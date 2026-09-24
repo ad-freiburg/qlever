@@ -58,6 +58,10 @@ class PrefixRegexExpression : public SparqlExpression {
       uint64_t inputSize,
       const std::optional<Variable>& firstSortedVariable) const override;
 
+  [[nodiscard]] bool isDeterministic() const override {
+    return child_->isDeterministic();
+  }
+
  private:
   ql::span<Ptr> childrenImpl() override;
 

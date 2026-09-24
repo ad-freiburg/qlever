@@ -84,8 +84,7 @@ TEST(Views, uniqueBlockView) {
     i = nextI;
   }
 
-  auto unique = ql::views::join(
-      ad_utility::OwningView{ad_utility::uniqueBlockView(inputs)});
+  auto unique = ql::views::join(ad_utility::uniqueBlockView(inputs));
   std::vector<int> result;
   for (const auto& element : unique) {
     result.push_back(element);
@@ -170,7 +169,7 @@ TEST(Views, CallbackOnEndView) {
   EXPECT_EQ(numCalls, 1);
   {
     auto view = CallbackOnEndView{ad_utility::integerRange(10u), callback};
-    for ([[maybe_unused]] size_t i : integerRange(5ul)) {
+    for ([[maybe_unused]] auto i : integerRange(5u)) {
       EXPECT_EQ(numCalls, 1u);
     }
     // Callback not invoked, because because end was not reached yet.

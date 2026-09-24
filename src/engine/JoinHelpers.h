@@ -84,7 +84,7 @@ IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
     CompressedRelationReader::IdTableGeneratorInputRange gen, IndexScan& scan) {
   // Store the generator in a wrapper so we can access its details after moving
   auto generatorStorage =
-      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
+      scan.makeShared<CompressedRelationReader::IdTableGeneratorInputRange>(
           std::move(gen));
 
   using SendPriority = RuntimeInformation::SendPriority;
@@ -115,7 +115,7 @@ using MaterializedInputView =
 inline MaterializedInputView asSingleTableView(
     const Result& result, const std::vector<ColumnIndex>& permutation) {
   return {makeIdTableAndFirstCols<1>(
-      result.idTable().asColumnSubsetView(permutation),
+      result.idTableView().asColumnSubsetView(permutation),
       result.getCopyOfLocalVocab())};
 }
 

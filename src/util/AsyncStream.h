@@ -25,7 +25,7 @@ namespace detail {
 template <typename Range, bool logTime>
 struct AsyncStreamGenerator
     : public ad_utility::InputRangeFromGet<ql::ranges::range_value_t<Range>> {
-  using value_type = typename Range::value_type;
+  using value_type = ql::ranges::range_value_t<Range>;
 
   ad_utility::data_structures::ThreadSafeQueue<value_type> queue_;
   ad_utility::JThread thread_;
@@ -72,7 +72,7 @@ struct AsyncStreamGenerator
     if constexpr (logTime) {
       std::invoke(function);
     }
-  };
+  }
 };
 
 }  // namespace detail
@@ -84,7 +84,8 @@ struct AsyncStreamGenerator
  * element from the range is expensive, but very inefficient if retrieving
  * elements is cheap because of the synchronization overhead.
  */
-template <typename Range, bool logTime = (LOGLEVEL >= TIMING)>
+template <typename Range, bool logTime = (ad_utility::compileTimeLogLevel >=
+                                          ad_utility::LogLevel::Enum::TIMING)>
 ad_utility::InputRangeTypeErased<ql::ranges::range_value_t<Range>>
 runStreamAsync(Range range, size_t bufferLimit) {
   return ad_utility::InputRangeTypeErased{

@@ -49,3 +49,7 @@ sourcelist
 
 /cmake-build*
 /localIndices
+
+# Test index artifacts that are generated when a unit-test binary is run with
+# the repository root as its working directory.
+/_staticGlobalTestIndex*

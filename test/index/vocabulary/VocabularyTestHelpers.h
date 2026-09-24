@@ -5,11 +5,17 @@
 #ifndef QLEVER_VOCABULARYTESTHELPERS_H
 #define QLEVER_VOCABULARYTESTHELPERS_H
 
+#include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include <array>
+
 #include "../../util/GTestHelpers.h"
+#include "backports/span.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/File.h"
 
 // human-readable output for the `WordAndIndex` class within GTest.
 inline void PrintTo(const WordAndIndex& wi, std::ostream* osPtr) {
@@ -251,7 +257,7 @@ auto testAccessOperatorForUnorderedVocabulary(F createVocabulary) {
 // `createVocabulary(std::vector<std::string>{})`, works as expected with the
 // given comparator.
 template <typename F, typename C>
-auto testEmptyVocabularyWithComparator(F createVocabulary, C comparator) {
+auto testEmptyVocabularyWithComparator(F&& createVocabulary, C comparator) {
   auto vocab = createVocabulary(std::vector<std::string>{});
   ASSERT_EQ(0u, vocab.size());
   auto expected = WordAndIndex::end();
@@ -267,6 +273,209 @@ template <typename F>
 auto testEmptyVocabulary(F createVocabulary) {
   testEmptyVocabularyWithComparator(createVocabulary, std::less<>{});
   testEmptyVocabularyWithComparator(createVocabulary, std::greater<>{});
+}
+
+// Collect all words that the given `scanAll` result yields into a vector. This
+// is a template because the different vocabularies return different (concrete
+// or type-erased `VocabularyScanRange`) range types from `scanAll`.
+template <typename Range>
+std::vector<std::string> scanAllToVector(Range&& range) {
+  std::vector<std::string> result;
+  for (const IndexAndWord& indexAndWord : range) {
+    result.emplace_back(indexAndWord.word_);
+  }
+  return result;
+}
+
+// Collect all `{index, word}` pairs that the given `scanAll` result yields into
+// a vector.
+template <typename Range>
+std::vector<std::pair<uint64_t, std::string>> scanAllToIndexAndWordVector(
+    Range&& range) {
+  std::vector<std::pair<uint64_t, std::string>> result;
+  for (const IndexAndWord& indexAndWord : range) {
+    result.emplace_back(indexAndWord.index_, std::string{indexAndWord.word_});
+  }
+  return result;
+}
+
+// The default set of words written by `writeWordsAndFinish`.
+// Sorted lexicographically, since the underlying vocabularies require sorted
+// input at write time.
+inline constexpr std::array<std::string_view, 4> defaultTestWords{
+    "alpha", "beta", "delta", "gamma"};
+
+// Feed `words` into an already-constructed word `writer` and `finish()` it. The
+// `words` must be sorted.
+template <typename Writer>
+void writeWordsAndFinish(
+    Writer& writer, ql::span<const std::string_view> words = defaultTestWords) {
+  for (const auto& word : words) {
+    writer(word, false);
+  }
+  writer.finish();
+}
+
+// Assert that the vocabulary contains `expectedWords[i]` at vocabulary index
+// `indices[i]`, for all positions `i`.
+template <typename Vocab, typename Indices>
+void assertVocabularyMatchesAtIndices(
+    const Vocab& vocab, const Indices& indices,
+    std::initializer_list<std::string_view> expectedWords) {
+  ASSERT_EQ(ql::ranges::distance(indices), expectedWords.size());
+
+  for (const auto& [idx, expectedWord] :
+       ::ranges::views::zip(indices, expectedWords)) {
+    EXPECT_EQ(std::string{vocab[idx]}, expectedWord)
+        << "at vocabulary index " << idx;
+  }
+}
+
+// Assert that the vocabulary contains `expectedWords[i]` at vocabulary index
+// `i`, for all indices `i` in `[0, expectedWords.size())`.
+template <typename Vocab>
+void assertVocabularyMatchesContiguousIndices(
+    const Vocab& vocab, std::initializer_list<std::string_view> expectedWords) {
+  assertVocabularyMatchesAtIndices(
+      vocab, ql::views::iota(size_t{0}, expectedWords.size()), expectedWords);
+}
+
+// Test `endIndex()` and `getPositionOfWord()` of a vocabulary with "holes"
+// (see `VocabularyInMemoryBinSearch`) that contains `words.at(i)` at the
+// vocabulary index `indices.at(i)`. The `words` must be sorted, the `indices`
+// ascending, and both must be non-empty. Each entry of `wordsNotContained`
+// pairs a word that the vocabulary does not contain with the vocabulary index
+// of the first word that is greater than it.
+template <typename Vocab>
+void testEndIndexAndGetPositionOfWord(
+    const Vocab& vocab, ql::span<const std::string> words,
+    ql::span<const uint64_t> indices,
+    const std::vector<std::pair<std::string, uint64_t>>& wordsNotContained) {
+  using Pair = std::pair<uint64_t, uint64_t>;
+  ASSERT_EQ(words.size(), indices.size());
+  ASSERT_FALSE(words.empty());
+  auto getPositionOfWord = [&vocab](std::string_view word) {
+    return vocab.getPositionOfWord(word, ql::ranges::less{});
+  };
+
+  // The "one past the end" index is one larger than the largest contained
+  // index, and NOT `size()`.
+  ASSERT_EQ(vocab.endIndex(), indices.back() + 1);
+  ASSERT_NE(vocab.endIndex(), vocab.size());
+
+  // A word that is contained yields the half-open range consisting of exactly
+  // its (non-contiguous) vocabulary index. This also has to work across the
+  // boundaries of the blocks that a vocabulary may internally use.
+  for (const auto& [word, index] : ::ranges::views::zip(words, indices)) {
+    EXPECT_EQ(getPositionOfWord(word), (Pair{index, index + 1}))
+        << "for the word \"" << word << '"';
+  }
+
+  // A word that is not contained yields the empty range at the index of the
+  // first word that is greater than it.
+  for (const auto& [word, expectedIndex] : wordsNotContained) {
+    EXPECT_EQ(getPositionOfWord(word), (Pair{expectedIndex, expectedIndex}))
+        << "for the word \"" << word << '"';
+  }
+
+  // A word that is greater than all contained words yields the empty range at
+  // `endIndex()`. Using `size()` here would be a bug, because `size()` is in
+  // general much smaller than the largest contained index, so such a word
+  // would be reported as sorting before words that are actually smaller.
+  auto wordAfterAll = absl::StrCat(words.back(), "x");
+  EXPECT_EQ(getPositionOfWord(wordAfterAll),
+            (Pair{vocab.endIndex(), vocab.endIndex()}));
+  EXPECT_GT(getPositionOfWord(wordAfterAll).first, indices.back());
+}
+
+// Assert that `lookupResult[i]` equals `vocab[indices[i]]`, for all positions
+// `i`.
+template <typename Vocab, typename Indices>
+void assertLookupResultMatchesVocabularyAtIndices(
+    const Vocab& vocab, const VocabBatchLookupResult& lookupResult,
+    const Indices& indices) {
+  ASSERT_EQ(lookupResult->size(), ql::ranges::distance(indices));
+
+  auto at = [&](size_t i) -> decltype(auto) {
+    if constexpr (requires { vocab[i]; }) {
+      return vocab[i];
+    } else {
+      using IndexType = typename Vocab::IndexType;
+      return vocab[IndexType::make(i)];
+    }
+  };
+
+  for (const auto& [resultWord, idx] :
+       ::ranges::views::zip(*lookupResult, indices)) {
+    EXPECT_EQ(resultWord, at(idx)) << " at  vocabulary index " << idx;
+  }
+}
+
+// Assert that every streamed lookup result equals the individual `vocab[]`
+// lookups for the corresponding batch in `expectedBatches`, and that the
+// batches are yielded in order.
+template <typename Vocab, typename ExpectedBatches>
+void assertStreamedLookupMatchesVocabularyAtIndices(
+    const Vocab& vocab, VocabLookupOutput& streamedResults,
+    const ExpectedBatches& expectedBatches) {
+  auto results = ::ranges::to_vector(streamedResults);
+  ASSERT_EQ(results.size(), expectedBatches.size());
+
+  for (const auto& [result, indices] :
+       ::ranges::views::zip(results, expectedBatches)) {
+    assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+  }
+}
+
+// The names of all the files that a vocabulary with the given base `filename`
+// and the given `suffixes` consists of (see `FileSuffixes`).
+inline std::vector<std::string> vocabularyFilenames(
+    const std::string& filename, const FileSuffixes& suffixes) {
+  std::vector<std::string> filenames;
+  for (const std::string& suffix : suffixes) {
+    filenames.push_back(absl::StrCat(filename, suffix));
+  }
+  return filenames;
+}
+
+// Same as above, for a vocabulary of the given (statically known) type.
+template <typename Vocabulary>
+std::vector<std::string> vocabularyFilenames(const std::string& filename) {
+  return vocabularyFilenames(filename, Vocabulary::fileSuffixes());
+}
+
+// Delete all the files that a vocabulary with the given base `filename` and the
+// given `suffixes` consists of. Do not warn about files that were never
+// created, which happens for example when a test deliberately throws while
+// writing the vocabulary.
+inline void deleteVocabularyFiles(const std::string& filename,
+                                  const FileSuffixes& suffixes) {
+  for (const std::string& file : vocabularyFilenames(filename, suffixes)) {
+    ad_utility::deleteFile(file, false);
+  }
+}
+
+// Same as above, for a vocabulary of the given (statically known) type.
+template <typename Vocabulary>
+void deleteVocabularyFiles(const std::string& filename) {
+  deleteVocabularyFiles(filename, Vocabulary::fileSuffixes());
+}
+
+// Return an `absl::Cleanup` that deletes all the files that a vocabulary with
+// the given base `filename` and the given `suffixes` consists of (see
+// `deleteVocabularyFiles` above). The arguments are copied into the returned
+// object, which therefore stays valid independently of them.
+inline auto makeVocabFileCleanup(std::string filename, FileSuffixes suffixes) {
+  return absl::Cleanup{
+      [filename = std::move(filename), suffixes = std::move(suffixes)] {
+        deleteVocabularyFiles(filename, suffixes);
+      }};
+}
+
+// Same as above, for a vocabulary of the given (statically known) type.
+template <typename Vocabulary>
+auto makeVocabFileCleanup(std::string filename) {
+  return makeVocabFileCleanup(std::move(filename), Vocabulary::fileSuffixes());
 }
 
 }  // namespace vocabulary_test

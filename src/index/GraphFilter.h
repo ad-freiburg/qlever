@@ -29,7 +29,7 @@ class GraphFilter {
  public:
   // Marker type for the "ALL" case.
   struct AllTag {
-    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(AllTag)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(AllTag, )
   };
 
   // ALL, WHITELIST, BLACKLIST
@@ -82,6 +82,10 @@ class GraphFilter {
 
   // Return true iff all graphs are always allowed.
   bool areAllGraphsAllowed() const;
+
+  // Return the whitelisted graphs if this filter is a whitelist, and `nullptr`
+  // otherwise.
+  const ad_utility::HashSet<T>* whitelistIfPresent() const;
 
   // Make sure this filter is comparable.
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GraphFilter, filter_)

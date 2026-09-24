@@ -4,8 +4,8 @@
 
 #include <gmock/gmock.h>
 
-#include "index/PrefixHeuristic.h"
 #include "index/vocabulary/PrefixCompressor.h"
+#include "index/vocabulary/PrefixHeuristic.h"
 #include "util/Views.h"
 
 TEST(PrefixCompressor, CompressionPreservesWords) {
@@ -86,7 +86,7 @@ TEST(PrefixCompressor, prefixCompression) {
 
   // Newlines handling
   std::vector<std::string> input;
-  for (size_t i : ad_utility::integerRange(200UL)) {
+  for (size_t i : ad_utility::integerRange<size_t>(200)) {
     input.push_back(absl::StrCat("\"\"\"\nabc\t\n34as\n\ndj", i, "\"\"\""));
   }
 

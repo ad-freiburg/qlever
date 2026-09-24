@@ -91,17 +91,4 @@ void BasicGraphPattern::collectAllContainedVariables(
   }
 }
 
-// _____________________________________________________________________________
-ad_utility::HashSet<Variable> getVariablesPresentInFirstBasicGraphPattern(
-    const std::vector<parsedQuery::GraphPatternOperation>& graphPatterns) {
-  ad_utility::HashSet<Variable> vars;
-  auto basicGraphPatterns =
-      ad_utility::filterRangeOfVariantsByType<parsedQuery::BasicGraphPattern>(
-          graphPatterns);
-  if (!ql::ranges::empty(basicGraphPatterns)) {
-    (*basicGraphPatterns.begin()).collectAllContainedVariables(vars);
-  }
-  return vars;
-}
-
 }  // namespace parsedQuery

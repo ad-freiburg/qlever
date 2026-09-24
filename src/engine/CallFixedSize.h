@@ -61,7 +61,7 @@ CPP_variadic_template(typename Int, Int... Is, typename F, typename... Args)(
         Int>) auto applyOnIntegerSequence(ad_utility::ValueSequence<Int, Is...>,
                                           F&& lambda, Args&&... args) {
   return lambda.template operator()<Is...>(AD_FWD(args)...);
-};
+}
 
 // An array with `NumValues` entries of type `Int` that has linkage in C++17
 // mode. It is needed below to deduce a return type.

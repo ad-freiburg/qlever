@@ -20,7 +20,7 @@ CPP_template_def(typename Type)(requires ad_utility::SimilarToAnyTypeIn<
   } else if constexpr (ad_utility::isSimilar<Type, bool>) {
     return true;
   } else if constexpr (ad_utility::isSimilar<Type, size_t>) {
-    return 17361644613946UL;
+    return uint64_t{17361644613946};
   } else if constexpr (ad_utility::isSimilar<Type, int>) {
     return -42;
   } else {

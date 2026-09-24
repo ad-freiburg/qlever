@@ -1,6 +1,12 @@
-//  Copyright 2024, University of Freiburg,
-//                  Chair of Algorithms and Data Structures
-//  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 Hannes Baumann <baumannh@informatik.uni-freiburg.de>, UFR
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
@@ -8,7 +14,15 @@
 
 #include "./PrefilterExpressionTestHelpers.h"
 #include "./SparqlExpressionTestHelpers.h"
+// The prefiltering takes the `IndexImpl` itself (it needs the vocabulary), and
+// converting it to a `LocalVocabContext` for `LVE` below requires the complete
+// type.
+#include "engine/ExportQueryExecutionTrees.h"
+#include "engine/QueryPlanner.h"
+#include "index/IndexImpl.h"
 #include "util/GTestHelpers.h"
+#include "util/IndexTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 
 using ad_utility::testing::BlankNodeId;
 using ad_utility::testing::BoolId;
@@ -118,6 +132,8 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // active Index + global vocabulary is required.
   QueryExecutionContext* qet = ad_utility::testing::getQec(turtleInput);
   const LocalVocabContext& lvc = qet->getLocalVocabContext();
+  // The prefiltering itself needs the vocabulary and therefore the `IndexImpl`.
+  const IndexImpl& indexImpl = qet->getIndex().getImpl();
   std::function<Id(const std::string&)> getVocabId =
       ad_utility::testing::makeGetId(qet->getIndex());
   LocalVocab vocab{};
@@ -326,6 +342,31 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
       b1Date, b2Date, b3Date, b4Date,  b5Date,  b6Date,
       b7Date, b8Date, b9Date, b10Date, b11Date, b12Date};
 
+  // Blocks over numeric values where a single block spans the boundary
+  // between non-negative and negative values. Negative `Int`s are sorted
+  // after all non-negative `Int`s (2s-complement bit order, so ascending from
+  // the most negative value to -1), negative `Double`s after all non-negative
+  // `Double`s (and NaN), in the order of their bits, i.e. from -0.0 down to
+  // the most negative value. Thus `bNegInt3` contains all `Int`s > 62950 and
+  // all `Int`s <= -10, and `bNegDouble3` all `Double`s > 61.0 and all
+  // negative `Double`s >= -1.0.
+  const CompressedBlockMetadata bNegInt1 = makeBlock(IntId(0), IntId(50));
+  const CompressedBlockMetadata bNegInt2 = makeBlock(IntId(51), IntId(62900));
+  const CompressedBlockMetadata bNegInt3 = makeBlock(IntId(62950), IntId(-10));
+  const CompressedBlockMetadata bNegInt4 = makeBlock(IntId(-10), IntId(-1));
+  const std::vector<CompressedBlockMetadata> negIntBlocks = {
+      bNegInt1, bNegInt2, bNegInt3, bNegInt4};
+  const CompressedBlockMetadata bNegDouble1 =
+      makeBlock(DoubleId(0.5), DoubleId(2.5));
+  const CompressedBlockMetadata bNegDouble2 =
+      makeBlock(DoubleId(2.5), DoubleId(60.0));
+  const CompressedBlockMetadata bNegDouble3 =
+      makeBlock(DoubleId(61.0), DoubleId(-1.0));
+  const CompressedBlockMetadata bNegDouble4 =
+      makeBlock(DoubleId(-1.0), DoubleId(-3.0));
+  const std::vector<CompressedBlockMetadata> negDoubleBlocks = {
+      bNegDouble1, bNegDouble2, bNegDouble3, bNegDouble4};
+
   const std::vector<CompressedBlockMetadata> blocksIncomplete = {
       bFirstIncomplete,
       b2,
@@ -409,7 +450,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
                           size_t evaluationColumn = 2) {
     std::vector<CompressedBlockMetadata> testBlocks = input;
     AD_EXPECT_THROW_WITH_MESSAGE(
-        expr->evaluate(lvc, testBlocks, evaluationColumn),
+        expr->evaluate(indexImpl, testBlocks, evaluationColumn),
         ::testing::HasSubstr(expected));
   }
 
@@ -433,7 +474,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     }
     std::vector<CompressedBlockMetadata> testBlocks =
         useBlocksIncomplete ? blocksIncomplete : blocks;
-    ASSERT_EQ(toVec(expr->evaluate(lvc, testBlocks, 2)),
+    ASSERT_EQ(toVec(expr->evaluate(indexImpl, testBlocks, 2)),
               addMixedBlocks ? expectedAdjusted : expected);
   }
 
@@ -458,9 +499,10 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
         testIsIriOrIsLit
             ? addBlocksMixedDatatype(expected, mixedBlocksTestIsDatatype)
             : expected;
-    ASSERT_EQ(toVec(expr->evaluate(
-                  lvc, input.empty() ? allTestBlocksIsDatatype : input, 2)),
-              adjustedExpected);
+    ASSERT_EQ(
+        toVec(expr->evaluate(
+            indexImpl, input.empty() ? allTestBlocksIsDatatype : input, 2)),
+        adjustedExpected);
   }
 
   // Check if `BlockMetadataRanges r1` and `BlockMetadataRanges r2` contain
@@ -502,13 +544,21 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Simple `ASSERT_EQ` on date blocks
   auto makeTestDate(std::unique_ptr<PrefilterExpression> expr,
                     std::vector<CompressedBlockMetadata>&& expected) {
-    ASSERT_EQ(toVec(expr->evaluate(lvc, dateBlocks, 2)), expected);
+    ASSERT_EQ(toVec(expr->evaluate(indexImpl, dateBlocks, 2)), expected);
+  }
+
+  // Simple `ASSERT_EQ` on `negIntBlocks` / `negDoubleBlocks`.
+  auto makeTestNegativeBoundary(
+      std::unique_ptr<PrefilterExpression> expr,
+      const std::vector<CompressedBlockMetadata>& testBlocks,
+      std::vector<CompressedBlockMetadata>&& expected) {
+    ASSERT_EQ(toVec(expr->evaluate(indexImpl, testBlocks, 2)), expected);
   }
 
   // Simple `ASSERT_EQ` VocabIdBlocks
   auto makeTestPrefixRegex(std::unique_ptr<PrefilterExpression> expr,
                            std::vector<CompressedBlockMetadata>&& expected) {
-    ASSERT_EQ(toVec(expr->evaluate(lvc, blocksRegexTest, 2)), expected);
+    ASSERT_EQ(toVec(expr->evaluate(indexImpl, blocksRegexTest, 2)), expected);
   }
 
   // Test `PrefilterExpression` helper `mergeRelevantBlockItRanges<bool>`.
@@ -582,8 +632,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testValueIdItToBlockItRangeMapping) {
   makeTestDetailIndexMapping(CompOp::LE, IntId(5), {{2, 5}, {6, 15}}, false);
   makeTestDetailIndexMapping(CompOp::LE, IntId(5),
                              {{0, 3}, {4, 6}, {10, 11}, {14, 23}}, true);
-  // This will yield an empty range. However, in the actual evaluation those
-  // empty ranges will be removed by valueIdComparators::detail::simplifyRanges
+  // This will yield an empty range (which is kept in the actual evaluation,
+  // see `RelationalExpression::evaluateImpl`).
   makeTestDetailIndexMapping(CompOp::GT, DoubleId(10.00), {}, false);
   makeTestDetailIndexMapping(CompOp::GT, DoubleId(10.00), {{0, 23}}, true);
   // b11 is also relevant. But given that this block contains mixed
@@ -701,6 +751,50 @@ TEST_F(PrefilterExpressionOnMetadataTest, testGreaterThanExpression) {
   makeTest(gt(referenceDateEqual), {b28});
   makeTest(gt(referenceDate1), {b26, b27, bLastIncomplete}, true);
   makeTest(gt(referenceDate2), {bLastIncomplete}, true);
+}
+
+// Test the relational expressions on blocks that span the boundary between
+// non-negative and negative numbers (`negIntBlocks` and `negDoubleBlocks`).
+TEST_F(PrefilterExpressionOnMetadataTest, testNegativeNumberBoundaryBlocks) {
+  // Bounds above the largest value of `bNegInt2`. The relevant `ValueId`
+  // range is empty (it starts and ends at the last ID of `bNegInt3`), but
+  // `bNegInt3` may contain matching values and has to be returned.
+  makeTestNegativeBoundary(gt(IntId(63000)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(ge(IntId(63000)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(gt(DoubleId(63000.5)), negIntBlocks, {bNegInt3});
+
+  // Bounds inside `bNegInt2` select that block as well.
+  makeTestNegativeBoundary(gt(IntId(62800)), negIntBlocks,
+                           {bNegInt2, bNegInt3});
+  makeTestNegativeBoundary(gt(IntId(50)), negIntBlocks, {bNegInt2, bNegInt3});
+
+  // Negative bounds: `bNegInt3` holds the `Int`s <= -10, `bNegInt4` the
+  // `Int`s from -10 to -1.
+  makeTestNegativeBoundary(lt(IntId(-20)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(le(IntId(-20)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(lt(IntId(-10)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(lt(IntId(0)), negIntBlocks, {bNegInt3, bNegInt4});
+  makeTestNegativeBoundary(lt(IntId(-5)), negIntBlocks, {bNegInt3, bNegInt4});
+
+  // Equality and inequality on the boundary block.
+  makeTestNegativeBoundary(eq(IntId(70000)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(eq(IntId(-20)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(neq(IntId(70000)), negIntBlocks,
+                           {bNegInt1, bNegInt2, bNegInt3, bNegInt4});
+
+  // The same for `Double`s, where the negative values are ordered from -0.0
+  // downwards: `bNegDouble3` holds the `Double`s > 61.0 and those in
+  // [-1.0, -0.0], `bNegDouble4` those from -1.0 down to -3.0.
+  makeTestNegativeBoundary(gt(DoubleId(70.0)), negDoubleBlocks, {bNegDouble3});
+  makeTestNegativeBoundary(ge(IntId(70)), negDoubleBlocks, {bNegDouble3});
+  makeTestNegativeBoundary(gt(DoubleId(60.5)), negDoubleBlocks, {bNegDouble3});
+  makeTestNegativeBoundary(gt(DoubleId(59.0)), negDoubleBlocks,
+                           {bNegDouble2, bNegDouble3});
+  makeTestNegativeBoundary(lt(DoubleId(-0.5)), negDoubleBlocks,
+                           {bNegDouble3, bNegDouble4});
+  makeTestNegativeBoundary(lt(DoubleId(-2.0)), negDoubleBlocks, {bNegDouble4});
+  makeTestNegativeBoundary(lt(DoubleId(-4.0)), negDoubleBlocks, {});
+  makeTestNegativeBoundary(eq(DoubleId(70.0)), negDoubleBlocks, {bNegDouble3});
 }
 
 //______________________________________________________________________________
@@ -955,6 +1049,96 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
                      {b18GapIriAndLiteral, b27, b28});
 }
 
+// Regression test for the bug reported by @hannahbast in the review of PR #3069
+// (https://github.com/ad-freiburg/qlever/pull/3069): When a
+// `FILTER(ql:isIRI(?x))` or `FILTER(ql:isEncodedIri(?x))` is applied to an
+// index scan that is sorted by `?x`, blocks that consist entirely of encoded
+// IRIs (that is, `ValueId`s of datatype `EncodedVal`) must not be pruned.
+// Encoded IRIs are IRIs, so `isIri` has to keep them, and `isEncodedIri`
+// selects exactly these blocks. The bug was that both used a prefilter of the
+// form `?x >
+// <>`, which only covers the `VocabIndex` range and hence incorrectly discarded
+// blocks that contain only `EncodedVal` ids (these sort *after* all vocabulary
+// IRIs).
+//______________________________________________________________________________
+TEST_F(PrefilterExpressionOnMetadataTest, isIriAndIsEncodedIriKeepEncodedIris) {
+  // Two `EncodedVal` ids that represent encoded IRIs. Their concrete payload is
+  // irrelevant for the prefilter; only their datatype and order matter.
+  const Id encodedIri1 = Id::makeFromEncodedVal(1);
+  const Id encodedIri2 = Id::makeFromEncodedVal(100);
+  const Id vocabIri0 = getVocabId("<x0>");
+  const Id vocabIri1 = getVocabId("<x1>");
+  // Blocks in ascending `ValueId` order over the evaluation column (column 2):
+  // numeric < vocabulary IRIs < encoded IRIs. In addition to the "pure" blocks
+  // (whose two bounding `ValueId`s have the same datatype), we also add
+  // "mixed" blocks whose bounding `ValueId`s have different datatypes. A mixed
+  // block might "hide" a matching value of any datatype in between its bounds,
+  // so it is conservatively kept by *every* prefilter; in particular it is part
+  // of the result of a prefilter as well as of its negation.
+  const CompressedBlockMetadata blockInt = makeBlock(IntId(0), IntId(5));
+  // A mixed block spanning a numeric literal and a regular vocabulary IRI.
+  const CompressedBlockMetadata blockIntAndVocabIri =
+      makeBlock(IntId(5), vocabIri0);
+  // A block that consists entirely of regular vocabulary IRIs.
+  const CompressedBlockMetadata blockVocabIri = makeBlock(vocabIri0, vocabIri1);
+  // A mixed block spanning a regular vocabulary IRI and an encoded IRI.
+  const CompressedBlockMetadata blockVocabAndEncodedIri =
+      makeBlock(vocabIri1, encodedIri1);
+  // A block that consists entirely of encoded IRIs.
+  const CompressedBlockMetadata blockEncodedIri =
+      makeBlock(encodedIri1, encodedIri2);
+  const std::vector<CompressedBlockMetadata> blocks = {
+      blockInt, blockIntAndVocabIri, blockVocabIri, blockVocabAndEncodedIri,
+      blockEncodedIri};
+
+  // `isIri` must keep the regular vocabulary IRI block and the encoded IRI
+  // block (before the fix, `blockEncodedIri` was incorrectly pruned), as well
+  // as both mixed blocks.
+  EXPECT_EQ(toVec(isIri()->evaluate(indexImpl, blocks, 2)),
+            (std::vector<CompressedBlockMetadata>{
+                blockIntAndVocabIri, blockVocabIri, blockVocabAndEncodedIri,
+                blockEncodedIri}));
+
+  // `isEncodedIri` must keep the encoded IRI block and the two mixed blocks,
+  // but prune the pure numeric and pure vocabulary IRI blocks. We build the
+  // prefilter via the same path as the query engine (from the SPARQL
+  // expression), which is where the datatype of the prefilter is chosen. Before
+  // the fix, this produced a `> <>` prefilter that kept `blockVocabIri` and
+  // pruned `blockEncodedIri`.
+  auto isEncodedIriSparqlExpr = sparqlExpression::makeIsEncodedIriExpression(
+      std::make_unique<sparqlExpression::VariableExpression>(Variable{"?x"}));
+  auto prefilterVec =
+      isEncodedIriSparqlExpr->getPrefilterExpressionForMetadata(lvc);
+  ASSERT_EQ(prefilterVec.size(), 1u);
+  const auto& isEncodedIriPrefilter = prefilterVec.at(0).first;
+  EXPECT_EQ(
+      toVec(isEncodedIriPrefilter->evaluate(indexImpl, blocks, 2)),
+      (std::vector<CompressedBlockMetadata>{
+          blockIntAndVocabIri, blockVocabAndEncodedIri, blockEncodedIri}));
+
+  // Negated cases. Negated prefilters are easy to get wrong (they combine the
+  // sub-ranges via De Morgan, so a union becomes an intersection), hence we
+  // check them explicitly.
+
+  // `!isIri` must prune *both* pure IRI blocks: the regular vocabulary IRI
+  // block and the encoded IRI block (encoded IRIs are IRIs, so `!isIri`
+  // excludes them too). It keeps the numeric block and, as always, the mixed
+  // blocks. Note that `blockIntAndVocabIri` and `blockVocabAndEncodedIri` are
+  // part of the result of both `isIri` and `!isIri`.
+  EXPECT_EQ(toVec(isIri(true)->evaluate(indexImpl, blocks, 2)),
+            (std::vector<CompressedBlockMetadata>{blockInt, blockIntAndVocabIri,
+                                                  blockVocabAndEncodedIri}));
+
+  // `!isEncodedIri` must prune only the pure encoded IRI block and keep
+  // everything else, in particular the pure vocabulary IRI block and the mixed
+  // blocks. Note that `blockIntAndVocabIri` and `blockVocabAndEncodedIri` are
+  // part of the result of both `isEncodedIri` and `!isEncodedIri`.
+  EXPECT_EQ(toVec(isEncodedIri(true)->evaluate(indexImpl, blocks, 2)),
+            (std::vector<CompressedBlockMetadata>{blockInt, blockIntAndVocabIri,
+                                                  blockVocabIri,
+                                                  blockVocabAndEncodedIri}));
+}
+
 // Test InExpression
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testIsInExpression) {
@@ -1195,7 +1379,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
 // Test the (full) invariant check of `ScanSpecAndBlocks` constructor.
 TEST_F(PrefilterExpressionOnMetadataTest,
        testScanSpecAndBlocksConstructionFromPrefilteredBlocks) {
-  auto blockRanges = gt(IntId(0))->evaluate(lvc, blocks, 2);
+  auto blockRanges = gt(IntId(0))->evaluate(indexImpl, blocks, 2);
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
       ScanSpecification{VocabId10, DoubleId33, std::nullopt}, blockRanges));
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
@@ -1217,16 +1401,16 @@ TEST_F(PrefilterExpressionOnMetadataTest,
 TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
   auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
   std::vector<CompressedBlockMetadata> input = {b16};
-  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 0)), input);
-  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 1)), input);
-  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 2)), input);
+  EXPECT_EQ(toVec(expr->evaluate(indexImpl, input, 0)), input);
+  EXPECT_EQ(toVec(expr->evaluate(indexImpl, input, 1)), input);
+  EXPECT_EQ(toVec(expr->evaluate(indexImpl, input, 2)), input);
   expr = eq(DoubleId(-6.25));
   input = {b15, b16, b17};
-  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 2)),
+  EXPECT_EQ(toVec(expr->evaluate(indexImpl, input, 2)),
             (std::vector<CompressedBlockMetadata>{b15, b16}));
-  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 1)),
+  EXPECT_EQ(toVec(expr->evaluate(indexImpl, input, 1)),
             std::vector<CompressedBlockMetadata>{});
-  EXPECT_EQ(toVec(expr->evaluate(lvc, input, 0)),
+  EXPECT_EQ(toVec(expr->evaluate(indexImpl, input, 0)),
             std::vector<CompressedBlockMetadata>{});
 }
 
@@ -1430,6 +1614,9 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   EXPECT_THAT(*isNum(),
               matcher("Prefilter IsDatatypeExpression:\nPrefilter "
                       "for datatype: Numeric\nis negated: false.\n.\n"));
+  EXPECT_THAT(*isEncodedIri(),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: EncodedIri\nis negated: false.\n.\n"));
   EXPECT_THAT(*isBlank(true),
               matcher("Prefilter IsDatatypeExpression:\nPrefilter "
                       "for datatype: Blank\nis negated: true.\n.\n"));
@@ -1465,4 +1652,52 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
       ::testing::HasSubstr(
           "Set unknown (relational) comparison operator for the creation of "
           "PrefilterExpression on date-values: Undefined CompOp value: 10."));
+}
+
+// Test numeric `FILTER`s on an index. With three rows per block, the values
+// of `<p>` form the blocks [1, 2, 3], [4, 5, 6], [7, 8, -5], [-4, -3, -2]; the
+// third block spans the boundary between non-negative and negative numbers and
+// is neither the first nor the last block of the relation, so that only the
+// prefilter decides whether it is read (the same for `<q>` with `Double`s).
+TEST(PrefilterExpressionIndex, negativeNumberBoundaryEndToEnd) {
+  std::string turtle;
+  for (int i : {1, 2, 3, 4, 5, 6, 7, 8, -5, -4, -3, -2}) {
+    absl::StrAppend(&turtle, "<s", i, "> <p> ", i, " . <t", i, "> <q> ", i,
+                    ".5 . ");
+  }
+  ad_utility::testing::TestIndexConfig config{turtle};
+  config.blocksizePermutations = 24_B;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  // The `ORDER BY ?x` makes the planner choose the scan that is sorted by
+  // `?x`, which is the one the prefilter applies to.
+  auto query = [qec](std::string_view predicate, std::string_view filter) {
+    auto cancellationHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
+    QueryPlanner planner{qec, cancellationHandle};
+    auto parsedQuery = ad_utility::testing::parseQuery(
+        absl::StrCat("SELECT ?s WHERE { ?s <", predicate, "> ?x . FILTER(?x ",
+                     filter, ") } ORDER BY ?x"));
+    auto tree = planner.createExecutionTree(parsedQuery);
+    ad_utility::Timer timer{ad_utility::Timer::Started};
+    std::string result;
+    for (const auto& block : ExportQueryExecutionTrees::computeResult(
+             parsedQuery, *tree, ad_utility::MediaType::tsv, timer,
+             std::move(cancellationHandle))) {
+      result += block;
+    }
+    return result;
+  };
+
+  // Bounds between the two non-negative values of the boundary block: the
+  // relevant ID range is empty, but the block has to be read.
+  EXPECT_EQ(query("p", "> 7"), "?s\n<s8>\n");
+  EXPECT_EQ(query("p", ">= 8"), "?s\n<s8>\n");
+  EXPECT_EQ(query("q", "> 7.5"), "?s\n<t8>\n");
+  EXPECT_EQ(query("q", ">= 8.5"), "?s\n<t8>\n");
+
+  // Bounds inside an earlier block, and negative bounds.
+  EXPECT_EQ(query("p", "> 5"), "?s\n<s6>\n<s7>\n<s8>\n");
+  EXPECT_EQ(query("p", "<= -4"), "?s\n<s-5>\n<s-4>\n");
+  EXPECT_EQ(query("p", "< -4"), "?s\n<s-5>\n");
+  EXPECT_EQ(query("q", "<= -4.5"), "?s\n<t-5>\n<t-4>\n");
 }

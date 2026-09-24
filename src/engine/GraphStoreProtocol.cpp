@@ -56,18 +56,13 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
 // ____________________________________________________________________________
 updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
     const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
-    Quads::BlankNodeAdder& blankNodeAdder) {
+    BlankNodeAdder& blankNodeAdder) {
   SparqlTripleSimpleWithGraph::Graph tripleGraph{std::monostate{}};
   if (std::holds_alternative<GraphRef>(graph)) {
     tripleGraph = std::get<GraphRef>(graph);
   }
-  auto transformTc =
-      [&blankNodeAdder](TripleComponent&& tc) -> TripleComponent {
-    if (tc.isString()) {
-      return blankNodeAdder.getBlankNodeIndex(tc.getString());
-    } else {
-      return std::move(tc);
-    }
+  auto transformTc = [&blankNodeAdder](TripleComponent&& tc) {
+    return blankNodeAdder.resolveParsedComponent(std::move(tc));
   };
   auto transformTurtleTriple = [&tripleGraph,
                                 &transformTc](TurtleTriple&& triple) {
@@ -82,6 +77,26 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
   };
   return {ad_utility::transform(std::move(triples), transformTurtleTriple),
           blankNodeAdder.localVocab_.clone()};
+}
+
+// ____________________________________________________________________________
+ResponseMiddleware GraphStoreProtocol::makePostNewGraphMiddleware(
+    const ad_utility::triple_component::Iri& graphIri) {
+  namespace http = boost::beast::http;
+  return ResponseMiddleware(
+      [graphIri](ResponseMiddleware::ResponseT&& response, const auto&) {
+        response.result(http::status::created);
+        response.set(http::field::location,
+                     asStringViewUnsafe(graphIri.getContent()));
+        return std::move(response);
+      });
+}
+
+// ____________________________________________________________________________
+ad_utility::triple_component::Iri GraphStoreProtocol::generateNewGraphIri() {
+  ad_utility::UuidGenerator uuidGen;
+  return ad_utility::triple_component::Iri::fromIriref(
+      absl::StrCat("<", QLEVER_NEW_GRAPH_PREFIX, uuidGen(), ">"));
 }
 
 // ____________________________________________________________________________

@@ -13,6 +13,7 @@
 
 #include "engine/TransitivePathBase.h"
 #include "engine/TransitivePathGraphSearch.h"
+#include "index/TripleComponentConversions.h"
 #include "util/Iterators.h"
 #include "util/Timer.h"
 
@@ -58,7 +59,7 @@ struct TableColumnWithVocab {
     }
   }
 };
-};  // namespace detail
+}  // namespace detail
 
 /**
  * @class TransitivePathImpl
@@ -99,7 +100,7 @@ class TransitivePathImpl : public TransitivePathBase {
       std::shared_ptr<const Result> startSideResult, bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Started};
 
-    auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
+    auto edges = setupEdgesMap(sub->idTableView(), startSide, targetSide);
     auto nodes = setupNodes(startSide, std::move(startSideResult));
     // Setup nodes returns a generator, so this time measurement won't include
     // the time for each iteration, but every iteration step should have
@@ -121,7 +122,7 @@ class TransitivePathImpl : public TransitivePathBase {
     for (auto& pair : result) {
       co_yield pair;
     }
-  };
+  }
 
   /**
    * @brief Compute the transitive hull.
@@ -140,8 +141,8 @@ class TransitivePathImpl : public TransitivePathBase {
                                           bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Started};
 
-    auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
-    auto nodes = setupNodes(sub->idTable(), startSide, edges);
+    auto edges = setupEdgesMap(sub->idTableView(), startSide, targetSide);
+    auto nodes = setupNodes(sub->idTableView(), startSide, edges);
 
     runtimeInfo().addDetail("Initialization time", timer.msecs());
 
@@ -233,7 +234,7 @@ class TransitivePathImpl : public TransitivePathBase {
     std::optional<Id> targetId =
         target.isVariable()
             ? std::nullopt
-            : std::optional{std::move(target).toValueId(index, targetHelper)};
+            : std::optional{toValueId(std::move(target), index, targetHelper)};
     bool sameVariableOnBothSides =
         !targetId.has_value() && lhs_.value_ == rhs_.value_;
     bool endsWithGraphVariable =
@@ -297,7 +298,7 @@ class TransitivePathImpl : public TransitivePathBase {
    * @param edges Templated datastructure representing the edges of the graph
    * @return Set A set of starting nodes for the transitive hull computation
    */
-  SetWithGraph setupNodes(const IdTable& sub,
+  SetWithGraph setupNodes(const IdTableView<0>& sub,
                           const TransitivePathSide& startSide,
                           const T& edges) const {
     AD_CORRECTNESS_CHECK(minDist_ != 0,
@@ -323,7 +324,7 @@ class TransitivePathImpl : public TransitivePathBase {
     // id -> var|id
     LocalVocab helperVocab;
     Id startId =
-        TripleComponent{startSide.value_}.toValueId(getIndex(), helperVocab);
+        toValueId(TripleComponent{startSide.value_}, getIndex(), helperVocab);
     // Make sure we retrieve the Id from an IndexScan, so we don't have to pass
     // this LocalVocab around. If it's not present then no result needs to be
     // returned anyways. This also augments the id with matching graph ids.
@@ -361,7 +362,7 @@ class TransitivePathImpl : public TransitivePathBase {
     };
 
     auto toView = [columnsWithoutJoinColumns = std::move(
-                       columnsWithoutJoinColumns)](const IdTable& idTable) {
+                       columnsWithoutJoinColumns)](const auto& idTable) {
       return idTable.asColumnSubsetView(columnsWithoutJoinColumns);
     };
 
@@ -370,7 +371,7 @@ class TransitivePathImpl : public TransitivePathBase {
           [toView = std::move(toView),
            columnsToRange = std::move(columnsToRange),
            startSideResult = std::move(startSideResult)]() {
-            const IdTable& idTable = startSideResult->idTable();
+            const IdTableView<0>& idTable = startSideResult->idTableView();
             return TableColumnWithVocab{toView(idTable),
                                         columnsToRange(idTable),
                                         startSideResult->getCopyOfLocalVocab()};
@@ -391,7 +392,7 @@ class TransitivePathImpl : public TransitivePathBase {
         }));
   }
 
-  virtual T setupEdgesMap(const IdTable& dynSub,
+  virtual T setupEdgesMap(const IdTableView<0>& dynSub,
                           const TransitivePathSide& startSide,
                           const TransitivePathSide& targetSide) const = 0;
 

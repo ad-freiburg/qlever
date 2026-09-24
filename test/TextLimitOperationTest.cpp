@@ -101,7 +101,7 @@ TEST(TextLimit, computeResult) {
   TextLimit textLimit0 = makeTextLimit(inputTable.clone(), 0, 0, {1}, {3});
   ASSERT_EQ(textLimit0.getResultWidth(), 6);
   ASSERT_TRUE(textLimit0.knownEmptyResult());
-  IdTable resultIdTable = textLimit0.getResult()->idTable().clone();
+  IdTable resultIdTable = textLimit0.getResult()->cloneIdTable();
 
   ASSERT_EQ(resultIdTable.numRows(), 0);
 
@@ -121,7 +121,7 @@ TEST(TextLimit, computeResult) {
   VectorTable expected = {{4, 0, 1, 7, 8, 6},  {7, 1, 1, 2, 1, 5},
                           {2, 4, 1, 5, 6, 19}, {2, 5, 0, 6, 7, 5},
                           {0, 6, 3, 3, 4, 4},  {1, 36, 2, 4, 5, 3}};
-  resultIdTable = textLimit1.getResult()->idTable().clone();
+  resultIdTable = textLimit1.getResult()->cloneIdTable();
   IdTable expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 
@@ -146,7 +146,7 @@ TEST(TextLimit, computeResult) {
               {5, 1, 1, 2, 3, 27}, {5, 1, 0, 2, 0, 27}, {2, 4, 1, 5, 6, 19},
               {2, 5, 0, 6, 7, 5},  {5, 5, 2, 4, 9, 7},  {0, 6, 3, 3, 4, 4},
               {1, 36, 2, 4, 5, 3}};
-  resultIdTable = textLimit2.getResult()->idTable().clone();
+  resultIdTable = textLimit2.getResult()->cloneIdTable();
   expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 
@@ -173,7 +173,7 @@ TEST(TextLimit, computeResult) {
               {5, 1, 1, 2, 3, 27}, {5, 1, 0, 2, 0, 27}, {19, 1, 4, 1, 7, 9},
               {2, 4, 1, 5, 6, 19}, {2, 5, 0, 6, 7, 5},  {5, 5, 2, 4, 9, 7},
               {3, 5, 4, 2, 4, 4},  {0, 6, 3, 3, 4, 4},  {1, 36, 2, 4, 5, 3}};
-  resultIdTable = textLimit19.getResult()->idTable().clone();
+  resultIdTable = textLimit19.getResult()->cloneIdTable();
   expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 
@@ -218,7 +218,7 @@ TEST(TextLimit, computeResult) {
   */
   expected = {{7, 1, 1, 2, 1, 5},  {0, 2, 3, 3, 4, 4},  {5, 2, 1, 2, 3, 27},
               {5, 2, 0, 2, 0, 27}, {19, 2, 4, 1, 7, 9}, {3, 5, 4, 2, 4, 4}};
-  resultIdTable = textLimit3.getResult()->idTable().clone();
+  resultIdTable = textLimit3.getResult()->cloneIdTable();
   expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 }
@@ -299,7 +299,7 @@ TEST(TextLimit, computeResultMultipleEntities) {
                           {3, 5, 3, 8, 4, 4, 3, 2},   {2, 5, 9, 5, 0, 5, 2, 6},
                           {5, 5, 23, 17, 2, 6, 6, 4}, {0, 6, 7, 6, 3, 5, 1, 3},
                           {1, 36, 36, 36, 2, 7, 4, 4}};
-  IdTable resultIdTable = textLimit2.getResult()->idTable().clone();
+  IdTable resultIdTable = textLimit2.getResult()->cloneIdTable();
   IdTable expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 
@@ -326,7 +326,7 @@ TEST(TextLimit, computeResultMultipleEntities) {
               {3, 5, 3, 8, 4, 4, 3, 2},   {2, 5, 9, 5, 0, 5, 2, 6},
               {5, 5, 23, 17, 2, 6, 6, 4}, {0, 6, 7, 6, 3, 5, 1, 3},
               {1, 36, 36, 36, 2, 7, 4, 4}};
-  resultIdTable = textLimitFixedEntity.getResult()->idTable().clone();
+  resultIdTable = textLimitFixedEntity.getResult()->cloneIdTable();
   expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 }
@@ -391,57 +391,56 @@ TEST(TextLimit, PositioningTest) {
   TextLimit textLimit12 = makeTextLimit(inputTable2.clone(), 2, 0, {1}, {3});
 
   // Join the two results.
-  IdTable resultIdTable1 = textLimit11.getResult()->idTable().clone();
-  IdTable resultIdTable2 = textLimit12.getResult()->idTable().clone();
+  IdTable resultIdTable1 = textLimit11.getResult()->cloneIdTable();
+  IdTable resultIdTable2 = textLimit12.getResult()->cloneIdTable();
 
   IdTable finalIdTableOrder1 =
       makeJoin(resultIdTable1.clone(), resultIdTable2.clone())
           .getResult()
-          ->idTable()
-          .clone();
+          ->cloneIdTable();
 
   // Second Order: Apply textLimit1 and textLimit2 after applying the cartesian
   // join.
   CartesianProductJoin c2 = makeJoin(inputTable1.clone(), inputTable2.clone());
-  IdTable intermediateResult = c2.getResult()->idTable().clone();
+  IdTable intermediateResult = c2.getResult()->cloneIdTable();
 
   TextLimit textLimit21 =
       makeTextLimit(intermediateResult.clone(), 2, newColumnIndex(c2, 0),
                     {newColumnIndex(c2, 1)}, {newColumnIndex(c2, 3)});
-  resultIdTable1 = textLimit21.getResult()->idTable().clone();
+  resultIdTable1 = textLimit21.getResult()->cloneIdTable();
 
   TextLimit textLimit22 =
       makeTextLimit(resultIdTable1.clone(), 2, newColumnIndex(c2, 6),
                     {newColumnIndex(c2, 7)}, {newColumnIndex(c2, 9)});
-  IdTable finalIdTableOrder2 = textLimit22.getResult()->idTable().clone();
+  IdTable finalIdTableOrder2 = textLimit22.getResult()->cloneIdTable();
 
   // Third Order: Apply textLimit2 before applying the cartesian join and
   // textLimit1 after.
   TextLimit textLimit32 = makeTextLimit(inputTable2.clone(), 2, 0, {1}, {3});
-  resultIdTable2 = textLimit32.getResult()->idTable().clone();
+  resultIdTable2 = textLimit32.getResult()->cloneIdTable();
 
   CartesianProductJoin c3 =
       makeJoin(inputTable1.clone(), resultIdTable2.clone());
-  intermediateResult = c3.getResult()->idTable().clone();
+  intermediateResult = c3.getResult()->cloneIdTable();
 
   TextLimit textLimit31 =
       makeTextLimit(intermediateResult.clone(), 2, newColumnIndex(c3, 0),
                     {newColumnIndex(c3, 1)}, {newColumnIndex(c3, 3)});
-  IdTable finalIdTableOrder3 = textLimit31.getResult()->idTable().clone();
+  IdTable finalIdTableOrder3 = textLimit31.getResult()->cloneIdTable();
 
   // Fourth Order: Apply textLimit2 after applying the cartesian join and
   // textLimit1 before.
   TextLimit textLimit41 = makeTextLimit(inputTable1.clone(), 2, 0, {1}, {3});
-  resultIdTable1 = textLimit41.getResult()->idTable().clone();
+  resultIdTable1 = textLimit41.getResult()->cloneIdTable();
 
   CartesianProductJoin c4 =
       makeJoin(resultIdTable1.clone(), inputTable2.clone());
-  intermediateResult = c4.getResult()->idTable().clone();
+  intermediateResult = c4.getResult()->cloneIdTable();
 
   TextLimit textLimit42 =
       makeTextLimit(intermediateResult.clone(), 2, newColumnIndex(c4, 6),
                     {newColumnIndex(c4, 7)}, {newColumnIndex(c4, 9)});
-  IdTable finalIdTableOrder4 = textLimit42.getResult()->idTable().clone();
+  IdTable finalIdTableOrder4 = textLimit42.getResult()->cloneIdTable();
 
   // Compare the results of all 4 orders.
   compareIdTableWithExpectedContent(finalIdTableOrder1, finalIdTableOrder2);

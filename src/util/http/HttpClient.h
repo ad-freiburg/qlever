@@ -17,11 +17,13 @@
 // order of the includes should not matter, and it should certainly not cause
 // segmentation faults.
 
+#include <optional>
 #include <string>
 
 #include "backports/span.h"
 #include "util/CancellationHandle.h"
 #include "util/Generator.h"
+#include "util/http/HttpProxyConfig.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 
@@ -59,8 +61,17 @@ struct HttpOrHttpsResponse {
 template <typename StreamType>
 class HttpClientImpl {
  public:
-  // The constructor sets up the connection to the client.
-  HttpClientImpl(std::string_view host, std::string_view port);
+  // The constructor sets up the connection to the client. If `proxy` is set,
+  // the TCP connection goes to the proxy instead of to `host`:`port`, and it is
+  // the proxy that connects to `host`:`port` on our behalf. For HTTPS this
+  // requires establishing a tunnel with the `CONNECT` method before the TLS
+  // handshake (see `establishProxyTunnel` in `HttpClient.cpp`). For plain HTTP
+  // nothing else has to happen here, but the request target passed to
+  // `sendRequest` then has to be in absolute form (see `absoluteFormTarget` in
+  // `HttpProxyConfig.h`), which `sendHttpOrHttpsRequest` below takes care of.
+  HttpClientImpl(
+      std::string_view host, std::string_view port,
+      const std::optional<ad_utility::httpProxy::Proxy>& proxy = std::nullopt);
 
   // The destructor closes the connection.
   ~HttpClientImpl();
@@ -71,6 +82,11 @@ class HttpClientImpl {
   // `cppcoro::generator<ql::span<std::byte>>`. The connection can be used
   // for only one request, as the client is moved to the content yielding
   // coroutine.
+  //
+  // Note that `host` only determines the `Host` header; where the request
+  // actually goes was already decided by the constructor. With a proxy, `Host`
+  // hence still names the target server, and `target` has to be in absolute
+  // form, see there.
   static HttpOrHttpsResponse sendRequest(
       std::unique_ptr<HttpClientImpl> client,
       const boost::beast::http::verb& method, std::string_view host,
@@ -94,6 +110,12 @@ class HttpClientImpl {
       workGuard_ = boost::asio::make_work_guard(ioContext_);
   std::unique_ptr<boost::asio::ssl::context> ssl_context_;
   std::unique_ptr<StreamType> stream_;
+  // The value for the `Proxy-Authorization` header of relayed plain HTTP
+  // requests (empty if there is no proxy or it needs no authentication). Only
+  // used for plain HTTP: for HTTPS, the credentials are sent on the `CONNECT`
+  // request instead, and must not appear inside the TLS session, where the
+  // target server would see them.
+  std::string proxyAuthorization_;
 };
 
 // Instantiation for HTTP.
@@ -117,7 +139,8 @@ using SendRequestType = std::function<HttpOrHttpsResponse(
 // The protocol (HTTP or HTTPS) is chosen automatically based on the URL. The
 // `requestBody` is the payload sent for POST requests (default: empty). If
 // `maxRedirects` is greater than 0, the function will automatically follow
-// redirects (301, 302, 307, 308) up to the specified limit.
+// redirects (301, 302, 307, 308) up to the specified limit. All requests are
+// routed through the proxy configured for this process, see `globalProxy()`.
 HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
@@ -125,6 +148,19 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     std::string_view postData = "",
     std::string_view contentTypeHeader = "text/plain",
     std::string_view acceptHeader = "text/plain", size_t maxRedirects = 0);
+
+// Same as above, but route the requests through `proxy` (or directly, if it is
+// `std::nullopt`) instead of through the proxy configured for this process.
+// Mostly useful for tests, as the latter is read from the environment only once
+// per process. Note that this deliberately is not an overload of the above,
+// which could then no longer be converted to a `SendRequestType`.
+HttpOrHttpsResponse sendHttpOrHttpsRequestWithProxy(
+    const ad_utility::httpUtils::Url& url,
+    ad_utility::SharedCancellationHandle handle,
+    const boost::beast::http::verb& method, std::string_view postData,
+    std::string_view contentTypeHeader, std::string_view acceptHeader,
+    size_t maxRedirects,
+    const std::optional<ad_utility::httpProxy::Proxy>& proxy);
 
 #endif
 #endif  // QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H

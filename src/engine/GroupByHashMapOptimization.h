@@ -41,7 +41,7 @@ struct AvgAggregationData {
     auto val = ValueGetter{}(AD_FWD(value), ctx);
     std::visit([this](auto val) { valueAdder(val, sum_, error_); }, val);
     count_++;
-  };
+  }
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
@@ -130,7 +130,7 @@ struct SumAggregationData {
         doubleValueAdder, intValueAdder, nonNumericValueAdder};
 
     std::visit(sumValueAdder, val);
-  };
+  }
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(

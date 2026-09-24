@@ -70,6 +70,6 @@ class WebSocketSession {
   static std::optional<http::response<httpUtils::httpStreams::streamable_body>>
   getErrorResponseIfPathIsInvalid(const http::request<http::string_body>&);
 };
-};  // namespace ad_utility::websocket
+}  // namespace ad_utility::websocket
 
 #endif  // QLEVER_SRC_UTIL_HTTP_WEBSOCKET_WEBSOCKETSESSION_H

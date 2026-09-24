@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashSet.h"
@@ -265,6 +266,55 @@ CPP_template(typename ForwardIterator, typename Tp,
     }
   }
   return first;
+}
+
+// In place version of `ql::ranges::set_difference` which writes the output to
+// the beginning of `r1`. `std::set_difference` is undefined for this case where
+// the output overlaps with one of the input ranges. Additionally, this allows
+// some further optimizations.
+CPP_template_2(typename R1, typename R2, typename Compare = std::less<>,
+               typename Proj1 = ql::identity, typename Proj2 = ql::identity)(
+    requires ql::ranges::range<R1> CPP_and_2 ql::ranges::range<R2> CPP_and_2
+        ql::concepts::mergeable<
+            ql::ranges::iterator_t<R1>, ql::ranges::iterator_t<R2>,
+            ql::ranges::iterator_t<R1>, Compare, Proj1,
+            Proj2>) auto inplace_set_difference(R1&& r1, R2&& r2,
+                                                Compare comp = {},
+                                                Proj1 proj1 = {},
+                                                Proj2 proj2 = {}) {
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(r1, comp, proj1));
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(r2, comp, proj2));
+  auto it1 = ql::ranges::begin(r1);
+  auto end1 = ql::ranges::end(r1);
+  auto it2 = ql::ranges::begin(r2);
+  auto end2 = ql::ranges::end(r2);
+  auto output = ql::ranges::begin(r1);
+
+  while (it1 != end1) {
+    if (it2 == end2) {
+      // All remaining `r1` elements belong in the output. If output == it1 the
+      // elements are already in place. Otherwise, shift them left by the gap.
+      if (output == it1) {
+        return end1;
+      }
+      return ql::shift_left(output, end1, std::distance(output, it1));
+    }
+    if (std::invoke(comp, std::invoke(proj1, *it1), std::invoke(proj2, *it2))) {
+      // No need to copy if the element is already at the target destination.
+      if (output != it1) {
+        *output = std::move(*it1);
+      }
+      ++output;
+      ++it1;  // *it1 < *it2 → keep
+    } else if (std::invoke(comp, std::invoke(proj2, *it2),
+                           std::invoke(proj1, *it1))) {
+      ++it2;  // *it2 < *it1 → skip r2 element
+    } else {
+      ++it1;
+      ++it2;  // equal → discard from r1
+    }
+  }
+  return output;
 }
 
 }  // namespace ad_utility

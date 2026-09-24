@@ -243,7 +243,7 @@ struct TextSearchQuery : MagicServiceQuery {
 
   constexpr std::string_view name() const override {
     return "full text search";
-  };
+  }
 };
 
 }  // namespace parsedQuery

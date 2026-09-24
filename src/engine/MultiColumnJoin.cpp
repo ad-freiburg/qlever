@@ -75,10 +75,10 @@ Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   AD_LOG_DEBUG << "MultiColumnJoin subresult computation done." << std::endl;
 
   AD_LOG_DEBUG << "Computing a multi column join between results of size "
-               << leftResult->idTable().size() << " and "
-               << rightResult->idTable().size() << endl;
+               << leftResult->idTableView().size() << " and "
+               << rightResult->idTableView().size() << endl;
 
-  computeMultiColumnJoin(leftResult->idTable(), rightResult->idTable(),
+  computeMultiColumnJoin(leftResult->idTableView(), rightResult->idTableView(),
                          _joinColumns, &idTable);
 
   checkCancellation();
@@ -206,7 +206,7 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
 
 // _______________________________________________________________________
 void MultiColumnJoin::computeMultiColumnJoin(
-    const IdTable& left, const IdTable& right,
+    const IdTableView<0>& left, const IdTableView<0>& right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
     IdTable* result) {
   // check for trivial cases

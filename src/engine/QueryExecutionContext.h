@@ -20,6 +20,7 @@
 #include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
+#include "util/AllocateShared.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
 
@@ -50,7 +51,9 @@ class CacheValue {
     return runtimeInfo_;
   }
 
-  static ad_utility::MemorySize getSize(const IdTable& idTable) {
+  CPP_template(typename IdTableT)(
+      requires IdTableLike<IdTableT>) static ad_utility::MemorySize
+      getSize(const IdTableT& idTable) {
     return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
                                          sizeof(Id));
   }
@@ -59,7 +62,7 @@ class CacheValue {
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       if (const auto& resultPtr = cacheValue.result_; resultPtr) {
-        return getSize(resultPtr->idTable());
+        return getSize(resultPtr->idTableView());
       } else {
         return 0_B;
       }
@@ -112,7 +115,8 @@ class QueryExecutionContext
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false,
-      DisableCaching = DisableCaching::FromRuntimeParameter);
+      DisableCaching = DisableCaching::FromRuntimeParameter,
+      bool disableMaterializedViewRewriting = false);
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -150,11 +154,16 @@ class QueryExecutionContext
 
   [[nodiscard]] double getCostFactor(const std::string& key) const {
     return _costFactors.getCostFactor(key);
-  };
+  }
 
   const ad_utility::AllocatorWithLimit<Id>& getAllocator() const {
     return _allocator;
   }
+
+  // define a `makeShared` member function that has the same interface as
+  // `std::make_shared`, but allocates via the `getAllocator()` (see
+  // `util/AllocateShared.h`).
+  DEFINE_MAKE_SHARED_MEMBER(getAllocator())
 
   // Serialize the given `runtimeInformation` to a JSON string and send it
   // using `updateCallback_`. If `sendPriority` is set to `IfDue`, this only
@@ -176,6 +185,33 @@ class QueryExecutionContext
     disableCaching_ = disableCaching;
   }
 
+  // If materialized view rewriting is active. The global configuration is
+  // already taken into account by the return value.
+  bool disableMaterializedViewRewriting() const {
+    return disableMaterializedViewRewriting_;
+  }
+
+  // Set this to `true` to enforce materialized view rewriting to be disabled.
+  // If set to `false`, the global configuration will be used. In particular, if
+  // the global configuration disables rewriting, setting this to `false` does
+  // not enable rewriting.
+  void setDisableMaterializedViewRewriting(
+      bool disableMaterializedViewRewriting);
+
+  // Whether a materialized view's own defining query is currently being
+  // planned to compute its cache key (see `MaterializedView::computeCacheKey`).
+  // This is unrelated to the `enable-materialized-view-query-rewrite` runtime
+  // parameter: it is only used to detect (and reject) the case where a view's
+  // query references another materialized view, which would otherwise
+  // deadlock on the write lock for the loaded views.
+  bool isAnalyzingMaterializedViewQuery() const {
+    return isAnalyzingMaterializedViewQuery_;
+  }
+
+  void setIsAnalyzingMaterializedViewQuery(bool isAnalyzing) {
+    isAnalyzingMaterializedViewQuery_ = isAnalyzing;
+  }
+
   // If false, then no updates of the runtime information should be sent via the
   // websocket connection for performance reasons.
   bool areWebsocketUpdatesEnabled() const {
@@ -188,26 +224,34 @@ class QueryExecutionContext
   // Get a reference to the `MaterializedViewsManager`.
   const MaterializedViewsManager& materializedViewsManager() const {
     return *materializedViewsManager_;
-  };
+  }
 
   // If `pinResultWithName_` is set, then the result of the query that is
   // executed using this context will be stored in the `namedQueryCache()` using
   // the string given in `PinResultWithName` as the query name. If
   // `geoIndexVar_` is also set, a geo index is built and cached in-memory on
-  // the column of this variable. If `pinResultWithName_` is `nullopt`, no
-  // pinning is done.
+  // the column of this variable. If `geoIndexSimplificationInMeters_` is also
+  // set, the indexed geometries are simplified before indexing using the
+  // Douglas-Peucker algorithm with the given maximum error in meters.
+  // If `pinResultWithName_` is `nullopt`, no pinning is done.
   struct PinResultWithName {
     std::string name_;
     std::optional<Variable> geoIndexVar_ = std::nullopt;
+    std::optional<double> geoIndexSimplificationInMeters_ = std::nullopt;
+
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PinResultWithName, name_,
+                                                geoIndexVar_,
+                                                geoIndexSimplificationInMeters_)
   };
 
   // Accessors; see `pinResultWithName_` for an explanation.
   auto& pinResultWithName() { return pinResultWithName_; }
   const auto& pinResultWithName() const { return pinResultWithName_; }
 
-  // Helper function to abstract away the fact that `LocalVocabContext` is
-  // currently just an alias for `IndexImpl`.
-  const LocalVocabContext& getLocalVocabContext() const { return getIndex(); }
+  // The context of the `LocalVocabEntry`s that belong to this query's index.
+  const LocalVocabContext& getLocalVocabContext() const {
+    return getIndex().getLocalVocabContext();
+  }
 
  private:
   // Helper functions to avoid including `global/RuntimeParameters.h` in this
@@ -266,6 +310,15 @@ class QueryExecutionContext
   // limiting the update frequency when `sendPriority` is `IfDue`.
   mutable std::chrono::steady_clock::time_point lastWebsocketUpdate_ =
       std::chrono::steady_clock::time_point::min();
+
+  // Disable the automatic rewriting of joins to materialized views. This also
+  // deactivates the check for materialized view rewriting of
+  // `QueryExecutionTree` by cache key. This is needed in
+  // `MaterializedView::computeCacheKey` to prevent a deadlock.
+  bool disableMaterializedViewRewriting_ = false;
+
+  // See the documentation for the getter with the same name above.
+  bool isAnalyzingMaterializedViewQuery_ = false;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

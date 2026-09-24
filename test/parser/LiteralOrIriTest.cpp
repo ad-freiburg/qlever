@@ -20,6 +20,7 @@
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
 #include "util/HashSet.h"
+#include "util/ParsedUri.h"
 
 namespace {
 
@@ -37,35 +38,64 @@ TEST(IriTest, IriCreation) {
 }
 
 // _____________________________________________________________________________
-TEST(IriTest, getBaseIri) {
-  // Helper lambda that calls `Iri::getBaseIri` and returns the result as a
-  // string (including the angle brackets).
-  auto getBaseIri = [](std::string_view iriSv, bool domainOnly) {
-    return Iri::fromIriref(iriSv)
-        .getBaseIri(domainOnly)
-        .toStringRepresentation();
+TEST(IriTest, fromIrirefOwnedString) {
+  // Whether or not the input has to be unescaped, the overload for owned
+  // strings yields the same result as the one for `std::string_view`.
+  for (std::string_view input : {"<http://www.wikidata.org/entity/Q3138>",
+                                 R"(<http://example.org/\u0061>)"}) {
+    EXPECT_EQ(Iri::fromIriref(std::string{input}), Iri::fromIriref(input));
+  }
+  // If the input is an owned string with nothing to unescape, it is moved into
+  // the `Iri` instead of being copied. Note that the string is long enough to
+  // be stored on the heap, so moving it preserves the address of its data.
+  std::string input = "<http://www.wikidata.org/entity/Q3138>";
+  const char* data = input.data();
+  std::string representation =
+      Iri::fromIriref(std::move(input)).toStringRepresentation();
+  EXPECT_EQ(representation.data(), data);
+  // An lvalue `std::string` is not moved from, but takes the `std::string_view`
+  // overload.
+  std::string lvalue = "<http://www.wikidata.org/entity/Q3139>";
+  std::string copied = Iri::fromIriref(lvalue).toStringRepresentation();
+  EXPECT_EQ(copied, lvalue);
+  EXPECT_NE(copied.data(), lvalue.data());
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, fromLangtag) {
+  EXPECT_EQ(Iri::fromLangtag("en").toStringRepresentation(),
+            "<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>");
+  EXPECT_NE(Iri::fromLangtag("en"), Iri::fromLangtag("de"));
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, fromIrirefValidated) {
+  // Valid IRI references are accepted and behave like `fromIriref`.
+  EXPECT_EQ(Iri::fromIrirefValidated("<http://www.wikidata.org/entity/Q3138>"),
+            Iri::fromIriref("<http://www.wikidata.org/entity/Q3138>"));
+  // The empty body `<>` is a valid `IRIREF`.
+  EXPECT_NO_THROW(Iri::fromIrirefValidated("<>"));
+  EXPECT_NO_THROW(Iri::fromIrirefValidated("<urn:foo>"));
+
+  // Invalid inputs throw with a descriptive message.
+  auto expectInvalid = [](std::string_view input) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        Iri::fromIrirefValidated(input),
+        ::testing::HasSubstr("not a valid IRI reference"));
   };
-  // IRI with path.
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/uniprot/>", false),
-            "<http://purl.uniprot.org/uniprot/>");
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/uniprot>", false),
-            "<http://purl.uniprot.org/uniprot/>");
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/uniprot/>", true),
-            "<http://purl.uniprot.org/>");
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/uniprot>", true),
-            "<http://purl.uniprot.org/>");
-  // IRI with domain only.
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/>", false),
-            "<http://purl.uniprot.org/>");
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org>", false),
-            "<http://purl.uniprot.org/>");
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/>", true),
-            "<http://purl.uniprot.org/>");
-  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org>", true),
-            "<http://purl.uniprot.org/>");
-  // IRI without scheme.
-  EXPECT_EQ(getBaseIri("<blabla>", false), "<blabla/>");
-  EXPECT_EQ(getBaseIri("<blabla>", true), "<blabla/>");
+  // Missing brackets.
+  expectInvalid("http://example.org");
+  expectInvalid("<http://example.org");
+  expectInvalid("http://example.org>");
+  // Forbidden characters inside the brackets.
+  expectInvalid("<http://example.org/a b>");   // space
+  expectInvalid("<http://example.org/a\"b>");  // double quote
+  expectInvalid("<http://example.org/a{b}>");  // braces
+  expectInvalid("<http://example.org/a\\b>");  // backslash
+  expectInvalid("<http://example.org/a^b>");   // caret
+  expectInvalid("<http://example.org/a`b>");   // backtick
+  // The internal `@lang@`-prefixed format is deliberately rejected.
+  expectInvalid("@en@<http://example.org>");
 }
 
 // _____________________________________________________________________________
@@ -76,35 +106,121 @@ TEST(IriTest, emptyIri) {
 
 // _____________________________________________________________________________
 TEST(IriTest, fromIrirefConsiderBase) {
-  // Helper lambda that calls `Iri::fromIrirefConsiderBase` with the two base
-  // IRIs and returns the results as a string (including the angle brackets).
-  Iri baseForRelativeIris;
+  // Helper lambda that calls `Iri::fromIrirefConsiderBase` with the base
+  // IRI and returns the results as a string (including the angle brackets).
+  qlever::util::ParsedUri baseUri{"http://example.com/uniprot"};
   Iri baseForAbsoluteIris;
-  auto fromIrirefConsiderBase = [&baseForRelativeIris, &baseForAbsoluteIris](
-                                    std::string_view iriStringWithBrackets) {
-    return Iri::fromIrirefConsiderBase(iriStringWithBrackets,
-                                       baseForRelativeIris, baseForAbsoluteIris)
-        .toStringRepresentation();
-  };
+  auto fromIrirefConsiderBase =
+      [&baseUri](std::string_view iriStringWithBrackets) {
+        return Iri::fromIrirefConsiderBase(iriStringWithBrackets, baseUri)
+            .toStringRepresentation();
+      };
 
-  // Check that it works for "real" base IRIs.
-  baseForRelativeIris = Iri::fromIriref("<http://.../uniprot/>");
-  baseForAbsoluteIris = Iri::fromIriref("<http://.../>");
   EXPECT_EQ(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
             "<http://purl.uniprot.org/uniprot/>");
   EXPECT_EQ(fromIrirefConsiderBase("<UPI001AF4585D>"),
-            "<http://.../uniprot/UPI001AF4585D>");
+            "<http://example.com/UPI001AF4585D>");
   EXPECT_EQ(fromIrirefConsiderBase("</prosite/PS51927>"),
-            "<http://.../prosite/PS51927>");
-
-  // Check that with the default base, all IRIs remain unchanged.
-  baseForRelativeIris = Iri{};
-  baseForAbsoluteIris = Iri{};
+            "<http://example.com/prosite/PS51927>");
   EXPECT_EQ(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
             "<http://purl.uniprot.org/uniprot/>");
-  EXPECT_EQ(fromIrirefConsiderBase("</a>"), "</a>");
-  EXPECT_EQ(fromIrirefConsiderBase("<a>"), "<a>");
-  EXPECT_EQ(fromIrirefConsiderBase("<>"), "<>");
+  EXPECT_EQ(fromIrirefConsiderBase("</a>"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase("<a>"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase("<>"), "<http://example.com/uniprot>");
+
+  // Numeric escapes are part of the lexical form of an IRI reference, so they
+  // are resolved before the IRI is resolved against the base IRI. Note that
+  // `\u0061` is `a`, so the results below are the same as for the unescaped
+  // inputs above.
+  EXPECT_EQ(fromIrirefConsiderBase(R"(<\u0061>)"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase(R"(</\u0061>)"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase(R"(<http://example.org/\u0061>)"),
+            "<http://example.org/a>");
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, resolveAgainstBase) {
+  qlever::util::ParsedUri baseUri{"http://example.com/uniprot"};
+  auto resolve = [&baseUri](const Iri& iri) {
+    return iri.resolveAgainstBase(baseUri).toStringRepresentation();
+  };
+  auto resolveIriref = [&baseUri](std::string_view iriref) {
+    return Iri::fromIrirefConsiderBase(iriref, baseUri)
+        .toStringRepresentation();
+  };
+
+  // For IRIs without escape sequences the result is the same as for
+  // `fromIrirefConsiderBase`.
+  EXPECT_EQ(resolve(Iri::fromIriref("<a>")), "<http://example.com/a>");
+  EXPECT_EQ(resolve(Iri::fromIriref("</a>")), "<http://example.com/a>");
+  EXPECT_EQ(resolve(Iri::fromIriref("<http://example.org/a>")),
+            "<http://example.org/a>");
+  EXPECT_EQ(resolve(Iri::fromIriref("<>")), "<http://example.com/uniprot>");
+
+  // The input is already in the internal representation, so a backslash in it
+  // is an ordinary character and not the start of an escape sequence. Such an
+  // IRI can be built at runtime by the SPARQL `IRI()` function, which does not
+  // unescape its argument.
+  //
+  // A backslash is not a valid character in a URI (RFC 3986), so such an IRI
+  // cannot be resolved against a base IRI at all and is rejected. The point of
+  // `resolveAgainstBase` is that it is rejected rather than silently rewritten:
+  // `fromIrirefConsiderBase` reads the same bytes as the escape sequence
+  // `\u0062` and turns `a\u0062c` into `abc`.
+  auto looksLikeAnEscape = Iri::fromIrirefWithoutBrackets(R"(a\u0062c)");
+  EXPECT_EQ(looksLikeAnEscape.toStringRepresentation(), R"(<a\u0062c>)");
+  EXPECT_ANY_THROW(resolve(looksLikeAnEscape));
+  EXPECT_EQ(resolveIriref(looksLikeAnEscape.toStringRepresentation()),
+            "<http://example.com/abc>");
+
+  // A percent-encoded backslash is a valid URI character and is preserved.
+  EXPECT_EQ(resolve(Iri::fromIrirefWithoutBrackets(R"(a%5Cb)")),
+            "<http://example.com/a%5Cb>");
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, fromLangtagAndIriref) {
+  // The language tag is prepended in QLever's internal `@langtag@<iri>` format.
+  EXPECT_EQ(Iri::fromLangtagAndIriref(
+                "en", "<http://www.w3.org/2000/01/rdf-schema#label>")
+                .toStringRepresentation(),
+            "@en@<http://www.w3.org/2000/01/rdf-schema#label>");
+
+  // The IRI is unescaped exactly as in `fromIriref`, the language tag is taken
+  // verbatim.
+  EXPECT_EQ(Iri::fromLangtagAndIriref("en", R"(<http://example.org/\u0061>)")
+                .toStringRepresentation(),
+            "@en@<http://example.org/a>");
+  EXPECT_EQ(Iri::fromLangtagAndIriref("en", "<http://example.org/a>"),
+            Iri::fromLangtagAndIriref("en", R"(<http://example.org/\u0061>)"));
+
+  // The result is not a valid IRI reference, so it must not be fed back into
+  // `fromIriref`.
+  EXPECT_ANY_THROW(
+      Iri::fromIriref(Iri::fromLangtagAndIriref("en", "<http://example.org/a>")
+                          .toStringRepresentation()));
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, withLanguageTag) {
+  auto label = Iri::fromIriref("<http://www.w3.org/2000/01/rdf-schema#label>");
+  EXPECT_EQ(label.withLanguageTag("en").toStringRepresentation(),
+            "@en@<http://www.w3.org/2000/01/rdf-schema#label>");
+  EXPECT_EQ(label.withLanguageTag("en"),
+            Iri::fromLangtagAndIriref(
+                "en", "<http://www.w3.org/2000/01/rdf-schema#label>"));
+
+  // The `Iri` is already in the internal representation, so a backslash in it
+  // is an ordinary character. In contrast to `fromLangtagAndIriref`, it is not
+  // read as an escape sequence a second time.
+  auto looksLikeAnEscape =
+      Iri::fromIrirefWithoutBrackets(R"(http://x/a\u0062c)");
+  EXPECT_EQ(looksLikeAnEscape.withLanguageTag("en").toStringRepresentation(),
+            R"(@en@<http://x/a\u0062c>)");
+  EXPECT_EQ(Iri::fromLangtagAndIriref(
+                "en", looksLikeAnEscape.toStringRepresentation())
+                .toStringRepresentation(),
+            "@en@<http://x/abc>");
 }
 
 // _____________________________________________________________________________

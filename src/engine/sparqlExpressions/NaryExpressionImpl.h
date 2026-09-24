@@ -16,18 +16,54 @@
 
 namespace sparqlExpression::detail {
 
+// Common storage and metadata handling for expressions with a fixed number of
+// child expressions.
+template <size_t N>
+class NaryExpressionBase : public SparqlExpression {
+ protected:
+  using Children = std::array<SparqlExpression::Ptr, N>;
+  Children children_;
+
+  explicit NaryExpressionBase(Children&& children)
+      : children_{std::move(children)} {}
+
+  [[nodiscard]] std::string getCacheKeyForChildren(
+      const VariableToColumnMap& varColMap) const {
+    return absl::StrJoin(
+        children_ | ql::views::transform([&varColMap](const auto& child) {
+          return child->getCacheKey(varColMap);
+        }),
+        "");
+  }
+
+ public:
+  [[nodiscard]] std::string getCacheKey(
+      const VariableToColumnMap& varColMap) const override {
+    return std::string{typeid(*this).name()} +
+           getCacheKeyForChildren(varColMap);
+  }
+
+  // Deterministic iff all children are deterministic.
+  [[nodiscard]] bool isDeterministic() const override {
+    return areChildrenDeterministic();
+  }
+
+ private:
+  ql::span<SparqlExpression::Ptr> childrenImpl() override {
+    return {children_.data(), children_.size()};
+  }
+};
+
 template <typename NaryOperation>
-class NaryExpressionStronglyTyped : public SparqlExpression {
+class NaryExpressionStronglyTyped
+    : public NaryExpressionBase<NaryOperation::N> {
   CPP_assert(isOperation<NaryOperation>);
 
  public:
   static constexpr size_t N = NaryOperation::N;
-  using Children = std::array<SparqlExpression::Ptr, N>;
+  using Base = NaryExpressionBase<N>;
+  using Children = typename Base::Children;
 
- private:
-  Children children_;
-
- public:
   // Construct from an array of `N` child expressions.
   explicit NaryExpressionStronglyTyped(Children&& children);
 
@@ -42,14 +78,7 @@ class NaryExpressionStronglyTyped : public SparqlExpression {
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  // _________________________________________________________________________
-  [[nodiscard]] std::string getCacheKey(
-      const VariableToColumnMap& varColMap) const override;
-
  private:
-  // _________________________________________________________________________
-  ql::span<SparqlExpression::Ptr> childrenImpl() override;
-
   // Evaluate the `naryOperation` on the `operands` using the `context`.
   // Is deliberately a functor, s.t. we can pass it to `bind_front` etc,
   // although the call operator is overloaded.
@@ -104,7 +133,7 @@ class NaryExpressionStronglyTyped : public SparqlExpression {
 template <typename Op>
 NaryExpressionStronglyTyped<Op>::NaryExpressionStronglyTyped(
     Children&& children)
-    : children_{std::move(children)} {}
+    : Base{std::move(children)} {}
 
 // _____________________________________________________________________________
 
@@ -113,7 +142,7 @@ ExpressionResult NaryExpressionStronglyTyped<NaryOperation>::evaluate(
     EvaluationContext* context) const {
   auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
       [context](const auto& child) { return child->evaluate(context); },
-      children_);
+      this->children_);
 
   // A function that only takes several `ExpressionResult`s,
   // and evaluates the expression.
@@ -122,26 +151,6 @@ ExpressionResult NaryExpressionStronglyTyped<NaryOperation>::evaluate(
                        EvaluateOnChildOperands{}, NaryOperation{}, context);
 
   return std::apply(evaluateOnChildrenResults, std::move(resultsOfChildren));
-}
-
-// _____________________________________________________________________________
-template <typename Op>
-ql::span<SparqlExpression::Ptr>
-NaryExpressionStronglyTyped<Op>::childrenImpl() {
-  return {children_.data(), children_.size()};
-}
-
-// __________________________________________________________________________
-template <typename Op>
-[[nodiscard]] std::string NaryExpressionStronglyTyped<Op>::getCacheKey(
-    const VariableToColumnMap& varColMap) const {
-  std::string key = typeid(*this).name();
-  key += absl::StrJoin(
-      children_ | ql::views::transform([&varColMap](const auto& child) {
-        return child->getCacheKey(varColMap);
-      }),
-      "");
-  return key;
 }
 
 // ============================================================================
@@ -159,10 +168,12 @@ template <typename Op>
 // `NaryExpressionTypeErased` class below, then this works, because the value
 // getters become part of the classes name/typeid.
 template <typename Ret, typename... Args>
-class NaryExpressionTypeErasedImpl : public SparqlExpression {
+class NaryExpressionTypeErasedImpl
+    : public NaryExpressionBase<sizeof...(Args)> {
  public:
   static constexpr size_t N = sizeof...(Args);
-  using Children = std::array<SparqlExpression::Ptr, N>;
+  using Base = NaryExpressionBase<N>;
+  using Children = typename Base::Children;
   using Function = std::function<Ret(Args...)>;
 
   // Type-erased `std::function` that converts the `ExpressionResult` variant
@@ -176,7 +187,6 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
   using Getters = std::tuple<TypeErasedGetter<Args>...>;
 
  private:
-  Children children_;
   Function function_;
   Getters getters_;
 
@@ -185,7 +195,7 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
   // `function` and `getters`.
   explicit NaryExpressionTypeErasedImpl(Function function, Getters getters,
                                         Children&& children)
-      : children_{std::move(children)},
+      : Base{std::move(children)},
         function_{std::move(function)},
         getters_{std::move(getters)} {}
 
@@ -196,7 +206,7 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
           return evaluateOnChildrenOperands(context,
                                             child->evaluate(context)...);
         },
-        children_);
+        this->children_);
   }
 
   // _________________________________________________________________________
@@ -204,19 +214,15 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
       const VariableToColumnMap& varColMap) const override {
     const auto& signatureId = typeid(*this);
     const auto& functionId = function_.target_type();
+
     std::string key =
         absl::StrCat(signatureId.name(), "_", signatureId.hash_code(), "_",
                      functionId.name(), "_", functionId.hash_code(), "_");
-    for (const auto& child : children_) {
-      key += child->getCacheKey(varColMap);
-    }
-    return key;
+
+    return key + this->getCacheKeyForChildren(varColMap);
   }
 
  private:
-  // _________________________________________________________________________
-  ql::span<SparqlExpression::Ptr> childrenImpl() override { return children_; }
-
   // Evaluate the `naryOperation` on the `operands` using the `context`.
   CPP_variadic_template(typename... Operands)(requires(
       ...&& std::is_same_v<ExpressionResult, Operands>)) ExpressionResult
@@ -234,8 +240,8 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
     // respective child result.
     auto zipper = std::apply(
         [&](const auto&... getters) {
-          return ::ranges::views::zip(ad_utility::OwningView{
-              getters(std::move(operands), context, targetSize)}...);
+          return ::ranges::views::zip(
+              getters(std::move(operands), context, targetSize)...);
         },
         getters_);
 
@@ -267,9 +273,9 @@ class NaryExpressionTypeErasedImpl : public SparqlExpression {
 
 // ============================================================================
 // Implementation of `NaryExpressionTypeErased` using the
-// `NaryExpressionTypeErasedImpl` from above: It has the same template argument
-// as `NaryExpression`, but uses type erasure for the function and value
-// getters.
+// `NaryExpressionTypeErasedImpl` from above: It has the same template
+// argument as `NaryExpression`, but uses type erasure for the function and
+// value getters.
 // ============================================================================
 
 // Helper: given a Function type and a tuple of (strongly typed) function
@@ -280,7 +286,11 @@ struct TypeErasedNaryHelper;
 
 template <typename Func, typename... VGs>
 struct TypeErasedNaryHelper<Func, std::tuple<VGs...>> {
-  using Res = std::invoke_result_t<Func, typename VGs::Value...>;
+  // `std::decay_t` ensures a value type, not a reference. Without this,
+  // expressions that use `ql:identity` as their functor, because the
+  // `ValueGetter`s do all the work would lead to dangling stack references.
+  // The strongly-typed path handles the same issue in `applyFunction`.
+  using Res = std::decay_t<std::invoke_result_t<Func, typename VGs::Value...>>;
   using BaseType = NaryExpressionTypeErasedImpl<Res, typename VGs::Value...>;
   static auto makeGetters() {
     return typename BaseType::Getters{TypeErasedValueGetter<VGs>{}...};
@@ -294,8 +304,8 @@ class NaryExpressionTypeErased;
 
 // Partial specialization for `Operation<N, FV<Function, ValueGetters...>,
 // SpecializedFunctions...>` As that is exactly the pattern the strongly typed
-// `NaryExpression` uses. Note: The `SpezializedFunctions` (which implement more
-// efficient evaluation in some circumstances, but are not required for
+// `NaryExpression` uses. Note: The `SpezializedFunctions` (which implement
+// more efficient evaluation in some circumstances, but are not required for
 // correctness) are ignored in the type-erased case, which is only used during
 // development for cheaper compilation.
 template <size_t N, typename Function, typename... ValueGetters,
@@ -340,15 +350,15 @@ using NaryExpression = NaryExpressionStronglyTyped<Args...>;
   class Name : public NaryExpression<detail::Operation<N, X, __VA_ARGS__>> { \
     using Base = NaryExpression<Operation<N, X, __VA_ARGS__>>;               \
     using Base::Base;                                                        \
-  };
+  }
 
-// Takes a `Function` that returns a numeric value (integral or floating point)
-// and converts it to a function, that takes the same arguments and returns the
-// same result, but the return type is the `NumericValue` variant.
+// Takes a `Function` that returns a numeric value (integral or floating
+// point) and converts it to a function, that takes the same arguments and
+// returns the same result, but the return type is the `NumericValue` variant.
 template <typename Function, bool nanToUndef = false>
 struct NumericIdWrapper {
-  // Note: Sonarcloud suggests `[[no_unique_address]]` for the following member,
-  // but adding it causes an internal compiler error in Clang 16.
+  // Note: Sonarcloud suggests `[[no_unique_address]]` for the following
+  // member, but adding it causes an internal compiler error in Clang 16.
   Function function_{};
   template <typename... Args>
   Id operator()(Args&&... args) const {
@@ -357,9 +367,9 @@ struct NumericIdWrapper {
 };
 
 // Takes a `Function` that takes and returns numeric values (integral or
-// floating point) and converts it to a function, that takes the same arguments
-// and returns the same result, but the arguments and the return type are the
-// `NumericValue` variant.
+// floating point) and converts it to a function, that takes the same
+// arguments and returns the same result, but the arguments and the return
+// type are the `NumericValue` variant.
 template <typename Function, bool NanOrInfToUndef = false>
 struct MakeNumericExpression {
   template <typename... Args>

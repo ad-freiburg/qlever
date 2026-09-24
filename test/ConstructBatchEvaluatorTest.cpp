@@ -26,13 +26,13 @@ using ::testing::Pointee;
 // `std::optional<std::shared_ptr<const EvaluatedTermData>>`): asserts the
 // optional is non-empty and the pointed-to term's `rdfTermString_` field equals
 // `expected`.
-static constexpr auto evalTerm = [](const std::string& expected) {
+constexpr auto evalTerm = [](const std::string& expected) {
   return Optional(
       Pointee(Field(&EvaluatedTermData::rdfTermString_, Eq(expected))));
 };
 
-static const EvaluatedVariableValues& getColumn(
-    const BatchEvaluationResult& result, size_t variableColumnIdx) {
+const EvaluatedVariableValues& getColumn(const BatchEvaluationResult& result,
+                                         size_t variableColumnIdx) {
   return result.variablesByColumn_.at(variableColumnIdx);
 }
 
@@ -66,9 +66,10 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
   // Evaluate all rows of the `IdTable` with the given variable columns in
   // one single batch.
   BatchEvaluationResult evaluateIdTable(
-      const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
-      IdCache& idCache) {
-    BatchEvaluationContext ctx{idTable, 0, idTable.numRows()};
+      const std::vector<ColumnIndex>& variableColumnIndices,
+      const IdTable& idTable, IdCache& idCache) {
+    const BatchEvaluationContext ctx{idTable.asStaticView<0>(), 0,
+                                     idTable.numRows()};
     return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
                                                   localVocab_, index_, idCache);
   }
@@ -76,9 +77,11 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
   // Evaluate a sub-range [`firstRow`, `endRow`) of the `IdTable` in one single
   // batch.
   BatchEvaluationResult evaluateRowRange(
-      const std::vector<size_t>& variableColumnIndices, const IdTable& idTable,
-      size_t firstRow, size_t endRow, IdCache& idCache) {
-    BatchEvaluationContext ctx{idTable, firstRow, endRow};
+      const std::vector<ColumnIndex>& variableColumnIndices,
+      const IdTable& idTable, size_t firstRow, size_t endRow,
+      IdCache& idCache) {
+    const BatchEvaluationContext ctx{idTable.asStaticView<0>(), firstRow,
+                                     endRow};
     return ConstructBatchEvaluator::evaluateBatch(variableColumnIndices, ctx,
                                                   localVocab_, index_, idCache);
   }
@@ -246,6 +249,42 @@ TEST_F(ConstructBatchEvaluatorTest, noVariableColumns) {
 
   EXPECT_EQ(result.numRows_, 2);
   EXPECT_TRUE(result.variablesByColumn_.empty());
+}
+
+// Regression test for the heap-use-after-free fixed in PR #3025: a
+// `LocalVocabIndex` Id must never enter the block-spanning `idCache`. The
+// `LocalVocabEntry` such an Id points to is owned by the current result
+// block's `LocalVocab` and is freed when the export advances to the next
+// block, while `idCache` outlives blocks. A cached `LocalVocabIndex` key
+// would therefore dangle, and a later hash-colliding lookup would compare
+// against freed memory (heap-use-after-free in
+// `LocalVocabEntry::compareThreeWay`).
+TEST_F(ConstructBatchEvaluatorTest, localVocabIdBypassesIdCache) {
+  // Add a `LocalVocabEntry` to the fixture's `localVocab_` (so it owns
+  // the storage) and build an `Id` pointing into it.
+  const auto& ctx = qec_->getLocalVocabContext();
+  LocalVocabIndex localVocabIdx = localVocab_.getIndexAndAddIfNotContained(
+      LocalVocabEntry::literalWithoutQuotes("local-word", ctx));
+  Id idLocal = Id::makeFromLocalVocabIndex(localVocabIdx);
+
+  // Mix the `LocalVocab` Id with vocab Ids so the test also exercises the
+  // mixed-Id-type path in `evaluateVariableByColumn`.
+  auto idTable = makeIdTableFromVector({{idS_}, {idLocal}, {idO_}});
+  IdCache idCache{1024};
+
+  // Check that `evaluateIdTable` produces the correct result.
+  auto result = evaluateIdTable({0}, idTable, idCache);
+  ASSERT_EQ(result.numRows_, 3);
+  EXPECT_THAT(getColumn(result, 0),
+              ElementsAre(evalTerm("<s>"), evalTerm("\"local-word\""),
+                          evalTerm("<o>")));
+
+  // The fix's invariant: the `LocalVocab` Id must NOT be in the cache after
+  // evaluation, while the vocab Ids must be (the latter check guards against
+  // a trivially-empty cache making the first assertion vacuous).
+  EXPECT_FALSE(idCache.tryGet(idLocal).has_value());
+  EXPECT_TRUE(idCache.tryGet(idS_).has_value());
+  EXPECT_TRUE(idCache.tryGet(idO_).has_value());
 }
 
 // Simulates the `IdTable` that would result from:

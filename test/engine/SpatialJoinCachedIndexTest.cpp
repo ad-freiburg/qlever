@@ -4,6 +4,7 @@
 
 #include <gmock/gmock.h>
 #include <s2/mutable_s2shape_index.h>
+#include <s2/s2polyline.h>
 
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -13,7 +14,9 @@
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/SpatialJoinConfig.h"
 #include "global/ValueId.h"
+#include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/Variable.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
 
@@ -55,7 +58,7 @@ TEST_P(SpatialJoinCachedIndexTest, Basic) {
   auto qec = ad_utility::testing::getQec(kb);
   qec->pinResultWithName() = {"dummy", Variable{"?o"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinned, qec);
-  [[maybe_unused]] auto pinResult = plan.getResult();
+  [[maybe_unused]] auto pinResult = plan->getResult();
 
   auto& cache = qec->namedResultCache();
   if (shouldSerialize) {
@@ -66,9 +69,12 @@ TEST_P(SpatialJoinCachedIndexTest, Basic) {
   auto cacheEntry = qec->namedResultCache().get("dummy");
 
   ASSERT_NE(cacheEntry.get(), nullptr);
-  ASSERT_NE(cacheEntry->result_.get(), nullptr);
-  EXPECT_EQ(cacheEntry->result_->numColumns(), 2);
-  EXPECT_EQ(cacheEntry->result_->numRows(), 5);
+  ASSERT_THAT(cacheEntry->result_,
+              ::testing::VariantWith<std::shared_ptr<const IdTable>>(
+                  ::testing::Ne(nullptr)));
+  auto resultView = ExplicitIdTableOperation::viewOf(cacheEntry->result_);
+  EXPECT_EQ(resultView.numColumns(), 2);
+  EXPECT_EQ(resultView.numRows(), 5);
 
   ASSERT_TRUE(cacheEntry->cachedGeoIndex_.has_value());
   EXPECT_EQ(cacheEntry->cachedGeoIndex_.value().getGeometryColumn().name(),
@@ -126,8 +132,8 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
   auto qec = ad_utility::testing::getQec(kb);
   qec->pinResultWithName() = {"dummy", Variable{"?geo2"}};
   auto plan = queryPlannerTestHelpers::parseAndPlan(pinQuery, qec);
-  const auto pinResultCacheKey = plan.getCacheKey();
-  [[maybe_unused]] auto pinResult = plan.getResult();
+  const auto pinResultCacheKey = plan->getCacheKey();
+  [[maybe_unused]] auto pinResult = plan->getResult();
 
   auto& cache = qec->namedResultCache();
   if (shouldSerialize) {
@@ -136,8 +142,9 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
 
   // Check expected cache size
   const auto cacheEntry = qec->namedResultCache().get("dummy");
-  EXPECT_EQ(cacheEntry->result_->numColumns(), 2);
-  EXPECT_EQ(cacheEntry->result_->numRows(), 5);
+  auto resultView = ExplicitIdTableOperation::viewOf(cacheEntry->result_);
+  EXPECT_EQ(resultView.numColumns(), 2);
+  EXPECT_EQ(resultView.numRows(), 5);
   EXPECT_TRUE(cacheEntry->cachedGeoIndex_.has_value());
 
   // Prepare a spatial join using the s2 point polyline algorithm on this
@@ -159,16 +166,16 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
   const auto res = spatialJoin->computeResult(false);
 
   EXPECT_TRUE(res.isFullyMaterialized());
-  EXPECT_EQ(res.idTable().numRows(), expectedResultIris.size());
-  EXPECT_EQ(res.idTable().numColumns(), 4);  // ?s1 ?s2 ?geo1 ?geo2
+  EXPECT_EQ(res.idTableView().numRows(), expectedResultIris.size());
+  EXPECT_EQ(res.idTableView().numColumns(), 4);  // ?s1 ?s2 ?geo1 ?geo2
 
   std::vector<std::string> resultIris;
 
   const auto subjectColIdx = spatialJoin->computeVariableToColumnMap()
                                  .at(Variable{"?s2"})
                                  .columnIndex_;
-  for (size_t i = 0; i < res.idTable().numRows(); i++) {
-    auto valueId = res.idTable().at(i, subjectColIdx);
+  for (size_t i = 0; i < res.idTableView().numRows(); i++) {
+    auto valueId = res.idTableView()(i, subjectColIdx);
     ASSERT_EQ(valueId.getDatatype(), Datatype::VocabIndex);
     auto entry = qec->getIndex().getVocab()[valueId.getVocabIndex()];
     resultIris.push_back(entry);
@@ -185,5 +192,106 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
 // _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(WithAndWithoutSerialization,
                          SpatialJoinCachedIndexTest, ::testing::Bool());
+
+// _____________________________________________________________________________
+// Tests for `SpatialJoinCachedIndex` with and without simplification.
+class SpatialJoinCachedIndexSimplificationTest
+    : public ::testing::TestWithParam<bool> {};
+
+// _____________________________________________________________________________
+TEST_P(SpatialJoinCachedIndexSimplificationTest, WithoutSimplification) {
+  bool shouldSerialize = GetParam();
+  // A 3-vertex linestring: without simplification all 3 vertices (= 2 edges)
+  // must be stored in the S2 shape index.
+  const std::string kb =
+      "<s1> <p> \"LINESTRING(7.840000 47.999000, 7.840045 47.999050, 7.841000 "
+      "47.999900)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .";
+  const std::string query = "SELECT * { ?s <p> ?o }";
+
+  auto qec = ad_utility::testing::getQec(kb);
+  qec->pinResultWithName() = {"idx", Variable{"?o"}};
+  auto plan = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  [[maybe_unused]] auto pinResult = plan->getResult();
+
+  auto& cache = qec->namedResultCache();
+  if (shouldSerialize) {
+    serializeAndDeserializeCache(cache, qec);
+  }
+
+  const auto entry = qec->namedResultCache().get("idx");
+  ASSERT_TRUE(entry->cachedGeoIndex_.has_value());
+  auto s2idx = entry->cachedGeoIndex_.value().getIndex();
+  ASSERT_EQ(s2idx->num_shape_ids(), 1);
+  // 3 vertices → 2 edges, stored as a single shape.
+  EXPECT_EQ(s2idx->shape(0)->num_edges(), 2);
+}
+
+// _____________________________________________________________________________
+TEST_P(SpatialJoinCachedIndexSimplificationTest, WithSimplification) {
+  bool shouldSerialize = GetParam();
+  // Same 3-vertex linestring, but the middle vertex is only ~6 m off the
+  // direct path, so a 10 m simplification tolerance should remove it, leaving
+  // 2 vertices (= 1 edge) in the index.
+  const std::string kb =
+      "<s1> <p> \"LINESTRING(7.840000 47.999000, 7.840045 47.999050, 7.841000 "
+      "47.999900)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .";
+  const std::string query = "SELECT * { ?s <p> ?o }";
+
+  auto qec = ad_utility::testing::getQec(kb);
+  qec->pinResultWithName() = {"idx", Variable{"?o"}, 10.0};
+  auto plan = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  [[maybe_unused]] auto pinResult = plan->getResult();
+
+  auto& cache = qec->namedResultCache();
+  if (shouldSerialize) {
+    serializeAndDeserializeCache(cache, qec);
+  }
+
+  const auto entry = qec->namedResultCache().get("idx");
+  ASSERT_TRUE(entry->cachedGeoIndex_.has_value());
+  auto s2idx = entry->cachedGeoIndex_.value().getIndex();
+  ASSERT_EQ(s2idx->num_shape_ids(), 1);
+  // Middle vertex removed by simplification: 2 vertices → 1 edge.
+  EXPECT_EQ(s2idx->shape(0)->num_edges(), 1);
+}
+
+// _____________________________________________________________________________
+INSTANTIATE_TEST_SUITE_P(WithAndWithoutSerialization,
+                         SpatialJoinCachedIndexSimplificationTest,
+                         ::testing::Bool());
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, GetPolylineGeometryTypeCheck) {
+  // Test that `getPolyline` correctly checks the geometry type of its input
+  // literals.
+  std::string kb =
+      "<s1> <asWKT> \"LINESTRING(7.8428469 47.9995367,7.8423373 "
+      "47.9988434,7.8420709 47.9984901,7.8417183 47.9980174,7.8417069 "
+      "47.9980066,7.8413941 47.9975806,7.8413556 47.9975293,7.8413293 "
+      "47.9974942)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s2> <asWKT> \"POLYGON((7.8428469 47.9995367,7.8423373 "
+      "47.9988434,7.8420709 47.9984901,7.8417183 47.9980174,7.8417069 "
+      "47.9980066,7.8413941 47.9975806,7.8413556 47.9975293,7.8413293 "
+      "47.9974942, 7.8428469 47.9995367))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s3> <asWKT> \"POINT(1 2)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
+
+  auto vocabType =
+      ad_utility::VocabularyType::fromString("on-disk-compressed-geo-split");
+  auto qec = ad_utility::testing::getQec(kb, vocabType);
+  auto scan = buildIndexScan(qec, {"?s", std::string{"<asWKT>"}, "?geo"});
+  auto result = scan->getResult();
+  auto col = scan->getVariableColumn(Variable{"?geo"});
+
+  auto check = [&](size_t row) {
+    return SpatialJoinCachedIndex::getPolyline(result->idTableView(), row, col,
+                                               qec->getIndex());
+  };
+
+  EXPECT_TRUE(check(0).has_value());
+  EXPECT_FALSE(check(1).has_value());
+  EXPECT_FALSE(check(2).has_value());
+}
 
 }  // namespace

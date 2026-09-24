@@ -1,15 +1,17 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+#include "engine/sparqlExpressions/BinaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
 
 namespace sparqlExpression {
 namespace detail {
+
 // Multiplication.
 using Multiply = MakeNumericExpression<std::multiplies<>>;
-NARY_EXPRESSION(MultiplyExpression, 2, FV<Multiply, NumericValueGetter>);
+BINARY_EXPRESSION(MultiplyExpression, FV<Multiply, NumericValueGetter>);
 
 // Division.
 //
@@ -29,19 +31,54 @@ struct DivideImpl {
 };
 
 using Divide1 = MakeNumericExpression<DivideImpl, true>;
-NARY_EXPRESSION(DivideExpressionByZeroIsUndef, 2,
-                FV<Divide1, NumericValueGetter>);
+BINARY_EXPRESSION(DivideExpressionByZeroIsUndef,
+                  FV<Divide1, NumericValueGetter>);
 
 using Divide2 = MakeNumericExpression<DivideImpl, false>;
-NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
-                FV<Divide2, NumericValueGetter>);
-
-// Addition and subtraction, currently all results are converted to double.
-using Add = MakeNumericExpression<std::plus<>>;
-NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
+BINARY_EXPRESSION(DivideExpressionByZeroIsNan, FV<Divide2, NumericValueGetter>);
 
 // _____________________________________________________________________________
-// Subtract.
+// Addition.
+struct AddImpl {
+  ValueId operator()(NumericOrDateValue lhs, NumericOrDateValue rhs) const {
+    return std::visit(AddImpl{}, lhs, rhs);
+  }
+
+  ValueId operator()(int64_t lhs, int64_t rhs) const {
+    return Id::makeFromInt(lhs + rhs);
+  }
+  ValueId operator()(int64_t lhs, double rhs) const {
+    return Id::makeFromDouble(static_cast<double>(lhs) + rhs);
+  }
+  ValueId operator()(double lhs, double rhs) const {
+    return Id::makeFromDouble(lhs + rhs);
+  }
+  ValueId operator()(double lhs, int64_t rhs) const {
+    return Id::makeFromDouble(lhs + static_cast<double>(rhs));
+  }
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  ValueId operator()(DateYearOrDuration lhs, DateYearOrDuration rhs) const {
+    // Using `operator+` implementation in `DateYearOrDuration`.
+    auto difference = lhs + rhs;
+    if (difference.has_value()) {
+      return Id::makeFromDate(difference.value());
+    } else {
+      return Id::makeUndefined();
+    }
+  }
+#endif
+  template <typename L, typename R>
+  ValueId operator()(L, R) const {
+    // For all other operations return `Undefined`.
+    // It is not allowed to use addition between a `DateYearOrDuration` and
+    // a `NumericValue`.
+    return Id::makeUndefined();
+  }
+};
+BINARY_EXPRESSION(AddExpression, FV<AddImpl, NumericOrDateValueGetter>);
+
+// _____________________________________________________________________________
+// Subtraction.
 struct SubtractImpl {
   ValueId operator()(NumericOrDateValue lhs, NumericOrDateValue rhs) const {
     return std::visit(SubtractImpl{}, lhs, rhs);
@@ -78,8 +115,8 @@ struct SubtractImpl {
     return Id::makeUndefined();
   }
 };
-NARY_EXPRESSION(SubtractExpression, 2,
-                FV<SubtractImpl, NumericOrDateValueGetter>);
+BINARY_EXPRESSION(SubtractExpression,
+                  FV<SubtractImpl, NumericOrDateValueGetter>);
 
 // _____________________________________________________________________________
 // Power.
@@ -89,7 +126,7 @@ struct PowImpl {
   }
 };
 using Pow = MakeNumericExpression<PowImpl>;
-NARY_EXPRESSION(PowExpression, 2, FV<Pow, NumericValueGetter>);
+BINARY_EXPRESSION(PowExpression, FV<Pow, NumericValueGetter>);
 
 // OR and AND
 // _____________________________________________________________________________

@@ -52,6 +52,12 @@ bool GraphFilter<T>::areAllGraphsAllowed() const {
 
 //______________________________________________________________________________
 template <typename T>
+const ad_utility::HashSet<T>* GraphFilter<T>::whitelistIfPresent() const {
+  return std::get_if<ad_utility::HashSet<T>>(&filter_);
+}
+
+//______________________________________________________________________________
+template <typename T>
 void GraphFilter<T>::format(
     std::ostream& os,
     absl::FunctionRef<std::string(const T&)> formatter) const {

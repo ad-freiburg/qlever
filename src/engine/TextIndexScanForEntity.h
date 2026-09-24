@@ -71,6 +71,8 @@ class TextIndexScanForEntity : public Operation {
   }
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   const VocabIndex& getVocabIndexOfFixedEntity() const {
@@ -80,7 +82,9 @@ class TextIndexScanForEntity : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {};
+  }
 
   void setVariableToColumnMap();
 };

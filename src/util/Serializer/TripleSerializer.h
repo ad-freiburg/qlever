@@ -7,11 +7,11 @@
 #include <absl/container/flat_hash_map.h>
 
 #include <array>
-#include <filesystem>
 #include <fstream>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/filesystem.h"
 #include "backports/type_traits.h"
 #include "global/Id.h"
 #include "index/IndexImpl.h"
@@ -93,6 +93,24 @@ CPP_template(typename Serializer)(
                        ad_utility::dereference);
 }
 
+// Serialize only the blank node blocks of the local vocabulary, and none of
+// its words: write exactly the format of `serializeLocalVocab` above, with the
+// number of words set to zero, such that `deserializeLocalVocab` reads it back
+// as a local vocab that holds only those blank node blocks (and returns an
+// empty mapping). Use this for a caller that stores the words elsewhere, e.g.
+// in a persistent vocabulary, and that has rewritten the `Id`s that refer to
+// those words accordingly, so that the words must not be written a second time
+// here.
+CPP_template(typename Serializer)(
+    requires serialization::WriteSerializer<
+        Serializer>) void serializeOnlyBlankNodeBlocksFromLocalVocab(Serializer&
+                                                                         serializer,
+                                                                     const LocalVocab&
+                                                                         vocab) {
+  serializer << vocab.getOwnedLocalBlankNodeBlocks();
+  serializer << uint64_t{0};
+}
+
 // Deserialize the local vocabulary from the input stream.
 CPP_template(typename Serializer)(
     requires serialization::ReadSerializer<Serializer>) std::
@@ -170,9 +188,9 @@ std::vector<Id> deserializeIds(Serializer& serializer,
 // Serialize the local vocabulary and the given ranges of Ids to the given path.
 CPP_template(typename Range)(
     requires ql::ranges::range<
-        Range>) void serializeIds(const std::filesystem::path& path,
+        Range>) void serializeIds(const ql::filesystem::path& path,
                                   const LocalVocab& vocab, Range&& idRanges) {
-  serialization::FileWriteSerializer serializer{path.c_str()};
+  serialization::FileWriteSerializer serializer{path.string()};
   detail::writeHeader(serializer);
   detail::serializeLocalVocab(serializer, vocab);
   serializer << uint64_t{ql::ranges::size(idRanges)};
@@ -182,15 +200,15 @@ CPP_template(typename Range)(
 }
 
 inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
-    const std::filesystem::path& path, const LocalVocabContext& context) {
+    const ql::filesystem::path& path, const LocalVocabContext& context) {
   // This is a minor TOCTOU issue, the file might be gone after this check and
   // before the call to `fopen`, done by `FileReadSerializer`, so ideally we'd
   // handle this as a special exception type of our own `File` class, which
   // doesn't exist yet.
-  if (!std::filesystem::exists(path)) {
+  if (!ql::filesystem::exists(path)) {
     return {};
   }
-  auto serializer = [p = path.c_str()]() {
+  auto serializer = [p = path.string()]() {
     try {
       return serialization::FileReadSerializer{p};
     } catch (const std::runtime_error& err) {

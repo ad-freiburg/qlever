@@ -5,59 +5,9 @@
 #include <gtest/gtest.h>
 
 #include "./util/GTestHelpers.h"
-#include "index/StringSortComparator.h"
+#include "index/vocabulary/StringSortComparator.h"
 using namespace std::literals;
 using ad_utility::source_location;
-
-TEST(LocaleManagerTest, Levels) {
-  using L = LocaleManager::Level;
-  LocaleManager loc;
-
-  ASSERT_EQ(loc.compare("alpha", "ALPHA", L::SECONDARY), 0);
-  ASSERT_LT(loc.compare("alpha", "ALPHA", L::TERTIARY), 0);
-  ASSERT_EQ(loc.compare("älpha", "ALPHA", L::PRIMARY), 0);
-  ASSERT_GT(loc.compare("älpha", "ALPHA", L::SECONDARY), 0);
-}
-
-TEST(LocaleManagerTest, getLowercaseUtf8) {
-  LocaleManager loc;
-  ASSERT_EQ("schindler's list", loc.getLowercaseUtf8("Schindler's List"));
-  ASSERT_EQ("#+-_foo__bar++", loc.getLowercaseUtf8("#+-_foo__Bar++"));
-  ASSERT_EQ("fôéßaéé", loc.getLowercaseUtf8("FÔÉßaéÉ"));
-}
-
-TEST(LocaleManagerTest, Punctuation) {
-  using L = LocaleManager::Level;
-  {
-    LocaleManager loc("en", "US", false);
-    ASSERT_LT(loc.compare("a.c", "ab", L::IDENTICAL), 0);
-    ASSERT_LT(loc.compare(".a", "a", L::IDENTICAL), 0);
-    ASSERT_LT(loc.compare(".a", "a", L::PRIMARY), 0);
-  }
-  {
-    LocaleManager loc("en", "US", true);
-    ASSERT_GT(loc.compare("a.c", "ab", L::IDENTICAL), 0);
-    ASSERT_LT(loc.compare(".a", "a", L::IDENTICAL), 0);
-    ASSERT_EQ(loc.compare(".a", "a", L::PRIMARY), 0);
-    ASSERT_EQ(loc.compare(".a", "#?a", L::PRIMARY), 0);
-    ASSERT_EQ(loc.compare(".a", "#?a", L::TERTIARY), 0);
-    ASSERT_LT(loc.compare(".a", "#?a", L::QUARTERNARY), 0);
-  }
-}
-
-TEST(LocaleManagerTest, Normalization) {
-  // é as single codepoints
-  std::string as = "\xc3\xa9"s;
-  // é as e + accent aigu
-  std::string bs = "e\xcc\x81"s;
-  ASSERT_EQ(2u, as.size());
-  ASSERT_EQ(3u, bs.size());
-  LocaleManager loc;
-  auto resA = loc.normalizeUtf8(as);
-  auto resB = loc.normalizeUtf8(bs);
-  ASSERT_EQ(resA, resB);
-  ASSERT_EQ(resA, as);
-}
 
 // ______________________________________________________________________________________________
 TEST(StringSortComparatorTest, TripleComponentComparatorQuarternary) {
@@ -242,53 +192,52 @@ TEST(StringSortComparatorTest, SimpleStringComparator) {
   ASSERT_FALSE(comp("@u2", "\"@u2"));
 }
 
-// ______________________________________________________________________________________________
-TEST(LocaleManagerTest, CountPrimaryCollationElements) {
-  LocaleManager loc("en", "US", false);
-  EXPECT_EQ(loc.countPrimaryCollationElements(""), 0u);
-  EXPECT_EQ(loc.countPrimaryCollationElements("hello"), 5u);
-  // Accented characters count as one primary element each.
-  EXPECT_EQ(loc.countPrimaryCollationElements("héllo"), 5u);
-  // Multi-byte UTF-8: é = U+00E9 = 2 bytes, still 1 primary element.
-  EXPECT_EQ(loc.countPrimaryCollationElements("\xc3\xa9"), 1u);
-  // Punctuation has raw primary weight even with ignorePunctuation=true,
-  // because CollationElementIterator returns raw weights; UCOL_SHIFTED is only
-  // applied during comparison, not during element iteration.
-  EXPECT_EQ(loc.countPrimaryCollationElements(".hello"), 6u);
-  EXPECT_EQ(loc.countPrimaryCollationElements("hello world"), 11u);
-  EXPECT_EQ(loc.countPrimaryCollationElements("..."), 3u);
+// The following tests exercise the ICU-free (bytewise) comparators. They are
+// always compiled and run, regardless of whether QLever is built with ICU, so
+// that the ICU-free code paths are covered.
+
+// ______________________________________________________________________________
+TEST(StringSortComparatorNoICU, SimpleStringComparator) {
+  SimpleStringComparatorNoICU comp("en", "US", true);
+
+  // Bytewise ordering: uppercase letters come before lowercase ones.
+  EXPECT_TRUE(comp("ALPHA", "alpha"));
+  EXPECT_FALSE(comp("alpha", "ALPHA"));
+  EXPECT_TRUE(comp("alpha", "beta"));
+  EXPECT_FALSE(comp("beta", "alpha"));
+
+  // Something is not smaller than itself.
+  EXPECT_FALSE(comp("beta", "beta"));
 }
 
-// ______________________________________________________________________________________________
-TEST(LocaleManagerTest, PrimaryCollationPrefixLength) {
-  LocaleManager loc("en", "US", false);
+// ______________________________________________________________________________
+TEST(StringSortComparatorNoICU, TripleComponentComparator) {
+  TripleComponentComparatorNoICU comp("en", "US", false);
+  using L = TripleComponentComparatorNoICU::Level;
 
-  // Edge cases.
-  EXPECT_EQ(loc.primaryCollationPrefixLength("hello", 0), 0u);
-  EXPECT_EQ(loc.primaryCollationPrefixLength("", 5), 0u);
-  // Fewer elements than requested: return the full string length.
-  EXPECT_EQ(loc.primaryCollationPrefixLength("hi", 10), 2u);
+  // The inner value is compared bytewise, so casing DOES affect the order
+  // (in contrast to the ICU-based comparator).
+  EXPECT_TRUE(comp("\"ALPHA\"", "\"beta\""));   // 'A' (65) < 'b' (98)
+  EXPECT_TRUE(comp("\"ALPHA\"", "\"alpha\""));  // 'A' (65) < 'a' (97)
+  EXPECT_FALSE(comp("\"alpha\"", "\"ALPHA\""));
+  EXPECT_TRUE(comp("\"alpha\"", "\"beta\""));
 
-  // Basic ASCII: one byte per codepoint, one primary element per letter.
-  EXPECT_EQ(loc.primaryCollationPrefixLength("hello world", 5), 5u);
-  // 6th element is the space, so offset includes it.
-  EXPECT_EQ(loc.primaryCollationPrefixLength("hello world", 6), 6u);
+  // Something is not smaller than itself.
+  EXPECT_FALSE(comp("\"beta\"", "\"beta\""));
 
-  // Multi-byte UTF-8: é = U+00E9 = 2 bytes but 1 primary element.
-  // "héllo" = h(1) + é(2) + l(1) + l(1) + o(1) = 6 bytes total.
-  EXPECT_EQ(loc.primaryCollationPrefixLength("héllo", 1), 1u);  // "h"
-  EXPECT_EQ(loc.primaryCollationPrefixLength("héllo", 2), 3u);  // "hé"
-  EXPECT_EQ(loc.primaryCollationPrefixLength("héllo", 5), 6u);  // "héllo"
+  // The datatype (first character) is compared first.
+  EXPECT_TRUE(comp("\"zzz\"", "<aaa>"));  // '"' (34) < '<' (60)
 
-  // "." has raw primary weight, so it counts as element 1.
-  EXPECT_EQ(loc.primaryCollationPrefixLength(".hello", 1), 1u);  // "."
-  EXPECT_EQ(loc.primaryCollationPrefixLength(".hello", 6), 6u);  // ".hello"
+  // On the TOTAL level the language tag is a tiebreaker.
+  EXPECT_TRUE(comp("\"Hannibal\"@af", "\"Hannibal\"@en", L::TOTAL));
+  EXPECT_FALSE(comp("\"Hannibal\"@en", "\"Hannibal\"@af", L::TOTAL));
 
-  // Round-trip: countPrimaryCollationElements(s) elements should cover all of
-  // s.
-  for (std::string_view s :
-       {"hello"sv, "héllo"sv, ".hello"sv, "hello world"sv}) {
-    size_t n = loc.countPrimaryCollationElements(s);
-    EXPECT_EQ(loc.primaryCollationPrefixLength(s, n), s.size());
-  }
+  // `isLessInTotalWithExternalFlag` breaks ties on equal values by the flag.
+  EXPECT_TRUE(
+      comp.isLessInTotalWithExternalFlag("\"beta\"", true, "\"beta\"", false));
+  EXPECT_FALSE(
+      comp.isLessInTotalWithExternalFlag("\"beta\"", false, "\"beta\"", true));
+
+  // `normalizeUtf8` is a no-op in the ICU-free variant.
+  EXPECT_EQ(comp.normalizeUtf8("\xc3\xa9"), "\xc3\xa9");
 }

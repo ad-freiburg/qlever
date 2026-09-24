@@ -59,7 +59,7 @@ uint64_t GroupBy::getSizeEstimateBeforeLimit() {
 size_t GroupBy::getCostEstimate() { return _impl->getCostEstimate(); }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> GroupBy::getChildren() {
+std::vector<QueryExecutionTree*> GroupBy::getChildrenImpl() const {
   return _impl->getChildren();
 }
 
@@ -80,6 +80,9 @@ const std::vector<Variable>& GroupBy::groupByVariables() const {
 
 // _____________________________________________________________________________
 const std::vector<Alias>& GroupBy::aliases() const { return _impl->aliases(); }
+
+// _____________________________________________________________________________
+bool GroupBy::isDeterministicImpl() const { return _impl->isDeterministic(); }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> GroupBy::cloneImpl() const {

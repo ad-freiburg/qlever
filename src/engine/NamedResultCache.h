@@ -30,7 +30,13 @@ class NamedResultCache {
   // geometry index `cachedGeoIndex_` can be precomputed on a column of the
   // result table for spatial joins with a constant (right) child.
   struct Value {
-    std::shared_ptr<const IdTable> result_;
+    // The result can either be an owning `shared_ptr<const IdTable>` or a
+    // non-owning `IdTableView<0>`. The latter is used when the value was
+    // deserialized as a zero-copy view directly into an externally-owned
+    // buffer (e.g. a memory-mapped or in-memory blob); the caller is then
+    // responsible for keeping that buffer alive for at least as long as this
+    // `Value` (and any `ExplicitIdTableOperation`/`Result` derived from it).
+    ExplicitIdTableOperation::IdTableOrView result_;
     VariableToColumnMap varToColMap_;
     std::vector<ColumnIndex> resultSortedOn_;
     LocalVocab localVocab_;
@@ -90,6 +96,13 @@ class NamedResultCache {
   // `QueryExecutionTree`.
   std::shared_ptr<ExplicitIdTableOperation> getOperation(
       const Key& name, QueryExecutionContext* qec);
+
+  // Get all entries of the cache, sorted by their key. The order is
+  // deterministic (and not the arbitrary order of the underlying hash map), so
+  // that serializing the same contents twice yields the same bytes, which a
+  // byte-level comparison of serialized caches relies on.
+  std::vector<std::pair<Key, std::shared_ptr<const Value>>>
+  getAllEntriesSortedByKey() const;
 
   // NOTE: The following two templated serialization functions are defined in
   // the `NamedResultCacheSerializer.h` header which has to be included by the

@@ -12,10 +12,13 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "engine/Values.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
+#include "index/TripleComponentConversions.h"
+#include "parser/BlankNodeAdder.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
@@ -319,8 +322,8 @@ TEST_F(ServiceTest, computeResult) {
         getResultFunctionFactory(
             expectedUrl, expectedSparqlQuery, "{}",
             boost::beast::http::status::ok, "application/sparql-results+json",
-            std::make_exception_ptr(
-                ad_utility::CancellationException("Mock Cancellation")))};
+            std::make_exception_ptr(ad_utility::CancellationException(
+                ad_utility::CancellationState::MANUAL, "Mock Cancellation")))};
 
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         serviceSilent.computeResultOnlyForTesting(),
@@ -360,7 +363,7 @@ TEST_F(ServiceTest, computeResult) {
     // value -> undefined value
     auto result3 = runComputeResult(
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}));
-    EXPECT_TRUE(result3.idTable().at(1, 1).isUndefined());
+    EXPECT_TRUE(result3.idTableView()(1, 1).isUndefined());
 
     testQec->clearCacheUnpinnedOnly();
 
@@ -398,7 +401,7 @@ TEST_F(ServiceTest, computeResult) {
     // Check that the result table corresponds to the contents of the JSON.
     IdTable expectedIdTable = makeIdTableFromVector(
         {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
-    EXPECT_EQ(result.idTable(), expectedIdTable);
+    EXPECT_EQ(result.idTableView(), expectedIdTable);
 
     // Check 5: When a siblingTree with variables common to the Service
     // Clause is passed, the Service Operation shall use the siblings result
@@ -425,9 +428,8 @@ TEST_F(ServiceTest, computeResult) {
 
     std::string_view expectedSparqlQuery5 =
         "PREFIX doof: <http://doof.org> SELECT ?x ?y ?z2 "
-        "{ VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y "
-        ". ?y "
-        "<is-a> ?z2 . }";
+        "{ ?x <ble> ?y . ?y <is-a> ?z2 . VALUES (?x ?y) { (<x> <y>) "
+        "(<blu> <bla>) } }";
 
     Service serviceOperation5{
         testQec, parsedServiceClause5,
@@ -498,8 +500,7 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
       false};
 
   std::string_view expectedSparqlQuery =
-      " SELECT ?a { VALUES (?a) { (<a>) } . { SELECT ?obj WHERE { ?a ?b "
-      "?c } } }";
+      " SELECT ?a { { SELECT ?obj WHERE { ?a ?b ?c } } VALUES (?a) { (<a>) } }";
 
   Service serviceOperation{
       testQec, parsedServiceClause,
@@ -508,6 +509,27 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
 
   serviceOperation.siblingInfo_.emplace(siblingInfoFromOp(sibling));
   EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
+}
+
+// _____________________________________________________________________________
+TEST_F(ServiceTest, pushDownValuesPlacesValuesAtEnd) {
+  // Normal body: VALUES clause appears after the body content.
+  EXPECT_EQ(
+      Service::pushDownValues("{ ?x <ble> ?y . }", "VALUES (?x) { (<a>) } "),
+      "{\n ?x <ble> ?y . \nVALUES (?x) { (<a>) } \n}");
+
+  // Subquery body: subquery is wrapped in braces and VALUES appears after.
+  EXPECT_EQ(Service::pushDownValues("{ SELECT ?a WHERE { ?a ?b ?c } }",
+                                    "VALUES (?a) { (<a>) } "),
+            "{\n{ SELECT ?a WHERE { ?a ?b ?c } }\nVALUES (?a) { (<a>) } \n}");
+
+  // BIND body: VALUES is placed AFTER the BIND so the remote endpoint does not
+  // see the variable as already bound when it evaluates the BIND expression.
+  // Reproducer: SELECT * WHERE { VALUES ?x { 1 }
+  //             SERVICE <...> { BIND (1 AS ?x) } }
+  EXPECT_EQ(
+      Service::pushDownValues("{ BIND (1 AS ?x) }", "VALUES (?x) { (1) } "),
+      "{\n BIND (1 AS ?x) \nVALUES (?x) { (1) } \n}");
 }
 
 // _____________________________________________________________________________
@@ -617,7 +639,6 @@ TEST_F(ServiceTest, getCacheKeyWithCaching) {
 
 // Test that bindingToTripleComponent behaves as expected.
 TEST_F(ServiceTest, bindingToTripleComponent) {
-  ad_utility::HashMap<std::string, Id> blankNodeMap;
   parsedQuery::Service parsedServiceClause{
       {Variable{"?x"}, Variable{"?y"}},
       TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
@@ -625,11 +646,12 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       "{ }",
       false};
   Service service{testQec, parsedServiceClause};
-  LocalVocab localVocab{};
+  BlankNodeAdder blankNodeAdder{testQec->getIndex().getBlankNodeManager(),
+                                testQec->getAllocator()};
 
-  auto bTTC = [&service, &blankNodeMap,
-               &localVocab](const nlohmann::json& binding) -> TripleComponent {
-    return service.bindingToTripleComponent(binding, blankNodeMap, &localVocab);
+  auto bTTC = [&service, &blankNodeAdder](
+                  const nlohmann::json& binding) -> TripleComponent {
+    return service.bindingToTripleComponent(binding, blankNodeAdder);
   };
 
   // Missing type or value.
@@ -675,24 +697,24 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
             TripleComponent::Iri::fromIrirefWithoutBrackets("http://doof.org"));
 
   // Blank Nodes.
-  EXPECT_EQ(blankNodeMap.size(), 0);
+  EXPECT_EQ(blankNodeAdder.map_.size(), 0);
 
   const EncodedIriManager encodedIriManager;
-  Id a = bTTC({{"type", "bnode"}, {"value", "A"}})
-             .toValueIdIfNotString(&encodedIriManager)
+  Id a = toValueIdIfNotString(bTTC({{"type", "bnode"}, {"value", "A"}}),
+                              &encodedIriManager)
              .value();
-  Id b = bTTC({{"type", "bnode"}, {"value", "B"}})
-             .toValueIdIfNotString(&encodedIriManager)
+  Id b = toValueIdIfNotString(bTTC({{"type", "bnode"}, {"value", "B"}}),
+                              &encodedIriManager)
              .value();
   EXPECT_EQ(a.getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_EQ(b.getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_NE(a, b);
 
-  EXPECT_EQ(blankNodeMap.size(), 2);
+  EXPECT_EQ(blankNodeAdder.map_.size(), 2);
 
   // This BlankNode exists already, known Id will be used.
-  Id a2 = bTTC({{"type", "bnode"}, {"value", "A"}})
-              .toValueIdIfNotString(&encodedIriManager)
+  Id a2 = toValueIdIfNotString(bTTC({{"type", "bnode"}, {"value", "A"}}),
+                               &encodedIriManager)
               .value();
   EXPECT_EQ(a, a2);
 
@@ -700,6 +722,120 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       bTTC({{"type", "INVALID_TYPE"}, {"value", "v"}}),
       ::testing::HasSubstr("Type INVALID_TYPE is undefined."));
+}
+
+// ____________________________________________________________________________
+// Regression test: The labels of blank nodes are scoped to the complete result
+// set of a SERVICE, but the `LazyJsonParser` splits that result set into one
+// part per chunk of the response. The blank nodes used to be resolved per part,
+// such that the same label yielded different blank node `Id`s in different
+// parts of the same result.
+TEST_F(ServiceTest, blankNodesAcrossResponseChunks) {
+  // A mock for the `getResultFunction` that yields the response body in exactly
+  // the given `chunks`. In contrast to the `getResultFunctionFactory` of the
+  // fixture, which slices the body randomly, this gives us control over the
+  // parts that the `LazyJsonParser` produces.
+  auto getResultFunctionWithChunks =
+      [](std::vector<std::string> chunks) -> SendRequestType {
+    auto body = [](std::vector<std::string> chunks)
+        -> cppcoro::generator<ql::span<std::byte>> {
+      for (std::string& chunk : chunks) {
+        co_yield ql::as_writable_bytes(ql::span{chunk});
+      }
+    };
+    return [body, chunks = std::move(chunks)](
+               const ad_utility::httpUtils::Url&,
+               ad_utility::SharedCancellationHandle,
+               const boost::beast::http::verb&, std::string_view,
+               std::string_view, std::string_view, size_t) {
+      return HttpOrHttpsResponse{
+          .status_ = boost::beast::http::status::ok,
+          .contentType_ = "application/sparql-results+json",
+          .location_ = "",
+          .body_ = body(chunks)};
+    };
+  };
+
+  // The blank node `_:b` occurs in both chunks (as the 2nd and the 4th
+  // binding), the blank node `_:c` only in the second chunk.
+  const std::vector<std::string> chunks{
+      R"({"head":{"vars":["x"]},"results":{"bindings":[)"
+      R"({"x":{"type":"uri","value":"http://ex.org/1"}},)"
+      R"({"x":{"type":"bnode","value":"b"}},)",
+      R"({"x":{"type":"bnode","value":"c"}},)"
+      R"({"x":{"type":"bnode","value":"b"}}]}})"};
+
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "",
+      "{ ?x <p> <o> }",
+      false};
+
+  // Check the four `Id`s of the single column, which are the same for the lazy
+  // and the fully materialized result.
+  auto expectIdsAreConsistent = [](const std::vector<Id>& ids) {
+    ASSERT_THAT(ids, testing::SizeIs(4));
+    EXPECT_THAT(ids[0].getDatatype(), testing::Ne(Datatype::BlankNodeIndex));
+    for (size_t rowIdx : {1, 2, 3}) {
+      EXPECT_THAT(ids[rowIdx].getDatatype(),
+                  testing::Eq(Datatype::BlankNodeIndex))
+          << "row " << rowIdx;
+    }
+    // The same label in different chunks yields the same `Id`, different
+    // labels yield different `Id`s.
+    EXPECT_THAT(ids[3], testing::Eq(ids[1]));
+    EXPECT_THAT(ids[2], testing::Ne(ids[1]));
+  };
+
+  // The lazy result, where each part becomes its own block.
+  std::vector<Id> lazyIds;
+  {
+    Service service{testQec, parsedServiceClause,
+                    getResultFunctionWithChunks(chunks)};
+    auto result = service.computeResultOnlyForTesting(true);
+    size_t numBlocks = 0;
+    for (auto& pair : result.idTables()) {
+      ++numBlocks;
+      for (size_t rowIdx = 0; rowIdx < pair.idTable_.numRows(); ++rowIdx) {
+        Id id = pair.idTable_(rowIdx, 0);
+        lazyIds.push_back(id);
+        // The `LocalVocab` of a block has to keep all the blank nodes of that
+        // block alive, also those that were created for a previous block.
+        if (id.getDatatype() == Datatype::BlankNodeIndex) {
+          EXPECT_THAT(pair.localVocab_.isBlankNodeIndexContained(
+                          id.getBlankNodeIndex()),
+                      testing::IsTrue());
+        }
+      }
+    }
+    // One block per chunk, otherwise this test wouldn't test anything.
+    EXPECT_THAT(numBlocks, testing::Eq(2));
+  }
+  expectIdsAreConsistent(lazyIds);
+
+  // The fully materialized result, where all the parts end up in a single
+  // `IdTable`.
+  {
+    Service service{testQec, parsedServiceClause,
+                    getResultFunctionWithChunks(chunks)};
+    auto result = service.computeResultOnlyForTesting();
+    const auto& idTable = result.idTableView();
+    std::vector<Id> ids;
+    for (size_t rowIdx = 0; rowIdx < idTable.numRows(); ++rowIdx) {
+      ids.push_back(idTable(rowIdx, 0));
+      if (ids.back().getDatatype() == Datatype::BlankNodeIndex) {
+        EXPECT_THAT(result.localVocab().isBlankNodeIndexContained(
+                        ids.back().getBlankNodeIndex()),
+                    testing::IsTrue());
+      }
+    }
+    expectIdsAreConsistent(ids);
+
+    // Blank nodes with the same label, but from a different SERVICE operation
+    // are distinct.
+    EXPECT_THAT(ids[1], testing::Ne(lazyIds[1]));
+  }
 }
 
 // ____________________________________________________________________________
@@ -721,7 +857,8 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
 
   // Escape Quotes within literals.
-  auto str = LocalVocabEntry::literalWithoutQuotes("a\"b\"c", index);
+  auto str = LocalVocabEntry::literalWithoutQuotes(
+      "a\"b\"c", index.getLocalVocabContext());
   EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
             "\"a\\\"b\\\"c\"");
 
@@ -820,7 +957,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
       Result res = Values::computeResult(false);
 
       if (!requestLaziness) {
-        return Result(Result::IdTableVocabPair(res.idTable().clone(),
+        return Result(Result::IdTableVocabPair(res.cloneIdTable(),
                                                res.localVocab().clone()),
                       res.sortedBy());
       }
@@ -835,7 +972,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                   co_yield pair;
                   idt.clear();
                 }
-              }(res.idTable().clone()),
+              }(res.cloneIdTable()),
               res.sortedBy()};
     }
   };
@@ -894,19 +1031,19 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   reset();
 
   // Compute (large) sibling -> sibling result is computed
-  const auto maxValueRowsDefault =
-      getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
-  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>(0);
-  Service::precomputeSiblingResult(sibling, service, true, false);
-  ASSERT_TRUE(
-      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
-  EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
-                  .value()
-                  ->isFullyMaterialized());
-  EXPECT_FALSE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
-  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>(
-      maxValueRowsDefault);
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
+    Service::precomputeSiblingResult(sibling, service, true, false);
+    ASSERT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                    .has_value());
+    EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                    .value()
+                    ->isFullyMaterialized());
+    EXPECT_FALSE(service->siblingInfo_.has_value());
+    EXPECT_FALSE(
+        service->precomputedResultBecauseSiblingOfService().has_value());
+  }
   reset();
 
   // Lazy compute (small) sibling -> sibling result is fully materialized and
@@ -923,23 +1060,144 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Lazy compute (large) sibling -> partially materialized result is passed
   // back to sibling
-  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>(0);
-  Service::precomputeSiblingResult(service, sibling, false, true);
-  ASSERT_TRUE(
-      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
-  EXPECT_FALSE(siblingOperation->precomputedResultBecauseSiblingOfService()
-                   .value()
-                   ->isFullyMaterialized());
-  EXPECT_FALSE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
-  setRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>(
-      maxValueRowsDefault);
+  {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
+    Service::precomputeSiblingResult(service, sibling, false, true);
+    ASSERT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                    .has_value());
+    EXPECT_FALSE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                     .value()
+                     ->isFullyMaterialized());
+    EXPECT_FALSE(service->siblingInfo_.has_value());
+    EXPECT_FALSE(
+        service->precomputedResultBecauseSiblingOfService().has_value());
+  }
 
   // consume the sibling result-generator
   for ([[maybe_unused]] auto& _ :
        siblingOperation->precomputedResultBecauseSiblingOfService()
            .value()
            ->idTables()) {
+  }
+}
+
+// ____________________________________________________________________________
+// The query planner puts a `StripColumns` (and a `Sort`) on top of a `Service`
+// when not all of its variables are needed further up, e.g. for a `GROUP BY`.
+// The sibling optimization must look through these operations (see #2967).
+TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
+  auto makeService = [&]() {
+    return std::make_shared<Service>(
+        testQec,
+        parsedQuery::Service{
+            {Variable{"?x"}, Variable{"?y"}},
+            TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+            "PREFIX doof: <http://doof.org>",
+            "{ }",
+            true},
+        getResultFunctionFactory(
+            "http://localhorst:80/api",
+            "PREFIX doof: <http://doof.org> SELECT ?x ?y { }",
+            genJsonResult({"x", "y"}, {{"a", "b"}}),
+            boost::beast::http::status::ok, "application/sparql-results+json"));
+  };
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+  auto makeValues = [&]() {
+    return std::make_shared<Values>(
+        testQec, parsedQuery::SparqlValues{{Variable{"?x"}, Variable{"?y"}},
+                                           {{TC(iri("<x>")), TC(iri("<y>"))}}});
+  };
+  // Wrap `op` into a `StripColumns` that only keeps `?x`, and that into a
+  // `Sort`, which is the shape the query planner produces.
+  auto makeTree = [&](std::shared_ptr<Operation> op) {
+    return std::make_shared<QueryExecutionTree>(testQec, std::move(op));
+  };
+  auto wrap = [&](std::shared_ptr<Operation> op,
+                  std::optional<LimitOffsetClause> limitForStripColumns =
+                      std::nullopt) -> std::shared_ptr<Operation> {
+    auto strip = std::make_shared<StripColumns>(
+        testQec, makeTree(std::move(op)), std::set<Variable>{Variable{"?x"}});
+    if (limitForStripColumns.has_value()) {
+      strip->applyLimitOffset(limitForStripColumns.value());
+    }
+    return std::make_shared<Sort>(testQec, makeTree(std::move(strip)),
+                                  std::vector<ColumnIndex>{0});
+  };
+  // The `VALUES` clause that is expected when only `?x` is pushed down.
+  const std::string valuesClauseX = "VALUES (?x) { (<x>) } ";
+
+  // `Sort(StripColumns(Service))` on the right: the `Service` is found, the
+  // sibling result is precomputed, and only `?x`, which is visible above the
+  // `StripColumns`, is used for the `VALUES` clause (`?y` is hidden, so the
+  // sibling's `?y` is a different variable).
+  {
+    auto service = makeService();
+    auto sibling = makeValues();
+    Service::precomputeSiblingResult(sibling, wrap(service), true, false);
+    ASSERT_TRUE(service->siblingInfo_.has_value());
+    EXPECT_EQ(service->getSiblingValuesClause(), valuesClauseX);
+    EXPECT_TRUE(
+        sibling->precomputedResultBecauseSiblingOfService().has_value());
+  }
+
+  // Same, but the sibling is wrapped (`?y` hidden on the sibling's side), once
+  // with the `Service` on the left and once on the right.
+  {
+    auto service = makeService();
+    auto sibling = makeValues();
+    Service::precomputeSiblingResult(service, wrap(sibling), false, false);
+    ASSERT_TRUE(service->siblingInfo_.has_value());
+    EXPECT_EQ(service->getSiblingValuesClause(), valuesClauseX);
+    EXPECT_TRUE(
+        sibling->precomputedResultBecauseSiblingOfService().has_value());
+  }
+  {
+    auto service = makeService();
+    auto sibling = makeValues();
+    Service::precomputeSiblingResult(wrap(sibling), service, true, false);
+    ASSERT_TRUE(service->siblingInfo_.has_value());
+    EXPECT_EQ(service->getSiblingValuesClause(), valuesClauseX);
+    EXPECT_TRUE(
+        sibling->precomputedResultBecauseSiblingOfService().has_value());
+  }
+
+  // A `LIMIT` on a skipped operation disables the optimization, on either
+  // side.
+  {
+    auto service = makeService();
+    auto sibling = makeValues();
+    Service::precomputeSiblingResult(
+        sibling, wrap(service, LimitOffsetClause{1}), true, false);
+    EXPECT_FALSE(service->siblingInfo_.has_value());
+    EXPECT_FALSE(
+        sibling->precomputedResultBecauseSiblingOfService().has_value());
+  }
+  {
+    auto service = makeService();
+    auto sibling = makeValues();
+    Service::precomputeSiblingResult(wrap(service, LimitOffsetClause{1}),
+                                     sibling, false, false);
+    EXPECT_FALSE(service->siblingInfo_.has_value());
+    EXPECT_FALSE(
+        sibling->precomputedResultBecauseSiblingOfService().has_value());
+  }
+
+  // Also for nested `Sort`s (as for a subquery with `ORDER BY ... LIMIT`),
+  // where the `LIMIT` sits on the inner `Sort`.
+  {
+    auto service = makeService();
+    auto sibling = makeValues();
+    auto innerSort = std::make_shared<Sort>(testQec, makeTree(service),
+                                            std::vector<ColumnIndex>{0});
+    innerSort->applyLimitOffset(LimitOffsetClause{1});
+    auto outerSort = std::make_shared<Sort>(testQec, makeTree(innerSort),
+                                            std::vector<ColumnIndex>{0});
+    Service::precomputeSiblingResult(sibling, outerSort, true, false);
+    EXPECT_FALSE(service->siblingInfo_.has_value());
+    EXPECT_FALSE(
+        sibling->precomputedResultBecauseSiblingOfService().has_value());
   }
 }
 
@@ -959,6 +1217,8 @@ TEST_F(ServiceTest, clone) {
           genJsonResult({"x", "y"}, {{"a", "b"}}),
           boost::beast::http::status::ok, "application/sparql-results+json")};
 
+  // SERVICE performs a network request and is therefore non-deterministic.
+  EXPECT_FALSE(service.isDeterministic());
   auto clone = service.clone();
   ASSERT_TRUE(clone);
   EXPECT_THAT(service, IsDeepCopy(*clone));

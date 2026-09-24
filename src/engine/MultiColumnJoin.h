@@ -51,10 +51,12 @@ class MultiColumnJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {_left.get(), _right.get()};
   }
 
+ public:
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
 
@@ -65,11 +67,13 @@ class MultiColumnJoin : public Operation {
    *This method is made public here for unit testing purposes.
    **/
   void computeMultiColumnJoin(
-      const IdTable& left, const IdTable& right,
+      const IdTableView<0>& left, const IdTableView<0>& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* resultMightBeUnsorted);
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;

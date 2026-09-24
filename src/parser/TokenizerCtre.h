@@ -188,7 +188,7 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
    */
   template <TurtleTokenId fst, TurtleTokenId... ids>
   std::tuple<bool, size_t, std::string_view> getNextTokenMultiple() {
-    const char* beg = _data.begin();
+    const char* beg = _data.data();
     size_t dataSize = _data.size();
 
     auto innerResult = getNextTokenRecurse<0, fst, ids...>();
@@ -322,7 +322,7 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
   std::tuple<bool, size_t, std::string_view> getNextTokenRecurse() {
     const auto [success, unusedIdx, content] =
         getNextTokenRecurse<idx + 1, ids...>();
-    const char* beg = _data.begin();
+    const char* beg = _data.data();
     size_t dataSize = _data.size();
     const auto [currentSuccess, res] = getNextToken<fst>();
     reset(beg, dataSize);
@@ -344,9 +344,8 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
     template <auto& regex>
     static std::pair<bool, std::string_view> process(
         std::string_view data) noexcept {
-      static constexpr auto ext = grp(regex) + ".*";
-      if (auto m = ctre::match<ext>(data)) {
-        return {true, m.template get<1>().to_view()};
+      if (auto m = ctre::starts_with<regex>(data)) {
+        return {true, m.to_view()};
       } else {
         return {false, std::string_view()};
       }

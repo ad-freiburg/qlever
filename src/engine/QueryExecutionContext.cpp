@@ -28,7 +28,8 @@ QueryExecutionContext::QueryExecutionContext(
     NamedResultCache* namedResultCache,
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
     std::function<void(std::string)> updateCallback, const bool pinSubtrees,
-    const bool pinResult, const DisableCaching disableCaching)
+    const bool pinResult, const DisableCaching disableCaching,
+    bool disableMaterializedViewRewriting)
     : _pinSubtrees(pinSubtrees),
       _pinResult(pinResult),
       _index(std::move(index)),
@@ -49,6 +50,9 @@ QueryExecutionContext::QueryExecutionContext(
       return getRuntimeParameter<&RuntimeParameters::disableCaching_>();
     }
   }();
+  // This is a separate function call to also take into account the runtime
+  // parameter.
+  setDisableMaterializedViewRewriting(disableMaterializedViewRewriting);
   AD_CORRECTNESS_CHECK(cache != nullptr);
   AD_CORRECTNESS_CHECK(namedResultCache != nullptr);
   AD_CORRECTNESS_CHECK(materializedViewsManager_ != nullptr);
@@ -74,4 +78,13 @@ void QueryExecutionContext::signalQueryUpdate(
     lastWebsocketUpdate_ = now;
     updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
   }
+}
+
+// _____________________________________________________________________________
+void QueryExecutionContext::setDisableMaterializedViewRewriting(
+    bool disableMaterializedViewRewriting) {
+  disableMaterializedViewRewriting_ =
+      !getRuntimeParameter<
+          &RuntimeParameters::enableMaterializedViewQueryRewrite_>() ||
+      disableMaterializedViewRewriting;
 }

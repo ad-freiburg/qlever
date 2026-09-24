@@ -14,8 +14,11 @@
 #include "engine/CountAvailablePredicates.h"
 #include "engine/HasPredicateScan.h"
 #include "engine/IndexScan.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "engine/PermutationSelector.h"
 #include "engine/ValuesForTesting.h"
+#include "global/Pattern.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
@@ -48,14 +51,14 @@ class HasPredicateScanTest : public ::testing::Test {
   void runTest(Operation& operation, const VectorTable& expectedElements) {
     auto expected = makeIdTableFromVector(expectedElements);
     auto res = operation.computeResultOnlyForTesting();
-    EXPECT_THAT(res.idTable(), ::testing::ElementsAreArray(expected));
+    EXPECT_THAT(res.idTableView(), ::testing::ElementsAreArray(expected));
   }
 
   // Expect that the result of the `operation` matches the `expectedElements`,
   // but without taking the order into account.
   void runTestUnordered(Operation& op, const VectorTable& expectedElements) {
     auto expected = makeIdTableFromVector(expectedElements);
-    EXPECT_THAT(op.computeResultOnlyForTesting().idTable(),
+    EXPECT_THAT(op.computeResultOnlyForTesting().idTableView(),
                 ::testing::UnorderedElementsAreArray(expected));
   }
 };
@@ -235,16 +238,266 @@ TEST_F(HasPredicateScanTest, patternTrickIllegalInput) {
 }
 
 // ____________________________________________________________
+// Build a `CountAvailablePredicates` operation for the given `input`, of which
+// column 0 holds the subjects and column 1 the pattern indices. The input is
+// declared as sorted by the subjects, so that no additional `Sort` is added.
+static std::shared_ptr<QueryExecutionTree> makePatternTrickSubtree(
+    QueryExecutionContext* qec, IdTable input) {
+  return ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(input),
+      std::vector<std::optional<Variable>>{Variable{"?x"},
+                                           Variable{"?predicate"}},
+      false, std::vector<ColumnIndex>{0});
+}
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, countAvailablePredicatesEstimates) {
+  IdTable input{2, makeAllocator()};
+  input.push_back({Int(0), Int(0)});
+  auto patternTrick = CountAvailablePredicates(
+      qec, makePatternTrickSubtree(qec, std::move(input)), 0, V{"?predicate"},
+      V{"?count"});
+  // The multiplicity of the counts cannot be determined without computing the
+  // result, so it always is 1.
+  EXPECT_FLOAT_EQ(patternTrick.getMultiplicity(0), 1.0f);
+  EXPECT_FLOAT_EQ(patternTrick.getMultiplicity(1), 1.0f);
+  // The estimates are very rough, we only check that they are computed at all.
+  EXPECT_NO_THROW(patternTrick.getSizeEstimate());
+  EXPECT_NO_THROW(patternTrick.getCostEstimate());
+  EXPECT_THAT(patternTrick.getCacheKey(),
+              ::testing::HasSubstr("COUNT_AVAILABLE_PREDICATES (col 0)"));
+  EXPECT_EQ(patternTrick.getDescriptor(), "CountAvailablePredicates");
+  EXPECT_THAT(patternTrick.getChildren(), ::testing::SizeIs(1));
+  EXPECT_FALSE(patternTrick.knownEmptyResult());
+  EXPECT_THAT(patternTrick.resultSortedOn(), ::testing::IsEmpty());
+  EXPECT_EQ(patternTrick.getResultWidth(), 2u);
+}
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickEmptyInput) {
+  // The pattern trick on an empty input yields an empty result.
+  IdTable input{2, makeAllocator()};
+  auto patternTrick = CountAvailablePredicates(
+      qec, makePatternTrickSubtree(qec, std::move(input)), 0, V{"?predicate"},
+      V{"?count"});
+  EXPECT_EQ(patternTrick.computeResultOnlyForTesting().idTableView().numRows(),
+            0u);
+}
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickEntitiesWithoutPattern) {
+  // Entities that have no pattern at all contribute no predicates.
+  auto Voc = ad_utility::testing::VocabId;
+  IdTable input{2, makeAllocator()};
+  input.push_back({Voc(0), Int(Pattern::NoPattern)});
+  input.push_back({Voc(1), Int(Pattern::NoPattern)});
+  auto patternTrick = CountAvailablePredicates(
+      qec, makePatternTrickSubtree(qec, std::move(input)), 0, V{"?predicate"},
+      V{"?count"});
+  EXPECT_EQ(patternTrick.computeResultOnlyForTesting().idTableView().numRows(),
+            0u);
+}
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickEntitiesWithoutPatternWiderInput) {
+  // The same as above, but with an input of three columns, which instantiates a
+  // different `computePatternTrick<WIDTH>`. The middle column is ignored.
+  auto Voc = ad_utility::testing::VocabId;
+  IdTable input{3, makeAllocator()};
+  input.push_back({Voc(0), Voc(17), Int(0)});
+  input.push_back({Voc(1), Voc(17), Int(Pattern::NoPattern)});
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(input),
+      std::vector<std::optional<Variable>>{V{"?x"}, V{"?y"}, V{"?predicate"}},
+      false, std::vector<ColumnIndex>{0});
+  auto patternTrick =
+      CountAvailablePredicates(qec, subtree, 0, V{"?predicate"}, V{"?count"});
+  // Only the first entity has a pattern, and pattern `0` holds two predicates.
+  const auto& patterns = qec->getIndex().getPatterns();
+  VectorTable expected;
+  for (Id predicate : patterns[0]) {
+    expected.push_back({predicate, Int(1)});
+  }
+  runTestUnordered(patternTrick, expected);
+}
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickWithLargeInput) {
+  // An input that is large enough to be split into several chunks that are
+  // processed in parallel, the partial results of which then have to be merged
+  // (see `CHUNK_SIZE_ROWS` in `CountAvailablePredicates.cpp`).
+  auto Voc = ad_utility::testing::VocabId;
+  const auto& patterns = qec->getIndex().getPatterns();
+  // The patterns of the index of this fixture, see above: `x -> p p2`,
+  // `y -> p p3`, and `z -> p3`.
+  ASSERT_EQ(patterns.size(), 3u);
+
+  // Each subject appears twice (the duplicates must not be counted twice), and
+  // each of the patterns is used by the same number of subjects. The number of
+  // rows has to exceed `CHUNK_SIZE_ROWS` for the input to be split.
+  constexpr size_t numSubjects = 501'000;
+  static_assert(numSubjects % 3 == 0);
+  static_assert(2 * numSubjects > 500'000);
+  IdTable input{2, makeAllocator()};
+  input.reserve(2 * numSubjects);
+  for (size_t i = 0; i < numSubjects; ++i) {
+    input.push_back({Voc(i), Int(i % 3)});
+    input.push_back({Voc(i), Int(i % 3)});
+  }
+
+  // Each predicate is counted once for each subject the pattern of which
+  // contains that predicate.
+  ad_utility::HashMap<Id, size_t> expectedCounts;
+  for (size_t patternIdx = 0; patternIdx < patterns.size(); ++patternIdx) {
+    for (Id predicate : patterns[patternIdx]) {
+      expectedCounts[predicate] += numSubjects / 3;
+    }
+  }
+  VectorTable expected;
+  for (const auto& [predicate, count] : expectedCounts) {
+    expected.push_back({predicate, Int(count)});
+  }
+  ASSERT_THAT(expected, ::testing::SizeIs(3));
+
+  auto patternTrick = CountAvailablePredicates(
+      qec, makePatternTrickSubtree(qec, std::move(input)), 0, V{"?predicate"},
+      V{"?count"});
+  runTestUnordered(patternTrick, expected);
+}
+
+// ____________________________________________________________
 TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
   /* Manual setup of the operations for the full pattern trick:
    * SELECT ?predicate COUNT(DISTINCT ?x) WHERE {
    *   ?x ?predicate ?o
    * } GROUP BY ?predicate
    */
+  // Free the cache to get a fresh `IndexScan`.
+  qec->getQueryTreeCache().clearAll();
   auto indexScan = HasPredicateScan::makePatternScan(
       qec, TripleComponent{V{"?x"}}, V{"?predicate"});
   auto patternTrick =
       CountAvailablePredicates(qec, indexScan, 0, V{"?predicate"}, V{"?count"});
 
   runTestUnordered(patternTrick, {{p3, Int(2)}, {p2, Int(1)}, {p, Int(2)}});
+
+  // The scan of the full `ql:has-pattern` relation must have been consumed
+  // lazily by `computePatternTrickAllEntities`, instead of being fully
+  // materialized by the generic path. Without this check the test would
+  // silently pass on the generic path, which is what happened for years while
+  // the condition that selects the special implementation was always false.
+  EXPECT_EQ(indexScan->getRootOperation()->runtimeInfo().status_,
+            RuntimeInformation::Status::lazilyMaterializedCompleted);
+
+  // Run again to test handling a cached `IndexScan`, which is fully
+  // materialized and thus takes the other branch of the special
+  // implementation.
+  runTestUnordered(patternTrick, {{p3, Int(2)}, {p2, Int(1)}, {p, Int(2)}});
+  EXPECT_EQ(indexScan->getRootOperation()->runtimeInfo().status_,
+            RuntimeInformation::Status::fullyMaterializedCompleted);
+}
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, patternTrickAllEntitiesWithDeltaTriples) {
+  // Cover the two branches of `computePatternTrickAllEntities` for entities
+  // without a pattern and for patterns that no entity uses. Neither occurs in
+  // a freshly built index (the `ql:has-pattern` relation only contains
+  // subjects with non-empty patterns), so we modify the internal relation
+  // directly via delta triples on a private copy of the index.
+  auto index = std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+      "patternTrickAllEntitiesWithDeltaTriples", kg));
+  auto getIdPrivate = ad_utility::testing::makeGetId(*index);
+  Id o = getIdPrivate("<o>");
+  Id zPrivate = getIdPrivate("<z>");
+  // Note: `ql:has-pattern` is a regular word in the vocabulary of the index,
+  // so its `Id` must be looked up there (the fixed `Id` from `specialIds()`
+  // is a different, unrelated `Id`).
+  Id hasPattern = getIdPrivate(std::string{HAS_PATTERN_PREDICATE});
+  QueryResultCache queryResultCache;
+  NamedResultCache namedResultCache;
+  auto makeQec = [&]() {
+    return QueryExecutionContext{index,
+                                 &queryResultCache,
+                                 makeAllocator(),
+                                 SortPerformanceEstimator{},
+                                 &namedResultCache,
+                                 std::make_shared<MaterializedViewsManager>()};
+  };
+
+  // Read the `ql:has-pattern` entry of `<z>` (subject, pattern, and the
+  // graph, which we need to delete the exact triple below).
+  auto qecBefore = makeQec();
+  auto scanBefore = ad_utility::makeExecutionTree<IndexScan>(
+      &qecBefore,
+      qlever::getPermutationForTriple(
+          Permutation::Enum::PSO, *index,
+          SparqlTripleSimple{Variable{"?s"},
+                             ad_utility::triple_component::Iri::fromIriref(
+                                 HAS_PATTERN_PREDICATE),
+                             Variable{"?p"}}),
+      qecBefore.locatedTriplesSharedState(),
+      SparqlTripleSimple{
+          Variable{"?s"},
+          ad_utility::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
+          Variable{"?p"},
+          {std::pair{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID},
+                     Variable{"?g"}}}});
+  auto before = scanBefore->getResult();
+  std::optional<Id> zPattern;
+  std::optional<Id> graphOfHasPattern;
+  for (const auto& row : before->idTableView()) {
+    if (row[0] == zPrivate) {
+      zPattern = row[1];
+      graphOfHasPattern = row[2];
+    }
+  }
+  ASSERT_TRUE(zPattern.has_value());
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    // The object-only entity `<o>` gets an entry without a pattern, like a
+    // subject that is added by an update.
+    deltaTriples.insertInternalTriplesForTesting(
+        cancellationHandle,
+        {IdTriple<0>{std::array{o, hasPattern,
+                                Id::makeFromInt(Pattern::NoPattern),
+                                graphOfHasPattern.value()}}});
+    // Remove the entry of `<z>`. Its pattern (which contains only `<p3>`) is
+    // then used by no entity.
+    deltaTriples.deleteInternalTriplesForTesting(
+        cancellationHandle,
+        {IdTriple<0>{std::array{zPrivate, hasPattern, zPattern.value(),
+                                graphOfHasPattern.value()}}});
+  });
+
+  auto qec = makeQec();
+
+  // The modified relation must contain `<x>`, `<y>`, and `<o>` (with
+  // `NoPattern`), but no longer `<z>`.
+  {
+    auto scanAfter = HasPredicateScan::makePatternScan(
+        &qec, TripleComponent{V{"?x2"}}, V{"?p2"});
+    auto after = scanAfter->getRootOperation()->computeResultOnlyForTesting();
+    std::vector<std::pair<Id, Id>> rows;
+    for (const auto& row : after.idTableView()) {
+      rows.emplace_back(row[0], row[1]);
+    }
+    EXPECT_THAT(rows, ::testing::SizeIs(3));
+    EXPECT_THAT(rows, ::testing::Contains(
+                          std::pair{o, Id::makeFromInt(Pattern::NoPattern)}));
+    EXPECT_THAT(rows, ::testing::Not(::testing::Contains(::testing::Field(
+                          &std::pair<Id, Id>::first, zPrivate))));
+  }
+
+  auto indexScan = HasPredicateScan::makePatternScan(
+      &qec, TripleComponent{V{"?x"}}, V{"?predicate"});
+  auto patternTrick = CountAvailablePredicates(&qec, indexScan, 0,
+                                               V{"?predicate"}, V{"?count"});
+
+  // `<o>` contributes to no predicate, and the pattern of `<z>` is unused, so
+  // `<p3>` is only counted for `<y>`.
+  runTestUnordered(patternTrick, {{p3, Int(1)}, {p2, Int(1)}, {p, Int(2)}});
+  EXPECT_EQ(indexScan->getRootOperation()->runtimeInfo().status_,
+            RuntimeInformation::Status::lazilyMaterializedCompleted);
 }

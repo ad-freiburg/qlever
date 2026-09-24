@@ -242,7 +242,7 @@ class HeapBasedPQ {
 
     // was the value associated with this handle already deleted because of an
     // erase operation
-    bool isValid() const { return (mData->mScore).index() == 1; };
+    bool isValid() const { return (mData->mScore).index() == 1; }
 
     // does this handle point into the pq or was it popped/erased
     bool isInPq() const { return mData->mIsInPQ; }

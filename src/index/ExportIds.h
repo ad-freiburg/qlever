@@ -13,23 +13,31 @@
 #ifndef QLEVER_SRC_INDEX_EXPORTIDS_H
 #define QLEVER_SRC_INDEX_EXPORTIDS_H
 
+#include <array>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/span.h"
+#include "global/Constants.h"
 #include "global/Id.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
 #include "parser/LiteralOrIri.h"
+#include "util/Algorithm.h"
+#include "util/CompilerExtensions.h"
+#include "util/Exception.h"
 #include "util/ValueIdentity.h"
 
 namespace ql::exportIds {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using LiteralOrIriView = ad_utility::triple_component::LiteralOrIriView;
 using Iri = ad_utility::triple_component::Iri;
+using IriView = ad_utility::triple_component::IriView;
 using Literal = ad_utility::triple_component::Literal;
 
 // Convert the `id` to a `Literal`. Datatypes are always stripped, so for
@@ -41,6 +49,17 @@ using Literal = ad_utility::triple_component::Literal;
 // non-`xsd:string` datatypes (including encoded IDs) return `std::nullopt`.
 // These semantics are useful for the string expressions in
 // StringExpressions.cpp.
+//
+// All datatypes are handled, in one of the following ways. The words of the
+// vocabularies (`VocabIndex`, `LocalVocabIndex`, `SecondaryVocabIndex`) and the
+// encoded IRIs (`EncodedVal`) are resolved via `getLiteralOrIriFromVocabIndex`
+// and `encodedIdToLiteralOrIri`, respectively, and then processed as described
+// above. The words of the text index (`WordVocabIndex`, `TextRecordIndex`)
+// are always plain literals. All remaining datatypes are handled by
+// `idToLiteralForEncodedValue`, which turns the value that the `Id` stores
+// into a plain literal (`Bool`, `Int`, `Double`, `Date`, `GeoPoint`), returns
+// the label of the blank node (`BlankNodeIndex`), or returns `std::nullopt`
+// (`Undefined`).
 std::optional<Literal> idToLiteral(
     const IndexImpl& index, Id id, const LocalVocab& localVocab,
     bool onlyReturnLiteralsWithXsdString = false);
@@ -90,12 +109,16 @@ std::string replaceAnglesByQuotes(std::string iriString);
 
 // Return the blank-node string representation if `iri` is a blank-node IRI,
 // otherwise std::nullopt.
-std::optional<std::string> blankNodeIriToString(const Iri& iri);
+template <typename IriType>
+std::optional<std::string_view> blankNodeIriToString(
+    const IriType& iri AD_LIFETIMEBOUND);
 
 // Acts as a helper to retrieve a LiteralOrIri object from an Id, where the Id
-// is of type `VocabIndex`, `LocalVocabIndex`, or `EncodedVal`. This function
-// should only be called with suitable `Datatype` Ids, otherwise `AD_FAIL()` is
-// called.
+// is of type `VocabIndex`, `LocalVocabIndex`, `SecondaryVocabIndex`, or
+// `EncodedVal`. This function should only be called with suitable `Datatype`
+// Ids, otherwise `AD_FAIL()` is called. Note that an `Id` of type
+// `SecondaryVocabIndex` requires the `index` to have a secondary vocabulary
+// (see `IndexImpl::secondaryVocab`), which is checked.
 LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
                                            const LocalVocab& localVocab);
 
@@ -108,10 +131,46 @@ idToStringAndTypeForEncodedValue(Id id);
 // IRI via the `EncodedIriManager` in the index.
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index);
 
+// Format a `LiteralOrIri` as a (string, XSD-type) pair applying the template
+// options and `escapeFunction`. Return `std::nullopt` when `returnOnlyLiterals`
+// is true and `word` is not a literal.
+CPP_template(bool removeQuotesAndAngleBrackets = false,
+             bool returnOnlyLiterals = false,
+             typename LiteralOrIriType = LiteralOrIri,
+             typename EscapeFunction = ql::identity)(
+    requires ad_utility::SameAsAny<LiteralOrIriType, LiteralOrIri,
+                                   LiteralOrIriView>) std::
+    optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
+        const LiteralOrIriType& word,
+        EscapeFunction&& escapeFunction = EscapeFunction{}) {
+  if constexpr (returnOnlyLiterals) {
+    if (!word.isLiteral()) {
+      return std::nullopt;
+    }
+  }
+  if (word.isIri()) {
+    if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
+      return std::pair{std::string{blankNodeString.value()}, nullptr};
+    }
+  }
+  if constexpr (removeQuotesAndAngleBrackets) {
+    // TODO<joka921> Can we get rid of the string copying here?
+    return std::pair{
+        escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
+        nullptr};
+  }
+  // TODO<ms2144>: we unconditionally always materialize a string here, which
+  // is wasteful and should be mitigated in the future.
+  return std::pair{escapeFunction(std::string{word.toStringRepresentation()}),
+                   nullptr};
+}
+
 // Convert the `id` to a human-readable string. The `index` is used to resolve
-// `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
-// used to resolve `Id`s with datatype `LocalVocabIndex`. The `escapeFunction`
-// is applied to the resulting string if it is not of a numeric type.
+// the `Id`s that point into one of its data structures (`VocabIndex`,
+// `SecondaryVocabIndex`, `WordVocabIndex`, `TextRecordIndex`, and
+// `EncodedVal`). The `localVocab` is used to resolve `Id`s with datatype
+// `LocalVocabIndex`. The `escapeFunction` is applied to the resulting string if
+// it is not of a numeric type.
 //
 // Return value: If the `Id` encodes a numeric value (integer, double, etc.)
 // then the `string` (first element of the pair) will be the number as a
@@ -129,30 +188,24 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
   using enum Datatype;
   auto datatype = id.getDatatype();
   if constexpr (returnOnlyLiterals) {
-    if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
+    // In this mode, restrict the result to the words of the vocabularies that
+    // store their words as strings. The words of the text index and the values
+    // that are encoded in the `Id` are turned into a string directly below and
+    // would bypass the `isLiteral()` check in `literalOrIriToStringAndType`,
+    // so they have to be discarded here. An encoded IRI (`EncodedVal`) would
+    // pass through that check, but can never be a literal, so discarding it
+    // here as well is equivalent and cheaper.
+    static constexpr std::array stringVocabDatatypes{
+        VocabIndex, LocalVocabIndex, SecondaryVocabIndex};
+    if (!ad_utility::contains(stringVocabDatatypes, datatype)) {
       return std::nullopt;
     }
   }
 
-  auto handleIriOrLiteral = [&escapeFunction](const LiteralOrIri& word)
-      -> std::optional<std::pair<std::string, const char*>> {
-    if constexpr (returnOnlyLiterals) {
-      if (!word.isLiteral()) {
-        return std::nullopt;
-      }
-    }
-    if (word.isIri()) {
-      if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
-        return std::pair{std::move(blankNodeString.value()), nullptr};
-      }
-    }
-    if constexpr (removeQuotesAndAngleBrackets) {
-      // TODO<joka921> Can we get rid of the string copying here?
-      return std::pair{
-          escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
-          nullptr};
-    }
-    return std::pair{escapeFunction(word.toStringRepresentation()), nullptr};
+  auto formatLiteralOrIri = [&escapeFunction](const auto& word) {
+    return literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
+                                       returnOnlyLiterals>(word,
+                                                           escapeFunction);
   };
 
   switch (id.getDatatype()) {
@@ -162,10 +215,11 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
     }
     case VocabIndex:
     case LocalVocabIndex:
-      return handleIriOrLiteral(
+    case SecondaryVocabIndex:
+      return formatLiteralOrIri(
           getLiteralOrIriFromVocabIndex(index.getImpl(), id, localVocab));
     case EncodedVal:
-      return handleIriOrLiteral(encodedIdToLiteralOrIri(id, index.getImpl()));
+      return formatLiteralOrIri(encodedIdToLiteralOrIri(id, index.getImpl()));
     case TextRecordIndex:
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
@@ -175,48 +229,98 @@ std::optional<std::pair<std::string, const char*>> idToStringAndType(
   }
 }
 
-// Batch variant of idToStringAndType.
-// Precondition: `ids` is sorted by `ValueId` (as `ConstructBatchEvaluator`
-// does before calling vocabulary lookups). Under this precondition, all
-// `VocabIndex` IDs form a single contiguous block that is already sorted by
-// vocabulary position, so they can be resolved last and in sequential order
-// for I/O-local access to the on-disk vocabulary. All other IDs are resolved
-// immediately since their values are either encoded in the id bits or stored
-// in the in-memory `LocalVocab`.
+// Positions (indices into the `ids` span) split by datatype: `VocabIndex` ids
+// (`vocabIndexIndices_`) need an on-disk vocabulary lookup and are batched
+// together: all others (`nonVocabIndexIndices_`) are resolved from the id bits
+// or `LocalVocab`. Each stored position is also the index of the `results` slot
+// to scatter that id's resolved value back into.
+struct PartitionedIdPositions {
+  std::vector<size_t> vocabIndexIndices_;
+  std::vector<size_t> nonVocabIndexIndices_;
+};
+
+// Partition the positions `0 ... ids.size()-1` by whether `ids[i]` is a
+// `VocabIndex`.
+PartitionedIdPositions partitionIdPositions(ql::span<const Id> ids);
+
+// Resolve the IDs at `positions` (all non-`VocabIndex`) immediately via
+// in-memory `idToStringAndType`, writing each result into its slot in
+// `results`. These values are either encoded in the id bits or stored in the
+// in-memory `LocalVocab`.
+template <bool removeQuotesAndAngleBrackets, bool returnOnlyLiterals,
+          typename EscapeFunction>
+void resolveNonVocabIndexIds(
+    const Index& index, ql::span<const Id> ids, const LocalVocab& localVocab,
+    ql::span<const size_t> positions,
+    ql::span<std::optional<std::pair<std::string, const char*>>> results,
+    const EscapeFunction& escapeFunction) {
+  AD_EXPENSIVE_CHECK(ql::ranges::all_of(positions, [&ids](size_t i) {
+    return ids[i].getDatatype() != Datatype::VocabIndex;
+  }));
+  ql::ranges::for_each(positions, [&](size_t i) {
+    results[i] =
+        idToStringAndType<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
+            index, ids[i], localVocab, escapeFunction);
+  });
+}
+
+// Resolve the `VocabIndex` IDs at `positions` in a single batched vocabulary
+// lookup, writing each result into its slot in `results`.
+template <bool removeQuotesAndAngleBrackets, bool returnOnlyLiterals,
+          typename EscapeFunction>
+void resolveVocabIndexIds(
+    const Index& index, ql::span<const Id> ids,
+    ql::span<const size_t> positions,
+    ql::span<std::optional<std::pair<std::string, const char*>>> results,
+    const EscapeFunction& escapeFunction) {
+  if (positions.empty()) {
+    return;
+  }
+
+  AD_EXPENSIVE_CHECK(ql::ranges::all_of(positions, [&ids](size_t i) {
+    return ids[i].getDatatype() == Datatype::VocabIndex;
+  }));
+
+  // NOTE: The batch is deliberately not sorted by vocabulary position: the
+  // io_uring backend reorders the reads anyway, and only the synchronous
+  // fallback could profit from sequential file access.
+  auto rawIndices = ::ranges::to_vector(
+      positions | ql::views::transform([&ids](size_t i) {
+        return static_cast<size_t>(ids[i].getVocabIndex().get());
+      }));
+  auto vocabStrings = index.getImpl().getVocab().lookupBatch(rawIndices);
+
+  // `vocabStrings` is in the same order as `positions`, so zip scatters each
+  // looked-up string back to the position it came from.
+  for (auto&& [sv, i] : ::ranges::views::zip(*vocabStrings, positions)) {
+    results[i] = literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
+                                             returnOnlyLiterals>(
+        LiteralOrIriView::fromStringRepresentation(sv), escapeFunction);
+  }
+}
+
+// Batch variant of `idToStringAndType`. We cannot assume that the `VocabIndex`
+// IDs form a single contiguous block: even when the `ids` are sorted, IDs of
+// datatype `LocalVocabIndex` might be interspersed between the `VocabIndex`
+// IDs. We therefore check each ID's datatype individually to partition the
+// positions.
 template <bool removeQuotesAndAngleBrackets = false,
           bool returnOnlyLiterals = false,
           typename EscapeFunction = ql::identity>
 std::vector<std::optional<std::pair<std::string, const char*>>>
 idsToStringAndType(const Index& index, ql::span<const Id> ids,
                    const LocalVocab& localVocab,
-                   EscapeFunction&& escapeFunction = EscapeFunction{}) {
+                   const EscapeFunction& escapeFunction = EscapeFunction{}) {
   std::vector<std::optional<std::pair<std::string, const char*>>> results(
       ids.size());
 
-  // `ids` is sorted by `ValueId`. Because the datatype tag occupies the 4 most
-  // significant bits of a `ValueId`, all `VocabIndex` IDs form a single
-  // contiguous block and are already sorted by vocabulary position within that
-  // block. We resolve all other datatypes immediately (in-memory lookups) and
-  // record where the `VocabIndex` block begins.
-  size_t vocabBegin = ids.size();
-  for (size_t i = 0; i < ids.size(); ++i) {
-    if (ids[i].getDatatype() != Datatype::VocabIndex) {
-      results[i] =
-          idToStringAndType<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
-              index, ids[i], localVocab, escapeFunction);
-    } else if (vocabBegin == ids.size()) {
-      vocabBegin = i;
-    }
-  }
+  PartitionedIdPositions positions = partitionIdPositions(ids);
 
-  // Resolve the contiguous `VocabIndex` block in sorted (vocabulary-position)
-  // order, giving sequential I/O access to the on-disk vocabulary file.
-  for (size_t i = vocabBegin;
-       i < ids.size() && ids[i].getDatatype() == Datatype::VocabIndex; ++i) {
-    results[i] =
-        idToStringAndType<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
-            index, ids[i], localVocab, escapeFunction);
-  }
+  resolveNonVocabIndexIds<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
+      index, ids, localVocab, positions.nonVocabIndexIndices_, results,
+      escapeFunction);
+  resolveVocabIndexIds<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
+      index, ids, positions.vocabIndexIndices_, results, escapeFunction);
 
   return results;
 }

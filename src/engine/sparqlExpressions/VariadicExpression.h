@@ -30,6 +30,11 @@ class VariadicExpression : public SparqlExpression {
   // _________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override = 0;
 
+  // Deterministic iff all children are deterministic.
+  [[nodiscard]] bool isDeterministic() const override {
+    return areChildrenDeterministic();
+  }
+
   // ___________________________________________________
   std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
     std::string key = typeid(*this).name();

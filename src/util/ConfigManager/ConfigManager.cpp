@@ -859,7 +859,7 @@ void ConfigManager::verifyWithValidators() const {
   ql::ranges::for_each(validators(false), [](auto& validator) {
     validator.get().checkValidator();
   });
-};
+}
 
 // ____________________________________________________________________________
 bool ConfigManager::containsOption(const ConfigOption& opt) const {

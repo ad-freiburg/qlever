@@ -1,2 +1,2 @@
 add_library(global RuntimeParameters.cpp)
-qlever_target_link_libraries(global)
+qlever_target_link_libraries(global qlever_util)

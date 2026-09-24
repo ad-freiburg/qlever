@@ -37,8 +37,8 @@ TEST(TextIndexScanForEntity, ShortPrefixWord) {
                             "t*"};
   ASSERT_EQ(s1.getResultWidth(), 3);
   auto result = s1.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().numColumns(), 3);
-  ASSERT_EQ(result.idTable().size(), 3);
+  ASSERT_EQ(result.idTableView().numColumns(), 3);
+  ASSERT_EQ(result.idTableView().size(), 3);
   ASSERT_EQ("\"he failed the test\"",
             h::getEntityFromResultTable(qec, result, 0));
   ASSERT_EQ("\"testing can help\"",
@@ -57,8 +57,8 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
   ASSERT_EQ(s1.getResultWidth(), 3);
 
   auto result = s1.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().numColumns(), 3);
-  ASSERT_EQ(result.idTable().size(), 3);
+  ASSERT_EQ(result.idTableView().numColumns(), 3);
+  ASSERT_EQ(result.idTableView().size(), 3);
 
   // NOTE: because of the way the graph above is constructed, the entities are
   // texts
@@ -86,8 +86,8 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
 
   auto result = s3.computeResultOnlyForTesting();
   ASSERT_EQ(s3.getResultWidth(), 2);
-  ASSERT_EQ(result.idTable().numColumns(), 2);
-  ASSERT_EQ(result.idTable().size(), 1);
+  ASSERT_EQ(result.idTableView().numColumns(), 2);
+  ASSERT_EQ(result.idTableView().size(), 1);
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
   VariableToColumnMap expectedVariables = {
@@ -103,8 +103,8 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
   fixedEntity = "\"he failed the test\"";
   TextIndexScanForEntity s4{qec, Variable{"?text4"}, fixedEntity, "test*"};
   result = s4.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().numColumns(), 2);
-  ASSERT_EQ(result.idTable().size(), 1);
+  ASSERT_EQ(result.idTableView().numColumns(), 2);
+  ASSERT_EQ(result.idTableView().size(), 1);
 
   ASSERT_EQ(fixedEntity, h::getTextRecordFromResultTable(qec, result, 0));
 }
@@ -181,6 +181,28 @@ TEST(TextIndexScanForEntity, KnownEmpty) {
   TextIndexScanForEntity s3{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test"};
   ASSERT_TRUE(!s3.knownEmptyResult());
+}
+
+// Regression test: With a `SplitVocabulary` the `VocabIndex`
+// of an entity from a non-default sub-vocabulary (like a WKT literal) has its
+// marker bit set. Writing such an entity to the text index previously
+// overflowed the signed 60-bit `Id::makeFromInt` used for its index.
+TEST(TextIndexScanForEntity, EntityFromSplitVocabulary) {
+  TestIndexConfig config{
+      "<s> <geometry> \"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))\"^^<http://www."
+      "opengis.net/ont/geosparql#wktLiteral> ."};
+  config.createTextIndex = true;
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  auto qec = getQec(std::move(config));
+
+  TextIndexScanForEntity s{qec, Variable{"?text"}, Variable{"?entity"},
+                           "polygon"};
+  auto result = s.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTableView().size(), 1);
+  EXPECT_EQ(
+      "\"POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral>",
+      h::getEntityFromResultTable(qec, result, 0));
 }
 
 // _____________________________________________________________________________

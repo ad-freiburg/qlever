@@ -14,23 +14,53 @@
 #ifndef QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 #define QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 
-#include <absl/container/inlined_vector.h>
-#include <absl/strings/str_cat.h>
-
 #include <atomic>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/memory_resource.h"
+#include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/StringSortComparator.h"
+#include "index/TripleComponentConversions.h"
+#include "index/vocabulary/StringSortComparator.h"
 #include "parser/TripleComponent.h"
-#include "util/Conversions.h"
 #include "util/HashMap.h"
+#include "util/NoCopyNoMove.h"
+#include "util/RegexSet.h"
 #include "util/Serializer/Serializer.h"
-#include "util/TupleHelpers.h"
 #include "util/TypeTraits.h"
+
+// Return true if `word` is a blank node. A word is a blank node if it starts
+// with `_:`, or, when `blankNodeIriRegexes` is given, if it is an IRI that is
+// fully matched by one of those regexes.
+//
+// The regexes are matched (as a full match, see `ad_utility::RegexSet`)
+// against the full text of the word, *including* the surrounding angle
+// brackets of an IRI. The match has to cover the entire word, so a regex must
+// describe the whole IRI; to allow an arbitrary suffix, end it with `.*`. For
+// example the regex `<https://example\.org/statement/.*>` matches the IRI
+// `<https://example.org/statement/42>`. Only IRIs (words starting with `<`)
+// are ever treated this way; literals are never converted. The regexes are
+// required to describe IRIs (i.e. to start with `<`), which is enforced by
+// `IndexImpl::setBlankNodeIriRegexes`. See also the
+// `--iri-as-blank-node-regexes` option of the index builder.
+inline bool isBlankNode(std::string_view word,
+                        const ad_utility::RegexSet& blankNodeIriRegexes) {
+  if (ql::starts_with(word, "_:")) {
+    return true;
+  }
+  // Only IRIs (which start with `<`) can be treated as blank nodes; this also
+  // avoids running the regexes for the common case of a literal.
+  if (!ql::starts_with(word, "<")) {
+    return false;
+  }
+  return blankNodeIriRegexes.matchesAny(word);
+}
 
 // An IRI or literal together with its index in the global vocabulary. This is
 // used during vocabulary merging.
@@ -46,7 +76,11 @@ struct TripleComponentWithIndex {
   [[nodiscard]] auto& isExternal() { return isExternal_; }
   [[nodiscard]] const auto& iriOrLiteral() const { return iriOrLiteral_; }
   [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
-  bool isBlankNode() const { return ql::starts_with(iriOrLiteral_, "_:"); }
+  // Return true if this word is a blank node, see the free `isBlankNode`
+  // function above.
+  bool isBlankNode(const ad_utility::RegexSet& blankNodeIriRegexes) const {
+    return ::isBlankNode(iriOrLiteral_, blankNodeIriRegexes);
+  }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
     serializer | arg.iriOrLiteral_;
@@ -105,23 +139,18 @@ class PartialVocabIndexWithExternalFlag {
 // deallocate all strings from a single batch of triples at once as soon as we
 // have finished processing them.
 
-// Allocator type for the hash map.
-using ItemAlloc = ql::pmr::polymorphic_allocator<
-    std::pair<const std::string_view, PartialVocabIndexWithExternalFlag>>;
-
-// The type of the hash map.
+// The type of the hash map. The maps are cleared and reused between partial
+// vocabularies (see `ItemMapAndBuffer::clear`), so no caching allocator is
+// needed.
 using ItemMap =
-    ad_utility::HashMap<std::string_view, PartialVocabIndexWithExternalFlag,
-                        absl::DefaultHashContainerHash<std::string_view>,
-                        absl::DefaultHashContainerEq<std::string_view>,
-                        ItemAlloc>;
+    ad_utility::HashMap<std::string_view, PartialVocabIndexWithExternalFlag>;
 
 // A vector that stores the same values as the hash map.
 using ItemVec =
     std::vector<std::pair<std::string_view, PartialVocabIndexWithExternalFlag>>;
 
 // A buffer that very efficiently handles a set of strings that is deallocated
-// at once when the buffer goes out of scope.
+// at once when the buffer goes out of scope or `clear` is called.
 class MonotonicBuffer {
   std::unique_ptr<ql::pmr::monotonic_buffer_resource> buffer_ =
       std::make_unique<ql::pmr::monotonic_buffer_resource>();
@@ -140,31 +169,34 @@ class MonotonicBuffer {
     ql::ranges::copy(input, ptr);
     return {ptr, input.size()};
   }
+
+  // Deallocate all the strings at once and make the buffer reusable. All the
+  // `string_view`s that `addString` has returned dangle afterwards.
+  void clear() { buffer_->release(); }
 };
 
 // The hash map (which only stores pointers) together with the `MonotonicBuffer`
-// that manages the actual strings.
-struct ItemMapAndBuffer {
+// that manages the actual strings. Neither copyable nor movable: the
+// `string_view` keys of `map_` point into `buffer_`, and each task chain of the
+// first pass reuses a single instance via `clear` (see
+// `PartialVocabularyBuilder.h`).
+struct ItemMapAndBuffer : public ad_utility::NoCopyNoMove {
   ItemMap map_;
   MonotonicBuffer buffer_;
 
-  explicit ItemMapAndBuffer(ItemAlloc alloc) : map_{alloc} {}
-  // Note: For older boost versions + compilers, we unfortunately cannot default
-  // copy constructor because
-  // 1. In older boost versions, the move operations of the polymorphic
-  // allocators were not yet marked `noexcept`
-  // 2. We definitely want this move constructor to be `noexcept`.
-  // 3. GCC 8 complains if we explicitly use `noexcept = default` if the default
-  // implementation wouldn't be noexcept.
-  ItemMapAndBuffer(ItemMapAndBuffer&& rhs) noexcept
-      : map_{std::move(rhs.map_)}, buffer_{std::move(rhs.buffer_)} {}
-  // We have to delete the move-assignment as it would have the wrong semantics
-  // (the monotonic buffer wouldn't be moved, this is one of the oddities of the
-  // `ql::pmr` types.
-  ItemMapAndBuffer& operator=(ItemMapAndBuffer&&) noexcept = delete;
+  // Remove all the entries and deallocate all the strings, but keep the hash
+  // map's memory for the next partial vocabulary.
+  //
+  // NOTE: `erase(begin(), end())` is deliberately not `clear()`, which
+  // deallocates the backing array for all but very small maps (see
+  // `ClearBackingArray` in `absl/container/internal/raw_hash_set.cc`).
+  void clear() {
+    // The above holds for the Abseil hash maps only.
+    static_assert(ad_utility::isInstantiation<ItemMap, absl::flat_hash_map>);
+    map_.erase(map_.begin(), map_.end());
+    buffer_.clear();
+  }
 };
-
-using ItemMapArray = std::array<ItemMapAndBuffer, NUM_PARALLEL_ITEM_MAPS>;
 
 // A hash map that assigns a unique ID for each of a set of strings. The IDs
 // are assigned in an adjacent range starting from a configurable minimum ID.
@@ -180,21 +212,19 @@ struct alignas(256) ItemMapManager {
   const TripleComponentComparator* comparator_;
 
   // Construct with given minimum ID.
-  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
-                          ItemAlloc alloc)
-      : map_(alloc), minId_(minId), comparator_(cmp) {
-    // Precompute the mapping from the `specialIds` to their normal IDs in the
-    // vocabulary. This makes resolving such IRIs much cheaper.
-    for (const auto& [specialIri, specialId] : qlever::specialIds()) {
-      auto iriref = TripleComponent::Iri::fromIriref(specialIri);
-      auto key = PossiblyExternalizedTripleComponent{std::move(iriref), false};
-      specialIdMapping_[specialId] = getId(key);
-    }
+  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp)
+      : minId_(minId), comparator_(cmp) {
+    addSpecialIds();
   }
 
-  // Move the hash map out, as soon as we are done adding triples and only need
-  // the actual vocabulary.
-  ItemMapAndBuffer&& moveMap() && { return std::move(map_); }
+  // Reset to the state right after construction, but keep the hash map's memory
+  // (see `ItemMapAndBuffer::clear`). All the `string_view`s into this manager
+  // (in particular those of a previously created `ItemVec`) dangle afterwards.
+  void clear() {
+    map_.clear();
+    specialIdMapping_.clear();
+    addSpecialIds();
+  }
 
   // For a given `PossiblyExternalizedTripleComponent`, if we have seen it
   // before, return its assigned ID. Else assign it the next free ID, store it,
@@ -211,7 +241,10 @@ struct alignas(256) ItemMapManager {
     }
     auto& map = map_.map_;
     auto& buffer = map_.buffer_;
-    auto repr = key.tripleComponent_.toRdfLiteral();
+    // The view always exists here: all values that are directly encoded into
+    // an `Id` were handled above, so `key` is a literal, an IRI, or a blank
+    // node string.
+    auto repr = toRdfLiteralView(key.tripleComponent_).value();
     auto it = map.find(repr);
     if (it == map.end()) {
       uint64_t res = map.size() + minId_;
@@ -231,6 +264,18 @@ struct alignas(256) ItemMapManager {
     return std::apply(
         [this](const auto&... els) { return std::array{getId(els)...}; }, t);
   }
+
+ private:
+  // Precompute the mapping from the `specialIds` to their normal IDs in the
+  // vocabulary. This makes resolving such IRIs much cheaper. Every partial
+  // vocabulary has to contain them.
+  void addSpecialIds() {
+    for (const auto& [specialIri, specialId] : qlever::specialIds()) {
+      auto iriref = TripleComponent::Iri::fromIriref(specialIri);
+      auto key = PossiblyExternalizedTripleComponent{std::move(iriref), false};
+      specialIdMapping_[specialId] = getId(key);
+    }
+  }
 };
 
 // A triple together with the language tag of its object (if any). If the object
@@ -242,152 +287,96 @@ struct ProcessedTriple {
   ad_utility::HashMap<std::string, size_t> wordFrequencies_;
 };
 
-/**
- * @brief Get the tuple of lambda functions that is needed for the String-> Id
- * step of the Index building Pipeline
- *
- * return a tuple of lambda functions, one per map in `itemArray`, each lambda
- * does the following
- *
- * given an index idx, returns a lambda that
- * - Takes a triple and a language tag
- * - Returns IdTriples where the first entry are the Ids for the triple,
- *   the second and third entry are the Ids of the extra triples for the
- *   language filter implementation (or std::nullopt if there was no language
- * tag)
- * - in the <i-th> lambda all Ids are assigned according to itemMaps[i]
- * - if the argument maxNumberOfTriples is set correctly, the Id ranges assigned
- * by the different lambdas  never intersect
- *
- * The ItemMapMangers at *itemArrayPtr are also cleared and reset by this
- * function.
- *
- * @param itemMaps These Maps are used for assigning the ids. Their lifetime
- * must exceed that of this function's return value, since they are captured by
- * reference
- * @param maxNumberOfTriples The maximum total number of triples that will be
- * processed by all the lambdas together. Needed to correctly setup the Id
- * ranges for the individual HashMaps
- * @return A Tuple of lambda functions (see above)
- */
+// The Ids of a triple, once its string components have been mapped via an
+// `ItemMapManager`. NOTE: Deliberately not named `IdTriple`, which is a class
+// with a similar purpose defined in `global/IdTriple.h`.
+using IdRow = std::array<Id, NumColumnsIndexBuilding>;
+
+// Perform the String -> Id step of the Index building pipeline for a single
+// triple.
+//
+// Append the `IdRow`s for `triple` to `result`, that is the Ids for the triple
+// itself plus the Ids of the extra internal triples (for the language filter
+// implementation and for the text index) that it gives rise to. All Ids are
+// assigned according to `map`. Increase `numHasWordTriples` by the number of
+// `ql:has-word` triples that were added.
 template <typename IndexPtr>
-auto getIdMapLambdas(
-    std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS>& itemMaps,
-    size_t maxNumberOfTriples, const TripleComponentComparator* comp,
-    IndexPtr* index, ItemAlloc alloc,
-    std::atomic<size_t>* numHasWordTriples = nullptr) {
-  // Create one `ItemMapManager` per thread, each with its own ID range.
-  for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
-    itemMaps[j].emplace(j * 100 * maxNumberOfTriples, comp, alloc);
+void mapTripleToIds(QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& triple,
+                    ItemMapManager& map, IndexPtr* index,
+                    std::vector<IdRow>& result, size_t& numHasWordTriples) {
+  // Process the given triple.
+  ProcessedTriple lt = index->processTriple(AD_FWD(triple));
 
-    // This `reserve` is for a guaranteed upper bound that stays the same during
-    // the whole index building. That's why we use the `CachingMemoryResource`
-    // as an underlying memory pool for the allocator of the hash map to make
-    // the allocation and deallocation of these hash maps (that are newly
-    // created for each batch) much cheaper (see `CachingMemoryResource.h` and
-    // `IndexImpl.cpp`).
-    itemMaps[j]->map_.map_.reserve(5 * maxNumberOfTriples /
-                                   NUM_PARALLEL_ITEM_MAPS);
-  }
-  using IdTriple = std::array<Id, NumColumnsIndexBuilding>;
-  using IdTriples = absl::InlinedVector<IdTriple, 3>;
+  // First, process the original triple.
+  IdRow spoIds = map.getId(lt.triple_);
+  result.push_back(spoIds);
+  static_assert(NumColumnsIndexBuilding == 4,
+                " The following lines probably have to be changed when "
+                "the number of payload columns changes");
+  auto tripleGraphId = spoIds[ADDITIONAL_COLUMN_GRAPH_ID];
 
-  // For a given `ItemMapManager` (specified via its index in `itemMaps`),
-  // return a lambda that takes a single parsed `triple` and returns
-  // `IdTriples`, which contains a processed version of the triple plus
-  // additional internal triples if applicable.
+  // Second, if there is a language tag, add the corresponding two internal
+  // triples. Give them the same graph ID as the original triple; that way,
+  // our language filter optimizations also work with named graphs.
   //
-  // TODO: This lambda has become quite large and complex. Better refactor it
-  // into a separate function.
-  const auto itemMapLamdaCreator = [&itemMaps, index,
-                                    numHasWordTriples](const size_t itemIndex) {
-    return [&map = *itemMaps[itemIndex], index, numHasWordTriples](
-               QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& triple) {
-      // Process the given triple.
-      ProcessedTriple lt = index->processTriple(AD_FWD(triple));
+  // NOTE: There is similar code in `DeltaTriples::makeInternalTriples`
+  // for adding these internal triples for update triples. If you change
+  // this code, you probably also have to change that one. This should
+  // eventually be refactored, so that this code duplication is avoided.
+  if (!lt.langtag_.empty()) {
+    // Get the `Id` for the language tag, e.g., `@en`.
+    auto langTagId = map.getId(
+        TripleComponent{TripleComponent::Iri::fromLangtag(lt.langtag_)});
+    // Get the `Id` for the special predicate, e.g., `@en@rdfs:label`.
+    const auto& iri = lt.triple_[1].tripleComponent_.getIri();
+    auto langTaggedPredId =
+        map.getId(TripleComponent{iri.withLanguageTag(lt.langtag_)});
+    // Add the internal triple `<subject> @language@<predicate> <object>`.
+    result.push_back(
+        IdRow{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
+    // Add the internal triple `<object> ql:langtag <@language>`.
+    result.push_back(IdRow{
+        spoIds[2],
+        map.getId(TripleComponent{
+            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)}),
+        langTagId, tripleGraphId});
+  }
 
-      // Reserve the exact number of triples we will produce. For ≤3 triples
-      // (original + language tag), this stays inline. For more (has-word
-      // triples), this allocates on the heap once.
-      IdTriples result;
-      result.reserve(1 + (lt.langtag_.empty() ? 0 : 2) +
-                     lt.wordFrequencies_.size());
-
-      // First, process the original triple.
-      result.push_back(map.getId(lt.triple_));
-      static_assert(NumColumnsIndexBuilding == 4,
-                    " The following lines probably have to be changed when "
-                    "the number of payload columns changes");
-      // Convenience reference to the IDs of the original triple. This is safe
-      // because the `reserve` above ensures that no subsequent `push_back`
-      // will reallocate `result`.
-      auto& spoIds = result[0];
-      auto tripleGraphId = spoIds[ADDITIONAL_COLUMN_GRAPH_ID];
-
-      // Second, if there is a language tag, add the corresponding two internal
-      // triples. Give them the same graph ID as the original triple; that way,
-      // our language filter optimizations also work with named graphs.
-      //
-      // NOTE: There is similar code in `DeltaTriples::makeInternalTriples`
-      // for adding these internal triples for update triples. If you change
-      // this code, you probably also have to change that one. This should
-      // eventually be refactored, so that this code duplication is avoided.
-      if (!lt.langtag_.empty()) {
-        // Get the `Id` for the language tag, e.g., `@en`.
-        auto langTagId = map.getId(TripleComponent{
-            ad_utility::convertLangtagToEntityUri(lt.langtag_)});
-        // Get the `Id` for the special predicate, e.g., `@en@rdfs:label`.
-        const auto& iri = lt.triple_[1].tripleComponent_.getIri();
-        auto langTaggedPredId = map.getId(TripleComponent{
-            ad_utility::convertToLanguageTaggedPredicate(iri, lt.langtag_)});
-        // Add the internal triple `<subject> @language@<predicate> <object>`.
-        result.push_back(
-            IdTriple{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
-        // Add the internal triple `<object> ql:langtag <@language>`.
-        result.push_back(IdTriple{
-            spoIds[2],
-            map.getId(
-                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                    LANGUAGE_PREDICATE)}),
-            langTagId, tripleGraphId});
-      }
-
-      // Third, if applicable, add a `ql:has-word` triple for each distinct word
-      // in the literal. We abuse the graph ID field to store the term
-      // frequency of the word in the literal.
-      //
-      // NOTE: There is similar code in `DeltaTriples::makeInternalTriples`
-      // for adding these internal triples for update triples. If you change
-      // this code, you probably also have to change that one. This should
-      // eventually be refactored, so that this code duplication is avoided.
-      if (!lt.wordFrequencies_.empty()) {
-        auto hasWordPredId = map.getId(TripleComponent{
-            ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
-        for (const auto& [word, termFrequency] : lt.wordFrequencies_) {
-          // Add the internal triple `<literal> ql:has-word "word"`.
-          auto wordId = map.getId(TripleComponent{
-              ad_utility::triple_component::Literal::literalWithoutQuotes(
-                  word)});
-          result.push_back(
-              IdTriple{spoIds[2], hasWordPredId, wordId,
-                       Id::makeFromInt(static_cast<int64_t>(termFrequency))});
-        }
-        // Update the counter for the number of `ql:has-word` triples. Relaxed
-        // ordering is fine because this counter is only read after all threads
-        // have finished (for a log message).
-        if (numHasWordTriples != nullptr) {
-          numHasWordTriples->fetch_add(lt.wordFrequencies_.size(),
-                                       std::memory_order_relaxed);
-        }
-      }
-
-      return result;
-    };
-  };
-
-  // Return one of the above lambdas for each thread.
-  return ad_tuple_helpers::setupTupleFromCallable<NUM_PARALLEL_ITEM_MAPS>(
-      itemMapLamdaCreator);
+  // Third, if applicable, add a `ql:has-word` triple for each distinct word
+  // in the literal. We abuse the graph ID field to store the term
+  // frequency of the word in the literal.
+  //
+  // NOTE: There is similar code in `DeltaTriples::makeInternalTriples`
+  // for adding these internal triples for update triples. If you change
+  // this code, you probably also have to change that one. This should
+  // eventually be refactored, so that this code duplication is avoided.
+  if (!lt.wordFrequencies_.empty()) {
+    auto hasWordPredId = map.getId(TripleComponent{
+        ad_utility::triple_component::Iri::fromIriref(HAS_WORD_PREDICATE)});
+    for (const auto& [word, termFrequency] : lt.wordFrequencies_) {
+      // Add the internal triple `<literal> ql:has-word "word"`.
+      auto wordId = map.getId(TripleComponent{
+          ad_utility::triple_component::Literal::literalWithoutQuotes(word)});
+      result.push_back(
+          IdRow{spoIds[2], hasWordPredId, wordId,
+                Id::makeFromInt(static_cast<int64_t>(termFrequency))});
+    }
+    // Update the counter for the number of `ql:has-word` triples.
+    numHasWordTriples += lt.wordFrequencies_.size();
+  }
 }
+
+// Return type of `IndexImpl::buildPartialVocabularies`.
+struct BuildPartialVocabulariesResult {
+  // The number of partial vocabularies that were written. Each partial
+  // vocabulary has exactly one file with the ID triples that were mapped using
+  // it (see `unsortedTriplesFilename`), so the partial vocabulary with index
+  // `i` and the triples in the file with index `i` always belong together. The
+  // workers that write those pairs work completely independently of each
+  // other; they only share the counter for the indices.
+  size_t numPartialVocabularies_ = 0;
+  // The total number of triples that were written. Only used for logging.
+  size_t numTriples_ = 0;
+};
 
 #endif  // QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H

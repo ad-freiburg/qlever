@@ -267,36 +267,21 @@ class TransitivePathBase : public Operation {
                                           size_t targetSideCol,
                                           bool yieldOnce) const;
 
-  // Create two instances of `IndexScan` that perform full scans using the
-  // pattern `?variable ?a ?b` and `?c ?d ?variable`, respectively and properly
-  // use `activeGraphs` and the optional `graphVariable`.
-  static std::array<std::shared_ptr<QueryExecutionTree>, 2> makeIndexScanPair(
-      QueryExecutionContext* qec, Graphs activeGraphs, const Variable& variable,
-      const std::optional<Variable>& graphVariable);
-
-  // Return an execution tree, that "joins" the given `tripleComponent` with all
-  // the subjects or objects in the knowledge graph, so if the graph does not
-  // contain this value it is filtered out.
-  static std::shared_ptr<QueryExecutionTree> joinWithIndexScan(
-      QueryExecutionContext* qec, Graphs activeGraphs,
+  // Return an execution tree that yields the given `tripleComponent` as the
+  // single starting point of the empty path. If a `graphVariable` is set, the
+  // value is combined with all the graphs of `activeGraphs` via a cartesian
+  // product, because the implementations require a graph id for every starting
+  // point.
+  static std::shared_ptr<QueryExecutionTree> makeStartingPoint(
+      QueryExecutionContext* qec, const Graphs& activeGraphs,
       const std::optional<Variable>& graphVariable,
       const TripleComponent& tripleComponent);
-
-  // Return an execution tree that represents one side of an empty path. This is
-  // used as a starting point for evaluating the empty path and returns a single
-  // column containung all distinct entities the appear either as a subject or
-  // object in the knowledge graph. The optional parameter `variable` can be set
-  // to explicitly define the name of the column this produces (useful for
-  // subsequent joins), by default it is `?internal_property_path_variable_x`.
-  static std::shared_ptr<QueryExecutionTree> makeEmptyPathSide(
-      QueryExecutionContext* qec, Graphs activeGraphs,
-      const std::optional<Variable>& graphVariable,
-      std::optional<Variable> variable = std::nullopt);
 
   // Make sure that all values in `inputCol` returned by `leftOrRightOp` can be
   // found in the knowledge graph. In many cases we can statically guarantee
   // this and just return the `leftOrRightOp` unchanged, in all other cases the
-  // result will be a join with the result of `makeEmptyPathSide` above.
+  // result will be an `EmptyPath` operation that performs the existence check
+  // (and adds the graph column if required).
   std::shared_ptr<QueryExecutionTree> matchWithKnowledgeGraph(
       size_t& inputCol,
       std::shared_ptr<QueryExecutionTree> leftOrRightOp) const;
@@ -352,8 +337,10 @@ class TransitivePathBase : public Operation {
       size_t maxDist, Graphs activeGraphs = Graphs::All(),
       const std::optional<Variable>& graphVariable = std::nullopt);
 
-  std::vector<QueryExecutionTree*> getChildren() override;
+ private:
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
+ public:
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   bool columnOriginatesFromGraphOrUndef(

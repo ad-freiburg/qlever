@@ -11,6 +11,7 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/OptionalJoin.h"
 #include "engine/Sort.h"
 #include "engine/Union.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -36,7 +37,7 @@ TEST(Union, computeUnion) {
 
   Union u{qec, leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
-  const auto& result = resultTable.idTable();
+  const auto& result = resultTable.idTableView();
 
   auto U = Id::makeUndefined();
   auto expected = makeIdTableFromVector(
@@ -71,7 +72,7 @@ TEST(Union, computeUnionLarge) {
 
   Union u{qec, leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
-  const auto& result = resultTable.idTable();
+  const auto& result = resultTable.idTableView();
 
   ASSERT_EQ(result, makeIdTableFromVector(expected));
 }
@@ -181,7 +182,7 @@ TEST(Union, ensurePermutationIsAppliedCorrectly) {
     auto U = Id::makeUndefined();
     auto expected =
         makeIdTableFromVector({{1, 2, 3, 4, 5}, {V(7), V(6), U, U, V(8)}});
-    EXPECT_EQ(resultTable.idTable(), expected);
+    EXPECT_EQ(resultTable.idTableView(), expected);
   }
 }
 
@@ -218,7 +219,7 @@ TEST(Union, inputWithZeroColumns) {
     ASSERT_TRUE(resultTable.isFullyMaterialized());
 
     auto expected = makeIdTableFromVector({{}, {}});
-    EXPECT_EQ(resultTable.idTable(), expected);
+    EXPECT_EQ(resultTable.idTableView(), expected);
   }
 }
 
@@ -293,7 +294,7 @@ TEST(Union, sortedMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, U, 4}, {1, 2, 4}, {2, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -327,7 +328,7 @@ TEST(Union, sortedMergeWithOneSideNonLazy) {
     qec->getQueryTreeCache().clearAll();
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -376,7 +377,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{0}, {1}, {2}, {3}, {4}, {5}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
     EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
                 ::testing::IsSupersetOf(vocab1.getAllWordsForTesting()));
     EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
@@ -434,13 +435,13 @@ TEST(Union, cacheKeyDiffersForDifferentOrdering) {
     auto result =
         unionOperation1.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, U, 8}, {1, 4, U}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     auto result =
         unionOperation2.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, 4, U}, {1, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
 }
 
@@ -540,7 +541,7 @@ TEST(Union, testEfficientMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{U, 2}, {1, U}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -554,7 +555,7 @@ TEST(Union, testEfficientMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, U}, {U, 2}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
 }
 
@@ -589,7 +590,7 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected =
         makeIdTableFromVector({{1, U, U, 4}, {1, 2, 4, U}, {2, U, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -607,7 +608,7 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected =
         makeIdTableFromVector({{1, 2, 4, U}, {1, U, U, 4}, {2, U, U, 8}});
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
   {
     qec->getQueryTreeCache().clearAll();
@@ -769,4 +770,119 @@ TEST(Union, getCostEstimate) {
   // Union should never be free.
   EXPECT_GT(unsortedUnionSmall.getCostEstimate(),
             valuesSmall->getCostEstimate() * 2);
+}
+
+// _____________________________________________________________________________
+// Pushing a `LIMIT` into the children can change the algorithm and with it the
+// sort order of an `OptionalJoin` inside them, see the caution note on
+// `Operation::applyLimitOffset`. Check that the sort order which the merging
+// implementation requires of the children is restored in that case.
+TEST(Union, limitPushdownRestoresSortOrderOfChildren) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  // An `OptionalJoin` on `?a` that is sorted on `?a`, but switches to the index
+  // nested loop join (which doesn't preserve the order of its left input) as
+  // soon as its left input becomes smaller than its right input.
+  auto makeOptionalJoin = [qec]() {
+    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec,
+        makeIdTableFromVector(
+            {{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}, {6, 6}}),
+        Vars{Var{"?a"}, Var{"?b"}}, false, std::vector<ColumnIndex>{0});
+    // Deliberately unsorted, so that the `OptionalJoin` wraps it in a `Sort`,
+    // which is a precondition for the index nested loop join.
+    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{2, 20}, {1, 10}, {0, 0}}),
+        Vars{Var{"?a"}, Var{"?c"}});
+    return ad_utility::makeExecutionTree<OptionalJoin>(qec, std::move(left),
+                                                       std::move(right));
+  };
+  auto other = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{7, 70}, {8, 80}}),
+      Vars{Var{"?a"}, Var{"?d"}}, false, std::vector<ColumnIndex>{0});
+
+  // The result of the union has to be sorted on `?a`, which is its column 0.
+  Union unionOperation{qec, makeOptionalJoin(), std::move(other),
+                       std::vector<ColumnIndex>{0}};
+  auto expectChildrenAreSorted =
+      [&unionOperation](ad_utility::source_location loc =
+                            AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(loc);
+        for (const auto* child : unionOperation.getChildren()) {
+          EXPECT_TRUE(child->getRootOperation()->isSortedBy({0}));
+        }
+      };
+  // Both children are already sorted, so the constructor added no `Sort`.
+  expectChildrenAreSorted();
+
+  // The limit is small enough to make the left input of the `OptionalJoin`
+  // smaller than its right input.
+  unionOperation.applyLimitOffset({2});
+  expectChildrenAreSorted();
+}
+
+// _____________________________________________________________________________
+TEST(Union, limitAndOffsetArePushedDownToChildren) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  // The left child yields 1 to 5 and the right child yields 6 to 10, so the
+  // union yields the numbers 1 to 10 in that order.
+  auto makeUnion = [qec]() {
+    auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{1}, {2}, {3}, {4}, {5}}), Vars{Var{"?a"}});
+    auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{6}, {7}, {8}, {9}, {10}}),
+        Vars{Var{"?a"}});
+    return Union{qec, std::move(leftT), std::move(rightT)};
+  };
+  auto expectChildLimits =
+      [](Union& unionOperation, std::optional<uint64_t> limit,
+         ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(loc);
+        for (const auto* child : unionOperation.getChildren()) {
+          EXPECT_EQ(child->getRootOperation()->getLimitOffset(),
+                    LimitOffsetClause{limit});
+        }
+      };
+  auto expectResult = [qec](Union& unionOperation, const IdTable& expected,
+                            ad_utility::source_location loc =
+                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    qec->getQueryTreeCache().clearAll();
+    EXPECT_EQ(unionOperation.getResult(false)->idTableView(), expected);
+  };
+
+  {
+    // Both children only have to supply `limit + offset` rows.
+    auto unionOperation = makeUnion();
+    unionOperation.applyLimitOffset({2, 3});
+    expectChildLimits(unionOperation, 5);
+    // The `Union` still has to apply the `LIMIT`/`OFFSET` to its own result.
+    expectResult(unionOperation, makeIdTableFromVector({{4}, {5}}));
+  }
+  {
+    // A `LIMIT`/`OFFSET` that is applied on top of a previous one (which
+    // happens for nested subqueries) must not shrink the limit of the children
+    // too much. Here the result consists of the rows 5 and 6 of the union, so
+    // the children still have to supply 7 rows.
+    auto unionOperation = makeUnion();
+    unionOperation.applyLimitOffset({10, 5});
+    expectChildLimits(unionOperation, 15);
+    unionOperation.applyLimitOffset({2, 0});
+    expectChildLimits(unionOperation, 7);
+    expectResult(unionOperation, makeIdTableFromVector({{6}, {7}}));
+  }
+  {
+    // Adding up the limit and the offset must not overflow.
+    auto unionOperation = makeUnion();
+    unionOperation.applyLimitOffset({std::numeric_limits<uint64_t>::max(), 1});
+    expectChildLimits(unionOperation, std::nullopt);
+  }
+  {
+    // Without a limit there is no bound that could be pushed down.
+    auto unionOperation = makeUnion();
+    unionOperation.applyLimitOffset({std::nullopt, 8});
+    expectChildLimits(unionOperation, std::nullopt);
+    expectResult(unionOperation, makeIdTableFromVector({{9}, {10}}));
+  }
 }

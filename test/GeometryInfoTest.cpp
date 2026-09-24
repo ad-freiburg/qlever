@@ -811,4 +811,24 @@ TEST(GeometryInfoTest, MetricDistanceVisitor) {
             std::nullopt);
 }
 
+// Test `isWktLiteral` on positive and negative examples.
+TEST(GeometryInfoTest, IsWktLiteral) {
+  auto wkt = [](std::string_view content) {
+    return absl::StrCat("\"", content, "\"", GEO_LITERAL_SUFFIX);
+  };
+
+  // WKT literals. The check is purely syntactic (quotes plus the WKT datatype
+  // suffix), so invalid WKT content also counts.
+  for (const std::string& word : {wkt("POINT(1 2)"), wkt("NOTAGEOMETRY")}) {
+    EXPECT_TRUE(ad_utility::isWktLiteral(word)) << word;
+  }
+
+  // Not WKT literals: a plain literal, an IRI, a language-tagged literal.
+  for (const std::string& word :
+       {std::string{"\"foo\""}, std::string{"<http://example.org>"},
+        std::string{"\"foo\"@en"}}) {
+    EXPECT_FALSE(ad_utility::isWktLiteral(word)) << word;
+  }
+}
+
 }  // namespace

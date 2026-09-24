@@ -50,13 +50,17 @@ class TextIndexScanForWord : public Operation {
   const TextIndexScanForWordConfiguration& getConfig() const { return config_; }
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Returns a Result containing an IdTable with the columns being
   // the text variable and the completed word (if it was prefixed)
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {};
+  }
 
   void setVariableToColumnMap();
 };

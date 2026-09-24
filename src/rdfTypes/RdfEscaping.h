@@ -15,6 +15,15 @@
 #include "util/StringUtils.h"
 
 namespace RdfEscaping {
+namespace detail {
+// Turn a sequence of at most 8 hexadecimal characters that encode a single
+// Unicode codepoint (e.g. "00e4") into the corresponding UTF-8 string (e.g.
+// "ä"). The input must be short enough to represent a single codepoint (at most
+// 8 hex digits, the length of a `\UXXXXXXXX` escape); longer inputs violate a
+// contract check. Exposed for unit testing.
+std::string hexadecimalCharactersToUtf8Codepoint(std::string_view hex);
+}  // namespace detail
+
 /// Replaces each newline '\n' by an escaped newline '\\n', and each backslash
 /// '\\' by an escaped backslash "\\\\". This is the minimal amount of escaping
 /// that has to be done in order to store strings in a line-based text file.
@@ -110,6 +119,16 @@ std::string normalizedContentFromLiteralOrIri(std::string&& input);
  */
 std::string unescapeIriref(std::string_view iriref);
 
+// Same as `unescapeIriref` above, but do not allocate if there is nothing to
+// unescape: return a view of the unescaped Iriref (including the angle
+// brackets). If `iriref` contains no escape sequence (by far the most common
+// case when parsing RDF input), a view of `iriref` itself is returned and
+// `buffer` is left untouched, which tells the caller that it can keep using
+// the original string. Otherwise the unescaped Iriref is stored in `buffer`
+// and a view of `buffer` is returned. `buffer` must be empty when calling this
+// function and has to outlive the returned view.
+std::string_view unescapeIriref(std::string_view iriref, std::string& buffer);
+
 /**
  * This function unescapes a prefixedIri (the "local" part in the form
  * prefix:local). These may only contain so-called "reserved character escape
@@ -149,18 +168,6 @@ NormalizedString normalizeLiteralWithQuotes(std::string_view input);
 // the surrounding quotation marks. Escaped characters are stored in
 // their unescaped format, e.g. "Hello \' World" -> "Hello' World".
 NormalizedString normalizeLiteralWithoutQuotes(std::string_view input);
-
-// Created the content for an Iri based on a string that contains
-// the surrounding angled brackets. The angled brackets are removed
-NormalizedString normalizeIriWithBrackets(std::string_view input);
-
-// Created the content for an Iri based on a string that does not contain
-// the surrounding angled brackets.
-NormalizedString normalizeIriWithoutBrackets(std::string_view input);
-
-// Created a normalized representation of the language tag.
-// If it starts with an @, the leading @ character will be removed.
-NormalizedString normalizeLanguageTag(std::string_view input);
 
 }  // namespace RdfEscaping
 

@@ -5,9 +5,9 @@
 #include "engine/SortPerformanceEstimator.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 
 #include <cstdlib>
-#include <iomanip>
 
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/IdTable.h"
@@ -188,8 +188,9 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
               << "Setting all estimates to 0. This means that no sort "
               << "operations will be canceled." << std::endl;
         }
-        AD_LOG_TRACE << "Estimated the sort time to be " << std::fixed
-                     << std::setprecision(3) << Timer::toSeconds(_samples[i][j])
+        AD_LOG_TRACE << "Estimated the sort time to be "
+                     << absl::StrFormat("%.3f",
+                                        Timer::toSeconds(_samples[i][j]))
                      << " seconds." << std::endl;
       }
     }
@@ -210,6 +211,7 @@ void SortPerformanceEstimator::throwIfEstimateTooLong(
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation.
     throw ad_utility::CancellationException(
+        ad_utility::CancellationState::TIMEOUT,
         absl::StrCat(operationDescriptor,
                      " was canceled, because time estimate exceeded "
                      "remaining time by a factor of ",

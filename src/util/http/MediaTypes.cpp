@@ -21,8 +21,8 @@ using enum MediaType;
 // specified in the request. It's "application/sparql-results+json", as
 // required by the SPARQL standard.
 constexpr std::array SUPPORTED_MEDIA_TYPES{
-    sparqlJson, sparqlXml,   qleverJson,        tsv, csv, turtle,
-    ntriples,   octetStream, binaryQleverExport};
+    sparqlJson, sparqlXml,   qleverJson,         tsv,   csv, turtle,
+    ntriples,   octetStream, binaryQleverExport, nquads};
 
 // _____________________________________________________________
 const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
@@ -45,6 +45,7 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
     add(qleverJson, "application", "qlever-results+json", {});
     add(turtle, "text", "turtle", {".ttl"});
     add(ntriples, "application", "n-triples", {".nt"});
+    add(nquads, "application", "n-quads", {".nq"});
     add(octetStream, "application", "octet-stream", {});
     add(binaryQleverExport, "application", "qlever-export+octet-stream", {});
     return t;

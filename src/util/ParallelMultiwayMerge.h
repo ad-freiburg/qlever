@@ -9,6 +9,7 @@
 #include <absl/functional/bind_front.h>
 
 #include "util/AsyncStream.h"
+#include "util/Forward.h"
 #include "util/Generator.h"
 #include "util/TypeTraits.h"
 #include "util/ValueSizeGetters.h"
@@ -222,13 +223,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
         MemorySize maxMemPerNode, size_t blocksize, R&& rangeOfRanges,
         ComparisonFuncT comparison) {
   AD_CORRECTNESS_CHECK(!rangeOfRanges.empty());
-  auto moveIf = [](auto& range) -> decltype(auto) {
-    if constexpr (moveElements) {
-      return std::move(range);
-    } else {
-      return range;
-    }
-  };
+  auto moveIf = ad_utility::moveIf<moveElements>;
 
   using ResultT = InputRangeTypeErased<std::vector<T>>;
 
@@ -249,15 +244,12 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
     auto beg = rangeOfRanges.begin();
     auto splitIt = beg + split;
     auto end = rangeOfRanges.end();
-    auto join = [](auto&& view) {
-      return ql::views::join(ad_utility::OwningView{AD_FWD(view)});
-    };
-
-    auto parallelMerge = [join, blocksize, comparison, maxMemPerNode](
-                             auto it, auto end) {
+    auto parallelMerge = [blocksize, comparison, maxMemPerNode](auto it,
+                                                                auto end) {
       auto subRange{ql::ranges::subrange{it, end}};
-      return join(parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
-          maxMemPerNode, blocksize, std::move(subRange), comparison));
+      return ql::views::join(
+          parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
+              maxMemPerNode, blocksize, std::move(subRange), comparison));
     };
 
     auto mergeRange1 = parallelMerge(beg, splitIt);

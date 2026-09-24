@@ -5,8 +5,6 @@
 #include <gmock/gmock.h>
 
 #include "../util/IdTableHelpers.h"
-#include "../util/IndexTestHelpers.h"
-#include "./ValuesForTesting.h"
 #include "engine/GroupBy.h"
 #include "engine/GroupByImpl.h"
 #include "engine/LazyGroupBy.h"
@@ -59,7 +57,7 @@ class LazyGroupByTest : public ::testing::Test {
     sparqlExpression::EvaluationContext evaluationContext{
         *qec_,
         subtree_->getVariableColumns(),
-        idTable,
+        idTable.asStaticView<0>(),
         ua,
         localVocab_,
         std::make_shared<ad_utility::CancellationHandle<>>(),

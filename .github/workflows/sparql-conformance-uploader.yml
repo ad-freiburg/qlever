@@ -6,6 +6,14 @@ on:
     types:
       - completed
 
+# This workflow only reads the repository and downloads the artifact of the
+# triggering run (which requires `actions: read`). It never writes anything via
+# the GITHUB_TOKEN, so we grant nothing else. The upload to the conformance
+# server uses `secrets.SPARQL_CONFORMANCE_TOKEN`, not the GITHUB_TOKEN.
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   upload:
     env:
@@ -15,7 +23,7 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success'
     steps:
       - name: 'Download artifact'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         with:
           script: |
             var artifacts = await github.rest.actions.listWorkflowRunArtifacts({
@@ -35,26 +43,45 @@ jobs:
             var fs = require('fs');
             fs.writeFileSync('${{github.workspace}}/conformance-report.zip', Buffer.from(download.data));
       - run: unzip conformance-report.zip
-      # Read the metadata into environment variables.
-      - name: "Read github event"
-        run: echo "github_event=`cat event`" >> $GITHUB_ENV
-      - name: "Read PR number"
-        run: echo "pr_number=`cat pr`" >> $GITHUB_ENV
-      - name: "Read Github Ref"
-        run: echo "original_github_ref=`cat github_ref`" >> $GITHUB_ENV;
-      - name: "Read Github SHA"
-        run: echo "commit_sha=`cat sha`" >> $GITHUB_ENV;
-      - name: "Read Github Repository"
-        run: echo "original_github_repository=`cat github_repository`" >> $GITHUB_ENV;
+      # Read the metadata from the artifact and submit it to the server.
+      #
+      # SECURITY: the `event`, `pr` and `sha` files come from the artifact that
+      # the `sparql-conformance` workflow produced for the (possibly forked) PR.
+      # A malicious PR fully controls their contents. We therefore read them into
+      # shell variables (NEVER into `$GITHUB_ENV`, which would allow injecting
+      # arbitrary environment variables) and NEVER interpolate them via `${{ }}`
+      # into the shell (which would allow arbitrary command execution and hence
+      # exfiltration of `SPARQL_CONFORMANCE_TOKEN`). Every value is validated
+      # against a strict pattern before use.
       - name: "Submit data to server"
         run: |
+            set -euo pipefail
+            github_event="$(cat event)"
+            pr_number="$(cat pr)"
+            commit_sha="$(cat sha)"
+            # `event` is one of a known, fixed set; `sha` is a 40-char hex commit
+            # id (used below as a file name); `pr` is a number, or empty on a
+            # `push` to master (where `github.event.number` is blank). The bash
+            # `=~` match is anchored and whole-string, so it also rejects values
+            # containing embedded newlines (which could inject extra HTTP headers).
+            if [[ ! "$github_event" =~ ^(push|pull_request|merge_group)$ ]]; then
+              echo "Refusing to proceed: unexpected event '$github_event'" >&2; exit 1
+            fi
+            if [[ ! "$commit_sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "Refusing to proceed: 'sha' is not a commit id" >&2; exit 1
+            fi
+            if [[ ! "$pr_number" =~ ^[0-9]*$ ]]; then
+              echo "Refusing to proceed: 'pr' is not a number" >&2; exit 1
+            fi
+            # The values are passed as quoted shell variables, so they are not
+            # re-parsed as workflow expressions or shell syntax.
             response=$(curl -L -s -o temp_response.txt -w "%{http_code}" \
               -H "x-api-key: $API_KEY" \
-              -H "event: ${{ env.github_event }}" \
-              -H "sha: ${{ env.commit_sha }}" \
-              -H "pr-number: ${{ env.pr_number }}" \
-              -F "file=@${{env.commit_sha}}.json.bz2" \
-              $SERVER_URL/upload)
+              -H "event: $github_event" \
+              -H "sha: $commit_sha" \
+              -H "pr-number: $pr_number" \
+              -F "file=@${commit_sha}.json.bz2" \
+              "$SERVER_URL/upload")
 
             echo "Server response:"
             cat temp_response.txt

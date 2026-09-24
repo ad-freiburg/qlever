@@ -8,9 +8,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <string_view>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/three_way_comparison.h"
 #include "concepts/concepts.hpp"
+#include "global/Constants.h"
 #include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
@@ -26,10 +29,10 @@ struct Centroid {
   GeoPoint centroid_;
 
  public:
-  explicit Centroid(GeoPoint centroid) : centroid_{centroid} {};
-  Centroid(double lat, double lng) : centroid_{lat, lng} {};
+  explicit Centroid(GeoPoint centroid) : centroid_{centroid} {}
+  Centroid(double lat, double lng) : centroid_{lat, lng} {}
 
-  GeoPoint centroid() const { return centroid_; };
+  GeoPoint centroid() const { return centroid_; }
 };
 
 // The individual coordinates describing the bounding box.
@@ -80,7 +83,7 @@ struct GeometryType {
  public:
   explicit GeometryType(uint8_t type);
 
-  uint8_t type() const { return type_; };
+  uint8_t type() const { return type_; }
 
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
@@ -94,13 +97,13 @@ struct NumGeometries {
   uint32_t numGeometries_;
 
  public:
-  NumGeometries(uint32_t numGeometries) : numGeometries_{numGeometries} {};
+  NumGeometries(uint32_t numGeometries) : numGeometries_{numGeometries} {}
 
   uint32_t numGeometries() const { return numGeometries_; }
 
   constexpr bool operator==(const NumGeometries& other) const {
     return numGeometries_ == other.numGeometries_;
-  };
+  }
 };
 
 // Represents the length of the geometry in meters.
@@ -134,7 +137,7 @@ struct MetricArea {
   MetricArea() = default;
 #endif
 
-  double area() const { return area_; };
+  double area() const { return area_; }
 
   bool isValid() const { return !std::isnan(area_); }
 };
@@ -259,6 +262,13 @@ class GeometryInfo {
 // For the disk serialization we require that a `GeometryInfo` is trivially
 // copyable.
 static_assert(std::is_trivially_copyable_v<GeometryInfo>);
+
+// Return true iff `word` is a WKT literal (with quotes and datatype suffix).
+// This is the criterion by which the `SplitGeoVocabulary` routes words into
+// the geo vocabulary (see `GeoSplitFunc`).
+inline bool isWktLiteral(std::string_view word) {
+  return ql::starts_with(word, "\"") && ql::ends_with(word, GEO_LITERAL_SUFFIX);
+}
 
 }  // namespace ad_utility
 

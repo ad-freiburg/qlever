@@ -18,7 +18,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
-#include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
 
 using std::string;
@@ -319,8 +318,7 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
     std::vector<PropertyPath> predicates;
     for (const std::string& langTag : langTags) {
       predicates.push_back(
-          PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-              predicate.getIri(), langTag)));
+          PropertyPath::fromIri(predicate.getIri().withLanguageTag(langTag)));
     }
     predicate = predicates.size() == 1
                     ? std::move(predicates[0])
@@ -346,7 +344,7 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
           variable,
           PropertyPath::fromIri(ad_utility::triple_component::Iri::fromIriref(
               LANGUAGE_PREDICATE)),
-          ad_utility::convertLangtagToEntityUri(langTag)}}});
+          ad_utility::triple_component::Iri::fromLangtag(langTag)}}});
     }
 
     // Optimization if there already is a `BasicGraphPattern` we can use.
@@ -383,6 +381,21 @@ const std::vector<Alias>& ParsedQuery::getAliases() const {
   }
 }
 
+// _____________________________________________________________________________
+void ParsedQuery::updateExportLimit(std::optional<uint64_t> sendLimit) {
+  if (sendLimit.has_value()) {
+    _limitOffset.exportLimit_ = sendLimit;
+  }
+}
+
+// ____________________________________________________________________________
+bool ParsedQuery::isAggregatingQuery() const {
+  return !_groupByVariables.empty() ||
+         ql::ranges::any_of(getAliases(), [](const Alias& alias) {
+           return alias._expression.containsAggregate();
+         });
+}
+
 // ____________________________________________________________________________
 void ParsedQuery::checkVariableIsVisible(
     const Variable& variable, const std::string& locationDescription,
@@ -403,7 +416,10 @@ void ParsedQuery::checkUsedVariablesAreVisible(
     const std::string& locationDescription,
     const ad_utility::HashSet<Variable>& additionalVisibleVariables,
     std::string_view otherPossibleLocationDescription) {
-  for (const auto* var : expression.containedVariables()) {
+  // Note: We pass `excludeExists = true`, because the variables that occur only
+  // inside the body of an `EXISTS` live in their own scope and thus are not
+  // visible in the surrounding query.
+  for (const auto* var : expression.containedVariables(true)) {
     checkVariableIsVisible(*var,
                            locationDescription + " in expression \"" +
                                expression.getDescriptor() + "\"",
