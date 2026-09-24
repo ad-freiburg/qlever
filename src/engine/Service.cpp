@@ -13,14 +13,15 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
 #include "index/TripleComponentConversions.h"
+#include "parser/BlankNodeAdder.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
-#include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
@@ -254,29 +255,21 @@ template <size_t I>
 void Service::writeJsonResult(const std::vector<std::string>& vars,
                               const nlohmann::json& partJson,
                               IdTable* idTablePtr, LocalVocab* localVocab,
-                              size_t& rowIdx) {
+                              BlankNodeAdder& blankNodeAdder, size_t& rowIdx) {
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
-  std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
-  // TODO<joka921> We should include a memory limit, as soon as we can do proper
-  // memory-limited HashMaps.
-  ad_utility::HashMap<std::string, Id> blankNodeMap;
 
   auto writeBindings = [&](const nlohmann::json& bindings, size_t& rowIdx) {
     for (const auto& binding : bindings) {
       idTable.emplace_back();
       for (size_t colIdx = 0; colIdx < vars.size(); ++colIdx) {
-        TripleComponent tc =
-            binding.contains(vars[colIdx])
-                ? bindingToTripleComponent(binding[vars[colIdx]], blankNodeMap,
-                                           localVocab)
-                : TripleComponent::UNDEF();
+        TripleComponent tc = binding.contains(vars[colIdx])
+                                 ? bindingToTripleComponent(
+                                       binding[vars[colIdx]], blankNodeAdder)
+                                 : TripleComponent::UNDEF();
 
-        Id id = toValueId(std::move(tc), getIndex(), *localVocab);
-        idTable(rowIdx, colIdx) = id;
-        if (id.getDatatype() == Datatype::LocalVocabIndex) {
-          ++numLocalVocabPerColumn[colIdx];
-        }
+        idTable(rowIdx, colIdx) =
+            toValueId(std::move(tc), getIndex(), *localVocab);
       }
       rowIdx++;
       checkCancellation();
@@ -312,13 +305,33 @@ Result::LazyResult Service::computeResultLazily(
     std::vector<std::string> vars, ad_utility::LazyJsonParser::Generator body,
     bool singleIdTable) {
   using LC = Result::IdTableLoopControl;
+  // The `blankNodeAdder` is shared by all the blocks of the result, because
+  // blank node labels are scoped to the complete result of the SERVICE, while
+  // the `LazyJsonParser` splits that result into one part per response chunk.
+  // An adder per part would give the same label different `Id`s.
+  //
+  // Its `LocalVocab` owns the blocks of blank node indices for the whole
+  // result, and `yieldPair` merges it into the `LocalVocab` of each block that
+  // is yielded, which keeps those `Id`s alive. NOTE: `LocalVocab::mergeWith`
+  // marks its argument as "copied", after which no more words may be added to
+  // it, but blank node indices are exempt from that limitation. So the adder's
+  // `LocalVocab` can be merged once per block, as long as only blank nodes go
+  // into it; the words of the bindings stay in the per-block `localVocab`.
   auto get = [service = this, vars = std::move(vars), singleIdTable,
               inputRange = moveToCachingInputRange(std::move(body)),
               localVocab = LocalVocab{},
+              blankNodeAdder =
+                  BlankNodeAdder{getIndex().getBlankNodeManager(),
+                                 getExecutionContext()->getAllocator()},
               idTable = IdTable{getResultWidth(),
                                 getExecutionContext()->getAllocator()},
               rowIdx = size_t{0}, varsChecked = false,
               resultExists = false]() mutable {
+    auto yieldPair = [&idTable, &localVocab, &blankNodeAdder]() {
+      localVocab.mergeWith(blankNodeAdder.localVocab_);
+      return Result::IdTableVocabPair{std::move(idTable),
+                                      std::move(localVocab)};
+    };
     auto& details = inputRange.underlyingView().base().details();
     try {
       while (auto partJsonOpt = inputRange.get()) {
@@ -330,13 +343,12 @@ Result::LazyResult Service::computeResultLazily(
         }
 
         ad_utility::callFixedSizeVi(service->getResultWidth(), [&](auto width) {
-          return service->writeJsonResult<width>(vars, partJson, &idTable,
-                                                 &localVocab, rowIdx);
+          return service->writeJsonResult<width>(
+              vars, partJson, &idTable, &localVocab, blankNodeAdder, rowIdx);
         });
         resultExists = true;
         if (!singleIdTable) {
-          Result::IdTableVocabPair pair{std::move(idTable),
-                                        std::move(localVocab)};
+          Result::IdTableVocabPair pair = yieldPair();
           idTable.clear();
           localVocab = LocalVocab{};
           rowIdx = 0;
@@ -369,8 +381,7 @@ Result::LazyResult Service::computeResultLazily(
     }
 
     if (singleIdTable) {
-      return LC::breakWithValue(
-          Result::IdTableVocabPair(std::move(idTable), std::move(localVocab)));
+      return LC::breakWithValue(yieldPair());
     }
     return LC::makeBreak();
   };
@@ -438,9 +449,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
 // ____________________________________________________________________________
 TripleComponent Service::bindingToTripleComponent(
-    const nlohmann::json& binding,
-    ad_utility::HashMap<std::string, Id>& blankNodeMap,
-    LocalVocab* localVocab) const {
+    const nlohmann::json& binding, BlankNodeAdder& blankNodeAdder) const {
   if (!binding.contains("type") || !binding.contains("value")) {
     throw std::runtime_error(absl::StrCat(
         "Missing type or value field in binding. The binding is: '",
@@ -449,8 +458,6 @@ TripleComponent Service::bindingToTripleComponent(
 
   const auto type = binding["type"].get<std::string_view>();
   const auto value = binding["value"].get<std::string_view>();
-  auto blankNodeManagerPtr =
-      getExecutionContext()->getIndex().getBlankNodeManager();
 
   TripleComponent tc;
   // NOTE: The type `typed-literal` is not part of the official SPARQL 1.1
@@ -475,12 +482,9 @@ TripleComponent Service::bindingToTripleComponent(
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
   } else if (type == "bnode") {
-    auto [it, wasNew] = blankNodeMap.try_emplace(value, Id());
-    if (wasNew) {
-      it->second = Id::makeFromBlankNodeIndex(
-          localVocab->getBlankNodeIndex(blankNodeManagerPtr));
-    }
-    tc = it->second;
+    // In the SPARQL JSON format, the label of a blank node is stored without
+    // the leading `_:`.
+    tc = blankNodeAdder.getBlankNodeIndexForLabelWithoutPrefix(value);
   } else {
     throw std::runtime_error(absl::StrCat("Type ", type,
                                           " is undefined. The binding is: '",
@@ -583,21 +587,64 @@ std::optional<std::string> Service::idToValueForValuesClause(
   }
 }
 
+namespace {
+// Replace `op` by its child as long as it is a `Sort` or `StripColumns`
+// operation. These only reorder or project the result of their single child
+// (a `StripColumns` is put on top of a `Service` whenever the query above does
+// not need all of its variables, e.g. for a `GROUP BY`). Return `false` if one
+// of them is constrained by a `LIMIT` or `OFFSET`, then the sibling
+// optimization must not be applied.
+//
+// NOTE: Handling `StripColumns` here should not be necessary in the long run.
+// That operation is expected to become redundant (each operation stripping its
+// unused columns itself), and the `StripColumns` case can then be removed here
+// again.
+bool skipSortAndStripColumns(std::shared_ptr<Operation>& op) {
+  while (std::dynamic_pointer_cast<Sort>(op) ||
+         std::dynamic_pointer_cast<StripColumns>(op)) {
+    if (!op->getLimitOffset().isUnconstrained()) {
+      return false;
+    }
+    const auto& children = op->getChildren();
+    AD_CORRECTNESS_CHECK(children.size() == 1);
+    op = children[0]->getRootOperation();
+  }
+  return true;
+}
+
+// The variables of the `sibling` that may be used for the `VALUES` clause are
+// those that are also visible at the top of both original subtrees (before
+// `skipSortAndStripColumns` was applied). A variable hidden by a
+// `StripColumns` (e.g. a variable that is not selected by a subquery) is a
+// different variable from an equally named one on the other side, so it must
+// not be constrained.
+VariableToColumnMap getSiblingVariables(const Operation& sibling,
+                                        const Operation& outerLeft,
+                                        const Operation& outerRight) {
+  auto variables = sibling.getExternallyVisibleVariableColumns();
+  const auto& visibleLeft = outerLeft.getExternallyVisibleVariableColumns();
+  const auto& visibleRight = outerRight.getExternallyVisibleVariableColumns();
+  absl::erase_if(
+      variables, [&visibleLeft, &visibleRight](const auto& varAndCol) {
+        const auto& var = varAndCol.first;
+        return !visibleLeft.contains(var) || !visibleRight.contains(var);
+      });
+  return variables;
+}
+}  // namespace
+
 // ____________________________________________________________________________
 void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
                                       std::shared_ptr<Operation> right,
                                       bool rightOnly, bool requestLaziness) {
   AD_CORRECTNESS_CHECK(left && right);
 
-  auto skipSortOperation = [](std::shared_ptr<Operation>& op) {
-    if (static_cast<bool>(std::dynamic_pointer_cast<Sort>(op))) {
-      const auto& children = op->getChildren();
-      AD_CORRECTNESS_CHECK(children.size() == 1);
-      op = children[0]->getRootOperation();
-    }
-  };
-  skipSortOperation(left);
-  skipSortOperation(right);
+  // Remember the original operations, needed for `getSiblingVariables`.
+  const auto outerLeft = left;
+  const auto outerRight = right;
+  if (!skipSortAndStripColumns(left) || !skipSortAndStripColumns(right)) {
+    return;
+  }
 
   auto a = std::dynamic_pointer_cast<Service>(left);
   auto b = std::dynamic_pointer_cast<Service>(right);
@@ -630,6 +677,9 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
     return;
   }
 
+  auto siblingVariables =
+      getSiblingVariables(*sibling, *outerLeft, *outerRight);
+
   auto addRuntimeInfo = [&](bool siblingUsed) {
     std::string_view v = siblingUsed ? "yes"sv : "no"sv;
     service->runtimeInfo().addDetail("optimized-with-sibling-result", v);
@@ -645,9 +695,8 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
         siblingResult->idTableView().size() <=
         getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
     if (resultIsSmall) {
-      service->siblingInfo_.emplace(
-          siblingResult, sibling->getExternallyVisibleVariableColumns(),
-          sibling->getCacheKey());
+      service->siblingInfo_.emplace(siblingResult, std::move(siblingVariables),
+                                    sibling->getCacheKey());
     }
     sibling->precomputedResultBecauseSiblingOfService() =
         std::move(siblingResult);
@@ -704,7 +753,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   service->siblingInfo_.emplace(
       service->makeShared<Result>(std::move(siblingPair),
                                   siblingResult->sortedBy()),
-      sibling->getExternallyVisibleVariableColumns(), sibling->getCacheKey());
+      std::move(siblingVariables), sibling->getCacheKey());
 
   sibling->precomputedResultBecauseSiblingOfService() =
       service->siblingInfo_->precomputedResult_;

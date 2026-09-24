@@ -12,7 +12,6 @@
 
 #include <atomic>
 #include <boost/asio/awaitable.hpp>
-#include <chrono>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -21,27 +20,26 @@
 #include "global/SpecialIds.h"
 #include "index/InputFileSpecification.h"
 #include "parser/AsyncBlockSource.h"
-#include "parser/AsyncParserDriver.h"
 #include "parser/AsyncRdfParserBase.h"
 #include "parser/RdfParser.h"
 #include "util/AsyncResourcePool.h"
 #include "util/MemorySize/MemorySize.h"
 
-// An RDF parser that, like `RdfParallelParser`, parses a single input file by
-// splitting it into batches and parsing those batches in parallel, but
-// schedules all of its work via `boost::asio` on an externally-provided
-// executor instead of owning its own threads. It is an `AsyncRdfParserBase`
-// (see there for the documentation of `asyncGetBatch`), not an
-// `RdfParserBase`, because its interface is asynchronous;
-// `RdfParallelParserViaAsync` below wraps it in the synchronous
-// `RdfParserBase` interface.
+// An RDF parser that parses a single input file by splitting it into batches
+// and parsing those batches in parallel, scheduling all of its work via
+// `boost::asio` on an externally-provided executor instead of owning its own
+// threads. It is an `AsyncRdfParserBase` (see there for the documentation of
+// `asyncGetBatch`), not an `RdfParserBase`, because its interface is
+// asynchronous (the unit tests drive it through the synchronous
+// `RdfParserBase` interface via `RdfParallelParserViaAsync`, see
+// `test/util/AsyncParserDriver.h`).
 //
-// Unlike `RdfParallelParser`, this class does not prefetch or buffer batches
-// on its own behalf: parallelism comes entirely from the caller keeping
-// several calls to `asyncGetBatch()` in flight at once. Fetching the next
-// block is serialized (at most one fetch is in flight at any time, as required
-// by `AsyncBlockSource`), while parsing of different blocks happens in
-// parallel on `executor()`.
+// This class does not prefetch or buffer batches on its own behalf:
+// parallelism comes entirely from the caller keeping several calls to
+// `asyncGetBatch()` in flight at once. Fetching the next block is serialized
+// (at most one fetch is in flight at any time, as required by
+// `AsyncBlockSource`), while parsing of different blocks happens in parallel on
+// `executor()`.
 //
 // The constructor does nothing but open the input; in particular it neither
 // blocks nor starts any asynchronous operation. The leading declarations of
@@ -112,6 +110,14 @@ class RdfAsyncParallelParser : public AsyncRdfParserBase {
   // synchronization.
   bool headerWasParsed_ = false;
 
+  // The offset of the next block within the input file. Each call claims the
+  // current value for the block it fetches and advances it by the size of that
+  // block, so that the worker parsers can report file-absolute positions in
+  // their error messages (see `RdfStringParser::setPositionOffset`). Like
+  // `headerWasParsed_` this is only accessed while the permit of
+  // `blockFetchPermit_` is held and hence needs no further synchronization.
+  size_t nextBlockOffset_ = 0;
+
   // Set to true by the first `asyncGetBatch()` call that encounters an error.
   // All subsequent calls complete with `nullopt` instead of propagating
   // further exceptions, so that the caller's pipeline stops cleanly.
@@ -141,13 +147,16 @@ class RdfAsyncParallelParser : public AsyncRdfParserBase {
   // (like `boost::asio::use_future`), so `co_spawn` returns `void` for it, and
   // the whole completion-token machinery lives one level up, in
   // `AsyncRdfParserBase::asyncGetBatch`.
-  void asyncGetBatchImpl(Handler handler) override;
+  void asyncGetBatchImpl(std::vector<TurtleTriple> buffer,
+                         Handler handler) override;
 
  private:
   // Parse the header if this is the first call, then fetch the next block and
-  // parse it into triples. Throw on a parse error, and return `nullopt` at the
-  // end of the input. See the class comment for the exact error semantics.
-  boost::asio::awaitable<OptionalTriples> getBatchCoroutine();
+  // parse it into triples, using `buffer` as their storage. Throw on a parse
+  // error, and return `nullopt` at the end of the input. See the class comment
+  // for the exact error semantics.
+  boost::asio::awaitable<OptionalTriples> getBatchCoroutine(
+      std::vector<TurtleTriple> buffer);
 
   // Parse the leading declarations of the input (the "header") by feeding the
   // blocks of the input to `state_` one by one until it reports that the
@@ -155,37 +164,6 @@ class RdfAsyncParallelParser : public AsyncRdfParserBase {
   // only while the permit of `blockFetchPermit_` is held, see the class
   // comment above.
   boost::asio::awaitable<void> parseHeader();
-};
-
-// The `RdfAsyncParallelParser` driven by its own thread pool, which makes it a
-// drop-in replacement for `RdfParallelParser`. The only purpose of this class
-// is to provide the constructor of `RdfParallelParser`; everything else is
-// inherited from `AsyncParserDriver`.
-template <typename Parser>
-class RdfParallelParserViaAsync
-    : public AsyncParserDriver<RdfAsyncParallelParser<Parser>> {
- public:
-  // Construct a parser that reads from `spec` on an internally-managed thread
-  // pool. The interface is identical to that of `RdfParallelParser`.
-  RdfParallelParserViaAsync(const qlever::InputFileSpecification& spec,
-                            ad_utility::MemorySize blocksize,
-                            const EncodedIriManager* ev,
-                            const TripleComponent& defaultGraphIri =
-                                qlever::specialIds().at(DEFAULT_GRAPH_IRI),
-                            RdfParserSettings settings = {})
-      : AsyncParserDriver<RdfAsyncParallelParser<Parser>>{
-            ev, spec, blocksize, ev, defaultGraphIri, settings} {}
-
-  // Overload that accepts and ignores a `sleepTimeForTesting` parameter so that
-  // tests can instantiate this class and `RdfParallelParser` with the same
-  // constructor arguments (see `RdfParserTest.stopParsingOnOutsideFailure`).
-  RdfParallelParserViaAsync(
-      const qlever::InputFileSpecification& spec,
-      ad_utility::MemorySize blocksize, const EncodedIriManager* ev,
-      const TripleComponent& defaultGraphIri, RdfParserSettings settings,
-      [[maybe_unused]] std::chrono::milliseconds sleepTimeForTesting)
-      : RdfParallelParserViaAsync{spec, blocksize, ev, defaultGraphIri,
-                                  settings} {}
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFASYNCPARALLELPARSER_H

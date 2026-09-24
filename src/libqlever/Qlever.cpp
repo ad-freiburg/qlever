@@ -34,6 +34,7 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
+#include "util/GlobalExecutor.h"
 #include "util/Log.h"
 #include "util/TimeTracer.h"
 
@@ -122,6 +123,19 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
 void Qlever::buildIndex(IndexBuilderConfig config) {
   // Reject invalid configurations early and with an informative error message.
   config.validate();
+  // Make the size of the global thread pool respect the number of threads that
+  // was configured for the index build. The pool is created on its first use
+  // and cannot be resized afterwards, so a process that has already used it
+  // (for example because it has built an index before) has to live with the
+  // existing pool. That is not an error, but it is worth a warning.
+  if (!ad_utility::trySetGlobalExecutorNumThreads(config.numThreads_)) {
+    AD_LOG_WARN << "The global thread pool already exists with "
+                << ad_utility::globalExecutorNumThreads() << " threads, so the "
+                << config.numThreads_
+                << " threads that were configured for this index build cannot "
+                   "be applied to it"
+                << std::endl;
+  }
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Set memory limit and parser buffer size if specified.

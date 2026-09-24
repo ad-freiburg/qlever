@@ -65,7 +65,8 @@ class AsyncSerialParserAdapter : public AsyncRdfParserBase {
                            ParserFactory parserFactory);
 
  protected:
-  void asyncGetBatchImpl(Handler handler) override;
+  void asyncGetBatchImpl(std::vector<TurtleTriple> buffer,
+                         Handler handler) override;
 };
 
 #endif  // QLEVER_SRC_PARSER_ASYNCSERIALPARSERADAPTER_H

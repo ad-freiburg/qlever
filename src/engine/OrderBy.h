@@ -62,8 +62,9 @@ class OrderBy : public Operation {
     return subtree_->getMultiplicity(col);
   }
 
-  // The cost is `n log n` for the sort, or linear if the input is already
-  // sorted by the first sort column (see `computeResultForSortedInput`).
+  // The cost is `n log n` for the sort, or linear if there is a single sort
+  // column and the input is already sorted by it (see
+  // `computeResultForSortedInput`).
   size_t getCostEstimate() override;
 
   // `ORDER BY` handles `LIMIT` and `OFFSET` itself if the input is sorted by
@@ -90,9 +91,10 @@ class OrderBy : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  // Return true iff the subtree's result is sorted (in the internal order of
-  // the `Id`s) by the first of the `sortIndices_`.
-  bool isInputSortedOnFirstSortColumn() const;
+  // Return true iff there is a single sort column and the subtree's result is
+  // sorted by it (in the internal order of the `Id`s). This is the part of the
+  // precondition of the fast path below that is known at planning time.
+  bool hasSingleSortColumnWithSortedInput() const;
 
   // Fast path for a single sort column, where the `input` is already sorted by
   // that column in the internal order and the column contains only integers or

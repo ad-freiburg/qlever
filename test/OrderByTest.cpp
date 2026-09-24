@@ -547,6 +547,14 @@ TEST(OrderBy, costEstimateForSortedInput) {
   OrderBy sortedOnOther =
       makeOrderByOnSortedInput(inputTable.clone(), false, {1});
   EXPECT_EQ(sortedOnOther.getCostEstimate(), 1000 + 1000 * 9);
+  // Two sort columns, the fast path does not apply.
+  OrderBy twoSortColumns = makeOrderByOnSortedInput(
+      inputTable.clone(), false, {0}, {{0, false}, {1, false}});
+  EXPECT_EQ(twoSortColumns.getCostEstimate(), 1000 + 1000 * 9);
+  // Empty input.
+  auto qec = ad_utility::testing::getQec();
+  OrderBy empty = makeOrderBy(IdTable{1, qec->getAllocator()}, {{0, false}});
+  EXPECT_EQ(empty.getCostEstimate(), 0);
 }
 
 // _____________________________________________________________________________

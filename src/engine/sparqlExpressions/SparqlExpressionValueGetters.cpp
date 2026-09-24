@@ -12,11 +12,11 @@
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "index/ExportIds.h"
+#include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
-#include "util/Conversions.h"
 #include "util/ParsedUri.h"
 
 using namespace sparqlExpression::detail;

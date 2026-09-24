@@ -11,6 +11,7 @@
 #include "backports/functional.h"
 #include "engine/Operation.h"
 #include "engine/VariableToColumnMap.h"
+#include "parser/BlankNodeAdder.h"
 #include "parser/ParsedQuery.h"
 #include "util/LazyJsonParser.h"
 #include "util/http/HttpClient.h"
@@ -90,11 +91,12 @@ class Service : public Operation {
   }
 
  public:
-  // Convert the given binding to TripleComponent.
+  // Convert the given binding to TripleComponent. Blank nodes are resolved via
+  // the `blankNodeAdder`, which has to be the same for all bindings of a single
+  // SERVICE result, because blank node labels are scoped to the result set they
+  // occur in.
   TripleComponent bindingToTripleComponent(
-      const nlohmann::json& binding,
-      ad_utility::HashMap<std::string, Id>& blankNodeMap,
-      LocalVocab* localVocab) const;
+      const nlohmann::json& binding, BlankNodeAdder& blankNodeAdder) const;
 
   // Create a value for the VALUES-clause used in `getSiblingValuesClause` from
   // id. If the id is of type blank node `std::nullopt` is returned.
@@ -105,6 +107,8 @@ class Service : public Operation {
   // operation, this method tries to precompute the result of one if the other
   // one (its sibling) is a `Service` operation. If `rightOnly` is true (used by
   // `OptionalJoin` and `Minus`), only the right operation can be a `Service`.
+  // `Sort` and `StripColumns` operations on top of the children are looked
+  // through.
   static void precomputeSiblingResult(std::shared_ptr<Operation> left,
                                       std::shared_ptr<Operation> right,
                                       bool rightOnly, bool requestLaziness);
@@ -163,10 +167,14 @@ class Service : public Operation {
   //
   // NOTE: This is similar to `Values::writeValues`, except that we have to
   // parse JSON here and not a VALUES clause.
+  // NOTE: The `localVocab` holds the words of the current block only, whereas
+  // the `blankNodeAdder` (and thereby the blank nodes) is shared by all blocks,
+  // see `computeResultLazily`.
   template <size_t I>
   void writeJsonResult(const std::vector<std::string>& vars,
                        const nlohmann::json& partJson, IdTable* idTable,
-                       LocalVocab* localVocab, size_t& rowIdx);
+                       LocalVocab* localVocab, BlankNodeAdder& blankNodeAdder,
+                       size_t& rowIdx);
 
   // Compute the result lazy as IdTable generator.
   // If the `singleIdTable` flag is set, the result is yielded as one idTable.
@@ -179,6 +187,7 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching);
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
+  FRIEND_TEST(ServiceTest, precomputeSiblingResultWithStripColumns);
   FRIEND_TEST(ServiceTest, pushDownValuesPlacesValuesAtEnd);
 };
 #else
