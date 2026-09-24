@@ -120,10 +120,11 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
                                column.begin());
   };
 
-  // The `Undefined` values come first, because their datatype bits are all
-  // zero. The rows after them all have the same datatype iff the first and the
-  // last of them have the same datatype, because the column is grouped by
-  // datatype. Only `Int` and `Double` are handled.
+  // Find the first row that is not `Undefined` (the `Undefined` values come
+  // first, because their datatype bits are all zero). Return `std::nullopt` if
+  // there is no such row, if the rows from there have more than one datatype
+  // (the column is grouped by datatype, so it suffices to compare the first and
+  // the last of them), or if that datatype is neither `Int` nor `Double`.
   size_t firstDefined =
       partitionPoint(0, column.size(), [](Id id) { return id.isUndefined(); });
   if (firstDefined == column.size()) {
@@ -135,14 +136,15 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
     return std::nullopt;
   }
 
-  // `ORDER BY` also puts the `Undefined` values first.
+  // Output the `Undefined` values first, as `ORDER BY` does.
   std::vector<RowRange> ranges;
   if (firstDefined > 0) {
     ranges.push_back({0, firstDefined, false});
   }
 
-  // Ints: the non-negative ints come before the negative ones, and each of the
-  // two parts is sorted by value. So the negative ints go first.
+  // For ints, output the negative ints first and then the non-negative ones (in
+  // the column, the non-negative ints come first, and each of the two parts is
+  // sorted by value).
   if (type == Datatype::Int) {
     size_t firstNegative = partitionPoint(
         firstDefined, column.size(), [](Id id) { return id.getInt() >= 0; });
@@ -151,9 +153,9 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
     return ranges;
   }
 
-  // Doubles: the non-negative doubles come before the negative ones (that is,
-  // those with the sign bit set, including `-0.0`), and each of the two parts
-  // ends with its `NaN`s.
+  // For doubles, find where the negative doubles begin (those with the sign bit
+  // set, including `-0.0`, which come after the non-negative ones), and where
+  // the `NaN`s at the end of each of the two parts begin.
   auto isNotNan = [](Id id) { return !std::isnan(id.getDouble()); };
   size_t firstNegative = partitionPoint(firstDefined, column.size(), [](Id id) {
     return !std::signbit(id.getDouble());
@@ -163,9 +165,10 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
   size_t firstNegativeNan =
       partitionPoint(firstNegative, column.size(), isNotNan);
 
-  // The negative doubles are sorted by descending value (their magnitude
-  // increases with the bits), so they go first and in reverse order. Then the
-  // non-negative doubles, and then all `NaN`s, which `ORDER BY` puts last.
+  // Output the negative doubles in reverse order (in the column, they are
+  // sorted by descending value, because their magnitude increases with the
+  // bits), then the non-negative doubles, and then all `NaN`s, which `ORDER BY`
+  // puts last.
   ranges.push_back({firstNegative, firstNegativeNan, true});
   ranges.push_back({firstDefined, firstPositiveNan, false});
   ranges.push_back({firstPositiveNan, firstNegative, false});
