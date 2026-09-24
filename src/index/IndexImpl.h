@@ -118,8 +118,7 @@ class IndexImpl {
   ad_utility::MemorySize memoryLimitIndexBuilding_ =
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
-  ad_utility::MemorySize blocksizePermutationPerColumn_ =
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
+  size_t rowsPerBlock_ = DEFAULT_INDEX_ROWS_PER_BLOCK;
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
@@ -202,6 +201,11 @@ class IndexImpl {
   // index building (only relevant during index building). Set (and compiled
   // from their string representation) via `setBlankNodeIriRegexes`.
   ad_utility::RegexSet blankNodeIriRegexes_;
+
+  // The geo cell grid for WKT literals (see `GeoCellGrid`), only relevant
+  // during index building. When reading an index, the grid comes from its
+  // configuration.
+  std::optional<ad_utility::GeoCellGrid> geoCellGridForIndexBuilding_;
 
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
@@ -409,10 +413,30 @@ class IndexImpl {
   // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
 
+  // Throw if `vocabularyType` cannot hold a geo cell grid (see
+  // `setGeoCellGridForIndexBuilding`).
+  static void checkVocabularyTypeForGeoCellGrid(
+      ad_utility::VocabularyType vocabularyType);
+
   // ___________________________________________________________________________
   TextVocabulary::AccessReturnType indexToString(WordVocabIndex id) const;
 
  public:
+  // Set the geo cell grid for WKT literals (see `GeoCellGrid`), which is
+  // stored in the index configuration. A grid requires the vocabulary type
+  // `OnDiskCompressedGeoSplit`. Only relevant during index building.
+  void setGeoCellGridForIndexBuilding(
+      std::optional<ad_utility::GeoCellGrid> grid) {
+    geoCellGridForIndexBuilding_ = grid;
+    if (grid.has_value()) {
+      configurationJson_["geo-cell-grid-level"] = grid->level();
+      configurationJson_["geo-cell-grid-scheme"] = grid->scheme();
+    } else {
+      configurationJson_.erase("geo-cell-grid-level");
+      configurationJson_.erase("geo-cell-grid-scheme");
+    }
+  }
+
   // ___________________________________________________________________________
   Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
@@ -556,13 +580,9 @@ class IndexImpl {
     return parserBufferSize_;
   }
 
-  ad_utility::MemorySize& blocksizePermutationPerColumn() {
-    return blocksizePermutationPerColumn_;
-  }
+  size_t& rowsPerBlock() { return rowsPerBlock_; }
 
-  const ad_utility::MemorySize& blocksizePermutationPerColumn() const {
-    return blocksizePermutationPerColumn_;
-  }
+  const size_t& rowsPerBlock() const { return rowsPerBlock_; }
 
   void setOnDiskBase(const std::string& onDiskBase);
 
@@ -609,6 +629,12 @@ class IndexImpl {
   // useful for tooling that inspects an index on disk without loading it.
   static std::string dateOfIndexBuild(const nlohmann::json& configurationJson,
                                       const std::string& onDiskBase);
+
+  // Return the number of rows per block of the index with the given
+  // `configurationJson` (`INDEX_ROWS_PER_BLOCK_KEY`), and the default if the
+  // index was built before that key existed. Throw if the value is not between
+  // 1 and `MAX_INDEX_ROWS_PER_BLOCK`.
+  static size_t rowsPerBlock(const nlohmann::json& configurationJson);
 
   // Format the given time as a UTC timestamp string in the
   // `DATE_OF_INDEX_BUILD_FORMAT` (e.g. `2026-07-12T14:03:52Z`).
@@ -894,6 +920,19 @@ class IndexImpl {
 
   void writeConfiguration() const;
   void readConfiguration();
+
+  // If the configuration file of this index (at `onDiskBase_`) exists and
+  // records the index format that directly precedes the current one, set the
+  // format version in that file to the current one. This is called by
+  // `applyConfiguration` when it accepts an index in the previous format
+  // because the two formats do not differ for that index (see
+  // `qlever::indexFormatConverter::indexNeedsNoConversion`), so that the
+  // check is not repeated at every start and so that updates persisted from
+  // now on (which are written in the current format) belong to an index in
+  // the current format. A failure to write the file (for example, because the
+  // index directory is read-only) is logged as a warning and otherwise
+  // ignored.
+  void recordCurrentFormatVersionInConfigurationFile();
 
   // initialize the index-build-time settings for the vocabulary
   void readIndexBuilderSettingsFromFile();

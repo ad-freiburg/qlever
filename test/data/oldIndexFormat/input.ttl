@@ -23,3 +23,13 @@ ex:s2 ex:geometry "POINT(7.835 47.999)"^^geo:wktLiteral .
 ex:s3 ex:int "1000000"^^xsd:int .
 ex:s3 ex:double "-0.125"^^xsd:double .
 ex:s3 ex:label "zeta" .
+ex:s4 ex:geometry "POINT(7.85 48.0)"^^geo:wktLiteral .
+ex:s4 ex:geometry "POINT(-122.4 37.8)"^^geo:wktLiteral .
+ex:s5 ex:geometry "POINT(2.294481 48.858370)"^^geo:wktLiteral .
+ex:s5 ex:centroid "POINT(139.7 35.7)"^^geo:wktLiteral .
+ex:s6 ex:geometry "POINT(151.2 -33.9)"^^geo:wktLiteral .
+ex:s6 ex:geometry "POINT(-43.2 -22.9)"^^geo:wktLiteral .
+ex:s6 ex:centroid "POINT(13.4 52.5)"^^geo:wktLiteral .
+ex:s7 ex:geometry "LINESTRING(7.8 48.0, 7.9 48.1, 8.0 48.0)"^^geo:wktLiteral .
+ex:s8 ex:geometry "POLYGON((-73.99 40.75, -73.98 40.75, -73.98 40.76, -73.99 40.76, -73.99 40.75))"^^geo:wktLiteral .
+ex:s9 ex:geometry "INVALID(1 2)"^^geo:wktLiteral .

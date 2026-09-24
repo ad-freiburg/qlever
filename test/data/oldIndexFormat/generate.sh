@@ -28,6 +28,7 @@ cd "$(dirname "$0")"
   --settings-file settings.json \
   --text-words-input-file words.tsv \
   --text-docs-input-file docs.tsv \
+  --vocabulary-type on-disk-compressed-geo-split \
   --encode-as-id "https://example.org/id/" \
   --materialized-views '{"testview": "SELECT ?s ?o WHERE { ?s <http://example.org/label> ?o }"}' \
   --no-resource-usage-log

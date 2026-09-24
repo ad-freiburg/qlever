@@ -12,6 +12,7 @@
 
 #include <boost/optional.hpp>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string_view>
@@ -145,6 +146,9 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   if (config.parserBufferSize_.has_value()) {
     index.parserBufferSize() = config.parserBufferSize_.value();
   }
+  if (config.indexRowsPerBlock_.has_value()) {
+    index.rowsPerBlock() = config.indexRowsPerBlock_.value();
+  }
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
@@ -163,6 +167,11 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
+  if (config.geoCellGridLevel_ > 0) {
+    index.getImpl().setGeoCellGridForIndexBuilding(
+        ad_utility::GeoCellGrid{static_cast<uint8_t>(config.geoCellGridLevel_),
+                                config.geoCellGridScheme_});
+  }
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,
                                               config.patternsForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(
@@ -340,13 +349,14 @@ PlannedQuery Qlever::planQuery(
     rootOperation.recursivelySetTimeConstraint(timeLimit.value());
   }
 
+  auto& runtimeInfoWholeQuery = rootOperation.getRuntimeInfoWholeQuery();
   if (requestTimer.has_value()) {
-    auto& qet = plannedQuery.queryExecutionTree();
-    auto timeForQueryPlanning = requestTimer->msecs();
-    auto& runtimeInfoWholeQuery =
-        qet.getRootOperation()->getRuntimeInfoWholeQuery();
-    runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
+    runtimeInfoWholeQuery.timeQueryPlanning = requestTimer->msecs();
   }
+  runtimeInfoWholeQuery.queryPlanning = qp.planningInfo();
+  // The runtime information that is sent over the websocket during the
+  // execution also carries this information about the query planning.
+  qec.setRuntimeInfoWholeQuery(runtimeInfoWholeQuery);
   return plannedQuery;
 }
 
@@ -414,10 +424,28 @@ void IndexBuilderConfig::validate() const {
         "\" cannot be used for index building, the supported types are ",
         ad_utility::VocabularyType::getListOfValuesForIndexBuilding()));
   }
+  if (geoCellGridLevel_ > 0) {
+    if (vocabType_ !=
+        ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit) {
+      throw std::invalid_argument(
+          "A geo cell grid (option --geo-cell-grid-level) requires the "
+          "vocabulary type on-disk-compressed-geo-split");
+    }
+    if (geoCellGridLevel_ > std::numeric_limits<uint8_t>::max()) {
+      throw std::invalid_argument("The geo cell grid level is too large");
+    }
+  }
   if (numThreads_ == 0) {
     throw std::invalid_argument(
         "The number of threads for the index build (`num-threads`) must be at "
         "least 1");
+  }
+  if (indexRowsPerBlock_ == 0 ||
+      indexRowsPerBlock_ > MAX_INDEX_ROWS_PER_BLOCK) {
+    throw std::invalid_argument(absl::StrCat(
+        "The number of rows per block of the index (`index-rows-per-block`) "
+        "must be between 1 and ",
+        MAX_INDEX_ROWS_PER_BLOCK));
   }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");

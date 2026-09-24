@@ -1978,7 +1978,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
 TEST(GroupByOptimizationsRegression,
      computeGroupByObjectWithCountWithNonUniformCol0) {
   // All triples share the same predicate `<p>` but have different objects.
-  // Use a non-default `blocksizePermutations` so that multiple triples land in
+  // Use a non-default `rowsPerBlock` so that multiple triples land in
   // the same block.
   TestIndexConfig config{
       "<s1> <p> <o1> . "
@@ -1986,7 +1986,7 @@ TEST(GroupByOptimizationsRegression,
       "<s3> <p> <o3> . "
       "<s4> <p> <o4> . "
       "<s5> <p> <o5> ."};
-  config.blocksizePermutations = 1_kB;
+  config.rowsPerBlock = 125;
   auto* qec = getQec(std::move(config));
 
   auto scan = makeExecutionTree<IndexScan>(

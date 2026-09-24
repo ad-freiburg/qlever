@@ -26,6 +26,7 @@
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
+#include "engine/QueryPlanner.h"
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "index/ExportIds.h"
@@ -35,6 +36,7 @@
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "parser/SparqlParser.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
@@ -548,10 +550,87 @@ TEST(IndexTest, emptyTextIndex) {
   }
 }
 
+// Test an index built with a geo cell grid: the vocabulary and its comparator
+// get the grid from the index configuration, the vocabulary indices of WKT
+// literals carry their grid cell, and the literals can be looked up. NOTE: The
+// tiny input gives a single partial vocabulary; the merge of several partial
+// vocabularies by geo sort key is tested in `VocabularyGeneratorTest`.
+TEST(IndexTest, geoCellGridIndexBuild) {
+  using ad_utility::GeoCellGrid;
+  auto wkt = [](std::string_view content) {
+    return absl::StrCat("\"", content, GEO_LITERAL_SUFFIX);
+  };
+  // With a grid of level 2 (4 x 4 cells of 90 degrees), the first literal is
+  // in cell 3, the other two in cell 12. NOTE: Point literals would not do
+  // here, because they are encoded directly in the ID and never reach the
+  // vocabulary.
+  std::string w3 = wkt("LINESTRING(170 -80, 171 -81)");
+  std::string w12 = wkt("LINESTRING(-170 80, -171 81)");
+  std::string w12b = wkt("LINESTRING(-170 80, -172 82)");
+  ad_utility::testing::TestIndexConfig config{
+      absl::StrCat("<a> <p> ", w12, " . <b> <p> ", w3, " . <c> <p> ", w12b,
+                   " . <d> <p> \"other\" .")};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  config.geoCellGridLevel = 2;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& index = qec->getIndex();
+  const auto& vocab = index.getVocab();
+
+  GeoCellGrid grid{2};
+  ASSERT_TRUE(vocab.getGeoCellGrid().has_value());
+  EXPECT_EQ(vocab.getGeoCellGrid().value(), grid);
+  ASSERT_TRUE(vocab.getCaseComparator().getGeoCellGrid().has_value());
+  EXPECT_EQ(vocab.getCaseComparator().getGeoCellGrid().value(), grid);
+
+  // The vocabulary index of a WKT literal is its cell in the upper bits and
+  // its position in the lower bits, where the positions follow the cell
+  // order: cell 3 first, then the two literals of cell 12 in lexicographic
+  // order.
+  using SGV =
+      SplitGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
+  auto indexOf = [&vocab](const std::string& word) {
+    VocabIndex idx;
+    EXPECT_TRUE(vocab.getId(word, &idx)) << word;
+    EXPECT_EQ(SGV::getMarker(idx.get()), 1u);
+    return SGV::getVocabIndex(idx.get());
+  };
+  EXPECT_EQ(indexOf(w3), grid.indexFromCellAndPosition(3, 0));
+  EXPECT_EQ(indexOf(w12), grid.indexFromCellAndPosition(12, 1));
+  EXPECT_EQ(indexOf(w12b), grid.indexFromCellAndPosition(12, 2));
+
+  // The literals are retrieved by these indices.
+  VocabIndex idx;
+  ASSERT_TRUE(vocab.getId(w12b, &idx));
+  EXPECT_EQ(index.indexToString(idx), w12b);
+
+  // A query with a WKT literal as constant finds its subject.
+  auto query = absl::StrCat("SELECT ?s WHERE { ?s <p> ", w12, " }");
+  auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), query);
+  QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+  auto result = qp.createExecutionTree(pq)->getResult();
+  VocabIndex idxOfA;
+  ASSERT_TRUE(vocab.getId("<a>", &idxOfA));
+  EXPECT_EQ(result->idTableView(),
+            makeIdTableFromVector({{Id::makeFromVocabIndex(idxOfA)}}));
+}
+
+// Test that a geo cell grid requires the geo split vocabulary type.
+TEST(IndexTest, geoCellGridRequiresGeoSplitVocabulary) {
+  ad_utility::testing::TestIndexConfig config{"<a> <p> <b> ."};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressed;
+  config.geoCellGridLevel = 2;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::testing::getQec(config),
+      ::testing::HasSubstr("requires the vocabulary type"));
+}
+
+// NOTE: The configuration of an index built without a grid is edited by hand
+// here, so that only the reading of the configuration is tested.
+
 // Test that the geo cell grid (see `GeoVocabulary`) is read from the index
 // configuration when an index is loaded, with `flat` as the default scheme.
-// NOTE: Building an index with a grid is a follow-up change, so the
-// configuration of an index built without a grid is edited by hand here.
+// NOTE: The configuration of an index built without a grid is edited by hand
+// here, so that only the reading of the configuration is tested.
 TEST(IndexTest, geoCellGridFromConfiguration) {
   ad_utility::testing::TestIndexConfig config{
       "<a> <p> \"LINESTRING(7 48, 8 49)\"^^<http://www.opengis.net/ont/"
@@ -587,6 +666,68 @@ TEST(IndexTest, geoCellGridFromConfiguration) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       loadWithConfiguration({{"geo-cell-grid-level", 300}}),
       ::testing::HasSubstr("Invalid value 300"));
+}
+
+// _____________________________________________________________________________
+TEST(IndexTest, indexRowsPerBlockFromConfiguration) {
+  // The block size with which the permutations of an index were written is
+  // stored in its configuration, so that permutations of that index that are
+  // written later on (a materialized view, for example) get the same blocks.
+  ad_utility::testing::TestIndexConfig config{"<a> <p> <o> . <a> <p> <o2> ."};
+  config.rowsPerBlock = 4;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& base = qec->getIndex().getOnDiskBase();
+  EXPECT_EQ(qec->getIndex().rowsPerBlock(), 4);
+  {
+    nlohmann::json configuration;
+    std::ifstream in{absl::StrCat(base, CONFIGURATION_FILE)};
+    in >> configuration;
+    EXPECT_EQ(configuration.at(INDEX_ROWS_PER_BLOCK_KEY), 4);
+  }
+
+  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
+  auto loadWithConfiguration =
+      [&](const std::function<void(nlohmann::json&)>& modify) {
+        nlohmann::json configuration;
+        {
+          std::ifstream in{configFilename};
+          in >> configuration;
+        }
+        modify(configuration);
+        {
+          auto out = ad_utility::makeOfstream(configFilename);
+          out << configuration;
+        }
+        Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+        index.createFromOnDiskIndex(base, false);
+        return index.rowsPerBlock();
+      };
+
+  // The block size of the index build is read back.
+  EXPECT_EQ(loadWithConfiguration([](nlohmann::json&) {}), 4);
+  EXPECT_EQ(loadWithConfiguration([](nlohmann::json& configuration) {
+              configuration[INDEX_ROWS_PER_BLOCK_KEY] = 512;
+            }),
+            512);
+
+  // An index that was built before the block size was stored uses the default.
+  EXPECT_EQ(loadWithConfiguration([](nlohmann::json& configuration) {
+              configuration.erase(std::string{INDEX_ROWS_PER_BLOCK_KEY});
+            }),
+            DEFAULT_INDEX_ROWS_PER_BLOCK);
+
+  // A block size of zero is rejected, it would mean blocks without rows, and
+  // so is a block size that is too large to be held in RAM.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration([](nlohmann::json& configuration) {
+        configuration[INDEX_ROWS_PER_BLOCK_KEY] = 0;
+      }),
+      ::testing::HasSubstr("Invalid value 0"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration([](nlohmann::json& configuration) {
+        configuration[INDEX_ROWS_PER_BLOCK_KEY] = MAX_INDEX_ROWS_PER_BLOCK + 1;
+      }),
+      ::testing::HasSubstr("must be between 1 and 3125000"));
 }
 
 // Regression test for #3191.
@@ -1204,7 +1345,7 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   auto [directory, cleanup] = makeTemporaryDirectory("loadConfigFromOldIndex");
   auto onDiskBase = directory + "/index";
   IndexImpl other{ad_utility::makeUnlimitedAllocator<Id>()};
-  other.blocksizePermutationPerColumn() = 1337_B;
+  other.rowsPerBlock() = 1337;
   nlohmann::json stats;
 
   Index::NumNormalAndInternal numTriples{42, 1337};
@@ -1226,8 +1367,7 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   EXPECT_EQ(index.numDistinctPredicates(), numPredicates);
   EXPECT_EQ(index.numSubjects_, numSubjects);
   EXPECT_EQ(index.numObjects_, numObjects);
-  EXPECT_EQ(index.blocksizePermutationPerColumn(),
-            other.blocksizePermutationPerColumn());
+  EXPECT_EQ(index.rowsPerBlock(), other.rowsPerBlock());
   EXPECT_EQ(index.configurationJson_, stats);
 
   // The version written to disk will also have these fields.
@@ -1404,6 +1544,81 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
               ::testing::HasSubstr("the old index is preserved"),
               ::testing::HasSubstr("qlever-upgrade-index "))),
       ::testing::Not(::testing::HasSubstr("The index is too old")));
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, previousFormatIsAcceptedIffTheIndexHasNoGeoPoints) {
+  // The previous index format differs from the current one only in the
+  // encoding of geo points. An index in the previous format without points is
+  // therefore accepted (and its configuration file is updated to the current
+  // format), one with points is rejected with the hint to upgrade it.
+  using namespace qlever::indexFormatConverter;
+  ASSERT_EQ(targetVersion, qlever::indexFormatVersion);
+  auto setVersion = [](const std::string& basename,
+                       const qlever::IndexFormatVersion& version) {
+    std::string filename = basename + CONFIGURATION_FILE;
+    nlohmann::json configuration;
+    ad_utility::makeIfstream(filename) >> configuration;
+    configuration["index-format-version"] = version;
+    ad_utility::makeOfstream(filename) << configuration.dump(4);
+  };
+  auto getVersion = [](const std::string& basename) {
+    nlohmann::json configuration;
+    ad_utility::makeIfstream(basename + CONFIGURATION_FILE) >> configuration;
+    return configuration["index-format-version"]
+        .get<qlever::IndexFormatVersion>();
+  };
+  auto load = [](const std::string& basename) {
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    index.createFromOnDiskIndex(basename, false);
+    return logStream.str();
+  };
+  auto acceptedMessage = ::testing::HasSubstr(
+      "the only difference between the two formats is the encoding of geo "
+      "points, of which this index has none");
+
+  // Without points: accepted with an INFO message, and the configuration file
+  // now records the current format, so that the next load says nothing.
+  {
+    std::string basename = "previousFormatWithoutPoints";
+    makeTestIndex(basename, "<a> <b> <c> . <a> <b> 42 . <a> <b> \"x\" .");
+    setVersion(basename, sourceVersion);
+    std::string log = load(basename);
+    EXPECT_THAT(log, acceptedMessage);
+    EXPECT_THAT(log, ::testing::HasSubstr("Recorded the current index format"));
+    EXPECT_EQ(getVersion(basename), qlever::indexFormatVersion);
+    EXPECT_THAT(load(basename), ::testing::Not(acceptedMessage));
+  }
+
+  // With a point: rejected with the dedicated message that names the upgrade
+  // command, and the configuration file is untouched.
+  {
+    std::string basename = "previousFormatWithPoints";
+    makeTestIndex(basename,
+                  "<a> <b> <c> . <a> <b> \"POINT(7.8 48.0)\"^^"
+                  "<http://www.opengis.net/ont/geosparql#wktLiteral> .");
+    setVersion(basename, sourceVersion);
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    AD_EXPECT_THROW_WITH_MESSAGE(index.createFromOnDiskIndex(basename, false),
+                                 ::testing::HasSubstr("qlever-upgrade-index "));
+    EXPECT_EQ(getVersion(basename), sourceVersion);
+  }
+
+  // Without points, but with persisted updates (whose `Id`s are not checked):
+  // rejected as well.
+  {
+    std::string basename = "previousFormatWithPersistedUpdates";
+    makeTestIndex(basename, "<a> <b> <c> .");
+    setVersion(basename, sourceVersion);
+    ad_utility::makeOfstream(basename + UPDATE_TRIPLES_SUFFIX) << "irrelevant";
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    AD_EXPECT_THROW_WITH_MESSAGE(index.createFromOnDiskIndex(basename, false),
+                                 ::testing::HasSubstr("qlever-upgrade-index "));
+    EXPECT_EQ(getVersion(basename), sourceVersion);
+  }
 }
 
 // _____________________________________________________________________________

@@ -8,6 +8,8 @@
 #include <absl/strings/str_cat.h>
 
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "backports/three_way_comparison.h"
 #include "rdfTypes/Literal.h"
@@ -48,19 +50,73 @@ class GeoPoint {
     return H::combine(std::move(h), g.lat_, g.lng_);
   }
 
-  // A GeoPoint has to store two values (lat and lng).
-  // For simplicity in the binary encoding each uses half of the available bits.
+  // A GeoPoint stores two values (lat and lng), each quantized to 30 bits.
+  // The two 30-bit values are bit-interleaved into the 60 data bits (Morton
+  // or Z-order code): bit `i` of the latitude sits at position `2 * i + 1`,
+  // bit `i` of the longitude at position `2 * i`. In this order, the points
+  // of any quadtree cell (a square of side `2^k` in the quantized coordinate
+  // space, aligned at a multiple of `2^k`) form one contiguous range of bit
+  // representations, so that a geographic rectangle maps to a small set of
+  // ranges, see `bitRangesForRectangle`. This is what makes the prefilter
+  // on the `Id`s of points effective.
   static constexpr T numDataBits = 60;
   static constexpr T numDataBitsCoordinate = numDataBits / 2;
-  static constexpr T coordinateMaskLng =
-      ad_utility::bitMaskForLowerBits(numDataBitsCoordinate);
-  static constexpr T coordinateMaskLat = coordinateMaskLng
-                                         << numDataBitsCoordinate;
   static constexpr T coordinateMaskFreeBits =
       ad_utility::bitMaskForHigherBits(sizeof(T) * 8 - numDataBits);
-  static constexpr double maxCoordinateEncoded =
-      static_cast<double>(coordinateMaskLng);
+  // The largest quantized coordinate value (30 one-bits).
+  static constexpr T maxCoordinateEncoded =
+      ad_utility::bitMaskForLowerBits(numDataBitsCoordinate);
 
+  // Quantize a coordinate in `[-maxValue, maxValue]` to an integer in
+  // `[0, maxCoordinateEncoded]` and back. The quantization step is
+  // `2 * maxValue / maxCoordinateEncoded` (about 1.7e-7 degrees for the
+  // latitude, 3.4e-7 degrees for the longitude, i.e. a few centimeters).
+  static T quantizeCoordinate(double value, double maxValue);
+  static double dequantizeCoordinate(T quantized, double maxValue);
+
+  // Interleave two quantized coordinates into a bit representation and take
+  // it apart again (see above).
+  static constexpr T interleaveCoordinates(T lat, T lng) {
+    return (spreadBits(lat) << 1) | spreadBits(lng);
+  }
+  static constexpr std::pair<T, T> deinterleaveCoordinates(T bits) {
+    return {compactBits(bits >> 1), compactBits(bits)};
+  }
+
+  // The closed ranges `[lower, upper]` of bit representations that together
+  // contain every point whose coordinates lie in the given rectangle (bounds
+  // inclusive, widened by one quantization step to absorb rounding). The
+  // ranges are ascending and disjoint, and there are few of them: the
+  // rectangle is decomposed into quadtree cells whose side is at most a
+  // sixteenth of the rectangle's smaller side.
+  static std::vector<std::pair<T, T>> bitRangesForRectangle(double minLat,
+                                                            double maxLat,
+                                                            double minLng,
+                                                            double maxLng);
+
+ private:
+  // Spread the lower 30 bits of `x` to the even bit positions 0, 2, ..., 58,
+  // and the inverse (which ignores the odd bits).
+  static constexpr T spreadBits(T x) {
+    x &= maxCoordinateEncoded;
+    x = (x | (x << 16)) & 0x0000FFFF0000FFFFull;
+    x = (x | (x << 8)) & 0x00FF00FF00FF00FFull;
+    x = (x | (x << 4)) & 0x0F0F0F0F0F0F0F0Full;
+    x = (x | (x << 2)) & 0x3333333333333333ull;
+    x = (x | (x << 1)) & 0x5555555555555555ull;
+    return x;
+  }
+  static constexpr T compactBits(T x) {
+    x &= 0x5555555555555555ull;
+    x = (x | (x >> 1)) & 0x3333333333333333ull;
+    x = (x | (x >> 2)) & 0x0F0F0F0F0F0F0F0Full;
+    x = (x | (x >> 4)) & 0x00FF00FF00FF00FFull;
+    x = (x | (x >> 8)) & 0x0000FFFF0000FFFFull;
+    x = (x | (x >> 16)) & 0x00000000FFFFFFFFull;
+    return x & maxCoordinateEncoded;
+  }
+
+ public:
   // Construct GeoPoint and ensure valid coordinate values
   GeoPoint(double lat, double lng);
 
@@ -71,9 +127,8 @@ class GeoPoint {
   // Convert the value of this GeoPoint object to a single bitstring.
   // The conversion will reduce the precision and thus change the value.
   // However the lost precision should only be in the range of centimeters.
-  // Guarantees to only use the lower `numDataBits` (currently 60 bits),
-  // with lng stored in the lower 30 and lat stored in the upper 30 bits of
-  // the lower 60.
+  // Guarantees to only use the lower `numDataBits` (currently 60 bits), with
+  // the quantized lat and lng bit-interleaved as described above.
   T toBitRepresentation() const;
 
   // Restore a GeoPoint object from a single bitstring produced by the above

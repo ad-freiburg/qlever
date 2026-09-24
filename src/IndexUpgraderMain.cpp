@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-// Upgrade an index in the index format `{PR = 1572, Date = 2024-10-22}` to the
-// index format `{PR = 3159, Date = 2026-09-01}` in place, so that it does not
+// Upgrade an index in the index format `{PR = 3159, Date = 2026-09-01}` to the
+// index format `{PR = 3412, Date = 2026-09-19}` in place, so that it does not
 // have to be rebuilt from its input files. See `index/IndexFormatConverter.h`
 // for the details, in particular for the difference between the two formats
 // and for how the upgraded index is staged in a subdirectory and only swapped
@@ -51,6 +51,14 @@ int main(int argc, char** argv) {
       "The basename of the index that is upgraded in place, including the "
       "name of the index itself, for example `index-dir/wikidata` (positional "
       "argument, required).");
+  add("memory-for-sorting,m",
+      po::value(&qlever::indexFormatConverter::memoryForSorting()),
+      "The amount of memory to use for sorting the parts of the permutations "
+      "whose order changes (the points and, for a large index, only those). "
+      "Two permutations are converted at a time, so each of them uses half of "
+      "this. For an index with billions of points, give it as much as the "
+      "machine has to spare: a larger budget means fewer blocks to merge and "
+      "hence less I/O. Default is 5 GB.");
   add("log-level",
       optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
       "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "

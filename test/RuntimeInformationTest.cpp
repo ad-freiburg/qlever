@@ -235,3 +235,27 @@ TEST(RuntimeInformation, toStringAndJson) {
 )";
   ASSERT_EQ(j, nlohmann::ordered_json::parse(expectedJson));
 }
+
+// _____________________________________________________________________________
+TEST(RuntimeInformation, wholeQueryToJson) {
+  RuntimeInformationWholeQuery rti;
+  EXPECT_EQ(nlohmann::ordered_json(rti),
+            nlohmann::ordered_json::parse(
+                R"({"time_query_planning": 0, "query_planning": []})"));
+
+  rti.timeQueryPlanning = std::chrono::milliseconds{12};
+  rti.queryPlanning.push_back({false, 3, 6, 1500, 42});
+  rti.queryPlanning.push_back({true, 20, 1501, 1500, 380});
+  auto expected = nlohmann::ordered_json::parse(R"({
+    "time_query_planning": 12,
+    "query_planning": [
+      {"algorithm": "dynamic-programming", "num_nodes": 3,
+       "num_connected_subgraphs": 6, "budget": 1500,
+       "num_candidate_plans": 42},
+      {"algorithm": "greedy", "num_nodes": 20,
+       "num_connected_subgraphs": 1501, "budget": 1500,
+       "num_candidate_plans": 380}
+    ]
+  })");
+  EXPECT_EQ(nlohmann::ordered_json(rti), expected);
+}

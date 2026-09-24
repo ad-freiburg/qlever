@@ -427,6 +427,17 @@ void IndexImpl::createFromFiles(
 }
 
 // _____________________________________________________________________________
+void IndexImpl::checkVocabularyTypeForGeoCellGrid(
+    ad_utility::VocabularyType vocabularyType) {
+  if (vocabularyType !=
+      ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit) {
+    throw std::runtime_error{
+        "A geo cell grid requires the vocabulary type "
+        "`on-disk-compressed-geo-split`"};
+  }
+}
+
+// _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
     size_t numThreads) {
@@ -438,10 +449,27 @@ void IndexImpl::createFromFiles(
   configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
   configurationJson_[DATE_OF_INDEX_BUILD_KEY] =
       formatIndexBuildTime(absl::Now());
+  // The block size is stored so that everything that writes sorted lists of
+  // this index later on (the server for a materialized view, the index format
+  // converter) uses the same block size as this build.
+  configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = rowsPerBlock_;
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
   readIndexBuilderSettingsFromFile();
+
+  // Set the geo cell grid (see `GeoCellGrid`), if one is configured. This must
+  // happen after `readIndexBuilderSettingsFromFile`, which sets the locale and
+  // thereby recreates the word comparator, and before any parsing, which
+  // already sorts words.
+  if (geoCellGridForIndexBuilding_.has_value()) {
+    checkVocabularyTypeForGeoCellGrid(vocabularyTypeForIndexBuilding_);
+    const auto& grid = geoCellGridForIndexBuilding_.value();
+    vocab_.setGeoCellGrid(grid);
+    AD_LOG_INFO << "Using a geo cell grid for WKT literals, level "
+                << static_cast<int>(grid.level()) << ", scheme "
+                << grid.scheme() << std::endl;
+  }
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(std::move(files), numThreads);
@@ -593,9 +621,13 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 
   AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
+    // The merger orders the words by the geo sort keys stored in the partial
+    // vocabularies (see `mergeVocabulary`), so the comparator here is the one
+    // without the geo cell layer.
     auto sortPred = [&cmp = vocab_.getCaseComparator()](std::string_view a,
                                                         std::string_view b) {
-      return cmp(a, b, TripleComponentComparator::Level::TOTAL);
+      return cmp.compareWithoutGeoCellGrid(
+                 a, b, TripleComponentComparator::Level::TOTAL) < 0;
     };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
@@ -824,8 +856,8 @@ CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
     IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
     std::optional<size_t> numWriterThreads) const {
   auto writer = std::make_unique<CompressedRelationWriter>(
-      numColumns, ad_utility::File(fileName, "w"),
-      blocksizePermutationPerColumn_, numWriterThreads);
+      numColumns, ad_utility::File(fileName, "w"), rowsPerBlock_,
+      numWriterThreads);
 
   auto callback =
       liftCallback([&metaData](const auto& md) { metaData.add(md); });
@@ -1242,9 +1274,49 @@ std::string IndexImpl::dateOfIndexBuild(const nlohmann::json& configurationJson,
 }
 
 // ____________________________________________________________________________
+size_t IndexImpl::rowsPerBlock(const nlohmann::json& configurationJson) {
+  size_t rowsPerBlock = configurationJson.value(INDEX_ROWS_PER_BLOCK_KEY,
+                                                DEFAULT_INDEX_ROWS_PER_BLOCK);
+  if (rowsPerBlock == 0 || rowsPerBlock > MAX_INDEX_ROWS_PER_BLOCK) {
+    throw std::runtime_error{
+        absl::StrCat("Invalid value ", rowsPerBlock, " for the key \"",
+                     INDEX_ROWS_PER_BLOCK_KEY,
+                     "\" in the `meta-data.json`, it must be between 1 and ",
+                     MAX_INDEX_ROWS_PER_BLOCK)};
+  }
+  return rowsPerBlock;
+}
+
+// ____________________________________________________________________________
 std::string IndexImpl::formatIndexBuildTime(absl::Time time) {
   return absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, time,
                           absl::UTCTimeZone());
+}
+
+// ___________________________________________________________________________
+void IndexImpl::recordCurrentFormatVersionInConfigurationFile() {
+  std::string filename = onDiskBase_ + CONFIGURATION_FILE;
+  try {
+    if (!ql::filesystem::exists(filename)) {
+      return;
+    }
+    auto configuration = fileToJson<nlohmann::json>(filename);
+    if (!configuration.contains("index-format-version") ||
+        configuration["index-format-version"]
+                .get<qlever::IndexFormatVersion>() !=
+            qlever::previousIndexFormatVersion) {
+      return;
+    }
+    configuration["index-format-version"] = qlever::indexFormatVersion;
+    ad_utility::makeOfstream(filename) << configuration.dump(4) << std::endl;
+    configurationJson_["index-format-version"] = qlever::indexFormatVersion;
+    AD_LOG_INFO << "Recorded the current index format in the file \""
+                << filename << "\"" << std::endl;
+  } catch (const std::exception& e) {
+    AD_LOG_WARN << "Could not record the current index format in the file \""
+                << filename << "\" (" << e.what()
+                << "), the index is used anyway" << std::endl;
+  }
 }
 
 // ___________________________________________________________________________
@@ -1284,7 +1356,31 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
     auto indexFormatVersion = static_cast<qlever::IndexFormatVersion>(
         configurationJson_["index-format-version"]);
     const auto& currentVersion = qlever::indexFormatVersion;
-    if (indexFormatVersion != currentVersion) {
+    // An index in exactly the format that the `qlever-upgrade-index` binary
+    // upgrades from is accepted if the conversion would not change it (see
+    // `indexNeedsNoConversion`).
+    auto isAcceptedPreviousFormat = [this, &indexFormatVersion,
+                                     &currentVersion]() {
+      using namespace qlever::indexFormatConverter;
+      if (indexFormatVersion != sourceVersion ||
+          currentVersion != targetVersion ||
+          !indexNeedsNoConversion(onDiskBase_)) {
+        return false;
+      }
+      AD_LOG_INFO << "The index is in the previous index format (PR = "
+                  << indexFormatVersion.prNumber_ << ", Date = "
+                  << indexFormatVersion.date_.toStringAndType().first
+                  << ") and this version of QLever uses the format (PR = "
+                  << currentVersion.prNumber_
+                  << ", Date = " << currentVersion.date_.toStringAndType().first
+                  << "). That is fine, because the only difference between "
+                     "the two formats is the encoding of geo points, of "
+                     "which this index has none"
+                  << std::endl;
+      recordCurrentFormatVersionInConfigurationFile();
+      return true;
+    };
+    if (indexFormatVersion != currentVersion && !isAcceptedPreviousFormat()) {
       if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
         AD_LOG_ERROR
             << "The version of QLever you are using is too old for this "
@@ -1427,6 +1523,13 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 
+  // The block size with which the permutations of this index were written. It
+  // is needed when further permutations of this index are written later on (a
+  // materialized view, for example), so that all permutations of an index have
+  // the same block size. Indexes that were built before this key existed were
+  // built with the default.
+  rowsPerBlock_ = rowsPerBlock(configurationJson_);
+
   // The geo cell grid of the geo vocabulary, if the index was built with one
   // (see `GeoCellGrid`). The vocabulary needs it before it is opened, because
   // the grid determines how its indices are composed.
@@ -1438,6 +1541,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
           "Invalid value ", geoCellGridLevel,
           " for the key \"geo-cell-grid-level\" in the `meta-data.json`")};
     }
+    checkVocabularyTypeForGeoCellGrid(vocabType);
     ad_utility::GeoCellGridScheme geoCellGridScheme =
         ad_utility::GeoCellGridScheme::Flat;
     loadDataMember("geo-cell-grid-scheme", geoCellGridScheme,
@@ -1669,7 +1773,12 @@ void IndexImpl::writePartialVocabulary(
 
   auto vec = [&]() {
     ad_utility::TimeBlockAndLog l{"vocab map to vector"};
-    return vocabMapsToVector(items);
+    // The geo sort key of each word is computed here, once, so that the sort
+    // below does not parse WKT literals for every comparison.
+    return vocabMapsToVector(
+        items, [&c = vocab_.getCaseComparator()](std::string_view word) {
+          return c.geoSortKey(word);
+        });
   }();
   {
     ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
@@ -1679,8 +1788,9 @@ void IndexImpl::writePartialVocabulary(
     sortVocabVector(
         &vec,
         [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
-          return c.isLessInTotalWithExternalFlag(
-              a.first, a.second.isExternal(), b.first, b.second.isExternal());
+          return c.isLessInTotalWithExternalFlagAndGeoSortKeys(
+              a.word_, a.idAndFlag_.isExternal(), a.geoSortKey_, b.word_,
+              b.idAndFlag_.isExternal(), b.geoSortKey_);
         },
         false);
   }
@@ -1695,7 +1805,7 @@ void IndexImpl::writePartialVocabulary(
     ad_utility::TimeBlockAndLog l{"removing duplicates from the input"};
     vec.erase(std::unique(vec.begin(), vec.end(),
                           [](const auto& a, const auto& b) {
-                            return a.second.id() == b.second.id();
+                            return a.idAndFlag_.id() == b.idAndFlag_.id();
                           }),
               vec.end());
   }
@@ -2066,7 +2176,7 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
   // index and write a fresh configuration file for a new index.
   setOnDiskBase(newName);
   setKbName(other.getKbName());
-  blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
+  rowsPerBlock() = other.rowsPerBlock();
   configurationJson_ = newStats;
   numTriples_ = static_cast<NumNormalAndInternal>(newStats.at("num-triples"));
   numPredicates_ =

@@ -1,6 +1,11 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 The QLever Authors, in particular:
+//
+// 2015 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/IndexScan.h"
 
@@ -11,6 +16,7 @@
 #include <string>
 #include <utility>
 
+#include "engine/GeoRectangleRowFilter.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -301,8 +307,20 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
                                 colIndex),
             scanSpecAndBlocks_.blockMetadata_);
 
-    return makeCopyWithPrefilteredScanSpecAndBlocks(
+    auto copy = makeCopyWithPrefilteredScanSpecAndBlocks(
         {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
+    // A geo rectangle can only prune whole blocks here (and for `GeoPoint`s
+    // only by latitude), so also drop the remaining rows outside the
+    // rectangle one by one, before any operation above the scan sees them.
+    if (const auto* geoRectangle =
+            dynamic_cast<const prefilterExpressions::GeoRectangleExpression*>(
+                it->first.get())) {
+      auto geometryColumn = copy->getVariableColumn(sortedVar);
+      return ad_utility::makeExecutionTree<GeoRectangleRowFilter>(
+          getExecutionContext(), std::move(copy), geometryColumn,
+          geoRectangle->rectangle());
+    }
+    return copy;
   }
 
   // If no prefilter applies, return `std::nullopt`.
@@ -336,6 +354,97 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   return variableToColumnMap;
 }
 
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+IndexScan::makeCopyWithSelectedBlocks(const BlockSelector& selectBlocks) const {
+  // The same preconditions as for
+  // `getUpdatedQueryExecutionTreeWithPrefilterApplied` above: a
+  // `LIMIT`/`OFFSET` of the scan itself is applied while scanning all blocks
+  // (see `getLazyScan`), and without a variable there is nothing to select by.
+  if (!getLimitOffset().isUnconstrained() ||
+      scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
+    return std::nullopt;
+  }
+  auto sortedVarAndColIndex =
+      getSortedVariableAndMetadataColumnIndexForPrefiltering();
+  if (!sortedVarAndColIndex.has_value()) {
+    return std::nullopt;
+  }
+  const size_t colIdx = sortedVarAndColIndex.value().second;
+  // The bounds of the scan result, which also tell whether it is empty.
+  auto metadataAndBlocks = getMetadataForScan();
+  if (!metadataAndBlocks.has_value()) {
+    return std::nullopt;
+  }
+  const auto& scanSpec = scanSpecAndBlocks_.scanSpec_;
+  using PermutedTriple = CompressedBlockMetadata::PermutedTriple;
+  auto getColumn = [](const PermutedTriple& triple, size_t i) {
+    AD_CORRECTNESS_CHECK(i < 3);
+    return i == 0 ? triple.col0Id_ : i == 1 ? triple.col1Id_ : triple.col2Id_;
+  };
+  // A triple belongs to the scanned relation iff its fixed columns (those
+  // before the first variable) match the scan specification.
+  auto isInScan = [&](const PermutedTriple& triple) {
+    for (size_t i = 0; i < colIdx; ++i) {
+      const auto& fixed = i == 0   ? scanSpec.col0Id()
+                          : i == 1 ? scanSpec.col1Id()
+                                   : scanSpec.col2Id();
+      AD_CORRECTNESS_CHECK(fixed.has_value());
+      if (getColumn(triple, i) != fixed.value()) {
+        return false;
+      }
+    }
+    return true;
+  };
+  const auto& locatedTriples =
+      permutation().getLocatedTriplesForPermutation(locatedTriplesState());
+
+  // Flatten the block ranges, and remember the iterator of each block so that
+  // the selection can be turned back into ranges.
+  const auto& bounds = metadataAndBlocks.value().firstAndLastTriple_;
+  BlocksOfSortedVariable blocksOfSortedVariable{
+      getColumn(bounds.firstTriple_, colIdx),
+      getColumn(bounds.lastTriple_, colIdx),
+      {}};
+  auto& blocks = blocksOfSortedVariable.blocks_;
+  std::vector<BlockMetadataIt> iterators;
+  for (const auto& range : scanSpecAndBlocks_.blockMetadata_) {
+    for (auto it = range.begin(); it != range.end(); ++it) {
+      const CompressedBlockMetadata& block = *it;
+      // Each delta triple can delete at most one row of the block, so this is
+      // a lower bound on the number of rows that the block contributes.
+      size_t numDeleted =
+          locatedTriples.numTriples(block.blockIndex_).numDeleted_;
+      size_t numRowsLowerBound =
+          block.numRows_ - std::min(block.numRows_, numDeleted);
+      blocks.push_back(
+          {getColumn(block.firstTriple_, colIdx),
+           getColumn(block.lastTriple_, colIdx), numRowsLowerBound,
+           isInScan(block.firstTriple_) && isInScan(block.lastTriple_)});
+      iterators.push_back(it);
+    }
+  }
+  auto selected = selectBlocks(blocksOfSortedVariable);
+  if (!selected.has_value()) {
+    return std::nullopt;
+  }
+  AD_CONTRACT_CHECK(ql::ranges::is_sorted(selected.value()) &&
+                    ql::ranges::adjacent_find(selected.value()) ==
+                        selected.value().end());
+  BlockMetadataRanges ranges;
+  for (size_t index : selected.value()) {
+    AD_CONTRACT_CHECK(index < iterators.size());
+    auto it = iterators[index];
+    if (!ranges.empty() && ranges.back().end() == it) {
+      ranges.back() = BlockMetadataRange{ranges.back().begin(), it + 1};
+    } else {
+      ranges.emplace_back(it, it + 1);
+    }
+  }
+  return makeCopyWithPrefilteredScanSpecAndBlocks(
+      {scanSpecAndBlocks_.scanSpec_, std::move(ranges)});
+}
+
 //______________________________________________________________________________
 std::shared_ptr<QueryExecutionTree>
 IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
@@ -358,6 +467,18 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
   AD_CORRECTNESS_CHECK(indexScan != nullptr);
   std::tie(indexScan->sizeEstimateIsExact_, indexScan->sizeEstimate_) =
       indexScan->computeSizeEstimate();
+  // Remember the row total of the unprefiltered blocks for runtime
+  // statistics. If this scan is itself already a prefiltered copy (e.g. a
+  // plan-time prefiltered scan that is prefiltered again at runtime), keep
+  // the row total of the original, completely unprefiltered scan.
+  uint64_t numRowsBefore = 0;
+  for (const auto& blockRange : scanSpecAndBlocks_.blockMetadata_) {
+    for (const auto& block : blockRange) {
+      numRowsBefore += block.numRows_;
+    }
+  }
+  indexScan->numBlockRowsBeforePrefilter_ =
+      numBlockRowsBeforePrefilter_.value_or(numRowsBefore);
   return copy;
 }
 
