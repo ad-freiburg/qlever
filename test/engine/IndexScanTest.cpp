@@ -566,13 +566,13 @@ TEST(IndexScan, getResultSizeOfScan) {
   }
 }
 
-// For a scan with a fixed first column and two variables, the size estimate
-// of a large relation (one that has its own entry in the per-relation
-// metadata) is taken from that metadata and not from the block metadata. It
-// is exact iff there are no located triples in the blocks of the relation.
+// Test that the size estimate of a scan with two variables is taken from the
+// per-relation metadata if the relation has an entry there, and that it is
+// exact iff no block of the relation has located triples.
 TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
-  // With a block size of 16 bytes, `<p>` is stored in blocks of its own and
-  // `<q>` in a block shared with other small relations.
+  // A large relation `<p>` and two small relations `<q>` and `<r>`. With a
+  // block size of 16 bytes, `<p>` is stored in blocks of its own and has a
+  // metadata entry, `<q>` and `<r>` share one block and have none.
   std::string kg;
   for (size_t i = 0; i < 50; ++i) {
     kg += absl::StrCat("<x", i, "> <p> <y", i, "> . ");
@@ -586,33 +586,33 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   ASSERT_TRUE(pso.metaData().getMetaDataIfPresent(getId("<p>")).has_value());
   ASSERT_FALSE(pso.metaData().getMetaDataIfPresent(getId("<q>")).has_value());
 
+  // The size estimate of the scan `?x <predicate> ?y` and whether it is exact.
+  // Each scan needs a new `QueryExecutionContext`, because the located triples
+  // are read from the snapshot taken at its creation.
   QueryResultCache cache;
   NamedResultCache namedCache;
   auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
   std::unique_ptr<QueryExecutionContext> qec = nullptr;
-  using V = Variable;
-  using I = TripleComponent::Iri;
-  // A new `QueryExecutionContext` for each scan, because the located triples
-  // are read from the snapshot taken at its creation.
-  auto expectEstimate = [&](const std::string& predicate, size_t estimate,
-                            bool exact,
-                            ad_utility::source_location l =
-                                ad_utility::source_location::current()) {
-    auto trace = generateLocationTrace(l);
+  auto sizeEstimate = [&](const std::string& predicate) {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
         SortPerformanceEstimator{}, &namedCache, materializedViewsManager);
-    SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref(predicate), V{"?y"}};
+    SparqlTripleSimple scanTriple{Variable{"?x"},
+                                  TripleComponent::Iri::fromIriref(predicate),
+                                  Variable{"?y"}};
     IndexScan scan{qec.get(), Permutation::PSO, scanTriple};
-    EXPECT_EQ(scan.getSizeEstimate(), estimate);
-    EXPECT_EQ(scan.sizeEstimateIsExactForTesting(), exact);
+    return std::pair{scan.getSizeEstimate(),
+                     scan.sizeEstimateIsExactForTesting()};
   };
+  using EstimateAndExact = std::pair<size_t, bool>;
 
-  expectEstimate("<p>", 50, true);
-  expectEstimate("<q>", 1, true);
+  // Without updates, both estimates are exact, that of `<p>` from the
+  // metadata and that of `<q>` from its block.
+  EXPECT_EQ(sizeEstimate("<p>"), EstimateAndExact(50, true));
+  EXPECT_EQ(sizeEstimate("<q>"), EstimateAndExact(1, true));
 
-  // An update in the blocks of `<p>` makes the estimate of `<p>` inexact, but
-  // does not change it.
+  // A triple inserted into a block of `<p>` leaves the estimate of `<p>`
+  // unchanged, but makes it inexact.
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
   auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
@@ -624,16 +624,16 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
     deltaTriples.insertTriples(cancellationHandle,
                                {IdTriple<0>{std::array{x0, p, x0, g}}});
   });
-  expectEstimate("<p>", 50, false);
+  EXPECT_EQ(sizeEstimate("<p>"), EstimateAndExact(50, false));
 
-  // An update in a block that does not belong to `<p>` keeps the estimate of
-  // `<p>` exact.
+  // A triple deleted from a block that does not belong to `<p>` keeps the
+  // estimate of `<p>` exact.
   index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
     deltaTriples.clear();
     deltaTriples.deleteTriples(cancellationHandle,
                                {IdTriple<0>{std::array{x0, r, y0, g}}});
   });
-  expectEstimate("<p>", 50, true);
+  EXPECT_EQ(sizeEstimate("<p>"), EstimateAndExact(50, true));
 }
 
 // _____________________________________________________________________________
