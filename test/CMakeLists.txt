@@ -216,6 +216,7 @@ addLinkAndDiscoverTest(DeltaTriplesTest index)
 addLinkAndDiscoverTest(UpdateMetadataTest index)
 
 addLinkAndDiscoverTest(IdTableUtilsTest engine)
+addLinkAndDiscoverTest(IdColumnSortTest index)
 
 addLinkAndDiscoverTest(JoinTest engine)
 

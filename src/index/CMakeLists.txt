@@ -27,7 +27,7 @@ add_library(index
         DeltaTriples.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
         TextIndexBuilder.cpp GraphFilter.cpp IndexRebuilder.cpp GraphNameManager.cpp
         IndexFormatConverter.cpp IndexSwap.cpp
-        IdTableUtils.cpp ExportIds.cpp LocalVocabContextImpl.cpp
+        IdTableUtils.cpp IdColumnSort.cpp ExportIds.cpp LocalVocabContextImpl.cpp
         CompressedExternalIdTableSorterInstantiations.cpp
         InputFileSpecification.cpp
         TripleComponentConversions.cpp)
