@@ -334,6 +334,23 @@ class QueryPlanner {
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 
+  // For each filter substitute that is a `SpatialJoin` with a fixed geometry
+  // on one side (a one-row `VALUES` created by the rewriting of the filter,
+  // or a variable bound by a `BIND` of a constant expression), prefilter the
+  // seeds of the triples that bind the geometry variable of the other side
+  // with the padded rectangle of that geometry: the scan that is sorted by
+  // the variable gets its blocks pruned, every scan that binds the variable
+  // gets a row filter with the same size estimate, and the spatial join is
+  // told the selectivity within the remaining rows (see
+  // `SpatialJoin::setGeometrySideSelectivity`). Replacement plans (from
+  // materialized views) get the prefilter forwarded to their scans. This is
+  // done once, before the dynamic programming, so that it costs one
+  // prefilter evaluation per permutation of the triple and not one per
+  // candidate plan; the DP then decides by cost where the spatial join goes.
+  void applyConstantGeometryPrefilters(
+      std::vector<SubtreePlan>& seeds, FiltersAndOptionalSubstitutes& filters,
+      std::vector<std::vector<SubtreePlan>>& replacementPlans) const;
+
   // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
   // substitutes. This is sufficient for the filter modes that never apply
   // substitutes and avoids constructing throwaway substitute plans (which
@@ -765,6 +782,7 @@ class QueryPlanner {
       const std::vector<SubtreePlan>& lastRow) const;
   static size_t findSmallestExecutionTree(
       const std::vector<SubtreePlan>& lastRow);
+
   static size_t findUniqueNodeIds(
       const std::vector<SubtreePlan>& connectedComponent,
       bool allowReplacementPlans = false);
