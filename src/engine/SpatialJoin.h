@@ -18,7 +18,10 @@
 
 #include "engine/Operation.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "index/Index.h"
+#include "rdfTypes/GeoRectangle.h"
 #include "rdfTypes/Variable.h"
 
 using SpatialJoinBoundingBoxColumns =
@@ -200,23 +203,26 @@ class SpatialJoin : public Operation {
   std::optional<std::shared_ptr<SpatialJoin>> cloneWithBoundingBoxColumns()
       const;
 
-  // If this spatial join is a within-distance join whose one side is a single
-  // fixed geometry (a one-row `VALUES`, as constructed by the rewriting of
-  // filters like `geof:metricDistance(<constant>, ?wkt) <= <dist>`), push a
-  // `GeoRectangleExpression` block prefilter for the padded query rectangle
-  // into the other side. Returns `std::nullopt` if not applicable or if the
-  // other side could not apply the prefilter (e.g. it is not an index scan
-  // sorted by the geometry variable).
-  std::optional<std::shared_ptr<SpatialJoin>> cloneWithGeoBlockPrefilter()
-      const;
+  // Set the estimated fraction of the geometry side's rows that lie in the
+  // rectangle of a fixed other side, see `geometrySideSelectivity_`. Called
+  // by the query planner when it prefilters the scans of the geometry side.
+  void setGeometrySideSelectivity(double selectivity) {
+    geometrySideSelectivity_ = selectivity;
+  }
 
-  // Runtime counterpart of `cloneWithGeoBlockPrefilter` for joins whose
-  // sides are only known at execution time: materialize the (estimated)
-  // smaller side, compute the padded bounding rectangle of its geometries
-  // from the precomputed geometry info, and prune the blocks of the other
-  // side's index scan before it is read. Returns the (possibly replaced)
-  // children. Conservative and result-preserving; a no-op if the other side
-  // is not an index scan sorted by its geometry variable.
+  // The bounding rectangle of all geometries in the given column, computed
+  // from the `GeoPoint` encodings and the precomputed geometry info (no
+  // parsing). Rows without geometry information are skipped (they cannot
+  // contribute join results). Returns `std::nullopt` if no row has one.
+  static std::optional<ad_utility::GeoRectangle> boundingRectangleOfColumn(
+      const IdTableView<0>& table, ColumnIndex column, const Index& index);
+
+  // For joins whose sides are only known at execution time: materialize the
+  // (estimated) smaller side, compute the padded bounding rectangle of its
+  // geometries from the precomputed geometry info, and prune the blocks of
+  // the other side's index scan before it is read. Returns the (possibly
+  // replaced) children. Conservative and result-preserving; a no-op if the
+  // other side is not an index scan sorted by its geometry variable.
   std::pair<std::shared_ptr<QueryExecutionTree>,
             std::shared_ptr<QueryExecutionTree>>
   applyRuntimeGeoBlockPrefilter(
@@ -263,19 +269,12 @@ class SpatialJoin : public Operation {
 
   bool substitutesFilterOp_ = false;
 
-  // Set iff the rectangle of one side was known at planning time (see
-  // `cloneWithGeoBlockPrefilter`): the estimated fraction of the other side's
-  // rows that lie in the rectangle. The size estimate then uses it instead of
-  // the generic selectivity constant.
+  // Set iff the rectangle of one side was known at planning time and the
+  // scans of the other side were prefiltered with it (see
+  // `QueryPlanner::applyConstantGeometryPrefilters`): the estimated fraction
+  // of the other side's remaining rows that lie in the rectangle. The size
+  // estimate then uses it instead of the generic selectivity constant.
   std::optional<double> geometrySideSelectivity_;
-
-  // The estimated share of the rows of `tree` inside `rectangle`, from the
-  // block metadata of the scan that binds `variable` (as object with a fixed
-  // predicate), in the permutation sorted by `variable`. `std::nullopt` if
-  // there is no such scan. Used by `cloneWithGeoBlockPrefilter`.
-  std::optional<double> blockShareOfRectangle(
-      const QueryExecutionTree& tree, const Variable& variable,
-      const ad_utility::GeoRectangle& rectangle) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOIN_H

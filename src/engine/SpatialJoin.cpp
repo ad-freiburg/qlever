@@ -32,13 +32,11 @@
 #include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinConfig.h"
-#include "engine/Values.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
-#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/spatialJoinAlgorithms/BaselineAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
@@ -129,15 +127,10 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
     }
   }
 
-  // If the `SpatialJoin` stems from a distance filter with a fixed geometry,
-  // push a block prefilter for the padded query rectangle into the other
-  // side (see `cloneWithGeoBlockPrefilter`).
-  if (sj->isConstructed() &&
-      getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
-    if (auto sjWithPrefilter = sj->cloneWithGeoBlockPrefilter()) {
-      sj = sjWithPrefilter.value();
-    }
-  }
+  // The selectivity of a prefiltered geometry side is a property of the join
+  // (see `geometrySideSelectivity_`), so every partial or complete
+  // `SpatialJoin` derived from this one carries it.
+  sj->geometrySideSelectivity_ = geometrySideSelectivity_;
 
   // The new spatial join after adding a child needs to inherit the warnings of
   // its predecessor.
@@ -387,11 +380,12 @@ uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
       return childLeft_->getSizeEstimate() * maxResults.value();
     }
 
-    // If the rectangle of one side was known at planning time, the estimated
-    // fraction of the other side's rows inside it replaces the generic
-    // selectivity constant (see `cloneWithGeoBlockPrefilter`). This is what
-    // makes the planner restrict first when the rectangle is large and join
-    // spatially first when it is small.
+    // If the rectangle of one side was known at planning time and the scans
+    // of the other side were prefiltered with it, the estimated fraction of
+    // the remaining rows inside the rectangle replaces the generic selectivity
+    // constant (see `geometrySideSelectivity_`). This is what makes the
+    // planner restrict first when the rectangle is large and join spatially
+    // first when it is small.
     if (geometrySideSelectivity_.has_value()) {
       auto product = static_cast<double>(childLeft_->getSizeEstimate()) *
                      static_cast<double>(childRight_->getSizeEstimate());
@@ -513,11 +507,8 @@ SpatialJoin::SwappedJoinSides SpatialJoin::getSwappedJoinSides() const {
                                       config_.right_};
 }
 
-// The bounding rectangle of all geometries in the given column, computed
-// from the `GeoPoint` encodings and the precomputed geometry info (no
-// parsing). Rows without geometry information are skipped (they cannot
-// contribute join results). Returns `std::nullopt` if no row has one.
-static std::optional<ad_utility::GeoRectangle> boundingRectangleOfColumn(
+// ____________________________________________________________________________
+std::optional<ad_utility::GeoRectangle> SpatialJoin::boundingRectangleOfColumn(
     const IdTableView<0>& table, ColumnIndex column, const Index& index) {
   std::optional<ad_utility::GeoRectangle> result = std::nullopt;
   auto extend = [&result](double lng, double lat) {
@@ -963,203 +954,4 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
       // Potentially unchanged child retrieved with `value_or`.
       left.value_or(childLeft_), right.value_or(childRight_),
       substitutesFilterOp_);
-}
-
-// ____________________________________________________________________________
-std::optional<std::shared_ptr<SpatialJoin>>
-SpatialJoin::cloneWithGeoBlockPrefilter() const {
-  AD_CONTRACT_CHECK(isConstructed());
-  if (config_.algo_ != SpatialJoinAlgorithm::LIBSPATIALJOIN) {
-    return std::nullopt;
-  }
-  const auto* libConfig = std::get_if<LibSpatialJoinConfig>(&config_.task_);
-  if (libConfig == nullptr) {
-    return std::nullopt;
-  }
-  double padding = libConfig->maxDist_.value_or(0.0);
-
-  // Check whether `child` is a single-row `VALUES` that binds exactly the
-  // join variable `var` to a fixed value, and return that value.
-  auto getConstantGeometry =
-      [](const std::shared_ptr<QueryExecutionTree>& child,
-         const Variable& var) -> std::optional<TripleComponent> {
-    const auto* values =
-        dynamic_cast<const Values*>(child->getRootOperation().get());
-    if (values == nullptr) {
-      return std::nullopt;
-    }
-    const auto& parsed = values->parsedValues();
-    if (parsed._variables != std::vector<Variable>{var} ||
-        parsed._values.size() != 1 || parsed._values.at(0).size() != 1) {
-      return std::nullopt;
-    }
-    return parsed._values.at(0).at(0);
-  };
-
-  // Check whether the small side `child` is cheap to evaluate at planning
-  // time: its estimated result is small, and no intermediate result in its
-  // subtree dwarfs that result (which would indicate a plan variant that
-  // materializes far more than it returns, e.g. a full scan followed by a
-  // sort). Index scans are exempt from the check: below a join they are
-  // evaluated lazily with block skipping, so their static size estimate (the
-  // full relation) says nothing about the evaluation cost. The relative
-  // bound makes the check independent of the dataset size.
-  auto isCheapToEvaluate = [](QueryExecutionTree& child) {
-    size_t maxRows = getRuntimeParameter<
-        &RuntimeParameters::spatialJoinPlanTimePrefilterMaxRows_>();
-    auto rootEstimate = child.getSizeEstimate();
-    if (maxRows == 0 || rootEstimate > maxRows) {
-      return false;
-    }
-    constexpr size_t maxIntermediateFactor = 100;
-    size_t bound = std::max<size_t>(rootEstimate, 1) * maxIntermediateFactor;
-    auto nodesAreSmall = [&bound](QueryExecutionTree& tree,
-                                  const auto& self) -> bool {
-      auto op = tree.getRootOperation();
-      if (dynamic_cast<const IndexScan*>(op.get()) != nullptr) {
-        return true;
-      }
-      if (tree.getSizeEstimate() > bound) {
-        return false;
-      }
-      return ql::ranges::all_of(op->getChildren(),
-                                [&self](QueryExecutionTree* subtree) {
-                                  return self(*subtree, self);
-                                });
-    };
-    return nodesAreSmall(child, nodesAreSmall);
-  };
-
-  // The rectangle of the small side: from a constant geometry without any
-  // evaluation, otherwise by materializing a cheap-to-evaluate small side at
-  // planning time (the result is cached and reused when the query runs).
-  auto getRectangle =
-      [&](const std::shared_ptr<QueryExecutionTree>& child,
-          const Variable& var) -> std::optional<ad_utility::GeoRectangle> {
-    if (auto constant = getConstantGeometry(child, var)) {
-      return sparqlExpression::geoRectangleOfConstantGeometry(constant.value());
-    }
-    if (!isCheapToEvaluate(*child)) {
-      return std::nullopt;
-    }
-    auto result = child->getRootOperation()->getResult(
-        false, ComputationMode::FULLY_MATERIALIZED);
-    if (result == nullptr || !result->isFullyMaterialized()) {
-      return std::nullopt;
-    }
-    return boundingRectangleOfColumn(result->idTableView(),
-                                     child->getVariableColumn(var),
-                                     getExecutionContext()->getIndex());
-  };
-
-  // Take the rectangle from the side with the smaller size estimate and
-  // prefilter the other side (like the runtime block prefilter does).
-  bool leftIsSmaller =
-      childLeft_->getSizeEstimate() <= childRight_->getSizeEstimate();
-  std::optional<ad_utility::GeoRectangle> rectangle;
-  bool smallSideIsLeft = leftIsSmaller;
-  if (leftIsSmaller) {
-    rectangle = getRectangle(childLeft_, config_.left_);
-  } else {
-    rectangle = getRectangle(childRight_, config_.right_);
-  }
-  if (!rectangle.has_value()) {
-    return std::nullopt;
-  }
-  const auto& geometrySide = smallSideIsLeft ? childRight_ : childLeft_;
-  const Variable& geometryVariable =
-      smallSideIsLeft ? config_.right_ : config_.left_;
-
-  auto paddedRectangle =
-      ad_utility::padGeoRectangle(rectangle.value(), padding);
-  std::vector<PrefilterVariablePair> prefilterPairs;
-  prefilterPairs.emplace_back(
-      std::make_unique<prefilterExpressions::GeoRectangleExpression>(
-          paddedRectangle),
-      geometryVariable);
-  auto newGeometrySide =
-      geometrySide->getUpdatedQueryExecutionTreeWithPrefilterApplied(
-          std::move(prefilterPairs));
-
-  // The estimated fraction of the rows of the geometry side that lie in the
-  // rectangle: the share of the blocks (of the scan sorted by the geometry
-  // variable) that the rectangle touches, times the share of the touched
-  // cells that it covers. Without a grid the blocks are pruned by latitude
-  // only and the cell share is 1.
-  const auto& grid =
-      getExecutionContext()->getIndex().getVocab().getGeoCellGrid();
-  double cellShare = grid.has_value() ? ad_utility::fractionOfCoveringCells(
-                                            paddedRectangle, grid.value())
-                                      : 1.0;
-
-  if (newGeometrySide.has_value()) {
-    // The block share is already part of the prefiltered side's estimate.
-    auto result = std::make_shared<SpatialJoin>(
-        getExecutionContext(), config_,
-        smallSideIsLeft ? childLeft_ : newGeometrySide.value(),
-        smallSideIsLeft ? newGeometrySide.value() : childRight_,
-        substitutesFilterOp_);
-    result->geometrySideSelectivity_ = cellShare;
-    return result;
-  }
-
-  // No scan of the geometry side is sorted by the geometry variable, so
-  // nothing is prefiltered. The size estimate must not depend on this choice
-  // of permutation (it is a property of the join, not of the plan), so the
-  // block share is taken from the permutation that is sorted by the geometry
-  // variable, for the scan of the geometry side that binds it.
-  auto blockShare =
-      blockShareOfRectangle(*geometrySide, geometryVariable, paddedRectangle);
-  if (!blockShare.has_value()) {
-    return std::nullopt;
-  }
-  auto result =
-      std::make_shared<SpatialJoin>(getExecutionContext(), config_, childLeft_,
-                                    childRight_, substitutesFilterOp_);
-  result->geometrySideSelectivity_ = blockShare.value() * cellShare;
-  return result;
-}
-
-// ____________________________________________________________________________
-std::optional<double> SpatialJoin::blockShareOfRectangle(
-    const QueryExecutionTree& tree, const Variable& variable,
-    const ad_utility::GeoRectangle& rectangle) const {
-  // Find the scan that binds `variable` as its object with a fixed predicate.
-  auto findScan = [&variable](const QueryExecutionTree& tree,
-                              const auto& self) -> const IndexScan* {
-    const auto* op = tree.getRootOperation().get();
-    if (const auto* scan = dynamic_cast<const IndexScan*>(op)) {
-      const auto& object = scan->object();
-      bool binds = object.isVariable() && object.getVariable() == variable &&
-                   !scan->predicate().isVariable() &&
-                   scan->subject().isVariable();
-      return binds ? scan : nullptr;
-    }
-    for (const auto* child : std::as_const(*op).getChildren()) {
-      if (const auto* scan = self(*child, self)) {
-        return scan;
-      }
-    }
-    return nullptr;
-  };
-  const auto* scan = findScan(tree, findScan);
-  if (scan == nullptr) {
-    return std::nullopt;
-  }
-  auto sortedByObject = ad_utility::makeExecutionTree<IndexScan>(
-      getExecutionContext(), Permutation::POS,
-      SparqlTripleSimple{scan->subject(), scan->predicate(), scan->object()});
-  auto all = sortedByObject->getSizeEstimate();
-  if (all == 0) {
-    return std::nullopt;
-  }
-  std::vector<PrefilterVariablePair> prefilterPairs;
-  prefilterPairs.emplace_back(
-      std::make_unique<prefilterExpressions::GeoRectangleExpression>(rectangle),
-      variable);
-  auto pruned =
-      sortedByObject->getUpdatedQueryExecutionTreeWithPrefilterApplied(
-          std::move(prefilterPairs));
-  auto kept = pruned.has_value() ? pruned.value()->getSizeEstimate() : all;
-  return static_cast<double>(std::min(kept, all)) / static_cast<double>(all);
 }

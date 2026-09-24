@@ -17,7 +17,7 @@
 
 #include "global/ValueId.h"
 #include "index/Index.h"
-#include "rdfTypes/GeoCellGrid.h"
+#include "rdfTypes/GeoRectangle.h"
 
 namespace ad_utility::detail::parallel_wkt_parser {
 
@@ -67,7 +67,7 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   size_t getParseCounter();
 
   // The number of geometries skipped by the geo cell test on their `ValueId`
-  // alone (a subset of `getPrefilterCounter`, see `GeoCellIdPrefilter`).
+  // alone (a subset of `getPrefilterCounter`, see `GeoRectangleIdPrefilter`).
   size_t getCellPrefilterCounter();
 
  protected:
@@ -88,7 +88,7 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
 
   // Prefilter on the geo cell bits of `ValueId`s; only set if the vocabulary
   // was built with a geo cell grid and we have a prefilter box.
-  std::optional<GeoCellIdPrefilter> _geoCellPrefilter;
+  std::optional<GeoRectangleIdPrefilter> _geoCellPrefilter;
 
   // Configure prefiltering geometries by bounding box.
   bool _usePrefiltering;

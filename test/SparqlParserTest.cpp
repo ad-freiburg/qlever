@@ -12,7 +12,7 @@
 #include "./parser/SparqlAntlrParserTestHelpers.h"
 #include "global/Constants.h"
 #include "parser/SparqlParser.h"
-#include "util/Conversions.h"
+#include "rdfTypes/Iri.h"
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
@@ -1198,8 +1198,7 @@ TEST(ParserTest, Group) {
 // _____________________________________________________________________________
 TEST(ParserTest, LanguageFilterPostProcessing) {
   auto makeTaggedPath = [](std::string_view iriString, std::string langTag) {
-    return PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
-        iri(iriString), std::move(langTag)));
+    return PropertyPath::fromIri(iri(iriString).withLanguageTag(langTag));
   };
   {
     ParsedQuery q = parseQuery(
@@ -1285,10 +1284,10 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
     SparqlTriple tripleA{Var{"?y"},
                          PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
-                         ad_utility::convertLangtagToEntityUri("en")};
+                         ad_utility::triple_component::Iri::fromLangtag("en")};
     SparqlTriple tripleB{Var{"?y"},
                          PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
-                         ad_utility::convertLangtagToEntityUri("de")};
+                         ad_utility::triple_component::Iri::fromLangtag("de")};
 
     auto hasSingleTriple = [](const SparqlTriple& triple) {
       return AD_FIELD(
@@ -1331,7 +1330,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
                   Var{"?y"},
                   PropertyPath::fromIri(iri("<http://qlever.cs.uni-freiburg.de/"
                                             "builtin-functions/langtag>")),
-                  ad_utility::convertLangtagToEntityUri("en")}),
+                  ad_utility::triple_component::Iri::fromLangtag("en")}),
               triples[1]);
   }
   {
@@ -1347,7 +1346,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     EXPECT_THAT(patterns[2].getBasic()._triples,
                 ::testing::ElementsAre(SparqlTriple{
                     Var{"?y"}, PropertyPath::fromIri(iri(LANGUAGE_PREDICATE)),
-                    ad_utility::convertLangtagToEntityUri("en")}));
+                    ad_utility::triple_component::Iri::fromLangtag("en")}));
   }
 
   // Test that the language filter never changes triples with

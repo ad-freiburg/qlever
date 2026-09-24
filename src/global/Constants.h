@@ -183,6 +183,9 @@ constexpr inline std::string_view hasWord{"has-word"};
 }  // namespace constants::details::strings
 constexpr inline std::string_view LANGUAGE_PREDICATE =
     makeQleverInternalIriConst<constants::details::strings::langtag>();
+// The prefix of QLever's internal representation of a language-tagged
+// predicate, which is the language tag enclosed in `@`, e.g. `@en@<...>`.
+constexpr inline std::string_view LANGUAGE_TAGGED_PREDICATE_PREFIX = "@";
 constexpr inline std::string_view HAS_WORD_PREDICATE =
     makeQleverInternalIriConst<constants::details::strings::hasWord>();
 

@@ -13,7 +13,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "parser/TripleComponent.h"
-#include "rdfTypes/GeoCellGrid.h"
+#include "rdfTypes/GeoRectangle.h"
 #include "util/UnitOfMeasurement.h"
 
 // This header declares utilities required during query planning for rewriting

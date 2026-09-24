@@ -16,13 +16,14 @@
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "rdfTypes/GeoCellGrid.h"
+#include "rdfTypes/GeoRectangle.h"
 
 namespace {
 
 using ad_utility::GeoCellGrid;
 using ad_utility::GeoCellGridScheme;
-using ad_utility::GeoCellIdPrefilter;
 using ad_utility::GeoRectangle;
+using ad_utility::GeoRectangleIdPrefilter;
 
 // Build a full WKT literal (with quotes and datatype suffix) from the given
 // content.
@@ -362,10 +363,11 @@ TEST(GeoCellGrid, unknownSchemeIsDefendedAgainst) {
 }
 
 // _____________________________________________________________________________
-TEST(GeoCellIdPrefilter, canBeSkipped) {
+TEST(GeoRectangleIdPrefilter, canBeSkipped) {
   GeoCellGrid grid{2};
   // Query box entirely inside cell (2 << 2) | 2 = 10.
-  GeoCellIdPrefilter prefilter{grid, 10.0, 10.0, 11.0, 11.0};
+  GeoRectangleIdPrefilter prefilter{std::optional{grid},
+                                    GeoRectangle{10.0, 10.0, 11.0, 11.0}};
 
   auto geoId = [&grid](uint64_t cell, uint64_t position) {
     return GeoCellGrid::geoVocabMarkerBit |
@@ -386,10 +388,11 @@ TEST(GeoCellIdPrefilter, canBeSkipped) {
 }
 
 // _____________________________________________________________________________
-TEST(GeoCellIdPrefilter, canBeSkippedForValueIds) {
+TEST(GeoRectangleIdPrefilter, canBeSkippedForValueIds) {
   GeoCellGrid grid{2};
   // Rectangle [10, 11] x [10, 11] (lng x lat), inside cell 10 (see above).
-  GeoCellIdPrefilter prefilter{grid, 10.0, 10.0, 11.0, 11.0};
+  GeoRectangleIdPrefilter prefilter{std::optional{grid},
+                                    GeoRectangle{10.0, 10.0, 11.0, 11.0}};
   auto geoId = [&grid](uint64_t cell, uint64_t position) {
     return ValueId::makeFromVocabIndex(
         VocabIndex::make(GeoCellGrid::geoVocabMarkerBit |
@@ -410,7 +413,8 @@ TEST(GeoCellIdPrefilter, canBeSkippedForValueIds) {
   EXPECT_TRUE(prefilter.canBeSkipped(
       ValueId::makeFromGeoPoint(GeoPoint{10.5, -170.0})));
   // Without a grid, only points can be skipped.
-  GeoCellIdPrefilter noGrid{std::nullopt, GeoRectangle{10.0, 10.0, 11.0, 11.0}};
+  GeoRectangleIdPrefilter noGrid{std::nullopt,
+                                 GeoRectangle{10.0, 10.0, 11.0, 11.0}};
   EXPECT_FALSE(noGrid.canBeSkipped(geoId(9, 3)));
   EXPECT_TRUE(
       noGrid.canBeSkipped(ValueId::makeFromGeoPoint(GeoPoint{12.0, 0.0})));

@@ -785,7 +785,7 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
 std::unique_ptr<PrefilterExpression> GeoRectangleExpression::logicalComplement()
     const {
   // The complement ("all geometries outside the rectangle, plus all
-  // non-geometries") cannot be expressed with grid cells; return the
+  // non-geometries") cannot be expressed as ID ranges; return the
   // conservative prefilter that keeps all blocks.
   return make<IsInExpression>(std::vector<IdOrLocalVocabEntry>{},
                               /*isNegated=*/true);
@@ -825,11 +825,13 @@ BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
 
   // Compute the closed intervals `[lowerId, upperId]` of `ValueId`s that may
   // belong to geometries whose bounding box intersects the rectangle. The
-  // intervals are constructed in ascending order: the WKT region of the
-  // `VocabIndex` datatype first (`Datatype::VocabIndex` <
-  // `Datatype::GeoPoint`), then the latitude band of the `GeoPoint`s.
+  // intervals are constructed in ascending order: the `VocabIndex` datatype
+  // first (`Datatype::VocabIndex` < `Datatype::GeoPoint`), then the latitude
+  // band of the `GeoPoint`s. With a geo cell grid, the WKT literals are
+  // restricted to the ID ranges of the cells that the rectangle covers;
+  // without one, the coordinates of a WKT literal cannot be seen from its ID,
+  // so the whole `VocabIndex` region is kept.
   std::vector<std::pair<ValueId, ValueId>> keepIntervals;
-  using ad_utility::GeoCellGrid;
   const auto& grid = index.getVocab().getGeoCellGrid();
   if (grid.has_value()) {
     for (auto [firstCell, lastCell] : grid.value().coveringCellRanges(
@@ -844,12 +846,8 @@ BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
           Id::makeFromVocabIndex(VocabIndex::make(upper - 1)));
     }
   } else {
-    // Without a geo cell grid we cannot restrict WKT literals; keep the
-    // entire WKT region of the vocabulary (the marker bit region, see
-    // `SplitGeoVocabulary`).
     keepIntervals.emplace_back(
-        Id::makeFromVocabIndex(
-            VocabIndex::make(GeoCellGrid::geoVocabMarkerBit)),
+        Id::makeFromVocabIndex(VocabIndex::make(0)),
         Id::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)));
   }
 
@@ -1004,8 +1002,8 @@ std::string LogicalExpression<Operation>::asString(size_t depth) const {
   std::stringstream stream;
   stream << "Prefilter LogicalExpression<" << getLogicalOpStr(Operation)
          << ">\n"
-         << "child1 {" << child1Info << "}" << "child2 {" << child2Info << "}"
-         << std::endl;
+         << "child1 {" << child1Info << "}"
+         << "child2 {" << child2Info << "}" << std::endl;
   return stream.str();
 }
 

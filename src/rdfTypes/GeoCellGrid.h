@@ -12,7 +12,6 @@
 
 #include <array>
 #include <cstdint>
-#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -25,34 +24,6 @@
 #include "util/Exception.h"
 
 namespace ad_utility {
-
-// A geographic rectangle in plain degrees. In contrast to `BoundingBox` it
-// is a simple aggregate without invariants, suitable for query rectangles
-// that may cover the whole world.
-struct GeoRectangle {
-  double minLng_;
-  double minLat_;
-  double maxLng_;
-  double maxLat_;
-  bool operator==(const GeoRectangle&) const = default;
-};
-
-// Grow `rectangle` on all sides by at least `distanceMeters` (measured on the
-// earth's surface) and clamp it to the valid coordinate ranges. The result is
-// conservative: every point within `distanceMeters` of the input rectangle is
-// contained in the result. Near the poles and across the antimeridian the
-// longitude range degrades to [-180, 180].
-GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
-                             double distanceMeters);
-
-class GeoCellGrid;
-// The share of the area of the cells of `grid` that `rectangle` touches which
-// is covered by `rectangle` itself, in [0, 1]. A prefilter with `rectangle`
-// keeps all geometries of these cells. Assuming that the geometries are spread
-// uniformly within a cell, this is the fraction of them that actually lie in
-// `rectangle`, which makes it a size estimate for the prefiltered candidates.
-double fractionOfCoveringCells(const GeoRectangle& rectangle,
-                               const GeoCellGrid& grid);
 
 namespace detail {
 // The available schemes for the `GeoCellGrid` class below.
@@ -266,36 +237,6 @@ class GeoCellGrid {
   CellIndex flatCell(double u1, double v1, double u2, double v2) const;
   void flatCover(double u1, double v1, double u2, double v2,
                  CellRanges& ranges) const;
-};
-
-// Row-level counterpart of the block prefilter: decide for a single `ValueId`
-// - without any disk access - whether the geometry it stands for is certainly
-// outside a query rectangle. For a WKT literal of the geo vocabulary this is
-// a bit extraction and a binary search over a handful of cell ranges; for a
-// `GeoPoint` it is a comparison of the coordinates encoded in the ID.
-// Conservative: literals without cell information, indices outside the WKT
-// region, and all other datatypes are never skipped.
-class GeoCellIdPrefilter {
-  // Half-open, ascending ranges of vocabulary index payloads that must be
-  // kept (covering cells plus the "no information" cells).
-  std::vector<std::pair<uint64_t, uint64_t>> keepRanges_;
-  // The query rectangle, for the `GeoPoint` test.
-  GeoRectangle rectangle_;
-
- public:
-  GeoCellIdPrefilter(const GeoCellGrid& grid, double minLng, double minLat,
-                     double maxLng, double maxLat);
-  // Without a grid, only the `GeoPoint` test can decide anything.
-  GeoCellIdPrefilter(const std::optional<GeoCellGrid>& grid,
-                     const GeoRectangle& rectangle);
-
-  // Return true iff the word with the given vocabulary index payload is
-  // certainly outside the query rectangle.
-  bool canBeSkipped(uint64_t vocabIndexBits) const;
-
-  // Return true iff the geometry with the given ID is certainly outside the
-  // query rectangle (see above).
-  bool canBeSkipped(ValueId id) const;
 };
 
 }  // namespace ad_utility

@@ -95,7 +95,6 @@ function(addLinkAndDiscoverTestNoLibs basename)
     addLinkAndDiscoverTestImpl(linkAndDiscoverTest ${basename} ${ARGN})
 endfunction()
 
-
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
 # `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
 # In contrast to `addLinkAndDiscoverTest` this doesn't let ctest run all subtests individually,
@@ -176,6 +175,8 @@ addLinkAndDiscoverTest(StringUtilsTest qlever_util)
 
 addLinkAndDiscoverTest(RegexSetTest qlever_util)
 
+addLinkAndDiscoverTest(BinaryDiffApplierTest qlever_util)
+
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
 
 addLinkAndDiscoverTest(CryptographicHashUtilsTest qlever_util)
@@ -222,6 +223,8 @@ addLinkAndDiscoverTest(TextLimitOperationTest engine)
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerSpatialJoinTest engine)
+
+addLinkAndDiscoverTest(GeoRectanglePrefilterTest engine)
 
 addLinkAndDiscoverTestNoLibs(HashMapTest)
 
@@ -304,6 +307,8 @@ addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
 
 addLinkAndDiscoverTest(TaskQueueTest)
+
+addLinkAndDiscoverTest(TaskQueueOnExecutorTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
@@ -556,8 +561,6 @@ addLinkAndDiscoverTest(GeometryInfoTest qlever_util)
 
 addLinkAndDiscoverTest(GeoCellGridTest vocabulary)
 
-addLinkAndDiscoverTest(GeoRectanglePrefilterTest engine)
-
 addLinkAndDiscoverTest(QueryRewriteUtilTest engine)
 
 addLinkAndDiscoverTest(HttpErrorTest engine)
@@ -609,6 +612,8 @@ addLinkAndDiscoverTest(FilesystemHelpersTest qlever_util)
 addLinkAndDiscoverTest(LogTest)
 
 addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(GlobalExecutorTest qlever_util)
 
 addLinkAndDiscoverTest(MetricsTest metrics)
 
