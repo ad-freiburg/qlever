@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "engine/SpatialJoinConfig.h"
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -33,6 +34,7 @@
 #include "util/Log.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
+#include "util/geo/DE9IMatrix.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -554,6 +556,139 @@ struct GeometryNVisitor {
 };
 
 static constexpr GeometryNVisitor getGeometryN;
+
+using GeomsForDE9IM =
+    std::vector<std::variant<DPoint, DXSortedLine, DXSortedPolygon>>;
+struct UtilGeomForDE9IMVisitor {
+  GeomsForDE9IM operator()(DPoint p) const { return {p}; }
+
+  GeomsForDE9IM operator()(DLine line) const { return {XSortedLine{line}}; }
+
+  GeomsForDE9IM operator()(DPolygon line) const {
+    return {XSortedPolygon{line}};
+  }
+
+  GeomsForDE9IM operator()(DAnyGeometry geom) const {
+    return visitAnyGeometry(UtilGeomForDE9IMVisitor{}, geom);
+  }
+
+  CPP_template(typename T)(requires WktCollectionType<T>) GeomsForDE9IM
+  operator()(const T& geoms) const {
+    GeomsForDE9IM result;
+    for (auto geom : geoms) {
+      for (auto converted : UtilGeomForDE9IMVisitor{}(geom)) {
+        result.push_back(std::move(converted));
+      }
+    }
+    return result;
+  }
+};
+
+static constexpr UtilGeomForDE9IMVisitor utilGeomForDE9IM;
+
+inline DE9IMatrix getDE9IM(const ParsedWkt& left, const ParsedWkt& right) {
+  auto lSorted = std::visit(utilGeomForDE9IM, left);
+  auto rSorted = std::visit(utilGeomForDE9IM, right);
+  DE9IMatrix m;
+  for (const auto& entryLeft : lSorted) {
+    for (const auto& entryRight : rSorted) {
+      m += std::visit(
+          [](const auto& a, const auto& b) {
+            // `libspatialjoin` only provides `DE9IM(Point, XSortedLine)` and
+            // `DE9IM(Point, XSortedPolygon)` overloads (not the reverse
+            // argument order), so swap and transpose the resulting matrix
+            // whenever the point is the second argument.
+            if constexpr (SimilarTo<decltype(b), DPoint>) {
+              return DE9IM(b, a).transpose();
+            } else {
+              return DE9IM(a, b);
+            }
+          },
+          entryLeft, entryRight);
+    }
+  }
+  return m;
+};
+
+// The OGC/DE-9IM dimension of a geometry: 0 for (multi)points, 1 for
+// (multi)linestrings, 2 for (multi)polygons. `std::nullopt` for a geometry
+// collection, whose members may have mixed dimensions, and for `NONE`.
+inline std::optional<uint8_t> wktTypeDimension(WKTType type) {
+  using enum WKTType;
+  switch (type) {
+    case POINT:
+    case MULTIPOINT:
+      return 0;
+    case LINESTRING:
+    case MULTILINESTRING:
+      return 1;
+    case POLYGON:
+    case MULTIPOLYGON:
+      return 2;
+    case COLLECTION:
+    case NONE:
+    default:
+      return std::nullopt;
+  }
+}
+
+// Checks whether the given `DE9IMatrix` (describing the relation of two
+// geometries of dimension `dimLeft`/`dimRight`, see `wktTypeDimension` above)
+// satisfies the given `Relation`.
+template <SpatialJoinType::Enum Relation>
+inline bool DE9IMatrixSatisfies(DE9IMatrix m, std::optional<uint8_t> dimLeft,
+                                std::optional<uint8_t> dimRight) {
+  using enum SpatialJoinType::Enum;
+  if constexpr (Relation == INTERSECTS) {
+    return m.intersects();
+  } else if constexpr (Relation == CONTAINS) {
+    return m.contains();
+  } else if constexpr (Relation == COVERS) {
+    return m.covers();
+  } else if constexpr (Relation == CROSSES) {
+    // `crosses` is only defined for two geometries of equal dimension if
+    // both are lines (a point can never cross another point, nor can a
+    // polygon cross another polygon). For differing dimensions, the
+    // lower-dimensional geometry's interior has to meet the higher one's
+    // interior, and lie outside its interior otherwise. If the dimension of
+    // either geometry is unknown (a mixed geometry collection), we cannot
+    // apply this dimension-dependent check and conservatively treat only the
+    // line-line case as a potential match.
+    if (!dimLeft.has_value() || !dimRight.has_value() || dimLeft == dimRight) {
+      return dimLeft == 1 && dimRight == 1 && m.II() == D0;
+    }
+    return dimLeft < dimRight ? (m.II() && m.IE()) : (m.II() && m.EI());
+  } else if constexpr (Relation == TOUCHES) {
+    return m.touches();
+  } else if constexpr (Relation == EQUALS) {
+    return m.equals();
+  } else if constexpr (Relation == OVERLAPS) {
+    // `overlaps` is only defined for two geometries of the same dimension;
+    // the exact DE-9IM check differs for lines and polygons/points.
+    return dimLeft == 1 && dimRight == 1
+               ? m.overlaps1()
+               : (dimLeft.has_value() && dimLeft == dimRight && m.overlaps02());
+  } else if constexpr (Relation == WITHIN) {
+    return m.within();
+  } else {
+    // `WITHIN_DIST` and `DE9IM` take an additional parameter (the distance
+    // resp. the filter pattern) and are therefore never checked here.
+    AD_FAIL();
+  }
+}
+
+template <SpatialJoinType::Enum Relation>
+inline std::optional<bool> georel(const GeoPointOrWkt& left,
+                                  const GeoPointOrWkt& right) {
+  auto [lType, lParsed] = parseGeoPointOrWkt(left);
+  auto [rType, rParsed] = parseGeoPointOrWkt(right);
+  if (!lParsed.has_value() || !rParsed.has_value()) {
+    return std::nullopt;
+  }
+  auto de9im = getDE9IM(lParsed.value(), rParsed.value());
+  return DE9IMatrixSatisfies<Relation>(de9im, wktTypeDimension(lType),
+                                       wktTypeDimension(rType));
+}
 
 // Simplify a parsed geometry using the Douglas-Peucker algorithm provided by
 // `pb_util`. The `tolerance` is interpreted in the coordinate units of the
