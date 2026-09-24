@@ -329,9 +329,11 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 IndexMetaData MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
   std::string spoFilename = absl::StrCat(getFilenameBase(), VIEW_SPO_SUFFIX);
+  // NOTE: The block size of an index is not necessarily the default, see
+  // `INDEX_ROWS_PER_BLOCK_KEY`.
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
       numCols(), ad_utility::File{spoFilename, "w"},
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
+      qec_->getIndex().rowsPerBlock());
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
   IndexMetaData spoMetaData;

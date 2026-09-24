@@ -620,27 +620,24 @@ class RunSorter : public ad_utility::InputRangeFromGet<IdTableStatic<0>> {
 // permutation (see `permutationPairs` above). The `blocks` have to be sorted by
 // their first `numKeyColumns` columns.
 //
-// NOTE: The block size of the permutation is not stored in an index, so the
-// converted permutation uses the default, exactly like a freshly built index
-// (`IndexImpl::blocksizePermutationPerColumn_`, which nothing but a unit test
-// ever changes, and correspondingly `blocksizeOfConvertedPermutations` here).
-// The blocks of the converted permutation may therefore differ from the blocks
-// of the permutation that it was converted from, which is irrelevant for its
-// content, but not for its metadata: a relation that is large enough to occupy
-// blocks of its own in the permutation that is converted can be small enough to
-// share a block with other relations in the converted permutation. Such a
-// relation has no `CompressedRelationMetadata` of its own anymore, that
-// metadata is derived from its block instead (see
+// NOTE: The permutation is written with `rowsPerBlock`, the block size of the
+// index that is converted (see `convertIndexToCurrentFormat`), so it has
+// exactly the blocks of a fresh build of that index. These blocks can still
+// differ from the blocks of the permutation that it was converted from, which
+// is irrelevant for its content, but not for its metadata: a relation that is
+// large enough to occupy blocks of its own in the permutation that is converted
+// can be small enough to share a block with other relations in the converted
+// permutation. Such a relation has no `CompressedRelationMetadata` of its own
+// anymore, that metadata is derived from its block instead (see
 // `CompressedRelationReader::getMetadataForSmallRelation`). The number of
 // blocks, the `numRows_` and the multiplicities of the converted permutation
 // can therefore differ from those of the permutation that it was converted
 // from; they are exactly those that a freshly built index would have.
 IndexMetaData writePermutation(
-    const std::string& filename, size_t numColumns,
+    const std::string& filename, size_t numColumns, size_t rowsPerBlock,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> blocks) {
   auto writer = std::make_unique<CompressedRelationWriter>(
-      numColumns, ad_utility::File{filename, "w"},
-      blocksizeOfConvertedPermutations());
+      numColumns, ad_utility::File{filename, "w"}, rowsPerBlock);
   IndexMetaData metaData;
   auto callback =
       [&metaData](ql::span<const CompressedRelationMetadata> metadata) {
@@ -850,7 +847,7 @@ bool permutationContainsGeoPoints(const Permutation& permutation,
 // temporary file of the external sorter is named after the permutation.
 IndexMetaData convertPermutation(const Permutation& oldPermutation,
                                  const std::string& newBasename,
-                                 bool isInternal,
+                                 bool isInternal, size_t rowsPerBlock,
                                  const std::function<void(size_t)>& progress) {
   std::string newFilename =
       filenameForPermutation(newBasename, oldPermutation, isInternal);
@@ -868,8 +865,9 @@ IndexMetaData convertPermutation(const Permutation& oldPermutation,
             progress(block.numRows());
             return std::move(block);
           }}};
-  auto newMetaData = writePermutation(
-      newFilename, getNumColumns(oldPermutation), std::move(rowsWithProgress));
+  auto newMetaData =
+      writePermutation(newFilename, getNumColumns(oldPermutation), rowsPerBlock,
+                       std::move(rowsWithProgress));
   newMetaData.setName(oldPermutation.metaData().getName());
   verifyConvertedPermutation(oldPermutation.metaData(), newMetaData,
                              newFilename);
@@ -879,10 +877,11 @@ IndexMetaData convertPermutation(const Permutation& oldPermutation,
 // Convert all permutations of the index with the base name `oldBasename` and
 // write them to the index with the base name `newBasename`. The `numTriples`
 // are the numbers of triples from the configuration of that index, which are
-// the total for the progress bar below.
+// the total for the progress bar below, and `rowsPerBlock` is its block size.
 void convertPermutations(const std::string& oldBasename,
                          const std::string& newBasename,
                          const Index::NumNormalAndInternal& numTriples,
+                         size_t rowsPerBlock,
                          std::vector<fs::path>& handledFiles) {
   // Each triple is written once per permutation, which gives the total number
   // of triples that the conversion of the permutations writes.
@@ -945,9 +944,10 @@ void convertPermutations(const std::string& oldBasename,
     // `futureB` waits for the other conversion to finish before the exception
     // leaves this function. That is exactly what we want: no thread must still
     // be writing to the incomplete index when the caller handles the error.
-    auto convert = [&newBasename, isInternal,
+    auto convert = [&newBasename, isInternal, rowsPerBlock,
                     &progress](const Permutation& permutation) {
-      return convertPermutation(permutation, newBasename, isInternal, progress);
+      return convertPermutation(permutation, newBasename, isInternal,
+                                rowsPerBlock, progress);
     };
     auto futureB =
         std::async(std::launch::async, convert, std::cref(*permutationB));
@@ -1436,6 +1436,11 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
   auto configuration = readAndCheckConfiguration(oldBasename);
   throwIfPersistedUpdatesExist(oldBasename);
 
+  // The converted permutations must have the block size of the index that is
+  // converted, because the configuration (which records that block size) is
+  // copied unchanged, see below.
+  size_t rowsPerBlock = IndexImpl::rowsPerBlock(configuration);
+
   // The converted index must not overwrite any existing file.
   fs::path newDirectory = fs::path{newBasename}.parent_path();
   if (!newDirectory.empty()) {
@@ -1467,7 +1472,7 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
     convertPermutations(oldBasename, newBasename,
                         static_cast<Index::NumNormalAndInternal>(
                             configuration.at("num-triples")),
-                        handledFiles);
+                        rowsPerBlock, handledFiles);
     convertPatterns(oldBasename, newBasename, handledFiles);
     convertGeoInfoFiles(oldBasename, newBasename, handledFiles);
     copyFilesThatNeedNoConversion(oldBasename, newBasename, handledFiles);

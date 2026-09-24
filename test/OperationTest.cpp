@@ -191,7 +191,7 @@ class OperationTestFixture : public testing::Test {
 
   std::shared_ptr<Index> index = []() {
     TestIndexConfig indexConfig{};
-    indexConfig.blocksizePermutations = 32_B;
+    indexConfig.rowsPerBlock = 4;
 
     return std::make_shared<Index>(makeTestIndex(std::move(indexConfig)));
   }();

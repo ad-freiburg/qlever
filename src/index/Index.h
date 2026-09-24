@@ -203,7 +203,8 @@ class Index {
   ad_utility::MemorySize& parserBufferSize();
   const ad_utility::MemorySize& parserBufferSize() const;
 
-  ad_utility::MemorySize& blocksizePermutationsPerColumn();
+  size_t& rowsPerBlock();
+  const size_t& rowsPerBlock() const;
 
   void setOnDiskBase(const std::string& onDiskBase);
 

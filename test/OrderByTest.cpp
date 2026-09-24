@@ -454,7 +454,7 @@ TEST(OrderBy, limitPushedIntoIndexScan) {
                     ".5 . ");
   }
   ad_utility::testing::TestIndexConfig config{turtle};
-  config.blocksizePermutations = 24_B;
+  config.rowsPerBlock = 3;
   auto* qec = ad_utility::testing::getQec(std::move(config));
 
   // Run the query and return the result as TSV together with the runtime
