@@ -422,7 +422,7 @@ void IndexBuilderConfig::validate() const {
         "The number of threads for the index build (`num-threads`) must be at "
         "least 1");
   }
-  if (indexRowsPerBlock_.has_value() && indexRowsPerBlock_.value() == 0) {
+  if (indexRowsPerBlock_ == 0) {
     throw std::invalid_argument(
         "The number of rows per block of the index (`index-rows-per-block`) "
         "must be at least 1");
