@@ -7,7 +7,6 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -859,17 +858,10 @@ TEST_F(MultiBlockIndexFormatConverterTest, relationWithItsOwnMetadata) {
   // with other relations (see
   // `CompressedRelationReader::getMetadataForSmallRelation`). A permutation
   // that consists only of small relations therefore never invokes the metadata
-  // callback of `writePermutation`, and with the default block size of the
-  // conversion, a large relation has more than 25000 rows, which is far too
-  // much for a unit test. The conversion is thus run with a block size of two
-  // triples per block, which is the same block size that the index that is
-  // converted is built with (see `convertAndExpectTheSameContent` above). A
-  // relation with two rows then already is large enough.
-  size_t previousBlocksize = blocksizeOfConvertedPermutations();
-  blocksizeOfConvertedPermutations() = 2;
-  absl::Cleanup restoreBlocksize = [previousBlocksize]() {
-    blocksizeOfConvertedPermutations() = previousBlocksize;
-  };
+  // callback of `writePermutation`. The conversion uses the block size of the
+  // index that is converted, which is two triples per block in the tests (see
+  // `convertAndExpectTheSameContent` above), so a relation with two rows
+  // already is large enough.
 
   // The subject `<big>` has two triples, so it is a large relation in the `SPO`
   // permutation, and the subject `<small>` has one triple, so it stays a small
@@ -897,6 +889,47 @@ TEST_F(MultiBlockIndexFormatConverterTest, relationWithItsOwnMetadata) {
   EXPECT_FALSE(
       metaData.getMetaDataIfPresent(getId("<http://example.org/small>"))
           .has_value());
+}
+
+// _____________________________________________________________________________
+TEST_F(MultiBlockIndexFormatConverterTest, indexWithoutRowsPerBlock) {
+  // An index that was built before its block size was stored in its
+  // configuration was built with the default block size, so it is converted
+  // with the default block size. With that, the relation `<big>`, which is
+  // large with the block size of two triples per block of the tests (see
+  // `relationWithItsOwnMetadata` above), is small and the whole `SPO`
+  // permutation is a single block.
+  std::string turtle =
+      "<http://example.org/big> <http://example.org/p> <http://example.org/o1> "
+      ".\n"
+      "<http://example.org/big> <http://example.org/p> <http://example.org/o2> "
+      ".\n"
+      "<http://example.org/small> <http://example.org/p> "
+      "<http://example.org/o1> .\n";
+  ad_utility::testing::makeTestIndex(
+      oldBasename_, ad_utility::testing::TestIndexConfig{turtle});
+  pretendThatTheIndexIsInThePreviousFormat();
+  {
+    std::string filename = absl::StrCat(oldBasename_, CONFIGURATION_FILE);
+    nlohmann::json configuration;
+    ad_utility::makeIfstream(filename) >> configuration;
+    ASSERT_EQ(configuration.at(INDEX_ROWS_PER_BLOCK_KEY), 2);
+    configuration.erase(std::string{INDEX_ROWS_PER_BLOCK_KEY});
+    ad_utility::makeOfstream(filename) << configuration.dump(4);
+  }
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    convertIndexToCurrentFormat(oldBasename_, newBasename_);
+  }
+
+  Index newIndex = loadConvertedIndex();
+  EXPECT_EQ(newIndex.rowsPerBlock(), DEFAULT_INDEX_ROWS_PER_BLOCK);
+  auto getId = ad_utility::testing::makeGetId(newIndex);
+  const auto& metaData =
+      newIndex.getImpl().getPermutation(Permutation::SPO).metaData();
+  EXPECT_EQ(metaData.blockData().size(), 1u);
+  EXPECT_FALSE(metaData.getMetaDataIfPresent(getId("<http://example.org/big>"))
+                   .has_value());
 }
 
 // _____________________________________________________________________________
