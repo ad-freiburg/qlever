@@ -29,11 +29,11 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "index/Index.h"
+#include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/AllocatorTestHelpers.h"
-#include "util/Conversions.h"
 #include "util/IdTestHelpers.h"
 
 namespace {
@@ -504,9 +504,37 @@ TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
   // Preserve `NanOrInfToUndef` in the homogeneous numeric fast path.
   testDivide(V<Id>{{U, U, U}, alloc}, ints, I(0));
 
-  // A mixed numeric vector must fall back to the generic path.
+  // Mixed numeric vectors must preserve the expected arithmetic semantics.
   V<Id> mixed{{I(1), D(2.0), I(3)}, alloc};
   testPlus(V<Id>{{I(2), D(3.0), I(4)}, alloc}, mixed, I(1));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlExpression, speculativeNumericBinaryFastPath) {
+  // Integers are the majority, so the speculative path is taken with `Int`
+  // as the expected datatype. The other rows must reach the generic fallback
+  // of the slow path: a `Bool` counts as `0` or `1` there, an `UNDEF`, a
+  // vocabulary entry, and (for `+`) a date all yield `UNDEF`.
+  V<Id> mostlyInts{{I(1), I(2), I(3), I(4), I(5), D(0.5), B(true), U, Voc(4),
+                    Dat(DateYearOrDuration::parseXsdDate, "2000-01-01")},
+                   alloc};
+  testPlus(V<Id>{{I(2), I(3), I(4), I(5), I(6), D(1.5), I(2), U, U, U}, alloc},
+           mostlyInts, I(1));
+  testMultiply(
+      V<Id>{{D(2.0), D(4.0), D(6.0), D(8.0), D(10.0), D(1.0), D(2.0), U, U, U},
+            alloc},
+      mostlyInts, D(2.0));
+
+  // Doubles are the majority and the constant is an integer, so the slow path
+  // sees the `Int`/`Int` and `Int`/`Double` combinations.
+  V<Id> mostlyDoubles{{D(0.5), D(1.5), D(2.5), I(3), B(false)}, alloc};
+  testPlus(V<Id>{{D(1.5), D(2.5), D(3.5), I(4), I(1)}, alloc}, mostlyDoubles,
+           I(1));
+
+  // A tie between integers and doubles has no majority type and takes the
+  // generic path; the result must be the same either way.
+  V<Id> tied{{I(1), D(2.0), U}, alloc};
+  testPlus(V<Id>{{I(2), D(3.0), U}, alloc}, tied, I(1));
 }
 
 // _____________________________________________________________________________________
@@ -940,6 +968,16 @@ TEST(SparqlExpression, stringOperators) {
                                  lit("https://www.bimbimbam/2001/bamString"),
                                  lit("/hello"), iriref("</hello>")},
           IdOrLocalVocabEntry{iriref("<http://example.com/hi/>")}});
+
+  // `IRI()` does not unescape its argument, so the content of the resulting IRI
+  // may contain a backslash. Resolving it against a base IRI must not read that
+  // backslash as an escape sequence: `a\\u0062c` must not silently become
+  // `abc`. A backslash is not a valid URI character, so this is reported as an
+  // error instead.
+  EXPECT_ANY_THROW(checkIriOrUri(
+      IdOrLocalVocabEntryVec{U},
+      std::tuple{IdOrLocalVocabEntryVec{lit(R"(a\\u0062c)")},
+                 IdOrLocalVocabEntry{iriref("<http://example.com/hi/>")}}));
 
   // The ParsedUriGetter::operator()(ValueId, ...) overload is required by the
   // Mixin interface but logically unreachable (the base IRI is always a
@@ -1925,11 +1963,18 @@ TEST(SparqlExpression, ifAndCoalesce) {
   // If all children are unbound constants, the result is a single UNDEF.
   checkCoalesce(U, std::tuple{U, U});
 
-  // Check COALESCE with no arguments or empty arguments.
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}, Ids{}});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}, Ids{}, Ids{}});
+  // Check COALESCE with no arguments or empty arguments. The result is a single
+  // UNDEF and not an empty vector, by the same rule as in the case directly
+  // above: nothing is bound, and for an empty input nothing ever can be. Both
+  // representations are equivalent for an ordinary expression (the number of
+  // result rows is determined by the input, not by this result), but only a
+  // constant is accepted when the `COALESCE` is evaluated as part of an
+  // implicit `GROUP BY` over an empty input, see the
+  // `CoalesceWithAggregateOnEmptyImplicitGroup` test in `GroupByTest.cpp`.
+  checkCoalesce(U, std::tuple{});
+  checkCoalesce(U, std::tuple{Ids{}});
+  checkCoalesce(U, std::tuple{Ids{}, Ids{}});
+  checkCoalesce(U, std::tuple{Ids{}, Ids{}, Ids{}});
 
   auto coalesceExpr = makeCoalesceExpressionVariadic(
       std::make_unique<IriExpression>(iri("<bim>")),

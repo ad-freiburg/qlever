@@ -24,19 +24,30 @@ namespace qlever::parser {
 namespace net = boost::asio;
 
 namespace {
-// Build the exception that signals that no statement boundary (as described
-// by `description`) could be found in an input batch of `inputSize` bytes
-// that was not the last one.
-std::exception_ptr getNoStatementBoundaryError(std::string_view description,
-                                               size_t inputSize) {
+// Build the exception that signals that a block of `inputSize` bytes, which was
+// not the last one, contains none of the positions (as described by
+// `description`) at which a block may end. `inputName` names the affected
+// input, so that the error can be attributed to one of the possibly many inputs
+// of an index build. Suggest disabling parallel parsing only if the input is
+// actually parsed in parallel (`isParsedInParallel`), because that suggestion
+// is useless (and confusing) for an input that is already parsed serially.
+std::exception_ptr getNoBlockBoundaryError(std::string_view description,
+                                           size_t inputSize,
+                                           std::string_view inputName,
+                                           bool isParsedInParallel) {
   return std::make_exception_ptr(std::runtime_error{absl::StrCat(
-      "No statement boundary (", description,
-      ") was found in the current input batch (which was not the last one) "
-      "of size ",
+      "Could not split the input \"", inputName, "\" into blocks. A block of ",
       ad_utility::insertThousandSeparator(std::to_string(inputSize), ','),
-      "; possible fixes are: "
-      "use `--parser-buffer-size` to increase the buffer size or use "
-      "`--parallel-parsing false` to disable parallel parsing")});
+      " bytes, which is not the last one, contains no position at which a "
+      "block may end. Such a position is ",
+      description,
+      ". To fix this, use `--parser-buffer-size` to increase the buffer size",
+      isParsedInParallel
+          ? ", or use `--parallel-parsing false` for this input. The serial "
+            "parser can resume a statement that crosses a block boundary and "
+            "therefore ends a block at any newline"
+          : "",
+      ".")});
 }
 }  // namespace
 
@@ -92,24 +103,22 @@ std::optional<ByteBlock> FileBlockSource::getNextBlockImpl() {
 // ____________________________________________________________________________
 AsyncStatementBoundaryBlockSource::AsyncStatementBoundaryBlockSource(
     const ql::any_io_executor& exec, std::unique_ptr<AsyncBlockSource> inner,
-    EndPositionFinder findEndPosition, std::string description)
+    EndPositionFinder findEndPosition, std::string description,
+    std::string inputName, bool isParsedInParallel)
     : AsyncBlockSource{exec, inner->getBlocksize()},
       inner_{std::move(inner)},
       findEndPosition_{std::move(findEndPosition)},
-      description_{std::move(description)} {}
+      description_{std::move(description)},
+      inputName_{std::move(inputName)},
+      isParsedInParallel_{isParsedInParallel} {}
 
 // ____________________________________________________________________________
-void AsyncStatementBoundaryBlockSource::assembleAndDeliver(Handler& handler,
-                                                           Block& rawInput,
-                                                           size_t endPosition) {
-  Block result;
-  result.reserve(remainder_.size() + endPosition);
-  result.insert(result.end(), remainder_.begin(), remainder_.end());
-  result.insert(result.end(), rawInput.begin(), rawInput.begin() + endPosition);
-  remainder_.clear();
-  remainder_.insert(remainder_.end(), rawInput.begin() + endPosition,
-                    rawInput.end());
-  handler(nullptr, std::move(result));
+void AsyncStatementBoundaryBlockSource::splitAndDeliver(Handler& handler,
+                                                        Block& input,
+                                                        size_t endPosition) {
+  remainder_.assign(input.begin() + endPosition, input.end());
+  input.resize(endPosition);
+  handler(nullptr, std::move(input));
 }
 
 // ____________________________________________________________________________
@@ -124,29 +133,29 @@ void AsyncStatementBoundaryBlockSource::deliverRemainder(Handler& handler) {
 
 // ____________________________________________________________________________
 void AsyncStatementBoundaryBlockSource::handleMissingBoundary(Handler handler,
-                                                              Block rawInput) {
+                                                              Block input) {
   AsyncBlockSource::callAsyncGetNextBlockImpl(
-      *inner_,
-      AsyncBlockSource::forwardErrors(
-          std::move(handler),
-          [this, rawInput = std::move(rawInput)](
-              Handler handler, std::optional<Block> peek) mutable {
-            if (!peek.has_value()) {
-              // `peek` is the result of fetching another block from
-              // `inner_` right after `rawInput`, so `nullopt` here means
-              // `inner_` is genuinely exhausted and `rawInput` is the last
-              // block. It is thus correct to also mark this source
-              // exhausted and return `remainder_ + rawInput` without
-              // requiring a statement boundary in it.
-              exhausted_ = true;
-              return assembleAndDeliver(handler, rawInput, rawInput.size());
-            }
-            // Inner source has more data: this is a real "statement too
-            // large" error.
-            return handler(
-                getNoStatementBoundaryError(description_, rawInput.size()),
-                std::nullopt);
-          }));
+      *inner_, AsyncBlockSource::forwardErrors(
+                   std::move(handler),
+                   [this, input = std::move(input)](
+                       Handler handler, std::optional<Block> peek) mutable {
+                     if (!peek.has_value()) {
+                       // `peek` is the result of fetching another block from
+                       // `inner_` right after `input`, so `nullopt` here means
+                       // `inner_` is genuinely exhausted and `input` is the
+                       // last block. It is thus correct to also mark this
+                       // source exhausted and return `input` without requiring
+                       // a statement boundary in it.
+                       exhausted_ = true;
+                       return splitAndDeliver(handler, input, input.size());
+                     }
+                     // Inner source has more data, so the block really cannot
+                     // be split.
+                     return handler(getNoBlockBoundaryError(
+                                        description_, input.size(), inputName_,
+                                        isParsedInParallel_),
+                                    std::nullopt);
+                   }));
 }
 
 // ____________________________________________________________________________
@@ -169,22 +178,27 @@ void AsyncStatementBoundaryBlockSource::asyncGetNextBlockImpl(Handler handler) {
             if (!rawOpt.has_value()) {
               return deliverRemainder(handler);
             }
-            Block rawInput = std::move(*rawOpt);
+            // Prepend the remainder of the previous block, such that the
+            // search below starts at the end of the previous statement, see
+            // the class comment.
+            Block input = std::move(*rawOpt);
+            input.insert(input.begin(), remainder_.begin(), remainder_.end());
+            remainder_.clear();
 
             // Search for the end of the last statement near the end of the
-            // raw block. `findEndPosition_` is user-supplied code, so an
+            // block. `findEndPosition_` is user-supplied code, so an
             // exception from it is delivered via the handler like any other
             // error (and must not escape into the code that invoked this
             // callback, see `BlockingBlockSource::asyncGetNextBlockImpl`).
             std::optional<size_t> endPosition;
             try {
               endPosition = findEndPosition_(
-                  std::string_view{rawInput.data(), rawInput.size()});
+                  std::string_view{input.data(), input.size()});
             } catch (...) {
               return handler(std::current_exception(), std::nullopt);
             }
             if (endPosition.has_value()) {
-              return assembleAndDeliver(handler, rawInput, endPosition.value());
+              return splitAndDeliver(handler, input, endPosition.value());
             }
 
             // No boundary found. Peek at the next raw block to decide how
@@ -192,7 +206,7 @@ void AsyncStatementBoundaryBlockSource::asyncGetNextBlockImpl(Handler handler) {
             // current block is too short for a full statement and parsing
             // must fail. If the inner source is exhausted, the current
             // block is the last one; return it without requiring a match.
-            handleMissingBoundary(std::move(handler), std::move(rawInput));
+            handleMissingBoundary(std::move(handler), std::move(input));
           }));
 }
 }  // namespace qlever::parser
