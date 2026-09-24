@@ -40,18 +40,25 @@ namespace {
 namespace http = boost::beast::http;
 using ad_utility::httpUtils::Url;
 
-// The shape of the two large responses of the test server below. They are
-// parameters of the server rather than literals in its JavaScript code, so that
-// the expectations of the tests don't have to repeat them.
+// The parameters of the responses of the test server below, which has an
+// endpoint for each kind of response that the tests need (a large body, a
+// slowly streamed one, one with every byte value, ...). They are passed to the
+// server rather than written into its JavaScript code, so that the tests can
+// use the same values in their expectations instead of repeating them.
 //
-// Both are far too large to be delivered in a single piece, so a consumer has
-// to receive them chunk by chunk. Byte `i` of the body of `/stream` is
-// `i % STREAM_BYTE_MODULUS`, so that a consumer can tell whether it received
-// exactly the bytes that were sent, in order (see `expectStreamedBytes`).
+// The bodies of `/large` and `/stream` are far too large to be delivered in a
+// single piece, so a consumer has to receive them chunk by chunk. Byte `i` of
+// the body of `/stream` is `i % STREAM_BYTE_MODULUS`, so that a consumer can
+// tell whether it received exactly the bytes that were sent, in order (see
+// `expectStreamedBytes`).
 constexpr int32_t LARGE_BODY_SIZE = 500'000;
 constexpr int32_t NUM_STREAM_CHUNKS = 200;
 constexpr int32_t STREAM_CHUNK_SIZE = 1 << 16;  // 64 KiB
+// A prime below 256, so that each value fits in a byte, and one that does not
+// divide `STREAM_CHUNK_SIZE`. Otherwise every chunk would consist of the same
+// bytes, and a reordered chunk would go unnoticed.
 constexpr int32_t STREAM_BYTE_MODULUS = 251;
+static_assert(STREAM_CHUNK_SIZE % STREAM_BYTE_MODULUS != 0);
 
 // How often `/all-bytes` repeats the 256 byte values.
 constexpr int32_t NUM_ALL_BYTE_ROUNDS = 40;
@@ -87,13 +94,16 @@ EM_JS(void, startTestServer,
       const chunks = [];
       request.on("data", (chunk) => chunks.push(chunk));
       request.on("end", () => {
+        // Node.js gives the headers as a plain object with lowercase names;
+        // `Headers` looks them up case-insensitively, like on the client side.
+        const headers = new Headers(request.headers);
         response.writeHead(200, {"Content-Type" : "application/json"});
         response.end(JSON.stringify({
           method : request.method,
           body : Buffer.concat(chunks).toString(),
           bodyHex : Buffer.concat(chunks).toString("hex"),
-          accept : request.headers["accept"] ?? "",
-          contentType : request.headers["content-type"] ?? ""
+          accept : headers.get("Accept") ?? "",
+          contentType : headers.get("Content-Type") ?? ""
         }));
       });
     } else if (request.url === "/all-bytes") {
@@ -105,10 +115,10 @@ EM_JS(void, startTestServer,
     } else if (request.url === "/large") {
       // Sent in many small pieces, so that the client has to assemble it.
       response.writeHead(200, {"Content-Type" : "text/plain"});
-      const numPieces = 50;
-      const piece = "x".repeat(largeBodySize / numPieces);
-      for (let i = 0; i < numPieces; ++i) {
-        response.write(piece);
+      // The last piece is whatever is left, so any size works.
+      const pieceSize = Math.ceil(largeBodySize / 50);
+      for (let sent = 0; sent < largeBodySize; sent += pieceSize) {
+        response.write("x".repeat(Math.min(pieceSize, largeBodySize - sent)));
       }
       response.end();
     } else if (request.url === "/stream") {
@@ -133,6 +143,8 @@ EM_JS(void, startTestServer,
       // that is, the requests the client aborted.
       response.on("close", () => {
         clearInterval(timer);
+        // `writableEnded` is true iff `end()` has been called, which the timer
+        // above does once it has sent all chunks.
         if (!response.writableEnded) {
           globalThis.numAbortedRequests = (globalThis.numAbortedRequests ?? 0) + 1;
         }
@@ -146,6 +158,19 @@ EM_JS(void, startTestServer,
     } else if (request.url === "/long-content-type") {
       response.writeHead(200, {"Content-Type" : "text/plain;x=" + "y".repeat(longHeaderSize)});
       response.end("body");
+    } else if (request.url === "/closed-port") {
+      // A port that nobody listens on (any more), for a request that cannot
+      // connect. NOTE: Not a fixed small one like 1, which `fetch` refuses
+      // without even trying, because it is on the list of blocked ports of the
+      // Fetch standard.
+      const probe = require("net").createServer();
+      probe.listen(0, "127.0.0.1", () => {
+        const port = probe.address().port;
+        probe.close(() => {
+          response.writeHead(200, {"Content-Type" : "text/plain"});
+          response.end(String(port));
+        });
+      });
     } else if (request.url === "/empty") {
       response.writeHead(204);
       response.end();
@@ -196,6 +221,17 @@ std::string toString(HttpOrHttpsResponse& response) {
   for (ql::span<std::byte> bytes : response.body_) {
     result += std::string_view{reinterpret_cast<const char*>(bytes.data()),
                                bytes.size()};
+  }
+  return result;
+}
+
+// Every byte value, in order, `numRounds` times over.
+std::string allByteValues(int numRounds = 1) {
+  std::string result;
+  for (int round = 0; round < numRounds; ++round) {
+    for (int byte = 0; byte < 256; ++byte) {
+      result += static_cast<char>(byte);
+    }
   }
   return result;
 }
@@ -305,25 +341,14 @@ TEST_F(HttpClientEmscriptenTest, binaryResponseBody) {
   // another QLever instance may use.
   auto response = sendHttpOrHttpsRequest(Url{url_ + "/all-bytes"}, handle_);
   EXPECT_EQ(response.contentType_, "application/octet-stream");
-  std::string body = toString(response);
-  ASSERT_EQ(body.size(), static_cast<size_t>(256 * NUM_ALL_BYTE_ROUNDS));
-  std::string expected;
-  for (int round = 0; round < NUM_ALL_BYTE_ROUNDS; ++round) {
-    for (int byte = 0; byte < 256; ++byte) {
-      expected += static_cast<char>(byte);
-    }
-  }
-  EXPECT_EQ(body, expected);
+  EXPECT_EQ(toString(response), allByteValues(NUM_ALL_BYTE_ROUNDS));
 }
 
 // _____________________________________________________________________________
 TEST_F(HttpClientEmscriptenTest, binaryRequestBody) {
   // Every byte value, including the ones that are not valid UTF-8 and the null
   // byte, has to arrive exactly as it was sent.
-  std::string body;
-  for (int byte = 0; byte < 256; ++byte) {
-    body += static_cast<char>(byte);
-  }
+  std::string body = allByteValues();
   auto response =
       sendHttpOrHttpsRequest(Url{url_ + "/echo"}, handle_, http::verb::post,
                              body, "application/octet-stream", "*/*");
@@ -430,7 +455,7 @@ TEST_F(HttpClientEmscriptenTest, redirects) {
   // has to fail.
   AD_EXPECT_THROW_WITH_MESSAGE(
       sendHttpOrHttpsRequest(Url{url_ + "/redirect"}, handle_),
-      ::testing::HasSubstr("failed"));
+      ::testing::HasSubstr("fetch failed (unexpected redirect)"));
   // With a limit, the redirect is followed by the JavaScript environment.
   auto response =
       sendHttpOrHttpsRequest(Url{url_ + "/redirect"}, handle_, http::verb::get,
@@ -441,9 +466,18 @@ TEST_F(HttpClientEmscriptenTest, redirects) {
 
 // _____________________________________________________________________________
 TEST_F(HttpClientEmscriptenTest, unreachableEndpoint) {
+  auto portResponse =
+      sendHttpOrHttpsRequest(Url{url_ + "/closed-port"}, handle_);
+  std::string url =
+      absl::StrCat("http://127.0.0.1:", toString(portResponse), "/");
+  // The message that `fetch` itself gives is just "fetch failed"; the reason
+  // is in its `cause`, which has to be part of the message as well.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      sendHttpOrHttpsRequest(Url{"http://127.0.0.1:1/unreachable"}, handle_),
-      ::testing::HasSubstr("failed"));
+      sendHttpOrHttpsRequest(Url{url}, handle_),
+      ::testing::AllOf(::testing::HasSubstr(absl::StrCat(
+                           "The HTTP request to <", url, "> failed: ")),
+                       ::testing::HasSubstr("fetch failed"),
+                       ::testing::HasSubstr("(ECONNREFUSED: ")));
 }
 
 // _____________________________________________________________________________
