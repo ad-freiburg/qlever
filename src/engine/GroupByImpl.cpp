@@ -895,10 +895,12 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
       });
   bool hasCrossGraphDuplicates =
       !isMaterializedView && !hasGraphVariable &&
-      ql::ranges::any_of(locTriples.getAugmentedMetadata(),
-                         [](const CompressedBlockMetadata& block) {
-                           return block.containsDuplicatesWithDifferentGraphs_;
-                         });
+      ql::ranges::any_of(locTriples.getAugmentedMetadata(), [](const auto&
+                                                                   chunk) {
+        return ql::ranges::any_of(
+            chunk,
+            &CompressedBlockMetadata::containsDuplicatesWithDifferentGraphs_);
+      });
 
   if (hasLocatedTriples || hasCrossGraphDuplicates) {
     return countFromExactSize();
