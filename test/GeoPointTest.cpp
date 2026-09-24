@@ -5,8 +5,10 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <random>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
@@ -91,13 +93,22 @@ TEST(GeoPoint, string) {
 
 // _____________________________________________________________________________
 TEST(GeoPoint, bitRepresentation) {
+  using T = GeoPoint::T;
   GeoPoint g = GeoPoint(-70.5, -130.2);
-  constexpr double lat = ((-70.5 + 90) / (2 * 90)) * (1 << 30);
-  ASSERT_EQ(g.toBitRepresentation() >> 30, round(lat));
-  constexpr double lng = ((-130.2 + 180) / (2 * 180)) * (1 << 30);
-  ASSERT_EQ(g.toBitRepresentation() & ((1 << 30) - 1), round(lng));
+  constexpr double lat = ((-70.5 + 90) / (2 * 90)) * ((1 << 30) - 1);
+  constexpr double lng = ((-130.2 + 180) / (2 * 180)) * ((1 << 30) - 1);
+  // The two quantized coordinates are bit-interleaved, lat in the odd bits.
+  auto [latBits, lngBits] =
+      GeoPoint::deinterleaveCoordinates(g.toBitRepresentation());
+  ASSERT_EQ(latBits, round(lat));
+  ASSERT_EQ(lngBits, round(lng));
+  ASSERT_EQ(GeoPoint::interleaveCoordinates(latBits, lngBits),
+            g.toBitRepresentation());
+  ASSERT_EQ(GeoPoint::interleaveCoordinates(1, 0), 2u);
+  ASSERT_EQ(GeoPoint::interleaveCoordinates(0, 1), 1u);
+  ASSERT_EQ(GeoPoint::interleaveCoordinates(0b11, 0b01), 0b1011u);
 
-  constexpr size_t expect1 = (static_cast<size_t>(1) << 60) - 1;
+  constexpr T expect1 = (static_cast<T>(1) << 60) - 1;
   g = GeoPoint(90, 180);
   ASSERT_EQ(g.toBitRepresentation(), expect1);
   // Upper 4 bits must be 0 for ValueId Datatype
@@ -106,12 +117,15 @@ TEST(GeoPoint, bitRepresentation) {
   g = GeoPoint(-90, -180);
   ASSERT_EQ(g.toBitRepresentation(), 0);
 
-  constexpr size_t expect2 = (static_cast<size_t>(1) << 30) - 1;
+  // Only the longitude bits (the even positions) are set.
+  constexpr T expect2 = 0x0555555555555555ull;
   g = GeoPoint(-90, 180);
   ASSERT_EQ(g.toBitRepresentation(), expect2);
+  g = GeoPoint(90, -180);
+  ASSERT_EQ(g.toBitRepresentation(), expect2 << 1);
 
-  const size_t expect3 =
-      (static_cast<size_t>(round(lat)) << 30) | static_cast<size_t>(round(lng));
+  const T expect3 = GeoPoint::interleaveCoordinates(static_cast<T>(round(lat)),
+                                                    static_cast<T>(round(lng)));
   g = GeoPoint::fromBitRepresentation(expect3);
   constexpr auto precision = 0.00001;
   ASSERT_NEAR(g.getLat(), -70.5, precision);
@@ -120,6 +134,13 @@ TEST(GeoPoint, bitRepresentation) {
   g = GeoPoint::fromBitRepresentation(0);
   ASSERT_DOUBLE_EQ(g.getLat(), -90);
   ASSERT_DOUBLE_EQ(g.getLng(), -180);
+
+  // The quantization is idempotent, so the round trip through the bits is
+  // exact for every representable point.
+  for (T bits : {T{0}, T{1}, T{12345678901ull}, expect2, expect1}) {
+    ASSERT_EQ(GeoPoint::fromBitRepresentation(bits).toBitRepresentation(),
+              bits);
+  }
 }
 
 // _____________________________________________________________________________

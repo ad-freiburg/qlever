@@ -1407,6 +1407,81 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
 }
 
 // _____________________________________________________________________________
+TEST(IndexImpl, previousFormatIsAcceptedIffTheIndexHasNoGeoPoints) {
+  // The previous index format differs from the current one only in the
+  // encoding of geo points. An index in the previous format without points is
+  // therefore accepted (and its configuration file is updated to the current
+  // format), one with points is rejected with the hint to upgrade it.
+  using namespace qlever::indexFormatConverter;
+  ASSERT_EQ(targetVersion, qlever::indexFormatVersion);
+  auto setVersion = [](const std::string& basename,
+                       const qlever::IndexFormatVersion& version) {
+    std::string filename = basename + CONFIGURATION_FILE;
+    nlohmann::json configuration;
+    ad_utility::makeIfstream(filename) >> configuration;
+    configuration["index-format-version"] = version;
+    ad_utility::makeOfstream(filename) << configuration.dump(4);
+  };
+  auto getVersion = [](const std::string& basename) {
+    nlohmann::json configuration;
+    ad_utility::makeIfstream(basename + CONFIGURATION_FILE) >> configuration;
+    return configuration["index-format-version"]
+        .get<qlever::IndexFormatVersion>();
+  };
+  auto load = [](const std::string& basename) {
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    index.createFromOnDiskIndex(basename, false);
+    return logStream.str();
+  };
+  auto acceptedMessage = ::testing::HasSubstr(
+      "the only difference between the two formats is the encoding of geo "
+      "points, of which this index has none");
+
+  // Without points: accepted with an INFO message, and the configuration file
+  // now records the current format, so that the next load says nothing.
+  {
+    std::string basename = "previousFormatWithoutPoints";
+    makeTestIndex(basename, "<a> <b> <c> . <a> <b> 42 . <a> <b> \"x\" .");
+    setVersion(basename, sourceVersion);
+    std::string log = load(basename);
+    EXPECT_THAT(log, acceptedMessage);
+    EXPECT_THAT(log, ::testing::HasSubstr("Recorded the current index format"));
+    EXPECT_EQ(getVersion(basename), qlever::indexFormatVersion);
+    EXPECT_THAT(load(basename), ::testing::Not(acceptedMessage));
+  }
+
+  // With a point: rejected with the dedicated message that names the upgrade
+  // command, and the configuration file is untouched.
+  {
+    std::string basename = "previousFormatWithPoints";
+    makeTestIndex(basename,
+                  "<a> <b> <c> . <a> <b> \"POINT(7.8 48.0)\"^^"
+                  "<http://www.opengis.net/ont/geosparql#wktLiteral> .");
+    setVersion(basename, sourceVersion);
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    AD_EXPECT_THROW_WITH_MESSAGE(index.createFromOnDiskIndex(basename, false),
+                                 ::testing::HasSubstr("qlever-upgrade-index "));
+    EXPECT_EQ(getVersion(basename), sourceVersion);
+  }
+
+  // Without points, but with persisted updates (whose `Id`s are not checked):
+  // rejected as well.
+  {
+    std::string basename = "previousFormatWithPersistedUpdates";
+    makeTestIndex(basename, "<a> <b> <c> .");
+    setVersion(basename, sourceVersion);
+    ad_utility::makeOfstream(basename + UPDATE_TRIPLES_SUFFIX) << "irrelevant";
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    AD_EXPECT_THROW_WITH_MESSAGE(index.createFromOnDiskIndex(basename, false),
+                                 ::testing::HasSubstr("qlever-upgrade-index "));
+    EXPECT_EQ(getVersion(basename), sourceVersion);
+  }
+}
+
+// _____________________________________________________________________________
 TEST(IndexImpl, applyConfigurationDeprecatedIgnoreCaseKey) {
   // The key `ignore-case` was used by very old index builds and is no longer
   // supported.
