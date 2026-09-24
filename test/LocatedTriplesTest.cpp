@@ -15,7 +15,7 @@
 #include "./util/IndexTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationMetadata.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"

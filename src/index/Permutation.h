@@ -17,7 +17,7 @@
 
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/IndexMetaData.h"
 #include "index/KeyOrder.h"
 #include "parser/data/LimitOffsetClause.h"

@@ -22,16 +22,17 @@
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/LocatedTriples.h"
 #include "index/ScanSpecification.h"
 #include "util/HashSet.h"
 #include "util/VectorWithMemoryLimit.h"
 
 // The helper classes and functions for
-// `CompressedRelationReader::getDistinctCol0Ids` (see `CompressedRelation.h`
-// for its exact semantics). They live in their own translation unit to keep the
-// already very large `CompressedRelation.cpp` from growing even further.
+// `CompressedRelationReader::getDistinctCol0Ids` (see
+// `CompressedRelationReader.h` for its exact semantics). They live in their own
+// translation unit to keep the already large `CompressedRelationReader.cpp`
+// from growing even further.
 namespace distinctCol0Ids {
 
 using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
