@@ -18,7 +18,10 @@
 
 #include "engine/Operation.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "index/Index.h"
+#include "rdfTypes/GeoRectangle.h"
 #include "rdfTypes/Variable.h"
 
 using SpatialJoinBoundingBoxColumns =
@@ -36,6 +39,17 @@ struct PreparedSpatialJoinParams {
   std::vector<ColumnIndex> leftSelectedCols_;
   std::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
+  // If a side was produced by a block-prefiltered index scan (at planning
+  // time or by the runtime geo block prefilter of `prepareJoin`), the row
+  // total of the unprefiltered blocks; used for the geometry funnel in the
+  // runtime details.
+  std::optional<uint64_t> numRowsBeforeBlockPrefilterLeft_ = std::nullopt;
+  std::optional<uint64_t> numRowsBeforeBlockPrefilterRight_ = std::nullopt;
+  // Time spent by the runtime geo block prefilter of `prepareJoin`
+  // (computing the small side's rectangle and pruning the blocks), without
+  // the materialization of the small side (which is needed anyway and
+  // reported by the child operation).
+  std::chrono::milliseconds timeBlockPrefilter_ = std::chrono::milliseconds{0};
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -189,6 +203,34 @@ class SpatialJoin : public Operation {
   std::optional<std::shared_ptr<SpatialJoin>> cloneWithBoundingBoxColumns()
       const;
 
+  // Set the estimated fraction of the geometry side's rows that lie in the
+  // rectangle of a fixed other side, see `geometrySideSelectivity_`. Called
+  // by the query planner when it prefilters the scans of the geometry side.
+  void setGeometrySideSelectivity(double selectivity) {
+    geometrySideSelectivity_ = selectivity;
+  }
+
+  // The bounding rectangle of all geometries in the given column, computed
+  // from the `GeoPoint` encodings and the precomputed geometry info (no
+  // parsing). Rows without geometry information are skipped (they cannot
+  // contribute join results). Returns `std::nullopt` if no row has one.
+  static std::optional<ad_utility::GeoRectangle> boundingRectangleOfColumn(
+      const IdTableView<0>& table, ColumnIndex column, const Index& index);
+
+  // For joins whose sides are only known at execution time: materialize the
+  // (estimated) smaller side, compute the padded bounding rectangle of its
+  // geometries from the precomputed geometry info, and prune the blocks of
+  // the other side's index scan before it is read. Returns the (possibly
+  // replaced) children. Conservative and result-preserving; a no-op if the
+  // other side is not an index scan sorted by its geometry variable.
+  std::pair<std::shared_ptr<QueryExecutionTree>,
+            std::shared_ptr<QueryExecutionTree>>
+  applyRuntimeGeoBlockPrefilter(
+      std::shared_ptr<QueryExecutionTree> childLeft,
+      std::shared_ptr<QueryExecutionTree> childRight, const Variable& varLeft,
+      const Variable& varRight,
+      std::chrono::milliseconds& timeBlockPrefilter) const;
+
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
@@ -226,6 +268,13 @@ class SpatialJoin : public Operation {
   SpatialJoinConfiguration config_;
 
   bool substitutesFilterOp_ = false;
+
+  // Set iff the rectangle of one side was known at planning time and the
+  // scans of the other side were prefiltered with it (see
+  // `QueryPlanner::applyConstantGeometryPrefilters`): the estimated fraction
+  // of the other side's remaining rows that lie in the rectangle. The size
+  // estimate then uses it instead of the generic selectivity constant.
+  std::optional<double> geometrySideSelectivity_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOIN_H
