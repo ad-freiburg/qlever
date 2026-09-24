@@ -15,6 +15,7 @@
 #include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "backports/span.h"
+#include "engine/idTable/ColumnStorageTraits.h"
 #include "engine/idTable/IdTableRow.h"
 #include "engine/idTable/VectorWithElementwiseMove.h"
 #include "global/Id.h"
@@ -126,7 +127,18 @@ class IdTable {
   static constexpr size_t numInlinedColumns = 10;
   using Storage = detail::VectorWithElementwiseMove<
       ColumnStorage, absl::InlinedVector<ColumnStorage, numInlinedColumns>>;
-  using ViewSpans = absl::InlinedVector<ql::span<const T>, numInlinedColumns>;
+
+  // The customization point (see `ColumnStorageTraits.h`) for `ColumnStorage`'s
+  // reference/view types: `T&`/`const T&` and `ql::span<T>`/`ql::span<const T>`
+  // for a plain `std::vector<T, ...>`; `IdRef`/`ConstIdRef` and
+  // `IdColumn`/`ConstIdColumn` for `Id` columns.
+  using StorageTraits = columnBasedIdTable::ColumnStorageTraits<ColumnStorage, T>;
+  using Ref = typename StorageTraits::Ref;
+  using ConstRef = typename StorageTraits::ConstRef;
+  using Column = typename StorageTraits::Column;
+  using ConstColumn = typename StorageTraits::ConstColumn;
+
+  using ViewSpans = absl::InlinedVector<ConstColumn, numInlinedColumns>;
   using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
 
@@ -337,7 +349,7 @@ class IdTable {
   // for performance reason whenever possible.
   // TODO<joka921, C++23> Use the multidimensional subscript operator.
   // TODO<joka921, C++23> Use explicit object parameters ("deducing this").
-  CPP_template(typename = void)(requires(!isView)) T& operator()(
+  CPP_template(typename = void)(requires(!isView)) Ref operator()(
       size_t row, size_t column) {
     AD_EXPENSIVE_CHECK(column < data().size(), [&]() {
       return absl::StrCat(row, " , ", column, ", ", data().size(), " ",
@@ -346,24 +358,24 @@ class IdTable {
     AD_EXPENSIVE_CHECK(row < data().at(column).size());
     return data()[column][row];
   }
-  const T& operator()(size_t row, size_t column) const {
+  ConstRef operator()(size_t row, size_t column) const {
     return data()[column][row];
   }
 
   // Get safe access to a single element specified by the row and the column.
   // Throw if the row or the column is out of bounds. See the note for
   // `operator()` above.
-  CPP_template(typename = void)(requires(!isView)) T& at(size_t row,
-                                                         size_t column) {
+  CPP_template(typename = void)(requires(!isView)) Ref at(size_t row,
+                                                          size_t column) {
     return data().at(column).at(row);
   }
   // TODO<C++26> Remove overload for `isView` and drop requires clause.
-  CPP_template(typename = void)(requires(!isView)) const T& at(
+  CPP_template(typename = void)(requires(!isView)) ConstRef at(
       size_t row, size_t column) const {
     return data().at(column).at(row);
   }
   // `std::span::at` is a C++26 feature, so we have to implement it ourselves.
-  CPP_template(typename = void)(requires(isView)) const T& at(
+  CPP_template(typename = void)(requires(isView)) ConstRef at(
       size_t row, size_t column) const {
     const auto& col = data().at(column);
     AD_CONTRACT_CHECK(row < col.size());
@@ -631,7 +643,7 @@ class IdTable {
     auto viewSpans = ::ranges::to<ViewSpans>(
         ad_utility::allView(getColumns()) |
         ql::views::transform(
-            [offset, size](const auto& col) -> ql::span<const T> {
+            [offset, size](const auto& col) -> ConstColumn {
               return col.subspan(offset, size);
             }));
     return IdTable<T, NumColumns, ColumnStorage, IsView::True>{
@@ -880,11 +892,11 @@ class IdTable {
   }
 
   // Get the `i`-th column. It is stored contiguously in memory.
-  CPP_template(typename = void)(requires(!isView)) ql::span<T> getColumn(
+  CPP_template(typename = void)(requires(!isView)) Column getColumn(
       size_t i) {
     return {data().at(i)};
   }
-  ql::span<const T> getColumn(size_t i) const { return {data().at(i)}; }
+  ConstColumn getColumn(size_t i) const { return {data().at(i)}; }
 
   // Return all the columns as a `std::vector` (if `isDynamic`) or as a
   // `std::array` (else). The elements of the vector/array are `ql::span<T>`
@@ -926,7 +938,10 @@ class IdTable {
 namespace detail {
 using DefaultAllocator =
     ad_utility::default_init_allocator<Id, ad_utility::AllocatorWithLimit<Id>>;
-using IdVector = std::vector<Id, DefaultAllocator>;
+// `ColumnStorage` for `IdTableStatic`/`IdTable`: structure-of-arrays storage
+// (see `IdColumnVector.h`) instead of `std::vector<Id>`, since a materialized
+// `Id` is 16 padded bytes but only 9 carry information.
+using IdVector = columnBasedIdTable::IdColumnVector<DefaultAllocator>;
 }  // namespace detail
 
 /// The general IdTable class. Can be modified and owns its data. If COLS > 0,

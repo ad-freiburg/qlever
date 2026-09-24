@@ -93,9 +93,15 @@ constexpr static bool isConstantResult =
     ad_utility::SimilarToAnyTypeIn<T, detail::ConstantTypes>;
 
 /// True iff T is one of the ConstantTypesAsVector
+// Also `std::vector<Id>`, alongside the pre-existing `ql::span<const ValueId>`:
+// `getIdsFromVariable` now materializes into a vector since `IdTable` columns
+// are no longer contiguous (see `IdColumn.h`). The span type stays too, since
+// it's still meaningful on its own, independent of `IdTable` (e.g. in
+// `HomogeneousNumericExpressionHelpersTest.cpp`).
 template <typename T>
 constexpr static bool isVectorResult =
     ad_utility::SimilarToAnyTypeIn<T, detail::ConstantTypesAsVector> ||
+    ad_utility::isSimilar<T, std::vector<Id>> ||
     ad_utility::isSimilar<T, ql::span<const ValueId>>;
 
 /// All the additional information which is needed to evaluate a SPARQL

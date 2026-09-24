@@ -63,7 +63,9 @@ DeduplicationKey ConstructDeduplicator::makeFullTripleKey(
         AD_CORRECTNESS_CHECK(c.dedupId_.has_value());
         return c.dedupId_.value();
       },
-      [&ctx, rowIdxInIdTable](const PrecomputedVariable& v) {
+      // Explicit `-> ValueId`: an `Id` column returns `ConstIdRef` here, and
+      // `std::visit` below requires all branches to share one return type.
+      [&ctx, rowIdxInIdTable](const PrecomputedVariable& v) -> ValueId {
         return ctx.idTable_[rowIdxInIdTable][v.columnIndex_];
       },
       [](const PrecomputedBlankNode&) -> ValueId {

@@ -490,10 +490,13 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
          getRowIndices(limitAndOffset, *result, resultSize)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
-          STREAMABLE_YIELD(
-              std::string_view{reinterpret_cast<const char*>(&pair.idTable()(
-                                   i, columnIndex.value().columnIndex_)),
-                               sizeof(Id)});
+          // Materialize into a real, addressable local first:
+          // `pair.idTable()(...)` returns `ConstIdRef` here, whose address
+          // cannot be taken (see `IdColumn.h`). Keeps the binary wire format
+          // (raw 16-byte `Id`) unchanged.
+          Id id = pair.idTable()(i, columnIndex.value().columnIndex_);
+          STREAMABLE_YIELD(std::string_view{
+              reinterpret_cast<const char*>(&id), sizeof(Id)});
         }
         cancellationHandle->throwIfCancelled();
       }

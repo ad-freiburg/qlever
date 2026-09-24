@@ -1176,16 +1176,18 @@ TEST(IdTable, shrinkToFit) {
   ASSERT_EQ(allocator.amountMemoryLeft(), 1_kB);
   table.reserve(20);
   ASSERT_TRUE(table.empty());
-  // 20 rows * 2 columns * 16 bytes per ID were allocated.
-  ASSERT_EQ(allocator.amountMemoryLeft(), 360_B);
+  // 20 rows * 2 columns * 9 bytes per ID (a split payload + datatype array,
+  // see `IdColumnVector.h`, rather than the padded `sizeof(Id) == 16`) were
+  // allocated.
+  ASSERT_EQ(allocator.amountMemoryLeft(), 640_B);
   table.emplace_back();
   table.emplace_back();
   ASSERT_EQ(table.numRows(), 2u);
-  ASSERT_EQ(allocator.amountMemoryLeft(), 360_B);
+  ASSERT_EQ(allocator.amountMemoryLeft(), 640_B);
   table.shrinkToFit();
   ASSERT_EQ(table.numRows(), 2u);
-  // Now only 2 rows * 2 columns * 16 bytes were allocated.
-  ASSERT_EQ(allocator.amountMemoryLeft(), 936_B);
+  // Now only 2 rows * 2 columns * 9 bytes were allocated.
+  ASSERT_EQ(allocator.amountMemoryLeft(), 964_B);
 }
 
 TEST(IdTable, staticAsserts) {
@@ -1253,20 +1255,43 @@ TEST(IdTable, moveOrCloneOnView) {
   // `moveOrClone()` on a view (lvalue) returns a deep-owned clone, not a view.
   IdTable cloned = view.moveOrClone();
   EXPECT_EQ(cloned, table);
-  EXPECT_NE(&cloned(0, 0), &table(0, 0));
+  // `(0, 0)` returns `IdRef` (a proxy, not a real `Id&`, see `IdColumn.h`),
+  // whose address cannot be taken; compare the underlying column's raw
+  // payload array pointers instead to verify the clone doesn't alias `table`.
+  EXPECT_NE(cloned.getColumn(0).rawPayloads().data(),
+           table.getColumn(0).rawPayloads().data());
 
   // `moveOrClone()` on a view rvalue also returns a deep-owned clone, since
   // views cannot transfer ownership.
   IdTable cloned2 = std::move(view).moveOrClone();
   EXPECT_EQ(cloned2, table);
-  EXPECT_NE(&cloned2(0, 0), &table(0, 0));
+  EXPECT_NE(cloned2.getColumn(0).rawPayloads().data(),
+           table.getColumn(0).rawPayloads().data());
 }
 
 // ____________________________________________________________________________
 TEST(IdTable, fromColumns) {
-  std::vector<Id> col0{V(1), V(2), V(3)};
-  std::vector<Id> col1{V(4), V(5), V(6)};
+  std::vector<Id> col0Ids{V(1), V(2), V(3)};
+  std::vector<Id> col1Ids{V(4), V(5), V(6)};
   auto allocator = makeAllocator();
+
+  // `ConstIdColumn` can only view a split payload/datatype array (see
+  // `IdColumn.h`), not a contiguous `std::vector<Id>` directly, so the two
+  // columns' split-storage arrays are built manually here.
+  auto toSplit = [](const std::vector<Id>& ids) {
+    std::vector<uint64_t> payloads;
+    std::vector<uint8_t> datatypes;
+    for (Id id : ids) {
+      auto bits = id.getBits();
+      payloads.push_back(bits.payload_);
+      datatypes.push_back(bits.datatype_);
+    }
+    return std::pair{std::move(payloads), std::move(datatypes)};
+  };
+  auto [payloads0, datatypes0] = toSplit(col0Ids);
+  auto [payloads1, datatypes1] = toSplit(col1Ids);
+  ConstIdColumn col0{payloads0.data(), datatypes0.data(), payloads0.size()};
+  ConstIdColumn col1{payloads1.data(), datatypes1.data(), payloads1.size()};
 
   IdTableView<0>::ViewSpans columns{col0, col1};
   auto view = IdTableView<0>::fromColumns(columns, 2, 3, allocator);
@@ -1274,13 +1299,13 @@ TEST(IdTable, fromColumns) {
   ASSERT_EQ(view.numColumns(), 2u);
   ASSERT_EQ(view.numRows(), 3u);
   for (size_t i = 0; i < 3; ++i) {
-    EXPECT_EQ(view(i, 0), col0[i]);
-    EXPECT_EQ(view(i, 1), col1[i]);
-    // The view must not copy the data: its elements are the very same
-    // objects as those in `col0`/`col1`.
-    EXPECT_EQ(&view(i, 0), &col0[i]);
-    EXPECT_EQ(&view(i, 1), &col1[i]);
+    EXPECT_EQ(view(i, 0), col0Ids[i]);
+    EXPECT_EQ(view(i, 1), col1Ids[i]);
   }
+  // The view must not copy the data: its columns must reference the very
+  // same payload arrays as `payloads0`/`payloads1`.
+  EXPECT_EQ(view.getColumn(0).rawPayloads().data(), payloads0.data());
+  EXPECT_EQ(view.getColumn(1).rawPayloads().data(), payloads1.data());
 
   // The `columns` and the passed in `numColumns` must be consistent.
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1303,11 +1328,11 @@ TEST(IdTable, fromColumns) {
   ASSERT_EQ(staticView.numColumns(), 2u);
   ASSERT_EQ(staticView.numRows(), 3u);
   for (size_t i = 0; i < 3; ++i) {
-    EXPECT_EQ(staticView(i, 0), col0[i]);
-    EXPECT_EQ(staticView(i, 1), col1[i]);
-    EXPECT_EQ(&staticView(i, 0), &col0[i]);
-    EXPECT_EQ(&staticView(i, 1), &col1[i]);
+    EXPECT_EQ(staticView(i, 0), col0Ids[i]);
+    EXPECT_EQ(staticView(i, 1), col1Ids[i]);
   }
+  EXPECT_EQ(staticView.getColumn(0).rawPayloads().data(), payloads0.data());
+  EXPECT_EQ(staticView.getColumn(1).rawPayloads().data(), payloads1.data());
 }
 
 // ____________________________________________________________________________
@@ -1352,9 +1377,11 @@ TYPED_TEST(IdTableSubViewTest, subView) {
     EXPECT_EQ(sliceView(0, 0), V(10));
     EXPECT_EQ(sliceView(1, 0), V(20));
 
-    // `subView` is non-owning: data pointers point into the original table.
-    EXPECT_EQ(&sliceView(0, 0), &table(1, 0));
-    EXPECT_EQ(&sliceView(1, 0), &table(2, 0));
+    // `subView` is non-owning: the column's raw payload array points into the
+    // original table's storage. `(i, 0)` returns a proxy (see `IdColumn.h`),
+    // whose address can't be taken directly.
+    EXPECT_EQ(sliceView.getColumn(0).rawPayloads().data(),
+             target.getColumn(0).rawPayloads().data() + 1);
 
     // Out-of-range access must trigger a contract check.
     EXPECT_ANY_THROW(target.subView(3, 3));  // offset + size > numRows.

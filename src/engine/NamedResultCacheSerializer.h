@@ -154,8 +154,11 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
     // which we do handle correctly, and which also rely on the local vocab.
     // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
     // allow local vocab entries here.
+    // Lambda, not `&Id::getDatatype`: proxy column elements don't support
+    // pointer-to-member dispatch (see `IdColumn.h`).
     AD_CORRECTNESS_CHECK(
-        ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
+        ql::ranges::find(col, Datatype::LocalVocabIndex,
+                         [](const Id& id) { return id.getDatatype(); }) ==
             ql::ranges::end(col),
         "Named result cache entries that contain local vocab entries "
         "currently cannot be serialized. Note that local vocab entries can "
@@ -217,29 +220,12 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
 
     AD_CORRECTNESS_CHECK(arg.allocatorForSerialization_.has_value());
     ExplicitIdTableOperation::IdTableOrView resultTable;
-    if constexpr (ZeroCopyReadSerializer<S>) {
-      // Zero-copy path: build a non-owning `IdTableView<0>` directly from
-      // spans into the serializer's buffer, without copying the column data.
-      // Since the writing side (see above) rejects any entry that contains a
-      // `LocalVocabIndex` id, `mapping` can never actually apply to any id in
-      // the columns, so skipping `deserializeIds`'s remapping step here is
-      // safe. We still defensively re-check the invariant.
-      IdTableView<0>::ViewSpans columns;
-      columns.reserve(numColumns);
-      for (size_t i = 0; i < numColumns; ++i) {
-        auto column = zeroCopyDeserializeToSpan<Id>(serializer);
-        AD_CORRECTNESS_CHECK(column.size() == numRows);
-        AD_CORRECTNESS_CHECK(
-            ql::ranges::find(column, Datatype::LocalVocabIndex,
-                             &Id::getDatatype) == column.end(),
-            "Named result cache entries that contain local vocab entries "
-            "currently cannot be deserialized.");
-        columns.push_back(column);
-      }
-      resultTable =
-          IdTableView<0>::fromColumns(std::move(columns), numColumns, numRows,
-                                      arg.allocatorForSerialization_.value());
-    } else {
+    // No more zero-copy path: `IdTable` columns are no longer contiguous
+    // (see `IdColumn.h`), so a view can't be built directly over the
+    // serializer's buffer anymore. A deliberate, accepted performance
+    // regression -- a bulk copy, not a true zero-copy read, but still one
+    // packed byte-buffer read via `deserializeIds`, not per-`Id`.
+    {
       IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
       idTable.resize(numRows);
       for (auto&& col : idTable.getColumns()) {

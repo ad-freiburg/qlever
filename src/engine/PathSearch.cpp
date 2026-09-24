@@ -296,21 +296,24 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::pair<ConstIdColumn, ConstIdColumn>
+std::pair<std::vector<Id>, std::vector<Id>>
 PathSearch::handleSearchSides() const {
-  ConstIdColumn sourceIds;
-  ConstIdColumn targetIds;
+  std::vector<Id> sourceIds;
+  std::vector<Id> targetIds;
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();
-    sourceIds = resultTable->idTableView().getColumn(sourceCol_.value());
-    targetIds = resultTable->idTableView().getColumn(targetCol_.value());
-    return {sourceIds, targetIds};
+    auto sourceCol = resultTable->idTableView().getColumn(sourceCol_.value());
+    auto targetCol = resultTable->idTableView().getColumn(targetCol_.value());
+    sourceIds.assign(sourceCol.begin(), sourceCol.end());
+    targetIds.assign(targetCol.begin(), targetCol.end());
+    return {std::move(sourceIds), std::move(targetIds)};
   }
 
   if (sourceTree_.has_value()) {
-    sourceIds = sourceTree_.value()->getResult()->idTableView().getColumn(
+    auto sourceCol = sourceTree_.value()->getResult()->idTableView().getColumn(
         sourceCol_.value());
+    sourceIds.assign(sourceCol.begin(), sourceCol.end());
   } else if (config_.sourceIsVariable()) {
     sourceIds = {};
   } else {
@@ -318,15 +321,16 @@ PathSearch::handleSearchSides() const {
   }
 
   if (targetTree_.has_value()) {
-    targetIds = targetTree_.value()->getResult()->idTableView().getColumn(
+    auto targetCol = targetTree_.value()->getResult()->idTableView().getColumn(
         targetCol_.value());
+    targetIds.assign(targetCol.begin(), targetCol.end());
   } else if (config_.targetIsVariable()) {
     targetIds = {};
   } else {
     targetIds = std::get<std::vector<Id>>(config_.targets_);
   }
 
-  return {sourceIds, targetIds};
+  return {std::move(sourceIds), std::move(targetIds)};
 }
 
 // _____________________________________________________________________________

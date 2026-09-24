@@ -71,10 +71,10 @@ struct TestIndexConfig {
   bool usePrefixCompression = true;
   // Deliberately tiny, to force many small blocks even for the handful of
   // triples that most tests use, so that block-boundary logic gets
-  // exercised. `32_B` (not `16_B`) so that (with `sizeof(Id) == 16`) two
-  // rows still fit per block, matching the granularity that most existing
-  // tests are calibrated for.
-  ad_utility::MemorySize blocksizePermutations = 32_B;
+  // exercised. `18_B` so that (with `BYTES_PER_ID_COLUMN_ENTRY == 9`, see
+  // `IdColumnByteIO.h`) two rows still fit per block, matching the
+  // granularity that most existing tests are calibrated for.
+  ad_utility::MemorySize blocksizePermutations = 18_B;
   bool createTextIndex = false;
   bool addWordsFromLiterals = true;
   std::optional<std::pair<std::string, std::string>>

@@ -162,7 +162,10 @@ template <typename T1, typename T2, typename F>
 static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
                                           F resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto projectionForComparator = [](const auto& rowOrId) -> const Id& {
+  // `-> Id`, not `-> const Id&`: `rowOrId[0]` returns `ConstIdRef` here, and
+  // `const Id&` would dangle, binding to a temporary that dies on return
+  // (see `IdColumn.h`).
+  auto projectionForComparator = [](const auto& rowOrId) -> Id {
     using T = std::decay_t<decltype(rowOrId)>;
     if constexpr (ad_utility::SimilarTo<T, Id>) {
       return rowOrId;
@@ -216,7 +219,7 @@ static auto fixBlockAfterPatternJoin(T block) {
   block.value().setColumnSubset(permutation);
   ql::ranges::for_each(
       block.value().getColumn(ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN),
-      [](Id& id) {
+      [](auto&& id) {
         id = id.isUndefined() ? Id::makeFromInt(Pattern::NoPattern) : id;
       });
   return std::move(block.value()).template toStatic<0>();
@@ -342,8 +345,10 @@ IndexImpl::buildOspWithPatterns(
   // by PSO.
   // TODO<joka921> Simply get the output unsorted (should be cheaper).
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
+    // Explicit `std::array<Id, 4>`: CTAD would deduce the `ConstIdRef` proxy
+    // type from `row[0]` etc. instead (see `IdColumn.h`).
     internalTripleSorter.push(
-        std::array{row[0], row[1], row[2], internalGraph});
+        std::array<Id, 4>{row[0], row[1], row[2], internalGraph});
   }
   hasPatternPredicateSortedByPSO->clear();
   return thirdSorter;
@@ -636,7 +641,7 @@ using BufferView = IdTableView<NumColumnsIndexBuilding>;
 void transformTriples(Buffer& triples,
                       const ad_utility::HashMap<VocabIndex, Id>& idMap) {
   for (IdColumn column : triples.getColumns()) {
-    for (Id& id : column) {
+    for (auto&& id : column) {
       if (id.getDatatype() != Datatype::VocabIndex) {
         // Check that all the internal, special IDs which we have introduced
         // for performance reasons are eliminated.
@@ -1942,7 +1947,10 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
       static_assert(NumColumnsIndexBuilding == 4,
                     "this place probably has to be changed when additional "
                     "payload columns are added");
-      auto tripleArr = std::array{triple[0], triple[1], triple[2], triple[3]};
+      // Explicit `std::array<Id, 4>`: CTAD would deduce the `ConstIdRef`
+      // proxy type from `triple[0]` etc. instead (see `IdColumn.h`).
+      auto tripleArr =
+          std::array<Id, 4>{triple[0], triple[1], triple[2], triple[3]};
       patternCreator.processTriple(tripleArr);
     };
     size_t numSubjects = createPermutationPair(

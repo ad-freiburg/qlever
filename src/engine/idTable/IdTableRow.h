@@ -181,29 +181,32 @@ class RowReferenceImpl {
 
    protected:
     // The actual implementation of operator[].
+    // `decltype(auto)`, not a hardcoded `T&`/`const T&`: an `Id` column
+    // returns `IdRef`/`ConstIdRef` by value here, not a real reference (see
+    // `IdColumn.h`); `decltype(auto)` handles both cases.
     CPP_template(typename SelfType)(
         requires CPP_NOT(std::is_const_v<std::remove_reference_t<SelfType>>)
             CPP_and CPP_NOT(
-                isConst)) static T& operatorBracketImpl(SelfType& self,
-                                                        size_t i) {
+                isConst)) static decltype(auto)
+    operatorBracketImpl(SelfType& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
     template <typename Self>
-    static const T& operatorBracketImpl(const Self& self, size_t i) {
+    static decltype(auto) operatorBracketImpl(const Self& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
 
    public:
     // Access to the `i`-th columns of this row. Only allowed for const values
     // and for rvalues.
-    CPP_template_2(typename = void)(requires(!isConst)) T& operator[](
-        size_t i) && {
+    CPP_template_2(typename = void)(requires(!isConst)) decltype(auto)
+    operator[](size_t i) && {
       return operatorBracketImpl(*this, i);
     }
-    const T& operator[](size_t i) const& {
+    decltype(auto) operator[](size_t i) const& {
       return operatorBracketImpl(*this, i);
     }
-    const T& operator[](size_t i) const&& {
+    decltype(auto) operator[](size_t i) const&& {
       return operatorBracketImpl(*this, i);
     }
 
@@ -216,14 +219,18 @@ class RowReferenceImpl {
                                                                 colIdx);
       }
     };
+    // `T` passed explicitly as `ValueType`: otherwise deduced from
+    // `IteratorHelper`'s return type, which for an `Id` column is
+    // `IdRef`/`ConstIdRef`, not `Id` -- breaking `range_value_t`-based code
+    // like `IdTable::push_back`. For a plain `T` column this was already `T`.
     using iterator = ad_utility::IteratorForAccessOperator<
         RowReferenceWithRestrictedAccess,
         IteratorHelper<RowReferenceWithRestrictedAccess>,
-        ad_utility::IsConst::False>;
+        ad_utility::IsConst::False, T>;
     using const_iterator = ad_utility::IteratorForAccessOperator<
         RowReferenceWithRestrictedAccess,
         IteratorHelper<RowReferenceWithRestrictedAccess>,
-        ad_utility::IsConst::True>;
+        ad_utility::IsConst::True, T>;
     // Non-const iterators allow non-const access and are therefore only allowed
     // on rvalues.
     iterator begin() && { return {this, 0}; }
@@ -245,11 +252,18 @@ class RowReferenceImpl {
 
    protected:
     // The implementation of swapping two `RowReference`s (passed either by
-    // value or by reference).
+    // value or by reference). Not `std::swap(operatorBracketImpl(a, i),
+    // operatorBracketImpl(b, i))`: for an `Id` column that returns `IdRef` by
+    // value, the prvalue can't bind to `std::swap`'s `T&` parameters. This
+    // manual 3-step swap works for both a real reference and a by-value
+    // proxy (each step's implicit conversion to/from `T` reads resp. writes
+    // through the proxy).
     CPP_template(typename AType, typename BType)(
         requires(!isConst)) static void swapImpl(AType&& a, BType&& b) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
-        std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
+        T tmp = std::move(operatorBracketImpl(a, i));
+        operatorBracketImpl(a, i) = std::move(operatorBracketImpl(b, i));
+        operatorBracketImpl(b, i) = std::move(tmp);
       }
     }
 
@@ -391,10 +405,11 @@ class RowReference
   using Base::Base;
 
   // Access to the `i`-th column of this row.
-  CPP_template_2(typename = void)(requires(!isConst)) T& operator[](size_t i) {
+  CPP_template_2(typename = void)(requires(!isConst)) decltype(auto)
+  operator[](size_t i) {
     return Base::operatorBracketImpl(base(), i);
   }
-  const T& operator[](size_t i) const {
+  decltype(auto) operator[](size_t i) const {
     return Base::operatorBracketImpl(base(), i);
   }
 

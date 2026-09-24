@@ -1100,11 +1100,11 @@ TEST_F(MultiBlockIndexFormatConverterTest, relationWithItsOwnMetadata) {
   // converted is built with (see `convertAndExpectTheSameContent` above). A
   // relation with two rows then already is large enough.
   //
-  // Two rows per block means two `Id`s (16 bytes each in the current format)
-  // per column per block, i.e. 32 bytes, matching the default
-  // `blocksizePermutations` of `TestIndexConfig` (see `IndexTestHelpers.h`).
+  // Two rows/block = 18 bytes/column/block (`BYTES_PER_ID_COLUMN_ENTRY == 9`,
+  // see `IdColumnByteIO.h`), matching `TestIndexConfig`'s default
+  // `blocksizePermutations` (`IndexTestHelpers.h`).
   ad_utility::MemorySize previousBlocksize = blocksizeOfConvertedPermutations();
-  blocksizeOfConvertedPermutations() = 32_B;
+  blocksizeOfConvertedPermutations() = 18_B;
   absl::Cleanup restoreBlocksize = [previousBlocksize]() {
     blocksizeOfConvertedPermutations() = previousBlocksize;
   };

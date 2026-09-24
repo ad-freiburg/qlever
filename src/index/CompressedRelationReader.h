@@ -506,13 +506,11 @@ class CompressedRelationReader {
   DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
                                     size_t numRowsToRead) const;
 
-  // Helper function used by `decompressBlock` and
-  // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
-  // store the result at the `iterator`. For the `numRowsToRead` argument, see
-  // the documentation of `decompressBlock`.
-  template <typename Iterator>
+  // Helper function used by `decompressBlock`. Decompress the
+  // `compressedColumn` and store the result in `column`. For the
+  // `numRowsToRead` argument, see the documentation of `decompressBlock`.
   static void decompressColumn(const std::vector<char>& compressedColumn,
-                               size_t numRowsToRead, Iterator iterator);
+                               size_t numRowsToRead, IdColumn column);
 
   // Read and decompress the parts of the block given by `blockMetaData` (which
   // identifies the block) and `scanConfig` (which specifies the part of that

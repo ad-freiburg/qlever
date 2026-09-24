@@ -24,6 +24,7 @@
 #include "backports/algorithm.h"
 #include "backports/span.h"
 #include "engine/idTable/IdColumn.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
@@ -215,9 +216,9 @@ class CompressedRelationWriter {
   // actual sizes of blocks will slightly vary due to new relations starting in
   // new blocks etc.
   size_t blocksize() const {
-    return std::max(
-        size_t{1},
-        size_t{uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id)});
+    return std::max(size_t{1},
+                    size_t{uncompressedBlocksizePerColumn_.getBytes() /
+                           columnBasedIdTable::BYTES_PER_ID_COLUMN_ENTRY});
   }
 
  private:

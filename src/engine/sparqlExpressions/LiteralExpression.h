@@ -209,7 +209,10 @@ class LiteralExpression : public SparqlExpression {
           "A non-grouped variable outside of an aggregate should have been "
           "rejected by the parser");
       const auto& table = context->_inputTable;
-      auto constantValue = table.at(context->_beginIndex, column.value());
+      // Explicitly `Id`, not `auto`: `table.at(...)` returns `ConstIdRef` (a
+      // proxy, not a real `Id`, see `IdColumn.h`), which does not implicitly
+      // convert into `ExpressionResult` the way a real `Id` does.
+      Id constantValue = table.at(context->_beginIndex, column.value());
       AD_EXPENSIVE_CHECK((
           std::all_of(table.begin() + context->_beginIndex,
                       table.begin() + context->_endIndex, [&](const auto& row) {

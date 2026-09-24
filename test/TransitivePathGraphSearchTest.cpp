@@ -40,9 +40,13 @@ class GraphSearchTest : public Test {
 
   std::vector<T> graphs_;
   // When testing using BinSearchMap, store the data for the startIds and
-  // targetIds spans here.
-  std::vector<std::vector<Id>> binSearchMapStartIds_;
-  std::vector<std::vector<Id>> binSearchMapTargetIds_;
+  // targetIds spans here. `IdColumnVector` (not `std::vector<Id>`), since
+  // `ConstIdColumn` can only view a split payload/datatype array (see
+  // `IdColumn.h`), not a contiguous `std::vector<Id>`.
+  using BinSearchMapIdStorage =
+      columnBasedIdTable::IdColumnVector<ad_utility::AllocatorWithLimit<Id>>;
+  std::vector<BinSearchMapIdStorage> binSearchMapStartIds_;
+  std::vector<BinSearchMapIdStorage> binSearchMapTargetIds_;
 
   // Easy-to-read-and-change representation of the graphs that will be tested
   // on. Will be converted to template type T and stored in `graphs_` in the
@@ -124,8 +128,8 @@ class GraphSearchTest : public Test {
       for (const AdjacencyList& adjList : graphsAdjListRepresentation_) {
         // Create new storage on the heap for a new BinSearchMap's startId and
         // targetId spans.
-        binSearchMapStartIds_.push_back(std::vector<Id>());
-        binSearchMapTargetIds_.push_back(std::vector<Id>());
+        binSearchMapStartIds_.push_back(BinSearchMapIdStorage(allocator_));
+        binSearchMapTargetIds_.push_back(BinSearchMapIdStorage(allocator_));
         auto& startIds = binSearchMapStartIds_.back();
         auto& targetIds = binSearchMapTargetIds_.back();
 
@@ -135,12 +139,12 @@ class GraphSearchTest : public Test {
 
         for (const size_t startNode : keys) {
           for (const size_t targetNode : adjList.at(startNode)) {
-            startIds.emplace_back(Id::makeFromInt(startNode));
-            targetIds.emplace_back(Id::makeFromInt(targetNode));
+            startIds.push_back(Id::makeFromInt(startNode));
+            targetIds.push_back(Id::makeFromInt(targetNode));
           }
         }
-        graphs_.push_back(BinSearchMap(ConstIdColumn(startIds),
-                                       ConstIdColumn(targetIds)));
+        graphs_.push_back(BinSearchMap(startIds.asConstView(),
+                                       targetIds.asConstView()));
       }
     }
   }

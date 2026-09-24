@@ -51,16 +51,20 @@ EntityAndGraph entityAndGraph(const Row& row, size_t numColumns) {
 // the graphs, such that the caller can treat both cases uniformly: The result
 // is a single undefined ID if `id` occurs in `matches` at all, and empty
 // otherwise.
-ql::span<const Id> graphsOf(const IdTable& matches, Id id) {
-  ql::span<const Id> ids = matches.getColumn(0);
+// `std::vector<Id>`, not `ql::span<const Id>`: `IdTable` columns are no
+// longer contiguous (see `IdColumn.h`). The sole caller fully consumes the
+// result within one loop, so the copy is unproblematic.
+std::vector<Id> graphsOf(const IdTable& matches, Id id) {
+  ConstIdColumn ids = matches.getColumn(0);
   auto matching = ql::ranges::equal_range(ids, id);
   size_t numMatches = ql::ranges::size(matching);
   if (matches.numColumns() == 1) {
-    static const Id undefined = Id::makeUndefined();
-    return {&undefined, numMatches == 0 ? 0u : 1u};
+    return numMatches == 0 ? std::vector<Id>{}
+                           : std::vector{Id::makeUndefined()};
   }
-  return matches.getColumn(1).subspan(matching.begin() - ids.begin(),
-                                      numMatches);
+  auto graphColumn = matches.getColumn(1).subspan(
+      matching.begin() - ids.begin(), numMatches);
+  return {graphColumn.begin(), graphColumn.end()};
 }
 
 // The rows of a `table` from `EmptyPath::scanIndex` as a range of

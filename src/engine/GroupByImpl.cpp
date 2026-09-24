@@ -493,7 +493,11 @@ void GroupByImpl::processGroup(
   sparqlExpression::ExpressionResult expressionResult =
       aggregate._expression.getPimpl()->evaluate(&evaluationContext);
 
-  auto& resultEntry = result->operator()(resultRow, resultColumn);
+  // `decltype(auto)`, not `auto&`: for an `Id` column, `result->operator()`
+  // returns `IdRef` by value, which can't bind to `auto&` (see `IdColumn.h`).
+  // `decltype(auto)` handles both cases; writing through `resultEntry` works
+  // either way.
+  decltype(auto) resultEntry = result->operator()(resultRow, resultColumn);
 
   // Copy the result to the evaluation context in case one of the following
   // aliases has to reuse it.

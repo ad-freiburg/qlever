@@ -22,10 +22,14 @@ static constexpr size_t c2Idx = 2;
 // Compares two rows based on the second, third and fourth column only (it
 // ignores the first column as well as any payload columns).
 struct ComparatorForConstCol0 {
+  // `std::array<Id, 3>`, not `std::tie(a[c1Idx], ...)`: `a[i]` returns
+  // `IdRef`/`ConstIdRef` by value here, and `std::tie` can't bind such a
+  // prvalue (see `IdColumn.h`).
   template <typename A, typename B>
   bool operator()(const A& a, const B& b) const {
-    return std::tie(a[c1Idx], a[c2Idx], a[ADDITIONAL_COLUMN_GRAPH_ID]) <
-           std::tie(b[c1Idx], b[c2Idx], b[ADDITIONAL_COLUMN_GRAPH_ID]);
+    std::array<Id, 3> aVals{a[c1Idx], a[c2Idx], a[ADDITIONAL_COLUMN_GRAPH_ID]};
+    std::array<Id, 3> bVals{b[c1Idx], b[c2Idx], b[ADDITIONAL_COLUMN_GRAPH_ID]};
+    return aVals < bVals;
   }
 };
 

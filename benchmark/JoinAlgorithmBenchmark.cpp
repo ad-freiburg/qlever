@@ -41,6 +41,7 @@
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
+#include "engine/idTable/IdColumn.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "index/IdTableUtils.h"
@@ -112,15 +113,17 @@ struct SetOfIdTableColumnElements {
   The list of all unique elements is also included inside `numOccurrences_`.
   However, accessing a hash map entry based on index position takes linear time,
   instead of constant.
+  Note: `ValueId` by value rather than `std::reference_wrapper<const ValueId>`:
+  an `IdTable` column is no longer a contiguous range of `Id` (see
+  `IdColumn.h`), so there is no persistent `const ValueId&` left to reference.
   */
-  std::vector<std::reference_wrapper<const ValueId>> uniqueElements_{};
+  std::vector<ValueId> uniqueElements_{};
   ad_utility::HashMap<ValueId, size_t> numOccurrences_{};
 
   /*
   Set the member variables for the given column.
   */
-  explicit SetOfIdTableColumnElements(
-      const ql::span<const ValueId>& idTableColumnRef) {
+  explicit SetOfIdTableColumnElements(const ConstIdColumn& idTableColumnRef) {
     ql::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
       if (auto numOccurrencesIterator = numOccurrences_.find(id);
           numOccurrencesIterator != numOccurrences_.end()) {
@@ -194,13 +197,12 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   size_t newOverlapMatches{0};
 
   // Create the overlap.
-  ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
-      smallerTableElementToNewElement{};
+  ad_utility::HashMap<ValueId, ValueId> smallerTableElementToNewElement{};
   ql::ranges::for_each(
       smallerTableJoinColumnRef,
       [&randomDouble, &probabilityToCreateOverlap,
        &smallerTableElementToNewElement, &randomBiggerTableElement,
-       &newOverlapMatches, &biggerTableJoinColumnSet](auto& id) {
+       &newOverlapMatches, &biggerTableJoinColumnSet](auto&& id) {
         /*
         If a value has no hash map value, with which it will be overwritten, we
         either assign it its own value, or an element from the bigger table.
@@ -299,8 +301,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   randomShuffle(smallerTableJoinColumnSet.uniqueElements_.begin(),
                 smallerTableJoinColumnSet.uniqueElements_.end(), seeds.at(1));
   size_t newOverlapMatches{0};
-  ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
-      smallerTableElementToNewElement{};
+  ad_utility::HashMap<ValueId, ValueId> smallerTableElementToNewElement{};
   ql::ranges::for_each(
       smallerTableJoinColumnSet.uniqueElements_,
       [&randomBiggerTableElement, &wantedNumNewOverlapMatches,
@@ -333,7 +334,8 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 
   // Overwrite the designated values in the smaller table.
   ql::ranges::for_each(
-      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](auto& id) {
+      smallerTableJoinColumnRef,
+      [&smallerTableElementToNewElement](auto&& id) {
         if (auto newValueIterator = smallerTableElementToNewElement.find(id);
             newValueIterator != smallerTableElementToNewElement.end()) {
           id = newValueIterator->second;

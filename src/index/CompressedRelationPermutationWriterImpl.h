@@ -34,17 +34,21 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
     // column, not the additional payload. Note: We could also use
     // `compareWithoutLocalVocab` to compare the IDs cheaper, but this
     // sort is far from being a performance bottleneck.
+    // `std::array<Id, 4>`, not `std::tie(a[0], ...)`: `a[0]` etc. are
+    // `IdRef`/`ConstIdRef` by value here, and `std::tie` can't bind such a
+    // prvalue (see `IdColumn.h`).
     auto compare = [](const auto& a, const auto& b) {
-      return std::tie(a[0], a[1], a[2], a[3]) <
-             std::tie(b[0], b[1], b[2], b[3]);
+      return std::array<Id, 4>{a[0], a[1], a[2], a[3]} <
+             std::array<Id, 4>{b[0], b[1], b[2], b[3]};
     };
     ql::ranges::sort(blockOfSmallRelations, compare);
     AD_CORRECTNESS_CHECK(!blockOfSmallRelations.empty());
-    // Note: it is important that we store these two IDs before moving the
-    // `relation`, because the evaluation order of function arguments is
-    // unspecified.
-    auto firstCol0 = blockOfSmallRelations.at(0, 0);
-    auto lastCol0 =
+    // Store these two IDs as `Id`, not `auto`, before moving `relation`
+    // (argument evaluation order is unspecified): `.at()` now returns a
+    // proxy pointing into `blockOfSmallRelations`'s storage, so `auto` would
+    // no longer copy the value.
+    Id firstCol0 = blockOfSmallRelations.at(0, 0);
+    Id lastCol0 =
         blockOfSmallRelations.at(blockOfSmallRelations.numRows() - 1, 0);
     writer_.compressAndWriteBlock(firstCol0, lastCol0,
                                   std::move(blockOfSmallRelations), false);

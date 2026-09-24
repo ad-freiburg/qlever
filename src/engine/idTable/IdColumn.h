@@ -21,10 +21,6 @@ namespace columnBasedIdTable {
 // datatype-byte array. Mirrors `ql::span<[const] Id>`'s interface except for
 // `.data()` (the two arrays aren't one contiguous range of `Id`); use
 // `rawPayloads()`/`rawDatatypes()` instead, e.g. for `IdColumnByteIO.h`.
-//
-// So far unused: the global `IdColumn`/`ConstIdColumn` aliases at the bottom
-// of this file still refer to `ql::span<Id>`/`ql::span<const Id>`; a later
-// commit switches them over and fixes every call site the switch breaks.
 template <bool IsConst>
 class BasicIdColumnView {
  public:
@@ -152,11 +148,9 @@ inline constexpr bool std::ranges::enable_view<
     columnBasedIdTable::BasicIdColumnView<IsConst>> = true;
 #endif
 
-// Type aliases for the columns of an `IdTable`. Currently just aliases for
-// `ql::span<Id>`/`ql::span<const Id>`; a later commit switches them to
-// `columnBasedIdTable::IdColumn`/`ConstIdColumn` above, once `IdTable` stores
-// the payload and datatype of each `Id` in separate arrays.
-using IdColumn = ql::span<Id>;
-using ConstIdColumn = ql::span<const Id>;
+// The columns of an `IdTable`: the proxy view types above, not
+// `ql::span<Id>`/`ql::span<const Id>` (see `IdColumnVector.h` for why).
+using IdColumn = columnBasedIdTable::IdColumn;
+using ConstIdColumn = columnBasedIdTable::ConstIdColumn;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMN_H

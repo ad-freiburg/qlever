@@ -140,10 +140,11 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   EXPECT_FALSE(deserializedValue.cachedGeoIndex_.has_value());
 }
 
-// Test that deserializing from an `AlignedByteBufferReadSerializer` (which
-// supports zero-copy deserialization) yields a non-owning `IdTableView<0>`
-// that points directly into the serializer's buffer, instead of an owning
-// `shared_ptr<const IdTable>`.
+// Deserializing from an `AlignedByteBufferReadSerializer` (normally
+// zero-copy for contiguous `Id` storage) still round-trips correctly now
+// that `IdColumn` is non-contiguous: it deserializes to the owning
+// `shared_ptr<const IdTable>` alternative instead of the non-owning
+// `IdTableView<0>` one -- a deliberate, accepted performance regression.
 TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
   auto table = makeIdTableFromVector({{0, 7}, {9, 11}, {13, 17}});
 
@@ -169,8 +170,8 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
       &qec_->getIndex().getLocalVocabContext();
   readSerializer >> deserializedValue;
 
-  ASSERT_TRUE(
-      std::holds_alternative<IdTableView<0>>(deserializedValue.result_));
+  ASSERT_TRUE(std::holds_alternative<std::shared_ptr<const IdTable>>(
+      deserializedValue.result_));
   EXPECT_THAT(ExplicitIdTableOperation::viewOf(deserializedValue.result_),
               matchesIdTable(table));
   EXPECT_THAT(deserializedValue.varToColMap_,
