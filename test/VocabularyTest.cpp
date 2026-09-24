@@ -232,6 +232,24 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
 }
 
 // _____________________________________________________________________________
+TEST(VocabularyTest, getIdRangeForFullTextPrefixExpansion) {
+  TextVocabulary v;
+  ad_utility::HashSet<string> s{"gro", "gros", "groß", "grosse", "grot"};
+  auto filename = "vocTestExpansion.dat";
+  v.createFromSet(s, filename);
+  absl::Cleanup cleanup{[&filename] { ad_utility::deleteFile(filename); }};
+
+  // "ß" has the same primary weights as "ss".
+  auto range = v.getIdRangeForFullTextPrefix("gros*");
+  ASSERT_TRUE(range.has_value());
+  std::vector<std::string> words;
+  for (auto i = range->first().get(); i <= range->last().get(); ++i) {
+    words.emplace_back(v[WordVocabIndex::make(i)]);
+  }
+  EXPECT_THAT(words, ::testing::UnorderedElementsAre("gros", "groß", "grosse"));
+}
+
+// _____________________________________________________________________________
 TEST(VocabularyTest, getIdRangeForFullTextPrefixIgnorePunctuation) {
   TextVocabulary v;
   v.setLocale("en", "US", true);
@@ -249,12 +267,13 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixIgnorePunctuation) {
         result.emplace_back(v[WordVocabIndex::make(i)]);
       }
     }
-    ql::ranges::sort(result);
     return result;
   };
-  EXPECT_THAT(getWords("ab*"), ElementsAre("a.bc", "ab", "abz"));
-  EXPECT_THAT(getWords("a.b*"), ElementsAre("a.bc", "ab", "abz"));
-  EXPECT_THAT(getWords("ac*"), ElementsAre("a.c", "ac"));
+  EXPECT_THAT(getWords("ab*"),
+              ::testing::UnorderedElementsAre("a.bc", "ab", "abz"));
+  EXPECT_THAT(getWords("a.b*"),
+              ::testing::UnorderedElementsAre("a.bc", "ab", "abz"));
+  EXPECT_THAT(getWords("ac*"), ::testing::UnorderedElementsAre("a.c", "ac"));
   EXPECT_THAT(getWords("...*"), ::testing::SizeIs(s.size()));
 }
 
@@ -312,6 +331,8 @@ TEST(Vocabulary, PrefixFilter) {
         << prefix;
   };
   expectRange("\"exv", 3, 4);
+  expectRange("\"[\"Ex-v", 3, 4);
+  expectRange("\"[\"Ex-vivo\" renal", 3, 4);
   expectRange("\"ex", 0, 4);
   expectRange("\"", 0, 4);
   expectRange("<", 4, 4);

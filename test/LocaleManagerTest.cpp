@@ -70,73 +70,85 @@ TEST(LocaleManagerTest, Normalization) {
 }
 
 // _____________________________________________________________________________
-TEST(LocaleManagerTest, CountPrimaryCollationElements) {
+TEST(LocaleManagerTest, StartsWithOnPrimaryLevel) {
   LocaleManager loc("en", "US", false);
-  EXPECT_EQ(loc.countPrimaryCollationElements(""), 0u);
-  EXPECT_EQ(loc.countPrimaryCollationElements("hello"), 5u);
-  // Accented characters count as one primary element each.
-  EXPECT_EQ(loc.countPrimaryCollationElements("héllo"), 5u);
-  // Multi-byte UTF-8: é = U+00E9 = 2 bytes, still 1 primary element.
-  EXPECT_EQ(loc.countPrimaryCollationElements("\xc3\xa9"), 1u);
-  // Punctuation is relevant on the PRIMARY level if it is not ignored.
-  EXPECT_EQ(loc.countPrimaryCollationElements(".hello"), 6u);
-  EXPECT_EQ(loc.countPrimaryCollationElements("hello world"), 11u);
-  EXPECT_EQ(loc.countPrimaryCollationElements("..."), 3u);
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", ""));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("", ""));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "hel"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "HEL"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "hello"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("héllo", "hel"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "hé"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("hello", "help"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("he", "hello"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("", "a"));
+
+  // Characters that expand to several collation elements.
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("groß", "gros"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("große", "gross"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("gross", "groß"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("vivæ", "viva"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("vivæ", "vivb"));
+
+  // Characters without a primary weight (here a combining acute accent).
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("cafe\xcc\x81s", "caf\xc3\xa9"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("cafes", "cafe\xcc\x81"));
+
+  // Punctuation is relevant if it is not ignored.
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel(".hello", "hello"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("a.b", "ab"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("a.b", "a."));
+
+  // Characters with a primary weight longer than 16 bits. The upper 16 bits of
+  // the weights of these two characters are equal.
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("中文", "中"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("中", "中文"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("丮", "中"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("中", "丮"));
 }
 
 // _____________________________________________________________________________
-TEST(LocaleManagerTest, PrimaryCollationPrefixLength) {
-  LocaleManager loc("en", "US", false);
-
-  // Edge cases.
-  EXPECT_EQ(loc.primaryCollationPrefixLength("hello", 0), 0u);
-  EXPECT_EQ(loc.primaryCollationPrefixLength("", 5), 0u);
-  // Fewer elements than requested: return the full string length.
-  EXPECT_EQ(loc.primaryCollationPrefixLength("hi", 10), 2u);
-  // Characters without a primary weight (here a combining acute accent) that
-  // follow the last element are part of the prefix.
-  EXPECT_EQ(loc.primaryCollationPrefixLength("cafe\xcc\x81s", 4), 6u);
-
-  // Basic ASCII: one byte per codepoint, one primary element per letter.
-  EXPECT_EQ(loc.primaryCollationPrefixLength("hello world", 5), 5u);
-  // 6th element is the space, so offset includes it.
-  EXPECT_EQ(loc.primaryCollationPrefixLength("hello world", 6), 6u);
-
-  // Multi-byte UTF-8: é = U+00E9 = 2 bytes but 1 primary element.
-  // "héllo" = h(1) + é(2) + l(1) + l(1) + o(1) = 6 bytes total.
-  EXPECT_EQ(loc.primaryCollationPrefixLength("héllo", 1), 1u);  // "h"
-  EXPECT_EQ(loc.primaryCollationPrefixLength("héllo", 2), 3u);  // "hé"
-  EXPECT_EQ(loc.primaryCollationPrefixLength("héllo", 5), 6u);  // "héllo"
-
-  // "." has raw primary weight, so it counts as element 1.
-  EXPECT_EQ(loc.primaryCollationPrefixLength(".hello", 1), 1u);  // "."
-  EXPECT_EQ(loc.primaryCollationPrefixLength(".hello", 6), 6u);  // ".hello"
-
-  // Round-trip: countPrimaryCollationElements(s) elements should cover all of
-  // s.
-  for (std::string_view s :
-       {"hello"sv, "héllo"sv, ".hello"sv, "hello world"sv}) {
-    size_t n = loc.countPrimaryCollationElements(s);
-    EXPECT_EQ(loc.primaryCollationPrefixLength(s, n), s.size());
-  }
-}
-
-// _____________________________________________________________________________
-TEST(LocaleManagerTest, PrimaryCollationElementsIgnorePunctuation) {
+TEST(LocaleManagerTest, StartsWithOnPrimaryLevelIgnorePunctuation) {
   LocaleManager loc("en", "US", true);
-  // Punctuation and spaces are ignored on the PRIMARY level, so they don't
-  // count as elements.
-  EXPECT_EQ(loc.countPrimaryCollationElements(".hello"), 5u);
-  EXPECT_EQ(loc.countPrimaryCollationElements("hello world"), 10u);
-  EXPECT_EQ(loc.countPrimaryCollationElements("..."), 0u);
-  EXPECT_EQ(loc.countPrimaryCollationElements("\"<@"), 0u);
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel(".hello", "hello"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", ".h.e"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("a.b", "ab"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("ab", "a."));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("abc", "..."));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("", "\"<@ "));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello world", "hellow"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("a.c", "ab"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("...", "a"));
+}
 
-  // The prefix extends up to the next relevant element.
-  EXPECT_EQ(loc.primaryCollationPrefixLength("a.c", 1), 2u);   // "a."
-  EXPECT_EQ(loc.primaryCollationPrefixLength(".a.c", 0), 1u);  // "."
-  EXPECT_EQ(loc.primaryCollationPrefixLength("...", 0), 3u);
-  EXPECT_EQ(loc.primaryCollationPrefixLength("hello world", 5), 6u);
-  EXPECT_EQ(loc.primaryCollationPrefixLength("hello world", 6), 7u);
+// _____________________________________________________________________________
+TEST(LocaleManagerTest, HaveEqualPrimaryPrefix) {
+  LocaleManager loc("en", "US", false);
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("abcdx", "abcdy", 4));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("abcdx", "abcdy", 5));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("abcd", "ABCD", 4));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("ab", "ab", 4));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("ab", "AB", 4));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("ab", "abcd", 4));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("abcd", "ab", 4));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("a", "b", 0));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("", "", 4));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("", "a", 4));
+
+  // "æ" has the same primary weights as "ae".
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("vivæ", "vivae", 4));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("vivæt", "vivaeb", 5));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("vivæt", "vivaeb", 6));
+
+  // A primary weight longer than 16 bits is a single element.
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("中a", "中b", 1));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("中a", "中b", 2));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("中a", "丮a", 1));
+
+  LocaleManager ignorePunct("en", "US", true);
+  EXPECT_TRUE(ignorePunct.haveEqualPrimaryPrefix("a.bcd", "abce", 3));
+  EXPECT_FALSE(ignorePunct.haveEqualPrimaryPrefix("a.bcd", "abce", 4));
+  EXPECT_TRUE(ignorePunct.haveEqualPrimaryPrefix("...", "", 4));
 }
 
 #ifndef QLEVER_NO_UNICODE
@@ -187,15 +199,17 @@ TEST(LocaleManagerTest, RaiseThrowsOnIcuError) {
 // ICU, so that the ICU-free code path is covered.
 
 // _____________________________________________________________________________
-TEST(LocaleManager, NoICUPrimaryCollationElements) {
+TEST(LocaleManager, NoICUPrimaryPrefix) {
   LocaleManagerNoICU loc;
   // Every byte is its own collation element.
-  EXPECT_EQ(loc.countPrimaryCollationElements(""), 0u);
-  EXPECT_EQ(loc.countPrimaryCollationElements("abc"), 3u);
-  EXPECT_EQ(loc.countPrimaryCollationElements("\xc3\xa9"), 2u);
-  EXPECT_EQ(loc.primaryCollationPrefixLength("abcdef", 3), 3u);
-  EXPECT_EQ(loc.primaryCollationPrefixLength("abc", 10), 3u);
-  EXPECT_EQ(loc.primaryCollationPrefixLength("", 5), 0u);
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("abc", "ab"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("abc", ""));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("abc", "AB"));
+  EXPECT_FALSE(loc.startsWithOnPrimaryLevel("ab", "abc"));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("abcd", "abce", 3));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("abcd", "abce", 4));
+  EXPECT_TRUE(loc.haveEqualPrimaryPrefix("ab", "ab", 4));
+  EXPECT_FALSE(loc.haveEqualPrimaryPrefix("ab", "abc", 4));
 }
 
 // _____________________________________________________________________________

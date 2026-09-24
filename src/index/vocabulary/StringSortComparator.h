@@ -14,15 +14,6 @@
 #include "index/vocabulary/LocaleManager.h"
 #include "util/StringUtils.h"
 
-// Return the longest prefix of `s` that has as many collation elements relevant
-// on the `PRIMARY` level as `pattern`.
-template <typename LocaleManagerT>
-std::string_view truncateLike(const LocaleManagerT& locManager,
-                              std::string_view s, std::string_view pattern) {
-  return s.substr(0, locManager.primaryCollationPrefixLength(
-                         s, locManager.countPrimaryCollationElements(pattern)));
-}
-
 /**
  * @brief This class compares strings, e.g. strings from the text index
  * vocabulary, according to the collation of the held `LocaleManagerT`. To
@@ -79,15 +70,17 @@ class SimpleStringComparatorImpl {
     return a.compare(b);
   }
 
-  // Compare `prefix` on the `PRIMARY` level to the prefix of `word` that has
-  // as many collation elements as `prefix` (see
-  // `LocaleManager::countPrimaryCollationElements`). The result is 0 iff `word`
-  // starts with `prefix` on the `PRIMARY` level and is monotonic in `word`,
-  // which makes it usable for binary searches of prefix ranges.
+  // Compare `prefix` on the `PRIMARY` level to the words that start with it:
+  // Return 0 iff `word` starts with `prefix` on the `PRIMARY` level, and
+  // otherwise the result of comparing `prefix` to `word`. The result is
+  // monotonic in `word`, which makes it usable for binary searches of prefix
+  // ranges.
   [[nodiscard]] int compareToPrefixOf(std::string_view prefix,
                                       std::string_view word) const {
-    return locManager_.compare(prefix, truncateLike(locManager_, word, prefix),
-                               Level::PRIMARY);
+    if (locManager_.startsWithOnPrimaryLevel(word, prefix)) {
+      return 0;
+    }
+    return locManager_.compare(prefix, word, Level::PRIMARY);
   }
 
   /// Obtain access to the held `LocaleManagerT`
@@ -181,21 +174,27 @@ class TripleComponentComparatorImpl {
   }
 
   // Same as `SimpleStringComparatorImpl::compareToPrefixOf`, but on the
-  // components of `prefix` and `word`: the datatypes have to match, and only
-  // the inner value of `word` is truncated, so that the truncation never
-  // interferes with the detection of the end of a literal.
+  // components of `prefix` and `word`: the datatypes have to be equal and the
+  // inner value of `word` has to start with that of `prefix`. A `prefix` that
+  // starts with a quotation mark is a literal without its end, so everything
+  // after the leading quotation mark (including other quotation marks) is its
+  // inner value.
   [[nodiscard]] int compareToPrefixOf(std::string_view prefix,
                                       std::string_view word) const {
-    auto splitPrefix = extractComparable(prefix);
     auto splitWord = extractComparable(word);
-    if (auto res = std::strncmp(&splitPrefix.firstOriginalChar_,
-                                &splitWord.firstOriginalChar_, 1);
+    char firstPrefixChar = prefix.empty() ? char{0} : prefix[0];
+    if (auto res =
+            std::strncmp(&firstPrefixChar, &splitWord.firstOriginalChar_, 1);
         res != 0) {
       return res;
     }
-    return locManager_.compare(splitPrefix.innerValue_,
-                               truncateLike(locManager_, splitWord.innerValue_,
-                                            splitPrefix.innerValue_),
+    std::string_view innerPrefix =
+        firstPrefixChar == '"' ? prefix.substr(1) : prefix;
+    if (locManager_.startsWithOnPrimaryLevel(splitWord.innerValue_,
+                                             innerPrefix)) {
+      return 0;
+    }
+    return locManager_.compare(innerPrefix, splitWord.innerValue_,
                                Level::PRIMARY);
   }
 

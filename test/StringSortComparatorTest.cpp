@@ -203,6 +203,9 @@ TEST(StringSortComparatorTest, SimpleStringComparatorCompareToPrefixOf) {
     EXPECT_GT(comp.compareToPrefixOf("ab", "aa"), 0);
     EXPECT_GT(comp.compareToPrefixOf("ab", "a"), 0);
     EXPECT_EQ(comp.compareToPrefixOf("", "abc"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("gros", "groß"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("gross", "große"), 0);
+    EXPECT_LT(comp.compareToPrefixOf("gros", "grot"), 0);
   }
   SimpleStringComparator respectPunct("en", "US", false);
   EXPECT_NE(respectPunct.compareToPrefixOf("ab", "a.b"), 0);
@@ -228,6 +231,13 @@ TEST(StringSortComparatorTest, TripleComponentComparatorCompareToPrefixOf) {
     EXPECT_EQ(comp.compareToPrefixOf("\"a b", "\"a \"b\" c\"@en"),
               ignorePunctuation ? 0 : 1);
     EXPECT_EQ(comp.compareToPrefixOf("\"a ", "\"a \"b\" c\"@en"), 0);
+    // A quote inside the prefix doesn't end it either.
+    EXPECT_EQ(comp.compareToPrefixOf("\"a \"b", "\"a \"b\" c\"@en"), 0);
+    EXPECT_EQ(comp.compareToPrefixOf("\"a \"b\" c\"", "\"a \"b\" c\"\"@en"), 0);
+    EXPECT_LT(comp.compareToPrefixOf("\"a \"b", "\"a \"c\""), 0);
+    EXPECT_GT(comp.compareToPrefixOf("\"a \"b", "\"a \"a\""), 0);
+    // Expansions are handled correctly.
+    EXPECT_EQ(comp.compareToPrefixOf("\"gros", "\"groß\"@de"), 0);
     // The datatype has to match, even if the prefix has no relevant elements.
     EXPECT_LT(comp.compareToPrefixOf("\"", "<abc>"), 0);
     EXPECT_EQ(comp.compareToPrefixOf("\"", "\"abc\""), 0);

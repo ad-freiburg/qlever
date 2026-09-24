@@ -104,11 +104,15 @@ class UnicodeVocabulary {
       return {std::nullopt, std::nullopt};
     }
 
-    auto lb = lower_bound(prefix, SortLevel::PRIMARY);
-
+    // `compareToPrefixOf` is positive for the words before the range, zero
+    // for the words in the range, and negative for the words after it.
+    auto lb = _underlyingVocabulary.lower_bound(
+        prefix, [this](std::string_view word, std::string_view p) {
+          return _comparator.compareToPrefixOf(p, word) > 0;
+        });
     auto ub = _underlyingVocabulary.upper_bound(
-        prefix, [this](std::string_view a, std::string_view b) {
-          return _comparator.compareToPrefixOf(a, b) < 0;
+        prefix, [this](std::string_view p, std::string_view word) {
+          return _comparator.compareToPrefixOf(p, word) < 0;
         });
 
     auto toOptionalIndex = [](const WordAndIndex& wi) {

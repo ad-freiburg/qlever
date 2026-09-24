@@ -21,19 +21,19 @@
 #include <unicode/tblcoll.h>
 #include <unicode/unistr.h>
 #include <unicode/unorm2.h>
-#include <unicode/utf8.h>
 #include <unicode/utypes.h>
 #endif  // QLEVER_NO_UNICODE
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
@@ -164,24 +164,41 @@ class LocaleManagerICU : public LocaleManagerBase {
     return res;
   }
 
-  // Count the collation elements of a UTF-8 encoded string that are relevant
-  // on the `PRIMARY` level. Elements with a zero primary weight and, if
-  // punctuation is ignored, variable elements (punctuation, spaces, symbols)
-  // are not counted.
-  [[nodiscard]] size_t countPrimaryCollationElements(
-      std::string_view text) const {
-    return walkPrimaryElements(text, std::numeric_limits<size_t>::max())
-        .numElements;
+  // Return true iff `text` starts with `prefix` on the `PRIMARY` level, i.e.
+  // iff the primary weights of the collation elements of `prefix` are a prefix
+  // of those of `text`. Elements that are ignored on the `PRIMARY` level don't
+  // matter. This also works for characters that expand to several elements,
+  // e.g. "groß" (g, r, o, s, s) starts with "gros".
+  [[nodiscard]] bool startsWithOnPrimaryLevel(std::string_view text,
+                                              std::string_view prefix) const {
+    PrimaryWeightIterator textIt{*this, text};
+    PrimaryWeightIterator prefixIt{*this, prefix};
+    while (auto prefixWeight = prefixIt.next()) {
+      if (textIt.next() != prefixWeight) {
+        return false;
+      }
+    }
+    return true;
   }
 
-  // Return the byte length of the longest UTF-8 prefix of `text` that contains
-  // at most `numPrimaryElements` elements in the sense of
-  // `countPrimaryCollationElements`, so trailing ignorable characters are
-  // included. If `text` has at most `numPrimaryElements` elements, returns
-  // `text.size()`.
-  [[nodiscard]] size_t primaryCollationPrefixLength(
-      std::string_view text, size_t numPrimaryElements) const {
-    return walkPrimaryElements(text, numPrimaryElements).byteOffset;
+  // Return true iff the first `numElements` collation elements of `a` and `b`
+  // that are relevant on the `PRIMARY` level have the same primary weights. If
+  // one of the strings has fewer elements, both have to have the same elements.
+  [[nodiscard]] bool haveEqualPrimaryPrefix(std::string_view a,
+                                            std::string_view b,
+                                            size_t numElements) const {
+    PrimaryWeightIterator itA{*this, a};
+    PrimaryWeightIterator itB{*this, b};
+    for (size_t i = 0; i < numElements; ++i) {
+      auto weightA = itA.next();
+      if (weightA != itB.next()) {
+        return false;
+      }
+      if (!weightA.has_value()) {
+        break;
+      }
+    }
+    return true;
   }
 
  private:
@@ -257,91 +274,70 @@ class LocaleManagerICU : public LocaleManagerBase {
     return icu::StringPiece(s.data(), static_cast<int32_t>(s.size()));
   }
 
-  // Create a `icu::CollationElementIterator` for the given UTF-8 string.
-  std::unique_ptr<icu::CollationElementIterator> makeCollationElementIterator(
-      std::string_view input) const {
-    auto& collator = *collators_[static_cast<uint8_t>(Level::PRIMARY)];
-    icu::UnicodeString ustr =
-        icu::UnicodeString::fromUTF8(toStringPiece(input));
-    return std::unique_ptr<icu::CollationElementIterator>{
-        dynamic_cast<icu::RuleBasedCollator&>(collator)
-            .createCollationElementIterator(ustr)};
-  }
+  // Yield the primary weights of the collation elements of a UTF-8 string that
+  // are relevant on the `PRIMARY` level: elements with a zero primary weight
+  // are skipped, and so are variable elements (punctuation, spaces, symbols)
+  // if punctuation is ignored.
+  class PrimaryWeightIterator {
+    std::unique_ptr<icu::CollationElementIterator> iter_;
+    // With `UCOL_SHIFTED`, all primary weights up to and including this value
+    // are ignored on the `PRIMARY` level.
+    std::optional<uint32_t> variableTop_;
+    // An element that was read ahead, but not yet processed.
+    std::optional<int32_t> lookahead_;
 
-  struct PrimaryWalkResult {
-    size_t numElements;
-    size_t byteOffset;
+    // Return the next element or `NULLORDER` at the end.
+    int32_t nextElement() {
+      if (lookahead_.has_value()) {
+        return std::exchange(lookahead_, std::nullopt).value();
+      }
+      UErrorCode err = U_ZERO_ERROR;
+      int32_t elem = iter_->next(err);
+      raise(err);
+      return elem;
+    }
+
+   public:
+    PrimaryWeightIterator(const LocaleManagerICU& locManager,
+                          std::string_view text) {
+      auto& collator = dynamic_cast<const icu::RuleBasedCollator&>(
+          *locManager.collators_[static_cast<uint8_t>(Level::PRIMARY)]);
+      iter_.reset(collator.createCollationElementIterator(
+          icu::UnicodeString::fromUTF8(toStringPiece(text))));
+      if (locManager.ignorePunctuationStatus_ == UCOL_SHIFTED) {
+        UErrorCode err = U_ZERO_ERROR;
+        variableTop_ = collator.getVariableTop(err);
+        raise(err);
+      }
+    }
+
+    // Return the next relevant primary weight or `std::nullopt` at the end.
+    std::optional<uint32_t> next() {
+      using CEI = icu::CollationElementIterator;
+      while (true) {
+        int32_t elem = nextElement();
+        if (elem == CEI::NULLORDER) {
+          return std::nullopt;
+        }
+        // The `CollationElementIterator` splits 32-bit primary weights into a
+        // first element holding the upper 16 bits and a continuation element
+        // holding the lower 16 bits. Continuations have the bits `0xC0` set in
+        // their lowest byte, which never happens for a first element.
+        uint32_t weight = static_cast<uint32_t>(CEI::primaryOrder(elem)) << 16;
+        int32_t following = nextElement();
+        if (following != CEI::NULLORDER && (following & 0xC0) == 0xC0) {
+          weight |= static_cast<uint32_t>(CEI::primaryOrder(following));
+        } else {
+          lookahead_ = following;
+        }
+        if (weight == 0 ||
+            (variableTop_.has_value() && weight <= *variableTop_)) {
+          continue;
+        }
+        return weight;
+      }
+    }
   };
-
-  // Iterate through the collation elements of `text` that are relevant on the
-  // `PRIMARY` level (see `countPrimaryCollationElements`), stopping right
-  // before the element after the first `maxCount` ones. Returns the number of
-  // elements seen and the UTF-8 byte offset where the walk stopped
-  // (`text.size()` if the string ended first).
-  [[nodiscard]] PrimaryWalkResult walkPrimaryElements(std::string_view text,
-                                                      size_t maxCount) const {
-    UErrorCode err = U_ZERO_ERROR;
-    const auto& collator = *collators_[static_cast<uint8_t>(Level::PRIMARY)];
-    // With `UCOL_SHIFTED`, elements with a primary weight up to the variable
-    // top are ignored on the `PRIMARY` level. Variable groups start and end at
-    // multiples of 2^16, so comparing the upper 16 bits (which is what the
-    // `CollationElementIterator` returns as the primary order) is exact.
-    std::optional<uint32_t> variableTop;
-    if (ignorePunctuationStatus_ == UCOL_SHIFTED) {
-      variableTop = collator.getVariableTop(err) >> 16;
-      raise(err);
-    }
-    auto iter = makeCollationElementIterator(text);
-    size_t count = 0;
-    bool previousWasVariable = false;
-    while (true) {
-      int32_t offsetBefore = iter->getOffset();
-      int32_t elem = iter->next(err);
-      raise(err);
-      if (elem == icu::CollationElementIterator::NULLORDER) {
-        break;
-      }
-      uint32_t primary = icu::CollationElementIterator::primaryOrder(elem);
-      if (primary == 0) {
-        continue;
-      }
-      // Primary weights longer than 16 bits are split into a first element
-      // and a continuation element, which has the bits `0xC0` set in its
-      // lowest byte. The continuation inherits the variable status.
-      bool isContinuation = (elem & 0xC0) == 0xC0;
-      bool isVariable =
-          isContinuation ? previousWasVariable
-                         : variableTop.has_value() && primary <= *variableTop;
-      previousWasVariable = isVariable;
-      if (isVariable) {
-        continue;
-      }
-      if (count == maxCount) {
-        return {count, utf16OffsetToUtf8ByteOffset(text, offsetBefore)};
-      }
-      ++count;
-    }
-    return {count, text.size()};
-  }
-
-  // Walk the UTF-8 bytes of `utf8String`, counting UTF-16 code units, and
-  // return the byte offset that corresponds to `utf16Offset` UTF-16 code units
-  // from the start.
-  static size_t utf16OffsetToUtf8ByteOffset(std::string_view utf8String,
-                                            int32_t utf16Offset) {
-    const char* s = utf8String.data();
-    int32_t byteIdx = 0;
-    int32_t utf16Count = 0;
-    int32_t len = static_cast<int32_t>(utf8String.size());
-    while (byteIdx < len && utf16Count < utf16Offset) {
-      UChar32 c;
-      int32_t next = byteIdx;
-      U8_NEXT(s, next, len, c);
-      utf16Count += c > 0xFFFF ? 2 : 1;
-      byteIdx = next;
-    }
-    return static_cast<size_t>(byteIdx);
-  }
 };
 
 #endif  // QLEVER_NO_UNICODE
@@ -363,14 +359,15 @@ class LocaleManagerNoICU : public LocaleManagerBase {
   }
 
   // Every byte is its own collation element.
-  [[nodiscard]] size_t countPrimaryCollationElements(
-      std::string_view text) const {
-    return text.size();
+  [[nodiscard]] bool startsWithOnPrimaryLevel(std::string_view text,
+                                              std::string_view prefix) const {
+    return ql::starts_with(text, prefix);
   }
 
-  [[nodiscard]] size_t primaryCollationPrefixLength(
-      std::string_view text, size_t numPrimaryElements) const {
-    return std::min(numPrimaryElements, text.size());
+  [[nodiscard]] bool haveEqualPrimaryPrefix(std::string_view a,
+                                            std::string_view b,
+                                            size_t numElements) const {
+    return a.substr(0, numElements) == b.substr(0, numElements);
   }
 
   // Lowercase `s`. As a preparatory step this still reuses the ICU-based

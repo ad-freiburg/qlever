@@ -401,11 +401,9 @@ void TextIndexBuilder::calculateBlockBoundariesImpl(
   // 2) shorter than the minimum prefix length
   // 3) The next word is shorter than the minimum prefix length
   // 4) word.substring(0, MIN_PREFIX_LENGTH) is different from the next.
-  // The prefix in 4) consists of the first `MIN_WORD_PREFIX_SIZE` collation
-  // elements that are relevant on the `PRIMARY` level. A character that expands
-  // to several elements is never split, so e.g. vivæ (v, i, v, a, e) and vivae
-  // end up in different blocks. This only affects efficiency, as prefix
-  // queries read all blocks that overlap with their word range.
+  // The prefix in 4) consists of the primary weights of the first
+  // `MIN_WORD_PREFIX_SIZE` collation elements that are relevant on the
+  // `PRIMARY` level, so e.g. vivæ (v, i, v, a, e) and vivae share a block.
   // A block boundary is always the last WordId in the block.
   // this way std::lower_bound will point to the correct bracket.
 
@@ -426,21 +424,15 @@ void TextIndexBuilder::calculateBlockBoundariesImpl(
   size_t numBlocks = 0;
   const auto& locManager = index.textVocab_.getLocaleManager();
 
-  auto getPrefix = [&](WordVocabIndex i) {
-    std::string_view word = index.textVocab_[i];
-    return word.substr(
-        0, locManager.primaryCollationPrefixLength(word, MIN_WORD_PREFIX_SIZE));
-  };
-  std::string_view currentPrefix = getPrefix(WordVocabIndex::make(0));
+  // The first word of the current block.
+  std::string blockStart{index.textVocab_[WordVocabIndex::make(0)]};
   for (size_t i = 0; i < index.textVocab_.size() - 1; ++i) {
-    std::string_view nextPrefix = getPrefix(WordVocabIndex::make(i + 1));
-
-    bool prefixDiffers = locManager.compare(currentPrefix, nextPrefix,
-                                            LocaleManager::Level::PRIMARY) != 0;
-    if (prefixDiffers) {
+    const auto& nextWord = index.textVocab_[WordVocabIndex::make(i + 1)];
+    if (!locManager.haveEqualPrimaryPrefix(blockStart, nextWord,
+                                           MIN_WORD_PREFIX_SIZE)) {
       blockBoundaryAction(i);
       numBlocks++;
-      currentPrefix = nextPrefix;
+      blockStart = nextWord;
     }
   }
   blockBoundaryAction(index.textVocab_.size() - 1);
