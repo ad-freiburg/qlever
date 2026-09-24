@@ -4097,8 +4097,7 @@ TEST(QueryPlanner, planningInfo) {
 
   // A path of three triples is one connected component, with six connected
   // subgraphs (three single triples, two pairs, and all three).
-  auto info =
-      planningInfo("SELECT * WHERE { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w }");
+  auto info = planningInfo("SELECT * { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w }");
   ASSERT_EQ(info.size(), 1u);
   EXPECT_EQ(info[0].algorithm_, PlanningAlgorithm::DYNAMIC_PROGRAMMING);
   EXPECT_EQ(info[0].numNodes_, 3u);
@@ -4110,7 +4109,7 @@ TEST(QueryPlanner, planningInfo) {
   // Two connected components, with a budget of one.
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(1);
-  info = planningInfo("SELECT * WHERE { ?x <p> ?y . ?y <q> ?z . ?a <r> ?b }");
+  info = planningInfo("SELECT * { ?x <p> ?y . ?y <q> ?z . ?a <r> ?b }");
   ASSERT_EQ(info.size(), 2u);
   ql::ranges::sort(info, {}, &ConnectedComponentPlanningInfo::numNodes_);
 
