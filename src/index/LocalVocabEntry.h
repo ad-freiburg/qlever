@@ -51,7 +51,7 @@ class LocalVocabContext;
 // `valueIdComparators::detail::compareIdsImpl`.
 //
 // This is deliberate for now: nothing but a unit test can currently create a
-// secondary vocabulary (see `IndexImpl::setSecondaryVocabForTesting`), so no
+// secondary vocabulary (see `IndexImpl::setSecondaryVocab`), so no
 // query is affected. It has to be fixed *before* anything else creates one,
 // most likely by keeping the position in the main vocabulary (which is what a
 // semantic comparison needs, and which can always be computed from the word)
