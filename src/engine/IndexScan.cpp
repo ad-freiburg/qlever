@@ -437,7 +437,8 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
       bool hasUpdates =
           permutation()
               .getLocatedTriplesForPermutation(locatedTriplesState())
-              .containsTriplesInBlockRange(firstBlockIndex, lastBlockIndex);
+              .containsLocatedTriplesInBlockRange(firstBlockIndex,
+                                                  lastBlockIndex);
       return {!hasUpdates, metadata->numRows_};
     }
   }

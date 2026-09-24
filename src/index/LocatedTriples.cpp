@@ -427,7 +427,7 @@ size_t LocatedTriplesPerBlock::numTriplesForTesting() const {
 }
 
 // ____________________________________________________________________________
-bool LocatedTriplesPerBlock::containsTriplesInBlockRange(
+bool LocatedTriplesPerBlock::containsLocatedTriplesInBlockRange(
     size_t firstBlockIndex, size_t lastBlockIndex) const {
   AD_CONTRACT_CHECK(firstBlockIndex <= lastBlockIndex);
   if (map_.size() < lastBlockIndex - firstBlockIndex + 1) {
