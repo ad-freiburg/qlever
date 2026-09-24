@@ -668,57 +668,6 @@ TEST(IndexTest, geoCellGridFromConfiguration) {
       ::testing::HasSubstr("Invalid value 300"));
 }
 
-// _____________________________________________________________________________
-TEST(IndexTest, blocksizePermutationsPerColumnFromConfiguration) {
-  // The block size with which the permutations of an index were written is
-  // stored in its configuration, so that permutations of that index that are
-  // written later on (a materialized view, for example) get the same blocks.
-  ad_utility::testing::TestIndexConfig config{"<a> <p> <o> . <a> <p> <o2> ."};
-  config.blocksizePermutations = 32_B;
-  auto* qec = ad_utility::testing::getQec(config);
-  const auto& base = qec->getIndex().getOnDiskBase();
-  EXPECT_EQ(qec->getIndex().blocksizePermutationsPerColumn(), 32_B);
-
-  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
-  auto loadWithConfiguration =
-      [&](const std::function<void(nlohmann::json&)>& modify) {
-        nlohmann::json configuration;
-        {
-          std::ifstream in{configFilename};
-          in >> configuration;
-        }
-        modify(configuration);
-        {
-          auto out = ad_utility::makeOfstream(configFilename);
-          out << configuration;
-        }
-        Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-        index.createFromOnDiskIndex(base, false);
-        return index.blocksizePermutationsPerColumn();
-      };
-
-  // The block size of the index build is read back.
-  EXPECT_EQ(loadWithConfiguration([](nlohmann::json&) {}), 32_B);
-  EXPECT_EQ(loadWithConfiguration([](nlohmann::json& configuration) {
-              configuration[BLOCKSIZE_PERMUTATIONS_PER_COLUMN_KEY] = 4096;
-            }),
-            4096_B);
-
-  // An index that was built before the block size was stored uses the default.
-  EXPECT_EQ(
-      loadWithConfiguration([](nlohmann::json& configuration) {
-        configuration.erase(std::string{BLOCKSIZE_PERMUTATIONS_PER_COLUMN_KEY});
-      }),
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
-
-  // A block size of zero is rejected, it would mean blocks without rows.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      loadWithConfiguration([](nlohmann::json& configuration) {
-        configuration[BLOCKSIZE_PERMUTATIONS_PER_COLUMN_KEY] = 0;
-      }),
-      ::testing::HasSubstr("Invalid value 0"));
-}
-
 // Regression test for #3191.
 TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
   ad_utility::testing::TestIndexConfig config{
