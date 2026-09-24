@@ -23,7 +23,7 @@ CPP_template(typename T, typename Func = std::function<void(T&&)>)(
   // Wrapped value.
   T value_;
   // Cleanup function. Only run once.
-  Func function_;
+  [[no_unique_address]] Func function_;
 
  public:
   // Wrap the `value` and the `function` to run on it as its cleanup. NOTE:

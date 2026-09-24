@@ -1322,6 +1322,8 @@ TEST(BufferedWriteSerializer, RoundtripWithFileSerializerViaClose) {
     writer << original;
     // `close` flushes the remaining buffered data to the file.
     writer.close();
+    // Closing again is a no-op.
+    writer.close();
   }
 
   {
