@@ -332,7 +332,10 @@ class CompressedRelationWriter {
       : outfile_{std::move(f)},
         numColumns_{numColumns},
         rowsPerBlock_{rowsPerBlock},
-        blockWriteQueue_{makeBlockWriteQueue(numWriterThreads)} {}
+        blockWriteQueue_{makeBlockWriteQueue(numWriterThreads)} {
+    AD_CONTRACT_CHECK(rowsPerBlock_ > 0,
+                      "A block must have room for at least one row");
+  }
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
   using MetadataCallback =
@@ -457,7 +460,7 @@ class CompressedRelationWriter {
   // Return the blocksize (in number of triples) of this writer. Note that the
   // actual sizes of blocks will slightly vary due to new relations starting in
   // new blocks etc.
-  size_t blocksize() const { return std::max(size_t{1}, rowsPerBlock_); }
+  size_t blocksize() const { return rowsPerBlock_; }
 
  private:
   /// Finish writing all relations which have previously been added, but might
@@ -618,7 +621,7 @@ class CompressedRelationWriter {
   friend std::pair<std::vector<CompressedBlockMetadata>,
                    std::vector<CompressedRelationMetadata>>
   compressedRelationTestWriteCompressedRelations(T inputs, std::string filename,
-                                                 size_t blocksize,
+                                                 size_t rowsPerBlock,
                                                  size_t inputBlockSize);
 
   // Create a `TaskQueue` for the compression and writing of blocks. The number

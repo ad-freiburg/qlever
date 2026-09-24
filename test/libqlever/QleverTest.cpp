@@ -95,7 +95,7 @@ TEST(LibQlever, buildIndexAndRunQuery) {
   {
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.createFromOnDiskIndex(c.baseName_, false);
-    EXPECT_EQ(index.rowsPerBlock(), 8u);
+    EXPECT_EQ(index.rowsPerBlock(), 8);
   }
 
   {

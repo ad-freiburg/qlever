@@ -598,7 +598,7 @@ TEST(IndexTest, indexRowsPerBlockFromConfiguration) {
   config.rowsPerBlock = 4;
   auto* qec = ad_utility::testing::getQec(config);
   const auto& base = qec->getIndex().getOnDiskBase();
-  EXPECT_EQ(qec->getIndex().rowsPerBlock(), 4u);
+  EXPECT_EQ(qec->getIndex().rowsPerBlock(), 4);
   {
     nlohmann::json configuration;
     std::ifstream in{absl::StrCat(base, CONFIGURATION_FILE)};
@@ -625,11 +625,11 @@ TEST(IndexTest, indexRowsPerBlockFromConfiguration) {
       };
 
   // The block size of the index build is read back.
-  EXPECT_EQ(loadWithConfiguration([](nlohmann::json&) {}), 4u);
+  EXPECT_EQ(loadWithConfiguration([](nlohmann::json&) {}), 4);
   EXPECT_EQ(loadWithConfiguration([](nlohmann::json& configuration) {
               configuration[INDEX_ROWS_PER_BLOCK_KEY] = 512;
             }),
-            512u);
+            512);
 
   // An index that was built before the block size was stored uses the default.
   EXPECT_EQ(loadWithConfiguration([](nlohmann::json& configuration) {

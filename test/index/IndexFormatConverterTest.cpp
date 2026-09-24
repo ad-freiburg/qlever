@@ -899,13 +899,11 @@ TEST_F(MultiBlockIndexFormatConverterTest, indexWithoutRowsPerBlock) {
   // large with the block size of two triples per block of the tests (see
   // `relationWithItsOwnMetadata` above), is small and the whole `SPO`
   // permutation is a single block.
-  std::string turtle =
-      "<http://example.org/big> <http://example.org/p> <http://example.org/o1> "
-      ".\n"
-      "<http://example.org/big> <http://example.org/p> <http://example.org/o2> "
-      ".\n"
-      "<http://example.org/small> <http://example.org/p> "
-      "<http://example.org/o1> .\n";
+  std::string turtle = R"(
+<http://example.org/big> <http://example.org/p> <http://example.org/o1> .
+<http://example.org/big> <http://example.org/p> <http://example.org/o2> .
+<http://example.org/small> <http://example.org/p> <http://example.org/o1> .
+)";
   ad_utility::testing::makeTestIndex(
       oldBasename_, ad_utility::testing::TestIndexConfig{turtle});
   pretendThatTheIndexIsInThePreviousFormat();
