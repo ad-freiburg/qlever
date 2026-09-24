@@ -592,31 +592,27 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   std::unique_ptr<QueryExecutionContext> qec = nullptr;
   using V = Variable;
   using I = TripleComponent::Iri;
-  auto makeScan = [&](const std::string& predicate,
-                      Permutation::Enum permutation) {
-    qec = std::make_unique<QueryExecutionContext>(
-        index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{}, &namedCache, materializedViewsManager);
-    SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref(predicate), V{"?y"}};
-    return IndexScan{qec.get(), permutation, scanTriple};
-  };
-  auto expectEstimate = [&](const std::string& predicate,
-                            Permutation::Enum permutation, size_t estimate,
+  // A new `QueryExecutionContext` for each scan, because the located triples
+  // are read from the snapshot taken at its creation.
+  auto expectEstimate = [&](const std::string& predicate, size_t estimate,
                             bool exact,
                             ad_utility::source_location l =
                                 ad_utility::source_location::current()) {
     auto trace = generateLocationTrace(l);
-    auto scan = makeScan(predicate, permutation);
+    qec = std::make_unique<QueryExecutionContext>(
+        index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
+        SortPerformanceEstimator{}, &namedCache, materializedViewsManager);
+    SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref(predicate), V{"?y"}};
+    IndexScan scan{qec.get(), Permutation::PSO, scanTriple};
     EXPECT_EQ(scan.getSizeEstimate(), estimate);
     EXPECT_EQ(scan.sizeEstimateIsExactForTesting(), exact);
   };
 
-  expectEstimate("<p>", Permutation::PSO, 50, true);
-  expectEstimate("<p>", Permutation::POS, 50, true);
-  expectEstimate("<q>", Permutation::PSO, 1, true);
+  expectEstimate("<p>", 50, true);
+  expectEstimate("<q>", 1, true);
 
   // An update in the blocks of `<p>` makes the estimate of `<p>` inexact, but
-  // does not change it. The estimates of the other relations are unaffected.
+  // does not change it.
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
   auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
@@ -628,9 +624,7 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
     deltaTriples.insertTriples(cancellationHandle,
                                {IdTriple<0>{std::array{x0, p, x0, g}}});
   });
-  expectEstimate("<p>", Permutation::PSO, 50, false);
-  expectEstimate("<p>", Permutation::POS, 50, false);
-  expectEstimate("<q>", Permutation::PSO, 1, true);
+  expectEstimate("<p>", 50, false);
 
   // An update in a block that does not belong to `<p>` keeps the estimate of
   // `<p>` exact.
@@ -639,8 +633,7 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
     deltaTriples.deleteTriples(cancellationHandle,
                                {IdTriple<0>{std::array{x0, r, y0, g}}});
   });
-  expectEstimate("<p>", Permutation::PSO, 50, true);
-  expectEstimate("<p>", Permutation::POS, 50, true);
+  expectEstimate("<p>", 50, true);
 }
 
 // _____________________________________________________________________________

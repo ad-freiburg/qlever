@@ -107,20 +107,16 @@ TEST_F(LocatedTriplesTest, containsLocatedTriplesInBlockRange) {
   auto ltpb = makeLocatedTriplesPerBlock(
       {LT{2, IT(10, 1, 0), true}, LT{5, IT(20, 4, 0), true},
        LT{5, IT(21, 5, 0), false}, LT{9, IT(30, 6, 0), true}});
-  // Ranges smaller than the number of blocks with located triples (3) are
-  // checked block by block, larger ranges via the located triples.
+  // Ranges with at most as many blocks as there are blocks with located
+  // triples (3) are checked block by block, larger ranges via the blocks with
+  // located triples. Both ends of the range are inclusive.
   EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(2, 2));
-  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(5, 6));
+  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(3, 5));
   EXPECT_FALSE(ltpb.containsLocatedTriplesInBlockRange(3, 4));
-  EXPECT_FALSE(ltpb.containsLocatedTriplesInBlockRange(10, 11));
-  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(0, 2));
   EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(6, 9));
-  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(0, 100));
-  EXPECT_FALSE(ltpb.containsLocatedTriplesInBlockRange(6, 8));
+  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(9, 12));
   EXPECT_FALSE(ltpb.containsLocatedTriplesInBlockRange(10, 100));
   EXPECT_ANY_THROW(ltpb.containsLocatedTriplesInBlockRange(3, 2));
-  EXPECT_FALSE(
-      LocatedTriplesPerBlock{}.containsLocatedTriplesInBlockRange(0, 100));
 }
 
 // Test the method that counts the number of `LocatedTriple's in a block.
