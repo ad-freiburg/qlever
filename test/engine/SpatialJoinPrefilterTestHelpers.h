@@ -264,11 +264,11 @@ inline void runParsingAndSweeper(
                                        result.idTableView().at(i, leftCol),
                                        result.idTableView().at(i, rightCol), 0);
     }
-    if (spatialJoin->runtimeInfo().details_.contains(
-            "num-geoms-dropped-by-prefilter")) {
-      testResult.numElementsSkippedByPrefilter_ =
-          static_cast<size_t>(spatialJoin->runtimeInfo()
-                                  .details_["num-geoms-dropped-by-prefilter"]);
+    auto& details = spatialJoin->runtimeInfo().details_;
+    if (details.contains("num-geoms-after-block-prefilter")) {
+      testResult.numElementsSkippedByPrefilter_ = static_cast<size_t>(
+          details["num-geoms-after-block-prefilter"].get<int64_t>() -
+          details["num-geoms-after-bbox-prefilter"].get<int64_t>());
     }
     return;
   }
