@@ -146,13 +146,20 @@ class RuntimeInformation {
                                 const nlohmann::json& value);
 };
 
+// The two algorithms of the query planner for a connected component of a query
+// graph.
+enum class PlanningAlgorithm { GREEDY, DYNAMIC_PROGRAMMING };
+NLOHMANN_JSON_SERIALIZE_ENUM(PlanningAlgorithm,
+                             {{PlanningAlgorithm::GREEDY, "greedy"},
+                              {PlanningAlgorithm::DYNAMIC_PROGRAMMING,
+                               "dynamic-programming"}})
+
 // How the query planner planned one connected component of a query graph, that
 // is, of a set of triples (and filters) of one group graph pattern that are
 // connected by shared variables.
 struct ConnectedComponentPlanningInfo {
-  // Whether the greedy planner was used, and not the one based on dynamic
-  // programming.
-  bool greedy_ = false;
+  // The algorithm that planned the component.
+  PlanningAlgorithm algorithm_ = PlanningAlgorithm::DYNAMIC_PROGRAMMING;
   // The number of nodes of the component. A node is a triple, or an operation
   // like a text search that the planner treats like a triple.
   size_t numNodes_ = 0;

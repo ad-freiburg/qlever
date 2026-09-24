@@ -245,7 +245,8 @@ TEST_F(OperationTestFixture, updatesCarryInformationAboutTheQueryPlanning) {
   // as in the `application/qlever-results+json` format.
   QueryPlanningInfo queryPlanningInfo;
   queryPlanningInfo.timeQueryPlanning = std::chrono::milliseconds{17};
-  queryPlanningInfo.queryPlanning.push_back({false, 3, 6, 1500, 42});
+  queryPlanningInfo.queryPlanning.push_back(
+      {PlanningAlgorithm::DYNAMIC_PROGRAMMING, 3, 6, 1500, 42});
   qec.setQueryPlanningInfo(queryPlanningInfo);
   jsonHistory.clear();
   qec.clearCacheUnpinnedOnly();

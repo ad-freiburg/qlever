@@ -247,8 +247,9 @@ TEST(RuntimeInformation, queryPlanningInfoToJson) {
   // With two connected components, one planned with dynamic programming and one
   // greedily.
   qpi.timeQueryPlanning = std::chrono::milliseconds{12};
-  qpi.queryPlanning.push_back({false, 3, 6, 1500, 42});
-  qpi.queryPlanning.push_back({true, 20, 1501, 1500, 380});
+  qpi.queryPlanning.push_back(
+      {PlanningAlgorithm::DYNAMIC_PROGRAMMING, 3, 6, 1500, 42});
+  qpi.queryPlanning.push_back({PlanningAlgorithm::GREEDY, 20, 1501, 1500, 380});
   auto expected = nlohmann::ordered_json::parse(R"({
     "time_query_planning": 12,
     "query_planning": [

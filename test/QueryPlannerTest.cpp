@@ -4100,7 +4100,7 @@ TEST(QueryPlanner, planningInfo) {
   auto info =
       planningInfo("SELECT * WHERE { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w }");
   ASSERT_EQ(info.size(), 1u);
-  EXPECT_FALSE(info[0].greedy_);
+  EXPECT_EQ(info[0].algorithm_, PlanningAlgorithm::DYNAMIC_PROGRAMMING);
   EXPECT_EQ(info[0].numNodes_, 3u);
   EXPECT_EQ(info[0].numConnectedSubgraphs_, 6u);
   EXPECT_EQ(info[0].budget_,
@@ -4116,7 +4116,7 @@ TEST(QueryPlanner, planningInfo) {
 
   // The component with a single triple has one connected subgraph and needs no
   // joins.
-  EXPECT_FALSE(info[0].greedy_);
+  EXPECT_EQ(info[0].algorithm_, PlanningAlgorithm::DYNAMIC_PROGRAMMING);
   EXPECT_EQ(info[0].numNodes_, 1u);
   EXPECT_EQ(info[0].numConnectedSubgraphs_, 1u);
   EXPECT_EQ(info[0].numCandidatePlans_, 0u);
@@ -4124,7 +4124,7 @@ TEST(QueryPlanner, planningInfo) {
   // The component with two triples has three connected subgraphs, of which
   // only two are counted (the counting stops at the budget plus one), so it is
   // planned greedily.
-  EXPECT_TRUE(info[1].greedy_);
+  EXPECT_EQ(info[1].algorithm_, PlanningAlgorithm::GREEDY);
   EXPECT_EQ(info[1].numNodes_, 2u);
   EXPECT_EQ(info[1].numConnectedSubgraphs_, 2u);
   EXPECT_EQ(info[1].budget_, 1u);

@@ -229,7 +229,7 @@ void to_json(nlohmann::ordered_json& j, const QueryPlanningInfo& qpi) {
 void to_json(nlohmann::ordered_json& j,
              const ConnectedComponentPlanningInfo& info) {
   j = nlohmann::ordered_json{
-      {"algorithm", info.greedy_ ? "greedy" : "dynamic-programming"},
+      {"algorithm", info.algorithm_},
       {"num_nodes", info.numNodes_},
       {"num_connected_subgraphs", info.numConnectedSubgraphs_},
       {"budget", info.budget_},

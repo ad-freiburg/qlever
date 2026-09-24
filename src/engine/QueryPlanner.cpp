@@ -1905,7 +1905,9 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
                               filtersAndOptSubstitutes, textLimitVec, tg,
                               std::move(applicableReplacementPlans)));
     planningInfo_.push_back(ConnectedComponentPlanningInfo{
-        useGreedyPlanning, static_cast<size_t>(absl::popcount(coveredNodes)),
+        useGreedyPlanning ? PlanningAlgorithm::GREEDY
+                          : PlanningAlgorithm::DYNAMIC_PROGRAMMING,
+        static_cast<size_t>(absl::popcount(coveredNodes)),
         numConnectedSubgraphs, budget,
         numCandidatePlans_ - numCandidatePlansBefore});
     lastDpRowFromComponents.push_back(std::move(lastDpRow));
