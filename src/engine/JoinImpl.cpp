@@ -306,7 +306,7 @@ void JoinImpl::computeSizeEstimateAndMultiplicities() {
 // ______________________________________________________________________________
 
 void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
-                    IdTable* result) const {
+                    IdTable* result, bool joinColumnsAreBitComparable) const {
   AD_LOG_DEBUG << "Performing join between two tables.\n";
   AD_LOG_DEBUG << "A: width = " << a.numColumns() << ", size = " << a.size()
                << "\n";
@@ -332,6 +332,16 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
                  beginRight = joinColumnR.begin(),
                  &rowAdder](const auto& itLeft, const auto& itRight) {
     rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
+  };
+  // Run emitter for the fast path below, using the same `addRow`/`addRows`.
+  auto emitRun = [&rowAdder](size_t iBegin, size_t iEnd, size_t jBegin,
+                             size_t jEnd) {
+    if (iEnd - iBegin == 1 && jEnd - jBegin == 1) {
+      rowAdder.addRow(iBegin, jBegin);
+    } else {
+      rowAdder.addRows(ql::views::iota(iBegin, iEnd),
+                       ql::views::iota(jBegin, jEnd));
+    }
   };
 
   // The UNDEF values are right at the start, so this calculation works.
@@ -368,8 +378,16 @@ void JoinImpl::join(const IdTableView<0>& a, const IdTableView<0>& b,
       return ad_utility::IteratorRange{undefRangeB.first, undefRangeB.second};
     };
 
-    auto numOutOfOrder = [&]() {
+    auto numOutOfOrder = [&]() -> size_t {
       if (numUndefB == 0 && numUndefA == 0) {
+        bool useBitComparison =
+            joinColumnsAreBitComparable &&
+            getRuntimeParameter<&RuntimeParameters::enableJoinBitComparison_>();
+        if (useBitComparison) {
+          ad_utility::zipperJoinWithoutUndefOrLocalVocab(
+              joinColumnL, joinColumnR, emitRun, cancellationCallback);
+          return 0;  // no UNDEF, so the output is sorted
+        }
         return ad_utility::zipperJoinWithUndef(
             joinColumnL, joinColumnR, ql::ranges::less{}, addRow,
             ad_utility::noop, ad_utility::noop, {}, cancellationCallback);
@@ -710,7 +728,11 @@ Result JoinImpl::computeResultForTwoMaterializedInputs(
     std::shared_ptr<const Result> leftRes,
     std::shared_ptr<const Result> rightRes) const {
   IdTable idTable{getResultWidth(), allocator()};
-  join(leftRes->idTableView(), rightRes->idTableView(), &idTable);
+  // Empty local vocabs -> no `LocalVocabIndex` -> bitwise comparable.
+  bool bitComparable =
+      leftRes->localVocab().empty() && rightRes->localVocab().empty();
+  join(leftRes->idTableView(), rightRes->idTableView(), &idTable,
+       bitComparable);
   checkCancellation();
 
   return {std::move(idTable), resultSortedOn(),
