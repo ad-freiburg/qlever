@@ -874,14 +874,19 @@ bool Operation::isDeterministic() const {
 }
 
 // _____________________________________________________________________________
-bool Operation::coversVariables(
-    const std::vector<const Variable*>& variables) const {
+bool Operation::isVariableAlwaysDefined(const Variable& variable) const {
   const auto& varToCol = getExternallyVisibleVariableColumns();
-  return ql::ranges::all_of(variables, [&varToCol](const auto v) {
-    return varToCol.contains(*v) &&
-           varToCol.at(*v).mightContainUndef_ ==
-               ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
-  });
+  auto it = varToCol.find(variable);
+  return it != varToCol.end() &&
+         it->second.mightContainUndef_ ==
+             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+}
+
+// _____________________________________________________________________________
+bool Operation::areVariablesAlwaysDefined(
+    const std::vector<const Variable*>& variables) const {
+  return ql::ranges::all_of(
+      variables, [this](const auto v) { return isVariableAlwaysDefined(*v); });
 }
 
 // _____________________________________________________________________________

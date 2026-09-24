@@ -312,9 +312,16 @@ class Operation {
     return false;
   }
 
-  // Check whether all variables given are covered by this `Operation` and are
-  // always defined.
-  bool coversVariables(const std::vector<const Variable*>& variables) const;
+  // Check whether the given variable is part of the result of this `Operation`
+  // and is always defined (that is, it is never UNDEF in the result). Note the
+  // difference to `QueryExecutionTree::containsVariable`, which only checks for
+  // the presence of the variable, no matter whether it might be UNDEF.
+  bool isVariableAlwaysDefined(const Variable& variable) const;
+
+  // Check whether all the given variables are part of the result of this
+  // `Operation` and are always defined.
+  bool areVariablesAlwaysDefined(
+      const std::vector<const Variable*>& variables) const;
 
   // See the member variable with the same name below for documentation.
   std::optional<std::shared_ptr<const Result>>&

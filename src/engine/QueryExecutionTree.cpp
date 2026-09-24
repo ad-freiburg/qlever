@@ -154,7 +154,7 @@ bool QueryExecutionTree::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-bool QueryExecutionTree::isVariableCovered(Variable variable) const {
+bool QueryExecutionTree::containsVariable(Variable variable) const {
   return getVariableColumns().contains(variable);
 }
 
