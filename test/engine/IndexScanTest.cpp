@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -561,6 +562,48 @@ TEST(IndexScan, getResultSizeOfScan) {
     auto res = scan.computeResultOnlyForTesting();
     ASSERT_EQ(res.idTableView().numRows(), 0);
     ASSERT_EQ(res.idTableView().numColumns(), 0);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
+  }
+}
+
+// _____________________________________________________________________________
+// For a scan with a fixed first column and two variables, the size estimate
+// of a large relation (one that has its own entry in the per-relation
+// metadata) is taken from that metadata and not from the block metadata.
+TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
+  // With a block size of 16 bytes, `<p>` is stored in blocks of its own and
+  // `<q>` in a block shared with other small relations.
+  std::string kg;
+  for (size_t i = 0; i < 50; ++i) {
+    kg += absl::StrCat("<x", i, "> <p> <y", i, "> . ");
+  }
+  kg += "<x0> <q> <y0> .";
+  TestIndexConfig config{kg};
+  config.blocksizePermutations = 16_B;
+  auto qec = getQec(std::move(config));
+  auto getId = makeGetId(qec->getIndex());
+  const auto& pso = qec->getIndex().getImpl().getPermutation(Permutation::PSO);
+  ASSERT_TRUE(pso.metaData().getMetaDataIfPresent(getId("<p>")).has_value());
+  ASSERT_FALSE(pso.metaData().getMetaDataIfPresent(getId("<q>")).has_value());
+
+  using V = Variable;
+  using I = TripleComponent::Iri;
+  {
+    SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<p>"), V{"?y"}};
+    IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 50);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
+  }
+  {
+    SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<q>"), V{"?y"}};
+    IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 1);
+    EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
+  }
+  {
+    SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<p>"), V{"?y"}};
+    IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 50);
     EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
 }
