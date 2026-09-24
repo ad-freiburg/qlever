@@ -194,6 +194,11 @@ int main(int argc, char** argv) {
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
+  // NOTE: Not parsed into `config.indexRowsPerBlock_` directly, because
+  // `boost::program_options` cannot parse a `std::optional<size_t>` (see the
+  // `validate` functions in `util/ProgramOptionsHelpers.h`). `NonNegative` also
+  // rejects a negative value right away.
+  std::optional<ad_utility::NonNegative> indexRowsPerBlock;
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 1;
 
@@ -327,7 +332,7 @@ int main(int argc, char** argv) {
       "that the server uses the same block size when it writes sorted lists "
       "(for example, for a materialized view). Default: ",
       DEFAULT_INDEX_ROWS_PER_BLOCK, ".");
-  add("index-rows-per-block", po::value(&config.indexRowsPerBlock_),
+  add("index-rows-per-block", po::value(&indexRowsPerBlock),
       rowsPerBlockDescription.c_str());
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
@@ -400,6 +405,9 @@ int main(int argc, char** argv) {
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
+    if (indexRowsPerBlock.has_value()) {
+      config.indexRowsPerBlock_ = indexRowsPerBlock.value();
+    }
     config.validate();
     // For index building, use more threads for writing permutations than the
     // default (which is optimized for `rebuild-index`, where six permutations
