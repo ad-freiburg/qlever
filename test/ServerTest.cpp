@@ -578,12 +578,15 @@ TEST(ServerTest, setIndexAndTextDescription) {
     EXPECT_THAT(body.value().at(jsonKey), testing::Eq(newName));
   };
 
-  expectDescriptionSettable("index-description", "new-kb-name", "name-index");
-  EXPECT_THAT(server.getIndex().getKbName(), testing::Eq("new-kb-name"));
+  expectDescriptionSettable("index-description", "new-index-description",
+                            "index-description");
+  EXPECT_THAT(server.getIndex().getIndexDescription(),
+              testing::Eq("new-index-description"));
 
-  expectDescriptionSettable("text-description", "new-text-name",
-                            "name-text-index");
-  EXPECT_THAT(server.getIndex().getTextName(), testing::Eq("new-text-name"));
+  expectDescriptionSettable("text-description", "new-text-description",
+                            "text-description");
+  EXPECT_THAT(server.getIndex().getTextIndexDescription(),
+              testing::Eq("new-text-description"));
 }
 
 // _____________________________________________________________________________

@@ -305,11 +305,11 @@ TEST(IndexBuilderConfig, validate) {
 TEST(LibQlever, indexAndTextDescription) {
   EngineConfig ec = buildTestIndex("<s> <p> <o> .");
   ec.indexDescription_ = "Some dataset, version 42";
-  ec.textDescription_ = "Some text";
+  ec.textIndexDescription_ = "Some text";
   Qlever engine{ec};
   const auto& index = engine.indexAndViewsSnapshot()->index_;
-  EXPECT_EQ(index.getKbName(), "Some dataset, version 42");
-  EXPECT_EQ(index.getTextName(), "Some text");
+  EXPECT_EQ(index.getIndexDescription(), "Some dataset, version 42");
+  EXPECT_EQ(index.getTextIndexDescription(), "Some text");
 }
 
 // _____________________________________________________________________________
@@ -320,10 +320,10 @@ TEST(LibQlever, loadIndexWithoutPermutations) {
   ec.doNotLoadPermutations_ = true;
   Qlever engine{ec};
 
-  // Test that the `setKbName` function silently does nothing, if we have no
-  // index.
-  EXPECT_NO_THROW(
-      engine.indexAndViewsSnapshot()->index_.setKbName("we have no triples!"));
+  // Test that the `setIndexDescription` function silently does nothing, if we
+  // have no index.
+  EXPECT_NO_THROW(engine.indexAndViewsSnapshot()->index_.setIndexDescription(
+      "we have no triples!"));
 
   // Run a query that doesn't need to access permutations (constant expression).
   std::string query = "SELECT (3 + 5 AS ?result) {}";

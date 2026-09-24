@@ -20,7 +20,10 @@ namespace responseJson {
 // _____________________________________________________________________________
 json composeIndexStats(const Index& index) {
   json result;
-  result["name-index"] = index.getKbName();
+  result["index-description"] = index.getIndexDescription();
+  // The old name of the previous field, kept for a transitional period (the
+  // QLever UI reads it).
+  result["name-index"] = index.getIndexDescription();
   result["git-hash-index"] = index.getGitShortHash();
   result["git-hash-server"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
@@ -39,7 +42,9 @@ json composeIndexStats(const Index& index) {
   auto numTriples = index.numTriples();
   result["num-triples-normal"] = numTriples.normal;
   result["num-triples-internal"] = numTriples.internal;
-  result["name-text-index"] = index.getTextName();
+  result["text-description"] = index.getTextIndexDescription();
+  // The old name of the previous field, see above.
+  result["name-text-index"] = index.getTextIndexDescription();
   result["num-text-records"] = index.getNofTextRecords();
   result["num-word-occurrences"] = index.getNofWordPostings();
   result["num-entity-occurrences"] = index.getNofEntityPostings();
