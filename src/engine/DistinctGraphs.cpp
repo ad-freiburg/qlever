@@ -17,7 +17,7 @@
 #include "engine/Result.h"
 #include "engine/Values.h"
 #include "global/Constants.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
