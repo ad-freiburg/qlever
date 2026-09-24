@@ -74,10 +74,10 @@ TEST(LocaleManagerTest, StartsWithOnPrimaryLevel) {
   LocaleManager loc("en", "US", false);
   EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", ""));
   EXPECT_TRUE(loc.startsWithOnPrimaryLevel("", ""));
-  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "hel"));
-  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "HEL"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "hell"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "HELL"));
   EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "hello"));
-  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("héllo", "hel"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("héllo", "hell"));
   EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello", "hé"));
   EXPECT_FALSE(loc.startsWithOnPrimaryLevel("hello", "help"));
   EXPECT_FALSE(loc.startsWithOnPrimaryLevel("he", "hello"));
@@ -91,7 +91,7 @@ TEST(LocaleManagerTest, StartsWithOnPrimaryLevel) {
   EXPECT_FALSE(loc.startsWithOnPrimaryLevel("vivæ", "vivb"));
 
   // Characters without a primary weight (here a combining acute accent).
-  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("cafe\xcc\x81s", "caf\xc3\xa9"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("cafe\xcc\x81s", "café"));
   EXPECT_TRUE(loc.startsWithOnPrimaryLevel("cafes", "cafe\xcc\x81"));
 
   // Punctuation is relevant if it is not ignored.
@@ -116,7 +116,7 @@ TEST(LocaleManagerTest, StartsWithOnPrimaryLevelIgnorePunctuation) {
   EXPECT_TRUE(loc.startsWithOnPrimaryLevel("ab", "a."));
   EXPECT_TRUE(loc.startsWithOnPrimaryLevel("abc", "..."));
   EXPECT_TRUE(loc.startsWithOnPrimaryLevel("", "\"<@ "));
-  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello world", "hellow"));
+  EXPECT_TRUE(loc.startsWithOnPrimaryLevel("hello world", "hellowo"));
   EXPECT_FALSE(loc.startsWithOnPrimaryLevel("a.c", "ab"));
   EXPECT_FALSE(loc.startsWithOnPrimaryLevel("...", "a"));
 }
