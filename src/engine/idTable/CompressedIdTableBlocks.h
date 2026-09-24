@@ -25,7 +25,10 @@
 // `CompressedIdTableBlockStorage.h`), which spills the output blocks of the
 // parallel merge to disk. It lives in a header of its own, because it is the
 // part of that storage that is purely about bytes and can hence be read and
-// tested without any of the asynchronous machinery.
+// tested without any of the asynchronous machinery. `Id` columns are packed
+// via `packIdColumnToBytes`/`unpackBytesToIdColumn` (see `IdColumnByteIO.h`),
+// not via `.data()`/`sizeof(Id)`, since they are non-contiguous split-column
+// storage (see `IdColumn.h`).
 //
 // NOTE: The `CompressedExternalIdTableWriter` (see
 // `CompressedExternalIdTable.h`) stores its blocks in a very similar way, but

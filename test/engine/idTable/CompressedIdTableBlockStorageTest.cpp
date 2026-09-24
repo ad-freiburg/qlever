@@ -703,7 +703,9 @@ TEST(CompressedIdTableBlockStorage, theUncompressedSpillFileHasTheExactSize) {
   // NOTE: This has to be checked before the blocks are consumed, because
   // handing out the end-of-chunk sentinel deletes the file of that chunk, see
   // `aFinishedChunkReclaimsItsSpillFile`.
-  EXPECT_EQ(ql::filesystem::file_size(filename), 4 * numColumns * sizeof(Id));
+  EXPECT_EQ(
+      ql::filesystem::file_size(filename),
+      4 * numColumns * columnBasedIdTable::BYTES_PER_ID_COLUMN_ENTRY);
   GetOutcomes gets;
   runAndPoll(ioContext, [&] { get(storage, 0, gets, true); });
   EXPECT_THAT(gets.blocks_,

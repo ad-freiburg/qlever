@@ -12,6 +12,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/Serializer/SerializeString.h"
@@ -165,7 +166,12 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
         "also occur if SPARQL UPDATE operations have been performed on the "
         "index before creating the named cached result.");
     AD_CORRECTNESS_CHECK(ql::ranges::size(col) == resultView.numRows());
-    ad_utility::detail::serializeIds(serializer, col);
+    // Packed directly (not via `ad_utility::detail::serializeIds`, whose
+    // dispatch on a contiguous `Range` would pick a different wire format):
+    // the read side (`deserializeIds(..., IdColumn)` below) always unpacks
+    // via `unpackBytesToIdColumn`, regardless of whether `col` here is a
+    // genuine `IdColumn`/`ConstIdColumn` or a replaced `std::vector<Id>`.
+    serializer << columnBasedIdTable::packIdColumnToBytes(col);
   }
 
   // Serialize the `VariableToColumnMap` deterministically, see

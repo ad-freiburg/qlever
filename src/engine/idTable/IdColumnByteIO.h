@@ -7,6 +7,7 @@
 #include <cstring>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "engine/idTable/IdColumn.h"
 #include "global/Id.h"
 #include "util/Exception.h"
@@ -19,16 +20,20 @@ namespace columnBasedIdTable {
 inline constexpr size_t BYTES_PER_ID_COLUMN_ENTRY =
     sizeof(uint64_t) + sizeof(uint8_t);
 
-// Pack `column` into a buffer of `column.size() * BYTES_PER_ID_COLUMN_ENTRY`
+// Pack `column` (any range of `Id`, `IdRef`, or `ConstIdRef` -- an
+// `IdColumn`/`ConstIdColumn`, but also a plain `std::vector<Id>`/
+// `ql::span<Id>`) into a buffer of `column.size() * BYTES_PER_ID_COLUMN_ENTRY`
 // bytes: datatype byte then payload word per entry (native byte order),
 // matching `ValueIdBitRepresentation`'s field order and every
 // `Id::fromBits({datatype, payload})` call site. Replaces what used to be a
 // plain `Id*`/`sizeof(Id)` byte range, e.g. as compression input.
-inline std::vector<char> packIdColumnToBytes(const ConstIdColumn& column) {
-  std::vector<char> result(column.size() * BYTES_PER_ID_COLUMN_ENTRY);
+template <typename Range>
+inline std::vector<char> packIdColumnToBytes(const Range& column) {
+  std::vector<char> result(ql::ranges::size(column) *
+                           BYTES_PER_ID_COLUMN_ENTRY);
   char* out = result.data();
-  for (ConstIdRef ref : column) {
-    auto bits = ref.getBits();
+  for (const auto& element : column) {
+    auto bits = element.getBits();
     std::memcpy(out, &bits.datatype_, sizeof(bits.datatype_));
     out += sizeof(bits.datatype_);
     std::memcpy(out, &bits.payload_, sizeof(bits.payload_));
