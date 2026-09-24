@@ -86,7 +86,18 @@ TEST(LibQlever, buildIndexAndRunQuery) {
   // Test materialized views to be written at index build time.
   c.writeMaterializedViews_ = {{"demoView", "SELECT ?s { ?s <p> <o> }"}};
 
+  // A non-default block size of the permutations, which the index records so
+  // that it is also used when further permutations of it are written.
+  c.indexRowsPerBlock_ = 8;
+
   EXPECT_NO_THROW(Qlever::buildIndex(c));
+
+  {
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.createFromOnDiskIndex(c.baseName_, false);
+    EXPECT_EQ(index.blocksizePermutationsPerColumn(),
+              ad_utility::MemorySize::bytes(8 * sizeof(Id)));
+  }
 
   {
     EngineConfig ec{c};
@@ -263,6 +274,12 @@ TEST(IndexBuilderConfig, validate) {
   c = IndexBuilderConfig{};
   c.numThreads_ = 0;
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be at least 1"));
+
+  c = IndexBuilderConfig{};
+  c.indexRowsPerBlock_ = 0;
+  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be at least 1"));
+  c.indexRowsPerBlock_ = 128;
+  EXPECT_NO_THROW(c.validate());
 
   c = IndexBuilderConfig{};
   c.wordsfile_ = "blibb";

@@ -308,6 +308,15 @@ int main(int argc, char** argv) {
   add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
+  add("index-rows-per-block", po::value(&config.indexRowsPerBlock_),
+      "The number of rows of one block of the permutations (and of the other "
+      "sorted lists of the index, like materialized views). Index scans "
+      "always read whole blocks, so a smaller value makes selective scans "
+      "read fewer rows, at the price of more block metadata (which is held in "
+      "RAM) and a slightly larger index. The value is stored in the index, so "
+      "that the server uses the same block size when it writes sorted lists "
+      "(for example, for a materialized view). Default: 31250 (250 kB per "
+      "column).");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),

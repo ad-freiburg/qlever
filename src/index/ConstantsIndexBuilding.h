@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "util/MemorySize/MemorySize.h"
 
@@ -104,6 +105,15 @@ constexpr inline size_t VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE = 3;
 constexpr inline ad_utility::MemorySize
     UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN =
         ad_utility::MemorySize::kilobytes(250);
+
+// The key under which the block size above is stored in the configuration of
+// an index (`meta-data.json`), as the number of rows per block (the size per
+// column divided by `sizeof(Id)`). It is stored because an index can be built
+// with a non-default block size, and everything that writes sorted lists of an
+// existing index afterwards has to use the block size of that index. Indexes
+// built before this key existed simply use the default.
+constexpr inline std::string_view INDEX_ROWS_PER_BLOCK_KEY =
+    "index-rows-per-block";
 
 constexpr inline size_t NumColumnsIndexBuilding = 4;
 

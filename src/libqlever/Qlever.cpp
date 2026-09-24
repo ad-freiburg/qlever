@@ -145,6 +145,10 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   if (config.parserBufferSize_.has_value()) {
     index.parserBufferSize() = config.parserBufferSize_.value();
   }
+  if (config.indexRowsPerBlock_.has_value()) {
+    index.blocksizePermutationsPerColumn() = ad_utility::MemorySize::bytes(
+        config.indexRowsPerBlock_.value() * sizeof(Id));
+  }
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
@@ -418,6 +422,11 @@ void IndexBuilderConfig::validate() const {
     throw std::invalid_argument(
         "The number of threads for the index build (`num-threads`) must be at "
         "least 1");
+  }
+  if (indexRowsPerBlock_.has_value() && indexRowsPerBlock_.value() == 0) {
+    throw std::invalid_argument(
+        "The number of rows per block of the index (`index-rows-per-block`) "
+        "must be at least 1");
   }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");
