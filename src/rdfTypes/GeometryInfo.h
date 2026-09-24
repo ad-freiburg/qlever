@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <string>
 #include <string_view>
 
@@ -247,6 +248,14 @@ class GeometryInfo {
   // Parse an arbitrary WKT literal and compute only the length in meters.
   static std::optional<MetricLength> getMetricLength(
       const std::string_view& wkt);
+
+  // Return a copy of this object in which the bit representation of each of
+  // its points (the two corners of the bounding box and the centroid) is
+  // replaced by `mapBits(bits)`. This is what the index format converter uses
+  // when the bit representation of a `GeoPoint` changes (see
+  // `index/IndexFormatConverter.h`); everything else stays as it is.
+  GeometryInfo withPointBitsMappedBy(
+      const std::function<uint64_t(uint64_t)>& mapBits) const;
 
   // Extract the requested information from this object.
   CPP_template(typename RequestedInfo = GeometryInfo)(
