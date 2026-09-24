@@ -71,6 +71,7 @@
 #include <utility>
 #include <variant>
 
+#include "util/CompilerExtensions.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/http/HttpClient.h"
@@ -295,6 +296,40 @@ void runOnNetworkThread(std::function<void()> work) {
   }
 }
 
+// Report what one step of the request to `url` yielded (see `qleverFetch`)
+// through `promise`.
+//
+// NOTE: This is deliberately a function of its own, which must not be inlined
+// into the coroutine `performStep`, because LLVM miscompiles a `catch` block
+// inside that coroutine for WebAssembly. With the `catch` block there, the
+// network thread crashed right after reporting a failed request, so that no
+// further request was ever performed.
+AD_NO_INLINE void reportStep(const val& step, const std::string& url,
+                             StepPromise& promise) {
+  // Nothing may escape from here: an exception that escapes from the coroutine
+  // `performStep` becomes a rejected JavaScript promise that nobody handles,
+  // which Node.js answers by terminating the process.
+  try {
+    std::string kind = step["kind"].as<std::string>();
+    if (kind == "head") {
+      promise.set_value(
+          ResponseHead{static_cast<http::status>(step["status"].as<int>()),
+                       step["contentType"].as<std::string>()});
+    } else if (kind == "chunk") {
+      promise.set_value(BodyChunk{step["data"].as<std::string>()});
+    } else if (kind == "done") {
+      promise.set_value(BodyChunk{std::nullopt});
+    } else {
+      AD_CORRECTNESS_CHECK(kind == "error");
+      throw std::runtime_error(
+          absl::StrCat("The HTTP request to <", url,
+                       "> failed: ", step["message"].as<std::string>()));
+    }
+  } catch (...) {
+    promise.set_exception(std::current_exception());
+  }
+}
+
 // Take the next step of `response` and report what it yielded through
 // `promise`. Runs on the network thread, which it gives back while it waits for
 // JavaScript; that wait is what makes this a coroutine. The JavaScript promise
@@ -307,28 +342,7 @@ void runOnNetworkThread(std::function<void()> work) {
 val performStep(val response, std::string url,
                 std::shared_ptr<StepPromise> promise) {
   val step = co_await response.call<val>("next");
-  // Nothing may escape from here: an exception of a coroutine becomes a
-  // rejected JavaScript promise that nobody handles, which Node.js answers by
-  // terminating the process.
-  try {
-    std::string kind = step["kind"].as<std::string>();
-    if (kind == "head") {
-      promise->set_value(
-          ResponseHead{static_cast<http::status>(step["status"].as<int>()),
-                       step["contentType"].as<std::string>()});
-    } else if (kind == "chunk") {
-      promise->set_value(BodyChunk{step["data"].as<std::string>()});
-    } else if (kind == "done") {
-      promise->set_value(BodyChunk{std::nullopt});
-    } else {
-      AD_CORRECTNESS_CHECK(kind == "error");
-      throw std::runtime_error(
-          absl::StrCat("The HTTP request to <", url,
-                       "> failed: ", step["message"].as<std::string>()));
-    }
-  } catch (...) {
-    promise->set_exception(std::current_exception());
-  }
+  reportStep(step, url, *promise);
   co_return val::undefined();
 }
 

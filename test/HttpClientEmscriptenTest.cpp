@@ -485,6 +485,9 @@ TEST_F(HttpClientEmscriptenTest, unreachableEndpoint) {
                            "The HTTP request to <", url, "> failed: ")),
                        ::testing::HasSubstr("fetch failed"),
                        ::testing::HasSubstr("(ECONNREFUSED: ")));
+  // A request after a failed one still works.
+  auto response = sendHttpOrHttpsRequest(Url{url_ + "/hello"}, handle_);
+  EXPECT_EQ(toString(response), "Hello, World!");
 }
 
 // _____________________________________________________________________________
