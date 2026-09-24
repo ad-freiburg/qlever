@@ -430,8 +430,10 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
     const auto& col0Id = scanSpecAndBlocks_.scanSpec_.col0Id();
     AD_CORRECTNESS_CHECK(col0Id.has_value());
     auto metadata = permutation().metaData().getMetaDataIfPresent(*col0Id);
-    if (metadata.has_value() && scanSpecAndBlocks_.sizeBlockMetadata_ > 0) {
+    if (metadata.has_value()) {
       const auto& blocks = scanSpecAndBlocks_.getBlockMetadataView();
+      AD_CORRECTNESS_CHECK(ql::ranges::begin(blocks) !=
+                           ql::ranges::end(blocks));
       size_t firstBlockIndex = ql::ranges::begin(blocks)->blockIndex_;
       size_t lastBlockIndex = std::prev(ql::ranges::end(blocks))->blockIndex_;
       bool hasUpdates =

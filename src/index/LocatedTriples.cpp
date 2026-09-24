@@ -430,18 +430,14 @@ size_t LocatedTriplesPerBlock::numTriplesForTesting() const {
 bool LocatedTriplesPerBlock::containsLocatedTriplesInBlockRange(
     size_t firstBlockIndex, size_t lastBlockIndex) const {
   AD_CONTRACT_CHECK(firstBlockIndex <= lastBlockIndex);
-  if (map_.size() < lastBlockIndex - firstBlockIndex + 1) {
+  if (map_.size() <= lastBlockIndex - firstBlockIndex) {
     return ql::ranges::any_of(map_ | ql::views::keys, [&](size_t blockIndex) {
       return blockIndex >= firstBlockIndex && blockIndex <= lastBlockIndex;
     });
   }
-  for (size_t blockIndex = firstBlockIndex; blockIndex <= lastBlockIndex;
-       ++blockIndex) {
-    if (map_.contains(blockIndex)) {
-      return true;
-    }
-  }
-  return false;
+  return ql::ranges::any_of(
+      ql::views::iota(firstBlockIndex, lastBlockIndex + 1),
+      [this](size_t blockIndex) { return map_.contains(blockIndex); });
 }
 
 // ____________________________________________________________________________
