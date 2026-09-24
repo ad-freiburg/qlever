@@ -205,12 +205,11 @@ namespace {
 using ResultAndFastPath = std::pair<IdTable, bool>;
 
 // Sort the `input` by the `sortedColumns` in the internal order, and compute
-// an `OrderBy` with the `sortIndices` on an input that reports being sorted by
-// these columns.
+// an `OrderBy` on the first column (descending iff `isDescending`) on an input
+// that reports being sorted by these columns.
 ResultAndFastPath orderByOnSortedInput(
     const VectorTable& input, bool isDescending = false,
-    std::vector<ColumnIndex> sortedColumns = {0},
-    OrderBy::SortIndices sortIndices = {{0, false}}) {
+    std::vector<ColumnIndex> sortedColumns = {0}) {
   // Sort the `input` by the `sortedColumns`, and make it the result of a
   // subtree that reports being sorted by these columns.
   auto qec = ad_utility::testing::getQec();
@@ -225,8 +224,7 @@ ResultAndFastPath orderByOnSortedInput(
 
   // Compute the `OrderBy` on that subtree, and check the runtime information
   // for whether it took the fast path.
-  sortIndices.front().second = isDescending;
-  OrderBy orderBy{qec, std::move(subtree), std::move(sortIndices)};
+  OrderBy orderBy{qec, std::move(subtree), {{0, isDescending}}};
   return {orderBy.getResult()->idTableView().clone(),
           orderBy.runtimeInfo().details_.contains("sorted-numeric-input")};
 }
@@ -241,7 +239,9 @@ TEST(OrderBy, sortedIntInput) {
   auto min = Id::IntegerType::min();
   auto max = Id::IntegerType::max();
 
-  // The second column shows that whole rows are moved.
+  // Check the order of `Undefined`, the smallest and the largest integers, and
+  // the integers around zero. The second column checks that whole rows are
+  // moved.
   EXPECT_EQ(orderByOnSortedInput({{I(0), I(1)},
                                   {I(max), I(2)},
                                   {I(-1), I(3)},
@@ -254,7 +254,7 @@ TEST(OrderBy, sortedIntInput) {
                                                       {I(max), I(2)}}),
                                true}));
 
-  // Without undefined values.
+  // Check an input without `Undefined` values.
   EXPECT_EQ(
       orderByOnSortedInput({{I(3)}, {I(-2)}}),
       (ResultAndFastPath{makeIdTableFromVector({{I(-2)}, {I(3)}}), true}));
@@ -268,13 +268,15 @@ TEST(OrderBy, sortedDoubleInput) {
   auto U = Id::makeUndefined();
   auto inf = std::numeric_limits<double>::infinity();
   auto nan = std::numeric_limits<double>::quiet_NaN();
-  // A `NaN` with the sign bit set (e.g. the result of `0.0 / 0.0` on x86) is
-  // at the very end of the internal order, after the negative doubles.
+  // Make an input with `Undefined`, the infinities, doubles around zero, and
+  // two `NaN`s. The `NaN` with the sign bit set (e.g. the result of
+  // `0.0 / 0.0` on x86) is at the very end of the internal order, after the
+  // negative doubles.
   auto negNan = std::copysign(nan, -1.0);
   VectorTable input{{D(0.0)},  {D(2.25)},   {D(-inf)}, {D(nan)},
                     {D(-3.5)}, {D(negNan)}, {U},       {D(inf)}};
 
-  // Ascending.
+  // Check the ascending order.
   EXPECT_EQ(orderByOnSortedInput(input),
             (ResultAndFastPath{makeIdTableFromVector({{U},
                                                       {D(-inf)},
@@ -286,7 +288,7 @@ TEST(OrderBy, sortedDoubleInput) {
                                                       {D(negNan)}}),
                                true}));
 
-  // Descending.
+  // Check the descending order.
   EXPECT_EQ(orderByOnSortedInput(input, true),
             (ResultAndFastPath{makeIdTableFromVector({{D(negNan)},
                                                       {D(nan)},
@@ -300,43 +302,40 @@ TEST(OrderBy, sortedDoubleInput) {
 }
 
 // Test that `ORDER BY` on a sorted input uses the regular sort if the sort
-// column is not all integers or all doubles, if the input is sorted by another
-// column, or if there is more than one sort column.
+// column is not all integers or all doubles, or if the input is sorted by
+// another column.
 TEST(OrderBy, sortedInputWithoutFastPath) {
   auto I = ad_utility::testing::IntId;
   auto D = ad_utility::testing::DoubleId;
   auto V = ad_utility::testing::VocabId;
   auto U = Id::makeUndefined();
 
-  // Integers and doubles.
+  // Check a sort column with integers and doubles.
   EXPECT_EQ(orderByOnSortedInput({{I(3)}, {D(-2.5)}, {I(-4)}}),
             (ResultAndFastPath{
                 makeIdTableFromVector({{I(-4)}, {D(-2.5)}, {I(3)}}), false}));
 
-  // Only vocabulary entries.
+  // Check a sort column with vocabulary entries.
   EXPECT_EQ(
       orderByOnSortedInput({{V(4)}, {U}, {V(2)}}),
       (ResultAndFastPath{makeIdTableFromVector({{U}, {V(2)}, {V(4)}}), false}));
 
-  // Only undefined values.
+  // Check a sort column with only `Undefined` values.
   EXPECT_EQ(orderByOnSortedInput({{U}, {U}}),
             (ResultAndFastPath{makeIdTableFromVector({{U}, {U}}), false}));
 
-  // Sorted by the second column.
+  // Check an input that is sorted by the second column.
   VectorTable input{{I(3), I(1)}, {I(-2), I(0)}};
-  auto expected = makeIdTableFromVector({{I(-2), I(0)}, {I(3), I(1)}});
   EXPECT_EQ(orderByOnSortedInput(input, false, {1}),
-            (ResultAndFastPath{expected.clone(), false}));
-
-  // Two sort columns.
-  EXPECT_EQ(orderByOnSortedInput(input, false, {0}, {{0, false}, {1, false}}),
-            (ResultAndFastPath{expected.clone(), false}));
+            (ResultAndFastPath{
+                makeIdTableFromVector({{I(-2), I(0)}, {I(3), I(1)}}), false}));
 }
 
 // Test that the cost estimate of `ORDER BY` is linear for an input that is
 // sorted by the sort column, and `n log n` otherwise.
 TEST(OrderBy, costEstimateForSortedInput) {
-  // Eight rows, so `log n` is 3. The cost of the input is its number of rows.
+  // Make an `OrderBy` on an input of eight rows (so `log n` is 3, and the cost
+  // of the input is 8) that reports being sorted by the `sortedColumns`.
   VectorTable input;
   for (int64_t i = 0; i < 8; ++i) {
     input.push_back({i});
@@ -350,10 +349,13 @@ TEST(OrderBy, costEstimateForSortedInput) {
         std::move(sortedColumns));
     return OrderBy{qec, std::move(subtree), {{0, false}}};
   };
+
+  // Check the linear cost for an input that is sorted by the sort column, and
+  // the cost `n log n` otherwise.
   EXPECT_EQ(makeOrderByOnInput({0}).getCostEstimate(), 8 + 8);
   EXPECT_EQ(makeOrderByOnInput({}).getCostEstimate(), 8 + 8 * 3);
 
-  // An empty input, where `log n` is not defined.
+  // Check an empty input, where `log n` is not defined.
   EXPECT_EQ(makeOrderBy(IdTable{1, qec->getAllocator()}, {{0, false}})
                 .getCostEstimate(),
             0);
