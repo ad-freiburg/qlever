@@ -236,13 +236,16 @@ TEST(RuntimeInformation, toStringAndJson) {
   ASSERT_EQ(j, nlohmann::ordered_json::parse(expectedJson));
 }
 
-// _____________________________________________________________________________
+// Test the JSON of the information about the whole query.
 TEST(RuntimeInformation, wholeQueryToJson) {
+  // Without any information, the planning took no time and has no components.
   RuntimeInformationWholeQuery rti;
   EXPECT_EQ(nlohmann::ordered_json(rti),
             nlohmann::ordered_json::parse(
                 R"({"time_query_planning": 0, "query_planning": []})"));
 
+  // With two connected components, one planned with dynamic programming and one
+  // greedily.
   rti.timeQueryPlanning = std::chrono::milliseconds{12};
   rti.queryPlanning.push_back({false, 3, 6, 1500, 42});
   rti.queryPlanning.push_back({true, 20, 1501, 1500, 380});

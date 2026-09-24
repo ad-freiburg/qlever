@@ -232,16 +232,17 @@ TEST_F(OperationTestFixture,
                       "status", Eq("fully materialized completed")))));
 }
 
-// _____________________________________________________________________________
+// Test that the updates of the runtime information carry the information about
+// the whole query, once it is set.
 TEST_F(OperationTestFixture, updatesCarryInformationAboutTheWholeQuery) {
-  // Without information about the whole query, the updates are just the
-  // runtime information of the operations.
+  // Without that information, an update is just the runtime information of the
+  // operations.
   operation.getResult(true);
   ASSERT_FALSE(jsonHistory.empty());
   EXPECT_FALSE(nlohmann::json::parse(jsonHistory.back()).contains("meta"));
 
-  // Once it is set, every update carries it as the key `meta`, with the same
-  // content as in the `application/qlever-results+json` format.
+  // With it, every update carries it as the key `meta`, with the same content
+  // as in the `application/qlever-results+json` format.
   RuntimeInformationWholeQuery wholeQuery;
   wholeQuery.timeQueryPlanning = std::chrono::milliseconds{17};
   wholeQuery.queryPlanning.push_back({false, 3, 6, 1500, 42});

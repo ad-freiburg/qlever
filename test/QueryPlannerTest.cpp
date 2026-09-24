@@ -4084,8 +4084,10 @@ TEST(QueryPlanner, nonDeterministicOperandNotDistributedOverUnion) {
               ::testing::A<const QueryExecutionTree&>()));
 }
 
-// _____________________________________________________________________________
+// Test the information about how each connected component of a query was
+// planned.
 TEST(QueryPlanner, planningInfo) {
+  // The information for the given query.
   auto planningInfo = [](std::string query) {
     QueryPlanner qp = makeQueryPlanner();
     ParsedQuery pq = parseQuery(std::move(query));
@@ -4093,8 +4095,8 @@ TEST(QueryPlanner, planningInfo) {
     return qp.planningInfo();
   };
 
-  // A single connected component, a path of three triples, which has six
-  // connected subgraphs (three single triples, two pairs, and all three).
+  // A path of three triples is one connected component, with six connected
+  // subgraphs (three single triples, two pairs, and all three).
   auto info =
       planningInfo("SELECT * WHERE { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w }");
   ASSERT_EQ(info.size(), 1u);
@@ -4105,19 +4107,23 @@ TEST(QueryPlanner, planningInfo) {
             getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>());
   EXPECT_GT(info[0].numCandidatePlans_, 0u);
 
-  // Two connected components. With a budget of one, the component with two
-  // triples (three connected subgraphs, of which only two are counted, because
-  // the counting stops at the budget plus one) is planned greedily, while the
-  // one with a single triple (one connected subgraph) needs no joins at all.
+  // Two connected components, with a budget of one.
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(1);
   info = planningInfo("SELECT * WHERE { ?x <p> ?y . ?y <q> ?z . ?a <r> ?b }");
   ASSERT_EQ(info.size(), 2u);
   ql::ranges::sort(info, {}, &ConnectedComponentPlanningInfo::numNodes_);
+
+  // The component with a single triple has one connected subgraph and needs no
+  // joins.
   EXPECT_FALSE(info[0].greedy_);
   EXPECT_EQ(info[0].numNodes_, 1u);
   EXPECT_EQ(info[0].numConnectedSubgraphs_, 1u);
   EXPECT_EQ(info[0].numCandidatePlans_, 0u);
+
+  // The component with two triples has three connected subgraphs, of which
+  // only two are counted (the counting stops at the budget plus one), so it is
+  // planned greedily.
   EXPECT_TRUE(info[1].greedy_);
   EXPECT_EQ(info[1].numNodes_, 2u);
   EXPECT_EQ(info[1].numConnectedSubgraphs_, 2u);
