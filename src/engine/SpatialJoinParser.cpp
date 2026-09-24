@@ -37,8 +37,9 @@ WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
     if (grid.has_value()) {
       const auto& box = _prefilterLatLngBox.value();
       _geoCellPrefilter.emplace(
-          grid.value(), box.getLowerLeft().getX(), box.getLowerLeft().getY(),
-          box.getUpperRight().getX(), box.getUpperRight().getY());
+          grid,
+          GeoRectangle{box.getLowerLeft().getX(), box.getLowerLeft().getY(),
+                       box.getUpperRight().getX(), box.getUpperRight().getY()});
     }
   }
   for (size_t i = 0; i < _thrds.size(); i++) {

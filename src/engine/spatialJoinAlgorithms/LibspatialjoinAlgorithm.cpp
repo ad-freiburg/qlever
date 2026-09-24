@@ -16,7 +16,6 @@
 #include <thread>
 
 #include "backports/filesystem.h"
-#include "engine/IndexScan.h"
 #include "engine/SpatialJoinParser.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"

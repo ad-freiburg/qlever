@@ -816,9 +816,19 @@ class IdTable {
             ql::ranges::fill(getColumn(i).subspan(oldSize), defaultValue);
             return;
           }
-          ql::ranges::copy(
-              table.getColumn(mappedIndex).subspan(begin, numInserted),
-              getColumn(i).begin() + oldSize);
+          // NOTE: Deliberately use `std::copy` instead of
+          // `ql::ranges::copy`, because only the former is reliably turned
+          // into a `std::memmove` for trivially copyable value types like
+          // `Id` (see the `static_assert` in `global/Id.h`). libstdc++ misses
+          // this optimization for `std::ranges::copy` before version 13.4
+          // (GCC bug 116754; 13.3 is the default on Ubuntu 24.04), and the
+          // `range-v3` implementation that `ql::ranges` uses in C++17 mode
+          // never has it at all. Without the `std::memmove` the compilers
+          // emit a scalar loop, which is significantly slower.
+          auto sourceColumn =
+              table.getColumn(mappedIndex).subspan(begin, numInserted);
+          std::copy(sourceColumn.begin(), sourceColumn.end(),
+                    getColumn(i).begin() + oldSize);
         });
   }
 

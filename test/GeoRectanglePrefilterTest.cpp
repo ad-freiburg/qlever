@@ -26,67 +26,72 @@
 #include "global/ValueId.h"
 #include "index/IndexImpl.h"
 #include "rdfTypes/GeoCellGrid.h"
+#include "rdfTypes/GeoRectangle.h"
 
 namespace {
 
-using ad_utility::GeoCellGrid;
 using ad_utility::GeoRectangle;
+using ad_utility::geoRectangleSelectivity;
 using ad_utility::padGeoRectangle;
 using prefilterExpressions::GeoRectangleExpression;
 
 constexpr std::string_view wktDatatype =
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
-// Turtle input with non-point WKT literals in different cells of a level-2
-// grid (4 x 4 cells of 90 x 45 degrees): cell 10 (lng 0..90, lat 0..45),
-// cell 0 (bottom left) and the sentinel cell (a linestring crossing a cell
-// border). The two `POINT` literals become `GeoPoint` IDs.
-std::string geoTurtleInput(int numFar = 16) {
+// Turtle input with a few geometries near (10, 10): two linestrings, a point
+// of type `<P>`, plus `numFar` far-away points of type `<T>` in southern
+// latitude bands (so that the latitude band of a query near (10, 10) can
+// prune whole blocks of points), and one far-away linestring.
+std::string geoTurtleInput(int numFar = 64) {
   auto wktTriple = [](std::string_view subject, std::string_view content) {
     return absl::StrCat(subject, " <hasGeom> \"", content, "\"", wktDatatype,
                         " . \n");
   };
-  return absl::StrCat(
-      wktTriple("<cell10a>", "LINESTRING(10 10, 11 10)"),
-      wktTriple("<cell10b>", "LINESTRING(12 10, 13 10)"),
-      wktTriple("<cell0a>", "LINESTRING(-100 -50, -101 -50)"),
-      wktTriple("<cell0b>", "LINESTRING(-102 -50, -103 -50)"),
-      wktTriple("<spanning>", "LINESTRING(-10 10, 20 20)"),
-      "<pointNear> <hasGeom> \"POINT(10.5 10.01)\"", wktDatatype, " . \n",
-      "<cell10a> <hasType> <T> . \n"
-      "<cell10b> <hasType> <T> . \n"
-      "<spanning> <hasType> <T> . \n"
-      "<pointNear> <hasType> <P> . \n",
-      "<pointFar> <hasGeom> \"POINT(-100.5 -50.01)\"", wktDatatype, " . \n",
-      [numFar] {
-        // A batch of far-away geometries, so that (in every scheme) there
-        // are whole blocks that a covering query near (10, 10) can prune.
-        std::string result;
-        for (int i = 0; i < numFar; ++i) {
-          result += absl::StrCat(
-              "<far", i, "> <hasGeom> \"LINESTRING(", -170 + i % 320, " -",
-              60 - i / 320, ".0, ", -169.5 + i % 320, " -", 60 - i / 320,
-              ".0)\"", wktDatatype, " . \n", "<far", i, "> <hasType> <T> . \n");
-        }
-        return result;
-      }());
+  return absl::StrCat(wktTriple("<lineA>", "LINESTRING(10 10, 11 10)"),
+                      wktTriple("<lineB>", "LINESTRING(12 10, 13 10)"),
+                      wktTriple("<lineFar>", "LINESTRING(-100 -50, -101 -50)"),
+                      wktTriple("<pointNear>", "POINT(10.5 10.01)"),
+                      wktTriple("<pointFar>", "POINT(-100.5 -50.01)"),
+                      "<lineA> <hasType> <T> . \n"
+                      "<lineB> <hasType> <T> . \n"
+                      "<lineFar> <hasType> <T> . \n"
+                      "<pointNear> <hasType> <P> . \n"
+                      "<pointFar> <hasType> <P> . \n",
+                      [numFar] {
+                        std::string result;
+                        for (int i = 0; i < numFar; ++i) {
+                          result += absl::StrCat(
+                              "<far", i, "> <hasGeom> \"POINT(", -170 + i % 320,
+                              " -", 60 - i / 320, ".0)\"", wktDatatype, " . \n",
+                              "<far", i, "> <hasType> <T> . \n");
+                        }
+                        return result;
+                      }());
 }
 
 // A `QueryExecutionContext` for an index over `geoTurtleInput` with the
-// geo-split vocabulary and a level-2 geo cell grid.
-QueryExecutionContext* geoQec(
-    uint8_t gridLevel = 2,
-    ad_utility::GeoCellGridScheme scheme = ad_utility::GeoCellGridScheme::Flat,
-    int numFar = 16) {
+// geo-split vocabulary (which has the precomputed geometry info).
+QueryExecutionContext* geoQec(int numFar = 64) {
   ad_utility::testing::TestIndexConfig config{geoTurtleInput(numFar)};
   config.vocabularyType = ad_utility::VocabularyType{
       ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit};
-  config.geoCellGridLevel = gridLevel;
-  // The other grid schemes are a follow-up change; until then, the test index
-  // can only be built with the `Flat` scheme.
-  AD_CONTRACT_CHECK(scheme == ad_utility::GeoCellGridScheme::Flat);
   config.parserBufferSize = 1000_B;
   return ad_utility::testing::getQec(std::move(config));
+}
+
+// Find the first operation of type `T` in `tree`, depth first.
+template <typename T>
+const T* findOperation(const QueryExecutionTree& tree) {
+  if (const auto* op = dynamic_cast<const T*>(tree.getRootOperation().get())) {
+    return op;
+  }
+  for (const auto* child :
+       std::as_const(*tree.getRootOperation()).getChildren()) {
+    if (const auto* found = findOperation<T>(*child)) {
+      return found;
+    }
+  }
+  return nullptr;
 }
 
 TEST(GeoRectanglePrefilter, padGeoRectangle) {
@@ -116,23 +121,11 @@ TEST(GeoRectanglePrefilter, padGeoRectangle) {
             90.0);
 }
 
-TEST(GeoRectanglePrefilter, fractionOfCoveringCells) {
-  // Level 2: 4 x 4 cells of 90 x 45 degrees.
-  GeoCellGrid grid{2, ad_utility::GeoCellGridScheme::Flat};
-  // A rectangle inside one cell: its share of that cell.
-  EXPECT_NEAR(fractionOfCoveringCells(GeoRectangle{10, 10, 55, 20}, grid),
-              (45.0 * 10.0) / (90.0 * 45.0), 1e-9);
-  // A rectangle exactly covering a cell.
-  EXPECT_NEAR(fractionOfCoveringCells(GeoRectangle{0, 0, 90, 45}, grid), 1.0,
+TEST(GeoRectanglePrefilter, geoRectangleSelectivity) {
+  EXPECT_NEAR(geoRectangleSelectivity(GeoRectangle{0, 0, 36, 10}), 0.1, 1e-9);
+  EXPECT_NEAR(geoRectangleSelectivity(GeoRectangle{-180, -90, 180, 90}), 1.0,
               1e-9);
-  // Spanning two cells in longitude.
-  EXPECT_NEAR(fractionOfCoveringCells(GeoRectangle{80, 0, 100, 45}, grid),
-              (20.0 * 45.0) / (180.0 * 45.0), 1e-9);
-  // A point still touches one cell, the fraction is 0.
-  EXPECT_EQ(fractionOfCoveringCells(GeoRectangle{10, 10, 10, 10}, grid), 0.0);
-  // The whole world.
-  EXPECT_NEAR(fractionOfCoveringCells(GeoRectangle{-180, -90, 180, 90}, grid),
-              1.0, 1e-9);
+  EXPECT_EQ(geoRectangleSelectivity(GeoRectangle{10, 10, 10, 10}), 0.0);
 }
 
 TEST(GeoRectanglePrefilter, geoRectangleOfConstantGeometry) {
@@ -165,13 +158,29 @@ TEST(GeoRectanglePrefilter, geoRectangleOfConstantGeometry) {
           .has_value());
 }
 
+TEST(GeoRectanglePrefilter, geoRectangleIdPrefilter) {
+  ad_utility::GeoRectangleIdPrefilter prefilter{GeoRectangle{9, 9, 11, 11}};
+  EXPECT_FALSE(
+      prefilter.canBeSkipped(Id::makeFromGeoPoint(GeoPoint{10.0, 10.0})));
+  EXPECT_TRUE(
+      prefilter.canBeSkipped(Id::makeFromGeoPoint(GeoPoint{10.0, 20.0})));
+  EXPECT_TRUE(
+      prefilter.canBeSkipped(Id::makeFromGeoPoint(GeoPoint{-50.0, 10.0})));
+  // A point on the border is kept (quantization slack).
+  EXPECT_FALSE(
+      prefilter.canBeSkipped(Id::makeFromGeoPoint(GeoPoint{11.0, 9.0})));
+  // Anything that is not a point is never skipped.
+  EXPECT_FALSE(
+      prefilter.canBeSkipped(Id::makeFromVocabIndex(VocabIndex::make(12345))));
+  EXPECT_FALSE(prefilter.canBeSkipped(ad_utility::testing::IntId(7)));
+  EXPECT_FALSE(prefilter.canBeSkipped(Id::makeUndefined()));
+}
+
 // Test the block-level evaluation of the `GeoRectangleExpression` against
-// synthetic block metadata over an index with a level-2 geo cell grid.
+// synthetic block metadata.
 class GeoRectangleExpressionTest : public ::testing::Test {
  protected:
   const IndexImpl& indexImpl_ = geoQec()->getIndex().getImpl();
-  GeoCellGrid grid_{2};
-
   size_t blockIdx_ = 0;
 
   // Build one block whose evaluation column (column 2) spans [first, last].
@@ -188,13 +197,6 @@ class GeoRectangleExpressionTest : public ::testing::Test {
             blockIdx_};
   }
 
-  // The Id of a WKT literal with the given cell and position.
-  ValueId geoWktId(uint64_t cell, uint64_t position) {
-    return Id::makeFromVocabIndex(
-        VocabIndex::make(GeoCellGrid::geoVocabMarkerBit |
-                         grid_.indexFromCellAndPosition(cell, position)));
-  }
-
   static std::vector<const CompressedBlockMetadata*> toPointers(
       const BlockMetadataRanges& ranges) {
     std::vector<const CompressedBlockMetadata*> result;
@@ -208,10 +210,7 @@ class GeoRectangleExpressionTest : public ::testing::Test {
 };
 
 TEST_F(GeoRectangleExpressionTest, evaluate) {
-  ASSERT_TRUE(indexImpl_.getVocab().getGeoCellGrid().has_value());
-  ASSERT_EQ(indexImpl_.getVocab().getGeoCellGrid().value(), grid_);
-
-  // Query rectangle inside cell 3 (bottom right corner of the earth).
+  // Query rectangle in the far south east.
   GeoRectangle rectangle{170.0, -81.0, 172.0, -79.0};
   GeoRectangleExpression expr{rectangle};
 
@@ -219,39 +218,31 @@ TEST_F(GeoRectangleExpressionTest, evaluate) {
   // Block 0: ints -> pruned (`Datatype::Int` sorts below the index types).
   blocks.push_back(
       makeBlock(ad_utility::testing::IntId(1), ad_utility::testing::IntId(5)));
-  // Block 1: plain (non-WKT) vocab entries -> pruned.
+  // Block 1: vocabulary entries -> kept (a WKT literal's coordinates cannot
+  // be seen from its ID).
   blocks.push_back(makeBlock(Id::makeFromVocabIndex(VocabIndex::make(5)),
                              Id::makeFromVocabIndex(VocabIndex::make(20))));
-  // Block 2: WKT literals of cell 0 -> pruned.
-  blocks.push_back(makeBlock(geoWktId(0, 0), geoWktId(0, 5)));
-  // Block 3: WKT literals of cell 3 -> kept.
-  blocks.push_back(makeBlock(geoWktId(3, 6), geoWktId(3, 9)));
-  // Block 4: WKT literals of cell 12 -> pruned.
-  blocks.push_back(makeBlock(geoWktId(12, 10), geoWktId(12, 12)));
-  // Block 5: sentinel cell -> kept.
-  blocks.push_back(makeBlock(geoWktId(grid_.sentinelCell(), 13),
-                             geoWktId(grid_.sentinelCell(), 15)));
-  // Block 6: a GeoPoint inside the rectangle -> kept (a block that holds a
-  // point inside the rectangle always intersects one of the Z-order ranges).
-  blocks.push_back(makeBlock(Id::makeFromGeoPoint(GeoPoint{-80.0, 171.0}),
-                             Id::makeFromGeoPoint(GeoPoint{-80.0, 171.0})));
-  // Block 7: GeoPoints far north -> pruned.
+  // Block 2: GeoPoints within the latitude band -> kept, although their
+  // longitudes are far off (the band is all the block prefilter can see).
+  blocks.push_back(makeBlock(Id::makeFromGeoPoint(GeoPoint{-80.5, 0.0}),
+                             Id::makeFromGeoPoint(GeoPoint{-79.5, 10.0})));
+  // Block 3: GeoPoints far north -> pruned.
   blocks.push_back(makeBlock(Id::makeFromGeoPoint(GeoPoint{70.0, 0.0}),
                              Id::makeFromGeoPoint(GeoPoint{80.0, 10.0})));
 
+  // NOTE: The IDs of points are Z-order codes here, so the block of points
+  // in the latitude band but far away in longitude (block 2) is pruned too.
   auto kept =
       toPointers(expr.evaluate(indexImpl_, {blocks.data(), blocks.size()}, 2));
-  EXPECT_THAT(kept, ::testing::ElementsAre(&blocks[3], &blocks[5], &blocks[6]));
-
-  // A block that spans the whole cell-3 interval (from cell 2 to cell 4)
-  // must also be kept, although neither of its boundary IDs is inside.
+  EXPECT_THAT(kept, ::testing::ElementsAre(&blocks[1]));
+  // A block of points around the rectangle must be kept, although neither of
+  // its boundary IDs is inside.
   std::vector<CompressedBlockMetadata> spanningBlocks;
-  spanningBlocks.push_back(makeBlock(geoWktId(0, 0), geoWktId(1, 3)));
-  spanningBlocks.push_back(makeBlock(geoWktId(2, 4), geoWktId(4, 8)));
-  spanningBlocks.push_back(makeBlock(geoWktId(5, 9), geoWktId(6, 11)));
+  spanningBlocks.push_back(makeBlock(Id::makeFromGeoPoint(GeoPoint{-82, 169}),
+                                     Id::makeFromGeoPoint(GeoPoint{-78, 173})));
   auto keptSpanning = toPointers(expr.evaluate(
       indexImpl_, {spanningBlocks.data(), spanningBlocks.size()}, 2));
-  EXPECT_THAT(keptSpanning, ::testing::ElementsAre(&spanningBlocks[1]));
+  EXPECT_THAT(keptSpanning, ::testing::ElementsAre(&spanningBlocks[0]));
 
   // Clone and equality.
   auto clone = expr.clone();
@@ -265,32 +256,6 @@ TEST_F(GeoRectangleExpressionTest, evaluate) {
   auto keptComplement = toPointers(
       complement->evaluate(indexImpl_, {blocks.data(), blocks.size()}, 2));
   EXPECT_EQ(keptComplement.size(), blocks.size());
-}
-
-// Without a geo cell grid the whole WKT region of the vocabulary is kept,
-// GeoPoints are still pruned via their Z-order ranges.
-TEST_F(GeoRectangleExpressionTest, evaluateWithoutGrid) {
-  ad_utility::testing::TestIndexConfig config{geoTurtleInput()};
-  config.vocabularyType = ad_utility::VocabularyType{
-      ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit};
-  config.parserBufferSize = 1000_B;
-  const IndexImpl& noGridIndex =
-      ad_utility::testing::getQec(std::move(config))->getIndex().getImpl();
-  ASSERT_FALSE(noGridIndex.getVocab().getGeoCellGrid().has_value());
-
-  GeoRectangleExpression expr{GeoRectangle{170.0, -81.0, 172.0, -79.0}};
-  std::vector<CompressedBlockMetadata> blocks;
-  blocks.push_back(makeBlock(Id::makeFromVocabIndex(VocabIndex::make(5)),
-                             Id::makeFromVocabIndex(VocabIndex::make(20))));
-  blocks.push_back(makeBlock(geoWktId(0, 0), geoWktId(0, 5)));
-  blocks.push_back(makeBlock(geoWktId(12, 10), geoWktId(12, 12)));
-  blocks.push_back(makeBlock(Id::makeFromGeoPoint(GeoPoint{70.0, 0.0}),
-                             Id::makeFromGeoPoint(GeoPoint{80.0, 10.0})));
-  auto kept =
-      toPointers(expr.evaluate(noGridIndex, {blocks.data(), blocks.size()}, 2));
-  // All WKT blocks are kept, the non-WKT vocab block and the far-away
-  // GeoPoints are pruned.
-  EXPECT_THAT(kept, ::testing::ElementsAre(&blocks[1], &blocks[2]));
 }
 
 // The producer: a `<=` comparison over a geo distance function with a fixed
@@ -326,29 +291,11 @@ TEST(GeoRectanglePrefilter, getPrefilterExpressionFromDistanceFilter) {
   }
 }
 
-// The `SpatialJoin` pushes the prefilter into an index scan that is sorted by
-// the geometry variable, and only into such a scan. Parameterized over the
-// four grid schemes: the pruning machinery is scheme-agnostic and the
-// results must be identical for all of them.
-class GeoRectanglePrefilterSchemeTest
-    : public ::testing::TestWithParam<ad_utility::GeoCellGridScheme> {};
-
-TEST_P(GeoRectanglePrefilterSchemeTest, spatialJoinPushesBlockPrefilter) {
-  auto* qec = geoQec(2, GetParam());
-  auto point = TripleComponent{Id::makeFromGeoPoint(GeoPoint{10.0, 10.5})};
-  Variable pointVar{"?point"};
-  Variable wktVar{"?wkt"};
-  auto valuesTree = makeValuesForSingleValue(qec, pointVar, point);
-
-  SparqlTripleSimple triple{
-      TripleComponent{Variable{"?s"}},
-      TripleComponent{TripleComponent::Iri::fromIriref("<hasGeom>")},
-      TripleComponent{wktVar}};
-  auto makeScan = [&](Permutation::Enum permutation) {
-    return ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple);
-  };
-
-  SpatialJoinConfiguration config{
+// The common configuration of the spatial joins below: within 200 km of a
+// fixed point near (10, 10).
+SpatialJoinConfiguration withinDistConfig(const Variable& pointVar,
+                                          const Variable& wktVar) {
+  return SpatialJoinConfiguration{
       LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 200'000.0,
                            std::nullopt},
       pointVar,
@@ -357,150 +304,26 @@ TEST_P(GeoRectanglePrefilterSchemeTest, spatialJoinPushesBlockPrefilter) {
       PayloadVariables::all(),
       SpatialJoinAlgorithm::LIBSPATIALJOIN,
       std::nullopt};
-
-  auto makeJoin = [&](Permutation::Enum permutation) {
-    auto sj = std::make_shared<SpatialJoin>(qec, config, std::nullopt,
-                                            std::nullopt, true);
-    sj = sj->addChild(valuesTree, pointVar);
-    sj = sj->addChild(makeScan(permutation), wktVar);
-    return sj;
-  };
-
-  // POS scan: sorted by ?wkt -> the prefilter is applied, which makes the
-  // scan uncacheable under its ordinary cache key.
-  auto sjPos = makeJoin(Permutation::POS);
-  const auto* scanPos = sjPos->getChildren().at(1)->getRootOperation().get();
-  EXPECT_FALSE(scanPos->canResultBeCached());
-
-  // PSO scan: sorted by ?s -> no prefilter.
-  auto sjPso = makeJoin(Permutation::PSO);
-  const auto* scanPso = sjPso->getChildren().at(1)->getRootOperation().get();
-  EXPECT_TRUE(scanPso->canResultBeCached());
-
-  // Both plans agree on the result: the two linestrings of cell 3 and the
-  // nearby point geometry are within 200 km of the query point.
-  auto result = sjPos->computeResultOnlyForTesting();
-  EXPECT_EQ(result.idTableView().numRows(), 3u);
-  auto resultPso = sjPso->computeResultOnlyForTesting();
-  EXPECT_EQ(resultPso.idTableView().numRows(), 3u);
 }
 
-// The size estimate of a spatial join whose geometry side was prefiltered at
-// planning time counts every remaining candidate: the block prefilter already
-// applied the spatial selectivity to the scan's estimate. Without the
-// prefilter, the generic selectivity constant applies.
-TEST_P(GeoRectanglePrefilterSchemeTest, prefilteredSpatialJoinSizeEstimate) {
-  auto* qec = geoQec(2, GetParam(), 300);
-  Variable pointVar{"?point"};
-  Variable wktVar{"?wkt"};
-  auto valuesTree = makeValuesForSingleValue(
-      qec, pointVar,
-      TripleComponent{Id::makeFromGeoPoint(GeoPoint{10.0, 10.5})});
-  SparqlTripleSimple triple{
+SparqlTripleSimple hasGeomTriple(const Variable& wktVar) {
+  return SparqlTripleSimple{
       TripleComponent{Variable{"?s"}},
       TripleComponent{TripleComponent::Iri::fromIriref("<hasGeom>")},
       TripleComponent{wktVar}};
-  SpatialJoinConfiguration config{
-      LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 200'000.0,
-                           std::nullopt},
-      pointVar,
-      wktVar,
-      std::nullopt,
-      PayloadVariables::all(),
-      SpatialJoinAlgorithm::LIBSPATIALJOIN,
-      std::nullopt};
-  auto makeJoin = [&](Permutation::Enum permutation) {
-    auto sj = std::make_shared<SpatialJoin>(qec, config, std::nullopt,
-                                            std::nullopt, true);
-    sj = sj->addChild(valuesTree, pointVar);
-    sj = sj->addChild(
-        ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple),
-        wktVar);
-    return sj;
-  };
-
-  // POS scan (sorted by `?wkt`): prefiltered, the estimate is the number of
-  // remaining candidates (less than the full scan) times the share of their
-  // cells that the padded query rectangle covers. The 200 km around a point
-  // cover a tiny part of a 90 x 45 degree cell, so the estimate is the
-  // minimum of 1.
-  auto sjPos = makeJoin(Permutation::POS);
-  auto fullScanSize =
-      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple)
-          ->getSizeEstimate();
-  auto candidates = sjPos->getChildren().at(1)->getSizeEstimate();
-  EXPECT_LT(candidates, fullScanSize);
-  EXPECT_GT(candidates, 1u);
-  EXPECT_EQ(sjPos->getSizeEstimate(), 1u);
-
-  // PSO scan (sorted by `?s`): no prefilter, but the same estimate. The size
-  // of the join does not depend on the permutation of its scan.
-  auto sjPso = makeJoin(Permutation::PSO);
-  EXPECT_EQ(sjPso->getChildren().at(1)->getSizeEstimate(), fullScanSize);
-  EXPECT_EQ(sjPso->getSizeEstimate(), sjPos->getSizeEstimate());
-
-  // The clone keeps the estimate.
-  EXPECT_EQ(sjPos->clone()->getSizeEstimate(), 1u);
-
-  // A polygon covering most of the cell (0..90, 0..45): the estimate is the
-  // corresponding share of the candidates.
-  Variable polygonVar{"?polygon"};
-  auto polygonTree = makeValuesForSingleValue(
-      qec, polygonVar,
-      TripleComponent{
-          ad_utility::triple_component::Literal::fromStringRepresentation(
-              absl::StrCat("\"POLYGON((2 2, 88 2, 88 43, 2 43, 2 2))\"",
-                           wktDatatype))});
-  SpatialJoinConfiguration intersectsConfig{
-      LibSpatialJoinConfig{SpatialJoinType::INTERSECTS, std::nullopt,
-                           std::nullopt},
-      polygonVar,
-      wktVar,
-      std::nullopt,
-      PayloadVariables::all(),
-      SpatialJoinAlgorithm::LIBSPATIALJOIN,
-      std::nullopt};
-  auto sjPolygon = std::make_shared<SpatialJoin>(
-      qec, intersectsConfig, std::nullopt, std::nullopt, true);
-  sjPolygon = sjPolygon->addChild(polygonTree, polygonVar);
-  sjPolygon = sjPolygon->addChild(
-      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple),
-      wktVar);
-  auto polygonCandidates = sjPolygon->getChildren().at(1)->getSizeEstimate();
-  EXPECT_LT(polygonCandidates, fullScanSize);
-  double share = (86.0 * 41.0) / (90.0 * 45.0);
-  EXPECT_EQ(
-      sjPolygon->getSizeEstimate(),
-      std::max<uint64_t>(1, static_cast<uint64_t>(polygonCandidates * share)));
-
-  // The same polygon over the PSO scan: the estimate is the same, up to the
-  // rounding of the two products.
-  auto sjPolygonPso = std::make_shared<SpatialJoin>(
-      qec, intersectsConfig, std::nullopt, std::nullopt, true);
-  sjPolygonPso = sjPolygonPso->addChild(polygonTree, polygonVar);
-  sjPolygonPso = sjPolygonPso->addChild(
-      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple),
-      wktVar);
-  EXPECT_EQ(sjPolygonPso->getChildren().at(1)->getSizeEstimate(), fullScanSize);
-  EXPECT_NEAR(static_cast<double>(sjPolygonPso->getSizeEstimate()),
-              static_cast<double>(sjPolygon->getSizeEstimate()), 1.0);
 }
 
 // The geo rectangle prefilter on an `IndexScan` prunes whole blocks and then
 // drops the remaining rows outside the rectangle one by one (in particular
 // points, which the block prefilter can only restrict by latitude), so that
 // the operations above the scan only see rows that may match.
-TEST_P(GeoRectanglePrefilterSchemeTest, rowFilterOnPrefilteredScan) {
-  auto* qec = geoQec(2, GetParam());
+TEST(GeoRectanglePrefilter, rowFilterOnPrefilteredScan) {
+  auto* qec = geoQec();
   Variable wktVar{"?wkt"};
-  SparqlTripleSimple triple{
-      TripleComponent{Variable{"?s"}},
-      TripleComponent{TripleComponent::Iri::fromIriref("<hasGeom>")},
-      TripleComponent{wktVar}};
-  auto scan =
-      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple);
+  auto scan = ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS,
+                                                       hasGeomTriple(wktVar));
 
-  // A rectangle around the cell-10 geometries and the nearby point.
+  // A rectangle around the geometries near (10, 10).
   std::vector<Operation::PrefilterVariablePair> pairs;
   pairs.emplace_back(std::make_unique<GeoRectangleExpression>(
                          GeoRectangle{9.5, 9.5, 13.5, 10.5}),
@@ -512,14 +335,21 @@ TEST_P(GeoRectanglePrefilterSchemeTest, rowFilterOnPrefilteredScan) {
   auto* rowFilter = dynamic_cast<GeoRectangleRowFilter*>(
       prefiltered.value()->getRootOperation().get());
   ASSERT_NE(rowFilter, nullptr);
+  qec->clearCacheUnpinnedOnly();
+  auto prefilteredRows = rowFilter->getChildren()
+                             .at(0)
+                             ->getRootOperation()
+                             ->getResult()
+                             ->idTableView()
+                             .numRows();
   EXPECT_FALSE(rowFilter->canResultBeCached());
   EXPECT_EQ(rowFilter->getResultWidth(), scan->getResultWidth());
   EXPECT_EQ(rowFilter->getResultSortedOn(), scan->resultSortedOn());
 
-  // The far-away points (all in one latitude band with `<pointFar>`) survive
-  // the block prefilter only if they share a block with kept rows; the row
-  // filter drops them in any case. The nearby point and the two cell-10
-  // linestrings are kept, and so is `<spanning>` (no cell information).
+  // The far-away points are in other latitude bands, so their blocks are
+  // pruned, unless they share a block with kept rows; the row filter drops
+  // them in any case. The nearby point and all three linestrings are kept
+  // (a linestring cannot be decided from its ID).
   auto result = rowFilter->getResult();
   const auto& table = result->idTableView();
   auto wktCol = prefiltered.value()->getVariableColumn(wktVar);
@@ -533,27 +363,20 @@ TEST_P(GeoRectanglePrefilterSchemeTest, rowFilterOnPrefilteredScan) {
   }
   EXPECT_EQ(numPoints, 1u);
   EXPECT_EQ(table.numRows(), 4u);
-  EXPECT_LT(table.numRows(), rowFilter->getChildren()
-                                 .at(0)
-                                 ->getRootOperation()
-                                 ->getResult()
-                                 ->idTableView()
-                                 .numRows());
+  auto fullScanRows =
+      scan->getRootOperation()->getResult()->idTableView().numRows();
+  EXPECT_LT(table.numRows(), fullScanRows);
+  // The block prefilter alone already read fewer rows than the full scan
+  // (measured on the prefiltered scan's own computation, before the full
+  // scan's result, which shares the cache key, is in the cache).
+  EXPECT_LT(prefilteredRows, fullScanRows);
 }
 
 // The runtime block prefilter: with a non-constant (here: two-row) small
 // side, plan-time prefiltering is impossible, but `prepareJoin` prunes the
 // scan's blocks using the bounding rectangle of the materialized small side.
-TEST_P(GeoRectanglePrefilterSchemeTest, runtimeBlockPrefilter) {
-  auto* qec = geoQec(2, GetParam());
-  // Disable the plan-time materialization, so that this test exercises the
-  // runtime block prefilter in isolation.
-  setRuntimeParameter<&RuntimeParameters::spatialJoinPlanTimePrefilterMaxRows_>(
-      0);
-  absl::Cleanup restoreParameter{[]() {
-    setRuntimeParameter<
-        &RuntimeParameters::spatialJoinPlanTimePrefilterMaxRows_>(100'000);
-  }};
+TEST(GeoRectanglePrefilter, runtimeBlockPrefilter) {
+  auto* qec = geoQec();
   Variable pointVar{"?point"};
   Variable wktVar{"?wkt"};
   parsedQuery::SparqlValues values;
@@ -563,32 +386,19 @@ TEST_P(GeoRectanglePrefilterSchemeTest, runtimeBlockPrefilter) {
   values._values.push_back(
       {TripleComponent{Id::makeFromGeoPoint(GeoPoint{10.05, 10.6})}});
   auto valuesTree = ad_utility::makeExecutionTree<Values>(qec, values);
+  auto scanTree = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::POS, hasGeomTriple(wktVar));
 
-  SparqlTripleSimple triple{
-      TripleComponent{Variable{"?s"}},
-      TripleComponent{TripleComponent::Iri::fromIriref("<hasGeom>")},
-      TripleComponent{wktVar}};
-  auto scanTree =
-      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple);
-
-  SpatialJoinConfiguration config{
-      LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 200'000.0,
-                           std::nullopt},
-      pointVar,
-      wktVar,
-      std::nullopt,
-      PayloadVariables::all(),
-      SpatialJoinAlgorithm::LIBSPATIALJOIN,
-      std::nullopt};
-  auto sj = std::make_shared<SpatialJoin>(qec, config, std::nullopt,
-                                          std::nullopt, true);
+  auto sj =
+      std::make_shared<SpatialJoin>(qec, withinDistConfig(pointVar, wktVar),
+                                    std::nullopt, std::nullopt, true);
   sj = sj->addChild(valuesTree, pointVar);
   sj = sj->addChild(scanTree, wktVar);
 
-  // The plan-time prefilter must NOT have fired (two rows, no constant).
+  // No plan-time prefilter (two rows, no constant): the scan is untouched.
   EXPECT_TRUE(sj->getChildren().at(1)->getRootOperation()->canResultBeCached());
 
-  // Both query points are within 200 km of the two cell-10 linestrings and
+  // Both query points are within 200 km of the two nearby linestrings and
   // the nearby point geometry: 2 x 3 = 6 result rows.
   auto result = sj->computeResultOnlyForTesting();
   EXPECT_EQ(result.idTableView().numRows(), 6u);
@@ -604,9 +414,8 @@ TEST_P(GeoRectanglePrefilterSchemeTest, runtimeBlockPrefilter) {
 // The runtime block prefilter reaches a scan whose blocks it can prune even
 // when the scan is wrapped in a `Sort` and a `Join` (as happens for a side
 // with a type restriction): the prefilter is forwarded through both.
-TEST_P(GeoRectanglePrefilterSchemeTest,
-       runtimeBlockPrefilterThroughSortAndJoin) {
-  auto* qec = geoQec(2, GetParam());
+TEST(GeoRectanglePrefilter, runtimeBlockPrefilterThroughSortAndJoin) {
+  auto* qec = geoQec();
   Variable pointVar{"?point"};
   Variable wktVar{"?wkt"};
   parsedQuery::SparqlValues values;
@@ -619,33 +428,17 @@ TEST_P(GeoRectanglePrefilterSchemeTest,
 
   // A `Join` on `?s` of the geometry scan (sorted by `?wkt`, so the `Join`
   // wraps it in a `Sort` on `?s`) with a second scan of the same predicate.
-  SparqlTripleSimple tripleA{
-      TripleComponent{Variable{"?s"}},
-      TripleComponent{TripleComponent::Iri::fromIriref("<hasGeom>")},
-      TripleComponent{wktVar}};
-  auto scanA =
-      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, tripleA);
-  SparqlTripleSimple tripleB{
-      TripleComponent{Variable{"?s"}},
-      TripleComponent{TripleComponent::Iri::fromIriref("<hasGeom>")},
-      TripleComponent{Variable{"?wkt2"}}};
-  auto scanB =
-      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, tripleB);
+  auto scanA = ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS,
+                                                        hasGeomTriple(wktVar));
+  auto scanB = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO, hasGeomTriple(Variable{"?wkt2"}));
   auto joinTree = ad_utility::makeExecutionTree<Join>(
       qec, scanA, scanB, scanA->getVariableColumn(Variable{"?s"}),
       scanB->getVariableColumn(Variable{"?s"}));
 
-  SpatialJoinConfiguration config{
-      LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 200'000.0,
-                           std::nullopt},
-      pointVar,
-      wktVar,
-      std::nullopt,
-      PayloadVariables::all(),
-      SpatialJoinAlgorithm::LIBSPATIALJOIN,
-      std::nullopt};
-  auto sj = std::make_shared<SpatialJoin>(qec, config, std::nullopt,
-                                          std::nullopt, true);
+  auto sj =
+      std::make_shared<SpatialJoin>(qec, withinDistConfig(pointVar, wktVar),
+                                    std::nullopt, std::nullopt, true);
   sj = sj->addChild(valuesTree, pointVar);
   sj = sj->addChild(joinTree, wktVar);
 
@@ -671,62 +464,23 @@ TEST_P(GeoRectanglePrefilterSchemeTest,
   }
 }
 
-// A query with type restrictions on both geometry sides: the plan-time
-// prefilter materializes the small side during planning, computes its
-// bounding rectangle, and prunes candidate plans of the other side. This
-// must not change the result (whichever plan the cost comparison picks).
-TEST_P(GeoRectanglePrefilterSchemeTest, planTimePrefilterKeepsResultsCorrect) {
-  auto* qec = geoQec(2, GetParam(), 300);
-  constexpr std::string_view query = R"(
-    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
-    SELECT * WHERE {
-      ?a <hasType> <P> . ?a <hasGeom> ?g1 .
-      ?b <hasType> <T> . ?b <hasGeom> ?g2 .
-      FILTER (geof:metricDistance(?g1, ?g2) <= 200000)
-    })";
-
-  auto numRows = [&qec](std::string_view q) {
-    qec->clearCacheUnpinnedOnly();
-    auto qet = queryPlannerTestHelpers::parseAndPlan(std::string{q}, qec);
-    auto result = qet->getRootOperation()->getResult();
-    return result->idTableView().size();
-  };
-
-  auto rowsWithPlanTimePrefilter = numRows(query);
-  setRuntimeParameter<&RuntimeParameters::spatialJoinPlanTimePrefilterMaxRows_>(
-      0);
-  absl::Cleanup restoreParameter{[]() {
-    setRuntimeParameter<
-        &RuntimeParameters::spatialJoinPlanTimePrefilterMaxRows_>(100'000);
-  }};
-  auto rowsWithoutPlanTimePrefilter = numRows(query);
-  EXPECT_GT(rowsWithPlanTimePrefilter, 0u);
-  EXPECT_EQ(rowsWithPlanTimePrefilter, rowsWithoutPlanTimePrefilter);
-}
-
 // A `Join` that the prefilter rebuilds (because the geometry scan is below
 // it) must keep the column layout of the original join: the operations above
 // it (a `Sort`, another `Join`) refer to its columns by index. The `Join`
 // constructor orders its children by cache key, and the prefiltered child has
 // a new cache key, so the rebuilt join must not reorder them. Both child
 // orders are tested, one of them differs from the constructor's order.
-TEST_P(GeoRectanglePrefilterSchemeTest, rebuiltJoinKeepsColumnLayout) {
-  auto* qec = geoQec(2, GetParam());
-  Variable pointVar{"?point"};
+TEST(GeoRectanglePrefilter, rebuiltJoinKeepsColumnLayout) {
+  auto* qec = geoQec();
   Variable wktVar{"?wkt"};
   Variable sVar{"?s"};
-  auto valuesTree = makeValuesForSingleValue(
-      qec, pointVar,
-      TripleComponent{Id::makeFromGeoPoint(GeoPoint{10.0, 10.5})});
   auto iri = [](std::string_view s) {
     return TripleComponent{TripleComponent::Iri::fromIriref(s)};
   };
   // The geometry scan is sorted by `?wkt`, the type scan by `?t`, so the join
   // on `?s` sorts both of them.
   auto geomScan = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::POS,
-      SparqlTripleSimple{TripleComponent{sVar}, iri("<hasGeom>"),
-                         TripleComponent{wktVar}});
+      qec, Permutation::POS, hasGeomTriple(wktVar));
   auto typeScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::POS,
       SparqlTripleSimple{TripleComponent{sVar}, iri("<hasType>"),
@@ -734,16 +488,6 @@ TEST_P(GeoRectanglePrefilterSchemeTest, rebuiltJoinKeepsColumnLayout) {
   auto restrictionScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::POS,
       SparqlTripleSimple{TripleComponent{sVar}, iri("<hasType>"), iri("<T>")});
-
-  SpatialJoinConfiguration config{
-      LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 200'000.0,
-                           std::nullopt},
-      pointVar,
-      wktVar,
-      std::nullopt,
-      PayloadVariables::all(),
-      SpatialJoinAlgorithm::LIBSPATIALJOIN,
-      std::nullopt};
 
   auto layout = [](const QueryExecutionTree& tree) {
     std::vector<std::pair<std::string, ColumnIndex>> result;
@@ -753,6 +497,11 @@ TEST_P(GeoRectanglePrefilterSchemeTest, rebuiltJoinKeepsColumnLayout) {
     ql::ranges::sort(result);
     return result;
   };
+
+  std::vector<Operation::PrefilterVariablePair> pairs;
+  pairs.emplace_back(std::make_unique<GeoRectangleExpression>(
+                         GeoRectangle{9.5, 9.5, 13.5, 10.5}),
+                     wktVar);
 
   for (bool geometryScanFirst : {true, false}) {
     const auto& first = geometryScanFirst ? geomScan : typeScan;
@@ -765,34 +514,312 @@ TEST_P(GeoRectanglePrefilterSchemeTest, rebuiltJoinKeepsColumnLayout) {
         qec, innerJoin, restrictionScan, innerJoin->getVariableColumn(sVar),
         restrictionScan->getVariableColumn(sVar));
 
-    auto sj = std::make_shared<SpatialJoin>(qec, config, std::nullopt,
-                                            std::nullopt, true);
-    sj = sj->addChild(valuesTree, pointVar);
-    sj = sj->addChild(outerJoin, wktVar);
-
-    // The prefilter was pushed down (the side was rebuilt), and the rebuilt
-    // side has the same column layout as the original.
-    const auto& rebuiltSide = sj->getChildren().at(1);
-    ASSERT_NE(rebuiltSide->getCacheKey(), outerJoin->getCacheKey())
+    // The prefilter is pushed down through both joins (the side is rebuilt),
+    // and the rebuilt side has the same column layout as the original.
+    auto rebuilt = outerJoin->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+        Operation::clonePrefilters(pairs));
+    ASSERT_TRUE(rebuilt.has_value())
         << "geometryScanFirst = " << geometryScanFirst;
-    EXPECT_EQ(layout(*rebuiltSide), layout(*outerJoin))
+    ASSERT_NE(rebuilt.value()->getCacheKey(), outerJoin->getCacheKey())
+        << "geometryScanFirst = " << geometryScanFirst;
+    EXPECT_EQ(layout(*rebuilt.value()), layout(*outerJoin))
         << "geometryScanFirst = " << geometryScanFirst;
 
-    // The two linestrings of type `<T>` within 200 km of the query point.
-    auto result = sj->computeResultOnlyForTesting();
-    EXPECT_EQ(result.idTableView().numRows(), 2u)
+    // The rebuilt side drops the 64 far-away points of type `<T>` and keeps
+    // the three linestrings (the far-away one survives the prefilter, its
+    // coordinates are not in its ID); the original has all 67.
+    EXPECT_EQ(rebuilt.value()
+                  ->getRootOperation()
+                  ->getResult()
+                  ->idTableView()
+                  .numRows(),
+              3u)
         << "geometryScanFirst = " << geometryScanFirst;
+    EXPECT_EQ(
+        outerJoin->getRootOperation()->getResult()->idTableView().numRows(),
+        67u);
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    GeoRectanglePrefilter, GeoRectanglePrefilterSchemeTest,
-    // NOTE: The other grid schemes are added by a follow-up change.
-    ::testing::Values(ad_utility::GeoCellGridScheme::Flat),
-    [](const auto& info) {
-      std::string name{info.param.toString()};
-      std::replace(name.begin(), name.end(), '-', '_');
-      return name;
-    });
+// The queries for the planner tests below: a fixed point near (10, 10),
+// either inlined in the filter or bound by a `BIND`, with a type restriction
+// on the geometries.
+constexpr std::string_view queryInlined = R"q(
+  PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+  PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+  SELECT * WHERE {
+    ?s <hasType> <T> . ?s <hasGeom> ?g .
+    FILTER (geof:metricDistance("POINT(10.5 10.0)"^^geo:wktLiteral, ?g) <= 200000)
+})q";
+constexpr std::string_view queryBind = R"q(
+  PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+  PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+  SELECT * WHERE {
+    BIND ("POINT(10.5 10.0)"^^geo:wktLiteral AS ?p)
+    ?s <hasType> <T> . ?s <hasGeom> ?g .
+    FILTER (geof:metricDistance(?p, ?g) <= 200000)
+})q";
+
+// The planner prefilters the scans of the geometry variable once, before the
+// dynamic programming: the final plan contains a `GeoRectangleRowFilter`
+// below the spatial join, for the inlined constant as well as for the `BIND`
+// form, and the spatial join carries the selectivity.
+TEST(GeoRectanglePrefilter, plannerPrefiltersGeometrySeeds) {
+  auto* qec = geoQec();
+  for (std::string_view query : {queryInlined, queryBind}) {
+    auto qet = queryPlannerTestHelpers::parseAndPlan(std::string{query}, qec);
+    const auto* spatialJoin = findOperation<SpatialJoin>(*qet);
+    ASSERT_NE(spatialJoin, nullptr) << query;
+    const auto* rowFilter = findOperation<GeoRectangleRowFilter>(*qet);
+    ASSERT_NE(rowFilter, nullptr) << query;
+    // The row filter sits on the scan of `?g`, below the spatial join.
+    EXPECT_NE(findOperation<GeoRectangleRowFilter>(
+                  *spatialJoin->getChildren().at(1)) == nullptr &&
+                  findOperation<GeoRectangleRowFilter>(
+                      *spatialJoin->getChildren().at(0)) == nullptr,
+              true)
+        << query;
+    // The two nearby linestrings of type `<T>`.
+    auto result = qet->getRootOperation()->getResult();
+    EXPECT_EQ(result->idTableView().numRows(), 2u) << query;
+  }
+}
+
+// The prefilter never changes a result: the same queries with the prefilter
+// disabled give the same rows.
+TEST(GeoRectanglePrefilter, plannerPrefilterKeepsResultsCorrect) {
+  auto* qec = geoQec();
+  auto numRows = [&qec](std::string_view q) {
+    qec->clearCacheUnpinnedOnly();
+    auto qet = queryPlannerTestHelpers::parseAndPlan(std::string{q}, qec);
+    return qet->getRootOperation()->getResult()->idTableView().size();
+  };
+  for (std::string_view query : {queryInlined, queryBind}) {
+    auto rowsWithPrefilter = numRows(query);
+    setRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>(
+        false);
+    absl::Cleanup restoreParameter{[]() {
+      setRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>(
+          true);
+    }};
+    auto rowsWithoutPrefilter = numRows(query);
+    EXPECT_EQ(rowsWithPrefilter, 2u) << query;
+    EXPECT_EQ(rowsWithPrefilter, rowsWithoutPrefilter) << query;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// With a geo cell grid, the block prefilter and the row prefilter also decide
+// WKT literals, by the cell bits of their IDs.
+
+using ad_utility::fractionOfCoveringCells;
+using ad_utility::GeoCellGrid;
+
+// Turtle input with non-point WKT literals in different cells of a level-2
+// grid (4 x 4 cells of 90 x 45 degrees): cell 10 (lng 0..90, lat 0..45),
+// cell 0 (bottom left) and the sentinel cell (a linestring crossing a cell
+// border), plus two points and a batch of far-away linestrings (so that whole
+// blocks can be pruned).
+std::string gridTurtleInput(int numFar = 16) {
+  auto wktTriple = [](std::string_view subject, std::string_view content) {
+    return absl::StrCat(subject, " <hasGeom> \"", content, "\"", wktDatatype,
+                        " . \n");
+  };
+  return absl::StrCat(
+      wktTriple("<cell10a>", "LINESTRING(10 10, 11 10)"),
+      wktTriple("<cell10b>", "LINESTRING(12 10, 13 10)"),
+      wktTriple("<cell0a>", "LINESTRING(-100 -50, -101 -50)"),
+      wktTriple("<cell0b>", "LINESTRING(-102 -50, -103 -50)"),
+      wktTriple("<spanning>", "LINESTRING(-10 10, 20 20)"),
+      wktTriple("<pointNear>", "POINT(10.5 10.01)"),
+      wktTriple("<pointFar>", "POINT(-100.5 -50.01)"),
+      "<cell10a> <hasType> <T> . \n"
+      "<cell10b> <hasType> <T> . \n"
+      "<spanning> <hasType> <T> . \n"
+      "<pointNear> <hasType> <P> . \n",
+      [numFar] {
+        std::string result;
+        for (int i = 0; i < numFar; ++i) {
+          result += absl::StrCat(
+              "<far", i, "> <hasGeom> \"LINESTRING(", -170 + i % 320, " -",
+              60 - i / 320, ".0, ", -169.5 + i % 320, " -", 60 - i / 320,
+              ".0)\"", wktDatatype, " . \n", "<far", i, "> <hasType> <T> . \n");
+        }
+        return result;
+      }());
+}
+
+// A `QueryExecutionContext` for an index over `gridTurtleInput` with the
+// geo-split vocabulary and a level-2 geo cell grid.
+QueryExecutionContext* gridQec(int numFar = 16) {
+  ad_utility::testing::TestIndexConfig config{gridTurtleInput(numFar)};
+  config.vocabularyType = ad_utility::VocabularyType{
+      ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit};
+  config.geoCellGridLevel = 2;
+  config.parserBufferSize = 1000_B;
+  return ad_utility::testing::getQec(std::move(config));
+}
+
+TEST(GeoRectanglePrefilterGrid, fractionOfCoveringCells) {
+  // Level 2: 4 x 4 cells of 90 x 45 degrees.
+  GeoCellGrid grid{2, ad_utility::GeoCellGridScheme::Flat};
+  // A rectangle inside one cell: its share of that cell.
+  EXPECT_NEAR(fractionOfCoveringCells(GeoRectangle{10, 10, 55, 20}, grid),
+              (45.0 * 10.0) / (90.0 * 45.0), 1e-9);
+  // A rectangle exactly covering a cell.
+  EXPECT_NEAR(fractionOfCoveringCells(GeoRectangle{0, 0, 90, 45}, grid), 1.0,
+              1e-9);
+  // Spanning two cells in longitude.
+  EXPECT_NEAR(fractionOfCoveringCells(GeoRectangle{80, 0, 100, 45}, grid),
+              (20.0 * 45.0) / (180.0 * 45.0), 1e-9);
+  // A point still touches one cell, the fraction is 0.
+  EXPECT_EQ(fractionOfCoveringCells(GeoRectangle{10, 10, 10, 10}, grid), 0.0);
+  // The whole world.
+  EXPECT_NEAR(fractionOfCoveringCells(GeoRectangle{-180, -90, 180, 90}, grid),
+              1.0, 1e-9);
+  // The grid-aware selectivity picks the cell share with a grid and the
+  // latitude band share without one.
+  EXPECT_NEAR(ad_utility::geoRectangleSelectivity(GeoRectangle{10, 10, 55, 20},
+                                                  std::optional{grid}),
+              (45.0 * 10.0) / (90.0 * 45.0), 1e-9);
+  EXPECT_NEAR(ad_utility::geoRectangleSelectivity(GeoRectangle{10, 10, 55, 20},
+                                                  std::nullopt),
+              45.0 / 360.0, 1e-9);
+}
+
+// The block-level evaluation with a grid: WKT literal blocks are pruned by
+// their cells, points by the latitude band, the sentinel cell is kept.
+TEST(GeoRectanglePrefilterGrid, evaluate) {
+  const IndexImpl& indexImpl = gridQec()->getIndex().getImpl();
+  ASSERT_TRUE(indexImpl.getVocab().getGeoCellGrid().has_value());
+  GeoCellGrid grid{2};
+  ASSERT_EQ(indexImpl.getVocab().getGeoCellGrid().value(), grid);
+
+  size_t blockIdx = 0;
+  auto makeBlock = [&blockIdx](ValueId first, ValueId last) {
+    AD_CONTRACT_CHECK(first <= last);
+    auto vocabId10 = Id::makeFromVocabIndex(VocabIndex::make(10));
+    ++blockIdx;
+    return CompressedBlockMetadata{
+        {{},
+         0,
+         {vocabId10, vocabId10, first, Id::makeUndefined()},
+         {vocabId10, vocabId10, last, Id::makeUndefined()},
+         {},
+         false},
+        blockIdx};
+  };
+  auto geoWktId = [&grid](uint64_t cell, uint64_t position) {
+    return Id::makeFromVocabIndex(
+        VocabIndex::make(GeoCellGrid::geoVocabMarkerBit |
+                         grid.indexFromCellAndPosition(cell, position)));
+  };
+  auto toPointers = [](const BlockMetadataRanges& ranges) {
+    std::vector<const CompressedBlockMetadata*> result;
+    for (const auto& range : ranges) {
+      for (const auto& block : range) {
+        result.push_back(&block);
+      }
+    }
+    return result;
+  };
+
+  // Query rectangle inside cell 3 (bottom right corner of the earth).
+  GeoRectangleExpression expr{GeoRectangle{170.0, -81.0, 172.0, -79.0}};
+  std::vector<CompressedBlockMetadata> blocks;
+  // Block 0: ints -> pruned.
+  blocks.push_back(
+      makeBlock(ad_utility::testing::IntId(1), ad_utility::testing::IntId(5)));
+  // Block 1: plain (non-WKT) vocab entries -> pruned.
+  blocks.push_back(makeBlock(Id::makeFromVocabIndex(VocabIndex::make(5)),
+                             Id::makeFromVocabIndex(VocabIndex::make(20))));
+  // Block 2: WKT literals of cell 0 -> pruned.
+  blocks.push_back(makeBlock(geoWktId(0, 0), geoWktId(0, 5)));
+  // Block 3: WKT literals of cell 3 -> kept.
+  blocks.push_back(makeBlock(geoWktId(3, 6), geoWktId(3, 9)));
+  // Block 4: WKT literals of cell 12 -> pruned.
+  blocks.push_back(makeBlock(geoWktId(12, 10), geoWktId(12, 12)));
+  // Block 5: sentinel cell -> kept.
+  blocks.push_back(makeBlock(geoWktId(grid.sentinelCell(), 13),
+                             geoWktId(grid.sentinelCell(), 15)));
+  // Block 6: GeoPoints inside the rectangle -> kept.
+  blocks.push_back(makeBlock(Id::makeFromGeoPoint(GeoPoint{-80.5, 170.5}),
+                             Id::makeFromGeoPoint(GeoPoint{-79.5, 171.5})));
+  // Block 7: GeoPoints far north -> pruned.
+  blocks.push_back(makeBlock(Id::makeFromGeoPoint(GeoPoint{70.0, 0.0}),
+                             Id::makeFromGeoPoint(GeoPoint{80.0, 10.0})));
+  auto kept =
+      toPointers(expr.evaluate(indexImpl, {blocks.data(), blocks.size()}, 2));
+  EXPECT_THAT(kept, ::testing::ElementsAre(&blocks[3], &blocks[5], &blocks[6]));
+
+  // A block that spans the whole cell-3 interval (from cell 2 to cell 4)
+  // must also be kept, although neither of its boundary IDs is inside.
+  std::vector<CompressedBlockMetadata> spanningBlocks;
+  spanningBlocks.push_back(makeBlock(geoWktId(0, 0), geoWktId(1, 3)));
+  spanningBlocks.push_back(makeBlock(geoWktId(2, 4), geoWktId(4, 8)));
+  spanningBlocks.push_back(makeBlock(geoWktId(5, 9), geoWktId(6, 11)));
+  auto keptSpanning = toPointers(expr.evaluate(
+      indexImpl, {spanningBlocks.data(), spanningBlocks.size()}, 2));
+  EXPECT_THAT(keptSpanning, ::testing::ElementsAre(&spanningBlocks[1]));
+}
+
+// The row prefilter with a grid decides WKT literals by their cell bits.
+TEST(GeoRectanglePrefilterGrid, rowFilterDropsLiteralsByCell) {
+  auto* qec = gridQec();
+  Variable wktVar{"?wkt"};
+  auto scan = ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS,
+                                                       hasGeomTriple(wktVar));
+  // A rectangle around the cell-10 geometries and the nearby point.
+  std::vector<Operation::PrefilterVariablePair> pairs;
+  pairs.emplace_back(std::make_unique<GeoRectangleExpression>(
+                         GeoRectangle{9.5, 9.5, 13.5, 10.5}),
+                     wktVar);
+  auto prefiltered =
+      scan->getRootOperation()
+          ->getUpdatedQueryExecutionTreeWithPrefilterApplied(pairs);
+  ASSERT_TRUE(prefiltered.has_value());
+  auto* rowFilter = dynamic_cast<GeoRectangleRowFilter*>(
+      prefiltered.value()->getRootOperation().get());
+  ASSERT_NE(rowFilter, nullptr);
+  // Kept: the two cell-10 linestrings, the nearby point and `<spanning>`
+  // (no cell information). Dropped: the linestrings of cell 0 and the
+  // far-away ones (other cells), and the far-away point.
+  auto result = rowFilter->getResult();
+  EXPECT_EQ(result->idTableView().numRows(), 4u);
+}
+
+// The planner prefilters the seeds on a grid index as well, and the spatial
+// join's estimate uses the cell share; the results do not change.
+TEST(GeoRectanglePrefilterGrid, plannerOnGridIndex) {
+  auto* qec = gridQec(300);
+  constexpr std::string_view query = R"q(
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    SELECT * WHERE {
+      ?s <hasType> <T> . ?s <hasGeom> ?g .
+      FILTER (geof:metricDistance("POINT(10.5 10.0)"^^geo:wktLiteral, ?g) <= 200000)
+    })q";
+  auto qet = queryPlannerTestHelpers::parseAndPlan(std::string{query}, qec);
+  const auto* spatialJoin = findOperation<SpatialJoin>(*qet);
+  ASSERT_NE(spatialJoin, nullptr);
+  ASSERT_NE(findOperation<GeoRectangleRowFilter>(*qet), nullptr);
+  // 200 km around a point cover a tiny part of a 90 x 45 degree cell, so the
+  // estimate is the minimum of 1.
+  EXPECT_EQ(const_cast<SpatialJoin*>(spatialJoin)->getSizeEstimate(), 1u);
+
+  auto numRows = [&qec](std::string_view q) {
+    qec->clearCacheUnpinnedOnly();
+    auto qet = queryPlannerTestHelpers::parseAndPlan(std::string{q}, qec);
+    return qet->getRootOperation()->getResult()->idTableView().size();
+  };
+  auto rowsWithPrefilter = numRows(query);
+  setRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>(false);
+  absl::Cleanup restoreParameter{[]() {
+    setRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>(true);
+  }};
+  // The two cell-10 linestrings are within 200 km (`<spanning>` is not).
+  EXPECT_EQ(rowsWithPrefilter, 2u);
+  EXPECT_EQ(numRows(query), rowsWithPrefilter);
+}
 
 }  // namespace

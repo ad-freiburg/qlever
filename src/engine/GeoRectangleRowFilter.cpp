@@ -14,12 +14,14 @@
 // _____________________________________________________________________________
 GeoRectangleRowFilter::GeoRectangleRowFilter(
     QueryExecutionContext* ctx, std::shared_ptr<QueryExecutionTree> child,
-    ColumnIndex geometryColumn, const ad_utility::GeoRectangle& rectangle)
+    ColumnIndex geometryColumn, const ad_utility::GeoRectangle& rectangle,
+    std::optional<uint64_t> sizeEstimate)
     : Operation{ctx},
       child_{std::move(child)},
       geometryColumn_{geometryColumn},
       rectangle_{rectangle},
-      prefilter_{getIndex().getVocab().getGeoCellGrid(), rectangle} {
+      prefilter_{getIndex().getVocab().getGeoCellGrid(), rectangle},
+      sizeEstimate_{sizeEstimate} {
   AD_CONTRACT_CHECK(geometryColumn_ < child_->getResultWidth());
   // The result of a block-prefiltered scan does not match its cache key, and
   // neither does the result of this filter on top of it.
@@ -59,7 +61,7 @@ size_t GeoRectangleRowFilter::getCostEstimate() {
 
 // _____________________________________________________________________________
 uint64_t GeoRectangleRowFilter::getSizeEstimateBeforeLimit() {
-  return child_->getSizeEstimate();
+  return sizeEstimate_.value_or(child_->getSizeEstimate());
 }
 
 // _____________________________________________________________________________
@@ -75,7 +77,8 @@ bool GeoRectangleRowFilter::knownEmptyResult() {
 // _____________________________________________________________________________
 std::unique_ptr<Operation> GeoRectangleRowFilter::cloneImpl() const {
   return std::make_unique<GeoRectangleRowFilter>(
-      getExecutionContext(), child_->clone(), geometryColumn_, rectangle_);
+      getExecutionContext(), child_->clone(), geometryColumn_, rectangle_,
+      sizeEstimate_);
 }
 
 // _____________________________________________________________________________

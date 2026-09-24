@@ -1983,10 +1983,9 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
     auto res = qet.getResult();
     const auto& runtimeInfo = qet.getRootOperation()->runtimeInfo().details_;
     ASSERT_TRUE(runtimeInfo.contains("num-geoms-after-block-prefilter"));
-    EXPECT_EQ(
-        runtimeInfo.at("num-geoms-after-block-prefilter").get<int64_t>() -
-            runtimeInfo.at("num-geoms-after-bbox-prefilter").get<int64_t>(),
-        3);
+    EXPECT_EQ(runtimeInfo.at("num-geoms-after-block-prefilter").get<int64_t>() -
+                  runtimeInfo.at("num-geoms-after-bbox-prefilter").get<int64_t>(),
+              3);
   }
 }
 
