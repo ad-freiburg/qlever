@@ -40,7 +40,6 @@
 #include "parser/RdfAsyncMultifileParser.h"
 #endif
 #include "parser/WordsAndDocsFileParser.h"
-#include "util/CachingMemoryResource.h"
 #include "util/CancellationHandle.h"
 #include "util/FilesystemHelpers.h"
 #include "util/HashMap.h"
@@ -544,12 +543,9 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
                  "per batch, using "
               << numThreads << " threads ..." << std::endl;
 
-  ad_utility::CachingMemoryResource cachingMemoryResource;
-  ItemAlloc itemAlloc(&cachingMemoryResource);
-
   using namespace qlever::partialVocabularyBuilder;
   FirstPassSharedState<IndexImpl> shared{this, &vocab_.getCaseComparator(),
-                                         itemAlloc, linesPerPartial};
+                                         linesPerPartial};
   // The thread pool and the parser are owned by `runTaskChains`, which only
   // returns once no asynchronous operation is left.
   runTaskChains(shared, numThreads,
@@ -561,10 +557,10 @@ BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
   // partial vocabulary, because the vocabulary has to contain the special IDs
   // (which every `ItemMapManager` adds to its map).
   if (shared.nextPartialVocabIdx_ == 0) {
-    writePartialVocabulary(
-        shared.nextPartialVocabIdx_++,
-        ItemMapManager{0, &vocab_.getCaseComparator(), itemAlloc}.moveMap(),
-        {});
+    ItemMapManager itemMap{0, &vocab_.getCaseComparator()};
+    std::vector<IdRow> noTriples;
+    writePartialVocabulary(shared.nextPartialVocabIdx_++, itemMap.map_,
+                           noTriples);
   }
 
   // The task chains have claimed all the indices below the counter, and each
@@ -1712,8 +1708,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 
 // ___________________________________________________________________________
 void IndexImpl::writePartialVocabulary(
-    size_t partialVocabIdx, ItemMapAndBuffer items,
-    std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds) const {
+    size_t partialVocabIdx, const ItemMapAndBuffer& items,
+    std::vector<std::array<Id, NumColumnsIndexBuilding>>& localIds) const {
   using namespace ad_utility::vocabulary_merger;
   AD_LOG_DEBUG
       << "Triples processed, also counting internal triples added by QLever: "
@@ -1755,7 +1751,7 @@ void IndexImpl::writePartialVocabulary(
   }
   {
     ad_utility::TimeBlockAndLog l{"writing to file"};
-    writeMappedIdsToFile(std::move(localIds), mapping,
+    writeMappedIdsToFile(localIds, mapping,
                          unsortedTriplesFilename(onDiskBase_, partialVocabIdx));
   }
   {

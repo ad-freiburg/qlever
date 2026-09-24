@@ -23,6 +23,7 @@
 #include "util/Serializer/SerializeOptional.h"
 #include "util/Serializer/SerializePair.h"
 #include "util/Serializer/SerializeString.h"
+#include "util/Serializer/SerializeVariant.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 
@@ -705,6 +706,73 @@ TEST(Serializer, serializeOptional) {
 }
 
 // _____________________________________________________________________________
+TEST(Serializer, serializeVariant) {
+  using Variant = std::variant<int, std::string, std::vector<int>>;
+  Variant number = 42;
+  Variant string = std::string{"hallo"};
+  Variant vector = std::vector<int>{1, 2, 3};
+
+  ByteBufferWriteSerializer writer;
+  writer << number;
+  writer << string;
+  writer << vector;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+
+  // The alternative that was written is also the alternative that is read, no
+  // matter which alternative the target currently holds.
+  Variant numberExpected = std::string{"not a number"};
+  Variant stringExpected;
+  Variant vectorExpected;
+  reader >> numberExpected;
+  reader >> stringExpected;
+  reader >> vectorExpected;
+  EXPECT_EQ(numberExpected, number);
+  EXPECT_EQ(stringExpected, string);
+  EXPECT_EQ(vectorExpected, vector);
+}
+
+// _____________________________________________________________________________
+TEST(Serializer, serializeVariantWithAnOutOfRangeIndex) {
+  using Variant = std::variant<int, std::string>;
+  // Write an index that is out of range for `Variant`, which can only happen
+  // for a corrupted or otherwise unsuitable input.
+  ByteBufferWriteSerializer writer;
+  writer << uint64_t{2};
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  Variant variant;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      reader >> variant,
+      ::testing::HasSubstr(
+          "out of range index 2 (the variant has 2 alternatives)"));
+  // The variant is unchanged, in particular it does not hold an alternative
+  // that was never read.
+  EXPECT_EQ(variant, Variant{int{}});
+}
+
+// A type that makes a `std::variant` `valueless_by_exception`, which is the
+// only state in which a variant holds no alternative at all.
+struct ThrowingOnMove {
+  int value_ = 0;
+  ThrowingOnMove() = default;
+  ThrowingOnMove(ThrowingOnMove&&) {
+    throw std::runtime_error{"deliberately throwing move constructor"};
+  }
+  ThrowingOnMove& operator=(ThrowingOnMove&&) = default;
+  AD_SERIALIZE_FRIEND_FUNCTION(ThrowingOnMove) { serializer | arg.value_; }
+};
+
+// _____________________________________________________________________________
+TEST(Serializer, serializeValuelessVariant) {
+  std::variant<int, ThrowingOnMove> variant;
+  EXPECT_ANY_THROW(variant.emplace<ThrowingOnMove>(ThrowingOnMove{}));
+  ASSERT_TRUE(variant.valueless_by_exception());
+
+  ByteBufferWriteSerializer writer;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writer << variant, ::testing::HasSubstr("`valueless_by_exception`"));
+}
+
+// _____________________________________________________________________________
 TEST(Serializer, serializeEnum) {
   // Enums are implicitly serializable without any additional code.
   enum E { a, b, c };
@@ -889,6 +957,49 @@ TEST(ZstdSerializer, RoundtripWithFileSerializer) {
     reader >> read;
     EXPECT_EQ(original, read);
   }
+}
+
+// _____________________________________________________________________________
+TEST(ByteBufferWriteSerializer, serializeAtPosition) {
+  ByteBufferWriteSerializer writer;
+  writer << uint32_t{1};
+  // Remember the position of the value that is patched below, and write a
+  // placeholder for it, as a caller would do for a size that is only known
+  // once the data that it describes has been written.
+  size_t position = writer.getCurrentPosition();
+  writer << uint32_t{0};
+  writer << uint32_t{3};
+
+  serializeAtPosition(writer, position, uint32_t{42});
+  // The number of bytes is unchanged, only the middle value was replaced.
+  EXPECT_EQ(writer.getCurrentPosition(), 3 * sizeof(uint32_t));
+
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  uint32_t first, second, third;
+  reader >> first;
+  reader >> second;
+  reader >> third;
+  EXPECT_EQ(first, 1u);
+  EXPECT_EQ(second, 42u);
+  EXPECT_EQ(third, 3u);
+}
+
+// _____________________________________________________________________________
+TEST(ByteBufferWriteSerializer, serializeAtPositionOutOfRangeThrows) {
+  ByteBufferWriteSerializer writer;
+  writer << uint32_t{1};
+
+  // Overwriting exactly the bytes that were written is still allowed.
+  EXPECT_NO_THROW(serializeAtPosition(writer, 0, uint32_t{7}));
+
+  // Overwriting a single byte past the end throws, as does an overwrite that
+  // starts inside the data but reaches past its end.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serializeAtPosition(writer, sizeof(uint32_t), char{0}),
+      ::testing::HasSubstr("position_ + numBytes <= data_.size()"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serializeAtPosition(writer, 1, uint32_t{7}),
+      ::testing::HasSubstr("position_ + numBytes <= data_.size()"));
 }
 
 // _____________________________________________________________________________

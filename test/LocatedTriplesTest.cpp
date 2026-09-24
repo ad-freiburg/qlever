@@ -14,6 +14,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "index/CompressedRelation.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
@@ -1007,7 +1008,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   using TC = TripleComponent;
-  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto Iri = ad_utility::testing::iri;
   auto getId = [&lv, &index](TC&& tc) {
     return toValueId(std::move(tc), index, lv);
   };

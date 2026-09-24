@@ -28,6 +28,7 @@
 #include "engine/MaterializedViews.h"
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
+#include "index/ExportIds.h"
 #include "index/Index.h"
 #include "index/IndexFormatConverter.h"
 #include "index/IndexFormatVersion.h"
@@ -609,6 +610,28 @@ TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
       qec->getIndex().getWordPostingsForTerm("polygon", qec->getAllocator());
   ASSERT_EQ(polygonResult.size(), 1u);
   EXPECT_GT(polygonResult.at(0, 2).getDouble(), 0.0);
+}
+
+// The text of a docsfile line is stored verbatim, so exporting a text record
+// must not unescape it. A backslash in the text, e.g. in a Windows path, is an
+// ordinary character and not the start of an escape sequence.
+TEST(IndexTest, textRecordExportDoesNotUnescapeTheExcerpt) {
+  std::string docText = R"(The config lives in C:\temp\notes.txt)";
+  ad_utility::testing::TestIndexConfig config{"<a> <b> \"hello world\" ."};
+  config.createTextIndex = true;
+  config.contentsOfWordsFileAndDocsfile =
+      std::pair{createWordsFileLineAsString("config", false, 1, 1),
+                createDocsFileLineAsString(1, docText)};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  const IndexImpl& index = qec->getIndex().getImpl();
+
+  auto id = Id::makeFromTextRecordIndex(TextRecordIndex::make(1));
+  ASSERT_EQ(index.getTextExcerpt(id.getTextRecordIndex()), docText);
+
+  auto exported = ql::exportIds::getLiteralOrIriFromTextRecordIndex(index, id);
+  ASSERT_TRUE(exported.has_value());
+  EXPECT_EQ(asStringViewUnsafe(exported.value().getLiteral().getContent()),
+            docText);
 }
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a

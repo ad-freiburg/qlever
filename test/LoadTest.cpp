@@ -19,6 +19,7 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
+#include "util/TripleComponentTestHelpers.h"
 
 namespace {
 
@@ -218,7 +219,7 @@ TEST_F(LoadTest, computeResult) {
                                                                   5_GB))),
       testing::HasSubstr("Tried to allocate"));
 
-  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto Iri = ad_utility::testing::iri;
   auto Literal =
       ad_utility::triple_component::Literal::fromStringRepresentation;
   expectLoad("<x> <b> <c>", "text/turtle",
