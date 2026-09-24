@@ -419,10 +419,10 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   // in the PSO permutation), the number of rows is stored in the per-relation
   // metadata, if the relation is large enough to have such an entry. Use it,
   // as summing up the block sizes below is linear in the number of blocks of
-  // the relation, which can be large. The estimate is exact iff none of the
-  // blocks of the relation has located triples (the general case below would
-  // return the same estimate then, as the located triples of a block count
-  // as inserted and as deleted at the same time, see
+  // the relation, which can be large. If a block of the relation has located
+  // triples, the estimate is the same, but marked as inexact. This is also
+  // what the general case below computes, because it counts the located
+  // triples of a block as inserted and as deleted at the same time (see
   // `LocatedTriplesPerBlock::numTriples`). Prefiltered scans and small
   // relations that share a block with other relations (and hence have no
   // metadata entry) use the general case.
@@ -436,12 +436,12 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
                            ql::ranges::end(blocks));
       size_t firstBlockIndex = ql::ranges::begin(blocks)->blockIndex_;
       size_t lastBlockIndex = std::prev(ql::ranges::end(blocks))->blockIndex_;
-      bool hasUpdates =
+      bool hasLocatedTriples =
           permutation()
               .getLocatedTriplesForPermutation(locatedTriplesState())
               .containsLocatedTriplesInBlockRange(firstBlockIndex,
                                                   lastBlockIndex);
-      return {!hasUpdates, metadata->numRows_};
+      return {!hasLocatedTriples, metadata->numRows_};
     }
   }
 
