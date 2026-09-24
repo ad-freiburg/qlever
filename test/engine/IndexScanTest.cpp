@@ -569,9 +569,9 @@ TEST(IndexScan, getResultSizeOfScan) {
 // per-relation metadata if the relation has an entry there, and that it is
 // exact iff no block of the relation has located triples.
 TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
-  // A large relation `<p>` and two small relations `<q>` and `<r>`. With a
-  // block size of 16 bytes, `<p>` is stored in blocks of its own and has a
-  // metadata entry, `<q>` and `<r>` share one block and have none.
+  // A large relation `<p>` and two small relations `<q>` and `<r>`. With two
+  // rows per block, `<p>` is stored in blocks of its own and has a metadata
+  // entry, `<q>` and `<r>` share one block and have none.
   std::string kg;
   for (size_t i = 0; i < 50; ++i) {
     kg += absl::StrCat("<x", i, "> <p> <y", i, "> . ");
