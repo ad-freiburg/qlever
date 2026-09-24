@@ -26,38 +26,10 @@ namespace otel_common = opentelemetry::sdk::common;
 namespace semconv = opentelemetry::semconv;
 
 namespace ad_utility::metrics {
-namespace {
-
-constexpr std::string_view DEFAULT_SERVICE_NAME = "qlever";
-
-// Names of the environment variables from which the OTEL SDK itself detects
-// resource attributes (see `OTELResourceDetector`).
-constexpr const char* SERVICE_NAME_ENV_VAR = "OTEL_SERVICE_NAME";
-constexpr const char* RESOURCE_ATTRIBUTES_ENV_VAR = "OTEL_RESOURCE_ATTRIBUTES";
-
-}  // namespace
-
-// _____________________________________________________________________________
-bool hasServiceNameFromEnv() {
-  std::string value;
-  if (otel_common::GetStringEnvironmentVariable(SERVICE_NAME_ENV_VAR, value) &&
-      !value.empty()) {
-    return true;
-  }
-  // Reads and parses `OTEL_RESOURCE_ATTRIBUTES`. Return whether a non-empty
-  // service name was set (mirroring `GetStringEnvironmentVariable`).
-  auto res = opentelemetry::sdk::resource::OTELResourceDetector().Detect();
-  return ql::ranges::any_of(res.GetAttributes(), [](const auto& attribute) {
-    return attribute.first == semconv::service::kServiceName &&
-           std::holds_alternative<std::string>(attribute.second) &&
-           !std::get<std::string>(attribute.second).empty();
-  });
-}
 
 // _____________________________________________________________________________
 const resource_sdk::Resource& sharedResource() {
-  static const resource_sdk::Resource resource =
-      resource_sdk::Resource::Create(detail::qleverResourceAttributes());
+  static const resource_sdk::Resource resource = detail::sharedResourceImpl();
   return resource;
 }
 
@@ -67,7 +39,7 @@ resource_sdk::ResourceAttributes detail::qleverResourceAttributes() {
   // Prometheus (see `ServerMetrics.cpp`). On the OTLP side this information
   // belongs on the resource, so it does not have to be repeated for every
   // metric and span.
-  resource_sdk::ResourceAttributes attributes{
+  return resource_sdk::ResourceAttributes{
       {"qlever.compiler", *qlever::version::compilerWithoutLinking.rlock()},
       {"qlever.compiler_version",
        *qlever::version::compilerVersionWithoutLinking.rlock()},
@@ -78,11 +50,18 @@ resource_sdk::ResourceAttributes detail::qleverResourceAttributes() {
        *qlever::version::timeOfCompilationUnixWithoutLinking.rlock()},
       {"qlever.cxx_standard",
        *qlever::version::cxxStandardWithoutLinking.rlock()}};
-  if (!hasServiceNameFromEnv()) {
-    attributes.SetAttribute(semconv::service::kServiceName,
-                            DEFAULT_SERVICE_NAME);
-  }
-  return attributes;
+}
+
+// _____________________________________________________________________________
+resource_sdk::Resource detail::sharedResourceImpl() {
+  return resource_sdk::Resource::GetDefault()
+      // `service.name` is a required attribute. Provide a default that is
+      // be overwritten by user provided values (`OTELResourceDetector`) if
+      // provided.
+      .Merge(resource_sdk::Resource(
+          {{semconv::service::kServiceName, DEFAULT_SERVICE_NAME}}))
+      .Merge(resource_sdk::OTELResourceDetector().Detect())
+      .Merge(resource_sdk::Resource(qleverResourceAttributes()));
 }
 
 }  // namespace ad_utility::metrics

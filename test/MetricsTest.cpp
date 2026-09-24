@@ -14,8 +14,8 @@
 #include <cstdlib>
 #include <optional>
 #include <string>
-#include <string_view>
 
+#include "util/Algorithm.h"
 #include "util/GTestHelpers.h"
 #include "util/metrics/Metrics.h"
 #include "util/metrics/Resource.h"
@@ -23,15 +23,6 @@
 namespace {
 namespace semconv = opentelemetry::semconv;
 namespace resource_sdk = opentelemetry::sdk::resource;
-
-std::optional<std::string> getAttribute(
-    const resource_sdk::ResourceAttributes& attributes, std::string_view key) {
-  auto it = attributes.find(std::string{key});
-  if (it == attributes.end()) {
-    return std::nullopt;
-  }
-  return opentelemetry::nostd::get<std::string>(it->second);
-}
 
 // RAII helper that sets an environment variable and unsets it again on
 // destruction.
@@ -53,27 +44,34 @@ TEST(Metrics, initialize) {
   EXPECT_NE(ad_utility::metrics::initialize(true), nullptr);
 }
 
+namespace {
+auto QLeverResourceAttributesExist() {
+  std::vector<std::string> attrs = {
+      "qlever.git_hash",         "qlever.compiler",
+      "qlever.compiler_version", "qlever.cxx_standard",
+      "qlever.compile_time",     semconv::service::kServiceVersion};
+  return testing::AllOfArray(ad_utility::transform(attrs, [](auto& attr) {
+    return testing::Contains(testing::Pair(
+        attr,
+        testing::VariantWith<std::string>(testing::Not(testing::IsEmpty()))));
+  }));
+}
+};  // namespace
+
 // _____________________________________________________________________________
 TEST(Metrics, resourceAttributesContainBuildInformation) {
   // Check that all attributes exist. They don't contain the actual values as
   // `copyVersionInfo` hasn't been called.
-  auto attributes = ad_utility::metrics::detail::qleverResourceAttributes();
-  for (std::string_view key :
-       {"qlever.git_hash", "qlever.compiler", "qlever.compiler_version",
-        "qlever.cxx_standard", "qlever.compile_time",
-        semconv::service::kServiceVersion}) {
-    EXPECT_THAT(getAttribute(attributes, key),
-                testing::Optional(testing::Not(testing::IsEmpty())));
-  }
+  EXPECT_THAT(ad_utility::metrics::detail::qleverResourceAttributes(),
+              QLeverResourceAttributesExist());
 }
 
 // _____________________________________________________________________________
-TEST(Metrics, hasServiceNameFromEnv) {
-  using ad_utility::metrics::hasServiceNameFromEnv;
-  using ad_utility::metrics::detail::qleverResourceAttributes;
-  auto expectServiceName =
+TEST(Metrics, sharedResourceImpl) {
+  auto expectSharedResourceImpl =
       [](std::optional<std::pair<std::string, std::string>> envVariable,
-         bool expectedHasServiceName,
+         const std::string& expectedServiceName =
+             ad_utility::metrics::DEFAULT_SERVICE_NAME,
          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         std::optional<ScopedEnvironmentVariable> variable;
@@ -81,28 +79,26 @@ TEST(Metrics, hasServiceNameFromEnv) {
           variable.emplace(envVariable.value().first,
                            envVariable.value().second);
         }
-        EXPECT_THAT(hasServiceNameFromEnv(),
-                    testing::Eq(expectedHasServiceName));
+        auto attributes =
+            ad_utility::metrics::detail::sharedResourceImpl().GetAttributes();
+        EXPECT_THAT(attributes, QLeverResourceAttributesExist());
         // The service name is read by the OTEL sdk from the environment
         // variables. Only if no service name is set via `qlever` is injected.
-        testing::Matcher<std::optional<std::string>> serviceNameMatcher =
-            testing::Eq(std::nullopt);
-        if (!expectedHasServiceName) {
-          serviceNameMatcher = testing::Optional(std::string{"qlever"});
-        }
-        EXPECT_THAT(getAttribute(qleverResourceAttributes(),
-                                 semconv::service::kServiceName),
-                    serviceNameMatcher);
+        EXPECT_THAT(
+            attributes,
+            testing::Contains(testing::Pair(
+                semconv::service::kServiceName,
+                testing::VariantWith<std::string>(expectedServiceName))));
       };
-  expectServiceName(std::nullopt, false);
-  expectServiceName({{"OTEL_SERVICE_NAME", "my-qlever"}}, true);
-  expectServiceName({{"OTEL_SERVICE_NAME", ""}}, false);
-  expectServiceName({{"OTEL_RESOURCE_ATTRIBUTES", "service.name=mo-qlever"}},
-                    true);
-  expectServiceName({{"OTEL_RESOURCE_ATTRIBUTES",
-                      "deployment.environment=prod, service.name=ma-qlever"}},
-                    true);
-  expectServiceName({{"OTEL_RESOURCE_ATTRIBUTES",
-                      "service.namespace=qlever,my.service.name=x"}},
-                    false);
+  expectSharedResourceImpl(std::nullopt);
+  expectSharedResourceImpl({{"OTEL_SERVICE_NAME", "my-qlever"}}, "my-qlever");
+  expectSharedResourceImpl({{"OTEL_SERVICE_NAME", ""}});
+  expectSharedResourceImpl(
+      {{"OTEL_RESOURCE_ATTRIBUTES", "service.name=mo-qlever"}}, "mo-qlever");
+  // The SDK doesn't trim whitespaces so this is not detected as `service.name`.
+  expectSharedResourceImpl(
+      {{"OTEL_RESOURCE_ATTRIBUTES",
+        "deployment.environment=prod, service.name=ma-qlever"}});
+  expectSharedResourceImpl({{"OTEL_RESOURCE_ATTRIBUTES",
+                             "service.namespace=qlever,my.service.name=x"}});
 }

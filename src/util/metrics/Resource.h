@@ -14,6 +14,8 @@
 
 namespace ad_utility::metrics {
 
+constexpr std::string DEFAULT_SERVICE_NAME = "qlever";
+
 // The identity shared by all OTEL providers so that a backend
 // can tell that metrics and spans come from the same QLever instance.
 //
@@ -23,11 +25,9 @@ const opentelemetry::sdk::resource::Resource& sharedResource();
 namespace detail {
 // The resource attributes that QLever itself contributes. Exposed for testing.
 opentelemetry::sdk::resource::ResourceAttributes qleverResourceAttributes();
+// Exposed for testing.
+opentelemetry::sdk::resource::Resource sharedResourceImpl();
 }  // namespace detail
-
-// Whether the environment specifies a `service.name`, either directly via
-// `OTEL_SERVICE_NAME` or as an entry of `OTEL_RESOURCE_ATTRIBUTES`.
-bool hasServiceNameFromEnv();
 
 }  // namespace ad_utility::metrics
 
