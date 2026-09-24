@@ -427,6 +427,20 @@ size_t LocatedTriplesPerBlock::numTriplesForTesting() const {
 }
 
 // ____________________________________________________________________________
+bool LocatedTriplesPerBlock::containsLocatedTriplesInBlockRange(
+    size_t firstBlockIndex, size_t lastBlockIndex) const {
+  AD_CONTRACT_CHECK(firstBlockIndex <= lastBlockIndex);
+  if (map_.size() <= lastBlockIndex - firstBlockIndex) {
+    return ql::ranges::any_of(map_ | ql::views::keys, [&](size_t blockIndex) {
+      return blockIndex >= firstBlockIndex && blockIndex <= lastBlockIndex;
+    });
+  }
+  return ql::ranges::any_of(
+      ql::views::iota(firstBlockIndex, lastBlockIndex + 1),
+      [this](size_t blockIndex) { return map_.contains(blockIndex); });
+}
+
+// ____________________________________________________________________________
 void LocatedTriplesPerBlock::setOriginalMetadata(
     std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata) {
   originalMetadata_ = std::move(metadata);
