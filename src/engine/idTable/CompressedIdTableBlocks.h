@@ -20,10 +20,11 @@
 #include "util/Exception.h"
 
 // Store a block of an `IdTable` in a `CompressedBlockFile` and read it back.
-// This is the codec of the block storage that a follow-up PR will use to spill
-// the output blocks of the parallel merge to disk. It lives in a header of its
-// own, because it is the part of that storage that is purely about bytes and
-// can hence be read and tested without any of the asynchronous machinery.
+// This is the codec of the `CompressedIdTableBlockStorage` (see
+// `CompressedIdTableBlockStorage.h`), which spills the output blocks of the
+// parallel merge to disk. It lives in a header of its own, because it is the
+// part of that storage that is purely about bytes and can hence be read and
+// tested without any of the asynchronous machinery.
 //
 // NOTE: The `CompressedExternalIdTableWriter` (see
 // `CompressedExternalIdTable.h`) stores its blocks in a very similar way, but

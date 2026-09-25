@@ -35,6 +35,13 @@ namespace ad_utility {
 // that destruction). A caller that relies on a resource of the `function` being
 // released has to make the `function` release it explicitly before it returns,
 // see `ad_utility::streams::runStreamAsync` for an example.
+//
+// NOTE: This is deliberately not `ad_utility::runFunctionOnExecutor(executor,
+// function, net::use_future)` from `util/AsioHelpers.h`, which is the same
+// thing for a result that is default-constructible (or `void`). The callers
+// here hand back blocks (a `SortBlockBuffer`, an `IdTableStatic`) that are
+// not, because they own an allocator. Prefer `runFunctionOnExecutor` wherever
+// that restriction does not bite.
 template <typename Function>
 std::future<std::invoke_result_t<Function&>> postAndGetFuture(
     const boost::asio::any_io_executor& executor, Function function) {

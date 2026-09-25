@@ -11,12 +11,14 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <future>
 #include <thread>
 #include <vector>
 
+#include "util/AsioHelpers.h"
 #include "util/Exception.h"
+#include "util/GTestHelpers.h"
 #include "util/GlobalExecutor.h"
-#include "util/PostAndGetFuture.h"
 
 // NOTE: The global executor is a process-wide singleton, so none of the
 // following tests may assume that the pool doesn't exist yet. They are
@@ -29,14 +31,17 @@ TEST(GlobalExecutor, numThreadsIsPositive) {
 
 // _____________________________________________________________________________
 TEST(GlobalExecutor, numThreadsMustBePositive) {
-  EXPECT_ANY_THROW(ad_utility::setGlobalExecutorNumThreads(0));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::setGlobalExecutorNumThreads(0),
+      ::testing::HasSubstr("Assertion `numThreads > 0` failed"));
 }
 
 // _____________________________________________________________________________
 TEST(GlobalExecutor, executorRunsPostedTasks) {
   auto executor = ad_utility::globalExecutor();
   ASSERT_TRUE(static_cast<bool>(executor));
-  auto future = ad_utility::postAndGetFuture(executor, []() { return 42; });
+  auto future = ad_utility::runFunctionOnExecutor(
+      executor, []() { return 42; }, ad_utility::net::use_future);
   EXPECT_EQ(future.get(), 42);
 }
 
@@ -47,8 +52,8 @@ TEST(GlobalExecutor, executorRunsManyTasks) {
   std::vector<std::future<void>> futures;
   static constexpr size_t numTasks = 100;
   for (size_t i = 0; i < numTasks; ++i) {
-    futures.push_back(
-        ad_utility::postAndGetFuture(executor, [&counter]() { ++counter; }));
+    futures.push_back(ad_utility::runFunctionOnExecutor(
+        executor, [&counter]() { ++counter; }, ad_utility::net::use_future));
   }
   for (auto& future : futures) {
     future.get();
@@ -57,16 +62,29 @@ TEST(GlobalExecutor, executorRunsManyTasks) {
 }
 
 // _____________________________________________________________________________
-TEST(GlobalExecutor, settingTheNumThreadsTooLateIsIgnored) {
+TEST(GlobalExecutor, settingTheNumThreadsTooLate) {
   // Make sure that the pool exists, no matter in which order the tests run.
   auto numThreadsBefore = ad_utility::globalExecutorNumThreads();
   ad_utility::globalExecutor();
-  // The pool now exists, so the following call only logs a warning and does
-  // nothing else. In particular, the executor still works afterwards.
-  ad_utility::setGlobalExecutorNumThreads(numThreadsBefore + 1);
+  // The pool now exists and cannot be resized, so setting a different number
+  // of threads fails and leaves the configuration unchanged.
+  EXPECT_FALSE(
+      ad_utility::trySetGlobalExecutorNumThreads(numThreadsBefore + 1));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::setGlobalExecutorNumThreads(numThreadsBefore + 1),
+      ::testing::HasSubstr(
+          "must not be set after the pool has already been accessed"));
   EXPECT_EQ(ad_utility::globalExecutorNumThreads(), numThreadsBefore);
-  auto future = ad_utility::postAndGetFuture(ad_utility::globalExecutor(),
-                                             []() { return 1; });
+  // Setting the number of threads that the pool already has is not a change
+  // and therefore succeeds. This matters for a process that builds several
+  // indices, because each build sets the number of threads.
+  EXPECT_TRUE(ad_utility::trySetGlobalExecutorNumThreads(numThreadsBefore));
+  EXPECT_NO_THROW(ad_utility::setGlobalExecutorNumThreads(numThreadsBefore));
+  EXPECT_EQ(ad_utility::globalExecutorNumThreads(), numThreadsBefore);
+  // In particular, the executor still works afterwards.
+  auto future = ad_utility::runFunctionOnExecutor(
+      ad_utility::globalExecutor(), []() { return 1; },
+      ad_utility::net::use_future);
   EXPECT_EQ(future.get(), 1);
 }
 

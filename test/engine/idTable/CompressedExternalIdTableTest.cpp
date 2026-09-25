@@ -35,6 +35,21 @@ namespace {
 
 static constexpr size_t NUM_COLS = NumColumnsIndexBuilding;
 
+// Set the global `EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING`
+// flag to `value` and restore its previous value when the returned cleanup is
+// destroyed. Note: The flag is global, so setting it without such a cleanup
+// would make every test that runs afterwards silently depend on the value that
+// was set here.
+[[nodiscard]] auto setIgnoreMemoryLimit(bool value) {
+  bool previousValue =
+      ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING
+          .exchange(value);
+  return absl::Cleanup{[previousValue] {
+    ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
+        previousValue;
+  }};
+}
+
 // From a `generator` that yields  `IdTable`s, create a single `IdTable` that is
 // the concatenation of all the yielded tables.
 auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
@@ -123,7 +138,7 @@ void testExternalSorterImpl(
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
   using namespace ad_utility::memory_literals;
 
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticColumns>
       writer{filename, numDynamicColumns, memoryToUse,
              ad_utility::testing::makeAllocator(), 5_kB};
@@ -328,7 +343,7 @@ TEST(CompressedExternalIdTable, stillSortingOnDestruction) {
       [[maybe_unused]] volatile auto x = other.data_[0];
     }
   };
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   ad_utility::CompressedExternalIdTableSorter<SlowDummySorter, 0> sorter{
       "stillSortingOnDestruction.dat", NUM_COLS, 10_kB,
       ad_utility::testing::makeAllocator()};
@@ -344,7 +359,7 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
   std::string filename = "idTableCompressedSorter.memoryLimit.dat";
 
   // only 100 bytes of memory, not sufficient for merging
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(false);
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> writer{
       filename, NUM_COLS, 100_B, ad_utility::testing::makeAllocator()};
 
@@ -366,7 +381,7 @@ TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
   // Create `CompressedExternalIdTable` with a block size of exactly 10 rows.
   size_t blockSize = 10;
   std::string filename = "idTableCompressedSorter.cornerCases.dat";
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   ad_utility::CompressedExternalIdTable<0> writer{
       filename, NUM_COLS, memoryForBlocksize(blockSize, NUM_COLS),
       ad_utility::testing::makeAllocator()};
@@ -394,7 +409,7 @@ void testExternalCompressor(size_t numDynamicColumns, size_t numRows,
   std::string filename = "idTableCompressedSorter.testExternalCompressor.dat";
   using namespace ad_utility::memory_literals;
 
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   ad_utility::CompressedExternalIdTable<NumStaticColumns> writer{
       filename, numDynamicColumns, memoryToUse,
       ad_utility::testing::makeAllocator(), 5_kB};
@@ -499,7 +514,7 @@ TEST(CompressedExternalIdTable, pushBlockProducesCorrectSortedOutput) {
   using namespace ad_utility::memory_literals;
   auto alloc = ad_utility::testing::makeAllocator();
 
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> writer{
       filename, NUM_COLS, 1_MB, alloc};
   ad_utility::CompressedExternalIdTableSorterTypeErased& erased = writer;
@@ -1124,7 +1139,7 @@ void testPushBlockEqualsRowWisePush(
     const IdTable& table, ad_utility::MemorySize memoryToUse,
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   auto alloc = ad_utility::testing::makeAllocator();
   using Sorter =
       ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticCols>;
@@ -1166,7 +1181,7 @@ void testCompressedExternalIdTablePushBlock(
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   auto alloc = ad_utility::testing::makeAllocator();
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   // Choose the memory limit such that exactly 6 rows fit into a single block.
   constexpr size_t blocksize = 6;
   auto memory = memoryForBlocksize(blocksize, NUM_COLS);
@@ -1315,7 +1330,7 @@ TEST(CompressedExternalIdTable, pushBlockEqualsRowWisePush) {
 // _____________________________________________________________________________
 TEST(CompressedExternalIdTable, pushBlockBlockBoundaries) {
   auto alloc = ad_utility::testing::makeAllocator();
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   // Choose the memory limit such that exactly 8 rows fit into a single block.
   constexpr size_t blocksize = 8;
   auto memory = memoryForBlocksize(blocksize, NUM_COLS);
@@ -1353,7 +1368,7 @@ TEST(CompressedExternalIdTable, pushBlockBlockBoundaries) {
 // _____________________________________________________________________________
 TEST(CompressedExternalIdTable, pushBlockMixedWithSingleRowPushes) {
   auto alloc = ad_utility::testing::makeAllocator();
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   // Choose the memory limit such that exactly 5 rows fit into a single block.
   constexpr size_t blocksize = 5;
   auto memory = memoryForBlocksize(blocksize, NUM_COLS);
@@ -1410,7 +1425,7 @@ TEST(CompressedExternalIdTable, pushBlockPreservesOrderInCompressor) {
 // _____________________________________________________________________________
 TEST(CompressedExternalIdTable, pushEmptyBlockIsNoOp) {
   auto alloc = ad_utility::testing::makeAllocator();
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   // Choose the memory limit such that exactly 4 rows fit into a single block.
   constexpr size_t blocksize = 4;
   auto memory = memoryForBlocksize(blocksize, NUM_COLS);
@@ -1452,10 +1467,7 @@ TEST(CompressedExternalIdTable, pushBlockCreatesSameBlocksAsRowWisePush) {
   auto alloc = ad_utility::testing::makeAllocator();
   // The memory limits below are deliberately too small for the merging phase,
   // s.t. an exception that contains the number of blocks is thrown.
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
-  absl::Cleanup restoreFlag = [] {
-    ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  };
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(false);
 
   std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
   absl::Cleanup cleanup = [&filename] {

@@ -1,9 +1,12 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2021 - 2025 The QLever Authors, in particular:
 //
 // 2021 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025        Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
@@ -19,11 +22,11 @@
 #include <optional>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
-#include "index/CompressedRelation.h"
 #include "index/CompressedRelationHelpersImpl.h"
-#include "util/AsyncTaskQueue.h"
+#include "index/CompressedRelationWriter.h"
 #include "util/GlobalExecutor.h"
 #include "util/ProgressBar.h"
+#include "util/TaskQueueOnExecutor.h"
 
 // Set up the handling of small relations for the twin permutation.
 // `AddBlockOfSmallRelationsToSwitched` receives a block of small relations from
@@ -84,7 +87,7 @@ struct BlockCallbackManager {
   // latter guarantee requires that all the tasks are posted by a single
   // thread, which is the case here, because `passToBlockCallbacks` is only
   // called by the single thread that drives the `PermutationWriter`.
-  ad_utility::AsyncTaskQueue blockCallbackQueue_{
+  ad_utility::TaskQueueOnExecutor blockCallbackQueue_{
       boost::asio::make_strand(ad_utility::globalExecutor()), 3,
       "Additional callbacks during permutation building"};
   ad_utility::Timer blockCallbackTimer_{ad_utility::Timer::Stopped};
@@ -221,7 +224,7 @@ struct CompressedRelationWriter::PermutationWriter {
   // tasks use (the `largeRelationBlockPool_` included), so that its destructor
   // (which waits for the pending tasks) runs before those members are
   // destroyed.
-  ad_utility::AsyncTaskQueue largeRelationBlockQueue_{
+  ad_utility::TaskQueueOnExecutor largeRelationBlockQueue_{
       largeRelationBlockPool_.get_executor(),
       2 * numThreadsForBlocksOfLargeRelations,
       "Writing blocks of large relations"};
@@ -541,10 +544,10 @@ struct CompressedRelationWriter::PermutationWriter {
                     << ad_utility::Timer::toSeconds(
                            writer2_->blockWriteQueueTimer_.msecs())
                     << "s" << std::endl;
-      AD_LOG_TIMING << "Time spent waiting for the drain of large twin relations "
-                    << ad_utility::Timer::toSeconds(
-                           largeTwinRelationTimer_.msecs())
-                    << "s" << std::endl;
+      AD_LOG_TIMING
+          << "Time spent waiting for the drain of large twin relations "
+          << ad_utility::Timer::toSeconds(largeTwinRelationTimer_.msecs())
+          << "s" << std::endl;
     }
     AD_LOG_TIMING
         << "Time spent waiting for triple callbacks (e.g. the next sorter) "

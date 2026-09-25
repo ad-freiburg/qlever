@@ -1357,8 +1357,12 @@ TEST_F(PrefilterExpressionOnMetadataTest, testRelationalPrefilteringDates) {
 }
 
 //______________________________________________________________________________
-// Test that correct errors are thrown for invalid input (condition)
+// Test that correct errors are thrown for invalid input (condition). The check
+// is only run when the expensive checks are enabled.
 TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP() << "The input condition check is an expensive check";
+  }
   makeTestErrorCheck(le(IntId(5)), blocksWithDuplicate1,
                      "Found block metadata duplicates");
   makeTestErrorCheck(andExpr(gt(VocabId(10)), le(VocabId(20))),

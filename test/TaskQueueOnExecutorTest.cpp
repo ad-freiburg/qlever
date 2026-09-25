@@ -21,11 +21,11 @@
 #include <thread>
 #include <vector>
 
-#include "util/AsyncTaskQueue.h"
+#include "util/TaskQueueOnExecutor.h"
 #include "util/jthread.h"
 
 namespace {
-using ad_utility::AsyncTaskQueue;
+using ad_utility::TaskQueueOnExecutor;
 using namespace std::chrono_literals;
 
 namespace net = boost::asio;
@@ -83,24 +83,24 @@ bool waitUntil(const Predicate& predicate) {
 }  // namespace
 
 // _____________________________________________________________________________
-TEST(AsyncTaskQueue, invalidArguments) {
+TEST(TaskQueueOnExecutor, invalidArguments) {
   net::thread_pool pool{2};
   // The executor must not be empty.
-  EXPECT_ANY_THROW(AsyncTaskQueue(net::any_io_executor{}, 2));
+  EXPECT_ANY_THROW(TaskQueueOnExecutor(net::any_io_executor{}, 2));
   // At least one task has to be allowed in flight.
-  EXPECT_ANY_THROW(AsyncTaskQueue(pool.get_executor(), 0));
+  EXPECT_ANY_THROW(TaskQueueOnExecutor(pool.get_executor(), 0));
   // A valid combination.
-  AsyncTaskQueue queue{pool.get_executor(), 3, "valid queue"};
+  TaskQueueOnExecutor queue{pool.get_executor(), 3, "valid queue"};
   EXPECT_EQ(queue.maxNumTasksInFlight(), 3u);
 }
 
 // _____________________________________________________________________________
-TEST(AsyncTaskQueue, allTasksAreRunAndFinishWaitsForThem) {
+TEST(TaskQueueOnExecutor, allTasksAreRunAndFinishWaitsForThem) {
   net::thread_pool pool{4};
   std::atomic<size_t> counter = 0;
   constexpr size_t numTasks = 200;
   {
-    AsyncTaskQueue queue{pool.get_executor(), 5, "allTasksAreRun"};
+    TaskQueueOnExecutor queue{pool.get_executor(), 5, "allTasksAreRun"};
     for (size_t i = 0; i < numTasks; ++i) {
       queue.push([&counter]() { ++counter; });
     }
@@ -113,14 +113,17 @@ TEST(AsyncTaskQueue, allTasksAreRunAndFinishWaitsForThem) {
 }
 
 // _____________________________________________________________________________
-TEST(AsyncTaskQueue, destructorWaitsForAllTasks) {
+TEST(TaskQueueOnExecutor, destructorWaitsForAllTasks) {
   net::thread_pool pool{4};
   std::atomic<size_t> counter = 0;
   constexpr size_t numTasks = 100;
   {
-    AsyncTaskQueue queue{pool.get_executor(), 3, "destructorWaits"};
+    TaskQueueOnExecutor queue{pool.get_executor(), 3, "destructorWaits"};
     for (size_t i = 0; i < numTasks; ++i) {
       queue.push([&counter]() {
+        // The `yield` slows the tasks down, such that the destructor below is
+        // likely to be entered while tasks are still in flight (otherwise the
+        // test would also pass for a destructor that doesn't wait at all).
         std::this_thread::yield();
         ++counter;
       });
@@ -130,13 +133,13 @@ TEST(AsyncTaskQueue, destructorWaitsForAllTasks) {
 }
 
 // _____________________________________________________________________________
-TEST(AsyncTaskQueue, inFlightBoundIsRespected) {
+TEST(TaskQueueOnExecutor, inFlightBoundIsRespected) {
   // A single thread, so that at most one task runs at a time, and a bound of
   // two tasks in flight.
   net::thread_pool pool{1};
   Latch latch;
   std::atomic<size_t> numStartedTasks = 0;
-  AsyncTaskQueue queue{pool.get_executor(), 2, "inFlightBound"};
+  TaskQueueOnExecutor queue{pool.get_executor(), 2, "inFlightBound"};
 
   // The first two tasks fill the queue. The first one blocks the only thread
   // of the pool.
@@ -168,9 +171,9 @@ TEST(AsyncTaskQueue, inFlightBoundIsRespected) {
 }
 
 // _____________________________________________________________________________
-TEST(AsyncTaskQueue, submitPropagatesValuesAndExceptions) {
+TEST(TaskQueueOnExecutor, submitPropagatesValuesAndExceptions) {
   net::thread_pool pool{2};
-  AsyncTaskQueue queue{pool.get_executor(), 4, "submit"};
+  TaskQueueOnExecutor queue{pool.get_executor(), 4, "submit"};
 
   auto valueFuture = queue.submit([]() { return 42; });
   auto voidFuture = queue.submit([]() {});
@@ -187,13 +190,13 @@ TEST(AsyncTaskQueue, submitPropagatesValuesAndExceptions) {
 }
 
 // _____________________________________________________________________________
-TEST(AsyncTaskQueue, pushFromSeveralThreads) {
+TEST(TaskQueueOnExecutor, pushFromSeveralThreads) {
   net::thread_pool pool{4};
   std::atomic<size_t> counter = 0;
   constexpr size_t numThreads = 4;
   constexpr size_t numTasksPerThread = 100;
   {
-    AsyncTaskQueue queue{pool.get_executor(), 3, "concurrentPushes"};
+    TaskQueueOnExecutor queue{pool.get_executor(), 3, "concurrentPushes"};
     std::vector<ad_utility::JThread> threads;
     for (size_t i = 0; i < numThreads; ++i) {
       threads.emplace_back([&queue, &counter]() {
@@ -207,10 +210,10 @@ TEST(AsyncTaskQueue, pushFromSeveralThreads) {
 }
 
 // _____________________________________________________________________________
-TEST(AsyncTaskQueue, waitUntilFinished) {
+TEST(TaskQueueOnExecutor, waitUntilFinished) {
   net::thread_pool pool{2};
   Latch latch;
-  AsyncTaskQueue queue{pool.get_executor(), 2, "waitUntilFinished"};
+  TaskQueueOnExecutor queue{pool.get_executor(), 2, "waitUntilFinished"};
   queue.push([&latch]() { latch.wait(); });
 
   std::atomic<bool> hasWaited = false;
@@ -230,25 +233,55 @@ TEST(AsyncTaskQueue, waitUntilFinished) {
 }
 
 // _____________________________________________________________________________
-TEST(AsyncTaskQueue, pushAfterFinishIsAContractViolation) {
+TEST(TaskQueueOnExecutor, waitUntilAllTasksAreDoneWorksForSeveralBatches) {
+  net::thread_pool pool{4};
+  std::atomic<size_t> counter = 0;
+  constexpr size_t numTasksPerBatch = 20;
+  constexpr size_t numBatches = 3;
+  TaskQueueOnExecutor queue{pool.get_executor(), 3, "batches"};
+  for (size_t batch = 0; batch < numBatches; ++batch) {
+    Latch latch;
+    // None of the tasks of this batch can complete before the `latch` is
+    // released, so a `counter` that has the expected value below proves that
+    // `waitUntilAllTasksAreDone` has really waited for all of them.
+    ad_utility::JThread releaser{[&latch]() {
+      std::this_thread::sleep_for(shortTimeout);
+      latch.release();
+    }};
+    for (size_t i = 0; i < numTasksPerBatch; ++i) {
+      queue.push([&counter, &latch]() {
+        latch.wait();
+        ++counter;
+      });
+    }
+    queue.waitUntilAllTasksAreDone();
+    EXPECT_EQ(counter.load(), (batch + 1) * numTasksPerBatch);
+  }
+  queue.finish();
+}
+
+// _____________________________________________________________________________
+TEST(TaskQueueOnExecutor, pushAfterFinishIsAContractViolation) {
   net::thread_pool pool{2};
-  AsyncTaskQueue queue{pool.get_executor(), 2, "pushAfterFinish"};
+  TaskQueueOnExecutor queue{pool.get_executor(), 2, "pushAfterFinish"};
   queue.push([]() {});
   queue.finish();
   EXPECT_ANY_THROW(queue.push([]() {}));
 }
 
 // _____________________________________________________________________________
-TEST(AsyncTaskQueue, aStrandRunsTheTasksInOrder) {
+TEST(TaskQueueOnExecutor, aStrandRunsTheTasksInOrder) {
   // The queue itself doesn't guarantee any ordering, but with a strand as the
   // executor the tasks are run one after the other and in the order in which
-  // they were pushed (by a single thread), which is relied on by the
-  // `BlockCallbackManager` in `CompressedRelationPermutationWriterImpl.h`.
+  // they were pushed (by a single thread). This is the mode in which the first
+  // user of this class (which will be added in a follow-up PR) runs callbacks
+  // that have to observe the tasks in their original order.
   net::thread_pool pool{4};
   std::vector<size_t> result;
   constexpr size_t numTasks = 100;
   {
-    AsyncTaskQueue queue{net::make_strand(pool.get_executor()), 3, "strand"};
+    TaskQueueOnExecutor queue{net::make_strand(pool.get_executor()), 3,
+                              "strand"};
     for (size_t i = 0; i < numTasks; ++i) {
       // The `result` needs no synchronization, because the strand guarantees
       // that the tasks don't run concurrently.
@@ -260,4 +293,73 @@ TEST(AsyncTaskQueue, aStrandRunsTheTasksInOrder) {
     expected.push_back(i);
   }
   EXPECT_EQ(result, expected);
+}
+
+// _____________________________________________________________________________
+TEST(TaskQueueOnExecutor, aBoundOfOneRunsTheTasksSequentiallyAndInOrder) {
+  // With a maximum of one task in flight, the next task is only pushed to the
+  // executor after the previous one has completed. The tasks therefore never
+  // run concurrently, and they run in the order in which they were pushed by
+  // the single pushing thread, even though the underlying executor has
+  // several threads.
+  net::thread_pool pool{4};
+  std::vector<size_t> result;
+  std::atomic<size_t> numRunningTasks = 0;
+  std::atomic<bool> sawConcurrentTasks = false;
+  constexpr size_t numTasks = 100;
+  {
+    TaskQueueOnExecutor queue{pool.get_executor(), 1, "boundOfOne"};
+    for (size_t i = 0; i < numTasks; ++i) {
+      // The `result` needs no synchronization, because the tasks are ordered
+      // by the queue (the completion of a task happens before the push of the
+      // next one, which happens before the execution of that next task).
+      queue.push([&result, &numRunningTasks, &sawConcurrentTasks, i]() {
+        if (++numRunningTasks > 1) {
+          sawConcurrentTasks = true;
+        }
+        result.push_back(i);
+        --numRunningTasks;
+      });
+    }
+  }
+  std::vector<size_t> expected;
+  for (size_t i = 0; i < numTasks; ++i) {
+    expected.push_back(i);
+  }
+  EXPECT_EQ(result, expected);
+  EXPECT_FALSE(sawConcurrentTasks);
+}
+
+// _____________________________________________________________________________
+TEST(TaskQueueOnExecutor, aPushThatIsBlockedWhenFinishStartsIsRejected) {
+  // A `push` that waits for a free slot while another thread calls `finish()`
+  // must not enqueue its task once that slot becomes free, because `finish()`
+  // (and hence the destructor) could then return while the task is still
+  // pending. It reports the contract violation instead, like a push that is
+  // initiated after `finish()`.
+  net::thread_pool pool{2};
+  Latch latch;
+  TaskQueueOnExecutor queue{pool.get_executor(), 1, "blockedPushVsFinish"};
+  queue.push([&latch]() { latch.wait(); });
+  std::atomic<bool> pushHasThrown = false;
+  std::atomic<bool> pushHasReturned = false;
+  ad_utility::JThread pusher{[&queue, &pushHasThrown, &pushHasReturned]() {
+    try {
+      queue.push([]() {});
+    } catch (const std::exception&) {
+      pushHasThrown = true;
+    }
+    pushHasReturned = true;
+  }};
+  // The pusher is now blocked, because the single slot is taken.
+  std::this_thread::sleep_for(shortTimeout);
+  EXPECT_FALSE(pushHasReturned.load());
+  ad_utility::JThread finisher{[&queue]() { queue.finish(); }};
+  // The finisher has now started finishing and waits for the first task.
+  std::this_thread::sleep_for(shortTimeout);
+  latch.release();
+  pusher.join();
+  finisher.join();
+  EXPECT_TRUE(pushHasThrown.load());
+  queue.waitUntilFinished();
 }

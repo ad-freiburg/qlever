@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_UTIL_ASYNCTASKQUEUE_H
-#define QLEVER_SRC_UTIL_ASYNCTASKQUEUE_H
+#ifndef QLEVER_SRC_UTIL_TASKQUEUEONEXECUTOR_H
+#define QLEVER_SRC_UTIL_TASKQUEUEONEXECUTOR_H
 
 #include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
@@ -25,6 +25,7 @@
 
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
+#include "util/Forward.h"
 
 namespace ad_utility {
 
@@ -33,36 +34,54 @@ namespace ad_utility {
 // destructor, or its manual equivalent `finish()`, block until all tasks have
 // run to completion.
 //
+// NOTE: The interface of this class is blocking, not asynchronous; it is only
+// the *execution* of the tasks that happens asynchronously on the executor.
+// Every member function blocks the calling thread: `push` and `submit` while
+// the maximal number of tasks is already in flight, and `finish`,
+// `waitUntilAllTasksAreDone`, `waitUntilFinished`, and the destructor until
+// the tasks they wait for have completed. None of them returns an awaitable.
+//
 // This class mimics the observable behavior of `ad_utility::TaskQueue<false>`
 // (see `util/TaskQueue.h`), but with the following important differences:
 //
 // 1. This class owns no threads. The number of threads (and thus the actual
 //    parallelism) is a property of the executor and not of this queue. The
 //    queue only bounds how much work it keeps *in flight* (see `push`).
-// 2. `finish()`, `waitUntilFinished()`, and the destructor block the calling
-//    thread. They must therefore NOT be called from a thread that runs the
-//    executor, because then the tasks that are waited for might never get a
-//    thread to run on (the same holds for a `push` that has to wait for a free
-//    slot).
+// 2. No member function of this class may be called from a thread that runs
+//    the executor. The complete interface is blocking (see the NOTE above), so
+//    such a call would occupy one of the executor's threads while waiting for
+//    tasks that then might never get a thread to run on. Depending on the
+//    executor and the number of tasks this is prone to deadlock, or even
+//    guaranteed to deadlock (for example for a single-threaded executor).
+//    Unfortunately this precondition cannot be checked: the concrete asio
+//    executors have a `running_in_this_thread()`, but the type-erased
+//    `boost::asio::any_io_executor` that we store does not.
 // 3. The execution context behind the executor has to outlive this queue,
 //    because the destructor waits for tasks that run on that context.
-// 4. Tasks may run concurrently and in an arbitrary order. In particular,
-//    setting `maxNumTasksInFlight` to 1 does NOT make the tasks run in the
-//    order in which they were pushed; only one task is then in flight at a
-//    time, but a task is only counted as "in flight" from the `push` until its
-//    completion, so two consecutive pushes may still be reordered by the
-//    executor. Callers that need the tasks to be run sequentially and in order
-//    have to pass a `boost::asio::strand` as the executor.
-class AsyncTaskQueue {
+// 4. Whether the tasks run concurrently, and in which order, is a property of
+//    the executor. With `maxNumTasksInFlight == 1`, a task is only posted to
+//    the executor after the previous task has completed, so the tasks then run
+//    strictly sequentially, and, if they are all pushed by the same thread, in
+//    the order in which they were pushed. With a larger bound, several tasks
+//    may be in flight at the same time; they then run concurrently and in an
+//    arbitrary order. Callers that need a larger bound, but still want the
+//    tasks to be run sequentially and in order, have to pass a
+//    `boost::asio::strand` as the executor.
+//
+// NOTE: An exception that is thrown by a task terminates the process, unless
+// the task was passed to `submit`, in which case the exception is stored in
+// the returned future. For the details see `push` and `submit` below.
+class TaskQueueOnExecutor {
  public:
   using Task = absl::AnyInvocable<void()>;
 
  private:
   boost::asio::any_io_executor executor_;
   size_t maxNumTasksInFlight_;
-  // The message that is logged if a task throws (it contains the name of this
-  // queue). It is precomputed, because it is needed for every single task.
-  std::string taskErrorMessage_;
+  // The message that is logged if a task throws or cannot be scheduled. It is
+  // the only thing that uses the `name` that is passed to the constructor, so
+  // we store the complete message directly instead of that name.
+  std::string errorMessage_;
 
   // The mutex that protects all of the following members, together with the
   // condition variable that is notified whenever one of them changes.
@@ -87,12 +106,12 @@ class AsyncTaskQueue {
   // and might not fit into memory. The queue works optimally when on the
   // average the executor is at least as fast as the "pusher", but the pusher
   // is faster sometimes (which the queue can then accommodate).
-  AsyncTaskQueue(boost::asio::any_io_executor executor,
-                 size_t maxNumTasksInFlight, std::string name = "")
+  TaskQueueOnExecutor(boost::asio::any_io_executor executor,
+                      size_t maxNumTasksInFlight, std::string name = "")
       : executor_{std::move(executor)},
         maxNumTasksInFlight_{maxNumTasksInFlight},
-        taskErrorMessage_{absl::StrCat("During a task of the AsyncTaskQueue \"",
-                                       name, "\".")} {
+        errorMessage_{
+            absl::StrCat("In the TaskQueueOnExecutor \"", name, "\".")} {
     AD_CONTRACT_CHECK(static_cast<bool>(executor_));
     AD_CONTRACT_CHECK(maxNumTasksInFlight_ > 0);
   }
@@ -103,28 +122,45 @@ class AsyncTaskQueue {
   //
   // NOTE: If the execution of the task throws, then `std::terminate` will be
   // called (this matches the behavior of `TaskQueue`, where an exception
-  // escapes the worker thread).
+  // escapes the worker thread). Use `submit` below if the exception should
+  // instead be propagated to the pushing thread. The *scheduling* of the task
+  // also terminates if it throws, see below.
   void push(Task task) {
     std::unique_lock lock{mutex_};
+    cv_.wait(lock, [this]() {
+      return startedFinishing_ || numTasksInFlight_ < maxNumTasksInFlight_;
+    });
+    // NOTE: This is checked after the wait and not before it, because another
+    // thread may call `finish()` while this push waits for a free slot. A task
+    // that is enqueued afterwards would not be waited for by that `finish()`.
     AD_CONTRACT_CHECK(!startedFinishing_);
-    cv_.wait(lock,
-             [this]() { return numTasksInFlight_ < maxNumTasksInFlight_; });
     ++numTasksInFlight_;
     lock.unlock();
-    try {
-      boost::asio::post(executor_, [this, task = std::move(task)]() mutable {
-        ad_utility::terminateIfThrows([&task]() { task(); }, taskErrorMessage_);
-        taskIsDone();
-      });
-    } catch (...) {
-      // The task will never be run, so it doesn't occupy a slot.
-      taskIsDone();
-      throw;
-    }
+    // NOTE: The only way in which `boost::asio::post` can fail is that the
+    // executor runs out of resources while scheduling the task (in practice,
+    // one of the allocations for the queued operation throws `std::bad_alloc`;
+    // the `boost::asio::bad_executor` for an empty executor is excluded by the
+    // contract check in the constructor). Such a failure is not recoverable,
+    // so we terminate instead of leaving the queue in a state where a slot is
+    // occupied by a task that will never be run.
+    ad_utility::terminateIfThrows(
+        [this, &task]() {
+          boost::asio::post(executor_, [this,
+                                        task = std::move(task)]() mutable {
+            ad_utility::terminateIfThrows([&task]() { task(); }, errorMessage_);
+            taskIsDone();
+          });
+        },
+        errorMessage_);
   }
 
   // Submit a callable and return a `std::future` for its result. The returned
   // future resolves (or throws) once the task completes.
+  //
+  // NOTE: In contrast to `push` above, an exception that is thrown by `func`
+  // does NOT terminate the process, but is stored in the returned future and
+  // is rethrown by its `get()`. The exception is therefore silently swallowed
+  // if the future is discarded.
   template <typename Func>
   auto submit(Func&& func)
       -> std::future<std::invoke_result_t<std::decay_t<Func>>> {
@@ -135,10 +171,10 @@ class AsyncTaskQueue {
     return future;
   }
 
-  // Block until all tasks that have been pushed have been completed. After a
-  // call to `finish()`, no more calls to `push` are allowed. Calling `finish()`
-  // several times is allowed; all calls but the first one simply wait until the
-  // first call has completed (and thus return immediately if it already has).
+  // Block until all tasks that have been pushed so far have been completed.
+  // After a call to `finish()`, no more tasks may be pushed. Calling `finish()`
+  // several times is allowed; each of those calls blocks until all pushed tasks
+  // are done.
   void finish() {
     std::unique_lock lock{mutex_};
     if (startedFinishing_) {
@@ -146,6 +182,9 @@ class AsyncTaskQueue {
       return;
     }
     startedFinishing_ = true;
+    // Wake up the pushes that wait for a free slot, so that they can report
+    // the contract violation right away, see `push`.
+    cv_.notify_all();
     cv_.wait(lock, [this]() { return numTasksInFlight_ == 0; });
     finishedFinishing_ = true;
     cv_.notify_all();
@@ -178,9 +217,9 @@ class AsyncTaskQueue {
   size_t maxNumTasksInFlight() const { return maxNumTasksInFlight_; }
 
   // The destructor waits for all pushed tasks to complete, see `finish()`.
-  ~AsyncTaskQueue() {
+  ~TaskQueueOnExecutor() {
     ad_utility::terminateIfThrows([this]() { finish(); },
-                                  "In the destructor of AsyncTaskQueue.");
+                                  "In the destructor of TaskQueueOnExecutor.");
   }
 
  private:
@@ -190,9 +229,12 @@ class AsyncTaskQueue {
     std::lock_guard lock{mutex_};
     AD_CORRECTNESS_CHECK(numTasksInFlight_ > 0);
     --numTasksInFlight_;
+    // NOTE: `cv_` is shared by several distinct predicates (a free slot, an
+    // empty queue, a completed `finish()`), so every change of the state has to
+    // wake up ALL waiters, and not only one of them.
     cv_.notify_all();
   }
 };
 }  // namespace ad_utility
 
-#endif  // QLEVER_SRC_UTIL_ASYNCTASKQUEUE_H
+#endif  // QLEVER_SRC_UTIL_TASKQUEUEONEXECUTOR_H

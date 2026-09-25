@@ -4,7 +4,9 @@
 
 #include "index/PatternCreator.h"
 
-#include <iomanip>
+#include <absl/strings/str_format.h>
+
+#include <ostream>
 
 #include "global/SpecialIds.h"
 
@@ -160,20 +162,14 @@ void PatternCreator::printStatistics(
               << " [all]" << std::endl;
   AD_LOG_INFO << "Total number of distinct subject-predicate pairs: "
               << numDistinctSubjectPredicatePairs_ << std::endl;
-  // Note: `std::fixed` and `std::setprecision` change the state of the global
-  // log stream, so the default state (`std::defaultfloat` with a precision of
-  // six) has to be restored afterwards. Otherwise every floating point number
-  // that is logged later (for example the timings of the permutation writer)
-  // would also be printed with a precision of zero.
-  auto restoreDefaultFloatFormat = [](std::ostream& stream) -> std::ostream& {
-    return stream << std::defaultfloat << std::setprecision(6);
-  };
-  AD_LOG_INFO << "Average number of predicates per subject: " << std::fixed
-              << std::setprecision(1)
-              << patternStatistics.avgNumDistinctPredicatesPerSubject_
-              << restoreDefaultFloatFormat << std::endl;
-  AD_LOG_INFO << "Average number of subjects per predicate: " << std::fixed
-              << std::setprecision(0)
-              << patternStatistics.avgNumDistinctSubjectsPerPredicate_
-              << restoreDefaultFloatFormat << std::endl;
+  AD_LOG_INFO << "Average number of predicates per subject: "
+              << absl::StrFormat(
+                     "%.1f",
+                     patternStatistics.avgNumDistinctPredicatesPerSubject_)
+              << std::endl;
+  AD_LOG_INFO << "Average number of subjects per predicate: "
+              << absl::StrFormat(
+                     "%.0f",
+                     patternStatistics.avgNumDistinctSubjectsPerPredicate_)
+              << std::endl;
 }
