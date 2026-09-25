@@ -113,9 +113,20 @@ void FiberIoScheduler::runAsFibers(std::vector<std::function<void()>> bodies) {
   }
   // Join every fiber: a joinable fiber's destructor would call
   // `std::terminate`. Bodies cannot throw past the wrapper anymore, so a
-  // throwing join here is a scheduler error and propagates.
+  // throwing join is a scheduler error. Keep joining the remaining fibers
+  // before propagating it, otherwise their destructors would terminate.
+  std::exception_ptr joinError;
   for (auto& fiber : fibers) {
-    fiber.join();
+    try {
+      fiber.join();
+    } catch (...) {
+      if (!joinError) {
+        joinError = std::current_exception();
+      }
+    }
+  }
+  if (joinError) {
+    std::rethrow_exception(joinError);
   }
   for (const auto& error : errors) {
     if (error) {
