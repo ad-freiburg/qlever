@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <optional>
+#include <type_traits>
 
 #include "global/Constants.h"
 #include "parser/NormalizedString.h"
@@ -26,23 +27,22 @@ GeoPoint::GeoPoint(double lat, double lng) : lat_{lat}, lng_{lng} {
 GeoPoint::T GeoPoint::quantizeCoordinate(double value, double maxValue) {
   // Only positive values between 0 and 1
   double downscaled = (value + maxValue) / (2 * maxValue);
-  AD_CORRECTNESS_CHECK(0.0 <= downscaled && downscaled <= 1.0, [&]() {
-    return absl::StrCat("downscaled coordinate value ", downscaled,
-                        " does not satisfy [0,1] constraint");
-  });
+  AD_CORRECTNESS_CHECK(0.0 <= downscaled && downscaled <= 1.0,
+                       "downscaled coordinate value ", downscaled,
+                       " does not satisfy [0,1] constraint");
   // Stretch to allowed range of values between 0 and maxCoordinateEncoded,
   // rounded to integer
   auto newscaled = static_cast<T>(round(downscaled * maxCoordinateEncoded));
-  AD_CORRECTNESS_CHECK(newscaled <= maxCoordinateEncoded, [&]() {
-    return absl::StrCat("scaled coordinate value ", newscaled,
-                        " does not satisfy [0,", maxCoordinateEncoded,
-                        "] constraint");
-  });
+  AD_CORRECTNESS_CHECK(
+      newscaled <= maxCoordinateEncoded, "scaled coordinate value ", newscaled,
+      " does not satisfy [0,", maxCoordinateEncoded, "] constraint");
   return newscaled;
 }
 
 // _____________________________________________________________________________
 double GeoPoint::dequantizeCoordinate(T quantized, double maxValue) {
+  // Together with the check below, this ensures `0 <= quantized`.
+  static_assert(std::is_unsigned_v<T>);
   AD_CORRECTNESS_CHECK(quantized <= maxCoordinateEncoded);
   double value =
       ((static_cast<double>(quantized) / maxCoordinateEncoded) * 2 * maxValue) -
