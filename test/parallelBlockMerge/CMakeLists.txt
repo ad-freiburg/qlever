@@ -8,4 +8,6 @@ addLinkAndDiscoverTestNoLibs(MergeOptionsTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelBlockMergeTest)
 
+addLinkAndDiscoverTestNoLibs(BlockPrefetcherTest)
+
 addLinkAndDiscoverTestNoLibs(MergeHelpersTest)
