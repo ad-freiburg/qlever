@@ -334,10 +334,11 @@ int main(int argc, char** argv) {
   add("num-threads,j", po::value(&config.numThreads_),
       "The number of threads used during the index build. Must be at least 1. "
       "Default: the number of hardware threads of the machine. NOTE: Currently "
-      "only the first pass (parsing the input and creating the partial "
-      "vocabularies) and the conversion to global IDs use this number; the "
-      "other phases use their own parallelism (making all phases respect this "
-      "option is work in progress). The memory of the first pass grows "
+      "the first pass (parsing the input and creating the partial "
+      "vocabularies), the conversion to global IDs, and the shared thread pool "
+      "that the permutation writer runs on use this number; the other phases "
+      "use their own parallelism (making all phases respect this option is "
+      "work in progress). The memory of the first pass grows "
       "linearly with this number, since each thread holds one batch of "
       "`num-triples-per-batch` triples with its partial vocabulary in RAM.");
 
@@ -380,10 +381,6 @@ int main(int argc, char** argv) {
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
     config.validate();
-    // For index building, use more threads for writing permutations than the
-    // default (which is optimized for `rebuild-index`, where six permutations
-    // are written simultaneously).
-    setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(5);
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "

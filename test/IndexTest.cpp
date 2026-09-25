@@ -1101,11 +1101,12 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
   // Writing the same permutation with the writer-thread throttle disabled
-  // (0 means "fall back to `permutation-writer-num-threads`") must give the
-  // same result. Together with the default of 1 used by the calls above and
-  // below, this exercises the translation of the runtime parameter to the
-  // writer-thread override on both of its branches. Use a separate base name,
-  // so that the permutation that was already finalized above stays intact.
+  // (0 means "fall back to the number of threads of the global thread pool")
+  // must give the same result. Together with the default of 1 used by the calls
+  // above and below, this exercises the translation of the runtime parameter to
+  // the writer-thread override on both of its branches. Use a separate base
+  // name, so that the permutation that was already finalized above stays
+  // intact.
   {
     auto cleanupParameter = setRuntimeParameterForTest<
         &RuntimeParameters::rebuildPermutationWriterNumThreads_>(0);

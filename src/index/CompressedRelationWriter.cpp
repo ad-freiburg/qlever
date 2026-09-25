@@ -22,6 +22,7 @@
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/GraphComputation.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/GlobalExecutor.h"
 
 // ____________________________________________________________________________
 float CompressedRelationWriter::computeMultiplicity(
@@ -67,35 +68,78 @@ CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
 // _____________________________________________________________________________
 void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
                                                      Id lastCol0Id,
-                                                     IdTable block,
+                                                     BlockToWrite block,
                                                      bool invokeCallback) {
   auto timer = blockWriteQueueTimer_.startMeasurement();
   blockWriteQueue_.push([this, block = std::move(block), firstCol0Id,
                          lastCol0Id, invokeCallback]() mutable {
-    std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
-    for (const auto& column : block.getColumns()) {
-      offsets.push_back(compressAndWriteColumn(column));
-    }
-    AD_CORRECTNESS_CHECK(!offsets.empty());
-    auto numRows = block.numRows();
-    const auto& first = block[0];
-    const auto& last = block[numRows - 1];
-    AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
-    AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
-
-    auto [hasDuplicates, graphInfo] = getGraphInfo(block);
-    blockBuffer_.wlock()->emplace_back(CompressedBlockMetadataNoBlockIndex{
-        std::move(offsets),
-        numRows,
-        {first[0], first[1], first[2], first[3]},
-        {last[0], last[1], last[2], last[3]},
-        std::move(graphInfo),
-        hasDuplicates});
-    if (invokeCallback && smallBlocksCallback_) {
-      std::invoke(smallBlocksCallback_, std::move(block));
-    }
+    compressAndWriteBlockInCallingThread(firstCol0Id, lastCol0Id,
+                                         std::move(block), invokeCallback);
   });
   timer.stop();
+}
+
+// _____________________________________________________________________________
+void CompressedRelationWriter::compressAndWriteBlockInCallingThread(
+    Id firstCol0Id, Id lastCol0Id, BlockToWrite block, bool invokeCallback) {
+  // Note: The `view` is only used before the `block` is moved from below, and
+  // moving a `BlockToWrite` doesn't move the memory that the view points to
+  // anyway.
+  auto view = block.view();
+  std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
+  for (const auto& column : view.getColumns()) {
+    offsets.push_back(compressAndWriteColumn(column));
+  }
+  AD_CORRECTNESS_CHECK(!offsets.empty());
+  auto numRows = view.numRows();
+  const auto& first = view[0];
+  const auto& last = view[numRows - 1];
+  AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
+  AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
+
+  auto [hasDuplicates, graphInfo] = getGraphInfo(view);
+  blockBuffer_.wlock()->emplace_back(CompressedBlockMetadataNoBlockIndex{
+      std::move(offsets),
+      numRows,
+      {first[0], first[1], first[2], first[3]},
+      {last[0], last[1], last[2], last[3]},
+      std::move(graphInfo),
+      hasDuplicates});
+  if (invokeCallback && smallBlocksCallback_) {
+    // Only blocks of small relations invoke the callback, and those always own
+    // their rows, because they are assembled in the `smallRelationsBuffer_`.
+    AD_CORRECTNESS_CHECK(block.ownsRows());
+    std::invoke(smallBlocksCallback_, std::move(block).extractTable());
+  } else if (block.ownsRows()) {
+    recycleBlock(std::move(block).extractTable());
+  }
+}
+
+// _____________________________________________________________________________
+IdTable CompressedRelationWriter::takeRecycledBlock(
+    size_t numColumns, const ad_utility::AllocatorWithLimit<Id>& allocator) {
+  auto recycledBlocks = recycledBlocks_.wlock();
+  // Blocks with a different number of columns cannot be reused, but this
+  // should never happen for the current users.
+  if (!recycledBlocks->empty() &&
+      recycledBlocks->back().numColumns() == numColumns) {
+    IdTable result = std::move(recycledBlocks->back());
+    recycledBlocks->pop_back();
+    return result;
+  }
+  return IdTable{numColumns, allocator};
+}
+
+// _____________________________________________________________________________
+void CompressedRelationWriter::recycleBlock(IdTable block) {
+  if (!recycleBlocks_) {
+    return;
+  }
+  block.clear();
+  auto recycledBlocks = recycledBlocks_.wlock();
+  if (recycledBlocks->size() < maxNumRecycledBlocks_) {
+    recycledBlocks->push_back(std::move(block));
+  }
 }
 // _____________________________________________________________________________
 CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
@@ -115,33 +159,34 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
-ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue(
-    std::optional<size_t> numThreadsOverride) {
-  size_t requestedThreads = numThreadsOverride.value_or(
-      getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
-  // `hardware_concurrency` may return 0 when it cannot determine the number
-  // of hardware threads; fall back to 1, so that the queue always has a
-  // worker (with 0 workers, the tasks would never run).
-  uint32_t hardwareThreads = std::max(1u, std::thread::hardware_concurrency());
-  // Clamp in `size_t` BEFORE casting, so that a huge requested value cannot
-  // truncate to a small (or zero) thread count.
-  uint32_t threadCount = requestedThreads == 0
-                             ? hardwareThreads
-                             : static_cast<uint32_t>(std::min<size_t>(
-                                   requestedThreads, hardwareThreads));
-  // Allow at least up to 4 tasks in the queue.
-  uint32_t queueSize = std::max<uint32_t>(4, threadCount * 2);
-  return ad_utility::TaskQueue<false>{queueSize, threadCount};
+ad_utility::TaskQueueOnExecutor CompressedRelationWriter::makeBlockWriteQueue(
+    std::optional<size_t> numTasksInFlightOverride) {
+  // The blocks are compressed and written on the global thread pool, so the
+  // number of threads that is available for them is the size of that pool,
+  // which the `--num-threads / -j` option of the index builder configures (see
+  // `ad_utility::setGlobalExecutorNumThreads`).
+  size_t numThreads = ad_utility::globalExecutorNumThreads();
+  size_t requestedTasks = numTasksInFlightOverride.value_or(numThreads);
+  // A value of 0 means "as many as the pool has threads", larger values are
+  // capped at that number.
+  size_t numConcurrentBlocks =
+      requestedTasks == 0 ? numThreads : std::min(requestedTasks, numThreads);
+  // Allow at least 4 blocks to be in flight.
+  size_t maxNumTasksInFlight = std::max<size_t>(4, numConcurrentBlocks * 2);
+  return ad_utility::TaskQueueOnExecutor{ad_utility::globalExecutor(),
+                                         maxNumTasksInFlight,
+                                         "Compressing and writing blocks"};
 }
 
 // _____________________________________________________________________________
 void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
-                                                        IdTable relation) {
-  AD_CORRECTNESS_CHECK(!relation.empty());
+                                                        BlockToWrite relation) {
+  size_t numRows = relation.view().numRows();
+  AD_CORRECTNESS_CHECK(numRows != 0);
   AD_CORRECTNESS_CHECK(currentCol0Id_ == col0Id ||
                        currentCol0Id_.isUndefined());
   currentCol0Id_ = col0Id;
-  currentRelationPreviousSize_ += relation.numRows();
+  currentRelationPreviousSize_ += numRows;
   writeBufferedRelationsToSingleBlock();
   // This is a block of a large relation, so we don't invoke the
   // `smallBlocksCallback_`. Hence the last argument is `false`.
@@ -149,20 +194,31 @@ void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
                         false);
 }
 
+// The number of blocks of a large relation for which the number of distinct
+// `col1` IDs is computed concurrently in `addCompleteLargeRelation` below. Each
+// of these blocks is held in memory, so this must not be too large.
+static constexpr size_t numBlocksInFlightForDistinctCol1Count = 3;
+
 // __________________________________________________________________________
 template <typename T>
 CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     Id col0Id, T&& sortedBlocks) {
   using namespace compressedRelationHelpers;
-  DistinctIdCounter distinctCol1Counter;
+  size_t numDistinctCol1 = 0;
+
+  // Counting the distinct IDs of column 1 is expensive, so it is performed on
+  // the global thread pool. The blocks themselves are yielded in their original
+  // order, because the merging of the blocks below has to happen in order.
+  AsyncDistinctIdCounter<std::remove_reference_t<T>> blocks{
+      sortedBlocks, c1Idx, numBlocksInFlightForDistinctCol1Count};
 
   // Buffer used to ensure the invariant that equal triples (when disregarding
   // the graph) stay in the same block.
   std::optional<IdTable> bufferedBlock;
 
-  for (auto& block :
-       sortedBlocks | ql::views::filter(std::not_fn(&IdTable::empty))) {
-    ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
+  while (auto nextBlockAndCount = blocks.next()) {
+    auto& [block, numDistinctCol1InBlock] = nextBlockAndCount.value();
+    numDistinctCol1 += numDistinctCol1InBlock;
 
     if (!bufferedBlock.has_value()) {
       // First non-empty block - initialize buffer.
@@ -212,7 +268,7 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     addBlockForLargeRelation(col0Id, std::move(bufferedBlock.value()));
   }
 
-  return finishLargeRelation(distinctCol1Counter.getAndReset());
+  return finishLargeRelation(numDistinctCol1);
 }
 
 // _____________________________________________________________________________

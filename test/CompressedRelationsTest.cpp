@@ -20,6 +20,7 @@
 #include "index/CompressedRelationWriter.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
+#include "util/GlobalExecutor.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/RuntimeParametersTestHelpers.h"
@@ -2003,72 +2004,51 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
   }
 }
 
-namespace ad_utility {
-std::pair<size_t, size_t> getThreadCountAndTaskSize(
-    const TaskQueue<false>& taskQueue) {
-  return {taskQueue.threads_.size(), taskQueue.queuedTasks_.maxSize()};
-}
-}  // namespace ad_utility
-
 // _____________________________________________________________________________
-TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
-  auto threads = std::thread::hardware_concurrency();
+TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfTasksInFlight) {
+  auto threads = ad_utility::globalExecutorNumThreads();
   if (threads == 1) {
-    GTEST_SKIP_("This test assumes that there are at least 2 threads.");
+    GTEST_SKIP_(
+        "This test assumes that the global thread pool has at least 2 "
+        "threads.");
   }
+  // The blocks are compressed and written on the global thread pool, so the
+  // only thing that the writer controls is the number of blocks that it keeps
+  // in flight, see `CompressedRelationWriter::makeBlockWriteQueue`.
+  auto maxNumTasksInFlight = [](const CompressedRelationWriter& writer) {
+    return writer.blockWriteQueue_.maxNumTasksInFlight();
+  };
   {
-    // Check if it is limited to actual threads.
-    auto reset = setRuntimeParameterForTest<
-        &RuntimeParameters::permutationWriterNumThreads_>(1337);
+    // Without an override, the number of concurrent blocks is the number of
+    // threads of the global thread pool (which the `--num-threads` option of
+    // the index builder configures).
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
-              threads);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
-              threads * 2);
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
-    // Check if it is expanded to actual threads.
-    auto reset = setRuntimeParameterForTest<
-        &RuntimeParameters::permutationWriterNumThreads_>(0);
+    // An override of 0 (used by the runtime index rebuild via
+    // `rebuild-permutation-writer-num-threads`) means "as many as the pool has
+    // threads".
     auto [filename, cleanup] = testFilenameWithCleanup();
-    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
-              threads);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
-              threads * 2);
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
+                                    0};
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
     // Check if minimum of 4 tasks is honored.
-    auto reset = setRuntimeParameterForTest<
-        &RuntimeParameters::permutationWriterNumThreads_>(1);
-    auto [filename, cleanup] = testFilenameWithCleanup();
-    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
-  }
-  {
-    // An explicit override (used by the runtime index rebuild via
-    // `rebuild-permutation-writer-num-threads`) wins over the runtime
-    // parameter.
-    auto reset = setRuntimeParameterForTest<
-        &RuntimeParameters::permutationWriterNumThreads_>(0);
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
                                     1};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
+    EXPECT_EQ(maxNumTasksInFlight(writer), 4);
   }
   {
-    // An override is capped at the number of hardware threads, just like the
-    // runtime parameter.
+    // An override is capped at the number of threads of the global thread
+    // pool.
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
                                     1337};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
-              threads);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
-              threads * 2);
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
 }
 
@@ -2511,33 +2491,70 @@ TEST(CompressedRelationWriter, directlyWrittenSmallRelationWithGraphs) {
   }
 }
 
+// The number of distinct `col1` IDs of a large relation is counted per block
+// (and in the background), so an ID that ends one block and also starts the
+// next block must not be counted twice.
 // _____________________________________________________________________________
-TEST(DistinctIdCounter, resetClearsCountAndLastSeenId) {
-  compressedRelationHelpers::DistinctIdCounter counter;
-  // A fresh counter has counted nothing.
-  EXPECT_EQ(counter.getAndReset(), 0);
+TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
+  // A block size of 80 bytes means 10 triples per block.
+  std::vector<RelationInput> inputs;
+  // 30 rows with 10 distinct `col1` IDs, each of which occurs three times. The
+  // blocks end after 10, 20, and 30 rows, so the `col1` IDs `3` and `6` each
+  // occur in two consecutive blocks.
+  std::vector<RowInput> rowsOfFirstRelation;
+  for (int j = 0; j < 30; ++j) {
+    rowsOfFirstRelation.push_back({j / 3, j, 17});
+  }
+  inputs.push_back(RelationInput{1, std::move(rowsOfFirstRelation)});
+  // 15 rows with 3 distinct `col1` IDs, none of which spans two blocks.
+  std::vector<RowInput> rowsOfSecondRelation;
+  for (int j = 0; j < 15; ++j) {
+    rowsOfSecondRelation.push_back({j / 5, j, 17});
+  }
+  inputs.push_back(RelationInput{2, std::move(rowsOfSecondRelation)});
 
-  counter(V(1));
-  counter(V(1));
-  counter(V(2));
-  EXPECT_EQ(counter.getAndReset(), 2);
+  checkPermutationIsIndependentOfInputBlockSize(
+      inputs, 80_B, inputBlockSizesForPathEquivalence);
 
-  // `getAndReset` also clears the "last seen" ID, so feeding `V(2)` again
-  // counts it as distinct.
-  counter(V(2));
-  counter(V(2));
-  EXPECT_EQ(counter.getAndReset(), 1);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto result = buildPermutation(inputs, 80_B, 1000, filename);
+  ASSERT_EQ(result.largeRelationMetadata_.size(), 2);
+  const auto& metadata1 = result.largeRelationMetadata_.at(0);
+  EXPECT_EQ(metadata1.col0Id_, V(1));
+  EXPECT_EQ(metadata1.numRows_, 30);
+  EXPECT_FLOAT_EQ(metadata1.multiplicityCol1_,
+                  CompressedRelationWriter::computeMultiplicity(30, 10));
+  const auto& metadata2 = result.largeRelationMetadata_.at(1);
+  EXPECT_EQ(metadata2.col0Id_, V(2));
+  EXPECT_EQ(metadata2.numRows_, 15);
+  EXPECT_FLOAT_EQ(metadata2.multiplicityCol1_,
+                  CompressedRelationWriter::computeMultiplicity(15, 3));
+}
 
-  // `reset` clears the count.
-  counter(V(3));
-  counter(V(4));
-  counter.reset();
-  EXPECT_EQ(counter.getAndReset(), 0);
+// _____________________________________________________________________________
+TEST(CountDistinctIds, countAndBoundaryIds) {
+  using compressedRelationHelpers::countDistinctIds;
+  auto count = [](const std::vector<Id>& ids) {
+    return countDistinctIds(ql::span<const Id>{ids});
+  };
 
-  // `reset` also clears the "last seen" ID, so feeding `V(4)` again counts it
-  // as distinct.
-  counter(V(4));
-  counter.reset();
-  counter(V(4));
-  EXPECT_EQ(counter.getAndReset(), 1);
+  {
+    auto result = count({V(1)});
+    EXPECT_EQ(result.count_, 1);
+    EXPECT_EQ(result.first_, V(1));
+    EXPECT_EQ(result.last_, V(1));
+  }
+  {
+    auto result = count({V(1), V(1), V(2), V(2), V(2), V(5)});
+    EXPECT_EQ(result.count_, 3);
+    EXPECT_EQ(result.first_, V(1));
+    EXPECT_EQ(result.last_, V(5));
+  }
+  {
+    // All IDs equal.
+    auto result = count({V(3), V(3), V(3)});
+    EXPECT_EQ(result.count_, 1);
+    EXPECT_EQ(result.first_, V(3));
+    EXPECT_EQ(result.last_, V(3));
+  }
 }
