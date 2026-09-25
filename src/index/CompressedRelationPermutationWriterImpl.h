@@ -140,13 +140,6 @@ struct CompressedRelationWriter::PermutationWriter {
   compressedRelationHelpers::DistinctIdCounter distinctCol1Counter_;
   BlockCallbackManager blockCallbackManager_;
 
-  // The maximal number of block buffers that `writer1_` keeps for reuse, see
-  // `makeRecyclingOwner`. The block write queue of `writer1_` keeps at least
-  // four blocks in flight (see `makeBlockWriteQueue`), and one more buffer is
-  // the one that is currently filled. A buffer that is given back while the
-  // pool is full is simply freed, so a larger queue only costs allocations.
-  static constexpr size_t numRecycledBlockBuffers = 5;
-
   size_t numTriplesProcessed_ = 0;
   ad_utility::ProgressBar progressBar_{numTriplesProcessed_,
                                        "Triples sorted: "};
@@ -182,9 +175,10 @@ struct CompressedRelationWriter::PermutationWriter {
 
     writer1_->smallBlocksCallback_ =
         AddBlockOfSmallRelationsToSwitched{*writer2_};
-    // The buffers of the blocks of large relations are reused, see
-    // `makeRecyclingOwner`.
-    writer1_->enableBlockRecycling(numRecycledBlockBuffers);
+    // The blocks of small relations of `writer1_` end up in `writer2_` (see
+    // `AddBlockOfSmallRelationsToSwitched`), so their buffers are also given
+    // back by `writer2_`, which therefore has to use the same pool.
+    writer2_->shareBlockBufferPoolWith(*writer1_);
   }
 
   // Constructor for a `PermutationWriter` which writes a single permutation.
@@ -207,9 +201,6 @@ struct CompressedRelationWriter::PermutationWriter {
     // column.
     AD_CORRECTNESS_CHECK(permutation_.keys().at(3) == 3);
     AD_CORRECTNESS_CHECK(blocksize_ > 0);
-    // The buffers of the blocks of large relations are reused, see
-    // `makeRecyclingOwner`.
-    writer1_->enableBlockRecycling(numRecycledBlockBuffers);
   }
 
   // Write a single block of the current large relation with `writer1_`, count
@@ -230,40 +221,25 @@ struct CompressedRelationWriter::PermutationWriter {
       // contiguously, which is much faster than pushing the rows one by one.
       twinRelationSorter_.pushBlock(twinRelation);
     }
-    writer1_->addBlockForLargeRelation(col0IdCurrentRelation_.value(),
-                                       BlockToWrite{block, std::move(owner)});
-  }
-
-  // Wrap a filled block buffer in a `shared_ptr`, which keeps the rows of the
-  // block alive for as long as `writer1_` still looks at them. Once `writer1_`
-  // is done with it, the buffer is given back to the pool of `writer1_`, from
-  // where it is taken again for one of the next blocks (see
-  // `takeRecycledBlock`), so that the same few buffers are used over and over
-  // again and almost no allocations are needed.
-  std::shared_ptr<IdTable> makeRecyclingOwner(IdTable buffer) {
-    auto recycle = [writer = writer1_.get()](IdTable* table) {
-      writer->recycleBlock(std::move(*table));
-      delete table;
-    };
-    return std::shared_ptr<IdTable>{new IdTable{std::move(buffer)},
-                                    std::move(recycle)};
+    writer1_->addBlockForLargeRelation(
+        col0IdCurrentRelation_.value(),
+        BlockToWrite{std::move(block), std::move(owner)});
   }
 
   // Write the buffered rows of the current (large) relation as its next block
-  // (see `writeBlockOfLargeRelation` above). The buffer for the next block is
-  // taken from the pool of recycled buffers of `writer1_`, to which the buffer
-  // of this block is given back once it is no longer needed, so that the same
-  // few buffers are used over and over again.
+  // (see `writeBlockOfLargeRelation` above). The buffer is given back to the
+  // block buffer pool of `writer1_` once `writer1_` is done with it, and the
+  // buffer for the next block is taken from that pool, so that the same few
+  // buffers are used over and over again and almost no allocations are needed.
   void addBlockForLargeRelation() {
     if (relation_.empty()) {
       return;
     }
-    auto owner = makeRecyclingOwner(std::move(relation_));
+    auto owner = BlockBufferPool::makeRecyclingOwner(
+        writer1_->blockBufferPool(), std::move(relation_));
     auto block = owner->template asStaticView<0>();
-    relation_ = writer1_->takeRecycledBlock(numColumns_, alloc_);
-    relation_.clear();
-    relation_.reserve(blocksize_);
-    writeBlockOfLargeRelation(block, std::move(owner));
+    relation_ = writer1_->takeBlockBuffer();
+    writeBlockOfLargeRelation(std::move(block), std::move(owner));
   }
 
   // Write the given rows of the current input block as the next block of the
@@ -423,6 +399,8 @@ struct CompressedRelationWriter::PermutationWriter {
                                     pickFirstThreeColumnsOfIdsWithoutLocalVocab(
                                         permutedCols[begin + blocksize_ - 1]));
           if (blockEnd < end) {
+            // Note: The rows of this view are kept alive via the `inputBlock_`
+            // member, see `addBlockOfLargeRelationWithoutCopying`.
             addBlockOfLargeRelationWithoutCopying(
                 permutedCols.subView(begin, blockEnd - begin));
             increaseTripleCounter(blockEnd - begin);

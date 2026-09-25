@@ -38,7 +38,10 @@ inline Id::T bitsOfIdWithoutLocalVocab(Id id) {
 struct ComparatorForConstCol0 {
   // Pick the bits of the cells that this comparator looks at. The resulting
   // `std::array`s compare lexicographically, which is exactly the desired
-  // order.
+  // order. Note: In a micro benchmark (sorting 5M rows with various
+  // distributions of duplicates) materializing the arrays was as fast as a
+  // handwritten comparison of the bits with an early exit, and both were
+  // 20-35% faster than comparing the `Id`s themselves.
   template <typename Row>
   static std::array<Id::T, 3> pickBits(const Row& row) {
     return {bitsOfIdWithoutLocalVocab(row[c1Idx]),

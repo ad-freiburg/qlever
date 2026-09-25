@@ -49,8 +49,7 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   // argument to `true` to invoke the `smallBlocksCallback_`.
   compressAndWriteBlock(currentBlockFirstCol0_, currentBlockLastCol0_,
                         std::move(smallRelationsBuffer_), true);
-  smallRelationsBuffer_.clear();
-  smallRelationsBuffer_.reserve(2 * blocksize());
+  smallRelationsBuffer_ = takeBlockBuffer();
 }
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
@@ -102,37 +101,24 @@ void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
       AD_CORRECTNESS_CHECK(block.ownsRows());
       std::invoke(smallBlocksCallback_, std::move(block).extractTable());
     } else if (block.ownsRows()) {
-      recycleBlock(std::move(block).extractTable());
+      blockBufferPool_->giveBack(std::move(block).extractTable());
     }
   });
   timer.stop();
 }
 
 // _____________________________________________________________________________
-IdTable CompressedRelationWriter::takeRecycledBlock(
-    size_t numColumns, const ad_utility::AllocatorWithLimit<Id>& allocator) {
-  auto recycledBlocks = recycledBlocks_.wlock();
-  // Blocks with a different number of columns cannot be reused, but this
-  // should never happen for the current users.
-  if (!recycledBlocks->empty() &&
-      recycledBlocks->back().numColumns() == numColumns) {
-    IdTable result = std::move(recycledBlocks->back());
-    recycledBlocks->pop_back();
-    return result;
-  }
-  return IdTable{numColumns, allocator};
-}
-
-// _____________________________________________________________________________
-void CompressedRelationWriter::recycleBlock(IdTable block) {
-  if (!recycleBlocks_) {
-    return;
-  }
-  block.clear();
-  auto recycledBlocks = recycledBlocks_.wlock();
-  if (recycledBlocks->size() < maxNumRecycledBlocks_) {
-    recycledBlocks->push_back(std::move(block));
-  }
+IdTable CompressedRelationWriter::takeBlockBuffer() {
+  IdTable buffer = blockBufferPool_->take(
+      [this]() { return IdTable{numColumns(), allocator_}; });
+  // All users of the same pool write blocks with the same number of columns.
+  AD_CORRECTNESS_CHECK(buffer.numColumns() == numColumns());
+  buffer.clear();
+  // Note: A block may exceed the `blocksize()` (see
+  // `smallRelationBlockCapacity`), but the factor of 2 suffices in almost all
+  // cases. For a buffer that is reused, this `reserve` is typically a no-op.
+  buffer.reserve(2 * blocksize());
+  return buffer;
 }
 
 // _____________________________________________________________________________
