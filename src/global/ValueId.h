@@ -17,6 +17,7 @@
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
+#include "global/ValueIdBitRepresentation.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/Algorithm.h"
 #include "util/BitUtils.h"
@@ -204,6 +205,13 @@ class ValueId {
   // A struct that represents the single undefined value. This is required for
   // generic code like in the `visit` method.
   struct UndefinedType {};
+
+  // The raw bit representation of a `ValueId`: a single datatype byte and a
+  // full 64-bit word of payload. See `ValueIdBitRepresentation.h` for
+  // details. Introduced ahead of the commit that actually switches
+  // `getBits()`/`fromBits()` to it, so later commits can already spell out
+  // the type they mean.
+  using BitRepresentation = ValueIdBitRepresentation;
 
  private:
   // The actual bits.
