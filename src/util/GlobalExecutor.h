@@ -50,21 +50,29 @@ size_t globalExecutorNumThreads();
 // `globalExecutorNumThreads()` threads and which is created lazily on the first
 // call to this function.
 //
-// There is deliberately only a single such pool: its intended users are the
-// phases of the index build, all of which want to use the machine's threads and
-// would oversubscribe it if each of them had a pool of its own. A single pool
-// also makes the total parallelism of the process configurable via a single
-// knob (the `--num-threads / -j` option of the index builder, see
+// There is deliberately only a single such pool: its users are the phases of
+// the index build, all of which want to use the machine's threads and would
+// oversubscribe it if each of them had a pool of its own. A single pool also
+// makes the total parallelism of the process configurable via a single knob
+// (the `--num-threads / -j` option of the index builder, see
 // `setGlobalExecutorNumThreads`).
 //
-// NOTE: The pool is not used in production yet; porting the phases of the index
-// build onto it is work in progress.
+// NOTE: So far the only user is the merge phase of the external sorters (see
+// `engine/idTable/ExternalIdTableSorterMergeConfig.h`); porting the remaining
+// phases of the index build onto this pool is work in progress.
 //
 // NOTE: The pool has static lifetime and we never `join()` or `stop()` it, so
 // it outlives everything that posts to it, which is exactly what its users
 // need: they post tasks that only have to be completed before the process ends.
 // A phase that needs to know when its own work is done therefore has to
 // establish that itself.
+//
+// NOTE: It is safe to share this executor between concurrent users of the
+// parallel merge (see `util/parallelBlockMerge/ParallelBlockMerge.h`), because
+// a chunk of a merge that cannot make progress suspends instead of occupying
+// its thread, so that concurrent merges cannot starve each other. It is however
+// *not* safe to *consume* a merge from one of the threads of the executor that
+// the merge runs on, see `parallelBlockMerge::parallelBlockMergeToRange`.
 ql::any_io_executor globalExecutor();
 
 }  // namespace ad_utility

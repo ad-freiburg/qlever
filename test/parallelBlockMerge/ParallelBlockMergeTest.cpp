@@ -1195,6 +1195,149 @@ TEST(ParallelBlockMerge, rangeWithASingleInFlightChunk) {
   }
 }
 
+namespace {
+// A `VectorInput` that reports its own destruction. It deliberately sleeps
+// before it does so, such that a destruction that happens too late is observed
+// reliably instead of flakily, see the test below.
+struct DestructionReportingInput : public VectorInput<size_t> {
+  // `nullptr` if and only if this object was moved from.
+  std::atomic<bool>* wasDestroyed_;
+
+  DestructionReportingInput(VectorInput<size_t> input,
+                            std::atomic<bool>* wasDestroyed)
+      : VectorInput<size_t>{std::move(input)}, wasDestroyed_{wasDestroyed} {}
+  DestructionReportingInput(DestructionReportingInput&& other) noexcept
+      : VectorInput<size_t>{std::move(other)},
+        wasDestroyed_{std::exchange(other.wasDestroyed_, nullptr)} {}
+  ~DestructionReportingInput() {
+    if (wasDestroyed_ == nullptr) {
+      return;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    *wasDestroyed_ = true;
+  }
+};
+static_assert(
+    ad_utility::parallelBlockMerge::InputConcept<DestructionReportingInput>);
+
+// Merge with a `DestructionReportingInput`, consume `numBlocksToConsume` blocks
+// of the result (or all of them if that is `nullopt`), destroy the range, and
+// return whether the input was already destroyed at that point.
+bool inputIsDestroyedWithTheRange(std::optional<size_t> numBlocksToConsume) {
+  auto runs = makeRandomRuns(8, 100, 200);
+  std::atomic<bool> inputWasDestroyed = false;
+  net::thread_pool pool{4};
+  // See the note in `mergeToRangeAndCollect` above for why the pool is joined
+  // only after the range is destroyed.
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+  {
+    auto blocks = parallelBlockMergeToRange<false>(
+        pool.get_executor(),
+        DestructionReportingInput{makeVectorInput(runs, 8), &inputWasDestroyed},
+        std::less<>{}, makeInMemoryStorageFactory<SizeVec>(2),
+        alwaysParallelOptions(7), detail::freshCancellationHandle());
+    size_t numConsumed = 0;
+    for ([[maybe_unused]] auto& block : blocks) {
+      ++numConsumed;
+      if (numBlocksToConsume.has_value() &&
+          numConsumed >= numBlocksToConsume.value()) {
+        break;
+      }
+    }
+  }
+  return inputWasDestroyed;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Regression test: when the range is destroyed, the merge has to have released
+// its input, see the destructor of `detail::ParallelMergeRange`. Consumers rely
+// on this, because the input typically owns a resource (a file, a registration)
+// that they dispose of right afterwards. Before the destructor waited, the
+// input was released by whichever coroutine happened to finish last, on one of
+// the executor's threads and hence after the consumer had already moved on.
+TEST(ParallelBlockMerge, rangeDestructorWaitsForTheMergeToReleaseItsInput) {
+  // The merge ran to completion.
+  EXPECT_TRUE(inputIsDestroyedWithTheRange(std::nullopt));
+  // The consumer abandoned the merge, so several chunks were still in flight.
+  EXPECT_TRUE(inputIsDestroyedWithTheRange(1));
+}
+
+// _____________________________________________________________________________
+// Regression test: a range that was consumed to its end has to release the
+// merge (and hence its input) right away, also while the range object itself
+// stays alive. Consumers rely on this: they exhaust the range, keep it in a
+// local variable, and dispose of the input afterwards, see
+// `detail::ParallelMergeRange::releaseEverything`.
+TEST(ParallelBlockMerge, exhaustedRangeReleasesTheInputWhileItStaysAlive) {
+  auto runs = makeRandomRuns(8, 100, 200);
+  auto expected = sortedConcatenation(runs);
+  std::atomic<bool> inputWasDestroyed = false;
+  net::thread_pool pool{4};
+  // See the note in `mergeToRangeAndCollect` above for why the pool is joined
+  // only after the range is destroyed.
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+  auto blocks = parallelBlockMergeToRange<false>(
+      pool.get_executor(),
+      DestructionReportingInput{makeVectorInput(runs, 8), &inputWasDestroyed},
+      std::less<>{}, makeInMemoryStorageFactory<SizeVec>(2),
+      alwaysParallelOptions(7), detail::freshCancellationHandle());
+  SizeVec result;
+  for (const auto& block : blocks) {
+    result.insert(result.end(), block.begin(), block.end());
+  }
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  // The range is still alive, but everything that the merge owned is gone.
+  EXPECT_TRUE(inputWasDestroyed);
+  // The range stays a valid object that simply has nothing left to yield, and
+  // destroying it afterwards must not wait for (or touch) anything.
+  EXPECT_FALSE(blocks.get().has_value());
+  EXPECT_FALSE(blocks.get().has_value());
+}
+
+// _____________________________________________________________________________
+// The very same holds for the serial merge, which has no coroutines to wait for
+// but owns its input just as much, see `detail::RangeThatReleasesOnEnd`.
+TEST(ParallelBlockMerge,
+     exhaustedSerialRangeReleasesTheInputWhileItStaysAlive) {
+  auto runs = makeRandomRuns(4, 50, 100);
+  auto expected = sortedConcatenation(runs);
+  std::atomic<bool> inputWasDestroyed = false;
+  auto blocks = serialBlockMergeToRange<false>(
+      DestructionReportingInput{makeVectorInput(runs, 8), &inputWasDestroyed},
+      std::less<>{}, optionsWithBlockSize(7));
+  SizeVec result;
+  for (const auto& block : blocks) {
+    result.insert(result.end(), block.begin(), block.end());
+  }
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  EXPECT_TRUE(inputWasDestroyed);
+  EXPECT_FALSE(blocks.get().has_value());
+}
+
+// _____________________________________________________________________________
+// The same holds for a range that has propagated an exception: its consumer
+// may keep it alive for a long time, so the merge has to be released as soon as
+// the exception reaches that consumer.
+TEST(ParallelBlockMerge, rangeThatThrewReleasesTheInputWhileItStaysAlive) {
+  auto runs = makeRandomRuns(8, 100, 200);
+  std::atomic<bool> inputWasDestroyed = false;
+  auto handle = detail::freshCancellationHandle();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  net::thread_pool pool{4};
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+  auto blocks = parallelBlockMergeToRange<false>(
+      pool.get_executor(),
+      DestructionReportingInput{makeVectorInput(runs, 8), &inputWasDestroyed},
+      std::less<>{}, makeInMemoryStorageFactory<SizeVec>(2),
+      alwaysParallelOptions(7), std::move(handle));
+  EXPECT_THROW(blocks.get(), ad_utility::CancellationException);
+  EXPECT_TRUE(inputWasDestroyed);
+  // The exception is kept, so a consumer that keeps reading sees it again
+  // instead of a silent end of the range.
+  EXPECT_THROW(blocks.get(), ad_utility::CancellationException);
+}
+
 // _____________________________________________________________________________
 TEST(ParallelBlockMerge, rangeTakesTheSerialFastPath) {
   auto runs = makeRandomRuns(8, 100, 200);
@@ -1305,6 +1448,7 @@ namespace {
 struct DummyMergeState {
   using Block = SizeVec;
   void stop() {}
+  std::future<void> asyncWaitForCompletion() { return {}; }
 };
 struct DummySink {
   template <typename Token>
