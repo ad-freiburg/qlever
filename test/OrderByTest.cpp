@@ -258,6 +258,10 @@ TEST(OrderBy, sortedIntInput) {
   EXPECT_EQ(
       orderByOnSortedInput({{I(3)}, {I(-2)}}),
       (ResultAndFastPath{makeIdTableFromVector({{I(-2)}, {I(3)}}), true}));
+
+  // Check an input with only `Undefined` values.
+  EXPECT_EQ(orderByOnSortedInput({{U}, {U}}),
+            (ResultAndFastPath{makeIdTableFromVector({{U}, {U}}), true}));
 }
 
 // Test that `ORDER BY` on a double column that is sorted in the internal order
@@ -319,10 +323,6 @@ TEST(OrderBy, sortedInputWithoutFastPath) {
   EXPECT_EQ(
       orderByOnSortedInput({{V(4)}, {U}, {V(2)}}),
       (ResultAndFastPath{makeIdTableFromVector({{U}, {V(2)}, {V(4)}}), false}));
-
-  // Check a sort column with only `Undefined` values.
-  EXPECT_EQ(orderByOnSortedInput({{U}, {U}}),
-            (ResultAndFastPath{makeIdTableFromVector({{U}, {U}}), false}));
 
   // Check an input that is sorted by the second column.
   VectorTable input{{I(3), I(1)}, {I(-2), I(0)}};
