@@ -9,10 +9,12 @@
 #include <cstdint>
 #include <vector>
 
+#include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/LocalVocab.h"
 #include "util/Algorithm.h"
+#include "util/Iterators.h"
 #include "util/TransparentFunctors.h"
 
 namespace ad_utility {
@@ -115,17 +117,27 @@ class JoinColumnMapping {
 };
 
 struct GetColsFromTable {
-  template <size_t numCols, typename Table>
-  decltype(auto) operator()(Table& table) {
-    return [&table]<size_t... I>(std::index_sequence<I...>) {
-      return ::ranges::views::zip(table.getColumn(I)...) |
-             ::ranges::views::transform([](auto&& tuple) {
-               return std::apply(
-                   [](auto&... refs) { return std::array{refs...}; },
-                   AD_FWD(tuple));
-             });
-    }(std::make_index_sequence<numCols>());
-  }
+  // Computes the first `numCols` join-column values for row `rowIdx`,
+  // directly from `table` (a stable, persistent object, see
+  // `IdTableAndFirstCols` below), not from a transient view. NOT built via
+  // `zip(table.getColumn(I)...) | transform(...)`: for an `Id` column,
+  // `getColumn(I)` is a proxy-based view (see `IdColumn.h`) whose `zip_view`
+  // doesn't compose with a subsequent `transform`; and even an
+  // `iota | transform` pipeline would produce iterators referencing their
+  // parent `transform_view`, which is fatal once (as `.begin()`/`.end()`
+  // used to do) each call builds and discards its own transient view.
+  template <size_t numCols>
+  struct Accessor {
+    template <typename Table>
+    auto operator()(Table&& table, size_t rowIdx) const {
+      using T = ql::remove_cvref_t<Table>::single_value_type;
+      return [&]<size_t... I>(std::index_sequence<I...>) {
+        // Explicit `std::array<T, numCols>`: CTAD would deduce the
+        // `ConstIdRef` proxy type from `table.getColumn(I)[rowIdx]` instead.
+        return std::array<T, numCols>{table.getColumn(I)[rowIdx]...};
+      }(std::make_index_sequence<numCols>());
+    }
+  };
 };
 
 // A class that stores a complete `IdTable`, but when being treated as a range
@@ -151,31 +163,34 @@ struct IdTableAndFirstCols {
   LocalVocab localVocab_;
 
  public:
-  // Typedef needed for generic interfaces.
-  using ConstBaseIterator = ql::ranges::iterator_t<
-      decltype(GetColsFromTable{}.template operator()<numCols>(
-          std::declval<const Table&>()))>;
+  // Needed by `GetColsFromTable::Accessor`, which is also called with
+  // `*this` (see below) and therefore needs to determine the element type
+  // via the wrapped `Table`, not via `IdTableAndFirstCols` itself.
+  using single_value_type = typename Table::single_value_type;
+
+  // References `*this` directly via `GetColsFromTable::Accessor`, not a
+  // transient view rebuilt per call (see `GetColsFromTable` above for why).
+  using Accessor = typename GetColsFromTable::template Accessor<numCols>;
+  using ConstBaseIterator =
+      ad_utility::IteratorForAccessOperator<IdTableAndFirstCols, Accessor,
+                                            ad_utility::IsConst::True>;
   using iterator = ConstBaseIterator;
   using const_iterator = ConstBaseIterator;
-  // Get access to the first column.
-  decltype(auto) cols() const {
-    return GetColsFromTable{}.template operator()<numCols>(table_);
-  }
   // Construct by taking ownership of the table.
   IdTableAndFirstCols(Table t, LocalVocab localVocab)
       : table_{std::move(t)}, localVocab_{std::move(localVocab)} {}
 
   // The following functions all refer to the same column.
-  const_iterator begin() const { return cols().begin(); }
-  const_iterator end() const { return cols().end(); }
+  const_iterator begin() const { return {this, 0}; }
+  const_iterator end() const { return {this, table_.numRows()}; }
 
-  bool empty() const { return cols().empty(); }
+  bool empty() const { return table_.numRows() == 0; }
 
-  decltype(auto) operator[](size_t idx) const { return cols()[idx]; }
-  decltype(auto) front() const { return cols().front(); }
-  decltype(auto) back() const { return cols().back(); }
+  decltype(auto) operator[](size_t idx) const { return Accessor{}(*this, idx); }
+  decltype(auto) front() const { return (*this)[0]; }
+  decltype(auto) back() const { return (*this)[table_.numRows() - 1]; }
 
-  size_t size() const { return cols().size(); }
+  size_t size() const { return table_.numRows(); }
 
   // Note: This function only refers to the exposed `numCols` column, not to all
   // the columns in the underlying `Table`. This interface is currently used by
@@ -231,9 +246,12 @@ struct IdTableAndFirstCols<1, Table> {
 
   bool empty() const { return col().empty(); }
 
-  const Id& operator[](size_t idx) const { return col()[idx]; }
-  const Id& front() const { return col().front(); }
-  const Id& back() const { return col().back(); }
+  // `decltype(auto)`, not a hardcoded `const Id&`: `col()[idx]` etc. return
+  // `ConstIdRef` by value here, and `const Id&` would dangle (see
+  // `IdColumn.h`).
+  decltype(auto) operator[](size_t idx) const { return col()[idx]; }
+  decltype(auto) front() const { return col().front(); }
+  decltype(auto) back() const { return col().back(); }
 
   size_t size() const { return col().size(); }
 

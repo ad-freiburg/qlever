@@ -19,6 +19,7 @@
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "engine/IndexScan.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "index/IndexImpl.h"
@@ -108,7 +109,9 @@ void testLazyScanForJoinOfTwoScans(
     const SparqlTripleSimple& tripleRight,
     const std::vector<IndexPair>& leftRows,
     const std::vector<IndexPair>& rightRows,
-    ad_utility::MemorySize blocksizePermutations = 16_B,
+    // `18_B` (2 rows per block, since `BYTES_PER_ID_COLUMN_ENTRY == 9`),
+    // matching the "two triples per block" comments on the call sites below.
+    ad_utility::MemorySize blocksizePermutations = 18_B,
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   // As soon as there is a LIMIT clause present, we cannot use the prefiltered
@@ -163,8 +166,20 @@ void testLazyScanForJoinWithColumn(
   for (const auto& entry : columnEntries) {
     column.push_back(toValueId(entry, qec->getIndex()).value());
   }
+  // `ConstIdColumn` can only view a split payload/datatype array (see
+  // `IdColumn.h`), not a contiguous `std::vector<Id>` directly, so build
+  // that split representation here.
+  std::vector<uint64_t> columnPayloads;
+  std::vector<uint8_t> columnDatatypes;
+  for (Id id : column) {
+    auto bits = id.getBits();
+    columnPayloads.push_back(bits.payload_);
+    columnDatatypes.push_back(bits.datatype_);
+  }
+  ConstIdColumn columnView{columnPayloads.data(), columnDatatypes.data(),
+                          columnPayloads.size()};
 
-  auto lazyScan = scan.lazyScanForJoinOfColumnWithScan(column);
+  auto lazyScan = scan.lazyScanForJoinOfColumnWithScan(columnView);
   testLazyScan(std::move(lazyScan), scan, expectedRows);
 }
 
@@ -181,11 +196,24 @@ void testLazyScanWithColumnThrows(
   for (const auto& entry : columnEntries) {
     column.push_back(toValueId(entry, qec->getIndex()).value());
   }
+  // `ConstIdColumn` can only view a split payload/datatype array (see
+  // `IdColumn.h`), not a contiguous `std::vector<Id>` directly, so build
+  // that split representation here.
+  std::vector<uint64_t> columnPayloads;
+  std::vector<uint8_t> columnDatatypes;
+  for (Id id : column) {
+    auto bits = id.getBits();
+    columnPayloads.push_back(bits.payload_);
+    columnDatatypes.push_back(bits.datatype_);
+  }
+  ConstIdColumn columnView{columnPayloads.data(), columnDatatypes.data(),
+                          columnPayloads.size()};
 
   // We need this to suppress the warning about a [[nodiscard]] return value
   // being unused.
-  auto makeScan = [&column, &s1]() {
-    [[maybe_unused]] auto scan = s1.lazyScanForJoinOfColumnWithScan(column);
+  auto makeScan = [&columnView, &s1]() {
+    [[maybe_unused]] auto scan =
+        s1.lazyScanForJoinOfColumnWithScan(columnView);
   };
   EXPECT_ANY_THROW(makeScan());
 }
@@ -298,7 +326,8 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
     testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{1, 5}}, {{0, 4}});
   }
   {
-    // In this example we use 3 triples per block (24 bytes) and the `<p>`
+    // In this example we use 3 triples per block (27 bytes, since
+    // `BYTES_PER_ID_COLUMN_ENTRY == 9`) and the `<p>`
     // permutation is standing in a single block together with the previous
     // `<o>` relation. The lazy scans are however still aware that the relevant
     // part of the block (`<b> <p> ?x`) only  goes from `<x80>` through `<x90>`,
@@ -308,7 +337,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<a> <o> <a1>. <b> <p> <x80>. <b> <p> <x90>. "
         "<x2> <q> <xb>. <x5> <q> <xb2> . <x5> <q> <xb>. "
         "<x9> <q> <xb2> . <x91> <q> <xb>. <x93> <q> <xb2> .";
-    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 24_B);
+    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 27_B);
   }
   {
     std::string kg =
@@ -571,7 +600,7 @@ TEST(IndexScan, getResultSizeOfScan) {
 // exact iff no block of the relation has located triples.
 TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   // A large relation `<p>` and two small relations `<q>` and `<r>`. With a
-  // block size of 16 bytes, `<p>` is stored in blocks of its own and has a
+  // block size of 2 rows, `<p>` is stored in blocks of its own and has a
   // metadata entry, `<q>` and `<r>` share one block and have none.
   std::string kg;
   for (size_t i = 0; i < 50; ++i) {
@@ -579,7 +608,8 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   }
   kg += "<x0> <q> <y0> . <x0> <r> <y0> .";
   TestIndexConfig config{kg};
-  config.blocksizePermutations = 16_B;
+  config.blocksizePermutations = ad_utility::MemorySize::bytes(
+      2 * columnBasedIdTable::BYTES_PER_ID_COLUMN_ENTRY);  // 2 rows/block
   auto index = std::make_shared<Index>(makeTestIndex(std::move(config)));
   auto getId = makeGetId(*index);
   const auto& pso = index->getImpl().getPermutation(Permutation::PSO);
@@ -1302,7 +1332,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
   // a and b are supposed to share one block and c and d.
   config.turtleInput =
       "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
-  config.blocksizePermutations = 16_B;
+  config.blocksizePermutations = 18_B;  // 2 rows/block, BYTES_PER_ID_COLUMN_ENTRY == 9
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
 
@@ -1327,7 +1357,7 @@ TEST_P(IndexScanWithLazyJoin,
   // a and b are supposed to share one block and c and d.
   config.turtleInput =
       "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
-  config.blocksizePermutations = 16_B;
+  config.blocksizePermutations = 18_B;  // 2 rows/block, BYTES_PER_ID_COLUMN_ENTRY == 9
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
   LocalVocab extraVocab;

@@ -69,7 +69,12 @@ struct TestIndexConfig {
   bool loadAllPermutations = true;
   bool usePatterns = true;
   bool usePrefixCompression = true;
-  ad_utility::MemorySize blocksizePermutations = 16_B;
+  // Deliberately tiny, to force many small blocks even for the handful of
+  // triples that most tests use, so that block-boundary logic gets
+  // exercised. `18_B` so that (with `BYTES_PER_ID_COLUMN_ENTRY == 9`, see
+  // `IdColumnByteIO.h`) two rows still fit per block, matching the
+  // granularity that most existing tests are calibrated for.
+  ad_utility::MemorySize blocksizePermutations = 18_B;
   bool createTextIndex = false;
   bool addWordsFromLiterals = true;
   std::optional<std::pair<std::string, std::string>>

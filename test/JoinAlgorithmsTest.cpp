@@ -623,23 +623,27 @@ struct IdRowAdder {
 
   void addRow(size_t leftIndex, size_t rightIndex) {
     // Cartesian path: use materialized tables.
-    auto x1 = leftTable_(leftIndex, 0);
-    auto x2 = leftTable_(leftIndex, 1);
-    auto y1 = rightTable_(rightIndex, 0);
-    auto y2 = rightTable_(rightIndex, 1);
-    auto leftPayload = leftTable_(leftIndex, 2);
-    auto rightPayload = rightTable_(rightIndex, 2);
+    // Explicitly `Id`, not `auto`: `leftTable_(...)` etc. return a proxy
+    // (see `IdColumn.h`), which `std::array{...}` below couldn't deduce a
+    // consistent element type from.
+    Id x1 = leftTable_(leftIndex, 0);
+    Id x2 = leftTable_(leftIndex, 1);
+    Id y1 = rightTable_(rightIndex, 0);
+    Id y2 = rightTable_(rightIndex, 1);
+    Id leftPayload = leftTable_(leftIndex, 2);
+    Id rightPayload = rightTable_(rightIndex, 2);
     AD_CONTRACT_CHECK(x1 == y1);
     AD_CONTRACT_CHECK(x2.isUndefined() || x2 == y2);
-    target_->push_back(
-        std::array{x1, x2.isUndefined() ? y2 : x2, leftPayload, rightPayload});
+    target_->push_back(std::array<Id, 4>{
+        x1, x2.isUndefined() ? y2 : x2, leftPayload, rightPayload});
   }
 
   void addOptionalRow(size_t leftIndex) {
-    auto x1 = leftTable_(leftIndex, 0);
-    auto x2 = leftTable_(leftIndex, 1);
-    auto leftPayload = leftTable_(leftIndex, 2);
-    target_->emplace_back(std::array{x1, x2, leftPayload, Id::makeUndefined()});
+    Id x1 = leftTable_(leftIndex, 0);
+    Id x2 = leftTable_(leftIndex, 1);
+    Id leftPayload = leftTable_(leftIndex, 2);
+    target_->emplace_back(
+        std::array<Id, 4>{x1, x2, leftPayload, Id::makeUndefined()});
   }
 
   template <typename R1, typename R2>

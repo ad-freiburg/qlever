@@ -15,6 +15,7 @@
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "backports/span.h"
+#include "engine/idTable/IdColumnZipperJoin.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/InputRangeUtils.h"
@@ -620,7 +621,10 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
     // TODO<joka921> We could probably also apply this optimization if both
     // inputs contain UNDEF values only in the last column, and possibly
     // also not only for `OPTIONAL` joins.
-    auto endOfUndef = ql::ranges::find_if_not(leftSub, &Id::isUndefined);
+    // Lambda, not `&Id::isUndefined`: proxy column elements don't support
+    // pointer-to-member dispatch (see `IdColumn.h`).
+    auto endOfUndef = ql::ranges::find_if_not(
+        leftSub, [](const Id& id) { return id.isUndefined(); });
 
     auto findSmallerUndefRangeLeft = [leftSub, endOfUndef](auto&&...) {
       return ad_utility::IteratorRange{leftSub.begin(), endOfUndef};
@@ -1668,10 +1672,53 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
       ElFromFirstNotFoundAction elFromFirstNotFoundAction,
       CheckCancellation checkCancellation, CoverUndefRanges coverUndefRanges) {
-    [[maybe_unused]] auto res = zipperJoinWithUndef(
-        subrangeLeft, subrangeRight, this->lessThan_, rowIndexAdder,
-        findSmallerUndefRangesLeft, findSmallerUndefRangesRight,
-        elFromFirstNotFoundAction, checkCancellation, coverUndefRanges);
+    // Fast path: If the join is on single split `Id` columns (i.e. the
+    // iterators are `IdColumnIterator`s), the comparison is the default
+    // `Id` order, and there is no UNDEF machinery (which is also the case
+    // at runtime for the "potentially UNDEF" variant if no UNDEF values
+    // were found), then perform the join directly on the datatype bytes and
+    // payload words of the split column storage. This is used by all joins
+    // of prefiltered index scans (lazy and materialized).
+    using LeftIterator = ql::ranges::iterator_t<const SubrangeLeft>;
+    using RightIterator = ql::ranges::iterator_t<const SubrangeRight>;
+    namespace cbit = columnBasedIdTable;
+    constexpr bool areIdColumns =
+        SimilarToAny<LeftIterator, cbit::IdColumnIterator,
+                     cbit::ConstIdColumnIterator> &&
+        SimilarToAny<RightIterator, cbit::IdColumnIterator,
+                     cbit::ConstIdColumnIterator>;
+    constexpr bool isDefaultLess =
+        SimilarToAny<LessThan, std::less<>, std::less<Id>, ql::ranges::less>;
+    constexpr bool hasNoUndefMachinery =
+        isSimilar<FindSmallerUndefRangesLeft, decltype(ad_utility::noop)> &&
+        isSimilar<FindSmallerUndefRangesRight, decltype(ad_utility::noop)> &&
+        isSimilar<CoverUndefRanges, std::true_type>;
+    if constexpr (areIdColumns && isDefaultLess && hasNoUndefMachinery) {
+      auto beginLeft = subrangeLeft.begin();
+      auto beginRight = subrangeRight.begin();
+      cbit::ConstIdColumn left{beginLeft.payloadPtr(), beginLeft.datatypePtr(),
+                               static_cast<size_t>(subrangeLeft.size())};
+      cbit::ConstIdColumn right{beginRight.payloadPtr(),
+                                beginRight.datatypePtr(),
+                                static_cast<size_t>(subrangeRight.size())};
+      cbit::zipperJoinIdColumns(
+          left, right,
+          [&](size_t l, size_t r) {
+            rowIndexAdder(beginLeft + l, beginRight + r);
+          },
+          [&](size_t beginL, size_t endL, size_t beginR, size_t endR) {
+            rowIndexAdder.addRows(beginLeft + beginL, beginLeft + endL,
+                                  beginRight + beginR, beginRight + endR);
+          },
+          [&](size_t l) { elFromFirstNotFoundAction(beginLeft + l); },
+          checkCancellation);
+      return;
+    } else {
+      [[maybe_unused]] auto res = zipperJoinWithUndef(
+          subrangeLeft, subrangeRight, this->lessThan_, rowIndexAdder,
+          findSmallerUndefRangesLeft, findSmallerUndefRangesRight,
+          elFromFirstNotFoundAction, checkCancellation, coverUndefRanges);
+    }
   }
 };
 
@@ -1810,7 +1857,10 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
 
     // Set up the generator for UNDEF values in the left last column.
     // TODO<joka921> Could optimize the case that there is no UNDEF at all.
-    auto endOfUndef = ql::ranges::find_if_not(lastColLeft, &Id::isUndefined);
+    // Lambda, not `&Id::isUndefined`: proxy column elements don't support
+    // pointer-to-member dispatch (see `IdColumn.h`).
+    auto endOfUndef = ql::ranges::find_if_not(
+        lastColLeft, [](const Id& id) { return id.isUndefined(); });
     auto findSmallerUndefRangeLeft = [&lastColLeft, endOfUndef](auto&&...) {
       return ad_utility::IteratorRange{lastColLeft.begin(), endOfUndef};
     };

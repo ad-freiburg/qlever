@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "engine/idTable/IdTable.h"
 #include "util/CompressedBlockFile.h"
 #include "util/Exception.h"
@@ -24,7 +25,10 @@
 // `CompressedIdTableBlockStorage.h`), which spills the output blocks of the
 // parallel merge to disk. It lives in a header of its own, because it is the
 // part of that storage that is purely about bytes and can hence be read and
-// tested without any of the asynchronous machinery.
+// tested without any of the asynchronous machinery. `Id` columns are packed
+// via `packIdColumnToBytes`/`unpackBytesToIdColumn` (see `IdColumnByteIO.h`),
+// not via `.data()`/`sizeof(Id)`, since they are non-contiguous split-column
+// storage (see `IdColumn.h`).
 //
 // NOTE: The `CompressedExternalIdTableWriter` (see
 // `CompressedExternalIdTable.h`) stores its blocks in a very similar way, but
@@ -59,8 +63,9 @@ BlockMetadata writeBlock(CompressedBlockFile& file, const Table& table,
   metadata.numRows_ = endRow - beginRow;
   metadata.columns_.reserve(table.numColumns());
   for (const auto& column : table.getColumns()) {
-    metadata.columns_.push_back(file.appendBlock(
-        column.data() + beginRow, (endRow - beginRow) * sizeof(Id)));
+    auto bytes = columnBasedIdTable::packIdColumnToBytes(
+        column.subspan(beginRow, endRow - beginRow));
+    metadata.columns_.push_back(file.appendBlock(bytes.data(), bytes.size()));
   }
   return metadata;
 }
@@ -80,7 +85,9 @@ IdTableStatic<NumCols> readBlock(const CompressedBlockFile& file,
   for (auto [columnMetadata, column] :
        ::ranges::views::zip(metadata.columns_, block.getColumns())) {
     AD_CORRECTNESS_CHECK(column.size() == metadata.numRows_);
-    file.readBlock(columnMetadata, column.data());
+    std::vector<char> bytes(columnMetadata.uncompressedSize_);
+    file.readBlock(columnMetadata, bytes.data());
+    columnBasedIdTable::unpackBytesToIdColumn(bytes, column);
   }
   return block;
 }

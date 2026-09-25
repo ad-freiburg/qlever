@@ -46,15 +46,17 @@ struct IndexFormatVersion {
 // the index format, so it has to be either extended by your change or updated
 // to the new pair of versions; else an index of the previous version can no
 // longer be converted, but only be rebuilt.
+// NOTE: 3425 is a placeholder, chosen as "the next PR after 3159"; replace it
+// with the actual PR number once this change has an associated pull request.
 inline const IndexFormatVersion& indexFormatVersion{
-    3159, DateYearOrDuration{Date{2026, 9, 1}}};
+    3425, DateYearOrDuration{Date{2026, 9, 22}}};
 
 // The index version that directly precedes `indexFormatVersion` above. An index
 // with exactly this version can be converted to the current version by the
 // standalone index converter (see `index/IndexFormatConverter.h`), which is the
 // only place that this constant is used.
 inline const IndexFormatVersion& previousIndexFormatVersion{
-    1572, DateYearOrDuration{Date{2024, 10, 22}}};
+    3159, DateYearOrDuration{Date{2026, 9, 1}}};
 }  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_INDEXFORMATVERSION_H

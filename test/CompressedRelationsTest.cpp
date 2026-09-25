@@ -45,7 +45,8 @@ auto I = &Id::makeFromInt;
 // mirroring the access pattern used by `DistinctGraphs::computeResult()`
 // (`src/engine/DistinctGraphs.cpp`), but starting from a plain `Index` instead
 // of an `Operation`.
-ad_utility::HashSetWithMemoryLimit<Id::T> computeUniqueGraphIdsForIndex(
+ad_utility::HashSetWithMemoryLimit<Id::BitRepresentation>
+computeUniqueGraphIdsForIndex(
     const Index& index,
     ad_utility::SharedCancellationHandle cancellationHandle =
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>(),
@@ -383,7 +384,9 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
         false};
   };
 
-  AD_EXPECT_NULLOPT(getMetadataFromId(V(Id::maxIndex - 1)).first);
+  AD_EXPECT_NULLOPT(getMetadataFromId(Id::makeFromVocabIndex(
+                                          VocabIndex::make(Id::maxIndex - 1)))
+                        .first);
 
   // return a `pair<RelationMetadata, bool>` (see above), but for the `i`-th
   // relation specified by the `inputs`.
@@ -812,8 +815,20 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
                   size_t numHandledBlocksExpected,
                   source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto t = generateLocationTrace(l);
+    // `ConstIdColumn` can only view a split payload/datatype array (see
+    // `IdColumn.h`), not a contiguous `std::vector<Id>` directly, so build
+    // that split representation here.
+    std::vector<uint64_t> payloads;
+    std::vector<uint8_t> datatypes;
+    for (Id id : joinColumn) {
+      auto bits = id.getBits();
+      payloads.push_back(bits.payload_);
+      datatypes.push_back(bits.datatype_);
+    }
+    ConstIdColumn joinColumnView{payloads.data(), datatypes.data(),
+                                payloads.size()};
     auto [result, numHandledBlocks] =
-        CompressedRelationReader::getBlocksForJoin(joinColumn,
+        CompressedRelationReader::getBlocksForJoin(joinColumnView,
                                                    *metadataAndBlocks);
     EXPECT_THAT(result, ::testing::ElementsAreArray(expectedBlocks));
     EXPECT_EQ(numHandledBlocks, numHandledBlocksExpected);
@@ -1880,7 +1895,7 @@ TEST(CompressedRelationReader, computeUniqueGraphIdsHandlesGraphInfoOverflow) {
   auto index = ad_utility::testing::makeTestIndex(config);
   auto getId = ad_utility::testing::makeGetId(index);
 
-  std::vector<Id::T> expectedIds;
+  std::vector<Id::BitRepresentation> expectedIds;
   for (const auto& graph : expectedGraphs) {
     expectedIds.push_back(getId(graph).getBits());
   }
@@ -2085,8 +2100,10 @@ TEST(ScanSpecAndBlocks, removePrefix) {
                                   {5, 0, 0},
                                   {6, 0, 0},
                                   {7, 0, 0}}});
+  // 2 triples per block (`BYTES_PER_ID_COLUMN_ENTRY == 9`, see
+  // `IdColumnByteIO.h`), so the 8 rows above split into 4 blocks.
   auto [blocks, metadata, reader] =
-      writeAndOpenRelations(inputs, "removePrefix", 16_B);
+      writeAndOpenRelations(inputs, "removePrefix", 18_B);
   ScanSpecification spec{std::nullopt, std::nullopt, std::nullopt};
 
   auto getSize = [](auto range) {
@@ -2448,15 +2465,16 @@ TEST(CompressedRelationWriter, smallRelationsAdjacentToLargeRelations) {
 // threshold, so test sizes just below, exactly at, and just above it.
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, relationSizesAtTheSmallRelationThreshold) {
-  // A block size of 80 bytes means 10 triples per block, so the threshold for
-  // a small relation is exactly 8 rows.
+  // A block size of 90 bytes means 10 triples per block
+  // (`BYTES_PER_ID_COLUMN_ENTRY == 9`, see `IdColumnByteIO.h`), so the
+  // threshold for a small relation is exactly 8 rows.
   std::vector<RelationInput> inputs;
   int col0 = 0;
   for (int numRows : {7, 8, 9, 8, 7, 9, 1}) {
     inputs.push_back(makeRelation(++col0, numRows, false));
   }
   checkPermutationIsIndependentOfInputBlockSize(
-      inputs, 80_B, inputBlockSizesForPathEquivalence);
+      inputs, 90_B, inputBlockSizesForPathEquivalence);
 
   // Explicitly check that exactly the relations with nine rows are treated as
   // large, no matter which of the two paths is taken. Metadata is only
@@ -2466,7 +2484,7 @@ TEST(CompressedRelationWriter, relationSizesAtTheSmallRelationThreshold) {
   for (size_t inputBlockSize : {size_t{1}, size_t{1000}}) {
     SCOPED_TRACE(absl::StrCat("input block size ", inputBlockSize));
     auto [filename, cleanup] = testFilenameWithCleanup();
-    auto result = buildPermutation(inputs, 80_B, inputBlockSize, filename);
+    auto result = buildPermutation(inputs, 90_B, inputBlockSize, filename);
     std::vector<Id> largeCol0Ids;
     ql::ranges::transform(result.largeRelationMetadata_,
                           std::back_inserter(largeCol0Ids),

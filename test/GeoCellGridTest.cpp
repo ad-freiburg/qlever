@@ -43,15 +43,17 @@ TEST(GeoCellGrid, basics) {
   EXPECT_EQ(grid.sentinelCell(), (uint64_t{1} << 21) - 1);
 
   // The bits of a vocabulary index below the marker bit and the cell bits hold
-  // the position of a word inside the geo vocabulary.
-  EXPECT_EQ(grid.numPositionBits(), ValueId::numDataBits - 22);
-  EXPECT_EQ(grid.maxNumWords(), uint64_t{1} << (ValueId::numDataBits - 22));
+  // the position of a word inside the geo vocabulary. One extra bit of
+  // headroom (below the marker bit) is reserved so that the exclusive upper
+  // bound for the sentinel cell never collides with the marker bit itself.
+  EXPECT_EQ(grid.numPositionBits(), ValueId::numDataBits - 23);
+  EXPECT_EQ(grid.maxNumWords(), uint64_t{1} << (ValueId::numDataBits - 23));
 
   // Level 0 is invalid, as are levels where no position bits remain. The
   // largest valid level leaves exactly one bit for the position: a vocabulary
-  // index has one marker bit, `2 * level + 1` cell bits, and at least one
-  // position bit.
-  uint8_t maxLevel = (ValueId::numDataBits - 3) / 2;
+  // index has one marker bit, one bit of headroom, `2 * level + 1` cell bits,
+  // and at least one position bit.
+  uint8_t maxLevel = (ValueId::numDataBits - 4) / 2;
   EXPECT_NO_THROW(GeoCellGrid{maxLevel});
   EXPECT_GE(GeoCellGrid{maxLevel}.numPositionBits(), 1u);
   EXPECT_ANY_THROW(GeoCellGrid{0});

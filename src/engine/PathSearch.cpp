@@ -15,6 +15,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/idTable/IdColumn.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
 
@@ -295,21 +296,24 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::pair<ql::span<const Id>, ql::span<const Id>>
+std::pair<std::vector<Id>, std::vector<Id>>
 PathSearch::handleSearchSides() const {
-  ql::span<const Id> sourceIds;
-  ql::span<const Id> targetIds;
+  std::vector<Id> sourceIds;
+  std::vector<Id> targetIds;
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();
-    sourceIds = resultTable->idTableView().getColumn(sourceCol_.value());
-    targetIds = resultTable->idTableView().getColumn(targetCol_.value());
-    return {sourceIds, targetIds};
+    auto sourceCol = resultTable->idTableView().getColumn(sourceCol_.value());
+    auto targetCol = resultTable->idTableView().getColumn(targetCol_.value());
+    sourceIds.assign(sourceCol.begin(), sourceCol.end());
+    targetIds.assign(targetCol.begin(), targetCol.end());
+    return {std::move(sourceIds), std::move(targetIds)};
   }
 
   if (sourceTree_.has_value()) {
-    sourceIds = sourceTree_.value()->getResult()->idTableView().getColumn(
+    auto sourceCol = sourceTree_.value()->getResult()->idTableView().getColumn(
         sourceCol_.value());
+    sourceIds.assign(sourceCol.begin(), sourceCol.end());
   } else if (config_.sourceIsVariable()) {
     sourceIds = {};
   } else {
@@ -317,32 +321,33 @@ PathSearch::handleSearchSides() const {
   }
 
   if (targetTree_.has_value()) {
-    targetIds = targetTree_.value()->getResult()->idTableView().getColumn(
+    auto targetCol = targetTree_.value()->getResult()->idTableView().getColumn(
         targetCol_.value());
+    targetIds.assign(targetCol.begin(), targetCol.end());
   } else if (config_.targetIsVariable()) {
     targetIds = {};
   } else {
     targetIds = std::get<std::vector<Id>>(config_.targets_);
   }
 
-  return {sourceIds, targetIds};
+  return {std::move(sourceIds), std::move(targetIds)};
 }
 
 // _____________________________________________________________________________
-PathsLimited PathSearch::findPaths(const Id& source,
-                                   const std::unordered_set<uint64_t>& targets,
-                                   const BinSearchWrapper& binSearch,
-                                   std::optional<uint64_t> numPathsPerTarget,
-                                   std::optional<uint64_t> maxDepth) const {
+PathsLimited PathSearch::findPaths(
+    const Id& source, const std::unordered_set<Id::BitRepresentation>& targets,
+    const BinSearchWrapper& binSearch,
+    std::optional<uint64_t> numPathsPerTarget,
+    std::optional<uint64_t> maxDepth) const {
   std::vector<Edge> edgeStack;
   Path currentPath{EdgesLimited(allocator())};
   std::unordered_map<
-      uint64_t, uint64_t, std::hash<uint64_t>, std::equal_to<uint64_t>,
-      ad_utility::AllocatorWithLimit<std::pair<const uint64_t, uint64_t>>>
+      Id::BitRepresentation, uint64_t, std::hash<Id::BitRepresentation>, std::equal_to<Id::BitRepresentation>,
+      ad_utility::AllocatorWithLimit<std::pair<const Id::BitRepresentation, uint64_t>>>
       numPathsPerNode{allocator()};
   PathsLimited result{allocator()};
-  std::unordered_set<uint64_t, std::hash<uint64_t>, std::equal_to<uint64_t>,
-                     ad_utility::AllocatorWithLimit<uint64_t>>
+  std::unordered_set<Id::BitRepresentation, std::hash<Id::BitRepresentation>, std::equal_to<Id::BitRepresentation>,
+                     ad_utility::AllocatorWithLimit<Id::BitRepresentation>>
       visited{allocator()};
 
   visited.insert(source.getBits());
@@ -409,7 +414,7 @@ PathsLimited PathSearch::allPaths(ql::span<const Id> sources,
   Path path{EdgesLimited(allocator())};
 
   if (cartesian || sources.size() != targets.size()) {
-    std::unordered_set<uint64_t> targetSet;
+    std::unordered_set<Id::BitRepresentation> targetSet;
     for (auto target : targets) {
       targetSet.insert(target.getBits());
     }

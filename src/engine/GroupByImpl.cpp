@@ -9,6 +9,8 @@
 
 #include <absl/strings/str_join.h>
 
+#include <cstring>
+
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
@@ -17,6 +19,7 @@
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
+#include "engine/idTable/IdColumn.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -492,7 +495,11 @@ void GroupByImpl::processGroup(
   sparqlExpression::ExpressionResult expressionResult =
       aggregate._expression.getPimpl()->evaluate(&evaluationContext);
 
-  auto& resultEntry = result->operator()(resultRow, resultColumn);
+  // `decltype(auto)`, not `auto&`: for an `Id` column, `result->operator()`
+  // returns `IdRef` by value, which can't bind to `auto&` (see `IdColumn.h`).
+  // `decltype(auto)` handles both cases; writing through `resultEntry` works
+  // either way.
+  decltype(auto) resultEntry = result->operator()(resultRow, resultColumn);
 
   // Copy the result to the evaluation context in case one of the following
   // aliases has to reuse it.
@@ -731,6 +738,48 @@ size_t GroupByImpl::searchBlockBoundaries(const T& onBlockChange,
                                           const IdTableView<COLS>& idTable,
                                           GroupBlock& currentGroupBlock) const {
   size_t blockStart = 0;
+
+  // Fast path for a single group column that contains no `LocalVocabIndex`
+  // IDs (those don't compare bitwise): find the group boundaries directly on
+  // the datatype bytes and payload words of the split column storage.
+  if (currentGroupBlock.size() == 1) {
+    auto column = idTable.getColumn(currentGroupBlock.at(0).first);
+    auto types = column.rawDatatypes();
+    auto payloads = column.rawPayloads();
+    if (std::memchr(types.data(), static_cast<int>(Datatype::LocalVocabIndex),
+                    types.size()) == nullptr) {
+      auto& currentValue = currentGroupBlock.at(0).second;
+      size_t pos = 0;
+      // Skip the prefix that still belongs to the current group. Note: The
+      // value in `currentGroupBlock` can stem from a previous table (in the
+      // lazy case) and can therefore be of type `LocalVocabIndex`, so this
+      // prefix has to be compared with the semantic `Id` comparison.
+      while (pos < idTable.size() && Id{column[pos]} == currentValue) {
+        ++pos;
+      }
+      if (pos < idTable.size()) {
+        // A boundary at `pos == 0` correctly reports an empty first block
+        // (exactly like the generic loop below).
+        onBlockChange(blockStart, pos);
+        blockStart = pos;
+        currentValue = column[pos];
+        // All further rows can be compared bitwise against their
+        // predecessor.
+        for (++pos; pos < idTable.size(); ++pos) {
+          if ((pos & ((size_t{1} << 16) - 1)) == 0) {
+            checkCancellation();
+          }
+          if (payloads[pos] != payloads[pos - 1] ||
+              types[pos] != types[pos - 1]) {
+            onBlockChange(blockStart, pos);
+            blockStart = pos;
+            currentValue = column[pos];
+          }
+        }
+      }
+      return blockStart;
+    }
+  }
 
   for (size_t pos = 0; pos < idTable.size(); pos++) {
     checkCancellation();
@@ -1521,7 +1570,7 @@ GroupByImpl::substituteAllAggregates(
 template <size_t NUM_GROUP_COLUMNS>
 std::vector<size_t>
 GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
-    const ArrayOrVector<ql::span<const Id>>& groupByCols) {
+    const ArrayOrVector<ConstIdColumn>& groupByCols) {
   AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
   std::vector<size_t> hashEntries;
@@ -1898,7 +1947,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
 
       // Perform HashMap lookup once for all groups in current block
       using U = typename HashMapAggregationData<
-          NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
+          NUM_GROUP_COLUMNS>::template ArrayOrVector<ConstIdColumn>;
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());
 

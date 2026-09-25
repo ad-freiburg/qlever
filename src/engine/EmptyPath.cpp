@@ -16,6 +16,7 @@
 #include <array>
 #include <utility>
 
+#include "engine/idTable/IdColumn.h"
 #include "index/CompressedRelationReader.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
@@ -50,16 +51,20 @@ EntityAndGraph entityAndGraph(const Row& row, size_t numColumns) {
 // the graphs, such that the caller can treat both cases uniformly: The result
 // is a single undefined ID if `id` occurs in `matches` at all, and empty
 // otherwise.
-ql::span<const Id> graphsOf(const IdTable& matches, Id id) {
-  ql::span<const Id> ids = matches.getColumn(0);
+// `std::vector<Id>`, not `ql::span<const Id>`: `IdTable` columns are no
+// longer contiguous (see `IdColumn.h`). The sole caller fully consumes the
+// result within one loop, so the copy is unproblematic.
+std::vector<Id> graphsOf(const IdTable& matches, Id id) {
+  ConstIdColumn ids = matches.getColumn(0);
   auto matching = ql::ranges::equal_range(ids, id);
   size_t numMatches = ql::ranges::size(matching);
   if (matches.numColumns() == 1) {
-    static const Id undefined = Id::makeUndefined();
-    return {&undefined, numMatches == 0 ? 0u : 1u};
+    return numMatches == 0 ? std::vector<Id>{}
+                           : std::vector{Id::makeUndefined()};
   }
-  return matches.getColumn(1).subspan(matching.begin() - ids.begin(),
-                                      numMatches);
+  auto graphColumn = matches.getColumn(1).subspan(
+      matching.begin() - ids.begin(), numMatches);
+  return {graphColumn.begin(), graphColumn.end()};
 }
 
 // The rows of a `table` from `EmptyPath::scanIndex` as a range of
@@ -399,7 +404,7 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
         "them have to be read and combined with each of the affected rows, "
         "which can be very slow.");
   }
-  ql::span<const Id> joinColumn =
+  ConstIdColumn joinColumn =
       input.getColumn(checkedChild_.value().joinColumn_);
   std::vector<size_t> undefRows;
   ql::ranges::copy_if(
@@ -431,7 +436,7 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
 Result::Generator EmptyPath::processTable(IdTableView<0> table,
                                           const LocalVocab& localVocab,
                                           bool& hasWarnedAboutUndef) const {
-  ql::span<const Id> joinColumn =
+  ConstIdColumn joinColumn =
       table.getColumn(checkedChild_.value().joinColumn_);
   // The distinct values of the join column that have to be looked up.
   std::vector<Id> ids;

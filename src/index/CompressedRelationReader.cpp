@@ -13,6 +13,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include "engine/idTable/IdColumn.h"
 #include "index/CompressedRelationReader.h"
 
 #include <algorithm>
@@ -971,7 +972,7 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
   decompressedBlock.resize(numRowsToRead);
   for (size_t i = 0; i < compressedBlock.size(); ++i) {
     auto col = decompressedBlock.getColumn(i);
-    decompressColumn(compressedBlock[i], numRowsToRead, col.data());
+    decompressColumn(compressedBlock[i], numRowsToRead, col);
   }
   return decompressedBlock;
 }
@@ -1005,15 +1006,19 @@ CompressedRelationReader::decompressAndPostprocessBlock(
 }
 
 // ____________________________________________________________________________
-template <typename Iterator>
 void CompressedRelationReader::decompressColumn(
     const std::vector<char>& compressedBlock, size_t numRowsToRead,
-    Iterator iterator) {
+    IdColumn column) {
+  // `Id` columns are non-contiguous (see `IdColumn.h`), so decompression
+  // goes into a plain byte buffer first, then unpacked into `column` (see
+  // `IdColumnByteIO.h`).
+  auto numBytes = numRowsToRead * columnBasedIdTable::BYTES_PER_ID_COLUMN_ENTRY;
+  std::vector<char> decompressed(numBytes);
   auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
-      compressedBlock.data(), compressedBlock.size(), iterator,
-      numRowsToRead * sizeof(*iterator));
-  static_assert(sizeof(Id) == sizeof(*iterator));
-  AD_CORRECTNESS_CHECK(numRowsToRead * sizeof(Id) == numBytesActuallyRead);
+      compressedBlock.data(), compressedBlock.size(), decompressed.data(),
+      decompressed.size());
+  AD_CORRECTNESS_CHECK(numBytesActuallyRead == numBytes);
+  columnBasedIdTable::unpackBytesToIdColumn(decompressed, column);
 }
 
 // ____________________________________________________________________________
@@ -1101,13 +1106,14 @@ auto CompressedRelationReader::getFirstAndLastTripleIgnoringGraph(
 }
 
 // ____________________________________________________________________________
-ad_utility::HashSetWithMemoryLimit<Id::T>
+ad_utility::HashSetWithMemoryLimit<Id::BitRepresentation>
 CompressedRelationReader::computeUniqueGraphIds(
     const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     const CancellationHandle& cancellationHandle,
     const Allocator& allocator) const {
-  ad_utility::HashSetWithMemoryLimit<Id::T> graphIds{allocator.as<Id::T>()};
+  ad_utility::HashSetWithMemoryLimit<Id::BitRepresentation> graphIds{
+      allocator.as<Id::BitRepresentation>()};
   std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
   const auto scanConfig =
       getScanConfig(ScanSpecification{std::nullopt, std::nullopt, std::nullopt},

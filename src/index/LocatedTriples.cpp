@@ -86,16 +86,20 @@ namespace {
 
 // This code works for `std::integer_sequence` as well as
 // `ad_utility::ValueSequence`.
+// `std::array<Id, ...>`, not `std::tie` of references: `row[I]` returns
+// `IdRef`/`ConstIdRef` by value here, and `std::tie` can't bind such a
+// prvalue (see `IdColumn.h`). Only used for comparison below, so the copy is
+// behaviorally equivalent.
 template <typename Row, template <typename T, T...> typename Tp, size_t... I>
 auto tieHelper(Row& row, Tp<size_t, I...>) {
-  return std::tie(row[I]...);
+  return std::array<Id, sizeof...(I)>{row[I]...};
 }
 }  // namespace
 
-// Return a `std::tie` of the relevant entries of a row, according to
+// Return an array of the relevant entries of a row, according to
 // `numIndexColumns` and `includeGraphColumn`. For example, if `numIndexColumns`
 // is `2` and `includeGraphColumn` is `true`, the function returns
-// `std::tie(row[0], row[1], row[2])`.
+// `{row[0], row[1], row[2]}`.
 CPP_template(size_t numIndexColumns, bool includeGraphColumn,
              typename T)(requires(numIndexColumns >= 1 &&
                                   numIndexColumns <=
@@ -105,11 +109,10 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
                                     static_cast<size_t>(includeGraphColumn)>{});
 }
 
-// Return a `std::tie` of the relevant entries of a located triple,
-// according to `numIndexColumns` and `includeGraphColumn`. For example, if
+// Return an array of the relevant entries of a located triple, according to
+// `numIndexColumns` and `includeGraphColumn`. For example, if
 // `numIndexColumns` is `2` and `includeGraphColumn` is `true`, the function
-// returns `std::tie(ids_[1], ids_[2], ids_[3])`, where `ids_` is from
-// `lt->triple_`.
+// returns `{ids_[1], ids_[2], ids_[3]}`, where `ids_` is from `lt->triple_`.
 template <size_t numIndexColumns, bool includeGraphColumn>
 static constexpr auto tieLocatedTriplesIndices = []() {
   std::array<size_t, numIndexColumns + static_cast<size_t>(includeGraphColumn)>
@@ -271,12 +274,14 @@ VacuumStatistics processBlockForVacuum(
     }(std::make_index_sequence<4>{})};
   };
 
-  auto ltProj = [](const LocatedTriple& lt)
-      -> std::tuple<const Id&, const Id&, const Id&, const Id&> {
+  // `std::array<Id, 4>`, not `std::tuple<const Id&, ...>`: `ltProj`/`rowProj`
+  // must share the exact return type the set-algorithms below merge through,
+  // and since `tieIdTableRow`/`tieLocatedTripleValue` now return materialized
+  // values (see `tieHelper` above), that common type has to be a value type.
+  auto ltProj = [](const LocatedTriple& lt) -> std::array<Id, 4> {
     return tieLocatedTripleValue<3, true>(lt);
   };
-  auto rowProj = [](const auto& row)
-      -> std::tuple<const Id&, const Id&, const Id&, const Id&> {
+  auto rowProj = [](const auto& row) -> std::array<Id, 4> {
     return tieIdTableRow<3, true>(row);
   };
 

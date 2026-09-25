@@ -13,6 +13,8 @@
 #include "backports/concepts.h"
 #include "backports/filesystem.h"
 #include "backports/type_traits.h"
+#include "engine/idTable/IdColumn.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "global/Id.h"
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
@@ -114,8 +116,9 @@ CPP_template(typename Serializer)(
 // Deserialize the local vocabulary from the input stream.
 CPP_template(typename Serializer)(
     requires serialization::ReadSerializer<Serializer>) std::
-    tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
-        Serializer& serializer, const LocalVocabContext& context) {
+    tuple<LocalVocab, absl::flat_hash_map<Id::BitRepresentation, Id>>
+    deserializeLocalVocab(Serializer& serializer,
+                          const LocalVocabContext& context) {
   LocalVocab vocab;
   vocab.reserveBlankNodeBlocksFromExplicitIndices(
       readValue<std::vector<
@@ -125,14 +128,14 @@ CPP_template(typename Serializer)(
   auto size = readValue<uint64_t>(serializer);
   // Note:: It might happen that the `size` is zero because the local vocab was
   // empty.
-  absl::flat_hash_map<Id::T, Id> mapping{};
+  absl::flat_hash_map<Id::BitRepresentation, Id> mapping{};
   mapping.reserve(size);
   for (uint64_t i = 0; i < size; ++i) {
-    auto id = readValue<Id::T>(serializer);
+    auto id = readValue<Id>(serializer);
     auto s = readValue<std::string>(serializer);
     auto localVocabIndex = vocab.getIndexAndAddIfNotContained(
         LocalVocabEntry::fromStringRepresentation(std::move(s), context));
-    mapping.emplace(id, Id::makeFromLocalVocabIndex(localVocabIndex));
+    mapping.emplace(id.getBits(), Id::makeFromLocalVocabIndex(localVocabIndex));
   }
   return {std::move(vocab), std::move(mapping)};
 }
@@ -144,6 +147,17 @@ CPP_template(typename Range, typename Serializer)(
                                                          Range&& range) {
   if constexpr (ql::ranges::contiguous_range<std::decay_t<Range>>) {
     serializer << ql::span{range};
+  } else if constexpr (ad_utility::isSimilar<std::decay_t<Range>, IdColumn> ||
+                       ad_utility::isSimilar<std::decay_t<Range>,
+                                             ConstIdColumn>) {
+    // `IdColumn`/`ConstIdColumn` specifically (see `IdColumn.h`): the one
+    // non-contiguous `Id` range that can still be packed into a single byte
+    // buffer (see `IdColumnByteIO.h`) and written as a genuine contiguous
+    // `std::vector<char>`, keeping the same fast bulk-write path as
+    // `contiguous_range` above instead of the generic, per-element
+    // `VectorIncrementalSerializer` path below. Other non-contiguous `Id`
+    // ranges (e.g. a lazy `views::transform`) still fall through to that.
+    serializer << columnBasedIdTable::packIdColumnToBytes(range);
   } else {
     ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>
         vectorSerializer{std::move(serializer)};
@@ -156,9 +170,13 @@ CPP_template(typename Range, typename Serializer)(
 }
 
 // TODO<joka921> Comments.
-inline void remapLocalVocab(ql::span<Id> ids,
-                            const absl::flat_hash_map<Id::T, Id>& mapping) {
-  for (Id& id : ids) {
+// Templated on `Range`, using `auto&&` not `Id&`: called both with an
+// `IdTable` column (elements are `IdRef`, a proxy, see `IdColumn.h`) and a
+// plain `std::vector<Id>` (elements are real `Id&`).
+template <typename Range>
+void remapLocalVocab(
+    Range&& ids, const absl::flat_hash_map<Id::BitRepresentation, Id>& mapping) {
+  for (auto&& id : ids) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
       id = mapping.at(id.getBits());
     }
@@ -167,18 +185,25 @@ inline void remapLocalVocab(ql::span<Id> ids,
 
 // Deserialize a range of Ids from the input stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id after reading it.
+// Symmetric counterpart of `serializeIds`'s `IdColumn`/`ConstIdColumn`
+// branch above: unpacks that byte buffer (see `IdColumnByteIO.h`) directly
+// into `ids`, since `IdColumn` is always non-contiguous.
 template <typename Serializer>
-void deserializeIds(Serializer& serializer,
-                    const absl::flat_hash_map<Id::T, Id>& mapping,
-                    ql::span<Id> ids) {
-  serializer >> ids;
+void deserializeIds(
+    Serializer& serializer,
+    const absl::flat_hash_map<Id::BitRepresentation, Id>& mapping,
+    IdColumn ids) {
+  std::vector<char> packed;
+  serializer >> packed;
+  columnBasedIdTable::unpackBytesToIdColumn(packed, ids);
   remapLocalVocab(ids, mapping);
 }
 // Deserialize a range of Ids from the input stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id after reading it.
 template <typename Serializer>
-std::vector<Id> deserializeIds(Serializer& serializer,
-                               const absl::flat_hash_map<Id::T, Id>& mapping) {
+std::vector<Id> deserializeIds(
+    Serializer& serializer,
+    const absl::flat_hash_map<Id::BitRepresentation, Id>& mapping) {
   std::vector<Id> ids = readValue<std::vector<Id>>(serializer);
   remapLocalVocab(ids, mapping);
   return ids;

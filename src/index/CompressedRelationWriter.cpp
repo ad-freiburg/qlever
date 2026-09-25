@@ -54,9 +54,13 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
 }
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
-CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
-  std::vector<char> compressedBlock = ZstdWrapper::compress(
-      (void*)(column.data()), column.size() * sizeof(column[0]));
+CompressedRelationWriter::compressAndWriteColumn(ConstIdColumn column) {
+  // `Id` columns are non-contiguous (see `IdColumn.h`), so the column is
+  // packed into a byte buffer first (see `IdColumnByteIO.h`), then
+  // compressed.
+  auto packed = columnBasedIdTable::packIdColumnToBytes(column);
+  std::vector<char> compressedBlock =
+      ZstdWrapper::compress((void*)(packed.data()), packed.size());
   auto compressedSize = compressedBlock.size();
   auto file = outfile_.wlock();
   auto offsetInFile = file->tell();

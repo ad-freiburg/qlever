@@ -42,7 +42,10 @@ class ExistsExpression : public SparqlExpression {
     if (worksOnAggregatedData(context)) {
       const auto& table = context->_inputTable;
       auto columnData = table.getColumn(column.value());
-      auto constantValue = columnData[context->_beginIndex];
+      // Explicitly `Id`, not `auto`: `columnData[...]` returns `ConstIdRef`
+      // (a proxy, not a real `Id`, see `IdColumn.h`), which does not
+      // implicitly convert into `ExpressionResult` the way a real `Id` does.
+      Id constantValue = columnData[context->_beginIndex];
       AD_EXPENSIVE_CHECK(ql::ranges::all_of(
           columnData.subspan(context->_beginIndex, context->size()),
           [&constantValue](const auto& value) {

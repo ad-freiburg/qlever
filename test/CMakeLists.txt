@@ -216,6 +216,7 @@ addLinkAndDiscoverTest(DeltaTriplesTest index)
 addLinkAndDiscoverTest(UpdateMetadataTest index)
 
 addLinkAndDiscoverTest(IdTableUtilsTest engine)
+addLinkAndDiscoverTest(IdColumnSortTest index)
 
 addLinkAndDiscoverTest(JoinTest engine)
 
@@ -487,6 +488,7 @@ addLinkAndDiscoverTest(MemorySizeTest memorySize)
 addLinkAndDiscoverTest(JsonUtilTest)
 
 addLinkAndDiscoverTest(JoinAlgorithmsTest)
+addLinkAndDiscoverTest(ZipperJoinerTest)
 
 addLinkAndDiscoverTest(AsioHelpersTest)
 # With `-fwasm-exceptions`, clang's `correlated-propagation` pass (run at -O2/-O3)

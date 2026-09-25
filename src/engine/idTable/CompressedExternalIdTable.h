@@ -14,6 +14,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
@@ -122,7 +123,8 @@ class CompressedExternalIdTableWriter {
           "over");
     }
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
-    size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
+    size_t blockSize = blockSizeUncompressed_.getBytes() /
+                       columnBasedIdTable::BYTES_PER_ID_COLUMN_ENTRY;
     AD_CONTRACT_CHECK(blockSize > 0);
     startOfSingleIdTables_.push_back(blocksPerColumn_.at(0).size());
     // The columns are compressed and stored in parallel.
@@ -138,9 +140,14 @@ class CompressedExternalIdTableWriter {
             // TODO<C++23> Use `ql::views::chunkd`
             for (size_t lower = 0; lower < column.size(); lower += blockSize) {
               size_t upper = std::min<size_t>(lower + blockSize, column.size());
-              auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
-              auto compressed = ZstdWrapper::compress(
-                  column.data() + lower, thisBlockSizeUncompressed);
+              // `Id` columns are non-contiguous (see `IdColumn.h`), so the
+              // subrange is packed into a byte buffer first (see
+              // `IdColumnByteIO.h`), then compressed.
+              auto packed = columnBasedIdTable::packIdColumnToBytes(
+                  column.subspan(lower, upper - lower));
+              auto thisBlockSizeUncompressed = packed.size();
+              auto compressed =
+                  ZstdWrapper::compress(packed.data(), thisBlockSizeUncompressed);
               size_t offset = 0;
               file_.withWriteLock(
                   [&offset, &compressed](ad_utility::File& file) {
@@ -241,18 +248,23 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<size_t>(numBytesRead) ==
                              metaData.compressedSize_);
-    auto numBytesDecompressed =
-        ZstdWrapper::decompressToBuffer(compressed.data(), compressed.size(),
-                                        col.data(), metaData.uncompressedSize_);
+    // `Id` columns are non-contiguous (see `IdColumn.h`), so decompression
+    // goes into a plain byte buffer first, then unpacked into `col` (see
+    // `IdColumnByteIO.h`).
+    std::vector<char> decompressed(metaData.uncompressedSize_);
+    auto numBytesDecompressed = ZstdWrapper::decompressToBuffer(
+        compressed.data(), compressed.size(), decompressed.data(),
+        decompressed.size());
     AD_CORRECTNESS_CHECK(numBytesDecompressed == metaData.uncompressedSize_);
+    columnBasedIdTable::unpackBytesToIdColumn(decompressed, col);
   }
 
   // Allocate and size an IdTableStatic for the block at `blockIdx`.
   template <size_t NumCols = 0>
   IdTableStatic<NumCols> makeBlock(size_t blockIdx) {
     IdTableStatic<NumCols> block{numColumns(), allocator_};
-    size_t blockSize =
-        blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
+    size_t blockSize = blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ /
+                       columnBasedIdTable::BYTES_PER_ID_COLUMN_ENTRY;
     block.resize(blockSize);
     return block;
   }
@@ -344,7 +356,7 @@ namespace compressedExternalIdTable {
 // being sorted and written to disk in the background, and one that is used to
 // collect rows in the calls to `push`.
 inline size_t blockMemoryPerRow(size_t numColumns) {
-  return numColumns * sizeof(Id) * 2;
+  return numColumns * columnBasedIdTable::BYTES_PER_ID_COLUMN_ENTRY * 2;
 }
 
 // The number of rows per block that a `CompressedExternalIdTableBase` with
@@ -999,7 +1011,8 @@ class CompressedExternalIdTableSorter
                    maxOutputBlocksize_);
 
       size_t blockSizeForOutput =
-          blockSizeOutputMemory.getBytes() / (sizeof(Id) * numColumns);
+          blockSizeOutputMemory.getBytes() /
+          (columnBasedIdTable::BYTES_PER_ID_COLUMN_ENTRY * numColumns);
       // If blocks are smaller than this, the performance will probably be poor
       // because of the coroutine and vector resetting overhead.
       if (blockSizeForOutput <= 10'000) {

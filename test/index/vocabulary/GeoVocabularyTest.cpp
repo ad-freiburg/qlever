@@ -445,14 +445,18 @@ TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, GeoCellGridIndices) {
     EXPECT_EQ(emptyVocab.endIndex(), 0u);
   }
 
-  // The finest grid leaves only two position bits, so the fourth word does
-  // not fit anymore (one position stays free for the past-the-end index).
+  // The finest possible grid leaves only very few position bits, so
+  // eventually a word does not fit anymore (one position stays free for the
+  // past-the-end index). The number of words that do fit is derived from
+  // `maxNumWords()` rather than hardcoded, so this stays correct regardless
+  // of `ValueId::numDataBits`.
   {
     GV fullVocab;
-    fullVocab.setGeoCellGrid(GeoCellGrid{28});
+    GeoCellGrid finestGrid{30};
+    fullVocab.setGeoCellGrid(finestGrid);
     auto ww = fullVocab.makeDiskWriterPtr(fn + ".full");
     ww->readableName() = "test";
-    for (size_t i = 0; i < 3; ++i) {
+    for (size_t i = 0; i + 1 < finestGrid.maxNumWords(); ++i) {
       (*ww)(w0, false);
     }
     AD_EXPECT_THROW_WITH_MESSAGE((*ww)(w0, false),

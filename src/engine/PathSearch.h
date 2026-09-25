@@ -12,6 +12,7 @@
 
 #include "backports/span.h"
 #include "engine/Operation.h"
+#include "engine/idTable/IdColumn.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/VectorWithMemoryLimit.h"
@@ -273,14 +274,20 @@ class PathSearch : public Operation {
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  std::pair<ql::span<const Id>, ql::span<const Id>> handleSearchSides() const;
+  // `std::vector<Id>`, not `ConstIdColumn`: sources/targets come either from
+  // an `IdTable` column or a plain `std::vector<Id>` in `config_`, and since
+  // `IdTable` columns are no longer contiguous (see `IdColumn.h`), no single
+  // view type covers both without a copy. `allPaths()` needs genuine
+  // contiguous `ql::span<const Id>`s into these owned vectors.
+  std::pair<std::vector<Id>, std::vector<Id>> handleSearchSides() const;
 
   /**
    * @brief Finds paths based on the configured algorithm.
    * @return A vector of paths.
    */
   pathSearch::PathsLimited findPaths(
-      const Id& source, const std::unordered_set<uint64_t>& targets,
+      const Id& source,
+      const std::unordered_set<Id::BitRepresentation>& targets,
       const pathSearch::BinSearchWrapper& binSearch,
       std::optional<uint64_t> numPathsPerTarget,
       std::optional<uint64_t> maxDepth) const;

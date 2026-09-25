@@ -24,6 +24,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/span.h"
+#include "engine/idTable/IdColumn.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
@@ -280,7 +281,7 @@ class CompressedRelationReader {
     size_t numHandledBlocks{0};
   };
   static GetBlocksForJoinResult getBlocksForJoin(
-      ql::span<const Id> joinColumn,
+      ConstIdColumn joinColumn,
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
 
   // For each of `metadataAndBlocks, metadataAndBlocks2` get the blocks (an
@@ -485,7 +486,7 @@ class CompressedRelationReader {
   // only decompressed if its metadata says that it contains a graph that has
   // not been seen before, or if the metadata contains no graph information
   // at all (more than `MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA` graphs).
-  ad_utility::HashSetWithMemoryLimit<Id::T> computeUniqueGraphIds(
+  ad_utility::HashSetWithMemoryLimit<Id::BitRepresentation> computeUniqueGraphIds(
       const CompressedRelationReader::ScanSpecAndBlocks& scanSpecAndBlocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       const CancellationHandle& cancellationHandle,
@@ -505,13 +506,11 @@ class CompressedRelationReader {
   DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
                                     size_t numRowsToRead) const;
 
-  // Helper function used by `decompressBlock` and
-  // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
-  // store the result at the `iterator`. For the `numRowsToRead` argument, see
-  // the documentation of `decompressBlock`.
-  template <typename Iterator>
+  // Helper function used by `decompressBlock`. Decompress the
+  // `compressedColumn` and store the result in `column`. For the
+  // `numRowsToRead` argument, see the documentation of `decompressBlock`.
   static void decompressColumn(const std::vector<char>& compressedColumn,
-                               size_t numRowsToRead, Iterator iterator);
+                               size_t numRowsToRead, IdColumn column);
 
   // Read and decompress the parts of the block given by `blockMetaData` (which
   // identifies the block) and `scanConfig` (which specifies the part of that
