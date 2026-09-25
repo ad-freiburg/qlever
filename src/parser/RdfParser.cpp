@@ -650,7 +650,7 @@ bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {
 
 // ______________________________________________________________________
 template <class T>
-TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
+void TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
     TripleComponent::Literal literal, const TripleComponent::Iri& typeIri) {
   AD_CORRECTNESS_CHECK(literal.isPlain());
   std::string_view normalizedLiteralContent =
@@ -732,7 +732,6 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
   } catch (const std::exception& e) {
     raise(e.what());
   }
-  return lastParseResult_;
 }
 
 // _____________________________________________________________________________
@@ -779,10 +778,11 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
     const EncodedIriManager& encodedIriManager) {
   RdfStringParser<TurtleParser<T>> parser{&encodedIriManager};
 
-  return parser.literalAndDatatypeToTripleComponentImpl(
+  parser.literalAndDatatypeToTripleComponentImpl(
       TripleComponent::Literal::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(normalizedLiteralContent)),
       typeIri);
+  return std::move(parser.lastParseResult_);
 }
 
 // ______________________________________________________________________
