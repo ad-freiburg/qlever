@@ -145,19 +145,17 @@ void IoUringPolicy::addBatch(int fd,
       // Otherwise ask the controller once the minimum group size is reached:
       // flush early when little work remains, defer while many I/Os are
       // already in flight to increase amortization. `outstanding` spans all
-      // batches by design: every in-flight read occupies device queue
-      // depth, while `pending` is this batch's remainder.
+      // batches by design (every submitted read occupies device queue
+      // depth), but excludes the prepared reads of the current group, which
+      // the kernel has not seen yet. `pending` is this batch's remainder.
       if (numPreparedSinceSubmit >= controller.maxBatchSize_) {
-        if (io_uring_submit(&ring_) < 0) {
-          AD_THROW("io_uring_submit failed in IoUringPolicy");
-        }
+        submitOrThrow();
         numPreparedSinceSubmit = 0;
       } else if (numPreparedSinceSubmit >= controller.minBatchSize_ &&
-                 controller.shouldFlush(numInFlightReadRequests_,
-                                        numRemaining)) {
-        if (io_uring_submit(&ring_) < 0) {
-          AD_THROW("io_uring_submit failed in IoUringPolicy");
-        }
+                 controller.shouldFlush(
+                     numInFlightReadRequests_ - numPreparedSinceSubmit,
+                     numRemaining)) {
+        submitOrThrow();
         numPreparedSinceSubmit = 0;
       }
     }
