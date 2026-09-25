@@ -265,21 +265,23 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // TODO<joka921> Measure (as soon as we have the benchmark merged)
   // whether it is beneficial to manually instantiate the comparison when
   // sorting by only one or two columns.
-
+  //
   // TODO<joka921> In the case of a single variable whose input is not sorted
   // by it, it might be more efficient to first sort by the ID values and then
   // "repair" the order in linear time, like `computeResultForSortedInput` does
   // for an input that is already sorted, or even to return lazy generators
   // that yield the repaired order.
-
+  //
   // TODO<joka921> For proper sorting of the local vocab we also need to
   // add some logic for the proper sorting.
-
+  //
   // TODO<joka921> If we know, that all the sort columns contain only datatypes
   // for which the `internal` order is also the `semantic` order, or if a column
   // only contains a single datatype, then we can use more efficient
-  // implementations here.
-
+  // implementations here. So far, this is only done for a single sort column
+  // with an input that is already sorted and contains only ints or only
+  // doubles, see `computeResultForSortedInput`.
+  //
   // Return true iff `rowA` comes before `rowB` in the sort order specified by
   // `sortIndices_`.
   auto comparison = [this](const auto& row1, const auto& row2) -> bool {
