@@ -102,6 +102,11 @@ void FiberIoScheduler::runAsFibers(std::vector<std::function<void()>> bodies) {
       try {
         fiber.join();
       } catch (...) {
+        // Deliberately not propagated: the construction error rethrown below
+        // is the root cause and must reach the caller. `join` only throws
+        // `fiber_error` (not joinable, or joining itself), which cannot occur
+        // for these freshly constructed sibling fibers; body exceptions never
+        // reach `join` because the wrapper captures them into `errors`.
       }
     }
     throw;
