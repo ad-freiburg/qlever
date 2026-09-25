@@ -316,6 +316,78 @@ TYPED_TEST(IoUringManagerTest, BatchLargerThanRing) {
               ::testing::ElementsAreArray(scenario.expected()));
 }
 
+// A batch much larger than a tiny ring (8 slots, one `REAP_WAVE`) completes.
+// `IoUringPolicy` refills the ring after reaping a whole wave of CQEs in one
+// call, so every refill starts from an empty or nearly empty ring.
+TYPED_TEST(IoUringManagerTest, BatchMuchLargerThanTinyRing) {
+  constexpr size_t N = 80;
+  SequentialReadScenarioForTesting scenario;
+  for (size_t i = 0; i < N; ++i) {
+    scenario.addRead(std::string(4, static_cast<char>('A' + (i % 26))));
+  }
+  auto [tmp, fd] = makeTempFile(scenario.content());
+  TypeParam manager(8);
+  manager.wait(scenario.submitTo(manager, fd));
+  EXPECT_THAT(scenario.results(),
+              ::testing::ElementsAreArray(scenario.expected()));
+}
+
+// Waiting on the last of many single-read batches reaps the CQEs of the other
+// batches in the same wave. The remaining waits then find their batches
+// already complete and must still see the correct bytes. Batch sizes that are
+// not multiples of the reap wave (1, 3, 5, ...) cover partial waves.
+TYPED_TEST(IoUringManagerTest, WaveReapCompletesOtherBatches) {
+  constexpr size_t M = 12;
+  std::string fileContent;
+  std::vector<std::vector<std::string>> expected(M);
+  std::vector<ReadBatchForTesting> batches(M);
+  for (size_t i = 0; i < M; ++i) {
+    const size_t numReads = 2 * (i % 3) + 1;
+    for (size_t j = 0; j < numReads; ++j) {
+      std::string chunk(3, static_cast<char>('a' + (fileContent.size() % 26)));
+      batches[i].add(fileContent.size(), chunk.size());
+      fileContent.append(chunk);
+      expected[i].push_back(std::move(chunk));
+    }
+  }
+  auto [tmp, fd] = makeTempFile(fileContent);
+
+  TypeParam manager(64);
+  std::vector<typename TypeParam::BatchHandle> handles;
+  for (auto& batch : batches) {
+    handles.push_back(batch.submitTo(manager, fd));
+  }
+  // Wait on the last batch first, then on the rest in submission order.
+  manager.wait(handles.back());
+  for (size_t i = 0; i + 1 < M; ++i) {
+    manager.wait(handles[i]);
+  }
+  for (size_t i = 0; i < M; ++i) {
+    EXPECT_THAT(batches[i].result(), ::testing::ElementsAreArray(expected[i]))
+        << "mismatch at batch " << i;
+  }
+}
+
+// A failed read in one batch must not lose the completions of another batch
+// reaped in the same wave: the error is thrown only after the whole wave is
+// applied to the bookkeeping, so the good batch still completes afterwards.
+TYPED_TEST(IoUringManagerTest, ErrorInWaveKeepsOtherBatchesConsistent) {
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCC");  // 12 bytes
+
+  TypeParam manager(64);
+  ReadBatchForTesting good;
+  good.add({{0, 4}, {4, 4}, {8, 4}});
+  ReadBatchForTesting bad;
+  bad.add(8, 16);  // past EOF: short read
+
+  // `SyncIoPolicy` reads in `addBatch`, so its throw happens on submission.
+  auto goodHandle = good.submitTo(manager, fd);
+  AD_EXPECT_THROW_WITH_MESSAGE(manager.wait(bad.submitTo(manager, fd)),
+                               HasSubstr("read fewer bytes than requested"));
+  manager.wait(goodHandle);
+  EXPECT_THAT(good.result(), ::testing::ElementsAre("AAAA", "BBBB", "CCCC"));
+}
+
 // Verify that many independent `addBatch` calls can be outstanding (submitted
 // to the kernel but not yet waited on) at once, and that the manager tracks
 // each batch's completion correctly. M batches of one read each are submitted
