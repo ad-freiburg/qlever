@@ -517,7 +517,7 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
 
   // ________________________________________________________________________
   template <typename R>
-  void appendToBlock(Block& block, R&& row) const {
+  void appendToBlock(Block& block, const R& row) const {
     block.push_back(row);
   }
 
