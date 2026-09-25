@@ -32,7 +32,28 @@ permissions:
   contents: read
 
 jobs:
+  # Fork PR profile 2026-09-25: pick the build legs per event. Master-only
+  # legs (formerly `skip-if-pr`) are not created at all on pull requests, so
+  # they no longer occupy a build runner just to exit early. Runs on the
+  # lightweight `wolga` runners, not on build runners.
+  legs:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
+    runs-on: [self-hosted, linux, x64, wolga]
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        env:
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+        run: |
+          if [ "$IS_PR" = true ]; then
+            echo 'matrix={"include":[{"image":"clang21","toolchain":"clang21","build-type":"Release","extra-flags":"","allocator-backend":"pmr"},{"image":"clang16","toolchain":"clang16","build-type":"RelWithDebInfo","extra-flags":"-fsanitize=address,undefined -fno-omit-frame-pointer","needs-seccomp":true,"container-env":"ASAN_OPTIONS=detect_leaks=0"},{"image":"gcc11","toolchain":"gcc11","build-type":"Release","extra-flags":"","additional-cmake-options":"-DUSE_CPP_17_BACKPORTS=ON -DEXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17=ON"}]}' >> "$GITHUB_OUTPUT"
+          else
+            echo 'matrix={"include":[{"image":"gcc13","toolchain":"gcc13","build-type":"Release","extra-flags":""},{"image":"clang21","toolchain":"clang21","build-type":"Release","extra-flags":"","allocator-backend":"pmr"},{"image":"clang16","toolchain":"clang16","build-type":"Release","extra-flags":""},{"image":"clang16","toolchain":"clang16","build-type":"RelWithDebInfo","extra-flags":"-fsanitize=address,undefined -fno-omit-frame-pointer","needs-seccomp":true,"container-env":"ASAN_OPTIONS=detect_leaks=0"},{"image":"clang16","toolchain":"clang16","build-type":"RelWithDebInfo","extra-flags":"-fsanitize=undefined","needs-seccomp":true},{"image":"gcc11","toolchain":"gcc11","build-type":"Release","extra-flags":""},{"image":"gcc11","toolchain":"gcc11","build-type":"Release","extra-flags":"","additional-cmake-options":"-DUSE_CPP_17_BACKPORTS=ON -DEXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17=ON"},{"image":"gcc12","toolchain":"gcc12","build-type":"Release","extra-flags":""},{"image":"clang18","toolchain":"clang18","build-type":"Release","extra-flags":""},{"image":"conan","run-kind":"conan","build-type":"Release"},{"image":"emsdk-6.0.5","run-kind":"emsdk","build-type":"Release"}]}' >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: legs
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
     # Pinned to image-bearing hosts: only runners sharing the podman storage
     # that holds localhost/qlever-ci carry wolga-img (Wolga fleet).
@@ -46,80 +67,7 @@ jobs:
       # runner at once; queued legs from other runs interleave anyway.
       # (CI speedup 2026-09-24; was max-parallel: 1.)
       max-parallel: 4
-      matrix:
-        include:
-          - image: gcc13
-            toolchain: gcc13
-            build-type: Release
-            extra-flags: ""
-            skip-if-pr: true  # Fork PR profile 2026-09-25: clang21 + gcc11 cover the compiler spread.
-          - image: clang21
-            toolchain: clang21
-            build-type: Release
-            extra-flags: ""
-            allocator-backend: pmr
-          - image: clang16
-            toolchain: clang16
-            build-type: Release
-            extra-flags: ""
-            skip-if-pr: true
-          - image: clang16
-            toolchain: clang16
-            build-type: RelWithDebInfo
-            # Fork PR profile 2026-09-25: ASan and UBSan combined in one leg.
-            extra-flags: "-fsanitize=address,undefined -fno-omit-frame-pointer"
-            needs-seccomp: true
-            # LeakSanitizer fatals at process startup under rootless podman
-            # (restricted syscalls), which aborts gtest test discovery, so
-            # leak detection stays off on this leg. Plain ASan is unaffected.
-            # (Base fix e9cb2483d, newer than this PR's seccomp approach;
-            # leak coverage stays on the GitHub-hosted ASan leg.)
-            container-env: "ASAN_OPTIONS=detect_leaks=0"
-          - image: clang16
-            toolchain: clang16
-            build-type: RelWithDebInfo
-            extra-flags: "-fsanitize=undefined"
-            needs-seccomp: true
-            skip-if-pr: true  # Fork PR profile 2026-09-25: covered by the combined ASan+UBSan leg.
-          - image: gcc11
-            toolchain: gcc11
-            build-type: Release
-            extra-flags: ""
-            skip-if-pr: true  # Fork PR profile 2026-09-25: gcc11+backports and gcc13 cover it.
-          - image: gcc11
-            toolchain: gcc11
-            build-type: Release
-            extra-flags: ""
-            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DEXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17=ON"
-          # gcc12/clang18 run on master only in native-build.yml.
-          - image: gcc12
-            toolchain: gcc12
-            build-type: Release
-            extra-flags: ""
-            skip-if-pr: true
-          - image: clang18
-            toolchain: clang18
-            build-type: Release
-            extra-flags: ""
-            skip-if-pr: true
-          # Conan leg (mirrors native-build-conan.yml): system compiler,
-          # third-party libs via conan, plus benchmarks and E2E.
-          - image: conan
-            run-kind: conan
-            build-type: Release
-            skip-if-pr: true  # Fork PR profile 2026-09-25: packaging leg, master only.
-          # Emscripten/WASM leg (mirrors
-          # native-build-with-conan-and-emscripten.yml, build job only;
-          # npm publish stays on the hosted workflow): emsdk 6.0.5,
-          # node 26, conan, TypeScript, npm pack + smoke test.
-          - image: emsdk-6.0.5
-            run-kind: emsdk
-            build-type: Release
-            skip-if-pr: true  # Fork PR profile 2026-09-25: packaging leg, master only.
-          # NOTE: no TSan leg here. ThreadSanitizer aborts with "unexpected
-          # memory mapping" unless the host sets vm.mmap_rnd_bits=28, which
-          # needs root on the runner hosts. TSan stays on the GitHub-hosted
-          # leg (which applies the sysctl) until the host config lands.
+      matrix: ${{ fromJSON(needs.legs.outputs.matrix) }}
     env:
       PODMAN_ROOT: /local/data-ssd/stoetzem/containers-storage
       PODMAN_TMP: /local/data-ssd/stoetzem/containers-tmp
@@ -149,7 +97,7 @@ jobs:
             -v "${{ github.workspace }}:/work" \
             -v "${CCACHE_BASE}/${{ matrix.toolchain }}:/ccache" \
             -w /work \
-            -e GH_CLONE_TOKEN \
+            -e GH_CLONE_TOKEN -e CI_BUILD_JOBS \
             localhost/qlever-ci:${{ matrix.image }} bash -c '
               set -e
               if [ -n "${GH_CLONE_TOKEN:-}" ]; then git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf "x-access-token:%s" "${GH_CLONE_TOKEN}" | base64 -w0)"; fi
@@ -191,13 +139,14 @@ jobs:
                 ${{ matrix.additional-cmake-options }} \
                 -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold" \
                 -DBUILD_SHARED_LIBS=ON -DQLEVER_ONE_TEST_CASE_PER_FILE=ON \
-                -DUSE_PRECOMPILED_HEADERS=${{ matrix.toolchain == 'clang21' && 'ON' || 'OFF' }} -DCHEAPER_COMPILATION=OFF \
+                -DUSE_PRECOMPILED_HEADERS=ON -DCHEAPER_COMPILATION=OFF \
                 -DQLEVER_ALLOCATOR_BACKEND=${{ matrix.allocator-backend || 'limit' }}
+              # CI_BUILD_JOBS (runner .env) raises -j on dedicated build boxes.
               # -j8, not -j$(nproc): the 16-core host is shared (OCR jobs,
               # other users) and RAM-bound. -j16 OOM-killed the UBSan leg
               # (SIGKILL 54min in) and starved a gcc13 rebuild into a
               # CancellationException-429 flake.
-              cmake --build /work/build --config ${{ matrix.build-type }} -- -j 8
+              cmake --build /work/build --config ${{ matrix.build-type }} -- -j ${CI_BUILD_JOBS:-8}
               echo "--- ccache stats for ${{ matrix.toolchain }} (this leg) ---"
               ccache -s
               cd /work/build/test
