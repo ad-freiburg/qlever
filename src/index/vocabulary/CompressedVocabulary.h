@@ -167,7 +167,7 @@ CPP_template(typename UnderlyingVocabulary,
     } else {
       // Fetch the compressed words in one batch through the underlying
       // vocabulary (an on-disk underlying vocabulary serves this from its
-      // io_uring ring pool), then decompress each word with the decoder for
+      // `io_uring` ring pool), then decompress each word with the decoder for
       // its block. The underlying lookup preserves order, so result `i`
       // belongs to `indices[i]`, exactly like the sequential path.
       auto compressed = underlyingVocabulary_.lookupBatch(indices);
