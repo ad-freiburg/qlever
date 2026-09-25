@@ -57,8 +57,8 @@ struct AdaptiveBatchController {
   // increase amortization. Otherwise flush early to keep the device busy.
   // The default of 1/1 defers once there are at least as many outstanding
   // I/Os as still-pending reads (equality defers). Both parts are normalized to
-  // at least one (see `normalized`), since zero would silently pin one
-  // decision.
+  // at least one (see `normalized`): a zero numerator would always defer and a
+  // zero denominator would always flush (outside the tail cases).
   uint64_t deferNumerator_ = 1;
   uint64_t deferDenominator_ = 1;
 
