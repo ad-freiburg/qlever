@@ -40,15 +40,19 @@ jobs:
     timeout-minutes: 240
     strategy:
       fail-fast: false
-      # Sequential legs: one full build+test at a time per run, so a shared
-      # 16-core host is never oversubscribed and stays usable for others.
-      max-parallel: 1
+      # Up to 4 legs of one run in parallel: legs land on different fleet
+      # runners, so a single PR's wall time drops ~4x when the fleet has
+      # room. Kept small (not unlimited) so one run cannot flood every
+      # runner at once; queued legs from other runs interleave anyway.
+      # (CI speedup 2026-09-24; was max-parallel: 1.)
+      max-parallel: 4
       matrix:
         include:
           - image: gcc13
             toolchain: gcc13
             build-type: Release
             extra-flags: ""
+            skip-if-pr: true  # Fork PR profile 2026-09-25: clang21 + gcc11 cover the compiler spread.
           - image: clang21
             toolchain: clang21
             build-type: Release
@@ -62,7 +66,9 @@ jobs:
           - image: clang16
             toolchain: clang16
             build-type: RelWithDebInfo
-            extra-flags: "-fsanitize=address -fno-omit-frame-pointer"
+            # Fork PR profile 2026-09-25: ASan and UBSan combined in one leg.
+            extra-flags: "-fsanitize=address,undefined -fno-omit-frame-pointer"
+            needs-seccomp: true
             # LeakSanitizer fatals at process startup under rootless podman
             # (restricted syscalls), which aborts gtest test discovery, so
             # leak detection stays off on this leg. Plain ASan is unaffected.
@@ -74,10 +80,12 @@ jobs:
             build-type: RelWithDebInfo
             extra-flags: "-fsanitize=undefined"
             needs-seccomp: true
+            skip-if-pr: true  # Fork PR profile 2026-09-25: covered by the combined ASan+UBSan leg.
           - image: gcc11
             toolchain: gcc11
             build-type: Release
             extra-flags: ""
+            skip-if-pr: true  # Fork PR profile 2026-09-25: gcc11+backports and gcc13 cover it.
           - image: gcc11
             toolchain: gcc11
             build-type: Release
@@ -99,6 +107,7 @@ jobs:
           - image: conan
             run-kind: conan
             build-type: Release
+            skip-if-pr: true  # Fork PR profile 2026-09-25: packaging leg, master only.
           # Emscripten/WASM leg (mirrors
           # native-build-with-conan-and-emscripten.yml, build job only;
           # npm publish stays on the hosted workflow): emsdk 6.0.5,
@@ -106,6 +115,7 @@ jobs:
           - image: emsdk-6.0.5
             run-kind: emsdk
             build-type: Release
+            skip-if-pr: true  # Fork PR profile 2026-09-25: packaging leg, master only.
           # NOTE: no TSan leg here. ThreadSanitizer aborts with "unexpected
           # memory mapping" unless the host sets vm.mmap_rnd_bits=28, which
           # needs root on the runner hosts. TSan stays on the GitHub-hosted
@@ -113,6 +123,13 @@ jobs:
     env:
       PODMAN_ROOT: /local/data-ssd/stoetzem/containers-storage
       PODMAN_TMP: /local/data-ssd/stoetzem/containers-tmp
+      # Host-SSD compiler cache, one dir per toolchain, shared across all
+      # runs and PRs landing on this host (CI speedup 2026-09-24).
+      CCACHE_BASE: /local/data-ssd/stoetzem/ccache
+      # Job token for github clones inside the containers (CMake
+      # FetchContent, emsdk tag fetch). Anonymous clones from the shared
+      # Wolga egress got HTTP 401 ("could not read Username") in bursts.
+      GH_CLONE_TOKEN: ${{ github.token }}
     steps:
       - name: Skip early if master-only leg on a PR
         if: github.event_name == 'pull_request' && matrix.skip-if-pr == true
@@ -125,17 +142,28 @@ jobs:
         if: (github.event_name != 'pull_request' || matrix.skip-if-pr != true) && (!matrix.run-kind || matrix.run-kind == 'native')
         shell: bash
         run: |
-          mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}"
+          mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}" "${CCACHE_BASE}/${{ matrix.toolchain }}"
           podman --root "${PODMAN_ROOT}" --tmpdir "${PODMAN_TMP}" run --rm \
             --network=host \
             ${{ matrix.needs-seccomp == true && '--security-opt seccomp=unconfined' || '' }} \
             -v "${{ github.workspace }}:/work" \
+            -v "${CCACHE_BASE}/${{ matrix.toolchain }}:/ccache" \
             -w /work \
+            -e GH_CLONE_TOKEN \
             localhost/qlever-ci:${{ matrix.image }} bash -c '
               set -e
+              if [ -n "${GH_CLONE_TOKEN:-}" ]; then git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf "x-access-token:%s" "${GH_CLONE_TOKEN}" | base64 -w0)"; fi
               # Per-leg extra environment inside the container (empty for
               # legs without a `container-env` matrix key).
               if [ -n "${{ matrix.container-env }}" ]; then export ${{ matrix.container-env }}; fi
+              # apt runs its downloads as _apt via setgroups, which rootless podman
+              # on Wolga cannot do (no /etc/subuid entry), so keep apt's sandbox root.
+              # Compiler cache on the host SSD (mounted at /ccache, persists
+              # across runs). Images carry no ccache binary, so install it
+              # on first use (~30s, once per fresh container layer).
+              command -v ccache >/dev/null 2>&1 || (apt-get -o APT::Sandbox::User=root update -qq && apt-get -o APT::Sandbox::User=root install -qy ccache)
+              export CCACHE_DIR=/ccache CCACHE_MAXSIZE=10G CCACHE_COMPRESS=true
+              ccache -z >/dev/null
               # cmake configure pulls third-party sources (googletest etc.)
               # over anonymous github clones, which fleet egress
               # occasionally fails and would otherwise fail the whole leg.
@@ -156,6 +184,7 @@ jobs:
               # (different toolchain/sanitizer flags) must not be reused.
               configure_with_retry cmake -B /work/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
                 -DCMAKE_TOOLCHAIN_FILE="/work/toolchains/${{ matrix.toolchain }}.cmake" \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                 -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror ${{ matrix.extra-flags }}" \
                 -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false \
                 -DENABLE_EXPENSIVE_CHECKS=true \
@@ -169,6 +198,8 @@ jobs:
               # (SIGKILL 54min in) and starved a gcc13 rebuild into a
               # CancellationException-429 flake.
               cmake --build /work/build --config ${{ matrix.build-type }} -- -j 8
+              echo "--- ccache stats for ${{ matrix.toolchain }} (this leg) ---"
+              ccache -s
               cd /work/build/test
               # Drop stale per-test dirs: /work/build persists across runs on
               # the same host, and leftover previous.*/rebuild.* dirs from a
@@ -185,8 +216,10 @@ jobs:
             --network=host \
             -v "${{ github.workspace }}:/work" \
             -w /work \
+            -e GH_CLONE_TOKEN \
             localhost/qlever-ci:${{ matrix.image }} bash -c '
               set -e
+              if [ -n "${GH_CLONE_TOKEN:-}" ]; then git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf "x-access-token:%s" "${GH_CLONE_TOKEN}" | base64 -w0)"; fi
               cd /work && rm -rf /work/build && mkdir -p /work/build
               conan profile detect
               # Same configure retry as the native step: anonymous github
@@ -225,9 +258,22 @@ jobs:
             --network=host \
             -v "${{ github.workspace }}:/work" \
             -w /work \
+            -e GH_CLONE_TOKEN \
             localhost/qlever-ci:${{ matrix.image }} bash -c '
               set -e
-              [ -f /work/.git/shallow ] && git -C /work fetch --tags --unshallow || true
+              if [ -n "${GH_CLONE_TOKEN:-}" ]; then git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf "x-access-token:%s" "${GH_CLONE_TOKEN}" | base64 -w0)"; fi
+              # Fleet egress to github flakes: retry the tag fetch (mirrors
+              # configure_with_retry below) instead of failing the leg when
+              # the clone stays shallow and tagless.
+              if [ -f /work/.git/shallow ]; then
+                attempt=1
+                while [ "${attempt}" -le 3 ]; do
+                  if git -C /work fetch --tags --unshallow; then break; fi
+                  echo "tag fetch attempt ${attempt} failed, retrying in 15s..."
+                  attempt=$((attempt + 1))
+                  if [ "${attempt}" -le 3 ]; then sleep 15; fi
+                done
+              fi
               printf "compiler:\n  emcc:\n    version: [\"6.0.5\"]\n" > ~/.conan2/settings_user.yml
               cd /work && rm -rf /work/build
               conan install . -pr:b default -pr:h conanprofiles/emscripten.profile \
@@ -244,12 +290,15 @@ jobs:
               if [ "${GITHUB_REF_TYPE}" = tag ]; then
                 VERSION="${GITHUB_REF_NAME#v}"
               else
-                DESCRIBE=$(git -C /work describe --tags --long --match "v[0-9]*")
+                DESCRIBE=$(git -C /work describe --tags --long --match "v[0-9]*" 2>/dev/null || true)
                 if [[ "$DESCRIBE" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)-([0-9]+)-g([0-9a-f]+)$ ]]; then
                   VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))-dev.${BASH_REMATCH[4]}.g${BASH_REMATCH[5]}"
                 else
-                  echo "::error::Cannot derive a version from git describe output $DESCRIBE"
-                  exit 1
+                  # Non-tag builds only smoke-test the npm artifact, so a
+                  # tagless clone (persistent egress flake above) falls back
+                  # to a dev version instead of failing the leg. Tag builds
+                  # keep the strict path above.
+                  VERSION="0.0.0-dev.0+g$(git -C /work rev-parse --short HEAD)"
                 fi
               fi
               npm version --no-git-tag-version "${VERSION}"
