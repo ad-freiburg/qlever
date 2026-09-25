@@ -180,8 +180,11 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
 
   // Output the negative doubles in reverse order (in the column, they are
   // sorted by descending value, because their magnitude increases with the
-  // bits), then the non-negative doubles, and then all `NaN`s, which `ORDER BY`
-  // puts last.
+  // bits), then the non-negative doubles, and then all `NaN`s.
+  //
+  // NOTE: The SPARQL standard does not say where `NaN`s go. Putting them last
+  // is how the regular comparator of `ORDER BY` does it (see
+  // `makeComparatorForNans`).
   ranges.push_back({firstNegative, firstNegativeNan, true});
   ranges.push_back({firstDefined, firstPositiveNan, false});
   ranges.push_back({firstPositiveNan, firstNegative, false});
