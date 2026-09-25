@@ -10,6 +10,7 @@
 
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeoPointEncoding.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/HashSet.h"
@@ -284,4 +285,14 @@ TEST(GeoPoint, latMajorEncoding) {
     EXPECT_NEAR(GeoPoint::fromBitRepresentation(bits).getLat(), 48.0, 1e-6);
     EXPECT_NEAR(GeoPoint::fromBitRepresentation(bits).getLng(), 7.8, 1e-6);
   }
+}
+
+// Test the names of the two encodings in the configuration of an index and in
+// the option of `qlever-index`.
+TEST(GeoPoint, encodingNames) {
+  using ad_utility::GeoPointEncoding;
+  EXPECT_EQ(GeoPointEncoding::fromString("z-order"), GeoPointEncoding::ZOrder);
+  EXPECT_EQ(GeoPointEncoding::fromString("lat-major"),
+            GeoPointEncoding::LatMajor);
+  EXPECT_ANY_THROW(GeoPointEncoding::fromString("lng-major"));
 }
