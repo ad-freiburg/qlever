@@ -9,14 +9,21 @@
 #include "backports/functional.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
+#include "util/NoCopyNoMove.h"
 #include "util/ResetWhenMoved.h"
 
 namespace ad_utility::unique_cleanup {
 
 // Wrapper class that allows to call a function just before the wrapped value
-// T is destroyed or overwritten by a move assignment.
+// T is destroyed or overwritten by a move assignment. The function is called at
+// most once, as `std::move(function)(std::move(value))`, so it receives the
+// wrapped value as a `T&&` (both from the destructor and from `runNow`).
+//
+// This class is move-only: The cleanup belongs to exactly one object, and a
+// moved-from object doesn't run it any more.
 CPP_template(typename T, typename Func = std::function<void(T&&)>)(
-    requires ql::concepts::move_constructible<T>) class UniqueCleanup {
+    requires ql::concepts::move_constructible<T>) class UniqueCleanup
+    : public ad_utility::NoCopy {
   // False once the cleanup has run or was cancelled, or if this object was
   // moved from.
   ResetWhenMoved<bool, false> active_ = true;
@@ -26,10 +33,7 @@ CPP_template(typename T, typename Func = std::function<void(T&&)>)(
   [[no_unique_address]] Func function_;
 
  public:
-  // Wrap the `value` and the `function` to run on it as its cleanup. NOTE:
-  // The `function` must not capture the `this` pointer of the object owning
-  // this `UniqueCleanup`, because after a move that pointer would point to the
-  // moved-from object.
+  // Wrap the `value` and the `function` to run on it as its cleanup.
   UniqueCleanup(T value, Func function)
       : value_{std::move(value)}, function_{std::move(function)} {}
 
@@ -38,9 +42,6 @@ CPP_template(typename T, typename Func = std::function<void(T&&)>)(
 
   T* operator->() noexcept { return &value_; }
   const T* operator->() const noexcept { return &value_; }
-
-  UniqueCleanup(const UniqueCleanup&) noexcept = delete;
-  UniqueCleanup& operator=(const UniqueCleanup&) noexcept = delete;
 
   UniqueCleanup(UniqueCleanup&& cleanupDeleter) noexcept = default;
 

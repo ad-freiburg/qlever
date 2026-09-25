@@ -1421,7 +1421,7 @@ TEST(BufferedWriteSerializer, ThrowsWhenClosedOrMovedFrom) {
                                AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     AD_EXPECT_THROW_WITH_MESSAGE(
-        writer.getSerializationPosition(),
+        std::ignore = writer.getSerializationPosition(),
         HasSubstr("`getSerializationPosition` was called on a "
                   "`BufferedWriteSerializer` that has already been closed"));
     AD_EXPECT_THROW_WITH_MESSAGE(
