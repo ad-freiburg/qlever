@@ -15,6 +15,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/idTable/IdColumn.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
 
@@ -295,10 +296,10 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::pair<ql::span<const Id>, ql::span<const Id>>
+std::pair<ConstIdColumn, ConstIdColumn>
 PathSearch::handleSearchSides() const {
-  ql::span<const Id> sourceIds;
-  ql::span<const Id> targetIds;
+  ConstIdColumn sourceIds;
+  ConstIdColumn targetIds;
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();

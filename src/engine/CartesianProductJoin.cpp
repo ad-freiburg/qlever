@@ -11,6 +11,7 @@
 #include "engine/CartesianProductJoin.h"
 
 #include "engine/CallFixedSize.h"
+#include "engine/idTable/IdColumn.h"
 #include "util/Views.h"
 
 namespace {
@@ -106,8 +107,8 @@ bool CartesianProductJoin::knownEmptyResult() {
 }
 
 // ____________________________________________________________________________
-void CartesianProductJoin::writeResultColumn(ql::span<Id> targetColumn,
-                                             ql::span<const Id> inputColumn,
+void CartesianProductJoin::writeResultColumn(IdColumn targetColumn,
+                                             ConstIdColumn inputColumn,
                                              size_t groupSize,
                                              size_t offset) const {
   // Copy each element from the `inputColumn` `groupSize` times to
