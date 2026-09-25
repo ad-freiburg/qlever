@@ -134,14 +134,16 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
   // Find the first row that is not `Undefined` (the `Undefined` values come
   // first, because their datatype bits are all zero). If there is no such row,
   // return the whole column as a single range (it is then already in the order
-  // of `ORDER BY`). Return `std::nullopt` if the rows from there have more than
-  // one datatype (the column is grouped by datatype, so it suffices to compare
-  // the first and the last of them), or if that datatype is neither `Int` nor
-  // `Double`.
+  // of `ORDER BY`).
   size_t firstDefined = partitionPoint(0, column.size(), &Id::isUndefined);
   if (firstDefined == column.size()) {
     return std::vector<RowRange>{{0, column.size(), false}};
   }
+
+  // Return `std::nullopt` unless the rows from `firstDefined` on are all ints
+  // or all doubles (a mix of the two is not handled). Since the column is
+  // grouped by datatype, it suffices to compare the datatypes of the first and
+  // the last of these rows.
   Datatype type = column[firstDefined].getDatatype();
   if (column.back().getDatatype() != type ||
       (type != Datatype::Int && type != Datatype::Double)) {
