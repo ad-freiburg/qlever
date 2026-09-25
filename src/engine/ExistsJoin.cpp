@@ -177,9 +177,9 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   bool isCheap = ql::ranges::none_of(
       ad_utility::integerRange(numJoinColumns), [&](const auto& col) {
         return (ql::ranges::any_of(joinColumnsRight.getColumn(col),
-                                   &Id::isUndefined)) ||
+                                   &isUndefinedId)) ||
                (ql::ranges::any_of(joinColumnsLeft.getColumn(col),
-                                   &Id::isUndefined));
+                                   &isUndefinedId));
       });
 
   // Nothing to do for the actual matches.

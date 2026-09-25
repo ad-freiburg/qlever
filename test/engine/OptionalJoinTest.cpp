@@ -1231,7 +1231,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
   EXPECT_EQ(actual.numColumns(), 3);
 
   const auto& payload = actual.getColumn(2);
-  const auto& payloadBits = payload | ql::views::transform(&Id::getBits);
+  const auto& payloadBits = payload | ql::views::transform(&getIdBits);
   EXPECT_TRUE(ad_utility::contains(payloadBits, l1.getBits()));
   EXPECT_TRUE(ad_utility::contains(payloadBits, l2.getBits()));
   EXPECT_TRUE(ad_utility::contains(payloadBits, l3.getBits()));

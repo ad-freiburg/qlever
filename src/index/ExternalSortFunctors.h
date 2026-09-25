@@ -35,19 +35,18 @@ struct SortTriple {
       AD_EXPENSIVE_CHECK(a.size() >= ADDITIONAL_COLUMN_GRAPH_ID &&
                          b.size() >= ADDITIONAL_COLUMN_GRAPH_ID);
     }
-    constexpr auto compare = &Id::compareWithoutLocalVocab;
     // TODO<joka921> The manual invoking is ugly, probably we could use
     // `ql::ranges::lexicographical_compare`, but we have to carefully measure
     // that this change doesn't slow down the index build.
-    auto c1 = std::invoke(compare, a[i0], b[i0]);
+    auto c1 = std::invoke(&compareIdsWithoutLocalVocab, a[i0], b[i0]);
     if (c1 != 0) {
       return c1 < 0;
     }
-    auto c2 = std::invoke(compare, a[i1], b[i1]);
+    auto c2 = std::invoke(&compareIdsWithoutLocalVocab, a[i1], b[i1]);
     if (c2 != 0) {
       return c2 < 0;
     }
-    auto c3 = std::invoke(compare, a[i2], b[i2]);
+    auto c3 = std::invoke(&compareIdsWithoutLocalVocab, a[i2], b[i2]);
     if constexpr (!hasGraphColumn) {
       return c3 < 0;
     } else {
@@ -57,7 +56,7 @@ struct SortTriple {
       // If the triples are equal, we compare by the Graph column. This is
       // necessary to handle UPDATEs correctly.
       static constexpr auto g = ADDITIONAL_COLUMN_GRAPH_ID;
-      auto cGraph = std::invoke(compare, a[g], b[g]);
+      auto cGraph = std::invoke(&compareIdsWithoutLocalVocab, a[g], b[g]);
       return cGraph < 0;
     }
   }
