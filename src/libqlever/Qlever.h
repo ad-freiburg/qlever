@@ -102,6 +102,14 @@ struct IndexBuilderConfig : CommonConfig {
   // The default chunk size is large enough for most input sets.
   std::optional<ad_utility::MemorySize> parserBufferSize_;
 
+  // The number of rows of one block of the permutations (and of the other
+  // sorted lists of the index). It determines the granularity at which they
+  // are read: an index scan always reads whole blocks, so smaller blocks make
+  // selective scans read fewer rows, at the price of more block metadata
+  // (which is held in RAM) and a slightly larger index. The default is a
+  // compromise that favors large scans; see `DEFAULT_INDEX_ROWS_PER_BLOCK`.
+  std::optional<size_t> indexRowsPerBlock_;
+
   // Filename of a JSON file with additional settings. Examples can be seen in
   // https://github.com/ad-freiburg/qlever-control/tree/main/src/qlever/Qleverfiles
   // If empty, default settings are used.

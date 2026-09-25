@@ -118,8 +118,7 @@ class IndexImpl {
   ad_utility::MemorySize memoryLimitIndexBuilding_ =
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
-  ad_utility::MemorySize blocksizePermutationPerColumn_ =
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
+  size_t rowsPerBlock_ = DEFAULT_INDEX_ROWS_PER_BLOCK;
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
@@ -556,13 +555,9 @@ class IndexImpl {
     return parserBufferSize_;
   }
 
-  ad_utility::MemorySize& blocksizePermutationPerColumn() {
-    return blocksizePermutationPerColumn_;
-  }
+  size_t& rowsPerBlock() { return rowsPerBlock_; }
 
-  const ad_utility::MemorySize& blocksizePermutationPerColumn() const {
-    return blocksizePermutationPerColumn_;
-  }
+  const size_t& rowsPerBlock() const { return rowsPerBlock_; }
 
   void setOnDiskBase(const std::string& onDiskBase);
 
@@ -609,6 +604,12 @@ class IndexImpl {
   // useful for tooling that inspects an index on disk without loading it.
   static std::string dateOfIndexBuild(const nlohmann::json& configurationJson,
                                       const std::string& onDiskBase);
+
+  // Return the number of rows per block of the index with the given
+  // `configurationJson` (`INDEX_ROWS_PER_BLOCK_KEY`), and the default if the
+  // index was built before that key existed. Throw if the value is not between
+  // 1 and `MAX_INDEX_ROWS_PER_BLOCK`.
+  static size_t rowsPerBlock(const nlohmann::json& configurationJson);
 
   // Format the given time as a UTC timestamp string in the
   // `DATE_OF_INDEX_BUILD_FORMAT` (e.g. `2026-07-12T14:03:52Z`).
