@@ -94,7 +94,7 @@ class Operation {
   // Pointer to the `RuntimeInformation` tree; used in `signalQueryUpdate()`,
   // and reset in `createRuntimeInfoFromEstimates()`.
   std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
-  RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
+  QueryPlanningInfo queryPlanningInfo_;
 
   // Collect all the warnings that were created during the creation or
   // execution of this operation. This attribute is declared mutable in order to
@@ -328,9 +328,7 @@ class Operation {
     return _runtimeInfo;
   }
 
-  RuntimeInformationWholeQuery& getRuntimeInfoWholeQuery() {
-    return _runtimeInfoWholeQuery;
-  }
+  QueryPlanningInfo& getQueryPlanningInfo() { return queryPlanningInfo_; }
 
   // Notify the `QueryExecutionContext` of the latest `RuntimeInformation` with
   // the given `sendPriority` (`Always` or `IfDue`).

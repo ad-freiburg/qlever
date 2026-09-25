@@ -488,9 +488,11 @@ TEST(CompressedIdTableBlockStorage, theProducerIsNotBlockedByALaggingConsumer) {
   // Push everything before the consumer reads a single block. All the pushes
   // have to complete, otherwise the producer would be stuck.
   runAndPoll(ioContext, [&] { producer.storeAll(); });
-  EXPECT_THAT(
-      producer.outcomes_.wasStored_,
-      ::testing::ElementsAreArray(std::vector<bool>(numBlocks + 1, true)));
+  // NOTE: Comparing against a `std::vector<bool>` triggers a false-positive
+  // `-Warray-bounds` in GCC 12.
+  EXPECT_THAT(producer.outcomes_.wasStored_,
+              ::testing::AllOf(::testing::SizeIs(numBlocks + 1),
+                               ::testing::Each(true)));
   // Only two of the blocks fit in memory, so the rest really was spilled.
   EXPECT_GT(ql::filesystem::file_size(storage.spillFilename(0)), 0u);
   GetOutcomes gets;

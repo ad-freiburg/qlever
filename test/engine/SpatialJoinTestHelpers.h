@@ -427,7 +427,7 @@ inline auto buildQec(std::string turtleKg, bool useGeoVocab = false) {
     vocabType = ad_utility::VocabularyType{OnDiskCompressedGeoSplit};
   }
   config.vocabularyType = vocabType;
-  config.blocksizePermutations = 16_MB;
+  config.rowsPerBlock = 2'000'000;
   config.parserBufferSize = 10_kB;
   return ad_utility::testing::getQec(std::move(config));
 }
