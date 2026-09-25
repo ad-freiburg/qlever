@@ -992,8 +992,8 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   // backwards compatibility, in particular, because the QLever UI uses it
   // at many places.
   nlohmann::json jsonSuffix;
-  jsonSuffix["runtimeInformation"]["meta"] = nlohmann::ordered_json(
-      qet.getRootOperation()->getRuntimeInfoWholeQuery());
+  jsonSuffix["runtimeInformation"]["meta"] =
+      nlohmann::ordered_json(qet.getRootOperation()->getQueryPlanningInfo());
   jsonSuffix["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
   jsonSuffix["resultSizeExported"] = numBindingsExported;

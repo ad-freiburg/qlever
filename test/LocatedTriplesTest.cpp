@@ -15,7 +15,7 @@
 #include "./util/IndexTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationMetadata.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
@@ -1021,7 +1021,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
   static constexpr const char* testTurtle =
       "<a> <upp> <A> . <b> <upp> <B> . <c> <upp> <C> .";
   auto config = ad_utility::testing::TestIndexConfig{testTurtle};
-  config.blocksizePermutations = 1_kB;
+  config.rowsPerBlock = 125;
   auto* qec = ad_utility::testing::getQec(config);
 
   const auto& index = qec->getIndex().getImpl();
