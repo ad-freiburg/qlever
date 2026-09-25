@@ -184,8 +184,7 @@ class SplitVocabulary {
   // Partition marked indices into paired (`underlyingIndex`, `resultPosition`)
   // lists per marker. For each input index, extract the marker that identifies
   // the underlying vocabulary, pair its index with its position in the input,
-  // and group both by marker. Pre-reserve each marker's indices via `reserve()`
-  // to avoid reallocations during partitioning.
+  // and group both by marker.
   // _____________________________________________________________________________
   static IndicesAndPositionsByMarker partitionMarkerIndicesAndPositions(
       ql::span<const size_t> indices) {
