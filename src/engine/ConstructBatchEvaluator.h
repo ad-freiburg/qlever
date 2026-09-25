@@ -89,12 +89,6 @@ class ConstructBatchEvaluator {
       ql::span<const ColumnIndex> variableColumnIndices,
       const BatchEvaluationContext& evaluationContext,
       const LocalVocab& localVocab, const Index& index, IdCache& idCache);
-
-  // Convert the result of `ExportIds::idToStringAndType` to an `EvaluatedTerm`.
-  // Public so the (file-local) phased evaluation helpers can share the
-  // single conversion implementation.
-  static std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
-      std::optional<std::pair<std::string, const char*>>&& optStringAndType);
 };
 
 }  // namespace qlever::constructExport

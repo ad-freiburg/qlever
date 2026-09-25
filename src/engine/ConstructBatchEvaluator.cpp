@@ -99,6 +99,14 @@ void resolveColumnMisses(const Index& index, const LocalVocab& localVocab,
       ql::exportIds::idsToStringAndType(index, work.missIds_, localVocab);
 }
 
+// Convert the result of `ExportIds::idToStringAndType` to an `EvaluatedTerm`.
+std::optional<EvaluatedTerm> stringAndTypeToEvaluatedTerm(
+    std::optional<std::pair<std::string, const char*>>&& optStringAndType) {
+  if (!optStringAndType.has_value()) return std::nullopt;
+  auto& [str, type] = optStringAndType.value();
+  return std::make_shared<const EvaluatedTermData>(std::move(str), type);
+}
+
 // Phase C: insert the resolved misses into `idCache` and scatter them to
 // `work.result_`. Runs on the calling thread in column order, exactly as the
 // sequential evaluation would, so cache insertion order (and hence LRU
@@ -111,8 +119,7 @@ void scatterColumnResolved(ColumnWork& work, IdCache& idCache) {
     // moved-from outer element. `getOrCompute` invokes the factory at most
     // once, but the capture makes that a non-requirement.
     auto evaluate = [resolved = std::move(resolved)](const Id&) mutable {
-      return ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
-          std::move(resolved));
+      return stringAndTypeToEvaluatedTerm(std::move(resolved));
     };
     // `LocalVocabIndex` Ids are resolved per block but never inserted into
     // `idCache`: the `LocalVocabEntry` they point to is owned by the current
@@ -193,15 +200,6 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
   }
 
   return batchResult;
-}
-
-// _____________________________________________________________________________
-std::optional<EvaluatedTerm>
-ConstructBatchEvaluator::stringAndTypeToEvaluatedTerm(
-    std::optional<std::pair<std::string, const char*>>&& optStringAndType) {
-  if (!optStringAndType.has_value()) return std::nullopt;
-  auto& [str, type] = optStringAndType.value();
-  return std::make_shared<const EvaluatedTermData>(std::move(str), type);
 }
 
 }  // namespace qlever::constructExport
