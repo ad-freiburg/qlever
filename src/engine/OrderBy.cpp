@@ -205,7 +205,8 @@ std::optional<IdTable> OrderBy::computeResultForSortedInput(
   }
 
   // For `ORDER BY DESC`, reverse the order of the ranges and the direction of
-  // each range.
+  // each range. This yields the reverse of the result for `ORDER BY ASC`,
+  // without an extra pass over the data that reversing that result would need.
   if (isDescending) {
     ql::ranges::reverse(ranges.value());
     for (auto& range : ranges.value()) {
