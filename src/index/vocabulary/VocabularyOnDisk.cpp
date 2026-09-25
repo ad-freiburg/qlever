@@ -1,6 +1,12 @@
-// Copyright 2022, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/vocabulary/VocabularyOnDisk.h"
 
@@ -13,6 +19,7 @@
 
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
+#include "util/AdaptiveBatchController.h"
 #include "util/ExceptionHandling.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -306,7 +313,8 @@ void VocabularyOnDisk::open(const std::string& filename) {
   }
   bool preferIoUring = true;
   for (size_t i = 0; i < NUM_VOCAB_BATCH_IO_MANAGERS; ++i) {
-    ioManagers_->push(ad_utility::makeBatchManager(preferIoUring, 256,
-                                                   adaptiveBatchController));
+    ioManagers_->push(ad_utility::makeBatchManager(
+        preferIoUring, ad_utility::DEFAULT_IO_URING_RING_SIZE,
+        adaptiveBatchController));
   }
 }

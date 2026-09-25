@@ -33,6 +33,10 @@
 
 namespace ad_utility {
 
+// Default number of submission slots of an io_uring ring (and the fixed
+// submission window of a `BatchManager` without an adaptive controller).
+inline constexpr unsigned DEFAULT_IO_URING_RING_SIZE = 256;
+
 template <typename T>
 CPP_requires(ReadPolicy_,
              requires(T& policy, int fd, ql::span<const size_t> numBytes,
@@ -107,7 +111,8 @@ class BatchManager final : public BatchManagerBase {
  public:
   using BatchHandle = typename BatchManagerBase::BatchHandle;
 
-  explicit BatchManager(unsigned ringSize = 256) : policy_(ringSize) {}
+  explicit BatchManager(unsigned ringSize = DEFAULT_IO_URING_RING_SIZE)
+      : policy_(ringSize) {}
 
   BatchManager(const BatchManager&) = delete;
   BatchManager& operator=(const BatchManager&) = delete;
@@ -177,7 +182,9 @@ struct SyncIoPolicy {
   //
   // NOTE: GCC rejects `[[maybe_unused]]` on a defaulted parameter; cast to
   // void.
-  explicit SyncIoPolicy(unsigned ringSize = 256) { (void)ringSize; }
+  explicit SyncIoPolicy(unsigned ringSize = DEFAULT_IO_URING_RING_SIZE) {
+    (void)ringSize;
+  }
 
   ~SyncIoPolicy() = default;
   SyncIoPolicy(const SyncIoPolicy&) = delete;
@@ -318,7 +325,7 @@ using BatchIoManager = BatchManager<SyncIoPolicy>;
 // opts the io_uring backend into adaptive batch sizing; the default
 // (`std::nullopt`) keeps the fixed submission window.
 inline std::unique_ptr<BatchManagerBase> makeBatchManager(
-    bool& preferIoUring, unsigned ringSize = 256,
+    bool& preferIoUring, unsigned ringSize = DEFAULT_IO_URING_RING_SIZE,
     std::optional<AdaptiveBatchController> adaptiveBatchController =
         std::nullopt) {
 #ifdef QLEVER_HAS_IO_URING
