@@ -17,12 +17,21 @@
 #include <vector>
 
 #include "global/Id.h"
+#include "util/CompilerWarnings.h"
 
 #ifdef QLEVER_CHEAPER_COMPILATION
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #endif
 
+// GCC produces a false-positive `-Warray-bounds` warning for
+// `SortTriple::operator()` below: when it is instantiated for both
+// `Row<ValueId, 4>` and `Row<ValueId, 5>` in the same translation unit (and
+// inlined into `std::__insertion_sort` or `std::__adjust_heap`), GCC folds the
+// two instantiations and then believes that the `Row<5>` graph-column access
+// happens on a `Row<4>`. For why the suppression has to wrap the definition,
+// see `util/CompilerWarnings.h`.
+DISABLE_ARRAY_BOUNDS_WARNINGS
 template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
   using T = std::array<Id, 3>;
@@ -62,6 +71,7 @@ struct SortTriple {
     }
   }
 };
+GCC_REENABLE_WARNINGS
 
 using SortByPSO = SortTriple<1, 0, 2>;
 using SortByPSONoGraphColumn = SortTriple<1, 0, 2, false>;
