@@ -214,22 +214,22 @@ std::optional<IdTable> OrderBy::computeResultForSortedInput(
     }
   }
 
-  // Copy the ranges to the result, one after the other. Copy a range in
-  // reverse direction column by column (`insertAtEnd` only copies rows in
-  // their given order).
+  // Copy the ranges to the result, one after the other, column by column and
+  // each range in its direction.
   IdTable result{input.numColumns(), allocator()};
-  result.reserve(input.numRows());
+  result.resize(input.numRows());
+  size_t offset = 0;
   for (const auto& [begin, end, reversed] : ranges.value()) {
-    if (!reversed) {
-      result.insertAtEnd(input, begin, end);
-      continue;
-    }
-    size_t oldSize = result.numRows();
-    result.resize(oldSize + (end - begin));
     for (size_t i = 0; i < input.numColumns(); ++i) {
-      ql::ranges::reverse_copy(input.getColumn(i).subspan(begin, end - begin),
-                               result.getColumn(i).begin() + oldSize);
+      auto source = input.getColumn(i).subspan(begin, end - begin);
+      auto target = result.getColumn(i).begin() + offset;
+      if (reversed) {
+        ql::ranges::reverse_copy(source, target);
+      } else {
+        ql::ranges::copy(source, target);
+      }
     }
+    offset += end - begin;
   }
   return result;
 }
