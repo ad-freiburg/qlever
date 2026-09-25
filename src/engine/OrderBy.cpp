@@ -266,10 +266,11 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // whether it is beneficial to manually instantiate the comparison when
   // sorting by only one or two columns.
 
-  // TODO<joka921> In the case of a single variable, it might be more efficient
-  // to first sort by the ID values and then "repair" the resulting range by
-  // some O(n) algorithms (see `computeResultForSortedInput`), or even by
-  // returning lazy generators that yield the repaired order.
+  // TODO<joka921> In the case of a single variable whose input is not sorted
+  // by it, it might be more efficient to first sort by the ID values and then
+  // "repair" the order in linear time, like `computeResultForSortedInput` does
+  // for an input that is already sorted, or even to return lazy generators
+  // that yield the repaired order.
 
   // TODO<joka921> For proper sorting of the local vocab we also need to
   // add some logic for the proper sorting.
