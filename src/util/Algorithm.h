@@ -301,6 +301,9 @@ CPP_template(typename RandomIt, typename Tp, typename Compare)(
     gallop_lower_bound_iterator([[maybe_unused]] RandomIt first, RandomIt last,
                                 const Tp& val, Compare comp, RandomIt hint) {
   using DistanceType = typename std::iterator_traits<RandomIt>::difference_type;
+  // `first` is only needed for this check, which is compiled out unless
+  // expensive checks are enabled (hence `[[maybe_unused]]`).
+  AD_EXPENSIVE_CHECK(first <= hint && hint <= last);
   RandomIt lo = hint;
   DistanceType step = 1;
   while (true) {
@@ -327,6 +330,9 @@ CPP_template(typename RandomIt, typename Tp, typename Compare)(
     gallop_upper_bound_iterator([[maybe_unused]] RandomIt first, RandomIt last,
                                 const Tp& val, Compare comp, RandomIt hint) {
   using DistanceType = typename std::iterator_traits<RandomIt>::difference_type;
+  // `first` is only needed for this check, which is compiled out unless
+  // expensive checks are enabled (hence `[[maybe_unused]]`).
+  AD_EXPENSIVE_CHECK(first <= hint && hint <= last);
   RandomIt lo = hint;
   DistanceType step = 1;
   while (true) {
