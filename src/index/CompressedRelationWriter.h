@@ -24,6 +24,7 @@
 #include "backports/algorithm.h"
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/IdTableOrSharedIdTableView.h"
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
@@ -31,6 +32,7 @@
 #include "util/File.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/RecyclingPool.h"
 #include "util/Synchronized.h"
 #include "util/TaskQueue.h"
 #include "util/Timer.h"
@@ -76,6 +78,17 @@ class CompressedRelationWriter {
   using SmallBlocksCallback = std::function<void(IdTable)>;
   SmallBlocksCallback smallBlocksCallback_;
 
+  // A pool of block buffers whose blocks have already been written and whose
+  // memory can therefore be reused for the following blocks (see
+  // `takeBlockBuffer`). All blocks (of small as well as of large relations)
+  // have a similar size, so a single pool can serve all of them. The pool is
+  // shared, so that the two writers of a permutation pair (see
+  // `PermutationWriter`) and the `PermutationWriter` itself can use the same
+  // buffers, see `shareBlockBufferPoolWith`.
+  using BlockBufferPool = ad_utility::RecyclingPool<IdTable>;
+  std::shared_ptr<BlockBufferPool> blockBufferPool_ =
+      std::make_shared<BlockBufferPool>();
+
  public:
   /// Create using a filename, to which the relation data will be written.
   /// If `numWriterThreads` is set, it determines the number of threads that
@@ -98,6 +111,15 @@ class CompressedRelationWriter {
     std::unique_ptr<CompressedRelationWriter> writer_;
     MetadataCallback callback_;
   };
+
+  // A block of rows that is to be compressed and written by this writer. It
+  // either owns its rows (as an `IdTable`, whose buffer is then given back to
+  // the `blockBufferPool_`), or it is a non-owning view of rows that are owned
+  // elsewhere. The latter allows writing a block of a large relation directly
+  // from the input block in which its rows reside, without copying them into
+  // an intermediate buffer first, see
+  // `PermutationWriter::addRowsOfCurrentRelation`.
+  using BlockToWrite = ad_utility::IdTableOrSharedIdTableView;
 
   // The `PermutationWriter` can be used to write single or pair permutations.
   // It is defined in `CompressedRelationPermutationWriterImpl.h`.
@@ -250,7 +272,7 @@ class CompressedRelationWriter {
   // the `smallBlocksCallback_` is not empty, then
   // `smallBlocksCallback_(std::move(block))` is called AFTER the block has
   // completely been dealt with.
-  void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id, IdTable block,
+  void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id, BlockToWrite block,
                              bool invokeCallback);
 
   // Return the number of rows that a single block of small relations may hold
@@ -354,7 +376,23 @@ class CompressedRelationWriter {
   // `finishLargeRelation`.
   // * The previously called function was `addBlockForLargeRelation` with the
   // same `col0Id`.
-  void addBlockForLargeRelation(Id col0Id, IdTable relation);
+  void addBlockForLargeRelation(Id col0Id, BlockToWrite relation);
+
+  // Return an empty block buffer with room for at least `2 * blocksize()`
+  // rows, which is taken from the `blockBufferPool_` if possible (then its
+  // memory is typically already allocated). Thread-safe.
+  IdTable takeBlockBuffer();
+
+  // Use the same `blockBufferPool_` as the `other` writer.
+  void shareBlockBufferPoolWith(const CompressedRelationWriter& other) {
+    blockBufferPool_ = other.blockBufferPool_;
+  }
+
+  // Return the `blockBufferPool_`, e.g. to give buffers back to it via
+  // `BlockBufferPool::makeRecyclingOwner`.
+  const std::shared_ptr<BlockBufferPool>& blockBufferPool() const {
+    return blockBufferPool_;
+  }
 
   // This function must be called after all blocks of a large relation have been
   // added via `addBlockForLargeRelation` before any other function may be

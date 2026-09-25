@@ -11,6 +11,9 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
 
+#include <array>
+#include <optional>
+
 #include "index/CompressedRelationWriter.h"
 #include "util/ExceptionHandling.h"
 
@@ -19,26 +22,47 @@ namespace compressedRelationHelpers {
 static constexpr size_t c1Idx = 1;
 static constexpr size_t c2Idx = 2;
 
+// Return the binary representation of the given `id` and make sure (using
+// `AD_EXPENSIVE_CHECK`) that it can be compared bitwise, which should always be
+// true for index building, because there are no `Id`s of a local vocabulary
+// then. Comparing the bits is much cheaper than the general comparison of
+// `Id`s, and (in contrast to the latter) it can be vectorized.
+inline Id::T bitsOfIdWithoutLocalVocab(Id id) {
+  AD_EXPENSIVE_CHECK(id.canBeComparedBitwise());
+  return id.getBits();
+}
+
 // Compares two rows based on the second, third and fourth column only (it
-// ignores the first column as well as any payload columns).
+// ignores the first column as well as any payload columns). The comparison is
+// performed on the bits of the `Id`s, see `bitsOfIdWithoutLocalVocab` above.
 struct ComparatorForConstCol0 {
+  // Pick the bits of the cells that this comparator looks at. The resulting
+  // `std::array`s compare lexicographically, which is exactly the desired
+  // order. Note: In a micro benchmark (sorting 5M rows with various
+  // distributions of duplicates) materializing the arrays was as fast as a
+  // handwritten comparison of the bits with an early exit, and both were
+  // 20-35% faster than comparing the `Id`s themselves.
+  template <typename Row>
+  static std::array<Id::T, 3> pickBits(const Row& row) {
+    return {bitsOfIdWithoutLocalVocab(row[c1Idx]),
+            bitsOfIdWithoutLocalVocab(row[c2Idx]),
+            bitsOfIdWithoutLocalVocab(row[ADDITIONAL_COLUMN_GRAPH_ID])};
+  }
+
   template <typename A, typename B>
   bool operator()(const A& a, const B& b) const {
-    return std::tie(a[c1Idx], a[c2Idx], a[ADDITIONAL_COLUMN_GRAPH_ID]) <
-           std::tie(b[c1Idx], b[c2Idx], b[ADDITIONAL_COLUMN_GRAPH_ID]);
+    return pickBits(a) < pickBits(b);
   }
 };
 
 // Helper function to make a row from `IdTable` easier to compare. This selects
-// the binary representation of the cells of the given row with the indices 0, 1
-// and 2 and makes sure (using `AD_EXPENSIVE_CHECK`) that the resulting `Id`s
-// can be compared bitwise, which should always be true for index building. This
-// way comparison becomes really cheap.
+// the binary representation (see `bitsOfIdWithoutLocalVocab` above) of the
+// cells of the given row with the indices 0, 1 and 2. This way comparison
+// becomes really cheap.
 inline auto pickFirstThreeColumnsOfIdsWithoutLocalVocab = [](const auto& row) {
-  std::array result{row[0].getBits(), row[1].getBits(), row[2].getBits()};
-  AD_EXPENSIVE_CHECK(
-      ql::ranges::all_of(result, &Id::canBeComparedBitwise, &Id::fromBits));
-  return result;
+  return std::array{bitsOfIdWithoutLocalVocab(row[0]),
+                    bitsOfIdWithoutLocalVocab(row[1]),
+                    bitsOfIdWithoutLocalVocab(row[2])};
 };
 
 // Collect elements of type `T` in batches of size 100'000 and apply the
@@ -118,26 +142,66 @@ class PairMetadataWriter {
   }
 };
 
-// A simple class to count distinct IDs in a sorted sequence.
-class DistinctIdCounter {
-  Id lastSeen_ = std::numeric_limits<Id>::max();
+// The number of distinct IDs in a sorted column of a single block, together
+// with the first and the last ID of that column. The latter two are needed to
+// correct the count at the boundary between two consecutive blocks, where an ID
+// that ends the one block and starts the other must not be counted twice.
+struct DistinctIdCountOfBlock {
   size_t count_ = 0;
+  Id first_ = Id::makeUndefined();
+  Id last_ = Id::makeUndefined();
+};
+
+// Return the `DistinctIdCountOfBlock` of the `column`, which has to be sorted
+// and must not be empty.
+inline DistinctIdCountOfBlock countDistinctIds(ql::span<const Id> column) {
+  AD_CORRECTNESS_CHECK(!column.empty());
+  size_t count = 1;
+  // Note: The comparison of the bits (instead of the general comparison of
+  // `Id`s) is not only much cheaper per element, it also makes this loop
+  // vectorizable, which matters because it touches every single ID.
+  for (size_t i = 1; i < column.size(); ++i) {
+    count += static_cast<size_t>(bitsOfIdWithoutLocalVocab(column[i]) !=
+                                 bitsOfIdWithoutLocalVocab(column[i - 1]));
+  }
+  return {count, column.front(), column.back()};
+}
+
+// Count the distinct IDs in a sorted sequence of IDs that is split into several
+// consecutive blocks, which are added one after the other via `addBlock`.
+class DistinctIdCounter {
+  size_t count_ = 0;
+  // The last ID of the previously added block, which must not be counted again
+  // if the next block starts with it.
+  std::optional<Id> lastIdOfPreviousBlock_;
 
  public:
-  // ___________________________________________________________________________
-  void operator()(Id id) {
-    count_ += static_cast<size_t>(id != lastSeen_);
-    lastSeen_ = id;
+  // Add the `column` of the next block, which has to be sorted, and whose
+  // first ID must not be smaller than the last ID of the previous block. An
+  // empty `column` is ignored.
+  void addBlock(ql::span<const Id> column) {
+    if (column.empty()) {
+      return;
+    }
+    DistinctIdCountOfBlock countOfBlock = countDistinctIds(column);
+    count_ += countOfBlock.count_;
+    if (lastIdOfPreviousBlock_.has_value() &&
+        bitsOfIdWithoutLocalVocab(lastIdOfPreviousBlock_.value()) ==
+            bitsOfIdWithoutLocalVocab(countOfBlock.first_)) {
+      --count_;
+    }
+    lastIdOfPreviousBlock_ = countOfBlock.last_;
   }
 
   // Reset the counter, so that it can be reused for the next relation. Use
   // this instead of `getAndReset` if the count itself is not needed.
   void reset() {
-    lastSeen_ = std::numeric_limits<Id>::max();
     count_ = 0;
+    lastIdOfPreviousBlock_.reset();
   }
 
-  // ___________________________________________________________________________
+  // Return the number of distinct IDs in all the blocks that have been added
+  // since the last reset, and reset the counter.
   size_t getAndReset() {
     auto count = count_;
     reset();

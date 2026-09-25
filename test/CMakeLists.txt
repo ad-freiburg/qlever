@@ -478,6 +478,8 @@ addLinkAndDiscoverTest(ComparisonWithNanTest)
 
 addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
 
+addLinkAndDiscoverTestNoLibs(RecyclingPoolTest)
+
 addLinkAndDiscoverTest(IdTableHelpersTest)
 
 addLinkAndDiscoverTest(GeneratorTest)

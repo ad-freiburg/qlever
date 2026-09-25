@@ -2511,33 +2511,102 @@ TEST(CompressedRelationWriter, directlyWrittenSmallRelationWithGraphs) {
   }
 }
 
+// The number of distinct `col1` IDs of a large relation is counted per block,
+// so an ID that ends one block and also starts the
+// next block must not be counted twice.
 // _____________________________________________________________________________
-TEST(DistinctIdCounter, resetClearsCountAndLastSeenId) {
+TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
+  // A block size of 80 bytes means 10 triples per block.
+  std::vector<RelationInput> inputs;
+  // 30 rows with 10 distinct `col1` IDs, each of which occurs three times. The
+  // blocks end after 10, 20, and 30 rows, so the `col1` IDs `3` and `6` each
+  // occur in two consecutive blocks.
+  std::vector<RowInput> rowsOfFirstRelation;
+  for (int j = 0; j < 30; ++j) {
+    rowsOfFirstRelation.push_back({j / 3, j, 17});
+  }
+  inputs.push_back(RelationInput{1, std::move(rowsOfFirstRelation)});
+  // 15 rows with 3 distinct `col1` IDs, none of which spans two blocks.
+  std::vector<RowInput> rowsOfSecondRelation;
+  for (int j = 0; j < 15; ++j) {
+    rowsOfSecondRelation.push_back({j / 5, j, 17});
+  }
+  inputs.push_back(RelationInput{2, std::move(rowsOfSecondRelation)});
+
+  checkPermutationIsIndependentOfInputBlockSize(
+      inputs, 80_B, inputBlockSizesForPathEquivalence);
+
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto result = buildPermutation(inputs, 80_B, 1000, filename);
+  ASSERT_EQ(result.largeRelationMetadata_.size(), 2);
+  const auto& metadata1 = result.largeRelationMetadata_.at(0);
+  EXPECT_EQ(metadata1.col0Id_, V(1));
+  EXPECT_EQ(metadata1.numRows_, 30);
+  EXPECT_FLOAT_EQ(metadata1.multiplicityCol1_,
+                  CompressedRelationWriter::computeMultiplicity(30, 10));
+  const auto& metadata2 = result.largeRelationMetadata_.at(1);
+  EXPECT_EQ(metadata2.col0Id_, V(2));
+  EXPECT_EQ(metadata2.numRows_, 15);
+  EXPECT_FLOAT_EQ(metadata2.multiplicityCol1_,
+                  CompressedRelationWriter::computeMultiplicity(15, 3));
+}
+
+// _____________________________________________________________________________
+TEST(CountDistinctIds, countAndBoundaryIds) {
+  using compressedRelationHelpers::countDistinctIds;
+  auto count = [](const std::vector<Id>& ids) {
+    return countDistinctIds(ql::span<const Id>{ids});
+  };
+
+  {
+    auto result = count({V(1)});
+    EXPECT_EQ(result.count_, 1);
+    EXPECT_EQ(result.first_, V(1));
+    EXPECT_EQ(result.last_, V(1));
+  }
+  {
+    auto result = count({V(1), V(1), V(2), V(2), V(2), V(5)});
+    EXPECT_EQ(result.count_, 3);
+    EXPECT_EQ(result.first_, V(1));
+    EXPECT_EQ(result.last_, V(5));
+  }
+  {
+    // All IDs equal.
+    auto result = count({V(3), V(3), V(3)});
+    EXPECT_EQ(result.count_, 1);
+    EXPECT_EQ(result.first_, V(3));
+    EXPECT_EQ(result.last_, V(3));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(DistinctIdCounter, blocksAndReset) {
   compressedRelationHelpers::DistinctIdCounter counter;
+  auto addBlock = [&counter](const std::vector<Id>& ids) {
+    counter.addBlock(ql::span<const Id>{ids});
+  };
   // A fresh counter has counted nothing.
   EXPECT_EQ(counter.getAndReset(), 0);
 
-  counter(V(1));
-  counter(V(1));
-  counter(V(2));
-  EXPECT_EQ(counter.getAndReset(), 2);
+  // An ID that ends one block and starts the next one is counted only once,
+  // and empty blocks are ignored.
+  addBlock({V(1), V(1), V(2)});
+  addBlock({});
+  addBlock({V(2), V(3)});
+  addBlock({V(4)});
+  EXPECT_EQ(counter.getAndReset(), 4);
 
-  // `getAndReset` also clears the "last seen" ID, so feeding `V(2)` again
-  // counts it as distinct.
-  counter(V(2));
-  counter(V(2));
+  // `getAndReset` also clears the last ID of the previous block, so feeding
+  // `V(4)` again counts it as distinct.
+  addBlock({V(4), V(4)});
   EXPECT_EQ(counter.getAndReset(), 1);
 
-  // `reset` clears the count.
-  counter(V(3));
-  counter(V(4));
+  // `reset` clears the count and the last ID of the previous block.
+  addBlock({V(5), V(6)});
   counter.reset();
   EXPECT_EQ(counter.getAndReset(), 0);
-
-  // `reset` also clears the "last seen" ID, so feeding `V(4)` again counts it
-  // as distinct.
-  counter(V(4));
+  addBlock({V(6)});
   counter.reset();
-  counter(V(4));
+  addBlock({V(6)});
   EXPECT_EQ(counter.getAndReset(), 1);
 }
