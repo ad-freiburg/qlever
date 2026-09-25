@@ -1,0 +1,1 @@
+addLinkAndDiscoverTestNoLibs(BlockIndirectSortTest qlever_util)

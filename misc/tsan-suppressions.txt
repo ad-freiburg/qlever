@@ -23,3 +23,18 @@
 # other thread runs `delete`, so it does not appear in the deleting stack.
 race:boost::asio::detail::ref_count_down
 race:boost::asio::execution::detail::shared_target_executor::~shared_target_executor
+
+# False positive in libstdc++ (observed with the one of GCC 13). An exception
+# that is passed between threads via `std::exception_ptr` (e.g. by
+# `std::future`, by the coroutines of Boost.Asio, or by
+# `ad_utility::blockSort::detail::TaskGroup`) is freed by whichever thread
+# releases the last reference. The reference count is maintained inside
+# `libstdc++.so`, which is not instrumented, so TSAN does not see that the
+# release synchronizes with the other threads, and reports the freeing of the
+# exception object (via `exception_ptr::_M_release`) and of the message of a
+# `std::runtime_error` (via its destructor) as a data race with an earlier read
+# of the exception by another thread, for example of its `what()` in a `catch`
+# block. The code itself is correct, sharing exceptions between threads via
+# `std::exception_ptr` is explicitly allowed.
+race:std::__exception_ptr::exception_ptr::_M_release
+race:std::runtime_error::~runtime_error
