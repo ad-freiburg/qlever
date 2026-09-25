@@ -134,8 +134,9 @@ class BatchManager final : public BatchManagerBase {
   void wait(BatchHandle handle) override { policy_.wait(handle); }
 
   // Enable adaptive batch sizing on the policy. Only policies with
-  // controller support (`IoUringPolicy`) accept it; for others
-  // (`SyncIoPolicy`, whose blocking reads have nothing to pace) it throws.
+  // controller support (`IoUringPolicy`) accept it; for policies without a
+  // `setAdaptiveBatchController` member (`SyncIoPolicy`, whose blocking
+  // reads have nothing to pace) this method throws.
   void setAdaptiveBatchController(AdaptiveBatchController controller) {
     if constexpr (HasAdaptiveBatchControllerSetter<ReadPolicy>::value) {
       policy_.setAdaptiveBatchController(std::move(controller));
@@ -146,8 +147,9 @@ class BatchManager final : public BatchManagerBase {
     }
   }
 
-  // The policy's controller, or `std::nullopt` when adaptive batch sizing
-  // is disabled or the policy has no controller support (`SyncIoPolicy`).
+  // Return the policy's controller, or `std::nullopt` when adaptive batch
+  // sizing is disabled or the policy has no `adaptiveBatchController`
+  // member (`SyncIoPolicy`).
   [[nodiscard]] std::optional<AdaptiveBatchController> adaptiveBatchController()
       const {
     if constexpr (HasAdaptiveBatchControllerGetter<ReadPolicy>::value) {
@@ -349,8 +351,6 @@ inline std::unique_ptr<BatchManagerBase> makeBatchManager(
   }
 #else
   preferIoUring = false;
-  // Keep `-Werror=unused-parameter` quiet in builds without io_uring.
-  (void)adaptiveBatchController;
 #endif
   // The synchronous fallback performs blocking reads, which have nothing to
   // pace. Say so loudly when a controller was requested: silently dropping

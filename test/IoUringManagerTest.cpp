@@ -817,6 +817,23 @@ TEST(AdaptiveBatchControllerPolicy, syncPolicyRejectsController) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       manager.setAdaptiveBatchController(ad_utility::AdaptiveBatchController{}),
       HasSubstr("not supported by this read policy"));
+  EXPECT_FALSE(manager.adaptiveBatchController().has_value());
+}
+
+// A controller passed to `makeBatchManager` together with the synchronous
+// backend is ignored (with a warning) instead of throwing, and the manager
+// still performs correct reads.
+TEST(MakeBatchManager, syncBackendIgnoresAdaptiveController) {
+  bool preferIoUring = false;
+  auto manager = ad_utility::makeBatchManager(
+      preferIoUring, ad_utility::DEFAULT_IO_URING_RING_SIZE,
+      ad_utility::AdaptiveBatchController{});
+  ASSERT_NE(manager, nullptr);
+  EXPECT_FALSE(preferIoUring);
+  EXPECT_NE(dynamic_cast<ad_utility::BatchManager<ad_utility::SyncIoPolicy>*>(
+                manager.get()),
+            nullptr);
+  expectManagerWorks(*manager);
 }
 
 // With `preferIoUring == true`, the backend depends on the runtime
