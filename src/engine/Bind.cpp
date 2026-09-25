@@ -131,8 +131,8 @@ Result Bind::computeResult(bool requestLaziness) {
 
   if (subRes->isFullyMaterialized()) {
     if (requestLaziness && subRes->idTableView().size() > CHUNK_SIZE) {
-      ad_utility::ChunkedIotaView chunks{
-          size_t{0}, subRes->idTableView().size(), CHUNK_SIZE};
+      auto chunks = ad_utility::chunkedIotaView(
+          size_t{0}, subRes->idTableView().size(), CHUNK_SIZE);
       auto f = [applyBind = std::move(applyBind),
                 subRes = std::move(subRes)](const auto& chunk) {
         // Make a deep copy of the local vocab from `subRes` and then add to it

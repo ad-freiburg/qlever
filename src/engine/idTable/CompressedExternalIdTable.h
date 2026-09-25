@@ -82,8 +82,7 @@ class CompressedExternalIdTableWriter {
 
   // For each block (indexed exactly like the `ColumnMetadata` of a single
   // column), the first and the last row of that block. This metadata is
-  // required for the parallel merger. It lives in RAM only and is never
-  // serialized, so adding it does not change the index format.
+  // required for the parallel merger.
   std::vector<std::pair<IdTable::row_type, IdTable::row_type>>
       firstAndLastRowPerBlock_;
 
@@ -143,7 +142,7 @@ class CompressedExternalIdTableWriter {
     // The `[lower, upper)` row ranges of the blocks into which the `table` is
     // split. It is defined once and used by both loops below, such that the
     // first and last rows that are stored always match the stored blocks.
-    ChunkedIotaView blockRanges{size_t{0}, table.numRows(), blockSize};
+    auto blockRanges = chunkedIotaView(size_t{0}, table.numRows(), blockSize);
     // Store the first and the last row of each block, which a merge of the runs
     // needs to split them into disjoint ranges, see
     // `firstAndLastRowPerBlock_`. This cannot be done inside the per-column
@@ -1136,7 +1135,7 @@ class CompressedExternalIdTableSorter
                          })};
       }
       auto chunked =
-          ChunkedIotaView{size_t{0}, block.numRows(), blocksizeOutput} |
+          chunkedIotaView(size_t{0}, block.numRows(), blocksizeOutput) |
           ql::views::transform([&](const auto& chunk) {
             auto [chunkStart, chunkEnd] = chunk;
             auto curBlock = IdTableStatic<NumStaticCols>(
