@@ -275,9 +275,6 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // TODO<joka921> For proper sorting of the local vocab we also need to
   // add some logic for the proper sorting.
 
-  // TODO<joka921> Undefined values should always be at the end, no matter
-  // if the ordering is ascending or descending.
-
   // TODO<joka921> If we know, that all the sort columns contain only datatypes
   // for which the `internal` order is also the `semantic` order, or if a column
   // only contains a single datatype, then we can use more efficient
