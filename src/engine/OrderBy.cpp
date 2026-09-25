@@ -71,12 +71,19 @@ size_t OrderBy::getCostEstimate() {
   // Return a linear cost if there is a single sort column and the input is
   // already sorted by it (the result can then often be computed in linear
   // time, see `computeResultForSortedInput`).
+  //
+  // NOTE: Whether the fast path applies is only known when the column is
+  // computed (it must contain only ints or only doubles). If it does not, the
+  // cost is underestimated, which is acceptable because the alternative plans
+  // then need the same full sort.
   if (hasSingleSortColumnWithSortedInput()) {
     return size + subcost;
   }
 
   // Otherwise, return the cost of sorting, `n log n`, plus the cost of the
-  // input. NOTE: `logb(0)` is `-inf`, which must not be cast to an integer.
+  // input.
+  //
+  // NOTE: `logb(0)` is `-inf`, which must not be cast to an integer.
   size_t logSize = std::max(
       size_t(1), static_cast<size_t>(
                      logb(static_cast<double>(std::max(size, size_t(1))))));
