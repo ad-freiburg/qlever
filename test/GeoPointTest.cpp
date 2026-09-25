@@ -207,3 +207,23 @@ TEST(GeoPoint, Hashing) {
   ad_utility::HashSet<GeoPoint> set{g1, g2};
   EXPECT_THAT(set, ::testing::UnorderedElementsAre(g1, g2));
 }
+
+// _____________________________________________________________________________
+TEST(GeoPoint, quantizeCoordinate) {
+  using T = GeoPoint::T;
+  constexpr T max = GeoPoint::maxCoordinateEncoded;
+  EXPECT_EQ(GeoPoint::quantizeCoordinate(-90, 90), 0u);
+  EXPECT_EQ(GeoPoint::quantizeCoordinate(90, 90), max);
+  EXPECT_DOUBLE_EQ(GeoPoint::dequantizeCoordinate(0, 180), -180);
+  EXPECT_DOUBLE_EQ(GeoPoint::dequantizeCoordinate(max, 180), 180);
+  // The quantization is idempotent.
+  for (T q : {T{0}, T{1}, T{123456789}, max}) {
+    EXPECT_EQ(
+        GeoPoint::quantizeCoordinate(GeoPoint::dequantizeCoordinate(q, 90), 90),
+        q);
+  }
+  // Values out of range violate the preconditions.
+  EXPECT_ANY_THROW(GeoPoint::quantizeCoordinate(-90.5, 90));
+  EXPECT_ANY_THROW(GeoPoint::quantizeCoordinate(90.5, 90));
+  EXPECT_ANY_THROW(GeoPoint::dequantizeCoordinate(max + 1, 90));
+}
