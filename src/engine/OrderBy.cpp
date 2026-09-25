@@ -125,10 +125,10 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
   // Return the index of the first row in `[begin, end)` for which the
   // `predicate` is false. The predicate must be monotone on that range.
   auto partitionPoint = [&column](size_t begin, size_t end, auto predicate) {
-    return static_cast<size_t>(std::partition_point(column.begin() + begin,
-                                                    column.begin() + end,
-                                                    predicate) -
-                               column.begin());
+    return static_cast<size_t>(
+        ql::ranges::partition_point(column.begin() + begin,
+                                    column.begin() + end, predicate) -
+        column.begin());
   };
 
   // Find the first row that is not `Undefined` (the `Undefined` values come
@@ -136,8 +136,7 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
   // there is no such row, if the rows from there have more than one datatype
   // (the column is grouped by datatype, so it suffices to compare the first and
   // the last of them), or if that datatype is neither `Int` nor `Double`.
-  size_t firstDefined =
-      partitionPoint(0, column.size(), [](Id id) { return id.isUndefined(); });
+  size_t firstDefined = partitionPoint(0, column.size(), &Id::isUndefined);
   if (firstDefined == column.size()) {
     return std::nullopt;
   }
