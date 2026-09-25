@@ -241,13 +241,10 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // TODO<joka921> This is the most common case. There are many other cases
   // where the generic `zipperJoinWithUndef` can be optimized. We will those
   // for a later PR.
-  // Lambda, not `&Id::isUndefined`: proxy column elements don't support
-  // pointer-to-member dispatch (see `IdColumn.h`).
-  auto isUndefined = [](const Id& id) { return id.isUndefined(); };
   bool isCheap = ql::ranges::none_of(joinColumns, [&](const auto& jcs) {
     auto [leftCol, rightCol] = jcs;
-    return (ql::ranges::any_of(right.getColumn(rightCol), isUndefined)) ||
-           (ql::ranges::any_of(left.getColumn(leftCol), isUndefined));
+    return ql::ranges::any_of(right.getColumn(rightCol), &isUndefinedId) ||
+           ql::ranges::any_of(left.getColumn(leftCol), &isUndefinedId);
   });
 
   auto checkCancellationLambda = [this] { checkCancellation(); };

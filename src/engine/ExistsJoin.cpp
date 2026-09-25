@@ -174,15 +174,12 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   // a future PR.
   size_t numJoinColumns = joinColumnsLeft.numColumns();
   AD_CORRECTNESS_CHECK(numJoinColumns == joinColumnsRight.numColumns());
-  // Lambda, not `&Id::isUndefined`: proxy column elements don't support
-  // pointer-to-member dispatch (see `IdColumn.h`).
-  auto isUndefined = [](const Id& id) { return id.isUndefined(); };
   bool isCheap = ql::ranges::none_of(
       ad_utility::integerRange(numJoinColumns), [&](const auto& col) {
         return (ql::ranges::any_of(joinColumnsRight.getColumn(col),
-                                   isUndefined)) ||
+                                   &isUndefinedId)) ||
                (ql::ranges::any_of(joinColumnsLeft.getColumn(col),
-                                   isUndefined));
+                                   &isUndefinedId));
       });
 
   // Nothing to do for the actual matches.

@@ -128,12 +128,9 @@ auto Minus::makeUndefRangesChecker(bool left,
         bool colAlwaysDefined =
             info.mightContainUndef_ ==
             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
-        // Lambda, not `&Id::isUndefined`: proxy column elements don't
-        // support pointer-to-member dispatch (see `IdColumn.h`).
         return colAlwaysDefined ||
-               ql::ranges::none_of(
-                   idTable.getColumn(tableColumn),
-                   [](const Id& id) { return id.isUndefined(); });
+               ql::ranges::none_of(idTable.getColumn(tableColumn),
+                                   &isUndefinedId);
       });
   // Use expensive operation if one of the columns might contain undef.
   using RT = std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>;

@@ -21,6 +21,18 @@ using Score = float;
 // or destructor to `ValueId`.
 static_assert(std::is_trivially_copyable_v<Id>);
 
+// Lambda, not `&Id::<function>`: proxy column elements
+// don't support pointer-to-member dispatch (see `IdColumn.h`). The
+// lambda's `const Id&` parameters trigger the proxy's implicit
+// conversion to `Id` instead.
+inline bool isUndefinedId(const Id& id) { return id.isUndefined(); }
+
+inline auto compareIdsWithoutLocalVocab(const Id& a, const Id& b) {
+  return a.compareWithoutLocalVocab(b);
+}
+
+inline auto getIdBits(const Id& id) { return id.getBits(); }
+
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;
 
