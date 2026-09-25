@@ -1,4 +1,8 @@
 FROM ubuntu:24.04
-RUN chown -R 0:0 / \
+# Skip read-only bind mounts (/etc/hosts, /etc/resolv.conf, /etc/hostname)
+# and other filesystems (/proc, /sys): a plain 'chown -R 0:0 /' exits 1 on
+# them. Same pattern as misc/ci-images/Containerfile.*.
+RUN find / -xdev \( -path /etc/hosts -o -path /etc/hostname -o -path /etc/resolv.conf \) -prune \
+    -o -exec chown 0:0 {} + 2>/dev/null || true \
  && chmod 640 /etc/shadow /etc/gshadow \
  && echo BASE-CLONE-OK
