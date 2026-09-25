@@ -56,7 +56,7 @@ auto QLeverResourceAttributesExist() {
         testing::VariantWith<std::string>(testing::Not(testing::IsEmpty()))));
   }));
 }
-};  // namespace
+}  // namespace
 
 // _____________________________________________________________________________
 TEST(Metrics, resourceAttributesContainBuildInformation) {
@@ -82,8 +82,8 @@ TEST(Metrics, sharedResourceImpl) {
         auto attributes =
             ad_utility::metrics::detail::sharedResourceImpl().GetAttributes();
         EXPECT_THAT(attributes, QLeverResourceAttributesExist());
-        // The service name is read by the OTEL sdk from the environment
-        // variables. Only if no service name is set via `qlever` is injected.
+        // The OTEL SDK reads the service name from the environment
+        // variables. Only if none is set there, `qlever` is used.
         EXPECT_THAT(attributes, testing::Contains(testing::Pair(
                                     semconv::service::kServiceName,
                                     testing::VariantWith<std::string>(

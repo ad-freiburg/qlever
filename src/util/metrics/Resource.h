@@ -12,6 +12,8 @@
 
 #include <opentelemetry/sdk/resource/resource.h>
 
+#include <string_view>
+
 namespace ad_utility::metrics {
 
 constexpr std::string_view DEFAULT_SERVICE_NAME = "qlever";

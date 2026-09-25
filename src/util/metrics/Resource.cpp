@@ -9,20 +9,12 @@
 
 #include "util/metrics/Resource.h"
 
-#include <absl/strings/str_split.h>
-#include <absl/strings/strip.h>
-#include <opentelemetry/sdk/common/env_variables.h>
 #include <opentelemetry/sdk/resource/resource_detector.h>
 #include <opentelemetry/semconv/service_attributes.h>
 
-#include <string>
-#include <string_view>
-
 #include "CompilationInfo.h"
-#include "backports/algorithm.h"
 
 namespace resource_sdk = opentelemetry::sdk::resource;
-namespace otel_common = opentelemetry::sdk::common;
 namespace semconv = opentelemetry::semconv;
 
 namespace ad_utility::metrics {
@@ -55,9 +47,8 @@ resource_sdk::ResourceAttributes detail::qleverResourceAttributes() {
 // _____________________________________________________________________________
 resource_sdk::Resource detail::sharedResourceImpl() {
   return resource_sdk::Resource::GetDefault()
-      // `service.name` is a required attribute. Provide a default that is
-      // be overwritten by user provided values (`OTELResourceDetector`) if
-      // provided.
+      // `service.name` is a required attribute. Provide a default, which is
+      // overwritten by a user-provided value (see `OTELResourceDetector`).
       .Merge(resource_sdk::Resource(
           {{semconv::service::kServiceName, DEFAULT_SERVICE_NAME}}))
       .Merge(resource_sdk::OTELResourceDetector().Detect())
