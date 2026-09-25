@@ -72,10 +72,11 @@ size_t OrderBy::getCostEstimate() {
   // already sorted by it (the result can then often be computed in linear
   // time, see `computeResultForSortedInput`).
   //
-  // NOTE: Whether the fast path applies is only known when the column is
-  // computed (it must contain only ints or only doubles). If it does not, the
-  // cost is underestimated, which is acceptable because the alternative plans
-  // then need the same full sort.
+  // NOTE: Whether the fast path applies is only known at runtime (the column
+  // must contain only ints or only doubles). If it does not, the cost is
+  // underestimated, and the input is sorted as before. This only matters if
+  // the planner chose a sorted subtree that is more expensive than an unsorted
+  // alternative.
   if (hasSingleSortColumnWithSortedInput()) {
     return size + subcost;
   }
