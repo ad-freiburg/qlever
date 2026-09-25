@@ -179,6 +179,12 @@ CPP_template(typename UnderlyingVocabulary,
   // trimming or batch compaction is worthwhile.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
+    if constexpr (underlyingHasHoles) {
+      // The underlying batch lookup reports a hole as an uncompressed
+      // placeholder, which must not be decompressed. `operator[]` handles the
+      // holes correctly, so look up each word individually.
+      return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    }
     auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
 
     AD_CORRECTNESS_CHECK(compressedWords->size() == indices.size());
