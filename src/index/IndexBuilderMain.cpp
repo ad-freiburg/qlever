@@ -20,7 +20,6 @@
 #include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
-#include "util/GlobalExecutor.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"
@@ -382,11 +381,6 @@ int main(int argc, char** argv) {
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
     config.validate();
-    // Make the permutation writer, which runs on the global thread pool,
-    // respect the `--num-threads / -j` option. This has to happen before the
-    // index build starts, because the pool is created on its first use and its
-    // size cannot be changed afterwards.
-    ad_utility::setGlobalExecutorNumThreads(config.numThreads_);
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "

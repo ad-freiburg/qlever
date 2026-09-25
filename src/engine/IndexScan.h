@@ -8,6 +8,7 @@
 #include <string>
 
 #include "engine/Operation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/DeltaTriples.h"
 #include "util/HashMap.h"
 

@@ -1,6 +1,11 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 The QLever Authors, in particular:
+//
+// 2023 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
@@ -10,8 +15,9 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "global/Constants.h"
-#include "index/CompressedRelation.h"
 #include "index/CompressedRelationHelpersImpl.h"
+#include "index/CompressedRelationReader.h"
+#include "index/CompressedRelationWriter.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "util/GlobalExecutor.h"
@@ -139,7 +145,7 @@ void checkThatTablesAreEqual(const Expected& expected, const IdTable& actual,
 
 // If the `inputs` have no graph column (because the corresponding tests don't
 // care about named graphs), add a constant dummy graph column, such that the
-// assertions inside `CompressedRelation.cpp` (which always expect a graph
+// assertions inside `CompressedRelationWriter.cpp` (which always expect a graph
 // column) work.
 auto addGraphColumnIfNecessary(std::vector<RelationInput>& inputs) {
   size_t numColumns = getNumColumns(inputs) + 1;

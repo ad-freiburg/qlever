@@ -9,13 +9,14 @@
 
 #include "util/GlobalExecutor.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <algorithm>
 #include <boost/asio/thread_pool.hpp>
 #include <mutex>
 #include <thread>
 
 #include "util/Exception.h"
-#include "util/Log.h"
 
 namespace ad_utility {
 
@@ -23,6 +24,13 @@ namespace {
 
 // The configuration of the global thread pool. All its members are protected by
 // the `mutex_`.
+//
+// NOTE: Two atomics would not do instead of the mutex, because the creation of
+// the pool has to mark the configuration as final and read the number of
+// threads in one step. Otherwise a concurrent `setGlobalExecutorNumThreads`
+// could pass its check and change the number after the pool has read it, and
+// `globalExecutorNumThreads()` would then report a number that the pool does
+// not have.
 struct GlobalExecutorConfig {
   std::mutex mutex_;
   // The number of threads that the pool has or will have.
@@ -43,19 +51,26 @@ GlobalExecutorConfig& config() {
 }  // namespace
 
 // _____________________________________________________________________________
-void setGlobalExecutorNumThreads(size_t numThreads) {
+bool trySetGlobalExecutorNumThreads(size_t numThreads) {
   AD_CONTRACT_CHECK(numThreads > 0);
   auto& conf = config();
   std::lock_guard lock{conf.mutex_};
   if (conf.poolWasCreated_) {
-    AD_LOG_WARN << "The number of threads of the global thread pool was set to "
-                << numThreads
-                << " after the pool had already been created with "
-                << conf.numThreads_ << " threads; the new setting is ignored"
-                << std::endl;
-    return;
+    return conf.numThreads_ == numThreads;
   }
   conf.numThreads_ = numThreads;
+  return true;
+}
+
+// _____________________________________________________________________________
+void setGlobalExecutorNumThreads(size_t numThreads) {
+  if (!trySetGlobalExecutorNumThreads(numThreads)) {
+    AD_THROW(absl::StrCat(
+        "The number of threads of the global thread pool must not be set after "
+        "the pool has already been accessed: it was set to ",
+        numThreads, ", but the pool had already been created with ",
+        globalExecutorNumThreads(), " threads"));
+  }
 }
 
 // _____________________________________________________________________________
@@ -66,7 +81,7 @@ size_t globalExecutorNumThreads() {
 }
 
 // _____________________________________________________________________________
-boost::asio::any_io_executor globalExecutor() {
+ql::any_io_executor globalExecutor() {
   // NOTE: The initialization of a function-local static is thread-safe, so the
   // lambda (and with it the marking of the configuration as final) runs exactly
   // once.
