@@ -14,6 +14,7 @@
 
 #include "../../util/GTestHelpers.h"
 #include "../../util/MmapVectorLegacyFormat.h"
+#include "../../util/RuntimeParametersTestHelpers.h"
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
@@ -264,6 +265,31 @@ TEST(VocabularyOnDisk, ScanAllSingleWordExceedsLimit) {
 TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
   auto vocab = createExampleVocabulary();
   std::array<size_t, 8> indices{2, 0, 3, 1, 1, 4, 0, 3};
+  auto result = vocab->lookupBatch(indices);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
+                                                                indices);
+}
+
+// With the opt-in adaptive io_uring batch sizing enabled via the runtime
+// parameters (and small bounds, so early flushes and forced submits both
+// occur), `open` configures the vocabulary's batch managers with a controller
+// and batched lookups still return the same words as individual lookups.
+TEST(VocabularyOnDisk, LookupBatchWithAdaptiveBatchSizing) {
+  auto cleanupEnabled = setRuntimeParameterForTest<
+      &RuntimeParameters::ioUringAdaptiveBatchEnabled_>(true);
+  auto cleanupMin = setRuntimeParameterForTest<
+      &RuntimeParameters::ioUringAdaptiveBatchMinSize_>(size_t{1});
+  auto cleanupMax = setRuntimeParameterForTest<
+      &RuntimeParameters::ioUringAdaptiveBatchMaxSize_>(size_t{4});
+  std::vector<std::string> words;
+  for (size_t i = 0; i < 100; ++i) {
+    words.push_back(absl::StrCat("word", i));
+  }
+  auto vocab = createVocabularyFromWords(words);
+  std::vector<size_t> indices;
+  for (size_t i = 0; i < 300; ++i) {
+    indices.push_back((i * 37) % words.size());
+  }
   auto result = vocab->lookupBatch(indices);
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
                                                                 indices);
