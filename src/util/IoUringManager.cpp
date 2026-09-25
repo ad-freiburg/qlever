@@ -248,7 +248,8 @@ void IoUringPolicy::drainAtLeast(unsigned minComplete) {
     ret = io_uring_wait_cqes(&ring_, &cqe, numToWaitFor, nullptr, nullptr);
   } while (ret == -EINTR);
   if (ret < 0) {
-    AD_THROW("io_uring_wait_cqes failed in IoUringPolicy");
+    AD_THROW(absl::StrCat("io_uring_wait_cqes failed in IoUringPolicy: ",
+                          std::strerror(-ret)));
   }
 
   // Reap every ready CQE in chunks. `io_uring_peek_batch_cqe` does not block;
