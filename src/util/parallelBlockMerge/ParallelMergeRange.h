@@ -83,12 +83,9 @@ class ParallelMergeRange
   }
 
   // Stop the merge, such that the coroutines that are still in flight finish
-  // instead of waiting for a consumer that is gone, and then shut down the
-  // read-ahead. The order matters: only a stopped merge makes the sink complete
-  // a pending `asyncGetNextBlock` of the read-ahead promptly (with
-  // `std::nullopt`) instead of waiting for blocks that nobody will produce any
-  // more, and only then does the wait in `BlockPrefetcher::shutDown()`
-  // terminate.
+  // instead of waiting for a consumer that is gone, and shut down the
+  // read-ahead (which stops the sink by itself, see
+  // `BlockPrefetcher::shutDown()`).
   //
   // NOTE: This blocks the calling thread, which therefore must not be one of
   // the threads that run the executor of the merge, see the IMPORTANT note at

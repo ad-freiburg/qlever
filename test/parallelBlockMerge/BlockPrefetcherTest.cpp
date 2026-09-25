@@ -48,9 +48,10 @@ using Block = size_t;
 
 // A fake sink whose `asyncGetNextBlock` completes with the given script of
 // outcomes, one after the other, and then hangs (just like a sink whose merge
-// has not produced the next block yet) until `stop()` is called. It records how
-// often it was called and how many of its operations were in flight at the
-// same time.
+// has not produced the next block yet) until `stop()` is called. Once stopped,
+// it completes every operation with `std::nullopt`, no matter what is left of
+// the script, just like `InOrderBlockSink`. It records how often it was called
+// and how many of its operations were in flight at the same time.
 class FakeSink {
  public:
   // The end of the merge, that is a completion with `std::nullopt`.
@@ -83,6 +84,20 @@ class FakeSink {
         completionToken);
   }
 
+  // Call `stop()`, and then complete with nothing.
+  template <typename CompletionToken>
+  auto asyncStop(CompletionToken&& completionToken) {
+    return net::async_initiate<CompletionToken, void(std::exception_ptr)>(
+        [this](auto handler) {
+          stop();
+          auto executor = net::get_associated_executor(handler, executor_);
+          net::post(executor, [handler = std::move(handler)]() mutable {
+            std::move(handler)(nullptr);
+          });
+        },
+        completionToken);
+  }
+
   // Complete the operation that hangs (if any) with `std::nullopt`, and every
   // later operation right away, just like a sink whose merge was stopped.
   void stop() {
@@ -104,6 +119,10 @@ class FakeSink {
     std::unique_lock lock{mutex_};
     return maxNumInFlight_;
   }
+  bool wasStopped() const {
+    std::unique_lock lock{mutex_};
+    return wasStopped_;
+  }
 
  private:
   // The initiation of `asyncGetNextBlock`.
@@ -123,12 +142,12 @@ class FakeSink {
         std::move (*h)(std::move(exception), std::move(block));
       });
     };
+    if (wasStopped_) {
+      completeLater(std::move(erased), nullptr, std::nullopt);
+      return;
+    }
     if (script_.empty()) {
-      if (wasStopped_) {
-        completeLater(std::move(erased), nullptr, std::nullopt);
-      } else {
-        hangingHandler_ = std::move(erased);
-      }
+      hangingHandler_ = std::move(erased);
       return;
     }
     Outcome outcome = std::move(script_.front());
@@ -181,7 +200,7 @@ TEST(BlockPrefetcher, contractChecks) {
   auto executor = ioContext.get_executor();
   auto sink = std::make_shared<FakeSink>(executor, blocksScript(0));
   AD_EXPECT_THROW_WITH_MESSAGE(Prefetcher(executor, nullptr, 2),
-                               ::testing::HasSubstr("sink != nullptr"));
+                               ::testing::HasSubstr("sink_ != nullptr"));
   AD_EXPECT_THROW_WITH_MESSAGE(Prefetcher(executor, sink, 0),
                                ::testing::HasSubstr("numPrefetchedBlocks > 0"));
 }
@@ -238,9 +257,111 @@ TEST(BlockPrefetcher, readAheadIsBounded) {
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     EXPECT_EQ(sink->numCalls(), numPrefetched + 2);
     // The shutdown wakes up the filler, which is suspended because the buffer
-    // is full, without stopping the sink. It also drops the buffered blocks.
+    // is full, and drops the buffered blocks.
     prefetcher.shutDown();
+    EXPECT_TRUE(sink->wasStopped());
+    EXPECT_TRUE(sink->wasStopped());
     EXPECT_EQ(sink.use_count(), 1);
+    EXPECT_EQ(sink->maxNumInFlight(), 1u);
+  }
+}
+
+// _____________________________________________________________________________
+// A read-ahead whose filler is suspended in `async_send`, because the channel
+// is full, can be shut down without stalling. This is the case that a `close`
+// followed by a `cancel` of the channel would get wrong, see the NOTE at the
+// class comment of `BlockPrefetcher`.
+TEST(BlockPrefetcher, shutDownWhileFillerWaitsForRoom) {
+  for (size_t numPrefetched : {1u, 2u}) {
+    for (size_t numConsumed : {0u, 1u, 5u}) {
+      net::thread_pool pool{2};
+      absl::Cleanup joinPool = [&pool] { pool.join(); };
+      auto sink =
+          std::make_shared<FakeSink>(pool.get_executor(), blocksScript(100));
+      {
+        Prefetcher prefetcher{pool.get_executor(), sink, numPrefetched};
+        for (size_t i = 0; i < numConsumed; ++i) {
+          EXPECT_EQ(prefetcher.getNextBlock(), Block{i});
+        }
+        // The buffered blocks plus the one in the suspended `async_send`.
+        waitUntil([&] {
+          return sink->numCalls() == numConsumed + numPrefetched + 1;
+        });
+      }
+      EXPECT_TRUE(sink->wasStopped());
+      EXPECT_EQ(sink.use_count(), 1);
+      EXPECT_EQ(sink->maxNumInFlight(), 1u);
+    }
+  }
+}
+
+// _____________________________________________________________________________
+// Shutting down after the last value (the end of the merge or an exception) was
+// received, or before the consumer has received anything at all, does not
+// stall either.
+TEST(BlockPrefetcher, shutDownAfterLastValueOrRightAway) {
+  net::thread_pool pool{2};
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+  std::vector<std::vector<FakeSink::Outcome>> scripts;
+  scripts.push_back({FakeSink::EndOfMerge{}});
+  scripts.push_back({std::make_exception_ptr(std::runtime_error{"failed"})});
+  scripts.push_back({Block{0}, FakeSink::EndOfMerge{}});
+  for (const auto& script : scripts) {
+    for (bool consumeLastValue : {true, false}) {
+      auto sink = std::make_shared<FakeSink>(pool.get_executor(), script);
+      {
+        Prefetcher prefetcher{pool.get_executor(), sink, 1};
+        if (consumeLastValue) {
+          try {
+            while (prefetcher.getNextBlock().has_value()) {
+            }
+          } catch (const std::runtime_error& error) {
+            EXPECT_STREQ(error.what(), "failed");
+          }
+        }
+      }
+      EXPECT_EQ(sink.use_count(), 1);
+      EXPECT_EQ(sink->maxNumInFlight(), 1u);
+    }
+  }
+}
+
+// _____________________________________________________________________________
+// Stress the shutdown: consume a varying number of blocks from read-aheads of
+// different sizes and then destroy them at an arbitrary point in time, with an
+// executor that is busy with several read-aheads at once. None of this may
+// stall or leak the sink.
+TEST(BlockPrefetcher, shutDownStress) {
+  net::thread_pool pool{3};
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+  for (size_t iteration = 0; iteration < 200; ++iteration) {
+    size_t numPrefetched = 1 + iteration % 3;
+    size_t numBlocks = iteration % 7;
+    size_t numConsumed = iteration % 5;
+    std::vector<std::shared_ptr<FakeSink>> sinks;
+    std::vector<std::unique_ptr<Prefetcher>> prefetchers;
+    for (size_t i = 0; i < 3; ++i) {
+      auto script = blocksScript(numBlocks);
+      if (i == 1) {
+        script.emplace_back(FakeSink::EndOfMerge{});
+      }
+      sinks.push_back(
+          std::make_shared<FakeSink>(pool.get_executor(), std::move(script)));
+      prefetchers.push_back(std::make_unique<Prefetcher>(
+          pool.get_executor(), sinks.back(), numPrefetched));
+    }
+    for (size_t i = 0; i < 3; ++i) {
+      // Consume only as many blocks as there are, the sinks without an end
+      // hang afterwards.
+      for (size_t j = 0; j < std::min(numConsumed, numBlocks); ++j) {
+        EXPECT_EQ(prefetchers[i]->getNextBlock(), Block{j});
+      }
+    }
+    prefetchers.clear();
+    for (const auto& sink : sinks) {
+      EXPECT_EQ(sink.use_count(), 1);
+      EXPECT_EQ(sink->maxNumInFlight(), 1u);
+    }
   }
 }
 
@@ -269,8 +390,9 @@ TEST(BlockPrefetcher, exceptionAfterBufferedBlocks) {
 }
 
 // _____________________________________________________________________________
-// A read-ahead whose `asyncGetNextBlock` is still in flight can be shut down
-// once the merge was stopped, both explicitly and by its destructor.
+// A read-ahead whose `asyncGetNextBlock` is still in flight (and would hang
+// forever) can be shut down, both explicitly and by its destructor, because the
+// shutdown stops the sink.
 TEST(BlockPrefetcher, shutDownWhileOperationIsInFlight) {
   for (bool explicitShutDown : {true, false}) {
     net::thread_pool pool{2};
@@ -282,7 +404,6 @@ TEST(BlockPrefetcher, shutDownWhileOperationIsInFlight) {
       EXPECT_EQ(prefetcher.getNextBlock(), Block{0});
       // The third operation hangs, because the script is exhausted.
       waitUntil([&] { return sink->numCalls() == 3; });
-      sink->stop();
       if (explicitShutDown) {
         prefetcher.shutDown();
         EXPECT_EQ(sink.use_count(), 1);

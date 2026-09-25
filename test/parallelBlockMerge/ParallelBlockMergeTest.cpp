@@ -1314,6 +1314,11 @@ struct DummySink {
                                            std::optional<SizeVec>)>(
         []([[maybe_unused]] auto handler) {}, token);
   }
+  template <typename Token>
+  auto asyncStop(Token&& token) {
+    return net::async_initiate<Token, void(std::exception_ptr)>(
+        []([[maybe_unused]] auto handler) {}, token);
+  }
 };
 }  // namespace
 
