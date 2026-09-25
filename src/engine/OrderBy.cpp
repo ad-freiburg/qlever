@@ -68,9 +68,10 @@ size_t OrderBy::getCostEstimate() {
   size_t size = getSizeEstimateBeforeLimit();
   size_t subcost = subtree_->getCostEstimate();
 
-  // Return a linear cost if there is a single sort column and the input is
-  // already sorted by it (the result can then often be computed in linear
-  // time, see `computeResultForSortedInput`).
+  // If there is a single sort column and the input is already sorted by it,
+  // return the number of rows instead of `n log n` (plus the cost of the
+  // input), because the result can then often be computed in linear time (see
+  // `computeResultForSortedInput`).
   //
   // NOTE: Whether the fast path applies is only known at runtime (the column
   // must contain only ints or only doubles). If it does not, the cost is
