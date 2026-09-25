@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
+#include "util/views/ChunkedIotaView.h"
 
 // _____________________________________________________________________________
 Bind::Bind(QueryExecutionContext* qec,
@@ -130,16 +131,14 @@ Result Bind::computeResult(bool requestLaziness) {
 
   if (subRes->isFullyMaterialized()) {
     if (requestLaziness && subRes->idTableView().size() > CHUNK_SIZE) {
-      auto chunks = ::ranges::views::chunk(
-          ::ranges::views::iota(size_t{0}, subRes->idTableView().size()),
-          CHUNK_SIZE);
+      ad_utility::ChunkedIotaView chunks{
+          size_t{0}, subRes->idTableView().size(), CHUNK_SIZE};
       auto f = [applyBind = std::move(applyBind),
                 subRes = std::move(subRes)](const auto& chunk) {
         // Make a deep copy of the local vocab from `subRes` and then add to it
         // (in case BIND adds a new word or words).
         LocalVocab outVocab = subRes->getCopyOfLocalVocab();
-        auto start = chunk.front();
-        auto end = start + ::ranges::size(chunk);
+        auto [start, end] = chunk;
         IdTable idTable = applyBind(
             Bind::cloneSubView(subRes->idTableView(), {start, end}), &outVocab);
 
