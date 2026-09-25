@@ -672,9 +672,17 @@ TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
                        std::nullopt, requestTimer);
   EXPECT_GT(plan.queryExecutionTree()
                 .getRootOperation()
-                ->getRuntimeInfoWholeQuery()
+                ->getQueryPlanningInfo()
                 .timeQueryPlanning.count(),
             -1);
+  // The information about how the query was planned ends up there as well, one
+  // entry for the single connected component of the query.
+  const auto& queryPlanning = plan.queryExecutionTree()
+                                  .getRootOperation()
+                                  ->getQueryPlanningInfo()
+                                  .queryPlanning;
+  ASSERT_EQ(queryPlanning.size(), 1u);
+  EXPECT_EQ(queryPlanning[0].numNodes_, 1u);
 
   // A cancellation handle that is already cancelled makes planning fail, which
   // shows that the handle reaches the query planner as well.

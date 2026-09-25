@@ -343,13 +343,14 @@ PlannedQuery Qlever::planQuery(
     rootOperation.recursivelySetTimeConstraint(timeLimit.value());
   }
 
+  auto& queryPlanningInfo = rootOperation.getQueryPlanningInfo();
   if (requestTimer.has_value()) {
-    auto& qet = plannedQuery.queryExecutionTree();
-    auto timeForQueryPlanning = requestTimer->msecs();
-    auto& runtimeInfoWholeQuery =
-        qet.getRootOperation()->getRuntimeInfoWholeQuery();
-    runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
+    queryPlanningInfo.timeQueryPlanning = requestTimer->msecs();
   }
+  queryPlanningInfo.queryPlanning = qp.planningInfo();
+  // The runtime information that is sent over the websocket during the
+  // execution also carries this information about the query planning.
+  qec.setQueryPlanningInfo(queryPlanningInfo);
   return plannedQuery;
 }
 
