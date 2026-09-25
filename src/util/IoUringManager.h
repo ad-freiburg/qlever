@@ -261,12 +261,19 @@ class IoUringPolicy {
   uint64_t nextRequestIdToAssign_ = 0;
 
   // Maps a read's request id to its metadata. An entry is inserted when the
-  // read is prepared in `addBatch` and erased when its completion is reaped in
-  // `drainOneCqe`.
+  // read is prepared in `addBatch` and erased when its completion is reaped.
   ad_utility::HashMap<uint64_t, InFlightRead> inFlightReadsByRequestId_;
 
-  // Wait for one CQE and update the in-flight bookkeeping.
-  void drainOneCqe();
+  // Block until at least `minComplete` CQEs are ready (capped at the number
+  // of reads the kernel has received), then reap every ready CQE. Throw after
+  // the whole wave is reaped if any read in it failed or was short.
+  // `minComplete` must be > 0 and at most `numInFlightReadRequests_`.
+  void drainAtLeast(unsigned minComplete);
+
+  // Apply one completion to the in-flight bookkeeping. Always updates the
+  // counts, also for a failed read. Return a static error message if the read
+  // failed or was short, and `nullptr` otherwise.
+  [[nodiscard]] const char* processCqe(int numBytesRead, uint64_t requestId);
 
   // Submit all prepared SQEs to the kernel. Throw if `io_uring_submit`
   // fails, including the error description in the message.
@@ -295,6 +302,11 @@ class IoUringPolicy {
       const {
     return adaptiveBatchController_;
   }
+
+  // Minimum number of completions to wait for when the ring is full or
+  // `wait()` blocks. Waiting for several CQEs and reaping all ready ones in
+  // one pass amortizes `io_uring_enter` and the CQ-head update over the wave.
+  static constexpr unsigned REAP_WAVE = 8;
 
   // Enqueue a batch of read requests and submit them to the kernel. Blocks the
   // calling thread only when the submission queue is full, in order to drain
