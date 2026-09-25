@@ -288,19 +288,11 @@ auto parallelBlockMergeToSink(
 // disk (see `engine/idTable/CompressedIdTableBlockStorage.h`) lets it run
 // ahead.
 //
-// The returned range reads ahead: it keeps `options.numPrefetchedOutputBlocks`
-// output blocks ready (fetched in the background, on the very `executor` that
-// the merge runs on), so that a consumer typically does not have to wait for
-// the merge at all, see `detail::BlockPrefetcher`. Those blocks are held in
-// memory in addition to the ones that the merge itself holds, so a caller with
-// a memory budget has to account for them, see
-// `MergeOptions::numPrefetchedOutputBlocks`.
-//
 // The merge is performed serially in the calling thread (and the `executor` is
 // then never used at all) if `options.shouldMergeSerially()` says so, that is
 // for a small input or a single thread. On that path there is no sink at all,
-// so the `storageFactory` and the read-ahead are ignored. Except on that path
-// the `executor` must not be empty, see `parallelBlockMergeToSink`.
+// so the `storageFactory` is ignored. Except on that path the `executor` must
+// not be empty, see `parallelBlockMergeToSink`.
 //
 // IMPORTANT: Except on the serial path, the `executor` has to be run by *other*
 // threads (for example by a `boost::asio::thread_pool`), because the thread
@@ -355,16 +347,12 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
         std::make_shared<Sink>(executor, numChunks, std::move(storageFactory));
     return sink;
   };
-  // NOTE: This has to be read out *before* the `options` are moved into
-  // `parallelBlockMergeToSink` below.
-  size_t numPrefetchedBlocks = options.numPrefetchedOutputBlocks;
   auto state = parallelBlockMergeToSink<moveElements>(
       executor, std::move(input), std::move(comparator), makeSink,
       std::move(options), std::move(cancellationHandle));
   using Range =
       detail::ParallelMergeRange<typename decltype(state)::element_type, Sink>;
-  return Result{std::make_unique<Range>(std::move(state), std::move(sink),
-                                        numPrefetchedBlocks)};
+  return Result{std::make_unique<Range>(std::move(state), std::move(sink))};
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 }
 

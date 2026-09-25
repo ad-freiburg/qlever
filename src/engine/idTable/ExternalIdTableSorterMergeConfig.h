@@ -436,16 +436,6 @@ inline parallelBlockMerge::MergeOptions makeMergeOptions(
       parameters.outputBlockSize_);
   options.parallelismHint = config.parallelism_;
   options.maxNumChunksInFlight = parameters.numChunksInFlight_;
-  // The output blocks that the merge phase reserves on the consumer side (see
-  // `MergePhaseConfig::numBufferedOutputBlocks_`) are the one that the consumer
-  // currently holds, the one that the merge is just finishing, and the rest,
-  // which the consumer reads ahead. The read-ahead is never zero, see
-  // `MergeOptions::numPrefetchedOutputBlocks`.
-  constexpr size_t numReservedBlocks = 2;
-  options.numPrefetchedOutputBlocks =
-      config.numBufferedOutputBlocks_ > numReservedBlocks
-          ? config.numBufferedOutputBlocks_ - numReservedBlocks
-          : 1;
   return options;
 }
 

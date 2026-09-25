@@ -151,12 +151,22 @@ class CompressedExternalIdTableWriter {
     size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
     AD_CONTRACT_CHECK(blockSize > 0);
     startOfSingleIdTables_.push_back(blocksPerColumn_.at(0).size());
+    // The `[lower, upper)` row ranges of the blocks into which the `table` is
+    // split. It is defined once and used by both loops below, such that the
+    // first and last rows that are stored always match the stored blocks.
+    namespace rv = ::ranges::views;
+    auto blockRanges =
+        rv::chunk(rv::iota(size_t{0}, table.numRows()), blockSize) |
+        rv::transform([](const auto& chunk) {
+          size_t lower = *chunk.begin();
+          return std::pair{lower,
+                           lower + static_cast<size_t>(::ranges::size(chunk))};
+        });
     // Store the first and the last row of each block, which the merge phase
     // needs to split the runs into disjoint ranges, see
     // `firstAndLastRowPerBlock_`. This cannot be done inside the per-column
     // tasks below, because each of those only sees a single column.
-    for (size_t lower = 0; lower < table.numRows(); lower += blockSize) {
-      size_t upper = std::min(lower + blockSize, table.numRows());
+    for (auto [lower, upper] : blockRanges) {
       firstAndLastRowPerBlock_.push_back(IdTable::row_type{table[lower]});
       firstAndLastRowPerBlock_.push_back(IdTable::row_type{table[upper - 1]});
     }
@@ -167,12 +177,10 @@ class CompressedExternalIdTableWriter {
     std::vector<std::future<void>> compressColumFutures;
     for (auto i : ql::views::iota(0u, numColumns())) {
       compressColumFutures.push_back(
-          std::async(std::launch::async, [this, i, blockSize, &table]() {
+          std::async(std::launch::async, [this, i, blockRanges, &table]() {
             auto& blockMetadata = blocksPerColumn_.at(i);
             decltype(auto) column = table.getColumn(i);
-            // TODO<C++23> Use `ql::views::chunkd`
-            for (size_t lower = 0; lower < column.size(); lower += blockSize) {
-              size_t upper = std::min<size_t>(lower + blockSize, column.size());
+            for (auto [lower, upper] : blockRanges) {
               auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
               auto compressed = ZstdWrapper::compress(
                   column.data() + lower, thisBlockSizeUncompressed);
@@ -916,12 +924,9 @@ class CompressedExternalIdTableSorter
   MemorySize maxOutputBlocksize_ = 1_GB;
   // The number of merged blocks that are buffered during the output phase. It
   // is the number of output blocks that the memory accounting of the merge
-  // phase reserves memory for on the consumer side (see
-  // `compressedExternalIdTable::computeMergePhaseParameters`), and how it is
-  // split between the read-ahead of the consumer and the two blocks that are
-  // always in the consumer's hands is decided by
-  // `compressedExternalIdTable::makeMergeOptions`, see there.
-  int numBufferedOutputBlocks_ = 12;
+  // phase reserves memory for on the consumer side, see
+  // `compressedExternalIdTable::computeMergePhaseParameters`.
+  int numBufferedOutputBlocks_ = 4;
 
   // See the `moveResultOnMerge()` getter function for documentation.
   bool moveResultOnMerge_ = true;
@@ -1036,10 +1041,9 @@ class CompressedExternalIdTableSorter
     AD_CONTRACT_CHECK(!mergeIsActive_.load());
     mergeIsActive_.store(true);
 
-    // NOTE: The blocks are read ahead by the merge itself (see
-    // `numBufferedOutputBlocks_` and
-    // `parallelBlockMerge::MergeOptions::numPrefetchedOutputBlocks`), so no
-    // asynchronous stream is needed on top of it.
+    // NOTE: No asynchronous stream is needed on top of the merge, because the
+    // parallel merge already buffers its finished output blocks ahead of the
+    // consumer, see `makeBlockStorageFactory`.
     using namespace ad_utility;
     return InputRangeTypeErased{
         CallbackOnEndView{sortedBlocks<N>(blocksize), [&, this]() noexcept {
