@@ -26,13 +26,12 @@ jobs:
         github.event.comment.author_association == 'COLLABORATOR') &&
        (startsWith(github.event.comment.body, '/open-code-review') ||
         startsWith(github.event.comment.body, '@open-code-review')))
-    runs-on: [self-hosted, linux, x64, wolga]
+    # GitHub-hosted: this job is LLM-API-bound, not CPU-bound, so it must
+    # not occupy fleet compile runners (CI speedup 2026-09-24). ubuntu-latest
+    # ships node/npm; the per-run npm/HOME isolation below is kept as-is.
+    runs-on: ubuntu-latest
     timeout-minutes: 240
     env:
-      # ocr-stable is a fallback for the per-run npm prefix: if the
-      # freshly installed binary ever goes missing mid-job, review steps
-      # still resolve a pinned v1.11.7 copy from local SSD.
-      PATH: /home/stoetzem/.local/bin:/local/data-ssd/stoetzem/node22/bin:/local/data-ssd/stoetzem/ocr-stable/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       # The review tool self-upgrades in the background when the registry
       # `latest` is newer than the pinned install; the upgrade replaces the
       # running tree mid-job and the review spawn then fails with ENOENT.
@@ -52,6 +51,10 @@ jobs:
             });
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('head_sha', pr.head.sha);
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
       - name: Isolate npm prefix for this run
         run: |
           # Concurrent OCR jobs on the same self-hosted host share HOME *and*

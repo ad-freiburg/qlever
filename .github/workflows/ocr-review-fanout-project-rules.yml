@@ -30,15 +30,17 @@ jobs:
         github.event.comment.author_association == 'COLLABORATOR') &&
        (startsWith(github.event.comment.body, '/open-code-review-fanout') ||
         startsWith(github.event.comment.body, '@open-code-review-fanout')))
-    runs-on: [self-hosted, linux, x64, ocr-fanout-local]
+    # GitHub-hosted: this job is LLM-API-bound, not CPU-bound, so it must
+    # not occupy fleet compile runners (CI speedup 2026-09-24).
+    runs-on: ubuntu-latest
     # Full fan-out project-rules reviews need ~3.5-4h on larger diffs: runs
     # 35110677564 and 35288058721 were both killed at exactly the old
     # 180 min limit while the review agent was still streaming progress.
-    # Values above 360 are fine here: the 6h cap applies to GitHub-hosted
-    # runners only, this job runs on self-hosted runners.
-    timeout-minutes: 1800
+    # 360 is the GitHub-hosted cap; large diffs may now time out where the
+    # old 1800 min self-hosted limit survived. If that happens, split the
+    # review (smaller diffs) rather than moving back to the fleet.
+    timeout-minutes: 360
     env:
-      PATH: /home/userNoPriv/.local/bin:/home/userNoPriv/.local/share/npm/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       # Path-independent build cache: the action checkout lands at a different
       # absolute path every run, which would defeat GOCACHE without this.
       GOFLAGS: -trimpath
@@ -63,10 +65,13 @@ jobs:
           echo "NPM_CONFIG_PREFIX=${prefix}" >> "$GITHUB_ENV"
           echo "OCR_NPM_PREFIX=${prefix}" >> "$GITHUB_ENV"
           echo "${prefix}/bin" >> "$GITHUB_PATH"
-      # No setup-go step: the self-hosted runner image ships a pinned Go
-      # toolchain (>= go.mod minimum) and a shared persistent GOCACHE, so
-      # the source build below neither fetches a toolchain nor cold-compiles.
-      # Keep them in sync: bump the image GO_VERSION with the action pin.
+      # Hosted runners bring no Go toolchain: install the action's go.mod
+      # minimum (1.25.5 at pin 34ed9d2; bump with the action pin).
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: false
       - name: Restore OCR source-build caches
         # The fork's fan-out flag is not on npm, so the action must build from
         # source; cache the Go/npm caches keyed by the pinned OCR action
@@ -91,6 +96,11 @@ jobs:
           llm_auth_token: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           llm_model: ${{ vars.OCR_LLM_MODEL }}
           llm_use_anthropic: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
+          # Meta's Model API (api.meta.ai) validates strictly against the
+          # OpenAI schema and rejects the OCR default extra body
+          # {"thinking": {"type": "disabled"}}, so send an empty object
+          # (same override as ocr-review.yml).
+          llm_extra_body: '{}'
           base_ref: ${{ steps.pr-context.outputs.base_ref }}
           head_sha: ${{ steps.pr-context.outputs.head_sha }}
           ocr_install_from: source

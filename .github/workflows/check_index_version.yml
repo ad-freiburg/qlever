@@ -6,6 +6,12 @@ on:
   # master; full signal via 'ci'-labeled PRs or manual dispatch.
   pull_request:
     types: [opened, synchronize, reopened, labeled]
+    # Fork PR profile 2026-09-25: run only when relevant code changes.
+    paths:
+      - 'src/index/**'
+      - 'src/global/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/check_index_version.yml'
   workflow_dispatch:
 
 concurrency:

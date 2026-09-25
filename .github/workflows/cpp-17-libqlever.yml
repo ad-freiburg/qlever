@@ -130,6 +130,10 @@ jobs:
         # The two entries only differ in the compiler and in the C++ standard.
         # `USE_CPP_17_BACKPORTS` (and with it `boost::filesystem` instead of
         # `std::filesystem`, see `backports/filesystem.h`) is used in both.
+        # Fork PR profile 2026-09-25: on PRs keep only the GCC 8 entry (the
+        # real C++17 build); GCC 11 + backports runs on Wolga (wolga-native).
+        exclude:
+          - compiler-version: ${{ github.event_name == 'pull_request' && 11 || 0 }}
         include:
           - compiler-version: 11
             use-keep-going: false
