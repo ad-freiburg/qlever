@@ -121,10 +121,12 @@ class FiberIoScheduler {
     --numActiveFibers_;
   }
 
+#if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
   // Shared cooperative loop behind `waitForBatch` and `waitForFreeSlot`.
-  // Only declared meaningfully on fiber-enabled io_uring builds; defined in
-  // the implementation file.
+  // Exists only on fiber-enabled io_uring builds; defined in the
+  // implementation file.
   void waitUntil(IoUringPolicy& policy, const std::function<bool()>& isDone);
+#endif
 };
 
 }  // namespace ad_utility
