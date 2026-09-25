@@ -20,7 +20,6 @@
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/use_future.hpp>
@@ -81,12 +80,6 @@ concept PrefetchableSinkConcept = requires(T& sink) {
 // LIFETIME: The filler holds the sink and the channel alive by itself, and
 // `shutDown()` (which the destructor calls) waits until the filler has
 // finished, so no operation of the filler is left afterwards.
-//
-// NOTE: The channel is never closed or cancelled, the filler always ends by
-// sending a last value (the end of the merge or an exception) which the
-// consumer receives, see `shutDown()`. Closing and cancelling a channel with a
-// suspended sender is broken in some versions of Boost (in Boost 1.83, `cancel`
-// after `close` completes the suspended send as if it were a receive).
 template <typename Block, typename Sink>
 requires PrefetchableSinkConcept<Sink, Block>
 class BlockPrefetcher : public ad_utility::NoCopyNoMove {
@@ -100,8 +93,9 @@ class BlockPrefetcher : public ad_utility::NoCopyNoMove {
 
   std::shared_ptr<Sink> sink_;
   std::shared_ptr<Channel> channel_;
-  // Ready as soon as the filler has finished, see `shutDown()`.
-  std::shared_future<void> fillerIsDone_;
+  // The future of the `co_spawn` of the filler, which is ready as soon as the
+  // filler has finished, see `shutDown()`.
+  std::future<void> fillerIsDone_;
   // The first exception that the merge has pushed. It is deliberately kept,
   // such that every further call to `getNextBlock()` rethrows it, exactly as
   // the sink itself does.
@@ -119,10 +113,8 @@ class BlockPrefetcher : public ad_utility::NoCopyNoMove {
     AD_CONTRACT_CHECK(sink_ != nullptr);
     AD_CONTRACT_CHECK(numPrefetchedBlocks > 0);
     channel_ = std::make_shared<Channel>(executor, numPrefetchedBlocks);
-    auto fillerIsDone = std::make_shared<std::promise<void>>();
-    fillerIsDone_ = fillerIsDone->get_future().share();
-    net::co_spawn(executor, fill(sink_, channel_, std::move(fillerIsDone)),
-                  net::detached);
+    fillerIsDone_ =
+        net::co_spawn(executor, fill(sink_, channel_), net::use_future);
   }
 
   // Shut the read-ahead down, see `shutDown()`.
@@ -173,6 +165,13 @@ class BlockPrefetcher : public ad_utility::NoCopyNoMove {
     // Receive (and drop) the values until the last one, unless the consumer
     // has already received it. This also wakes up a filler that is suspended
     // in `async_send` because the channel is full.
+    //
+    // NOTE: The channel is deliberately never closed or cancelled, the filler
+    // always ends by sending a last value (the end of the merge or an
+    // exception) which is received either here or by `getNextBlock()`. Closing
+    // and cancelling a channel with a suspended sender is broken in some
+    // versions of Boost (in Boost 1.83, `cancel` after `close` completes the
+    // suspended send as if it were a receive).
     bool lastValueWasReceived = endOfMergeWasReached_ || exception_ != nullptr;
     while (!lastValueWasReceived) {
       auto [exception, block] = receive();
@@ -196,11 +195,9 @@ class BlockPrefetcher : public ad_utility::NoCopyNoMove {
 
   // The filler, see the class comment above: read the blocks from the `sink`
   // one after the other and send them into the `channel`, until the end of the
-  // merge or an exception, which is the last value that is sent. Fulfill
-  // `fillerIsDone` at the very end.
-  static net::awaitable<void> fill(
-      std::shared_ptr<Sink> sink, std::shared_ptr<Channel> channel,
-      std::shared_ptr<std::promise<void>> fillerIsDone) {
+  // merge or an exception, which is the last value that is sent.
+  static net::awaitable<void> fill(std::shared_ptr<Sink> sink,
+                                   std::shared_ptr<Channel> channel) {
     // NOTE: None of the operations below throws, the sink reports its
     // exceptions as values, so the `catch` is merely a safety net that makes
     // sure that the consumer still receives a last value. (It cannot contain
@@ -229,11 +226,10 @@ class BlockPrefetcher : public ad_utility::NoCopyNoMove {
                                    std::move(failure), std::nullopt,
                                    net::as_tuple(net::use_awaitable));
     }
-    // Release the sink before the filler reports that it is done, such that
-    // the sink is no longer referenced by the filler once `shutDown()`
-    // returns.
+    // Release the sink before the filler finishes (and thereby makes
+    // `fillerIsDone_` ready), such that the sink is no longer referenced by the
+    // filler once `shutDown()` returns.
     sink.reset();
-    fillerIsDone->set_value();
   }
 };
 
