@@ -67,23 +67,27 @@ CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
 // _____________________________________________________________________________
 void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
                                                      Id lastCol0Id,
-                                                     IdTable block,
+                                                     BlockToWrite block,
                                                      bool invokeCallback) {
   auto timer = blockWriteQueueTimer_.startMeasurement();
   blockWriteQueue_.push([this, block = std::move(block), firstCol0Id,
                          lastCol0Id, invokeCallback]() mutable {
+    // Note: The `view` is only used before the `block` is moved from below, and
+    // moving a `BlockToWrite` doesn't move the memory that the view points to
+    // anyway.
+    auto view = block.view();
     std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
-    for (const auto& column : block.getColumns()) {
+    for (const auto& column : view.getColumns()) {
       offsets.push_back(compressAndWriteColumn(column));
     }
     AD_CORRECTNESS_CHECK(!offsets.empty());
-    auto numRows = block.numRows();
-    const auto& first = block[0];
-    const auto& last = block[numRows - 1];
+    auto numRows = view.numRows();
+    const auto& first = view[0];
+    const auto& last = view[numRows - 1];
     AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
-    auto [hasDuplicates, graphInfo] = getGraphInfo(block);
+    auto [hasDuplicates, graphInfo] = getGraphInfo(view);
     blockBuffer_.wlock()->emplace_back(CompressedBlockMetadataNoBlockIndex{
         std::move(offsets),
         numRows,
@@ -92,11 +96,45 @@ void CompressedRelationWriter::compressAndWriteBlock(Id firstCol0Id,
         std::move(graphInfo),
         hasDuplicates});
     if (invokeCallback && smallBlocksCallback_) {
-      std::invoke(smallBlocksCallback_, std::move(block));
+      // Only blocks of small relations invoke the callback, and those always
+      // own their rows, because they are assembled in the
+      // `smallRelationsBuffer_`.
+      AD_CORRECTNESS_CHECK(block.ownsRows());
+      std::invoke(smallBlocksCallback_, std::move(block).extractTable());
+    } else if (block.ownsRows()) {
+      recycleBlock(std::move(block).extractTable());
     }
   });
   timer.stop();
 }
+
+// _____________________________________________________________________________
+IdTable CompressedRelationWriter::takeRecycledBlock(
+    size_t numColumns, const ad_utility::AllocatorWithLimit<Id>& allocator) {
+  auto recycledBlocks = recycledBlocks_.wlock();
+  // Blocks with a different number of columns cannot be reused, but this
+  // should never happen for the current users.
+  if (!recycledBlocks->empty() &&
+      recycledBlocks->back().numColumns() == numColumns) {
+    IdTable result = std::move(recycledBlocks->back());
+    recycledBlocks->pop_back();
+    return result;
+  }
+  return IdTable{numColumns, allocator};
+}
+
+// _____________________________________________________________________________
+void CompressedRelationWriter::recycleBlock(IdTable block) {
+  if (!recycleBlocks_) {
+    return;
+  }
+  block.clear();
+  auto recycledBlocks = recycledBlocks_.wlock();
+  if (recycledBlocks->size() < maxNumRecycledBlocks_) {
+    recycledBlocks->push_back(std::move(block));
+  }
+}
+
 // _____________________________________________________________________________
 CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
     size_t numDistinctC1) {
@@ -136,12 +174,13 @@ ad_utility::TaskQueue<false> CompressedRelationWriter::makeBlockWriteQueue(
 
 // _____________________________________________________________________________
 void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
-                                                        IdTable relation) {
-  AD_CORRECTNESS_CHECK(!relation.empty());
+                                                        BlockToWrite relation) {
+  size_t numRows = relation.view().numRows();
+  AD_CORRECTNESS_CHECK(numRows != 0);
   AD_CORRECTNESS_CHECK(currentCol0Id_ == col0Id ||
                        currentCol0Id_.isUndefined());
   currentCol0Id_ = col0Id;
-  currentRelationPreviousSize_ += relation.numRows();
+  currentRelationPreviousSize_ += numRows;
   writeBufferedRelationsToSingleBlock();
   // This is a block of a large relation, so we don't invoke the
   // `smallBlocksCallback_`. Hence the last argument is `false`.
@@ -162,7 +201,7 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
 
   for (auto& block :
        sortedBlocks | ql::views::filter(std::not_fn(&IdTable::empty))) {
-    ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
+    distinctCol1Counter.addBlock(block.getColumn(c1Idx));
 
     if (!bufferedBlock.has_value()) {
       // First non-empty block - initialize buffer.
