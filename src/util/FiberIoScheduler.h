@@ -22,8 +22,8 @@ namespace ad_utility {
 // Forward declaration; defined in `util/IoUringManager.h` on io_uring builds.
 class IoUringPolicy;
 
-// Cooperative fiber scheduler for io_uring batch waits. Design-only
-// reference: `docs/io_uring/fibers-design.md` (PR #165, steps 1-4).
+// Cooperative fiber scheduler for io_uring batch waits. Design reference:
+// `docs/io_uring/fibers-design.md` (steps 1-4).
 //
 // One thread runs several lookup batches as stackful fibers (Boost.Fiber over
 // Boost.Context). While a fiber's batch is still in flight, the fiber reaps
