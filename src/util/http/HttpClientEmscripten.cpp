@@ -36,7 +36,12 @@
 // * `maxRedirects` only distinguishes 0 ("don't follow", a redirect then fails
 //   the request, as natively) from larger values ("follow up to the limit of
 //   the JavaScript environment"). Following them ourselves would need
-//   `redirect: "manual"`, whose response is opaque in a browser.
+//   `redirect: "manual"`, whose response is opaque in a browser. And the
+//   JavaScript environment follows a `301` or `302` the way a browser does,
+//   that is, with a `GET` without a body, whereas the native implementation
+//   repeats the original request. A `SERVICE` whose endpoint answers with
+//   such a redirect (for example, the `http://` URL of an `https://` endpoint)
+//   therefore fails here, with a `307` or `308` it works.
 // * The `Location` header is never reported (`location_` stays empty).
 //   `fetch` only ever hands us the *final* response of a redirect chain, and
 //   the one non-redirect status that may carry the header (`300`, `305`) is
@@ -143,8 +148,10 @@ EM_JS(void, qleverFetch, (EM_VAL handle), {
     options.headers["Accept"] = accept;
   }
   // `fetch` rejects a `GET` or a `HEAD` that has a body, and a `Content-Type`
-  // without a body describes nothing. NOTE: `body` is a `Uint8Array` and hence
-  // truthy even when it is empty, so ask for its length.
+  // without a body describes nothing.
+  //
+  // NOTE: `body` is a `Uint8Array` and hence truthy even when it is empty, so
+  // ask for its length.
   if (body.length > 0) {
     options.body = body;
     if (contentType) {

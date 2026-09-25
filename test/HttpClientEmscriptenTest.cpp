@@ -152,6 +152,15 @@ EM_JS(void, startTestServer,
               (globalThis.numAbortedRequests ?? 0) + 1;
         }
       });
+    } else if (request.url === "/hang") {
+      // Never answers, for a request that can only end by being cancelled.
+      // Count the connection that the client then closes, like `/stream` does.
+      response.on("close", () => {
+        if (!response.writableEnded) {
+          globalThis.numAbortedRequests =
+              (globalThis.numAbortedRequests ?? 0) + 1;
+        }
+      });
     } else if (request.url === "/aborted-requests") {
       response.writeHead(200, {"Content-Type": "text/plain"});
       response.end(String(globalThis.numAbortedRequests ?? 0));
@@ -166,9 +175,11 @@ EM_JS(void, startTestServer,
       response.end("body");
     } else if (request.url === "/closed-port") {
       // A port that nobody listens on (any more), for a request that cannot
-      // connect. NOTE: Not a fixed small one like 1, which `fetch` refuses
-      // without even trying, because it is on the list of blocked ports of the
-      // Fetch standard.
+      // connect.
+      //
+      // NOTE: Not a fixed small one like 1, which `fetch` refuses without even
+      // trying, because it is on the list of blocked ports of the Fetch
+      // standard.
       const probe = require("net").createServer();
       probe.listen(0, "127.0.0.1", () => {
         const port = probe.address().port;
@@ -186,10 +197,12 @@ EM_JS(void, startTestServer,
     }
   });
   // Port 0 lets the OS pick a free one, so several test binaries can run at
-  // the same time. NOTE: `MEMORY64` passes pointers as `BigInt`, which cannot
-  // index the heap views, hence the `Number(...)` conversion (a no-op without
-  // it). The view is built freshly because Emscripten's cached `HEAPU8` can be
-  // stale after a memory growth.
+  // the same time.
+  //
+  // NOTE: `MEMORY64` passes pointers as `BigInt`, which cannot index the heap
+  // views, hence the `Number(...)` conversion (a no-op without it). The view is
+  // built freshly because Emscripten's cached `HEAPU8` can be stale after a
+  // memory growth.
   server.listen(0, "127.0.0.1", () => {
     Atomics.store(
         new Int32Array(HEAPU8.buffer), Number(portAddress) / 4,
@@ -303,8 +316,13 @@ class HttpClientEmscriptenTest : public ::testing::Test {
       auto response = sendHttpOrHttpsRequest(Url{url_ + "/stream"}, handle_);
       consume(response);
     }
-    // The server learns about the closed connection asynchronously, hence the
-    // retries.
+    expectOneMoreAbortedRequest(numAbortedBefore);
+  }
+
+  // Check that the server has seen exactly one more aborted request than
+  // `numAbortedBefore`. The server learns about a closed connection
+  // asynchronously, hence the retries.
+  void expectOneMoreAbortedRequest(size_t numAbortedBefore) {
     size_t numAbortedAfter = numAbortedBefore;
     for (size_t i = 0; i < 100 && numAbortedAfter == numAbortedBefore; ++i) {
       emscripten_thread_sleep(20);
@@ -512,11 +530,33 @@ TEST_F(HttpClientEmscriptenTest, cancellation) {
 }
 
 // _____________________________________________________________________________
+TEST_F(HttpClientEmscriptenTest, cancellationWhileWaitingForTheResponse) {
+  // The endpoint never answers, so the request can only end because the query
+  // is cancelled, which happens from another thread while we wait for the
+  // response. The cancelled request has to be aborted, so that its connection
+  // does not stay open.
+  size_t numAbortedBefore = numAbortedRequests();
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  std::thread canceller{[handle]() {
+    emscripten_thread_sleep(300);
+    handle->cancel(ad_utility::CancellationState::MANUAL);
+  }};
+  EXPECT_THROW(sendHttpOrHttpsRequest(Url{url_ + "/hang"}, handle),
+               ad_utility::CancellationException);
+  canceller.join();
+  expectOneMoreAbortedRequest(numAbortedBefore);
+  // A request after a cancelled one still works.
+  auto response = sendHttpOrHttpsRequest(Url{url_ + "/hello"}, handle_);
+  EXPECT_EQ(toString(response), "Hello, World!");
+}
+
+// _____________________________________________________________________________
 TEST_F(HttpClientEmscriptenTest, requestFromTheMainThreadOfABrowserFailsFast) {
   // Pretend to be on the main thread of a browser (detected by the absence of
-  // `WorkerGlobalScope`), where blocking is not allowed. NOTE: This has to run
-  // in the JavaScript context of the thread that performs the request, which is
-  // the thread this test runs on.
+  // `WorkerGlobalScope`), where blocking is not allowed.
+  //
+  // NOTE: This has to run in the JavaScript context of the thread that performs
+  // the request, which is the thread this test runs on.
   EM_ASM({ globalThis.window = {}; });
   absl::Cleanup restoreEnvironment{
       []() { EM_ASM({ delete globalThis.window; }); }};
@@ -527,6 +567,14 @@ TEST_F(HttpClientEmscriptenTest, requestFromTheMainThreadOfABrowserFailsFast) {
 
 // _____________________________________________________________________________
 TEST_F(HttpClientEmscriptenTest, concurrentRequestsFromSeveralThreads) {
+  // The very first request of the process creates the network thread, which
+  // Emscripten defers to the event loop of the main thread when the request
+  // comes from another thread (see the NOTE at `networkThread` in
+  // `HttpClientEmscripten.cpp`). The main thread is blocked in `join` below,
+  // so the first request has to be made here, or the test hangs when it runs
+  // on its own (which it does under `ctest`).
+  auto firstResponse = sendHttpOrHttpsRequest(Url{url_ + "/hello"}, handle_);
+  EXPECT_EQ(toString(firstResponse), "Hello, World!");
   std::atomic<size_t> numSuccesses = 0;
   std::vector<std::thread> threads;
   for (size_t i = 0; i < 4; ++i) {
