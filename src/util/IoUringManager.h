@@ -259,6 +259,10 @@ class IoUringPolicy {
   // Wait for one CQE and update the in-flight bookkeeping.
   void drainOneCqe();
 
+  // Submit all prepared SQEs to the kernel. Throw if `io_uring_submit`
+  // fails, including the error description in the message.
+  void submitOrThrow();
+
  public:
   IoUringPolicy(const IoUringPolicy&) = delete;
   IoUringPolicy& operator=(const IoUringPolicy&) = delete;

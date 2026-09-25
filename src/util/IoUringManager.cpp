@@ -10,8 +10,10 @@
 
 #include "util/IoUringManager.h"
 
+#include <absl/strings/str_cat.h>
 #include <unistd.h>
 
+#include <cstring>
 #include <stdexcept>
 
 #include "util/Exception.h"
@@ -83,7 +85,16 @@ IoUringPolicy::~IoUringPolicy() {
   // deliberately do not call `drainOneCqe` here: it throws on I/O errors, and a
   // destructor must not throw. We also stop if `io_uring_wait_cqe` fails, to
   // avoid spinning forever (it would not decrement the in-flight count).
-  while (numInFlightReadRequests_ > 0) {
+  //
+  // A failed `io_uring_submit` (see `submitOrThrow`) can leave prepared SQEs
+  // that the kernel has not consumed. They produce no completion, so retry
+  // submitting them once and wait only for the reads the kernel has actually
+  // received; the rest are discarded by `io_uring_queue_exit`.
+  if (io_uring_sq_ready(&ring_) > 0) {
+    io_uring_submit(&ring_);
+  }
+  const size_t numNeverSubmitted = io_uring_sq_ready(&ring_);
+  while (numInFlightReadRequests_ > numNeverSubmitted) {
     io_uring_cqe* cqe = nullptr;
     if (io_uring_wait_cqe(&ring_, &cqe) < 0) {
       break;
@@ -122,9 +133,7 @@ void IoUringPolicy::addBatch(int fd,
     if (numInFlightReadRequests_ >= ringSize_) {
       // Flush the SQEs prepared so far to the kernel so the kernel can start
       // servicing them. Their completions will free up submission slots.
-      if (io_uring_submit(&ring_) < 0) {
-        AD_THROW("io_uring_submit failed in IoUringPolicy");
-      }
+      submitOrThrow();
       while (numInFlightReadRequests_ >= ringSize_) {
         drainOneCqe();
       }
@@ -175,12 +184,10 @@ void IoUringPolicy::addBatch(int fd,
     numPreparedSinceSubmit++;
     numRemaining--;
   }
-  // Flush the remaining prepared SQEs to the kernel (the loop above only
-  // submits when the submission queue is full, so the last group of SQEs has
-  // not yet been submitted).
-  if (io_uring_submit(&ring_) < 0) {
-    AD_THROW("io_uring_submit failed in IoUringPolicy");
-  }
+  // Flush the remaining prepared SQEs to the kernel (the loop above submits
+  // only when the ring is full or, with an adaptive controller, when a group
+  // is flushed early, so the last group of SQEs has not yet been submitted).
+  submitOrThrow();
 }
 
 //______________________________________________________________________________
@@ -195,7 +202,25 @@ void IoUringPolicy::wait(BatchHandle handle) {
 }
 
 //______________________________________________________________________________
+void IoUringPolicy::submitOrThrow() {
+  // `io_uring_submit` returns the number of submitted SQEs or `-errno`. On
+  // failure the prepared SQEs stay in the submission queue; `drainOneCqe`
+  // and the destructor submit them again before waiting for completions.
+  const int ret = io_uring_submit(&ring_);
+  if (ret < 0) {
+    AD_THROW(absl::StrCat("io_uring_submit failed in IoUringPolicy: ",
+                          std::strerror(-ret)));
+  }
+}
+
+//______________________________________________________________________________
 void ad_utility::IoUringPolicy::drainOneCqe() {
+  // Submit SQEs that an earlier failed or partial `io_uring_submit` left in
+  // the submission queue. Without this, waiting for their completions would
+  // block forever, because the kernel has never seen them.
+  if (io_uring_sq_ready(&ring_) > 0) {
+    submitOrThrow();
+  }
   // Block until at least one completion queue entry (CQE) is available.
   io_uring_cqe* cqe = nullptr;
   int ret = io_uring_wait_cqe(&ring_, &cqe);
