@@ -16,6 +16,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
 #include "util/ConstexprUtils.h"
+#include "util/jthread.h"
 
 using ad_utility::source_location;
 using ad_utility::compressedExternalIdTable::blocksizeForMemory;
@@ -436,6 +437,298 @@ TEST(CompressedExternalIdTable, blocksizeAndMemoryAreInverses) {
       EXPECT_EQ(blocksizeForMemory(memory, numColumns), blocksize);
     }
   }
+}
+
+namespace {
+// The number of rows per block that results from the given uncompressed block
+// size. The blocks are formed per column, hence the size of a single `Id`.
+size_t rowsPerBlockFor(ad_utility::MemorySize blockSize) {
+  return blockSize.getBytes() / sizeof(Id);
+}
+
+// Write all the `tables` to the `writer` and then flush it, such that the
+// written blocks can be read again.
+void writeAndFlush(ad_utility::CompressedExternalIdTableWriter& writer,
+                   const std::vector<CopyableIdTable<0>>& tables) {
+  for (const auto& table : tables) {
+    writer.writeIdTable(table);
+  }
+  writer.flush();
+}
+
+// Check that the block boundary metadata of the `writer` exactly matches the
+// `tables` from which it was built.
+void checkBlockMetadata(
+    const ad_utility::CompressedExternalIdTableWriter& writer,
+    const std::vector<CopyableIdTable<0>>& tables, size_t rowsPerBlock,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  ASSERT_EQ(writer.numIdTables(), tables.size());
+  for (size_t i = 0; i < tables.size(); ++i) {
+    const auto& table = tables.at(i);
+    size_t expectedNumBlocks =
+        (table.numRows() + rowsPerBlock - 1) / rowsPerBlock;
+    ASSERT_EQ(writer.numBlocksOfIdTable(i), expectedNumBlocks);
+    for (size_t b = 0; b < expectedNumBlocks; ++b) {
+      size_t lower = b * rowsPerBlock;
+      size_t upper = std::min(lower + rowsPerBlock, table.numRows());
+      EXPECT_EQ(writer.numRowsInBlock(i, b), upper - lower);
+      EXPECT_EQ(writer.firstRowOfBlock(i, b), table.at(lower));
+      EXPECT_EQ(writer.lastRowOfBlock(i, b), table.at(upper - 1));
+    }
+  }
+}
+
+// Check that `readBlockOfIdTable` returns exactly the rows of the `tables` from
+// which the `writer` was built.
+void checkBlockContents(
+    const ad_utility::CompressedExternalIdTableWriter& writer,
+    const std::vector<CopyableIdTable<0>>& tables, size_t rowsPerBlock,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  ASSERT_EQ(writer.numIdTables(), tables.size());
+  for (size_t i = 0; i < tables.size(); ++i) {
+    const auto& table = tables.at(i);
+    for (size_t b = 0; b < writer.numBlocksOfIdTable(i); ++b) {
+      auto block = writer.readBlockOfIdTable(i, b);
+      size_t lower = b * rowsPerBlock;
+      size_t upper = std::min(lower + rowsPerBlock, table.numRows());
+      ASSERT_EQ(block.numRows(), upper - lower);
+      for (size_t row = 0; row < block.numRows(); ++row) {
+        EXPECT_EQ(block.at(row), table.at(lower + row));
+      }
+    }
+  }
+}
+
+// Three `IdTable`s with 3 columns each. The number of rows (6, 5, 1) is chosen
+// such that it is both divisible and not divisible by the block sizes used in
+// the tests below.
+std::vector<CopyableIdTable<0>> testTables() {
+  std::vector<CopyableIdTable<0>> tables;
+  tables.push_back(makeIdTableFromVector(
+      {{2, 4, 7}, {3, 6, 8}, {4, 3, 2}, {5, 1, 9}, {7, 0, 3}, {8, 8, 8}}));
+  tables.push_back(makeIdTableFromVector(
+      {{2, 3, 7}, {3, 6, 8}, {4, 2, 123}, {9, 9, 9}, {11, 0, 1}}));
+  tables.push_back(makeIdTableFromVector({{0, 4, 7}}));
+  return tables;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, blockBoundaryMetadata) {
+  auto tables = testTables();
+  // With 16 bytes per block we get 2 rows per block (divides the 6 rows of the
+  // first table, but not the 5 rows of the second one). With 24 bytes we get 3
+  // rows per block (divides the 6 rows, not the 5 rows). With 800 bytes each
+  // table fits into a single block.
+  for (auto blockSize : {16_B, 24_B, 800_B}) {
+    std::string filename =
+        gtestCurrentTestName() + std::to_string(blockSize.getBytes()) + ".dat";
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+    writeAndFlush(writer, tables);
+    checkBlockMetadata(writer, tables, rowsPerBlockFor(blockSize));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, readBlockOfIdTableMatchesSource) {
+  auto tables = testTables();
+  for (auto blockSize : {16_B, 24_B, 800_B}) {
+    std::string filename =
+        gtestCurrentTestName() + std::to_string(blockSize.getBytes()) + ".dat";
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+    writeAndFlush(writer, tables);
+    checkBlockContents(writer, tables, rowsPerBlockFor(blockSize));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, concurrentBlockReads) {
+  auto tables = testTables();
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+  writeAndFlush(writer, tables);
+
+  // Read all blocks concurrently from 8 threads. This only works if
+  // `readBlockOfIdTable` takes a shared lock on the underlying file.
+  writer.registerActiveReader();
+  std::vector<ad_utility::JThread> threads;
+  for ([[maybe_unused]] size_t i : ql::views::iota(0, 8)) {
+    threads.emplace_back([&writer, &tables, blockSize]() {
+      checkBlockContents(writer, tables, rowsPerBlockFor(blockSize));
+    });
+  }
+  threads.clear();
+  writer.unregisterActiveReader();
+
+  // After all readers are gone, the writer can be written to again.
+  EXPECT_NO_THROW(writer.writeIdTable(tables.at(0)));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, clearResetsBoundaryMetadata) {
+  auto tables = testTables();
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+  writeAndFlush(writer, tables);
+  writer.clear();
+
+  // After clearing, only the second batch is visible.
+  std::vector<CopyableIdTable<0>> secondBatch;
+  secondBatch.push_back(
+      makeIdTableFromVector({{1, 1, 1}, {2, 2, 2}, {3, 3, 3}}));
+  writeAndFlush(writer, secondBatch);
+  checkBlockMetadata(writer, secondBatch, rowsPerBlockFor(blockSize));
+  checkBlockContents(writer, secondBatch, rowsPerBlockFor(blockSize));
+}
+
+namespace {
+// Merge all the runs of the `writer` serially via a
+// `CompressedIdTableRunsInput` and return the merged rows.
+template <size_t NumStaticCols>
+std::vector<IdTable::row_type> mergeRunsSerially(
+    ad_utility::CompressedExternalIdTableWriter& writer) {
+  using namespace ad_utility::parallelBlockMerge;
+  MergeOptions options;
+  options.outputBlockSize = OutputBlockSize::numElements(2);
+  std::vector<IdTable::row_type> result;
+  for (auto& block : serialBlockMergeToRange<false>(
+           ad_utility::CompressedIdTableRunsInput<NumStaticCols>{writer},
+           SortTriple<0, 1, 2, false>{}, options)) {
+    EXPECT_LE(block.numRows(), 2u);
+    auto dynamicBlock = std::move(block).toDynamic();
+    for (const auto& row : dynamicBlock) {
+      result.emplace_back(row);
+    }
+  }
+  return result;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Merging the runs of a writer via a `CompressedIdTableRunsInput` yields all
+// the rows of all the runs in sorted order, for different block sizes and for
+// a dynamic and a static number of columns.
+TEST(CompressedExternalIdTable, runsInputMergedSerially) {
+  auto tables = testTables();
+  std::vector<IdTable::row_type> expected;
+  for (const auto& table : tables) {
+    for (const auto& row : table) {
+      expected.emplace_back(row);
+    }
+  }
+  ql::ranges::sort(expected, SortTriple<0, 1, 2, false>{});
+  for (auto blockSize : {16_B, 24_B, 800_B}) {
+    std::string filename =
+        gtestCurrentTestName() + std::to_string(blockSize.getBytes()) + ".dat";
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+    for (const auto& table : tables) {
+      writer.writeIdTable(table);
+    }
+    EXPECT_THAT(mergeRunsSerially<0>(writer),
+                ::testing::ElementsAreArray(expected));
+    EXPECT_THAT(mergeRunsSerially<3>(writer),
+                ::testing::ElementsAreArray(expected));
+  }
+}
+
+// _____________________________________________________________________________
+// A `CompressedIdTableRunsInput` forwards the block metadata of its writer.
+TEST(CompressedExternalIdTable, runsInputForwardsTheBlockMetadata) {
+  auto tables = testTables();
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+  for (const auto& table : tables) {
+    writer.writeIdTable(table);
+  }
+  ad_utility::CompressedIdTableRunsInput<0> input{writer};
+  ASSERT_EQ(input.numRuns(), tables.size());
+  for (size_t run = 0; run < input.numRuns(); ++run) {
+    ASSERT_EQ(input.numBlocks(run), writer.numBlocksOfIdTable(run));
+    for (size_t b = 0; b < input.numBlocks(run); ++b) {
+      EXPECT_EQ(input.numElementsInBlock(run, b),
+                writer.numRowsInBlock(run, b));
+      EXPECT_EQ(input.firstElement(run, b), writer.firstRowOfBlock(run, b));
+      EXPECT_EQ(input.lastElement(run, b), writer.lastRowOfBlock(run, b));
+      EXPECT_EQ(input.getBlock(run, b), writer.readBlockOfIdTable(run, b));
+    }
+  }
+  auto block = input.makeEmptyBlock();
+  EXPECT_EQ(block.numColumns(), 3u);
+  EXPECT_EQ(block.numRows(), 0u);
+  input.appendToBlock(block, writer.firstRowOfBlock(0, 0));
+  ASSERT_EQ(block.numRows(), 1u);
+  EXPECT_EQ(block.at(0), writer.firstRowOfBlock(0, 0));
+  EXPECT_EQ(input.memorySizeOfElement(block.at(0)), 3 * 8_B);
+}
+
+// _____________________________________________________________________________
+// A `CompressedIdTableRunsInput` registers itself as an active reader of its
+// writer for its whole lifetime (a move transfers the registration), so writing
+// to or clearing the writer throws while it is alive.
+TEST(CompressedExternalIdTable, runsInputIsAnActiveReader) {
+  auto tables = testTables();
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, 3, ad_utility::testing::makeAllocator(), 16_B};
+  writer.writeIdTable(tables.at(0));
+  auto expectWriterIsLocked = [&writer, &tables](bool isLocked) {
+    if (isLocked) {
+      AD_EXPECT_THROW_WITH_MESSAGE(writer.writeIdTable(tables.at(1)),
+                                   ::testing::HasSubstr("iterated over"));
+      AD_EXPECT_THROW_WITH_MESSAGE(writer.clear(),
+                                   ::testing::HasSubstr("iterated over"));
+    } else {
+      EXPECT_NO_THROW(writer.writeIdTable(tables.at(1)));
+    }
+  };
+  {
+    std::optional<ad_utility::CompressedIdTableRunsInput<0>> input{
+        std::in_place, writer};
+    expectWriterIsLocked(true);
+    // Moving transfers the registration, the moved-from object no longer holds
+    // it.
+    ad_utility::CompressedIdTableRunsInput<0> movedTo{std::move(input.value())};
+    input.reset();
+    expectWriterIsLocked(true);
+    // Move assignment swaps the registrations, so there are still exactly two.
+    ad_utility::CompressedIdTableRunsInput<0> other{writer};
+    other = std::move(movedTo);
+    expectWriterIsLocked(true);
+  }
+  expectWriterIsLocked(false);
+  EXPECT_NO_THROW(writer.clear());
 }
 
 namespace {
