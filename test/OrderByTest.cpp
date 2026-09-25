@@ -254,7 +254,8 @@ TEST(OrderBy, sortedIntInput) {
                                                       {I(max), I(2)}}),
                                true}));
 
-  // Check an input without `Undefined` values.
+  // Check an input without `Undefined` values (the range for them is then
+  // empty).
   EXPECT_EQ(
       orderByOnSortedInput({{I(3)}, {I(-2)}}),
       (ResultAndFastPath{makeIdTableFromVector({{I(-2)}, {I(3)}}), true}));

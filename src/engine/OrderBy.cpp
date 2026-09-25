@@ -150,11 +150,10 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
     return std::nullopt;
   }
 
-  // Output the `Undefined` values first, as `ORDER BY` does.
+  // Output the `Undefined` values first, as `ORDER BY` does (the range is
+  // empty if there are none).
   std::vector<RowRange> ranges;
-  if (firstDefined > 0) {
-    ranges.push_back({0, firstDefined, false});
-  }
+  ranges.push_back({0, firstDefined, false});
 
   // For ints, output the negative ints first and then the non-negative ones (in
   // the column, the non-negative ints come first, and each of the two parts is
