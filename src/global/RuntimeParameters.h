@@ -1,6 +1,12 @@
-//   Copyright 2024, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_RUNTIMEPARAMETERS_H
 #define QLEVER_RUNTIMEPARAMETERS_H
@@ -258,20 +264,20 @@ struct RuntimeParameters {
   // Opt-in adaptive io_uring batch sizing for vocabulary lookups
   // (`AdaptiveBatchController`): adapt the effective submission batch size
   // to the ratio of outstanding I/Os to still-pending reads instead of
-  // submitting against the fixed ring window. Disabled by default; the
-  // fixed window behavior is unchanged until this is enabled and the
-  // benchmark in `docs/io_uring/adaptive-batching-design.md` says
-  // otherwise.
-  Bool iouringAdaptiveBatchEnabled_{false, "iouring-adaptive-batch-enabled"};
-  // Minimum prepared reads before the controller may flush early. Must be
-  // at least one (enforced by a parameter constraint); smaller groups keep
-  // their single end-of-batch submit.
-  SizeT iouringAdaptiveBatchMinSize_{16, "iouring-adaptive-batch-min-size"};
-  // Maximum prepared reads before a forced submit, so large batches still
-  // submit incrementally. Must be at least one (enforced by a parameter
-  // constraint); a value below the minimum, or above the ring size, is
-  // clamped by the policy when the controller is installed.
-  SizeT iouringAdaptiveBatchMaxSize_{256, "iouring-adaptive-batch-max-size"};
+  // submitting against the fixed ring window. Disabled by default, in which
+  // case the fixed-window behavior is unchanged.
+  Bool ioUringAdaptiveBatchEnabled_{false, "iouring-adaptive-batch-enabled"};
+  // Minimum number of prepared reads before the controller may flush early.
+  // Must be at least one (enforced by a parameter constraint). Smaller
+  // groups are never flushed early by the controller, but the ring-full
+  // bound still submits them when the ring has no free slot.
+  SizeT ioUringAdaptiveBatchMinSize_{16, "iouring-adaptive-batch-min-size"};
+  // Maximum number of prepared reads before a forced submit, so large
+  // batches still submit incrementally. Must be at least one (enforced by a
+  // parameter constraint). When the controller is installed, both bounds
+  // are clamped to the ring size, and a maximum below the minimum is raised
+  // to the minimum.
+  SizeT ioUringAdaptiveBatchMaxSize_{256, "iouring-adaptive-batch-max-size"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
