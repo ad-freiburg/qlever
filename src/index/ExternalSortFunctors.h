@@ -17,12 +17,26 @@
 #include <vector>
 
 #include "global/Id.h"
+#include "util/CompilerWarnings.h"
 
 #ifdef QLEVER_CHEAPER_COMPILATION
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #endif
 
+// NOTE: With `hasGraphColumn`, this comparator unconditionally accesses the
+// column `ADDITIONAL_COLUMN_GRAPH_ID`, so GCC's `-Warray-bounds` fires whenever
+// it is instantiated for a row type whose size it knows to be smaller (in
+// particular for the `std::array` rows of a `RowMajorIdTable`, see
+// `engine/idTable/RowMajorIdTable.h`). Such instantiations exist because a
+// sorter whose number of columns is only known at runtime instantiates one row
+// type per supported number of columns, of which only the matching one is ever
+// used. Combining this comparator with a table that is too narrow for it was
+// always invalid; it simply used to read out of bounds at runtime instead of
+// warning at compile time. `-Warray-bounds` is a middle-end warning, but GCC
+// walks the inlining chain when deciding whether it is suppressed, so
+// suppressing it here covers every caller.
+DISABLE_ARRAY_BOUNDS_WARNINGS
 template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
   using T = std::array<Id, 3>;
@@ -62,6 +76,8 @@ struct SortTriple {
     }
   }
 };
+
+GCC_REENABLE_WARNINGS
 
 using SortByPSO = SortTriple<1, 0, 2>;
 using SortByPSONoGraphColumn = SortTriple<1, 0, 2, false>;

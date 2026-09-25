@@ -658,6 +658,9 @@ class ConversionOutput {
  private:
   using Sorters = FirstPermutationSorterAndInternalTriplesAsPso;
   Sorters sorters_;
+  // The progress bar and its counter are the only state that the concurrent
+  // `push` below shares, see there.
+  std::mutex progressMutex_;
   size_t numTriplesConverted_ = 0;
   ad_utility::ProgressBar progressBar_{numTriplesConverted_,
                                        "Triples converted: "};
@@ -686,9 +689,18 @@ class ConversionOutput {
   // respective sorters and report the progress. Both blocks are views, because
   // the caller obtains them by partitioning a single block (see
   // `convertPartialToGlobalIds`); the sorters copy the rows they are given.
+  //
+  // NOTE: This may be called concurrently from any number of threads. The
+  // blocks go into the sorters via `pushBlockConcurrently`, which only
+  // serializes the reservation of the rows and not the copying, and which is
+  // allowed here because the sorters sort their input anyway. Only the
+  // progress bar needs a lock of its own.
   void push(const BufferView& triples, const BufferView& internalTriples) {
-    sorters_.firstPermutationSorter_->pushBlock(triples.asStaticView<0>());
-    sorters_.internalTriplesPso_->pushBlock(internalTriples.asStaticView<0>());
+    sorters_.firstPermutationSorter_->pushBlockConcurrently(
+        triples.asStaticView<0>());
+    sorters_.internalTriplesPso_->pushBlockConcurrently(
+        internalTriples.asStaticView<0>());
+    std::lock_guard lock{progressMutex_};
     numTriplesConverted_ += triples.numRows() + internalTriples.numRows();
     if (progressBar_.update()) {
       AD_LOG_INFO << progressBar_.getProgressString() << std::flush;
@@ -712,8 +724,7 @@ auto IndexImpl::convertPartialToGlobalIds(
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
               << std::endl;
 
-  ad_utility::Synchronized<ConversionOutput> output{*this, "first",
-                                                    "internalTriples"};
+  ConversionOutput output{*this, "first", "internalTriples"};
 
   // Convert the triples that were mapped using the partial vocabulary with
   // index `partialVocabIdx` and push them to the sorters. The partial
@@ -747,8 +758,8 @@ auto IndexImpl::convertPartialToGlobalIds(
         std::partition(triples.begin(), triples.end(), isQLeverInternalTriple);
     size_t numInternalTriples = normalTriples - triples.begin();
     size_t numNormalTriples = triples.size() - numInternalTriples;
-    output.wlock()->push(triples.subView(numInternalTriples, numNormalTriples),
-                         triples.subView(0, numInternalTriples));
+    output.push(triples.subView(numInternalTriples, numNormalTriples),
+                triples.subView(0, numInternalTriples));
   };
 
   // Each worker repeatedly claims the next partial vocabulary from a shared
@@ -788,7 +799,7 @@ auto IndexImpl::convertPartialToGlobalIds(
   // them has thrown.
   ad_utility::runTasksInParallel(std::move(tasks));
 
-  return output.wlock()->finish();
+  return output.finish();
 }
 
 // _____________________________________________________________________________
@@ -925,8 +936,8 @@ std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
   // This function is only used by the runtime index rebuild (see
   // `IndexRebuilder`), which by default throttles the compress/write threads
   // of its permutation writers so that a rebuild on a live server leaves most
-  // of the CPU to concurrent queries. A value of 0 means "fall back to
-  // `permutation-writer-num-threads`".
+  // of the CPU to concurrent queries. A value of 0 means "fall back to the
+  // number of threads of the global thread pool".
   auto numWriterThreads = getRuntimeParameterAsOptional<
       &RuntimeParameters::rebuildPermutationWriterNumThreads_>();
   auto metaData = createPermutationImpl(

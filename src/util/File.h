@@ -199,6 +199,38 @@ class File {
     return bytesRead;
   }
 
+  //! Write `nofBytesToWrite` bytes to the file at the given `offset`, without
+  //! using or changing the file position (this uses `pwrite`). Returns the
+  //! number of bytes written, or the error returned by `pwrite`, which is < 0.
+  //! Writing past the end of the file extends it.
+  //!
+  //! NOTE: Several threads may call this concurrently, as long as they write
+  //! to ranges that do not overlap. It must not be mixed with the sequential
+  //! `write` above on the same file, because that one goes through the buffer
+  //! of the `FILE*`, which `pwrite` bypasses.
+  ssize_t write(const void* sourceBuffer, size_t nofBytesToWrite,
+                off_t offset) const {
+    assert(file_);
+    const int fd = fileno(file_);
+    size_t bytesWritten = 0;
+    const auto* from = static_cast<const uint8_t*>(sourceBuffer);
+    while (bytesWritten < nofBytesToWrite) {
+      size_t toWrite = nofBytesToWrite - bytesWritten;
+
+      const ssize_t ret = pwrite(fd, from + bytesWritten, toWrite,
+                                 offset + static_cast<off_t>(bytesWritten));
+
+      if (ret < 0) {
+        return ret;
+      }
+      if (ret == 0) {
+        break;
+      }
+      bytesWritten += ret;
+    }
+    return static_cast<ssize_t>(bytesWritten);
+  }
+
   //! Returns the number of bytes from the beginning
   //! is 0 on opening. Later equal the number of bytes written.
   //! -1 is returned when an error occurs
