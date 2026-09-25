@@ -300,8 +300,8 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
       std::move(options), std::move(cancellationHandle));
   using Range =
       detail::ParallelMergeRange<typename decltype(state)::element_type, Sink>;
-  return Result{std::make_unique<Range>(std::move(state), std::move(sink),
-                                        numPrefetchedBlocks)};
+  return Result{std::make_unique<Range>(std::move(executor), std::move(state),
+                                        std::move(sink), numPrefetchedBlocks)};
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 }
 

@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <chrono>
 #include <cstddef>
@@ -1308,9 +1309,10 @@ struct DummyMergeState {
 };
 struct DummySink {
   template <typename Token>
-  std::future<std::optional<SizeVec>> asyncGetNextBlock(
-      [[maybe_unused]] Token token) {
-    return {};
+  auto asyncGetNextBlock(Token&& token) {
+    return net::async_initiate<Token, void(std::exception_ptr,
+                                           std::optional<SizeVec>)>(
+        []([[maybe_unused]] auto handler) {}, token);
   }
 };
 }  // namespace
@@ -1322,20 +1324,23 @@ TEST(ParallelBlockMerge, rangeRequiresAStateAndASink) {
   using Range = detail::ParallelMergeRange<DummyMergeState, DummySink>;
   auto state = std::make_shared<DummyMergeState>();
   auto sink = std::make_shared<DummySink>();
-  AD_EXPECT_THROW_WITH_MESSAGE(Range(nullptr, sink, 2),
+  net::io_context ioContext;
+  auto executor = ioContext.get_executor();
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(executor, nullptr, sink, 2),
                                ::testing::HasSubstr("state_ != nullptr"));
-  AD_EXPECT_THROW_WITH_MESSAGE(Range(state, nullptr, 2),
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(executor, state, nullptr, 2),
                                ::testing::HasSubstr("sink_ != nullptr"));
   // A read-ahead of zero blocks would never make any progress, see
   // `MergeOptions::numPrefetchedOutputBlocks`.
-  AD_EXPECT_THROW_WITH_MESSAGE(Range(state, sink, 0),
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(executor, state, sink, 0),
                                ::testing::HasSubstr("numPrefetchedBlocks > 0"));
 }
 
 // ___________________________________________________________________________
-// The read-ahead of the range: the chain of `asyncGetNextBlock` operations that
-// keeps `MergeOptions::numPrefetchedOutputBlocks` output blocks ready, see
-// `detail::BlockPrefetcher`.
+// The read-ahead of the range, which keeps
+// `MergeOptions::numPrefetchedOutputBlocks` output blocks ready, see
+// `detail::BlockPrefetcher` (which has its own tests in
+// `BlockPrefetcherTest.cpp`).
 // ___________________________________________________________________________
 
 namespace {
@@ -1458,16 +1463,17 @@ TEST(ParallelBlockMerge, readAheadFillsTheBufferWhileTheConsumerIdles) {
     std::this_thread::sleep_for(std::chrono::milliseconds{200});
     return numBlocksRead->load();
   };
-  // With a read-ahead of a single block there are at most two blocks: the one
-  // that the consumer holds and the single one that was read ahead.
-  EXPECT_LE(numBlocksReadWhileIdling(1), 2u);
+  // With a read-ahead of a single block there are at most three blocks: the
+  // one that the consumer holds, the single one that was read ahead, and the
+  // one that the read-ahead holds while it waits for room in its buffer.
+  EXPECT_LE(numBlocksReadWhileIdling(1), 3u);
   // With a read-ahead of ten blocks the buffer fills up to ten blocks plus the
-  // one that the consumer holds, and the chain then pauses. The lower bound is
+  // two blocks from above, and the read-ahead then pauses. The lower bound is
   // deliberately loose, such that a heavily loaded machine does not make this
   // flaky.
   size_t numBlocksWithReadAhead = numBlocksReadWhileIdling(10);
   EXPECT_GE(numBlocksWithReadAhead, 6u);
-  EXPECT_LE(numBlocksWithReadAhead, 11u);
+  EXPECT_LE(numBlocksWithReadAhead, 12u);
 }
 
 // _____________________________________________________________________________
