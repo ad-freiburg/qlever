@@ -211,6 +211,9 @@ struct CompactStringVectorWriter : public ad_utility::NoCopy {
  private:
   using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
 
+  // The data members are encapsulated in a separate struct, which is managed by
+  // the `UniqueCleanup` below. NOTE: If you add additional data members to this
+  // class, add them inside the `Data` struct.
   struct Data {
     ad_utility::File file_;
     off_t startOfFile_{};
@@ -233,6 +236,10 @@ struct CompactStringVectorWriter : public ad_utility::NoCopy {
       return std::move(f).file();
     }
   };
+  // NOTE: This class is move-only. Because of this `UniqueCleanup`, the
+  // implicit move operations are correct: A moved-from writer doesn't write
+  // anything on destruction, and a move assignment first finishes the
+  // overwritten writer.
   ad_utility::unique_cleanup::UniqueCleanup<Data, Finisher> d_;
 
  public:

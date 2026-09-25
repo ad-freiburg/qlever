@@ -103,6 +103,10 @@ CPP_template(typename UnderlyingSerializer,
       return std::move(state.underlyingSerializer_);
     }
   };
+  // NOTE: This class is move-only. Because of this `UniqueCleanup`, the
+  // implicit move operations are correct: A moved-from serializer doesn't flush
+  // anything on destruction, and a move assignment first closes the overwritten
+  // serializer.
   unique_cleanup::UniqueCleanup<State, Closer> state_;
 
  public:
@@ -146,16 +150,15 @@ CPP_template(typename UnderlyingSerializer,
 
   // Flush the remaining buffered data and destroy the underlying serializer.
   // After a call to `close` no more calls to `serializeBytes` are allowed.
-  void close() {
-    if (state_.isActive()) {
-      std::move(state_).runNow();
-    }
-  }
+  void close() { std::move(state_).runNowIfActive(); }
 
   // Flush the remaining buffered data, and then move out the underlying
   // serializer.
   UnderlyingSerializer underlyingSerializer() && {
-    AD_CORRECTNESS_CHECK(state_.isActive());
+    AD_CONTRACT_CHECK(
+        state_.isActive(),
+        "`underlyingSerializer` was called on a `BufferedWriteSerializer` that "
+        "has already been closed or moved from");
     return std::move(state_).runNow();
   }
 
@@ -174,7 +177,10 @@ CPP_template(typename UnderlyingSerializer,
         std::is_same_v<BlockProcessor, PassthroughBlockProcessor>,
         "`getSerializationPosition` is only supported by a "
         "`BufferedWriteSerializer` that forwards its blocks unchanged");
-    AD_CORRECTNESS_CHECK(state_.isActive());
+    AD_CONTRACT_CHECK(
+        state_.isActive(),
+        "`getSerializationPosition` was called on a `BufferedWriteSerializer` "
+        "that has already been closed or moved from");
     return state_->underlyingSerializer_.getSerializationPosition() +
            state_->bufferSize_;
   }
@@ -194,7 +200,10 @@ CPP_template(typename UnderlyingSerializer,
         std::is_same_v<BlockProcessor, PassthroughBlockProcessor>,
         "`serializeAtPosition` is only supported by a "
         "`BufferedWriteSerializer` that forwards its blocks unchanged");
-    AD_CORRECTNESS_CHECK(serializer.state_.isActive());
+    AD_CONTRACT_CHECK(
+        serializer.state_.isActive(),
+        "`serializeAtPosition` was called on a `BufferedWriteSerializer` that "
+        "has already been closed or moved from");
     serializer.state_->flushBlock();
     serializeAtPosition(serializer.state_->underlyingSerializer_, position,
                         element);

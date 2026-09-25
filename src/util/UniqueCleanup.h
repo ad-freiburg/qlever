@@ -72,6 +72,10 @@ CPP_template(typename T, typename Func = std::function<void(T&&)>)(
     return std::invoke(std::move(function_), std::move(value_));
   }
 
+  // Like `runNow`, but does nothing if the object is not active. The result of
+  // the cleanup is discarded.
+  void runNowIfActive() && { runCleanup(); }
+
   ~UniqueCleanup() {
     ad_utility::terminateIfThrows([this]() { runCleanup(); },
                                   "The cleanup of a `UniqueCleanup` failed");

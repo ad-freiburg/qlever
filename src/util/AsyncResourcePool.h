@@ -171,11 +171,7 @@ class AsyncResourcePool {
     // Return the resource to its pool and make this handle empty. This is also
     // done by the destructor; call it explicitly to return the resource early.
     // Calling this on an empty handle does nothing.
-    void release() noexcept {
-      if (state_.isActive()) {
-        std::move(state_).runNow();
-      }
-    }
+    void release() noexcept { std::move(state_).runNowIfActive(); }
   };
 
   // Construct a pool of `numResources` value-initialized resources. The channel

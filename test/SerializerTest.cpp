@@ -1409,6 +1409,42 @@ TEST(BufferedWriteSerializer, SerializeAtPosition) {
 }
 
 // _____________________________________________________________________________
+// A `BufferedWriteSerializer` that has been closed or moved from can no longer
+// be used.
+TEST(BufferedWriteSerializer, ThrowsWhenClosedOrMovedFrom) {
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  using ::testing::HasSubstr;
+
+  auto expectUnusable = [](BufferedWriteSerializer<FileWriteSerializer>& writer,
+                           ad_utility::source_location l =
+                               AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        writer.getSerializationPosition(),
+        HasSubstr("`getSerializationPosition` was called on a "
+                  "`BufferedWriteSerializer` that has already been closed"));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        serializeAtPosition(writer, 0, uint32_t{42}),
+        HasSubstr("`serializeAtPosition` was called on a "
+                  "`BufferedWriteSerializer` that has already been closed"));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        std::move(writer).underlyingSerializer(),
+        HasSubstr("`underlyingSerializer` was called on a "
+                  "`BufferedWriteSerializer` that has already been closed"));
+  };
+
+  BufferedWriteSerializer writer{FileWriteSerializer{filename}, 1_kB};
+  writer << uint32_t{1};
+  auto other = std::move(writer);
+  // NOLINTNEXTLINE(bugprone-use-after-move)
+  expectUnusable(writer);
+
+  other.close();
+  expectUnusable(other);
+}
+
+// _____________________________________________________________________________
 // A `VectorIncrementalSerializer` on top of a `BufferedWriteSerializer` writes
 // exactly the same format as one that writes to the file directly, also if the
 // vector does not start at position 0.

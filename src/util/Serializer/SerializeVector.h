@@ -123,6 +123,10 @@ CPP_template(typename T, typename Serializer)(
       serializeAtPosition(state.serializer_, state.startPosition_, state.size_);
     }
   };
+  // NOTE: This class is move-only. Because of this `UniqueCleanup`, the
+  // implicit move operations are correct: A moved-from serializer doesn't write
+  // anything on destruction, and a move assignment first finishes the
+  // overwritten serializer.
   ad_utility::unique_cleanup::UniqueCleanup<State, Finisher> state_;
 
  public:
@@ -134,11 +138,7 @@ CPP_template(typename T, typename Serializer)(
     state_->size_++;
   }
 
-  void finish() {
-    if (state_.isActive()) {
-      std::move(state_).runNow();
-    }
-  }
+  void finish() { std::move(state_).runNowIfActive(); }
 
   Serializer serializer() && {
     finish();

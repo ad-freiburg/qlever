@@ -133,6 +133,27 @@ TEST(UniqueCleanup, RunNow) {
 }
 
 // _____________________________________________________________________________
+TEST(UniqueCleanup, RunNowIfActive) {
+  std::vector<int> cleanedUp;
+  auto cleanup = [&cleanedUp](int value) { cleanedUp.push_back(value); };
+  {
+    UniqueCleanup<int, std::function<void(int)>> a{1, cleanup};
+    std::move(a).runNowIfActive();
+    EXPECT_THAT(cleanedUp, ::testing::ElementsAre(1));
+    EXPECT_FALSE(a.isActive());
+    // Running it a second time does nothing.
+    std::move(a).runNowIfActive();
+    EXPECT_THAT(cleanedUp, ::testing::ElementsAre(1));
+
+    UniqueCleanup<int, std::function<void(int)>> b{2, cleanup};
+    std::move(b).cancel();
+    std::move(b).runNowIfActive();
+    EXPECT_THAT(cleanedUp, ::testing::ElementsAre(1));
+  }
+  EXPECT_THAT(cleanedUp, ::testing::ElementsAre(1));
+}
+
+// _____________________________________________________________________________
 TEST(UniqueCleanup, RunNowPropagatesExceptions) {
   UniqueCleanup<int, std::function<void(int)>> a{
       1, [](int) { throw std::runtime_error{"cleanup failed"}; }};
