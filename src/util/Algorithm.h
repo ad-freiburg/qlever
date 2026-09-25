@@ -273,6 +273,20 @@ CPP_template(typename ForwardIterator, typename Tp,
   return first;
 }
 
+namespace detail {
+// Return the next probe distance of a galloping search: double `step`, but
+// never beyond `remaining` (the distance from the new lower end to `last`).
+// Capping keeps the doubling free of signed overflow for every range size; a
+// probe distance larger than `remaining` would be clamped to `remaining` by
+// the caller anyway, so the probed positions are the same as with plain
+// doubling.
+template <typename DistanceType>
+constexpr DistanceType nextGallopStep(DistanceType step,
+                                      DistanceType remaining) {
+  return step > remaining / 2 ? remaining : step * 2;
+}
+}  // namespace detail
+
 // Galloping `lower_bound_iterator` starting from `hint`: exponential probe
 // forward while the probed element is still less than `val`, then binary
 // search in the bracket. Preconditions: `hint` is within `[first, last]` and
@@ -295,7 +309,7 @@ CPP_template(typename RandomIt, typename Tp, typename Compare)(
       return lower_bound_iterator(lo, hi, val, comp);
     }
     lo = hi;
-    step *= 2;
+    step = detail::nextGallopStep(step, last - lo);
   }
 }
 
@@ -319,7 +333,7 @@ CPP_template(typename RandomIt, typename Tp, typename Compare)(
       return upper_bound_iterator(lo, hi, val, comp);
     }
     lo = hi;
-    step *= 2;
+    step = detail::nextGallopStep(step, last - lo);
   }
 }
 

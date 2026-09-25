@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <limits>
 #include <map>
 
 #include "backports/span.h"
@@ -316,6 +317,25 @@ TEST(AlgorithmTest, gallopBoundIterator) {
       ad_utility::gallop_lower_bound_iterator(
           single.begin(), single.end(), 6u, compForLowerBound, single.begin()),
       single.end());
+}
+
+// _____________________________________________________________________________
+TEST(AlgorithmTest, nextGallopStep) {
+  using ad_utility::detail::nextGallopStep;
+  // Double the step while the doubled step does not exceed `remaining`.
+  EXPECT_EQ(nextGallopStep(1, 10), 2);
+  EXPECT_EQ(nextGallopStep(4, 10), 8);
+  EXPECT_EQ(nextGallopStep(5, 10), 10);
+  EXPECT_EQ(nextGallopStep(5, 11), 10);
+  // Otherwise cap the step at `remaining`.
+  EXPECT_EQ(nextGallopStep(6, 10), 10);
+  EXPECT_EQ(nextGallopStep(1, 1), 1);
+  // Doubling a step beyond half of the maximum would overflow, capping at
+  // `remaining` does not.
+  constexpr auto max = std::numeric_limits<std::ptrdiff_t>::max();
+  EXPECT_EQ(nextGallopStep<std::ptrdiff_t>(max / 2 + 1, max), max);
+  EXPECT_EQ(nextGallopStep<std::ptrdiff_t>(max / 2, max), max - 1);
+  EXPECT_EQ(nextGallopStep<std::ptrdiff_t>(max, max), max);
 }
 
 // _____________________________________________________________________________
