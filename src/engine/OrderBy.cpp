@@ -221,6 +221,9 @@ std::optional<IdTable> OrderBy::computeResultForSortedInput(
 
   // Copy the ranges to the result, one after the other, column by column and
   // each range in its direction.
+  //
+  // NOTE: `std::copy` and not `ql::ranges::copy`, because only the former
+  // reliably becomes a `memmove` (see the description of #3436).
   IdTable result{input.numColumns(), allocator()};
   result.resize(input.numRows());
   size_t offset = 0;
@@ -231,7 +234,7 @@ std::optional<IdTable> OrderBy::computeResultForSortedInput(
       if (reversed) {
         ql::ranges::reverse_copy(source, target);
       } else {
-        ql::ranges::copy(source, target);
+        std::copy(source.begin(), source.end(), target);
       }
     }
     offset += end - begin;
