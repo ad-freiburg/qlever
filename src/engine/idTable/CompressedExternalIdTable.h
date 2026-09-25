@@ -154,9 +154,9 @@ class CompressedExternalIdTableWriter {
     // TODO<joka921> Use parallelism per block instead of per column (more
     // fine-grained) but only once we have a reasonable abstraction for
     // parallelism.
-    std::vector<std::future<void>> compressColumFutures;
+    std::vector<std::future<void>> compressColumnFutures;
     for (auto i : ql::views::iota(0u, numColumns())) {
-      compressColumFutures.push_back(
+      compressColumnFutures.push_back(
           std::async(std::launch::async, [this, i, blockRanges, &table]() {
             auto& blockMetadata = blocksPerColumn_.at(i);
             decltype(auto) column = table.getColumn(i);
@@ -175,7 +175,7 @@ class CompressedExternalIdTableWriter {
             }
           }));
     }
-    for (auto& fut : compressColumFutures) {
+    for (auto& fut : compressColumnFutures) {
       fut.get();
     }
   }
@@ -247,7 +247,7 @@ class CompressedExternalIdTableWriter {
   // Register a reader that accesses the blocks directly (via
   // `readBlockOfIdTable`), such that the writer knows that it is currently
   // being read from, see `numActiveGenerators_`.
-  void registerActiveReader() { ++numActiveGenerators_; }
+  void registerActiveReader() noexcept { ++numActiveGenerators_; }
 
   // Unregister a reader that was previously registered via
   // `registerActiveReader`.
@@ -472,7 +472,8 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
     return *this;
   }
 
-  // ________________________________________________________________________
+  // TODO<joka921> Replace the destructor by a `UniqueCleanup` (see PR #3445),
+  // see the TODO at the move assignment above.
   ~CompressedIdTableRunsInput() {
     if (writer_ != nullptr) {
       writer_.value_->unregisterActiveReader();
@@ -520,7 +521,9 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
     block.push_back(row);
   }
 
-  // The memory of a single row, which is one `Id` per column.
+  // The memory of a single row, which is one `Id` per column. It is the same
+  // for all rows, so the `row` is not needed, but the argument is required by
+  // the input concept of `parallelBlockMerge`.
   template <typename R>
   MemorySize memorySizeOfElement([[maybe_unused]] const R& row) const {
     return MemorySize::bytes(writer().numColumns() * sizeof(Id));
