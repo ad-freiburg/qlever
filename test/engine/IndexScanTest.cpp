@@ -7,6 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -106,8 +107,7 @@ void testLazyScanForJoinOfTwoScans(
     const std::string& kgTurtle, const SparqlTripleSimple& tripleLeft,
     const SparqlTripleSimple& tripleRight,
     const std::vector<IndexPair>& leftRows,
-    const std::vector<IndexPair>& rightRows,
-    ad_utility::MemorySize blocksizePermutations = 16_B,
+    const std::vector<IndexPair>& rightRows, size_t rowsPerBlock = 2,
     source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
   // As soon as there is a LIMIT clause present, we cannot use the prefiltered
@@ -115,7 +115,7 @@ void testLazyScanForJoinOfTwoScans(
   std::vector<LimitOffsetClause> limits{{}, {12, 3}, {2, 3}};
   for (const auto& limit : limits) {
     TestIndexConfig config{kgTurtle};
-    config.blocksizePermutations = blocksizePermutations;
+    config.rowsPerBlock = rowsPerBlock;
     auto qec = getQec(std::move(config));
     IndexScan s1{qec, Permutation::PSO, tripleLeft};
     s1.applyLimitOffset(limit);
@@ -297,7 +297,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
     testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{1, 5}}, {{0, 4}});
   }
   {
-    // In this example we use 3 triples per block (24 bytes) and the `<p>`
+    // In this example we use 3 triples per block and the `<p>`
     // permutation is standing in a single block together with the previous
     // `<o>` relation. The lazy scans are however still aware that the relevant
     // part of the block (`<b> <p> ?x`) only  goes from `<x80>` through `<x90>`,
@@ -307,7 +307,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<a> <o> <a1>. <b> <p> <x80>. <b> <p> <x90>. "
         "<x2> <q> <xb>. <x5> <q> <xb2> . <x5> <q> <xb>. "
         "<x9> <q> <xb2> . <x91> <q> <xb>. <x93> <q> <xb2> .";
-    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 24_B);
+    testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {{0, 2}}, {{3, 6}}, 3);
   }
   {
     std::string kg =
@@ -563,6 +563,76 @@ TEST(IndexScan, getResultSizeOfScan) {
     ASSERT_EQ(res.idTableView().numColumns(), 0);
     EXPECT_TRUE(scan.sizeEstimateIsExactForTesting());
   }
+}
+
+// Test that the size estimate of a scan with two variables is taken from the
+// per-relation metadata if the relation has an entry there, and that it is
+// exact iff no block of the relation has located triples.
+TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
+  // A large relation `<p>` and two small relations `<q>` and `<r>`. With two
+  // rows per block, `<p>` is stored in blocks of its own and has a metadata
+  // entry, `<q>` and `<r>` share one block and have none.
+  std::string kg;
+  for (size_t i = 0; i < 50; ++i) {
+    kg += absl::StrCat("<x", i, "> <p> <y", i, "> . ");
+  }
+  kg += "<x0> <q> <y0> . <x0> <r> <y0> .";
+  TestIndexConfig config{kg};
+  config.rowsPerBlock = 2;
+  auto index = std::make_shared<Index>(makeTestIndex(std::move(config)));
+  auto getId = makeGetId(*index);
+  const auto& pso = index->getImpl().getPermutation(Permutation::PSO);
+  ASSERT_TRUE(pso.metaData().getMetaDataIfPresent(getId("<p>")).has_value());
+  ASSERT_FALSE(pso.metaData().getMetaDataIfPresent(getId("<q>")).has_value());
+
+  // The size estimate of the scan `?x <predicate> ?y` and whether it is exact.
+  // Each scan needs a new `QueryExecutionContext`, because the located triples
+  // are read from the snapshot taken at its creation.
+  QueryResultCache cache;
+  NamedResultCache namedCache;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
+  std::unique_ptr<QueryExecutionContext> qec = nullptr;
+  auto sizeEstimate = [&](const std::string& predicate) {
+    qec = std::make_unique<QueryExecutionContext>(
+        index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
+        SortPerformanceEstimator{}, &namedCache, materializedViewsManager);
+    SparqlTripleSimple scanTriple{Variable{"?x"},
+                                  TripleComponent::Iri::fromIriref(predicate),
+                                  Variable{"?y"}};
+    IndexScan scan{qec.get(), Permutation::PSO, scanTriple};
+    return std::pair{scan.getSizeEstimate(),
+                     scan.sizeEstimateIsExactForTesting()};
+  };
+  using EstimateAndExact = std::pair<size_t, bool>;
+
+  // Without updates, both estimates are exact, that of `<p>` from the
+  // metadata and that of `<q>` from its block.
+  EXPECT_EQ(sizeEstimate("<p>"), EstimateAndExact(50, true));
+  EXPECT_EQ(sizeEstimate("<q>"), EstimateAndExact(1, true));
+
+  // A triple inserted into a block of `<p>` leaves the estimate of `<p>`
+  // unchanged, but makes it inexact.
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
+  auto p = getId("<p>");
+  auto r = getId("<r>");
+  auto x0 = getId("<x0>");
+  auto y0 = getId("<y0>");
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    deltaTriples.insertTriples(cancellationHandle,
+                               {IdTriple<0>{std::array{x0, p, x0, g}}});
+  });
+  EXPECT_EQ(sizeEstimate("<p>"), EstimateAndExact(50, false));
+
+  // A triple deleted from a block that does not belong to `<p>` keeps the
+  // estimate of `<p>` exact.
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    deltaTriples.clear();
+    deltaTriples.deleteTriples(cancellationHandle,
+                               {IdTriple<0>{std::array{x0, r, y0, g}}});
+  });
+  EXPECT_EQ(sizeEstimate("<p>"), EstimateAndExact(50, true));
 }
 
 // _____________________________________________________________________________
@@ -1231,7 +1301,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
   // a and b are supposed to share one block and c and d.
   config.turtleInput =
       "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
-  config.blocksizePermutations = 16_B;
+  config.rowsPerBlock = 2;
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
 
@@ -1256,7 +1326,7 @@ TEST_P(IndexScanWithLazyJoin,
   // a and b are supposed to share one block and c and d.
   config.turtleInput =
       "<a> <p> <A> . <b> <p> <B> . <c> <p> <C> . <d> <p> <D> . ";
-  config.blocksizePermutations = 16_B;
+  config.rowsPerBlock = 2;
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
   LocalVocab extraVocab;
@@ -1540,7 +1610,7 @@ TEST(IndexScanTest, StripColumns) {
   TestIndexConfig config;
   using namespace ad_utility::memory_literals;
   // Each triple will be in a separate block.
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
   auto qec = ad_utility::testing::getQec(config);
 
@@ -1872,7 +1942,7 @@ TEST(IndexScanTest, StripColumns) {
 TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   TestIndexConfig config;
   using namespace ad_utility::memory_literals;
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   config.turtleInput = "<s> <p> <o>. <s2> <p> <o>. <s2> <p2> <o2>";
   auto qec = ad_utility::testing::getQec(config);
 
