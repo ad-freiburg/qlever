@@ -81,21 +81,11 @@ std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
 // _____________________________________________________________________________
 VocabBatchLookupResult VocabularyInMemoryBinSearch::lookupBatch(
     ql::span<const size_t> indices) const {
-  AD_CONTRACT_CHECK(!indices.empty());
-  auto sortedIndices = this->indices();
-  auto positions = ad_utility::batch_lower_bound_with_hints(
-      sortedIndices.begin(), sortedIndices.end(), indices);
-  std::vector<std::string> words;
-  words.reserve(indices.size());
-  for (auto [index, position] : ::ranges::views::zip(indices, positions)) {
-    if (position < sortedIndices.size() && sortedIndices[position] == index) {
-      words.emplace_back(wordAtPosition(position));
-    } else {
-      words.push_back(
-          ad_utility::vocabulary::placeholderForMissingVocabIndex(index));
-    }
-  }
-  return ad_utility::vocabulary::makeBatchResultFromWords(std::move(words));
+  // Resolve the whole batch with one galloping pass over `indices()` instead
+  // of one binary search (`positionOfIndex`) per index.
+  return ad_utility::vocabulary::lookupBatchWithGallopHints(
+      this->indices(), indices,
+      [this](size_t position) { return wordAtPosition(position); });
 }
 
 // _____________________________________________________________________________

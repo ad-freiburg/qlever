@@ -206,3 +206,69 @@ TEST(VocabularyTypes, sequentialLookupBatchWithMissingWords) {
       sequentialLookupBatch(VocabWithHolesThrowing{}, indices),
       ::testing::HasSubstr("replaceOptionalByPlaceholderOnExport"));
 }
+
+// _____________________________________________________________________________
+TEST(VocabularyTypes, makeBatchResultFromWords) {
+  using namespace ad_utility::vocabulary;
+  EXPECT_TRUE(makeBatchResultFromWords({})->empty());
+
+  std::vector<std::string> words{"beta", "alpha", "beta", ""};
+  auto result = makeBatchResultFromWords(words);
+  // The result owns copies of the words, so changing the input does not
+  // affect it.
+  words.clear();
+  ASSERT_EQ(result->size(), 4u);
+  EXPECT_EQ((*result)[0], "beta");
+  EXPECT_EQ((*result)[1], "alpha");
+  EXPECT_EQ((*result)[2], "beta");
+  EXPECT_EQ((*result)[3], "");
+  // The views stay valid for copies of the result after the original result
+  // is gone.
+  auto copy = result;
+  result.reset();
+  EXPECT_EQ((*copy)[1], "alpha");
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyTypes, lookupBatchWithGallopHints) {
+  using namespace ad_utility::vocabulary;
+  // A vocabulary with holes: the word at position `i` has index
+  // `vocabIndices[i]`.
+  std::vector<uint64_t> vocabIndices{1, 4, 5, 9};
+  std::vector<std::string> wordsByPosition{"a", "b", "c", "d"};
+  std::vector<size_t> numCalls(wordsByPosition.size(), 0);
+  auto wordAtPosition = [&](size_t position) -> std::string_view {
+    ++numCalls.at(position);
+    return wordsByPosition.at(position);
+  };
+  ql::span<const uint64_t> sorted{vocabIndices.data(), vocabIndices.size()};
+
+  // Unsorted batch with duplicates, holes, and indices before the first and
+  // after the last contained index: the result is in batch order.
+  std::vector<size_t> indices{9, 0, 4, 2, 1, 4, 10, 5};
+  auto result = lookupBatchWithGallopHints(sorted, indices, wordAtPosition);
+  std::vector<std::string> expected{"d",
+                                    placeholderForMissingVocabIndex(0),
+                                    "b",
+                                    placeholderForMissingVocabIndex(2),
+                                    "a",
+                                    "b",
+                                    placeholderForMissingVocabIndex(10),
+                                    "c"};
+  EXPECT_EQ(std::vector<std::string>(result->begin(), result->end()), expected);
+  // Only hits materialize a word, one call per occurrence in the batch.
+  EXPECT_EQ(numCalls, (std::vector<size_t>{1, 2, 1, 1}));
+
+  // Empty vocabulary: every index is a hole.
+  std::vector<size_t> single{3};
+  auto onlyHoles = lookupBatchWithGallopHints(
+      ql::span<const uint64_t>{}, single,
+      [](size_t) -> std::string_view { return "unreachable"; });
+  ASSERT_EQ(onlyHoles->size(), 1u);
+  EXPECT_EQ((*onlyHoles)[0], placeholderForMissingVocabIndex(3));
+
+  // An empty batch violates the contract.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      lookupBatchWithGallopHints(sorted, std::vector<size_t>{}, wordAtPosition),
+      ::testing::HasSubstr("indices.empty()"));
+}

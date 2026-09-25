@@ -145,11 +145,11 @@ class VocabularyInMemoryBinSearch
            });
   }
 
-  // Batch lookup with gallop hints (see `batch_lower_bound_with_hints`): sort
-  // a copy of the batch and resolve all positions with a single galloping
-  // pass over the sorted indices instead of one binary search per index.
-  // Behavior-preserving: same words, placeholders, and order as
-  // `sequentialLookupBatch`. Defined in `VocabularyInMemoryBinSearch.cpp`.
+  //____________________________________________________________________________
+  // Return one word per element of `indices`, in the order of `indices`, with
+  // `placeholderForMissingVocabIndex(index)` for each index that is not
+  // contained in the vocabulary (same result as `sequentialLookupBatch`). The
+  // returned views are valid as long as the result is alive.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________

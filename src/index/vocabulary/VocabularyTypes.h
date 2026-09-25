@@ -23,6 +23,7 @@
 
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
@@ -225,6 +226,23 @@ std::pair<uint64_t, uint64_t> getPositionOfWordInVocabWithHoles(
       .value_or(std::pair<uint64_t, uint64_t>{endIndex, endIndex});
 }
 
+// _____________________________________________________________________________
+// Return a `VocabBatchLookupResult` with one `string_view` per element of
+// `words`, in the order of `words`. Take ownership of `words`: the result
+// keeps them alive, so the views stay valid as long as the result is alive.
+// Build the views after the move, which is safe because moving the vector
+// does not relocate the contained strings. For empty `words`, return an empty
+// span.
+inline VocabBatchLookupResult makeBatchResultFromWords(
+    std::vector<std::string> words) {
+  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+  data->buffer() = std::move(words);
+  data->views() = ::ranges::to_vector(
+      data->buffer() |
+      ql::views::transform(ad_utility::staticCast<std::string_view>));
+  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+}
+
 // Sequential fallback for `lookupBatch`: look up each index individually via
 // `vocab[idx]`, returning one `string_view` per index. Works for any vocabulary
 // whose `operator[]` yields something convertible to `std::string`, or a
@@ -234,38 +252,45 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
                                              ql::span<const size_t> indices) {
   AD_CONTRACT_CHECK(!indices.empty());
   // Materialize the words as owning `std::string`s and move them into the
-  // result's `std::vector<std::string>` buffer. The views then point at those
-  // strings; no byte copying into a contiguous buffer is needed. Building the
-  // views after the move is safe: moving the vector does not relocate the
-  // contained strings.
-
-  std::vector<std::string> words = ::ranges::to<std::vector<std::string>>(
+  // result (see `makeBatchResultFromWords`).
+  return makeBatchResultFromWords(::ranges::to<std::vector<std::string>>(
       indices | ql::views::transform([&vocab](size_t idx) {
         return wordAsStringOrPlaceholder(vocab, idx);
-      }));
-
-  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
-  data->buffer() = std::move(words);
-  data->views() = ::ranges::to_vector(
-      data->buffer() |
-      ql::views::transform(ad_utility::staticCast<std::string_view>));
-
-  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+      })));
 }
 
-// Build a `VocabBatchLookupResult` from already materialized owning `words`
-// (one per looked-up index, in batch order). Shared by batch implementations
-// that resolve the words in a different order first (e.g. sorted with gallop
-// hints, see `batch_lower_bound_with_hints`) and therefore cannot use
-// `sequentialLookupBatch` above.
-inline VocabBatchLookupResult makeBatchResultFromWords(
-    std::vector<std::string> words) {
-  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
-  data->buffer() = std::move(words);
-  data->views() = ::ranges::to_vector(
-      data->buffer() |
-      ql::views::transform(ad_utility::staticCast<std::string_view>));
-  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+// _____________________________________________________________________________
+// Batch lookup for a vocabulary with holes that stores its words by position,
+// with the vocabulary index of the word at position `i` at
+// `sortedVocabIndices[i]` (strictly ascending). Return the same result as
+// `sequentialLookupBatch`: for each element of `indices`, in the order of
+// `indices`, the word `wordAtPosition(position)` if the index is contained in
+// `sortedVocabIndices` at `position`, and `placeholderForMissingVocabIndex`
+// otherwise. The result owns the words (see `makeBatchResultFromWords`).
+// Resolve all positions with a single galloping pass over
+// `sortedVocabIndices` (see `batch_lower_bound_with_hints`) instead of one
+// binary search per index.
+template <typename SortedVocabIndices, typename WordAtPosition>
+VocabBatchLookupResult lookupBatchWithGallopHints(
+    const SortedVocabIndices& sortedVocabIndices,
+    ql::span<const size_t> indices, const WordAtPosition& wordAtPosition) {
+  AD_CONTRACT_CHECK(!indices.empty());
+  const auto positions = ad_utility::batch_lower_bound_with_hints(
+      ql::ranges::begin(sortedVocabIndices),
+      ql::ranges::end(sortedVocabIndices), indices);
+  AD_CORRECTNESS_CHECK(positions.size() == indices.size());
+  const size_t numVocabIndices = ql::ranges::size(sortedVocabIndices);
+  // TODO<C++23> Use `ql::views::zip`.
+  return makeBatchResultFromWords(::ranges::to<std::vector<std::string>>(
+      ::ranges::views::zip(indices, positions) |
+      ql::views::transform([&](const auto& indexAndPosition) -> std::string {
+        const auto& [index, position] = indexAndPosition;
+        if (position < numVocabIndices &&
+            sortedVocabIndices[position] == index) {
+          return std::string{wordAtPosition(position)};
+        }
+        return placeholderForMissingVocabIndex(index);
+      })));
 }
 
 // Streamed version of `lookupBatch`: lazily apply `vocab.lookupBatch` for the

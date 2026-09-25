@@ -18,7 +18,6 @@
 #include "index/vocabulary/PrefixHeuristic.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyTypes.h"
-#include "util/Algorithm.h"
 #include "util/FsstCompressor.h"
 #include "util/InputRangeUtils.h"
 #include "util/OverloadCallOperator.h"
@@ -119,9 +118,7 @@ CPP_template(typename UnderlyingVocabulary,
       if (!position.has_value()) {
         return ad_utility::vocabulary::placeholderForMissingVocabIndex(idx);
       }
-      return compressionWrapper_.decompress(
-          underlyingVocabulary_.wordAtPosition(position.value()),
-          getDecoderIdxFromPosition(position.value()));
+      return decompressAtPosition(position.value());
     } else {
       decltype(auto) word = underlyingVocabulary_[idx];
       // As a safeguard for the future: only a vocabulary that deliberately has
@@ -159,6 +156,9 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
   //____________________________________________________________________________
+  // Return the uncompressed word for each element of `indices`, in the order
+  // of `indices` (the same words as `operator[]`, including the placeholder
+  // for a hole). The returned views are valid as long as the result is alive.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     // For an underlying vocabulary with holes each `operator[]` performs a
@@ -166,7 +166,12 @@ CPP_template(typename UnderlyingVocabulary,
     // single galloping pass instead (see `lookupBatchWithGallopHints`). All
     // other underlying vocabularies translate indices to positions in O(1).
     if constexpr (underlyingHasHoles) {
-      return lookupBatchWithGallopHints(indices);
+      // Resolve the whole batch with one galloping pass over the underlying
+      // indices instead of one binary search (`positionOfIndex`) per index,
+      // as `operator[]` would do.
+      return ad_utility::vocabulary::lookupBatchWithGallopHints(
+          underlyingVocabulary_.indices(), indices,
+          [this](size_t position) { return decompressAtPosition(position); });
     } else {
       // Fetch the compressed words in one batch through the underlying
       // vocabulary (an on-disk underlying vocabulary serves this from its
@@ -604,34 +609,14 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
  private:
-  // Batch lookup for an underlying vocabulary with holes: sort a copy of the
-  // batch and resolve all index-to-position translations with a single
-  // galloping pass over the underlying sorted indices (see
-  // `batch_lower_bound_with_hints`), then decompress each hit directly from
-  // its position. Behavior-preserving: same words, placeholders, and order as
-  // `sequentialLookupBatch`, but one galloping search instead of one binary
-  // search (`positionOfIndex`) per index. Only instantiated when
-  // `underlyingHasHoles`, the only case where the underlying vocabulary
-  // exposes `indices()` and `wordAtPosition()`.
-  VocabBatchLookupResult lookupBatchWithGallopHints(
-      ql::span<const size_t> indices) const {
-    AD_CONTRACT_CHECK(!indices.empty());
-    auto sortedIndices = underlyingVocabulary_.indices();
-    auto positions = ad_utility::batch_lower_bound_with_hints(
-        sortedIndices.begin(), sortedIndices.end(), indices);
-    std::vector<std::string> words;
-    words.reserve(indices.size());
-    for (auto [index, position] : ::ranges::views::zip(indices, positions)) {
-      if (position < sortedIndices.size() && sortedIndices[position] == index) {
-        words.push_back(compressionWrapper_.decompress(
-            underlyingVocabulary_.wordAtPosition(position),
-            getDecoderIdxFromPosition(position)));
-      } else {
-        words.push_back(
-            ad_utility::vocabulary::placeholderForMissingVocabIndex(index));
-      }
-    }
-    return ad_utility::vocabulary::makeBatchResultFromWords(std::move(words));
+  // Return the uncompressed word at the given `position` of the underlying
+  // vocabulary. Only valid for an underlying vocabulary with holes, which
+  // stores its words by position (see `underlyingHasHoles`).
+  std::string decompressAtPosition(size_t position) const {
+    static_assert(underlyingHasHoles);
+    return compressionWrapper_.decompress(
+        underlyingVocabulary_.wordAtPosition(position),
+        getDecoderIdxFromPosition(position));
   }
 
   // Get the correct decoder for the word at the given position. One decoder is
