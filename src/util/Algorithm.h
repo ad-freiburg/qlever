@@ -295,16 +295,18 @@ constexpr DistanceType nextGallopStep(DistanceType step,
 // argument to a value). Both hold when resolving a batch in sorted order
 // carrying the previous result as the hint.
 CPP_template(typename RandomIt, typename Tp, typename Compare)(
-    requires ql::concepts::random_access_iterator<RandomIt>) constexpr RandomIt
+    requires ql::concepts::random_access_iterator<RandomIt> CPP_and
+        ql::concepts::invocable<Compare&, RandomIt,
+                                const Tp&>) constexpr RandomIt
     gallop_lower_bound_iterator([[maybe_unused]] RandomIt first, RandomIt last,
                                 const Tp& val, Compare comp, RandomIt hint) {
   using DistanceType = typename std::iterator_traits<RandomIt>::difference_type;
   RandomIt lo = hint;
   DistanceType step = 1;
   while (true) {
-    DistanceType remaining = last - lo;
-    DistanceType jump = step < remaining ? step : remaining;
-    RandomIt hi = lo + jump;
+    const DistanceType remaining = last - lo;
+    const DistanceType jump = step < remaining ? step : remaining;
+    const RandomIt hi = lo + jump;
     if (hi == last || !comp(hi, val)) {
       return lower_bound_iterator(lo, hi, val, comp);
     }
@@ -319,16 +321,18 @@ CPP_template(typename RandomIt, typename Tp, typename Compare)(
 // second). Same preconditions: `hint` is within `[first, last]` and at or
 // before the answer.
 CPP_template(typename RandomIt, typename Tp, typename Compare)(
-    requires ql::concepts::random_access_iterator<RandomIt>) constexpr RandomIt
+    requires ql::concepts::random_access_iterator<RandomIt> CPP_and
+        ql::concepts::invocable<Compare&, const Tp&,
+                                RandomIt>) constexpr RandomIt
     gallop_upper_bound_iterator([[maybe_unused]] RandomIt first, RandomIt last,
                                 const Tp& val, Compare comp, RandomIt hint) {
   using DistanceType = typename std::iterator_traits<RandomIt>::difference_type;
   RandomIt lo = hint;
   DistanceType step = 1;
   while (true) {
-    DistanceType remaining = last - lo;
-    DistanceType jump = step < remaining ? step : remaining;
-    RandomIt hi = lo + jump;
+    const DistanceType remaining = last - lo;
+    const DistanceType jump = step < remaining ? step : remaining;
+    const RandomIt hi = lo + jump;
     if (hi == last || comp(val, hi)) {
       return upper_bound_iterator(lo, hi, val, comp);
     }
@@ -339,20 +343,23 @@ CPP_template(typename RandomIt, typename Tp, typename Compare)(
 
 // Resolve a batch of `queries` against the sorted range `[first, last)` and
 // return one `lower_bound` offset per query, in the original order of
-// `queries`. A copy of the batch is processed in sorted order (keeping each
-// query's original position for scattering the results back), carrying the
-// previous hit as the gallop hint for `gallop_lower_bound_iterator`. A query
-// that goes backwards (smaller than its predecessor, which cannot happen for
-// correctly sorted input) falls back to a plain `lower_bound_iterator` from
-// `first`, because such a query may lie before the hint. Callers distinguish
-// exact hits from holes by comparing each result against the query.
+// `queries`. Process a copy of the batch in sorted order (keeping each query's
+// original position for scattering the results back) and carry the previous
+// hit as the gallop hint for `gallop_lower_bound_iterator`: the sorted order
+// guarantees that each hint is at or before the answer of the next query.
+// Callers distinguish exact hits from holes by comparing each result against
+// the query.
 CPP_template(typename RandomIt, typename QueryRange)(
-    requires ql::concepts::random_access_iterator<RandomIt>)
+    requires ql::concepts::random_access_iterator<RandomIt> CPP_and
+        ql::ranges::sized_range<QueryRange>)
     std::vector<size_t> batch_lower_bound_with_hints(
         RandomIt first, RandomIt last, const QueryRange& queries) {
   // `remove_const_t` because the value type of e.g. `ql::span<const size_t>`
   // is `const size_t`, which must not be copied into the sorted query pairs.
   using QueryType = std::remove_const_t<ql::ranges::range_value_t<QueryRange>>;
+  if (ql::ranges::empty(queries)) {
+    return {};
+  }
   std::vector<std::pair<QueryType, size_t>> sortedQueries;
   sortedQueries.reserve(ql::ranges::size(queries));
   size_t index = 0;
@@ -363,24 +370,16 @@ CPP_template(typename RandomIt, typename QueryRange)(
     return a.first < b.first;
   });
   std::vector<size_t> result(sortedQueries.size());
-  if (sortedQueries.empty()) {
-    return result;
-  }
-  auto comp = [](RandomIt it, const QueryType& value) { return *it < value; };
+  const auto comp = [](RandomIt it, const QueryType& value) {
+    return *it < value;
+  };
+  // The first query starts at `hint == first`, which is always a valid hint.
   RandomIt hint = first;
-  // Start at the smallest query, so the first iteration already takes the
-  // gallop path with `hint == first`, which is always a valid hint.
-  QueryType prev = sortedQueries.front().first;
   for (const auto& [query, originalIndex] : sortedQueries) {
-    RandomIt it;
-    if (query < prev) {
-      it = lower_bound_iterator(first, last, query, comp);
-    } else {
-      it = gallop_lower_bound_iterator(first, last, query, comp, hint);
-    }
+    const RandomIt it =
+        gallop_lower_bound_iterator(first, last, query, comp, hint);
     result[originalIndex] = static_cast<size_t>(it - first);
     hint = it;
-    prev = query;
   }
   return result;
 }
