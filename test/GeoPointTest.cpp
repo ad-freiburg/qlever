@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
@@ -89,37 +90,57 @@ TEST(GeoPoint, string) {
   ASSERT_EQ(strpair.second, GEO_WKT_LITERAL);
 }
 
-// _____________________________________________________________________________
+// Test the bit representation of a point in the `ZOrder` encoding (for the
+// `LatMajor` encoding, see the test `latMajorEncoding` below).
 TEST(GeoPoint, bitRepresentation) {
-  GeoPoint g = GeoPoint(-70.5, -130.2);
-  constexpr double lat = ((-70.5 + 90) / (2 * 90)) * (1 << 30);
-  ASSERT_EQ(g.toBitRepresentation() >> 30, round(lat));
-  constexpr double lng = ((-130.2 + 180) / (2 * 180)) * (1 << 30);
-  ASSERT_EQ(g.toBitRepresentation() & ((1 << 30) - 1), round(lng));
+  using T = GeoPoint::T;
+  absl::Cleanup restoreEncoding{
+      [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
+  GeoPoint::setEncoding(GeoPointEncodingEnum::ZOrder);
 
-  constexpr size_t expect1 = (static_cast<size_t>(1) << 60) - 1;
-  g = GeoPoint(90, 180);
-  ASSERT_EQ(g.toBitRepresentation(), expect1);
-  // Upper 4 bits must be 0 for ValueId Datatype
-  ASSERT_EQ(g.toBitRepresentation() >> 60, 0);
+  // A point and its two quantized coordinates.
+  GeoPoint g{-70.5, -130.2};
+  const auto lat = static_cast<T>(
+      std::round(((-70.5 + 90) / (2 * 90)) * GeoPoint::maxCoordinateEncoded));
+  const auto lng = static_cast<T>(std::round(((-130.2 + 180) / (2 * 180)) *
+                                             GeoPoint::maxCoordinateEncoded));
 
-  g = GeoPoint(-90, -180);
-  ASSERT_EQ(g.toBitRepresentation(), 0);
+  // The two quantized coordinates are bit-interleaved, the latitude in the odd
+  // bits.
+  EXPECT_EQ(GeoPoint::deinterleaveCoordinates(g.toBitRepresentation()),
+            std::pair(lat, lng));
+  EXPECT_EQ(GeoPoint::interleaveCoordinates(lat, lng), g.toBitRepresentation());
+  EXPECT_EQ(GeoPoint::interleaveCoordinates(1, 0), 0b10u);
+  EXPECT_EQ(GeoPoint::interleaveCoordinates(0, 1), 0b01u);
+  EXPECT_EQ(GeoPoint::interleaveCoordinates(0b11, 0b01), 0b1011u);
 
-  constexpr size_t expect2 = (static_cast<size_t>(1) << 30) - 1;
-  g = GeoPoint(-90, 180);
-  ASSERT_EQ(g.toBitRepresentation(), expect2);
+  // The corners of the coordinate space have all 60 bits set, no bit set, only
+  // the longitude bits (the even positions), or only the latitude bits (the
+  // odd positions). The upper 4 bits are never set (they hold the datatype of
+  // an `Id`).
+  constexpr T allBits = (T{1} << 60) - 1;
+  constexpr T lngBits = 0x0555555555555555ULL;
+  EXPECT_EQ(GeoPoint(90, 180).toBitRepresentation(), allBits);
+  EXPECT_EQ(GeoPoint(-90, -180).toBitRepresentation(), 0u);
+  EXPECT_EQ(GeoPoint(-90, 180).toBitRepresentation(), lngBits);
+  EXPECT_EQ(GeoPoint(90, -180).toBitRepresentation(), lngBits << 1);
 
-  const size_t expect3 =
-      (static_cast<size_t>(round(lat)) << 30) | static_cast<size_t>(round(lng));
-  g = GeoPoint::fromBitRepresentation(expect3);
-  constexpr auto precision = 0.00001;
-  ASSERT_NEAR(g.getLat(), -70.5, precision);
-  ASSERT_NEAR(g.getLng(), -130.2, precision);
-
+  // Decoding gives the point back up to the precision of the quantization, and
+  // exactly for a corner of the coordinate space.
+  g = GeoPoint::fromBitRepresentation(
+      GeoPoint::interleaveCoordinates(lat, lng));
+  EXPECT_NEAR(g.getLat(), -70.5, 1e-5);
+  EXPECT_NEAR(g.getLng(), -130.2, 1e-5);
   g = GeoPoint::fromBitRepresentation(0);
-  ASSERT_DOUBLE_EQ(g.getLat(), -90);
-  ASSERT_DOUBLE_EQ(g.getLng(), -180);
+  EXPECT_DOUBLE_EQ(g.getLat(), -90);
+  EXPECT_DOUBLE_EQ(g.getLng(), -180);
+
+  // The quantization is idempotent, so the round trip through the bits is
+  // exact for every representable point.
+  for (T bits : {T{0}, T{1}, T{12345678901ULL}, lngBits, allBits}) {
+    EXPECT_EQ(GeoPoint::fromBitRepresentation(bits).toBitRepresentation(),
+              bits);
+  }
 }
 
 // _____________________________________________________________________________
@@ -226,4 +247,41 @@ TEST(GeoPoint, quantizeCoordinate) {
   EXPECT_ANY_THROW(GeoPoint::quantizeCoordinate(-90.5, 90));
   EXPECT_ANY_THROW(GeoPoint::quantizeCoordinate(90.5, 90));
   EXPECT_ANY_THROW(GeoPoint::dequantizeCoordinate(max + 1, 90));
+}
+
+// Test the `lat-major` encoding of a point, and that `toBitRepresentation` and
+// `fromBitRepresentation` use the encoding of the process.
+TEST(GeoPoint, latMajorEncoding) {
+  using T = GeoPoint::T;
+  using E = GeoPointEncodingEnum;
+  absl::Cleanup restoreEncoding{
+      [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
+
+  // In `LatMajor`, the latitude is in the upper and the longitude in the lower
+  // 30 bits, in `ZOrder`, the bits are interleaved. Splitting is the inverse
+  // of combining.
+  constexpr T lat = 0b101;
+  constexpr T lng = 0b11;
+  static_assert(GeoPoint::combineCoordinates(lat, lng, E::LatMajor) ==
+                ((lat << 30) | lng));
+  static_assert(GeoPoint::combineCoordinates(lat, lng, E::ZOrder) ==
+                GeoPoint::interleaveCoordinates(lat, lng));
+  for (auto encoding : {E::ZOrder, E::LatMajor}) {
+    EXPECT_EQ(GeoPoint::splitCoordinates(
+                  GeoPoint::combineCoordinates(lat, lng, encoding), encoding),
+              std::pair(lat, lng));
+  }
+
+  // A point is encoded and decoded with the encoding of the process.
+  GeoPoint point{48.0, 7.8};
+  T latQuantized = GeoPoint::quantizeCoordinate(48.0, 90);
+  T lngQuantized = GeoPoint::quantizeCoordinate(7.8, 180);
+  for (auto encoding : {E::ZOrder, E::LatMajor}) {
+    GeoPoint::setEncoding(encoding);
+    T bits = point.toBitRepresentation();
+    EXPECT_EQ(bits, GeoPoint::combineCoordinates(latQuantized, lngQuantized,
+                                                 encoding));
+    EXPECT_NEAR(GeoPoint::fromBitRepresentation(bits).getLat(), 48.0, 1e-6);
+    EXPECT_NEAR(GeoPoint::fromBitRepresentation(bits).getLng(), 7.8, 1e-6);
+  }
 }
