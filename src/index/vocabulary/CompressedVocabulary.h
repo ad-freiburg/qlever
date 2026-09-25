@@ -184,6 +184,12 @@ CPP_template(typename UnderlyingVocabulary,
       // reuse a buffer here.
       std::string decompressed =
           compressionWrapper_.decompress(compressedWord, getDecoderIdx(idx));
+      // An empty word needs no storage; this also avoids `memcpy` on a
+      // possibly null pointer from a zero-byte allocation.
+      if (decompressed.empty()) {
+        views.emplace_back();
+        continue;
+      }
       // `memory_resource::allocate` returns `void*` to storage we own for
       // `decompressed.size()` bytes. Casting to `char*` is well-defined and is
       // the usual way to treat that storage as a byte buffer: we only write
