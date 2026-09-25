@@ -14,6 +14,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "util/Exception.h"
+
 namespace ad_utility {
 
 // Ratio controller that adapts the effective io_uring submission batch size
@@ -29,14 +31,18 @@ namespace ad_utility {
 // unconditional end-of-batch flush) and consults `shouldFlush` to decide
 // whether the currently prepared group is flushed now or kept open for more
 // reads. QLever's export path stays single-threaded; `pending` here means
-// not-yet-submitted reads of the current batch, not waiting fibers.
+// the reads of the current batch that are not yet prepared (including the
+// one being prepared), not waiting fibers.
 struct AdaptiveBatchController {
   // Flush once at least this many reads are prepared since the last submit.
-  // Groups below this size are never flushed early, so tiny batches keep
-  // their single end-of-batch submit. Normalized to at least one by the
-  // policy, so a nearly finished batch always flushes instead of waiting
-  // for work that will never arrive. Default 16: even modest batch sizes
-  // amortize most of the per-operation syscall overhead.
+  // Groups below this size are never flushed early by the controller, so
+  // tiny batches keep their single end-of-batch submit. The same value is
+  // also the tail threshold of `shouldFlush`: once at most this many reads
+  // of the batch remain, the controller flushes instead of deferring.
+  // Normalized to at least one and at most the ring size by the policy, so a
+  // nearly finished batch always flushes instead of waiting for work that will
+  // never arrive. Default 16: even modest batch sizes amortize most of the
+  // per-operation syscall overhead.
   size_t minBatchSize_ = 16;
 
   // Flush once this many reads are prepared since the last submit, so a
@@ -49,16 +55,18 @@ struct AdaptiveBatchController {
   // `outstanding / pending >= deferNumerator_ / deferDenominator_` (many
   // I/Os in flight relative to the remaining work), defer the submit to
   // increase amortization. Otherwise flush early to keep the device busy.
-  // The default of 1/1 defers once the outstanding I/Os outnumber the
-  // still-pending reads. Both parts are normalized to at least one (see
-  // `normalized`), since zero would silently pin one decision.
+  // The default of 1/1 defers once there are at least as many outstanding
+  // I/Os as still-pending reads (equality defers). Both parts are normalized to
+  // at least one (see `normalized`), since zero would silently pin one
+  // decision.
   uint64_t deferNumerator_ = 1;
   uint64_t deferDenominator_ = 1;
 
   // Return a copy with enforceable bounds: the minimum batch size is at
   // least one (a nearly finished batch always flushes instead of waiting
-  // for work that will never arrive), the maximum is at most `ringSize`
-  // and at least the minimum (a deferred group never exceeds the ring),
+  // for work that will never arrive) and at most `ringSize`, the maximum is
+  // at most `ringSize` and at least the minimum (a deferred group never
+  // exceeds the ring; a `ringSize` of zero is treated as one),
   // and the defer ratio is strictly positive (a zero denominator or
   // numerator would silently force flush-everything or defer-everything).
   // The struct itself stays a plain aggregate; this is the single
@@ -66,8 +74,9 @@ struct AdaptiveBatchController {
   // installed. `shouldFlush` therefore assumes normalized values.
   [[nodiscard]] AdaptiveBatchController normalized(size_t ringSize) const {
     AdaptiveBatchController result = *this;
-    result.minBatchSize_ = std::max<size_t>(result.minBatchSize_, 1);
-    const size_t upperBound = std::max<size_t>(ringSize, result.minBatchSize_);
+    const size_t upperBound = std::max<size_t>(ringSize, 1);
+    result.minBatchSize_ =
+        std::clamp<size_t>(result.minBatchSize_, 1, upperBound);
     result.maxBatchSize_ =
         std::clamp(result.maxBatchSize_, result.minBatchSize_, upperBound);
     result.deferNumerator_ = std::max<uint64_t>(result.deferNumerator_, 1);
@@ -76,14 +85,19 @@ struct AdaptiveBatchController {
   }
 
   // Decide whether the currently prepared group should be submitted now.
-  // Requires normalized bounds (see `normalized`). Returns true (flush
+  // Requires a strictly positive minimum and defer ratio (guaranteed by
+  // `normalized`, checked here). Returns true (flush
   // early) when there is nothing left to batch (`pending == 0`), when the
   // device is idle (`outstanding == 0`), or when only a tail of at most
   // `minBatchSize_` reads remains. Returns false (defer, keep preparing)
   // when many I/Os are already in flight relative to the remaining work.
-  // Both counts are numbers of reads; `pending` includes the read
-  // currently being prepared.
+  // Both counts are numbers of reads: `outstanding` counts reads submitted
+  // to the kernel and not yet completed, `pending` counts the reads of the
+  // batch not yet prepared, including the one currently being prepared.
   [[nodiscard]] bool shouldFlush(size_t outstanding, size_t pending) const {
+    AD_CONTRACT_CHECK(minBatchSize_ > 0);
+    AD_CONTRACT_CHECK(deferNumerator_ > 0);
+    AD_CONTRACT_CHECK(deferDenominator_ > 0);
     if (pending == 0) {
       return true;
     }
@@ -95,9 +109,11 @@ struct AdaptiveBatchController {
     }
     // Defer while outstanding / pending >= deferNumerator_ / deferDenominator_.
     // The comparison is rearranged to multiplications so no division is
-    // needed; `__int128` keeps it exact for any realistic queue depth.
-    const __int128 lhs = static_cast<__int128>(outstanding) * deferDenominator_;
-    const __int128 rhs = static_cast<__int128>(pending) * deferNumerator_;
+    // needed. The product of two 64-bit values always fits into an unsigned
+    // 128-bit integer, so the comparison is exact for all inputs.
+    using U128 = unsigned __int128;
+    const U128 lhs = static_cast<U128>(outstanding) * U128{deferDenominator_};
+    const U128 rhs = static_cast<U128>(pending) * U128{deferNumerator_};
     return lhs < rhs;
   }
 };

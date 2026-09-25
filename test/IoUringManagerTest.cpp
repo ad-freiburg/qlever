@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -583,16 +584,16 @@ TEST(MakeBatchManager, syncBackendWhenIoUringNotPreferred) {
 // test the flush/defer decision, so these tests run in every build.
 TEST(AdaptiveBatchController, flushesWhenNothingRemains) {
   ad_utility::AdaptiveBatchController controller;
-  // Nothing left to batch: flush whatever is prepared, even with a full
-  // device.
+  // Nothing left to batch: flush whatever is prepared, even with many reads
+  // outstanding.
   EXPECT_TRUE(controller.shouldFlush(256, 0));
   EXPECT_TRUE(controller.shouldFlush(0, 0));
 }
 
 TEST(AdaptiveBatchController, flushesWhenDeviceIsIdle) {
   ad_utility::AdaptiveBatchController controller;
-  // Nothing in flight: flush early to keep the device busy, no matter how
-  // much work remains.
+  // Nothing outstanding: flush early to keep the device busy, independent of
+  // the number of pending reads.
   EXPECT_TRUE(controller.shouldFlush(0, 200));
   EXPECT_TRUE(controller.shouldFlush(0, 1));
 }
@@ -600,8 +601,8 @@ TEST(AdaptiveBatchController, flushesWhenDeviceIsIdle) {
 TEST(AdaptiveBatchController, flushesSmallTail) {
   ad_utility::AdaptiveBatchController controller;
   controller.minBatchSize_ = 16;
-  // A nearly finished batch always flushes instead of waiting for work that
-  // will never arrive.
+  // At most `minBatchSize_` pending reads (a small tail): flush instead of
+  // deferring, even with many reads outstanding.
   EXPECT_TRUE(controller.shouldFlush(256, 16));
   EXPECT_TRUE(controller.shouldFlush(256, 1));
   EXPECT_FALSE(controller.shouldFlush(256, 17));
@@ -629,22 +630,56 @@ TEST(AdaptiveBatchController, customDeferRatio) {
   EXPECT_TRUE(controller.shouldFlush(199, 100));
 }
 
-TEST(AdaptiveBatchController, normalizedHardensBounds) {
-  // A zero denominator would silently pin flush-everything, a zero
-  // numerator defer-everything; both normalize to one.
+// The ratio comparison is exact even for the largest representable values.
+TEST(AdaptiveBatchController, extremeValuesDoNotOverflow) {
+  constexpr auto maxU64 = std::numeric_limits<uint64_t>::max();
+  constexpr auto maxSize = std::numeric_limits<size_t>::max();
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 1;
+  controller.deferNumerator_ = maxU64;
+  controller.deferDenominator_ = maxU64;
+  // Ratio 1: defer at equality, flush when fewer are outstanding.
+  EXPECT_FALSE(controller.shouldFlush(maxSize, maxSize));
+  EXPECT_TRUE(controller.shouldFlush(maxSize - 1, maxSize));
+  controller.deferDenominator_ = 1;
+  // Ratio `maxU64`: defer only once outstanding >= maxU64 * pending.
+  EXPECT_TRUE(controller.shouldFlush(maxSize, 2));
+}
+
+// `shouldFlush` requires a normalized controller and checks it.
+TEST(AdaptiveBatchController, shouldFlushChecksNormalizedBounds) {
+  ad_utility::AdaptiveBatchController controller;
+  controller.deferDenominator_ = 0;
+  EXPECT_ANY_THROW((void)controller.shouldFlush(100, 100));
+  controller = ad_utility::AdaptiveBatchController{};
+  controller.deferNumerator_ = 0;
+  EXPECT_ANY_THROW((void)controller.shouldFlush(100, 100));
+  controller = ad_utility::AdaptiveBatchController{};
+  controller.minBatchSize_ = 0;
+  EXPECT_ANY_THROW((void)controller.shouldFlush(100, 100));
+  EXPECT_NO_THROW((void)controller.normalized(256).shouldFlush(100, 100));
+}
+
+TEST(AdaptiveBatchController, normalizedClampsBounds) {
+  // Without normalization, a zero ratio part would be rejected by
+  // `shouldFlush`; both normalize to one.
   ad_utility::AdaptiveBatchController controller;
   controller.deferNumerator_ = 0;
   controller.deferDenominator_ = 0;
   auto normalized = controller.normalized(256);
   EXPECT_EQ(normalized.deferNumerator_, 1);
   EXPECT_EQ(normalized.deferDenominator_, 1);
-  // A ring smaller than the minimum keeps max at the minimum; the
-  // ring-full safety bound still paces submission.
+  // A ring smaller than the minimum clamps both the minimum and the maximum
+  // to the ring size, so a deferred group never exceeds the ring.
   controller.minBatchSize_ = 16;
   controller.maxBatchSize_ = 256;
   normalized = controller.normalized(4);
-  EXPECT_EQ(normalized.minBatchSize_, 16);
-  EXPECT_EQ(normalized.maxBatchSize_, 16);
+  EXPECT_EQ(normalized.minBatchSize_, 4);
+  EXPECT_EQ(normalized.maxBatchSize_, 4);
+  // A ring size of zero is treated as one.
+  normalized = controller.normalized(0);
+  EXPECT_EQ(normalized.minBatchSize_, 1);
+  EXPECT_EQ(normalized.maxBatchSize_, 1);
 }
 
 #ifdef QLEVER_HAS_IO_URING
@@ -744,6 +779,7 @@ TEST(AdaptiveBatchControllerPolicy, enabledControllerReadsCorrectly) {
   controller.maxBatchSize_ = 64;  // Clamped to the ring size of 16.
   manager.setAdaptiveBatchController(controller);
   ASSERT_TRUE(manager.adaptiveBatchController().has_value());
+  EXPECT_EQ(manager.adaptiveBatchController()->maxBatchSize_, 16);
 
   manager.wait(scenario.submitTo(manager, fd));
   EXPECT_THAT(scenario.results(),
