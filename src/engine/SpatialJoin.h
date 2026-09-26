@@ -20,6 +20,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 using SpatialJoinBoundingBoxColumns =
     std::optional<std::pair<ColumnIndex, ColumnIndex>>;
@@ -55,7 +56,7 @@ class SpatialJoin : public Operation {
               bool substitutesFilterOp = false);
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
   std::string getCacheKeyImpl() const override;

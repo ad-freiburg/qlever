@@ -13,6 +13,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
+#include "util/ContainersWithAllocator.h"
 
 // An operation that owns its explicit `Result` via `shared_ptr`s (or a
 // non-owning view) and just returns this result when `computeResult` is
@@ -75,7 +76,7 @@ class ExplicitIdTableOperation : public Operation {
   Result computeResult(bool requestLaziness) override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 };
 

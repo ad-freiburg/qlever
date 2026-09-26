@@ -12,6 +12,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 // The implementation of the SPARQL `ORDER BY` operation.
 //
@@ -72,8 +73,8 @@ class OrderBy : public Operation {
   size_t getResultWidth() const override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {subtree_.get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{subtree_.get()}, allocator()};
   }
 
  private:
