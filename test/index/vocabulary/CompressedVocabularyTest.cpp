@@ -9,6 +9,8 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <array>
+
 #include "VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "backports/span.h"
@@ -339,9 +341,8 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchShortWordViewsStayValid) {
   // Clobber the stack region a dangling SSO view would point into. Two deep
   // frames of sentinel bytes leave no plausible intact copy behind.
   auto churn = []() {
-    volatile char sentinel[2048];
+    std::array<volatile char, 2048> sentinel;
     ql::ranges::fill(sentinel, '#');
-    static_cast<void>(sentinel);
   };
   churn();
   churn();
