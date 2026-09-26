@@ -269,6 +269,43 @@ TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
                                                                 indices);
 }
 
+// With the switches behind the runtime parameters
+// `vocabulary-iouring-registered-buffers` and `vocabulary-iouring-direct-io`
+// on, `lookupBatch` reads through the registered arena (and, where the file
+// system supports it, with `O_DIRECT`) and must return the same words. The
+// words cover strings that cross a 4 KiB block boundary and strings larger
+// than an arena slot.
+TEST(VocabularyOnDisk, LookupBatchWithRegisteredBuffersAndDirectIo) {
+  std::vector<std::string> words;
+  for (size_t i = 0; i < 2000; ++i) {
+    words.push_back(absl::StrCat("word", i, std::string(i % 13, 'x')));
+  }
+  words.push_back(std::string(5000, 'L'));
+  words.push_back("last");
+  VocabularyCreator creator{gtestCurrentTestName()};
+  auto vocab = creator.createVocabulary(words);
+  std::vector<size_t> indices;
+  for (size_t i = 0; i < words.size(); i += 3) {
+    indices.push_back(words.size() - 1 - i);
+  }
+  indices.push_back(words.size() - 2);
+
+  absl::Cleanup reset{[]() {
+    ad_utility::useRegisteredBuffersForVocabularyReads = false;
+    ad_utility::useDirectIoForVocabularyReads = false;
+  }};
+  for (bool directIo : {false, true}) {
+    ad_utility::useRegisteredBuffersForVocabularyReads = true;
+    ad_utility::useDirectIoForVocabularyReads = directIo;
+    // Twice, so the second batch reuses the arena slots of the first.
+    for (size_t rep = 0; rep < 2; ++rep) {
+      auto result = vocab.lookupBatch(indices);
+      vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+          vocab, result, indices);
+    }
+  }
+}
+
 // An empty batch is an invalid request and must throw.
 TEST(VocabularyOnDisk, LookupBatchEmptyThrows) {
   auto vocab = createExampleVocabulary();
