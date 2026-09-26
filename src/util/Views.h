@@ -278,7 +278,18 @@ CPP_template(typename V, typename F)(
   CallbackOnEndView& operator=(const CallbackOnEndView&) = delete;
 
   CallbackOnEndView(CallbackOnEndView&&) = default;
-  CallbackOnEndView& operator=(CallbackOnEndView&&) = default;
+  // Invoke the callback of the overwritten view (if not yet invoked).
+  CallbackOnEndView& operator=(CallbackOnEndView&& other) noexcept(
+      isNoexcept && std::is_nothrow_move_assignable_v<V> &&
+      std::is_nothrow_move_assignable_v<::ranges::semiregular_box_t<F>>) {
+    if (this != &other) {
+      maybeInvoke();
+      base_ = std::move(other.base_);
+      callback_ = std::move(other.callback_);
+      called_ = std::move(other.called_);
+    }
+    return *this;
+  }
 
   ~CallbackOnEndView() noexcept(isNoexcept) {
     if constexpr (isNoexcept) {

@@ -250,7 +250,7 @@ TEST(GeoPoint, quantizeCoordinate) {
   EXPECT_ANY_THROW(GeoPoint::dequantizeCoordinate(max + 1, 90));
 }
 
-// Test the `lat-major` encoding of a point, and that `toBitRepresentation` and
+// Test the `LatMajor` encoding of a point, and that `toBitRepresentation` and
 // `fromBitRepresentation` use the encoding of the process.
 TEST(GeoPoint, latMajorEncoding) {
   using T = GeoPoint::T;

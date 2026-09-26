@@ -101,7 +101,7 @@ class GeoPoint {
   static double dequantizeCoordinate(T quantized, double maxValue);
 
   // Interleave two quantized coordinates into a bit representation and take
-  // it apart again (see above).
+  // it apart again. This is the `ZOrder` encoding (see above).
   static constexpr T interleaveCoordinates(T lat, T lng) {
     return (spreadBits(lat) << 1) | spreadBits(lng);
   }
@@ -142,31 +142,6 @@ class GeoPoint {
     encoding_.store(encoding);
   }
 
- private:
-  static inline std::atomic encoding_{GeoPointEncodingEnum::ZOrder};
-
-  // Spread the lower 30 bits of `x` to the even bit positions 0, 2, ..., 58,
-  // and the inverse (which ignores the odd bits).
-  static constexpr T spreadBits(T x) {
-    x &= maxCoordinateEncoded;
-    x = (x | (x << 16)) & 0x0000FFFF0000FFFFULL;
-    x = (x | (x << 8)) & 0x00FF00FF00FF00FFULL;
-    x = (x | (x << 4)) & 0x0F0F0F0F0F0F0F0FULL;
-    x = (x | (x << 2)) & 0x3333333333333333ULL;
-    x = (x | (x << 1)) & 0x5555555555555555ULL;
-    return x;
-  }
-  static constexpr T compactBits(T x) {
-    x &= 0x5555555555555555ULL;
-    x = (x | (x >> 1)) & 0x3333333333333333ULL;
-    x = (x | (x >> 2)) & 0x0F0F0F0F0F0F0F0FULL;
-    x = (x | (x >> 4)) & 0x00FF00FF00FF00FFULL;
-    x = (x | (x >> 8)) & 0x0000FFFF0000FFFFULL;
-    x = (x | (x >> 16)) & 0x00000000FFFFFFFFULL;
-    return x & maxCoordinateEncoded;
-  }
-
- public:
   // Construct GeoPoint and ensure valid coordinate values
   GeoPoint(double lat, double lng);
 
@@ -198,6 +173,30 @@ class GeoPoint {
   std::pair<std::string, const char*> toStringAndType() const;
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GeoPoint, lat_, lng_)
+
+ private:
+  static inline std::atomic encoding_{GeoPointEncodingEnum::ZOrder};
+
+  // Spread the lower 30 bits of `x` to the even bit positions 0, 2, ..., 58,
+  // and the inverse (which ignores the odd bits).
+  static constexpr T spreadBits(T x) {
+    x &= maxCoordinateEncoded;
+    x = (x | (x << 16)) & 0x0000FFFF0000FFFFULL;
+    x = (x | (x << 8)) & 0x00FF00FF00FF00FFULL;
+    x = (x | (x << 4)) & 0x0F0F0F0F0F0F0F0FULL;
+    x = (x | (x << 2)) & 0x3333333333333333ULL;
+    x = (x | (x << 1)) & 0x5555555555555555ULL;
+    return x;
+  }
+  static constexpr T compactBits(T x) {
+    x &= 0x5555555555555555ULL;
+    x = (x | (x >> 1)) & 0x3333333333333333ULL;
+    x = (x | (x >> 2)) & 0x0F0F0F0F0F0F0F0FULL;
+    x = (x | (x >> 4)) & 0x00FF00FF00FF00FFULL;
+    x = (x | (x >> 8)) & 0x0000FFFF0000FFFFULL;
+    x = (x | (x >> 16)) & 0x00000000FFFFFFFFULL;
+    return x & maxCoordinateEncoded;
+  }
 };
 
 #endif  // QLEVER_SRC_PARSER_GEOPOINT_H
