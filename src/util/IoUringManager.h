@@ -13,13 +13,18 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <atomic>
 #include <cstdint>
+#include <limits>
+#include <optional>
 #include <unordered_map>
+#include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/RegisteredIoUringReader.h"
 
 #ifdef QLEVER_HAS_IO_URING
 #include <liburing.h>
@@ -29,16 +34,39 @@
 
 namespace ad_utility {
 
+// How the reads of one batch are carried out. The default (all members off)
+// is a plain read into each target buffer.
+struct BatchReadOptions {
+  // Read into the slots of a pinned arena that is registered with the ring
+  // (`IORING_REGISTER_BUFFERS`, served by `IORING_OP_READ_FIXED`) and copy
+  // each result into its target buffer. Reads that do not fit into a slot use
+  // a plain read. Only honored by `IoUringPolicy`.
+  bool useRegisteredBuffers = false;
+  // If `useRegisteredBuffers` is set and this is a valid descriptor: the same
+  // file as the `fd` of the batch, opened with `O_DIRECT`. Each read then
+  // fetches the enclosing aligned blocks from this descriptor (bypassing the
+  // page cache) and copies the requested bytes out of the slot.
+  int directIoFd = -1;
+};
+
+// Process-wide switches for the `BatchReadOptions` of vocabulary batch reads.
+// They are set by the runtime parameters
+// `vocabulary-iouring-registered-buffers` and `vocabulary-iouring-direct-io`
+// (see `RuntimeParameters`), like `setRuntimeLogLevel` in `Log.h`.
+inline std::atomic<bool> useRegisteredBuffersForVocabularyReads{false};
+inline std::atomic<bool> useDirectIoForVocabularyReads{false};
+
 template <typename T>
-CPP_requires(ReadPolicy_,
-             requires(T& policy, int fd, ql::span<const size_t> numBytes,
-                      ql::span<const uint64_t> offsets, ql::span<char*> buffers,
-                      typename T::BatchHandle handle)(
-                 concepts::constructible_from<T, unsigned>,
-                 // Must provide `addBatch` with the following parameters.
-                 policy.addBatch(fd, numBytes, offsets, buffers, handle),
-                 // Must provide a `wait` method with the following interface.
-                 policy.wait(handle)));
+CPP_requires(
+    ReadPolicy_,
+    requires(T& policy, int fd, ql::span<const size_t> numBytes,
+             ql::span<const uint64_t> offsets, ql::span<char*> buffers,
+             typename T::BatchHandle handle, const BatchReadOptions& options)(
+        concepts::constructible_from<T, unsigned>,
+        // Must provide `addBatch` with the following parameters.
+        policy.addBatch(fd, numBytes, offsets, buffers, handle, options),
+        // Must provide a `wait` method with the following interface.
+        policy.wait(handle)));
 
 // The pluggable I/O backend of `BatchManager`: it specifies how the reads in a
 // batch are carried out. See `IoUringPolicy` (asynchronous, via io_uring) and
@@ -58,10 +86,19 @@ class BatchManagerBase {
   using BatchHandle = uint64_t;
   virtual ~BatchManagerBase() = default;
 
-  [[nodiscard]] virtual BatchHandle addBatch(int fd,
-                                             ql::span<const size_t> numBytes,
-                                             ql::span<const uint64_t> offsets,
-                                             ql::span<char*> buffers) = 0;
+  // Submit the reads of one batch (read `i` reads `numBytes[i]` bytes at
+  // `offsets[i]` of `fd` into `buffers[i]`), carried out as specified by
+  // `options`. Returns the handle to pass to `wait`.
+  [[nodiscard]] virtual BatchHandle addBatch(
+      int fd, ql::span<const size_t> numBytes, ql::span<const uint64_t> offsets,
+      ql::span<char*> buffers, const BatchReadOptions& options) = 0;
+
+  // Same as above, with the default (plain) `BatchReadOptions`.
+  [[nodiscard]] BatchHandle addBatch(int fd, ql::span<const size_t> numBytes,
+                                     ql::span<const uint64_t> offsets,
+                                     ql::span<char*> buffers) {
+    return addBatch(fd, numBytes, offsets, buffers, BatchReadOptions{});
+  }
 
   virtual void wait(BatchHandle handle) = 0;
 };
@@ -89,15 +126,19 @@ class BatchManager final : public BatchManagerBase {
   BatchManager(const BatchManager&) = delete;
   BatchManager& operator=(const BatchManager&) = delete;
 
+  // Keep the overload without `BatchReadOptions` visible.
+  using BatchManagerBase::addBatch;
+
   [[nodiscard]] BatchHandle addBatch(int fd, ql::span<const size_t> numBytes,
                                      ql::span<const uint64_t> offsets,
-                                     ql::span<char*> buffers) override {
+                                     ql::span<char*> buffers,
+                                     const BatchReadOptions& options) override {
     validateSameLength(numBytes, offsets, buffers);
 
     BatchHandle handle = nextBatchHandle_++;
 
     // Delegate the I/O work to the policy.
-    policy_.addBatch(fd, numBytes, offsets, buffers, handle);
+    policy_.addBatch(fd, numBytes, offsets, buffers, handle, options);
 
     return handle;
   }
@@ -141,11 +182,12 @@ struct SyncIoPolicy {
   // descriptor `fd`, starting at offset `fileOffsetPerRequest[i]` (from the
   // start of the file), into the buffer starting at
   // `targetBufferPerRequest[i]`. `handle` is unused (the batch completes before
-  // `addBatch` returns).
+  // `addBatch` returns). `options` is ignored: the blocking fallback always
+  // reads plainly into the target buffers.
   void addBatch(int fd, ql::span<const size_t> numBytesToReadPerRequest,
                 ql::span<const uint64_t> fileOffsetPerRequest,
-                ql::span<char*> targetBufferPerRequest,
-                BatchHandle handle) const;
+                ql::span<char*> targetBufferPerRequest, BatchHandle handle,
+                const BatchReadOptions& options) const;
 
   void wait(BatchHandle) const {
     // No-op: `addBatch` already completed all reads synchronously.
@@ -185,14 +227,51 @@ class IoUringPolicy {
   // removed once `wait()` has observed all of its reads complete.
   ad_utility::HashMap<BatchHandle, size_t> numInFlightReadRequestsPerBatch_;
 
+  // Marks an `InFlightRead` that reads directly into its target buffer.
+  static constexpr uint32_t kNoSlot = std::numeric_limits<uint32_t>::max();
+
   // Per-read metadata needed when a completion is reaped: which batch the read
-  // belongs to, and how many bytes it was supposed to read (so that reading
-  // fewer bytes than expected can be detected). See
-  // `inFlightReadsByRequestId_`.
+  // belongs to, and how many bytes it must at least have read (so that reading
+  // fewer bytes than expected can be detected). A read into a slot of the
+  // registered arena additionally records where its bytes lie in the slot and
+  // where they have to be copied. See `inFlightReadsByRequestId_`.
   struct InFlightRead {
     BatchHandle batchHandle;
-    size_t expectedNumBytes;
+    size_t minNumBytes;
+    uint32_t slot = kNoSlot;
+    size_t offsetInSlot = 0;
+    size_t numBytesToCopy = 0;
+    char* copyTarget = nullptr;
   };
+
+  // Size of one slot of the registered arena. With `O_DIRECT`, a read fetches
+  // the aligned blocks that enclose the requested bytes, so a read fits into
+  // a slot if these blocks do.
+  static constexpr size_t kRegisteredSlotSize =
+      export_prototypes::kDirectIoBlockSize;
+
+  // The arena for `BatchReadOptions::useRegisteredBuffers`: one slot per ring
+  // entry, so that every in-flight read can own a slot. Allocated and
+  // registered with the ring on the first batch that asks for it; if that
+  // fails (e.g. because of `RLIMIT_MEMLOCK`), all reads stay plain.
+  enum class Registration { NotTried, Registered, Failed };
+  Registration registration_ = Registration::NotTried;
+  std::optional<export_prototypes::PinnedArena> arena_;
+  std::vector<uint32_t> freeSlots_;
+
+  // Return true if the registered arena is available, registering it first
+  // if this has not been tried yet. Registration is only attempted while no
+  // read is in flight.
+  bool registeredBuffersAvailable();
+
+  // Prepare `sqe` as a fixed-buffer read of the request into a free slot of
+  // the arena (from `options.directIoFd` if set) and record the slot in
+  // `read`. Return false (leaving `sqe` untouched) if no slot is free or the
+  // read does not fit into a slot.
+  bool prepareRegisteredRead(io_uring_sqe* sqe, int fd,
+                             const BatchReadOptions& options,
+                             size_t numBytesToRead, uint64_t fileOffset,
+                             char* targetBuf, InFlightRead& read);
 
   // Monotonically increasing counter that mints a unique request id for each
   // individual read. The id is stored in the SQE's `user_data` and recovered
@@ -221,10 +300,12 @@ class IoUringPolicy {
   // reads `numBytesToRead[i]` bytes from file descriptor `fd`, starting at
   // offset `offsets[i]` (from the start of the file), into the buffer starting
   // at `buffers[i]`. The reads are tracked under `handle`, which can be passed
-  // to `wait()` to block until this batch has completed.
+  // to `wait()` to block until this batch has completed. See
+  // `BatchReadOptions` for how `options` changes the way the reads are done;
+  // the bytes that end up in `buffers` are the same.
   void addBatch(int fd, ql::span<const size_t> numBytesToRead,
                 ql::span<const uint64_t> offsets, ql::span<char*> buffers,
-                BatchHandle handle);
+                BatchHandle handle, const BatchReadOptions& options);
 
   // Block until every read in the batch that is represented by the `handle` has
   // completed. (The `handle` was submitted along the read requests using

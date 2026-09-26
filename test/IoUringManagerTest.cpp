@@ -103,10 +103,12 @@ class ReadBatchForTesting {
                                                     reads.size()});
   }
 
-  // Submit all accumulated reads to `manager` for file `fd`; returns the
-  // handle.
+  // Submit all accumulated reads to `manager` for file `fd`, carried out as
+  // specified by `options`; returns the handle.
   template <typename Manager>
-  typename Manager::BatchHandle submitTo(Manager& manager, int fd) {
+  typename Manager::BatchHandle submitTo(
+      Manager& manager, int fd,
+      const ad_utility::BatchReadOptions& options = {}) {
     // Build the buffer pointers here, after all buffers have been added, so the
     // addresses are stable (no further `add` will reallocate `targetBuffers_`).
     // `addBatch` copies each address into its read request, so this temporary
@@ -115,7 +117,7 @@ class ReadBatchForTesting {
         targetBuffers_ | ql::views::transform([](std::string& buffer) {
           return buffer.data();
         }));
-    return manager.addBatch(fd, numBytes_, offsets_, pointers);
+    return manager.addBatch(fd, numBytes_, offsets_, pointers, options);
   }
 
   // The bytes read by each read, in request order (valid once the batch has
@@ -151,8 +153,10 @@ class SequentialReadScenarioForTesting {
 
   // Submit all reads to `manager` for file `fd`; returns the handle.
   template <typename Manager>
-  typename Manager::BatchHandle submitTo(Manager& manager, int fd) {
-    return batch_.submitTo(manager, fd);
+  typename Manager::BatchHandle submitTo(
+      Manager& manager, int fd,
+      const ad_utility::BatchReadOptions& options = {}) {
+    return batch_.submitTo(manager, fd, options);
   }
 
   // The bytes actually read (valid once the batch has completed).
@@ -371,6 +375,97 @@ TYPED_TEST(IoUringManagerTest, ReadPastEofThrows) {
 
   AD_EXPECT_THROW_WITH_MESSAGE(manager.wait(batch.submitTo(manager, fd)),
                                HasSubstr("read fewer bytes than requested"));
+}
+
+// Reads through the registered arena (`useRegisteredBuffers`) deliver the same
+// bytes as plain reads: more reads than the ring (and the arena) has slots,
+// reads larger than a slot (which fall back to a plain read), and empty
+// reads. `SyncIoPolicy` ignores the option.
+TYPED_TEST(IoUringManagerTest, RegisteredBuffersReadSameBytes) {
+  constexpr size_t slotSize = ad_utility::export_prototypes::kDirectIoBlockSize;
+  auto makeScenario = []() {
+    SequentialReadScenarioForTesting scenario;
+    for (size_t i = 0; i < 200; ++i) {
+      scenario.addRead(std::string(1 + i % 7, static_cast<char>('a' + i % 26)));
+    }
+    scenario.addRead(std::string(slotSize + 100, 'X'));
+    scenario.addRead("");
+    scenario.addRead("tail");
+    return scenario;
+  };
+
+  auto first = makeScenario();
+  auto second = makeScenario();
+  auto [tmp, fd] = makeTempFile(first.content());
+  TypeParam manager(64);
+  ad_utility::BatchReadOptions options;
+  options.useRegisteredBuffers = true;
+  // Two batches, so the slots freed by the first batch are reused.
+  for (auto* scenario : {&first, &second}) {
+    manager.wait(scenario->submitTo(manager, fd, options));
+    EXPECT_THAT(scenario->results(),
+                ::testing::ElementsAreArray(scenario->expected()));
+  }
+}
+
+// A short read through the registered arena is reported like a plain one, and
+// its slot is released: afterwards, a batch that needs every slot still works.
+TYPED_TEST(IoUringManagerTest, RegisteredBuffersShortReadThrowsAndFreesSlot) {
+  auto [tmp, fd] = makeTempFile("AAAABBBB");
+  TypeParam manager(4);
+  ad_utility::BatchReadOptions options;
+  options.useRegisteredBuffers = true;
+  {
+    ReadBatchForTesting batch;
+    batch.add(0, 16);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        manager.wait(batch.submitTo(manager, fd, options)),
+        HasSubstr("read fewer bytes than requested"));
+  }
+  ReadBatchForTesting batch;
+  batch.add({{0, 2}, {2, 2}, {4, 2}, {6, 2}, {1, 4}});
+  manager.wait(batch.submitTo(manager, fd, options));
+  EXPECT_THAT(batch.result(),
+              ::testing::ElementsAre("AA", "AA", "BB", "BB", "AAAB"));
+}
+
+// With a second descriptor of the same file that is opened with `O_DIRECT`,
+// the reads fetch the enclosing aligned blocks and copy out exactly the
+// requested bytes: unaligned reads, a read that crosses a block boundary, and
+// a read at the end of a file whose size is not a multiple of the block size.
+TYPED_TEST(IoUringManagerTest, RegisteredBuffersWithDirectIo) {
+  constexpr size_t block = ad_utility::export_prototypes::kDirectIoBlockSize;
+  std::string content;
+  for (size_t i = 0; i < 3 * block + 123; ++i) {
+    content.push_back(static_cast<char>('A' + (i * 7) % 26));
+  }
+  auto [tmp, fd] = makeTempFile(content);
+  ad_utility::export_prototypes::DirectIoFile directFile;
+  try {
+    directFile.open(absl::StrCat(gtestCurrentTestName(), ".tmp"), true);
+  } catch (const std::exception& e) {
+    GTEST_SKIP() << "O_DIRECT is not supported here: " << e.what();
+  }
+
+  std::vector<std::pair<uint64_t, size_t>> reads{{0, 5},
+                                                 {17, 100},
+                                                 {block - 3, 10},
+                                                 {2 * block, block},
+                                                 {content.size() - 20, 20},
+                                                 {block + 1, block}};
+  ReadBatchForTesting batch;
+  batch.add(reads);
+  TypeParam manager(64);
+  ad_utility::BatchReadOptions options;
+  options.useRegisteredBuffers = true;
+  options.directIoFd = directFile.fd();
+  manager.wait(batch.submitTo(manager, fd, options));
+
+  std::vector<std::string> expected;
+  for (const auto& [offset, numBytes] : reads) {
+    expected.push_back(content.substr(offset, numBytes));
+  }
+  EXPECT_THAT(batch.result(), ::testing::ElementsAreArray(expected));
 }
 
 // A read that is fully satisfied returns the requested bytes from the requested
