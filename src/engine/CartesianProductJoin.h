@@ -13,6 +13,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 // An operation that takes a set of subresults that pairwise-disjoint sets of
 // bound variables and materializes the full Cartesian product of these
@@ -53,7 +54,7 @@ class CartesianProductJoin : public Operation {
                                 size_t chunkSize = 1'000'000);
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.

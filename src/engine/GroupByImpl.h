@@ -24,6 +24,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "parser/Alias.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/TypeIdentity.h"
 
 // Block size for when using the hash map optimization
@@ -91,8 +92,8 @@ class GroupByImpl : public Operation {
   vector<ColumnIndex> computeSortColumns(const QueryExecutionTree* subtree);
 
  private:
-  vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {_subtree.get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{_subtree.get()}, allocator()};
   }
 
  public:
