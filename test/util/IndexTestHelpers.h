@@ -21,10 +21,10 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/GeoPointEncoding.h"
 #include "index/Index.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
-#include "rdfTypes/GeoPointEncoding.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
@@ -115,7 +115,7 @@ struct TestIndexConfig {
   // `ad_utility::GeoPointEncoding`).
   //
   // NOTE: The encoding is a process-wide setting (see `GeoPoint::encoding`),
-  // which building or loading an index changes. A test that uses `lat-major`
+  // which building or loading an index changes. A test that uses `LatMajor`
   // should therefore not use the cached `getQec`, and restore the encoding.
   ad_utility::GeoPointEncoding geoPointEncoding =
       ad_utility::GeoPointEncoding::ZOrder;

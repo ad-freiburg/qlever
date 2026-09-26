@@ -772,7 +772,7 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
 
 // Test that rebuilding an index in the previous format (whose configuration has
 // no entry for the encoding of the geo points) gives an index in the current
-// format that keeps the `lat-major` encoding of its points.
+// format that keeps the `LatMajor` encoding of its points.
 TEST(IndexRebuilder, materializeToIndexKeepsGeoPointEncoding) {
   absl::Cleanup restoreEncoding{
       [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};

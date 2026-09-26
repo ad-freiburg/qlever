@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "global/Constants.h"
+#include "index/GeoPointEncoding.h"
 #include "rdfTypes/GeoPoint.h"
-#include "rdfTypes/GeoPointEncoding.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/HashSet.h"

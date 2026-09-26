@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_RDFTYPES_GEOPOINTENCODING_H
-#define QLEVER_SRC_RDFTYPES_GEOPOINTENCODING_H
+#ifndef QLEVER_SRC_INDEX_GEOPOINTENCODING_H
+#define QLEVER_SRC_INDEX_GEOPOINTENCODING_H
 
 #include <array>
 #include <string_view>
@@ -47,18 +47,18 @@ const inline GeoPointEncoding GeoPointEncoding::LatMajor{
 
 // The key under which the encoding is stored in the configuration of an index.
 // An index in the format `qlever::indexFormatVersionWithLatMajorGeoPoints`
-// predates this key and has no entry for it; its points are `lat-major`.
+// predates this key and has no entry for it; its points are `LatMajor`.
 inline constexpr std::string_view GEO_POINT_ENCODING_KEY = "geo-point-encoding";
 
 // The warning that is shown when an index is built or used with the deprecated
-// `lat-major` encoding.
+// `LatMajor` encoding.
 inline constexpr std::string_view LAT_MAJOR_GEO_POINT_ENCODING_WARNING =
     "The geo points of this index use the encoding \"lat-major\", which is "
-    "deprecated and will not be supported for much longer. With this "
-    "encoding, a spatial prefilter on points can only restrict the latitude. "
-    "Please build the index with the default encoding \"z-order\" (just omit "
+    "deprecated and will not be supported for much longer; with this "
+    "encoding, a spatial prefilter on points can only restrict the latitude; "
+    "please build the index with the default encoding \"z-order\" (just omit "
     "the option `--geo-point-encoding` of `qlever-index`)";
 
 }  // namespace ad_utility
 
-#endif  // QLEVER_SRC_RDFTYPES_GEOPOINTENCODING_H
+#endif  // QLEVER_SRC_INDEX_GEOPOINTENCODING_H

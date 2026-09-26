@@ -1474,7 +1474,7 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
 
 // Test that the encoding of the geo points is taken from the configuration of
 // the index, and that an index in the format that predates the entry for the
-// encoding uses `lat-major`.
+// encoding uses `LatMajor`.
 TEST(IndexImpl, applyConfigurationGeoPointEncoding) {
   using ad_utility::GeoPointEncoding;
   absl::Cleanup restoreEncoding{
@@ -1496,7 +1496,7 @@ TEST(IndexImpl, applyConfigurationGeoPointEncoding) {
     EXPECT_EQ(GeoPoint::encoding(), encoding);
   }
 
-  // An index in the previous format has no entry, and uses `lat-major`.
+  // An index in the previous format has no entry, and uses `LatMajor`.
   configuration.erase("geo-point-encoding");
   configuration["index-format-version"] =
       qlever::indexFormatVersionWithLatMajorGeoPoints;
@@ -1515,14 +1515,14 @@ TEST(IndexImpl, applyConfigurationGeoPointEncoding) {
 }
 
 // Test the encoding of the geo points of a built index and of a loaded index in
-// the previous format, and the warnings for the deprecated `lat-major`.
+// the previous format, and the warnings for the deprecated `LatMajor`.
 TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
   using ad_utility::GeoPointEncoding;
   absl::Cleanup restoreEncoding{
       [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
 
   // An input with a point and one without, a helper to read the configuration
-  // of an index, and the start of the warning for `lat-major`.
+  // of an index, and the start of the warning for `LatMajor`.
   const std::string withPoint =
       "<a> <b> \"POINT(7.8 48.0)\"^^"
       "<http://www.opengis.net/ont/geosparql#wktLiteral> .";
@@ -1545,7 +1545,7 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
 
   // Build an index with a point in either encoding. The configuration records
   // the encoding, the `Id` of the point uses it, and loading the index gives a
-  // warning only for `lat-major`.
+  // warning only for `LatMajor`.
   for (auto encoding : {GeoPointEncoding::LatMajor, GeoPointEncoding::ZOrder}) {
     std::string basename = absl::StrCat("geoPointEncoding.", encoding);
     TestIndexConfig config{withPoint};
@@ -1572,7 +1572,7 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
     }
   }
 
-  // Building an index with `lat-major` gives the warning as well (built
+  // Building an index with `LatMajor` gives the warning as well (built
   // without `makeTestIndex`, which discards the log output).
   {
     std::string basename = "geoPointEncoding.buildWarning";
@@ -1590,7 +1590,7 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
   }
 
   // Load an index in the previous format (which has no entry for the
-  // encoding). It uses `lat-major`, and there is a warning iff it has points.
+  // encoding). It uses `LatMajor`, and there is a warning iff it has points.
   for (const auto& [turtle, hasPoint] :
        {std::pair{withPoint, true}, std::pair{withoutPoint, false}}) {
     std::string basename = absl::StrCat("geoPointEncoding.previous.", hasPoint);

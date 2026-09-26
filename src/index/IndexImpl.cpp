@@ -445,7 +445,7 @@ void IndexImpl::createFromFiles(
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
-  // `lat-major`.
+  // `LatMajor`.
   GeoPoint::setEncoding(geoPointEncodingForIndexBuilding_);
   if (geoPointEncodingForIndexBuilding_ ==
       ad_utility::GeoPointEncoding::LatMajor) {
@@ -1037,7 +1037,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     }
   }
 
-  // Warn if the index uses the deprecated `lat-major` encoding and may contain
+  // Warn if the index uses the deprecated `LatMajor` encoding and may contain
   // points (an index without points does not depend on the encoding).
   if (geoPointEncodingOfLoadedIndex_ ==
           ad_utility::GeoPointEncoding::LatMajor &&
@@ -1334,7 +1334,7 @@ void IndexImpl::readConfiguration() {
 // ___________________________________________________________________________
 void IndexImpl::applyGeoPointEncoding() {
   // Determine the encoding of the index. An index in the format that predates
-  // the entry for the encoding always uses `lat-major`. Throw if an index in
+  // the entry for the encoding always uses `LatMajor`. Throw if an index in
   // the current format has no entry (its points could then not be decoded
   // reliably).
   const std::string key{ad_utility::GEO_POINT_ENCODING_KEY};
@@ -1346,7 +1346,7 @@ void IndexImpl::applyGeoPointEncoding() {
       throw std::runtime_error{absl::StrCat(
           "The configuration of the index (\"", onDiskBase_, CONFIGURATION_FILE,
           "\") has no entry \"", key,
-          "\", which every index in the current format has. Please rebuild "
+          "\", which every index in the current format has; please rebuild "
           "the index")};
     }
     encoding = configurationJson_[key].get<ad_utility::GeoPointEncoding>();

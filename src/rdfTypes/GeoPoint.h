@@ -39,8 +39,8 @@ struct CoordinateOutOfRangeException : public std::exception {
 // can be arranged in its bit representation, see `GeoPoint` below. The
 // encoding is a property of an index: all points of an index (and all points
 // that a process creates while it uses that index) must use the same encoding.
-// See `GeoPointEncoding.h` for the names under which the encodings appear in
-// the configuration of an index and as an option of `qlever-index`.
+// See `index/GeoPointEncoding.h` for the names under which the encodings appear
+// in the configuration of an index and as an option of `qlever-index`.
 enum class GeoPointEncodingEnum : uint8_t {
   // The bits of the two coordinates are interleaved (Z-order). This is the
   // default, and the only encoding for which a geographic rectangle maps to a

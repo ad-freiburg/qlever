@@ -32,6 +32,7 @@
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
+#include "index/GeoPointEncoding.h"
 #include "index/Index.h"
 #include "index/IndexRebuilderTypes.h"
 #include "index/IndexSwap.h"
@@ -39,7 +40,6 @@
 #include "index/vocabulary/EncodedIriPattern.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
-#include "rdfTypes/GeoPointEncoding.h"
 #include "util/Allocator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
@@ -132,7 +132,7 @@ struct IndexBuilderConfig : CommonConfig {
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
   // How geo points are encoded in the `Id`s of the index, see
-  // `ad_utility::GeoPointEncoding`. The encoding `lat-major` is deprecated.
+  // `ad_utility::GeoPointEncoding`. The encoding `LatMajor` is deprecated.
   ad_utility::GeoPointEncoding geoPointEncoding_{
       ad_utility::GeoPointEncoding::ZOrder};
 

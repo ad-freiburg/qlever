@@ -53,7 +53,7 @@ inline const IndexFormatVersion& indexFormatVersion{
 
 // The index format that directly precedes `indexFormatVersion` above. It
 // differs from the current format only in that it always encodes geo points
-// in the (now deprecated) `lat-major` encoding, and that its configuration has
+// in the (now deprecated) `LatMajor` encoding, and that its configuration has
 // no entry for the encoding (see `ad_utility::GeoPointEncoding`). The current
 // format supports that encoding as well, so an index in this format is loaded
 // without any conversion.
