@@ -341,6 +341,8 @@ addLinkAndDiscoverTestNoLibs(ViewsTest)
 
 addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
+addLinkAndDiscoverTestNoLibs(ChunkedIotaViewTest)
+
 addLinkAndDiscoverTest(ForwardTest)
 
 addLinkAndDiscoverTestNoLibs(CompressorStreamTest Boost::iostreams)

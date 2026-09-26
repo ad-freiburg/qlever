@@ -129,6 +129,9 @@ ASYNC_TEST(AsyncResourcePool, defaultConstructedHandleIsEmpty) {
   // pool.
   permit.release();
   EXPECT_FALSE(permit.isValid());
+  // Releasing twice is also a no-op.
+  permit.release();
+  EXPECT_FALSE(permit.isValid());
   co_return;
 }
 

@@ -629,13 +629,19 @@ bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {
     return false;
   }
 
-  auto previous = lastParseResult_.getLiteral();
+  // Parsing the language tag or the datatype IRI overwrites
+  // `lastParseResult_`, so the literal has to be moved out of it first, and
+  // moved back in if there is neither. Copying it instead would mean an
+  // additional allocation for every single literal in the input.
+  auto literal = std::move(lastParseResult_.getLiteral());
   if (langtag()) {
-    previous.addLanguageTag(lastParseResult_.getString());
-    lastParseResult_ = std::move(previous);
+    literal.addLanguageTag(lastParseResult_.getString());
+    lastParseResult_ = std::move(literal);
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
-    literalAndDatatypeToTripleComponentImpl(
-        asStringViewUnsafe(previous.getContent()), lastParseResult_.getIri());
+    literalAndDatatypeToTripleComponentImpl(std::move(literal),
+                                            lastParseResult_.getIri());
+  } else {
+    lastParseResult_ = std::move(literal);
   }
 
   // It is okay to neither have a langtag nor an XSD datatype.
@@ -644,11 +650,11 @@ bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {
 
 // ______________________________________________________________________
 template <class T>
-TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
-    std::string_view normalizedLiteralContent,
-    const TripleComponent::Iri& typeIri) {
-  auto literal = TripleComponent::Literal::literalWithNormalizedContent(
-      asNormalizedStringViewUnsafe(normalizedLiteralContent));
+void TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
+    TripleComponent::Literal literal, const TripleComponent::Iri& typeIri) {
+  AD_CORRECTNESS_CHECK(literal.isPlain());
+  std::string_view normalizedLiteralContent =
+      asStringViewUnsafe(literal.getContent());
   std::string_view type = asStringViewUnsafe(typeIri.getContent());
 
   // Helper to handle literals that are invalid for the respective datatype
@@ -726,7 +732,6 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
   } catch (const std::exception& e) {
     raise(e.what());
   }
-  return lastParseResult_;
 }
 
 // _____________________________________________________________________________
@@ -773,8 +778,11 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
     const EncodedIriManager& encodedIriManager) {
   RdfStringParser<TurtleParser<T>> parser{&encodedIriManager};
 
-  return parser.literalAndDatatypeToTripleComponentImpl(
-      normalizedLiteralContent, typeIri);
+  parser.literalAndDatatypeToTripleComponentImpl(
+      TripleComponent::Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(normalizedLiteralContent)),
+      typeIri);
+  return std::move(parser.lastParseResult_);
 }
 
 // ______________________________________________________________________
