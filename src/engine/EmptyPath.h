@@ -21,8 +21,8 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/ScanSpecification.h"
-#include "util/Generator.h"
 #include "util/ContainersWithAllocator.h"
+#include "util/Generator.h"
 
 // Operation that yields all the entities that occur as a subject or an object
 // in the knowledge graph, optionally together with the graphs they occur in.
