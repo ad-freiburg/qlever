@@ -533,6 +533,12 @@ class RegisteredIoUringReader {
 
       if (buffersRegistered_ && config_.useRegisteredBuffers) {
         AD_CONTRACT_CHECK(req.bufferIndex < registeredIovecs_.size());
+        // The target must be the given range of the registered buffer.
+        const iovec& buffer = registeredIovecs_[req.bufferIndex];
+        AD_CONTRACT_CHECK(req.destination ==
+                          static_cast<char*>(buffer.iov_base) +
+                              req.bufferOffset);
+        AD_CONTRACT_CHECK(req.bufferOffset + req.numBytes <= buffer.iov_len);
         // Fixed buffer read with kernel page-pinning
         io_uring_prep_read_fixed(sqe, targetFd, req.destination, req.numBytes,
                                  req.fileOffset, req.bufferIndex);
