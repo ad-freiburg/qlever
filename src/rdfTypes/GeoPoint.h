@@ -97,7 +97,7 @@ class GeoPoint {
   static double dequantizeCoordinate(T quantized, double maxValue);
 
   // Interleave two quantized coordinates into a bit representation and take
-  // it apart again (see above).
+  // it apart again. This is the `ZOrder` encoding (see above).
   static constexpr T interleaveCoordinates(T lat, T lng) {
     return (spreadBits(lat) << 1) | spreadBits(lng);
   }
