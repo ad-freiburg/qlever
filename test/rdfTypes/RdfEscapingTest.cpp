@@ -120,9 +120,8 @@ TEST(RdfEscapingTest, unescapeNewlinesAndBackslashes) {
   }
   // Numeric escapes are not allowed.
   for (std::string_view input : {R"(a\u00e4)", R"(a\U0001F600)"}) {
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        unescapeNewlinesAndBackslashes(input),
-        ::testing::HasSubstr("Numeric escapes escapes like"));
+    AD_EXPECT_THROW_WITH_MESSAGE(unescapeNewlinesAndBackslashes(input),
+                                 ::testing::HasSubstr("Numeric escapes like"));
   }
   // Unknown escapes and a trailing backslash violate contract checks.
   AD_EXPECT_THROW_WITH_MESSAGE(

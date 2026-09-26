@@ -163,7 +163,7 @@ std::string escapeForXml(std::string input);
 void unescapeLiteral(std::string_view input, std::string& res);
 
 // Like `unescapeLiteral`, but the `input` contains the surrounding quotation
-// marks (either one or three `"` or `\'`), which are not appended to `res`.
+// marks (either one or three `"` or `'`), which are not appended to `res`.
 void unescapeLiteralWithQuotesRemoved(std::string_view input, std::string& res);
 
 }  // namespace RdfEscaping

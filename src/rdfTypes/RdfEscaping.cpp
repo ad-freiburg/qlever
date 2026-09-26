@@ -103,7 +103,7 @@ void unescapeStringAndNumericEscapes(std::string_view input,
       (void)output;
       (void)endIterator;
       throw std::runtime_error(
-          "Numeric escapes escapes like \"\\u00e4\" are not allowed in this "
+          "Numeric escapes like \"\\u00e4\" are not allowed in this "
           "context");
     }
   };
