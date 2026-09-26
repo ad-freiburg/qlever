@@ -138,8 +138,8 @@ class GraphSearchTest : public Test {
             targetIds.emplace_back(Id::makeFromInt(targetNode));
           }
         }
-        graphs_.push_back(BinSearchMap(ql::span<const Id>(startIds),
-                                       ql::span<const Id>(targetIds)));
+        graphs_.push_back(BinSearchMap(ConstIdColumnRef(startIds),
+                                       ConstIdColumnRef(targetIds)));
       }
     }
   }

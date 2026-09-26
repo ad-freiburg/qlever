@@ -123,7 +123,7 @@ struct RowRange {
 // puts all `NaN`s after all other doubles (see `makeComparatorForNans`) and
 // `Undefined` before everything else.
 std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
-    ql::span<const Id> column) {
+    ConstIdColumnRef column) {
   // Return the index of the first row in `[begin, end)` for which the
   // `predicate` is false. The predicate must be monotone on that range.
   auto partitionPoint = [&column](size_t begin, size_t end, auto predicate) {
