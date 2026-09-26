@@ -16,7 +16,7 @@
 #include <array>
 #include <utility>
 
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "util/Views.h"

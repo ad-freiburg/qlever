@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <optional>
+#include <type_traits>
 
 #include "global/Constants.h"
 #include "parser/NormalizedString.h"
@@ -23,37 +24,39 @@ GeoPoint::GeoPoint(double lat, double lng) : lat_{lat}, lng_{lng} {
 }
 
 // _____________________________________________________________________________
+GeoPoint::T GeoPoint::quantizeCoordinate(double value, double maxValue) {
+  // Only positive values between 0 and 1
+  double downscaled = (value + maxValue) / (2 * maxValue);
+  AD_CORRECTNESS_CHECK(0.0 <= downscaled && downscaled <= 1.0,
+                       "downscaled coordinate value ", downscaled,
+                       " does not satisfy [0,1] constraint");
+  // Stretch to allowed range of values between 0 and maxCoordinateEncoded,
+  // rounded to integer
+  auto newscaled = static_cast<T>(round(downscaled * maxCoordinateEncoded));
+  AD_CORRECTNESS_CHECK(
+      newscaled <= maxCoordinateEncoded, "scaled coordinate value ", newscaled,
+      " does not satisfy [0,", maxCoordinateEncoded, "] constraint");
+  return newscaled;
+}
+
+// _____________________________________________________________________________
+double GeoPoint::dequantizeCoordinate(T quantized, double maxValue) {
+  // Together with the check below, this ensures `0 <= quantized`.
+  static_assert(std::is_unsigned_v<T>);
+  AD_CORRECTNESS_CHECK(quantized <= maxCoordinateEncoded);
+  double value =
+      ((static_cast<double>(quantized) / maxCoordinateEncoded) * 2 * maxValue) -
+      maxValue;
+  AD_CORRECTNESS_CHECK(-maxValue <= value && value <= maxValue);
+  return value;
+}
+
+// _____________________________________________________________________________
 GeoPoint::T GeoPoint::toBitRepresentation() const {
-  // Transforms a normal-scaled geographic coordinate to an integer
-  constexpr auto scaleCoordinate = [](double value, double maxValue) {
-    // Only positive values between 0 and 1
-    double downscaled = (value + maxValue) / (2 * maxValue);
-
-    AD_CORRECTNESS_CHECK(0.0 <= downscaled && downscaled <= 1.0, [&]() {
-      return absl::StrCat("downscaled coordinate value ", downscaled,
-                          " does not satisfy [0,1] constraint");
-    });
-
-    // Stretch to allowed range of values between 0 and maxCoordinateEncoded,
-    // rounded to integer
-    auto newscaled =
-        static_cast<size_t>(round(downscaled * maxCoordinateEncoded));
-
-    AD_CORRECTNESS_CHECK(
-        0.0 <= newscaled && newscaled <= maxCoordinateEncoded, [&]() {
-          return absl::StrCat("scaled coordinate value ", newscaled,
-                              " does not satisfy [0,", maxCoordinateEncoded,
-                              "] constraint");
-        });
-    return newscaled;
-  };
-
-  T lat = scaleCoordinate(getLat(), COORDINATE_LAT_MAX);
-  T lng = scaleCoordinate(getLng(), COORDINATE_LNG_MAX);
-
+  T lat = quantizeCoordinate(getLat(), COORDINATE_LAT_MAX);
+  T lng = quantizeCoordinate(getLng(), COORDINATE_LNG_MAX);
   // Use shift to obtain 30 bit lat followed by 30 bit lng in lower bits
   auto bits = (lat << numDataBitsCoordinate) | lng;
-
   // Ensure the highest 4 bits are 0
   AD_CORRECTNESS_CHECK((bits & coordinateMaskFreeBits) == 0);
   return bits;
@@ -76,25 +79,10 @@ std::optional<GeoPoint> GeoPoint::parseFromLiteral(
 
 // _____________________________________________________________________________
 GeoPoint GeoPoint::fromBitRepresentation(T bits) {
-  // Extracts one of the coordinates from a single bitstring
-  constexpr auto extractCoordinate = [](T bits, T mask, T shift,
-                                        double maxValue) {
-    // Obtain raw value from bits
-    auto value = static_cast<double>((bits & mask) >> shift);
-    AD_CORRECTNESS_CHECK(0.0 <= value && value <= maxCoordinateEncoded);
-
-    // Transform to usual scaling
-    value = ((value / maxCoordinateEncoded) * 2 * maxValue) - maxValue;
-    AD_CORRECTNESS_CHECK(-maxValue <= value && value <= maxValue);
-    return value;
-  };
-
-  double lat = extractCoordinate(bits, coordinateMaskLat, numDataBitsCoordinate,
-                                 COORDINATE_LAT_MAX);
-  double lng =
-      extractCoordinate(bits, coordinateMaskLng, 0, COORDINATE_LNG_MAX);
-
-  return {lat, lng};
+  return {
+      dequantizeCoordinate((bits & coordinateMaskLat) >> numDataBitsCoordinate,
+                           COORDINATE_LAT_MAX),
+      dequantizeCoordinate(bits & coordinateMaskLng, COORDINATE_LNG_MAX)};
 }
 
 // _____________________________________________________________________________

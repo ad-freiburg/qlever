@@ -172,6 +172,14 @@ class QueryExecutionContext
   void signalQueryUpdate(const RuntimeInformation& runtimeInformation,
                          RuntimeInformation::SendPriority sendPriority) const;
 
+  // Information about the planning of the query (the time and the details).
+  // Once set, `signalQueryUpdate` sends it along with every
+  // update, as the key `meta` of the runtime information, like the result in
+  // the `application/qlever-results+json` format does.
+  void setQueryPlanningInfo(QueryPlanningInfo info) {
+    queryPlanningInfo_ = std::move(info);
+  }
+
   bool _pinSubtrees;
   bool _pinResult;
 
@@ -310,6 +318,9 @@ class QueryExecutionContext
   // limiting the update frequency when `sendPriority` is `IfDue`.
   mutable std::chrono::steady_clock::time_point lastWebsocketUpdate_ =
       std::chrono::steady_clock::time_point::min();
+
+  // See `setQueryPlanningInfo`.
+  std::optional<QueryPlanningInfo> queryPlanningInfo_;
 
   // Disable the automatic rewriting of joins to materialized views. This also
   // deactivates the check for materialized view rewriting of

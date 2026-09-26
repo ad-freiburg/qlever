@@ -31,6 +31,8 @@
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Forward.h"
+#include "util/NoCopyNoMove.h"
+#include "util/UniqueCleanup.h"
 
 namespace ad_utility {
 
@@ -119,12 +121,22 @@ class AsyncResourcePool {
   //
   // NOTE: This is move-only, and it keeps the state of its pool alive, so it
   // may safely outlive the `AsyncResourcePool` object it was obtained from.
-  class Handle {
+  class Handle : public NoCopy {
    private:
-    std::shared_ptr<Impl> impl_;
-    // The resource that this handle currently holds. It has a value exactly if
-    // `impl_ != nullptr`, see `isValid`.
-    std::optional<StoredType> resource_;
+    struct State {
+      std::shared_ptr<Impl> impl_;
+      // The resource that this handle currently holds. It has a value if
+      // `impl_ != nullptr`, see `isValid`.
+      std::optional<StoredType> resource_;
+    };
+    // Return the resource to its pool. Runs on destruction and when the handle
+    // is overwritten, unless `release()` was called before.
+    struct Releaser {
+      void operator()(State&& state) const noexcept {
+        releaseResource(std::move(state.impl_), std::move(state.resource_));
+      }
+    };
+    unique_cleanup::UniqueCleanup<State, Releaser> state_{State{}, Releaser{}};
 
    public:
     // Construct an empty handle that holds no resource. This is the same state
@@ -136,35 +148,13 @@ class AsyncResourcePool {
     // from the resource itself. A `nullptr` yields an empty handle, in which
     // case the `resource` has to be empty as well, see `isValid`.
     Handle(std::shared_ptr<Impl> impl, std::optional<StoredType> resource)
-        : impl_{std::move(impl)}, resource_{std::move(resource)} {
-      AD_CORRECTNESS_CHECK((impl_ != nullptr) == resource_.has_value());
+        : state_{State{std::move(impl), std::move(resource)}, Releaser{}} {
+      AD_CORRECTNESS_CHECK((state_->impl_ != nullptr) ==
+                           state_->resource_.has_value());
     }
-
-    // NOTE: Both of these have to be written by hand. Moving a `std::optional`
-    // leaves the source engaged (with a moved-from value inside), so the source
-    // has to be emptied explicitly to restore the invariant of `resource_`. The
-    // move *assignment* additionally has to return the resource that it
-    // overwrites instead of just dropping it.
-    Handle(Handle&& other) noexcept
-        : impl_{std::move(other.impl_)}, resource_{std::move(other.resource_)} {
-      other.resource_.reset();
-    }
-    Handle& operator=(Handle&& other) noexcept {
-      if (this != &other) {
-        release();
-        impl_ = std::move(other.impl_);
-        resource_ = std::move(other.resource_);
-        other.resource_.reset();
-      }
-      return *this;
-    }
-    Handle(const Handle&) = delete;
-    Handle& operator=(const Handle&) = delete;
-
-    ~Handle() { release(); }
 
     // Return `true` if this handle actually holds a resource.
-    bool isValid() const noexcept { return impl_ != nullptr; }
+    bool isValid() const noexcept { return state_->impl_ != nullptr; }
 
     // Return a reference to the resource that this handle holds. The reference
     // is only valid for as long as this handle holds the resource, so in
@@ -175,17 +165,13 @@ class AsyncResourcePool {
     CPP_template_2(typename T = ResourceType)(
         requires(!std::is_void_v<T>)) std::add_lvalue_reference_t<T> get() {
       AD_CONTRACT_CHECK(isValid());
-      return resource_.value();
+      return state_->resource_.value();
     }
 
     // Return the resource to its pool and make this handle empty. This is also
     // done by the destructor; call it explicitly to return the resource early.
     // Calling this on an empty handle does nothing.
-    void release() noexcept {
-      releaseResource(std::move(impl_), std::move(resource_));
-      impl_ = nullptr;
-      resource_.reset();
-    }
+    void release() noexcept { std::move(state_).runNowIfActive(); }
   };
 
   // Construct a pool of `numResources` value-initialized resources. The channel

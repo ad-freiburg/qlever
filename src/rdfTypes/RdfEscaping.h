@@ -10,7 +10,6 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/TypedIndex.h"
-#include "parser/NormalizedString.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
 
@@ -158,16 +157,14 @@ std::string escapeForTsv(std::string input);
 // Escape a string to be compatible with XML.
 std::string escapeForXml(std::string input);
 
-// Create the content for a Literal based on a string that contains
-// the surrounding quotation marks. Escaped characters are stored in
-// their unescaped format, e.g. "Hello \' World" -> "Hello' World".
-// The surrounding quotes are removed
-NormalizedString normalizeLiteralWithQuotes(std::string_view input);
+// Append the content of a literal that does not contain the surrounding
+// quotation marks to `res`. Escaped characters are appended in their unescaped
+// format, e.g. "Hello \' World" -> "Hello' World".
+void unescapeLiteral(std::string_view input, std::string& res);
 
-// Create the content for a Literal based on a string that does not contain
-// the surrounding quotation marks. Escaped characters are stored in
-// their unescaped format, e.g. "Hello \' World" -> "Hello' World".
-NormalizedString normalizeLiteralWithoutQuotes(std::string_view input);
+// Like `unescapeLiteral`, but the `input` contains the surrounding quotation
+// marks (either one or three `"` or `'`), which are not appended to `res`.
+void unescapeLiteralWithQuotesRemoved(std::string_view input, std::string& res);
 
 }  // namespace RdfEscaping
 
