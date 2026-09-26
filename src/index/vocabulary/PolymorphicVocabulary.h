@@ -93,6 +93,20 @@ class PolymorphicVocabulary {
         vocab_);
   }
 
+  // Forward the minimum length for parsed geometries to the currently active
+  // vocabulary if it might hold a `GeoVocabulary` (see there); no-op
+  // otherwise.
+  void setParsedGeometriesMinLength(size_t minLength) {
+    std::visit(
+        [minLength](auto& vocab) {
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (MaybeProvidesGeometryInfo<T>) {
+            vocab.setParsedGeometriesMinLength(minLength);
+          }
+        },
+        vocab_);
+  }
+
   // The geo cell grid of an underlying `GeoVocabulary`, or `std::nullopt` if
   // the active vocabulary is not a `SplitVocabulary` holding one with a grid.
   std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
@@ -220,6 +234,11 @@ class PolymorphicVocabulary {
         },
         vocab_);
   }
+
+  // Retrieve the parsed geometry from an underlying vocabulary, if it is a
+  // `GeoVocabulary` (see `GeoVocabulary::getParsedGeometry`).
+  std::optional<ad_utility::ParsedGeometry> getParsedGeometry(
+      uint64_t index) const;
 
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
   bool isGeoInfoAvailable() const {
