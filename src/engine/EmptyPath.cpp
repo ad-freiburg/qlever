@@ -50,8 +50,8 @@ EntityAndGraph entityAndGraph(const Row& row, size_t numColumns) {
 // the graphs, such that the caller can treat both cases uniformly: The result
 // is a single undefined ID if `id` occurs in `matches` at all, and empty
 // otherwise.
-ql::span<const Id> graphsOf(const IdTable& matches, Id id) {
-  ql::span<const Id> ids = matches.getColumn(0);
+ConstIdColumnRef graphsOf(const IdTable& matches, Id id) {
+  ConstIdColumnRef ids = matches.getColumn(0);
   auto matching = ql::ranges::equal_range(ids, id);
   size_t numMatches = ql::ranges::size(matching);
   if (matches.numColumns() == 1) {

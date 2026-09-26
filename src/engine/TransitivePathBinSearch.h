@@ -43,9 +43,8 @@ class BinSearchMap {
   // Construct with the given edges. The `sizeOfActiveGraph_` is set to the
   // total number of edges if no graphs are given, or to zero otherwise. In the
   // latter case, the correct size has to be set via `setGraphId`.
-  BinSearchMap(
-      ConstIdColumnRef startIds, ConstIdColumnRef targetIds,
-      const std::optional<ConstIdColumnRef>& graphIds = std::nullopt);
+  BinSearchMap(ConstIdColumnRef startIds, ConstIdColumnRef targetIds,
+               const std::optional<ConstIdColumnRef>& graphIds = std::nullopt);
 
   // Return all target nodes for the given source node in the currently
   // active graph.

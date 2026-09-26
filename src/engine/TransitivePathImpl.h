@@ -423,8 +423,7 @@ class TransitivePathImpl : public TransitivePathBase {
   }
 
   // Create a zipped view from two columns.
-  static auto zipColumns(ConstIdColumnRef input,
-                         ConstIdColumnRef graphInput) {
+  static auto zipColumns(ConstIdColumnRef input, ConstIdColumnRef graphInput) {
     return ::ranges::views::zip(input, graphInput);
   }
 };

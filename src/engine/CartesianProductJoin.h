@@ -129,9 +129,8 @@ class CartesianProductJoin : public Operation {
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write.
-  void writeResultColumn(IdColumnRef targetColumn,
-                         ConstIdColumnRef inputColumn, size_t groupSize,
-                         size_t offset) const;
+  void writeResultColumn(IdColumnRef targetColumn, ConstIdColumnRef inputColumn,
+                         size_t groupSize, size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.
   // `offset` indicates how many rows to skip in the result and `limit` how many

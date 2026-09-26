@@ -291,7 +291,7 @@ class PathSearch : public Operation {
    * @return A vector of all paths.
    */
   pathSearch::PathsLimited allPaths(
-      ql::span<const Id> sources, ql::span<const Id> targets,
+      ConstIdColumnRef sources, ConstIdColumnRef targets,
       const pathSearch::BinSearchWrapper& binSearch, bool cartesian,
       std::optional<uint64_t> numPathsPerTarget,
       std::optional<uint64_t> maxDepth) const;

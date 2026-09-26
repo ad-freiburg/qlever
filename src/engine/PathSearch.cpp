@@ -295,8 +295,8 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::pair<ConstIdColumnRef, ConstIdColumnRef>
-PathSearch::handleSearchSides() const {
+std::pair<ConstIdColumnRef, ConstIdColumnRef> PathSearch::handleSearchSides()
+    const {
   ConstIdColumnRef sourceIds;
   ConstIdColumnRef targetIds;
 
@@ -399,8 +399,8 @@ PathsLimited PathSearch::findPaths(const Id& source,
 }
 
 // _____________________________________________________________________________
-PathsLimited PathSearch::allPaths(ql::span<const Id> sources,
-                                  ql::span<const Id> targets,
+PathsLimited PathSearch::allPaths(ConstIdColumnRef sources,
+                                  ConstIdColumnRef targets,
                                   const BinSearchWrapper& binSearch,
                                   bool cartesian,
                                   std::optional<uint64_t> numPathsPerTarget,
