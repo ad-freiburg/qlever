@@ -177,6 +177,10 @@ class PinnedArena {
     slotSize_ = slotSizeBytes;
     numSlots_ = numSlots;
     totalBytes_ = numSlots * slotSizeBytes;
+    // Reserve before allocating the arena: a throwing `reserve` after
+    // `posix_memalign` would leak the arena (the destructor does not run for
+    // an object whose constructor throws). The `push_back`s below do not throw.
+    iovecs_.reserve(numSlots_);
 
     int ret = posix_memalign(&rawBuffer_, kDirectIoAlignment, totalBytes_);
     if (ret != 0 || rawBuffer_ == nullptr) {
@@ -186,7 +190,6 @@ class PinnedArena {
     // Zero out memory to pre-fault pages before kernel DMA registration.
     std::memset(rawBuffer_, 0, totalBytes_);
 
-    iovecs_.reserve(numSlots_);
     auto* basePtr = static_cast<char*>(rawBuffer_);
     for (size_t i = 0; i < numSlots_; ++i) {
       iovecs_.push_back(
