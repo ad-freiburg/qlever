@@ -276,6 +276,9 @@ TYPED_TEST(CompactVectorOfStringsFixture, SerializationWithPushMiddleOfFile) {
     fileWriter =
         ad_utility::serialization::FileWriteSerializer{writer.finish()};
     fileWriter << -3;
+    // Finishing again returns an empty file, and pushing is no longer allowed.
+    EXPECT_FALSE(writer.finish().isOpen());
+    EXPECT_ANY_THROW(writer.push(input[0].data(), input[0].size()));
   }
 
   CompactVector compactVector;
