@@ -48,7 +48,7 @@ class Join : public Operation {
   float getMultiplicity(size_t col) override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
   bool columnOriginatesFromGraphOrUndef(

@@ -605,7 +605,7 @@ TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
 // scans would fail if one element could potentially be found in multiple blocks
 // of the respective other side.
 TEST_P(JoinTestParametrized, joinTwoScansWithSubjectInMultipleBlocks) {
-  // Default block size is 16 bytes for testing, so the triples are spread
+  // Default block size is 2 rows for testing, so the triples are spread
   // across 3 blocks in total.
   auto keepJoinCol = GetParam();
   auto qec = ad_utility::testing::getQec(

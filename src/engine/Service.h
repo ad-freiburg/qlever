@@ -13,6 +13,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "parser/BlankNodeAdder.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/LazyJsonParser.h"
 #include "util/http/HttpClient.h"
 
@@ -86,8 +87,8 @@ class Service : public Operation {
 
  private:
   // A SERVICE clause has no children.
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{}, allocator()};
   }
 
  public:
