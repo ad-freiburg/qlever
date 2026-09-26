@@ -722,7 +722,8 @@ TEST(CompressedExternalIdTable, runsInputIsAnActiveReader) {
     ad_utility::CompressedIdTableRunsInput<0> movedTo{std::move(input.value())};
     input.reset();
     expectWriterIsLocked(true);
-    // Move assignment swaps the registrations, so there are still exactly two.
+    // Move assignment unregisters the overwritten object and takes over the
+    // registration of the moved-from object, so exactly one remains.
     ad_utility::CompressedIdTableRunsInput<0> other{writer};
     other = std::move(movedTo);
     expectWriterIsLocked(true);

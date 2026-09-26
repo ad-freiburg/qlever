@@ -24,8 +24,8 @@
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
-#include "util/ResetWhenMoved.h"
 #include "util/TransparentFunctors.h"
+#include "util/UniqueCleanup.h"
 #include "util/Views.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 #include "util/views/ChunkedIotaView.h"
@@ -441,44 +441,30 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   using value_type = typename Block::value_type;
 
  private:
-  // The `writer` that stores the runs. It is `nullptr` if and only if this
-  // object was moved from.
-  ad_utility::ResetWhenMoved<CompressedExternalIdTableWriter*, nullptr> writer_;
+  // Unregister this object as an active reader of its `writer`. Runs on
+  // destruction and when this object is overwritten by a move assignment.
+  struct Unregister {
+    void operator()(CompressedExternalIdTableWriter* writer) const noexcept {
+      writer->unregisterActiveReader();
+    }
+  };
+  // The `writer` that stores the runs, together with the registration of this
+  // object as an active reader of it. The class owns that registration, so it
+  // must not be copied (hence the `NoCopy` base class). It has to be movable,
+  // because `parallelBlockMergeToRange` takes its input by value.
+  //
+  // NOTE: Because of the `UniqueCleanup`, the implicit move operations are
+  // correct: A moved-from object doesn't unregister anything on destruction,
+  // and a move assignment first unregisters the overwritten object.
+  ad_utility::unique_cleanup::UniqueCleanup<CompressedExternalIdTableWriter*,
+                                            Unregister>
+      writer_;
 
  public:
   // Construct from the `writer`, which has to outlive this object. Flush the
   // `writer`, such that all blocks that were written so far can be read again.
   explicit CompressedIdTableRunsInput(CompressedExternalIdTableWriter& writer)
-      : writer_{&writer} {
-    writer.flush();
-    writer.registerActiveReader();
-  }
-
-  // The class owns the registration as an active reader, so it must not be
-  // copied (hence the `NoCopy` base class). It has to be movable, because
-  // `parallelBlockMergeToRange` takes its input by value. The `ResetWhenMoved`
-  // resets the source of a move.
-  CompressedIdTableRunsInput(CompressedIdTableRunsInput&& other) noexcept =
-      default;
-  // The move assignment cannot be defaulted, because that would overwrite the
-  // registration of this object without unregistering it. Swapping hands it to
-  // `other`, whose destructor unregisters it.
-  // TODO<joka921> With the improvements of `UniqueCleanup` (see PR #3445), the
-  // registration can be stored in a cleanup that unregisters the reader, and
-  // then the move assignment and the destructor can be defaulted.
-  CompressedIdTableRunsInput& operator=(
-      CompressedIdTableRunsInput&& other) noexcept {
-    std::swap(writer_.value_, other.writer_.value_);
-    return *this;
-  }
-
-  // TODO<joka921> Replace the destructor by a `UniqueCleanup` (see PR #3445),
-  // see the TODO at the move assignment above.
-  ~CompressedIdTableRunsInput() {
-    if (writer_ != nullptr) {
-      writer_.value_->unregisterActiveReader();
-    }
-  }
+      : writer_{flushAndRegister(writer), Unregister{}} {}
 
   // ________________________________________________________________________
   size_t numRuns() const { return writer().numIdTables(); }
@@ -530,8 +516,19 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   }
 
  private:
-  // Access the `writer_`. Must not be called on a moved-from object.
-  CompressedExternalIdTableWriter& writer() const { return *writer_.value_; }
+  // Flush the `writer` and register the caller as an active reader. This runs
+  // before the `writer_` is constructed, such that a throwing `flush` doesn't
+  // leave an active `Unregister` behind without a matching registration.
+  static CompressedExternalIdTableWriter* flushAndRegister(
+      CompressedExternalIdTableWriter& writer) {
+    writer.flush();
+    writer.registerActiveReader();
+    return &writer;
+  }
+
+  // Access the `writer_` (the first `*` yields the stored pointer). Must not
+  // be called on a moved-from object.
+  CompressedExternalIdTableWriter& writer() const { return **writer_; }
 };
 
 // Make a mismatch with the `InputConcept` a clear compile error.
