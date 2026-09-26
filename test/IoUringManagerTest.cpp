@@ -466,6 +466,25 @@ TYPED_TEST(IoUringManagerTest, RegisteredBuffersWithDirectIo) {
     expected.push_back(content.substr(offset, numBytes));
   }
   EXPECT_THAT(batch.result(), ::testing::ElementsAreArray(expected));
+
+  // Many consecutive small reads: those in the same block share one read, and
+  // with a small ring the batch needs more slots than the arena has, so slots
+  // are reused while the batch is submitted. Also go backwards once, which
+  // starts a new read for a block that was read before.
+  std::vector<std::pair<uint64_t, size_t>> smallReads;
+  for (uint64_t offset = 0; offset + 7 <= content.size(); offset += 9) {
+    smallReads.emplace_back(offset, 7);
+  }
+  smallReads.emplace_back(3, 2);
+  ReadBatchForTesting smallBatch;
+  smallBatch.add(smallReads);
+  TypeParam smallManager(4);
+  smallManager.wait(smallBatch.submitTo(smallManager, fd, options));
+  std::vector<std::string> expectedSmall;
+  for (const auto& [offset, numBytes] : smallReads) {
+    expectedSmall.push_back(content.substr(offset, numBytes));
+  }
+  EXPECT_THAT(smallBatch.result(), ::testing::ElementsAreArray(expectedSmall));
 }
 
 // A read that is fully satisfied returns the requested bytes from the requested

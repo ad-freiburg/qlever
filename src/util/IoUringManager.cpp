@@ -10,6 +10,7 @@
 
 #include "util/IoUringManager.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <unistd.h>
 
 #include <cstring>
@@ -111,6 +112,7 @@ bool IoUringPolicy::registeredBuffersAvailable() {
         AD_THROW(
             absl::StrCat("io_uring_register_buffers failed: ", strerror(-ret)));
       }
+      copiesPerSlot_.resize(ringSize_);
       // Hand out the low slots first (`freeSlots_` is used as a stack).
       freeSlots_.resize(ringSize_);
       for (uint32_t i = 0; i < ringSize_; ++i) {
@@ -135,45 +137,68 @@ bool IoUringPolicy::registeredBuffersAvailable() {
 }
 
 //______________________________________________________________________________
-bool IoUringPolicy::prepareRegisteredRead(io_uring_sqe* sqe, int fd,
-                                          const BatchReadOptions& options,
-                                          size_t numBytesToRead,
-                                          uint64_t fileOffset, char* targetBuf,
-                                          InFlightRead& read) {
-  if (freeSlots_.empty() || numBytesToRead == 0) {
-    return false;
+io_uring_sqe* IoUringPolicy::claimSqe() {
+  // The ring has no free slot, so make room: submit what we have prepared so
+  // far and block until enough completions have been drained.
+  if (numInFlightReadRequests_ >= ringSize_) {
+    // Flush the SQEs prepared so far to the kernel so the kernel can start
+    // servicing them. Their completions will free up submission slots.
+    io_uring_submit(&ring_);
+    while (numInFlightReadRequests_ >= ringSize_) {
+      drainOneCqe();
+    }
   }
-  // By default read exactly the requested bytes. With `O_DIRECT`, read the
-  // aligned blocks that enclose them, and copy out the requested bytes later.
-  int readFd = fd;
-  uint64_t readOffset = fileOffset;
-  size_t offsetInSlot = 0;
-  size_t numBytesToReadIntoSlot = numBytesToRead;
-  if (options.directIoFd >= 0) {
-    constexpr size_t block = export_prototypes::kDirectIoBlockSize;
-    readFd = options.directIoFd;
-    readOffset = fileOffset - fileOffset % block;
-    offsetInSlot = fileOffset - readOffset;
-    numBytesToReadIntoSlot =
-        (offsetInSlot + numBytesToRead + block - 1) / block * block;
-  }
-  if (numBytesToReadIntoSlot > kRegisteredSlotSize) {
-    return false;
+  // Claim the next free SQE. The check above guarantees a slot is available,
+  // so `io_uring_get_sqe` must not return `nullptr` here.
+  io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
+  AD_CORRECTNESS_CHECK(sqe != nullptr);
+  return sqe;
+}
+
+//______________________________________________________________________________
+void IoUringPolicy::trackSqe(io_uring_sqe* sqe, const InFlightRead& read) {
+  // Tag the SQE with a unique request id and record its metadata. io_uring
+  // copies the request id (the SQE's `user_data`) verbatim into the matching
+  // completion, so `drainOneCqe` can recover it.
+  const uint64_t requestId = nextRequestIdToAssign_++;
+  inFlightReadsByRequestId_[requestId] = read;
+  // Store the id in the pointer-sized `user_data` field, which every
+  // liburing version provides. The 64-bit `io_uring_sqe_set_data64` helper
+  // requires a very recent liburing that older images (e.g. the gcc11 CI
+  // image with its distro liburing) do not have yet.
+  io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(requestId));
+  numInFlightReadRequests_++;
+  // Count the read for its batch. A batch whose earlier reads all completed
+  // while this batch was still being submitted was erased by `drainOneCqe`
+  // and is added again here.
+  numInFlightReadRequestsPerBatch_[read.batchHandle]++;
+}
+
+//______________________________________________________________________________
+uint32_t IoUringPolicy::acquireSlot() {
+  // Every slot that is not free belongs to an in-flight read, whose completion
+  // frees it.
+  while (freeSlots_.empty()) {
+    AD_CORRECTNESS_CHECK(numInFlightReadRequests_ > 0);
+    io_uring_submit(&ring_);
+    drainOneCqe();
   }
   const uint32_t slot = freeSlots_.back();
   freeSlots_.pop_back();
-  io_uring_prep_read_fixed(sqe, readFd, arena_->getSlotSpan(slot).data(),
-                           static_cast<unsigned>(numBytesToReadIntoSlot),
-                           static_cast<__u64>(readOffset),
-                           static_cast<int>(slot));
-  // With `O_DIRECT`, a read at the end of the file returns fewer bytes than
-  // the rounded-up size; only the requested bytes must be present.
-  read.minNumBytes = offsetInSlot + numBytesToRead;
-  read.slot = slot;
-  read.offsetInSlot = offsetInSlot;
-  read.numBytesToCopy = numBytesToRead;
-  read.copyTarget = targetBuf;
-  return true;
+  return slot;
+}
+
+//______________________________________________________________________________
+void IoUringPolicy::submitDirectRead(const OpenDirectRead& read, int directIoFd,
+                                     BatchHandle handle) {
+  io_uring_sqe* sqe = claimSqe();
+  io_uring_prep_read_fixed(
+      sqe, directIoFd, arena_->getSlotSpan(read.slot).data(),
+      static_cast<unsigned>(read.blockEnd - read.blockBegin),
+      static_cast<__u64>(read.blockBegin), static_cast<int>(read.slot));
+  // At the end of the file, the read returns fewer bytes than the rounded-up
+  // size; only the requested bytes must be present.
+  trackSqe(sqe, InFlightRead{handle, read.minNumBytes, read.slot});
 }
 
 //______________________________________________________________________________
@@ -183,61 +208,98 @@ void IoUringPolicy::addBatch(int fd,
                              ql::span<char*> targetBufferPerRequest,
                              BatchHandle handle,
                              const BatchReadOptions& options) {
-  const size_t numReadRequestsToPerform = numBytesToReadPerRequest.size();
-
-  if (numReadRequestsToPerform == 0) {
+  if (numBytesToReadPerRequest.empty()) {
     return;
   }
   const bool useRegisteredBuffers =
       options.useRegisteredBuffers && registeredBuffersAvailable();
-  numInFlightReadRequestsPerBatch_[handle] = numReadRequestsToPerform;
+  const bool useDirectIo = useRegisteredBuffers && options.directIoFd >= 0;
+  constexpr size_t block = export_prototypes::kDirectIoBlockSize;
+
+  // The `O_DIRECT` read that the current request may still join.
+  std::optional<OpenDirectRead> openDirectRead;
+  auto submitOpenDirectRead = [&]() {
+    if (openDirectRead.has_value()) {
+      submitDirectRead(openDirectRead.value(), options.directIoFd, handle);
+      openDirectRead.reset();
+    }
+  };
+
+  // With `O_DIRECT`, read the aligned blocks that enclose the requested bytes
+  // into a slot (joining the open read if they fit into its slot), and copy
+  // out the requested bytes on completion. Return false if the blocks do not
+  // fit into a slot; the request then needs a plain read.
+  auto addToDirectRead = [&](size_t numBytesToRead, uint64_t fileOffset,
+                             char* targetBuf) {
+    const uint64_t blockBegin = fileOffset - fileOffset % block;
+    const uint64_t blockEnd =
+        (fileOffset + numBytesToRead + block - 1) / block * block;
+    auto& open = openDirectRead;
+    if (open.has_value() && blockBegin >= open->blockBegin &&
+        blockEnd - open->blockBegin <= kRegisteredSlotSize) {
+      open->blockEnd = std::max(open->blockEnd, blockEnd);
+    } else {
+      submitOpenDirectRead();
+      if (blockEnd - blockBegin > kRegisteredSlotSize) {
+        return false;
+      }
+      open = OpenDirectRead{acquireSlot(), blockBegin, blockEnd, 0};
+    }
+    const size_t offsetInSlot = fileOffset - open->blockBegin;
+    open->minNumBytes =
+        std::max(open->minNumBytes, offsetInSlot + numBytesToRead);
+    copiesPerSlot_[open->slot].push_back(
+        CopyFromSlot{targetBuf, offsetInSlot, numBytesToRead});
+    return true;
+  };
+
+  // If draining a completion throws while a read is open, release its slot.
+  absl::Cleanup releaseOpenDirectRead{[this, &openDirectRead]() {
+    if (openDirectRead.has_value()) {
+      copiesPerSlot_[openDirectRead->slot].clear();
+      freeSlots_.push_back(openDirectRead->slot);
+    }
+  }};
 
   for (const auto& [numBytesToRead, fileOffset, targetBuf] :
        ::ranges::views::zip(numBytesToReadPerRequest, fileOffsetPerRequest,
                             targetBufferPerRequest)) {
-    // The ring has no free slot, so make room: submit what we have prepared so
-    // far and block until enough completions have been drained.
-    if (numInFlightReadRequests_ >= ringSize_) {
-      // Flush the SQEs prepared so far to the kernel so the kernel can start
-      // servicing them. Their completions will free up submission slots.
-      io_uring_submit(&ring_);
-      while (numInFlightReadRequests_ >= ringSize_) {
-        drainOneCqe();
-      }
+    if (useDirectIo && numBytesToRead > 0 &&
+        addToDirectRead(numBytesToRead, fileOffset, targetBuf)) {
+      continue;
     }
-
-    // Claim the next free SQE. The check above guarantees a slot is available,
-    // so `io_uring_get_sqe` must not return `nullptr` here.
-    io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
-    AD_CORRECTNESS_CHECK(sqe != nullptr);
-
-    // Record the read's parameters in the SQE (this only sets the SQE's fields;
-    // the request is not handed to the kernel until a later `io_uring_submit`).
+    // A read that fits into a slot of the registered arena reads there and is
+    // copied to its target on completion. Acquire the slot before claiming the
+    // SQE: `acquireSlot` may submit the prepared SQEs.
     InFlightRead read{handle, numBytesToRead};
-    if (!useRegisteredBuffers ||
-        !prepareRegisteredRead(sqe, fd, options, numBytesToRead, fileOffset,
-                               targetBuf, read)) {
+    const bool readIntoSlot = useRegisteredBuffers && !useDirectIo &&
+                              numBytesToRead > 0 &&
+                              numBytesToRead <= kRegisteredSlotSize;
+    if (readIntoSlot) {
+      read.slot = acquireSlot();
+    }
+    io_uring_sqe* sqe = claimSqe();
+    // Record the read's parameters in the SQE (this only sets the SQE's
+    // fields; the request is not handed to the kernel until a later
+    // `io_uring_submit`).
+    if (readIntoSlot) {
+      io_uring_prep_read_fixed(sqe, fd, arena_->getSlotSpan(read.slot).data(),
+                               static_cast<unsigned>(numBytesToRead),
+                               static_cast<__u64>(fileOffset),
+                               static_cast<int>(read.slot));
+      copiesPerSlot_[read.slot].push_back(
+          CopyFromSlot{targetBuf, 0, numBytesToRead});
+    } else {
       io_uring_prep_read(sqe, fd, targetBuf,
                          static_cast<unsigned>(numBytesToRead),
                          static_cast<__u64>(fileOffset));
     }
-
-    // Tag the SQE with a unique request id and record its metadata (the batch
-    // it belongs to and how many bytes it should read). io_uring copies the
-    // request id (the SQE's `user_data`) verbatim into the matching completion,
-    // so `drainOneCqe` can recover it.
-    const uint64_t requestId = nextRequestIdToAssign_++;
-    inFlightReadsByRequestId_[requestId] = read;
-    // Store the id in the pointer-sized `user_data` field, which every
-    // liburing version provides. The 64-bit `io_uring_sqe_set_data64` helper
-    // requires a very recent liburing that older images (e.g. the gcc11 CI
-    // image with its distro liburing) do not have yet.
-    io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(requestId));
-    numInFlightReadRequests_++;
+    trackSqe(sqe, read);
   }
-  // Flush the remaining prepared SQEs to the kernel (the loop above only
-  // submits when the submission queue is full, so the last group of SQEs has
-  // not yet been submitted).
+  submitOpenDirectRead();
+  // Flush the remaining prepared SQEs to the kernel (`claimSqe` only submits
+  // when the submission queue is full, so the last group of SQEs has not yet
+  // been submitted).
   io_uring_submit(&ring_);
 }
 
@@ -284,14 +346,16 @@ void ad_utility::IoUringPolicy::drainOneCqe() {
   const bool tooShort =
       !failed && static_cast<size_t>(numBytesRead) < inFlightRead.minNumBytes;
   // A read into a slot of the registered arena: copy the requested bytes to
-  // their target and free the slot (also on error, before throwing).
+  // their targets and free the slot (also on error, before throwing).
   if (inFlightRead.slot != kNoSlot) {
+    auto& copies = copiesPerSlot_[inFlightRead.slot];
     if (!failed && !tooShort) {
-      std::memcpy(inFlightRead.copyTarget,
-                  arena_->getSlotSpan(inFlightRead.slot).data() +
-                      inFlightRead.offsetInSlot,
-                  inFlightRead.numBytesToCopy);
+      const char* slotData = arena_->getSlotSpan(inFlightRead.slot).data();
+      for (const auto& copy : copies) {
+        std::memcpy(copy.target, slotData + copy.offsetInSlot, copy.numBytes);
+      }
     }
+    copies.clear();
     freeSlots_.push_back(inFlightRead.slot);
   }
   if (failed) {

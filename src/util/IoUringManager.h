@@ -45,7 +45,8 @@ struct BatchReadOptions {
   // If `useRegisteredBuffers` is set and this is a valid descriptor: the same
   // file as the `fd` of the batch, opened with `O_DIRECT`. Each read then
   // fetches the enclosing aligned blocks from this descriptor (bypassing the
-  // page cache) and copies the requested bytes out of the slot.
+  // page cache) and copies the requested bytes out of the slot. Consecutive
+  // requests whose blocks lie in the same slot share one read.
   int directIoFd = -1;
 };
 
@@ -231,17 +232,31 @@ class IoUringPolicy {
   static constexpr uint32_t kNoSlot = std::numeric_limits<uint32_t>::max();
 
   // Per-read metadata needed when a completion is reaped: which batch the read
-  // belongs to, and how many bytes it must at least have read (so that reading
-  // fewer bytes than expected can be detected). A read into a slot of the
-  // registered arena additionally records where its bytes lie in the slot and
-  // where they have to be copied. See `inFlightReadsByRequestId_`.
+  // belongs to, how many bytes it must at least have read (so that reading
+  // fewer bytes than expected can be detected), and the slot of the registered
+  // arena it reads into (if any). See `inFlightReadsByRequestId_`.
   struct InFlightRead {
     BatchHandle batchHandle;
     size_t minNumBytes;
     uint32_t slot = kNoSlot;
-    size_t offsetInSlot = 0;
-    size_t numBytesToCopy = 0;
-    char* copyTarget = nullptr;
+  };
+
+  // A range of a slot that has to be copied to a target buffer once the read
+  // into the slot has completed.
+  struct CopyFromSlot {
+    char* target;
+    size_t offsetInSlot;
+    size_t numBytes;
+  };
+
+  // An `O_DIRECT` read into a slot that is still being extended: consecutive
+  // requests of a batch whose enclosing blocks fit into the same slot share
+  // one read, so a block is not read once per word that lies in it.
+  struct OpenDirectRead {
+    uint32_t slot;
+    uint64_t blockBegin;
+    uint64_t blockEnd;
+    size_t minNumBytes;
   };
 
   // Size of one slot of the registered arena. With `O_DIRECT`, a read fetches
@@ -258,20 +273,28 @@ class IoUringPolicy {
   Registration registration_ = Registration::NotTried;
   std::optional<export_prototypes::PinnedArena> arena_;
   std::vector<uint32_t> freeSlots_;
+  // The copies to do when the read into a slot completes, indexed by slot.
+  std::vector<std::vector<CopyFromSlot>> copiesPerSlot_;
 
   // Return true if the registered arena is available, registering it first
   // if this has not been tried yet. Registration is only attempted while no
   // read is in flight.
   bool registeredBuffersAvailable();
 
-  // Prepare `sqe` as a fixed-buffer read of the request into a free slot of
-  // the arena (from `options.directIoFd` if set) and record the slot in
-  // `read`. Return false (leaving `sqe` untouched) if no slot is free or the
-  // read does not fit into a slot.
-  bool prepareRegisteredRead(io_uring_sqe* sqe, int fd,
-                             const BatchReadOptions& options,
-                             size_t numBytesToRead, uint64_t fileOffset,
-                             char* targetBuf, InFlightRead& read);
+  // Return an SQE for the next read, first submitting the prepared SQEs and
+  // draining completions if the ring is full.
+  io_uring_sqe* claimSqe();
+
+  // Tag the prepared `sqe` with a new request id and account for it as an
+  // in-flight read of `read.batchHandle`.
+  void trackSqe(io_uring_sqe* sqe, const InFlightRead& read);
+
+  // Return a free slot of the arena, draining completions until one is free.
+  uint32_t acquireSlot();
+
+  // Submit `read` as one fixed-buffer read from `directIoFd`.
+  void submitDirectRead(const OpenDirectRead& read, int directIoFd,
+                        BatchHandle handle);
 
   // Monotonically increasing counter that mints a unique request id for each
   // individual read. The id is stored in the SQE's `user_data` and recovered
