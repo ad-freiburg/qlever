@@ -132,8 +132,11 @@ jobs:
         # `std::filesystem`, see `backports/filesystem.h`) is used in both.
         # Fork PR profile 2026-09-25: on PRs keep only the GCC 8 entry (the
         # real C++17 build); GCC 11 + backports runs on Wolga (wolga-native).
-        exclude:
-          - compiler-version: ${{ github.event_name == 'pull_request' && 11 || 0 }}
+        # NOTE: this is an include-only matrix (no `compiler-version:` axis
+        # declared above), so a plain `exclude:` entry is invalid here and
+        # fails the whole workflow at matrix-expansion time before any `build`
+        # job is created (see job-level `if` above, which does the PR-only
+        # filtering instead).
         include:
           - compiler-version: 11
             use-keep-going: false
@@ -163,7 +166,14 @@ jobs:
     # translated by the runner, so mixing the two silently used two different
     # directories). Relative paths are correct in both places.
     steps:
+      # `matrix` is not available in `jobs.<job_id>.if` (only in the job's own
+      # steps/env/etc.), so the PR-only "skip GCC 11" filtering (GCC 11 +
+      # backports runs on Wolga instead, see the matrix comment above) is
+      # implemented here as a per-step `if:`, repeated on every step that does
+      # real work. The job entry itself still gets created for both matrix
+      # entries; the GCC-11 entry just shows as skipped on PRs.
       - name: Prepare the container
+        if: github.event_name != 'pull_request' || matrix.compiler-version != 11
         # A bare Ubuntu image has none of these: `actions/checkout` needs `git`
         # for the submodules, and the composite actions below use `sudo` and
         # `add-apt-repository`. The steps run as `root`, so `sudo` isn't
@@ -182,23 +192,27 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates git sudo software-properties-common wget
       - uses: actions/checkout@v7
+        if: github.event_name != 'pull_request' || matrix.compiler-version != 11
         with:
           submodules: 'recursive'
       - name: Download the rewritten sources
         # Replace `src` by the output of the `rewrite-using-enum` job. The
         # rewritten code is valid C++17 as well as C++20, so both matrix entries
         # use it.
+        if: github.event_name != 'pull_request' || matrix.compiler-version != 11
         uses: actions/download-artifact@v4
         with:
           name: rewritten-sources
           path: src
       - name: Install dependencies
+        if: github.event_name != 'pull_request' || matrix.compiler-version != 11
         uses: ./.github/workflows/install-dependencies-ubuntu
         with:
           boost-version: "1.71"
           # Inside a container, the disk space of the host can't be freed.
           free-disk-space: false
       - name: Install compiler
+        if: github.event_name != 'pull_request' || matrix.compiler-version != 11
         uses: ./.github/workflows/install-compiler-ubuntu
         with:
           compiler: ${{env.compiler}}
@@ -209,10 +223,12 @@ jobs:
       - name: Configure CMake
         # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
         # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+        if: github.event_name != 'pull_request' || matrix.compiler-version != 11
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=${{env.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true ${{matrix.additional-cmake-options}}
 
       - name: Build
         # Build your program with the given configuration
+        if: github.event_name != 'pull_request' || matrix.compiler-version != 11
         run: |
           KEEP_GOING=""
           if [[ "${{ matrix.use-keep-going }}" == "true" ]]; then
@@ -233,7 +249,7 @@ jobs:
         id: gcc8_log_analyzer
       - name: Test
         id: runTest
-        if: (matrix.compiler-version == 11)
+        if: matrix.compiler-version == 11 && (github.event_name != 'pull_request' || matrix.compiler-version != 11)
         working-directory: build/test
         # Execute tests defined by the CMake configuration.
         # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
