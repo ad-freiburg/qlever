@@ -58,8 +58,15 @@ class GeoPoint {
                                          << numDataBitsCoordinate;
   static constexpr T coordinateMaskFreeBits =
       ad_utility::bitMaskForHigherBits(sizeof(T) * 8 - numDataBits);
-  static constexpr double maxCoordinateEncoded =
-      static_cast<double>(coordinateMaskLng);
+  // The largest quantized coordinate value (30 one-bits).
+  static constexpr T maxCoordinateEncoded = coordinateMaskLng;
+
+  // Quantize a coordinate in `[-maxValue, maxValue]` to an integer in
+  // `[0, maxCoordinateEncoded]` and back. The quantization step is
+  // `2 * maxValue / maxCoordinateEncoded` (about 1.7e-7 degrees for the
+  // latitude, 3.4e-7 degrees for the longitude, i.e. a few centimeters).
+  static T quantizeCoordinate(double value, double maxValue);
+  static double dequantizeCoordinate(T quantized, double maxValue);
 
   // Construct GeoPoint and ensure valid coordinate values
   GeoPoint(double lat, double lng);
