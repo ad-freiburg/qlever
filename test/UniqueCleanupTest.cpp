@@ -168,3 +168,15 @@ TEST(UniqueCleanup, ThrowingCleanupInDestructorTerminates) {
           1, [](int) { throw std::runtime_error{"cleanup failed"}; }}),
       "The cleanup of a `UniqueCleanup` failed");
 }
+
+// _____________________________________________________________________________
+TEST(UniqueCleanup, ThrowingCleanupInMoveAssignmentTerminates) {
+  using Cleanup = UniqueCleanup<int, std::function<void(int)>>;
+  auto moveAssignOverThrowingCleanup = []() {
+    Cleanup a{1, [](int) { throw std::runtime_error{"cleanup failed"}; }};
+    Cleanup b{2, [](int) {}};
+    a = std::move(b);
+  };
+  EXPECT_DEATH_IF_SUPPORTED(moveAssignOverThrowingCleanup(),
+                            "overwritten by a move assignment failed");
+}

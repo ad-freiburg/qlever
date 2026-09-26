@@ -46,10 +46,14 @@ CPP_template(typename T, typename Func = std::function<void(T&&)>)(
   UniqueCleanup(UniqueCleanup&& cleanupDeleter) noexcept = default;
 
   // Runs the cleanup of the overwritten value (if active) before taking over
-  // the value of `other`.
+  // the value of `other`. As in the destructor, an exception thrown by that
+  // cleanup terminates the program.
   UniqueCleanup& operator=(UniqueCleanup&& other) noexcept {
     if (this != &other) {
-      runCleanup();
+      ad_utility::terminateIfThrows(
+          [this]() { runCleanup(); },
+          "The cleanup of a `UniqueCleanup` that was overwritten by a move "
+          "assignment failed");
       active_ = std::move(other.active_);
       value_ = std::move(other.value_);
       function_ = std::move(other.function_);
