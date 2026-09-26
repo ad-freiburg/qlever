@@ -1294,6 +1294,8 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   // The version written to disk will also have these fields.
   stats["git-hash"] = *qlever::version::gitShortHashWithoutLinking.wlock();
   stats["index-format-version"] = qlever::indexFormatVersion;
+  stats["geo-point-encoding"] =
+      ad_utility::GeoPointEncoding{GeoPoint::encoding()};
   stats["has-icu-support"] = ad_utility::useICUDefault;
 
   std::string jsonFile = onDiskBase + CONFIGURATION_FILE;
@@ -1347,6 +1349,7 @@ nlohmann::json minimalValidConfiguration() {
   nlohmann::json configuration;
   configuration["git-hash"] = "f00ba4";
   configuration["index-format-version"] = qlever::indexFormatVersion;
+  configuration["geo-point-encoding"] = "z-order";
   configuration["has-icu-support"] = ad_utility::useICUDefault;
   configuration["locale"]["language"] = "en";
   configuration["locale"]["country"] = "US";
@@ -1451,11 +1454,13 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
 
   // An index in exactly the format that the `qlever-upgrade-index` binary
   // upgrades from. Then the thrown exception is one dedicated message that
-  // mentions that binary, and the generic advice is not logged at all. Note
-  // that this requires the target format of the upgrader to be the current
-  // index format (which `convertIndexToCurrentFormat` also checks).
-  ASSERT_EQ(qlever::indexFormatConverter::targetVersion,
-            qlever::indexFormatVersion);
+  // mentions that binary, and the generic advice is not logged at all.
+  //
+  // NOTE: This requires the target format of the upgrader to be a format that
+  // the current version of QLever loads (which `convertIndexToCurrentFormat`
+  // also checks).
+  ASSERT_TRUE(qlever::isLoadableIndexFormatVersion(
+      qlever::indexFormatConverter::targetVersion));
   EXPECT_THAT(
       applyVersionAndExpectThrow(
           qlever::indexFormatConverter::sourceVersion,
@@ -1465,6 +1470,147 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
               ::testing::HasSubstr("the old index is preserved"),
               ::testing::HasSubstr("qlever-upgrade-index "))),
       ::testing::Not(::testing::HasSubstr("The index is too old")));
+}
+
+// Test that the encoding of the geo points is taken from the configuration of
+// the index, and that an index in the format that predates the entry for the
+// encoding uses `LatMajor`.
+TEST(IndexImpl, applyConfigurationGeoPointEncoding) {
+  using ad_utility::GeoPointEncoding;
+  absl::Cleanup restoreEncoding{
+      [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
+
+  // Apply the given `configuration` to a fresh `IndexImpl` (without log
+  // output).
+  auto apply = [](const nlohmann::json& configuration) {
+    IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    indexImpl.applyConfiguration(configuration);
+  };
+
+  // An index in the current format with either encoding.
+  auto configuration = minimalValidConfiguration();
+  for (auto encoding : {GeoPointEncoding::LatMajor, GeoPointEncoding::ZOrder}) {
+    configuration["geo-point-encoding"] = encoding;
+    apply(configuration);
+    EXPECT_EQ(GeoPoint::encoding(), encoding);
+  }
+
+  // An index in the previous format has no entry, and uses `LatMajor`.
+  configuration.erase("geo-point-encoding");
+  configuration["index-format-version"] =
+      qlever::indexFormatVersionWithLatMajorGeoPoints;
+  apply(configuration);
+  EXPECT_EQ(GeoPoint::encoding(), GeoPointEncoding::LatMajor);
+
+  // An index in the current format without an entry, or with an unknown one,
+  // is rejected.
+  configuration["index-format-version"] = qlever::indexFormatVersion;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      apply(configuration),
+      ::testing::HasSubstr("has no entry \"geo-point-encoding\""));
+  configuration["geo-point-encoding"] = "lng-major";
+  AD_EXPECT_THROW_WITH_MESSAGE(apply(configuration),
+                               ::testing::HasSubstr("lng-major"));
+}
+
+// Test the encoding of the geo points of a built index and of a loaded index in
+// the previous format, and the warnings for the deprecated `LatMajor`.
+TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
+  using ad_utility::GeoPointEncoding;
+  absl::Cleanup restoreEncoding{
+      [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
+
+  // An input with a point and one without, a helper to read the configuration
+  // of an index, and the start of the warning for `LatMajor`.
+  const std::string withPoint =
+      "<a> <b> \"POINT(7.8 48.0)\"^^"
+      "<http://www.opengis.net/ont/geosparql#wktLiteral> .";
+  const std::string withoutPoint = "<a> <b> <c> .";
+  auto readConfiguration = [](const std::string& basename) {
+    nlohmann::json configuration;
+    ad_utility::makeIfstream(basename + CONFIGURATION_FILE) >> configuration;
+    return configuration;
+  };
+  auto warning =
+      ::testing::HasSubstr("which is deprecated and will not be supported");
+
+  // Load the index with the given `basename` and return the log output.
+  auto load = [](const std::string& basename) {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.createFromOnDiskIndex(basename, false);
+    return logStream.str();
+  };
+
+  // Build an index with a point in either encoding. The configuration records
+  // the encoding, the `Id` of the point uses it, and loading the index gives a
+  // warning only for `LatMajor`.
+  for (auto encoding : {GeoPointEncoding::LatMajor, GeoPointEncoding::ZOrder}) {
+    std::string basename = absl::StrCat("geoPointEncoding.", encoding);
+    TestIndexConfig config{withPoint};
+    config.geoPointEncoding = encoding;
+    auto index = makeTestIndex(basename, std::move(config));
+    EXPECT_EQ(readConfiguration(basename)["geo-point-encoding"],
+              std::string{encoding.toString()});
+    Id point = index.getImpl()
+                   .getPermutation(Permutation::OSP)
+                   .metaData()
+                   .blockData()
+                   .front()
+                   .firstTriple_.col0Id_;
+    ASSERT_EQ(point.getDatatype(), Datatype::GeoPoint);
+    EXPECT_EQ(point.getBits() &
+                  ad_utility::bitMaskForLowerBits(GeoPoint::numDataBits),
+              GeoPoint::combineCoordinates(
+                  GeoPoint::quantizeCoordinate(48.0, 90),
+                  GeoPoint::quantizeCoordinate(7.8, 180), encoding));
+    if (encoding == GeoPointEncoding::LatMajor) {
+      EXPECT_THAT(load(basename), warning);
+    } else {
+      EXPECT_THAT(load(basename), ::testing::Not(warning));
+    }
+  }
+
+  // Building an index with `LatMajor` gives the warning as well (built
+  // without `makeTestIndex`, which discards the log output).
+  {
+    std::string basename = "geoPointEncoding.buildWarning";
+    ad_utility::makeOfstream(basename + ".ttl") << withPoint;
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(basename);
+    index.getImpl().setGeoPointEncodingForIndexBuilding(
+        GeoPointEncoding::LatMajor);
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    index.createFromFiles(
+        {qlever::InputFileSpecification{
+            basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}},
+        1);
+    EXPECT_THAT(logStream.str(), warning);
+  }
+
+  // Load an index in the previous format (which has no entry for the
+  // encoding). It uses `LatMajor`, and there is a warning iff it has points.
+  for (const auto& [turtle, hasPoint] :
+       {std::pair{withPoint, true}, std::pair{withoutPoint, false}}) {
+    std::string basename = absl::StrCat("geoPointEncoding.previous.", hasPoint);
+    TestIndexConfig config{turtle};
+    config.geoPointEncoding = GeoPointEncoding::LatMajor;
+    makeTestIndex(basename, std::move(config));
+    auto configuration = readConfiguration(basename);
+    configuration.erase("geo-point-encoding");
+    configuration["index-format-version"] =
+        qlever::indexFormatVersionWithLatMajorGeoPoints;
+    ad_utility::makeOfstream(basename + CONFIGURATION_FILE) << configuration;
+    GeoPoint::setEncoding(GeoPointEncoding::ZOrder);
+    std::string log = load(basename);
+    EXPECT_EQ(GeoPoint::encoding(), GeoPointEncoding::LatMajor);
+    if (hasPoint) {
+      EXPECT_THAT(log, warning);
+    } else {
+      EXPECT_THAT(log, ::testing::Not(warning));
+    }
+  }
 }
 
 // _____________________________________________________________________________

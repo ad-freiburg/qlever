@@ -155,15 +155,15 @@ std::string filenameForPermutation(std::string_view basename,
 // cannot be used to look up a key in a `nlohmann::json` object.
 constexpr const char* indexFormatVersionKey = "index-format-version";
 
-// Check that the source and the target format of this converter (see
-// `sourceVersion` and `targetVersion`) still are the previous resp. the current
-// index format. If they are not, then the index format has changed again and
-// this converter has to be updated (see the note at
-// `qlever::indexFormatVersion`), so this is a programming error and not
-// something that a user can fix.
+// Check that the source format of this converter (see `sourceVersion`) still
+// is the previous index format, and that its target format (see
+// `targetVersion`) still is a format that the current version of QLever loads
+// without conversion. If not, then the index format has changed again and this
+// converter has to be updated (see the note at `qlever::indexFormatVersion`),
+// so this is a programming error and not something that a user can fix.
 void checkThatTheSupportedFormatsAreUpToDate() {
   AD_CORRECTNESS_CHECK(
-      targetVersion == indexFormatVersion,
+      isLoadableIndexFormatVersion(targetVersion),
       "The index converter converts to the index format ",
       versionAsString(targetVersion), ", but the current index format is ",
       versionAsString(indexFormatVersion),
@@ -199,9 +199,11 @@ nlohmann::json readAndCheckConfiguration(const std::string& basename) {
   }
   auto version =
       configuration.at(indexFormatVersionKey).get<IndexFormatVersion>();
-  if (version == targetVersion) {
+  if (isLoadableIndexFormatVersion(version)) {
     throw std::runtime_error{absl::StrCat(
-        "The index \"", basename, "\" already is in the current index format (",
+        "The index \"", basename,
+        "\" already is in an index format that the current version of QLever "
+        "can use (",
         versionAsString(version), "), so there is nothing to convert.")};
   }
   if (version != sourceVersion) {

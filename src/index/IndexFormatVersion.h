@@ -45,16 +45,35 @@ struct IndexFormatVersion {
 // `index/IndexFormatConverter.h`). That converter handles exactly one change of
 // the index format, so it has to be either extended by your change or updated
 // to the new pair of versions; else an index of the previous version can no
-// longer be converted, but only be rebuilt.
+// longer be converted, but only be rebuilt. The same holds for
+// `indexFormatVersionWithLatMajorGeoPoints`: an index in that format is loaded
+// without conversion only as long as your change does not affect it.
 inline const IndexFormatVersion& indexFormatVersion{
+    3470, DateYearOrDuration{Date{2026, 9, 26}}};
+
+// The index format that directly precedes `indexFormatVersion` above. It
+// differs from the current format only in that it always encodes geo points
+// in the (now deprecated) `LatMajor` encoding, and that its configuration has
+// no entry for the encoding (see `ad_utility::GeoPointEncoding`). The current
+// format supports that encoding as well, so an index in this format is loaded
+// without any conversion.
+inline const IndexFormatVersion& indexFormatVersionWithLatMajorGeoPoints{
     3159, DateYearOrDuration{Date{2026, 9, 1}}};
 
-// The index version that directly precedes `indexFormatVersion` above. An index
-// with exactly this version can be converted to the current version by the
-// standalone index converter (see `index/IndexFormatConverter.h`), which is the
-// only place that this constant is used.
+// The index format that the standalone index converter (see
+// `index/IndexFormatConverter.h`) converts from, which is the only place that
+// this constant is used. The converter converts an index in this format to the
+// format `indexFormatVersionWithLatMajorGeoPoints`, which the current version
+// of QLever loads as it is (see above).
 inline const IndexFormatVersion& previousIndexFormatVersion{
     1572, DateYearOrDuration{Date{2024, 10, 22}}};
+
+// Return true iff an index in the given format can be loaded by the current
+// version of QLever without conversion.
+inline bool isLoadableIndexFormatVersion(const IndexFormatVersion& version) {
+  return version == indexFormatVersion ||
+         version == indexFormatVersionWithLatMajorGeoPoints;
+}
 }  // namespace qlever
 
 #endif  // QLEVER_SRC_INDEX_INDEXFORMATVERSION_H

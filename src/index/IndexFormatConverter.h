@@ -31,10 +31,17 @@ namespace qlever::indexFormatConverter {
 // source format are therefore converted by rewriting their datatype bits, and
 // nothing else in the index changes.
 //
-// `convertIndexToCurrentFormat` checks that these two formats still are the
-// previous and the current index format (`qlever::previousIndexFormatVersion`
-// resp. `qlever::indexFormatVersion`), so that this converter cannot silently
-// be applied to a different change of the index format.
+// The target format is not the current index format, but the one that directly
+// precedes it (`qlever::indexFormatVersionWithLatMajorGeoPoints`), which the
+// current version of QLever loads without conversion: it differs from the
+// current format only in the encoding of geo points, and the source format
+// encodes geo points in the same way as the target format.
+//
+// `convertIndexToCurrentFormat` checks that the source format still is the
+// previous index format (`qlever::previousIndexFormatVersion`) and that the
+// target format still can be loaded by the current version of QLever (see
+// `qlever::isLoadableIndexFormatVersion`), so that this converter cannot
+// silently be applied to a different change of the index format.
 inline const IndexFormatVersion sourceVersion{
     1572, DateYearOrDuration{Date{2024, 10, 22}}};
 inline const IndexFormatVersion targetVersion{
