@@ -15,6 +15,7 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -119,6 +120,12 @@ class DirectIoFile {
 #endif
 
     fd_ = ::open(path_.c_str(), flags);
+#ifdef O_NOATIME
+    // `O_NOATIME` is only permitted for the owner of the file.
+    if (fd_ < 0 && errno == EPERM) {
+      fd_ = ::open(path_.c_str(), flags & ~O_NOATIME);
+    }
+#endif
     if (fd_ < 0) {
       AD_THROW(absl::StrCat("Failed to open file: ", path_,
                             " (errno: ", strerror(errno), ")"));
