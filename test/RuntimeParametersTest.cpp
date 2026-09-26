@@ -12,6 +12,7 @@
 
 #include "global/RuntimeParameters.h"
 #include "util/GTestHelpers.h"
+#include "util/IoUringManager.h"
 
 using ::testing::AllOf;
 using ::testing::HasSubstr;
@@ -64,6 +65,22 @@ TEST(RuntimeParameters, lazyIndexScanNumThreadsIsStrictlyPositive) {
       std::runtime_error);
   EXPECT_NO_THROW(params.setFromAssignment("lazy-index-scan-num-threads=1"));
   EXPECT_EQ(params.lazyIndexScanNumThreads_.get(), 1u);
+}
+
+// The runtime parameters for the vocabulary batch reads are propagated to the
+// process-wide switches that `VocabularyOnDisk` reads.
+TEST(RuntimeParameters, vocabularyIoUringSwitchesArePropagated) {
+  RuntimeParameters params;
+  EXPECT_FALSE(ad_utility::useRegisteredBuffersForVocabularyReads);
+  EXPECT_FALSE(ad_utility::useDirectIoForVocabularyReads);
+  params.setFromAssignment("vocabulary-iouring-registered-buffers=true");
+  params.setFromAssignment("vocabulary-iouring-direct-io=true");
+  EXPECT_TRUE(ad_utility::useRegisteredBuffersForVocabularyReads);
+  EXPECT_TRUE(ad_utility::useDirectIoForVocabularyReads);
+  params.setFromAssignment("vocabulary-iouring-registered-buffers=false");
+  params.setFromAssignment("vocabulary-iouring-direct-io=false");
+  EXPECT_FALSE(ad_utility::useRegisteredBuffersForVocabularyReads);
+  EXPECT_FALSE(ad_utility::useDirectIoForVocabularyReads);
 }
 
 // Test that `getKeys` and `toMap` (the building blocks of

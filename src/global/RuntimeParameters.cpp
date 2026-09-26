@@ -12,6 +12,7 @@
 
 #include "backports/algorithm.h"
 #include "util/Algorithm.h"
+#include "util/IoUringManager.h"
 
 // _____________________________________________________________________________
 RuntimeParameters::RuntimeParameters() {
@@ -70,12 +71,25 @@ RuntimeParameters::RuntimeParameters() {
   add(disableCaching_);
   add(logLevel_);
   add(constructDeduplication_);
+  add(vocabularyIoUringRegisteredBuffers_);
+  add(vocabularyIoUringDirectIo_);
 
   // Propagate runtime log level changes immediately to the global atomic in
   // Log.h. The action fires once immediately on registration, so the atomic is
   // in sync with the parameter default from the start.
   logLevel_.setOnUpdateAction(
       [](LogLevel level) { ad_utility::setRuntimeLogLevel(level); });
+
+  // The vocabulary library does not depend on the runtime parameters, so
+  // propagate these switches to the process-wide atomics it reads.
+  vocabularyIoUringRegisteredBuffers_.setOnUpdateAction([](bool value) {
+    ad_utility::useRegisteredBuffersForVocabularyReads.store(
+        value, std::memory_order_relaxed);
+  });
+  vocabularyIoUringDirectIo_.setOnUpdateAction([](bool value) {
+    ad_utility::useDirectIoForVocabularyReads.store(value,
+                                                    std::memory_order_relaxed);
+  });
 
   // A constraint that rejects values that are not strictly positive, with a
   // readable error message. Works for integral types and for
