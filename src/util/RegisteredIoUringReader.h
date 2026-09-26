@@ -707,8 +707,11 @@ class RegisteredIoUringReader {
   BatchResult submitBatchSync(ql::span<const BlockReadRequest> requests) {
     BatchResult result;
     for (const auto& req : requests) {
+      // Like the ring path, interpret `fileIndex` as an index into the
+      // registered files only if registered files are in use.
       int targetFd = static_cast<int>(req.fileIndex);
-      if (filesRegistered_ && req.fileIndex < registeredFds_.size()) {
+      if (filesRegistered_ && config_.useRegisteredFiles &&
+          req.fileIndex < registeredFds_.size()) {
         targetFd = registeredFds_[req.fileIndex];
       }
       readSync(targetFd, req.fileOffset, {req.destination, req.numBytes},
