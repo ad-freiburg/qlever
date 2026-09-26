@@ -334,6 +334,9 @@ class RegisteredIoUringReader {
   };
   ad_utility::HashMap<uint64_t, InFlightMeta> inFlightByReqId_;
   ad_utility::HashMap<BatchId, size_t> inFlightByBatchId_;
+  // Results of the batches that were read synchronously in `submitBatch`
+  // (no ring), handed out by `waitBatch`.
+  ad_utility::HashMap<BatchId, BatchResult> syncBatchResults_;
   uint64_t nextReqId_ = 0;
 
  public:
@@ -362,6 +365,7 @@ class RegisteredIoUringReader {
         nextBatchId_{other.nextBatchId_},
         inFlightByReqId_{std::move(other.inFlightByReqId_)},
         inFlightByBatchId_{std::move(other.inFlightByBatchId_)},
+        syncBatchResults_{std::move(other.syncBatchResults_)},
         nextReqId_{other.nextReqId_} {
 #ifdef QLEVER_HAS_LIBURING
     other.ringInitialized_ = false;
@@ -388,6 +392,7 @@ class RegisteredIoUringReader {
       nextBatchId_ = other.nextBatchId_;
       inFlightByReqId_ = std::move(other.inFlightByReqId_);
       inFlightByBatchId_ = std::move(other.inFlightByBatchId_);
+      syncBatchResults_ = std::move(other.syncBatchResults_);
       nextReqId_ = other.nextReqId_;
 
       other.filesRegistered_ = false;
@@ -498,7 +503,7 @@ class RegisteredIoUringReader {
 #ifdef QLEVER_HAS_LIBURING
     if (!ringInitialized_) {
       // Synchronous fallback if ring is not available
-      submitBatchSync(requests);
+      syncBatchResults_[batchId] = submitBatchSync(requests);
       return batchId;
     }
 
@@ -549,7 +554,7 @@ class RegisteredIoUringReader {
 
     io_uring_submit(&ring_);
 #else
-    submitBatchSync(requests);
+    syncBatchResults_[batchId] = submitBatchSync(requests);
 #endif
 
     return batchId;
@@ -560,6 +565,13 @@ class RegisteredIoUringReader {
   BatchResult waitBatch(BatchId batchId) {
     if (batchId == 0) {
       return BatchResult{0, 0, true};
+    }
+    // A batch that was read synchronously has already completed.
+    if (auto it = syncBatchResults_.find(batchId);
+        it != syncBatchResults_.end()) {
+      BatchResult result = it->second;
+      syncBatchResults_.erase(it);
+      return result;
     }
 
 #ifdef QLEVER_HAS_LIBURING
@@ -690,7 +702,10 @@ class RegisteredIoUringReader {
   }
 #endif
 
-  void submitBatchSync(ql::span<const BlockReadRequest> requests) {
+  // Read all `requests` with `pread` and return their result. `readSync`
+  // throws on a failed or short read.
+  BatchResult submitBatchSync(ql::span<const BlockReadRequest> requests) {
+    BatchResult result;
     for (const auto& req : requests) {
       int targetFd = static_cast<int>(req.fileIndex);
       if (filesRegistered_ && req.fileIndex < registeredFds_.size()) {
@@ -698,7 +713,10 @@ class RegisteredIoUringReader {
       }
       readSync(targetFd, req.fileOffset, {req.destination, req.numBytes},
                config_.useDirectIo);
+      ++result.requestsCompleted;
+      result.totalBytesRead += req.numBytes;
     }
+    return result;
   }
 };
 
