@@ -55,8 +55,7 @@ double GeoPoint::dequantizeCoordinate(T quantized, double maxValue) {
 GeoPoint::T GeoPoint::toBitRepresentation() const {
   T lat = quantizeCoordinate(getLat(), COORDINATE_LAT_MAX);
   T lng = quantizeCoordinate(getLng(), COORDINATE_LNG_MAX);
-  // Use shift to obtain 30 bit lat followed by 30 bit lng in lower bits
-  auto bits = (lat << numDataBitsCoordinate) | lng;
+  auto bits = combineCoordinates(lat, lng, encoding());
   // Ensure the highest 4 bits are 0
   AD_CORRECTNESS_CHECK((bits & coordinateMaskFreeBits) == 0);
   return bits;
@@ -79,10 +78,9 @@ std::optional<GeoPoint> GeoPoint::parseFromLiteral(
 
 // _____________________________________________________________________________
 GeoPoint GeoPoint::fromBitRepresentation(T bits) {
-  return {
-      dequantizeCoordinate((bits & coordinateMaskLat) >> numDataBitsCoordinate,
-                           COORDINATE_LAT_MAX),
-      dequantizeCoordinate(bits & coordinateMaskLng, COORDINATE_LNG_MAX)};
+  auto [lat, lng] = splitCoordinates(bits, encoding());
+  return {dequantizeCoordinate(lat, COORDINATE_LAT_MAX),
+          dequantizeCoordinate(lng, COORDINATE_LNG_MAX)};
 }
 
 // _____________________________________________________________________________
