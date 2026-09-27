@@ -176,10 +176,10 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   AD_CORRECTNESS_CHECK(numJoinColumns == joinColumnsRight.numColumns());
   bool isCheap = ql::ranges::none_of(
       ad_utility::integerRange(numJoinColumns), [&](const auto& col) {
-        return (ql::ranges::any_of(joinColumnsRight.getColumn(col),
-                                   &isUndefinedId)) ||
-               (ql::ranges::any_of(joinColumnsLeft.getColumn(col),
-                                   &isUndefinedId));
+        return ql::ranges::any_of(joinColumnsRight.getColumn(col),
+                                  &isUndefinedId) ||
+               ql::ranges::any_of(joinColumnsLeft.getColumn(col),
+                                  &isUndefinedId);
       });
 
   // Nothing to do for the actual matches.

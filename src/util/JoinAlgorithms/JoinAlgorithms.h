@@ -1954,9 +1954,8 @@ void zipperJoinForBlocksWithPotentialUndef(
   auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);
   auto rightSide = detail::makeJoinSide(rightBlocks, rightProjection);
 
-  detail::BlockZipperJoinImpl impl{
-      leftSide, rightSide, lessThan, compatibleRowAction,
-      [](const Id& id) { return id.isUndefined(); }};
+  detail::BlockZipperJoinImpl impl{leftSide, rightSide, lessThan,
+                                   compatibleRowAction, &isUndefinedId};
   impl.template runJoin<joinType>();
 }
 

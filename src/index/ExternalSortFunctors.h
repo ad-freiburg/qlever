@@ -71,10 +71,8 @@ struct SortText {
   // < comparator
   template <typename A, typename B>
   bool operator()(const A& a, const B& b) const {
-    return ql::ranges::lexicographical_compare(
-        a, b, [](const Id& x, const Id& y) {
-          return x.compareWithoutLocalVocab(y) < 0;
-        });
+    return ql::ranges::lexicographical_compare(a, b,
+                                               &isLessThanWithoutLocalVocab);
   }
 };
 
