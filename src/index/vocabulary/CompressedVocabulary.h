@@ -168,14 +168,16 @@ CPP_template(typename UnderlyingVocabulary,
       // Fetch the compressed words in one batch through the underlying
       // vocabulary (an on-disk underlying vocabulary serves this from its
       // `io_uring` ring pool), then decompress each word with the decoder for
-      // its block. The underlying lookup preserves order, so result `i`
-      // belongs to `indices[i]`, exactly like the sequential path.
+      // its block. The underlying lookup preserves order, so each word pairs
+      // with the index at the same position, exactly like the sequential path.
       auto compressed = underlyingVocabulary_.lookupBatch(indices);
+      AD_CONTRACT_CHECK(compressed->size() == indices.size());
       auto data = std::make_shared<StringVectorVocabBatchLookupData>();
       data->buffer().reserve(indices.size());
-      for (size_t i = 0; i < indices.size(); ++i) {
-        data->buffer().push_back(compressionWrapper_.decompress(
-            (*compressed)[i], getDecoderIdx(indices[i])));
+      for (const auto& [word, index] :
+           ::ranges::views::zip(*compressed, indices)) {
+        data->buffer().push_back(
+            compressionWrapper_.decompress(word, getDecoderIdx(index)));
       }
       // Build the views after the buffer is complete, so no reallocation can
       // move the bytes the views point into.

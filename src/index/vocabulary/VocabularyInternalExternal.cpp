@@ -12,6 +12,8 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "util/Algorithm.h"
+
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
   auto fromInternal = internalVocab_[i];
@@ -44,8 +46,10 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   }
   if (!missIndices.empty()) {
     auto external = externalVocab_.lookupBatch(missIndices);
-    for (size_t m = 0; m < missIndices.size(); ++m) {
-      data->buffer()[missPositions[m]] = std::string{(*external)[m]};
+    AD_CONTRACT_CHECK(external->size() == missIndices.size());
+    for (const auto& [position, word] :
+         ::ranges::views::zip(missPositions, *external)) {
+      data->buffer()[position] = std::string{word};
     }
   }
   // Build the views only after the buffer is complete, so that no reallocation
