@@ -45,7 +45,7 @@ struct AdaptiveBatchController {
   // Enforceable bounds in one place: batch sizes into [1, ringSize] with
   // max >= min, defer ratio strictly positive. `shouldFlush` assumes this.
   [[nodiscard]] AdaptiveBatchController normalized(size_t ringSize) const {
-      AdaptiveBatchController result = *this;
+    AdaptiveBatchController result = *this;
 
     // A zero ring size would forbid every batch; treat it as one.
     const size_t upperBound = std::max<size_t>(ringSize, 1);
