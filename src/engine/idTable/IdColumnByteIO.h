@@ -1,5 +1,11 @@
-// Copyright 2026, University of Freiburg,
-// Chair of Algorithms and Data Structures.
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Pascal Keßler <kesslerp@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNBYTEIO_H
 #define QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNBYTEIO_H
@@ -28,11 +34,11 @@ inline std::vector<char> packIdColumnToBytes(const ConstIdColumnRef& column) {
   std::vector<char> result(column.size() * BYTES_PER_ID_COLUMN_ENTRY);
   char* out = result.data();
   for (ConstIdRef ref : column) {
-    auto bits = ref.getBits();
-    std::memcpy(out, &bits.datatype_, sizeof(bits.datatype_));
-    out += sizeof(bits.datatype_);
-    std::memcpy(out, &bits.payload_, sizeof(bits.payload_));
-    out += sizeof(bits.payload_);
+    auto [datatype_, payload_] = ref.getBits();
+    std::memcpy(out, &datatype_, sizeof(datatype_));
+    out += sizeof(datatype_);
+    std::memcpy(out, &payload_, sizeof(payload_));
+    out += sizeof(payload_);
   }
   return result;
 }

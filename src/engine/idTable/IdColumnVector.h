@@ -1,5 +1,11 @@
-// Copyright 2026, University of Freiburg,
-// Chair of Algorithms and Data Structures.
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Pascal Keßler <kesslerp@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNVECTOR_H
 #define QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNVECTOR_H
@@ -26,11 +32,9 @@ template <typename Allocator>
 class IdColumnVector {
  public:
   using PayloadAllocator =
-      typename std::allocator_traits<Allocator>::template rebind_alloc<
-          uint64_t>;
+      std::allocator_traits<Allocator>::template rebind_alloc<uint64_t>;
   using DatatypeAllocator =
-      typename std::allocator_traits<Allocator>::template rebind_alloc<
-          uint8_t>;
+      std::allocator_traits<Allocator>::template rebind_alloc<uint8_t>;
 
   using value_type = Id;
   using reference = IdRef;
@@ -90,10 +94,10 @@ class IdColumnVector {
     datatypes_.shrink_to_fit();
   }
 
-  void push_back(Id id) {
-    auto bits = getBitsCompat(id);
-    payloads_.push_back(bits.payload_);
-    datatypes_.push_back(bits.datatype_);
+  void push_back(const Id id) {
+    auto [datatype_, payload_] = getBitsCompat(id);
+    payloads_.push_back(payload_);
+    datatypes_.push_back(datatype_);
   }
   // Append a default (unspecified) `Id`, analogous to
   // `std::vector<Id>::emplace_back()`.
@@ -125,23 +129,23 @@ class IdColumnVector {
   // Both overloads needed (unlike `std::vector`, which gets away with a
   // single `const_iterator` one): `IdColumnIterator`/`ConstIdColumnIterator`
   // are unrelated types with no conversion between them.
-  void erase(const_iterator first, const_iterator last) {
+  void erase(const const_iterator first, const const_iterator last) {
     eraseImpl(first - asConstView().begin(), last - asConstView().begin());
   }
-  void erase(iterator first, iterator last) {
+  void erase(const iterator first, const iterator last) {
     eraseImpl(first - asView().begin(), last - asView().begin());
   }
-  void erase(const_iterator pos) { erase(pos, pos + 1); }
-  void erase(iterator pos) { erase(pos, pos + 1); }
+  void erase(const const_iterator pos) { erase(pos, pos + 1); }
+  void erase(const iterator pos) { erase(pos, pos + 1); }
 
   // Insert the elements from `[first, last)` before `pos`. Two overloads for
   // `pos`, for the same reason as for `erase` above.
   template <typename InputIt>
-  void insert(const_iterator pos, InputIt first, InputIt last) {
+  void insert(const const_iterator pos, InputIt first, InputIt last) {
     insertImpl(pos - asConstView().begin(), first, last);
   }
   template <typename InputIt>
-  void insert(iterator pos, InputIt first, InputIt last) {
+  void insert(const iterator pos, InputIt first, InputIt last) {
     insertImpl(pos - asView().begin(), first, last);
   }
 
@@ -157,9 +161,9 @@ class IdColumnVector {
     std::vector<uint64_t> newPayloads;
     std::vector<uint8_t> newDatatypes;
     for (; first != last; ++first) {
-      auto bits = getBitsCompat(static_cast<Id>(*first));
-      newPayloads.push_back(bits.payload_);
-      newDatatypes.push_back(bits.datatype_);
+      auto [datatype_, payload_] = getBitsCompat(static_cast<Id>(*first));
+      newPayloads.push_back(payload_);
+      newDatatypes.push_back(datatype_);
     }
     payloads_.insert(payloads_.begin() + offset, newPayloads.begin(),
                      newPayloads.end());
@@ -168,7 +172,6 @@ class IdColumnVector {
   }
 
  public:
-
   [[nodiscard]] IdColumnRef asView() {
     return {payloads_.data(), datatypes_.data(), payloads_.size()};
   }

@@ -1,5 +1,11 @@
-// Copyright 2026, University of Freiburg,
-// Chair of Algorithms and Data Structures.
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Pascal Keßler <kesslerp@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_IDREF_H
 #define QLEVER_SRC_ENGINE_IDTABLE_IDREF_H
@@ -16,12 +22,12 @@ namespace columnBasedIdTable {
 // `Id::getBits()`/`Id::fromBits(T)` into `Id::BitRepresentation`'s
 // (datatype, payload) shape, until the next commit switches
 // `Id::getBits()`/`fromBits()` themselves to operate on that struct.
-inline Id::BitRepresentation getBitsCompat(Id id) {
-  auto bits = id.getBits();
+inline Id::BitRepresentation getBitsCompat(const Id id) {
+  const auto bits = id.getBits();
   return {static_cast<uint8_t>(bits >> Id::numDataBits),
-         bits & ((Id::T{1} << Id::numDataBits) - 1)};
+          bits & (Id::T{1} << Id::numDataBits) - 1};
 }
-inline Id idFromBitsCompat(Id::BitRepresentation bits) {
+inline Id idFromBitsCompat(const Id::BitRepresentation bits) {
   return Id::fromBits((static_cast<Id::T>(bits.datatype_) << Id::numDataBits) |
                       bits.payload_);
 }
@@ -64,11 +70,11 @@ class BasicIdRef {
   // any proxy reference (e.g. `std::vector<bool>::reference`): it writes
   // through to the referenced slot, not to the proxy's own state, which is
   // also what `std::indirectly_writable` (and thus `ranges::sort`) requires.
-  CPP_template(typename = void)(requires(!IsConst)) const BasicIdRef&
-  operator=(Id id) const {
-    auto bits = getBitsCompat(id);
-    *payload_ = bits.payload_;
-    *datatype_ = bits.datatype_;
+  CPP_template(typename = void)(requires(!IsConst)) const BasicIdRef& operator=(
+      const Id id) const {
+    auto [data_type, pay_load] = getBitsCompat(id);
+    *payload_ = pay_load;
+    *datatype_ = data_type;
     return *this;
   }
 
@@ -144,48 +150,60 @@ class BasicIdRef {
 
   // Comparisons. Only one side needs to be a `BasicIdRef` for these to be
   // found via ADL; the other side is implicitly converted to `Id`.
-  friend bool operator==(BasicIdRef a, Id b) { return a.toId() == b; }
-  friend bool operator==(Id a, BasicIdRef b) { return a == b.toId(); }
+  friend bool operator==(const BasicIdRef a, const Id b) {
+    return a.toId() == b;
+  }
+  friend bool operator==(const Id a, const BasicIdRef b) {
+    return a == b.toId();
+  }
   template <bool OtherConst>
-  friend bool operator==(BasicIdRef a, BasicIdRef<OtherConst> b) {
+  friend bool operator==(const BasicIdRef a, const BasicIdRef<OtherConst> b) {
     return a.toId() == b.operator Id();
   }
-  friend bool operator!=(BasicIdRef a, Id b) { return !(a == b); }
-  friend bool operator!=(Id a, BasicIdRef b) { return !(a == b); }
+  friend bool operator!=(const BasicIdRef a, const Id b) { return !(a == b); }
+  friend bool operator!=(const Id a, const BasicIdRef b) { return !(a == b); }
   template <bool OtherConst>
-  friend bool operator!=(BasicIdRef a, BasicIdRef<OtherConst> b) {
+  friend bool operator!=(const BasicIdRef a, const BasicIdRef<OtherConst> b) {
     return !(a == b);
   }
 
   // Relational operators, e.g. needed for `ql::ranges::equal_range`/`sort`
   // on an `Id` column. Forwarded to `Id`'s own operators (datatype-major
   // bitwise comparison, see `ValueId::compareThreeWay`).
-  friend bool operator<(BasicIdRef a, Id b) { return a.toId() < b; }
-  friend bool operator<(Id a, BasicIdRef b) { return a < b.toId(); }
+  friend bool operator<(const BasicIdRef a, const Id b) { return a.toId() < b; }
+  friend bool operator<(const Id a, const BasicIdRef b) { return a < b.toId(); }
   template <bool OtherConst>
-  friend bool operator<(BasicIdRef a, BasicIdRef<OtherConst> b) {
+  friend bool operator<(const BasicIdRef a, const BasicIdRef<OtherConst> b) {
     return a.toId() < b.operator Id();
   }
-  friend bool operator<=(BasicIdRef a, Id b) { return a.toId() <= b; }
-  friend bool operator<=(Id a, BasicIdRef b) { return a <= b.toId(); }
+  friend bool operator<=(const BasicIdRef a, const Id b) {
+    return a.toId() <= b;
+  }
+  friend bool operator<=(const Id a, const BasicIdRef b) {
+    return a <= b.toId();
+  }
   template <bool OtherConst>
-  friend bool operator<=(BasicIdRef a, BasicIdRef<OtherConst> b) {
+  friend bool operator<=(const BasicIdRef a, const BasicIdRef<OtherConst> b) {
     return a.toId() <= b.operator Id();
   }
-  friend bool operator>(BasicIdRef a, Id b) { return a.toId() > b; }
-  friend bool operator>(Id a, BasicIdRef b) { return a > b.toId(); }
+  friend bool operator>(const BasicIdRef a, const Id b) { return a.toId() > b; }
+  friend bool operator>(const Id a, const BasicIdRef b) { return a > b.toId(); }
   template <bool OtherConst>
-  friend bool operator>(BasicIdRef a, BasicIdRef<OtherConst> b) {
+  friend bool operator>(const BasicIdRef a, const BasicIdRef<OtherConst> b) {
     return a.toId() > b.operator Id();
   }
-  friend bool operator>=(BasicIdRef a, Id b) { return a.toId() >= b; }
-  friend bool operator>=(Id a, BasicIdRef b) { return a >= b.toId(); }
+  friend bool operator>=(const BasicIdRef a, const Id b) {
+    return a.toId() >= b;
+  }
+  friend bool operator>=(const Id a, const BasicIdRef b) {
+    return a >= b.toId();
+  }
   template <bool OtherConst>
-  friend bool operator>=(BasicIdRef a, BasicIdRef<OtherConst> b) {
+  friend bool operator>=(const BasicIdRef a, const BasicIdRef<OtherConst> b) {
     return a.toId() >= b.operator Id();
   }
 
-  friend std::ostream& operator<<(std::ostream& ostr, BasicIdRef ref) {
+  friend std::ostream& operator<<(std::ostream& ostr, const BasicIdRef ref) {
     return ostr << ref.toId();
   }
 
