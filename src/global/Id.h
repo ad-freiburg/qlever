@@ -21,7 +21,6 @@ using Score = float;
 // or destructor to `ValueId`.
 static_assert(std::is_trivially_copyable_v<Id>);
 
-
 // Lambda, not `&Id::<function>`: proxy column elements
 // don't support pointer-to-member dispatch (see `IdColumn.h`). The
 // lambda's `const Id&` parameters trigger the proxy's implicit
