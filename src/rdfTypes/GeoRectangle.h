@@ -10,9 +10,15 @@
 #ifndef QLEVER_SRC_RDFTYPES_GEORECTANGLE_H
 #define QLEVER_SRC_RDFTYPES_GEORECTANGLE_H
 
+#include <optional>
+#include <utility>
+#include <vector>
+
 #include "global/ValueId.h"
 
 namespace ad_utility {
+
+class GeoCellGrid;
 
 // A geographic rectangle in plain degrees. In contrast to `BoundingBox` it
 // is a simple aggregate without invariants, suitable for query rectangles
@@ -35,24 +41,52 @@ GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
 
 // The estimated fraction of the rows that the block prefilter
 // `GeoRectangleExpression` keeps for `rectangle` which actually lie inside
-// the rectangle. The block prefilter keeps the whole latitude band of the
-// rectangle, so with geometries spread uniformly in longitude this is the
-// share of the band that the rectangle covers. The query planner uses it as
+// the rectangle. For points with the `LatMajor` encoding, the block prefilter
+// keeps the whole latitude band of the rectangle, so with geometries spread
+// uniformly in longitude this is the share of the band that the rectangle
+// covers (with the `ZOrder` encoding it keeps little more than the rectangle,
+// which this estimate does not account for yet). The query planner uses it as
 // the selectivity of a spatial join whose geometry side was prefiltered.
 double geoRectangleSelectivity(const GeoRectangle& rectangle);
+
+// The share of the area of the cells of `grid` that `rectangle` touches which
+// is covered by `rectangle` itself, in [0, 1]. A prefilter with `rectangle`
+// keeps all geometries of these cells. Assuming that the geometries are spread
+// uniformly within a cell, this is the fraction of them that actually lie in
+// `rectangle`, which makes it a size estimate for the prefiltered candidates.
+double fractionOfCoveringCells(const GeoRectangle& rectangle,
+                               const GeoCellGrid& grid);
+
+// The selectivity for an index with the given grid: the share of the covering
+// cells with a grid (the block prefilter then keeps exactly those cells), the
+// share of the latitude band without one (see above).
+double geoRectangleSelectivity(const GeoRectangle& rectangle,
+                               const std::optional<GeoCellGrid>& grid);
 
 // Decide for a single `ValueId`, without any disk access, whether the
 // geometry it stands for is certainly outside a query rectangle. This is the
 // row-level counterpart of the block prefilter `GeoRectangleExpression`. A
-// `GeoPoint` is decided by the coordinates encoded in the ID. Conservative:
-// WKT literals (whose coordinates are not in the ID) and all other datatypes
-// are never skipped.
+// `GeoPoint` is decided by the coordinates encoded in the ID; a WKT literal of
+// a vocabulary with a geo cell grid by the cell bits of its ID (a bit
+// extraction and a binary search over a handful of cell ranges). Conservative:
+// literals without cell information, indices outside the WKT region, and all
+// other datatypes are never skipped.
 class GeoRectangleIdPrefilter {
   GeoRectangle rectangle_;
+  // Half-open, ascending ranges of vocabulary index payloads that must be
+  // kept (covering cells plus the "no information" cells); empty without a
+  // grid.
+  std::vector<std::pair<uint64_t, uint64_t>> keepRanges_;
 
  public:
   explicit GeoRectangleIdPrefilter(const GeoRectangle& rectangle)
       : rectangle_{rectangle} {}
+  GeoRectangleIdPrefilter(const std::optional<GeoCellGrid>& grid,
+                          const GeoRectangle& rectangle);
+
+  // Return true iff the word with the given vocabulary index payload is
+  // certainly outside the query rectangle (only decidable with a grid).
+  bool canBeSkipped(uint64_t vocabIndexBits) const;
 
   // Return true iff the geometry with the given ID is certainly outside the
   // query rectangle (see above).

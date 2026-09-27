@@ -2399,8 +2399,8 @@ void QueryPlanner::applyConstantGeometryPrefilters(
         }
       }
     }
-    spatialJoin->setGeometrySideSelectivity(
-        ad_utility::geoRectangleSelectivity(paddedRectangle));
+    spatialJoin->setGeometrySideSelectivity(ad_utility::geoRectangleSelectivity(
+        paddedRectangle, _qec->getIndex().getVocab().getGeoCellGrid()));
   }
 }
 

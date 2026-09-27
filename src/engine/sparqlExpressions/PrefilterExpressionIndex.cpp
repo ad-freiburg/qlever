@@ -837,27 +837,44 @@ BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
   // belong to geometries whose bounding box intersects the rectangle. The
   // intervals are constructed in ascending order: the `VocabIndex` datatype
   // first (`Datatype::VocabIndex` < `Datatype::GeoPoint`), then the latitude
-  // band of the `GeoPoint`s.
-  //
-  // NOTE: The coordinates of a WKT literal cannot be seen from its ID, so the
-  // whole `VocabIndex` region is kept. The parameter `index` is unused here,
-  // but it is the hook for an index whose vocabulary stores the geometries in
-  // a spatial order.
-  (void)index;
+  // band of the `GeoPoint`s. With a geo cell grid, the WKT literals are
+  // restricted to the ID ranges of the cells that the rectangle covers;
+  // without one, the coordinates of a WKT literal cannot be seen from its ID,
+  // so the whole `VocabIndex` region is kept.
   std::vector<std::pair<ValueId, ValueId>> keepIntervals;
-  keepIntervals.emplace_back(
-      Id::makeFromVocabIndex(VocabIndex::make(0)),
-      Id::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)));
+  const auto& grid = index.getVocab().getGeoCellGrid();
+  if (grid.has_value()) {
+    for (auto [firstCell, lastCell] : grid.value().coveringCellRanges(
+             rectangle_.minLng_, rectangle_.minLat_, rectangle_.maxLng_,
+             rectangle_.maxLat_)) {
+      auto [lower, upper] =
+          grid.value().vocabIndexRangeForCells(firstCell, lastCell);
+      // `upper` is exclusive and can exceed the largest valid index payload
+      // (for the sentinel cell), so convert to a closed interval.
+      keepIntervals.emplace_back(
+          Id::makeFromVocabIndex(VocabIndex::make(lower)),
+          Id::makeFromVocabIndex(VocabIndex::make(upper - 1)));
+    }
+  } else {
+    keepIntervals.emplace_back(
+        Id::makeFromVocabIndex(VocabIndex::make(0)),
+        Id::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)));
+  }
 
-  // The latitude band of the `GeoPoint` region: `GeoPoint` IDs store the
-  // latitude in their upper coordinate bits, so all points within a latitude
-  // band form one contiguous ID interval. Extend the band by one quantization
-  // step of the encoding so that rounding can never exclude a matching point.
-  constexpr double latStep = 180.0 / GeoPoint::maxCoordinateEncoded;
-  double bandMinLat = std::max(rectangle_.minLat_ - latStep, -90.0);
-  double bandMaxLat = std::min(rectangle_.maxLat_ + latStep, 90.0);
-  keepIntervals.emplace_back(Id::makeFromGeoPoint(GeoPoint{bandMinLat, -180.0}),
-                             Id::makeFromGeoPoint(GeoPoint{bandMaxLat, 180.0}));
+  // The `GeoPoint` region: the intervals of the bit representations that
+  // contain all points of the rectangle, which depend on the encoding of the
+  // points (one latitude band for `LatMajor`, the quadtree cells that cover
+  // the rectangle for `ZOrder`, see `GeoPoint::intervalsForRectangle`). The
+  // round trip through `fromBitRepresentation` is exact and turns the bits
+  // into IDs.
+  for (auto [lower, upper] : GeoPoint::intervalsForRectangle(
+           GeoPoint{rectangle_.minLat_, rectangle_.minLng_},
+           GeoPoint{rectangle_.maxLat_, rectangle_.maxLng_},
+           GeoPoint::encoding())) {
+    keepIntervals.emplace_back(
+        Id::makeFromGeoPoint(GeoPoint::fromBitRepresentation(lower)),
+        Id::makeFromGeoPoint(GeoPoint::fromBitRepresentation(upper)));
+  }
 
   // For each interval, find the corresponding range of block-boundary
   // `ValueId`s. Empty ranges are deliberately kept: they indicate a block
@@ -1000,8 +1017,8 @@ std::string LogicalExpression<Operation>::asString(size_t depth) const {
   std::stringstream stream;
   stream << "Prefilter LogicalExpression<" << getLogicalOpStr(Operation)
          << ">\n"
-         << "child1 {" << child1Info << "}" << "child2 {" << child2Info << "}"
-         << std::endl;
+         << "child1 {" << child1Info << "}"
+         << "child2 {" << child2Info << "}" << std::endl;
   return stream.str();
 }
 

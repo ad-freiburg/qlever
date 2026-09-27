@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "backports/algorithm.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/Exception.h"
 
@@ -52,7 +54,70 @@ double geoRectangleSelectivity(const GeoRectangle& rectangle) {
 }
 
 // ____________________________________________________________________________
+double fractionOfCoveringCells(const GeoRectangle& rectangle,
+                               const GeoCellGrid& grid) {
+  auto numCells = static_cast<double>(grid.numCellsPerDimension());
+  double cellWidth = 360.0 / numCells;
+  double cellHeight = 180.0 / numCells;
+  // Snap the rectangle outwards to the cell borders. A rectangle that is
+  // degenerate in a dimension (a point or a line on a cell border) still
+  // touches at least one cell.
+  auto snap = [](double min, double max, double cellSize) {
+    double snappedMin = std::floor(min / cellSize) * cellSize;
+    double snappedMax = std::ceil(max / cellSize) * cellSize;
+    if (snappedMax <= snappedMin) {
+      snappedMax = snappedMin + cellSize;
+    }
+    return snappedMax - snappedMin;
+  };
+  double coveringWidth = snap(rectangle.minLng_, rectangle.maxLng_, cellWidth);
+  double coveringHeight =
+      snap(rectangle.minLat_, rectangle.maxLat_, cellHeight);
+  double area = (rectangle.maxLng_ - rectangle.minLng_) *
+                (rectangle.maxLat_ - rectangle.minLat_);
+  return std::clamp(area / (coveringWidth * coveringHeight), 0.0, 1.0);
+}
+
+// ____________________________________________________________________________
+double geoRectangleSelectivity(const GeoRectangle& rectangle,
+                               const std::optional<GeoCellGrid>& grid) {
+  return grid.has_value() ? fractionOfCoveringCells(rectangle, grid.value())
+                          : geoRectangleSelectivity(rectangle);
+}
+
+// ____________________________________________________________________________
+GeoRectangleIdPrefilter::GeoRectangleIdPrefilter(
+    const std::optional<GeoCellGrid>& grid, const GeoRectangle& rectangle)
+    : rectangle_{rectangle} {
+  if (!grid.has_value()) {
+    return;
+  }
+  for (auto [first, last] :
+       grid->coveringCellRanges(rectangle.minLng_, rectangle.minLat_,
+                                rectangle.maxLng_, rectangle.maxLat_)) {
+    keepRanges_.push_back(grid->vocabIndexRangeForCells(first, last));
+  }
+}
+
+// ____________________________________________________________________________
+bool GeoRectangleIdPrefilter::canBeSkipped(uint64_t vocabIndexBits) const {
+  if (keepRanges_.empty() || !GeoCellGrid::isGeoVocabIndex(vocabIndexBits)) {
+    // No grid, or not a WKT literal of the geo vocabulary, so we cannot
+    // decide anything.
+    return false;
+  }
+  // Find the first keep-range that ends after the index; the index is kept
+  // iff that range also starts at or before it.
+  auto it = ql::ranges::upper_bound(keepRanges_, vocabIndexBits, {},
+                                    &std::pair<uint64_t, uint64_t>::second);
+  return it == keepRanges_.end() || vocabIndexBits < it->first;
+}
+
+// ____________________________________________________________________________
 bool GeoRectangleIdPrefilter::canBeSkipped(ValueId id) const {
+  if (id.getDatatype() == Datatype::VocabIndex) {
+    return canBeSkipped(id.getVocabIndex().get());
+  }
   if (id.getDatatype() != Datatype::GeoPoint) {
     return false;
   }

@@ -20,7 +20,7 @@ GeoRectangleRowFilter::GeoRectangleRowFilter(
       child_{std::move(child)},
       geometryColumn_{geometryColumn},
       rectangle_{rectangle},
-      prefilter_{rectangle},
+      prefilter_{getIndex().getVocab().getGeoCellGrid(), rectangle},
       sizeEstimate_{sizeEstimate} {
   AD_CONTRACT_CHECK(geometryColumn_ < child_->getResultWidth());
   // The result of a block-prefiltered scan does not match its cache key, and
