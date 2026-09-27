@@ -64,6 +64,9 @@ class SimulatedVocabularyFile {
       AD_THROW("mkstemps failed to create temporary vocabulary file");
     }
     filePath_ = std::move(tempPath);
+    // Mark created before any throwing allocation below so the destructor
+    // unlinks the temporary file when the constructor throws.
+    isCreated_ = true;
 
     std::cout << "Generating 1GB simulated vocabulary data in: " << filePath_
               << " ... " << std::flush;
@@ -99,14 +102,26 @@ class SimulatedVocabularyFile {
 
     // `fdatasync` is Linux-specific; macOS only provides `fsync`.
 #ifdef __APPLE__
-    ::fsync(fd);
+    int syncRes = ::fsync(fd);
 #else
-    ::fdatasync(fd);
+    int syncRes = ::fdatasync(fd);
 #endif
-    ::close(fd);
+    if (syncRes != 0) {
+      int syncErrno = errno;
+      std::free(writeBuf);
+      ::close(fd);
+      AD_THROW(std::string("Failed to sync simulated vocabulary file: ") +
+               std::strerror(syncErrno));
+    }
+    if (::close(fd) != 0) {
+      int closeErrno = errno;
+      std::free(writeBuf);
+      AD_THROW(std::string("Failed to close simulated vocabulary file: ") +
+               std::strerror(closeErrno));
+    }
     std::free(writeBuf);
-    isCreated_ = true;
-    std::cout << "Done (1,073,741,824 bytes written)." << std::endl;
+    std::cout << "Done (" << kTotalFileSizeBytes << " bytes written)."
+              << std::endl;
   }
 
   ~SimulatedVocabularyFile() {
@@ -129,7 +144,6 @@ struct BenchmarkMetric {
   double throughputMBs = 0.0;
   double throughputGBs = 0.0;
   double iops = 0.0;
-  double avgBatchLatencyUs = 0.0;
   double speedupVsBaseline = 1.0;
 };
 
@@ -175,7 +189,7 @@ class IoUringDirectBenchmarkRunner {
 
     auto endTime = std::chrono::steady_clock::now();
     return calculateMetric("1. Sync pread (Page Cache)", startTime, endTime,
-                           totalBytes, numBatches);
+                           totalBytes);
   }
 
   // 2. Synchronous pread() with Direct I/O (O_DIRECT)
@@ -206,7 +220,7 @@ class IoUringDirectBenchmarkRunner {
 
     auto endTime = std::chrono::steady_clock::now();
     return calculateMetric("2. Sync pread (O_DIRECT)", startTime, endTime,
-                           totalBytes, numBatches);
+                           totalBytes);
   }
 
   // 3. io_uring Standard (Unpinned buffers & Unregistered files)
@@ -250,7 +264,7 @@ class IoUringDirectBenchmarkRunner {
 
     auto endTime = std::chrono::steady_clock::now();
     return calculateMetric("3. io_uring (Unpinned + Unregistered)", startTime,
-                           endTime, totalBytes, numBatches);
+                           endTime, totalBytes);
   }
 
   // 4. io_uring with O_DIRECT (Unpinned buffers)
@@ -294,7 +308,7 @@ class IoUringDirectBenchmarkRunner {
 
     auto endTime = std::chrono::steady_clock::now();
     return calculateMetric("4. io_uring O_DIRECT (Unpinned)", startTime,
-                           endTime, totalBytes, numBatches);
+                           endTime, totalBytes);
   }
 
   // 5. io_uring with Registered Files (IORING_REGISTER_FILES) + Unpinned
@@ -341,7 +355,7 @@ class IoUringDirectBenchmarkRunner {
 
     auto endTime = std::chrono::steady_clock::now();
     return calculateMetric("5. io_uring (Registered Files + O_DIRECT)",
-                           startTime, endTime, totalBytes, numBatches);
+                           startTime, endTime, totalBytes);
   }
 
   // 6. io_uring Fully Registered: IORING_REGISTER_FILES +
@@ -394,7 +408,7 @@ class IoUringDirectBenchmarkRunner {
     auto endTime = std::chrono::steady_clock::now();
     return calculateMetric(
         "6. io_uring (Fully Registered Files+Buffers+O_DIRECT)", startTime,
-        endTime, totalBytes, numBatches);
+        endTime, totalBytes);
   }
 
  private:
@@ -417,8 +431,7 @@ class IoUringDirectBenchmarkRunner {
 
   BenchmarkMetric calculateMetric(
       std::string_view name, std::chrono::steady_clock::time_point startTime,
-      std::chrono::steady_clock::time_point endTime, size_t totalBytes,
-      size_t numBatches) const {
+      std::chrono::steady_clock::time_point endTime, size_t totalBytes) const {
     std::chrono::duration<double> elapsed = endTime - startTime;
     double elapsedSec = elapsed.count();
     double mbRead = static_cast<double>(totalBytes) / (1024.0 * 1024.0);
@@ -432,8 +445,6 @@ class IoUringDirectBenchmarkRunner {
     m.throughputMBs = mbRead / elapsedSec;
     m.throughputGBs = gbRead / elapsedSec;
     m.iops = totalBlocks / elapsedSec;
-    m.avgBatchLatencyUs =
-        (elapsedSec * 1'000'000.0) / static_cast<double>(numBatches);
     return m;
   }
 };

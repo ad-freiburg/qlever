@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -175,6 +176,10 @@ class PinnedArena {
 
     slotSize_ = slotSizeBytes;
     numSlots_ = numSlots;
+    // Guard the multiplication below (and the `i * slotSize_` striding in the
+    // loop) against `size_t` wraparound on adversarial inputs.
+    AD_CONTRACT_CHECK(numSlots <=
+                      std::numeric_limits<size_t>::max() / slotSizeBytes);
     totalBytes_ = numSlots * slotSizeBytes;
     // Reserve before allocating the arena: a throwing `reserve` after
     // `posix_memalign` would leak the arena (the destructor does not run for
