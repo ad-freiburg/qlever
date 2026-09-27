@@ -86,7 +86,6 @@ VocabBatchLookupResult VocabularyInternalExternal::MixedLookupHandle::finish() {
     for (auto&& [position, word] :
          ::ranges::views::zip(externalPositions_, *data->diskResult_)) {
       data->views_[position] = word;
->>>>>>> theirs
     }
   }
   for (auto&& [position, word] :
