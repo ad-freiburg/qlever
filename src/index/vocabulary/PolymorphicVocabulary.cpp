@@ -10,6 +10,7 @@
 #include "index/vocabulary/PolymorphicVocabulary.h"
 
 #include "engine/CallFixedSize.h"
+#include "rdfTypes/ParsedGeometry.h"
 
 // _____________________________________________________________________________
 void PolymorphicVocabulary::open(const std::string& filename) {
@@ -67,6 +68,23 @@ VocabLookupOutput PolymorphicVocabulary::lookupBatchesStreamed(
   return std::visit(
       [&input](const auto& vocab) {
         return vocab.lookupBatchesStreamed(std::move(input));
+      },
+      vocab_);
+}
+
+// _____________________________________________________________________________
+std::optional<ad_utility::ParsedGeometry>
+PolymorphicVocabulary::getParsedGeometry(uint64_t index) const {
+  // Like `getGeoInfo` in the header.
+  return std::visit(
+      [&](const auto& vocab) -> std::optional<ad_utility::ParsedGeometry> {
+        using T = std::decay_t<decltype(vocab)>;
+        if constexpr (MaybeProvidesGeometryInfo<T>) {
+          return vocab.getParsedGeometry(index);
+        } else {
+          static_assert(NeverProvidesGeometryInfo<T>);
+          return std::nullopt;
+        }
       },
       vocab_);
 }

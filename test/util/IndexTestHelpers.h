@@ -76,6 +76,8 @@ struct TestIndexConfig {
   bool usePatterns = true;
   bool usePrefixCompression = true;
   size_t rowsPerBlock = 2;
+  // See `Index::parsedGeometriesMinLength`.
+  size_t parsedGeometriesMinLength = 0;
   bool createTextIndex = false;
   bool addWordsFromLiterals = true;
   std::optional<std::pair<std::string, std::string>>
@@ -144,20 +146,21 @@ struct TestIndexConfig {
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
     return H::combine(
         std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
-        c.usePrefixCompression, c.rowsPerBlock, c.createTextIndex,
-        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
-        c.vocabularyType, c.geoCellGridLevel, c.geoCellGridScheme,
-        c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
-        c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
-        c.parseInParallel, c.additionalSettings, c.geoPointEncoding.value());
+        c.usePrefixCompression, c.rowsPerBlock, c.parsedGeometriesMinLength,
+        c.createTextIndex, c.addWordsFromLiterals,
+        c.contentsOfWordsFileAndDocsfile, c.parserBufferSize, c.scoringMetric,
+        c.bAndKParam, c.indexType, c.vocabularyType, c.geoCellGridLevel,
+        c.geoCellGridScheme, c.encodedPrefixesWithoutAngleBrackets,
+        c.encodedIriPatterns, c.addHasWordTriples, c.secondaryVocabWords,
+        c.numThreads, c.parseInParallel, c.additionalSettings,
+        c.geoPointEncoding.value());
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
-      usePrefixCompression, rowsPerBlock, createTextIndex, addWordsFromLiterals,
-      contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
-      bAndKParam, indexType, vocabularyType, geoCellGridLevel,
-      geoCellGridScheme, encodedPrefixesWithoutAngleBrackets,
+      usePrefixCompression, rowsPerBlock, parsedGeometriesMinLength,
+      createTextIndex, addWordsFromLiterals, contentsOfWordsFileAndDocsfile,
+      parserBufferSize, scoringMetric, bAndKParam, indexType, vocabularyType,
+      geoCellGridLevel, geoCellGridScheme, encodedPrefixesWithoutAngleBrackets,
       encodedIriPatterns, addHasWordTriples, secondaryVocabWords, numThreads,
       parseInParallel, additionalSettings, geoPointEncoding)
 };

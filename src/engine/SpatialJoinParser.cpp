@@ -13,6 +13,7 @@
 #include <range/v3/numeric/accumulate.hpp>
 
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
+#include "rdfTypes/ParsedGeometry.h"
 
 namespace ad_utility::detail::parallel_wkt_parser {
 
@@ -25,6 +26,7 @@ WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
       _numSkipped(numThreads),
       _numSkippedByCell(numThreads),
       _numParsed(numThreads),
+      _numFromIndex(numThreads),
       _usePrefiltering(usePrefiltering),
       _prefilterLatLngBox(prefilterLatLngBox),
       _requireContainment(requireContainment),
@@ -64,11 +66,17 @@ size_t WKTParser::getParseCounter() {
 }
 
 // _____________________________________________________________________________
+size_t WKTParser::getFromIndexCounter() {
+  return ::ranges::accumulate(_numFromIndex, 0);
+}
+
+// _____________________________________________________________________________
 void WKTParser::processQueue(size_t t) {
   std::vector<SpatialJoinParseJob> batch;
   size_t prefilterCounter = 0;
   size_t cellPrefilterCounter = 0;
   size_t parseCounter = 0;
+  size_t fromIndexCounter = 0;
   while ((batch = _jobs.get()).size()) {
     sj::WriteBatch w;
     for (auto& job : batch) {
@@ -97,11 +105,21 @@ void WKTParser::processQueue(size_t t) {
           continue;
         }
 
-        // If we have not filtered out this geometry, read and parse the full
-        // string.
-        job.wkt = _index.indexToString(job.valueId.getVocabIndex());
-        parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
-                  false);
+        // If the geometry was parsed at index build time, add it to the
+        // sweeper in its stored form (see `ParsedGeometry`). Otherwise read
+        // and parse the full string.
+        auto parsed =
+            _index.getVocab().getParsedGeometry(job.valueId.getVocabIndex());
+        if (parsed.has_value()) {
+          _bboxes[t] = ::util::geo::extendBox(
+              parsed.value().addToBatch(*_sweeper, job.line, job.side, w),
+              _bboxes[t]);
+          fromIndexCounter++;
+        } else {
+          job.wkt = _index.indexToString(job.valueId.getVocabIndex());
+          parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
+                    false);
+        }
         parseCounter++;
       } else if (dt == Datatype::GeoPoint) {
         const auto& p = job.valueId.getGeoPoint();
@@ -143,6 +161,7 @@ void WKTParser::processQueue(size_t t) {
   _numSkipped[t] = prefilterCounter;
   _numSkippedByCell[t] = cellPrefilterCounter;
   _numParsed[t] = parseCounter;
+  _numFromIndex[t] = fromIndexCounter;
 }
 
 // _____________________________________________________________________________

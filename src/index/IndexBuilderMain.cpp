@@ -342,6 +342,16 @@ int main(int argc, char** argv) {
       DEFAULT_INDEX_ROWS_PER_BLOCK, ".");
   add("index-rows-per-block", po::value(&indexRowsPerBlock),
       rowsPerBlockDescription.c_str());
+  add("parsed-geometries-min-length",
+      po::value(&config.parsedGeometriesMinLength_),
+      "Parse the WKT literals with at least this many bytes at index build "
+      "time and store them in their parsed form (with the geo vocabulary), so "
+      "that spatial joins do not have to parse them at query time. Parsing a "
+      "huge geometry (a country boundary with millions of points) takes "
+      "seconds per spatial join, parsing an ordinary geometry takes "
+      "microseconds, so a value like 100000 covers the geometries that "
+      "matter at a negligible cost in index size and build time. Default: 0 "
+      "(store none).");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),

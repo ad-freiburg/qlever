@@ -120,6 +120,7 @@ class IndexImpl {
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
   size_t rowsPerBlock_ = DEFAULT_INDEX_ROWS_PER_BLOCK;
+  size_t parsedGeometriesMinLength_ = 0;
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
@@ -612,6 +613,13 @@ class IndexImpl {
   size_t& rowsPerBlock() { return rowsPerBlock_; }
 
   const size_t& rowsPerBlock() const { return rowsPerBlock_; }
+
+  // The minimum length of the WKT literals for which the index build stores
+  // the parsed geometry (see `ParsedGeometry`, 0 = none).
+  size_t& parsedGeometriesMinLength() { return parsedGeometriesMinLength_; }
+  const size_t& parsedGeometriesMinLength() const {
+    return parsedGeometriesMinLength_;
+  }
 
   void setOnDiskBase(const std::string& onDiskBase);
 
