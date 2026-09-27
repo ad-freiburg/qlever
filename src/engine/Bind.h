@@ -8,6 +8,7 @@
 #include "engine/Operation.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
 
 // BIND operation.
 class Bind : public Operation {
@@ -31,7 +32,7 @@ class Bind : public Operation {
   [[nodiscard]] size_t getResultWidth() const override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
   size_t getCostEstimate() override;

@@ -1,16 +1,19 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2021 - 2025 The QLever Authors, in particular:
 //
 // 2021 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025        Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 
 #include "engine/idTable/CompressedExternalIdTable.h"
-#include "index/CompressedRelation.h"
 #include "index/CompressedRelationHelpersImpl.h"
+#include "index/CompressedRelationWriter.h"
 #include "util/ProgressBar.h"
 
 // Set up the handling of small relations for the twin permutation.
