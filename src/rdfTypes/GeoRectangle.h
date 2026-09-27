@@ -41,9 +41,11 @@ GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
 
 // The estimated fraction of the rows that the block prefilter
 // `GeoRectangleExpression` keeps for `rectangle` which actually lie inside
-// the rectangle. The block prefilter keeps the whole latitude band of the
-// rectangle, so with geometries spread uniformly in longitude this is the
-// share of the band that the rectangle covers. The query planner uses it as
+// the rectangle. For points with the `LatMajor` encoding, the block prefilter
+// keeps the whole latitude band of the rectangle, so with geometries spread
+// uniformly in longitude this is the share of the band that the rectangle
+// covers (with the `ZOrder` encoding it keeps little more than the rectangle,
+// which this estimate does not account for yet). The query planner uses it as
 // the selectivity of a spatial join whose geometry side was prefiltered.
 double geoRectangleSelectivity(const GeoRectangle& rectangle);
 
@@ -57,7 +59,7 @@ double fractionOfCoveringCells(const GeoRectangle& rectangle,
 
 // The selectivity for an index with the given grid: the share of the covering
 // cells with a grid (the block prefilter then keeps exactly those cells), the
-// share of the latitude band without one.
+// share of the latitude band without one (see above).
 double geoRectangleSelectivity(const GeoRectangle& rectangle,
                                const std::optional<GeoCellGrid>& grid);
 
