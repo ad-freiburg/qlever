@@ -12,7 +12,6 @@
 #include <exception>
 
 #include "absl/cleanup/cleanup.h"
-#include "util/Exception.h"
 
 #if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
 #include <boost/fiber/algo/round_robin.hpp>
@@ -174,30 +173,17 @@ void FiberIoScheduler::waitUntil(IoUringPolicy& policy,
 }
 #endif
 
+#if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
 //______________________________________________________________________________
 void FiberIoScheduler::waitForBatch(IoUringPolicy& policy, BatchHandle handle) {
-#if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
   waitUntil(policy,
             [&policy, handle]() { return policy.isBatchComplete(handle); });
-#else
-  (void)policy;
-  (void)handle;
-  AD_THROW(
-      "FiberIoScheduler::waitForBatch requires an io_uring build with fiber "
-      "support (QLEVER_HAS_IO_URING and QLEVER_HAS_FIBER_IO)");
-#endif
 }
 
 //______________________________________________________________________________
 void FiberIoScheduler::waitForFreeSlot(IoUringPolicy& policy) {
-#if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
   waitUntil(policy, [&policy]() { return !policy.isRingFull(); });
-#else
-  (void)policy;
-  AD_THROW(
-      "FiberIoScheduler::waitForFreeSlot requires an io_uring build with "
-      "fiber support (QLEVER_HAS_IO_URING and QLEVER_HAS_FIBER_IO)");
-#endif
 }
+#endif
 
 }  // namespace ad_utility

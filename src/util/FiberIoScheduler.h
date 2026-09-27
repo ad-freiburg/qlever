@@ -43,10 +43,13 @@ class IoUringPolicy;
 // attributes completions of any batch while parked), so parking cannot
 // deadlock sibling fibers.
 //
-// When fiber support is not compiled in (`QLEVER_HAS_FIBER_IO` undefined),
-// every method degrades gracefully: `runAsFibers` runs the bodies
-// sequentially, `isInsideFiber` is always false, and the waits fall back to
-// the blocking `IoUringPolicy` primitives.
+// When fiber support is not compiled in (`QLEVER_HAS_IO_URING` or
+// `QLEVER_HAS_FIBER_IO` undefined), only the scheduling interface is
+// available: `runAsFibers` runs the bodies sequentially, `isInsideFiber` is
+// always false, and both waiting counters stay zero. The cooperative waits
+// (`waitForBatch`, `waitForFreeSlot`) exist only on fiber builds, where the
+// submission path and `IoUringPolicy::wait` reach them after detecting an
+// active fiber.
 class FiberIoScheduler {
  public:
   using BatchHandle = uint64_t;
@@ -70,19 +73,22 @@ class FiberIoScheduler {
   // support the bodies run sequentially in order.
   static void runAsFibers(std::vector<std::function<void()>> bodies);
 
+#if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
   // Cooperatively wait until every read of `handle` has completed. To be
   // called from inside a fiber body (this is what `IoUringPolicy::wait`
   // delegates to when it detects an active fiber). Returns only after at
   // least one of this batch's own completions was reaped, so no wakeup can
   // be lost between the last reap and the yield: every resume re-reaps
-  // before checking completion.
+  // before checking completion. Exists only on fiber-enabled io_uring
+  // builds, like `waitUntil` below.
   void waitForBatch(IoUringPolicy& policy, BatchHandle handle);
 
   // Cooperatively wait until the ring has a free submission slot. To be
   // called from inside a fiber body when `addBatch` hits a full ring (this
   // is what the ring-full path delegates to when it detects an active
-  // fiber).
+  // fiber). Exists only on fiber-enabled io_uring builds.
   void waitForFreeSlot(IoUringPolicy& policy);
+#endif
 
   // Number of fibers currently inside `waitForBatch`/`waitForFreeSlot` on
   // this thread. Exposed for the adaptive-batching ratio controller
@@ -100,12 +106,14 @@ class FiberIoScheduler {
   size_t numWaitingFibers_ = 0;
   size_t numActiveFibers_ = 0;
 
+#if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
   // A sibling fiber is doing non-wait work (submitting, formatting) when
   // more fibers are active than waiting; yielding then lets it run. This is
   // a heuristic: a fiber between submit and wait counts as active-not-
   // waiting and may cause a spurious yield. That only costs a context
   // switch — and the one-yield grace in `waitUntil` covers the reverse case
   // of a just-woken sibling — so a precise runnable signal is not needed.
+  // Exists only on fiber-enabled io_uring builds, like everything below.
   bool siblingsMayHaveWork() const {
     return numActiveFibers_ > numWaitingFibers_;
   }
@@ -121,7 +129,6 @@ class FiberIoScheduler {
     --numActiveFibers_;
   }
 
-#if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
   // Shared cooperative loop behind `waitForBatch` and `waitForFreeSlot`.
   // Exists only on fiber-enabled io_uring builds; defined in the
   // implementation file.
