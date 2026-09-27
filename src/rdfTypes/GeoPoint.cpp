@@ -4,6 +4,7 @@
 
 #include "rdfTypes/GeoPoint.h"
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 #include <type_traits>
@@ -81,6 +82,66 @@ GeoPoint GeoPoint::fromBitRepresentation(T bits) {
   auto [lat, lng] = splitCoordinates(bits, encoding());
   return {dequantizeCoordinate(lat, COORDINATE_LAT_MAX),
           dequantizeCoordinate(lng, COORDINATE_LNG_MAX)};
+}
+
+// _____________________________________________________________________________
+std::vector<std::pair<GeoPoint::T, GeoPoint::T>>
+GeoPoint::intervalsForRectangle(const GeoPoint& lowerLeft,
+                                const GeoPoint& upperRight,
+                                GeoPointEncodingEnum encoding) {
+  AD_CONTRACT_CHECK(lowerLeft.getLat() <= upperRight.getLat() &&
+                    lowerLeft.getLng() <= upperRight.getLng());
+
+  // The rectangle in quantized coordinates, both ends included. The
+  // quantization is monotone, so every point of the rectangle lies in it.
+  T latMin = quantizeCoordinate(lowerLeft.getLat(), COORDINATE_LAT_MAX);
+  T latMax = quantizeCoordinate(upperRight.getLat(), COORDINATE_LAT_MAX);
+  T lngMin = quantizeCoordinate(lowerLeft.getLng(), COORDINATE_LNG_MAX);
+  T lngMax = quantizeCoordinate(upperRight.getLng(), COORDINATE_LNG_MAX);
+
+  // For `LatMajor`, the points of the latitude band form one interval.
+  if (encoding == GeoPointEncodingEnum::LatMajor) {
+    return {{combineCoordinates(latMin, 0, encoding),
+             combineCoordinates(latMax, maxCoordinateEncoded, encoding)}};
+  }
+
+  // For `ZOrder`, walk the quadtree of the coordinate space in Z-order (so
+  // that the intervals come out ascending), starting with the whole space as
+  // the root cell: a cell outside the rectangle is dropped, a cell inside it
+  // is emitted as one interval, and a cell that overlaps the border of the
+  // rectangle is split into its four children, unless its side is at most
+  // `stopSide` (then it is emitted whole, which is the "few percent more").
+  // Intervals of adjacent cells are merged.
+  AD_CORRECTNESS_CHECK(encoding == GeoPointEncodingEnum::ZOrder);
+  T stopSide =
+      std::max<T>(1, std::min(latMax - latMin + 1, lngMax - lngMin + 1) / 32);
+  std::vector<std::pair<T, T>> intervals;
+  auto visit = [&](auto&& self, T lat, T lng, T side) -> void {
+    T latEnd = lat + side - 1;
+    T lngEnd = lng + side - 1;
+    if (latEnd < latMin || lat > latMax || lngEnd < lngMin || lng > lngMax) {
+      return;
+    }
+    bool inside =
+        lat >= latMin && latEnd <= latMax && lng >= lngMin && lngEnd <= lngMax;
+    if (!inside && side > stopSide) {
+      T half = side / 2;
+      self(self, lat, lng, half);
+      self(self, lat, lng + half, half);
+      self(self, lat + half, lng, half);
+      self(self, lat + half, lng + half, half);
+      return;
+    }
+    T first = interleaveCoordinates(lat, lng);
+    T last = interleaveCoordinates(latEnd, lngEnd);
+    if (!intervals.empty() && intervals.back().second + 1 == first) {
+      intervals.back().second = last;
+    } else {
+      intervals.emplace_back(first, last);
+    }
+  };
+  visit(visit, 0, 0, maxCoordinateEncoded + 1);
+  return intervals;
 }
 
 // _____________________________________________________________________________
