@@ -208,9 +208,7 @@ class ValueId {
 
   // The raw bit representation of a `ValueId`: a single datatype byte and a
   // full 64-bit word of payload. See `ValueIdBitRepresentation.h` for
-  // details. Introduced ahead of the commit that actually switches
-  // `getBits()`/`fromBits()` to it, so later commits can already spell out
-  // the type they mean.
+  // details.
   using BitRepresentation = ValueIdBitRepresentation;
 
  private:
