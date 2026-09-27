@@ -1051,9 +1051,9 @@ Server::PlannedQuery Server::planQuery(
       std::move(operation), qec, std::move(handle), timeLimit, requestTimer);
 
   const auto& qet = plannedQuery.queryExecutionTree();
-  const auto& runtimeInfoWholeQuery =
-      qet.getRootOperation()->getRuntimeInfoWholeQuery();
-  auto timeForQueryPlanning = runtimeInfoWholeQuery.timeQueryPlanning;
+  const auto& queryPlanningInfo =
+      qet.getRootOperation()->getQueryPlanningInfo();
+  auto timeForQueryPlanning = queryPlanningInfo.timeQueryPlanning;
   AD_LOG_INFO << "Query planning done in " << timeForQueryPlanning.count()
               << " ms" << std::endl;
   AD_LOG_TRACE << qet.getCacheKey() << std::endl;
@@ -1285,8 +1285,8 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
       plannedQuery.parsedQuery()._originalString);
   response["status"] = "OK";
   response["warnings"] = warnings;
-  response["runtimeInformation"]["meta"] = nlohmann::ordered_json(
-      qet.getRootOperation()->getRuntimeInfoWholeQuery());
+  response["runtimeInformation"]["meta"] =
+      nlohmann::ordered_json(qet.getRootOperation()->getQueryPlanningInfo());
   response["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(qet.getRootOperation()->runtimeInfo());
   auto setIfHasValue = [&response, &updateMetadata](

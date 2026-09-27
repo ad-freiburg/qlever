@@ -224,12 +224,11 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   }
   {
     Index index = makeIndexWithTestSettings(c.parserBufferSize);
-    // This is enough for 2 triples per block. This is deliberately chosen as a
-    // small value, s.t. the tiny knowledge graphs from unit tests also contain
-    // multiple blocks. Should this value or the semantics of it (how many
-    // triples it may store) ever change, then some unit tests might have to be
-    // adapted.
-    index.blocksizePermutationsPerColumn() = c.blocksizePermutations;
+    // By default 2 triples per block. This is deliberately chosen as a small
+    // value, s.t. the tiny knowledge graphs from unit tests also contain
+    // multiple blocks. Should this value ever change, then some unit tests
+    // might have to be adapted.
+    index.rowsPerBlock() = c.rowsPerBlock;
     index.setOnDiskBase(indexBasename);
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
