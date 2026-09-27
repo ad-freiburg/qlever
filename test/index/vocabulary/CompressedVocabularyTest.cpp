@@ -359,7 +359,7 @@ TEST(CompressedVocabularyWithHoles, accessOperator) {
 // _____________________________________________________________________________
 TEST(CompressedVocabularyWithHoles, lookupBatch) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  auto cleanup = getFileCleanup(filename);
   auto vocab =
       createVocabularyWithHoles(filename, wordsWithHoles(), indicesWithHoles());
 
