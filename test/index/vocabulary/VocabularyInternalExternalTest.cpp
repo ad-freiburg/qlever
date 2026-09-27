@@ -155,3 +155,10 @@ TEST(VocabularyInternalExternal, LookupBatch) {
                              "epsilon", "alpha", "zeta", "gamma", "beta"));
   assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
 }
+
+// An empty batch is an invalid request and must throw.
+TEST(VocabularyInternalExternal, LookupBatchEmptyThrows) {
+  auto vocab = createVocabulary("LookupBatchEmptyThrows")(
+      std::vector<std::string>{"alpha", "beta", "gamma"});
+  EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
+}

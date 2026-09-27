@@ -46,7 +46,9 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   }
   if (!missIndices.empty()) {
     auto external = externalVocab_.lookupBatch(missIndices);
-    AD_CONTRACT_CHECK(external->size() == missIndices.size());
+    // Internal invariant (not violable via the public interface): the external
+    // lookup yields one word per index, in order.
+    AD_CORRECTNESS_CHECK(external->size() == missIndices.size());
     for (const auto& [position, word] :
          ::ranges::views::zip(missPositions, *external)) {
       data->buffer()[position] = std::string{word};

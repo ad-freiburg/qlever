@@ -171,7 +171,9 @@ CPP_template(typename UnderlyingVocabulary,
       // its block. The underlying lookup preserves order, so each word pairs
       // with the index at the same position, exactly like the sequential path.
       auto compressed = underlyingVocabulary_.lookupBatch(indices);
-      AD_CONTRACT_CHECK(compressed->size() == indices.size());
+      // Internal invariant (not violable via the public interface): the
+      // underlying lookup yields one word per index, in order.
+      AD_CORRECTNESS_CHECK(compressed->size() == indices.size());
       auto data = std::make_shared<StringVectorVocabBatchLookupData>();
       data->buffer().reserve(indices.size());
       for (const auto& [word, index] :
