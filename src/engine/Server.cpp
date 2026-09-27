@@ -4,6 +4,7 @@
 // 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2022 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
 // 2024 - 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -220,13 +221,25 @@ void Server::run() {
     return handleHttpRequest(std::move(request), AD_FWD(send));
   };
 
-  // `HttpServer`'s constructor binds the socket synchronously; keep this as
-  // the first statement in `run()` so a port already in use fails fast,
-  // before any other startup work.
+  // `HttpServer`'s constructor binds the socket synchronously; keep the bind
+  // as early as possible in `run()` so a port already in use fails fast,
+  // before any heavy startup work. The lightweight flag read and log line
+  // below intentionally precede it.
+  // Read once at startup (fixed for the lifetime of `HttpServer`; changing
+  // `use-send-zc` at runtime has no effect): enable the `IORING_OP_SEND_ZC`
+  // zero-copy path for chunked `streamable_body` export responses.
+  const bool useSendZC = getRuntimeParameter<&RuntimeParameters::useSendZC_>();
+  AD_LOG_INFO << "Zero-copy socket sends (IORING_OP_SEND_ZC) for export "
+              << "responses are " << (useSendZC ? "ENABLED" : "disabled")
+              << std::endl;
   auto httpServer =
-      HttpServer{port_, "0.0.0.0", static_cast<int>(numThreads_),
+      HttpServer{port_,
+                 "0.0.0.0",
+                 static_cast<int>(numThreads_),
                  std::move(httpSessionHandler),
-                 absl::bind_front(&Server::makeWebSocketSessionSupplier, this)};
+                 absl::bind_front(&Server::makeWebSocketSessionSupplier, this),
+                 DEFAULT_LAZY_BODY_CHUNK_SIZE,
+                 useSendZC};
 
   AD_LOG_INFO << "The server is ready, listening for requests on port "
               << std::to_string(httpServer.getPort()) << " ..." << std::endl;

@@ -1,6 +1,12 @@
-//   Copyright 2024, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_RUNTIMEPARAMETERS_H
 #define QLEVER_RUNTIMEPARAMETERS_H
@@ -130,6 +136,12 @@ struct RuntimeParameters {
   // Maximum size for the body of requests that the server will process.
   MemorySizeParameter requestBodyLimit_{ad_utility::MemorySize::gigabytes(1),
                                         "request-body-limit"};
+  // Enable `IORING_OP_SEND_ZC` zero-copy socket sends via Linux `io_uring`
+  // for chunked `streamable_body` HTTP responses (the export path for
+  // `SELECT`/`CONSTRUCT` results) instead of the default `Boost.Beast` write
+  // path. Off by default; enable for A/B experiments. Takes effect at server
+  // startup; changing it at runtime has no effect.
+  Bool useSendZC_{false, "use-send-zc"};
   // SERVICE operations are not cached by default, but can be enabled
   // which has the downside that the sibling optimization where VALUES are
   // dynamically pushed into `SERVICE` is no longer used.

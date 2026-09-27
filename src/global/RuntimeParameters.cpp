@@ -1,10 +1,14 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2025 - 2026 The QLever Authors, in particular:
 //
 // 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025 NN, BMW
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 // BMW =  Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "global/RuntimeParameters.h"
 
@@ -45,6 +49,7 @@ RuntimeParameters::RuntimeParameters() {
   add(smallIndexScanSizeEstimateDivisor_);
   add(zeroCostEstimateForCachedSubtree_);
   add(requestBodyLimit_);
+  add(useSendZC_);
   add(cacheServiceResults_);
   add(syntaxTestMode_);
   add(divisionByZeroIsUndef_);
