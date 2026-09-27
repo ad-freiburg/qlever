@@ -4,6 +4,7 @@
 // 2018 - 2026 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
 // 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 // 2025        Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -489,6 +490,14 @@ class QueryPlanner {
   using ReplacementPlans = std::vector<std::vector<SubtreePlan>>;
   ReplacementPlans createMaterializedViewJoinReplacements(
       const parsedQuery::BasicGraphPattern& triples) const;
+
+  // If the runtime parameter `use-leapfrog-triangle-join` is set, find
+  // disjoint sets of three triples in `pattern` that form a triangle over
+  // three variables (see `LeapfrogTriangleJoin`), remove them from `pattern`,
+  // and return one `LeapfrogTriangleJoin` plan of their index scans for each
+  // of them.
+  std::vector<SubtreePlan> extractLeapfrogTriangleJoins(
+      parsedQuery::BasicGraphPattern& pattern) const;
 
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq,

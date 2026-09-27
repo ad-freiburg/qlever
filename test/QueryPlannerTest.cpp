@@ -1,7 +1,13 @@
-// Copyright 2015 - 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2015 - 2026, The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2015 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
@@ -12,6 +18,7 @@
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
+#include "engine/LeapfrogTriangleJoin.h"
 #include "engine/QueryPlanner.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
@@ -4128,4 +4135,78 @@ TEST(QueryPlanner, planningInfo) {
   EXPECT_EQ(info[1].numConnectedSubgraphs_, 2u);
   EXPECT_EQ(info[1].budget_, 1u);
   EXPECT_GT(info[1].numCandidatePlans_, 0u);
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, leapfrogTriangleJoin) {
+  using enum Permutation::Enum;
+  auto scan = h::IndexScanFromStrings;
+  auto triangle = [](auto... children) {
+    return h::MatchTypeAndOrderedChildren<::LeapfrogTriangleJoin>(children...);
+  };
+  auto isTriangle = h::RootOperation<::LeapfrogTriangleJoin>(::testing::_);
+  std::string query = "SELECT * { ?x <p> ?y . ?y <q> ?z . ?x <r> ?z }";
+
+  // Without the runtime parameter, the triangle is a chain of binary joins.
+  h::expect(query, ::testing::Not(isTriangle));
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::useLeapfrogTriangleJoin_>(
+          true);
+  h::expect(query, triangle(scan("?x", "<p>", "?y", {PSO}),
+                            scan("?y", "<q>", "?z", {PSO}),
+                            scan("?x", "<r>", "?z", {PSO})));
+  // The edges can point in either direction and appear in any order. The
+  // variables are bound in the order of the first triple (`?z`, `?y`), and
+  // the scans are sorted accordingly.
+  h::expect(
+      "SELECT * { ?z <q> ?y . ?x <p> ?y . ?z <r> ?x }",
+      triangle(scan("?z", "<q>", "?y", {PSO}), scan("?x", "<p>", "?y", {POS}),
+               scan("?z", "<r>", "?x", {PSO})));
+
+  // Patterns that are not triangles of three variables keep their joins.
+  h::expect("SELECT * { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w }",
+            ::testing::Not(isTriangle));
+  h::expect("SELECT * { ?x <p> ?y . ?y <q> ?z . ?x ?r ?z }",
+            ::testing::Not(isTriangle));
+  h::expect("SELECT * { ?x <p> ?y . ?y <q> ?z . ?x <r> <z> }",
+            ::testing::Not(isTriangle));
+  h::expect("SELECT * { ?x <p> ?y . ?y <q> ?x . ?x <r> ?y }",
+            ::testing::Not(isTriangle));
+  // Inside a `GRAPH` clause, the triangle join is not used.
+  h::expect("SELECT * { GRAPH ?g { ?x <p> ?y . ?y <q> ?z . ?x <r> ?z } }",
+            ::testing::Not(isTriangle));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, leapfrogTriangleJoinComputesSameResultAsBinaryJoins) {
+  auto* qec = ad_utility::testing::getQec(
+      "<a> <p> <b> . <b> <q> <c> . <a> <r> <c> . <a> <p> <d> . <d> <q> <c> . "
+      "<d> <q> <e> . <b> <q> <e> . <a> <r> <e> . <x> <p> <y> . <y> <q> <z> . "
+      "<f> <p> <b> . <f> <r> <c> . <f> <r> <x> .");
+  std::string query =
+      "SELECT ?x ?y ?z ?w { ?x <p> ?y . ?y <q> ?z . ?x <r> ?z . "
+      "OPTIONAL { ?z <p> ?w } }";
+  // The rows of the result, with the columns in the order of the selected
+  // variables, sorted.
+  auto computeRows = [&]() {
+    auto qet = h::parseAndPlan(query, qec);
+    auto result = qet.getResult();
+    std::vector<std::vector<Id>> rows;
+    for (const auto& row : result->idTableView()) {
+      std::vector<Id> projected;
+      for (const auto& var : {"?x", "?y", "?z", "?w"}) {
+        projected.push_back(row[qet.getVariableColumn(Variable{var})]);
+      }
+      rows.push_back(std::move(projected));
+    }
+    ql::ranges::sort(rows);
+    return rows;
+  };
+  auto expected = computeRows();
+  ASSERT_EQ(expected.size(), 5u);
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::useLeapfrogTriangleJoin_>(
+          true);
+  EXPECT_EQ(computeRows(), expected);
 }

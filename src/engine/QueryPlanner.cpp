@@ -4,6 +4,7 @@
 // 2018 - 2026 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
 // 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 // 2025        Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -38,6 +39,7 @@
 #include "engine/HasPredicateScan.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/LeapfrogTriangleJoin.h"
 #include "engine/Load.h"
 #include "engine/MaterializedViews.h"
 #include "engine/Minus.h"
@@ -2718,6 +2720,111 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
   return plans;
 }
 
+// _____________________________________________________________________________
+std::vector<QueryPlanner::SubtreePlan>
+QueryPlanner::extractLeapfrogTriangleJoins(
+    parsedQuery::BasicGraphPattern& pattern) const {
+  std::vector<SubtreePlan> plans;
+  if (!getRuntimeParameter<&RuntimeParameters::useLeapfrogTriangleJoin_>()) {
+    return plans;
+  }
+  // As for the materialized views, the index scans of a triangle are created
+  // without the graph handling of `seedWithScansAndText`.
+  if (activeGraphVariable_.has_value() ||
+      activeDatasetClauses_.activeDefaultGraphs().has_value()) {
+    return plans;
+  }
+
+  // A triple can be an edge of a triangle if it is read by an ordinary index
+  // scan with a fixed predicate, and binds two different variables.
+  auto isEdge = [](const SparqlTriple& triple) {
+    auto predicate = triple.getSimplePredicate();
+    if (!predicate.has_value() || !triple.s_.isVariable() ||
+        !triple.o_.isVariable() || triple.s_ == triple.o_ ||
+        !triple.additionalScanColumns_.empty()) {
+      return false;
+    }
+    return ql::ranges::none_of(
+        std::array<std::string_view, 4>{
+            QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET,
+            MAX_DIST_IN_METERS, NEAREST_NEIGHBORS,
+            MATERIALIZED_VIEW_IRI_WITHOUT_CLOSING_BRACKET},
+        [&predicate](std::string_view prefix) {
+          return ql::starts_with(predicate.value(), prefix);
+        });
+  };
+  auto contains = [](const SparqlTriple& triple, const Variable& var) {
+    return triple.s_ == var || triple.o_ == var;
+  };
+  auto otherVariable = [](const SparqlTriple& triple, const Variable& var) {
+    return triple.s_ == var ? triple.o_.getVariable() : triple.s_.getVariable();
+  };
+  // An index scan of `triple` that is sorted on `first` and then on the other
+  // variable of the triple.
+  auto makeScan = [this, graphs = getActiveGraphs()](const SparqlTriple& triple,
+                                                     const Variable& first) {
+    auto simple = triple.getSimple();
+    using enum Permutation::Enum;
+    auto permutation = qlever::getPermutationForTriple(
+        simple.s_ == first ? PSO : POS, _qec->getIndex(), simple);
+    return makeExecutionTree<IndexScan>(_qec, std::move(permutation),
+                                        _qec->locatedTriplesSharedState(),
+                                        simple, graphs);
+  };
+
+  auto& triples = pattern._triples;
+  std::vector<bool> used(triples.size(), false);
+  std::vector<size_t> edges;
+  for (size_t i = 0; i < triples.size(); ++i) {
+    if (isEdge(triples[i])) {
+      edges.push_back(i);
+    }
+  }
+  // Try to complete the edge `triples[a]` from `x` (its subject) to `y` (its
+  // object) to a triangle with `triples[b]` (the edge from `y` to `z`) and
+  // `triples[c]` (the edge from `x` to `z`).
+  auto tryTriangle = [&](size_t a, size_t b, size_t c) {
+    const auto& xy = triples[a];
+    const auto& yz = triples[b];
+    const auto& xz = triples[c];
+    Variable x = xy.s_.getVariable();
+    Variable y = xy.o_.getVariable();
+    if (!contains(yz, y) || contains(yz, x) || !contains(xz, x) ||
+        contains(xz, y)) {
+      return false;
+    }
+    Variable z = otherVariable(yz, y);
+    if (z != otherVariable(xz, x)) {
+      return false;
+    }
+    plans.push_back(makeSubtreePlan<LeapfrogTriangleJoin>(
+        _qec, makeScan(xy, x), makeScan(yz, y), makeScan(xz, x), std::move(x),
+        std::move(y), std::move(z)));
+    used[a] = used[b] = used[c] = true;
+    return true;
+  };
+  for (size_t i : edges) {
+    for (size_t j : edges) {
+      for (size_t k : edges) {
+        if (i < j && j < k && !used[i] && !used[j] && !used[k] &&
+            !tryTriangle(i, j, k)) {
+          tryTriangle(i, k, j);
+        }
+      }
+    }
+  }
+
+  // Remove the triples that are covered by a triangle join.
+  std::vector<SparqlTriple> remaining;
+  for (size_t i = 0; i < triples.size(); ++i) {
+    if (!used[i]) {
+      remaining.push_back(std::move(triples[i]));
+    }
+  }
+  triples = std::move(remaining);
+  return plans;
+}
+
 // ______________________________________________________________________________________
 auto QueryPlanner::createJoinWithHasPredicateScan(
     const SubtreePlan& a, const SubtreePlan& b,
@@ -3565,6 +3672,9 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
+  for (auto& plan : planner_.extractLeapfrogTriangleJoins(candidateTriples_)) {
+    candidatePlans_.push_back(std::vector{std::move(plan)});
+  }
   auto replacementPlans =
       planner_.createMaterializedViewJoinReplacements(candidateTriples_);
   auto tg = planner_.createTripleGraph(&candidateTriples_);

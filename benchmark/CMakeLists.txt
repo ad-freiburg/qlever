@@ -13,10 +13,16 @@ if (NOT _NO_BENCHMARK)
     add_library(benchmarkWithMain infrastructure/BenchmarkMain.cpp)
     qlever_target_link_libraries(benchmarkWithMain benchmark)
 
-    # Link binary ${basename} against the benchmark library,
+    # Link binary ${basename} against the benchmark library (with default main),
     # and all libraries that are specified as additional arguments.
     function (linkBenchmark basename)
         qlever_target_link_libraries(${basename} benchmarkWithMain ${ARGN})
+    endfunction()
+
+    # Link binary ${basename} against the benchmark library (without main),
+    # for benchmarks that provide their own main function.
+    function (linkBenchmarkNoMain basename)
+        qlever_target_link_libraries(${basename} benchmark ${ARGN})
     endfunction()
 
     # Compile the benchmark and link it.
@@ -25,6 +31,14 @@ if (NOT _NO_BENCHMARK)
     function(addAndLinkBenchmark baseName)
         add_executable(${baseName}  "${baseName}.cpp")
         linkBenchmark(${baseName} ${ARGN})
+    endfunction()
+
+    # Compile the benchmark and link it without the default main.
+    # Usage: addAndLinkBenchmarkNoMain(baseName, [additionalLibraries...])
+    #   - baseName: The name of the benchmark file without the .cpp ending.
+    function(addAndLinkBenchmarkNoMain baseName)
+        add_executable(${baseName}  "${baseName}.cpp")
+        linkBenchmarkNoMain(${baseName} ${ARGN})
     endfunction()
 
     # Add benchmarks after here.
@@ -37,5 +51,7 @@ if (NOT _NO_BENCHMARK)
     addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)
 
     addAndLinkBenchmark(SparqlExpressionBenchmark engine testUtil gtest gmock)
+
+    addAndLinkBenchmarkNoMain(LeapfrogTriejoinBenchmark global qlever_util)
 
 endif()
