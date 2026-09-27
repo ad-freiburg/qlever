@@ -1389,10 +1389,11 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
         // If the index is in exactly the format that the
         // `qlever-upgrade-index` binary upgrades from, throw one dedicated
         // message instead of logging the generic advice below, so that the
-        // upgrade option is not buried among the generic alternatives.
+        // upgrade option is not buried among the generic alternatives. That
+        // the current version of QLever can load the upgraded index is checked
+        // by `convertIndexToCurrentFormat` (and by a unit test).
         using namespace qlever::indexFormatConverter;
-        if (indexFormatVersion == sourceVersion &&
-            qlever::isLoadableIndexFormatVersion(targetVersion)) {
+        if (indexFormatVersion == sourceVersion) {
           throw std::runtime_error{absl::StrCat(
               "The index format changed on ",
               targetVersion.date_.toStringAndType().first,

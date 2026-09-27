@@ -1521,12 +1521,14 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
   absl::Cleanup restoreEncoding{
       [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
 
-  // An input with a point and one without, a helper to read the configuration
-  // of an index, and the start of the warning for `LatMajor`.
+  // An input with a point and two without (with an object that is sorted
+  // before resp. after all points), a helper to read the configuration of an
+  // index, and the start of the warning for `LatMajor`.
   const std::string withPoint =
       "<a> <b> \"POINT(7.8 48.0)\"^^"
       "<http://www.opengis.net/ont/geosparql#wktLiteral> .";
   const std::string withoutPoint = "<a> <b> <c> .";
+  const std::string withoutPointBlankNode = "<a> <b> _:c .";
   auto readConfiguration = [](const std::string& basename) {
     nlohmann::json configuration;
     ad_utility::makeIfstream(basename + CONFIGURATION_FILE) >> configuration;
@@ -1535,10 +1537,12 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
   auto warning =
       ::testing::HasSubstr("which is deprecated and will not be supported");
 
-  // Load the index with the given `basename` and return the log output.
-  auto load = [](const std::string& basename) {
+  // Load the index with the given `basename` (without its permutations if
+  // `loadPermutations` is false) and return the log output.
+  auto load = [](const std::string& basename, bool loadPermutations = true) {
     auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.doNotLoadPermutations() = !loadPermutations;
     index.createFromOnDiskIndex(basename, false);
     return logStream.str();
   };
@@ -1591,9 +1595,11 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
 
   // Load an index in the previous format (which has no entry for the
   // encoding). It uses `LatMajor`, and there is a warning iff it has points.
-  for (const auto& [turtle, hasPoint] :
-       {std::pair{withPoint, true}, std::pair{withoutPoint, false}}) {
-    std::string basename = absl::StrCat("geoPointEncoding.previous.", hasPoint);
+  for (const auto& [name, turtle, hasPoint] :
+       {std::tuple{"point", withPoint, true},
+        std::tuple{"iri", withoutPoint, false},
+        std::tuple{"blankNode", withoutPointBlankNode, false}}) {
+    std::string basename = absl::StrCat("geoPointEncoding.previous.", name);
     TestIndexConfig config{turtle};
     config.geoPointEncoding = GeoPointEncoding::LatMajor;
     makeTestIndex(basename, std::move(config));
@@ -1611,6 +1617,10 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
       EXPECT_THAT(log, ::testing::Not(warning));
     }
   }
+
+  // Without its permutations, it is unknown whether an index has points, so
+  // loading it gives the warning even if it has none.
+  EXPECT_THAT(load("geoPointEncoding.previous.iri", false), warning);
 }
 
 // _____________________________________________________________________________
