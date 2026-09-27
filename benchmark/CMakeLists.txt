@@ -38,4 +38,11 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(SparqlExpressionBenchmark engine testUtil gtest gmock)
 
+    # Standalone main(), so not via addAndLinkBenchmark (which links
+    # benchmarkWithMain).
+    add_executable(BranchlessDispatcherBenchmark
+        BranchlessDispatcherBenchmark.cpp)
+    qlever_target_link_libraries(BranchlessDispatcherBenchmark engine
+        qlever_util)
+
 endif()
