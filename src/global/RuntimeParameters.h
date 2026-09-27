@@ -255,6 +255,14 @@ struct RuntimeParameters {
   DeduplicationModeParameter constructDeduplication_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
 
+  // How many `VocabularyOnDisk` lookup batches may have I/O in flight at once
+  // in `lookupBatchesStreamed`. The default of `1` reproduces the historical
+  // drain-per-batch behavior: each batch's reads complete before the next
+  // batch submits. Values greater than `1` let batch N+1's offset reads issue
+  // while batch N is still being consumed, hiding fetch latency behind
+  // decompression and result processing. Values below `1` are treated as `1`.
+  SizeT vocabularyIouringPipelineDepth_{1, "vocabulary-iouring-pipeline-depth"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.

@@ -333,3 +333,89 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatchThrows) {
     }
   });
 }
+
+// Every pipeline depth (including `0`, treated as `1`, and `1`, the
+// drain-per-batch default) must yield exactly the same batches as the
+// sequential path: same contents in the same order, matching the individual
+// `vocab[]` lookups.
+TEST(VocabularyOnDisk, LookupBatchesStreamedPipelineDepthMatchesSequential) {
+  auto vocab = createExampleVocabulary();
+  const std::vector<std::vector<size_t>> batches{
+      {2, 0, 3}, {1}, {4, 0, 1}, {3, 3, 2, 0}, {4}};
+  for (size_t depth : {0u, 1u, 2u, 4u}) {
+    auto inputBatches = batches;
+    auto streamed = vocab->lookupBatchesStreamed(
+        VocabLookupInput{std::move(inputBatches)}, depth);
+    vocabulary_test::assertStreamedLookupMatchesVocabularyAtIndices(
+        *vocab, streamed, batches);
+  }
+}
+
+// The pipelined depths must agree word-for-word with the parameterless
+// (sequential, depth-1 default) overload on the same input.
+TEST(VocabularyOnDisk, LookupBatchesStreamedDepthOneEqualsOldPath) {
+  auto vocab = createExampleVocabulary();
+  const std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}, {4, 0, 1}};
+  auto collectWords = [](VocabLookupOutput streamed) {
+    std::vector<std::vector<std::string>> words;
+    for (const auto& result : streamed) {
+      words.emplace_back(result->begin(), result->end());
+    }
+    return words;
+  };
+  auto expectedBatches = batches;
+  auto expected = collectWords(vocab->lookupBatchesStreamed(
+      VocabLookupInput{std::move(expectedBatches)}));
+  for (size_t depth : {1u, 2u, 4u}) {
+    auto inputBatches = batches;
+    auto actual = collectWords(vocab->lookupBatchesStreamed(
+        VocabLookupInput{std::move(inputBatches)}, depth));
+    EXPECT_EQ(actual, expected) << "at pipeline depth " << depth;
+  }
+}
+
+// Error behavior must match the sequential path for pipelined depths: an
+// out-of-range index and an empty batch must throw when the batch is pulled.
+TEST(VocabularyOnDisk, LookupBatchesStreamedPipelineDepthErrorParity) {
+  for (size_t depth : {2u, 4u}) {
+    auto vocab = createExampleVocabulary();
+    std::vector<std::vector<size_t>> badIndex{{0, 99}};
+    auto streamedBadIndex = vocab->lookupBatchesStreamed(
+        VocabLookupInput{std::move(badIndex)}, depth);
+    EXPECT_ANY_THROW({
+      for ([[maybe_unused]] auto& r : streamedBadIndex) {
+      }
+    }) << "at pipeline depth "
+       << depth;
+
+    std::vector<std::vector<size_t>> emptyBatch{{2, 0}, {}, {1}};
+    auto streamedEmpty = vocab->lookupBatchesStreamed(
+        VocabLookupInput{std::move(emptyBatch)}, depth);
+    EXPECT_ANY_THROW({
+      for ([[maybe_unused]] auto& r : streamedEmpty) {
+      }
+    }) << "at pipeline depth "
+       << depth;
+  }
+}
+
+// Abandoning a pipelined stream early (with reads still in flight) must be
+// safe: the stream drains the in-flight reads and returns its I/O manager to
+// the pool, so subsequent lookups keep working.
+TEST(VocabularyOnDisk, LookupBatchesStreamedPipelineDepthEarlyAbandon) {
+  auto vocab = createExampleVocabulary();
+  std::vector<std::vector<size_t>> batches{{2, 0, 3}, {1}, {4, 0, 1}};
+  {
+    // Pull exactly one batch (leaving later batches' reads in flight), then
+    // abandon the stream.
+    auto streamed =
+        vocab->lookupBatchesStreamed(VocabLookupInput{std::move(batches)}, 2u);
+    for ([[maybe_unused]] const auto& r : streamed) {
+      break;
+    }
+  }
+  std::array<size_t, 3> indices{4, 1, 0};
+  auto result = vocab->lookupBatch(indices);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
+                                                                indices);
+}

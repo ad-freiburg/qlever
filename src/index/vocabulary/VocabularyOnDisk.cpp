@@ -9,8 +9,10 @@
 
 #include <algorithm>
 #include <array>
+#include <deque>
 
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/ExceptionHandling.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -156,25 +158,43 @@ VocabularyScanRange VocabularyOnDisk::scanAll() const {
 }
 
 // _____________________________________________________________________________
-std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
+VocabularyOnDisk::PendingOffsetRead VocabularyOnDisk::submitOffsetPairs(
     ad_utility::BatchManagerBase& manager,
     ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
   // For each requested index `i`, read its offset together with the next offset
-  // (which bounds the string) as one 16-byte pair from `.offsets`.
-  const size_t numIndices = indices.size();
-  std::vector<OffsetPair> offsetPairs(numIndices);
-  std::vector<size_t> sizes(numIndices, sizeof(OffsetPair));
-  std::vector<uint64_t> fileOffsets(numIndices);
-  std::vector<char*> targets(numIndices);
-  for (auto&& [fileOffset, index, target, offsetPair] :
-       ::ranges::views::zip(fileOffsets, indices, targets, offsetPairs)) {
+  // (which bounds the string) as one 16-byte pair from `.offsets`. The buffers
+  // are owned by the returned `PendingOffsetRead`, so the caller's `indices`
+  // span may go out of scope while the reads are in flight.
+  PendingOffsetRead pending;
+  pending.indices_.assign(indices.begin(), indices.end());
+  pending.offsetPairs_.resize(pending.indices_.size());
+  std::vector<size_t> sizes(pending.indices_.size(), sizeof(OffsetPair));
+  std::vector<uint64_t> fileOffsets(pending.indices_.size());
+  std::vector<char*> targets(pending.indices_.size());
+  for (auto&& [fileOffset, index, target, offsetPair] : ::ranges::views::zip(
+           fileOffsets, pending.indices_, targets, pending.offsetPairs_)) {
     AD_CONTRACT_CHECK(index < size());
     fileOffset = index * sizeof(uint64_t);
     target = reinterpret_cast<char*>(&offsetPair);
   }
-  manager.wait(
-      manager.addBatch(offsetsFile_.fd(), sizes, fileOffsets, targets));
-  return offsetPairs;
+  pending.handle_ =
+      manager.addBatch(offsetsFile_.fd(), sizes, fileOffsets, targets);
+  return pending;
+}
+
+// _____________________________________________________________________________
+std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::waitOffsetPairs(
+    ad_utility::BatchManagerBase& manager, PendingOffsetRead pending) const {
+  manager.wait(pending.handle_);
+  return std::move(pending.offsetPairs_);
+}
+
+// _____________________________________________________________________________
+std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
+    ad_utility::BatchManagerBase& manager,
+    ql::span<const size_t> indices) const {
+  return waitOffsetPairs(manager, submitOffsetPairs(manager, indices));
 }
 
 // _____________________________________________________________________________
@@ -232,8 +252,88 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
 // _____________________________________________________________________________
 VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
     VocabLookupInput rangeOfIndexBatches) const {
-  return ad_utility::vocabulary::lookupBatchesStreamed(
-      *this, std::move(rangeOfIndexBatches));
+  size_t pipelineDepth = getRuntimeParameter<
+      &RuntimeParameters::vocabularyIouringPipelineDepth_>();
+  return lookupBatchesStreamed(std::move(rangeOfIndexBatches), pipelineDepth);
+}
+
+// _____________________________________________________________________________
+VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
+    VocabLookupInput rangeOfIndexBatches, size_t pipelineDepth) const {
+  if (pipelineDepth < 2) {
+    // Depth 1 (or 0, treated as 1) is the historical drain-per-batch behavior:
+    // each batch completes fully before the next batch submits.
+    return ad_utility::vocabulary::lookupBatchesStreamed(
+        *this, std::move(rangeOfIndexBatches));
+  }
+  // Pipelined behavior: keep up to `pipelineDepth` batches' offset reads in
+  // flight on a single pooled I/O manager, so batch N+1's offset reads issue
+  // while batch N's strings are read and consumed.
+  struct PipelineState {
+    const VocabularyOnDisk* vocabulary_;
+    VocabLookupInput input_;
+    size_t pipelineDepth_;
+    std::unique_ptr<ad_utility::BatchManagerBase> manager_;
+    std::deque<VocabularyOnDisk::PendingOffsetRead> pending_;
+    bool inputExhausted_ = false;
+
+    PipelineState(const VocabularyOnDisk* vocabulary, VocabLookupInput input,
+                  size_t pipelineDepth)
+        : vocabulary_{vocabulary},
+          input_{std::move(input)},
+          pipelineDepth_{pipelineDepth} {}
+
+    ~PipelineState() {
+      // If the stream is abandoned early (or a pull throws), drain the offset
+      // reads first: they target `pending_` buffers that die with this state,
+      // so the manager must be idle before it goes back to the pool.
+      if (manager_) {
+        ad_utility::terminateIfThrows(
+            [this]() {
+              for (const auto& pending : pending_) {
+                manager_->wait(pending.handle_);
+              }
+              pending_.clear();
+              vocabulary_->ioManagers_->push(std::move(manager_));
+            },
+            "draining in-flight offset reads and returning the `IoManager` in "
+            "`VocabularyOnDisk::lookupBatchesStreamed`");
+      }
+    }
+  };
+  auto state = std::make_shared<PipelineState>(
+      this, std::move(rangeOfIndexBatches), pipelineDepth);
+  return VocabLookupOutput{ad_utility::InputRangeFromGetCallable{
+      [state]() -> std::optional<VocabBatchLookupResult> {
+        // Pop the manager lazily on the first pull, so merely creating the
+        // stream (like the sequential path) acquires no pool slot.
+        if (!state->manager_) {
+          state->manager_ = state->vocabulary_->ioManagers_->pop().value();
+        }
+        // Submit ahead until the pipeline is full or the input is exhausted.
+        while (!state->inputExhausted_ &&
+               state->pending_.size() < state->pipelineDepth_) {
+          std::optional<std::vector<size_t>> next = state->input_.get();
+          if (!next.has_value()) {
+            state->inputExhausted_ = true;
+            break;
+          }
+          state->pending_.push_back(
+              state->vocabulary_->submitOffsetPairs(*state->manager_, *next));
+        }
+        if (state->pending_.empty()) {
+          // Input exhausted and nothing left in flight: return the manager and
+          // end the stream.
+          state->vocabulary_->ioManagers_->push(std::move(state->manager_));
+          return std::nullopt;
+        }
+        PendingOffsetRead oldest = std::move(state->pending_.front());
+        state->pending_.pop_front();
+        std::vector<OffsetPair> offsetPairs =
+            state->vocabulary_->waitOffsetPairs(*state->manager_,
+                                                std::move(oldest));
+        return state->vocabulary_->readStrings(*state->manager_, offsetPairs);
+      }}};
 }
 
 // _____________________________________________________________________________

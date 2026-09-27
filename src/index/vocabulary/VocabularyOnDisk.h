@@ -107,6 +107,15 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   VocabLookupOutput lookupBatchesStreamed(
       VocabLookupInput rangeOfIndexBatches) const;
 
+  // Pipelined variant of `lookupBatchesStreamed`: up to `pipelineDepth`
+  // batches may have offset reads in flight at once, so batch N+1's reads
+  // issue while batch N is consumed. A `pipelineDepth` below `2` is equivalent
+  // to the sequential `lookupBatchesStreamed` above. The parameterless overload
+  // reads the `vocabulary-iouring-pipeline-depth` runtime parameter (default
+  // `1`, hence sequential unless explicitly raised).
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput rangeOfIndexBatches,
+                                          size_t pipelineDepth) const;
+
   // Get the number of words in the vocabulary.
   size_t size() const { return size_; }
 
@@ -186,6 +195,23 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // (16 bytes) from the `.offsets` file in a single batched read via `manager`.
   std::vector<OffsetPair> readOffsetPairs(ad_utility::BatchManagerBase& manager,
                                           ql::span<const size_t> indices) const;
+
+  // Submitted-but-not-yet-completed phase-1 reads for one batch: owns the
+  // requested indices and the target buffers of the submitted batch, so the
+  // caller's span may go out of scope while the reads are in flight.
+  struct PendingOffsetRead {
+    std::vector<size_t> indices_;
+    std::vector<OffsetPair> offsetPairs_;
+    ad_utility::BatchManagerBase::BatchHandle handle_;
+  };
+
+  // Submit the phase-1 reads for `indices` without waiting for them.
+  PendingOffsetRead submitOffsetPairs(ad_utility::BatchManagerBase& manager,
+                                      ql::span<const size_t> indices) const;
+
+  // Block until the reads in `pending` complete and return their `OffsetPair`s.
+  std::vector<OffsetPair> waitOffsetPairs(ad_utility::BatchManagerBase& manager,
+                                          PendingOffsetRead pending) const;
 
   // Phase 2 of `lookupBatch`: given the `offsetPairs` from phase 1, read the
   // string data from `file_` into one contiguous buffer in a single batched

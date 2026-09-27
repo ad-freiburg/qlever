@@ -66,6 +66,15 @@ TEST(RuntimeParameters, lazyIndexScanNumThreadsIsStrictlyPositive) {
   EXPECT_EQ(params.lazyIndexScanNumThreads_.get(), 1u);
 }
 
+// The io_uring vocab pipeline depth defaults to `1` (drain-per-batch, the
+// historical behavior) and is settable via the runtime interface.
+TEST(RuntimeParameters, vocabularyIouringPipelineDepth) {
+  RuntimeParameters params;
+  EXPECT_EQ(params.vocabularyIouringPipelineDepth_.get(), 1u);
+  params.setFromAssignment("vocabulary-iouring-pipeline-depth=4");
+  EXPECT_EQ(params.vocabularyIouringPipelineDepth_.get(), 4u);
+}
+
 // Test that `getKeys` and `toMap` (the building blocks of
 // `--set-runtime-parameter help`) are consistent with each other.
 TEST(RuntimeParameters, getKeysAndToMapAreConsistent) {
