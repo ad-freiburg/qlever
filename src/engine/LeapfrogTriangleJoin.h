@@ -50,7 +50,7 @@ class LeapfrogTriangleJoin : public Operation {
                        std::shared_ptr<QueryExecutionTree> xz, Variable x,
                        Variable y, Variable z);
 
-  std::vector<QueryExecutionTree*> getChildren() override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
   std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;

@@ -53,8 +53,9 @@ LeapfrogTriangleJoin::LeapfrogTriangleJoin(
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> LeapfrogTriangleJoin::getChildren() {
-  return {children_[XY].get(), children_[YZ].get(), children_[XZ].get()};
+qlm::vector<QueryExecutionTree*> LeapfrogTriangleJoin::getChildrenImpl() const {
+  return {{children_[XY].get(), children_[YZ].get(), children_[XZ].get()},
+          allocator()};
 }
 
 // _____________________________________________________________________________
