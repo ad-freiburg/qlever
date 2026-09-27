@@ -55,7 +55,7 @@ class GeoRectangleRowFilter : public Operation {
   bool knownEmptyResult() override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
