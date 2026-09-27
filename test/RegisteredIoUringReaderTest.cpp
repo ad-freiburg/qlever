@@ -155,9 +155,9 @@ TEST(RegisteredIoUringReader, PinnedArenaSlotReadWrite) {
 // _____________________________________________________________________________
 TEST(RegisteredIoUringReader, PinnedArenaContractViolations) {
   EXPECT_THROW(PinnedArena{0}, ad_utility::Exception);
-  EXPECT_THROW(PinnedArena{1, 0}, ad_utility::Exception);
-  EXPECT_THROW(PinnedArena{1, 100}, ad_utility::Exception);
-  EXPECT_THROW(PinnedArena{1, kDirectIoBlockSize + 1}, ad_utility::Exception);
+  EXPECT_THROW((PinnedArena{1, 0}), ad_utility::Exception);
+  EXPECT_THROW((PinnedArena{1, 100}), ad_utility::Exception);
+  EXPECT_THROW((PinnedArena{1, kDirectIoBlockSize + 1}), ad_utility::Exception);
 
   // Slot indices run out: index `numSlots` is already invalid.
   PinnedArena arena{2};
@@ -255,8 +255,8 @@ TEST(RegisteredIoUringReader, DirectIoFileDefaults) {
 // _____________________________________________________________________________
 TEST(RegisteredIoUringReader, DirectIoFileOpenNonexistentThrows) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  EXPECT_THROW(DirectIoFile{path.string(), false}, ad_utility::Exception);
-  EXPECT_THROW(DirectIoFile{path.string(), true}, ad_utility::Exception);
+  EXPECT_THROW((DirectIoFile{path.string(), false}), ad_utility::Exception);
+  EXPECT_THROW((DirectIoFile{path.string(), true}), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
