@@ -35,13 +35,22 @@ namespace {
 
 using namespace ::testing;
 
+// Unique suffix for `TempFile` paths below: several `TempFile`s can be alive
+// in one test, and reusing one path would truncate the same inode on each
+// creation, so every live file would read the last-written content.
+int nextTempFileId() {
+  static int id = 0;
+  return id++;
+}
+
 // Writes `content` to a temporary file and keeps it open for reading.
 // `fd()` exposes the file descriptor; the file is removed from disk on
 // destruction. Use `makeTempFile` below to get the file and its fd in one step.
 class TempFile {
  public:
   explicit TempFile(std::string_view content)
-      : path_{absl::StrCat(gtestCurrentTestName(), ".tmp")} {
+      : path_{absl::StrCat(gtestCurrentTestName(), "-", nextTempFileId(),
+                           ".tmp")} {
     // Open for reading and writing (`"w+b"`): the tests read from this file's
     // `fd()` via `pread`/io_uring.
     readFile_ = ad_utility::File{path_, "w+b"};
