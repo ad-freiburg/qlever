@@ -638,7 +638,7 @@ using BufferView = IdTableView<NumColumnsIndexBuilding>;
 // from the `idMap` (see `IdMapFromPartialIdMapFile`).
 void transformTriples(Buffer& triples,
                       const ad_utility::HashMap<VocabIndex, Id>& idMap) {
-  for (ql::span<Id> column : triples.getColumns()) {
+  for (IdColumnRef column : triples.getColumns()) {
     for (Id& id : column) {
       if (id.getDatatype() != Datatype::VocabIndex) {
         // Check that all the internal, special IDs which we have introduced

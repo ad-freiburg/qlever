@@ -50,8 +50,8 @@ EntityAndGraph entityAndGraph(const Row& row, size_t numColumns) {
 // the graphs, such that the caller can treat both cases uniformly: The result
 // is a single undefined ID if `id` occurs in `matches` at all, and empty
 // otherwise.
-ql::span<const Id> graphsOf(const IdTable& matches, Id id) {
-  ql::span<const Id> ids = matches.getColumn(0);
+ConstIdColumnRef graphsOf(const IdTable& matches, Id id) {
+  ConstIdColumnRef ids = matches.getColumn(0);
   auto matching = ql::ranges::equal_range(ids, id);
   size_t numMatches = ql::ranges::size(matching);
   if (matches.numColumns() == 1) {
@@ -399,7 +399,7 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
         "them have to be read and combined with each of the affected rows, "
         "which can be very slow.");
   }
-  ql::span<const Id> joinColumn =
+  ConstIdColumnRef joinColumn =
       input.getColumn(checkedChild_.value().joinColumn_);
   std::vector<size_t> undefRows;
   ql::ranges::copy_if(
@@ -431,7 +431,7 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
 Result::Generator EmptyPath::processTable(IdTableView<0> table,
                                           const LocalVocab& localVocab,
                                           bool& hasWarnedAboutUndef) const {
-  ql::span<const Id> joinColumn =
+  ConstIdColumnRef joinColumn =
       table.getColumn(checkedChild_.value().joinColumn_);
   // The distinct values of the join column that have to be looked up.
   std::vector<Id> ids;
