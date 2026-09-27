@@ -1,18 +1,20 @@
-// Copyright 2024 - 2026 The QLever Authors, in particular:
+// Copyright 2024 - 2026, The QLever Authors, in particular:
 //
-// 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+// 2024 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 
+#include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
@@ -65,11 +67,18 @@ class VocabularyInternalExternal {
   // vocabulary.
   auto scanAll() const { return externalVocab_.scanAll(); }
 
-  // Return the words at `indices` in input order, exactly like sequential
-  // calls to `operator[]`. Words cached in the internal vocabulary are served
-  // from RAM; all other indices are resolved in a single `lookupBatch` on the
-  // external vocabulary. `indices` must not be empty.
+  // Resolve `indices` in request order. Words present in `internalVocab_` are
+  // taken from RAM. The remaining indices are resolved in one
+  // `externalVocab_.lookupBatch` call (the on-disk path).
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
+
+  // Split-phase variant: RAM-cached indices are resolved immediately; the
+  // rest are submitted to `externalVocab_.beginLookup` without blocking.
+  std::unique_ptr<VocabLookupHandleBase> beginLookup(
+      ql::span<const size_t> indices) const;
+
+  VocabBatchLookupResult finishLookup(
+      std::unique_ptr<VocabLookupHandleBase> handle) const;
 
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
@@ -185,6 +194,24 @@ class VocabularyInternalExternal {
   }
 
  private:
+  class MixedLookupHandle : public VocabLookupHandleBase {
+   public:
+    VocabBatchLookupResult finish() override;
+
+   private:
+    // Only `VocabularyInternalExternal::beginLookup` sets up the state below.
+    // The handle is only reachable through `VocabLookupHandleBase`.
+    friend class VocabularyInternalExternal;
+
+    // The vocabulary that created this handle. It must outlive the handle.
+    const VocabularyInternalExternal* vocab_ = nullptr;
+    std::unique_ptr<VocabLookupHandleBase> externalHandle_;
+    std::vector<std::string> internalWords_;
+    std::vector<size_t> internalPositions_;
+    std::vector<size_t> externalPositions_;
+    size_t numIndices_ = 0;
+  };
+
   // The common implementation of `lower_bound`, `upper_bound`,
   // `lower_bound_iterator`, and `upper_bound_iterator`. The `boundFunction`
   // must be a lambda, that calls the corresponding function (e.g.

@@ -1,10 +1,10 @@
-// Copyright 2024 - 2026 The QLever Authors, in particular:
+// Copyright 2024 - 2026, The QLever Authors, in particular:
 //
-// 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+// 2024 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
@@ -12,7 +12,12 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <string>
+#include <vector>
+
+#include "backports/algorithm.h"
 #include "util/Algorithm.h"
+#include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
@@ -26,41 +31,69 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
 // _____________________________________________________________________________
 VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     ql::span<const size_t> indices) const {
+  return finishLookup(beginLookup(indices));
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<VocabLookupHandleBase> VocabularyInternalExternal::beginLookup(
+    ql::span<const size_t> indices) const {
   AD_CONTRACT_CHECK(!indices.empty());
-  // Collect the indices that miss the internal vocabulary, so that the
-  // external vocabulary serves all of them in one batch (from its `io_uring`
-  // ring pool).
-  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
-  data->buffer().resize(indices.size());
-  std::vector<size_t> missPositions;
-  std::vector<size_t> missIndices;
-  missPositions.reserve(indices.size());
-  missIndices.reserve(indices.size());
-  for (size_t i = 0; i < indices.size(); ++i) {
-    if (auto hit = internalVocab_[indices[i]]; hit.has_value()) {
-      data->buffer()[i] = std::string{hit.value()};
+  auto handle = std::make_unique<MixedLookupHandle>();
+  handle->vocab_ = this;
+  handle->numIndices_ = indices.size();
+
+  std::vector<size_t> externalIndices;
+  externalIndices.reserve(indices.size());
+  handle->internalWords_.reserve(indices.size());
+  handle->internalPositions_.reserve(indices.size());
+  handle->externalPositions_.reserve(indices.size());
+
+  // Classify each index: RAM hits are resolved immediately, disk misses are
+  // collected into `externalIndices` for one batched on-disk lookup.
+  for (auto [pos, idx] : ::ranges::views::enumerate(indices)) {
+    auto fromInternal = internalVocab_[idx];
+    if (fromInternal.has_value()) {
+      handle->internalWords_.emplace_back(*fromInternal);
+      handle->internalPositions_.push_back(pos);
     } else {
-      missPositions.push_back(i);
-      missIndices.push_back(indices[i]);
+      externalIndices.push_back(idx);
+      handle->externalPositions_.push_back(pos);
     }
   }
-  if (!missIndices.empty()) {
-    auto external = externalVocab_.lookupBatch(missIndices);
-    // Internal invariant (not violable via the public interface): the external
-    // lookup yields one word per index, in order.
-    AD_CORRECTNESS_CHECK(external->size() == missIndices.size());
-    for (const auto& [position, word] :
-         ::ranges::views::zip(missPositions, *external)) {
-      data->buffer()[position] = std::string{word};
+  // Submit the reads for all disk misses in one non-blocking `beginLookup`.
+  if (!externalIndices.empty()) {
+    handle->externalHandle_ = externalVocab_.beginLookup(externalIndices);
+  }
+
+  return handle;
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInternalExternal::finishLookup(
+    std::unique_ptr<VocabLookupHandleBase> handleBase) const {
+  AD_CONTRACT_CHECK(handleBase != nullptr);
+  return handleBase->finish();
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInternalExternal::MixedLookupHandle::finish() {
+  auto data = std::make_shared<MixedVocabBatchLookupData>();
+  data->internalWords_ = std::move(internalWords_);
+  data->views_.resize(numIndices_);
+  if (externalHandle_) {
+    data->diskResult_ =
+        vocab_->externalVocab_.finishLookup(std::move(externalHandle_));
+    for (auto&& [position, word] :
+         ::ranges::views::zip(externalPositions_, *data->diskResult_)) {
+      data->views_[position] = word;
+>>>>>>> theirs
     }
   }
-  // Build the views only after the buffer is complete, so that no reallocation
-  // can move the bytes the views point into.
-  data->views().reserve(data->buffer().size());
-  for (const auto& word : data->buffer()) {
-    data->views().emplace_back(word);
+  for (auto&& [position, word] :
+       ::ranges::views::zip(internalPositions_, data->internalWords_)) {
+    data->views_[position] = word;
   }
-  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+  return MixedVocabBatchLookupData::asResult(std::move(data));
 }
 
 // _____________________________________________________________________________

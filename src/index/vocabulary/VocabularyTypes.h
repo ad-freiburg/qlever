@@ -1,6 +1,12 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
@@ -135,11 +141,82 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 struct StringVectorVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<std::string>> {};
 
+// A vocabulary batch-lookup result that combines words read from disk via a
+// batched read with words copied from an in-RAM vocabulary (used by
+// `VocabularyInternalExternal`, which serves some indices from its RAM-resident
+// internal vocabulary and the rest from the on-disk vocabulary). Owns the disk
+// result (which keeps the disk-read buffer alive) and one `string_view` per
+// looked-up index: the views for the on-disk words point into that buffer, the
+// views for the RAM-resident words point into the owned `internalWords_`
+// copies.
+struct MixedVocabBatchLookupData {
+  // Owns the disk-read buffer that the on-disk words' views point into.
+  VocabBatchLookupResult diskResult_;
+  // Owned copies of the words that were resolved from the in-RAM vocabulary.
+  std::vector<std::string> internalWords_;
+  // One `string_view` per looked-up index, pointing either into
+  // `internalWords_` or into the buffer owned by `diskResult_`.
+  std::vector<std::string_view> views_;
+  // The span over `views_`, populated by `finalize()` and exposed by
+  // `asResult()`.
+  ql::span<std::string_view> span_;
+
+  static VocabBatchLookupResult asResult(
+      std::shared_ptr<MixedVocabBatchLookupData> self) {
+    self->span_ = ql::span<std::string_view>{self->views_};
+    // Capture the span pointer before moving `self`, so the pointer is not
+    // derived from the moved-from (nulled) shared_ptr. The argument
+    // evaluation order of `std::shared_ptr(std::move(self), p)` is
+    // unspecified, so deriving the pointer in the argument list would be a
+    // use-after-move.
+    auto* spanPtr = &self->span_;
+    return std::shared_ptr<ql::span<std::string_view>>(std::move(self),
+                                                       spanPtr);
+  }
+};
+
+// Base class for the state of a split-phase vocabulary lookup, as returned by
+// a vocabulary's `beginLookup` and consumed by its `finishLookup`. The
+// concrete vocabulary stores the state it needs (e.g. the pooled I/O manager
+// and the in-flight read batch, for `VocabularyOnDisk`) in a derived class and
+// implements `finish()`, which blocks until all I/O of the lookup has
+// completed and returns the resolved strings. A handle refers to the
+// vocabulary that created it, so that vocabulary must outlive the handle.
+class VocabLookupHandleBase {
+ public:
+  virtual ~VocabLookupHandleBase() = default;
+
+  // Block until every read of the lookup has completed and return the resolved
+  // string representations, in the same order as the indices passed to the
+  // corresponding `beginLookup`.
+  [[nodiscard]] virtual VocabBatchLookupResult finish() = 0;
+};
+
+// A split-phase lookup handle for vocabularies whose lookups complete without
+// any I/O (e.g. fully in-memory vocabularies): `beginLookup` performs the full
+// lookup and `finish` just returns the stored result.
+struct EagerVocabLookupHandle : VocabLookupHandleBase {
+  VocabBatchLookupResult finish() override { return result_; }
+  VocabBatchLookupResult result_;
+};
+
 // Generic sequential fallback implementations of the batch-lookup interface,
-// used by all vocabularies that do not provide a specialized (e.g. io_uring)
+// used by all vocabularies that do not provide a specialized
 // implementation. They simply loop over the indices and issue the ordinary
 // single-word `operator[]` lookups one after another.
 namespace ad_utility::vocabulary {
+
+// Detection trait: whether `Vocab` provides a split-phase `beginLookup` member
+// callable with a `ql::span<const size_t>`. This is the C++17-compatible
+// replacement for the `if constexpr (requires { ... })` expression, which is
+// not available when the C++17 backports are enabled.
+template <typename Vocab, typename = void>
+struct HasBeginLookup : std::false_type {};
+
+template <typename Vocab>
+struct HasBeginLookup<
+    Vocab, std::void_t<decltype(std::declval<const Vocab&>().beginLookup(
+               std::declval<ql::span<const size_t>>()))>> : std::true_type {};
 
 // Return the placeholder that is reported for a vocabulary index that is not
 // contained in a vocabulary with "holes" (see `VocabularyInMemoryBinSearch`).

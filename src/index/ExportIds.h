@@ -14,6 +14,7 @@
 #define QLEVER_SRC_INDEX_EXPORTIDS_H
 
 #include <array>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -26,6 +27,7 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
+#include "index/vocabulary/VocabularyTypes.h"
 #include "parser/LiteralOrIri.h"
 #include "util/Algorithm.h"
 #include "util/CompilerExtensions.h"
@@ -264,6 +266,32 @@ void resolveNonVocabIndexIds(
   });
 }
 
+inline std::unique_ptr<VocabLookupHandleBase> beginResolveVocabIndexIds(
+    const Index& index, ql::span<const Id> ids,
+    ql::span<const size_t> positions) {
+  auto rawIndices = ::ranges::to_vector(
+      positions | ql::views::transform([&ids](size_t i) {
+        return static_cast<size_t>(ids[i].getVocabIndex().get());
+      }));
+  return index.getImpl().getVocab().beginLookup(rawIndices);
+}
+
+template <bool removeQuotesAndAngleBrackets, bool returnOnlyLiterals,
+          typename EscapeFunction>
+void finishResolveVocabIndexIds(
+    const Index& index, ql::span<const size_t> positions,
+    std::unique_ptr<VocabLookupHandleBase> handle,
+    ql::span<std::optional<std::pair<std::string, const char*>>> results,
+    const EscapeFunction& escapeFunction) {
+  auto vocabStrings =
+      index.getImpl().getVocab().finishLookup(std::move(handle));
+  for (auto&& [sv, i] : ::ranges::views::zip(*vocabStrings, positions)) {
+    results[i] = literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
+                                             returnOnlyLiterals>(
+        LiteralOrIriView::fromStringRepresentation(sv), escapeFunction);
+  }
+}
+
 // Resolve the `VocabIndex` IDs at `positions` in a single batched vocabulary
 // lookup, writing each result into its slot in `results`.
 template <bool removeQuotesAndAngleBrackets, bool returnOnlyLiterals,
@@ -284,19 +312,9 @@ void resolveVocabIndexIds(
   // NOTE: The batch is deliberately not sorted by vocabulary position: the
   // io_uring backend reorders the reads anyway, and only the synchronous
   // fallback could profit from sequential file access.
-  auto rawIndices = ::ranges::to_vector(
-      positions | ql::views::transform([&ids](size_t i) {
-        return static_cast<size_t>(ids[i].getVocabIndex().get());
-      }));
-  auto vocabStrings = index.getImpl().getVocab().lookupBatch(rawIndices);
-
-  // `vocabStrings` is in the same order as `positions`, so zip scatters each
-  // looked-up string back to the position it came from.
-  for (auto&& [sv, i] : ::ranges::views::zip(*vocabStrings, positions)) {
-    results[i] = literalOrIriToStringAndType<removeQuotesAndAngleBrackets,
-                                             returnOnlyLiterals>(
-        LiteralOrIriView::fromStringRepresentation(sv), escapeFunction);
-  }
+  finishResolveVocabIndexIds<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
+      index, positions, beginResolveVocabIndexIds(index, ids, positions),
+      results, escapeFunction);
 }
 
 // Batch variant of `idToStringAndType`. We cannot assume that the `VocabIndex`
@@ -322,6 +340,67 @@ idsToStringAndType(const Index& index, ql::span<const Id> ids,
   resolveVocabIndexIds<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
       index, ids, positions.vocabIndexIndices_, results, escapeFunction);
 
+  return results;
+}
+
+// Depth-2 pipeline over many vocab sub-batches: submit the next sub-batch's
+// lookup before consuming the current one, so its reads are in flight while
+// the current batch is consumed. Each sub-batch is at most 256 indices so
+// `beginLookup` stays non-blocking: `addBatch` drains once in-flight reads
+// reach the default ring size (256). Depth-2 uses two pooled managers, not
+// one 512-slot ring.
+constexpr size_t maxVocabIndicesPerSubBatch = 256;
+
+template <bool removeQuotesAndAngleBrackets = false,
+          bool returnOnlyLiterals = false,
+          typename EscapeFunction = ql::identity>
+std::vector<std::optional<std::pair<std::string, const char*>>>
+idsToStringAndTypeDepth2(
+    const Index& index, ql::span<const Id> ids, const LocalVocab& localVocab,
+    const EscapeFunction& escapeFunction = EscapeFunction{}) {
+  std::vector<std::optional<std::pair<std::string, const char*>>> results(
+      ids.size());
+
+  PartitionedIdPositions positions = partitionIdPositions(ids);
+  resolveNonVocabIndexIds<removeQuotesAndAngleBrackets, returnOnlyLiterals>(
+      index, ids, localVocab, positions.nonVocabIndexIndices_, results,
+      escapeFunction);
+
+  const auto vocabPositions =
+      ql::span<const size_t>{positions.vocabIndexIndices_};
+  const size_t numVocabIndices = vocabPositions.size();
+  if (numVocabIndices == 0) {
+    return results;
+  }
+  // Submit the first sub-batch's lookup, then walk the remaining sub-batches
+  // in a depth-2 pipeline: each iteration submits the next sub-batch's lookup
+  // before finishing the current one, so the next batch's reads are in flight
+  // while the current batch is consumed.
+  auto handle = beginResolveVocabIndexIds(
+      index, ids,
+      vocabPositions.subspan(
+          0, std::min(maxVocabIndicesPerSubBatch, numVocabIndices)));
+  size_t batchStart = 0;
+  size_t batchSize = std::min(maxVocabIndicesPerSubBatch, numVocabIndices);
+  while (handle) {
+    const size_t batchEnd = batchStart + batchSize;
+    std::unique_ptr<VocabLookupHandleBase> nextHandle;
+    if (batchEnd < numVocabIndices) {
+      nextHandle = beginResolveVocabIndexIds(
+          index, ids,
+          vocabPositions.subspan(batchEnd,
+                                 std::min(maxVocabIndicesPerSubBatch,
+                                          numVocabIndices - batchEnd)));
+    }
+    finishResolveVocabIndexIds<removeQuotesAndAngleBrackets,
+                               returnOnlyLiterals>(
+        index, vocabPositions.subspan(batchStart, batchSize), std::move(handle),
+        results, escapeFunction);
+    handle = std::move(nextHandle);
+    batchStart = batchEnd;
+    batchSize =
+        std::min(maxVocabIndicesPerSubBatch, numVocabIndices - batchStart);
+  }
   return results;
 }
 

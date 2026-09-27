@@ -1,9 +1,15 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchhold@gmail.com>
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026, The QLever Authors, in particular:
+//
+// 2025 - 2026 Björn Buchhold <buchhold@gmail.com>, UFR
+// 2025 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/vocabulary/Vocabulary.h"
 
@@ -304,6 +310,24 @@ VocabBatchLookupResult Vocabulary<S, C, I>::lookupBatch(
     ql::span<const size_t> indices) const {
   AD_CONTRACT_CHECK(!indices.empty());
   return vocabulary_.lookupBatch(indices);
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+std::unique_ptr<VocabLookupHandleBase> Vocabulary<S, C, I>::beginLookup(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+  // `UnicodeVocabulary::beginLookup` always exists and itself falls back to an
+  // eager lookup for underlying vocabularies without a split-phase lookup.
+  return vocabulary_.beginLookup(indices);
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+VocabBatchLookupResult Vocabulary<S, C, I>::finishLookup(
+    std::unique_ptr<VocabLookupHandleBase> handle) const {
+  AD_CONTRACT_CHECK(handle != nullptr);
+  return handle->finish();
 }
 
 // _____________________________________________________________________________

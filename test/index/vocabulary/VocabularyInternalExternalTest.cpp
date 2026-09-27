@@ -1,14 +1,18 @@
-// Copyright 2024 - 2026 The QLever Authors, in particular:
+// Copyright 2024 - 2026, The QLever Authors, in particular:
 //
-// 2024 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
-// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+// 2024 - 2026 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
+
+#include <array>
+#include <string>
+#include <vector>
 
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
@@ -117,6 +121,34 @@ TEST(VocabularyInternalExternal, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(createVocabulary("AccessOperator1"));
   testAccessOperatorForUnorderedVocabulary(
       createVocabularyFromDisk("AccessOperator2"));
+}
+
+// `lookupBatch` must match `operator[]` in request order, including cache
+// hits (even `i` in the writer: stored in RAM) and misses (odd `i`: disk
+// only), plus reordered and duplicated indices.
+TEST(VocabularyInternalExternal, LookupBatchMatchesAccessOperator) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
+                                       "epsilon"};
+  auto vocab = createVocabulary("LookupBatch")(words);
+  const std::array<size_t, 7> indices{4, 1, 0, 3, 1, 2, 4};
+  auto result = vocab.lookupBatch(indices);
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+  EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
+}
+
+TEST(VocabularyInternalExternal, BeginFinishLookupMatchesLookupBatch) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
+                                       "epsilon"};
+  auto vocab = createVocabulary("BeginFinishLookup")(words);
+  const std::array<size_t, 7> indices{4, 1, 0, 3, 1, 2, 4};
+  auto eager = vocab.lookupBatch(indices);
+  auto split = vocab.finishLookup(vocab.beginLookup(indices));
+  ASSERT_EQ(eager->size(), split->size());
+  for (auto [i, expectedAndActual] :
+       ::ranges::views::enumerate(::ranges::views::zip(*eager, *split))) {
+    const auto& [expected, actual] = expectedAndActual;
+    EXPECT_EQ(expected, actual) << " at requested slot " << i;
+  }
 }
 
 TEST(VocabularyInternalExternal, EmptyVocabulary) {
