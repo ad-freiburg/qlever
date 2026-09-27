@@ -125,8 +125,8 @@ class BasicIdColumnView {
   }
 };
 
-using IdColumn = BasicIdColumnView<false>;
-using ConstIdColumn = BasicIdColumnView<true>;
+using IdColumnRef = BasicIdColumnView<false>;
+using ConstIdColumnRef = BasicIdColumnView<true>;
 
 }  // namespace columnBasedIdTable
 

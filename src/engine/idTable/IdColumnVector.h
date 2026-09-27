@@ -169,14 +169,14 @@ class IdColumnVector {
 
  public:
 
-  [[nodiscard]] IdColumn asView() {
+  [[nodiscard]] IdColumnRef asView() {
     return {payloads_.data(), datatypes_.data(), payloads_.size()};
   }
-  [[nodiscard]] ConstIdColumn asConstView() const {
+  [[nodiscard]] ConstIdColumnRef asConstView() const {
     return {payloads_.data(), datatypes_.data(), payloads_.size()};
   }
-  /*implicit*/ operator IdColumn() { return asView(); }
-  /*implicit*/ operator ConstIdColumn() const { return asConstView(); }
+  /*implicit*/ operator IdColumnRef() { return asView(); }
+  /*implicit*/ operator ConstIdColumnRef() const { return asConstView(); }
 };
 
 }  // namespace columnBasedIdTable

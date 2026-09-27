@@ -29,8 +29,8 @@ template <typename Allocator>
 struct ColumnStorageTraits<IdColumnVector<Allocator>, Id> {
   using Ref = IdRef;
   using ConstRef = ConstIdRef;
-  using Column = IdColumn;
-  using ConstColumn = ConstIdColumn;
+  using Column = IdColumnRef;
+  using ConstColumn = ConstIdColumnRef;
 };
 
 }  // namespace columnBasedIdTable

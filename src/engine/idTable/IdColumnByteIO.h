@@ -24,7 +24,7 @@ inline constexpr size_t BYTES_PER_ID_COLUMN_ENTRY =
 // bytes: datatype byte then payload word per entry (native byte order),
 // matching `Id::BitRepresentation`'s field order. Replaces what used to be a
 // plain `Id*`/`sizeof(Id)` byte range, e.g. as compression input.
-inline std::vector<char> packIdColumnToBytes(const ConstIdColumn& column) {
+inline std::vector<char> packIdColumnToBytes(const ConstIdColumnRef& column) {
   std::vector<char> result(column.size() * BYTES_PER_ID_COLUMN_ENTRY);
   char* out = result.data();
   for (ConstIdRef ref : column) {
@@ -40,7 +40,7 @@ inline std::vector<char> packIdColumnToBytes(const ConstIdColumn& column) {
 // The inverse of `packIdColumnToBytes` above: unpack `bytes` into `column`.
 // `bytes.size()` must be exactly `column.size() * BYTES_PER_ID_COLUMN_ENTRY`.
 inline void unpackBytesToIdColumn(ql::span<const char> bytes,
-                                  const IdColumn& column) {
+                                  const IdColumnRef& column) {
   AD_CONTRACT_CHECK(bytes.size() ==
                     column.size() * BYTES_PER_ID_COLUMN_ENTRY);
   const char* in = bytes.data();

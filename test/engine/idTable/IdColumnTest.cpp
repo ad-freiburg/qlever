@@ -84,10 +84,10 @@ TEST(IdColumnTest, idRefRoundtripsAndMirrorsApi) {
 TEST(IdColumnTest, viewConstructionAccessAndDefaultState) {
   // A default-constructed view is empty, and storable in an array together
   // with views into other columns (as `IdTable`'s `getColumns()` needs).
-  columnBasedIdTable::ConstIdColumn defaultView;
+  columnBasedIdTable::ConstIdColumnRef defaultView;
   EXPECT_EQ(defaultView.size(), 0u);
   EXPECT_TRUE(defaultView.empty());
-  std::array<columnBasedIdTable::ConstIdColumn, 3> arrayOfViews;
+  std::array<columnBasedIdTable::ConstIdColumnRef, 3> arrayOfViews;
   EXPECT_TRUE(arrayOfViews[1].empty());
 
   auto ids = sampleIds();
@@ -99,7 +99,7 @@ TEST(IdColumnTest, viewConstructionAccessAndDefaultState) {
     datatypes.push_back(bits.datatype_);
   }
 
-  columnBasedIdTable::IdColumn view{payloads.data(), datatypes.data(),
+  columnBasedIdTable::IdColumnRef view{payloads.data(), datatypes.data(),
                                     payloads.size()};
   ASSERT_EQ(view.size(), ids.size());
   for (size_t i = 0; i < ids.size(); ++i) {
@@ -110,7 +110,7 @@ TEST(IdColumnTest, viewConstructionAccessAndDefaultState) {
   EXPECT_EQ(static_cast<Id>(view.back()), ids.back());
 
   // Implicit conversion to the const view.
-  columnBasedIdTable::ConstIdColumn constView = view;
+  columnBasedIdTable::ConstIdColumnRef constView = view;
   EXPECT_EQ(constView.size(), view.size());
 
   // `subspan`/`first`/`last`.
@@ -241,11 +241,11 @@ TEST(IdColumnTest, columnStorageTraitsResolvesGenericAndIdCase) {
   static_assert(
       std::is_same_v<
           ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::Column,
-          columnBasedIdTable::IdColumn>);
+          columnBasedIdTable::IdColumnRef>);
   static_assert(
       std::is_same_v<
           ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::ConstColumn,
-          columnBasedIdTable::ConstIdColumn>);
+          columnBasedIdTable::ConstIdColumnRef>);
 }
 
 // _____________________________________________________________________________
