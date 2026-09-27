@@ -12,7 +12,7 @@
 
 #include "backports/algorithm.h"
 #include "global/RuntimeParameters.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationMetadata.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/GraphComputation.h"
 #include "index/Permutation.h"
