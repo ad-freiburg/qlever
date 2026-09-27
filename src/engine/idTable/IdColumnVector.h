@@ -99,8 +99,7 @@ class IdColumnVector {
     payloads_.push_back(payload_);
     datatypes_.push_back(datatype_);
   }
-  // Append a default (unspecified) `Id`, analogous to
-  // `std::vector<Id>::emplace_back()`.
+
   void emplace_back() {
     payloads_.emplace_back();
     datatypes_.emplace_back();

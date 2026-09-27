@@ -211,8 +211,6 @@ class BasicIdRef {
   [[nodiscard]] Id toId() const { return *this; }
 };
 
-// `IdRef` allows both reading and (whole-value) writing of the referenced
-// `Id`, `ConstIdRef` only reading.
 using IdRef = BasicIdRef<false>;
 using ConstIdRef = BasicIdRef<true>;
 
