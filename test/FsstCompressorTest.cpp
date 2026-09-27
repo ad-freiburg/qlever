@@ -1,11 +1,22 @@
-// Copyright 2024, University of Freiburg,
-//                 Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 - 2026 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 
+#include <array>
+#include <memory>
+
+#include "backports/span.h"
 #include "util/FsstCompressor.h"
+#include "util/GTestHelpers.h"
 
 TEST(FsstEncoder, firstTest) {
   std::vector<std::string> s{
@@ -362,4 +373,114 @@ TEST(FsstEncoder, firstTest) {
     }
     EXPECT_THAT(s3, ::testing::ElementsAreArray(s));
   }
+}
+
+// Goal: `decompressInto` (the arena-bound path used by `lookupBatch`) must
+// produce byte-for-byte the same output as the string-returning `decompress`.
+// Method: compress the words, decode each compressed word through both
+// interfaces, and compare the results against each other and the original.
+// _____________________________________________________________________________
+TEST(FsstEncoder, DecompressIntoMatchesDecompress) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma"};
+  auto [buffer, compressedViews, decoder] = FsstEncoder::compressAll(words);
+  for (const auto& [word, compressed] :
+       ::ranges::views::zip(words, compressedViews)) {
+    const std::string viaString = decoder.decompress(compressed);
+    std::string output(decoder.maxDecompressedSize(compressed), '\0');
+    const size_t size = decoder.decompressInto(
+        compressed, ql::span<char>{output.data(), output.size()});
+    const std::string_view decompressedView{output.data(), size};
+
+    EXPECT_EQ(decompressedView, viaString);
+    EXPECT_THAT(viaString, ::testing::Eq(word));
+  }
+}
+
+// Goal: `detail::decompressToOwnedString` must shrink the buffer to the number
+// of bytes the decoder reports and reject a report that exceeds the bound.
+// Method: call it with decoders that report fewer, exactly `bound`, and more
+// than `bound` bytes.
+// _____________________________________________________________________________
+TEST(FsstEncoder, DecompressToOwnedStringRespectsBound) {
+  auto writeAbc = [](ql::span<char> out) {
+    EXPECT_GE(out.size(), 3u);
+    out[0] = 'a';
+    out[1] = 'b';
+    out[2] = 'c';
+    return size_t{3};
+  };
+  EXPECT_EQ(detail::decompressToOwnedString(5, writeAbc), "abc");
+  EXPECT_EQ(detail::decompressToOwnedString(3, writeAbc), "abc");
+  EXPECT_EQ(detail::decompressToOwnedString(
+                0, [](ql::span<char>) { return size_t{0}; }),
+            "");
+  auto reportTooMany = [](ql::span<char> out) { return out.size() + 1; };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      detail::decompressToOwnedString(4, reportTooMany),
+      ::testing::HasSubstr("numBytesWritten <= bound"));
+}
+
+// _____________________________________________________________________________
+class FsstRepeatedDecoderTest : public ::testing::Test {
+ protected:
+  template <size_t N>
+  static void expectRepeatedDecompressIntoMatches(
+      const std::vector<std::string>& words) {
+    std::vector<std::string_view> views;
+    views.reserve(words.size());
+    for (const auto& w : words) {
+      views.emplace_back(w);
+    }
+    std::array<FsstDecoder, N> decoders{};
+    std::shared_ptr<std::string> keepAlive;
+    std::vector<std::string_view> compressed = views;
+    for (size_t stage = 0; stage < N; ++stage) {
+      auto [buffer, nextViews, decoder] = FsstEncoder::compressAll(compressed);
+      keepAlive = std::move(buffer);
+      compressed.assign(nextViews.begin(), nextViews.end());
+      decoders[stage] = decoder;
+    }
+    FsstRepeatedDecoder<N> repeated{decoders};
+    std::string scratch;
+    for (size_t i = 0; i < words.size(); ++i) {
+      const std::string viaString = repeated.decompress(compressed[i]);
+      std::string intoBuf(repeated.maxDecompressedSize(compressed[i]), '\0');
+      const size_t n = repeated.decompressInto(
+          compressed[i], ql::span<char>{intoBuf.data(), intoBuf.size()},
+          scratch);
+      EXPECT_THAT(n, ::testing::Eq(viaString.size()));
+      EXPECT_THAT(std::string_view(intoBuf.data(), n),
+                  ::testing::Eq(viaString));
+      EXPECT_THAT(viaString, ::testing::Eq(words[i]));
+    }
+    if constexpr (N >= 2) {
+      EXPECT_GE(scratch.size(),
+                repeated.maxDecompressedSize(compressed.front()));
+    }
+  }
+};
+
+// _____________________________________________________________________________
+// Goal: the repeated-decoder variant (FSST stages applied N times) must also
+// satisfy `decompressInto` == `decompress` byte-for-byte. Method: shared
+// helper `expectRepeatedDecompressIntoMatches<N>` compresses words through N
+// cascaded stages, decodes via both interfaces, and compares all three.
+TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressOneStage) {
+  expectRepeatedDecompressIntoMatches<1>(
+      {"alpha", "", "beta", "gamma-gamma-gamma", ""});
+}
+
+// _____________________________________________________________________________
+// See above, with two cascaded FSST stages.
+TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressTwoStages) {
+  expectRepeatedDecompressIntoMatches<2>(
+      {"alpha", "", "beta", "gamma-gamma-gamma", ""});
+}
+
+// _____________________________________________________________________________
+// See above, with three cascaded FSST stages (the deepest staging used in
+// production).
+TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressThreeStages) {
+  expectRepeatedDecompressIntoMatches<3>(
+      {"alpha", "", "beta", "gamma-gamma-gamma", ""});
 }

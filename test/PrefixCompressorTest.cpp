@@ -1,11 +1,16 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <gmock/gmock.h>
 
+#include "backports/span.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/PrefixHeuristic.h"
+#include "util/GTestHelpers.h"
 #include "util/Views.h"
 
 TEST(PrefixCompressor, CompressionPreservesWords) {
@@ -47,6 +52,32 @@ TEST(PrefixCompressor, TooManyPrefixesThrow) {
     tooManyPrefixes.push_back(std::to_string(i));
   }
   ASSERT_THROW(p.buildCodebook(tooManyPrefixes), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(PrefixCompressor, decompressIntoMatchesDecompress) {
+  using namespace ::testing;
+  PrefixCompressor p;
+  p.buildCodebook(std::vector<std::string>{"alph", "alpha", "al"});
+  auto checkWord = [&](std::string_view word) {
+    const std::string compressed = p.compress(word);
+    const std::string viaString = p.decompress(compressed);
+    std::string intoBuf(p.maxDecompressedSize(compressed), '\0');
+    const size_t n = p.decompressInto(
+        compressed, ql::span<char>{intoBuf.data(), intoBuf.size()});
+    EXPECT_THAT(n, Eq(viaString.size()));
+    EXPECT_THAT(std::string_view(intoBuf.data(), n), Eq(viaString));
+    EXPECT_THAT(viaString, Eq(word));
+  };
+  for (std::string_view word :
+       {"a", "al", "alp", "alph", "alpha", "alphabet", "nothing"}) {
+    checkWord(word);
+  }
+  const std::string onlyPrefix = p.compress("alpha");
+  ASSERT_EQ(onlyPrefix.size(), 1u);
+  checkWord("alpha");
+  AD_EXPECT_THROW_WITH_MESSAGE(static_cast<void>(p.maxDecompressedSize("")),
+                               ::testing::HasSubstr("!compressedWord.empty()"));
 }
 
 TEST(PrefixCompressor, MaximumNumberOfPrefixes) {

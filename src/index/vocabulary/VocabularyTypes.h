@@ -135,6 +135,85 @@ using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
 struct StringVectorVocabBatchLookupData
     : VocabLookupDataCommonBase<std::vector<std::string>> {};
 
+// Construct a result from owning strings and expose views into their storage.
+inline VocabBatchLookupResult makeStringVectorVocabBatchLookupResult(
+    std::vector<std::string> words) {
+  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+  data->buffer() = std::move(words);
+  data->views() = ::ranges::to_vector(
+      data->buffer() |
+      ql::views::transform(ad_utility::staticCast<std::string_view>));
+  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+}
+
+// Construct a PMR-backed result and expose views into its monotonic allocator.
+// `views` must all point into `buffer`, else we get UB.
+inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
+    std::unique_ptr<ql::pmr::monotonic_buffer_resource> buffer,
+    std::vector<std::string_view> views) {
+  auto data = std::make_shared<PmrVocabBatchLookupData>();
+  data->buffer() = std::move(buffer);
+  data->views() = std::move(views);
+  return PmrVocabBatchLookupData::asResult(std::move(data));
+}
+
+// Type-erased smart pointer holding whatever keeps word storage alive. Used
+// to store child `VocabBatchLookupResult`s or references to vocabulary state
+// (e.g., shared ownership of a vocabulary's in-memory word storage).
+// See the usage below.
+using VocabBatchOwner = std::shared_ptr<const void>;
+
+// `VocabBatchLookupResult` that owns multiple independent storage sources.
+// Stores a list of `VocabBatchOwner`s that back the `string_view`s. Because
+// every view is backed by an owner stored here, the result is self-contained:
+// no view can dangle, and callers don't need to manage external lifetimes.
+struct MultiOwnerVocabBatchLookupData
+    : VocabLookupDataCommonBase<std::vector<VocabBatchOwner>> {};
+
+// Scatter string_views from `result` into `viewsInInputOrder` at positions
+// given by `resultPositions`, and keep `result` in `owners` to retain storage.
+// Called multiple times to merge multiple `VocabBatchLookupResult`s into a
+// single combined `VocabBatchLookupResult` via `keepAliveVocabBatch()`.
+inline void scatterVocabBatchLookupResult(
+    VocabBatchLookupResult result, ql::span<const size_t> resultPositions,
+    ql::span<std::string_view> viewsInInputOrder,
+    std::vector<VocabBatchOwner>& owners) {
+  AD_CONTRACT_CHECK(result != nullptr);
+  AD_CONTRACT_CHECK(result->size() == resultPositions.size());
+  std::vector<bool> written(viewsInInputOrder.size());
+  for (auto [resultPosition, word] :
+       ::ranges::views::zip(resultPositions, *result)) {
+    AD_CORRECTNESS_CHECK(resultPosition < viewsInInputOrder.size());
+    AD_CORRECTNESS_CHECK(!written[resultPosition]);
+    written[resultPosition] = true;
+    viewsInInputOrder[resultPosition] = word;
+  }
+  // Note: this function is called once per child batch; each call writes only
+  // its own positions. Completeness across calls (every position written) is
+  // the caller's contract, enforced by `keepAliveVocabBatch`'s non-empty
+  // checks and the per-call double-write guard above.
+  owners.push_back(std::move(result));
+}
+
+// Create a `VocabBatchLookupResult` for the given `words`. The result will
+// additionally keep the `owners` alive. Only call this if the storage for the
+// `words` is managed by the `owners`; see `scatterVocabBatchLookupResult()` for
+// an example.
+//
+// TODO<ms2144>: This API takes independent owner and view lists, so the
+// lifetime link is a call-site convention rather than a structural type. A
+// later redesign could replace it with a builder or an owned-view capability
+// type so slots are only filled together with their storage.
+inline VocabBatchLookupResult keepAliveVocabBatch(
+    std::vector<VocabBatchOwner> owners, std::vector<std::string_view> words) {
+  AD_CONTRACT_CHECK(!owners.empty());
+  AD_CONTRACT_CHECK(!words.empty());
+  auto data = std::make_shared<MultiOwnerVocabBatchLookupData>();
+  data->buffer() = std::move(owners);
+  data->views() = std::move(words);
+  return MultiOwnerVocabBatchLookupData::asResult(std::move(data));
+}
+
 // Generic sequential fallback implementations of the batch-lookup interface,
 // used by all vocabularies that do not provide a specialized (e.g. io_uring)
 // implementation. They simply loop over the indices and issue the ordinary
@@ -241,13 +320,7 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
         return wordAsStringOrPlaceholder(vocab, idx);
       }));
 
-  auto data = std::make_shared<StringVectorVocabBatchLookupData>();
-  data->buffer() = std::move(words);
-  data->views() = ::ranges::to_vector(
-      data->buffer() |
-      ql::views::transform(ad_utility::staticCast<std::string_view>));
-
-  return StringVectorVocabBatchLookupData::asResult(std::move(data));
+  return makeStringVectorVocabBatchLookupResult(std::move(words));
 }
 
 // Streamed version of `lookupBatch`: lazily apply `vocab.lookupBatch` for the

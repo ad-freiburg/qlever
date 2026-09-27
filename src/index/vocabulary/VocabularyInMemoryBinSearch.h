@@ -1,10 +1,17 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 - 2026 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 
+#include <memory>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -47,11 +54,14 @@ class VocabularyInMemoryBinSearch
   static constexpr bool replaceOptionalByPlaceholderOnExport = true;
 
  private:
-  // The actual storage. The indices are stored either as an owned vector
-  // (after `open()`, or after reading from a regular, non-zero-copy
-  // serializer), or as a non-owning view into externally-owned memory (after
+  // Store the word data through a `shared_ptr` so a
+  // `VocabBatchLookupResult` can keep the referenced bytes alive after
+  // `close()` and destruction of the vocabulary. Keep the pointer non-null;
+  std::shared_ptr<const Words> words_ = std::make_shared<const Words>();
+  // The indices are stored either as an owned vector (after `open()`, or
+  // after reading from a regular, non-zero-copy serializer), or as a
+  // non-owning view into externally-owned memory (after
   // `fromZeroCopyDeserializer`).
-  Words words_;
   std::variant<Indices, IndicesView> indices_;
 
  public:
@@ -74,7 +84,8 @@ class VocabularyInMemoryBinSearch
           S>) static VocabularyInMemoryBinSearch
       fromZeroCopyDeserializer(S& serializer) {
     VocabularyInMemoryBinSearch result;
-    result.words_ = Words::fromZeroCopyDeserializer(serializer);
+    result.words_ =
+        std::make_shared<Words>(Words::fromZeroCopyDeserializer(serializer));
     result.indices_ =
         ad_utility::serialization::zeroCopyDeserializeToSpan<uint64_t>(
             serializer);
@@ -91,8 +102,8 @@ class VocabularyInMemoryBinSearch
 
   // Return the total number of words
   [[nodiscard]] size_t size() const {
-    AD_CORRECTNESS_CHECK(indices().size() == words_.size());
-    return words_.size();
+    AD_CORRECTNESS_CHECK(indices().size() == words_->size());
+    return words_->size();
   }
 
   // Return the position (i.e. the offset into the words) of the word with the
@@ -135,7 +146,7 @@ class VocabularyInMemoryBinSearch
   // Iterate over all words of the vocabulary in order, together with their
   // (because of the holes, not necessarily contiguous) vocabulary index.
   auto scanAll() const {
-    return ::ranges::views::zip(indices(), words_) |
+    return ::ranges::views::zip(indices(), *words_) |
            ql::views::transform([](const auto& indexAndWord) {
              const auto& [index, word] = indexAndWord;
              return IndexAndWord{index, word};
@@ -189,17 +200,31 @@ class VocabularyInMemoryBinSearch
   void close();
 
   // Const access to the underlying words.
-  auto begin() const { return words_.begin(); }
-  auto end() const { return words_.end(); }
+  auto begin() const { return words().begin(); }
+  auto end() const { return words().end(); }
 
+  // Return shared ownership of the word bytes. A batch-lookup result that
+  // hands out `string_view`s into this vocabulary stores this pointer, so the
+  // bytes cannot be freed while the result is alive.
+  std::shared_ptr<const Words> wordStorage() const { return words_; }
+
+ private:
+  // Access the words for internal use. Prefer this over words_-> to avoid
+  // cascading changes if the storage representation changes in the future.
+  const Words& words() const { return *words_; }
+
+ public:
   // Generic serialization support. Note: Reading always produces a vocabulary
   // that owns its indices; use `fromZeroCopyDeserializer` (see above) to obtain
   // a non-owning, zero-copy view.
   AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemoryBinSearch) {
-    serializer | arg.words_;
     if constexpr (ad_utility::serialization::WriteSerializer<S>) {
+      serializer | *arg.words_;
       serializer << arg.indices();
     } else {
+      auto words = std::make_shared<Words>();
+      serializer | *words;
+      arg.words_ = std::move(words);
       auto& indices = arg.indices_.template emplace<Indices>();
       serializer | indices;
     }
