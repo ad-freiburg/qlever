@@ -291,6 +291,14 @@ int main(int argc, char** argv) {
       "default), `flat-4-shifts`, `hierarchical`, or `hierarchical-3-shifts` "
       "(see `GeoCellGrid`). Only relevant with a grid level > 0.");
 
+  add("geo-point-encoding", po::value(&config.geoPointEncoding_),
+      "How geo points are encoded in the IDs of the index: `z-order` (the "
+      "default), or `lat-major`, which is how they were encoded before "
+      "2026-09-26. The encoding `lat-major` is deprecated, only use it if "
+      "you need to be compatible with software that decodes the IDs of an "
+      "index. With it, a spatial prefilter on points can only restrict the "
+      "latitude.");
+
   add("encode-as-id",
       po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),
       "Space-separated list of IRI prefixes (without angle brackets). "

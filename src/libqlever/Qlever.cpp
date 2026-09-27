@@ -172,6 +172,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
         ad_utility::GeoCellGrid{static_cast<uint8_t>(config.geoCellGridLevel_),
                                 config.geoCellGridScheme_});
   }
+  index.getImpl().setGeoPointEncodingForIndexBuilding(config.geoPointEncoding_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,
                                               config.patternsForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(

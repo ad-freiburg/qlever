@@ -10,6 +10,7 @@
 
 #include "backports/algorithm.h"
 #include "global/Constants.h"
+#include "index/GeoPointEncoding.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/GTestHelpers.h"
@@ -387,4 +388,14 @@ TEST(GeoPoint, intervalsForRectangle) {
   // The lower left corner must not be above or right of the upper right one.
   EXPECT_ANY_THROW(
       GeoPoint::intervalsForRectangle(upperRight, lowerLeft, E::ZOrder));
+}
+
+// Test the names of the two encodings in the configuration of an index and in
+// the option of `qlever-index`.
+TEST(GeoPoint, encodingNames) {
+  using ad_utility::GeoPointEncoding;
+  EXPECT_EQ(GeoPointEncoding::fromString("z-order"), GeoPointEncoding::ZOrder);
+  EXPECT_EQ(GeoPointEncoding::fromString("lat-major"),
+            GeoPointEncoding::LatMajor);
+  EXPECT_ANY_THROW(GeoPointEncoding::fromString("lng-major"));
 }

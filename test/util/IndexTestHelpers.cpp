@@ -250,6 +250,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       index.getImpl().setGeoCellGridForIndexBuilding(
           ad_utility::GeoCellGrid{c.geoCellGridLevel, c.geoCellGridScheme});
     }
+    index.getImpl().setGeoPointEncodingForIndexBuilding(c.geoPointEncoding);
     if (c.encodedPrefixesWithoutAngleBrackets.has_value() ||
         !c.encodedIriPatterns.empty()) {
       index.getImpl().setPrefixesForEncodedValues(
