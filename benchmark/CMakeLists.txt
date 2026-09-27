@@ -38,4 +38,6 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(SparqlExpressionBenchmark engine testUtil gtest gmock)
 
+    addAndLinkBenchmark(VectorStreamSourceBenchmark engine testUtil)
+
 endif()
