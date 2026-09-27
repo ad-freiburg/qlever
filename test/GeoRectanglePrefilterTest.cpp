@@ -209,6 +209,13 @@ class GeoRectangleExpressionTest : public ::testing::Test {
 };
 
 TEST_F(GeoRectangleExpressionTest, evaluate) {
+  // The blocks of points below are kept or pruned by the latitude band of the
+  // rectangle, which is the `LatMajor` behavior (see `evaluateZOrder` below
+  // for `ZOrder`).
+  absl::Cleanup restoreEncoding{
+      [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
+  GeoPoint::setEncoding(GeoPointEncodingEnum::LatMajor);
+
   // Query rectangle in the far south east.
   GeoRectangle rectangle{170.0, -81.0, 172.0, -79.0};
   GeoRectangleExpression expr{rectangle};
