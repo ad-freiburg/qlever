@@ -532,6 +532,55 @@ TYPED_TEST(ExportIdsLiteralOrIriToStringAndTypeTest, blankNodeIris) {
 }
 
 // _____________________________________________________________________________
+// The vectorized-prefix fast path (gated by the `use-vectorized-prefix-export`
+// runtime parameter) must produce byte-identical output to the plain path,
+// whether it is on or off, for well-known prefixes, prefixes with a length
+// that is not a multiple of 16, and IRIs that are not well-known.
+TYPED_TEST(ExportIdsLiteralOrIriToStringAndTypeTest,
+           vectorizedPrefixExportIsByteIdentical) {
+  for (bool useFastPath : {false, true}) {
+    setRuntimeParameter<&RuntimeParameters::useVectorizedPrefixExport_>(
+        useFastPath);
+    SCOPED_TRACE(absl::StrCat("useVectorizedPrefixExport=", useFastPath));
+
+    // `http://schema.org/` (19 bytes, not a multiple of 16) plus a suffix.
+    TestFixture::checkAllFlagCombinations(
+        "<http://schema.org/name>",
+        {.plain_ = "X:<http://schema.org/name>",
+         .removeQuotesAndAngleBrackets_ = "X:http://schema.org/name",
+         .returnOnlyLiterals_ = std::nullopt,
+         .both_ = std::nullopt});
+
+    // `http://www.wikidata.org/entity/` (32 bytes, exact multiple of 16).
+    TestFixture::checkAllFlagCombinations(
+        "<http://www.wikidata.org/entity/Q42>",
+        {.plain_ = "X:<http://www.wikidata.org/entity/Q42>",
+         .removeQuotesAndAngleBrackets_ =
+             "X:http://www.wikidata.org/entity/Q42",
+         .returnOnlyLiterals_ = std::nullopt,
+         .both_ = std::nullopt});
+
+    // A prefix on its own, with no suffix at all.
+    TestFixture::checkAllFlagCombinations(
+        "<http://schema.org/>",
+        {.plain_ = "X:<http://schema.org/>",
+         .removeQuotesAndAngleBrackets_ = "X:http://schema.org/",
+         .returnOnlyLiterals_ = std::nullopt,
+         .both_ = std::nullopt});
+
+    // An IRI that is not one of the well-known prefixes must not be touched.
+    TestFixture::checkAllFlagCombinations(
+        "<http://example.org/x>",
+        {.plain_ = "X:<http://example.org/x>",
+         .removeQuotesAndAngleBrackets_ = "X:http://example.org/x",
+         .returnOnlyLiterals_ = std::nullopt,
+         .both_ = std::nullopt});
+  }
+  // Restore the default so other tests are unaffected.
+  setRuntimeParameter<&RuntimeParameters::useVectorizedPrefixExport_>(false);
+}
+
+// _____________________________________________________________________________
 TEST(ExportIds, partitionIdPositions) {
   using namespace ad_utility::testing;
 

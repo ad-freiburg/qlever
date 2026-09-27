@@ -232,6 +232,13 @@ struct RuntimeParameters {
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
 
+  // If set to true, IRIs that begin with one of a fixed set of well-known
+  // prefixes (Wikidata entity/property, RDF, RDFS, OWL, schema.org, XSD) are
+  // written during CSV/TSV/Turtle export using aligned vector stores
+  // (`VectorizedPrefixTable`) instead of a length-dependent `memcpy`. Default
+  // off: master behavior (plain `memcpy`) is unchanged unless this is set.
+  Bool useVectorizedPrefixExport_{false, "use-vectorized-prefix-export"};
+
   // Configure the amount of threads to compress and write blocks per
   // permutation. A value of 0 indicates that the number of threads should be
   // determined automatically based on the number of available hardware threads.

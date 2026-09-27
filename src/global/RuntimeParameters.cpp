@@ -68,6 +68,7 @@ RuntimeParameters::RuntimeParameters() {
   add(permutationWriterNumThreads_);
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
+  add(useVectorizedPrefixExport_);
   add(logLevel_);
   add(constructDeduplication_);
 

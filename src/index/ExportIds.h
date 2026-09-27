@@ -14,6 +14,7 @@
 #define QLEVER_SRC_INDEX_EXPORTIDS_H
 
 #include <array>
+#include <cstring>
 #include <optional>
 #include <string>
 #include <utility>
@@ -21,8 +22,10 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/span.h"
+#include "engine/export_prototypes/VectorizedPrefixSlicer.h"
 #include "global/Constants.h"
 #include "global/Id.h"
+#include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
@@ -131,6 +134,57 @@ idToStringAndTypeForEncodedValue(Id id);
 // IRI via the `EncodedIriManager` in the index.
 LiteralOrIri encodedIdToLiteralOrIri(Id id, const IndexImpl& index);
 
+namespace detail {
+// The string form of each `qlever::export_pipeline::WellKnownPrefixId`, in
+// enum order, used to match an IRI's content against the entries of the
+// `VectorizedPrefixTable`.
+inline constexpr std::array<std::string_view, 7> kWellKnownIriPrefixStrings{
+    "http://www.wikidata.org/entity/",
+    "http://www.wikidata.org/prop/direct/",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "http://www.w3.org/2000/01/rdf-schema#",
+    "http://www.w3.org/2002/07/owl#",
+    "http://schema.org/",
+    "http://www.w3.org/2001/XMLSchema#",
+};
+
+// If the `use-vectorized-prefix-export` runtime parameter is enabled and
+// `full` begins (at byte `offset`, to allow for a leading `<`) with one of
+// the well-known IRI prefixes, materialize `full` into a new string using
+// `VectorizedPrefixTable::writePrefixFast` for the prefix bytes and a plain
+// copy for the remainder. Otherwise return `std::nullopt`, in which case the
+// caller falls back to its normal `std::string{full}` construction.
+inline std::optional<std::string> tryFastCopyKnownPrefixIri(
+    std::string_view full, size_t offset) {
+  if (!getRuntimeParameter<&RuntimeParameters::useVectorizedPrefixExport_>()) {
+    return std::nullopt;
+  }
+  std::string_view content = full.substr(offset);
+  using qlever::export_pipeline::VectorizedPrefixTable;
+  using qlever::export_pipeline::WellKnownPrefixId;
+  const auto& table = VectorizedPrefixTable::instance();
+  for (size_t i = 0; i < kWellKnownIriPrefixStrings.size(); ++i) {
+    std::string_view prefix = kWellKnownIriPrefixStrings[i];
+    if (!ql::starts_with(content, prefix)) {
+      continue;
+    }
+    size_t storeSize = VectorizedPrefixTable::storeSize(prefix.size());
+    std::string result;
+    result.resize(std::max(full.size(), offset + storeSize));
+    if (offset == 1) {
+      result[0] = '<';
+    }
+    table.writePrefixFast(static_cast<WellKnownPrefixId>(i),
+                          ql::span<char>{result.data() + offset, storeSize});
+    std::memcpy(result.data() + offset + prefix.size(),
+                content.data() + prefix.size(), content.size() - prefix.size());
+    result.resize(full.size());
+    return result;
+  }
+  return std::nullopt;
+}
+}  // namespace detail
+
 // Format a `LiteralOrIri` as a (string, XSD-type) pair applying the template
 // options and `escapeFunction`. Return `std::nullopt` when `returnOnlyLiterals`
 // is true and `word` is not a literal.
@@ -155,12 +209,26 @@ CPP_template(bool removeQuotesAndAngleBrackets = false,
   }
   if constexpr (removeQuotesAndAngleBrackets) {
     // TODO<joka921> Can we get rid of the string copying here?
+    if (word.isIri()) {
+      std::string_view content = asStringViewUnsafe(word.getContent());
+      if (auto fast = detail::tryFastCopyKnownPrefixIri(content, 0)) {
+        return std::pair{escapeFunction(std::move(fast).value()), nullptr};
+      }
+    }
     return std::pair{
         escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
         nullptr};
   }
   // TODO<ms2144>: we unconditionally always materialize a string here, which
   // is wasteful and should be mitigated in the future.
+  if (word.isIri()) {
+    std::string_view full = word.toStringRepresentation();
+    if (ql::starts_with(full, '<')) {
+      if (auto fast = detail::tryFastCopyKnownPrefixIri(full, 1)) {
+        return std::pair{escapeFunction(std::move(fast).value()), nullptr};
+      }
+    }
+  }
   return std::pair{escapeFunction(std::string{word.toStringRepresentation()}),
                    nullptr};
 }
