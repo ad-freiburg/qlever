@@ -55,13 +55,16 @@ class TestHttpServer {
  public:
   // Create server on localhost. Port 0 instructs the operating system to choose
   // a free port of its choice. `lazyBodyChunkSize` controls the internal buffer
-  // size for lazy body streaming (ignored in eager mode).
+  // size for lazy body streaming (ignored in eager mode). `useSendZC` enables
+  // the `IORING_OP_SEND_ZC` zero-copy path for chunked `streamable_body`
+  // responses (off by default, like in production).
   explicit TestHttpServer(HttpHandler httpHandler,
-                          size_t lazyBodyChunkSize = 100u) {
+                          size_t lazyBodyChunkSize = 100u,
+                          bool useSendZC = false) {
     server_ = std::make_shared<
         HttpServer<readMode, HttpHandler, WebSocketHandlerType>>(
         0, "0.0.0.0", 1, std::move(httpHandler), makeWebSocketSessionSupplier,
-        ad_utility::MemorySize::bytes(lazyBodyChunkSize));
+        ad_utility::MemorySize::bytes(lazyBodyChunkSize), useSendZC);
   }
 
   // Get port on which this server is running.

@@ -92,6 +92,35 @@ auto makeIgnoreBodyServer(size_t chunkSize) {
   return TestHttpServer<decltype(handler), mode>(std::move(handler), chunkSize);
 }
 
+// Serves the given chunks as a chunked `streamable_body` response (the same
+// response type as the export path). `useSendZC` selects the
+// `IORING_OP_SEND_ZC` transmission path when true, the Beast path otherwise.
+template <BodyReadMode mode>
+auto makeStreamableServer(std::vector<std::string> chunks, bool useSendZC,
+                          size_t chunkSize) {
+  // `mutable` so the captured chunks can be moved into the generator frame
+  // instead of copied.
+  auto handler = [chunks = std::move(chunks)](
+                     auto req, auto&& send,
+                     auto...) mutable -> boost::asio::awaitable<void> {
+    // Pass the chunks as a by-value coroutine parameter (frame-copied and
+    // therefore alive for the generator's lifetime), not as a lambda capture
+    // of an immediately-invoked lambda (which would dangle).
+    auto generator =
+        [](std::vector<std::string> chunks) -> cppcoro::generator<std::string> {
+      // NOTE: `chunk` must bind as a mutable ref: `Generator::yield_value`
+      // only accepts `T&` or `T&&`, never a const lvalue.
+      for (auto& chunk : chunks) {
+        co_yield chunk;
+      }
+    }(std::move(chunks));
+    co_await send(createOkResponse(std::move(generator), req,
+                                   ad_utility::MediaType::textPlain));
+  };
+  return TestHttpServer<decltype(handler), mode>(std::move(handler), chunkSize,
+                                                 useSendZC);
+}
+
 // Sends an echo response (METHOD\nTARGET\nBODY) and then rethrows `exception`.
 // Shared between eager and lazy `makeThrowingEchoServer` handlers.
 template <typename Req, typename Send>
@@ -733,6 +762,31 @@ TYPED_TEST(HttpServerBodyTest, MaterializeBody) {
                                                              parser, limit);
           EXPECT_EQ(result, expected);
         }));
+  }
+}
+
+// A chunked `streamable_body` export-style response arrives byte-identical
+// with and without the zero-copy send path. The body exceeds one sender pool
+// slot (64 KB), exercising slot splitting; empty generator chunks are skipped
+// by the zero-copy path because they would serialize as the terminating
+// zero chunk.
+TYPED_TEST(HttpServerBodyTest, StreamableBodyRoundTripWithAndWithoutSendZC) {
+  const std::string bigA(70'000, 'a');
+  const std::string bigB(70'000, 'b');
+  const std::vector<std::string> chunks{bigA, bigB, "tail"};
+  const std::string expected = bigA + bigB + "tail";
+  for (bool useSendZC : {false, true}) {
+    SCOPED_TRACE(useSendZC ? "send-zc" : "beast");
+    auto server = makeStreamableServer<TypeParam::value>(chunks, useSendZC,
+                                                         this->lazyChunkSize);
+    server.runInOwnThread();
+    auto httpClient = std::make_unique<HttpClient>(
+        "localhost", std::to_string(server.getPort()));
+    auto response =
+        HttpClient::sendRequest(std::move(httpClient), verb::get, "localhost",
+                                "/stream", this->handle_);
+    EXPECT_EQ(response.status_, status::ok);
+    EXPECT_EQ(toString(std::move(response.body_)), expected);
   }
 }
 
