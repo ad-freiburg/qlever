@@ -42,6 +42,7 @@ RuntimeParameters::RuntimeParameters() {
   add(throwOnUnboundVariables_);
   add(cacheMaxSizeLazyResult_);
   add(websocketUpdatesEnabled_);
+  add(useNonTemporalExportBuffer_);
   add(smallIndexScanSizeEstimateDivisor_);
   add(zeroCostEstimateForCachedSubtree_);
   add(requestBodyLimit_);

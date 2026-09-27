@@ -10,6 +10,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "global/RuntimeParameters.h"
 #include "util/stream_generator.h"
 
 using namespace ad_utility::streams;
@@ -55,6 +56,39 @@ TEST(StringBatcher, StreamMacros) {
     result.emplace_back(batch);
   };
   EXPECT_THAT(result, ::testing::ElementsAre("hellohellohello"));
+}
+
+// _____________________________________________________________________________
+// Verify that toggling the `use-non-temporal-export-buffer` runtime
+// parameter (which switches `stream_generator_promise::copyIntoBuffer`
+// between `std::memcpy` and `StreamingBufferWriter::streamCopyNoFence`)
+// yields byte-identical output. This covers both the small-value path and
+// the buffer-boundary-spanning (overflow) path.
+TEST(StreamGenerator, NonTemporalBufferParameterYieldsIdenticalOutput) {
+  auto runWithParam = [](bool useNonTemporal) {
+    setRuntimeParameter<&RuntimeParameters::useNonTemporalExportBuffer_>(
+        useNonTemporal);
+    std::string result;
+    // 20 chars of payload against a 8-byte buffer forces several
+    // suspend/resume + overflow cycles through `yield_value`.
+    for (const auto& batch : yieldSomething(4)) {
+      result.append(batch);
+    }
+    return result;
+  };
+
+  bool originalValue =
+      getRuntimeParameter<&RuntimeParameters::useNonTemporalExportBuffer_>();
+
+  std::string withMemcpy = runWithParam(false);
+  std::string withNonTemporal = runWithParam(true);
+
+  EXPECT_EQ(withMemcpy, "hellohellohellohello");
+  EXPECT_EQ(withMemcpy, withNonTemporal);
+
+  // Restore the default so this test doesn't affect others.
+  setRuntimeParameter<&RuntimeParameters::useNonTemporalExportBuffer_>(
+      originalValue);
 }
 
 #endif

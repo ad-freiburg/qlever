@@ -116,6 +116,13 @@ struct RuntimeParameters {
   // Control if websockets are enable to post live query updates, and if they
   // are control the throttle of how many request can be sent at once.
   Bool websocketUpdatesEnabled_{true, "websocket-updates-enabled"};
+
+  // If set, the legacy export streaming buffer (`stream_generator`, used by
+  // the Turtle/CSV/TSV export paths) copies yielded chunks into its
+  // aggregation buffer using non-temporal (cache-bypassing) stores instead of
+  // `std::memcpy`. Off by default; only large export responses that would
+  // otherwise evict hot vocabulary/index data from the cache benefit.
+  Bool useNonTemporalExportBuffer_{false, "use-non-temporal-export-buffer"};
   Duration<std::chrono::milliseconds> websocketUpdateInterval_{
       std::chrono::milliseconds(50), "websocket-update-interval"};
   // When the result of an index scan is smaller than a single block, then
