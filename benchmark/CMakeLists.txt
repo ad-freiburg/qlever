@@ -38,4 +38,7 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(SparqlExpressionBenchmark engine testUtil gtest gmock)
 
+    add_executable(BranchlessStreamCompactorBenchmark "BranchlessStreamCompactorBenchmark.cpp")
+    qlever_target_link_libraries(BranchlessStreamCompactorBenchmark benchmark)
+
 endif()

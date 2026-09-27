@@ -1,6 +1,12 @@
-//   Copyright 2024, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024        Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 
@@ -291,4 +297,69 @@ TEST(Filter, isDeterministic) {
   Filter nonDetFilter{
       qec, makeTree(), {std::make_unique<RandomExpression>(), "RAND()"}};
   EXPECT_FALSE(nonDetFilter.isDeterministic());
+}
+
+// _____________________________________________________________________________
+// With `filter-branchless-compaction`, the rows that pass a `FILTER` that is
+// evaluated row by row are copied with `BranchlessStreamCompactor`. The result
+// must be the same, for a materialized child, for a lazy child whose chunks
+// are collected into one result, and for a lazy result.
+TEST(Filter, branchlessCompactionGivesSameResult) {
+  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  // Three columns: the value of `?x` decides whether the row is kept, the two
+  // other columns identify the row.
+  auto makeChunk = [](size_t begin, size_t size) {
+    IdTable table{3, ad_utility::makeUnlimitedAllocator<Id>()};
+    for (size_t i = begin; i < begin + size; ++i) {
+      table.push_back({asBool((i * 7) % 3 == 0), Id::makeFromInt(i),
+                       Id::makeFromInt(1000 + i)});
+    }
+    return table;
+  };
+  auto makeTables = [&makeChunk]() {
+    std::vector<IdTable> tables;
+    size_t begin = 0;
+    for (size_t size : {0, 1, 5, 17, 3, 100}) {
+      tables.push_back(makeChunk(begin, size));
+      begin += size;
+    }
+    return tables;
+  };
+  auto computeFilter = [&](bool branchless, bool lazyChild,
+                           ComputationMode mode) {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::filterBranchlessCompaction_>(branchless);
+    qec->getQueryTreeCache().clearAll();
+    std::vector<std::optional<Variable>> vars{Variable{"?x"}, Variable{"?a"},
+                                              Variable{"?b"}};
+    auto values =
+        lazyChild
+            ? std::make_shared<ValuesForTesting>(qec, makeTables(), vars)
+            : std::make_shared<ValuesForTesting>(
+                  qec, makeChunk(0, 126), vars, false,
+                  std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+    Filter filter{
+        qec,
+        std::make_shared<QueryExecutionTree>(qec, std::move(values)),
+        {std::make_unique<sparqlExpression::VariableExpression>(Variable{"?x"}),
+         "Expression ?x"}};
+    auto result = filter.getResult(false, mode);
+    IdTable all{3, ad_utility::makeUnlimitedAllocator<Id>()};
+    if (result->isFullyMaterialized()) {
+      all = result->cloneIdTable();
+    } else {
+      for (auto& pair : result->idTables()) {
+        all.insertAtEnd(pair.idTable_);
+      }
+    }
+    return all;
+  };
+  for (bool lazyChild : {false, true}) {
+    for (auto mode : {ComputationMode::FULLY_MATERIALIZED,
+                      ComputationMode::LAZY_IF_SUPPORTED}) {
+      auto expected = computeFilter(false, lazyChild, mode);
+      EXPECT_EQ(expected.size(), 42u);
+      EXPECT_EQ(computeFilter(true, lazyChild, mode), expected);
+    }
+  }
 }

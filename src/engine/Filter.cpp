@@ -1,14 +1,20 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2015 - 2026, The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+// 2020 - 2026 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/Filter.h"
 
 #include <sstream>
 
 #include "backports/algorithm.h"
+#include "engine/BranchlessStreamCompactor.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
@@ -208,6 +214,28 @@ CPP_template_def(int WIDTH,
 
       using ValueGetter = sparqlExpression::detail::EffectiveBooleanValueGetter;
       ValueGetter valueGetter{};
+      if (getRuntimeParameter<
+              &RuntimeParameters::filterBranchlessCompaction_>()) {
+        // Compute the mask of the rows to keep first, and then compact each
+        // column with it, without a branch per row.
+        std::vector<uint8_t> keep;
+        keep.reserve(input.size());
+        for (auto&& resultValue : resultGenerator) {
+          keep.push_back(valueGetter(resultValue, &evaluationContext) ==
+                         ValueGetter::Result::True);
+          checkCancellation();
+        }
+        size_t numKept = ql::ranges::count(keep, uint8_t{1});
+        size_t oldSize = resultTable.size();
+        resultTable.resize(oldSize + numKept);
+        for (size_t col = 0; col < resultTable.numColumns(); ++col) {
+          ql::engine::vector::BranchlessStreamCompactor::compactByMask(
+              input.getColumn(col), keep,
+              resultTable.getColumn(col).subspan(oldSize));
+        }
+        checkCancellation();
+        return;
+      }
       for (auto&& resultValue : resultGenerator) {
         if (valueGetter(resultValue, &evaluationContext) ==
             ValueGetter::Result::True) {
