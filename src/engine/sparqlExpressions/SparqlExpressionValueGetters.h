@@ -283,6 +283,23 @@ struct DateValueGetter : Mixin<DateValueGetter> {
   }
 };
 
+// Return the `ValueId` unchanged if it holds a date (`Datatype::Date`) and
+// `UNDEF` otherwise. Unlike `DateValueGetter`, it does not decode the date
+// into a `DateYearOrDuration`, so date-component functions (`YEAR`, `MONTH`,
+// `DAY`) read the packed `Id` directly.
+struct DateIdValueGetter : Mixin<DateIdValueGetter> {
+  using Mixin<DateIdValueGetter>::operator();
+  using Value = ValueId;
+
+  ValueId operator()(ValueId id, const EvaluationContext*) const {
+    return id.getDatatype() == Datatype::Date ? id : ValueId::makeUndefined();
+  }
+
+  ValueId operator()(const LiteralOrIri&, const EvaluationContext*) const {
+    return ValueId::makeUndefined();
+  }
+};
+
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a `std::optional<GeoPoint>`.
 struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {

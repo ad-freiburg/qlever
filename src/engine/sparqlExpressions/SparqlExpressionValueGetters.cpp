@@ -721,6 +721,7 @@ template struct TypeErasedValueGetter<IsNumericValueGetter>;
 template struct TypeErasedValueGetter<IsIriValueGetter>;
 template struct TypeErasedValueGetter<IsLiteralValueGetter>;
 template struct TypeErasedValueGetter<DateValueGetter>;
+template struct TypeErasedValueGetter<DateIdValueGetter>;
 template struct TypeErasedValueGetter<GeoPointValueGetter>;
 template struct TypeErasedValueGetter<LiteralFromIdGetter>;
 template struct TypeErasedValueGetter<ReplacementStringGetter>;

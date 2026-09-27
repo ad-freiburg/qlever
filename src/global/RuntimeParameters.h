@@ -148,6 +148,10 @@ struct RuntimeParameters {
   // false,
   // the result will be `NaN` or `infinity` respectively.
   Bool divisionByZeroIsUndef_{true, "division-by-zero-is-undef"};
+  // If set to `true`, `YEAR`, `MONTH` and `DAY` read the component directly
+  // from the date `Id` instead of first decoding it into a
+  // `DateYearOrDuration`. The results are the same.
+  Bool integerDateExtraction_{false, "integer-date-extraction"};
   // If set to `true`, the contained `FILTER` expressions in the query
   // try to set and apply a corresponding `PrefilterExpression` (see
   // `PrefilterExpressionIndex.h`) on its variable-related `IndexScan`

@@ -48,6 +48,7 @@ RuntimeParameters::RuntimeParameters() {
   add(cacheServiceResults_);
   add(syntaxTestMode_);
   add(divisionByZeroIsUndef_);
+  add(integerDateExtraction_);
   add(enablePrefilterOnIndexScans_);
   add(spatialJoinMaxNumThreads_);
   add(patternTrickNumThreads_);

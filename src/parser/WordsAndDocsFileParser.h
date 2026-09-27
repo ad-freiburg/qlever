@@ -1,7 +1,13 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//         Felix Meisen (fesemeisen@outlook.de)
+// Copyright 2015 - 2026 The QLever Authors, in particular:
+//
+// 2015 Björn Buchhold (buchhold@informatik.uni-freiburg.de), UFR
+// 2025 Felix Meisen (fesemeisen@outlook.de)
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of this project.
 
 #ifndef QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H
 #define QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H
@@ -16,6 +22,7 @@
 #include <cctype>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include "global/Id.h"
 #include "index/vocabulary/StringSortComparator.h"
@@ -140,8 +147,8 @@ struct LiteralsTokenizationDelimiter {
 
 /**
  * @brief A function that can be used to tokenize and normalize a given text.
- * @warning Both params are const refs where the original objects have to be
- * kept alive during the usage of the returned object.
+ * The result owns its strings, so neither `text` nor `localeManager` has to
+ * outlive the call.
  * @param text The text to be tokenized and normalized.
  * @param localeManager The localeManager to be used for normalization.
  * @details This function can be used in the following way:
@@ -149,14 +156,16 @@ struct LiteralsTokenizationDelimiter {
  *  code;
  * }
  */
-inline auto tokenizeAndNormalizeText(std::string_view text,
-                                     const LocaleManager& localeManager) {
+inline std::vector<std::string> tokenizeAndNormalizeText(
+    std::string_view text, const LocaleManager& localeManager) {
   std::vector<std::string_view> split{
       absl::StrSplit(text, LiteralsTokenizationDelimiter{}, absl::SkipEmpty{})};
-  return ql::views::transform(std::move(split),
-                              [&localeManager](const auto& str) {
-                                return localeManager.getLowercaseUtf8(str);
-                              });
+  std::vector<std::string> result;
+  result.reserve(split.size());
+  for (const auto& str : split) {
+    result.push_back(localeManager.getLowercaseUtf8(str));
+  }
+  return result;
 }
 
 // Strip the surrounding quotes (and, for a literal with a datatype like a

@@ -2,16 +2,31 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
+#include "engine/sparqlExpressions/IntegerDateOperations.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "global/RuntimeParameters.h"
 
 namespace sparqlExpression {
 namespace detail {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Literal = ad_utility::triple_component::Literal;
+using ql::engine::scalar::IntegerDateOperations;
 
 // Date functions.
 // The input is `std::nullopt` if the argument to the expression is not a date.
+// `ExtractYear`, `ExtractMonth` and `ExtractDay` additionally accept the date
+// `Id` from `DateIdValueGetter` (`UNDEF` if the argument is not a date) and
+// then read the component from the packed `Id` without decoding it into a
+// `DateYearOrDuration` first. Which of the two overloads is used is decided by
+// the runtime parameter `integer-date-extraction` (see `makeYearExpression`
+// below).
+
+// Return the `value` as an integer `Id`, `UNDEF` if it is `std::nullopt`.
+inline Id makeIntOrUndefined(std::optional<int64_t> value) {
+  return value.has_value() ? Id::makeFromInt(value.value())
+                           : Id::makeUndefined();
+}
 
 //______________________________________________________________________________
 struct ExtractYear {
@@ -21,6 +36,10 @@ struct ExtractYear {
     } else {
       return Id::makeFromInt(d->getYear());
     }
+  }
+
+  Id operator()(Id id) const {
+    return makeIntOrUndefined(IntegerDateOperations::extractYear(id));
   }
 };
 
@@ -37,6 +56,10 @@ struct ExtractMonth {
     }
     return Id::makeFromInt(optionalMonth.value());
   }
+
+  Id operator()(Id id) const {
+    return makeIntOrUndefined(IntegerDateOperations::extractMonth(id));
+  }
 };
 
 //______________________________________________________________________________
@@ -51,6 +74,10 @@ struct ExtractDay {
       return Id::makeUndefined();
     }
     return Id::makeFromInt(optionalDay.value());
+  }
+
+  Id operator()(Id id) const {
+    return makeIntOrUndefined(IntegerDateOperations::extractDay(id));
   }
 };
 
@@ -129,6 +156,8 @@ using ExtractSeconds =
 //______________________________________________________________________________
 NARY_EXPRESSION(MonthExpression, 1, FV<ExtractMonth, DateValueGetter>);
 NARY_EXPRESSION(DayExpression, 1, FV<ExtractDay, DateValueGetter>);
+NARY_EXPRESSION(MonthFromIdExpression, 1, FV<ExtractMonth, DateIdValueGetter>);
+NARY_EXPRESSION(DayFromIdExpression, 1, FV<ExtractDay, DateIdValueGetter>);
 NARY_EXPRESSION(TimezoneStrExpression, 1,
                 FV<ExtractStrTimezone, DateValueGetter>);
 NARY_EXPRESSION(TimezoneDurationExpression, 1,
@@ -151,17 +180,31 @@ CPP_class_template(typename NaryOperation)(
 
 using YearExpression =
     YearExpressionImpl<Operation<1, FV<ExtractYear, DateValueGetter>>>;
+using YearFromIdExpression =
+    YearExpressionImpl<Operation<1, FV<ExtractYear, DateIdValueGetter>>>;
+
+// Return an expression of type `FromId` if the runtime parameter
+// `integer-date-extraction` is set, and of type `FromDate` otherwise.
+template <typename FromDate, typename FromId>
+SparqlExpression::Ptr makeDateComponentExpression(SparqlExpression::Ptr child) {
+  if (getRuntimeParameter<&RuntimeParameters::integerDateExtraction_>()) {
+    return std::make_unique<FromId>(std::move(child));
+  }
+  return std::make_unique<FromDate>(std::move(child));
+}
 
 }  // namespace detail
 using namespace detail;
 
 //______________________________________________________________________________
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<YearExpression>(std::move(child));
+  return makeDateComponentExpression<YearExpression, YearFromIdExpression>(
+      std::move(child));
 }
 
 SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<DayExpression>(std::move(child));
+  return makeDateComponentExpression<DayExpression, DayFromIdExpression>(
+      std::move(child));
 }
 
 SparqlExpression::Ptr makeTimezoneStrExpression(SparqlExpression::Ptr child) {
@@ -177,7 +220,8 @@ SparqlExpression::Ptr makeToEpochExpression(SparqlExpression::Ptr child) {
 }
 
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<MonthExpression>(std::move(child));
+  return makeDateComponentExpression<MonthExpression, MonthFromIdExpression>(
+      std::move(child));
 }
 
 SparqlExpression::Ptr makeHoursExpression(SparqlExpression::Ptr child) {

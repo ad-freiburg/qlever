@@ -703,7 +703,10 @@ auto testUnaryExpression = [](VectorOrExpressionResult auto const& operand,
   testNaryExpression(makeFunction, expected, operand);
 };
 
-TEST(SparqlExpression, dateOperators) {
+namespace {
+// Run the checks for the date operators. `YEAR`, `MONTH` and `DAY` take the
+// code path selected by the runtime parameter `integer-date-extraction`.
+void testDateOperators() {
   // Test `YearExpression`, `MonthExpression`, `DayExpression`,
   //  `HoursExpression`, `MinutesExpression`, `SecondsExpression` and
   //  `ToEpochExpression`.
@@ -815,6 +818,12 @@ TEST(SparqlExpression, dateOperators) {
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
   testYear(IdOrLocalVocabEntryVec{lit("noDate")}, Ids{U});
+  // `MONTH` and `DAY` read the date `Id` through the same value getter as
+  // `YEAR`, so non-date inputs must give `UNDEF` there as well.
+  checkMonth(IdOrLocalVocabEntryVec{lit("noDate")}, Ids{U});
+  checkDay(IdOrLocalVocabEntryVec{lit("noDate")}, Ids{U});
+  checkMonth(Ids{Id::makeFromInt(42)}, Ids{U});
+  checkDay(Ids{Id::makeUndefined()}, Ids{U});
 
   // Test epoch for invalid dates.
   checkEpoch(Ids{Id::makeFromDate(D::parseXsdDate("1970-02-30"))},
@@ -866,6 +875,22 @@ TEST(SparqlExpression, dateOperators) {
       DateYearOrDuration(10000, DateYearOrDuration::Type::Year);
   checkStrTimezone(Ids{Id::makeFromDate(d7)}, IdOrLocalVocabEntryVec{lit("")});
   checkTimezone(Ids{Id::makeFromDate(d7)}, Ids{U});
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(SparqlExpression, dateOperators) { testDateOperators(); }
+
+// _____________________________________________________________________________
+TEST(SparqlExpression, dateOperatorsWithIntegerDateExtraction) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::integerDateExtraction_>(
+          true);
+  testDateOperators();
+  // The alternative `YEAR` expression must still be recognized as such.
+  auto year =
+      makeYearExpression(std::make_unique<VariableExpression>(Variable{"?x"}));
+  EXPECT_TRUE(year->isYearExpression());
 }
 
 // _____________________________________________________________________________________
