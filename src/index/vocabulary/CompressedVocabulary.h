@@ -1,6 +1,12 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2026 The QLever Authors, in particular:
+//
+// 2022 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
@@ -153,7 +159,36 @@ CPP_template(typename UnderlyingVocabulary,
 
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    AD_CONTRACT_CHECK(!indices.empty());
+    if constexpr (underlyingHasHoles) {
+      // Indices that are holes report a placeholder; keep the per-index path
+      // that implements that mapping.
+      return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    } else {
+      // Fetch the compressed words in one batch through the underlying
+      // vocabulary (an on-disk underlying vocabulary serves this from its
+      // `io_uring` ring pool), then decompress each word with the decoder for
+      // its block. The underlying lookup preserves order, so each word pairs
+      // with the index at the same position, exactly like the sequential path.
+      auto compressed = underlyingVocabulary_.lookupBatch(indices);
+      // Internal invariant (not violable via the public interface): the
+      // underlying lookup yields one word per index, in order.
+      AD_CORRECTNESS_CHECK(compressed->size() == indices.size());
+      auto data = std::make_shared<StringVectorVocabBatchLookupData>();
+      data->buffer().reserve(indices.size());
+      for (const auto& [word, index] :
+           ::ranges::views::zip(*compressed, indices)) {
+        data->buffer().push_back(
+            compressionWrapper_.decompress(word, getDecoderIdx(index)));
+      }
+      // Build the views after the buffer is complete, so no reallocation can
+      // move the bytes the views point into.
+      data->views().reserve(data->buffer().size());
+      for (const auto& word : data->buffer()) {
+        data->views().emplace_back(word);
+      }
+      return StringVectorVocabBatchLookupData::asResult(std::move(data));
+    }
   }
 
   //____________________________________________________________________________

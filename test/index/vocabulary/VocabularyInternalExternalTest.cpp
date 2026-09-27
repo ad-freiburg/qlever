@@ -1,6 +1,12 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
 
@@ -131,4 +137,28 @@ TEST(VocabularyInternalExternal, ScanAll) {
 TEST(VocabularyInternalExternal, ScanAllEmptyVocabulary) {
   auto vocab = createVocabulary("ScanAllEmpty")(std::vector<std::string>{});
   EXPECT_TRUE(scanAllToVector(vocab.scanAll()).empty());
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyInternalExternal, LookupBatch) {
+  // Shuffled indices with duplicates, mixing internal-vocabulary hits (odd
+  // indices are cached in RAM, see `VocabularyCreator`) and external-vocabulary
+  // misses (even indices). The batch result must match the sequential single
+  // lookups in input order.
+  const std::vector<std::string> words{"alpha", "beta",    "gamma",
+                                       "delta", "epsilon", "zeta"};
+  auto vocab = createVocabulary("LookupBatch")(words);
+  std::vector<size_t> indices{3, 0, 3, 5, 1, 4, 0, 5, 2, 1};
+  auto result = vocab.lookupBatch(indices);
+  EXPECT_THAT((*result), ::testing::ElementsAre(
+                             "delta", "alpha", "delta", "zeta", "beta",
+                             "epsilon", "alpha", "zeta", "gamma", "beta"));
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+}
+
+// An empty batch is an invalid request and must throw.
+TEST(VocabularyInternalExternal, LookupBatchEmptyThrows) {
+  auto vocab = createVocabulary("LookupBatchEmptyThrows")(
+      std::vector<std::string>{"alpha", "beta", "gamma"});
+  EXPECT_ANY_THROW(vocab.lookupBatch(ql::span<const size_t>{}));
 }
