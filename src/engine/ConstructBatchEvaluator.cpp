@@ -35,7 +35,6 @@ struct ColumnWork {
   // Phase B output: the resolved miss strings, parallel to `missIds_`.
   std::vector<std::optional<std::pair<std::string, const char*>>> missResolved_;
 };
->>>>>>> 2369e278c (iouring: address OCR review findings on fibers and evaluator)
 
 // Phase A: sort the column, check the cache, scatter hits to
 // `work.result_`, and collect misses into `work.missIds_`/`missRows_`. Pure
