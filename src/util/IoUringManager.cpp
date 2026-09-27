@@ -267,8 +267,8 @@ void IoUringPolicy::drainAtLeast(unsigned minComplete) {
     }
     for (unsigned i = 0; i < n; ++i) {
       // Recover the id via the 64-bit `user_data` field, see `addBatch`.
-      const char* errorMessage = processCqe(
-          cqes[i]->res, io_uring_cqe_get_data64(cqes[i]));
+      const char* errorMessage =
+          processCqe(cqes[i]->res, io_uring_cqe_get_data64(cqes[i]));
       if (firstErrorMessage == nullptr) {
         firstErrorMessage = errorMessage;
       }
