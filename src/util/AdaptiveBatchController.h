@@ -45,39 +45,57 @@ struct AdaptiveBatchController {
   // Enforceable bounds in one place: batch sizes into [1, ringSize] with
   // max >= min, defer ratio strictly positive. `shouldFlush` assumes this.
   [[nodiscard]] AdaptiveBatchController normalized(size_t ringSize) const {
-    AdaptiveBatchController result = *this;
+      AdaptiveBatchController result = *this;
+
+    // A zero ring size would forbid every batch; treat it as one.
     const size_t upperBound = std::max<size_t>(ringSize, 1);
+
+    // Floor at one so a nearly finished batch flushes instead of waiting
+    // for work that never arrives; cap so a deferred group never overfills.
     result.minBatchSize_ =
         std::clamp<size_t>(result.minBatchSize_, 1, upperBound);
+
+    // Cap so a deferred group never exceeds the ring; floor at the minimum
+    // so the ceiling cannot contradict the tail threshold above.
     result.maxBatchSize_ =
         std::clamp(result.maxBatchSize_, result.minBatchSize_, upperBound);
+
+    // A zero numerator would defer everything, a zero denominator would
+    // flush everything; force both positive instead of failing silently.
     result.deferNumerator_ = std::max<uint64_t>(result.deferNumerator_, 1);
     result.deferDenominator_ = std::max<uint64_t>(result.deferDenominator_, 1);
     return result;
   }
 
-  // Flush on empty, idle, or tail input (`pending <= minBatchSize_`); defer
-  // while the in-flight ratio says so. `outstanding` counts submitted but
-  // incomplete reads, `pending` the not-yet-prepared ones including the
-  // current read. Requires normalized values (checked below).
-  [[nodiscard]] bool shouldFlush(size_t outstanding, size_t pending) const {
+  // Flush on empty, idle, or tail input; defer while the in-flight ratio
+  // says so. `numOutstandingReads` counts submitted but incomplete reads,
+  // `numPendingReads` the not-yet-prepared ones including the current read.
+  // Requires normalized values (checked below).
+  [[nodiscard]] bool shouldFlush(size_t numOutstandingReads,
+                                 size_t numPendingReads) const {
     AD_CONTRACT_CHECK(minBatchSize_ > 0);
     AD_CONTRACT_CHECK(deferNumerator_ > 0);
     AD_CONTRACT_CHECK(deferDenominator_ > 0);
-    if (pending == 0) {
+    // Nothing left to batch: waiting would stall forever.
+    if (numPendingReads == 0) {
       return true;
     }
-    if (outstanding == 0) {
+    // Device idle: a submit starts work immediately.
+    if (numOutstandingReads == 0) {
       return true;
     }
-    if (pending <= minBatchSize_) {
+    // Tail input: the remaining work is too small to amortize waiting.
+    if (numPendingReads <= minBatchSize_) {
       return true;
     }
+
     // Cross-multiplied comparison, exact for all inputs via u128 (no division).
     using U128 = unsigned __int128;
-    const U128 lhs = static_cast<U128>(outstanding) * U128{deferDenominator_};
-    const U128 rhs = static_cast<U128>(pending) * U128{deferNumerator_};
-    return lhs < rhs;
+    const U128 outstandingScaled =
+        static_cast<U128>(numOutstandingReads) * U128{deferDenominator_};
+    const U128 pendingScaled =
+        static_cast<U128>(numPendingReads) * U128{deferNumerator_};
+    return outstandingScaled < pendingScaled;
   }
 };
 
