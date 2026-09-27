@@ -180,9 +180,10 @@ const ad_utility::MemorySize& Index::parserBufferSize() const {
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
-  return pimpl_->blocksizePermutationPerColumn();
-}
+size_t& Index::rowsPerBlock() { return pimpl_->rowsPerBlock(); }
+
+// ____________________________________________________________________________
+const size_t& Index::rowsPerBlock() const { return pimpl_->rowsPerBlock(); }
 
 // ____________________________________________________________________________
 void Index::setOnDiskBase(const std::string& onDiskBase) {

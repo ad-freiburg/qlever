@@ -118,8 +118,8 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> PathSearch::getChildrenImpl() const {
-  std::vector<QueryExecutionTree*> res;
+qlm::vector<QueryExecutionTree*> PathSearch::getChildrenImpl() const {
+  qlm::vector<QueryExecutionTree*> res{allocator()};
   res.push_back(subtree_.get());
 
   if (sourceAndTargetTree_.has_value()) {
@@ -295,10 +295,10 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::pair<ql::span<const Id>, ql::span<const Id>>
-PathSearch::handleSearchSides() const {
-  ql::span<const Id> sourceIds;
-  ql::span<const Id> targetIds;
+std::pair<ConstIdColumnRef, ConstIdColumnRef> PathSearch::handleSearchSides()
+    const {
+  ConstIdColumnRef sourceIds;
+  ConstIdColumnRef targetIds;
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();
@@ -399,8 +399,8 @@ PathsLimited PathSearch::findPaths(const Id& source,
 }
 
 // _____________________________________________________________________________
-PathsLimited PathSearch::allPaths(ql::span<const Id> sources,
-                                  ql::span<const Id> targets,
+PathsLimited PathSearch::allPaths(ConstIdColumnRef sources,
+                                  ConstIdColumnRef targets,
                                   const BinSearchWrapper& binSearch,
                                   bool cartesian,
                                   std::optional<uint64_t> numPathsPerTarget,
