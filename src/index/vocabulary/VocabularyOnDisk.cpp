@@ -324,7 +324,13 @@ VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
         if (state->pending_.empty()) {
           // Input exhausted and nothing left in flight: return the manager and
           // end the stream.
-          state->vocabulary_->ioManagers_->push(std::move(state->manager_));
+          ad_utility::terminateIfThrows(
+              [&]() {
+                state->vocabulary_->ioManagers_->push(
+                    std::move(state->manager_));
+              },
+              "returning the `IoManager` to the pool in "
+              "`VocabularyOnDisk::lookupBatchesStreamed`");
           return std::nullopt;
         }
         PendingOffsetRead oldest = std::move(state->pending_.front());
