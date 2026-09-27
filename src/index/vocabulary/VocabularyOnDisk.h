@@ -1,10 +1,17 @@
-// Copyright 2016, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2016 - 2026 The QLever Authors, in particular:
+//
+// 2016 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 #define QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -40,10 +47,31 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // The number of words stored in the vocabulary.
   size_t size_ = 0;
 
-  // Pool of persistent `BatchIoManager`s for `lookupBatch`.
+  // Pool persistent `BatchManagerBase` instances for `lookupBatch` as the
+  // fallback for threads that do not own a ring (see `threadRingBudget_`
+  // below). Such a thread pops a manager, runs both read phases of one
+  // `lookupBatch` call through it, and returns it.
   mutable std::unique_ptr<ad_utility::data_structures::ThreadSafeQueue<
       std::unique_ptr<ad_utility::BatchManagerBase>>>
       ioManagers_;
+
+  // Share per-vocabulary state with the thread-local rings (see
+  // `threadLocalManager`). Use shared ownership to keep `VocabularyOnDisk`
+  // movable, and let the thread-local rings hold only weak references, so
+  // entries of a destroyed (or reopened) vocabulary expire and are pruned.
+  // Keep this non-null; only a moved-from vocabulary has a null budget, and it
+  // must not be used for lookups anyway (its `ioManagers_` is null as well).
+  struct ThreadRingBudget {
+    std::atomic<size_t> numOwnedRings_{0};
+    // Store the initial `io_uring` preference set by `open()`. Each thread
+    // loads it once when it creates its owned ring, so a failed
+    // `io_uring_queue_init` degrades only that thread to the synchronous
+    // fallback. Make it atomic, so a thread that reads the value stored by
+    // `open()` also sees the state initialized before it.
+    std::atomic<bool> preferIoUring_{true};
+  };
+  mutable std::shared_ptr<ThreadRingBudget> threadRingBudget_{
+      std::make_shared<ThreadRingBudget>()};
 
   // This suffix is appended to the filename of the main file, in order to get
   // the name for the file in which IDs and offsets are stored.
@@ -82,8 +110,19 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   }
 
   // Open the vocabulary from file. It must have been previously written to
-  // this file via a `WordWriter`.
-  void open(const std::string& filename);
+  // this file via a `WordWriter`. `preferIoUring` selects the backend of the
+  // pooled managers and is the initial preference each thread copies when it
+  // creates its owned ring (see `threadLocalManager`); `false` forces the
+  // synchronous `pread` fallback everywhere, which is also what the tests use
+  // to cover that backend. Calling `open` again discards all rings that
+  // threads own for this vocabulary, so the new preference applies to every
+  // later `lookupBatch`. Like all other members set here, `open` must not run
+  // concurrently with lookups on the same vocabulary.
+  void open(const std::string& filename, bool preferIoUring = true);
+
+  // Return the number of threads that currently own a ring for this
+  // vocabulary (at most `NUM_VOCAB_BATCH_IO_MANAGERS`).
+  size_t numOwnedRingsForTesting() const;
 
   // Return the word that is stored at the index. Throw an exception if `idx >=
   // size`.
@@ -181,6 +220,17 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     uint64_t offset_;
     uint64_t nextOffset_;
   };
+
+  // Return the calling thread's exclusively owned ring for this vocabulary,
+  // or `nullptr` if `NUM_VOCAB_BATCH_IO_MANAGERS` other threads already own
+  // one (then use the shared `ioManagers_` pool). Create the ring on first use
+  // via `makeBatchManager` and destroy it at thread teardown. Drive it only
+  // from the calling thread, which needs no lock on its I/O path.
+  ad_utility::BatchManagerBase* threadLocalManager() const;
+
+  // Run both read phases of one `lookupBatch` call through `manager`.
+  VocabBatchLookupResult lookupBatchVia(ad_utility::BatchManagerBase& manager,
+                                        ql::span<const size_t> indices) const;
 
   // Phase 1 of `lookupBatch`: for each requested index, read its `OffsetPair`
   // (16 bytes) from the `.offsets` file in a single batched read via `manager`.
