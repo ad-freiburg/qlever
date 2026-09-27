@@ -31,9 +31,9 @@ GeoRectangleRowFilter::GeoRectangleRowFilter(
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> GeoRectangleRowFilter::getChildrenImpl()
+qlm::vector<QueryExecutionTree*> GeoRectangleRowFilter::getChildrenImpl()
     const {
-  return {child_.get()};
+  return {{child_.get()}, allocator()};
 }
 
 // _____________________________________________________________________________
