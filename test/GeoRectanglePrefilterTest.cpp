@@ -263,6 +263,66 @@ TEST_F(GeoRectangleExpressionTest, evaluate) {
 
 // The producer: a `<=` comparison over a geo distance function with a fixed
 // geometry yields a `GeoRectangleExpression` for the variable.
+// Test the block-level evaluation for points in the `ZOrder` encoding: a block
+// of points in the latitude band of the rectangle but far away in longitude is
+// pruned now (see `GeoPoint::intervalsForRectangle`).
+TEST_F(GeoRectangleExpressionTest, evaluateZOrder) {
+  absl::Cleanup restoreEncoding{
+      [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
+  GeoPoint::setEncoding(GeoPointEncodingEnum::ZOrder);
+  // Blocks of points, sorted by their IDs, as the evaluation expects.
+  auto pointBlocks =
+      [this](std::vector<std::pair<GeoPoint, GeoPoint>> firstAndLast) {
+        std::vector<CompressedBlockMetadata> blocks;
+        for (const auto& [first, last] : firstAndLast) {
+          blocks.push_back(makeBlock(Id::makeFromGeoPoint(first),
+                                     Id::makeFromGeoPoint(last)));
+        }
+        ql::ranges::sort(blocks, [](const auto& a, const auto& b) {
+          return a.firstTriple_.col2Id_.getBits() <
+                 b.firstTriple_.col2Id_.getBits();
+        });
+        return blocks;
+      };
+  auto evaluate = [this](GeoRectangleExpression& expr,
+                         const std::vector<CompressedBlockMetadata>& blocks) {
+    return toPointers(
+        expr.evaluate(indexImpl_, {blocks.data(), blocks.size()}, 2));
+  };
+  // The block whose first point has the given latitude (up to the precision
+  // of the quantization).
+  auto blockAt = [](const std::vector<CompressedBlockMetadata>& blocks,
+                    double firstLat) {
+    auto it = ql::ranges::find_if(blocks, [firstLat](const auto& block) {
+      return std::abs(block.firstTriple_.col2Id_.getGeoPoint().getLat() -
+                      firstLat) < 1e-5;
+    });
+    AD_CORRECTNESS_CHECK(it != blocks.end());
+    return &*it;
+  };
+
+  // The same query rectangle in the far south east as above. Of the blocks of
+  // points inside it, in its latitude band but far west, and far north, only
+  // the first one is kept.
+  GeoRectangle rectangle{170.0, -81.0, 172.0, -79.0};
+  GeoRectangleExpression expr{rectangle};
+  auto blocks = pointBlocks({{GeoPoint{-80.5, 170.5}, GeoPoint{-79.5, 171.5}},
+                             {GeoPoint{-80.25, 0.0}, GeoPoint{-79.5, 10.0}},
+                             {GeoPoint{70.0, 0.0}, GeoPoint{80.0, 10.0}}});
+  EXPECT_THAT(evaluate(expr, blocks),
+              ::testing::ElementsAre(blockAt(blocks, -80.5)));
+
+  // A block whose boundary points enclose the rectangle (south west and north
+  // east of it) is kept, although neither of them is inside; its neighbors
+  // are pruned.
+  auto spanningBlocks =
+      pointBlocks({{GeoPoint{-89.0, -179.0}, GeoPoint{-83.0, 159.0}},
+                   {GeoPoint{-82.0, 160.0}, GeoPoint{-78.0, 175.0}},
+                   {GeoPoint{-77.0, 176.0}, GeoPoint{89.0, 179.0}}});
+  EXPECT_THAT(evaluate(expr, spanningBlocks),
+              ::testing::ElementsAre(blockAt(spanningBlocks, -82.0)));
+}
+
 TEST(GeoRectanglePrefilter, getPrefilterExpressionFromDistanceFilter) {
   using namespace queryRewriteUtilTestHelpers;
   using namespace makeSparqlExpression;

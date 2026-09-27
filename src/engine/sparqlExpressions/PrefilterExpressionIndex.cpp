@@ -849,15 +849,20 @@ BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
       Id::makeFromVocabIndex(VocabIndex::make(0)),
       Id::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)));
 
-  // The latitude band of the `GeoPoint` region: `GeoPoint` IDs store the
-  // latitude in their upper coordinate bits, so all points within a latitude
-  // band form one contiguous ID interval. Extend the band by one quantization
-  // step of the encoding so that rounding can never exclude a matching point.
-  constexpr double latStep = 180.0 / GeoPoint::maxCoordinateEncoded;
-  double bandMinLat = std::max(rectangle_.minLat_ - latStep, -90.0);
-  double bandMaxLat = std::min(rectangle_.maxLat_ + latStep, 90.0);
-  keepIntervals.emplace_back(Id::makeFromGeoPoint(GeoPoint{bandMinLat, -180.0}),
-                             Id::makeFromGeoPoint(GeoPoint{bandMaxLat, 180.0}));
+  // The `GeoPoint` region: the intervals of the bit representations that
+  // contain all points of the rectangle, which depend on the encoding of the
+  // points (one latitude band for `LatMajor`, the quadtree cells that cover
+  // the rectangle for `ZOrder`, see `GeoPoint::intervalsForRectangle`). The
+  // round trip through `fromBitRepresentation` is exact and turns the bits
+  // into IDs.
+  for (auto [lower, upper] : GeoPoint::intervalsForRectangle(
+           GeoPoint{rectangle_.minLat_, rectangle_.minLng_},
+           GeoPoint{rectangle_.maxLat_, rectangle_.maxLng_},
+           GeoPoint::encoding())) {
+    keepIntervals.emplace_back(
+        Id::makeFromGeoPoint(GeoPoint::fromBitRepresentation(lower)),
+        Id::makeFromGeoPoint(GeoPoint::fromBitRepresentation(upper)));
+  }
 
   // For each interval, find the corresponding range of block-boundary
   // `ValueId`s. Empty ranges are deliberately kept: they indicate a block
