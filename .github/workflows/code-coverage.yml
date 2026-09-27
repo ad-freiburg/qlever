@@ -48,6 +48,11 @@ jobs:
 
     - name: Install dependencies
       uses: ./.github/workflows/install-dependencies-ubuntu
+    # `liburing` is required so that the io_uring batch I/O code
+    # (`QLEVER_HAS_IO_URING`) is compiled in and covered by the unit tests
+    # (as in the Docker images, which already install `liburing-dev`).
+    - name: Install liburing
+      run: sudo apt-get update && sudo apt-get install -y liburing-dev
     - name: Install compiler
       uses: ./.github/workflows/install-compiler-ubuntu
       with:
