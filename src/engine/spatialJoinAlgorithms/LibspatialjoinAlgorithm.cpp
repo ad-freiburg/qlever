@@ -232,8 +232,11 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 
   auto numGeomsDropped = parser.getPrefilterCounter();
   auto numGeomsParsed = idTable->size() - numGeomsDropped;
-  return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped,
-          parser.getCellPrefilterCounter(), numThreads,
+  return {parser.getBoundingBox(),
+          numGeomsParsed,
+          numGeomsDropped,
+          parser.getCellPrefilterCounter(),
+          numThreads,
           parser.getFromIndexCounter()};
 }
 
