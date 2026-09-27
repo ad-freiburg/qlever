@@ -1,6 +1,7 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -77,4 +78,53 @@ TEST(RuntimeParameters, getKeysAndToMapAreConsistent) {
   for (const auto& key : keys) {
     EXPECT_TRUE(map.contains(key)) << key;
   }
+}
+
+// The io_uring tuning knobs default to the current behavior: a 256-slot
+// ring, uncapped batches, and no SQPoll thread.
+TEST(RuntimeParameters, ioUringKnobDefaults) {
+  RuntimeParameters params;
+  EXPECT_EQ(params.ioUringRingSize_.get(), 256u);
+  EXPECT_EQ(params.vocabBatchWindow_.get(), 0u);
+  EXPECT_FALSE(params.ioUringSqPoll_.get());
+}
+
+// The ring size must name a usable liburing ring: 0 and values above 4096
+// are rejected, the boundaries are accepted.
+TEST(RuntimeParameters, ioUringRingSizeConstraints) {
+  RuntimeParameters params;
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      params.setFromAssignment("iouring-ring-size=0"),
+      AllOf(HasSubstr("iouring-ring-size"), HasSubstr("1 and 4096")),
+      std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      params.setFromAssignment("iouring-ring-size=4097"),
+      AllOf(HasSubstr("iouring-ring-size"), HasSubstr("1 and 4096")),
+      std::runtime_error);
+  EXPECT_NO_THROW(params.setFromAssignment("iouring-ring-size=1"));
+  EXPECT_EQ(params.ioUringRingSize_.get(), 1u);
+  EXPECT_NO_THROW(params.setFromAssignment("iouring-ring-size=4096"));
+  EXPECT_EQ(params.ioUringRingSize_.get(), 4096u);
+}
+
+// The batch window is either uncapped (0) or a cap up to 1M reads.
+TEST(RuntimeParameters, vocabBatchWindowConstraints) {
+  RuntimeParameters params;
+  EXPECT_NO_THROW(params.setFromAssignment("vocab-batch-window=0"));
+  EXPECT_EQ(params.vocabBatchWindow_.get(), 0u);
+  EXPECT_NO_THROW(params.setFromAssignment("vocab-batch-window=1000000"));
+  EXPECT_EQ(params.vocabBatchWindow_.get(), 1'000'000u);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      params.setFromAssignment("vocab-batch-window=1000001"),
+      AllOf(HasSubstr("vocab-batch-window"), HasSubstr("0 and 1000000")),
+      std::runtime_error);
+}
+
+// The SQPoll toggle accepts plain booleans in both directions.
+TEST(RuntimeParameters, ioUringSqPollToggle) {
+  RuntimeParameters params;
+  EXPECT_NO_THROW(params.setFromAssignment("iouring-sqpoll=true"));
+  EXPECT_TRUE(params.ioUringSqPoll_.get());
+  EXPECT_NO_THROW(params.setFromAssignment("iouring-sqpoll=false"));
+  EXPECT_FALSE(params.ioUringSqPoll_.get());
 }

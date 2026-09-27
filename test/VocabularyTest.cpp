@@ -1,6 +1,12 @@
-// Copyright 2011, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold <buchholb>
+// Copyright 2011 - 2026 The QLever Authors, in particular:
+//
+// 2011 Björn Buchhold <buchholb>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
@@ -9,6 +15,7 @@
 #include <vector>
 
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/Vocabulary.h"
@@ -17,6 +24,7 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "util/GTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/json.h"
 
@@ -314,6 +322,51 @@ TEST(VocabularyTest, LookupBatch) {
   std::vector<size_t> dup{1, 1, 0};
   auto dupResult = v->lookupBatch(dup);
   EXPECT_THAT((*dupResult), ::testing::ElementsAre("ab", "ab", "a"));
+}
+
+// A positive `vocab-batch-window` splits the batch into windows of that size
+// across both read phases, but the combined result must equal the uncapped
+// lookup exactly (here: windows of 3, 3, and 2 over 8 indices).
+TEST(VocabularyTest, LookupBatchWindowed) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::vocabBatchWindow_>(
+          size_t{3});
+  auto v = createExampleVocabulary();
+  std::vector<size_t> indices{2, 0, 3, 1, 1, 0, 3, 2};
+  auto result = v->lookupBatch(indices);
+  EXPECT_THAT((*result), ::testing::ElementsAre("ba", "a", "car", "ab", "ab",
+                                                "a", "car", "ba"));
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*v, result,
+                                                                indices);
+}
+
+// The smallest window (one read per submission) must also resolve every
+// position independently, including duplicates.
+TEST(VocabularyTest, LookupBatchWindowOfOne) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::vocabBatchWindow_>(
+          size_t{1});
+  auto v = createExampleVocabulary();
+  std::vector<size_t> indices{1, 1, 0};
+  auto result = v->lookupBatch(indices);
+  EXPECT_THAT((*result), ::testing::ElementsAre("ab", "ab", "a"));
+}
+
+// A window that is at least as large as the batch reads the whole batch with
+// one submission per phase; the result must equal the uncapped lookup.
+TEST(VocabularyTest, LookupBatchWindowNotSmallerThanBatch) {
+  std::vector<size_t> indices{3, 1, 1, 0};
+  for (size_t window : {size_t{4}, size_t{5}, size_t{1'000'000}}) {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::vocabBatchWindow_>(
+            window);
+    auto v = createExampleVocabulary();
+    auto result = v->lookupBatch(indices);
+    EXPECT_THAT((*result), ::testing::ElementsAre("car", "ab", "ab", "a"))
+        << "window " << window;
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*v, result,
+                                                                  indices);
+  }
 }
 
 // Each streamed result must equal the eager `lookupBatch` for that batch's

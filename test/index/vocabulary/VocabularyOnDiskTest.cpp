@@ -12,8 +12,11 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include <functional>
+
 #include "../../util/GTestHelpers.h"
 #include "../../util/MmapVectorLegacyFormat.h"
+#include "../../util/RuntimeParametersTestHelpers.h"
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
@@ -332,4 +335,99 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatchThrows) {
     for ([[maybe_unused]] auto& r : streamed) {
     }
   });
+}
+
+namespace {
+// Build a `VocabBatchLookupData` whose buffer holds `words` back to back and
+// whose views point into that buffer, one view per word.
+std::shared_ptr<VocabBatchLookupData> makeLookupData(
+    const std::vector<std::string>& words) {
+  auto data = std::make_shared<VocabBatchLookupData>();
+  for (const auto& word : words) {
+    data->buffer().insert(data->buffer().end(), word.begin(), word.end());
+  }
+  size_t offset = 0;
+  for (const auto& word : words) {
+    data->views().emplace_back(data->buffer().data() + offset, word.size());
+    offset += word.size();
+  }
+  return data;
+}
+}  // namespace
+
+// `combineLookupData` concatenates the parts in order, and every view of the
+// result points into the buffer of the result, so the parts can be released.
+// Empty words, including a part that consists only of empty words (whose
+// buffer has no storage), become empty views.
+TEST(VocabularyOnDisk, CombineLookupDataRebasesViews) {
+  std::vector<std::shared_ptr<VocabBatchLookupData>> parts{
+      makeLookupData({"alpha", "", "be"}), makeLookupData({"", ""}),
+      makeLookupData({"gamma"})};
+  auto combined = VocabularyOnDisk::combineLookupData(parts);
+  parts.clear();
+  EXPECT_THAT(combined->views(),
+              ::testing::ElementsAre("alpha", "", "be", "", "", "gamma"));
+  EXPECT_EQ(combined->buffer().size(), 12u);
+  const char* begin = combined->buffer().data();
+  const char* end = begin + combined->buffer().size();
+  for (std::string_view view : combined->views()) {
+    if (!view.empty()) {
+      EXPECT_TRUE(std::less_equal<>{}(begin, view.data()));
+      EXPECT_TRUE(std::less_equal<>{}(view.data() + view.size(), end));
+    }
+  }
+}
+
+// Combining no parts yields empty lookup data.
+TEST(VocabularyOnDisk, CombineLookupDataOfNoParts) {
+  auto combined = VocabularyOnDisk::combineLookupData({});
+  EXPECT_TRUE(combined->buffer().empty());
+  EXPECT_TRUE(combined->views().empty());
+}
+
+// A view that does not point into the buffer of its own part violates the
+// precondition of `combineLookupData` and must be detected.
+TEST(VocabularyOnDisk, CombineLookupDataRejectsForeignView) {
+  auto part = makeLookupData({"alpha"});
+  static constexpr std::string_view foreign = "outside";
+  part->views().push_back(foreign);
+  std::vector<std::shared_ptr<VocabBatchLookupData>> parts{part};
+  EXPECT_ANY_THROW({
+    [[maybe_unused]] auto combined = VocabularyOnDisk::combineLookupData(parts);
+  });
+}
+
+// A positive `vocab-batch-window` smaller than the batch splits the lookup
+// into windows. The result must equal the individual lookups, also for empty
+// words and for a window that consists only of empty words.
+TEST(VocabularyOnDisk, LookupBatchWindowedWithEmptyWords) {
+  for (size_t window : {size_t{1}, size_t{2}, size_t{3}}) {
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::vocabBatchWindow_>(
+            window);
+    auto vocab = createVocabularyFromWords({"", "alpha", "", "beta", ""});
+    std::array<size_t, 7> indices{0, 2, 1, 4, 3, 0, 2};
+    auto result = vocab->lookupBatch(indices);
+    EXPECT_THAT(*result,
+                ::testing::ElementsAre("", "", "alpha", "", "beta", "", ""))
+        << "window " << window;
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+        *vocab, result, indices);
+  }
+}
+
+// `open` reads the ring size and the SQPoll toggle from the runtime
+// parameters and configures the pooled managers with them. Whether the kernel
+// grants SQPoll or `IoUringPolicy` falls back, lookups must still succeed.
+TEST(VocabularyOnDisk, LookupBatchWithSqPollAndSmallRing) {
+  auto sqPollCleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::ioUringSqPoll_>(true);
+  auto ringSizeCleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::ioUringRingSize_>(
+          size_t{1});
+  auto vocab = createExampleVocabulary();
+  std::array<size_t, 8> indices{2, 0, 3, 1, 1, 4, 0, 3};
+  auto result = vocab->lookupBatch(indices);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
+                                                                indices);
 }

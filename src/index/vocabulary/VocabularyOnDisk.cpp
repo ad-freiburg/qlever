@@ -1,6 +1,12 @@
-// Copyright 2022, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2022 - 2026 The QLever Authors, in particular:
+//
+// 2022 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/vocabulary/VocabularyOnDisk.h"
 
@@ -9,8 +15,10 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/ExceptionHandling.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -178,7 +186,7 @@ std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
 }
 
 // _____________________________________________________________________________
-VocabBatchLookupResult VocabularyOnDisk::readStrings(
+std::shared_ptr<VocabBatchLookupData> VocabularyOnDisk::readStringsData(
     ad_utility::BatchManagerBase& manager,
     ql::span<const OffsetPair> offsetPairs) const {
   // Read the string data. String `i` starts at `offset_` with length
@@ -206,7 +214,61 @@ VocabBatchLookupResult VocabularyOnDisk::readStrings(
   }
 
   manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets, targets));
-  return VocabBatchLookupData::asResult(std::move(data));
+  return data;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<VocabBatchLookupData> VocabularyOnDisk::readWords(
+    ad_utility::BatchManagerBase& manager,
+    ql::span<const size_t> indices) const {
+  const auto offsetPairs = readOffsetPairs(manager, indices);
+  return readStringsData(manager, offsetPairs);
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<VocabBatchLookupData> VocabularyOnDisk::combineLookupData(
+    ql::span<const std::shared_ptr<VocabBatchLookupData>> parts) {
+  size_t totalBytes = 0;
+  size_t totalViews = 0;
+  for (const auto& part : parts) {
+    totalBytes += part->buffer().size();
+    totalViews += part->views().size();
+  }
+  auto combinedLookupData = std::make_shared<VocabBatchLookupData>();
+  auto& buffer = combinedLookupData->buffer();
+  auto& views = combinedLookupData->views();
+  // Reserve the exact capacity of `buffer` up front: the views emitted below
+  // point into `buffer`, so a reallocation by a later `insert` would leave
+  // them dangling.
+  buffer.reserve(totalBytes);
+  views.reserve(totalViews);
+  const char* const reservedBufferStart = buffer.data();
+  for (const auto& part : parts) {
+    const char* const partBegin = part->buffer().data();
+    const size_t partSize = part->buffer().size();
+    const size_t destinationOffset = buffer.size();
+    buffer.insert(buffer.end(), part->buffer().begin(), part->buffer().end());
+    // The views of `part` point into `part->buffer()`, which is released
+    // together with `part`. Translate each view to the same offset within the
+    // copy of that buffer inside `buffer`.
+    for (std::string_view view : part->views()) {
+      // Emit a default empty view for an empty `view`: its `data()` may be
+      // null (an empty `std::vector<char>` has no storage), and pointer
+      // arithmetic on a null pointer is undefined behavior.
+      if (view.empty()) {
+        views.emplace_back();
+        continue;
+      }
+      AD_CORRECTNESS_CHECK(
+          std::less_equal<>{}(partBegin, view.data()) &&
+          std::less_equal<>{}(view.data() + view.size(), partBegin + partSize));
+      const auto offsetInPart = static_cast<size_t>(view.data() - partBegin);
+      views.emplace_back(buffer.data() + destinationOffset + offsetInPart,
+                         view.size());
+    }
+  }
+  AD_CORRECTNESS_CHECK(buffer.data() == reservedBufferStart);
+  return combinedLookupData;
 }
 
 // _____________________________________________________________________________
@@ -225,8 +287,27 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
         "`VocabularyOnDisk::lookupBatch`");
   }};
 
-  auto offsetPairs = readOffsetPairs(*manager, indices);
-  return readStrings(*manager, offsetPairs);
+  // Read all of `indices` with one submission per phase if `batchWindow_` is
+  // unset (the default) or not smaller than `indices.size()`.
+  const size_t numIndices = indices.size();
+  if (!batchWindow_.has_value() || numIndices <= batchWindow_.value()) {
+    return VocabBatchLookupData::asResult(readWords(*manager, indices));
+  }
+  // Split `indices` into windows of at most `*batchWindow_` indices, read each
+  // window via `readWords` on the exclusively owned `manager`, and copy the
+  // windows into one result via `combineLookupData`.
+  const size_t windowSize = batchWindow_.value();
+  std::vector<std::shared_ptr<VocabBatchLookupData>> windowLookupData;
+  windowLookupData.reserve((numIndices + windowSize - 1) / windowSize);
+  ql::span<const size_t> remainingIndices = indices;
+  while (!remainingIndices.empty()) {
+    const size_t numRemainingIndices = remainingIndices.size();
+    const auto window =
+        remainingIndices.first(std::min(windowSize, numRemainingIndices));
+    windowLookupData.push_back(readWords(*manager, window));
+    remainingIndices = remainingIndices.subspan(window.size());
+  }
+  return VocabBatchLookupData::asResult(combineLookupData(windowLookupData));
 }
 
 // _____________________________________________________________________________
@@ -287,12 +368,32 @@ void VocabularyOnDisk::open(const std::string& filename) {
   AD_CORRECTNESS_CHECK(numOffsets > 0);
   size_ = numOffsets - 1;
 
-  // Initialize pool of persistent `BatchIoManager`s for `lookupBatch`.
+  // Read the io_uring tuning knobs once from the global `RuntimeParameters`:
+  // `ioUringRingSize_` and `ioUringSqPoll_` configure every pooled
+  // `BatchManagerBase`, and `vocabBatchWindow_` configures every `lookupBatch`
+  // call. An operator sets them e.g. via
+  // `qlever-server --set-runtime-parameter iouring-sqpoll=true`.
+  const auto ringSize =
+      getRuntimeParameter<&RuntimeParameters::ioUringRingSize_>();
+  batchWindow_ =
+      getRuntimeParameterAsOptional<&RuntimeParameters::vocabBatchWindow_>();
+  ad_utility::IoUringSetupOptions setupOptions;
+  setupOptions.useSqPoll =
+      getRuntimeParameter<&RuntimeParameters::ioUringSqPoll_>();
+
+  // Initialize the pool `ioManagers_` of persistent `BatchManagerBase`s for
+  // `lookupBatch`. A `lookupBatch` call `pop`s one manager, runs both phases
+  // on it, and `push`es it back, so at most one thread submits to a ring at a
+  // time, and the SQPoll thread of one ring never serves concurrent
+  // submitters. Keep `IoUringSetupOptions::singleIssuer` off, because a pooled
+  // ring is used by different threads over its lifetime.
   ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<
       std::unique_ptr<ad_utility::BatchManagerBase>>>(
       NUM_VOCAB_BATCH_IO_MANAGERS);
   bool preferIoUring = true;
-  for (size_t i = 0; i < NUM_VOCAB_BATCH_IO_MANAGERS; ++i) {
-    ioManagers_->push(ad_utility::makeBatchManager(preferIoUring));
+  for ([[maybe_unused]] auto i :
+       ad_utility::integerRange(NUM_VOCAB_BATCH_IO_MANAGERS)) {
+    ioManagers_->push(ad_utility::makeBatchManager(
+        preferIoUring, static_cast<unsigned>(ringSize), setupOptions));
   }
 }

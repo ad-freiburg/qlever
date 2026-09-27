@@ -1,6 +1,12 @@
-//   Copyright 2024, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_RUNTIMEPARAMETERS_H
 #define QLEVER_RUNTIMEPARAMETERS_H
@@ -254,6 +260,37 @@ struct RuntimeParameters {
   // triples (per template triple); bounded memory, partial deduplication.
   DeduplicationModeParameter constructDeduplication_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
+
+  // The inclusive bounds of `ioUringRingSize_`. The upper bound limits the
+  // kernel memory that the rings of one vocabulary pin, because every pooled
+  // ring allocates its submission and completion queues up front.
+  static constexpr size_t MIN_IO_URING_RING_SIZE = 1;
+  static constexpr size_t MAX_IO_URING_RING_SIZE = 4096;
+
+  // The io_uring submission ring size for the batched vocabulary lookup. A
+  // power of two is preferred because liburing rounds up. Must be within
+  // `[MIN_IO_URING_RING_SIZE, MAX_IO_URING_RING_SIZE]`.
+  SizeT ioUringRingSize_{256, "iouring-ring-size"};
+
+  // The inclusive upper bound of `vocabBatchWindow_`, which bounds the size of
+  // the per-window buffers of the windowed `lookupBatch` path.
+  static constexpr size_t MAX_VOCAB_BATCH_WINDOW = 1'000'000;
+
+  // The maximum number of reads that one `addBatch` submission carries on
+  // the batched vocabulary lookup path. 0 (default) means no cap: the whole
+  // batch is submitted at once. A positive value splits larger batches into
+  // windows of that size. Must be within `[0, MAX_VOCAB_BATCH_WINDOW]`.
+  // Consumers read it via `getRuntimeParameterAsOptional`, which maps the 0
+  // sentinel to `std::nullopt`.
+  SizeT vocabBatchWindow_{0, "vocab-batch-window"};
+
+  // Whether the io_uring rings for the batched vocabulary lookup use an
+  // SQPoll kernel poll thread, so submissions pay no `io_uring_enter`
+  // syscall while the poller stays awake. Off by default. When the kernel
+  // denies the SQPoll setup with `EPERM` or `EINVAL`, `IoUringPolicy` falls
+  // back to a plain ring. When even the plain ring cannot be set up,
+  // `makeBatchManager` falls back to synchronous reads via `SyncIoPolicy`.
+  Bool ioUringSqPoll_{false, "iouring-sqpoll"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
