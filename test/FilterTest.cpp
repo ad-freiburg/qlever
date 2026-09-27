@@ -292,3 +292,130 @@ TEST(Filter, isDeterministic) {
       qec, makeTree(), {std::make_unique<RandomExpression>(), "RAND()"}};
   EXPECT_FALSE(nonDetFilter.isDeterministic());
 }
+
+// _____________________________________________________________________________
+TEST(Filter, getRunLengthEvaluationColumn) {
+  using namespace makeSparqlExpression;
+  using namespace sparqlExpression;
+  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  auto I = ad_utility::testing::IntId;
+  auto makeFilter = [qec](SparqlExpression::Ptr expression) {
+    auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{1, 2}}, ad_utility::testing::IntId),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}});
+    return Filter{qec, std::move(values), {std::move(expression), "expr"}};
+  };
+  Variable x{"?x"};
+  Variable y{"?y"};
+
+  // Disabled by default.
+  EXPECT_EQ(makeFilter(ltSprql(x, I(5))).getRunLengthEvaluationColumn(),
+            std::nullopt);
+
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::filterRunLengthEvaluation_>(true);
+  auto columnY = makeFilter(ltSprql(y, I(5))).getRunLengthEvaluationColumn();
+  ASSERT_TRUE(columnY.has_value());
+  EXPECT_EQ(columnY->first, y);
+  EXPECT_EQ(columnY->second.columnIndex_, 1u);
+  // A variable that occurs twice.
+  auto columnX = makeFilter(andSprqlExpr(ltSprql(x, I(5)), gtSprql(x, I(1))))
+                     .getRunLengthEvaluationColumn();
+  ASSERT_TRUE(columnX.has_value());
+  EXPECT_EQ(columnX->first, x);
+  EXPECT_EQ(columnX->second.columnIndex_, 0u);
+
+  // Two variables.
+  EXPECT_EQ(makeFilter(andSprqlExpr(ltSprql(x, I(5)), gtSprql(y, I(1))))
+                .getRunLengthEvaluationColumn(),
+            std::nullopt);
+  // No variable, and a variable that the input does not bind.
+  EXPECT_EQ(makeFilter(std::make_unique<RandomExpression>())
+                .getRunLengthEvaluationColumn(),
+            std::nullopt);
+  EXPECT_EQ(
+      makeFilter(ltSprql(Variable{"?z"}, I(5))).getRunLengthEvaluationColumn(),
+      std::nullopt);
+  // Not deterministic.
+  EXPECT_EQ(makeFilter(std::make_unique<LessThanExpression>(
+                           std::array<SparqlExpression::Ptr, 2>{
+                               std::make_unique<RandomExpression>(),
+                               std::make_unique<VariableExpression>(x)}))
+                .getRunLengthEvaluationColumn(),
+            std::nullopt);
+}
+
+// _____________________________________________________________________________
+TEST(Filter, runLengthEvaluationGivesSameResult) {
+  using namespace makeSparqlExpression;
+  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  auto I = ad_utility::testing::IntId;
+  Variable x{"?x"};
+
+  // Blocks with long runs, short runs (per-row fallback), all rows passing,
+  // no row passing, and an empty block. The second column is unique per row,
+  // so that wrongly copied rows are detected.
+  auto makeBlocks = [&I]() {
+    std::vector<IdTable> blocks;
+    blocks.push_back(makeIdTableFromVector(
+        {{1, 0}, {1, 1}, {1, 2}, {5, 3}, {5, 4}, {6, 5}, {6, 6}, {2, 7}}, I));
+    blocks.push_back(makeIdTableFromVector({{1, 8}, {7, 9}, {2, 10}}, I));
+    blocks.push_back(
+        makeIdTableFromVector({{8, 11}, {8, 12}, {9, 13}, {9, 14}}, I));
+    blocks.push_back(makeIdTableFromVector({{3, 15}, {3, 16}}, I));
+    blocks.push_back(IdTable{2, ad_utility::makeUnlimitedAllocator<Id>()});
+    return blocks;
+  };
+
+  // Filter `makeBlocks()` by `NOT(?x < 5)` or, with `sorted`, by `?x = 5`
+  // on input that the filter is told to be sorted by `?x`.
+  auto compute = [&](bool runLength, bool lazy, bool sorted) {
+    qec->getQueryTreeCache().clearAll();
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::filterRunLengthEvaluation_>(runLength);
+    std::vector<IdTable> blocks = makeBlocks();
+    if (sorted) {
+      blocks.clear();
+      blocks.push_back(makeIdTableFromVector(
+          {{1, 0}, {1, 1}, {5, 2}, {5, 3}, {5, 4}, {6, 5}, {6, 6}}, I));
+    }
+    auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(blocks),
+        std::vector<std::optional<Variable>>{x, Variable{"?y"}}, false,
+        sorted ? std::vector<ColumnIndex>{0} : std::vector<ColumnIndex>{});
+    auto expression =
+        sorted ? eqSprql(x, I(5)) : notSprqlExpr(ltSprql(x, I(5)));
+    Filter filter{qec, std::move(values), {std::move(expression), "expr"}};
+    EXPECT_EQ(filter.getRunLengthEvaluationColumn().has_value(), runLength);
+    auto result =
+        filter.getResult(false, lazy ? ComputationMode::LAZY_IF_SUPPORTED
+                                     : ComputationMode::FULLY_MATERIALIZED);
+    IdTable table{2, ad_utility::makeUnlimitedAllocator<Id>()};
+    if (result->isFullyMaterialized()) {
+      table.insertAtEnd(result->idTableView());
+    } else {
+      for (auto& pair : result->idTables()) {
+        table.insertAtEnd(pair.idTable_);
+      }
+    }
+    return table;
+  };
+
+  auto expected = makeIdTableFromVector({{5, 3},
+                                         {5, 4},
+                                         {6, 5},
+                                         {6, 6},
+                                         {7, 9},
+                                         {8, 11},
+                                         {8, 12},
+                                         {9, 13},
+                                         {9, 14}},
+                                        I);
+  auto expectedSorted = makeIdTableFromVector({{5, 2}, {5, 3}, {5, 4}}, I);
+  for (bool lazy : {false, true}) {
+    EXPECT_EQ(compute(false, lazy, false), expected);
+    EXPECT_EQ(compute(true, lazy, false), expected);
+    EXPECT_EQ(compute(false, lazy, true), expectedSorted);
+    EXPECT_EQ(compute(true, lazy, true), expectedSorted);
+  }
+}

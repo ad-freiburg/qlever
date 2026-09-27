@@ -7,11 +7,13 @@
 #ifndef QLEVER_SRC_ENGINE_FILTER_H
 #define QLEVER_SRC_ENGINE_FILTER_H
 
+#include <optional>
 #include <utility>
 #include <vector>
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/RleVectorStream.h"
 #include "util/ContainersWithAllocator.h"
 
 class Filter : public Operation {
@@ -46,6 +48,14 @@ class Filter : public Operation {
   size_t getCostEstimate() override;
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; }
+
+  // Return the variable and column of the input that the expression reads if
+  // the expression can be evaluated once per run of equal `Id`s in that
+  // column: the runtime parameter `filter-run-length-evaluation` is set, the
+  // expression is deterministic, and it contains exactly one variable, which is
+  // bound by the input. Otherwise, return `std::nullopt`.
+  std::optional<VariableToColumnMap::value_type> getRunLengthEvaluationColumn()
+      const;
 
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
@@ -85,6 +95,17 @@ class Filter : public Operation {
                                          Table&& input,
                                          std::vector<ColumnIndex> sortedBy)
       const;
+
+  // Evaluate the expression once per run of `runs`, the runs of the column
+  // `column` of the input (see `getRunLengthEvaluationColumn`).
+  // `isSortedByColumn` states whether the input is sorted by that column.
+  // Return one element per run, which is `true` iff the effective boolean value
+  // of the expression for the value of the run is `true`, so the rows of the
+  // run pass the filter.
+  std::vector<char> evaluateOncePerRun(
+      const ql::engine::rle::RleVectorStream& runs,
+      const VariableToColumnMap::value_type& column,
+      bool isSortedByColumn) const;
 
   // Run `computeFilterImpl` on the provided IdTable.
   CPP_template(typename Table)(requires IdTableLike<Table>) IdTable

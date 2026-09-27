@@ -1,8 +1,13 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2015 - 2026, The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+// 2020 -      Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/Filter.h"
 
@@ -18,6 +23,12 @@
 #include "global/RuntimeParameters.h"
 
 using std::endl;
+
+namespace {
+// `computeFilterImpl` evaluates the expression once per run of equal `Id`s
+// only if the runs have at least this many rows on average.
+constexpr size_t MIN_AVERAGE_RUN_LENGTH = 2;
+}  // namespace
 
 // _____________________________________________________________________________
 size_t Filter::getResultWidth() const { return _subtree->getResultWidth(); }
@@ -137,6 +148,48 @@ CPP_template_def(int WIDTH,
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =
       std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();
+
+  // If the expression only reads a column with long runs of equal `Id`s, it
+  // suffices to evaluate it once per run, and the rows of a run pass or fail
+  // together.
+  if (auto column = getRunLengthEvaluationColumn(); column.has_value()) {
+    const ColumnIndex columnIndex = column->second.columnIndex_;
+    auto runs = ql::engine::rle::RleVectorStream::fromColumn(
+        inputTable.getColumn(columnIndex),
+        inputTable.size() / MIN_AVERAGE_RUN_LENGTH);
+    if (runs.has_value()) {
+      bool isSortedByColumn =
+          !sortedBy.empty() && sortedBy.front() == columnIndex;
+      std::vector<char> passes =
+          evaluateOncePerRun(runs.value(), column.value(), isSortedByColumn);
+      // Copy maximal ranges of consecutive passing runs.
+      size_t rangeBegin = 0;
+      size_t rangeEnd = 0;
+      auto copyRange = [&]() {
+        if (rangeBegin < rangeEnd) {
+          resultTable.insertAtEnd(inputTable, rangeBegin, rangeEnd);
+        }
+      };
+      for (auto [run, pass] : ::ranges::views::zip(runs->runs(), passes)) {
+        if (!pass) {
+          copyRange();
+          rangeBegin = rangeEnd + run.length_;
+        }
+        rangeEnd += run.length_;
+      }
+      if (resultTable.empty() && rangeBegin == 0 &&
+          rangeEnd == inputTable.size()) {
+        // All rows pass, and there are no previous results.
+        dynamicResultTable = AD_FWD(inputTable).moveOrClone();
+        return;
+      }
+      copyRange();
+      checkCancellation();
+      dynamicResultTable = std::move(resultTable).toDynamic();
+      return;
+    }
+  }
+
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputTable.template asStaticView<0>(),
@@ -226,6 +279,81 @@ CPP_template_def(int WIDTH,
     dynamicResultTable = std::move(resultTable).toDynamic();
   }
   checkCancellation();
+}
+
+// _____________________________________________________________________________
+std::optional<VariableToColumnMap::value_type>
+Filter::getRunLengthEvaluationColumn() const {
+  if (!getRuntimeParameter<&RuntimeParameters::filterRunLengthEvaluation_>() ||
+      !_expression.isDeterministic()) {
+    return std::nullopt;
+  }
+  auto variables = _expression.containedVariables();
+  if (variables.empty() ||
+      !ql::ranges::all_of(variables, [&variables](const Variable* variable) {
+        return *variable == *variables.front();
+      })) {
+    return std::nullopt;
+  }
+  const auto& columns = _subtree->getVariableColumns();
+  auto it = columns.find(*variables.front());
+  if (it == columns.end()) {
+    return std::nullopt;
+  }
+  return *it;
+}
+
+// _____________________________________________________________________________
+std::vector<char> Filter::evaluateOncePerRun(
+    const ql::engine::rle::RleVectorStream& runs,
+    const VariableToColumnMap::value_type& column,
+    bool isSortedByColumn) const {
+  // A table with one row per run, which holds the value of the run.
+  IdTable runValues{1, getExecutionContext()->getAllocator()};
+  runValues.resize(runs.numRuns());
+  ql::ranges::transform(runs.runs(), runValues.getColumn(0).begin(),
+                        &ql::engine::rle::RleVectorStream::Run::value_);
+  VariableToColumnMap runValueColumns{
+      {column.first, {0, column.second.mightContainUndef_}}};
+
+  LocalVocab dummyLocalVocab{};
+  sparqlExpression::EvaluationContext evaluationContext(
+      *getExecutionContext(), runValueColumns, runValues,
+      getExecutionContext()->getAllocator(), dummyLocalVocab,
+      cancellationHandle_, deadline_);
+  if (isSortedByColumn) {
+    evaluationContext._columnsByWhichResultIsSorted = {0};
+  }
+  sparqlExpression::ExpressionResult expressionResult =
+      _expression.getPimpl()->evaluate(&evaluationContext);
+
+  // Same semantics as the per-row evaluation in `computeFilterImpl`.
+  std::vector<char> passes(runs.numRuns(), false);
+  auto computePasses = CPP_template_lambda(
+      &passes, &evaluationContext)(typename T)(T && singleResult)(
+      requires sparqlExpression::SingleExpressionResult<T>) {
+    if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
+      for (auto [intervalBegin, intervalEnd] : singleResult._intervals) {
+        intervalEnd = std::min(intervalEnd, passes.size());
+        std::fill(passes.begin() + intervalBegin, passes.begin() + intervalEnd,
+                  true);
+      }
+    } else {
+      using ValueGetter = sparqlExpression::detail::EffectiveBooleanValueGetter;
+      ValueGetter valueGetter{};
+      auto resultGenerator = sparqlExpression::detail::makeGenerator(
+          AD_FWD(singleResult), passes.size(), &evaluationContext);
+      auto pass = passes.begin();
+      for (auto&& resultValue : resultGenerator) {
+        *pass = valueGetter(resultValue, &evaluationContext) ==
+                ValueGetter::Result::True;
+        ++pass;
+      }
+    }
+  };
+  std::visit(computePasses, std::move(expressionResult));
+  checkCancellation();
+  return passes;
 }
 
 // _____________________________________________________________________________
