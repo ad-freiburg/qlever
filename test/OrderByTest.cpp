@@ -430,9 +430,9 @@ TEST(OrderBy, limitOffsetOnSortedInput) {
 
 // Test that an `ORDER BY` with a `LIMIT` on top of an `IndexScan` that is
 // sorted by the `ORDER BY` variable only reads the blocks that can contain the
-// requested rows. With three rows per block, the values of `<p>` form the blocks
-// [1, 2, 3], [4, 5, 6], [7, 8, -5], [-4, -3, -2] (and those of `<q>` the same
-// values plus 0.5); the third block spans the boundary between the
+// requested rows. With three rows per block, the values of `<p>` form the
+// blocks [1, 2, 3], [4, 5, 6], [7, 8, -5], [-4, -3, -2] (and those of `<q>` the
+// same values plus 0.5); the third block spans the boundary between the
 // non-negative and the negative numbers.
 TEST(OrderBy, limitPushedIntoIndexScan) {
   std::vector<int> values{1, 2, 3, 4, 5, 6, 7, 8, -5, -4, -3, -2};
