@@ -69,7 +69,7 @@ struct TestIndexConfig {
   bool loadAllPermutations = true;
   bool usePatterns = true;
   bool usePrefixCompression = true;
-  ad_utility::MemorySize blocksizePermutations = 16_B;
+  size_t rowsPerBlock = 2;
   bool createTextIndex = false;
   bool addWordsFromLiterals = true;
   std::optional<std::pair<std::string, std::string>>
@@ -123,7 +123,7 @@ struct TestIndexConfig {
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
     return H::combine(
         std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
-        c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
+        c.usePrefixCompression, c.rowsPerBlock, c.createTextIndex,
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
         c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
@@ -132,9 +132,9 @@ struct TestIndexConfig {
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
-      usePrefixCompression, blocksizePermutations, createTextIndex,
-      addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
-      scoringMetric, bAndKParam, indexType, vocabularyType,
+      usePrefixCompression, rowsPerBlock, createTextIndex, addWordsFromLiterals,
+      contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
+      bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
       addHasWordTriples, secondaryVocabWords, numThreads, parseInParallel,
       additionalSettings)

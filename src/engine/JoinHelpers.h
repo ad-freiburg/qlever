@@ -20,7 +20,7 @@
 #include "engine/Result.h"
 #include "engine/Sort.h"
 #include "engine/idTable/IdTable.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/Permutation.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
