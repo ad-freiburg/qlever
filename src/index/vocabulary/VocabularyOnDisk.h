@@ -193,6 +193,17 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   VocabBatchLookupResult readStrings(
       ad_utility::BatchManagerBase& manager,
       ql::span<const OffsetPair> offsetPairs) const;
+
+  // Perform the batched reads described by `sizes`/`fileOffsets` into
+  // `targets` via `manager`. If the `vocab-block-cache-size` runtime parameter
+  // is nonzero, 4 KiB-aligned blocks fully covered by a read are served from
+  // the thread-local `VocabBlockCache` on hits, and only misses (plus
+  // uncacheable partial edge blocks) are read via `manager`. With the default
+  // of zero, this is a plain `addBatch` + `wait`.
+  void readBatchCached(ad_utility::BatchManagerBase& manager, int fd,
+                       ql::span<const size_t> sizes,
+                       ql::span<const uint64_t> fileOffsets,
+                       ql::span<char*> targets) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H
