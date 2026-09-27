@@ -14,6 +14,7 @@
 #include "engine/Operation.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/VectorWithMemoryLimit.h"
 
 enum class PathSearchAlgorithm { ALL_PATHS };
@@ -184,7 +185,7 @@ class PathSearch : public Operation {
              PathSearchConfiguration config);
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
   const PathSearchConfiguration& getConfig() const { return config_; }
@@ -273,7 +274,7 @@ class PathSearch : public Operation {
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  std::pair<ql::span<const Id>, ql::span<const Id>> handleSearchSides() const;
+  std::pair<ConstIdColumnRef, ConstIdColumnRef> handleSearchSides() const;
 
   /**
    * @brief Finds paths based on the configured algorithm.
@@ -290,7 +291,7 @@ class PathSearch : public Operation {
    * @return A vector of all paths.
    */
   pathSearch::PathsLimited allPaths(
-      ql::span<const Id> sources, ql::span<const Id> targets,
+      ConstIdColumnRef sources, ConstIdColumnRef targets,
       const pathSearch::BinSearchWrapper& binSearch, bool cartesian,
       std::optional<uint64_t> numPathsPerTarget,
       std::optional<uint64_t> maxDepth) const;

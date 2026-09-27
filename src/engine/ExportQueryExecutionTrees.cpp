@@ -994,8 +994,8 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   // `ordered_json`, so that the insertion order of the runtime details is
   // preserved (a plain `json` would re-sort all keys alphabetically).
   nlohmann::ordered_json jsonSuffix;
-  jsonSuffix["runtimeInformation"]["meta"] = nlohmann::ordered_json(
-      qet.getRootOperation()->getRuntimeInfoWholeQuery());
+  jsonSuffix["runtimeInformation"]["meta"] =
+      nlohmann::ordered_json(qet.getRootOperation()->getQueryPlanningInfo());
   jsonSuffix["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
   jsonSuffix["resultSizeExported"] = numBindingsExported;

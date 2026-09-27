@@ -656,8 +656,8 @@ TEST(SecondaryVocabIndex, updateWithWordOfTheSecondaryVocabulary) {
 // test that a future change of the secondary vocabulary has to keep passing.
 TEST(SecondaryVocabIndex, sameResultsWithAndWithoutSecondaryVocabulary) {
   // A knowledge graph with enough triples to span several blocks per
-  // permutation (a block holds two `Id`s per column in the tests, see
-  // `TestIndexConfig::blocksizePermutations`), and with objects of several
+  // permutation (a block holds two rows in the tests, see
+  // `TestIndexConfig::rowsPerBlock`), and with objects of several
   // datatypes.
   std::string kg;
   for (size_t i = 0; i < 12; ++i) {

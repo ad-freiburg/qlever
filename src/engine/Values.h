@@ -14,6 +14,7 @@
 
 #include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
 
 class TripleComponent;
 
@@ -60,8 +61,8 @@ class Values : virtual public Operation {
   virtual size_t getCostEstimate() override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
   }
 
  public:

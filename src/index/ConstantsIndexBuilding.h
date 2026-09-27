@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "util/MemorySize/MemorySize.h"
 
@@ -96,14 +97,28 @@ constexpr inline ad_utility::MemorySize VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE =
 // is a multiple of this number of batches.
 constexpr inline size_t VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE = 3;
 
-// The uncompressed size in bytes of a block of a single column of the
-// permutations. If chosen too large, then we lose performance for very small
-// index scans which always have to read a complete block. If chosen too small,
-// the overhead of the metadata that has to be stored per block becomes
-// infeasible. 250K seems to be a reasonable tradeoff here.
-constexpr inline ad_utility::MemorySize
-    UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN =
-        ad_utility::MemorySize::kilobytes(250);
+// The default number of rows of a block of the permutations (and of the other
+// sorted lists of an index). If chosen too large, then we lose performance for
+// very small index scans which always have to read a complete block. If chosen
+// too small, the overhead of the metadata that has to be stored per block
+// becomes infeasible. 31250 rows (250 kB per column) seems to be a reasonable
+// tradeoff here.
+constexpr inline size_t DEFAULT_INDEX_ROWS_PER_BLOCK = 31'250;
+
+// The largest number of rows per block that an index can be built with. The
+// index builder holds several blocks in RAM at the same time, so a much larger
+// value would only exhaust the memory. The bound also catches a negative value
+// on the command line, which the option parser turns into a huge number.
+constexpr inline size_t MAX_INDEX_ROWS_PER_BLOCK =
+    100 * DEFAULT_INDEX_ROWS_PER_BLOCK;
+
+// The key under which the number of rows per block is stored in the
+// configuration of an index (`meta-data.json`). It is stored because an index
+// can be built with a non-default block size, and everything that writes
+// sorted lists of an existing index afterwards has to use the block size of
+// that index. Indexes built before this key existed simply use the default.
+constexpr inline std::string_view INDEX_ROWS_PER_BLOCK_KEY =
+    "index-rows-per-block";
 
 constexpr inline size_t NumColumnsIndexBuilding = 4;
 
