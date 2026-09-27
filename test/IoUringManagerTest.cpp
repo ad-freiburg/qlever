@@ -12,6 +12,7 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
@@ -480,6 +481,51 @@ TEST(IoUringManagerDrop, dropSyncManagerHasNothingInFlight) {
 }
 
 #ifdef QLEVER_HAS_IO_URING
+// Require `IoUringPolicy` to use fixed-file slots for its two stable vocabulary
+// files, the offsets file and the word-data file. Reject a third descriptor
+// instead of accepting it without fixed-file registration.
+TEST(IoUringPolicy, thirdVocabularyFileIsRejected) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime "
+                    "(e.g. blocked by seccomp inside Docker)";
+  }
+  // Bind the pairs (not just `.second`): the `TempFile` must stay alive while
+  // the policy reads from its descriptor, otherwise the descriptor is closed
+  // and its number recycled (e.g. by the ring itself), and registration
+  // rejects the recycled descriptor.
+  const auto firstFile = makeTempFile("AAAA");
+  const auto secondFile = makeTempFile("BBBB");
+  const auto thirdFile = makeTempFile("CCCC");
+  const int firstFd = firstFile.second;
+  const int secondFd = secondFile.second;
+  const int thirdFd = thirdFile.second;
+  ad_utility::IoUringPolicy policy{64};
+
+  std::string firstBuffer(4, '\0');
+  std::string secondBuffer(4, '\0');
+  std::string thirdBuffer(4, '\0');
+  const std::array<size_t, 1> sizes{4};
+  const std::array<uint64_t, 1> offsets{0};
+  std::array<char*, 1> firstBuffers{firstBuffer.data()};
+  std::array<char*, 1> secondBuffers{secondBuffer.data()};
+  std::array<char*, 1> thirdBuffers{thirdBuffer.data()};
+
+  const auto submit = [&](int fd, auto& buffers, uint64_t batchIndex) {
+    policy.addBatch(fd, sizes, offsets, buffers, batchIndex);
+    policy.wait(batchIndex);
+  };
+  submit(firstFd, firstBuffers, 0);
+  submit(secondFd, secondBuffers, 1);
+  // The two fixed-file reads must actually read the right file's data, not
+  // just succeed: this is what the `ownerFd`/`registeredFd` slot mapping in
+  // `fileIndexForFd` is for.
+  EXPECT_EQ(firstBuffer, "AAAA");
+  EXPECT_EQ(secondBuffer, "BBBB");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      policy.addBatch(thirdFd, sizes, offsets, thirdBuffers, 2),
+      HasSubstr("at most two vocabulary files"));
+}
+
 // Drop the manager while reads are still in flight (submitted but never
 // waited). `IoUringPolicy`'s destructor drains the outstanding completions
 // (and logs a warning) before tearing down the ring, so the kernel is done
