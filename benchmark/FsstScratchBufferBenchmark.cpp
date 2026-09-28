@@ -109,26 +109,38 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
     BenchmarkResults results;
     auto& group = results.addGroup(
         "Three-stage FSST scratch-buffer strategies (5,000 words)");
-    const auto parseEnvironmentSize = [](const char* value,
-                                         size_t defaultValue) {
+    const auto parseEnvironmentSize = [](const char* value, size_t defaultValue,
+                                         const char* varName) {
       if (value == nullptr) return defaultValue;
       errno = 0;
       char* end = nullptr;
       const unsigned long parsed = std::strtoul(value, &end, 10);
-      AD_CONTRACT_CHECK(end != value && *end == '\0' && errno != ERANGE);
+      AD_CONTRACT_CHECK(end != value && *end == '\0' && errno != ERANGE,
+                        "Invalid value `", value, "` for environment variable ",
+                        varName);
       return static_cast<size_t>(parsed);
     };
-    const size_t selectedStrategy =
-        parseEnvironmentSize(std::getenv("FSST_SCRATCH_ONLY"), 3);
+    const size_t selectedStrategy = parseEnvironmentSize(
+        std::getenv("FSST_SCRATCH_ONLY"), 3, "FSST_SCRATCH_ONLY");
     // Bound the benchmark workload even when configured through the
     // environment.
     constexpr size_t maxRepetitions = 1'000'000;
     const size_t repetitions =
-        parseEnvironmentSize(std::getenv("FSST_SCRATCH_INNER_REPETITIONS"), 1);
+        parseEnvironmentSize(std::getenv("FSST_SCRATCH_INNER_REPETITIONS"), 1,
+                             "FSST_SCRATCH_INNER_REPETITIONS");
     AD_CONTRACT_CHECK(selectedStrategy <= 3);
     AD_CONTRACT_CHECK(repetitions > 0);
     AD_CONTRACT_CHECK(repetitions <= maxRepetitions);
 
+    // Provision all buffers once, outside the timed measurements, so that every
+    // strategy measures pure decode throughput. Allocating (and, for
+    // `std::string`, zero-initializing) inside the measured lambda would skew
+    // the first strategy against the uninitialized buffers of the others.
+    std::string stringOutput(outputCapacity_, '\0');
+    std::string stringScratch(outputCapacity_, '\0');
+    auto rawOutput = std::make_unique<char[]>(outputCapacity_);
+    auto rawScratch = std::make_unique<char[]>(outputCapacity_);
+    auto stagedScratch = std::make_unique<char[]>(intermediateCapacity_);
     auto runDecodeMeasurement = [&](ql::span<char> output,
                                     ql::span<char> scratch) {
       size_t totalBytes = 0;
@@ -141,26 +153,21 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
     };
     auto addFullSizeStringScratch = [&] {
       group.addMeasurement("full-size std::string scratch", [&] {
-        std::string output(outputCapacity_, '\0');
-        std::string scratch(outputCapacity_, '\0');
-        return runDecodeMeasurement({output.data(), output.size()},
-                                    {scratch.data(), scratch.size()});
+        return runDecodeMeasurement({stringOutput.data(), outputCapacity_},
+                                    {stringScratch.data(), outputCapacity_});
       });
     };
     auto addFullSizeUninitializedScratch = [&] {
       group.addMeasurement("full-size uninitialized scratch", [&] {
-        auto output = std::make_unique<char[]>(outputCapacity_);
-        auto scratch = std::make_unique<char[]>(outputCapacity_);
-        return runDecodeMeasurement({output.get(), outputCapacity_},
-                                    {scratch.get(), outputCapacity_});
+        return runDecodeMeasurement({rawOutput.get(), outputCapacity_},
+                                    {rawScratch.get(), outputCapacity_});
       });
     };
     auto addStageAwareUninitializedScratch = [&] {
       group.addMeasurement("stage-aware uninitialized scratch", [&] {
-        auto output = std::make_unique<char[]>(outputCapacity_);
-        auto scratch = std::make_unique<char[]>(intermediateCapacity_);
-        return runDecodeMeasurement({output.get(), outputCapacity_},
-                                    {scratch.get(), intermediateCapacity_});
+        return runDecodeMeasurement(
+            {rawOutput.get(), outputCapacity_},
+            {stagedScratch.get(), intermediateCapacity_});
       });
     };
 
@@ -172,8 +179,8 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
         {2, 0, 1},
         {2, 1, 0},
     }};
-    const size_t orderIndex =
-        parseEnvironmentSize(std::getenv("FSST_SCRATCH_ORDER"), 0);
+    const size_t orderIndex = parseEnvironmentSize(
+        std::getenv("FSST_SCRATCH_ORDER"), 0, "FSST_SCRATCH_ORDER");
     AD_CONTRACT_CHECK(orderIndex < orders.size());
     for (size_t strategy : orders[orderIndex]) {
       if (strategy != selectedStrategy && selectedStrategy != 3) {
