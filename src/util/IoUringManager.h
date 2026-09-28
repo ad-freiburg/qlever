@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
@@ -236,6 +237,28 @@ using BatchIoManager = BatchManager<IoUringPolicy>;
 #else
 using BatchIoManager = BatchManager<SyncIoPolicy>;
 #endif
+
+// Serve the reads of a batch that are fully in the page cache with
+// non-blocking `preadv2(RWF_NOWAIT)` calls, and return the positions (indices
+// into the three spans, ascending) of the reads that were not served. The
+// caller must issue those through its regular path, which also reports real
+// errors. Reads whose file ranges are exactly adjacent (`offsets[i] +
+// numBytes[i] == offsets[i + 1]`) are coalesced into one `preadv2` call with
+// one `iovec` per read. A read is served only if all of its bytes were read:
+// `EAGAIN` (not cached), a short read (end of file, or only a prefix cached)
+// or any other error leaves the read (and, for a failed call, the rest of its
+// run) to the caller. If the kernel or file system rejects `RWF_NOWAIT`
+// (`EOPNOTSUPP`), the fast path is disabled for the rest of the process (see
+// `pageCacheFastPathIsSupported`), which is logged once. Without
+// `RWF_NOWAIT` support at compile time, every read is returned.
+// Precondition: the three spans have the same length.
+std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
+                                      ql::span<const uint64_t> offsets,
+                                      ql::span<char*> buffers);
+
+// False once `readPageCacheHits` found that `RWF_NOWAIT` is not supported, or
+// if it is not available at compile time.
+bool pageCacheFastPathIsSupported();
 
 // Build a batch manager. When io_uring is compiled in and the runtime flag
 // `preferIoUring` is set, try to build an `IoUringManager`. If its setup
