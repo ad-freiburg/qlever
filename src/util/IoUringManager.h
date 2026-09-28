@@ -247,11 +247,13 @@ class IoUringPolicy {
   // `ringSize` must be > 0 (power of 2 preferred; liburing rounds up).
   explicit IoUringPolicy(unsigned ringSize);
   // Same, but with explicit setup flags (SQPoll and the evaluated opt-ins).
-  // When SQPoll is requested but the kernel denies it (`-EPERM` for a missing
-  // `CAP_SYS_NICE`, `-EINVAL` on kernels without SQPoll support), the
-  // constructor falls back to a plain ring and `sqPollEnabled()` reports
-  // `false`. Any other setup failure still throws, and `makeBatchManager`
-  // keeps its existing `SyncIoPolicy` fallback for that case.
+  // When any of `useSqPoll`, `deferTaskrun` or `singleIssuer` is requested but
+  // the kernel denies the setup (`-EPERM` for a missing `CAP_SYS_NICE`,
+  // `-EINVAL` on kernels without support for one of the flags), the
+  // constructor logs a warning and falls back to a plain ring without any of
+  // these flags; `sqPollEnabled()` then reports `false`. Any other setup
+  // failure still throws, and `makeBatchManager` keeps its existing
+  // `SyncIoPolicy` fallback for that case.
   IoUringPolicy(unsigned ringSize, const IoUringSetupOptions& setupOptions);
   ~IoUringPolicy();
 
