@@ -23,8 +23,8 @@
 
 #include "backports/asio.h"
 #include "engine/idTable/CompressedIdTableBlockStorage.h"
+#include "engine/idTable/ExternalSorterSettings.h"
 #include "engine/idTable/IdTable.h"
-#include "global/RuntimeParameters.h"
 #include "util/CompressedBlockFile.h"
 #include "util/Exception.h"
 #include "util/GlobalExecutor.h"
@@ -97,21 +97,21 @@ constexpr inline CompressedBlockFile::CompressionLevel
 // The two compression levels with which a `CompressedExternalIdTableSorter`
 // writes its blocks: the blocks of the presorted runs (written by the
 // `CompressedExternalIdTableWriter`) and the output blocks that the merge
-// phase spills to disk. They are derived from the runtime parameter
-// `external-sorter-compression-level`, see
+// phase spills to disk. They are derived from the `value` of the runtime
+// parameter `external-sorter-compression-level` (see
+// `ExternalSorterSettings::compressionLevel_`), see
 // `RuntimeParameters::externalSorterCompressionLevel_` for its syntax.
 //
-// Throw a descriptive exception if the value of that parameter is neither
-// `default`, nor `none`, nor an integer.
+// Throw a descriptive exception if the `value` is neither `default`, nor
+// `none`, nor an integer.
 struct SorterCompressionLevels {
   CompressedBlockFile::CompressionLevel presortedRuns_;
   CompressedBlockFile::CompressionLevel mergePhaseSpill_;
 };
 
 // ___________________________________________________________________________
-inline SorterCompressionLevels sorterCompressionLevels() {
-  const std::string& value = getRuntimeParameter<
-      &RuntimeParameters::externalSorterCompressionLevel_>();
+inline SorterCompressionLevels sorterCompressionLevels(
+    const std::string& value) {
   if (value == "default") {
     return {ZSTD_DEFAULT_LEVEL, MERGE_PHASE_SPILL_COMPRESSION};
   }

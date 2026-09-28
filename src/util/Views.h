@@ -129,8 +129,8 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 template <typename SortedBlockView,
           typename BlockType = ql::ranges::range_value_t<SortedBlockView>,
           typename ValueType = ql::ranges::range_value_t<BlockType>>
-InputRangeTypeErased<BlockType> uniqueBlockView(
-    SortedBlockView view, size_t numBlocksInFlight = 0) {
+InputRangeTypeErased<BlockType> uniqueBlockView(SortedBlockView view,
+                                                size_t numBlocksInFlight = 0) {
   struct UniqueBlockViewFromGet : InputRangeFromGet<BlockType> {
     SortedBlockView view_;
 

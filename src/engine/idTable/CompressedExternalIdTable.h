@@ -25,10 +25,10 @@
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
+#include "engine/idTable/ExternalSorterSettings.h"
 #include "engine/idTable/IdTable.h"
 #include "engine/idTable/RowMajorIdTable.h"
 #include "engine/idTable/RowMajorMergeBlock.h"
-#include "global/RuntimeParameters.h"
 #include "util/AsyncStream.h"
 #include "util/CancellationHandle.h"
 #include "util/CompressedBlockFile.h"
@@ -730,7 +730,7 @@ constexpr inline int MAX_NUM_COLUMNS_ROW_MAJOR =
 // constructed, so changing the underlying runtime parameter only affects the
 // sorters that are created afterwards.
 inline bool rowMajorModeIsEnabled() {
-  return getRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>();
+  return externalSorterSettings().rowMajor_;
 }
 
 // Whether the row-major mode is available for a table with `NumStaticCols`
@@ -1299,7 +1299,9 @@ CPP_class_template(size_t NumStaticCols,
         numColumns_{numCols},
         memory_{memory},
         writer_{std::move(filename), numCols, allocator, blocksizeCompression,
-                compressedExternalIdTable::sorterCompressionLevels()
+                compressedExternalIdTable::sorterCompressionLevels(
+                    compressedExternalIdTable::externalSorterSettings()
+                        .compressionLevel_)
                     .presortedRuns_},
         blockTransformation_{blockTransformation} {
     this->currentBlock_.reserve(blocksize_);
@@ -1845,7 +1847,9 @@ class CompressedExternalIdTableSorter
   // parameter `external-sorter-compression-level` and is read once, when this
   // sorter is constructed.
   CompressedBlockFile::CompressionLevel mergeSpillCompression_ =
-      compressedExternalIdTable::sorterCompressionLevels().mergePhaseSpill_;
+      compressedExternalIdTable::sorterCompressionLevels(
+          compressedExternalIdTable::externalSorterSettings().compressionLevel_)
+          .mergePhaseSpill_;
 
  public:
   // Constructor.
@@ -2178,9 +2182,8 @@ class CompressedExternalIdTableSorter
     config.maxOutputBlockSize_ = maxOutputBlocksize_;
     // A bound that the user has set explicitly, see
     // `RuntimeParameters::mergePhaseMaxOutputBlockRows_`.
-    if (auto maxRows = getRuntimeParameter<
-            &RuntimeParameters::mergePhaseMaxOutputBlockRows_>();
-        maxRows != 0) {
+    const auto settings = compressedExternalIdTable::externalSorterSettings();
+    if (auto maxRows = settings.mergePhaseMaxOutputBlockRows_; maxRows != 0) {
       config.maxOutputBlockSize_ =
           std::min(config.maxOutputBlockSize_,
                    ad_utility::MemorySize::bytes(maxRows * this->numColumns_ *
@@ -2189,9 +2192,7 @@ class CompressedExternalIdTableSorter
     config.parallelism_ = mergeParallelism_;
     // A cap that the user has set explicitly wins over the parallelism, see
     // `RuntimeParameters::mergePhaseMaxChunksInFlight_`.
-    if (auto cap = getRuntimeParameter<
-            &RuntimeParameters::mergePhaseMaxChunksInFlight_>();
-        cap != 0) {
+    if (auto cap = settings.mergePhaseMaxChunksInFlight_; cap != 0) {
       config.parallelism_ = std::min(config.parallelism_, cap);
     }
     config.outputBlockSizeOverride_ = blocksize;

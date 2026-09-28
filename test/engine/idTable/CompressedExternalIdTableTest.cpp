@@ -321,7 +321,9 @@ TEST(CompressedExternalIdTable, externalSorterCompressionLevel) {
   setRuntimeParameter<&RuntimeParameters::externalSorterCompressionLevel_>(
       "not a level");
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ad_utility::compressedExternalIdTable::sorterCompressionLevels(),
+      ad_utility::compressedExternalIdTable::sorterCompressionLevels(
+          ad_utility::compressedExternalIdTable::externalSorterSettings()
+              .compressionLevel_),
       ::testing::HasSubstr("neither `default`, nor `none`, nor an integer"));
 }
 
@@ -1160,7 +1162,8 @@ TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
     }
     // Deliberately small output blocks, such that a single chunk produces
     // several of them and therefore has to spill, because only
-    // `MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK` of them stay in memory.
+    // `MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK` of them stay in
+    // memory.
     auto blocks = sorter.getSortedBlocks<0>(1000);
     // A spill file is created with the first block that its chunk spills, so
     // there is none before the merge has produced anything. The chunks that
