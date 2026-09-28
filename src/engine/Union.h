@@ -37,14 +37,14 @@ class Union : public Operation {
         std::vector<ColumnIndex> targetOrder = {});
 
  protected:
-  virtual std::string getCacheKeyImpl() const override;
+  virtual qlm::string getCacheKeyImpl() const override;
 
  public:
-  virtual std::string getDescriptor() const override;
+  virtual qlm::string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;
 
-  virtual std::vector<ColumnIndex> resultSortedOn() const override;
+  virtual qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override;
 

@@ -18,7 +18,7 @@ class NeutralOptional : public Operation {
                   std::shared_ptr<QueryExecutionTree> tree);
 
  private:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
@@ -33,7 +33,7 @@ class NeutralOptional : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
   float getMultiplicity(size_t col) override;
@@ -42,7 +42,7 @@ class NeutralOptional : public Operation {
   void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
 
  protected:
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H

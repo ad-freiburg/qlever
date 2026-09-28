@@ -34,14 +34,15 @@ DistinctGraphs::DistinctGraphs(QueryExecutionContext* qec,
 
 // ____________________________________________________________________________
 std::unique_ptr<Operation> DistinctGraphs::cloneImpl() const {
-  return std::make_unique<DistinctGraphs>(_executionContext, graphVariable_,
-                                          includeDefaultGraph_);
+  return std::make_unique<DistinctGraphs>(
+      _executionContext, graphVariable_, includeDefaultGraph_);
 }
 
 // ____________________________________________________________________________
-std::string DistinctGraphs::getCacheKeyImpl() const {
-  return absl::StrCat("DistinctGraphs includeDefaultGraph=",
-                      includeDefaultGraph_ ? "true" : "false");
+qlm::string DistinctGraphs::getCacheKeyImpl() const {
+  return qlm::string{absl::StrCat("DistinctGraphs includeDefaultGraph=",
+                                  includeDefaultGraph_ ? "true" : "false"),
+                     allocator()};
 }
 
 // ____________________________________________________________________________

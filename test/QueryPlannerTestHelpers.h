@@ -427,7 +427,12 @@ constexpr inline PathSearch pathSearch;
 
 inline auto ValuesClause = [](std::string cacheKey) {
   return RootOperation<::Values>(
-      AllOf(AD_PROPERTY(Values, getCacheKey, cacheKey)));
+      AllOf(AD_PROPERTY(
+          Values, getCacheKey,
+          testing::Truly([cacheKey = std::move(cacheKey)](
+                             const qlm::string& actual) {
+            return std::string_view{actual} == cacheKey;
+          }))));
 };
 
 // Match a SpatialJoin operation, set arguments to ignore to -1
@@ -603,7 +608,7 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
   using QueryPlanner::QueryPlanner;
 
   FiltersAndOptionalSubstitutes seedFilterSubstitutes(
-      const std::vector<SparqlFilter>& filters) override {
+      const qlm::vector<SparqlFilter>& filters) override {
     FiltersAndOptionalSubstitutes plans;
     plans.reserve(filters.size());
 

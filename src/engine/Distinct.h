@@ -27,10 +27,11 @@ class Distinct : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] std::string getDescriptor() const override;
+  [[nodiscard]] qlm::string getDescriptor() const override;
 
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
-    return subtree_->resultSortedOn();
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override {
+    const auto& sortedOn = subtree_->resultSortedOn();
+    return {sortedOn.begin(), sortedOn.end(), allocator()};
   }
 
   // Get all columns that need to be distinct.
@@ -70,7 +71,7 @@ class Distinct : public Operation {
   }
 
  protected:
-  [[nodiscard]] std::string getCacheKeyImpl() const override;
+  [[nodiscard]] qlm::string getCacheKeyImpl() const override;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }

@@ -82,6 +82,6 @@ Result S2PointPolylineAlgorithm::run() {
   spatialJoin_.value()->runtimeInfo().addDetail("time total",
                                                 timerAll.msecs().count());
 
-  return Result{std::move(result), std::vector<ColumnIndex>{},
+  return Result{std::move(result), qlm::vector<ColumnIndex>{qec_->getAllocator()},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight)};
 }

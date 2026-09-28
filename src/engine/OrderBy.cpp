@@ -33,7 +33,7 @@ OrderBy::OrderBy(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::string OrderBy::getCacheKeyImpl() const {
+qlm::string OrderBy::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "ORDER BY on columns:";
 
@@ -44,11 +44,12 @@ std::string OrderBy::getCacheKeyImpl() const {
     os << (ind.second ? "desc(" : "asc(") << ind.first << ") ";
   }
   os << "\n" << subtree_->getCacheKey();
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
-std::string OrderBy::getDescriptor() const {
+qlm::string OrderBy::getDescriptor() const {
   std::string orderByVars;
   const auto& varCols = subtree_->getVariableColumns();
   for (auto [sortIndex, isDescending] : sortIndices_) {
@@ -60,7 +61,8 @@ std::string OrderBy::getDescriptor() const {
       }
     }
   }
-  return "OrderBy on" + orderByVars;
+  auto result = "OrderBy on"s + orderByVars;
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
@@ -335,6 +337,6 @@ OrderBy::SortedVariables OrderBy::getSortedVariables() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> OrderBy::cloneImpl() const {
-  return std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
-                                   sortIndices_);
+  return std::make_unique<OrderBy>( _executionContext,
+                                  subtree_->clone(), sortIndices_);
 }

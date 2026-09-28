@@ -23,19 +23,19 @@
 #include "util/ContainersWithAllocator.h"
 
 using SpatialJoinBoundingBoxColumns =
-    std::optional<std::pair<ColumnIndex, ColumnIndex>>;
+    qlm::optional<qlm::pair<ColumnIndex, ColumnIndex>>;
 
 // Helper providing the left and right input tables and column indices to
 // each spatial join algorithm.
 struct PreparedSpatialJoinParams {
   const IdTableView<0>* const idTableLeft_;
-  std::shared_ptr<const Result> resultLeft_;
+  qlm::shared_ptr<const Result> resultLeft_;
   const IdTableView<0>* const idTableRight_;
-  std::shared_ptr<const Result> resultRight_;
+  qlm::shared_ptr<const Result> resultRight_;
   ColumnIndex leftJoinCol_;
   ColumnIndex rightJoinCol_;
-  std::vector<ColumnIndex> leftSelectedCols_;
-  std::vector<ColumnIndex> rightSelectedCols_;
+  qlm::vector<ColumnIndex> leftSelectedCols_;
+  qlm::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
 };
 
@@ -51,16 +51,16 @@ class SpatialJoin : public Operation {
   // was explicitly requested by the user (false) or has been created to
   // implicitly rewrite a cartesian product with a geo filter (true).
   SpatialJoin(QueryExecutionContext* qec, SpatialJoinConfiguration config,
-              std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
-              std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
+              qlm::optional<qlm::shared_ptr<QueryExecutionTree>> childLeft,
+              qlm::optional<qlm::shared_ptr<QueryExecutionTree>> childRight,
               bool substitutesFilterOp = false);
 
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
-  std::string getCacheKeyImpl() const override;
-  std::string getDescriptor() const override;
+  qlm::string getCacheKeyImpl() const override;
+  qlm::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
   uint64_t getSizeEstimateBeforeLimit() override;
@@ -76,7 +76,7 @@ class SpatialJoin : public Operation {
   float getMultiplicity(size_t col) override;
 
   bool knownEmptyResult() override;
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
 
   // Depending on the amount of children the operation returns a different
@@ -90,8 +90,8 @@ class SpatialJoin : public Operation {
   // this method creates a new SpatialJoin object, to which the child gets
   // added. The reason for this behavior is, that the QueryPlanner can then
   // still use the existing SpatialJoin object, to try different orders
-  std::shared_ptr<SpatialJoin> addChild(
-      std::shared_ptr<QueryExecutionTree> child,
+  qlm::shared_ptr<SpatialJoin> addChild(
+      qlm::shared_ptr<QueryExecutionTree> child,
       const Variable& varOfChild) const;
 
   // if the spatialJoin has both children its construction is done. Then true
@@ -101,15 +101,15 @@ class SpatialJoin : public Operation {
   bool isConstructed() const;
 
   // this function is used to give the maximum distance for internal purposes
-  std::optional<double> getMaxDist() const;
+  qlm::optional<double> getMaxDist() const;
 
   // this function is used to give the maximum number of results
-  std::optional<size_t> getMaxResults() const;
+  qlm::optional<size_t> getMaxResults() const;
 
   // this function is used to give the DE-9IM filter pattern, if the task is a
   // `LibSpatialJoinConfig` with one set (only relevant for the `DE9IM` join
   // type)
-  std::optional<De9imFilterString> getDe9imFilter() const;
+  qlm::optional<De9imFilterString> getDe9imFilter() const;
 
   // switch the algorithm set in the config parameter at construction time
   void selectAlgorithm(SpatialJoinAlgorithm algo) { config_.algo_ = algo; }
@@ -118,12 +118,12 @@ class SpatialJoin : public Operation {
   SpatialJoinAlgorithm getAlgorithm() const { return config_.algo_; }
 
   // retrieve the currently selected spatial join type
-  std::optional<SpatialJoinType> getJoinType() const {
+  qlm::optional<SpatialJoinType> getJoinType() const {
     return config_.getJoinType();
   }
 
   // retrieve the variables the spatial join is joining on
-  std::pair<Variable, Variable> getSpatialJoinVariables() const {
+  qlm::pair<Variable, Variable> getSpatialJoinVariables() const {
     return {config_.left_, config_.right_};
   }
 
@@ -132,19 +132,19 @@ class SpatialJoin : public Operation {
   bool getSubstitutesFilterOp() const { return substitutesFilterOp_; }
 
   // Helper functions for unit tests
-  std::pair<double, size_t> onlyForTestingGetTask() const {
-    return std::pair{getMaxDist().value_or(-1.0), getMaxResults().value_or(-1)};
+  qlm::pair<double, size_t> onlyForTestingGetTask() const {
+    return qlm::pair{getMaxDist().value_or(-1.0), getMaxResults().value_or(-1)};
   }
 
   const SpatialJoinConfiguration& onlyForTestingGetConfig() const {
     return config_;
   }
 
-  std::pair<Variable, Variable> onlyForTestingGetVariables() const {
-    return std::pair{config_.left_, config_.right_};
+  qlm::pair<Variable, Variable> onlyForTestingGetVariables() const {
+    return qlm::pair{config_.left_, config_.right_};
   }
 
-  std::optional<Variable> onlyForTestingGetDistanceVariable() const {
+  qlm::optional<Variable> onlyForTestingGetDistanceVariable() const {
     return config_.distanceVariable_;
   }
 
@@ -152,11 +152,11 @@ class SpatialJoin : public Operation {
     return config_.payloadVariables_;
   }
 
-  std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
+  qlm::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
     return childLeft_;
   }
 
-  std::shared_ptr<QueryExecutionTree> onlyForTestingGetRightChild() const {
+  qlm::shared_ptr<QueryExecutionTree> onlyForTestingGetRightChild() const {
     return childRight_;
   }
 
@@ -164,7 +164,7 @@ class SpatialJoin : public Operation {
     return prepareJoin();
   }
 
-  std::pair<SpatialJoinBoundingBoxColumns, SpatialJoinBoundingBoxColumns>
+  qlm::pair<SpatialJoinBoundingBoxColumns, SpatialJoinBoundingBoxColumns>
   onlyForTestingGetLibspatialjoinBoundingBoxCols() const {
     return prepareLibspatialjoinBoundingBoxCols();
   }
@@ -173,21 +173,21 @@ class SpatialJoin : public Operation {
     checkCancellation();
   }
 
-  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+  qlm::optional<qlm::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
 
   // Get the internal variable names of bounding box columns.
-  static std::pair<Variable, Variable> getBoundingBoxColumnNames(
+  static qlm::pair<Variable, Variable> getBoundingBoxColumnNames(
       const Variable& joinVar);
 
   // Check if the child provides bounding boxes and if yes, return the column
   // indices.
   SpatialJoinBoundingBoxColumns getBoundingBoxColumnIndices(
-      std::shared_ptr<QueryExecutionTree> child, const Variable& joinVar) const;
+      qlm::shared_ptr<QueryExecutionTree> child, const Variable& joinVar) const;
 
   // Make a clone of this `SpatialJoin` which uses precomputed bounding boxes of
   // the geometries from an underlying `MaterializedView` if possible.
-  std::optional<std::shared_ptr<SpatialJoin>> cloneWithBoundingBoxColumns()
+  qlm::optional<qlm::shared_ptr<SpatialJoin>> cloneWithBoundingBoxColumns()
       const;
 
  private:
@@ -205,8 +205,8 @@ class SpatialJoin : public Operation {
   // and `prepareLibspatialjoinBoundingBoxCols()`, the two places that need
   // this swap).
   struct SwappedJoinSides {
-    std::shared_ptr<QueryExecutionTree> childLeft_;
-    std::shared_ptr<QueryExecutionTree> childRight_;
+    qlm::shared_ptr<QueryExecutionTree> childLeft_;
+    qlm::shared_ptr<QueryExecutionTree> childRight_;
     Variable joinVarLeft_;
     Variable joinVarRight_;
   };
@@ -218,11 +218,11 @@ class SpatialJoin : public Operation {
   // Column indices of precomputed bounding boxes for both sides of the join,
   // only needed by `LibspatialjoinAlgorithm`. Computed separately from
   // `prepareJoin()` so the other algorithms don't pay for it.
-  std::pair<SpatialJoinBoundingBoxColumns, SpatialJoinBoundingBoxColumns>
+  qlm::pair<SpatialJoinBoundingBoxColumns, SpatialJoinBoundingBoxColumns>
   prepareLibspatialjoinBoundingBoxCols() const;
 
-  std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
-  std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
+  qlm::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
+  qlm::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
 
   SpatialJoinConfiguration config_;
 

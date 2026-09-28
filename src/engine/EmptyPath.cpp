@@ -148,16 +148,18 @@ qlm::vector<QueryExecutionTree*> EmptyPath::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
-std::string EmptyPath::getDescriptor() const {
-  return absl::StrCat("EmptyPath for ", variable_.name(),
-                      checkedChild_.has_value() ? " (existence check)" : "");
+qlm::string EmptyPath::getDescriptor() const {
+  return qlm::string{absl::StrCat(
+                         "EmptyPath for ", variable_.name(),
+                         checkedChild_.has_value() ? " (existence check)" : ""),
+                     allocator()};
 }
 
 // _____________________________________________________________________________
 size_t EmptyPath::getResultWidth() const { return resultWidth_; }
 
 // _____________________________________________________________________________
-std::string EmptyPath::getCacheKeyImpl() const {
+qlm::string EmptyPath::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "EMPTY PATH";
   if (graphVariable_.has_value()) {
@@ -173,7 +175,8 @@ std::string EmptyPath::getCacheKeyImpl() const {
     }
     os << " of:\n" << child().getCacheKey();
   }
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
@@ -230,9 +233,9 @@ bool EmptyPath::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> EmptyPath::resultSortedOn() const {
+qlm::vector<ColumnIndex> EmptyPath::resultSortedOn() const {
   if (!checkedChild_.has_value()) {
-    return {0};
+    return qlm::vector<ColumnIndex>{{0}, allocator()};
   }
   // The rows of the child are processed in order, so the sort order of the join
   // column is preserved. The only exception are UNDEF values, which match every
@@ -245,9 +248,9 @@ std::vector<ColumnIndex> EmptyPath::resultSortedOn() const {
       ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
   if (childSortedOn.empty() || childSortedOn.at(0) != joinColumn ||
       joinColumnMightBeUndef) {
-    return {};
+    return qlm::vector<ColumnIndex>{allocator()};
   }
-  return {0};
+  return qlm::vector<ColumnIndex>{{0}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -277,9 +280,9 @@ std::unique_ptr<Operation> EmptyPath::cloneImpl() const {
   if (checkedChild_.has_value()) {
     checkedChild = checkedChild_.value().clone();
   }
-  return std::make_unique<EmptyPath>(getExecutionContext(), variable_,
-                                     activeGraphs_, graphVariable_,
-                                     std::move(checkedChild));
+  return std::make_unique<EmptyPath>( getExecutionContext(),
+                                    variable_, activeGraphs_, graphVariable_,
+                                    std::move(checkedChild));
 }
 
 // _____________________________________________________________________________

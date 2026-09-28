@@ -24,11 +24,11 @@ class Bind : public Operation {
   parsedQuery::Bind _bind;
   // For the documentation of the overridden members, see Operation.h
  protected:
-  [[nodiscard]] std::string getCacheKeyImpl() const override;
+  [[nodiscard]] qlm::string getCacheKeyImpl() const override;
 
  public:
   const parsedQuery::Bind& bind() const { return _bind; }
-  [[nodiscard]] std::string getDescriptor() const override;
+  [[nodiscard]] qlm::string getDescriptor() const override;
   [[nodiscard]] size_t getResultWidth() const override;
 
  private:
@@ -49,7 +49,7 @@ class Bind : public Operation {
   bool knownEmptyResult() override;
 
  protected:
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   Result computeResult(bool requestLaziness) override;

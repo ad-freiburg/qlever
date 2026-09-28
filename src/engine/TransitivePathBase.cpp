@@ -203,7 +203,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
 }
 
 // _____________________________________________________________________________
-std::string TransitivePathBase::getCacheKeyImpl() const {
+qlm::string TransitivePathBase::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "TRANSITIVE PATH ";
   if (graphVariable_.has_value()) {
@@ -225,7 +225,8 @@ std::string TransitivePathBase::getCacheKeyImpl() const {
 
   os << "Subtree:\n" << subtree_->getCacheKey() << '\n';
 
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
@@ -254,7 +255,7 @@ size_t TransitivePathBase::numJoinColumnsWith(
 }
 
 // _____________________________________________________________________________
-std::string TransitivePathBase::getDescriptor() const {
+qlm::string TransitivePathBase::getDescriptor() const {
   std::ostringstream os;
   os << "TransitivePath ";
   // If not full transitive hull, show interval as [min, max].
@@ -274,22 +275,23 @@ std::string TransitivePathBase::getDescriptor() const {
   }
   // Right variable or entity name.
   os << rhs_.value_;
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
 size_t TransitivePathBase::getResultWidth() const { return resultWidth_; }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TransitivePathBase::resultSortedOn() const {
+qlm::vector<ColumnIndex> TransitivePathBase::resultSortedOn() const {
   if (lhs_.isSortedOnInputCol()) {
-    return {0};
+    return qlm::vector<ColumnIndex>{{0}, allocator()};
   }
   if (rhs_.isSortedOnInputCol()) {
-    return {1};
+    return qlm::vector<ColumnIndex>{{1}, allocator()};
   }
 
-  return {};
+  return qlm::vector<ColumnIndex>{allocator()};
 }
 
 // _____________________________________________________________________________

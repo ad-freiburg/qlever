@@ -22,9 +22,9 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            ColumnIndex t2JoinCol, bool keepJoinColumn,
            bool allowSwappingChildrenOnlyForTesting)
     : Operation(qec),
-      impl_(std::make_unique<JoinImpl>(qec, std::move(t1), std::move(t2),
-                                       t1JoinCol, t2JoinCol, keepJoinColumn,
-                                       allowSwappingChildrenOnlyForTesting)) {}
+      impl_(std::make_unique<JoinImpl>(
+          qec, std::move(t1), std::move(t2), t1JoinCol,
+          t2JoinCol, keepJoinColumn, allowSwappingChildrenOnlyForTesting)) {}
 
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::unique_ptr<JoinImpl>&& impl)
@@ -36,14 +36,15 @@ Join::Join(Join&&) = default;
 Join& Join::operator=(Join&&) = default;
 
 // _____________________________________________________________________________
-string Join::getDescriptor() const { return impl_->getDescriptor(); }
+qlm::string Join::getDescriptor() const { return impl_->getDescriptor(); }
 
 // _____________________________________________________________________________
 size_t Join::getResultWidth() const { return impl_->getResultWidth(); }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> Join::resultSortedOn() const {
-  return impl_->resultSortedOn();
+qlm::vector<ColumnIndex> Join::resultSortedOn() const {
+  const auto& sortedOn = impl_->resultSortedOn();
+  return {sortedOn.begin(), sortedOn.end(), allocator()};
 }
 
 // _____________________________________________________________________________
@@ -66,7 +67,7 @@ bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
 }
 
 // _____________________________________________________________________________
-string Join::getCacheKeyImpl() const { return impl_->getCacheKeyImpl(); }
+qlm::string Join::getCacheKeyImpl() const { return impl_->getCacheKeyImpl(); }
 
 // _____________________________________________________________________________
 bool Join::isDeterministicImpl() const { return impl_->isDeterministic(); }

@@ -58,7 +58,7 @@ struct TransitivePathSide {
     }
 
     auto [tree, col] = treeAndCol_.value();
-    const std::vector<ColumnIndex>& sortedOn =
+    const qlm::vector<ColumnIndex>& sortedOn =
         tree->getRootOperation()->getResultSortedOn();
 
     // If the column contains undef values, we can't guarantee the output order.
@@ -194,7 +194,7 @@ class TransitivePathBase : public Operation {
   const TransitivePathSide& getRight() const { return rhs_; }
 
  protected:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
   /**
    * @brief Decide on which transitive path side the hull computation should
@@ -249,11 +249,11 @@ class TransitivePathBase : public Operation {
                             ColumnIndex joinColumn) const;
 
  public:
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override;
 

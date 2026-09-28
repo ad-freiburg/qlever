@@ -17,12 +17,15 @@ qlm::vector<QueryExecutionTree*> NeutralOptional::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
-std::string NeutralOptional::getCacheKeyImpl() const {
-  return absl::StrCat("NeutralOptional#", tree_->getCacheKey());
+qlm::string NeutralOptional::getCacheKeyImpl() const {
+  return qlm::string{absl::StrCat("NeutralOptional#", tree_->getCacheKey()),
+                     allocator()};
 }
 
 // _____________________________________________________________________________
-std::string NeutralOptional::getDescriptor() const { return "Optional"; }
+qlm::string NeutralOptional::getDescriptor() const {
+  return qlm::string{"Optional", allocator()};
+}
 
 // _____________________________________________________________________________
 size_t NeutralOptional::getResultWidth() const {
@@ -63,13 +66,14 @@ void NeutralOptional::onLimitOffsetChanged(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> NeutralOptional::cloneImpl() const {
-  return std::make_unique<NeutralOptional>(getExecutionContext(),
-                                           tree_->clone());
+  return std::make_unique<NeutralOptional>( getExecutionContext(),
+                                          tree_->clone());
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> NeutralOptional::resultSortedOn() const {
-  return tree_->resultSortedOn();
+qlm::vector<ColumnIndex> NeutralOptional::resultSortedOn() const {
+  const auto& sortedOn = tree_->resultSortedOn();
+  return {sortedOn.begin(), sortedOn.end(), allocator()};
 }
 
 namespace {

@@ -63,14 +63,14 @@ class GroupByImpl : public Operation {
               std::shared_ptr<QueryExecutionTree> subtree);
 
  public:
-  virtual string getCacheKeyImpl() const override;
+  virtual qlm::string getCacheKeyImpl() const override;
 
  public:
-  virtual string getDescriptor() const override;
+  virtual qlm::string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override;
+  virtual qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override {
     // Implicit group by always returns a single row.

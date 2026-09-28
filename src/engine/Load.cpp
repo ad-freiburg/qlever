@@ -20,17 +20,21 @@ Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
       getResultFunction_(std::move(getResultFunction)) {}
 
 // _____________________________________________________________________________
-std::string Load::getCacheKeyImpl() const {
+qlm::string Load::getCacheKeyImpl() const {
   if (getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>()) {
-    return absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation(),
-                        loadClause_.silent_ ? " SILENT" : "");
+    return qlm::string{absl::StrCat(
+                 "LOAD ", loadClause_.iri_.toStringRepresentation(),
+                 loadClause_.silent_ ? " SILENT" : ""),
+               allocator()};
   }
-  return absl::StrCat("LOAD ", cacheBreaker_);
+  return qlm::string{absl::StrCat("LOAD ", cacheBreaker_), allocator()};
 }
 
 // _____________________________________________________________________________
-std::string Load::getDescriptor() const {
-  return absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation());
+qlm::string Load::getDescriptor() const {
+  return qlm::string{absl::StrCat("LOAD ",
+                                  loadClause_.iri_.toStringRepresentation()),
+                     allocator()};
 }
 
 // _____________________________________________________________________________
@@ -62,11 +66,13 @@ bool Load::knownEmptyResult() { return false; }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Load::cloneImpl() const {
-  return std::make_unique<Load>(_executionContext, loadClause_);
+  return std::make_unique<Load>( _executionContext, loadClause_);
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> Load::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> Load::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // _____________________________________________________________________________
 Result Load::computeResult(bool requestLaziness) {

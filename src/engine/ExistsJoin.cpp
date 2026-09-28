@@ -43,19 +43,21 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::string ExistsJoin::getCacheKeyImpl() const {
-  return absl::StrCat("EXISTS JOIN left: ", left_->getCacheKey(),
+qlm::string ExistsJoin::getCacheKeyImpl() const {
+  return qlm::string{absl::StrCat("EXISTS JOIN left: ", left_->getCacheKey(),
                       " right: ", right_->getCacheKey(), " join columns: [",
                       absl::StrJoin(joinColumns_, " ",
                                     [](std::string* out, const auto& array) {
                                       absl::StrAppend(out, "(", array[0], ",",
                                                       array[1], ")");
                                     }),
-                      "]");
+                      "]"), allocator()};
 }
 
 // _____________________________________________________________________________
-std::string ExistsJoin::getDescriptor() const { return "Exists Join"; }
+qlm::string ExistsJoin::getDescriptor() const {
+  return qlm::string{"Exists Join", allocator()};
+}
 
 // ____________________________________________________________________________
 VariableToColumnMap ExistsJoin::computeVariableToColumnMap() const {
@@ -74,12 +76,15 @@ size_t ExistsJoin::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
+qlm::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
   if (rightIndexNestedLoopJoinIsPossible()) {
-    return left_->getRootOperation()->getChildren().at(0)->resultSortedOn();
+    const auto& sortedOn =
+      left_->getRootOperation()->getChildren().at(0)->resultSortedOn();
+    return {sortedOn.begin(), sortedOn.end(), allocator()};
   }
   // We add one column to `left_`, but do not change the order of the rows.
-  return left_->resultSortedOn();
+  const auto& sortedOn = left_->resultSortedOn();
+  return {sortedOn.begin(), sortedOn.end(), allocator()};
 }
 
 // ____________________________________________________________________________
@@ -290,7 +295,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
-  auto newJoin = std::make_unique<ExistsJoin>(*this);
+  auto newJoin = std::make_unique<ExistsJoin>( *this);
   newJoin->left_ = left_->clone();
   newJoin->right_ = right_->clone();
   return newJoin;

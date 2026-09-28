@@ -123,27 +123,29 @@ bool TextIndexScanForEntity::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
-  return {ColumnIndex(0)};
+qlm::vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{{ColumnIndex(0)}, allocator()};
 }
 
 // _____________________________________________________________________________
-std::string TextIndexScanForEntity::getDescriptor() const {
-  return absl::StrCat("TextIndexScanForEntity on ",
-                      config_.varToBindText_.name());
+qlm::string TextIndexScanForEntity::getDescriptor() const {
+  return qlm::string{absl::StrCat("TextIndexScanForEntity on ",
+                                  config_.varToBindText_.name()),
+                     allocator()};
 }
 
 // _____________________________________________________________________________
-std::string TextIndexScanForEntity::getCacheKeyImpl() const {
+qlm::string TextIndexScanForEntity::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "ENTITY INDEX SCAN FOR WORD: " << " with word: \"" << config_.word_
      << "\" and fixed-entity: \""
      << (hasFixedEntity() ? fixedEntity() : "no fixed-entity")
      << "\", has variable: " << config_.scoreVar_.has_value();
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> TextIndexScanForEntity::cloneImpl() const {
-  return std::make_unique<TextIndexScanForEntity>(*this);
+  return std::make_unique<TextIndexScanForEntity>( *this);
 }

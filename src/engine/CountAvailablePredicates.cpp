@@ -9,6 +9,7 @@
 #include "engine/IndexScan.h"
 #include "global/Pattern.h"
 #include "global/RuntimeParameters.h"
+#include <vector>
 #include "util/ContainersWithAllocator.h"
 #include "util/ParallelExecutor.h"
 
@@ -19,13 +20,14 @@ CountAvailablePredicates::CountAvailablePredicates(
     Variable countVariable)
     : Operation(qec),
       subtree_(QueryExecutionTree::createSortedTree(std::move(subtree),
-                                                    {subjectColumnIndex})),
+                                                    std::vector<ColumnIndex>{
+                                                        subjectColumnIndex})),
       subjectColumnIndex_(subjectColumnIndex),
       predicateVariable_(std::move(predicateVariable)),
       countVariable_(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
-std::string CountAvailablePredicates::getCacheKeyImpl() const {
+qlm::string CountAvailablePredicates::getCacheKeyImpl() const {
   std::ostringstream os;
   if (subtree_ == nullptr) {
     os << "COUNT_AVAILABLE_PREDICATES for all entities";
@@ -33,24 +35,25 @@ std::string CountAvailablePredicates::getCacheKeyImpl() const {
     os << "COUNT_AVAILABLE_PREDICATES (col " << subjectColumnIndex_ << ")\n"
        << subtree_->getCacheKey();
   }
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
-std::string CountAvailablePredicates::getDescriptor() const {
+qlm::string CountAvailablePredicates::getDescriptor() const {
   if (subtree_ == nullptr) {
-    return "CountAvailablePredicates for a all entities";
+    return qlm::string{"CountAvailablePredicates for a all entities", allocator()};
   }
-  return "CountAvailablePredicates";
+  return qlm::string{"CountAvailablePredicates", allocator()};
 }
 
 // _____________________________________________________________________________
 size_t CountAvailablePredicates::getResultWidth() const { return 2; }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
+qlm::vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
   // The result is not sorted on any column.
-  return {};
+  return qlm::vector<ColumnIndex>{allocator()};
 }
 
 // _____________________________________________________________________________

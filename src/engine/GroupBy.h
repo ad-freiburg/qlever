@@ -30,13 +30,13 @@ class GroupBy : public Operation {
   GroupBy& operator=(GroupBy&&);
 
   // Internal constructor used for the implementation of `clone`.
-  GroupBy(QueryExecutionContext* qec, std::unique_ptr<GroupByImpl>&& impl);
+      GroupBy(QueryExecutionContext* qec, std::unique_ptr<GroupByImpl>&& impl);
 
   // Virtual functions inherited from the `Operation` base class.
-  std::string getDescriptor() const override;
-  std::string getCacheKeyImpl() const override;
+        qlm::string getDescriptor() const override;
+        qlm::string getCacheKeyImpl() const override;
   size_t getResultWidth() const override;
-  std::vector<ColumnIndex> resultSortedOn() const override;
+        qlm::vector<ColumnIndex> resultSortedOn() const override;
   bool knownEmptyResult() override;
   float getMultiplicity(size_t col) override;
   uint64_t getSizeEstimateBeforeLimit() override;
@@ -48,7 +48,7 @@ class GroupBy : public Operation {
  public:
   VariableToColumnMap computeVariableToColumnMap() const override;
   Result computeResult(bool requestLaziness) override;
-  std::unique_ptr<Operation> cloneImpl() const override;
+      std::unique_ptr<Operation> cloneImpl() const override;
 
   // Getters for testing.
   const std::vector<Variable>& groupByVariables() const;
@@ -65,7 +65,7 @@ class GroupBy : public Operation {
   // alias expressions and the subtree.
   [[nodiscard]] bool isDeterministicImpl() const override;
 
-  std::unique_ptr<GroupByImpl> _impl;
+      std::unique_ptr<GroupByImpl> _impl;
 };
 
 #endif  // QLEVER_SRC_ENGINE_GROUPBY_H

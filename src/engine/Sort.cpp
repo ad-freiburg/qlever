@@ -41,7 +41,7 @@ Sort::Sort(QueryExecutionContext* qec,
       explicitSort_{explicitSort} {}
 
 // _____________________________________________________________________________
-std::string Sort::getCacheKeyImpl() const {
+qlm::string Sort::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "SORT(internal) on columns:";
 
@@ -49,11 +49,12 @@ std::string Sort::getCacheKeyImpl() const {
     os << "asc(" << sortCol << ") ";
   }
   os << "\n" << subtree_->getCacheKey();
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
-std::string Sort::getDescriptor() const {
+qlm::string Sort::getDescriptor() const {
   std::string orderByVars;
   const auto& varCols = subtree_->getVariableColumns();
   for (auto sortColumn : sortColumnIndices_) {
@@ -64,7 +65,8 @@ std::string Sort::getDescriptor() const {
     }
   }
 
-  return "Sort (internal order) on" + orderByVars;
+  auto descriptor = std::string{"Sort (internal order) on"} + orderByVars;
+  return {descriptor.begin(), descriptor.end(), allocator()};
 }
 
 // _____________________________________________________________________________
@@ -278,8 +280,9 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Sort::cloneImpl() const {
-  return std::make_unique<Sort>(_executionContext, subtree_->clone(),
-                                sortColumnIndices_, explicitSort_);
+  return std::make_unique<Sort>( _executionContext,
+                               subtree_->clone(), sortColumnIndices_,
+                               explicitSort_);
 }
 
 // _____________________________________________________________________________

@@ -37,15 +37,17 @@ class OrderBy : public Operation {
           std::shared_ptr<QueryExecutionTree> subtree, SortIndices sortIndices);
 
  protected:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
  public:
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
 
   // The function `resultSortedOn` refers to the `internal` sorting by ID value.
   // This is different from the `semantic` sorting that the ORDER BY operation
   // computes.
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
 
   // Expose the variables on which this OrderBy is performed. Currently mostly
   // used for testing.

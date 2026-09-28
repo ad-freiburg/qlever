@@ -22,13 +22,13 @@ class NeutralElementOperation : public Operation {
 
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  [[nodiscard]] std::string getCacheKeyImpl() const override {
-    return "Neutral Element";
+  [[nodiscard]] qlm::string getCacheKeyImpl() const override {
+    return qlm::string{"Neutral Element", allocator()};
   }
 
  public:
-  [[nodiscard]] std::string getDescriptor() const override {
-    return "NeutralElement";
+  [[nodiscard]] qlm::string getDescriptor() const override {
+    return qlm::string{"NeutralElement", allocator()};
   }
   [[nodiscard]] size_t getResultWidth() const override { return 0; }
   size_t getCostEstimate() override { return 0; }
@@ -41,12 +41,13 @@ class NeutralElementOperation : public Operation {
   bool knownEmptyResult() override { return false; }
 
   std::unique_ptr<Operation> cloneImpl() const override {
-    return std::make_unique<NeutralElementOperation>(_executionContext);
+    return std::make_unique<NeutralElementOperation>(
+                                                    _executionContext);
   }
 
  protected:
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
-    return {};
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
   }
 
  private:

@@ -31,14 +31,14 @@ class MultiColumnJoin : public Operation {
                   bool allowSwappingChildrenOnlyForTesting = true);
 
  protected:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
  public:
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override {
     return _left->knownEmptyResult() || _right->knownEmptyResult();

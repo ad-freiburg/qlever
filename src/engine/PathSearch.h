@@ -217,8 +217,8 @@ class PathSearch : public Operation {
     return variableColumns_.at(targetVar).columnIndex_;
   }
 
-  std::string getCacheKeyImpl() const override;
-  std::string getDescriptor() const override;
+  qlm::string getCacheKeyImpl() const override;
+  qlm::string getDescriptor() const override;
   size_t getResultWidth() const override;
 
   size_t getCostEstimate() override;
@@ -227,7 +227,7 @@ class PathSearch : public Operation {
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   void bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,
                       size_t inputCol);

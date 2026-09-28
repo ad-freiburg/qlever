@@ -82,6 +82,6 @@ Result S2GeometryAlgorithm::run() {
     }
   }
 
-  return Result(std::move(result), std::vector<ColumnIndex>{},
+  return Result(std::move(result), qlm::vector<ColumnIndex>{qec_->getAllocator()},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }

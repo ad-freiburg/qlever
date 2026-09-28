@@ -19,18 +19,20 @@ class StallForeverOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  std::string getCacheKeyImpl() const override {
-    return "StallForeverOperation";
+  qlm::string getCacheKeyImpl() const override {
+    return {"StallForeverOperation", allocator()};
   }
-  std::string getDescriptor() const override {
-    return "StallForeverOperationDescriptor";
+  qlm::string getDescriptor() const override {
+    return {"StallForeverOperationDescriptor", allocator()};
   }
   size_t getResultWidth() const override { return 0; }
   size_t getCostEstimate() override { return 0; }
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
   VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
 
  public:
@@ -54,7 +56,7 @@ class StallForeverOperation : public Operation {
 
   // _____________________________________________________________________________
   std::unique_ptr<Operation> cloneImpl() const override {
-    AD_THROW("Clone not implemented");
+    return std::make_unique<StallForeverOperation>( _executionContext);
   }
 };
 // _____________________________________________________________________________
@@ -66,16 +68,20 @@ class ShallowParentOperation : public Operation {
   explicit ShallowParentOperation(std::shared_ptr<QueryExecutionTree> child)
       : Operation{child->getRootOperation()->getExecutionContext()},
         child_{std::move(child)} {}
-  std::string getCacheKeyImpl() const override { return "ParentOperation"; }
-  std::string getDescriptor() const override {
-    return "ParentOperationDescriptor";
+  qlm::string getCacheKeyImpl() const override {
+    return {"ParentOperation", allocator()};
+  }
+  qlm::string getDescriptor() const override {
+    return {"ParentOperationDescriptor", allocator()};
   }
   size_t getResultWidth() const override { return 0; }
   size_t getCostEstimate() override { return 0; }
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
   VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {{child_.get()}, allocator()};
@@ -103,7 +109,8 @@ class ShallowParentOperation : public Operation {
 
   // _____________________________________________________________________________
   std::unique_ptr<Operation> cloneImpl() const override {
-    AD_THROW("Clone not implemented");
+    return std::make_unique<ShallowParentOperation>(
+        ShallowParentOperation{child_->clone()});
   }
 };
 
@@ -114,19 +121,21 @@ class AlwaysFailOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  std::string getCacheKeyImpl() const override {
+  qlm::string getCacheKeyImpl() const override {
     // Because this operation always fails, it should never be cached.
-    return "AlwaysFailOperationCacheKey";
+    return {"AlwaysFailOperationCacheKey", allocator()};
   }
-  std::string getDescriptor() const override {
-    return "AlwaysFailOperationDescriptor";
+  qlm::string getDescriptor() const override {
+    return {"AlwaysFailOperationDescriptor", allocator()};
   }
   size_t getResultWidth() const override { return 1; }
   size_t getCostEstimate() override { return 0; }
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  std::vector<ColumnIndex> resultSortedOn() const override { return {0}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return {{ColumnIndex{0}}, allocator()};
+  }
   VariableToColumnMap computeVariableToColumnMap() const override {
     if (!variable_.has_value()) {
       return {};
@@ -156,7 +165,11 @@ class AlwaysFailOperation : public Operation {
 
   // _____________________________________________________________________________
   std::unique_ptr<Operation> cloneImpl() const override {
-    AD_THROW("Clone not implemented");
+    if (variable_.has_value()) {
+      return std::make_unique<AlwaysFailOperation>( _executionContext,
+                                                  variable_.value());
+    }
+    return std::make_unique<AlwaysFailOperation>( _executionContext);
   }
 };
 
@@ -167,16 +180,18 @@ class CustomGeneratorOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  std::string getCacheKeyImpl() const override { AD_FAIL(); }
-  std::string getDescriptor() const override {
-    return "CustomGeneratorOperationDescriptor";
+  qlm::string getCacheKeyImpl() const override { AD_FAIL(); }
+  qlm::string getDescriptor() const override {
+    return {"CustomGeneratorOperationDescriptor", allocator()};
   }
   size_t getResultWidth() const override { return 0; }
   size_t getCostEstimate() override { return 0; }
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
   VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
 
  public:
@@ -192,7 +207,13 @@ class CustomGeneratorOperation : public Operation {
 
   // _____________________________________________________________________________
   std::unique_ptr<Operation> cloneImpl() const override {
-    AD_THROW("Clone not implemented");
+    return std::make_unique<CustomGeneratorOperation>(
+        _executionContext,
+        []() -> Result::Generator {
+          throw std::runtime_error{"CustomGeneratorOperation clone is not "
+                                   "supported for generator state"};
+          co_return;
+        }());
   }
 };
 

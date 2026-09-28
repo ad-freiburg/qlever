@@ -33,6 +33,7 @@ EvaluationContext::EvaluationContext(
       _variableToColumnMap{variableToColumnMap},
       _inputTable{std::move(inputTable)},
       _allocator{allocator},
+      _columnsByWhichResultIsSorted{allocator},
       _localVocab{localVocab},
       cancellationHandle_{std::move(cancellationHandle)},
       deadline_{deadline} {

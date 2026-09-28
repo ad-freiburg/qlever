@@ -66,13 +66,13 @@ qlm::vector<QueryExecutionTree*> ExplicitIdTableOperation::getChildrenImpl()
 }
 
 // _____________________________________________________________________________
-std::string ExplicitIdTableOperation::getCacheKeyImpl() const {
-  return cacheKey_;
+qlm::string ExplicitIdTableOperation::getCacheKeyImpl() const {
+  return {cacheKey_.begin(), cacheKey_.end(), allocator()};
 }
 
 // _____________________________________________________________________________
-std::string ExplicitIdTableOperation::getDescriptor() const {
-  return "Explicit Result";
+qlm::string ExplicitIdTableOperation::getDescriptor() const {
+  return qlm::string{"Explicit Result", allocator()};
 }
 
 // _____________________________________________________________________________
@@ -108,8 +108,8 @@ std::unique_ptr<Operation> ExplicitIdTableOperation::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> ExplicitIdTableOperation::resultSortedOn() const {
-  return sortedColumns_;
+qlm::vector<ColumnIndex> ExplicitIdTableOperation::resultSortedOn() const {
+  return {sortedColumns_.begin(), sortedColumns_.end(), allocator()};
 }
 
 // _____________________________________________________________________________

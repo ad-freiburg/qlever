@@ -287,8 +287,7 @@ TEST(Union, sortedMerge) {
       qec, makeIdTableFromVector({{4, 1}, {8, 2}}), Vars{Var{"?c"}, Var{"?a"}},
       false, std::vector<ColumnIndex>{1, 0});
   Union unionOperation{qec, std::move(leftT), std::move(rightT), {0, 1, 2}};
-  EXPECT_EQ(unionOperation.resultSortedOn(),
-            (std::vector<ColumnIndex>{0, 1, 2}));
+  EXPECT_THAT(unionOperation.resultSortedOn(), ::testing::ElementsAre(0, 1, 2));
   {
     qec->getQueryTreeCache().clearAll();
     auto result =
@@ -579,14 +578,14 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto tree = unionOperation.makeSortedTree({0, 1, 2, 3});
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
-    EXPECT_EQ(variant->getResultSortedOn(),
-              (std::vector<ColumnIndex>{0, 1, 2, 3}));
-    EXPECT_EQ(
+      EXPECT_THAT(variant->getResultSortedOn(), ::testing::ElementsAre(0, 1, 2,
+                                       3));
+      EXPECT_THAT(
         variant->getChildren().at(0)->getRootOperation()->getResultSortedOn(),
-        (std::vector<ColumnIndex>{0, 1, 2}));
-    EXPECT_EQ(
+        ::testing::ElementsAre(0, 1, 2));
+      EXPECT_THAT(
         variant->getChildren().at(1)->getRootOperation()->getResultSortedOn(),
-        (std::vector<ColumnIndex>{0, 1}));
+        ::testing::ElementsAre(0, 1));
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected =
         makeIdTableFromVector({{1, U, U, 4}, {1, 2, 4, U}, {2, U, U, 8}});
@@ -597,14 +596,14 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto tree = unionOperation.makeSortedTree({0, 3, 1, 2});
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
-    EXPECT_EQ(variant->getResultSortedOn(),
-              (std::vector<ColumnIndex>{0, 3, 1, 2}));
-    EXPECT_EQ(
+      EXPECT_THAT(variant->getResultSortedOn(), ::testing::ElementsAre(0, 3, 1,
+                                       2));
+      EXPECT_THAT(
         variant->getChildren().at(0)->getRootOperation()->getResultSortedOn(),
-        (std::vector<ColumnIndex>{0, 1, 2}));
-    EXPECT_EQ(
+        ::testing::ElementsAre(0, 1, 2));
+      EXPECT_THAT(
         variant->getChildren().at(1)->getRootOperation()->getResultSortedOn(),
-        (std::vector<ColumnIndex>{0, 1}));
+        ::testing::ElementsAre(0, 1));
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected =
         makeIdTableFromVector({{1, 2, 4, U}, {1, U, U, 4}, {2, U, U, 8}});

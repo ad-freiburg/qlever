@@ -15,6 +15,7 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 namespace SpatialJoinTestHelpers {
 
@@ -529,8 +530,10 @@ inline BoundingBoxAlgorithm getDummySpatialJoinAlgsForWrapperTesting(
                                    nullptr,
                                    0,
                                    0,
-                                   std::vector<ColumnIndex>{},
-                                   std::vector<ColumnIndex>{},
+                                     qlm::vector<ColumnIndex>{
+                                       qec.value()->getAllocator()},
+                                     qlm::vector<ColumnIndex>{
+                                       qec.value()->getAllocator()},
                                    1};
 
   return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};

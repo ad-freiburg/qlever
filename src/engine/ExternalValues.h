@@ -58,9 +58,9 @@ class ExternalValues : private Values, virtual public Operation {
   // Override to ensure external values are never considered empty.
   bool knownEmptyResult() override { return false; }
 
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
   Result computeResult(bool requestLaziness) override;
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
   // Override the method that is used by the `Operation` base class to collect
   // all `ExternalValues` from a `QueryExecutionTree`.

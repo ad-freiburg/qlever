@@ -45,22 +45,22 @@ bool Service::isDeterministicImpl() const {
 }
 
 // ____________________________________________________________________________
-std::string Service::getCacheKeyImpl() const {
+qlm::string Service::getCacheKeyImpl() const {
   if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>()) {
-    return absl::StrCat(
+    return qlm::string{absl::StrCat(
         "SERVICE ", parsedServiceClause_.silent_ ? "SILENT " : "",
         parsedServiceClause_.serviceIri_.toStringRepresentation(), " {\n",
         parsedServiceClause_.prologue_, "\n",
-        parsedServiceClause_.graphPatternAsString_, "\n}");
+        parsedServiceClause_.graphPatternAsString_, "\n}"), allocator()};
   }
-  return absl::StrCat("SERVICE ", cacheBreaker_);
+  return qlm::string{absl::StrCat("SERVICE ", cacheBreaker_), allocator()};
 }
 
 // ____________________________________________________________________________
-std::string Service::getDescriptor() const {
-  return absl::StrCat(
+qlm::string Service::getDescriptor() const {
+  return qlm::string{absl::StrCat(
       "Service with IRI ",
-      parsedServiceClause_.serviceIri_.toStringRepresentation());
+      parsedServiceClause_.serviceIri_.toStringRepresentation()), allocator()};
 }
 
 // ____________________________________________________________________________

@@ -30,10 +30,11 @@ qlm::vector<QueryExecutionTree*> Describe::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
-std::string Describe::getCacheKeyImpl() const {
+qlm::string Describe::getCacheKeyImpl() const {
   // The cache key must represent the `resources_` (the variables and IRIs of
   // the DESCRIBE clause) and the `subtree_` (the WHERE clause).
-  std::string result = absl::StrCat("DESCRIBE ", subtree_->getCacheKey(), " ");
+  qlm::string result{allocator()};
+  result.append(absl::StrCat("DESCRIBE ", subtree_->getCacheKey(), " "));
   for (const auto& resource : describe_.resources_) {
     if (std::holds_alternative<TripleComponent::Iri>(resource)) {
       result.append(
@@ -60,14 +61,16 @@ std::string Describe::getCacheKeyImpl() const {
     ql::ranges::transform(defaultGraphs.value(), std::back_inserter(graphIdVec),
                           &toRdfLiteral);
     ql::ranges::sort(graphIdVec);
-    absl::StrAppend(&result,
-                    "\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " "));
+    result.append(absl::StrCat(
+        "\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " ")));
   }
   return result;
 }
 
 // _____________________________________________________________________________
-std::string Describe::getDescriptor() const { return "DESCRIBE"; }
+qlm::string Describe::getDescriptor() const {
+  return qlm::string{"DESCRIBE", allocator()};
+}
 
 // _____________________________________________________________________________
 size_t Describe::getResultWidth() const { return 3; }
@@ -83,7 +86,9 @@ bool Describe::knownEmptyResult() { return false; }
 
 // The result cannot easily be sorted, as it involves recursive expanding of
 // graphs.
-std::vector<ColumnIndex> Describe::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> Describe::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // The result always has three variables `?subject`, `?predicate`, `?object`.
 //
@@ -261,6 +266,6 @@ Result Describe::computeResult([[maybe_unused]] bool requestLaziness) {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Describe::cloneImpl() const {
-  return std::make_unique<Describe>(_executionContext, subtree_->clone(),
-                                    describe_);
+  return std::make_unique<Describe>( _executionContext,
+                                   subtree_->clone(), describe_);
 }
