@@ -751,13 +751,15 @@ TEST(SplitVocabulary, geoCellGridIndicesThroughSplitVocabulary) {
   auto [loM, hiM] = vocab.getPositionOfWord(wktMissing, comparator);
   EXPECT_EQ(loM, hiM);
   EXPECT_GT(loM, SGV::addMarker(grid.indexFromCellAndPosition(12, 1), 1));
+}
+
 // _____________________________________________________________________________
 TEST(Vocabulary, ScopedSplitVocabularyFilesDeletesOwnedFiles) {
-  // The guard owns exactly the paths from the vocabulary's split-filename
-  // function, and deletes them when it goes out of scope.
+  // The guard owns exactly the paths from the vocabulary's
+  // `underlyingFilenames`
+  //, and deletes them when it goes out of scope.
   const std::string filename = gtestCurrentTestName();
-  const auto ownedFilenames =
-      TwoSplitVocabulary::splitFilenameFunction_(filename);
+  const auto ownedFilenames = TwoSplitVocabulary::underlyingFilenames(filename);
   {
     vocabulary_test::ScopedSplitVocabularyFiles<TwoSplitVocabulary> cleanup{
         filename};
@@ -781,8 +783,7 @@ TEST(Vocabulary, ScopedSplitVocabularyFilesDeletesOwnedFilesOnException) {
   // The guard also deletes when the scope is left via an exception, for
   // example by a failing assertion.
   const std::string filename = gtestCurrentTestName();
-  const auto ownedFilenames =
-      TwoSplitVocabulary::splitFilenameFunction_(filename);
+  const auto ownedFilenames = TwoSplitVocabulary::underlyingFilenames(filename);
   auto writeThenThrow = [&]() {
     vocabulary_test::ScopedSplitVocabularyFiles<TwoSplitVocabulary> cleanup{
         filename};

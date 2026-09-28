@@ -160,10 +160,6 @@ class SplitVocabulary {
   // Instances of the functions used for implementing the specific split logic
   static constexpr SplitFunction splitFunction_{};
 
- private:
-  // Array that holds all underlying vocabularies.
-  UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
-
   // The base filenames of all the underlying vocabularies for the given base
   // `filename` of this vocabulary, obtained by appending the
   // `FilenameSuffixes`.
@@ -175,6 +171,10 @@ class SplitVocabulary {
     }
     return filenames;
   }
+
+ private:
+  // Array that holds all underlying vocabularies.
+  UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
 
   // Implementation of `scanAll`, written separately because in C++17, lambdas
   // can't have explicit template parameters.

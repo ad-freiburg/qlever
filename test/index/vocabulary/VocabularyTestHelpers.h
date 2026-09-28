@@ -483,11 +483,10 @@ auto makeVocabFileCleanup(std::string filename) {
 // given base filename and deletes them when it goes out of scope, even when
 // an assertion fails or an exception is thrown.
 //
-// The owned paths are derived from the vocabulary's own split-filename
-// function (`SplitVocabulary::splitFilenameFunction_`), the same function
-// the implementation uses to name the underlying files, so they can never
-// drift from the implementation. For example, a two-way split owns `{base,
-// base.a}` and a three-way split owns `{base.a, base.b, base.c}`.
+// The owned paths are derived from `SplitVocabulary::underlyingFilenames`,
+// the same function the implementation uses to name the underlying files, so
+// they can never drift from the implementation. For example, a two-way split
+// owns `{base, base.a}` and a three-way split owns `{base.a, base.b, base.c}`.
 //
 // The guard must be destroyed after the vocabulary is closed: declare it
 // before the vocabulary, so that reverse destruction order deletes the files
@@ -496,7 +495,7 @@ template <typename SplitVocabulary>
 class ScopedSplitVocabularyFiles {
  public:
   explicit ScopedSplitVocabularyFiles(const std::string& filename)
-      : filenames_{SplitVocabulary::splitFilenameFunction_(filename)} {}
+      : filenames_{SplitVocabulary::underlyingFilenames(filename)} {}
 
   ScopedSplitVocabularyFiles(const ScopedSplitVocabularyFiles&) = delete;
   ScopedSplitVocabularyFiles& operator=(const ScopedSplitVocabularyFiles&) =
