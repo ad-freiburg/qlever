@@ -1,6 +1,12 @@
-// Copyright 2022, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/vocabulary/VocabularyOnDisk.h"
 
@@ -11,6 +17,7 @@
 #include <array>
 
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/ExceptionHandling.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -156,9 +163,31 @@ VocabularyScanRange VocabularyOnDisk::scanAll() const {
 }
 
 // _____________________________________________________________________________
+void VocabularyOnDisk::readThroughManager(ad_utility::BatchManagerBase& manager,
+                                          int fd,
+                                          ql::span<const size_t> numBytes,
+                                          ql::span<const uint64_t> offsets,
+                                          ql::span<char*> buffers,
+                                          ql::span<const size_t> positions) {
+  if (positions.empty()) {
+    return;
+  }
+  auto select = [&positions](auto values) {
+    return ::ranges::to_vector(
+        positions |
+        ql::views::transform([&values](size_t i) { return values[i]; }));
+  };
+  auto selectedNumBytes = select(numBytes);
+  auto selectedOffsets = select(offsets);
+  auto selectedBuffers = select(buffers);
+  manager.wait(
+      manager.addBatch(fd, selectedNumBytes, selectedOffsets, selectedBuffers));
+}
+
+// _____________________________________________________________________________
 std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
-    ad_utility::BatchManagerBase& manager,
-    ql::span<const size_t> indices) const {
+    ad_utility::BatchManagerBase& manager, ql::span<const size_t> indices,
+    bool pageCacheFastPath) const {
   // For each requested index `i`, read its offset together with the next offset
   // (which bounds the string) as one 16-byte pair from `.offsets`.
   const size_t numIndices = indices.size();
@@ -172,15 +201,65 @@ std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
     fileOffset = index * sizeof(uint64_t);
     target = reinterpret_cast<char*>(&offsetPair);
   }
-  manager.wait(
-      manager.addBatch(offsetsFile_.fd(), sizes, fileOffsets, targets));
+  if (!pageCacheFastPath) {
+    manager.wait(
+        manager.addBatch(offsetsFile_.fd(), sizes, fileOffsets, targets));
+    return offsetPairs;
+  }
+
+  // The pairs of consecutive indices overlap in the file, so read each run of
+  // consecutive indices `[runBegins[r], runBegins[r + 1])` as one range of
+  // `runLength + 1` offsets into `runOffsets`.
+  std::vector<size_t> runBegins{0};
+  for (size_t i = 1; i < numIndices; ++i) {
+    if (indices[i] != indices[i - 1] + 1) {
+      runBegins.push_back(i);
+    }
+  }
+  runBegins.push_back(numIndices);
+  const size_t numRuns = runBegins.size() - 1;
+  std::vector<uint64_t> runOffsets(numIndices + numRuns);
+  std::vector<size_t> runSizes(numRuns);
+  std::vector<uint64_t> runFileOffsets(numRuns);
+  std::vector<char*> runTargets(numRuns);
+  for (size_t run = 0; run < numRuns; ++run) {
+    const size_t begin = runBegins[run];
+    const size_t length = runBegins[run + 1] - begin;
+    runSizes[run] = (length + 1) * sizeof(uint64_t);
+    runFileOffsets[run] = fileOffsets[begin];
+    runTargets[run] = reinterpret_cast<char*>(runOffsets.data() + begin + run);
+  }
+  auto missedRuns = ad_utility::readPageCacheHits(offsetsFile_.fd(), runSizes,
+                                                  runFileOffsets, runTargets);
+
+  // Fill the pairs of the served runs, and collect the pairs of the missed runs
+  // for `manager`.
+  std::vector<size_t> missedPositions;
+  auto missedRun = missedRuns.begin();
+  for (size_t run = 0; run < numRuns; ++run) {
+    const size_t begin = runBegins[run];
+    const size_t end = runBegins[run + 1];
+    if (missedRun != missedRuns.end() && *missedRun == run) {
+      ++missedRun;
+      for (size_t i = begin; i < end; ++i) {
+        missedPositions.push_back(i);
+      }
+      continue;
+    }
+    const uint64_t* runStart = runOffsets.data() + begin + run;
+    for (size_t i = begin; i < end; ++i) {
+      offsetPairs[i] = OffsetPair{runStart[i - begin], runStart[i - begin + 1]};
+    }
+  }
+  readThroughManager(manager, offsetsFile_.fd(), sizes, fileOffsets, targets,
+                     missedPositions);
   return offsetPairs;
 }
 
 // _____________________________________________________________________________
 VocabBatchLookupResult VocabularyOnDisk::readStrings(
     ad_utility::BatchManagerBase& manager,
-    ql::span<const OffsetPair> offsetPairs) const {
+    ql::span<const OffsetPair> offsetPairs, bool pageCacheFastPath) const {
   // Read the string data. String `i` starts at `offset_` with length
   // `nextOffset_ - offset_`; the strings are packed contiguously into the
   // builder's buffer, with one precomputed view per word at its fixed offset.
@@ -200,8 +279,15 @@ VocabBatchLookupResult VocabularyOnDisk::readStrings(
   // Bind the returned array: `addBatch` takes a span, and the pointers must
   // stay alive until `wait` returns.
   auto targets = builder.targets();
-  manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets,
-                                ql::span<char*>{targets}));
+  ql::span<char*> targetSpan{targets};
+  if (pageCacheFastPath) {
+    auto missed = ad_utility::readPageCacheHits(file_.fd(), sizes, fileOffsets,
+                                                targetSpan);
+    readThroughManager(manager, file_.fd(), sizes, fileOffsets, targetSpan,
+                       missed);
+  } else {
+    manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets, targetSpan));
+  }
   return std::move(builder).finalize();
 }
 
@@ -221,8 +307,12 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
         "`VocabularyOnDisk::lookupBatch`");
   }};
 
-  auto offsetPairs = readOffsetPairs(*manager, indices);
-  return readStrings(*manager, offsetPairs);
+  const bool pageCacheFastPath =
+      getRuntimeParameter<
+          &RuntimeParameters::vocabularyIouringPageCacheFastPath_>() &&
+      ad_utility::pageCacheFastPathIsSupported();
+  auto offsetPairs = readOffsetPairs(*manager, indices, pageCacheFastPath);
+  return readStrings(*manager, offsetPairs, pageCacheFastPath);
 }
 
 // _____________________________________________________________________________
