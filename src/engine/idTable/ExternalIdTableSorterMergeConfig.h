@@ -169,8 +169,10 @@ inline size_t numBufferedOutputBlocksPerChunk(const MergePhaseConfig& config,
                                  numChunksInFlight;
   const MemorySize blockMemory =
       MemorySize::bytes(outputBlockSize * config.numColumns_ * sizeof(Id));
-  if (config.ignoreMemoryLimit_ || inputMemory >= config.memoryLimit_ ||
-      blockMemory.getBytes() == 0) {
+  // A block size of zero is rejected by `OutputBlockSize` anyway, and a table
+  // without columns has nothing to sort.
+  AD_CORRECTNESS_CHECK(blockMemory.getBytes() > 0);
+  if (config.ignoreMemoryLimit_ || inputMemory >= config.memoryLimit_) {
     return MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK;
   }
   // The blocks that are not buffered by the chunks: those between the merge and
@@ -226,8 +228,10 @@ inline MergePhaseParameters computeMergePhaseParameters(
   if (config.ignoreMemoryLimit_) {
     // Without a memory limit, let all the chunks that the parallelism offers be
     // in flight, and use the ordinary minimal output block size unless the
-    // caller has pinned one. NOTE: Unit tests that want to exercise many small
-    // blocks have to pin a small `outputBlockSizeOverride_` themselves.
+    // caller has pinned one.
+    //
+    // NOTE: Unit tests that want to exercise many small blocks have to pin a
+    // small `outputBlockSizeOverride_` themselves.
     return withBufferedBlocks(config.outputBlockSizeOverride_.value_or(
                                   MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE),
                               config.parallelism_);
@@ -258,23 +262,17 @@ inline MergePhaseParameters computeMergePhaseParameters(
                                  (sizeof(Id) * config.numColumns_)};
   };
 
-  // Return `true` if `numInFlight` concurrent chunks with output blocks of
-  // `numRows` rows each fit into the memory limit.
-  auto fits = [&largestOutputBlockSize](size_t numInFlight, size_t numRows) {
-    auto largest = largestOutputBlockSize(numInFlight);
-    return largest >= numRows;
-  };
-
   if (config.outputBlockSizeOverride_.has_value()) {
     // The caller has pinned the size of the output blocks, so only the number
-    // of concurrent chunks is left to derive. NOTE: If not even a single
-    // chunk fits, then we merge with a single chunk (which is exactly the
-    // serial merge) instead of throwing, because the caller has explicitly
-    // asked for that block size.
+    // of concurrent chunks is left to derive.
+    //
+    // NOTE: If not even a single chunk fits, then we merge with a single chunk
+    // (which is exactly the serial merge) instead of throwing, because the
+    // caller has explicitly asked for that block size.
     const size_t numRows = config.outputBlockSizeOverride_.value();
     for (size_t numInFlight = config.parallelism_; numInFlight > 1;
          --numInFlight) {
-      if (fits(numInFlight, numRows)) {
+      if (largestOutputBlockSize(numInFlight) >= numRows) {
         return withBufferedBlocks(numRows, numInFlight);
       }
     }

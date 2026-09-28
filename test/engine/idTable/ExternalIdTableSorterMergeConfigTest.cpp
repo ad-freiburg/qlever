@@ -141,8 +141,8 @@ TEST(ExternalIdTableSorterMergeConfig, pinnedOutputBlockSize) {
 // A merge phase that chooses the size of its output blocks itself spends the
 // whole memory limit on them, so nothing is left over and a chunk buffers the
 // minimal number of blocks: with 125'000 rows per block (see `fullParallelism`)
-// a block occupies 2'000'000 bytes, of which the limit affords only ten, while
-// `4 + 4 + 2 * 2 = 12` of them are already spoken for.
+// a block occupies 2'000'000 bytes, of which the limit affords exactly the
+// `4 + 3 * 2 = 10` that the minimal buffering already needs.
 TEST(ExternalIdTableSorterMergeConfig, derivedBlockSizeLeavesNothingToBuffer) {
   auto parameters = computeMergePhaseParameters(baseConfig());
   EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
@@ -176,6 +176,17 @@ TEST(ExternalIdTableSorterMergeConfig, pinnedBlockSizeIsSpentOnBuffering) {
   config.outputBlockSizeOverride_ = 1'000;
   config.memoryLimit_ = ad_utility::MemorySize::bytes(150);
   parameters = computeMergePhaseParameters(config);
+  EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
+            MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
+
+  // A pinned size that is too large for even a single chunk (while the input
+  // blocks alone still fit) leaves nothing to buffer either: a block of
+  // 1'000'000 rows occupies 16'000'000 bytes, of which the limit affords only
+  // one, while `4 + 2 * 1 = 6` of them are unbuffered anyway.
+  config.outputBlockSizeOverride_ = 1'000'000;
+  config.memoryLimit_ = baseConfig().memoryLimit_;
+  parameters = computeMergePhaseParameters(config);
+  EXPECT_EQ(parameters.numChunksInFlight_, 1u);
   EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
             MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
 }
