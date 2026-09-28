@@ -22,9 +22,12 @@
 #include <opentelemetry/trace/provider.h>
 #include <opentelemetry/trace/span_metadata.h>
 
+#include <boost/core/demangle.hpp>
+#include <exception>
 #include <memory>
 #include <optional>
 #include <string_view>
+#include <typeinfo>
 #include <utility>
 
 #include "util/metrics/Resource.h"
@@ -140,6 +143,22 @@ void SpanGuard::recordException(const std::exception& exception,
                   {{semconv::exception::kExceptionType, errorType},
                    {semconv::exception::kExceptionMessage, exception.what()}});
   setError(errorType, exception.what());
+}
+
+// _____________________________________________________________________________
+void detail::recordException(SpanGuard& guard, std::exception_ptr exception) {
+  AD_CONTRACT_CHECK(exception != nullptr);
+  // Rethrow so that we can inspect the exception.
+  try {
+    std::rethrow_exception(std::move(exception));
+  } catch (const std::exception& exception) {
+    guard.recordException(exception,
+                          boost::core::demangle(typeid(exception).name()));
+  } catch (...) {
+    // `_OTHER` is the fallback value for `error.type` defined by the semantic
+    // conventions.
+    guard.setError("_OTHER", "unknown exception");
+  }
 }
 
 }  // namespace ad_utility::tracing

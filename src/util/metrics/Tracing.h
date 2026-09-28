@@ -21,13 +21,19 @@
 #include <opentelemetry/trace/tracer.h>
 #include <opentelemetry/version.h>
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include <boost/asio/awaitable.hpp>
+#endif
 #include <boost/url/parse.hpp>
 #include <boost/url/url_view.hpp>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 #include "util/Exception.h"
 #include "util/UniqueCleanup.h"
@@ -108,6 +114,91 @@ class [[nodiscard(
   void recordException(const std::exception& exception,
                        std::string_view errorType);
 };
+
+namespace detail {
+// Record `exception` on `guard`. Its `error.type` is the demangled name of the
+// exception's type. `exception` must not be null.
+void recordException(SpanGuard& guard, std::exception_ptr exception);
+
+// Call `f`, and pass it `guard` if it accepts a `SpanGuard&`.
+template <typename F>
+decltype(auto) invokeWithGuard(F& f, SpanGuard& guard) {
+  if constexpr (std::is_invocable_v<F&, SpanGuard&>) {
+    return std::invoke(f, guard);
+  } else {
+    static_assert(std::is_invocable_v<F&>,
+                  "The callable must accept either no argument or a "
+                  "`SpanGuard&`.");
+    return std::invoke(f);
+  }
+}
+
+template <typename F>
+using InvokeWithGuardResult = decltype(invokeWithGuard(
+    std::declval<std::decay_t<F>&>(), std::declval<SpanGuard&>()));
+}  // namespace detail
+
+// Record a new span `name` that is a child of `parent` for the execution of the
+// wrapped `f`. `f` must have no arguments or take a the new span as
+// `SpanGuard&`. Returns the result of `f` and rethrows any exceptions.
+template <typename F>
+auto inSpan(std::optional<opentelemetry::trace::SpanContext> parent,
+            std::string_view name, F&& f) -> detail::InvokeWithGuardResult<F> {
+  using Result = detail::InvokeWithGuardResult<F>;
+  SpanGuard guard{name, std::move(parent)};
+  try {
+    if constexpr (std::is_void_v<Result>) {
+      detail::invokeWithGuard(f, guard);
+      guard.setOk();
+    } else {
+      Result result = detail::invokeWithGuard(f, guard);
+      guard.setOk();
+      return result;
+    }
+  } catch (...) {
+    detail::recordException(guard, std::current_exception());
+    throw;
+  }
+}
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+namespace detail {
+template <typename T>
+struct IsAwaitable : std::false_type {};
+template <typename T, typename Executor>
+struct IsAwaitable<boost::asio::awaitable<T, Executor>> : std::true_type {};
+}  // namespace detail
+
+// Asynchronous version of `inSpan`. Record a new span `name` that is a child of
+// `parent` for the execution of the wrapped `f`. `f` must have no arguments or
+// take a the new span as `SpanGuard&`. Returns the result of `f` and rethrows
+// any exceptions.
+template <typename F>
+auto coInSpan(std::optional<opentelemetry::trace::SpanContext> parent,
+              std::string name, F f) -> detail::InvokeWithGuardResult<F> {
+  using Awaitable = detail::InvokeWithGuardResult<F>;
+  static_assert(detail::IsAwaitable<Awaitable>::value,
+                "The callable must return a `boost::asio::awaitable`.");
+  SpanGuard guard{name, std::move(parent)};
+  try {
+    // Store the awaitable in a variable instead of directly awaiting it, to
+    // avoid crashes of GCC's coroutine implementation (see
+    // `Server::processQuery`).
+    auto awaitable = detail::invokeWithGuard(f, guard);
+    if constexpr (std::is_void_v<typename Awaitable::value_type>) {
+      co_await std::move(awaitable);
+      guard.setOk();
+    } else {
+      auto result = co_await std::move(awaitable);
+      guard.setOk();
+      co_return result;
+    }
+  } catch (...) {
+    detail::recordException(guard, std::current_exception());
+    throw;
+  }
+}
+#endif
 
 // Adapter between the propagator machinery of OTEL and our concrete Boost.Beast
 // HTTP types. `Get` reads a `traceparent` a client may have sent, `Set` writes

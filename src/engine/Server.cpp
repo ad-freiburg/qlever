@@ -896,13 +896,11 @@ CPP_template_def(typename RequestT, typename SendT)(
                      &rootSpan](Query query) -> Awaitable<void> {
     // We need to copy the query string because `visitOperation` below also
     // needs it.
-    auto parsedQuery = [&] {
-      ad_utility::tracing::SpanGuard parseSpan{"parsing", rootSpan.context()};
-      auto result = SparqlParser::parseQuery(
-          &index.encodedIriManager(), query.query_, query.datasetClauses_);
-      parseSpan.setOk();
-      return result;
-    }();
+    auto parsedQuery =
+        ad_utility::tracing::inSpan(rootSpan.context(), "parsing", [&]() {
+          return SparqlParser::parseQuery(&index.encodedIriManager(),
+                                          query.query_, query.datasetClauses_);
+        });
     if (parsedQuery.hasUpdateClause()) {
       throw std::runtime_error(absl::StrCat(
           "SPARQL QUERY was requested via the HTTP request, but the "
@@ -919,14 +917,12 @@ CPP_template_def(typename RequestT, typename SendT)(
     // needs it.
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
-    auto parsedUpdates = [&] {
-      ad_utility::tracing::SpanGuard parseSpan{"parsing", rootSpan.context()};
-      auto result = SparqlParser::parseUpdate(
-          index.getBlankNodeManager(), &index.encodedIriManager(),
-          update.update_, update.datasetClauses_);
-      parseSpan.setOk();
-      return result;
-    }();
+    auto parsedUpdates =
+        ad_utility::tracing::inSpan(rootSpan.context(), "parsing", [&]() {
+          return SparqlParser::parseUpdate(
+              index.getBlankNodeManager(), &index.encodedIriManager(),
+              update.update_, update.datasetClauses_);
+        });
     tracer->endTrace("parsing");
     if (!ql::ranges::all_of(parsedUpdates, &ParsedQuery::hasUpdateClause)) {
       throw std::runtime_error(absl::StrCat(
@@ -942,13 +938,11 @@ CPP_template_def(typename RequestT, typename SendT)(
        &rootSpan](GraphStoreOperation operation) -> Awaitable<void> {
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
-    std::vector<ParsedQuery> parsedOperations = [&] {
-      ad_utility::tracing::SpanGuard parseSpan{"parsing", rootSpan.context()};
-      auto result = GraphStoreProtocol::transformGraphStoreProtocol(
-          std::move(operation), request, index);
-      parseSpan.setOk();
-      return result;
-    }();
+    std::vector<ParsedQuery> parsedOperations =
+        ad_utility::tracing::inSpan(rootSpan.context(), "parsing", [&]() {
+          return GraphStoreProtocol::transformGraphStoreProtocol(
+              std::move(operation), request, index);
+        });
     tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
@@ -1281,21 +1275,17 @@ CPP_template_def(typename RequestT, typename SendT)(
   // probably related to issues in GCC's coroutine implementation.
   // For the same reason (crashes in the conanbuild) we store the coroutine in
   // an explicit variable instead of directly `co_await`-ing it.
-  {
-    ad_utility::tracing::SpanGuard planSpan{"planning", parentSpan};
-    auto coroutine = [&] {
-      return computeInNewThread(
-          queryThreadPool_,
-          [this, &query, &requestTimer, &timeLimit, &qec,
-           &cancellationHandle]() -> std::optional<PlannedQuery> {
-            return this->planQuery(std::move(query), qec, cancellationHandle,
-                                   timeLimit, requestTimer);
-          },
-          cancellationHandle);
-    }();
-    plannedQuery = co_await std::move(coroutine);
-    planSpan.setOk();
-  }
+  auto coroutine = ad_utility::tracing::coInSpan(parentSpan, "planning", [&]() {
+    return computeInNewThread(
+        queryThreadPool_,
+        [this, &query, &requestTimer, &timeLimit, &qec,
+         &cancellationHandle]() -> std::optional<PlannedQuery> {
+          return this->planQuery(std::move(query), qec, cancellationHandle,
+                                 timeLimit, requestTimer);
+        },
+        cancellationHandle);
+  });
+  plannedQuery = co_await std::move(coroutine);
   auto qet = plannedQuery.value().queryExecutionTree();
 
   MediaType mediaType = chooseBestFittingMediaType(
@@ -1318,15 +1308,14 @@ CPP_template_def(typename RequestT, typename SendT)(
   // This actually processes the query and sends the result in the
   // requested format. The result is computed lazily *while* it is
   // being serialized, so this span covers the execution as well.
-  {
-    ad_utility::tracing::SpanGuard exportSpan{"export", parentSpan};
-    exportSpan.span().SetAttribute("qlever.result.media_type",
-                                   ad_utility::toString(mediaType));
-    co_await sendStreamableResponse(request, AD_FWD(send), mediaType,
-                                    plannedQuery.value(), requestTimer,
-                                    cancellationHandle);
-    exportSpan.setOk();
-  }
+  co_await ad_utility::tracing::coInSpan(
+      parentSpan, "export", [&](ad_utility::tracing::SpanGuard& exportSpan) {
+        exportSpan.span().SetAttribute("qlever.result.media_type",
+                                       ad_utility::toString(mediaType));
+        return sendStreamableResponse(request, AD_FWD(send), mediaType,
+                                      plannedQuery.value(), requestTimer,
+                                      cancellationHandle);
+      });
   // Print the runtime info. This needs to be done after the query
   // was computed.
   AD_LOG_INFO << "Done processing query and sending result"

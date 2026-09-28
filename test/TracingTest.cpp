@@ -13,6 +13,13 @@
 #include <opentelemetry/trace/propagation/http_trace_context.h>
 #include <opentelemetry/trace/provider.h>
 
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/use_future.hpp>
+#include <chrono>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -54,6 +61,16 @@ class ScopedSilentOtelLog {
   ScopedSilentOtelLog(const ScopedSilentOtelLog&) = delete;
   ScopedSilentOtelLog& operator=(const ScopedSilentOtelLog&) = delete;
 };
+
+// Run `awaitable` to completion on the current thread and return its result.
+template <typename T>
+T runAwaitable(boost::asio::awaitable<T> awaitable) {
+  boost::asio::io_context ioContext;
+  auto future = boost::asio::co_spawn(ioContext, std::move(awaitable),
+                                      boost::asio::use_future);
+  ioContext.run();
+  return future.get();
+}
 
 auto makeRequestWithTraceparent(std::string_view traceparent) {
   auto request = ad_utility::testing::makeGetRequest("/sparql");
@@ -251,5 +268,145 @@ TEST(Tracing, extractParentFromRequest) {
         // Version (`zz`) is not hex
         "zz-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}) {
     expect(makeRequestWithTraceparent(traceparent), testing::Eq(std::nullopt));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Tracing, inSpan) {
+  using opentelemetry::trace::StatusCode;
+  {
+    // The result of the callable is returned and the span is a child of the
+    // given parent.
+    ScopedInMemoryTracer scopedTracer;
+    {
+      SpanGuard parent{"parent", std::nullopt};
+      EXPECT_EQ(inSpan(parent.context(), "child", [] { return 42; }), 42);
+      parent.setOk();
+    }
+    EXPECT_THAT(
+        scopedTracer.spans(),
+        testing::AllOf(AllSpansAreDirectChildrenOfRoot("parent"),
+                       testing::UnorderedElementsAre(
+                           SpanWithName("parent", StatusIs(StatusCode::kOk)),
+                           SpanWithName("child", StatusIs(StatusCode::kOk)))));
+  }
+  {
+    // The callable may take the guard, and may return `void` or a reference.
+    ScopedInMemoryTracer scopedTracer;
+    int value = 3;
+    int& ref =
+        inSpan(std::nullopt, "reference", [&value]() -> int& { return value; });
+    EXPECT_EQ(&ref, &value);
+    inSpan(std::nullopt, "withGuard",
+           [](SpanGuard& guard) { guard.span().SetAttribute("key", "value"); });
+    EXPECT_THAT(
+        scopedTracer.spans(),
+        testing::UnorderedElementsAre(
+            SpanWithName("reference", StatusIs(StatusCode::kOk)),
+            SpanWithName(
+                "withGuard",
+                testing::AllOf(StatusIs(StatusCode::kOk),
+                               Attributes(testing::UnorderedElementsAre(
+                                   Attribute<std::string>("key", "value")))))));
+  }
+  {
+    // Exceptions are recorded on the span and rethrown.
+    ScopedInMemoryTracer scopedTracer;
+    EXPECT_THROW(inSpan(std::nullopt, "throwing",
+                        []() -> int { throw std::runtime_error{"broken"}; }),
+                 std::runtime_error);
+    EXPECT_THROW(inSpan(std::nullopt, "throwingNonStd", [] { throw 42; }), int);
+    EXPECT_THAT(
+        scopedTracer.spans(),
+        testing::UnorderedElementsAre(
+            SpanWithName(
+                "throwing",
+                testing::AllOf(
+                    StatusIs(StatusCode::kError), DescriptionIs("broken"),
+                    Attributes(
+                        testing::UnorderedElementsAre(Attribute<std::string>(
+                            "error.type", "std::runtime_error"))))),
+            SpanWithName(
+                "throwingNonStd",
+                testing::AllOf(
+                    StatusIs(StatusCode::kError),
+                    DescriptionIs("unknown exception"),
+                    Attributes(testing::UnorderedElementsAre(
+                        Attribute<std::string>("error.type", "_OTHER")))))));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Tracing, coInSpan) {
+  using opentelemetry::trace::StatusCode;
+  namespace net = boost::asio;
+  auto coReturn = [](int value) -> net::awaitable<int> { co_return value; };
+  {
+    // The result of the awaitable is returned, the callable may take the
+    // guard, and the span is a child of the given parent.
+    ScopedInMemoryTracer scopedTracer;
+    {
+      SpanGuard parent{"parent", std::nullopt};
+      EXPECT_EQ(runAwaitable(coInSpan(parent.context(), "child",
+                                      [&](SpanGuard& guard) {
+                                        guard.span().SetAttribute("key",
+                                                                  "value");
+                                        return coReturn(42);
+                                      })),
+                42);
+      runAwaitable(coInSpan(parent.context(), "void",
+                            []() -> net::awaitable<void> { co_return; }));
+      parent.setOk();
+    }
+    EXPECT_THAT(
+        scopedTracer.spans(),
+        testing::AllOf(
+            AllSpansAreDirectChildrenOfRoot("parent"),
+            testing::UnorderedElementsAre(
+                SpanWithName("parent", StatusIs(StatusCode::kOk)),
+                SpanWithName("child",
+                             testing::AllOf(
+                                 StatusIs(StatusCode::kOk),
+                                 Attributes(testing::UnorderedElementsAre(
+                                     Attribute<std::string>("key", "value"))))),
+                SpanWithName("void", StatusIs(StatusCode::kOk)))));
+  }
+  {
+    // Exceptions are recorded on the span and rethrown.
+    ScopedInMemoryTracer scopedTracer;
+    EXPECT_THROW(runAwaitable(coInSpan(std::nullopt, "throwing",
+                                       []() -> net::awaitable<int> {
+                                         throw std::runtime_error{"broken"};
+                                         co_return 0;
+                                       })),
+                 std::runtime_error);
+    EXPECT_THAT(
+        scopedTracer.spans(),
+        testing::ElementsAre(SpanWithName(
+            "throwing",
+            testing::AllOf(
+                StatusIs(StatusCode::kError), DescriptionIs("broken"),
+                Attributes(testing::UnorderedElementsAre(Attribute<std::string>(
+                    "error.type", "std::runtime_error")))))));
+  }
+  {
+    // The coroutine is destroyed while it is suspended, e.g. because it was
+    // cancelled.
+    ScopedInMemoryTracer scopedTracer;
+    {
+      net::io_context ioContext;
+      net::steady_timer timer{ioContext, std::chrono::hours(1)};
+      net::co_spawn(
+          ioContext,
+          coInSpan(std::nullopt, "cancelled",
+                   [&timer] { return timer.async_wait(net::use_awaitable); }),
+          net::detached);
+      ioContext.poll();
+      EXPECT_THAT(scopedTracer.spans(), testing::IsEmpty());
+    }
+    EXPECT_THAT(scopedTracer.spans(),
+                testing::ElementsAre(SpanWithName(
+                    "cancelled", testing::AllOf(StatusIs(StatusCode::kError),
+                                                DescriptionIs("unfinished")))));
   }
 }
