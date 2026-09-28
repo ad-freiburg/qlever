@@ -29,10 +29,6 @@ permissions:
 jobs:
   build:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
-    # The slowest matrix jobs (clang-16 ASAN/UBSAN, RelWithDebInfo) take
-    # ~105-125 min on current runners (master run 34810399160: ASAN ~122
-    # min); 120 kills them deterministically during the build step.
-    timeout-minutes: 240
 
     # The CMake configure and build commands are platform-agnostic and should work equally
     # well on Windows or Mac.  You can convert this to a matrix build if you need

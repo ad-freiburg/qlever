@@ -4,13 +4,8 @@ on:
   # CI-trim 2026-09-23: hosted legs skip push/merge_group (GitHub queue
   # latency fanned every merge into dozens of queued jobs). Fleet legs guard
   # master; full signal via 'ci'-labeled PRs or manual dispatch.
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
+  # Fork PR profile 2026-09-25: superseded by sparql-conformance-new; run manually via workflow_dispatch.
   workflow_dispatch:
-
-concurrency:
-  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
-  cancel-in-progress: true
 
 # The default GITHUB_TOKEN only needs to read the repository here.
 permissions:
@@ -19,7 +14,6 @@ permissions:
 jobs:
   build:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
-    timeout-minutes: 120
     env:
       compiler: clang
       compiler-version: 16
@@ -35,7 +29,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: "w3c/rdf-tests"
-          ref: 3d0b0613d0177d25aad7ec60e88df2338f461516
           path: sparql-test-suite
       - name: Checkout qlever-test-suite
         uses: actions/checkout@v7

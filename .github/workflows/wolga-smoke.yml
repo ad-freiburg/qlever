@@ -3,9 +3,7 @@ name: wolga-smoke
 # Verifies a job actually executes on Wolga and reports machine state.
 # Docker access is reported but non-blocking until the docker group is granted.
 on:
-  pull_request:
-    paths:
-      - .github/workflows/wolga-smoke.yml
+  # Fork PR profile 2026-09-25: runner diagnostic, tests no code; run manually via workflow_dispatch.
   workflow_dispatch:
 
 jobs:
