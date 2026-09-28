@@ -109,8 +109,8 @@ permissions:
 env:
   CCACHE_EPOCH: v1
   LIBURING_VERSION: '2.15'
-  BASE_REF: ${{ inputs.base_ref || 'f6a3e9c5edb65b874dd672377c46fa71d478a52f' }}
-  VARIANT_REF: ${{ inputs.variant_ref || 'bench/pr73-realpath-base' }}
+  BASE_REF: ${{ inputs.base_ref || 'bench/pr73-realpath-base' }}
+  VARIANT_REF: ${{ inputs.variant_ref || 'bench/pr73-realpath-variant' }}
   TARGET: ${{ inputs.target || 'CompressedVocabularyLookupBenchmark' }}
   RUN_ENV: ${{ inputs.env || '' }}
   RUN_ARGS: ${{ inputs.args || '' }}
@@ -163,7 +163,7 @@ jobs:
       matrix:
         arm: [base, variant]
     env:
-      ARM_REF: ${{ matrix.arm == 'base' && (inputs.base_ref || 'f6a3e9c5edb65b874dd672377c46fa71d478a52f') || (inputs.variant_ref || 'bench/pr73-realpath-base') }}
+      ARM_REF: ${{ matrix.arm == 'base' && (inputs.base_ref || 'bench/pr73-realpath-base') || (inputs.variant_ref || 'bench/pr73-realpath-variant') }}
     steps:
       - uses: actions/checkout@v7
         with:
