@@ -17,6 +17,7 @@
 #include <array>
 
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/ExceptionHandling.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -162,9 +163,31 @@ VocabularyScanRange VocabularyOnDisk::scanAll() const {
 }
 
 // _____________________________________________________________________________
+std::optional<ad_utility::BatchManagerBase::BatchHandle>
+VocabularyOnDisk::submitThroughManager(ad_utility::BatchManagerBase& manager,
+                                       int fd, ql::span<const size_t> numBytes,
+                                       ql::span<const uint64_t> offsets,
+                                       ql::span<char*> buffers,
+                                       ql::span<const size_t> positions) {
+  if (positions.empty()) {
+    return std::nullopt;
+  }
+  auto select = [&positions](auto values) {
+    return ::ranges::to_vector(
+        positions |
+        ql::views::transform([&values](size_t i) { return values[i]; }));
+  };
+  auto selectedNumBytes = select(numBytes);
+  auto selectedOffsets = select(offsets);
+  auto selectedBuffers = select(buffers);
+  return manager.addBatch(fd, selectedNumBytes, selectedOffsets,
+                          selectedBuffers);
+}
+
+// _____________________________________________________________________________
 VocabBatchLookupResult VocabularyOnDisk::readStrings(
     ad_utility::BatchManagerBase& manager,
-    ql::span<const OffsetPair> offsetPairs) const {
+    ql::span<const OffsetPair> offsetPairs, bool pageCacheFastPath) const {
   // Read the string data. String `i` starts at `offset_` with length
   // `nextOffset_ - offset_`; the strings are packed contiguously into the
   // builder's buffer, with one precomputed view per word at its fixed offset.
@@ -184,8 +207,18 @@ VocabBatchLookupResult VocabularyOnDisk::readStrings(
   // Bind the returned array: `addBatch` takes a span, and the pointers must
   // stay alive until `wait` returns.
   auto targets = builder.targets();
-  manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets,
-                                ql::span<char*>{targets}));
+  if (pageCacheFastPath) {
+    auto missed =
+        ad_utility::readPageCacheHits(file_.fd(), sizes, fileOffsets, targets);
+    auto batch = submitThroughManager(manager, file_.fd(), sizes, fileOffsets,
+                                      targets, missed);
+    if (batch.has_value()) {
+      manager.wait(batch.value());
+    }
+  } else {
+    manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets,
+                                  ql::span<char*>{targets}));
+  }
   return std::move(builder).finalize();
 }
 
@@ -218,9 +251,66 @@ std::unique_ptr<VocabLookupHandleBase> VocabularyOnDisk::beginLookup(
     fileOffset = index * sizeof(uint64_t);
     target = reinterpret_cast<char*>(&offsetPair);
   }
-  handle->offsetBatch_ = handle->manager_->addBatch(offsetsFile_.fd(), sizes,
-                                                    fileOffsets, targets);
+  handle->pageCacheFastPath_ =
+      getRuntimeParameter<
+          &RuntimeParameters::vocabularyIouringPageCacheFastPath_>() &&
+      ad_utility::pageCacheFastPathIsSupported();
+  if (!handle->pageCacheFastPath_) {
+    handle->offsetBatch_ = handle->manager_->addBatch(offsetsFile_.fd(), sizes,
+                                                      fileOffsets, targets);
+    return handle;
+  }
 
+  // Page-cache fast path: `preadv2(RWF_NOWAIT)` never blocks, so it is done
+  // right here. The pairs of consecutive indices overlap in the file, so read
+  // each run of consecutive indices `[runBegins[r], runBegins[r + 1])` as one
+  // range of `runLength + 1` offsets into `runOffsets`.
+  const auto& indicesRef = handle->indices_;
+  std::vector<size_t> runBegins{0};
+  for (size_t i = 1; i < numIndices; ++i) {
+    if (indicesRef[i] != indicesRef[i - 1] + 1) {
+      runBegins.push_back(i);
+    }
+  }
+  runBegins.push_back(numIndices);
+  const size_t numRuns = runBegins.size() - 1;
+  std::vector<uint64_t> runOffsets(numIndices + numRuns);
+  std::vector<size_t> runSizes(numRuns);
+  std::vector<uint64_t> runFileOffsets(numRuns);
+  std::vector<char*> runTargets(numRuns);
+  for (size_t run = 0; run < numRuns; ++run) {
+    const size_t begin = runBegins[run];
+    const size_t length = runBegins[run + 1] - begin;
+    runSizes[run] = (length + 1) * sizeof(uint64_t);
+    runFileOffsets[run] = fileOffsets[begin];
+    runTargets[run] = reinterpret_cast<char*>(runOffsets.data() + begin + run);
+  }
+  auto missedRuns = ad_utility::readPageCacheHits(offsetsFile_.fd(), runSizes,
+                                                  runFileOffsets, runTargets);
+
+  // Fill the pairs of the served runs, and submit the pairs of the missed runs
+  // to the `manager_` (without waiting, like the path without the fast path).
+  std::vector<size_t> missedPositions;
+  auto missedRun = missedRuns.begin();
+  for (size_t run = 0; run < numRuns; ++run) {
+    const size_t begin = runBegins[run];
+    const size_t end = runBegins[run + 1];
+    if (missedRun != missedRuns.end() && *missedRun == run) {
+      ++missedRun;
+      for (size_t i = begin; i < end; ++i) {
+        missedPositions.push_back(i);
+      }
+      continue;
+    }
+    const uint64_t* runStart = runOffsets.data() + begin + run;
+    for (size_t i = begin; i < end; ++i) {
+      handle->offsetPairs_[i] =
+          OffsetPair{runStart[i - begin], runStart[i - begin + 1]};
+    }
+  }
+  handle->offsetBatch_ =
+      submitThroughManager(*handle->manager_, offsetsFile_.fd(), sizes,
+                           fileOffsets, targets, missedPositions);
   return handle;
 }
 
@@ -246,9 +336,12 @@ VocabBatchLookupResult VocabularyOnDisk::LookupHandle::finish() {
   }};
   // Wait for the offset reads submitted by `beginLookup`, then read the string
   // data (Phase 2) and return it.
-  AD_CORRECTNESS_CHECK(offsetBatch_.has_value());
-  manager_->wait(offsetBatch_.value());
-  return vocab_->readStrings(*manager_, offsetPairs_);
+  // With the page-cache fast path, all offset pairs may already have been
+  // read by `beginLookup`, in which case no batch was submitted.
+  if (offsetBatch_.has_value()) {
+    manager_->wait(offsetBatch_.value());
+  }
+  return vocab_->readStrings(*manager_, offsetPairs_, pageCacheFastPath_);
 }
 
 // _____________________________________________________________________________

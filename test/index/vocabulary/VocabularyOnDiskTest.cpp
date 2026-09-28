@@ -17,6 +17,7 @@
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/File.h"
 #include "util/Forward.h"
@@ -268,6 +269,26 @@ TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
   auto result = vocab->lookupBatch(indices);
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
                                                                 indices);
+}
+
+// With `vocabulary-iouring-page-cache-fast-path`, the words and offsets that
+// are in the page cache are read before the batch manager sees the rest. The
+// result must be byte-identical to the result without the fast path, for runs
+// of consecutive indices as well as for reordered and duplicated indices.
+TEST(VocabularyOnDisk, LookupBatchPageCacheFastPathIsByteIdentical) {
+  auto vocab = createExampleVocabulary();
+  std::array<size_t, 13> indices{0, 1, 2, 3, 4, 2, 0, 3, 1, 1, 4, 0, 3};
+  auto withoutFastPath = vocab->lookupBatch(indices);
+  setRuntimeParameter<&RuntimeParameters::vocabularyIouringPageCacheFastPath_>(
+      true);
+  absl::Cleanup resetParameter{[]() {
+    setRuntimeParameter<
+        &RuntimeParameters::vocabularyIouringPageCacheFastPath_>(false);
+  }};
+  auto withFastPath = vocab->lookupBatch(indices);
+  EXPECT_THAT(withFastPath, ::testing::ElementsAreArray(withoutFastPath));
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+      *vocab, withFastPath, indices);
 }
 
 // An empty batch is an invalid request and must throw.
