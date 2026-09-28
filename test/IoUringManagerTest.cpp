@@ -683,5 +683,36 @@ TEST(SqPollSetup, sqPollRequestStillServesReads) {
   EXPECT_THAT((std::vector<std::string>{first, second}),
               ::testing::ElementsAre("AAAA", "BBBB"));
 }
+
+// Request `deferTaskrun` and `singleIssuer` without SQPoll, alone and
+// together. Whether the kernel grants the flags or denies them (`-EINVAL`, for
+// example `deferTaskrun` without `singleIssuer`) and the constructor falls
+// back to a plain ring, the policy must serve reads and report no SQPoll.
+TEST(SqPollSetup, optInFlagsWithoutSqPollStillServeReads) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime "
+                    "(e.g. blocked by seccomp inside Docker)";
+  }
+  auto expectServesReads = [](bool deferTaskrun, bool singleIssuer) {
+    ad_utility::IoUringSetupOptions options;
+    options.deferTaskrun = deferTaskrun;
+    options.singleIssuer = singleIssuer;
+    ad_utility::IoUringPolicy policy(16, options);
+    EXPECT_FALSE(policy.sqPollEnabled());
+    auto [tmp, fd] = makeTempFile("AAAABBBB");
+    std::string first(4, '\0');
+    std::string second(4, '\0');
+    std::vector<size_t> numBytes{4, 4};
+    std::vector<uint64_t> fileOffsets{0, 4};
+    std::vector<char*> buffers{first.data(), second.data()};
+    policy.addBatch(fd, numBytes, fileOffsets, buffers, 0);
+    policy.wait(0);
+    EXPECT_THAT((std::vector<std::string>{first, second}),
+                ::testing::ElementsAre("AAAA", "BBBB"));
+  };
+  expectServesReads(true, false);
+  expectServesReads(false, true);
+  expectServesReads(true, true);
+}
 #endif
 }  // namespace
