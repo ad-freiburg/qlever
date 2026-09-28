@@ -160,19 +160,23 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
 
   // Phase B in waves of concurrent fibers, so one thread keeps several
   // lookup batches in flight (design step 1). Only columns with misses take
-  // part. A wave holds at most `NUM_VOCAB_BATCH_IO_MANAGERS` columns, the
-  // number of I/O managers the vocabulary creates up front: each in-flight
-  // column holds up to two of them (the depth-2 lookup), and the pool creates
-  // more on demand instead of blocking, so the bound only limits the number
-  // of rings and fiber stacks per batch. A lone resolvable column skips
-  // fibers (no overlap possible, avoid the setup).
+  // part. Each in-flight column holds up to `kIoManagersPerColumn` pooled I/O
+  // managers (the depth-2 lookup keeps the next sub-batch in flight), so a
+  // wave of `NUM_VOCAB_BATCH_IO_MANAGERS / kIoManagersPerColumn` columns
+  // uses exactly the managers the vocabulary creates up front, and a single
+  // export never makes the pool grow. The pool does not block when it is
+  // empty (it creates a manager), so the bound limits the number of rings and
+  // fiber stacks, not correctness. A lone resolvable column skips fibers (no
+  // overlap possible, avoid the setup).
   std::vector<size_t> resolvable;
   for (size_t i = 0; i < columns.size(); ++i) {
     if (!columns[i].missIds_.empty()) {
       resolvable.push_back(i);
     }
   }
-  constexpr size_t kMaxConcurrentColumns = NUM_VOCAB_BATCH_IO_MANAGERS;
+  constexpr size_t kIoManagersPerColumn = 2;
+  constexpr size_t kMaxConcurrentColumns =
+      NUM_VOCAB_BATCH_IO_MANAGERS / kIoManagersPerColumn;
   static_assert(kMaxConcurrentColumns >= 1);
   for (size_t begin = 0; begin < resolvable.size();
        begin += kMaxConcurrentColumns) {
