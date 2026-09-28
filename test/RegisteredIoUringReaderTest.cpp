@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <vector>
 
@@ -161,9 +162,9 @@ TEST(RegisteredIoUringReader, PinnedArenaContractViolations) {
 
   // Slot indices run out: index `numSlots` is already invalid.
   PinnedArena arena{2};
-  EXPECT_THROW(arena.getSlotSpan(2), ad_utility::Exception);
+  EXPECT_THROW(std::ignore = arena.getSlotSpan(2), ad_utility::Exception);
   const PinnedArena& constArena = arena;
-  EXPECT_THROW(constArena.getSlotSpan(2), ad_utility::Exception);
+  EXPECT_THROW(std::ignore = constArena.getSlotSpan(2), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
