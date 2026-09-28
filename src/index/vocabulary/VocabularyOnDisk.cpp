@@ -12,7 +12,6 @@
 #include <deque>
 
 #include "global/Constants.h"
-#include "global/RuntimeParameters.h"
 #include "util/ExceptionHandling.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -252,8 +251,8 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
 // _____________________________________________________________________________
 VocabLookupOutput VocabularyOnDisk::lookupBatchesStreamed(
     VocabLookupInput rangeOfIndexBatches) const {
-  size_t pipelineDepth = getRuntimeParameter<
-      &RuntimeParameters::vocabularyIouringPipelineDepth_>();
+  size_t pipelineDepth = ad_utility::vocabularyIoUringPipelineDepth.load(
+      std::memory_order_relaxed);
   return lookupBatchesStreamed(std::move(rangeOfIndexBatches), pipelineDepth);
 }
 

@@ -13,6 +13,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <atomic>
 #include <cstdint>
 #include <unordered_map>
 
@@ -28,6 +29,13 @@
 #include "backports/span.h"
 
 namespace ad_utility {
+
+// How many `VocabularyOnDisk` lookup batches may have offset reads in flight
+// at once in `VocabularyOnDisk::lookupBatchesStreamed`. Mirrors the runtime
+// parameter `vocabulary-iouring-pipeline-depth`, which keeps it in sync through
+// an update action: the vocabulary library does not link the runtime
+// parameters.
+inline std::atomic<size_t> vocabularyIoUringPipelineDepth{1};
 
 template <typename T>
 CPP_requires(ReadPolicy_,

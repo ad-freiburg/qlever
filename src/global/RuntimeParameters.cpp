@@ -12,6 +12,7 @@
 
 #include "backports/algorithm.h"
 #include "util/Algorithm.h"
+#include "util/IoUringManager.h"
 
 // _____________________________________________________________________________
 RuntimeParameters::RuntimeParameters() {
@@ -77,6 +78,13 @@ RuntimeParameters::RuntimeParameters() {
   // in sync with the parameter default from the start.
   logLevel_.setOnUpdateAction(
       [](LogLevel level) { ad_utility::setRuntimeLogLevel(level); });
+
+  // Same for the pipeline depth of batched vocabulary reads, which the
+  // vocabulary library reads from an atomic in `IoUringManager.h`.
+  vocabularyIouringPipelineDepth_.setOnUpdateAction([](size_t depth) {
+    ad_utility::vocabularyIoUringPipelineDepth.store(depth,
+                                                     std::memory_order_relaxed);
+  });
 
   // A constraint that rejects values that are not strictly positive, with a
   // readable error message. Works for integral types and for
