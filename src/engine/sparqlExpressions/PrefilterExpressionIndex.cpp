@@ -877,20 +877,38 @@ BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
   }
 
   // For each interval, find the corresponding range of block-boundary
-  // `ValueId`s. Empty ranges are deliberately kept: they indicate a block
-  // whose first and last ID enclose the whole interval, which must survive
-  // (same reasoning as for the `EQ` case of `RelationalExpression`).
+  // `ValueId`s. Search in the order of the `ValueId`s, which is the order of
+  // the block boundaries (for the `VocabIndex` and `GeoPoint` IDs of the
+  // intervals, it is the order of their bits, but an ID of type
+  // `LocalVocabIndex` is ordered by its position in the vocabulary). Empty
+  // ranges are deliberately kept: they indicate a block whose first and last
+  // ID enclose the whole interval, which must survive (same reasoning as for
+  // the `EQ` case of `RelationalExpression`).
   std::vector<ValueIdItPair> relevantRanges;
   relevantRanges.reserve(keepIntervals.size());
   for (const auto& [lower, upper] : keepIntervals) {
-    relevantRanges.emplace_back(
-        ql::ranges::lower_bound(idRange, lower,
-                                &valueIdComparators::compareByBits),
-        ql::ranges::upper_bound(idRange, upper,
-                                &valueIdComparators::compareByBits));
+    relevantRanges.emplace_back(ql::ranges::lower_bound(idRange, lower),
+                                ql::ranges::upper_bound(idRange, upper));
   }
-  return detail::mapping::mapValueIdItRangesToBlockItRanges(
+  auto keptByIntervals = detail::mapping::mapValueIdItRangesToBlockItRanges(
       relevantRanges, idRange, blockRange);
+
+  // Also keep every block whose first or last ID is of type `LocalVocabIndex`
+  // (a WKT literal inserted by an update). Such an ID has no cell, and its
+  // position in the vocabulary lies between the existing words, which can be
+  // outside the ID range of its cell (when the cell has no words, or the
+  // literal comes after all words of its cell), so the intervals above cannot
+  // decide it.
+  std::vector<ValueIdItPair> localVocabBoundaries;
+  for (auto it = idRange.begin(); it != idRange.end(); it += 2) {
+    if ((*it).getDatatype() == Datatype::LocalVocabIndex ||
+        (*std::next(it)).getDatatype() == Datatype::LocalVocabIndex) {
+      localVocabBoundaries.emplace_back(it, std::next(it));
+    }
+  }
+  return detail::logicalOps::mergeRelevantBlockItRanges<true>(
+      keptByIntervals, detail::mapping::mapValueIdItRangesToBlockItRanges(
+                           localVocabBoundaries, idRange, blockRange));
 }
 
 //______________________________________________________________________________
