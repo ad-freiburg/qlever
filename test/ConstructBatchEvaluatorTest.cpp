@@ -125,8 +125,8 @@ TEST_F(ConstructBatchEvaluatorTest, multipleVariablesMultipleRows) {
 }
 
 // More columns with cache misses than one fiber wave holds
-// (`NUM_VOCAB_BATCH_IO_MANAGERS`): phase B resolves them in several waves, the
-// last one partial. Every (column, row) must still be resolved to the right
+// (`NUM_VOCAB_BATCH_IO_MANAGERS / 2` = 4): phase B resolves the 11 columns in
+// waves of 4, 4 and 3. Every (column, row) must still be resolved to the right
 // term, in row order.
 TEST_F(ConstructBatchEvaluatorTest, moreColumnsThanOneFiberWave) {
   const std::array<Id, 4> ids{idS_, idP_, idO_, idQ_};
