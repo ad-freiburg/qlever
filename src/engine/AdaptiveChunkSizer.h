@@ -111,7 +111,8 @@ class AdaptiveChunkSizer {
         estimatedRowBytes_{config_.initialEstimatedRowBytes_} {
     AD_CONTRACT_CHECK(config_.initialChunkBytes_ > 0);
     AD_CONTRACT_CHECK(config_.maxChunkBytes_ >= config_.initialChunkBytes_);
-    AD_CONTRACT_CHECK(config_.growthFactor_ >= 1.0);
+    AD_CONTRACT_CHECK(std::isfinite(config_.growthFactor_) &&
+                      config_.growthFactor_ >= 1.0);
     AD_CONTRACT_CHECK(config_.initialEstimatedRowBytes_ > 0.0);
     AD_CONTRACT_CHECK(config_.minChunkRows_ >= 1);
     AD_CONTRACT_CHECK(config_.maxChunkRows_ >= config_.minChunkRows_);
@@ -141,7 +142,7 @@ class AdaptiveChunkSizer {
   // Calculate the recommended number of rows/triples to process in the next
   // batch based on current target chunk size and estimated row byte size.
   // Result is guaranteed to be clamped between [minChunkRows, maxChunkRows].
-  [[nodiscard]] size_t targetRowCount() const noexcept {
+  [[nodiscard]] size_t targetRowCount() const {
     AD_CORRECTNESS_CHECK(estimatedRowBytes_ > 0.0);
     const double rawTargetRows =
         static_cast<double>(currentChunkBytesTarget_) / estimatedRowBytes_;
@@ -151,7 +152,7 @@ class AdaptiveChunkSizer {
 
   // ___________________________________________________________________________
   // Overload: target row count clamped by the total remaining un-exported rows.
-  [[nodiscard]] size_t targetRowCount(size_t remainingRows) const noexcept {
+  [[nodiscard]] size_t targetRowCount(size_t remainingRows) const {
     return std::min(targetRowCount(), remainingRows);
   }
 
@@ -165,7 +166,7 @@ class AdaptiveChunkSizer {
   // ___________________________________________________________________________
   // Check if either the target byte capacity or target row count has been met.
   [[nodiscard]] bool isChunkFull(size_t bytesBuffered,
-                                 size_t rowsBuffered) const noexcept {
+                                 size_t rowsBuffered) const {
     return bytesBuffered >= currentChunkBytesTarget_ ||
            (rowsBuffered > 0 && rowsBuffered >= targetRowCount());
   }
@@ -190,12 +191,18 @@ class AdaptiveChunkSizer {
 
     ++chunksFlushed_;
 
-    // Exponential ramp-up towards maxChunkBytes_
-    if (currentChunkBytesTarget_ < config_.maxChunkBytes_) {
+    // Exponential ramp-up towards `maxChunkBytes_`. An empty chunk carries no
+    // information and does not advance the ramp. The comparison is done in
+    // `double`, so a large growth factor cannot overflow the conversion to
+    // `size_t`.
+    if (bytesWritten > 0 && currentChunkBytesTarget_ < config_.maxChunkBytes_) {
       const double nextBytes =
-          static_cast<double>(currentChunkBytesTarget_) * config_.growthFactor_;
-      currentChunkBytesTarget_ = std::min(
-          config_.maxChunkBytes_, static_cast<size_t>(std::ceil(nextBytes)));
+          std::ceil(static_cast<double>(currentChunkBytesTarget_) *
+                    config_.growthFactor_);
+      currentChunkBytesTarget_ =
+          nextBytes >= static_cast<double>(config_.maxChunkBytes_)
+              ? config_.maxChunkBytes_
+              : static_cast<size_t>(nextBytes);
     }
   }
 
@@ -230,7 +237,7 @@ class AdaptiveChunkSizer {
 
   // ___________________________________________________________________________
   // Snapshot of current statistics.
-  [[nodiscard]] AdaptiveChunkStats stats() const noexcept {
+  [[nodiscard]] AdaptiveChunkStats stats() const {
     // Field order: chunksFlushed, totalBytes, totalRows, currentChunkBytes,
     // averageRowBytes, targetRowsForNextChunk.
     return AdaptiveChunkStats{chunksFlushed_,     totalBytesObserved_,
