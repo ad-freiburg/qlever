@@ -127,7 +127,7 @@ class PolymorphicVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
       return static_cast<size_t>(parsed);
     };
     // Bound the workload even when configured through the environment.
-    constexpr size_t maxRepetitions = 100;
+    constexpr size_t maxRepetitions = 100'000;
     const size_t repetitions =
         parseEnvironmentSize(std::getenv("POLY_VOCAB_E2E_REPETITIONS"), 5);
     AD_CONTRACT_CHECK(repetitions > 0);
