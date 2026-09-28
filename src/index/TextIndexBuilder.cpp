@@ -49,7 +49,7 @@ void TextIndexBuilder::buildTextIndexFile(
   // That is, when we now call call `processWordsForVocabulary` (which builds
   // the text vocabulary), we already have the KB vocabular in RAM as well.
   AD_LOG_DEBUG << "Reloading the RDF vocabulary ..." << std::endl;
-  vocab_ = ad_utility::vocabulary::RdfsVocabulary{};
+  vocab_ = RdfsVocabulary{};
   readConfiguration();
   {
     auto [b, k] = bAndKForBM25;
@@ -441,8 +441,7 @@ void TextIndexBuilder::calculateBlockBoundariesImpl(
         break;
       }
       auto forcedBlockStartSortKey = locManager.getSortKey(
-          *forcedBlockStartsIt,
-          ad_utility::vocabulary::LocaleManager::Level::PRIMARY);
+          *forcedBlockStartsIt, LocaleManager::Level::PRIMARY);
       if (forcedBlockStartSortKey >= prefixSortKey) {
         break;
       }

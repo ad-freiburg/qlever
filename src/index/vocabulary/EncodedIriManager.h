@@ -15,8 +15,6 @@
 #include "util/Log.h"
 #include "util/json.h"
 
-namespace ad_utility::vocabulary {
-
 namespace detail {
 // Match `repr` against the pattern `([0-9]+)>` and return the digit
 // substring as a `string_view` into `repr` on success, or `std::nullopt` if
@@ -355,7 +353,5 @@ struct AlwaysOnPrefixes {
 };
 using EncodedIriManager =
     EncodedIriManagerImpl<Id::numDataBits, 8, AlwaysOnPrefixes>;
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_ENCODEDIRIMANAGER_H

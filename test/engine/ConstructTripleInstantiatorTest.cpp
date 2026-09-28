@@ -424,6 +424,11 @@ TEST(FormatTriple, FastExportStreamFormatterMatchesLegacyTurtle) {
                       makeTerm("42", XSD_INT_TYPE)},
       EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                       makeTerm("NaN", XSD_DOUBLE_TYPE)},
+      // A literal whose escaped form is far larger than any initial buffer:
+      // every character needs escaping, so the output doubles in size.
+      EvaluatedTriple{
+          makeTerm("<http://s>"), makeTerm("<http://p>"),
+          makeTerm(absl::StrCat("\"", std::string(10000, '\n'), "\""))},
   };
 
   std::vector<std::string> legacyOutputs;

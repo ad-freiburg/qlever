@@ -13,8 +13,6 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/TypeTraits.h"
 
-namespace ad_utility::vocabulary {
-
 // This header contains type constraints used to ensure that the correct
 // semantics of complex vocabulary types, like the `SplitVocabulary`, are
 // preserved if new vocabulary implementations or new instantiations of the
@@ -102,7 +100,5 @@ template <typename T>
 CPP_concept VocabularySupportsZeroCopy =
     ad_utility::serialization::SupportsZeroCopyDeserialization<
         T, ad_utility::serialization::AlignedByteBufferReadSerializer>;
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYCONSTRAINTS_H

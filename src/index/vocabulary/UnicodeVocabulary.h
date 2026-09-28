@@ -9,8 +9,6 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 
-namespace ad_utility::vocabulary {
-
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
 /// stricter level can be all equal on a weaker level. The
@@ -42,21 +40,16 @@ class UnicodeVocabulary {
     return _underlyingVocabulary.lookupBatch(indices);
   }
 
-  // Same as `lookupBatch(indices)`, but decode into `builder` when the
-  // underlying vocabulary supports it; otherwise materialize the underlying
-  // result into `builder` word by word. Fill-only: the caller owns `builder`
-  // and finalizes it exactly once after this call returns (see
-  // `Vocabulary::lookupBatch`). This overload must never finalize itself (see
-  // `PolymorphicVocabulary::lookupBatch`).
+  // Append the words for `indices` to `builder`. Delegate when the underlying
+  // vocabulary supports this protocol. Otherwise copy its owning result.
   void lookupBatch(ql::span<const size_t> indices,
                    ArenaVocabBatchBuilder& builder) const {
     AD_CONTRACT_CHECK(!indices.empty());
     if constexpr (SupportsBuilderLookupBatch<UnderlyingVocabulary>) {
       _underlyingVocabulary.lookupBatch(indices, builder);
     } else {
-      for (std::string_view word : _underlyingVocabulary.lookupBatch(indices)) {
-        builder.appendWord(word);
-      }
+      appendVocabBatchLookupResult(_underlyingVocabulary.lookupBatch(indices),
+                                   builder);
     }
   }
 
@@ -164,7 +157,5 @@ class UnicodeVocabulary {
     // Note: _comparator is not serialized as it's stateless or reconstructed.
   }
 };
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H

@@ -37,11 +37,10 @@ class VocabularyCreator {
 
   // Create and return a `VocabularyInternalExternal` from the given words.
   auto createVocabularyImpl(const std::vector<std::string>& words) {
-    ad_utility::vocabulary::VocabularyInternalExternal vocabulary;
+    VocabularyInternalExternal vocabulary;
     {
       auto writerPtr =
-          ad_utility::vocabulary::VocabularyInternalExternal::makeDiskWriterPtr(
-              vocabFilename_);
+          VocabularyInternalExternal::makeDiskWriterPtr(vocabFilename_);
       auto& writer = *writerPtr;
       for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
         EXPECT_EQ(writer(word, i % 2 == 0), static_cast<uint64_t>(i));
@@ -63,7 +62,7 @@ class VocabularyCreator {
   // destroyed and re-initialized from disk before it is returned.
   auto createVocabularyFromDiskImpl(const std::vector<std::string>& words) {
     { createVocabularyImpl(words); }
-    ad_utility::vocabulary::VocabularyInternalExternal vocabulary;
+    VocabularyInternalExternal vocabulary;
     vocabulary.open(vocabFilename_);
     return vocabulary;
   }
@@ -129,11 +128,12 @@ TEST(VocabularyInternalExternal, LookupBatchMatchesAccessOperator) {
   AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(ql::span<const size_t>{}),
                                ::testing::HasSubstr("!indices.empty()"));
 
-  // Use the test writer's RAM cache for even IDs and read odd IDs from disk.
-  const std::array<size_t, 3> ramOnly{0, 2, 4};
+  // The test writer marks even IDs as external; odd IDs and ID 0 (the first
+  // milestone) are also stored in the internal vocabulary.
+  const std::array<size_t, 3> ramOnly{0, 1, 3};
   assertLookupResultMatchesVocabularyAtIndices(
       vocab, vocab.lookupBatch(ramOnly), ramOnly);
-  const std::array<size_t, 3> diskOnly{1, 3, 1};
+  const std::array<size_t, 3> diskOnly{2, 4, 2};
   assertLookupResultMatchesVocabularyAtIndices(
       vocab, vocab.lookupBatch(diskOnly), diskOnly);
 
@@ -148,17 +148,33 @@ TEST(VocabularyInternalExternal, LookupBatchMatchesAccessOperator) {
 }
 
 // _____________________________________________________________________________
-// Verify that `VocabBatchLookupResult` string views remain valid after the
-// `VocabularyInternalExternal` is closed.
-TEST(VocabularyInternalExternal, LookupBatchResultOutlivesClose) {
+// Words of the internal vocabulary are returned as views into it (two lookups
+// of the same word see the same bytes); words of the external vocabulary are
+// read into a buffer that each result owns.
+TEST(VocabularyInternalExternal, LookupBatchDoesNotCopyInternalWords) {
   const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
-  auto vocab = createVocabulary("LookupBatchOutlivesClose")(words);
-  const std::array<size_t, 4> indices{0, 1, 2, 3};
-  auto result = vocab.lookupBatch(indices);
+  auto vocab = createVocabulary("LookupBatchDoesNotCopyInternalWords")(words);
+  // ID 1 is in the internal vocabulary, ID 2 only in the external one (see
+  // `createVocabularyImpl`).
+  const std::array<size_t, 2> indices{1, 2};
+  auto first = vocab.lookupBatch(indices);
+  auto second = vocab.lookupBatch(indices);
+  assertLookupResultMatchesVocabularyAtIndices(vocab, first, indices);
+  EXPECT_EQ(first[0].data(), second[0].data());
+  EXPECT_NE(first[1].data(), second[1].data());
+}
+
+// _____________________________________________________________________________
+// The external words of a result are owned by the result, so a batch of only
+// external words stays valid after the vocabulary is closed.
+TEST(VocabularyInternalExternal, LookupBatchExternalWordsOutliveClose) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
+  auto vocab = createVocabulary("LookupBatchExternalWordsOutliveClose")(words);
+  const std::array<size_t, 2> diskOnly{2, 2};
+  auto result = vocab.lookupBatch(diskOnly);
   vocab.close();
 
-  EXPECT_THAT(result,
-              ::testing::ElementsAre("alpha", "beta", "gamma", "delta"));
+  EXPECT_THAT(result, ::testing::ElementsAre("gamma", "gamma"));
 }
 
 // _____________________________________________________________________________

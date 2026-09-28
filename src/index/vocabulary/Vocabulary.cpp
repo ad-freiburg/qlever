@@ -18,8 +18,6 @@
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 
-namespace ad_utility::vocabulary {
-
 using std::string;
 
 // ____________________________________________________________________________
@@ -311,15 +309,14 @@ VocabBatchLookupResult Vocabulary<S, C, I>::lookupBatch(
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
-VocabBatchLookupResult Vocabulary<S, C, I>::lookupBatch(
-    ql::span<const size_t> indices, ArenaVocabBatchBuilder& builder) const {
+void Vocabulary<S, C, I>::lookupBatch(ql::span<const size_t> indices,
+                                      ArenaVocabBatchBuilder& builder) const {
   AD_CONTRACT_CHECK(!indices.empty());
   if constexpr (SupportsBuilderLookupBatch<
                     std::decay_t<decltype(vocabulary_)>>) {
     vocabulary_.lookupBatch(indices, builder);
-    return std::move(builder).finalize();
   } else {
-    return vocabulary_.lookupBatch(indices);
+    appendVocabBatchLookupResult(vocabulary_.lookupBatch(indices), builder);
   }
 }
 
@@ -342,4 +339,3 @@ template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
     const nlohmann::json& prefixes);
 template void RdfsVocabulary::initializeExternalizePrefixes<
     std::vector<std::string>>(const std::vector<std::string>& prefixes);
-}  // namespace ad_utility::vocabulary

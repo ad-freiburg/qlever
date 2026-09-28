@@ -13,8 +13,6 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 
-namespace ad_utility::vocabulary {
-
 using ad_utility::GeometryInfo;
 
 // ____________________________________________________________________________
@@ -137,4 +135,3 @@ std::optional<GeometryInfo> GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
 // Explicit template instantiations
 template class GeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
 template class GeoVocabulary<VocabularyInMemory>;
-}  // namespace ad_utility::vocabulary

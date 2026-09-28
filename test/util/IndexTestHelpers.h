@@ -25,8 +25,8 @@
 namespace ad_utility::testing {
 // Return a pointer to a single, lazily-initialized `EncodedIriManager`
 // instance shared across all tests.
-inline const ad_utility::vocabulary::EncodedIriManager* encodedIriManager() {
-  static ad_utility::vocabulary::EncodedIriManager instance;
+inline const EncodedIriManager* encodedIriManager() {
+  static EncodedIriManager instance;
   return &instance;
 }
 

@@ -5,10 +5,8 @@
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 
-namespace ad_utility::vocabulary {
-
 // Explicit template instantiations
-using namespace ad_utility::vocabulary::detail::splitVocabulary;
+using namespace detail::splitVocabulary;
 template class SplitVocabulary<
     GeoSplitFunc, GeoFilenameFunc,
     CompressedVocabulary<VocabularyInternalExternal>,
@@ -16,4 +14,3 @@ template class SplitVocabulary<
 template class SplitVocabulary<GeoSplitFunc, GeoFilenameFunc,
                                VocabularyInMemory,
                                GeoVocabulary<VocabularyInMemory>>;
-}  // namespace ad_utility::vocabulary

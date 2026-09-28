@@ -28,8 +28,8 @@ int main(int argc, char** argv) {
     return count++;
   };
 
-  ad_utility::vocabulary::VocabularyOnDisk vocab;
-  ad_utility::vocabulary::TripleComponentComparator comparator;
+  VocabularyOnDisk vocab;
+  TripleComponentComparator comparator;
   ad_utility::vocabulary_merger::mergeVocabulary(
       basename, numFiles,
       [&comparator](std::string_view a, bool aIsExternal, std::string_view b,

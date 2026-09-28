@@ -47,10 +47,8 @@ struct MicroSplitFilenameFunc {
 
 class SplitVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
  private:
-  using Vocab = ad_utility::vocabulary::SplitVocabulary<
-      MicroSplitFunc, MicroSplitFilenameFunc,
-      ad_utility::vocabulary::VocabularyInMemory,
-      ad_utility::vocabulary::VocabularyInMemory>;
+  using Vocab = SplitVocabulary<MicroSplitFunc, MicroSplitFilenameFunc,
+                                VocabularyInMemory, VocabularyInMemory>;
 
   // Remove the files of a vocabulary basename. Best effort: failures (e.g.
   // files that were never created) are ignored.
@@ -109,8 +107,7 @@ class SplitVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
     }
     vocab_.readFromFile(cleanup_.basename_);
 
-    for (const ad_utility::vocabulary::IndexAndWord& indexAndWord :
-         vocab_.scanAll()) {
+    for (const IndexAndWord& indexAndWord : vocab_.scanAll()) {
       marked_.push_back(static_cast<size_t>(indexAndWord.index_));
     }
 

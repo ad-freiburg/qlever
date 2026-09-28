@@ -225,7 +225,7 @@ void IndexImpl::setTextName(const std::string& name) {
 auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
     const -> std::vector<TextBlockMetadataAndWordInfo> {
   AD_CORRECTNESS_CHECK(!word.empty());
-  ad_utility::vocabulary::IdRange<WordVocabIndex> idRange;
+  IdRange<WordVocabIndex> idRange;
   if (ql::ends_with(word, PREFIX_CHAR)) {
     auto idRangeOpt = textVocab_.getIdRangeForFullTextPrefix(word);
     if (!idRangeOpt.has_value()) {
@@ -239,7 +239,7 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
       AD_LOG_INFO << "Term: " << word << " not in vocabulary\n";
       return {};
     }
-    idRange = ad_utility::vocabulary::IdRange{idx, idx};
+    idRange = IdRange{idx, idx};
   }
   auto tbmdVector = textMeta_.getBlockInfoByWordRange(idRange.first().get(),
                                                       idRange.last().get());

@@ -12,7 +12,7 @@ using ad_utility::source_location;
 
 // ______________________________________________________________________________________________
 TEST(StringSortComparatorTest, TripleComponentComparatorQuarternary) {
-  ad_utility::vocabulary::TripleComponentComparator comp("en", "US", false);
+  TripleComponentComparator comp("en", "US", false);
 
   // strange casings must not affect order
   ASSERT_TRUE(comp("\"ALPHA\"", "\"beta\""));
@@ -46,7 +46,7 @@ TEST(StringSortComparatorTest, TripleComponentComparatorQuarternary) {
 
   // Testing that latin and Hindi numbers mean exactly the same up to the
   // Quarternary level
-  using L = ad_utility::vocabulary::TripleComponentComparator::Level;
+  using L = TripleComponentComparator::Level;
   ASSERT_FALSE(
       comp("\"151\"", "\"१५१\"", L::QUARTERNARY));  // that is 151 in Hindi
   ASSERT_FALSE(comp("\"१५१\"", "\"151\"", L::QUARTERNARY));
@@ -59,11 +59,9 @@ TEST(StringSortComparatorTest, TripleComponentComparatorQuarternary) {
 }
 
 TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
-  ad_utility::vocabulary::TripleComponentComparator comparator("en", "US",
-                                                               false);
+  TripleComponentComparator comparator("en", "US", false);
   auto comp = [&comparator](const auto& a, const auto& b) {
-    return comparator(
-        a, b, ad_utility::vocabulary::TripleComponentComparator::Level::TOTAL);
+    return comparator(a, b, TripleComponentComparator::Level::TOTAL);
   };
   // Test that the comparison between `a` and  `b` always yields the same
   // result, no matter if it is done on the level of strings or on `SortKey`s.
@@ -74,9 +72,9 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
     bool ab = comp(a, b);
     bool ba = comp(b, a);
     auto aSplit = comparator.extractAndTransformComparable(
-        a, ad_utility::vocabulary::TripleComponentComparator::Level::TOTAL);
+        a, TripleComponentComparator::Level::TOTAL);
     auto bSplit = comparator.extractAndTransformComparable(
-        b, ad_utility::vocabulary::TripleComponentComparator::Level::TOTAL);
+        b, TripleComponentComparator::Level::TOTAL);
     EXPECT_EQ(ab, comp(aSplit, bSplit));
     EXPECT_EQ(ab, comp(a, bSplit));
     EXPECT_EQ(ab, comp(aSplit, b));
@@ -142,7 +140,7 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
 
 // ______________________________________________________________________________________________
 TEST(StringSortComparatorTest, IsLessInTotalWithExternalFlag) {
-  ad_utility::vocabulary::TripleComponentComparator comp("en", "US", false);
+  TripleComponentComparator comp("en", "US", false);
 
   // When the strings differ on the TOTAL level, the external flags must not
   // influence the result.
@@ -192,7 +190,7 @@ TEST(StringSortComparatorTest, IsLessInTotalWithExternalFlag) {
 
 // ______________________________________________________________________________________________
 TEST(StringSortComparatorTest, SimpleStringComparator) {
-  ad_utility::vocabulary::SimpleStringComparator comp("en", "US", true);
+  SimpleStringComparator comp("en", "US", true);
 
   // strange casings must not affect order
   ASSERT_TRUE(comp("ALPHA", "beta"));
@@ -226,7 +224,7 @@ TEST(StringSortComparatorTest, SimpleStringComparator) {
 
 // ______________________________________________________________________________
 TEST(StringSortComparatorNoICU, SimpleStringComparator) {
-  ad_utility::vocabulary::SimpleStringComparatorNoICU comp("en", "US", true);
+  SimpleStringComparatorNoICU comp("en", "US", true);
 
   // Bytewise ordering: uppercase letters come before lowercase ones.
   EXPECT_TRUE(comp("ALPHA", "alpha"));
@@ -238,7 +236,7 @@ TEST(StringSortComparatorNoICU, SimpleStringComparator) {
   EXPECT_FALSE(comp("beta", "beta"));
 
   // Consistency with the `SortKey`-based overload on the PRIMARY level.
-  using L = ad_utility::vocabulary::SimpleStringComparatorNoICU::Level;
+  using L = SimpleStringComparatorNoICU::Level;
   auto sortKeyBeta = comp.getLocaleManager().getSortKey("beta", L::PRIMARY);
   EXPECT_TRUE(comp("alpha", sortKeyBeta, L::PRIMARY));
   EXPECT_FALSE(comp("gamma", sortKeyBeta, L::PRIMARY));
@@ -246,9 +244,8 @@ TEST(StringSortComparatorNoICU, SimpleStringComparator) {
 
 // ______________________________________________________________________________
 TEST(StringSortComparatorNoICU, TripleComponentComparator) {
-  ad_utility::vocabulary::TripleComponentComparatorNoICU comp("en", "US",
-                                                              false);
-  using L = ad_utility::vocabulary::TripleComponentComparatorNoICU::Level;
+  TripleComponentComparatorNoICU comp("en", "US", false);
+  using L = TripleComponentComparatorNoICU::Level;
 
   // The inner value is compared bytewise, so casing DOES affect the order
   // (in contrast to the ICU-based comparator).

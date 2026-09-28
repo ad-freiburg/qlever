@@ -136,50 +136,64 @@ class VocabBatchLookupMicroBenchmark : public BenchmarkInterface {
     const size_t repetitions = parseEnvironmentSize(
         std::getenv("VOCAB_BATCH_MICRO_INNER_REPETITIONS"), 5);
     AD_CONTRACT_CHECK(repetitions > 0 && repetitions <= maxRepetitions);
+    // Profiling: run a single variant so a profiler attributes all samples
+    // to one code path. Unset or empty runs all three measurements.
+    // One of `baseline`, `contiguous`, `arena`.
+    const char* onlyVariant = std::getenv("VOCAB_BATCH_MICRO_ONLY");
+    auto runVariant = [onlyVariant](std::string_view variant) {
+      return onlyVariant == nullptr || onlyVariant[0] == '\0' ||
+             std::string_view{onlyVariant} == variant;
+    };
 
     // Old API cost model: one owning `std::string` (heap allocation) per word.
-    group.addMeasurement("baseline: owning vector<string> per word", [&] {
-      size_t checksum = 0;
-      for (size_t repetition = 0; repetition < repetitions; ++repetition) {
-        std::vector<std::string> copies;
-        copies.reserve(words_.size());
-        for (std::string_view word : words_) {
-          copies.emplace_back(word.data(), word.size());
+    if (runVariant("baseline")) {
+      group.addMeasurement("baseline: owning vector<string> per word", [&] {
+        size_t checksum = 0;
+        for (size_t repetition = 0; repetition < repetitions; ++repetition) {
+          std::vector<std::string> copies;
+          copies.reserve(words_.size());
+          for (std::string_view word : words_) {
+            copies.emplace_back(word.data(), word.size());
+          }
+          checksum += checksumStrings(copies);
         }
-        checksum += checksumStrings(copies);
-      }
-      return checksum;
-    });
+        return checksum;
+      });
+    }  // if (runVariant("baseline"))
 
     // New API: single contiguous buffer, direct memcpy targets for batched I/O.
-    group.addMeasurement("ContiguousVocabBatchBuilder + memcpy", [&] {
-      size_t checksum = 0;
-      for (size_t repetition = 0; repetition < repetitions; ++repetition) {
-        ad_utility::vocabulary::ContiguousVocabBatchBuilder builder{sizes_};
-        auto targets = builder.targets();
-        AD_CORRECTNESS_CHECK(targets.size() == words_.size());
-        for (size_t i = 0; i < words_.size(); ++i) {
-          std::memcpy(targets[i], words_[i].data(), words_[i].size());
+    if (runVariant("contiguous")) {
+      group.addMeasurement("ContiguousVocabBatchBuilder + memcpy", [&] {
+        size_t checksum = 0;
+        for (size_t repetition = 0; repetition < repetitions; ++repetition) {
+          ContiguousVocabBatchBuilder builder{sizes_};
+          auto targets = builder.targets();
+          AD_CORRECTNESS_CHECK(targets.size() == words_.size());
+          for (size_t i = 0; i < words_.size(); ++i) {
+            std::memcpy(targets[i], words_[i].data(), words_[i].size());
+          }
+          auto result = std::move(builder).finalize();
+          checksum += checksumViews({result.data(), result.size()});
         }
-        auto result = std::move(builder).finalize();
-        checksum += checksumViews({result.data(), result.size()});
-      }
-      return checksum;
-    });
+        return checksum;
+      });
+    }  // if (runVariant("contiguous"))
 
     // New API: PMR monotonic arena decode path.
-    group.addMeasurement("ArenaVocabBatchBuilder::appendWord", [&] {
-      size_t checksum = 0;
-      for (size_t repetition = 0; repetition < repetitions; ++repetition) {
-        ad_utility::vocabulary::ArenaVocabBatchBuilder builder{words_.size()};
-        for (std::string_view word : words_) {
-          builder.appendWord(word);
+    if (runVariant("arena")) {
+      group.addMeasurement("ArenaVocabBatchBuilder::appendWord", [&] {
+        size_t checksum = 0;
+        for (size_t repetition = 0; repetition < repetitions; ++repetition) {
+          ArenaVocabBatchBuilder builder{words_.size()};
+          for (std::string_view word : words_) {
+            builder.appendWord(word);
+          }
+          auto result = std::move(builder).finalize();
+          checksum += checksumViews({result.data(), result.size()});
         }
-        auto result = std::move(builder).finalize();
-        checksum += checksumViews({result.data(), result.size()});
-      }
-      return checksum;
-    });
+        return checksum;
+      });
+    }  // if (runVariant("arena"))
 
     return results;
   }
@@ -194,7 +208,7 @@ AD_REGISTER_BENCHMARK(VocabBatchLookupMicroBenchmark);
 class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
  private:
   std::string filename_ = "VocabBatchLookupBenchmark.vocab.tmp";
-  ad_utility::vocabulary::VocabularyInMemoryBinSearch vocabulary_;
+  VocabularyInMemoryBinSearch vocabulary_;
   // Shuffled batch of vocabulary indices, resolved by every measurement.
   std::vector<size_t> batch_;
 
@@ -205,8 +219,7 @@ class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
     ad_utility::deleteFile(filename_, false);
     ad_utility::deleteFile(filename_ + ".ids", false);
     {
-      ad_utility::vocabulary::VocabularyInMemoryBinSearch::WordWriter writer{
-          filename_};
+      VocabularyInMemoryBinSearch::WordWriter writer{filename_};
       for (size_t i = 0; i < numWords; ++i) {
         writer(makeSyntheticWord(i), i);
       }
