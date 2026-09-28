@@ -24,6 +24,7 @@ RuntimeParameters::RuntimeParameters() {
 
   add(stripColumns_);
   add(useSimdEscapeClassifierCsvTsv_);
+  add(useNonTemporalExportBuffer_);
   add(sortEstimateCancellationFactor_);
   add(cacheMaxNumEntries_);
   add(cacheMaxSize_);

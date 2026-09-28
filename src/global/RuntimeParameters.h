@@ -51,6 +51,11 @@ struct RuntimeParameters {
   Bool useSimdEscapeClassifierCsvTsv_{false,
                                       "use-simd-escape-classifier-csv-tsv"};
 
+  // If set, `stream_generator` (the buffer behind the Turtle, CSV and TSV
+  // export) copies the yielded strings into its buffer with non-temporal
+  // (cache-bypassing) stores instead of `std::memcpy`.
+  Bool useNonTemporalExportBuffer_{false, "use-non-temporal-export-buffer"};
+
   // If the time estimate for a sort operation is larger by more than this
   // factor than the remaining time, then the sort is canceled with a
   // timeout exception.
