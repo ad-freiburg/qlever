@@ -43,8 +43,6 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(ChunkStreamingBenchmark engine testUtil)
 
-    addAndLinkBenchmark(SimdEscapeBenchmark qlever_util)
-
     addAndLinkBenchmark(IoUringDirectBenchmark qlever_util)
 
     addAndLinkBenchmark(FastNumberFormatterBenchmark qlever_util)

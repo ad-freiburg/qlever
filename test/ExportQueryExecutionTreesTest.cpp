@@ -2266,30 +2266,3 @@ INSTANTIATE_TEST_SUITE_P(
         LruWindowParam{5, "abcde"},
         // window 10: all duplicates are caught, 5 unique triples remain.
         LruWindowParam{10, "abcde"}));
-
-// _____________________________________________________________________________
-// `use-simd-escape-classifier-csv-tsv` switches the CSV and TSV cell escaping
-// from `RdfEscaping` to `SimdEscapeClassifier`; the exported bytes must not
-// change. The literal contains the special characters of both formats plus
-// `\r` and `\`, which are special in CSV but not in TSV.
-TEST(ExportQueryExecutionTrees, SimdEscapeClassifierCsvTsvProducesSameBytes) {
-  const std::string kg =
-      R"(<a> <b> "needs\tescaping, \\backslash, \rcarriage return, and \"quotes\"" .)";
-  const std::string query = "SELECT * WHERE { ?s ?p ?o }";
-  using ad_utility::MediaType;
-
-  for (MediaType format : {MediaType::csv, MediaType::tsv}) {
-    auto legacy = [&] {
-      auto cleanup = setRuntimeParameterForTest<
-          &RuntimeParameters::useSimdEscapeClassifierCsvTsv_>(false);
-      return runQueryStreamableResult(kg, query, format);
-    }();
-    auto simd = [&] {
-      auto cleanup = setRuntimeParameterForTest<
-          &RuntimeParameters::useSimdEscapeClassifierCsvTsv_>(true);
-      return runQueryStreamableResult(kg, query, format);
-    }();
-    EXPECT_EQ(legacy, simd);
-    EXPECT_NE(legacy.find("needs"), std::string::npos);
-  }
-}

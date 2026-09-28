@@ -45,12 +45,6 @@ struct RuntimeParameters {
   // between otherwise equal queries.
   Bool stripColumns_{false, "strip-columns"};
 
-  // If set, the CSV and TSV export of SELECT results escapes the cells with
-  // the vectorized `ad_utility::simd::SimdEscapeClassifier` instead of
-  // `RdfEscaping::escapeForCsv`/`escapeForTsv`. The output is the same.
-  Bool useSimdEscapeClassifierCsvTsv_{false,
-                                      "use-simd-escape-classifier-csv-tsv"};
-
   // Number of words ahead that a batched lookup in an in-memory vocabulary
   // (`VocabularyInMemory::lookupBatch`) prefetches into the CPU cache. Zero
   // (default) disables software prefetching.
