@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-// Synthetic micro-benchmark for the polymorphic `lookupBatch` dispatch (PR
-// marvin7122/qlever#79): small synthetic vocabularies behind a
+// Synthetic micro-benchmark for the polymorphic `lookupBatch` dispatch:
+// small synthetic vocabularies behind a
 // `PolymorphicVocabulary` and tiny batches, comparing sequential per-word
 // `operator[]` lookups against a single `lookupBatch` call and against the
 // arena-based `lookupBatch(indices, builder)` overload. The compressed
