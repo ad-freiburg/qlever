@@ -45,11 +45,6 @@ struct RuntimeParameters {
   // between otherwise equal queries.
   Bool stripColumns_{false, "strip-columns"};
 
-  // Number of words ahead that a batched lookup in an in-memory vocabulary
-  // (`VocabularyInMemory::lookupBatch`) prefetches into the CPU cache. Zero
-  // (default) disables software prefetching.
-  SizeT vocabLookupPrefetchDistance_{0, "vocab-lookup-prefetch-distance"};
-
   // If the time estimate for a sort operation is larger by more than this
   // factor than the remaining time, then the sort is canceled with a
   // timeout exception.

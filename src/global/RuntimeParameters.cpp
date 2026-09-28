@@ -23,7 +23,6 @@ RuntimeParameters::RuntimeParameters() {
   };
 
   add(stripColumns_);
-  add(vocabLookupPrefetchDistance_);
   add(sortEstimateCancellationFactor_);
   add(cacheMaxNumEntries_);
   add(cacheMaxSize_);

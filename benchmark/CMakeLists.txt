@@ -43,8 +43,6 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(ChunkStreamingBenchmark engine testUtil)
 
-    addAndLinkBenchmark(PrefetchingBenchmark engine)
-
     addAndLinkBenchmark(PrefixCompressorBenchmark)
 
     addAndLinkBenchmark(VocabBatchLookupBenchmark vocabulary)

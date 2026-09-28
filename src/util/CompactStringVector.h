@@ -1,7 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -181,25 +180,22 @@ class CompactVectorOfStrings {
     }
   }
 
+ private:
   // Return a read-only view of the data, regardless of whether the storage
-  // currently owns its elements or is a non-owning view. Public so batch
-  // consumers (software prefetching) can address the underlying lines
-  // directly.
+  // currently owns its elements or is a non-owning view.
   DataView dataSpan() const {
     return std::visit(
         [](const auto& x) -> DataView { return {x.data(), x.size()}; }, data_);
   }
 
   // Return a read-only view of the offsets, regardless of whether the
-  // storage currently owns its elements or is a non-owning view. See
-  // `dataSpan` for why this is public.
+  // storage currently owns its elements or is a non-owning view.
   OffsetView offsetsSpan() const {
     return std::visit(
         [](const auto& x) -> OffsetView { return {x.data(), x.size()}; },
         offsets_);
   }
 
- private:
   // Access the owned vector alternatives. Throws (via `std::get`) if this
   // object is currently a non-owning view, which is a programming error (a
   // zero-copy view is read-only, so `build()` must not be called on it).
