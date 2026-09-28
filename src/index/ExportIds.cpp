@@ -17,11 +17,9 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
-#include "global/RuntimeParameters.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "parser/NormalizedString.h"
 #include "util/Exception.h"
-#include "util/FastIntToString.h"
 
 namespace ql::exportIds {
 
@@ -275,11 +273,6 @@ idToStringAndTypeForEncodedValue(Id id) {
     case Bool:
       return std::pair{std::string{id.getBoolLiteral()}, XSD_BOOLEAN_TYPE};
     case Int:
-      if (getRuntimeParameter<
-              &RuntimeParameters::fastIntToStringForExport_>()) {
-        return std::pair{ad_utility::formatIntToString(id.getInt()),
-                         XSD_INT_TYPE};
-      }
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Date:
       return id.getDate().toStringAndType();
