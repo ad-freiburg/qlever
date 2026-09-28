@@ -10,8 +10,12 @@
 
 #include "util/IoUringManager.h"
 
+#include <sys/uio.h>
 #include <unistd.h>
 
+#include <atomic>
+#include <cerrno>
+#include <climits>
 #include <stdexcept>
 
 #include "util/Exception.h"
@@ -38,6 +42,87 @@ void SyncIoPolicy::readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
   if (static_cast<size_t>(numBytesRead) != numBytes) {
     AD_THROW("read fewer bytes than requested in readFullyOrThrow");
   }
+}
+
+namespace {
+#ifdef RWF_NOWAIT
+// Cleared once a `preadv2(RWF_NOWAIT)` fails with `EOPNOTSUPP`.
+std::atomic<bool> pageCacheFastPathSupported{true};
+#endif
+}  // namespace
+
+//______________________________________________________________________________
+bool pageCacheFastPathIsSupported() {
+#ifdef RWF_NOWAIT
+  return pageCacheFastPathSupported.load(std::memory_order_relaxed);
+#else
+  return false;
+#endif
+}
+
+//______________________________________________________________________________
+std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
+                                      ql::span<const uint64_t> offsets,
+                                      ql::span<char*> buffers) {
+  AD_CONTRACT_CHECK(offsets.size() == numBytes.size() &&
+                    buffers.size() == numBytes.size());
+  std::vector<size_t> notServed;
+#ifdef RWF_NOWAIT
+  const size_t numReads = numBytes.size();
+  std::vector<iovec> iovecs;
+  size_t runBegin = 0;
+  while (runBegin < numReads) {
+    // The run `[runBegin, runEnd)` holds exactly adjacent file ranges, at most
+    // `IOV_MAX` of them (the limit of one `preadv2` call).
+    size_t runEnd = runBegin + 1;
+    while (runEnd < numReads &&
+           runEnd - runBegin < static_cast<size_t>(IOV_MAX) &&
+           offsets[runEnd - 1] + numBytes[runEnd - 1] == offsets[runEnd]) {
+      ++runEnd;
+    }
+    if (!pageCacheFastPathSupported.load(std::memory_order_relaxed)) {
+      for (size_t i = runBegin; i < numReads; ++i) {
+        notServed.push_back(i);
+      }
+      return notServed;
+    }
+    iovecs.clear();
+    for (size_t i = runBegin; i < runEnd; ++i) {
+      iovecs.push_back(iovec{buffers[i], numBytes[i]});
+    }
+    // See https://man7.org/linux/man-pages/man2/preadv2.2.html: with
+    // `RWF_NOWAIT`, the call fails with `EAGAIN` (or returns fewer bytes)
+    // instead of waiting for the storage device when data is not cached.
+    const ssize_t numBytesRead =
+        preadv2(fd, iovecs.data(), static_cast<int>(iovecs.size()),
+                static_cast<off_t>(offsets[runBegin]), RWF_NOWAIT);
+    if (numBytesRead < 0 && errno == EOPNOTSUPP) {
+      if (pageCacheFastPathSupported.exchange(false)) {
+        AD_LOG_WARN << "preadv2 with RWF_NOWAIT is not supported for the "
+                       "vocabulary files; reading them without the "
+                       "page-cache fast path"
+                    << std::endl;
+      }
+    }
+    // Reads that were read completely are served, the others (from the first
+    // incomplete one on) are left to the caller.
+    size_t remaining = numBytesRead < 0 ? 0 : static_cast<size_t>(numBytesRead);
+    size_t i = runBegin;
+    for (; i < runEnd && remaining >= numBytes[i]; ++i) {
+      remaining -= numBytes[i];
+    }
+    for (; i < runEnd; ++i) {
+      notServed.push_back(i);
+    }
+    runBegin = runEnd;
+  }
+#else
+  (void)fd;
+  for (size_t i = 0; i < numBytes.size(); ++i) {
+    notServed.push_back(i);
+  }
+#endif
+  return notServed;
 }
 
 //______________________________________________________________________________
