@@ -629,13 +629,19 @@ bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {
     return false;
   }
 
-  auto previous = lastParseResult_.getLiteral();
+  // Parsing the language tag or the datatype IRI overwrites
+  // `lastParseResult_`, so the literal has to be moved out of it first, and
+  // moved back in if there is neither. Copying it instead would mean an
+  // additional allocation for every single literal in the input.
+  auto literal = std::move(lastParseResult_.getLiteral());
   if (langtag()) {
-    previous.addLanguageTag(lastParseResult_.getString());
-    lastParseResult_ = std::move(previous);
+    literal.addLanguageTag(lastParseResult_.getString());
+    lastParseResult_ = std::move(literal);
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
-    literalAndDatatypeToTripleComponentImpl(
-        asStringViewUnsafe(previous.getContent()), lastParseResult_.getIri());
+    literalAndDatatypeToTripleComponentImpl(std::move(literal),
+                                            lastParseResult_.getIri());
+  } else {
+    lastParseResult_ = std::move(literal);
   }
 
   // It is okay to neither have a langtag nor an XSD datatype.
@@ -644,11 +650,11 @@ bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {
 
 // ______________________________________________________________________
 template <class T>
-TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
-    std::string_view normalizedLiteralContent,
-    const TripleComponent::Iri& typeIri) {
-  auto literal = TripleComponent::Literal::literalWithNormalizedContent(
-      asNormalizedStringViewUnsafe(normalizedLiteralContent));
+void TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
+    TripleComponent::Literal literal, const TripleComponent::Iri& typeIri) {
+  AD_CORRECTNESS_CHECK(literal.isPlain());
+  std::string_view normalizedLiteralContent =
+      asStringViewUnsafe(literal.getContent());
   std::string_view type = asStringViewUnsafe(typeIri.getContent());
 
   // Helper to handle literals that are invalid for the respective datatype
@@ -726,7 +732,6 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
   } catch (const std::exception& e) {
     raise(e.what());
   }
-  return lastParseResult_;
 }
 
 // _____________________________________________________________________________
@@ -773,8 +778,11 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
     const EncodedIriManager& encodedIriManager) {
   RdfStringParser<TurtleParser<T>> parser{&encodedIriManager};
 
-  return parser.literalAndDatatypeToTripleComponentImpl(
-      normalizedLiteralContent, typeIri);
+  parser.literalAndDatatypeToTripleComponentImpl(
+      TripleComponent::Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(normalizedLiteralContent)),
+      typeIri);
+  return std::move(parser.lastParseResult_);
 }
 
 // ______________________________________________________________________
@@ -931,15 +939,15 @@ bool TurtleParser<Tokenizer_T>::check(bool result) const {
 
 // _____________________________________________________________________________
 template <class Tokenizer_T>
-TripleComponent::Iri TurtleParser<Tokenizer_T>::expandPrefix(
+const TripleComponent::Iri& TurtleParser<Tokenizer_T>::expandPrefix(
     const std::string& prefix) {
-  if (!prefixMap().count(prefix)) {
+  auto it = prefixMap().find(prefix);
+  if (it == prefixMap().end()) {
     raise("Prefix " + prefix +
           " was not previously defined using a PREFIX or @prefix "
           "declaration");
-  } else {
-    return prefixMap()[prefix];
   }
+  return it->second;
 }
 
 // _____________________________________________________________________________
@@ -1165,7 +1173,11 @@ void RdfStreamParser<T>::initialize(const qlever::InputFileSpecification& spec,
 
 // _____________________________________________________________________________
 template <class T>
-std::optional<std::vector<TurtleTriple>> RdfStreamParser<T>::getBatch() {
+std::optional<std::vector<TurtleTriple>> RdfStreamParser<T>::getBatch(
+    std::vector<TurtleTriple> buffer) {
+  // Parse into the buffer that the caller has passed back, so that its
+  // capacity is reused.
+  this->setTripleBuffer(std::move(buffer));
   // If parsing a statement fails because our buffer ends before the end of
   // that statement, we need to be able to recover.
   TurtleParserBackupState b = backupState();
@@ -1283,7 +1295,8 @@ bool RdfParallelParsingState<Parser>::parseHeaderStep(
 // ____________________________________________________________________________
 template <typename Parser>
 std::vector<TurtleTriple> RdfParallelParsingState<Parser>::parseBatch(
-    qlever::parser::ByteBlock batch, size_t positionOffset) const {
+    qlever::parser::ByteBlock batch, size_t positionOffset,
+    std::vector<TurtleTriple> buffer) const {
   RdfStringParser<Parser> parser{encodedIriManager_, defaultGraphIri_,
                                  settings_};
   parser.header() = header_;
@@ -1294,6 +1307,9 @@ std::vector<TurtleTriple> RdfParallelParsingState<Parser>::parseBatch(
   // so that user-specified blank node labels (_:foo) have the same ID
   // across all batches of the same file.
   parser.setFileBlankNodePrefix(fileBlankNodePrefix_);
+  // Parse into the buffer that the caller has passed back, so that its
+  // capacity is reused across the (short-lived) worker parsers.
+  parser.setTripleBuffer(std::move(buffer));
   parser.setInputStream(std::move(batch));
   return parser.parseAndReturnAllTriples();
 }
@@ -1409,7 +1425,8 @@ RdfMultifileParser::~RdfMultifileParser() {
 }
 
 // _____________________________________________________________________________
-std::optional<std::vector<TurtleTriple>> RdfMultifileParser::getBatch() {
+std::optional<std::vector<TurtleTriple>> RdfMultifileParser::getBatch(
+    [[maybe_unused]] std::vector<TurtleTriple> buffer) {
   return finishedBatchQueue_.pop();
 }
 

@@ -148,6 +148,12 @@ class PartialVocabularyTaskChain {
   // written (see `startNewPartialVocabulary`).
   ItemMapManager itemMap_;
   std::vector<IdRow> localTriples_;
+  // The storage for the batches of this chain. It is handed to the parser with
+  // every `asyncGetBatch` call and comes back with the parsed triples (see
+  // `AsyncRdfParserBase::asyncGetBatch`), so that this chain grows its buffer
+  // only once instead of once per batch. As a chain only ever has a single
+  // call in flight, one buffer per chain suffices.
+  std::vector<TurtleTriple> batchBuffer_;
   size_t numInputTriples_ = 0;
   // The number of `ql:has-word` triples that this chain has created (see
   // `mapTripleToIds`). Counted locally and added to the shared counter in
@@ -207,35 +213,39 @@ class PartialVocabularyTaskChain {
   // contains the control flow of the asynchronous loop and the error handling,
   // the actual work is done in `handleBatch` and `finish`.
   void step() {
-    parser_.asyncGetBatch(boost::asio::bind_executor(
-        executor_, [this](std::exception_ptr ep,
-                          std::optional<std::vector<TurtleTriple>> batch) {
-          try {
-            if (ep) {
-              std::rethrow_exception(ep);
-            }
-            if (shared_.stopRequested_.load()) {
-              // Another chain has failed; end this chain without further work.
-              return;
-            }
-            if (!batch.has_value()) {
-              // End of input for this chain.
-              finish();
-              return;
-            }
-            handleBatch(std::move(batch).value());
-            // This is the `continue` of the asynchronous loop: schedule the
-            // next step of this chain.
-            postNextStep();
-          } catch (...) {
-            shared_.reportError(std::current_exception());
-            // End this chain: do not schedule another step.
-          }
-        }));
+    parser_.asyncGetBatch(
+        std::move(batchBuffer_),
+        boost::asio::bind_executor(
+            executor_, [this](std::exception_ptr ep,
+                              std::optional<std::vector<TurtleTriple>> batch) {
+              try {
+                if (ep) {
+                  std::rethrow_exception(ep);
+                }
+                if (shared_.stopRequested_.load()) {
+                  // Another chain has failed; end this chain without further
+                  // work.
+                  return;
+                }
+                if (!batch.has_value()) {
+                  // End of input for this chain.
+                  finish();
+                  return;
+                }
+                handleBatch(std::move(batch).value());
+                // This is the `continue` of the asynchronous loop: schedule the
+                // next step of this chain.
+                postNextStep();
+              } catch (...) {
+                shared_.reportError(std::current_exception());
+                // End this chain: do not schedule another step.
+              }
+            }));
   }
 
   // Map the triples in `batch` to local IDs, report the progress and, if the
-  // current partial vocabulary is full, write it and start a new one.
+  // current partial vocabulary is full, write it and start a new one. Keep the
+  // storage of `batch` for the next call, see `batchBuffer_`.
   void handleBatch(std::vector<TurtleTriple> batch) {
     for (auto& triple : batch) {
       mapTripleToIds(std::move(triple), itemMap_, shared_.index_, localTriples_,
@@ -243,6 +253,8 @@ class PartialVocabularyTaskChain {
     }
     numInputTriples_ += batch.size();
     shared_.progressBar_.add(batch.size());
+    batchBuffer_ = std::move(batch);
+    batchBuffer_.clear();
     if (auto update = shared_.progressBar_.update()) {
       AD_LOG_INFO << update->getProgressString() << std::flush;
     }

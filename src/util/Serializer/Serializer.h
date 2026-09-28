@@ -10,6 +10,7 @@
 #include <array>
 #include <stdexcept>
 
+#include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
@@ -339,7 +340,7 @@ CPP_template(typename T, typename S)(
   if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
     static constexpr size_t alignment = alignof(T);
-    size_t padding = (alignment - (currentPos % alignment)) % alignment;
+    size_t padding = ad_utility::alignUp(currentPos, alignment) - currentPos;
     if (padding > 0) {
       static constexpr std::array<char, alignment> zeros = {0};
       serializer.serializeBytes(zeros.data(), padding);
@@ -355,7 +356,7 @@ CPP_template(typename T, typename S)(
   if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
     static constexpr size_t alignment = alignof(T);
-    size_t padding = (alignment - (currentPos % alignment)) % alignment;
+    size_t padding = ad_utility::alignUp(currentPos, alignment) - currentPos;
     if (padding > 0) {
       serializer.skip(padding);
     }

@@ -147,13 +147,16 @@ class RdfAsyncParallelParser : public AsyncRdfParserBase {
   // (like `boost::asio::use_future`), so `co_spawn` returns `void` for it, and
   // the whole completion-token machinery lives one level up, in
   // `AsyncRdfParserBase::asyncGetBatch`.
-  void asyncGetBatchImpl(Handler handler) override;
+  void asyncGetBatchImpl(std::vector<TurtleTriple> buffer,
+                         Handler handler) override;
 
  private:
   // Parse the header if this is the first call, then fetch the next block and
-  // parse it into triples. Throw on a parse error, and return `nullopt` at the
-  // end of the input. See the class comment for the exact error semantics.
-  boost::asio::awaitable<OptionalTriples> getBatchCoroutine();
+  // parse it into triples, using `buffer` as their storage. Throw on a parse
+  // error, and return `nullopt` at the end of the input. See the class comment
+  // for the exact error semantics.
+  boost::asio::awaitable<OptionalTriples> getBatchCoroutine(
+      std::vector<TurtleTriple> buffer);
 
   // Parse the leading declarations of the input (the "header") by feeding the
   // blocks of the input to `state_` one by one until it reports that the

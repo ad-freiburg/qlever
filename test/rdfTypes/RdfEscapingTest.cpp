@@ -75,38 +75,91 @@ TEST(RdfEscapingTest, escapeForXml) {
 }
 
 // ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeLiteralWithQuotesToNormalizedString) {
+TEST(RdfEscapingTest, unescapeLiteralWithQuotesRemoved) {
+  auto f = [](std::string_view input) {
+    // Append to a non-empty string to demonstrate that the result is appended.
+    std::string result = "prefix:";
+    unescapeLiteralWithQuotesRemoved(input, result);
+    return result;
+  };
+  ASSERT_EQ("prefix:Hello \" \\World", f(R"("Hello \" \\World")"));
+  ASSERT_EQ("prefix:Hello \" \\World", f(R"('''Hello \" \\World''')"));
+  // A literal without any escape sequence is copied in a single block.
+  ASSERT_EQ("prefix:Hello World", f(R"("Hello World")"));
+  ASSERT_THROW(f("no quotes"), ad_utility::Exception);
+}
+
+// ___________________________________________________________________________
+TEST(RdfEscapingTest, unescapeLiteral) {
+  auto f = [](std::string_view input) {
+    std::string result;
+    unescapeLiteral(input, result);
+    return result;
+  };
+  ASSERT_EQ("Hello \" \\World", f(R"(Hello \" \\World)"));
+  ASSERT_EQ("Hello World", f("Hello World"));
+}
+
+// ___________________________________________________________________________
+TEST(RdfEscapingTest, unescapeNewlinesAndBackslashes) {
+  ASSERT_EQ(unescapeNewlinesAndBackslashes(""), "");
+  ASSERT_EQ(unescapeNewlinesAndBackslashes("Hello World"), "Hello World");
+  ASSERT_EQ(unescapeNewlinesAndBackslashes(R"(a\nb\\c\n)"), "a\nb\\c\n");
+  // Roundtrip with `escapeNewlinesAndBackslashes`.
+  std::string_view original = "line1\nline2\\\t\"end";
   ASSERT_EQ(
-      "Hello \" \\World",
-      asStringViewUnsafe(normalizeLiteralWithQuotes(R"("Hello \" \\World")")));
-  ASSERT_THROW(normalizeLiteralWithQuotes("no quotes"), ad_utility::Exception);
+      unescapeNewlinesAndBackslashes(escapeNewlinesAndBackslashes(original)),
+      original);
+
+  // All other string escapes are not allowed.
+  for (std::string_view input :
+       {R"(a\tb)", R"(a\rb)", R"(a\bb)", R"(a\fb)", R"(a\"b)", R"(a\'b)"}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        unescapeNewlinesAndBackslashes(input),
+        ::testing::HasSubstr("String escapes like \\n or \\t are not allowed"));
+  }
+  // Numeric escapes are not allowed.
+  for (std::string_view input : {R"(a\u00e4)", R"(a\U0001F600)"}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(unescapeNewlinesAndBackslashes(input),
+                                 ::testing::HasSubstr("Numeric escapes like"));
+  }
+  // Unknown escapes and a trailing backslash violate contract checks.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      unescapeNewlinesAndBackslashes(R"(a\zb)"),
+      ::testing::HasSubstr("Unsupported escape sequence"));
+  ASSERT_THROW(unescapeNewlinesAndBackslashes("a\\"), ad_utility::Exception);
 }
 
 // ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeLiteralWithoutQuotesToNormalizedString) {
-  ASSERT_EQ(
-      "Hello \" \\World",
-      asStringViewUnsafe(normalizeLiteralWithoutQuotes(R"(Hello \" \\World)")));
-}
-
-// ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeIriWithBracketsToNormalizedString) {
-  ASSERT_EQ("https://example.org/books/book1",
-            asStringViewUnsafe(
-                normalizeIriWithBrackets("<https://example.org/books/book1>")));
-}
-
-// ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeIriWithoutBracketsToNormalizedString) {
-  ASSERT_EQ("https://example.org/books/book1",
-            asStringViewUnsafe(normalizeIriWithoutBrackets(
-                "https://example.org/books/book1")));
-}
-
-// ___________________________________________________________________________
-TEST(RdfEscapingTest, normalizeLanguageTagToNormalizedString) {
-  ASSERT_EQ("se", asStringViewUnsafe(normalizeLanguageTag("@se")));
-  ASSERT_EQ("se", asStringViewUnsafe(normalizeLanguageTag("se")));
+TEST(RdfEscapingTest, unescapeIrirefIntoBuffer) {
+  // If there is nothing to unescape, the input itself is returned and the
+  // buffer is left untouched, which tells the caller that it may keep using
+  // the original string.
+  {
+    std::string buffer;
+    std::string_view input = "<http://example.org/a>";
+    std::string_view result = unescapeIriref(input, buffer);
+    EXPECT_EQ(result, input);
+    EXPECT_EQ(result.data(), input.data());
+    EXPECT_TRUE(buffer.empty());
+  }
+  // Otherwise the unescaped IRI is stored in the buffer, and a view of the
+  // buffer is returned.
+  {
+    std::string buffer;
+    std::string_view result =
+        unescapeIriref(R"(<http://example.org/B\u00E4>)", buffer);
+    EXPECT_EQ(result, "<http://example.org/Bä>");
+    EXPECT_EQ(result.data(), buffer.data());
+  }
+  // The buffer has to be empty, else the result of the fast path (an untouched
+  // buffer) could not be distinguished from an actual unescaping.
+  {
+    std::string buffer = "notEmpty";
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        unescapeIriref("<http://example.org/a>", buffer),
+        ::testing::HasSubstr("buffer.empty()"));
+  }
 }
 
 // ___________________________________________________________________________

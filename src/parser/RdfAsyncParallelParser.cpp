@@ -40,8 +40,10 @@ RdfAsyncParallelParser<Parser>::RdfAsyncParallelParser(
 
 // _____________________________________________________________________________
 template <typename Parser>
-void RdfAsyncParallelParser<Parser>::asyncGetBatchImpl(Handler handler) {
-  boost::asio::co_spawn(executor(), getBatchCoroutine(), std::move(handler));
+void RdfAsyncParallelParser<Parser>::asyncGetBatchImpl(
+    std::vector<TurtleTriple> buffer, Handler handler) {
+  boost::asio::co_spawn(executor(), getBatchCoroutine(std::move(buffer)),
+                        std::move(handler));
 }
 
 // ____________________________________________________________________________
@@ -56,7 +58,8 @@ net::awaitable<void> RdfAsyncParallelParser<Parser>::parseHeader() {
 // ____________________________________________________________________________
 template <typename Parser>
 net::awaitable<typename RdfAsyncParallelParser<Parser>::OptionalTriples>
-RdfAsyncParallelParser<Parser>::getBatchCoroutine() {
+RdfAsyncParallelParser<Parser>::getBatchCoroutine(
+    std::vector<TurtleTriple> buffer) {
   // A previous batch failed, so signal a clean end of the input to stop the
   // caller's pipeline without reporting yet another error.
   if (errorWasEncountered_.load()) {
@@ -111,7 +114,8 @@ RdfAsyncParallelParser<Parser>::getBatchCoroutine() {
     if (!block.has_value()) {
       co_return std::nullopt;
     }
-    co_return state_.parseBatch(std::move(block).value(), positionOffset);
+    co_return state_.parseBatch(std::move(block).value(), positionOffset,
+                                std::move(buffer));
   } catch (...) {
     // Only the first error is propagated to its caller, all subsequent calls
     // get a clean end of the input instead, see the class comment. The permit

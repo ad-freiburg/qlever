@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "../util/GTestHelpers.h"
+#include "../util/TripleComponentTestHelpers.h"
 #include "./SparqlAntlrParserTestHelpers.h"
 #include "parser/Quads.h"
 
@@ -129,7 +130,7 @@ TEST(QuadTest, forAllVariables) {
         });
         EXPECT_THAT(calledVariables, testing::Eq(expectVariables));
       };
-  auto TCIri = ad_utility::triple_component::Iri::fromIriref;
+  auto TCIri = ad_utility::testing::iri;
   using Var = Variable;
 
   using Triple = std::array<GraphTerm, 3>;

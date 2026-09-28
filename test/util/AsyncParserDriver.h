@@ -94,7 +94,12 @@ class AsyncParserDriver : public RdfParserBase {
   // started lazily on the first call so that immediately-destroyed parsers
   // (created but never consumed, e.g. in tests) do not leave in-flight
   // asynchronous operations that would delay the destructor.
-  std::optional<std::vector<TurtleTriple>> getBatch() override {
+  //
+  // NOTE: `buffer` is ignored, because the task chains run ahead of this call
+  // and hand the ownership of their batches to `queue_`.
+  using RdfParserBase::getBatch;
+  std::optional<std::vector<TurtleTriple>> getBatch(
+      [[maybe_unused]] std::vector<TurtleTriple> buffer) override {
     namespace net = boost::asio;
     if (!taskChainsStarted_.exchange(true)) {
       numActiveTaskChains_ = NUM_PARALLEL_PARSER_THREADS;

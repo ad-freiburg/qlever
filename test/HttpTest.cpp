@@ -14,6 +14,7 @@
 #include "global/RuntimeParameters.h"
 #include "util/GTestHelpers.h"
 #include "util/Random.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
@@ -471,7 +472,9 @@ TYPED_TEST(HttpServerBodyTest, RequestBodySizeLimit) {
     constexpr auto testingRequestBodyLimit = 50_kB;
 
     // Set a smaller limit for testing. The default of 100 MB is quite large.
-    setRuntimeParameter<&RuntimeParameters::requestBodyLimit_>(50_kB);
+    auto requestBodyLimitCleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::requestBodyLimit_>(
+            50_kB);
     // Requests with bodies smaller than the request body limit are processed.
     expectRequestSucceeds(3_B);
     // Exactly the limit is allowed.

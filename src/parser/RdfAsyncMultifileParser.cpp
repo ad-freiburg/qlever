@@ -160,7 +160,7 @@ void RdfAsyncMultifileParser::releaseFile(const std::shared_ptr<OpenFile>& file,
 
 // _____________________________________________________________________________
 net::awaitable<RdfAsyncMultifileParser::OptionalTriples>
-RdfAsyncMultifileParser::getBatchCoroutine() {
+RdfAsyncMultifileParser::getBatchCoroutine(std::vector<TurtleTriple> buffer) {
   for (;;) {
     // Another call has failed in the meantime, so there is nothing left to
     // parse.
@@ -185,13 +185,21 @@ RdfAsyncMultifileParser::getBatchCoroutine() {
       absl::Cleanup release = [this, &file, &wasExhausted] {
         releaseFile(file, wasExhausted);
       };
-      auto batch = co_await file->parser_->asyncGetBatch(net::use_awaitable);
+      auto batch = co_await file->parser_->asyncGetBatch(std::move(buffer),
+                                                         net::use_awaitable);
       wasExhausted = !batch.has_value();
       if (batch.has_value()) {
         co_return batch;
       }
       // The picked file turned out to be already exhausted; try again with
-      // (possibly) another file.
+      // (possibly) another file. That call got the buffer and did not return
+      // it, so the next one starts with a fresh (empty) one. This costs one
+      // buffer per exhausted file, which only matters if there are many more
+      // files than concurrent calls and those files additionally consist of
+      // very few batches each. The buffer could in principle also be returned
+      // for an exhausted file, but that would require `asyncGetBatch` to
+      // complete with something more explicit than an `optional<vector>`,
+      // which is not worth it for now.
       continue;
     } catch (...) {
       // Only the first error is propagated to its caller, all subsequent
@@ -205,6 +213,8 @@ RdfAsyncMultifileParser::getBatchCoroutine() {
 }
 
 // _____________________________________________________________________________
-void RdfAsyncMultifileParser::asyncGetBatchImpl(Handler handler) {
-  net::co_spawn(executor(), getBatchCoroutine(), std::move(handler));
+void RdfAsyncMultifileParser::asyncGetBatchImpl(
+    std::vector<TurtleTriple> buffer, Handler handler) {
+  net::co_spawn(executor(), getBatchCoroutine(std::move(buffer)),
+                std::move(handler));
 }
