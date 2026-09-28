@@ -244,9 +244,8 @@ struct RuntimeParameters {
   // submits only the remaining reads to its `io_uring` ring. A read that hits
   // the page cache then costs a share of one syscall instead of an `io_uring`
   // submission and completion; a read that misses costs one extra failed
-  // syscall per run of adjacent ranges. Default `true`: on Wikidata it removes
-  // the warm-cache slowdown of the `io_uring` path and does not slow down cold
-  // exports.
+  // syscall per run of adjacent ranges. On by default: it removes the
+  // warm-cache cost of the ring and also speeds up cold exports.
   Bool vocabularyIouringPageCacheFastPath_{
       true, "vocabulary-iouring-page-cache-fast-path"};
 

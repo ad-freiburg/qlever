@@ -185,6 +185,20 @@ VocabularyOnDisk::submitThroughManager(ad_utility::BatchManagerBase& manager,
 }
 
 // _____________________________________________________________________________
+void VocabularyOnDisk::readThroughManager(ad_utility::BatchManagerBase& manager,
+                                          int fd,
+                                          ql::span<const size_t> numBytes,
+                                          ql::span<const uint64_t> offsets,
+                                          ql::span<char*> buffers,
+                                          ql::span<const size_t> positions) {
+  auto batch =
+      submitThroughManager(manager, fd, numBytes, offsets, buffers, positions);
+  if (batch.has_value()) {
+    manager.wait(batch.value());
+  }
+}
+
+// _____________________________________________________________________________
 VocabBatchLookupResult VocabularyOnDisk::readStrings(
     ad_utility::BatchManagerBase& manager,
     ql::span<const OffsetPair> offsetPairs, bool pageCacheFastPath) const {
@@ -207,17 +221,14 @@ VocabBatchLookupResult VocabularyOnDisk::readStrings(
   // Bind the returned array: `addBatch` takes a span, and the pointers must
   // stay alive until `wait` returns.
   auto targets = builder.targets();
+  ql::span<char*> targetSpan{targets};
   if (pageCacheFastPath) {
-    auto missed =
-        ad_utility::readPageCacheHits(file_.fd(), sizes, fileOffsets, targets);
-    auto batch = submitThroughManager(manager, file_.fd(), sizes, fileOffsets,
-                                      targets, missed);
-    if (batch.has_value()) {
-      manager.wait(batch.value());
-    }
+    auto missed = ad_utility::readPageCacheHits(file_.fd(), sizes, fileOffsets,
+                                                targetSpan);
+    readThroughManager(manager, file_.fd(), sizes, fileOffsets, targetSpan,
+                       missed);
   } else {
-    manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets,
-                                  ql::span<char*>{targets}));
+    manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets, targetSpan));
   }
   return std::move(builder).finalize();
 }

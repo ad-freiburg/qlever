@@ -252,6 +252,10 @@ using BatchIoManager = BatchManager<SyncIoPolicy>;
 // `pageCacheFastPathIsSupported`), which is logged once. Without
 // `RWF_NOWAIT` support at compile time, every read is returned.
 // Precondition: the three spans have the same length.
+// `preadv2` and `RWF_NOWAIT` (Linux >= 4.14), including the caveat that a
+// `RWF_NOWAIT` read may return 0 before the end of the file (such a read is
+// treated as not served): readv(2),
+// https://web.archive.org/web/20260828220215/https://man7.org/linux/man-pages/man2/readv.2.html
 std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
                                       ql::span<const uint64_t> offsets,
                                       ql::span<char*> buffers);
