@@ -8,10 +8,13 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <future>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "./util/GTestHelpers.h"
@@ -143,6 +146,151 @@ TEST(AsyncChunkPipelineTest, PipelineStreamDeliversProducerChunks) {
   ASSERT_EQ(chunks.size(), 2u);
   EXPECT_EQ(chunks.at(0), "first");
   EXPECT_EQ(chunks.at(1), "second");
+}
+
+// _____________________________________________________________________________
+// `AsyncChunkProducer`: a generator on a producer thread, chunks by value.
+using qlever::export_pipeline::AsyncChunkProducer;
+
+// Wait (bounded) until `predicate` holds; the producer thread runs freely.
+template <typename Predicate>
+bool eventually(Predicate predicate) {
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds{5};
+  while (!predicate()) {
+    if (std::chrono::steady_clock::now() > deadline) {
+      return false;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
+  return true;
+}
+
+// Records on which thread the generator frame is created and destroyed.
+struct FrameThreads {
+  std::atomic<std::thread::id> created_{};
+  std::atomic<std::thread::id> destroyed_{};
+  std::atomic<size_t> produced_{0};
+};
+
+struct OnDestroy {
+  FrameThreads* threads_;
+  ~OnDestroy() { threads_->destroyed_ = std::this_thread::get_id(); }
+};
+
+cppcoro::generator<std::string> numberedChunks(size_t numChunks,
+                                               FrameThreads& threads,
+                                               size_t throwAt = SIZE_MAX) {
+  threads.created_ = std::this_thread::get_id();
+  OnDestroy onDestroy{&threads};
+  for (size_t i = 0; i < numChunks; ++i) {
+    if (i == throwAt) {
+      throw std::runtime_error{"producer failed"};
+    }
+    ++threads.produced_;
+    co_yield std::to_string(i);
+  }
+}
+
+TEST(AsyncChunkProducerTest, KeepsProductionOrder) {
+  FrameThreads threads;
+  AsyncChunkProducer<std::string> producer{
+      [&threads] { return numberedChunks(1000, threads); }, 2};
+  std::vector<std::string> received;
+  while (auto chunk = producer.pop()) {
+    received.push_back(std::move(chunk.value()));
+  }
+  ASSERT_EQ(received.size(), 1000u);
+  for (size_t i = 0; i < received.size(); ++i) {
+    EXPECT_EQ(received[i], std::to_string(i));
+  }
+  EXPECT_EQ(producer.stats().totalChunksConsumed, 1000u);
+  // The generator frame lives and dies on the producer thread.
+  EXPECT_TRUE(eventually(
+      [&] { return threads.destroyed_.load() != std::thread::id{}; }));
+  EXPECT_EQ(threads.created_.load(), threads.destroyed_.load());
+  EXPECT_NE(threads.created_.load(), std::this_thread::get_id());
+}
+
+TEST(AsyncChunkProducerTest, ProducerStaysAtMostCapacityAhead) {
+  FrameThreads threads;
+  AsyncChunkProducer<std::string> producer{
+      [&threads] { return numberedChunks(100, threads); }, 2};
+  // Two chunks queued plus one blocked in `push`.
+  ASSERT_TRUE(
+      eventually([&] { return producer.stats().backpressureStalls == 1; }));
+  EXPECT_EQ(threads.produced_.load(), 3u);
+  EXPECT_EQ(producer.pop(), std::optional<std::string>{"0"});
+  ASSERT_TRUE(
+      eventually([&] { return producer.stats().backpressureStalls == 2; }));
+  EXPECT_EQ(threads.produced_.load(), 4u);
+  EXPECT_EQ(producer.stats().totalChunksProduced, 3u);
+}
+
+TEST(AsyncChunkProducerTest, RethrowsProducerExceptionAfterEarlierChunks) {
+  FrameThreads threads;
+  AsyncChunkProducer<std::string> producer{
+      [&threads] { return numberedChunks(10, threads, 3); }, 2};
+  EXPECT_EQ(producer.pop(), std::optional<std::string>{"0"});
+  EXPECT_EQ(producer.pop(), std::optional<std::string>{"1"});
+  EXPECT_EQ(producer.pop(), std::optional<std::string>{"2"});
+  AD_EXPECT_THROW_WITH_MESSAGE(static_cast<void>(producer.pop()),
+                               ::testing::HasSubstr("producer failed"));
+}
+
+TEST(AsyncChunkProducerTest, RethrowsExceptionFromMakeRange) {
+  AsyncChunkProducer<std::string> producer{
+      []() -> cppcoro::generator<std::string> {
+        throw std::runtime_error{"no range"};
+      },
+      2};
+  AD_EXPECT_THROW_WITH_MESSAGE(static_cast<void>(producer.pop()),
+                               ::testing::HasSubstr("no range"));
+}
+
+TEST(AsyncChunkProducerTest, DestroyingUnfinishedProducerStopsIt) {
+  FrameThreads threads;
+  {
+    AsyncChunkProducer<std::string> producer{
+        [&threads] { return numberedChunks(SIZE_MAX, threads); }, 2};
+    EXPECT_EQ(producer.pop(), std::optional<std::string>{"0"});
+    // The consumer abandons the export here; the producer is blocked in
+    // `push` or about to be.
+  }
+  // Joined in the destructor: the frame is already gone, on its own thread.
+  EXPECT_NE(threads.destroyed_.load(), std::thread::id{});
+  EXPECT_EQ(threads.created_.load(), threads.destroyed_.load());
+  EXPECT_LE(threads.produced_.load(), 4u);
+}
+
+TEST(AsyncChunkProducerTest, DestroyingBeforeFirstPopIsSafe) {
+  FrameThreads threads;
+  {
+    AsyncChunkProducer<std::string> producer{
+        [&threads] { return numberedChunks(SIZE_MAX, threads); }, 2};
+  }
+  EXPECT_LE(threads.produced_.load(), 3u);
+}
+
+// `makeDoubleBuffered` resumes and destroys the source generator on the
+// producer thread, also when the consumer abandons the adapter while it is
+// suspended at a `co_yield` (the case that terminated the process when a
+// joinable worker thread was owned by the coroutine body only on its normal
+// exit paths).
+TEST(AsyncChunkPipelineTest, MakeDoubleBufferedAbandonedMidStreamJoins) {
+  FrameThreads threads;
+  {
+    auto buffered = AsyncChunkPipeline<std::string>::makeDoubleBuffered(
+        numberedChunks(SIZE_MAX, threads));
+    auto it = buffered.begin();
+    ASSERT_NE(it, buffered.end());
+    EXPECT_EQ(*it, "0");
+    ++it;
+    EXPECT_EQ(*it, "1");
+  }
+  EXPECT_NE(threads.destroyed_.load(), std::thread::id{});
+  EXPECT_EQ(threads.created_.load(), threads.destroyed_.load());
+  EXPECT_NE(threads.created_.load(), std::this_thread::get_id());
 }
 #endif
 
