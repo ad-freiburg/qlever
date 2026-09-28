@@ -34,6 +34,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/span.h"
+#include "engine/SimdCpuFeatures.h"
 #include "util/Exception.h"
 
 namespace ad_utility::simd {
@@ -259,23 +260,6 @@ template <EscapeFormat Format>
         _mm_or_si128(_mm_or_si128(m1, m2), _mm_or_si128(m3, m4)), m5);
     return static_cast<uint16_t>(_mm_movemask_epi8(match));
   }
-}
-
-// Runtime detection of AVX2 support. AVX2 is not part of the x86-64 baseline,
-// so calling AVX2 code unconditionally faults (SIGILL) on older x86-64 CPUs;
-// the `target("avx2")` attribute only affects code generation, not dispatch.
-// `__builtin_cpu_supports` performs the CPUID initialization implicitly and
-// the result is cached, so the per-call cost is a single predictable branch
-// (and the branch folds away entirely when compiled with `-mavx2`).
-[[nodiscard]] inline bool cpuSupportsAvx2() noexcept {
-#if defined(__AVX2__)
-  // AVX2 enabled globally: the compilation baseline guarantees support.
-  return true;
-#elif defined(__GNUC__) || defined(__clang__)
-  return __builtin_cpu_supports("avx2");
-#else
-  return false;
-#endif
 }
 
 #endif  // QLEVER_SIMD_X86

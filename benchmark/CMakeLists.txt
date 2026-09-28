@@ -85,4 +85,7 @@ if (NOT _NO_BENCHMARK)
     add_executable(AdaptiveChunkBenchmark AdaptiveChunkBenchmark.cpp)
     linkBenchmark(AdaptiveChunkBenchmark engine sparqlParser qlever_util)
 
+    add_executable(SimdValidityBenchmark SimdValidityBenchmark.cpp)
+    linkBenchmark(SimdValidityBenchmark engine sparqlParser qlever_util)
+
 endif()

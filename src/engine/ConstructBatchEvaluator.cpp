@@ -8,9 +8,32 @@
 
 #include "engine/ConstructBatchEvaluator.h"
 
+#include "engine/SimdValidityBitmask.h"
+#include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
 
 namespace qlever::constructExport {
+
+namespace {
+// Return `(rowInBatch, Id)` for every row of `col` whose `Id` is not
+// undefined. The rows are classified 64 at a time with one SIMD comparison
+// per 64 `Id`s, so long runs of undefined values (typical for variables bound
+// by an `OPTIONAL`) cost one bitmask each instead of one entry per row.
+std::vector<std::pair<size_t, Id>> boundRowsAndIds(ql::span<const Id> col) {
+  using ad_utility::simd::SimdValidityScanner;
+  constexpr size_t blockSize = 64;
+  std::vector<std::pair<size_t, Id>> result;
+  result.reserve(col.size());
+  for (size_t blockStart = 0; blockStart < col.size();
+       blockStart += blockSize) {
+    const auto block =
+        col.subspan(blockStart, std::min(blockSize, col.size() - blockStart));
+    SimdValidityScanner::scanBatch(block).forEachValid(
+        [&](size_t i) { result.emplace_back(blockStart + i, block[i]); });
+  }
+  return result;
+}
+}  // namespace
 
 // _____________________________________________________________________________
 BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
@@ -52,8 +75,16 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
   // Build a `(rowInBatch, Id)` index vector and sort by `Id`. This ensures
   // that `VocabIndex` IDs form a contiguous, sorted block (see
   // `idsToStringAndType`), converting vocabulary lookups from random-access
-  // reads to sequential reads for I/O locality.
-  auto sortedIndices = ::ranges::to_vector(::ranges::views::enumerate(col));
+  // reads to sequential reads for I/O locality. With
+  // `construct-skip-unbound-simd`, rows with an undefined `Id` are left out:
+  // they evaluate to `std::nullopt`, which is the default of `result`.
+  std::vector<std::pair<size_t, Id>> sortedIndices;
+  if (getRuntimeParameter<&RuntimeParameters::constructSkipUnboundSimd_>()) {
+    sortedIndices = boundRowsAndIds(col);
+  } else {
+    sortedIndices = ::ranges::to<std::vector<std::pair<size_t, Id>>>(
+        ::ranges::views::enumerate(col));
+  }
 
   ql::ranges::sort(sortedIndices, {}, ad_utility::second);
 

@@ -646,3 +646,5 @@ addLinkAndDiscoverTest(InstrumentedExecutorTest metrics)
 addLinkAndDiscoverTest(ResourceMonitorTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(AdaptiveChunkSizerTest qlever_util)
+
+addLinkAndDiscoverTest(SimdValidityBitmaskTest qlever_util)

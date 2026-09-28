@@ -10,6 +10,7 @@
 
 #include "./util/IdTableHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
 
 namespace {
@@ -152,6 +153,44 @@ TEST_F(ConstructBatchEvaluatorTest, undefinedMixedWithValidIds) {
   ASSERT_EQ(result.numRows_, 3);
   EXPECT_THAT(getColumn(result, 0),
               ElementsAre(evalTerm("<s>"), Eq(std::nullopt), evalTerm("<o>")));
+}
+
+// A column of 200 rows (three full 64-row blocks and a remainder of 8) in
+// which only a few rows are bound, as for a variable from an `OPTIONAL`. With
+// `construct-skip-unbound-simd`, the undefined rows are skipped before the
+// sort and the `IdCache`; the result must be the same as without it.
+TEST_F(ConstructBatchEvaluatorTest, skipUnboundSimdGivesSameResult) {
+  std::vector<std::vector<Id>> rows;
+  for (size_t i = 0; i < 200; ++i) {
+    rows.push_back({i % 17 == 0   ? idS_
+                    : i % 53 == 0 ? idO_
+                    : i == 199    ? idQ_
+                                  : Id::makeUndefined()});
+  }
+  auto idTable = makeIdTableFromVector(rows);
+  auto evaluate = [&](bool skipUnbound) {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::constructSkipUnboundSimd_>(skipUnbound);
+    IdCache idCache{1024};
+    return getColumn(evaluateIdTable({0}, idTable, idCache), 0);
+  };
+  const auto withoutSkip = evaluate(false);
+  const auto withSkip = evaluate(true);
+  ASSERT_EQ(withSkip.size(), 200);
+  for (size_t i = 0; i < 200; ++i) {
+    if (!withoutSkip[i].has_value()) {
+      EXPECT_EQ(withSkip[i], std::nullopt) << i;
+    } else {
+      ASSERT_TRUE(withSkip[i].has_value()) << i;
+      EXPECT_EQ(withSkip[i].value()->rdfTermString_,
+                withoutSkip[i].value()->rdfTermString_)
+          << i;
+    }
+  }
+  EXPECT_THAT(withSkip[0], evalTerm("<s>"));
+  EXPECT_THAT(withSkip[53], evalTerm("<o>"));
+  EXPECT_THAT(withSkip[199], evalTerm("<q>"));
+  EXPECT_EQ(withSkip[1], std::nullopt);
 }
 
 // When the same `Id` appears in multiple rows of a single variable column,
