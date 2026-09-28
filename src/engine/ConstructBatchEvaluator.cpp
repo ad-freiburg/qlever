@@ -89,8 +89,8 @@ void collectColumnMisses(size_t idTableColumnIdx,
 // `idsToStringAndType` precondition for sequential VocabIndex I/O. The
 // depth-2 variant keeps the lookup of the next vocabulary sub-batch in flight
 // while the current one is consumed. Reads only `index`/`localVocab` (plus at
-// most `kIoManagersPerColumn` pooled I/O managers per caller), so concurrent
-// phase B bodies share no mutable state and may run as fibers.
+// most two pooled I/O managers per caller), so concurrent phase B bodies share
+// no mutable state and may run as fibers.
 void resolveColumnMisses(const Index& index, const LocalVocab& localVocab,
                          ColumnWork& work) {
   if (work.missIds_.empty()) {
@@ -159,36 +159,33 @@ BatchEvaluationResult ConstructBatchEvaluator::evaluateBatch(
   }
 
   // Phase B in waves of concurrent fibers, so one thread keeps several
-  // lookup batches in flight (design step 1). Each in-flight column pops up to
-  // `kIoManagersPerColumn` I/O managers from the pool (the depth-2 lookup
-  // holds the managers of the current and the next sub-batch), and `pop()`
-  // blocks once the pool is empty, so a wave holds at most
-  // `NUM_VOCAB_BATCH_IO_MANAGERS / kIoManagersPerColumn` columns: more
-  // concurrent fibers would deadlock the thread. A lone resolvable column
-  // skips fibers (no overlap possible, avoid the setup).
-  constexpr size_t kIoManagersPerColumn = 2;
-  constexpr size_t kMaxConcurrentColumns =
-      NUM_VOCAB_BATCH_IO_MANAGERS / kIoManagersPerColumn;
+  // lookup batches in flight (design step 1). Only columns with misses take
+  // part. A wave holds at most `NUM_VOCAB_BATCH_IO_MANAGERS` columns, the
+  // number of I/O managers the vocabulary creates up front: each in-flight
+  // column holds up to two of them (the depth-2 lookup), and the pool creates
+  // more on demand instead of blocking, so the bound only limits the number
+  // of rings and fiber stacks per batch. A lone resolvable column skips
+  // fibers (no overlap possible, avoid the setup).
+  std::vector<size_t> resolvable;
+  for (size_t i = 0; i < columns.size(); ++i) {
+    if (!columns[i].missIds_.empty()) {
+      resolvable.push_back(i);
+    }
+  }
+  constexpr size_t kMaxConcurrentColumns = NUM_VOCAB_BATCH_IO_MANAGERS;
   static_assert(kMaxConcurrentColumns >= 1);
-  for (size_t begin = 0; begin < columns.size();
+  for (size_t begin = 0; begin < resolvable.size();
        begin += kMaxConcurrentColumns) {
-    const size_t end = std::min(begin + kMaxConcurrentColumns, columns.size());
-    std::vector<size_t> resolvable;
-    for (size_t i = begin; i < end; ++i) {
-      if (!columns[i].missIds_.empty()) {
-        resolvable.push_back(i);
-      }
-    }
-    if (resolvable.empty()) {
-      continue;
-    }
-    if (resolvable.size() == 1) {
-      resolveColumnMisses(index, localVocab, columns[resolvable[0]]);
+    const size_t end =
+        std::min(begin + kMaxConcurrentColumns, resolvable.size());
+    if (end - begin == 1) {
+      resolveColumnMisses(index, localVocab, columns[resolvable[begin]]);
       continue;
     }
     std::vector<std::function<void()>> bodies;
-    bodies.reserve(resolvable.size());
-    for (size_t i : resolvable) {
+    bodies.reserve(end - begin);
+    for (size_t i :
+         ql::span<const size_t>{resolvable}.subspan(begin, end - begin)) {
       bodies.emplace_back([&index, &localVocab, &columns, i]() {
         resolveColumnMisses(index, localVocab, columns[i]);
       });

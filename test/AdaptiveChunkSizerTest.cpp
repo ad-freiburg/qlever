@@ -9,11 +9,12 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "engine/AdaptiveChunkSizer.h"
 
 namespace {
 
-using qlever::AdaptiveChunkBuffer;
 using qlever::AdaptiveChunkConfig;
 using qlever::AdaptiveChunkSizer;
 using qlever::AdaptiveChunkStats;
@@ -160,13 +161,48 @@ TEST(AdaptiveChunkSizerTest, ResetRestoresInitialState) {
 TEST(AdaptiveChunkSizerTest, ZeroRowAndZeroByteHandling) {
   AdaptiveChunkSizer sizer;
 
-  // Recording a 0-byte or 0-row chunk should not divide by zero or crash
+  // An empty chunk is counted, but it neither changes the row estimate nor
+  // advances the ramp.
   sizer.recordChunk(0, 0);
   EXPECT_EQ(sizer.chunksFlushed(), 1);
   EXPECT_EQ(sizer.totalBytes(), 0);
   EXPECT_EQ(sizer.totalRows(), 0);
   EXPECT_DOUBLE_EQ(sizer.averageRowBytes(), 120.0);
+  EXPECT_EQ(sizer.currentChunkBytes(), 64 * 1024);
+
+  sizer.recordChunk(0, 10);
+  EXPECT_DOUBLE_EQ(sizer.averageRowBytes(), 120.0);
+  EXPECT_EQ(sizer.currentChunkBytes(), 64 * 1024);
+
+  // A chunk with bytes but an unknown row count (0) advances the ramp but
+  // leaves the row estimate unchanged. This is how the chunked HTTP transfer
+  // uses the sizer.
+  sizer.recordChunk(64 * 1024, 0);
+  EXPECT_EQ(sizer.chunksFlushed(), 3);
+  EXPECT_EQ(sizer.totalBytes(), 0);
+  EXPECT_DOUBLE_EQ(sizer.averageRowBytes(), 120.0);
   EXPECT_EQ(sizer.currentChunkBytes(), 128 * 1024);
+}
+
+// A growth factor that would overshoot `maxChunkBytes_` (or even the range of
+// `size_t`) lands exactly on `maxChunkBytes_`; non-finite factors are rejected.
+TEST(AdaptiveChunkSizerTest, LargeGrowthFactorIsCappedAtMax) {
+  AdaptiveChunkConfig config;
+  config.initialChunkBytes_ = 1024;
+  config.maxChunkBytes_ = 4096;
+  config.growthFactor_ = 1e300;
+  AdaptiveChunkSizer sizer(config);
+  sizer.recordChunk(1024, 0);
+  EXPECT_EQ(sizer.currentChunkBytes(), 4096);
+  sizer.recordChunk(4096, 0);
+  EXPECT_EQ(sizer.currentChunkBytes(), 4096);
+
+  config.growthFactor_ = std::numeric_limits<double>::infinity();
+  EXPECT_ANY_THROW(AdaptiveChunkSizer{config});
+  config.growthFactor_ = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_ANY_THROW(AdaptiveChunkSizer{config});
+  config.growthFactor_ = 0.5;
+  EXPECT_ANY_THROW(AdaptiveChunkSizer{config});
 }
 
 TEST(AdaptiveChunkSizerTest, CustomConfiguration) {
@@ -193,47 +229,6 @@ TEST(AdaptiveChunkSizerTest, CustomConfiguration) {
   // Next flush stays at 512 KB
   sizer.recordChunk(512 * 1024, 8000);
   EXPECT_EQ(sizer.currentChunkBytes(), 512 * 1024);
-}
-
-// =============================================================================
-// Unit Tests for AdaptiveChunkBuffer
-// =============================================================================
-
-TEST(AdaptiveChunkBufferTest, WriteAndFlushRampUp) {
-  AdaptiveChunkBuffer buffer;
-
-  EXPECT_EQ(buffer.bytesBuffered(), 0);
-  EXPECT_EQ(buffer.rowsBuffered(), 0);
-  EXPECT_FALSE(buffer.isReadyToFlush());
-
-  // Write small slice
-  buffer.write("Hello, World!\n");
-  buffer.recordRow();
-  EXPECT_EQ(buffer.bytesBuffered(), 14);
-  EXPECT_EQ(buffer.rowsBuffered(), 1);
-  EXPECT_EQ(buffer.currentView(), "Hello, World!\n");
-
-  // Flush buffer
-  std::string flushed = buffer.flush();
-  EXPECT_EQ(flushed, "Hello, World!\n");
-  EXPECT_EQ(buffer.bytesBuffered(), 0);
-  EXPECT_EQ(buffer.rowsBuffered(), 0);
-  EXPECT_EQ(buffer.sizer().chunksFlushed(), 1);
-  EXPECT_EQ(buffer.sizer().currentChunkBytes(), 128 * 1024);
-}
-
-// Writes beyond the current capacity keep every byte, also when the growth is
-// capped at `maxChunkBytes_` and a single write exceeds that cap.
-TEST(AdaptiveChunkBufferTest, GrowthBeyondMaxChunkBytesKeepsAllBytes) {
-  AdaptiveChunkBuffer buffer{AdaptiveChunkConfig{8, 16}};
-  const std::string first(12, 'a');
-  const std::string second(20, 'b');
-  buffer.write(first);
-  buffer.write(second);
-  EXPECT_EQ(buffer.bytesBuffered(), 32);
-  EXPECT_EQ(buffer.currentView(), first + second);
-  EXPECT_EQ(buffer.flush(), first + second);
-  EXPECT_EQ(buffer.sizer().currentChunkBytes(), 16);
 }
 
 }  // namespace

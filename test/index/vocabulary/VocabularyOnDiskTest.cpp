@@ -345,14 +345,47 @@ TEST(VocabularyOnDisk, DroppedInFlightHandleReturnsManager) {
   auto vocab = createExampleVocabulary();
   std::array<size_t, 3> indices{4, 0, 2};
   // Drop more handles than the pool has managers. If a dropped handle kept its
-  // manager, `beginLookup` would block on the empty pool.
+  // manager, the pool would have to create new ones.
   for (size_t round = 0; round < 2 * NUM_VOCAB_BATCH_IO_MANAGERS; ++round) {
     auto handle = vocab->beginLookup(indices);
   }
   auto result = vocab->finishLookup(vocab->beginLookup(indices));
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
                                                                 indices);
+  EXPECT_EQ(vocab->numIoManagers(), NUM_VOCAB_BATCH_IO_MANAGERS);
   EXPECT_ANY_THROW(vocab->finishLookup(nullptr));
+}
+
+// More lookups than the pool has managers may be in flight at once (the
+// depth-2 lookup and the fibers of one CONSTRUCT batch hold several managers
+// on one thread): `beginLookup` then creates a new manager instead of blocking
+// on the empty pool, which would deadlock this thread. The extra managers stay
+// in the pool and are reused by later lookups.
+TEST(VocabularyOnDisk, MoreInFlightLookupsThanPooledManagers) {
+  auto vocab = createExampleVocabulary();
+  EXPECT_EQ(vocab->numIoManagers(), NUM_VOCAB_BATCH_IO_MANAGERS);
+  const size_t numHandles = 2 * NUM_VOCAB_BATCH_IO_MANAGERS + 1;
+  std::vector<std::vector<size_t>> indices;
+  std::vector<std::unique_ptr<VocabLookupHandleBase>> handles;
+  for (size_t i = 0; i < numHandles; ++i) {
+    indices.push_back({i % vocab->size(), (i + 2) % vocab->size()});
+    handles.push_back(vocab->beginLookup(indices.back()));
+  }
+  EXPECT_EQ(vocab->numIoManagers(), numHandles);
+  // Finish in reverse order, so the completions of the first handles are
+  // consumed last.
+  for (size_t i = numHandles; i-- > 0;) {
+    auto result = vocab->finishLookup(std::move(handles[i]));
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+        *vocab, result, indices[i]);
+  }
+  // All managers are back in the pool; later lookups create no new ones.
+  for (size_t i = 0; i < numHandles; ++i) {
+    auto result = vocab->lookupBatch(indices[i]);
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+        *vocab, result, indices[i]);
+  }
+  EXPECT_EQ(vocab->numIoManagers(), numHandles);
 }
 
 // Each batch yielded by `lookupBatchesStreamed` must equal the individual
