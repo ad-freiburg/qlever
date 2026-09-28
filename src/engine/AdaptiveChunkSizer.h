@@ -20,17 +20,14 @@
 namespace qlever::export_streaming {
 
 // _____________________________________________________________________________
-// Configuration parameters for dynamic adaptive chunk sizing.
-// Defaults implement DuckDB-style exponential ramp-up:
-// Starts with a 64 KB buffer for sub-millisecond Time-To-First-Byte (TTFB),
-// doubling buffer size on each flush until reaching 4 MB bulk throughput
-// capacity.
+// Configuration parameters for adaptive chunk sizing: the chunk size starts at
+// `initialChunkBytes_` and is multiplied by `growthFactor_` after every chunk
+// up to `maxChunkBytes_`.
 struct AdaptiveChunkConfig {
-  // Initial chunk buffer capacity in bytes (64 KB). Ensures immediate first
-  // byte.
+  // Size of the first chunk in bytes (64 KiB).
   size_t initialChunkBytes_ = 64 * 1024;
 
-  // Maximum chunk buffer capacity in bytes (4 MB) for sustained bulk streaming.
+  // Upper bound of the chunk size in bytes (4 MiB).
   size_t maxChunkBytes_ = 4 * 1024 * 1024;
 
   // Multiplier to scale buffer capacity on each successful chunk flush.
@@ -58,37 +55,17 @@ struct AdaptiveChunkStats {
 };
 
 // _____________________________________________________________________________
-// Deep Module: Adaptive Chunk Sizer for Streaming Query Exports.
+// Chunk sizes for a streamed query export.
 //
-// In fixed-size chunking (e.g. 100K triples per chunk), the server must
-// compute, evaluate, and format a massive batch before releasing the very first
-// byte to the HTTP client. For slow or complex queries, this creates high
-// initial latency (Time-To-First-Byte / TTFB) and degrades interactive
-// responsiveness.
-//
-// `AdaptiveChunkSizer` manages dynamic buffer progression:
-//   1. First chunk starts at 64 KB: Formatted and flushed almost
-//   instantaneously
-//      (<1ms TTFB) so clients, UI dashboards, and command-line tools receive
-//      initial data immediately.
-//   2. Exponential Ramp-Up: On each subsequent flush, chunk capacity doubles
-//      (64 KB -> 128 KB -> 256 KB -> 512 KB -> 1 MB -> 2 MB -> 4 MB).
-//   3. High-Throughput Bulk Steady State: Once 4 MB is reached, chunks remain
-//   at
-//      4 MB for maximum sustained streaming throughput and optimal TCP socket
-//      utilization.
-//   4. Adaptive Row Estimation: Continuously observes actual serialized bytes
-//   per
-//      row/triple and dynamically computes optimal row batch boundaries for
-//      internal iterators and table evaluators.
-//
-// Architectural Laws:
-//   - Law 1 (Deep Module): Encapsulates buffer growth, statistical estimation,
-//     and batch partitioning behind a minimal interface.
-//   - Law 2 (Zero Accounting Leakage): Callers do not track moving averages or
-//     growth stages.
-//   - Law 3 (Complexity Gravity): Safe edge-case handling (zero rows, oversized
-//     rows, div-by-zero protection).
+// With a fixed chunk size, the first chunk is handed to the HTTP layer only
+// after a full chunk has been formatted. `AdaptiveChunkSizer` makes the first
+// chunk small and grows the chunk size geometrically:
+//   1. The first chunk has `initialChunkBytes_` (64 KiB by default).
+//   2. After every chunk, the size is multiplied by `growthFactor_` (2 by
+//      default): 64 KiB, 128 KiB, 256 KiB, ...
+//   3. The size stays at `maxChunkBytes_` once it is reached.
+//   4. It keeps an estimate of the bytes per row (from the recorded chunks),
+//      so that callers that cut chunks by rows can ask for a row count.
 class AdaptiveChunkSizer {
  private:
   AdaptiveChunkConfig config_;
@@ -100,7 +77,7 @@ class AdaptiveChunkSizer {
 
  public:
   // ___________________________________________________________________________
-  // Default constructor: uses DuckDB-style 64 KB -> 4 MB exponential sizing.
+  // Default constructor: 64 KiB, doubling up to 4 MiB.
   AdaptiveChunkSizer() : AdaptiveChunkSizer(AdaptiveChunkConfig{}) {}
 
   // ___________________________________________________________________________
