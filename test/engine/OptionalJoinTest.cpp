@@ -938,14 +938,14 @@ class OptionalJoinWithIndexScan
 
   void SetUp() override {
     // Create a small knowledge graph with controlled block structure.
-    // Using 8 bytes per column gives us a single triple per block.
+    // One row per block gives us a single triple per block.
     std::string kg =
         "<a> <p> <A> . <a> <p> <A2> . "
         "<b> <p> <B> . <b> <p> <B2> . "
         "<c> <p> <C> . <c> <p> <C2> . "
         "<d> <p> <D> . "
         "<e> <p> <E> . ";
-    setupQecWithKnowledgeGraph(kg, 8_B);
+    setupQecWithKnowledgeGraph(kg, 1);
   }
 
   // Create a common IndexScan instance for the right side.
@@ -1119,7 +1119,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsBasicFiltering) {
       "<s0> <p> <o1> .<s1> <p> <o1> . <s1> <p> <o2> . <s2> <p> <o3> .<s3> <p> "
       "<o3>. ";
   TestIndexConfig config{kg2};
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   auto qec2 = getQec(std::move(config));
 
   // Left side: two columns with UNDEF in second column.
@@ -1176,7 +1176,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
       "<s0> <p> <o1> .<s1> <p> <o1> . <s1> <p> <o2> . <s2> <p> <o3> .<s3> <p> "
       "<o3>. ";
   TestIndexConfig config{kg2};
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   auto qec2 = getQec(std::move(config));
 
   // Left side: two columns with UNDEF in second column.
@@ -1246,7 +1246,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsMultipleMatches) {
   // Test two-column optional join with multiple matches for one subject.
   std::string kg2 = "<s0> <p> 1. <s1> <p> 2 . <s1> <p> 3 . <s2> <p> 4 .";
   TestIndexConfig config{kg2};
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   auto qec2 = getQec(std::move(config));
 
   auto s1 =
