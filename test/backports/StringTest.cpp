@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <memory>
 #include <string>
 
 #include "backports/string.h"
@@ -69,4 +70,20 @@ TEST(StringTest, ResizeAndOverwriteOversizedResultThrows) {
   std::string s;
   ASSERT_THROW(ql::resize_and_overwrite(s, 4, [](char*, size_t) { return 5u; }),
                ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+// A move-only operation passed as an rvalue must work: the backport moves it
+// into the C++23 branch lambda instead of capturing a reference to it.
+TEST(StringTest, ResizeAndOverwriteMoveOnlyOperation) {
+  std::string s;
+  const std::string text = "move-only";
+  auto op = [payload = std::make_unique<std::string>(text), &text](
+                char* buf, size_t count) {
+    EXPECT_EQ(count, text.size());
+    std::memcpy(buf, payload->data(), payload->size());
+    return payload->size();
+  };
+  ql::resize_and_overwrite(s, text.size(), std::move(op));
+  EXPECT_EQ(s, text);
 }
