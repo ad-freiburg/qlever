@@ -14,8 +14,14 @@
 // queries one word at a time (the previous behavior for repeated lookups)
 // against resolving them with batched `lookupBatch` calls. The speedup is the
 // ratio of the `sequential single-word lookups` time to the `lookupBatch`
-// time.
+// time. Every measurement repeats all lookups until at least
+// `VOCAB_LOOKUP_MIN_SECONDS` (default 10) seconds have passed; the time per
+// word is in the measurement's metadata and in a tab-separated
+// `VOCAB_LOOKUP` line. `VOCAB_LOOKUP_ORDER=batch-first` measures
+// `lookupBatch` first.
 
+#include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <numeric>
@@ -87,6 +93,11 @@ class BMVocabBatchLookupEndToEnd : public BenchmarkInterface {
 
     constexpr size_t numWords = 200'000;
     constexpr size_t numQueries = 50'000;
+    // Minimum duration of one measurement: `VOCAB_LOOKUP_MIN_SECONDS`,
+    // default 10 (so a measurement is never a single short sample).
+    const char* minSecondsValue = std::getenv("VOCAB_LOOKUP_MIN_SECONDS");
+    const double minSeconds =
+        minSecondsValue != nullptr ? std::stod(minSecondsValue) : 10.0;
     const auto words = makeWords(numWords);
     auto vocab = buildHybridVocabulary(
         (benchmarkDir / "endtoend.hybrid").string(), words);
@@ -96,18 +107,56 @@ class BMVocabBatchLookupEndToEnd : public BenchmarkInterface {
         "VocabularyInternalExternal, 200k words, 50k shuffled lookups");
     group.metadata().addKeyValuePair("num-words", numWords);
     group.metadata().addKeyValuePair("num-queries", numQueries);
+    group.metadata().addKeyValuePair("min-seconds-per-measurement", minSeconds);
     size_t checksum = 0;
-    group.addMeasurement("sequential single-word lookups", [&]() {
-      for (size_t idx : ids) {
-        checksum += vocab[idx].size();
-      }
-    });
-    group.addMeasurement("lookupBatch", [&]() {
-      auto result = vocab.lookupBatch(ids);
-      for (std::string_view word : result) {
-        checksum += word.size();
-      }
-    });
+    // Repeat `resolveAll` (all `numQueries` lookups) until at least
+    // `minSeconds` have passed; record the time per word.
+    auto measure = [&](const std::string& name, const auto& resolveAll) {
+      using Clock = std::chrono::steady_clock;
+      size_t rounds = 0;
+      double seconds = 0;
+      auto& entry = group.addMeasurement(name, [&]() {
+        const auto start = Clock::now();
+        do {
+          checksum += resolveAll();
+          ++rounds;
+          seconds = std::chrono::duration<double>(Clock::now() - start).count();
+        } while (seconds < minSeconds);
+      });
+      const double nsPerWord =
+          seconds * 1e9 / static_cast<double>(rounds * numQueries);
+      entry.metadata().addKeyValuePair("ns-per-word", nsPerWord);
+      entry.metadata().addKeyValuePair("rounds", rounds);
+      std::cout << "VOCAB_LOOKUP\te2e-200k-50k\t" << name << '\t' << nsPerWord
+                << '\t' << rounds << '\t' << seconds << std::endl;
+    };
+    auto single = [&]() {
+      measure("sequential single-word lookups", [&]() {
+        size_t total = 0;
+        for (size_t idx : ids) {
+          total += vocab[idx].size();
+        }
+        return total;
+      });
+    };
+    auto batched = [&]() {
+      measure("lookupBatch", [&]() {
+        size_t total = 0;
+        auto result = vocab.lookupBatch(ids);
+        for (std::string_view word : result) {
+          total += word.size();
+        }
+        return total;
+      });
+    };
+    const char* orderValue = std::getenv("VOCAB_LOOKUP_ORDER");
+    if (orderValue != nullptr && std::string{orderValue} == "batch-first") {
+      batched();
+      single();
+    } else {
+      single();
+      batched();
+    }
     // Print the checksum so that the measured lookups cannot be optimized
     // away (see the same pattern in `BenchmarkExamples.cpp`).
     std::cout << "end-to-end checksum: " << checksum << '\n';

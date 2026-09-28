@@ -8,7 +8,6 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
@@ -21,6 +20,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/filesystem.h"
 #include "backports/span.h"
+#include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -58,6 +58,17 @@ constexpr std::array<std::string_view, 3> testThreeFilenameSuffixes{".a", ".b",
 using ThreeSplitVocabulary =
     SplitVocabulary<decltype(testSplitThreeFunction), testThreeFilenameSuffixes,
                     VocabularyInMemory, VocabularyInMemory, VocabularyInMemory>;
+
+// The same splits over compressed vocabularies. Their `operator[]` returns a
+// `std::string`, so `SplitVocabulary::lookupBatch` forwards to or partitions
+// among their `lookupBatch` instead of copying from memory.
+using CompressedInMemory = CompressedVocabulary<VocabularyInMemory>;
+using TwoSplitCompressedVocabulary =
+    SplitVocabulary<decltype(testSplitTwoFunction), testTwoFilenameSuffixes,
+                    CompressedInMemory, CompressedInMemory>;
+using ThreeSplitCompressedVocabulary =
+    SplitVocabulary<decltype(testSplitThreeFunction), testThreeFilenameSuffixes,
+                    CompressedInMemory, CompressedInMemory, CompressedInMemory>;
 
 }  // namespace splitVocabTestHelpers
 
@@ -124,8 +135,6 @@ TEST(Vocabulary, SplitGeoVocab) {
 TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   // Tests the SplitVocabulary class with a custom split function that separates
   // all words in two underlying vocabularies
-  vocabulary_test::ScopedSplitVocabularyFiles<TwoSplitVocabulary> cleanup{
-      "twoSplitVocab.dat"};
   TwoSplitVocabulary sv;
   ASSERT_FALSE(TwoSplitVocabulary::isGeoInfoAvailable());
   ASSERT_FALSE(sv.isGeoInfoAvailable());
@@ -241,8 +250,6 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
 TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   // Tests the SplitVocabulary class with a custom split function that separates
   // all words in three underlying vocabularies (of different types)
-  vocabulary_test::ScopedSplitVocabularyFiles<ThreeSplitVocabulary> cleanup{
-      "threeSplitVocab.dat"};
   ThreeSplitVocabulary sv;
   ASSERT_FALSE(ThreeSplitVocabulary::isGeoInfoAvailable());
   ASSERT_FALSE(sv.isGeoInfoAvailable());
@@ -460,10 +467,7 @@ TEST(Vocabulary, SplitVocabularyScanAll) {
   // vocabularies (here: words starting with `"a` go into the second vocab).
   // `scanAll` must still enumerate all of them.
   const auto filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename]() {
-    ad_utility::deleteFile(filename);
-    ad_utility::deleteFile(absl::StrCat(filename, ".a"));
-  };
+  auto cleanup = getFileCleanup(filename);
   TwoSplitVocabulary sv;
   auto ww = sv.makeDiskWriterPtr(filename);
   (*ww)("\"\"", true);
@@ -494,10 +498,7 @@ TEST(Vocabulary, SplitVocabularyScanAll) {
 TEST(Vocabulary, SplitVocabularyLookupBatchMatchesItemAt) {
   // Mixed markers, reordered indices, and a duplicate must match `operator[]`.
   const auto filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename]() {
-    ad_utility::deleteFile(filename);
-    ad_utility::deleteFile(absl::StrCat(filename, ".a"));
-  };
+  auto cleanup = getFileCleanup(filename);
   TwoSplitVocabulary sv;
   auto ww = sv.makeDiskWriterPtr(filename);
   (*ww)("\"\"", true);
@@ -540,15 +541,72 @@ TEST(Vocabulary, SplitVocabularyLookupBatchRejectsOutOfRangeMarker) {
       static_cast<size_t>(3ull << ThreeSplitVocabulary::markerShift)};
   AD_EXPECT_THROW_WITH_MESSAGE(sv.lookupBatch(illegalMarker),
                                ::testing::HasSubstr("marker < numberOfVocabs"));
+  // The same for underlying vocabularies that are not kept in memory, where
+  // `lookupBatch` counts the markers before it looks anything up.
+  ThreeSplitCompressedVocabulary compressed;
+  const std::array<size_t, 2> legalThenIllegal{
+      0,
+      static_cast<size_t>(3ull << ThreeSplitCompressedVocabulary::markerShift)};
+  AD_EXPECT_THROW_WITH_MESSAGE(compressed.lookupBatch(legalThenIllegal),
+                               ::testing::HasSubstr("marker < numberOfVocabs"));
+}
+
+// Write the words `""`, `"abc"`, `"axyz"`, and `"xyz"` to a `SplitVocab` with
+// the two-way test split function (`"abc"` and `"axyz"` get marker 1), and
+// check `lookupBatch` against `operator[]` for batches that reach all the
+// cases of `SplitVocabulary::lookupBatch`.
+template <typename SplitVocab>
+void checkLookupBatchMatchesItemAtForAllCases(const std::string& filename) {
+  auto cleanup = vocabulary_test::makeVocabFileCleanup(
+      filename, SplitVocab::fileSuffixes());
+  SplitVocab sv;
+  auto ww = sv.makeDiskWriterPtr(filename);
+  (*ww)("\"\"", true);
+  (*ww)("\"abc\"", true);
+  (*ww)("\"axyz\"", true);
+  (*ww)("\"xyz\"", true);
+  ww->finish();
+  sv.readFromFile(filename);
+
+  auto check = [&sv](const auto& indices) {
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+        sv, sv.lookupBatch(indices), indices);
+  };
+  auto marked = [](uint64_t index, uint8_t marker) {
+    return static_cast<size_t>(SplitVocab::addMarker(index, marker));
+  };
+  // Mixed markers, reordered, with duplicates.
+  check(std::array{marked(1, 0), marked(0, 1), marked(1, 1), marked(0, 0),
+                   marked(1, 0), marked(0, 1)});
+  // Only marker 0 (forwarded without a copy), with a duplicate.
+  check(std::array{marked(1, 0), marked(0, 0), marked(1, 0)});
+  // Only marker 1 (forwarded after removing the marker bits).
+  check(std::array{marked(1, 1), marked(0, 1), marked(1, 1)});
+  // A single index of each marker.
+  check(std::array{marked(0, 0)});
+  check(std::array{marked(1, 1)});
+  AD_EXPECT_THROW_WITH_MESSAGE(sv.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
+  sv.close();
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyLookupBatchAllCasesMatchItemAt) {
+  // In-memory underlying vocabularies: one pass via `operator[]` into one
+  // arena.
+  checkLookupBatchMatchesItemAtForAllCases<TwoSplitVocabulary>(
+      absl::StrCat(gtestCurrentTestName(), ".inMemory"));
+  // Compressed underlying vocabularies: forwarding for a single marker,
+  // partitioning for mixed markers.
+  checkLookupBatchMatchesItemAtForAllCases<TwoSplitCompressedVocabulary>(
+      absl::StrCat(gtestCurrentTestName(), ".compressed"));
 }
 
 using namespace splitVocabTestHelpers;
 
-// Share common SplitVocabulary setup across multiple tests.
-// Populates the vocabulary once per test suite with:
-//     and index 1: "" and index 1: "abc"; marker 1 with index 0: "xyz" and
-//     index 1: "axyz".
-//   index 1: "abc" (marker 0) / "axyz" (marker 1)
+// Share common SplitVocabulary setup across multiple tests. Every test gets a
+// two-way split vocabulary with the words `""` and `"xyz"` (marker 0, indices
+// 0 and 1) and `"abc"` and `"axyz"` (marker 1, indices 0 and 1).
 class SplitVocabularyWithDataTest : public ::testing::Test {
  protected:
   std::string getFilename() const {
@@ -557,8 +615,7 @@ class SplitVocabularyWithDataTest : public ::testing::Test {
 
   void SetUp() override {
     const auto filename = getFilename();
-    ad_utility::deleteFile(filename, false);
-    ad_utility::deleteFile(absl::StrCat(filename, ".a"), false);
+    vocabulary_test::deleteVocabularyFiles<TwoSplitVocabulary>(filename);
     auto ww = sv_.makeDiskWriterPtr(filename);
     (*ww)("\"\"", true);
     (*ww)("\"abc\"", true);
@@ -571,8 +628,7 @@ class SplitVocabularyWithDataTest : public ::testing::Test {
   void TearDown() override {
     const auto filename = getFilename();
     sv_.close();
-    ad_utility::deleteFile(filename);
-    ad_utility::deleteFile(absl::StrCat(filename, ".a"));
+    vocabulary_test::deleteVocabularyFiles<TwoSplitVocabulary>(filename);
   }
 
   TwoSplitVocabulary sv_;
@@ -751,51 +807,6 @@ TEST(SplitVocabulary, geoCellGridIndicesThroughSplitVocabulary) {
   auto [loM, hiM] = vocab.getPositionOfWord(wktMissing, comparator);
   EXPECT_EQ(loM, hiM);
   EXPECT_GT(loM, SGV::addMarker(grid.indexFromCellAndPosition(12, 1), 1));
-// _____________________________________________________________________________
-TEST(Vocabulary, ScopedSplitVocabularyFilesDeletesOwnedFiles) {
-  // The guard owns exactly the paths from the vocabulary's split-filename
-  // function, and deletes them when it goes out of scope.
-  const std::string filename = gtestCurrentTestName();
-  const auto ownedFilenames =
-      TwoSplitVocabulary::splitFilenameFunction_(filename);
-  {
-    vocabulary_test::ScopedSplitVocabularyFiles<TwoSplitVocabulary> cleanup{
-        filename};
-    TwoSplitVocabulary sv;
-    auto ww = sv.makeDiskWriterPtr(filename);
-    (*ww)("\"abc\"", true);
-    ww->finish();
-    sv.readFromFile(filename);
-    for (const auto& path : ownedFilenames) {
-      EXPECT_TRUE(ql::filesystem::exists(path)) << path;
-    }
-    sv.close();
-  }
-  for (const auto& path : ownedFilenames) {
-    EXPECT_FALSE(ql::filesystem::exists(path)) << path;
-  }
-}
-
-// _____________________________________________________________________________
-TEST(Vocabulary, ScopedSplitVocabularyFilesDeletesOwnedFilesOnException) {
-  // The guard also deletes when the scope is left via an exception, for
-  // example by a failing assertion.
-  const std::string filename = gtestCurrentTestName();
-  const auto ownedFilenames =
-      TwoSplitVocabulary::splitFilenameFunction_(filename);
-  auto writeThenThrow = [&]() {
-    vocabulary_test::ScopedSplitVocabularyFiles<TwoSplitVocabulary> cleanup{
-        filename};
-    TwoSplitVocabulary sv;
-    auto ww = sv.makeDiskWriterPtr(filename);
-    (*ww)("\"abc\"", true);
-    ww->finish();
-    throw 42;
-  };
-  EXPECT_ANY_THROW(writeThenThrow());
-  for (const auto& path : ownedFilenames) {
-    EXPECT_FALSE(ql::filesystem::exists(path)) << path;
-  }
 }
 
 }  // namespace
