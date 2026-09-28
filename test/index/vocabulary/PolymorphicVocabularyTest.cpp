@@ -229,6 +229,40 @@ TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
   }
 }
 
+// The `lookupBatch(indices, builder)` overload must append, for each requested
+// index and in input order, exactly what `vocab[]` returns. Compressed
+// alternatives decode into the builder's arena, all others copy their result
+// into it; iterating over every `VocabularyType` reaches both branches. Two
+// calls append to the same builder, and the words stay valid after the
+// vocabulary is closed, because the builder owns them.
+TEST(PolymorphicVocabulary, lookupBatchWithBuilderMatchesIndividualLookups) {
+  for (auto vocabType : VocabularyType::all()) {
+    auto [filename, cleanup] = ad_utility::testing::filenameForTesting();
+    PolymorphicVocabulary vocab;
+    setupVocab(vocab, vocabType, filename.string());
+
+    const std::array<size_t, 4> first{2, 0, 3, 1};
+    const std::array<size_t, 2> second{1, 1};
+    std::vector<std::string> expected;
+    for (size_t index : std::array<size_t, 6>{2, 0, 3, 1, 1, 1}) {
+      expected.emplace_back(vocab[index]);
+    }
+
+    ArenaVocabBatchBuilder builder(expected.size());
+    vocab.lookupBatch(first, builder);
+    vocab.lookupBatch(second, builder);
+    vocab.close();
+    auto result = std::move(builder).finalize();
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected))
+        << VocabularyType{vocabType}.toString();
+
+    ArenaVocabBatchBuilder unused(1);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        vocab.lookupBatch(ql::span<const size_t>{}, unused),
+        ::testing::HasSubstr("!indices.empty()"));
+  }
+}
+
 // `lookupBatchesStreamed` must yield, for each batch and in input order,
 // exactly what the individual `vocab[]` lookups return. Checked for every
 // `VocabularyType`.
