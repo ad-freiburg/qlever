@@ -11,9 +11,13 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <cstring>
+
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/ConstructDeduplicator.h"
+#include "engine/FastExportStreamFormatter.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
 #include "util/Views.h"
@@ -118,6 +122,48 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
                       ">");
 }
 
+namespace {
+// Upper bound on the number of bytes that `FastExportStreamFormatter` writes
+// for `term` in Turtle: escaping at most doubles the characters of the term
+// string, and a fully qualified literal adds its datatype and at most six
+// delimiter characters (`"`, `"^^<`, `>`).
+size_t turtleTermSizeUpperBound(const EvaluatedTermData& term) {
+  size_t bound = 2 * term.rdfTermString_.size() + 6;
+  if (term.rdfTermDataType_ != nullptr) {
+    bound += std::strlen(term.rdfTermDataType_);
+  }
+  return bound;
+}
+
+// Formats a single triple as Turtle using `FastExportStreamFormatter`
+// (in-buffer escaping) instead of the per-term `std::string` construction in
+// `formatTerm`. Produces output byte-identical to the legacy Turtle branch of
+// `formatTriple` below; only used when `use-fast-export-stream-formatter` is
+// enabled.
+std::string formatTripleFastTurtle(const EvaluatedTriple& evaluatedTriple) {
+  using ql::export_formatting::ExportFormat;
+  using ql::export_formatting::FastExportStreamFormatter;
+  const auto& [subject, predicate, object] = evaluatedTriple;
+  AD_CONTRACT_CHECK(subject != nullptr && predicate != nullptr &&
+                    object != nullptr);
+  // Two separating spaces and the trailing " .\n".
+  const size_t sizeBound = turtleTermSizeUpperBound(*subject) +
+                           turtleTermSizeUpperBound(*predicate) +
+                           turtleTermSizeUpperBound(*object) + 5;
+  // Reused across calls to avoid a heap allocation per triple. It is sized to
+  // the upper bound before formatting, so the fixed-span formatter can never
+  // run out of space.
+  static thread_local std::vector<char> buffer;
+  if (buffer.size() < sizeBound) {
+    buffer.resize(sizeBound);
+  }
+  FastExportStreamFormatter formatter(
+      ql::span<char>(buffer.data(), buffer.size()));
+  formatter.writeTriple(ExportFormat::Turtle, evaluatedTriple);
+  return std::string{formatter.currentChunk()};
+}
+}  // namespace
+
 // _____________________________________________________________________________
 std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
                          const ad_utility::MediaType& format) {
@@ -125,6 +171,12 @@ std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
   using enum ad_utility::MediaType;
   static constexpr std::array supportedFormats{turtle, csv, tsv, ntriples};
   AD_CONTRACT_CHECK(ad_utility::contains(supportedFormats, format));
+
+  if (format == turtle &&
+      getRuntimeParameter<
+          &RuntimeParameters::useFastExportStreamFormatter_>()) {
+    return formatTripleFastTurtle(evaluatedTriple);
+  }
 
   const auto& [subject, predicate, object] = evaluatedTriple;
 

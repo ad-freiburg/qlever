@@ -287,9 +287,7 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
       Id::makeUndefined(),
   };
 
-  // `idsToStringAndType` requires the input to be sorted by `ValueId`.
-  ql::ranges::sort(ids);
-
+  // Unsorted input is fine: both helpers partition mixed datatypes.
   auto batchResults = ql::exportIds::idsToStringAndType(
       index, ql::span<const Id>{ids}, localVocab);
 
@@ -299,6 +297,10 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
               ql::exportIds::idToStringAndType(index, ids[i], localVocab))
         << "Mismatch at index " << i;
   }
+
+  auto depth2 = ql::exportIds::idsToStringAndTypeDepth2(
+      index, ql::span<const Id>{ids}, localVocab);
+  EXPECT_EQ(depth2, batchResults);
 }
 
 // _____________________________________________________________________________

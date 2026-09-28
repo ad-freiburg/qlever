@@ -14,9 +14,10 @@
 
 #include "../../util/GTestHelpers.h"
 #include "../../util/MmapVectorLegacyFormat.h"
-#include "../../util/RuntimeParametersTestHelpers.h"
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
+#include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/File.h"
 #include "util/Forward.h"
@@ -270,29 +271,24 @@ TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
                                                                 indices);
 }
 
-// With the opt-in adaptive io_uring batch sizing enabled via the runtime
-// parameters (and small bounds, so early flushes and forced submits both
-// occur), `open` configures the vocabulary's batch managers with a controller
-// and batched lookups still return the same words as individual lookups.
-TEST(VocabularyOnDisk, LookupBatchWithAdaptiveBatchSizing) {
-  auto cleanupEnabled = setRuntimeParameterForTest<
-      &RuntimeParameters::ioUringAdaptiveBatchEnabled_>(true);
-  auto cleanupMin = setRuntimeParameterForTest<
-      &RuntimeParameters::ioUringAdaptiveBatchMinSize_>(size_t{1});
-  auto cleanupMax = setRuntimeParameterForTest<
-      &RuntimeParameters::ioUringAdaptiveBatchMaxSize_>(size_t{4});
-  std::vector<std::string> words;
-  for (size_t i = 0; i < 100; ++i) {
-    words.push_back(absl::StrCat("word", i));
-  }
-  auto vocab = createVocabularyFromWords(words);
-  std::vector<size_t> indices;
-  for (size_t i = 0; i < 300; ++i) {
-    indices.push_back((i * 37) % words.size());
-  }
-  auto result = vocab->lookupBatch(indices);
-  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
-                                                                indices);
+// With `vocabulary-iouring-page-cache-fast-path`, the words and offsets that
+// are in the page cache are read before the batch manager sees the rest. The
+// result must be byte-identical to the result without the fast path, for runs
+// of consecutive indices as well as for reordered and duplicated indices.
+TEST(VocabularyOnDisk, LookupBatchPageCacheFastPathIsByteIdentical) {
+  auto vocab = createExampleVocabulary();
+  std::array<size_t, 13> indices{0, 1, 2, 3, 4, 2, 0, 3, 1, 1, 4, 0, 3};
+  auto withoutFastPath = vocab->lookupBatch(indices);
+  setRuntimeParameter<&RuntimeParameters::vocabularyIouringPageCacheFastPath_>(
+      true);
+  absl::Cleanup resetParameter{[]() {
+    setRuntimeParameter<
+        &RuntimeParameters::vocabularyIouringPageCacheFastPath_>(false);
+  }};
+  auto withFastPath = vocab->lookupBatch(indices);
+  EXPECT_THAT(withFastPath, ::testing::ElementsAreArray(withoutFastPath));
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+      *vocab, withFastPath, indices);
 }
 
 // An empty batch is an invalid request and must throw.
@@ -306,6 +302,31 @@ TEST(VocabularyOnDisk, LookupBatchOutOfRangeIndexThrows) {
   auto vocab = createExampleVocabulary();
   std::array<size_t, 2> indices{0, 99};
   EXPECT_ANY_THROW(vocab->lookupBatch(indices));
+  // `beginLookup` throws before it submits any read. Destroying that handle
+  // must neither wait on an unsubmitted batch nor lose the pooled I/O manager,
+  // so a later lookup still works.
+  EXPECT_ANY_THROW(vocab->beginLookup(indices));
+  std::array<size_t, 3> validIndices{4, 0, 2};
+  auto result = vocab->lookupBatch(validIndices);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
+                                                                validIndices);
+}
+
+// A handle whose offset reads are in flight may be destroyed without calling
+// `finishLookup`: its destructor drains the reads and returns the pooled I/O
+// manager, so later lookups still work. `finishLookup` rejects a null handle.
+TEST(VocabularyOnDisk, DroppedInFlightHandleReturnsManager) {
+  auto vocab = createExampleVocabulary();
+  std::array<size_t, 3> indices{4, 0, 2};
+  // Drop more handles than the pool has managers. If a dropped handle kept its
+  // manager, `beginLookup` would block on the empty pool.
+  for (size_t round = 0; round < 2 * NUM_VOCAB_BATCH_IO_MANAGERS; ++round) {
+    auto handle = vocab->beginLookup(indices);
+  }
+  auto result = vocab->finishLookup(vocab->beginLookup(indices));
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
+                                                                indices);
+  EXPECT_ANY_THROW(vocab->finishLookup(nullptr));
 }
 
 // Each batch yielded by `lookupBatchesStreamed` must equal the individual

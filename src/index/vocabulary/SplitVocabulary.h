@@ -1,7 +1,8 @@
 // Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
-// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -11,12 +12,16 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <range/v3/view/enumerate.hpp>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
@@ -144,7 +149,15 @@ class SplitVocabulary {
   static constexpr uint64_t vocabIndexBitMask =
       ad_utility::bitMaskForLowerBits(markerShift);
 
-  // Instance of the function used for implementing the specific split logic
+  // Enforce the layout that `addMarker`/`getMarker`/`getVocabIndex` rely on:
+  // the marker bits sit directly above the vocab-index bits and together they
+  // exactly fill the data bits, so the `ValueId` datatype bits stay zero.
+  static_assert(markerBitMaskSize <= ValueId::numDataBits);
+  static_assert(markerShift + markerBitMaskSize == ValueId::numDataBits);
+  static_assert((markerBitMask >> markerShift) ==
+                ad_utility::bitMaskForLowerBits(markerBitMaskSize));
+
+  // Instances of the functions used for implementing the specific split logic
   static constexpr SplitFunction splitFunction_{};
 
  private:
@@ -180,9 +193,11 @@ class SplitVocabulary {
   }
 
  public:
-  // Check validity of vocabIndex and marker, then return a new 64 bit index
-  // that contains the marker and vocabIndex. The result is guaranteed to be
-  // zero in all ValueId datatype bits.
+  // ___________________________________________________________________________
+  // Check validity of `vocabIndex` and `marker`, then return a new 64 bit index
+  // that contains the `marker` and the `vocabIndex`. The result is guaranteed
+  // to be zero in all `ValueId` datatype bits (enforced by the static_asserts
+  // on the bit masks above).
   static uint64_t addMarker(uint64_t vocabIndex, uint8_t marker) {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs &&
                          vocabIndex <= vocabIndexBitMask);
@@ -192,7 +207,10 @@ class SplitVocabulary {
   // Extract the marker from a full 64 bit index.
   static constexpr uint8_t getMarker(uint64_t indexWithMarker) {
     uint64_t marker = (indexWithMarker & markerBitMask) >> markerShift;
-    AD_CORRECTNESS_CHECK(marker < numberOfVocabs);
+    // Public `operator[]` / `lookupBatch` take caller indices; a marker bit
+    // pattern can exceed `numberOfVocabs` when that count is not a power of
+    // two (the bit-field is then wider than the legal range).
+    AD_CONTRACT_CHECK(marker < numberOfVocabs);
     return static_cast<uint8_t>(marker);
   }
 
@@ -254,8 +272,35 @@ class SplitVocabulary {
   }
 
   //____________________________________________________________________________
+  // Partition `indices` by marker, look up each group, and reassemble the
+  // results in input order. `indices` must not be empty.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    AD_CONTRACT_CHECK(!indices.empty());
+    auto markerIndicesAndPositions =
+        partitionMarkerIndicesAndPositions<numberOfVocabs>(
+            indices, [](uint64_t markedIndex) {
+              return std::pair{getMarker(markedIndex),
+                               getVocabIndex(markedIndex)};
+            });
+
+    MarkerBatchLookups<numberOfVocabs> markerLookups;
+    for (auto&& [marker, vocabVariant] :
+         ::ranges::views::enumerate(underlying_)) {
+      const auto& markerIndices = markerIndicesAndPositions[marker];
+      if (markerIndices.empty()) {
+        continue;
+      }
+      markerLookups[marker] = std::visit(
+          [&](const auto& vocab) {
+            return vocab.lookupBatch(markerIndices.getUnderlyingIndices());
+          },
+          vocabVariant);
+      AD_CORRECTNESS_CHECK(markerLookups[marker]->size() ==
+                           markerIndices.size());
+    }
+
+    return mergeMarkerBatchesInInputOrder(std::move(markerLookups),
+                                          markerIndicesAndPositions);
   }
 
   //____________________________________________________________________________
