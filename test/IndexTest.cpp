@@ -1540,12 +1540,14 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
       ::testing::HasSubstr("which is deprecated and will not be supported");
 
   // Load the index with the given `basename` (without its permutations if
-  // `loadPermutations` is false) and return the log output.
-  auto load = [](const std::string& basename, bool loadPermutations = true) {
+  // `loadPermutations` is false, with its persisted updates if
+  // `persistUpdates` is true) and return the log output.
+  auto load = [](const std::string& basename, bool loadPermutations = true,
+                 bool persistUpdates = false) {
     auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.doNotLoadPermutations() = !loadPermutations;
-    index.createFromOnDiskIndex(basename, false);
+    index.createFromOnDiskIndex(basename, persistUpdates);
     return logStream.str();
   };
 
@@ -1624,6 +1626,25 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
     } else {
       EXPECT_THAT(log, ::testing::Not(warning));
     }
+  }
+
+  // An index in the previous format without points gives the warning when a
+  // point was inserted by an update that was persisted.
+  {
+    std::string basename = "geoPointEncoding.previous.iri";
+    {
+      Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+      index.createFromOnDiskIndex(basename, true);
+      index.deltaTriplesManager().modify<void>([](DeltaTriples& deltaTriples) {
+        Id a = Id::makeFromVocabIndex(VocabIndex::make(0));
+        Id point = Id::makeFromGeoPoint(GeoPoint{48.0, 7.8});
+        deltaTriples.insertTriples(
+            std::make_shared<ad_utility::CancellationHandle<>>(),
+            {IdTriple{{a, a, point, a}}});
+      });
+    }
+    EXPECT_THAT(load(basename, true, true), warning);
+    ad_utility::deleteFile(basename + UPDATE_TRIPLES_SUFFIX);
   }
 
   // Without its permutations, it is unknown whether an index has points, so

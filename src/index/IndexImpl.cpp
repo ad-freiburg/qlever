@@ -1037,15 +1037,6 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     }
   }
 
-  // Warn if the index uses the deprecated `LatMajor` encoding and may contain
-  // points (an index without points does not depend on the encoding).
-  if (geoPointEncodingOfLoadedIndex_ ==
-          ad_utility::GeoPointEncoding::LatMajor &&
-      mayContainGeoPoints()) {
-    AD_LOG_WARN << ad_utility::LAT_MAJOR_GEO_POINT_ENCODING_WARNING
-                << std::endl;
-  }
-
   // We have to load the patterns first to figure out if the patterns were built
   // at all.
   if (usePatterns_) {
@@ -1069,6 +1060,16 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     setFilenamesForPersistentUpdates(true);
   }
 
+  // Warn if the index uses the deprecated `LatMajor` encoding and may contain
+  // points (an index without points does not depend on the encoding). This is
+  // done after reading the updates, which may contain points as well.
+  if (geoPointEncodingOfLoadedIndex_ ==
+          ad_utility::GeoPointEncoding::LatMajor &&
+      mayContainGeoPoints()) {
+    AD_LOG_WARN << ad_utility::LAT_MAJOR_GEO_POINT_ENCODING_WARNING
+                << std::endl;
+  }
+
   // Only set at the very end, so that an index that failed to load (for
   // example, because it has an incompatible format) does not count as loaded
   // and the destructor does not log that it was unloaded.
@@ -1083,50 +1084,43 @@ bool IndexImpl::mayContainGeoPoints() const {
     return true;
   }
 
-  // The range of all points. The smallest and the largest point have the same
-  // bit representation in both encodings (all zeros resp. all ones).
-  const auto minPoint = Id::makeFromGeoPoint(GeoPoint{-90, -180}).getBits();
-  const auto maxPoint = Id::makeFromGeoPoint(GeoPoint{90, 180}).getBits();
-  auto isPoint = [minPoint, maxPoint](Id id) {
-    return id.getBits() >= minPoint && id.getBits() <= maxPoint;
-  };
-
   // Get the blocks of the `OSP` permutation, which is sorted by the object, so
-  // that the points form one contiguous range of it. Check that there are no
-  // updates yet (see the documentation in the header).
+  // that the points (the objects of type `GeoPoint`) form one contiguous range
+  // of it. The first and last object of each block include the updates.
   auto locatedTriplesState =
       deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  AD_CONTRACT_CHECK(
-      locatedTriplesState
-          ->getLocatedTriplesForPermutation<false>(Permutation::OSP)
-          .isEmpty());
-  BlockMetadataSpan blocks = osp_->metaData().blockData();
+  BlockMetadataSpan blocks =
+      osp_->getLocatedTriplesForPermutation(*locatedTriplesState)
+          .getAugmentedMetadata();
 
-  // Find the first block that does not end before the range of all points.
-  // Return false if there is none or if it starts after that range.
-  auto block = ql::ranges::find_if(blocks, [minPoint](const auto& block) {
-    return block.lastTriple_.col0Id_.getBits() >= minPoint;
+  // Find the first block whose last object is not of a datatype before
+  // `GeoPoint`. Return false if there is none or if its first object is of a
+  // datatype after `GeoPoint`.
+  auto block = ql::ranges::find_if(blocks, [](const auto& block) {
+    return block.lastTriple_.col0Id_.getDatatype() >= Datatype::GeoPoint;
   });
   if (block == blocks.end() ||
-      block->firstTriple_.col0Id_.getBits() > maxPoint) {
+      block->firstTriple_.col0Id_.getDatatype() > Datatype::GeoPoint) {
     return false;
   }
 
   // Otherwise, read the objects of that block and check whether one of them is
   // a point. This block contains a point if there is any: either its last
-  // object is a point, or it ends after the range of all points.
+  // object is a point, or it ends after the points.
   //
   // NOTE: The metadata alone cannot decide this, because in most indexes
-  // without points, some block starts before and ends after the range of all
-  // points (the datatypes before, e.g. `VocabIndex`, and after, e.g.
-  // `BlankNodeIndex`, are common).
+  // without points, some block starts before and ends after the points (the
+  // datatypes before, e.g. `VocabIndex`, and after, e.g. `BlankNodeIndex`, are
+  // common).
   CompressedRelationReader::ScanSpecAndBlocks blockOnly{
       {std::nullopt, std::nullopt, std::nullopt},
       {BlockMetadataRange{block, block + 1}}};
   auto objects = osp_->scan(
       blockOnly, {}, std::make_shared<ad_utility::CancellationHandle<>>(),
       *locatedTriplesState);
-  return ql::ranges::any_of(objects.getColumn(0), isPoint);
+  return ql::ranges::any_of(objects.getColumn(0), [](Id id) {
+    return id.getDatatype() == Datatype::GeoPoint;
+  });
 }
 
 // _____________________________________________________________________________
