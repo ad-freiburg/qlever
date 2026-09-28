@@ -13,6 +13,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <type_traits>
@@ -285,11 +286,40 @@ class IoUringPolicy {
   // the thread; called from a plain thread it blocks in `drainAtLeast`.
   void drainUntilSlotFree();
 
+  // The vocabulary path that uses this policy serves exactly two stable
+  // files (the offsets file and the word-data file).
+  static constexpr size_t NUM_FIXED_FILES = 2;
+
+  // One fixed-file slot: the descriptor seen by `addBatch` (`ownerFd`, never
+  // closed here) and the `dup`ed descriptor handed to the ring
+  // (`registeredFd`). The `dup` keeps the ring's file-table entry alive
+  // independently of the caller's descriptor lifetime. `-1` marks an unused
+  // slot.
+  struct FixedFile {
+    int ownerFd = -1;
+    int registeredFd = -1;
+  };
+
+  // The (at most) `NUM_FIXED_FILES` distinct files seen by `addBatch`, in
+  // registration order. Empty slots hold `FixedFile{}`.
+  std::array<FixedFile, NUM_FIXED_FILES> fixedFiles_;
+
+  // Return the fixed-file slot for `fd`, registering (and `dup`ing) it on
+  // first use. Throws when every slot is taken by another descriptor, so a
+  // third file fails loudly instead of silently falling back to an
+  // unregistered read. Slots are keyed by descriptor number, so the caller
+  // must keep `fd` open (and referring to the same file) for the lifetime of
+  // the policy.
+  unsigned fileIndexForFd(int fd);
+
  public:
   IoUringPolicy(const IoUringPolicy&) = delete;
   IoUringPolicy& operator=(const IoUringPolicy&) = delete;
 
   // `ringSize` must be > 0 (power of 2 preferred; liburing rounds up).
+  // Throws when the kernel does not support fixed files
+  // (`IORING_REGISTER_FILES`), so `makeBatchManager` falls back to
+  // synchronous reads on such kernels.
   explicit IoUringPolicy(unsigned ringSize);
   ~IoUringPolicy();
 
@@ -317,10 +347,12 @@ class IoUringPolicy {
   // Enqueue a batch of read requests and submit them to the kernel. Blocks the
   // calling thread only when the submission queue is full, in order to drain
   // completion queue entries and free slots in the submission queue. Read `i`
-  // reads `numBytesToRead[i]` bytes from file descriptor `fd`, starting at
-  // offset `offsets[i]` (from the start of the file), into the buffer starting
-  // at `buffers[i]`. The reads are tracked under `handle`, which can be passed
-  // to `wait()` to block until this batch has completed.
+  // reads `numBytesToRead[i]` bytes from the file registered for `fd` (see
+  // `NUM_FIXED_FILES`), starting at offset `offsets[i]` (from the start of the
+  // file), into the buffer starting at `buffers[i]`. Every read uses
+  // `IOSQE_FIXED_FILE`, so the kernel skips the per-request file-table lookup.
+  // The reads are tracked under `handle`, which can be passed to `wait()` to
+  // block until this batch has completed.
   void addBatch(int fd, ql::span<const size_t> numBytesToRead,
                 ql::span<const uint64_t> offsets, ql::span<char*> buffers,
                 BatchHandle handle);
