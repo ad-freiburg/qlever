@@ -1,6 +1,12 @@
-// Copyright 2024, University of Freiburg,
-//                 Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 - 2026 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_FSSTCOMPRESSOR_H
 #define QLEVER_FSSTCOMPRESSOR_H
@@ -8,16 +14,25 @@
 #include <absl/cleanup/cleanup.h>
 #include <fsst.h>
 
+#include <array>
+#include <limits>
 #include <memory>
+#include <range/v3/view/iota.hpp>
+#include <range/v3/view/reverse.hpp>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
+#include "backports/span.h"
+#include "backports/string.h"
 #include "util/Concepts.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
 
 namespace detail {
+// _____________________________________________________________________________
 // A helper function to cast `char*` to `unsigned char*` and `const char*` to
 // `const unsigned char*` which is used below because FSST always works on
 // unsigned character types. Note that this is one of the few cases where a
@@ -32,37 +47,92 @@ struct CastToUnsignedPtr {
   }
 };
 constexpr CastToUnsignedPtr castToUnsignedPtr{};
+
+// _____________________________________________________________________________
+// Allocate `bound` bytes without zero-initialization, decode directly into the
+// string buffer, and resize to the actual decoded size.
+CPP_template(typename Decode)(
+    requires ql::concepts::invocable<Decode, ql::span<char>>) std::string
+    decompressToOwnedString(size_t bound, Decode decode) {
+  if (bound == 0) {
+    return {};
+  }
+  std::string result;
+  size_t bytesWritten = 0;
+  ql::resize_and_overwrite(result, bound, [&](char* buf, size_t count) {
+    bytesWritten = decode(ql::span<char>{buf, count});
+    AD_CONTRACT_CHECK(bytesWritten <= bound);
+    return bytesWritten;
+  });
+  AD_CORRECTNESS_CHECK(result.size() <= bound);
+  AD_CORRECTNESS_CHECK(result.size() == bytesWritten);
+  return result;
+}
 }  // namespace detail
 
+// _____________________________________________________________________________
 // A simple C++ wrapper around the C-API of the `FSST` library. It consists of
-// two types, a thredsafe `FsstDecoder` that can be used to perform
+// two types, a thread-safe `FsstDecoder` that can be used to perform
 // decompression, and a single-threaded `FsstEncoder` for compression.
 class FsstDecoder {
  private:
   fsst_decoder_t decoder_;
 
  public:
+  // _____________________________________________________________________________
   // The default constructor does lead to an invalid decoder, but is required
   // for the serialization module. Don't use it.
   FsstDecoder() = default;
 
+  // _____________________________________________________________________________
   // Construct from the internal `fsst_decoder_t`. Note that the typical way to
   // obtain an `FsstDecoder` is by first creating a `FsstEncoder` and calling
   // `getDecoder()` on that encoder.
   explicit FsstDecoder(const fsst_decoder_t& decoder) : decoder_{decoder} {}
 
-  // Decompress a  single string.
-  std::string decompress(std::string_view str) const {
-    std::string output;
-    auto cast = detail::castToUnsignedPtr;
-    output.resize(8 * str.size());
-    size_t size = fsst_decompress(&decoder_, str.size(), cast(str.data()),
-                                  output.size(), cast(output.data()));
-    // FSST compresses at most by a factor of 8.
-    AD_CORRECTNESS_CHECK(size <= output.size());
-    output.resize(size);
-    return output;
+  // ____________________________________________________________________________
+  // FSST guarantees that decompression expands data by at most a factor of 8.
+  // This value is used to safely size caller-provided output buffers.
+  static constexpr size_t maxExpansionFactor = 8;
+
+  // ___________________________________________________________________________
+  // Return an upper bound on the decompressed size of `str`.
+  [[nodiscard]] static size_t maxDecompressedSize(std::string_view str) {
+    AD_CONTRACT_CHECK(str.size() <=
+                      std::numeric_limits<size_t>::max() / maxExpansionFactor);
+    return maxExpansionFactor * str.size();
   }
+
+  // ___________________________________________________________________________
+  // Decompress `str` into `out`. `out.size()` must be at least
+  // `maxDecompressedSize(str)`. Return the number of bytes written.
+  [[nodiscard]] size_t decompressInto(std::string_view str,
+                                      ql::span<char> out) const {
+    const size_t bound = maxDecompressedSize(str);
+    AD_CONTRACT_CHECK(out.size() >= bound);
+    if (bound == 0) {
+      return 0;
+    }
+    auto cast = detail::castToUnsignedPtr;
+    size_t size = fsst_decompress(&decoder_, str.size(), cast(str.data()),
+                                  bound, cast(out.data()));
+    AD_CORRECTNESS_CHECK(size <= bound);
+    return size;
+  }
+
+  // ___________________________________________________________________________
+  // Decompress a single string. Callers that already own an output buffer
+  // should use `decompressInto` instead.
+  [[nodiscard]] std::string decompress(std::string_view str) const {
+    const size_t bound = maxDecompressedSize(str);
+    std::string result = detail::decompressToOwnedString(
+        bound,
+        [this, str](ql::span<char> out) { return decompressInto(str, out); });
+    AD_CORRECTNESS_CHECK(result.size() <= bound);
+    return result;
+  }
+
+  // ___________________________________________________________________________
   // Allow this type to be trivially serializable,
   CPP_template(typename T, typename U)(
       requires ql::concepts::same_as<T, FsstDecoder>) friend std::true_type
@@ -71,12 +141,16 @@ class FsstDecoder {
   }
 };
 
-// A sequence of `N` `FsstDecoder` s that are chained in inverted order (the
-// last one first) when decompressing a string. The inverted order is chosen,
-// because it is the correct way to decompress a string that was compressed by
-// the N corresponding encoders in the "normal" order (first encoder first).
+// _____________________________________________________________________________
+// A sequence of `N` `FsstDecoder` objects that are chained in inverted order
+// (the last one first) when decompressing a string. The inverted order is
+// chosen, because it is the correct way to decompress a string that was
+// compressed by the N corresponding encoders in the "normal" order (first
+// encoder first).
 template <size_t N = 2>
 class FsstRepeatedDecoder {
+  static_assert(N >= 1, "FsstRepeatedDecoder needs at least one stage");
+
  public:
   using Decoders = std::array<FsstDecoder, N>;
 
@@ -84,38 +158,101 @@ class FsstRepeatedDecoder {
   Decoders decoders_;
 
  public:
+  // ___________________________________________________________________________
   // The default constructor does lead to an invalid decoder, but is required
   // for the serialization module. Don't use it.
   FsstRepeatedDecoder() = default;
 
-  // Construct from the internal `fsst_decoder_t`. Note that the typical way to
-  // obtain an `FsstDecoder` is by first creating a `FsstEncoder` and calling
-  // `getDecoder()` on that encoder.
-  explicit FsstRepeatedDecoder(Decoders decoders) : decoders_{decoders} {}
+  // ___________________________________________________________________________
+  // Construct from the array of `FsstDecoder` objects for each stage.
+  explicit FsstRepeatedDecoder(Decoders decoders)
+      : decoders_{std::move(decoders)} {}
 
-  // Decompress a  single string.
-  std::string decompress(std::string_view str) const {
-    std::string result;
-    std::string_view nextInput = str;
-    auto decompressSingle = [&result, &nextInput](const FsstDecoder& decoder) {
-      result = decoder.decompress(nextInput);
-      nextInput = result;
-    };
-
-    ql::ranges::for_each(ql::views::reverse(decoders_), decompressSingle);
-    return result;
+  // ___________________________________________________________________________
+  // Return an upper bound on the size after all `N` decoding stages.
+  [[nodiscard]] static size_t maxDecompressedSize(std::string_view str) {
+    size_t bound = str.size();
+    for ([[maybe_unused]] size_t stage : ::ranges::views::iota(size_t{0}, N)) {
+      AD_CONTRACT_CHECK(bound <= std::numeric_limits<size_t>::max() /
+                                     FsstDecoder::maxExpansionFactor);
+      bound *= FsstDecoder::maxExpansionFactor;
+    }
+    return bound;
   }
+
+  // ___________________________________________________________________________
+  // Decompress `str` into `out`. `out.size()` must be at least
+  // `maxDecompressedSize(str)`. For `N >= 2`, grow `scratch` to the largest
+  // intermediate bound and alternate writes so the final stage uses `out`.
+  // Return the number of bytes written.
+  [[nodiscard]] size_t decompressInto(std::string_view str, ql::span<char> out,
+                                      std::string& scratch) const {
+    AD_CONTRACT_CHECK(out.size() >= maxDecompressedSize(str));
+    if constexpr (N == 1) {
+      return decoders_[0].decompressInto(str, out);
+    } else {
+      const size_t scratchBound =
+          maxDecompressedSize(str) / FsstDecoder::maxExpansionFactor;
+      if (scratch.size() < scratchBound) {
+        scratch.resize(scratchBound);
+      }
+      std::array<ql::span<char>, 2> buffers{out, ql::span<char>{scratch}};
+      // For even `N`, write the first stage to `scratch` and the last to `out`.
+      // For odd `N`, write the first and last stages to `out`.
+      size_t targetBufferIdx = (N % 2 == 0) ? 1 : 0;
+      std::string_view input = str;
+      size_t bytesWritten = 0;
+      for (const auto& decoder : decoders_ | ::ranges::views::reverse) {
+        bytesWritten = decoder.decompressInto(input, buffers[targetBufferIdx]);
+        input = std::string_view{buffers[targetBufferIdx].data(), bytesWritten};
+        targetBufferIdx ^= 1;
+      }
+      return bytesWritten;
+    }
+  }
+
+  // ___________________________________________________________________________
+  // Decompress `str` into `out` without requiring a caller-owned scratch
+  // buffer.
+  [[nodiscard]] size_t decompressInto(std::string_view str,
+                                      ql::span<char> out) const {
+    if constexpr (N == 1) {
+      return decoders_[0].decompressInto(str, out);
+    } else {
+      std::string scratch;
+      return decompressInto(str, out, scratch);
+    }
+  }
+
+  // ___________________________________________________________________________
+  // Decompress a single string. Callers that already own an output buffer
+  // should use `decompressInto` instead.
+  std::string decompress(std::string_view str) const {
+    if constexpr (N == 1) {
+      return decoders_[0].decompress(str);
+    } else {
+      std::string current = decoders_[N - 1].decompress(str);
+      for (size_t stage = 1; stage < N; ++stage) {
+        current = decoders_[N - 1 - stage].decompress(current);
+      }
+      return current;
+    }
+  }
+
+  // ___________________________________________________________________________
   // Allow this type to be trivially serializable,
-  CPP_template_2(typename T, typename U)(
+  CPP_template(typename T, typename U)(
       requires ql::concepts::same_as<T, FsstRepeatedDecoder>)
-      [[maybe_unused]] friend std::true_type allowTrivialSerialization(T, U) {
+      [[maybe_unused]] friend std::true_type allowTrivialSerialization(T, U&&) {
     return {};
   }
 };
 
+// _____________________________________________________________________________
 // The encoder class.
 class FsstEncoder {
  private:
+  // ___________________________________________________________________________
   // The encoder state of FSST is rather complex and managed via a pointer
   // indirection. We manage this using a `unique_ptr` with a custom deleter.
   struct Deleter {
@@ -126,11 +263,13 @@ class FsstEncoder {
   static constexpr auto cast = detail::castToUnsignedPtr;
 
  public:
+  // ___________________________________________________________________________
   // Create an `FsstEncoder`. The given `strings` are used to create the
   // codebook.
   explicit FsstEncoder(const std::vector<std::string>& strings)
       : encoder_{makeEncoder(strings)} {}
 
+  // ___________________________________________________________________________
   // Compress a single string.
   std::string compress(std::string_view word) {
     size_t len = word.size();
@@ -147,19 +286,20 @@ class FsstEncoder {
     return output;
   }
 
-  // Return a decoder, that can be used to decompress strings that have been
-  // compressed by this encoder.
+  // ___________________________________________________________________________
+  // Return a decoder for strings compressed by this encoder.
   FsstDecoder makeDecoder() const {
     return FsstDecoder{fsst_decoder(encoder_.get())};
   }
 
+  // ___________________________________________________________________________
   // Interface for the case that all the strings that shall ever be compressed
   // using the same codebook shall also contribute to that codebook. Build a
   // codebook from the `strings`, and then use that codebook to compress each of
   // the `strings`. The result consists of a large `std::string` that contains
-  // all the compressed strings concatenated, a `vector<string_view` that points
-  // to the compressed strings, and a decoder that can be used to decompress the
-  // strings again.
+  // all the compressed strings concatenated, a `vector<string_view>` that
+  // points to the compressed strings, and a decoder that can be used to
+  // decompress the strings again.
   using BulkResult = std::tuple<std::shared_ptr<std::string>,
                                 std::vector<std::string_view>, FsstDecoder>;
   template <typename T>
@@ -168,6 +308,7 @@ class FsstEncoder {
   }
 
  private:
+  // ___________________________________________________________________________
   // The implementation of the constructor and of `compressAll`.
   template <bool alsoCompressAll = false, typename Strings>
   static std::conditional_t<alsoCompressAll, BulkResult, Encoder> makeEncoder(
