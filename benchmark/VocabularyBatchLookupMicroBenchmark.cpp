@@ -7,13 +7,26 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-// Synthetic micro-benchmark for the vocabulary `lookupBatch` implementations
-// added for `VocabularyOnDisk` and `VocabularyInternalExternal`: small
-// vocabulary (4k words), small shuffled batches. Compares repeated
-// single-word `operator[]` lookups against one `lookupBatch` call per batch
-// size. To read the speedup of a batch size, divide the `single lookups` time
-// by the `lookupBatch` time of the same group.
+// Synthetic micro-benchmark for `lookupBatch` of `VocabularyOnDisk` and
+// `VocabularyInternalExternal`: small vocabulary (4k words, files in the page
+// cache), small shuffled batches. Compares single-word `operator[]` lookups
+// with one `lookupBatch` call per batch.
+//
+// Every measurement repeats its batch until at least
+// `VOCAB_LOOKUP_MIN_SECONDS` (default 10) seconds have passed; the reported
+// time is that of the whole measurement, the time per word is in the
+// measurement's metadata. So a measurement is never a single sub-millisecond
+// sample. Environment knobs (all optional):
+//   VOCAB_LOOKUP_MIN_SECONDS  minimum duration of one measurement (seconds).
+//   VOCAB_LOOKUP_ONLY         run only the group with this id (`ondisk-128`,
+//                             `hybrid-128`, `ondisk-2048`, `hybrid-2048`).
+//   VOCAB_LOOKUP_ORDER        `batch-first` measures `lookupBatch` first.
+// Every measurement also prints one tab-separated line
+// `VOCAB_LOOKUP <group> <measurement> <ns/word> <batches> <seconds>` for
+// scripts.
 
+#include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <numeric>
@@ -29,8 +42,8 @@
 namespace ad_benchmark {
 namespace {
 
-// Create `numWords` synthetic words with varying lengths (8 to 72 bytes) that
-// resemble short IRIs/literals without requiring a real dataset.
+// Create `numWords` synthetic words with varying lengths that resemble short
+// IRIs/literals without requiring a real dataset.
 std::vector<std::string> makeWords(size_t numWords) {
   std::vector<std::string> words;
   words.reserve(numWords);
@@ -86,8 +99,7 @@ VocabularyInternalExternal buildHybridVocabulary(
 }
 
 // Resolve all `ids` one word at a time via `operator[]` and return the total
-// number of resolved bytes (returned, and ultimately printed, so that the
-// lookups cannot be optimized away).
+// number of resolved bytes (so that the lookups cannot be optimized away).
 template <typename Vocab>
 size_t resolveSingly(const Vocab& vocab, const std::vector<size_t>& ids) {
   size_t totalBytes = 0;
@@ -108,6 +120,43 @@ size_t resolveBatched(const Vocab& vocab, const std::vector<size_t>& ids) {
   }
   return totalBytes;
 }
+
+// Result of `measureLong`.
+struct LongMeasurement {
+  size_t numBatches = 0;
+  double seconds = 0;
+  double nsPerWord = 0;
+};
+
+// Repeat `resolveOneBatch` (which resolves `batchSize` words) until at least
+// `minSeconds` have passed, and print the script line.
+template <typename F>
+LongMeasurement measureLong(const std::string& group,
+                            const std::string& measurement, size_t batchSize,
+                            double minSeconds, size_t& checksum,
+                            const F& resolveOneBatch) {
+  using Clock = std::chrono::steady_clock;
+  LongMeasurement result;
+  const auto start = Clock::now();
+  do {
+    checksum += resolveOneBatch();
+    ++result.numBatches;
+    result.seconds =
+        std::chrono::duration<double>(Clock::now() - start).count();
+  } while (result.seconds < minSeconds);
+  result.nsPerWord =
+      result.seconds * 1e9 / static_cast<double>(result.numBatches * batchSize);
+  std::cout << "VOCAB_LOOKUP\t" << group << '\t' << measurement << '\t'
+            << result.nsPerWord << '\t' << result.numBatches << '\t'
+            << result.seconds << std::endl;
+  return result;
+}
+
+// Minimum duration of one measurement: `VOCAB_LOOKUP_MIN_SECONDS`, default 10.
+double minSecondsFromEnvironment() {
+  const char* value = std::getenv("VOCAB_LOOKUP_MIN_SECONDS");
+  return value != nullptr ? std::stod(value) : 10.0;
+}
 }  // namespace
 
 class BMVocabBatchLookupMicro : public BenchmarkInterface {
@@ -118,6 +167,13 @@ class BMVocabBatchLookupMicro : public BenchmarkInterface {
 
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
+    const double minSeconds = minSecondsFromEnvironment();
+    const char* onlyValue = std::getenv("VOCAB_LOOKUP_ONLY");
+    const std::string only = onlyValue != nullptr ? onlyValue : "";
+    const char* orderValue = std::getenv("VOCAB_LOOKUP_ORDER");
+    const bool batchFirst =
+        orderValue != nullptr && std::string{orderValue} == "batch-first";
+
     const auto benchmarkDir =
         std::filesystem::temp_directory_path() / "qleverVocabBatchMicro";
     std::filesystem::remove_all(benchmarkDir);
@@ -130,25 +186,45 @@ class BMVocabBatchLookupMicro : public BenchmarkInterface {
         buildHybridVocabulary((benchmarkDir / "micro.hybrid").string(), words);
 
     size_t checksum = 0;
+    // Add the two measurements (single lookups, `lookupBatch`) of one group.
+    auto runGroup = [&](const std::string& id, const std::string& title,
+                        const auto& vocab, const std::vector<size_t>& ids) {
+      if (!only.empty() && only != id) {
+        return;
+      }
+      auto& group = results.addGroup(title);
+      group.metadata().addKeyValuePair("min-seconds-per-measurement",
+                                       minSeconds);
+      auto measure = [&](const std::string& name, const auto& resolve) {
+        LongMeasurement m;
+        auto& entry = group.addMeasurement(name, [&]() {
+          m = measureLong(id, name, ids.size(), minSeconds, checksum, resolve);
+        });
+        entry.metadata().addKeyValuePair("ns-per-word", m.nsPerWord);
+        entry.metadata().addKeyValuePair("batches", m.numBatches);
+      };
+      auto single = [&]() {
+        measure("single lookups", [&]() { return resolveSingly(vocab, ids); });
+      };
+      auto batched = [&]() {
+        measure("lookupBatch", [&]() { return resolveBatched(vocab, ids); });
+      };
+      if (batchFirst) {
+        batched();
+        single();
+      } else {
+        single();
+        batched();
+      }
+    };
     for (size_t batchSize : {128u, 2'048u}) {
       const auto ids = makeQueryIds(words.size(), batchSize, 42);
-      auto& onDiskGroup = results.addGroup("VocabularyOnDisk, batch size " +
-                                           std::to_string(batchSize));
-      onDiskGroup.addMeasurement("single lookups", [&]() {
-        checksum += resolveSingly(onDiskVocab, ids);
-      });
-      onDiskGroup.addMeasurement("lookupBatch", [&]() {
-        checksum += resolveBatched(onDiskVocab, ids);
-      });
-      auto& hybridGroup =
-          results.addGroup("VocabularyInternalExternal, batch size " +
-                           std::to_string(batchSize));
-      hybridGroup.addMeasurement("single lookups", [&]() {
-        checksum += resolveSingly(hybridVocab, ids);
-      });
-      hybridGroup.addMeasurement("lookupBatch", [&]() {
-        checksum += resolveBatched(hybridVocab, ids);
-      });
+      const auto size = std::to_string(batchSize);
+      runGroup("ondisk-" + size, "VocabularyOnDisk, batch size " + size,
+               onDiskVocab, ids);
+      runGroup("hybrid-" + size,
+               "VocabularyInternalExternal, batch size " + size, hybridVocab,
+               ids);
     }
     // Print the checksum so that the measured lookups cannot be optimized
     // away (see the same pattern in `BenchmarkExamples.cpp`).
