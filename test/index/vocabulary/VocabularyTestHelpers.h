@@ -10,7 +10,6 @@
 #include <gmock/gmock.h>
 
 #include <array>
-#include <string>
 
 #include "../../util/GTestHelpers.h"
 #include "backports/span.h"
@@ -478,42 +477,6 @@ template <typename Vocabulary>
 auto makeVocabFileCleanup(std::string filename) {
   return makeVocabFileCleanup(std::move(filename), Vocabulary::fileSuffixes());
 }
-
-// RAII guard that owns the on-disk files of a `SplitVocabulary` for the
-// given base filename and deletes them when it goes out of scope, even when
-// an assertion fails or an exception is thrown.
-//
-// The owned paths are derived from the vocabulary's own split-filename
-// function (`SplitVocabulary::splitFilenameFunction_`), the same function
-// the implementation uses to name the underlying files, so they can never
-// drift from the implementation. For example, a two-way split owns `{base,
-// base.a}` and a three-way split owns `{base.a, base.b, base.c}`.
-//
-// The guard must be destroyed after the vocabulary is closed: declare it
-// before the vocabulary, so that reverse destruction order deletes the files
-// last. Deleting a file that was never created is a silent no-op.
-template <typename SplitVocabulary>
-class ScopedSplitVocabularyFiles {
- public:
-  explicit ScopedSplitVocabularyFiles(const std::string& filename)
-      : filenames_{SplitVocabulary::splitFilenameFunction_(filename)} {}
-
-  ScopedSplitVocabularyFiles(const ScopedSplitVocabularyFiles&) = delete;
-  ScopedSplitVocabularyFiles& operator=(const ScopedSplitVocabularyFiles&) =
-      delete;
-  ScopedSplitVocabularyFiles(ScopedSplitVocabularyFiles&&) = delete;
-  ScopedSplitVocabularyFiles& operator=(ScopedSplitVocabularyFiles&&) = delete;
-
-  ~ScopedSplitVocabularyFiles() {
-    for (const auto& path : filenames_) {
-      ad_utility::deleteFile(path, false);
-    }
-  }
-
- private:
-  // The underlying filenames, exactly as the vocabulary derives them.
-  std::array<std::string, SplitVocabulary::numberOfVocabs> filenames_;
-};
 
 }  // namespace vocabulary_test
 
