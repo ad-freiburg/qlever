@@ -79,15 +79,19 @@ class MultiSourceVocabBatchAssembler;
 
 // _____________________________________________________________________________
 // Batch lookup result: views are always `storage_->viewSpan()`. There is no
-// constructor that takes an owner and a span independently.
+// constructor that takes an owner and a span independently. Copies share the
+// storage. A view stays valid as long as any copy of the result lives, with
+// one documented exception: a view that the producing vocabulary placed via
+// `MultiSourceVocabBatchAssembler::assignUnownedViewAtPosition` points into
+// that vocabulary's own memory and is valid as long as the vocabulary lives.
 class VocabBatchLookupResult {
  private:
   VocabBatchOwner storage_{};
   ql::span<const std::string_view> span_{};
 
+  // Assemblers take over `storage_` of the sub-batches they re-arrange, to
+  // keep the bytes behind the re-arranged views alive.
   friend class MultiSourceVocabBatchAssembler;
-  // Frozen storage accessed only by assemblers to keep child views alive.
-  [[nodiscard]] VocabBatchOwner owner() const noexcept { return storage_; }
 
  public:
   VocabBatchLookupResult() = default;
@@ -504,18 +508,29 @@ inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
 }
 
 // _____________________________________________________________________________
-// Helper struct that encapsulates assembling string_views from multiple
-// independent vocabulary sources, verifying collision-free total coverage, and
-// aggregating storage ownership into a self-contained `VocabBatchLookupResult`.
+// Assemble one `VocabBatchLookupResult` from words that come from several
+// sources, without copying any word bytes. Every output position is filled
+// exactly once, by one of two means:
+//
+// 1. `scatterSubBatchResultAtPositions`: the views of a batch result that was
+//    received from another vocabulary are re-arranged into the given output
+//    positions, and that batch's storage is kept alive by the assembled
+//    result (shared ownership, no copy of the words).
+// 2. `assignUnownedViewAtPosition`: a view into storage that is NOT owned by
+//    the result, typically the words of an in-memory vocabulary. See that
+//    function for the lifetime contract.
+//
+// The assembler checks that no position is filled twice and that all
+// positions are filled before `finalizeVocabBatchLookupResult` hands out the
+// result.
 class MultiSourceVocabBatchAssembler {
  private:
   std::vector<std::string_view> assembledWordViews_;
   std::vector<bool> slotFilledTracking_;
   std::vector<VocabBatchOwner> storageOwners_;
 
-  // Place a view from a retained child result into its output position.
-  // Keeping this helper private prevents callers from pairing arbitrary views
-  // with unrelated owners.
+  // Fill one output position (shared by the two public placement functions,
+  // which differ only in how the storage behind `word` is kept alive).
   void assignWordAtPosition(size_t resultPosition, std::string_view word) {
     AD_CORRECTNESS_CHECK(resultPosition < assembledWordViews_.size());
     AD_CORRECTNESS_CHECK(!slotFilledTracking_[resultPosition]);
@@ -536,11 +551,14 @@ class MultiSourceVocabBatchAssembler {
   }
 
   // ___________________________________________________________________________
-  // Scatter a child batch lookup result across the specified output positions
-  // and retain the child's storage owner so its underlying string storage is
-  // kept alive.
+  // Place the `i`-th word of `subBatchResult` at output position
+  // `resultPositions[i]` and keep the storage of `subBatchResult` alive for
+  // as long as the assembled result lives. Only the views are re-arranged;
+  // the word bytes stay where they are. Taken by value so that a caller that
+  // no longer needs the batch can move it in without touching the reference
+  // count.
   void scatterSubBatchResultAtPositions(
-      const VocabBatchLookupResult& subBatchResult,
+      VocabBatchLookupResult subBatchResult,
       ql::span<const size_t> resultPositions) {
     AD_CONTRACT_CHECK(subBatchResult.size() == resultPositions.size());
 
@@ -548,19 +566,39 @@ class MultiSourceVocabBatchAssembler {
          ::ranges::views::zip(resultPositions, subBatchResult)) {
       assignWordAtPosition(resultPosition, word);
     }
-    if (auto owner = subBatchResult.owner(); owner != nullptr) {
-      storageOwners_.push_back(std::move(owner));
+    // Steal the owner of the (by-value) argument instead of copying it.
+    if (subBatchResult.storage_ != nullptr) {
+      storageOwners_.push_back(std::move(subBatchResult.storage_));
     }
   }
 
   // ___________________________________________________________________________
-  // Finalize the assembled batch and return a self-contained
-  // `VocabBatchLookupResult` (can be called only once).
+  // Place `word` at output position `resultPosition` WITHOUT taking any
+  // ownership of the bytes it points to.
+  //
+  // Lifetime contract: the bytes of `word` must stay valid and unchanged for
+  // as long as the assembled `VocabBatchLookupResult` (or any copy of it) is
+  // used. This holds for the words of a vocabulary that is kept in memory for
+  // its whole lifetime, as long as the vocabulary outlives the result, which
+  // is the case for lookups during query processing (the index, and thus its
+  // vocabularies, outlives every query). It does NOT hold for temporaries,
+  // for scratch buffers that are reused, or for the words of another batch
+  // result; use `scatterSubBatchResultAtPositions` for those.
+  void assignUnownedViewAtPosition(size_t resultPosition,
+                                   std::string_view word) {
+    assignWordAtPosition(resultPosition, word);
+  }
+
+  // ___________________________________________________________________________
+  // Finalize the assembled batch and return it as a `VocabBatchLookupResult`
+  // that co-owns the storage of all scattered sub-batches (can be called only
+  // once).
   [[nodiscard]] VocabBatchLookupResult finalizeVocabBatchLookupResult() && {
     AD_CORRECTNESS_CHECK(assembledWordViews_.size() ==
                          slotFilledTracking_.size());
     AD_CORRECTNESS_CHECK(!assembledWordViews_.empty());
-    AD_CORRECTNESS_CHECK(!storageOwners_.empty());
+    // `storageOwners_` is empty iff all words were placed via
+    // `assignUnownedViewAtPosition`, which is valid.
     AD_CORRECTNESS_CHECK(ql::ranges::all_of(
         slotFilledTracking_, [](bool isFilled) { return isFilled; }));
 
@@ -708,7 +746,7 @@ VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
     }
     auto lookupResult = releaseLookupResult(vocabMarker);
     assembler.scatterSubBatchResultAtPositions(
-        lookupResult, markerIndices.getResultPositions());
+        std::move(lookupResult), markerIndices.getResultPositions());
   }
   return std::move(assembler).finalizeVocabBatchLookupResult();
 }
