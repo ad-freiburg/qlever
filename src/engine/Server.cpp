@@ -9,6 +9,7 @@
 
 #include "engine/Server.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/functional/bind_front.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
@@ -36,6 +37,7 @@
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
+#include "util/IoUringManager.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/ParseableDuration.h"
@@ -43,6 +45,7 @@
 #include "util/ResourceMonitor.h"
 #include "util/TimeTracer.h"
 #include "util/TypeTraits.h"
+#include "util/VocabBlockCache.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
@@ -1098,6 +1101,34 @@ CPP_template_def(typename RequestT, typename SendT)(
         plannedQuery.parsedQuery().responseMiddleware_.value().applyQuery(
             std::move(response));
   }
+  // Counters of the block cache in front of `O_DIRECT` vocabulary reads, to
+  // report this export's share (see `vocab-block-cache-size`).
+  const auto& cacheCounters = ad_utility::vocab::vocabBlockCacheCounters;
+  const uint64_t cacheHitsBefore = cacheCounters.hits_.load();
+  const uint64_t cacheInFlightHitsBefore = cacheCounters.inFlightHits_.load();
+  const uint64_t cacheMissesBefore = cacheCounters.misses_.load();
+  const uint64_t cacheInsertsBefore = cacheCounters.inserts_.load();
+  const uint64_t cacheEvictionsBefore = cacheCounters.evictions_.load();
+  absl::Cleanup logBlockCache{[&]() {
+    if (ad_utility::useDirectIoForVocabularyReads.load() &&
+        ad_utility::vocabularyBlockCacheNumBlocks.load() > 0) {
+      AD_LOG_INFO << "Vocabulary block cache for this export ("
+                  << ad_utility::vocabularyBlockCacheNumBlocks.load()
+                  << " blocks of "
+                  << ad_utility::vocabularyDirectIoBlockSize.load()
+                  << " bytes per thread): "
+                  << cacheCounters.hits_.load() - cacheHitsBefore << " hits, "
+                  << cacheCounters.inFlightHits_.load() -
+                         cacheInFlightHitsBefore
+                  << " in-flight hits, "
+                  << cacheCounters.misses_.load() - cacheMissesBefore
+                  << " misses, "
+                  << cacheCounters.inserts_.load() - cacheInsertsBefore
+                  << " inserts, "
+                  << cacheCounters.evictions_.load() - cacheEvictionsBefore
+                  << " evictions" << std::endl;
+    }
+  }};
   try {
     co_await send(std::move(response));
   } catch (const boost::system::system_error& e) {

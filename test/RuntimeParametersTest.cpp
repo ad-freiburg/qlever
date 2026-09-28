@@ -12,6 +12,7 @@
 
 #include "global/RuntimeParameters.h"
 #include "util/GTestHelpers.h"
+#include "util/IoUringManager.h"
 
 using ::testing::AllOf;
 using ::testing::HasSubstr;
@@ -64,6 +65,47 @@ TEST(RuntimeParameters, lazyIndexScanNumThreadsIsStrictlyPositive) {
       std::runtime_error);
   EXPECT_NO_THROW(params.setFromAssignment("lazy-index-scan-num-threads=1"));
   EXPECT_EQ(params.lazyIndexScanNumThreads_.get(), 1u);
+}
+
+// The runtime parameters for the vocabulary batch reads are propagated to the
+// process-wide switches that `VocabularyOnDisk` reads.
+TEST(RuntimeParameters, vocabularyIoUringSwitchesArePropagated) {
+  RuntimeParameters params;
+  EXPECT_FALSE(ad_utility::useRegisteredBuffersForVocabularyReads);
+  EXPECT_FALSE(ad_utility::useDirectIoForVocabularyReads);
+  params.setFromAssignment("vocabulary-iouring-registered-buffers=true");
+  params.setFromAssignment("vocabulary-iouring-direct-io=true");
+  EXPECT_TRUE(ad_utility::useRegisteredBuffersForVocabularyReads);
+  EXPECT_TRUE(ad_utility::useDirectIoForVocabularyReads);
+  params.setFromAssignment("vocabulary-iouring-registered-buffers=false");
+  params.setFromAssignment("vocabulary-iouring-direct-io=false");
+  EXPECT_FALSE(ad_utility::useRegisteredBuffersForVocabularyReads);
+  EXPECT_FALSE(ad_utility::useDirectIoForVocabularyReads);
+}
+
+// The block cache parameters are propagated as well, and the block size must
+// be a positive multiple of 4 KiB.
+TEST(RuntimeParameters, vocabularyBlockCacheParametersArePropagated) {
+  RuntimeParameters params;
+  EXPECT_EQ(ad_utility::vocabularyBlockCacheNumBlocks, 0u);
+  EXPECT_EQ(ad_utility::vocabularyDirectIoBlockSize, 4096u);
+  params.setFromAssignment("vocab-block-cache-size=1000");
+  params.setFromAssignment("vocab-block-cache-block-size=16384");
+  EXPECT_EQ(ad_utility::vocabularyBlockCacheNumBlocks, 1000u);
+  EXPECT_EQ(ad_utility::vocabularyDirectIoBlockSize, 16384u);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      params.setFromAssignment("vocab-block-cache-block-size=5000"),
+      AllOf(HasSubstr("vocab-block-cache-block-size"),
+            HasSubstr("positive multiple of 4096")),
+      std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      params.setFromAssignment("vocab-block-cache-block-size=0"),
+      HasSubstr("positive multiple of 4096"), std::runtime_error);
+  EXPECT_EQ(ad_utility::vocabularyDirectIoBlockSize, 16384u);
+  params.setFromAssignment("vocab-block-cache-size=0");
+  params.setFromAssignment("vocab-block-cache-block-size=4096");
+  EXPECT_EQ(ad_utility::vocabularyBlockCacheNumBlocks, 0u);
+  EXPECT_EQ(ad_utility::vocabularyDirectIoBlockSize, 4096u);
 }
 
 // Test that `getKeys` and `toMap` (the building blocks of

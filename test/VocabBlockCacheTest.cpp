@@ -7,25 +7,18 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include <absl/cleanup/cleanup.h>
-#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include <array>
 #include <string>
+#include <string_view>
 #include <vector>
 
-#include "../../util/GTestHelpers.h"
-#include "../../util/RuntimeParametersTestHelpers.h"
-#include "./VocabularyTestHelpers.h"
-#include "global/RuntimeParameters.h"
-#include "index/vocabulary/VocabBlockCache.h"
-#include "index/vocabulary/VocabularyOnDisk.h"
-#include "util/File.h"
+#include "util/VocabBlockCache.h"
 
 namespace {
 using ad_utility::vocab::VocabBlockCache;
-constexpr size_t blockSize = VocabBlockCache::kBlockSize;
+constexpr size_t blockSize = VocabBlockCache::kDefaultBlockSize;
 
 // Fill a block with deterministic content derived from `seed`.
 std::array<char, blockSize> makeBlockData(uint64_t seed) {
@@ -168,69 +161,59 @@ TEST(VocabBlockCache, ThreadLocalShardAdoptsCapacity) {
   expectCachedBlock(shard, testDev, testIno, 8, data);
 }
 
-// Write `words` to a fresh `VocabularyOnDisk` file and open it. The file is
-// deleted when the returned handle is destroyed.
-struct VocabularyOnDiskHandle {
-  std::string filename_;
-  VocabularyOnDisk vocabulary_;
-  explicit VocabularyOnDiskHandle(std::string filename,
-                                  const std::vector<std::string>& words)
-      : filename_{std::move(filename)} {
-    ad_utility::deleteFile(filename_, false);
-    {
-      auto writer = VocabularyOnDisk::WordWriter(filename_);
-      for (const auto& word : words) {
-        writer(word, false);
-      }
-      writer.finish();
-    }
-    vocabulary_.open(filename_);
+// Many more blocks than slots: the hash index must stay consistent with the
+// slots through evictions, and every lookup must return the bytes of exactly
+// the requested block or miss.
+TEST(VocabBlockCache, HashIndexStaysConsistentUnderEviction) {
+  constexpr size_t capacity = 64;
+  VocabBlockCache cache{capacity};
+  for (uint64_t blockNo = 0; blockNo < 10 * capacity; ++blockNo) {
+    auto data = makeBlockData(blockNo);
+    cache.insert(testDev, testIno, blockNo, data.data());
+    EXPECT_LE(cache.size(), capacity);
   }
-  ~VocabularyOnDiskHandle() { ad_utility::deleteFile(filename_, false); }
-};
-
-// A `lookupBatch` with the block cache enabled must return exactly the same
-// words as without the cache, including for words that span multiple 4 KiB
-// blocks, empty words, and duplicated indices. The second identical batch must
-// additionally be served (at least partially) from the cache.
-TEST(VocabBlockCache, LookupBatchWithCacheMatchesIndividualLookups) {
-  std::vector<std::string> words{"tiny", std::string(10'000, 'a'), "",
-                                 std::string(5'000, 'b'), "tail"};
-  VocabularyOnDiskHandle handle{absl::StrCat(gtestCurrentTestName(), ".dat"),
-                                words};
-  std::vector<size_t> indices{1, 0, 3, 2, 4, 1, 3};
-
-  auto cleanup =
-      setRuntimeParameterForTest<&RuntimeParameters::vocabBlockCacheSize_>(
-          size_t{64});
-  VocabBlockCache& shard = ad_utility::vocab::threadLocalVocabBlockCache(64);
-
-  uint64_t hitsBefore = shard.numHits();
-  auto first = handle.vocabulary_.lookupBatch(ql::span<const size_t>{indices});
-  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
-      handle.vocabulary_, first, indices);
-
-  auto second = handle.vocabulary_.lookupBatch(ql::span<const size_t>{indices});
-  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
-      handle.vocabulary_, second, indices);
-  // The multi-block words cover full 4 KiB blocks, so the repeated batch must
-  // hit the cache.
-  EXPECT_GT(shard.numHits(), hitsBefore);
+  EXPECT_EQ(cache.size(), capacity);
+  size_t numCached = 0;
+  for (uint64_t blockNo = 0; blockNo < 10 * capacity; ++blockNo) {
+    if (const char* cached = cache.lookup(testDev, testIno, blockNo)) {
+      ++numCached;
+      auto expected = makeBlockData(blockNo);
+      EXPECT_EQ((std::string_view{cached, blockSize}),
+                (std::string_view{expected.data(), blockSize}));
+    }
+  }
+  EXPECT_EQ(numCached, capacity);
+  // The most recently inserted block is always cached.
+  auto last = makeBlockData(10 * capacity - 1);
+  expectCachedBlock(cache, testDev, testIno, 10 * capacity - 1, last);
 }
 
-// With the cache disabled (the default of `vocab-block-cache-size`), batched
-// lookups behave exactly as before.
-TEST(VocabBlockCache, LookupBatchWithDisabledCacheStillMatches) {
-  auto cleanup =
-      setRuntimeParameterForTest<&RuntimeParameters::vocabBlockCacheSize_>(
-          size_t{0});
-  std::vector<std::string> words{"alpha", std::string(8'000, 'z'), "omega"};
-  VocabularyOnDiskHandle handle{absl::StrCat(gtestCurrentTestName(), ".dat"),
-                                words};
-  std::vector<size_t> indices{2, 0, 1, 1};
-  auto result = handle.vocabulary_.lookupBatch(ql::span<const size_t>{indices});
-  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
-      handle.vocabulary_, result, indices);
+// Blocks larger than 4 KiB: the whole block is stored and returned, and a
+// block size that is not a positive multiple of 4 KiB is rejected.
+TEST(VocabBlockCache, LargerBlockSize) {
+  constexpr size_t largeBlockSize = 4 * blockSize;
+  VocabBlockCache cache{3, largeBlockSize};
+  EXPECT_EQ(cache.blockSize(), largeBlockSize);
+  std::string data(largeBlockSize, '\0');
+  for (size_t i = 0; i < data.size(); ++i) {
+    data[i] = static_cast<char>((i * 7) % 251);
+  }
+  cache.insert(testDev, testIno, 5, data.data());
+  const char* cached = cache.lookup(testDev, testIno, 5);
+  ASSERT_NE(cached, nullptr);
+  EXPECT_EQ((std::string_view{cached, largeBlockSize}), data);
+
+  // Changing the block size drops the content.
+  cache.resize(3, blockSize);
+  EXPECT_EQ(cache.blockSize(), blockSize);
+  EXPECT_EQ(cache.lookup(testDev, testIno, 5), nullptr);
+  VocabBlockCache& shard =
+      ad_utility::vocab::threadLocalVocabBlockCache(13, largeBlockSize);
+  EXPECT_EQ(shard.blockSize(), largeBlockSize);
+  EXPECT_EQ(shard.capacity(), 13u);
+
+  EXPECT_ANY_THROW(cache.resize(3, 0));
+  EXPECT_ANY_THROW(cache.resize(3, blockSize + 512));
 }
 
 }  // namespace

@@ -6,16 +6,11 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/functional/bind_front.h>
-#include <sys/stat.h>
 
 #include <algorithm>
 #include <array>
-#include <cstring>
-#include <optional>
 
 #include "global/Constants.h"
-#include "global/RuntimeParameters.h"
-#include "index/vocabulary/VocabBlockCache.h"
 #include "util/ExceptionHandling.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -177,7 +172,8 @@ std::vector<VocabularyOnDisk::OffsetPair> VocabularyOnDisk::readOffsetPairs(
     fileOffset = index * sizeof(uint64_t);
     target = reinterpret_cast<char*>(&offsetPair);
   }
-  readBatchCached(manager, offsetsFile_.fd(), sizes, fileOffsets, targets);
+  manager.wait(manager.addBatch(offsetsFile_.fd(), sizes, fileOffsets, targets,
+                                batchReadOptions(true)));
   return offsetPairs;
 }
 
@@ -209,107 +205,47 @@ VocabBatchLookupResult VocabularyOnDisk::readStrings(
     bufferOffset += size;
   }
 
-  readBatchCached(manager, file_.fd(), sizes, fileOffsets, targets);
+  manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets, targets,
+                                batchReadOptions(false)));
   return VocabBatchLookupData::asResult(std::move(data));
 }
 
 // _____________________________________________________________________________
-void VocabularyOnDisk::readBatchCached(ad_utility::BatchManagerBase& manager,
-                                       int fd, ql::span<const size_t> sizes,
-                                       ql::span<const uint64_t> fileOffsets,
-                                       ql::span<char*> targets) const {
-  using ad_utility::vocab::VocabBlockCache;
-  constexpr uint64_t blockSize = VocabBlockCache::kBlockSize;
-  size_t numCacheBlocks =
-      getRuntimeParameter<&RuntimeParameters::vocabBlockCacheSize_>();
-  struct stat fileId {};
-  // With the cache disabled (the default) or when the file cannot be
-  // identified, behave exactly as before: a single batched ring read.
-  if (numCacheBlocks == 0 || ::fstat(fd, &fileId) != 0) {
-    manager.wait(manager.addBatch(fd, sizes, fileOffsets, targets));
-    return;
+ad_utility::BatchReadOptions VocabularyOnDisk::batchReadOptions(
+    bool forOffsetsFile) const {
+  ad_utility::BatchReadOptions options;
+  options.useRegisteredBuffers =
+      ad_utility::useRegisteredBuffersForVocabularyReads.load(
+          std::memory_order_relaxed);
+  if (options.useRegisteredBuffers &&
+      ad_utility::useDirectIoForVocabularyReads.load(
+          std::memory_order_relaxed)) {
+    auto& files = *directIoFiles_;
+    std::call_once(files.opened_, [&files]() {
+      auto openDirect = [](auto& file, const std::string& name) {
+        try {
+          file.open(name, /*useDirectIo=*/true);
+          AD_LOG_INFO << "Opened " << name
+                      << " with O_DIRECT for batched vocabulary reads"
+                      << std::endl;
+        } catch (const std::exception& e) {
+          AD_LOG_WARN << "Could not open " << name << " with O_DIRECT ("
+                      << e.what() << "); its batched reads use the page cache"
+                      << std::endl;
+        }
+      };
+      openDirect(files.words_, files.filename_);
+      openDirect(files.offsets_, absl::StrCat(files.filename_, offsetSuffix_));
+    });
+    options.directIoFd =
+        forOffsetsFile ? files.offsets_.fd() : files.words_.fd();
+    options.blockCacheNumBlocks =
+        ad_utility::vocabularyBlockCacheNumBlocks.load(
+            std::memory_order_relaxed);
+    options.directIoBlockSize =
+        ad_utility::vocabularyDirectIoBlockSize.load(std::memory_order_relaxed);
   }
-  VocabBlockCache& cache =
-      ad_utility::vocab::threadLocalVocabBlockCache(numCacheBlocks);
-
-  // Sub-reads for the cache misses and partial edge blocks. Full blocks that
-  // hit are `memcpy`d directly; blocks read here are inserted into the cache
-  // after `wait` (from the target buffers, which outlive the read).
-  struct PendingBlock {
-    uint64_t blockNo_;
-    char* destination_;
-  };
-  std::vector<size_t> missSizes;
-  std::vector<uint64_t> missOffsets;
-  std::vector<char*> missTargets;
-  std::vector<PendingBlock> pendingInserts;
-  auto queueMiss = [&](size_t size, uint64_t fileOffset, char* target,
-                       std::optional<PendingBlock> insert) {
-    missSizes.push_back(size);
-    missOffsets.push_back(fileOffset);
-    missTargets.push_back(target);
-    if (insert.has_value()) {
-      pendingInserts.push_back(*insert);
-    }
-  };
-  auto serveFullBlock = [&](uint64_t blockNo, char* target) {
-    if (const char* cached =
-            cache.lookup(fileId.st_dev, fileId.st_ino, blockNo)) {
-      std::memcpy(target, cached, blockSize);
-    } else {
-      queueMiss(blockSize, blockNo * blockSize, target,
-                PendingBlock{blockNo, target});
-    }
-  };
-
-  for (size_t i = 0; i < sizes.size(); ++i) {
-    size_t size = sizes[i];
-    uint64_t fileOffset = fileOffsets[i];
-    char* target = targets[i];
-    if (size == 0) {
-      continue;
-    }
-    uint64_t firstBlock = fileOffset / blockSize;
-    uint64_t lastBlock = (fileOffset + size - 1) / blockSize;
-    if (firstBlock == lastBlock) {
-      // A single-block read is only cacheable when it covers the full block
-      // (which then implies block alignment).
-      if (size == blockSize) {
-        serveFullBlock(firstBlock, target);
-      } else {
-        queueMiss(size, fileOffset, target, std::nullopt);
-      }
-      continue;
-    }
-    // Leading block: fully covered (and thus cacheable) when the read starts
-    // at a block boundary, otherwise a partial edge that is never cached.
-    uint64_t firstBlockEnd = (firstBlock + 1) * blockSize;
-    if (fileOffset == firstBlock * blockSize) {
-      serveFullBlock(firstBlock, target);
-    } else {
-      queueMiss(firstBlockEnd - fileOffset, fileOffset, target, std::nullopt);
-    }
-    // Fully covered middle blocks: served from the cache on hits.
-    for (uint64_t blockNo = firstBlock + 1; blockNo < lastBlock; ++blockNo) {
-      serveFullBlock(blockNo, target + (blockNo * blockSize - fileOffset));
-    }
-    // Trailing block: fully covered (and thus cacheable) when the read ends
-    // at a block boundary, otherwise a partial edge that is never cached.
-    uint64_t lastBlockStart = lastBlock * blockSize;
-    if (fileOffset + size == (lastBlock + 1) * blockSize) {
-      serveFullBlock(lastBlock, target + (lastBlockStart - fileOffset));
-    } else {
-      queueMiss(fileOffset + size - lastBlockStart, lastBlockStart,
-                target + (lastBlockStart - fileOffset), std::nullopt);
-    }
-  }
-
-  if (!missSizes.empty()) {
-    manager.wait(manager.addBatch(fd, missSizes, missOffsets, missTargets));
-  }
-  for (const auto& [blockNo, destination] : pendingInserts) {
-    cache.insert(fileId.st_dev, fileId.st_ino, blockNo, destination);
-  }
+  return options;
 }
 
 // _____________________________________________________________________________
@@ -318,9 +254,9 @@ VocabBatchLookupResult VocabularyOnDisk::lookupBatch(
   AD_CONTRACT_CHECK(!indices.empty());
 
   auto manager = ioManagers_->pop().value();
-  // Return the `manager` to the pool on every exit path (including exceptions,
-  // e.g. an out-of-range index in phase 1), so we never leak an `IoManager`
-  // (and its io_uring buffers) out of the pool.
+  // Return the `manager` to the pool on every exit path (including
+  // exceptions, e.g. an out-of-range index in phase 1), so we never leak an
+  // `IoManager` (and its io_uring buffers) out of the pool.
   absl::Cleanup returnManager{[this, &manager]() {
     ad_utility::terminateIfThrows(
         [this, &manager]() { ioManagers_->push(std::move(manager)); },
@@ -389,6 +325,9 @@ void VocabularyOnDisk::open(const std::string& filename) {
       ad_utility::MmapVectorMetaData::readFromFile(offsetsFile_).size_;
   AD_CORRECTNESS_CHECK(numOffsets > 0);
   size_ = numOffsets - 1;
+
+  directIoFiles_ = std::make_unique<DirectIoFiles>();
+  directIoFiles_->filename_ = filename;
 
   // Initialize pool of persistent `BatchIoManager`s for `lookupBatch`.
   ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<

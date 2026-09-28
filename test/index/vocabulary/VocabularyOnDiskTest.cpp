@@ -20,6 +20,7 @@
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/MmapVector.h"
+#include "util/VocabBlockCache.h"
 
 namespace {
 using namespace vocabulary_test;
@@ -267,6 +268,86 @@ TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
   auto result = vocab->lookupBatch(indices);
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
                                                                 indices);
+}
+
+// With the switches behind the runtime parameters
+// `vocabulary-iouring-registered-buffers` and `vocabulary-iouring-direct-io`
+// on, `lookupBatch` reads through the registered arena (and, where the file
+// system supports it, with `O_DIRECT`) and must return the same words. The
+// words cover strings that cross a 4 KiB block boundary and strings larger
+// than an arena slot.
+TEST(VocabularyOnDisk, LookupBatchWithRegisteredBuffersAndDirectIo) {
+  std::vector<std::string> words;
+  for (size_t i = 0; i < 2000; ++i) {
+    words.push_back(absl::StrCat("word", i, std::string(i % 13, 'x')));
+  }
+  words.push_back(std::string(5000, 'L'));
+  words.push_back("last");
+  VocabularyCreator creator{gtestCurrentTestName()};
+  auto vocab = creator.createVocabulary(words);
+  std::vector<size_t> indices;
+  for (size_t i = 0; i < words.size(); i += 3) {
+    indices.push_back(words.size() - 1 - i);
+  }
+  indices.push_back(words.size() - 2);
+
+  absl::Cleanup reset{[]() {
+    ad_utility::useRegisteredBuffersForVocabularyReads = false;
+    ad_utility::useDirectIoForVocabularyReads = false;
+  }};
+  for (bool directIo : {false, true}) {
+    ad_utility::useRegisteredBuffersForVocabularyReads = true;
+    ad_utility::useDirectIoForVocabularyReads = directIo;
+    // Twice, so the second batch reuses the arena slots of the first.
+    for (size_t rep = 0; rep < 2; ++rep) {
+      auto result = vocab.lookupBatch(indices);
+      vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+          vocab, result, indices);
+    }
+  }
+}
+
+// With `O_DIRECT` and the block cache (`vocab-block-cache-size`), repeated
+// batched lookups return the same words, and the repeated batch is served from
+// the cache (where the file system supports `O_DIRECT` and io_uring is
+// available; otherwise the cache is not used and only the words are checked).
+TEST(VocabularyOnDisk, LookupBatchWithDirectIoAndBlockCache) {
+  std::vector<std::string> words;
+  for (size_t i = 0; i < 3000; ++i) {
+    words.push_back(absl::StrCat("entry", i, std::string(i % 17, 'y')));
+  }
+  words.push_back(std::string(6000, 'M'));
+  VocabularyCreator creator{gtestCurrentTestName()};
+  auto vocab = creator.createVocabulary(words);
+  std::vector<size_t> indices;
+  for (size_t i = 0; i < words.size(); i += 7) {
+    indices.push_back(i);
+  }
+  indices.push_back(words.size() - 1);
+
+  absl::Cleanup reset{[]() {
+    ad_utility::useRegisteredBuffersForVocabularyReads = false;
+    ad_utility::useDirectIoForVocabularyReads = false;
+    ad_utility::vocabularyBlockCacheNumBlocks = 0;
+  }};
+  ad_utility::useRegisteredBuffersForVocabularyReads = true;
+  ad_utility::useDirectIoForVocabularyReads = true;
+  // A capacity that no other test uses, so that the cache starts empty.
+  ad_utility::vocabularyBlockCacheNumBlocks = 1031;
+  const auto& counters = ad_utility::vocab::vocabBlockCacheCounters;
+  uint64_t hitsAfterFirst = 0;
+  for (size_t rep = 0; rep < 2; ++rep) {
+    auto result = vocab.lookupBatch(indices);
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(vocab, result,
+                                                                  indices);
+    if (rep == 0) {
+      hitsAfterFirst = counters.hits_.load();
+    }
+  }
+  if (counters.inserts_.load() > 0) {
+    // The blocks were cached by the first batch, so the second one hits.
+    EXPECT_GT(counters.hits_.load(), hitsAfterFirst);
+  }
 }
 
 // An empty batch is an invalid request and must throw.

@@ -6,6 +6,7 @@
 #define QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -44,6 +45,19 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   mutable std::unique_ptr<ad_utility::data_structures::ThreadSafeQueue<
       std::unique_ptr<ad_utility::BatchManagerBase>>>
       ioManagers_;
+
+  // Descriptors of `file_` and `offsetsFile_` that are opened with `O_DIRECT`
+  // when the runtime parameter `vocabulary-iouring-direct-io` is first used
+  // (see `batchReadOptions`). A descriptor stays closed if the file system
+  // does not support `O_DIRECT`; the reads from that file then use the page
+  // cache.
+  struct DirectIoFiles {
+    std::string filename_;
+    std::once_flag opened_;
+    ad_utility::export_prototypes::DirectIoFile words_;
+    ad_utility::export_prototypes::DirectIoFile offsets_;
+  };
+  std::unique_ptr<DirectIoFiles> directIoFiles_;
 
   // This suffix is appended to the filename of the main file, in order to get
   // the name for the file in which IDs and offsets are stored.
@@ -194,16 +208,10 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
       ad_utility::BatchManagerBase& manager,
       ql::span<const OffsetPair> offsetPairs) const;
 
-  // Perform the batched reads described by `sizes`/`fileOffsets` into
-  // `targets` via `manager`. If the `vocab-block-cache-size` runtime parameter
-  // is nonzero, 4 KiB-aligned blocks fully covered by a read are served from
-  // the thread-local `VocabBlockCache` on hits, and only misses (plus
-  // uncacheable partial edge blocks) are read via `manager`. With the default
-  // of zero, this is a plain `addBatch` + `wait`.
-  void readBatchCached(ad_utility::BatchManagerBase& manager, int fd,
-                       ql::span<const size_t> sizes,
-                       ql::span<const uint64_t> fileOffsets,
-                       ql::span<char*> targets) const;
+  // The `BatchReadOptions` for the batched reads from `offsetsFile_` (if
+  // `forOffsetsFile` is set) or `file_`, as selected by the runtime parameters
+  // `vocabulary-iouring-registered-buffers` and `vocabulary-iouring-direct-io`.
+  ad_utility::BatchReadOptions batchReadOptions(bool forOffsetsFile) const;
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H

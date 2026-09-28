@@ -10,6 +10,7 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -29,6 +30,7 @@
 #include "util/GTestHelpers.h"
 #include "util/IoUringManager.h"
 #include "util/Log.h"
+#include "util/VocabBlockCache.h"
 
 namespace {
 
@@ -103,10 +105,12 @@ class ReadBatchForTesting {
                                                     reads.size()});
   }
 
-  // Submit all accumulated reads to `manager` for file `fd`; returns the
-  // handle.
+  // Submit all accumulated reads to `manager` for file `fd`, carried out as
+  // specified by `options`; returns the handle.
   template <typename Manager>
-  typename Manager::BatchHandle submitTo(Manager& manager, int fd) {
+  typename Manager::BatchHandle submitTo(
+      Manager& manager, int fd,
+      const ad_utility::BatchReadOptions& options = {}) {
     // Build the buffer pointers here, after all buffers have been added, so the
     // addresses are stable (no further `add` will reallocate `targetBuffers_`).
     // `addBatch` copies each address into its read request, so this temporary
@@ -115,7 +119,7 @@ class ReadBatchForTesting {
         targetBuffers_ | ql::views::transform([](std::string& buffer) {
           return buffer.data();
         }));
-    return manager.addBatch(fd, numBytes_, offsets_, pointers);
+    return manager.addBatch(fd, numBytes_, offsets_, pointers, options);
   }
 
   // The bytes read by each read, in request order (valid once the batch has
@@ -151,8 +155,10 @@ class SequentialReadScenarioForTesting {
 
   // Submit all reads to `manager` for file `fd`; returns the handle.
   template <typename Manager>
-  typename Manager::BatchHandle submitTo(Manager& manager, int fd) {
-    return batch_.submitTo(manager, fd);
+  typename Manager::BatchHandle submitTo(
+      Manager& manager, int fd,
+      const ad_utility::BatchReadOptions& options = {}) {
+    return batch_.submitTo(manager, fd, options);
   }
 
   // The bytes actually read (valid once the batch has completed).
@@ -371,6 +377,349 @@ TYPED_TEST(IoUringManagerTest, ReadPastEofThrows) {
 
   AD_EXPECT_THROW_WITH_MESSAGE(manager.wait(batch.submitTo(manager, fd)),
                                HasSubstr("read fewer bytes than requested"));
+}
+
+// Reads through the registered arena (`useRegisteredBuffers`) deliver the same
+// bytes as plain reads: more reads than the ring (and the arena) has slots,
+// reads larger than a slot (which fall back to a plain read), and empty
+// reads. `SyncIoPolicy` ignores the option.
+TYPED_TEST(IoUringManagerTest, RegisteredBuffersReadSameBytes) {
+  constexpr size_t slotSize = ad_utility::export_prototypes::kDirectIoBlockSize;
+  auto makeScenario = []() {
+    SequentialReadScenarioForTesting scenario;
+    for (size_t i = 0; i < 200; ++i) {
+      scenario.addRead(std::string(1 + i % 7, static_cast<char>('a' + i % 26)));
+    }
+    scenario.addRead(std::string(slotSize + 100, 'X'));
+    scenario.addRead("");
+    scenario.addRead("tail");
+    return scenario;
+  };
+
+  auto first = makeScenario();
+  auto second = makeScenario();
+  auto [tmp, fd] = makeTempFile(first.content());
+  TypeParam manager(64);
+  ad_utility::BatchReadOptions options;
+  options.useRegisteredBuffers = true;
+  // Two batches, so the slots freed by the first batch are reused.
+  for (auto* scenario : {&first, &second}) {
+    manager.wait(scenario->submitTo(manager, fd, options));
+    EXPECT_THAT(scenario->results(),
+                ::testing::ElementsAreArray(scenario->expected()));
+  }
+}
+
+// A short read through the registered arena is reported like a plain one, and
+// its slot is released: afterwards, a batch that needs every slot still works.
+TYPED_TEST(IoUringManagerTest, RegisteredBuffersShortReadThrowsAndFreesSlot) {
+  auto [tmp, fd] = makeTempFile("AAAABBBB");
+  TypeParam manager(4);
+  ad_utility::BatchReadOptions options;
+  options.useRegisteredBuffers = true;
+  {
+    ReadBatchForTesting batch;
+    batch.add(0, 16);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        manager.wait(batch.submitTo(manager, fd, options)),
+        HasSubstr("read fewer bytes than requested"));
+  }
+  ReadBatchForTesting batch;
+  batch.add({{0, 2}, {2, 2}, {4, 2}, {6, 2}, {1, 4}});
+  manager.wait(batch.submitTo(manager, fd, options));
+  EXPECT_THAT(batch.result(),
+              ::testing::ElementsAre("AA", "AA", "BB", "BB", "AAAB"));
+}
+
+// With a second descriptor of the same file that is opened with `O_DIRECT`,
+// the reads fetch the enclosing aligned blocks and copy out exactly the
+// requested bytes: unaligned reads, a read that crosses a block boundary, and
+// a read at the end of a file whose size is not a multiple of the block size.
+TYPED_TEST(IoUringManagerTest, RegisteredBuffersWithDirectIo) {
+  constexpr size_t block = ad_utility::export_prototypes::kDirectIoBlockSize;
+  std::string content;
+  for (size_t i = 0; i < 3 * block + 123; ++i) {
+    content.push_back(static_cast<char>('A' + (i * 7) % 26));
+  }
+  auto [tmp, fd] = makeTempFile(content);
+  ad_utility::export_prototypes::DirectIoFile directFile;
+  try {
+    directFile.open(absl::StrCat(gtestCurrentTestName(), ".tmp"), true);
+  } catch (const std::exception& e) {
+    GTEST_SKIP() << "O_DIRECT is not supported here: " << e.what();
+  }
+
+  std::vector<std::pair<uint64_t, size_t>> reads{{0, 5},
+                                                 {17, 100},
+                                                 {block - 3, 10},
+                                                 {2 * block, block},
+                                                 {content.size() - 20, 20},
+                                                 {block + 1, block}};
+  ReadBatchForTesting batch;
+  batch.add(reads);
+  TypeParam manager(64);
+  ad_utility::BatchReadOptions options;
+  options.useRegisteredBuffers = true;
+  options.directIoFd = directFile.fd();
+  manager.wait(batch.submitTo(manager, fd, options));
+
+  std::vector<std::string> expected;
+  for (const auto& [offset, numBytes] : reads) {
+    expected.push_back(content.substr(offset, numBytes));
+  }
+  EXPECT_THAT(batch.result(), ::testing::ElementsAreArray(expected));
+
+  // Many consecutive small reads: those in the same block share one read, and
+  // with a small ring the batch needs more slots than the arena has, so slots
+  // are reused while the batch is submitted. Also go backwards once, which
+  // starts a new read for a block that was read before.
+  std::vector<std::pair<uint64_t, size_t>> smallReads;
+  for (uint64_t offset = 0; offset + 7 <= content.size(); offset += 9) {
+    smallReads.emplace_back(offset, 7);
+  }
+  smallReads.emplace_back(3, 2);
+  ReadBatchForTesting smallBatch;
+  smallBatch.add(smallReads);
+  TypeParam smallManager(4);
+  smallManager.wait(smallBatch.submitTo(smallManager, fd, options));
+  std::vector<std::string> expectedSmall;
+  for (const auto& [offset, numBytes] : smallReads) {
+    expectedSmall.push_back(content.substr(offset, numBytes));
+  }
+  EXPECT_THAT(smallBatch.result(), ::testing::ElementsAreArray(expectedSmall));
+}
+
+namespace {
+// The block cache counters, to measure one test step by their differences.
+struct BlockCacheCounts {
+  uint64_t hits_, inFlightHits_, misses_, inserts_;
+  static BlockCacheCounts now() {
+    const auto& c = ad_utility::vocab::vocabBlockCacheCounters;
+    return {c.hits_.load(), c.inFlightHits_.load(), c.misses_.load(),
+            c.inserts_.load()};
+  }
+  BlockCacheCounts operator-(const BlockCacheCounts& other) const {
+    return {hits_ - other.hits_, inFlightHits_ - other.inFlightHits_,
+            misses_ - other.misses_, inserts_ - other.inserts_};
+  }
+};
+
+// Read `reads` from `fd` in one batch with `options` and check the bytes.
+template <typename Manager>
+void readAndCheck(Manager& manager, int fd, const std::string& content,
+                  std::vector<std::pair<uint64_t, size_t>> reads,
+                  const ad_utility::BatchReadOptions& options) {
+  ReadBatchForTesting batch;
+  batch.add(reads);
+  manager.wait(batch.submitTo(manager, fd, options));
+  std::vector<std::string> expected;
+  for (const auto& [offset, numBytes] : reads) {
+    expected.push_back(content.substr(offset, numBytes));
+  }
+  EXPECT_THAT(batch.result(), ::testing::ElementsAreArray(expected));
+}
+}  // namespace
+
+// With a block cache, the blocks read via `O_DIRECT` are kept, and a later
+// batch that requests other bytes of the same blocks (partial-block hits) is
+// served from the cache without reading them again. Only the io_uring policy
+// uses the cache; the bytes are the same with both policies.
+TYPED_TEST(IoUringManagerTest, DirectIoBlockCacheServesPartialBlockHits) {
+  constexpr size_t block = ad_utility::export_prototypes::kDirectIoBlockSize;
+  std::string content;
+  for (size_t i = 0; i < 4 * block; ++i) {
+    content.push_back(static_cast<char>('a' + (i * 11) % 26));
+  }
+  auto [tmp, fd] = makeTempFile(content);
+  ad_utility::export_prototypes::DirectIoFile directFile;
+  try {
+    directFile.open(absl::StrCat(gtestCurrentTestName(), ".tmp"), true);
+  } catch (const std::exception& e) {
+    GTEST_SKIP() << "O_DIRECT is not supported here: " << e.what();
+  }
+  TypeParam manager(16);
+  ad_utility::BatchReadOptions options;
+  options.useRegisteredBuffers = true;
+  options.directIoFd = directFile.fd();
+  // A capacity that no other test uses, so that this thread's cache starts
+  // empty.
+  options.blockCacheNumBlocks = 17;
+  constexpr bool usesCache =
+      !std::is_same_v<TypeParam,
+                      ad_utility::BatchManager<ad_utility::SyncIoPolicy>>;
+
+  auto before = BlockCacheCounts::now();
+  readAndCheck(manager, fd, content, {{10, 5}, {block + 7, 20}}, options);
+  auto first = BlockCacheCounts::now() - before;
+  before = BlockCacheCounts::now();
+  // Other bytes of blocks 0 and 1 (partial-block hits) and block 2 (a miss).
+  readAndCheck(manager, fd, content,
+               {{100, 30}, {block + 2000, 50}, {2 * block + 5, 10}}, options);
+  auto second = BlockCacheCounts::now() - before;
+  if (usesCache) {
+    EXPECT_EQ(first.hits_, 0u);
+    EXPECT_EQ(first.misses_, 2u);
+    EXPECT_EQ(first.inserts_, 2u);
+    EXPECT_EQ(second.hits_, 2u);
+    EXPECT_EQ(second.misses_, 1u);
+    EXPECT_EQ(second.inserts_, 1u);
+  } else {
+    EXPECT_EQ(first.hits_ + first.misses_ + second.hits_ + second.misses_, 0u);
+  }
+}
+
+// A cache of one block evicts the previous block on every insert, so reading
+// block 0, then block 1, then block 0 again misses three times.
+TYPED_TEST(IoUringManagerTest, DirectIoBlockCacheEvicts) {
+  constexpr size_t block = ad_utility::export_prototypes::kDirectIoBlockSize;
+  std::string content(3 * block, 'x');
+  for (size_t i = 0; i < content.size(); ++i) {
+    content[i] = static_cast<char>('A' + (i * 5) % 26);
+  }
+  auto [tmp, fd] = makeTempFile(content);
+  ad_utility::export_prototypes::DirectIoFile directFile;
+  try {
+    directFile.open(absl::StrCat(gtestCurrentTestName(), ".tmp"), true);
+  } catch (const std::exception& e) {
+    GTEST_SKIP() << "O_DIRECT is not supported here: " << e.what();
+  }
+  TypeParam manager(16);
+  ad_utility::BatchReadOptions options;
+  options.useRegisteredBuffers = true;
+  options.directIoFd = directFile.fd();
+  options.blockCacheNumBlocks = 1;
+  constexpr bool usesCache =
+      !std::is_same_v<TypeParam,
+                      ad_utility::BatchManager<ad_utility::SyncIoPolicy>>;
+  auto before = BlockCacheCounts::now();
+  readAndCheck(manager, fd, content, {{3, 4}}, options);
+  readAndCheck(manager, fd, content, {{block + 3, 4}}, options);
+  readAndCheck(manager, fd, content, {{8, 4}}, options);
+  auto delta = BlockCacheCounts::now() - before;
+  if (usesCache) {
+    EXPECT_EQ(delta.hits_, 0u);
+    EXPECT_EQ(delta.misses_, 3u);
+    // Block 0 was inserted last, so both requests for it now hit.
+    before = BlockCacheCounts::now();
+    readAndCheck(manager, fd, content, {{8, 4}, {9, 4}}, options);
+    auto again = BlockCacheCounts::now() - before;
+    EXPECT_EQ(again.hits_, 2u);
+    EXPECT_EQ(again.misses_, 0u);
+  }
+}
+
+// Within one batch, a request for a block whose read is still in flight (not
+// the directly preceding request, so it cannot join the open read) is copied
+// from that read's slot instead of reading the block again. This includes the
+// short last block of the file, which is never inserted into the cache.
+TYPED_TEST(IoUringManagerTest, DirectIoBlockCacheJoinsInFlightReads) {
+  constexpr size_t block = ad_utility::export_prototypes::kDirectIoBlockSize;
+  std::string content;
+  for (size_t i = 0; i < 2 * block + 100; ++i) {
+    content.push_back(static_cast<char>('a' + (i * 13) % 26));
+  }
+  auto [tmp, fd] = makeTempFile(content);
+  ad_utility::export_prototypes::DirectIoFile directFile;
+  try {
+    directFile.open(absl::StrCat(gtestCurrentTestName(), ".tmp"), true);
+  } catch (const std::exception& e) {
+    GTEST_SKIP() << "O_DIRECT is not supported here: " << e.what();
+  }
+  TypeParam manager(16);
+  ad_utility::BatchReadOptions options;
+  options.useRegisteredBuffers = true;
+  options.directIoFd = directFile.fd();
+  // A capacity that no other test uses, so that this thread's cache starts
+  // empty.
+  options.blockCacheNumBlocks = 23;
+  constexpr bool usesCache =
+      !std::is_same_v<TypeParam,
+                      ad_utility::BatchManager<ad_utility::SyncIoPolicy>>;
+
+  auto before = BlockCacheCounts::now();
+  // Blocks 0, 1, 0 (in flight), 1 (joins the open read), 2 (short), 0 (in
+  // flight), 2 (joins the open read, within the bytes the short read
+  // returns).
+  readAndCheck(manager, fd, content,
+               {{0, 4},
+                {block + 1, 4},
+                {8, 4},
+                {block + 9, 4},
+                {2 * block + 10, 5},
+                {100, 7},
+                {2 * block + 50, 50}},
+               options);
+  auto delta = BlockCacheCounts::now() - before;
+  if (usesCache) {
+    EXPECT_EQ(delta.hits_, 0u);
+    EXPECT_EQ(delta.misses_, 3u);
+    EXPECT_EQ(delta.inFlightHits_, 2u);
+    // The short last block is not cached.
+    EXPECT_EQ(delta.inserts_, 2u);
+  } else {
+    EXPECT_EQ(delta.hits_ + delta.inFlightHits_ + delta.misses_, 0u);
+  }
+}
+
+// With `directIoBlockSize` = 16 KiB, every `O_DIRECT` read fetches (and the
+// cache keeps) the enclosing 16 KiB block, so a later request for another
+// 4 KiB block of it hits. Switching back to 4 KiB blocks on the same manager
+// registers the arena again with 4 KiB slots.
+TYPED_TEST(IoUringManagerTest, DirectIoLargerBlockSize) {
+  constexpr size_t smallBlock =
+      ad_utility::export_prototypes::kDirectIoBlockSize;
+  constexpr size_t largeBlock = 4 * smallBlock;
+  std::string content;
+  for (size_t i = 0; i < 3 * largeBlock + 100; ++i) {
+    content.push_back(static_cast<char>('a' + (i * 17) % 26));
+  }
+  auto [tmp, fd] = makeTempFile(content);
+  ad_utility::export_prototypes::DirectIoFile directFile;
+  try {
+    directFile.open(absl::StrCat(gtestCurrentTestName(), ".tmp"), true);
+  } catch (const std::exception& e) {
+    GTEST_SKIP() << "O_DIRECT is not supported here: " << e.what();
+  }
+  TypeParam manager(16);
+  ad_utility::BatchReadOptions options;
+  options.useRegisteredBuffers = true;
+  options.directIoFd = directFile.fd();
+  // A capacity that no other test uses, so that this thread's cache starts
+  // empty.
+  options.blockCacheNumBlocks = 29;
+  options.directIoBlockSize = largeBlock;
+  constexpr bool usesCache =
+      !std::is_same_v<TypeParam,
+                      ad_utility::BatchManager<ad_utility::SyncIoPolicy>>;
+
+  auto before = BlockCacheCounts::now();
+  readAndCheck(manager, fd, content, {{10, 5}, {largeBlock + 7, 20}}, options);
+  auto first = BlockCacheCounts::now() - before;
+  before = BlockCacheCounts::now();
+  // Other 4 KiB blocks of the two cached 16 KiB blocks, and the short last
+  // block of the file (read, but not cached).
+  readAndCheck(manager, fd, content,
+               {{smallBlock + 3, 10},
+                {largeBlock + 3 * smallBlock, 40},
+                {3 * largeBlock + 50, 50}},
+               options);
+  auto second = BlockCacheCounts::now() - before;
+  if (usesCache) {
+    EXPECT_EQ(first.misses_, 2u);
+    EXPECT_EQ(first.inserts_, 2u);
+    EXPECT_EQ(second.hits_, 2u);
+    EXPECT_EQ(second.misses_, 1u);
+    EXPECT_EQ(second.inserts_, 0u);
+  } else {
+    EXPECT_EQ(first.hits_ + first.misses_ + second.hits_ + second.misses_, 0u);
+  }
+
+  // Back to 4 KiB blocks; the request that spans two 4 KiB blocks does not fit
+  // into a slot and uses a plain read.
+  options.directIoBlockSize = smallBlock;
+  readAndCheck(manager, fd, content,
+               {{10, 5}, {largeBlock + 7, 20}, {2 * smallBlock - 3, 10}},
+               options);
 }
 
 // A read that is fully satisfied returns the requested bytes from the requested

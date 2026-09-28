@@ -477,6 +477,8 @@ addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
 addLinkAndDiscoverTest(RandomTest)
 
+addLinkAndDiscoverTest(RegisteredIoUringReaderTest)
+
 addLinkAndDiscoverTest(FindUndefRangesTest engine)
 
 addLinkAndDiscoverTest(AddCombinedRowToTableTest engine qlever_util)
@@ -597,6 +599,8 @@ addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
 
 addLinkAndDiscoverTestNoLibs(IoUringManagerTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(VocabBlockCacheTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 

@@ -10,8 +10,8 @@
 add_library(vocabulary VocabularyInMemory.h VocabularyInMemory.cpp
                        VocabularyInMemoryBinSearch.cpp VocabularyInternalExternal.cpp
                        BuildFilteredVocabulary.cpp
-                       VocabularyOnDisk.cpp VocabBlockCache.cpp SplitVocabulary.cpp GeoVocabulary.cpp PolymorphicVocabulary.cpp
+                       VocabularyOnDisk.cpp SplitVocabulary.cpp GeoVocabulary.cpp PolymorphicVocabulary.cpp
                        Vocabulary.cpp EncodedIriManager.cpp
                        EncodedIriPattern.cpp PrefixHeuristic.cpp
                        SecondaryVocabulary.cpp)
-qlever_target_link_libraries(vocabulary qlever_util rdfTypes global)
+qlever_target_link_libraries(vocabulary qlever_util rdfTypes)
