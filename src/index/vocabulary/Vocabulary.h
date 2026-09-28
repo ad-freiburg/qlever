@@ -26,8 +26,6 @@
 #include "util/HashSet.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
-namespace ad_utility::vocabulary {
-
 template <typename IndexT = WordVocabIndex>
 class IdRange {
  public:
@@ -358,7 +356,5 @@ using RdfsVocabulary = Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
                                   TripleComponentComparator, VocabIndex>;
 using TextVocabulary = Vocabulary<detail::UnderlyingVocabTextVocabulary,
                                   SimpleStringComparator, WordVocabIndex>;
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARY_H

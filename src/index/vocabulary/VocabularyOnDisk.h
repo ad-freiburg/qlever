@@ -19,8 +19,6 @@
 #include "util/Serializer/Serializer.h"
 #include "util/ThreadSafeQueue.h"
 
-namespace ad_utility::vocabulary {
-
 // On-disk vocabulary of strings. Each entry is a pair of <ID, String>. The IDs
 // are ascending, but not (necessarily) contiguous. If the strings are sorted,
 // then binary search for a string can be performed.
@@ -200,7 +198,5 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
       ad_utility::BatchManagerBase& manager,
       ql::span<const OffsetPair> offsetPairs) const;
 };
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H

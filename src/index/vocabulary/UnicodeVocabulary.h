@@ -9,8 +9,6 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 
-namespace ad_utility::vocabulary {
-
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
 /// stricter level can be all equal on a weaker level. The
@@ -159,7 +157,5 @@ class UnicodeVocabulary {
     // Note: _comparator is not serialized as it's stateless or reconstructed.
   }
 };
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H

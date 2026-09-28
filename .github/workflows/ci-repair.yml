@@ -43,6 +43,11 @@ jobs:
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL }}
+          # Ledger must live where the runner can write: /home/runner/.cache
+          # is root-owned on the ci-repair hosts, so the default ledger path
+          # fails every run with PermissionError. The self-hosted workspace
+          # persists across jobs, so the ledger survives there too.
+          CI_REPAIR_LEDGER: ${{ github.workspace }}/.ci-repair/ledger.json
         run: |
           # github.token must not open the probe PR: this repo gates CI on the
           # `ci` label, and GITHUB_TOKEN events do not start other workflows.

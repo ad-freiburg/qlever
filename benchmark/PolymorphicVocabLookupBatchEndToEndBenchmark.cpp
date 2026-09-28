@@ -35,7 +35,7 @@
 namespace ad_benchmark {
 namespace {
 
-using ad_utility::vocabulary::PolymorphicVocabulary;
+using PolymorphicVocabulary;
 
 class PolymorphicVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
  private:
@@ -53,19 +53,17 @@ class PolymorphicVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
   // pattern of batch ID-to-word resolution during query evaluation.
   std::vector<size_t> batch_;
   TempDirCleanup cleanup_;
-  ad_utility::vocabulary::PolymorphicVocabulary vocab_;
+  PolymorphicVocabulary vocab_;
 
   // Write `numWords` deterministic Wikidata-like IRIs to disk and read them
   // back into a vocabulary with the given basename.
-  ad_utility::vocabulary::PolymorphicVocabulary buildVocabulary(
-      const std::string& basename, size_t numWords) {
-    ad_utility::vocabulary::PolymorphicVocabulary vocab;
+  PolymorphicVocabulary buildVocabulary(const std::string& basename,
+                                        size_t numWords) {
+    PolymorphicVocabulary vocab;
     ad_utility::VocabularyType type{
         ad_utility::VocabularyType::Enum::OnDiskCompressed};
     {
-      auto writerPtr =
-          ad_utility::vocabulary::PolymorphicVocabulary::makeDiskWriterPtr(
-              basename, type);
+      auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(basename, type);
       for (size_t i = 0; i < numWords; ++i) {
         // Fixed-width zero padding keeps the words sorted, as the vocabulary
         // writers require sorted input.
@@ -153,7 +151,7 @@ class PolymorphicVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
     group.addMeasurement("batched lookupBatch with builder", [&] {
       size_t totalBytes = 0;
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
-        ad_utility::vocabulary::ArenaVocabBatchBuilder builder(batch_.size());
+        ArenaVocabBatchBuilder builder(batch_.size());
         vocab_.lookupBatch(batch_, builder);
         auto result = std::move(builder).finalize();
         for (const auto& word : result) {

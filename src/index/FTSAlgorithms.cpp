@@ -8,9 +8,8 @@
 
 #include "util/HashSet.h"
 // _____________________________________________________________________________
-IdTable FTSAlgorithms::filterByRange(
-    const ad_utility::vocabulary::IdRange<WordVocabIndex>& idRange,
-    const IdTable& idTablePreFilter) {
+IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
+                                     const IdTable& idTablePreFilter) {
   AD_CONTRACT_CHECK(idTablePreFilter.numColumns() == 3);
   AD_LOG_DEBUG << "Filtering " << idTablePreFilter.getColumn(0).size()
                << " elements by ID range...\n";

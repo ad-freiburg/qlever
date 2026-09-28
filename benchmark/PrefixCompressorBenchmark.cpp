@@ -29,7 +29,7 @@ namespace {
 // single preallocated arena (the pattern used by batch vocabulary lookups).
 class PrefixCompressorBenchmark : public BenchmarkInterface {
  private:
-  ad_utility::vocabulary::PrefixCompressor compressor_;
+  PrefixCompressor compressor_;
   // Owning storage for the compressed words; `compressed_` views into it.
   std::vector<std::string> compressedStorage_;
   std::vector<std::string_view> compressed_;

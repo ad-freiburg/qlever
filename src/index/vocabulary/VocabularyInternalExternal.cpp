@@ -15,8 +15,6 @@
 #include <string_view>
 #include <utility>
 
-namespace ad_utility::vocabulary {
-
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
   auto fromInternal = internalVocab_[i];
@@ -26,25 +24,13 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
   return externalVocab_[i];
 }
 
-// _____________________________________________________________________________
-// Partition input indices into internal-vocabulary hits and indices that must
-// be resolved by the external vocabulary, while keeping their positions in the
-// original input. Keeping the two groups separate allows each vocabulary to be
-// looked up in batches independently; the stored result positions are required
-// to restore the original request order when the sub-results are assembled.
-//
 // Helpers for `VocabularyInternalExternal::lookupBatch` (see below).
 namespace {
 
-// Partition input indices into internal-vocabulary hits and indices that must
-// be resolved by the external vocabulary, while keeping their positions in the
-// original input. Keeping the two groups separate allows each vocabulary to be
-// looked up in batches independently.
-//
-// Returns an `IndexPartition` where each stored pair records the underlying
-// vocabulary index together with its position in the original input, which is
-// required to restore the original request order when the sub-results are
-// assembled.
+// The requested indices split by the vocabulary that resolves them. Each pair
+// records the underlying vocabulary index together with its position in the
+// original input, which restores the request order when the two sub-results
+// are assembled.
 //
 // Classification requires one membership probe per index: the internal
 // vocabulary has "holes", and its batch lookup reports missing entries as
@@ -53,8 +39,8 @@ namespace {
 // allocation; indices at or past `internalVocab.endIndex()` are known misses in
 // O(1) and skip the search.
 struct IndexPartition {
-  MarkerIndicesAndPositions internalSlots_;
-  MarkerIndicesAndPositions diskSlots_;
+  MarkerIndicesAndPositions internalSlots;
+  MarkerIndicesAndPositions diskSlots;
 };
 
 // _____________________________________________________________________________
@@ -62,17 +48,17 @@ IndexPartition partitionIndicesBySource(
     ql::span<const size_t> indices,
     const VocabularyInMemoryBinSearch& internalVocab) {
   IndexPartition result;
-  result.internalSlots_.reserve(indices.size());
-  result.diskSlots_.reserve(indices.size());
+  result.internalSlots.reserve(indices.size());
+  result.diskSlots.reserve(indices.size());
 
   const uint64_t internalEnd = internalVocab.endIndex();
   for (const auto& [i, idx] : ::ranges::views::enumerate(indices)) {
     const uint64_t vocabIndex = static_cast<uint64_t>(idx);
     if (vocabIndex < internalEnd &&
         internalVocab.positionOfIndex(vocabIndex).has_value()) {
-      result.internalSlots_.addPair(idx, i);
+      result.internalSlots.addPair(idx, i);
     } else {
-      result.diskSlots_.addPair(idx, i);
+      result.diskSlots.addPair(idx, i);
     }
   }
   return result;
@@ -88,40 +74,37 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
 
   // Take the fast path when all indices are resolved through the external
   // (disk) vocabulary.
-  if (partition.internalSlots_.empty()) {
+  if (partition.internalSlots.empty()) {
     return externalVocab_.lookupBatch(
-        partition.diskSlots_.getUnderlyingIndices());
+        partition.diskSlots.getUnderlyingIndices());
   }
 
-  if (partition.diskSlots_.empty()) {
+  if (partition.diskSlots.empty()) {
     return internalVocab_.lookupBatch(
-        partition.internalSlots_.getUnderlyingIndices());
+        partition.internalSlots.getUnderlyingIndices());
   }
 
   // Handle mixed internal and external indices by assembling results from both
   // sources. This path provides the basic exception guarantee: if either
   // sub-lookup throws, the partially assembled state is discarded with the
-  // local `assembler`, so no partial result is observable by the caller. See
-  // `benchmark/VocabularyBatchLookupMicroBenchmark.cpp` and
-  // `benchmark/VocabularyBatchLookupEndToEndBenchmark.cpp` for the performance
-  // comparison of this batched path against repeated single-word lookups.
+  // local `assembler`, so no partial result is observable by the caller.
   MultiSourceVocabBatchAssembler assembler(indices.size());
 
   // 1. Pass the internal sub-result to the assembler, which takes ownership of
   // the result data so its string views remain valid, and place the values at
   // their original request positions.
   auto internal = internalVocab_.lookupBatch(
-      partition.internalSlots_.getUnderlyingIndices());
+      partition.internalSlots.getUnderlyingIndices());
   assembler.scatterSubBatchResultAtPositions(
-      std::move(internal), partition.internalSlots_.getResultPositions());
+      internal, partition.internalSlots.getResultPositions());
 
   // 2. Pass the external sub-result to the assembler and retain its result data
   // so the returned string views remain valid, placing the values at their
   // original request positions.
   auto disk =
-      externalVocab_.lookupBatch(partition.diskSlots_.getUnderlyingIndices());
+      externalVocab_.lookupBatch(partition.diskSlots.getUnderlyingIndices());
   assembler.scatterSubBatchResultAtPositions(
-      std::move(disk), partition.diskSlots_.getResultPositions());
+      disk, partition.diskSlots.getResultPositions());
 
   return std::move(assembler).finalizeVocabBatchLookupResult();
 }
@@ -171,4 +154,3 @@ void VocabularyInternalExternal::open(const std::string& filename) {
                  "of the external vocabulary): "
               << internalVocab_.size() << std::endl;
 }
-}  // namespace ad_utility::vocabulary

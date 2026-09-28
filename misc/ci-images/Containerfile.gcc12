@@ -1,0 +1,36 @@
+# QLever CI image: gcc-12 on Ubuntu 24.04 (master-only native leg).
+# Mirrors .github/workflows/install-dependencies-ubuntu + install-compiler-ubuntu
+# so Wolga legs behave exactly like the GitHub-hosted legs (which install
+# gcc-12 from ppa:ubuntu-toolchain-r/test on Noble). Boost 1.83 comes
+# from the standard Noble repositories (no PPA needed).
+# NOTE: build this on GitHub (docker as root, see
+# .github/workflows/toolchain-image-builder.yml), NOT rootless on the
+# cluster: unpacking upstream Ubuntu layers and dpkg chowns need UID/GID
+# ranges the cluster build user lacks. The trailing chown makes every file
+# 0:0 so the tarball imports cleanly under a single-UID mapping via
+# `podman load` on the cluster host.
+FROM ubuntu:24.04
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 LC_CTYPE=C.UTF-8 DEBIAN_FRONTEND=noninteractive
+# Rootless build containers cannot setgroups(2), so apt's privilege-dropping
+# sandbox dies with "Operation not permitted". Disable it: CI legs run as
+# root anyway, so the sandbox buys nothing here.
+RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/99-no-sandbox
+RUN apt-get update && apt-get install -y \
+    build-essential cmake ninja-build git wget pkg-config mold \
+    libicu-dev tzdata libzstd-dev libjemalloc-dev libssl-dev \
+    libboost1.83-all-dev libboost-url1.83-dev libboost-container1.83-dev \
+    libboost-filesystem1.83-dev \
+    python3-yaml unzip python3-icu liburing-dev uuid-dev \
+    gnupg lsb-release software-properties-common \
+ && rm -rf /var/lib/apt/lists/*
+RUN add-apt-repository -y ppa:ubuntu-toolchain-r/test && apt-get update \
+ && apt-get install -y gcc-12 g++-12 \
+ && rm -rf /var/lib/apt/lists/*
+ENV CC=gcc-12 CXX=g++-12
+# Flatten ownership so the image imports rootless (see header NOTE).
+# Flatten ownership so the image imports rootless (chown -R / would die on
+# the read-only /etc/hosts, /etc/hostname and /etc/resolv.conf bind mounts).
+RUN find / -xdev \( -path /etc/hosts -o -path /etc/hostname -o -path /etc/resolv.conf \) -prune \
+    -o -exec chown 0:0 {} + 2>/dev/null || true \
+ && chmod 640 /etc/shadow /etc/gshadow \
+ && echo TOOLCHAIN-IMAGE-OK

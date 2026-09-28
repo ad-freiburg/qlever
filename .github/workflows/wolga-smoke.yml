@@ -1,0 +1,24 @@
+name: wolga-smoke
+# Smoke test for the Wolga self-hosted runners (wolga-r1/r2).
+# Verifies a job actually executes on Wolga and reports machine state.
+# Docker access is reported but non-blocking until the docker group is granted.
+on:
+  # Fork PR profile 2026-09-25: runner diagnostic, tests no code; run manually via workflow_dispatch.
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: [self-hosted, linux, x64, wolga]
+    timeout-minutes: 10
+    steps:
+      - name: Machine identity
+        run: |
+          hostname
+          nproc
+          free -g | head -2
+          df -h /local/data-ssd 2>/dev/null | tail -1 || true
+      - name: Docker access (non-blocking)
+        run: |
+          docker ps >/dev/null 2>&1 && echo DOCKER_OK || echo DOCKER_DENIED
+      - name: Runner slot
+        run: echo "executed on $RUNNER_NAME"

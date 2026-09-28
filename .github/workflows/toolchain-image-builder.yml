@@ -1,0 +1,54 @@
+name: Build toolchain images (root as a service)
+
+# One-time builder for the Wolga migration. Rootless podman on the cluster
+# hosts can neither unpack upstream Ubuntu layers nor survive dpkg chowns
+# (the build user lacks subuid ranges), so toolchain images are built here
+# on GitHub where docker runs as root. Each recipe ends with chown 0:0 so
+# the tarball imports cleanly under a single-UID mapping. Manual dispatch
+# only; download the artifacts and `podman load` them on the cluster host.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ ci/wolga-ci-images ]
+    paths:
+      - misc/ci-images/Containerfile.*
+      - .github/workflows/toolchain-image-builder.yml
+  pull_request:
+    paths:
+      - misc/ci-images/Containerfile.*
+      - .github/workflows/toolchain-image-builder.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  toolchain:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: ["gcc12", "clang18", "gcc11"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+          sparse-checkout: misc/ci-images
+      - name: Build toolchain image
+        run: |
+          docker build -f misc/ci-images/Containerfile.${{ matrix.tag }} \
+            -t qlever-ci:${{ matrix.tag }} misc/ci-images
+          docker save qlever-ci:${{ matrix.tag }} \
+            -o qlever-ci-${{ matrix.tag }}.tar
+          ls -la qlever-ci-${{ matrix.tag }}.tar
+      - name: Upload image tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: qlever-ci-${{ matrix.tag }}
+          path: qlever-ci-${{ matrix.tag }}.tar
+          retention-days: 7

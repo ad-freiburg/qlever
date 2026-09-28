@@ -121,8 +121,7 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
 inline std::pair<ValueId, ValueId> getRangeFromVocab(
     const ad_utility::triple_component::LiteralOrIri& s,
     const EvaluationContext* context) {
-  auto level =
-      ad_utility::vocabulary::TripleComponentComparator::Level::QUARTERNARY;
+  auto level = TripleComponentComparator::Level::QUARTERNARY;
   // TODO<joka921> This should be `Vocab::equal_range`
   const ValueId lower =
       Id::makeFromVocabIndex(context->_qec.getIndex().getVocab().lower_bound(

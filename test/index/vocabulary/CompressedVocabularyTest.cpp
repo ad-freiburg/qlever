@@ -28,7 +28,9 @@
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
@@ -94,9 +96,7 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
 
-  ad_utility::vocabulary::CompressedVocabulary<
-      ad_utility::vocabulary::VocabularyInMemory, DummyCompressionWrapper>
-      vocab;
+  CompressedVocabulary<VocabularyInMemory, DummyCompressionWrapper> vocab;
   {
     auto writerPtr = vocab.makeDiskWriterPtr("vocabtmp.txt");
     auto& writer = *writerPtr;
@@ -108,7 +108,7 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
     // Test the case that the destructor implicitly calls `finish`.
   }
 
-  ad_utility::vocabulary::VocabularyInMemory simple;
+  VocabularyInMemory simple;
   simple.open("vocabtmp.txt.words");
   ad_utility::deleteFile("vocabtmp.txt.words");
 
@@ -139,9 +139,7 @@ struct CompressedVocabularyF : public testing::Test {
     return [](const std::vector<std::string>& words,
               std::string filename = gtestCurrentTestName()) {
       ad_utility::deleteFile(filename, false);
-      ad_utility::vocabulary::CompressedVocabulary<
-          ad_utility::vocabulary::VocabularyOnDisk, Compressor, 4>
-          vocab;
+      CompressedVocabulary<VocabularyOnDisk, Compressor, 4> vocab;
       auto writerPtr = vocab.makeDiskWriterPtr(filename);
       writeWordsAndFinish(*writerPtr, words);
       vocab.open(filename);
@@ -180,9 +178,31 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchMatchesAccessOperator) {
   const std::array<size_t, 7> indices{4, 1, 0, 3, 1, 2, 4};
   const auto result = vocab.lookupBatch(indices);
   assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
-  // Empty input is rejected up front like in all other lookupBatch overloads.
   AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(ql::span<const size_t>{}),
                                ::testing::HasSubstr("!indices.empty()"));
+}
+
+// _____________________________________________________________________________
+// The builder overload charges the decoded words against the memory limit of
+// the builder's allocator: a limit that is too small throws, a sufficient one
+// yields the same words as the convenience overload.
+TYPED_TEST(CompressedVocabularyF, LookupBatchRespectsMemoryLimit) {
+  using namespace ad_utility::memory_literals;
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
+                                       "epsilon"};
+  auto vocab = this->createCompressedVocabulary()(words);
+  const std::array<size_t, 5> indices{4, 1, 0, 3, 2};
+
+  ArenaVocabBatchBuilder tooSmall(indices.size(),
+                                  ad_utility::makeAllocatorWithLimit<Id>(8_B));
+  EXPECT_THROW(vocab.lookupBatch(indices, tooSmall),
+               ad_utility::detail::AllocationExceedsLimitException);
+
+  ArenaVocabBatchBuilder sufficient(
+      indices.size(), ad_utility::makeAllocatorWithLimit<Id>(1_MB));
+  vocab.lookupBatch(indices, sufficient);
+  const auto result = std::move(sufficient).finalize();
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
 }
 
 // _____________________________________________________________________________
@@ -193,14 +213,12 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchWithBuilderThroughDelegation) {
                                        "epsilon"};
   auto compressed = this->createCompressedVocabulary()(words);
   const std::array<size_t, 5> indices{4, 1, 0, 3, 1};
-  ad_utility::vocabulary::SimpleStringComparator comparator{"en", "us", false};
-  ad_utility::vocabulary::UnicodeVocabulary<decltype(compressed),
-                                            decltype(comparator)>
-      innerVocab{comparator, std::move(compressed)};
-  ad_utility::vocabulary::UnicodeVocabulary<decltype(innerVocab),
-                                            decltype(comparator)>
-      vocab{comparator, std::move(innerVocab)};
-  ad_utility::vocabulary::ArenaVocabBatchBuilder builder(indices.size());
+  SimpleStringComparator comparator{"en", "us", false};
+  UnicodeVocabulary<decltype(compressed), decltype(comparator)> innerVocab{
+      comparator, std::move(compressed)};
+  UnicodeVocabulary<decltype(innerVocab), decltype(comparator)> vocab{
+      comparator, std::move(innerVocab)};
+  ArenaVocabBatchBuilder builder(indices.size());
   vocab.lookupBatch(indices, builder);
   const auto result = std::move(builder).finalize();
   assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
@@ -240,9 +258,7 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
 
   // Create vocabulary with small block size (4 words per block).
   // Use VocabularyInMemory as the underlying vocabulary.
-  ad_utility::vocabulary::CompressedVocabulary<
-      ad_utility::vocabulary::VocabularyInMemory, TypeParam, 4>
-      vocab;
+  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
   std::string filename = gtestCurrentTestName();
   auto writerPtr = vocab.makeDiskWriterPtr(filename);
   auto& writer = *writerPtr;
@@ -259,9 +275,7 @@ TYPED_TEST(CompressedVocabularyF, WriteAndReadWithSerializer) {
   ASSERT_FALSE(blob.empty());
 
   // Read using serializer into a different vocabulary.
-  ad_utility::vocabulary::CompressedVocabulary<
-      ad_utility::vocabulary::VocabularyInMemory, TypeParam, 4>
-      readVocab;
+  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> readVocab;
   ad_utility::serialization::ByteBufferReadSerializer readSerializer{blob};
   readSerializer | readVocab;
   assertThatRangesAreEqual(vocab, readVocab);
@@ -280,9 +294,7 @@ TYPED_TEST(CompressedVocabularyF, ZeroCopyDeserialization) {
 
   // Create vocabulary with small block size (4 words per block) on top of an
   // in-memory (and hence zero-copy-capable) underlying vocabulary.
-  ad_utility::vocabulary::CompressedVocabulary<
-      ad_utility::vocabulary::VocabularyInMemory, TypeParam, 4>
-      vocab;
+  CompressedVocabulary<VocabularyInMemory, TypeParam, 4> vocab;
   std::string filename = gtestCurrentTestName();
   auto writerPtr = vocab.makeDiskWriterPtr(filename);
   auto& writer = *writerPtr;
@@ -300,9 +312,9 @@ TYPED_TEST(CompressedVocabularyF, ZeroCopyDeserialization) {
   // decoders normally.
   ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
       std::move(writeSerializer).data()};
-  auto view = (ad_utility::vocabulary::CompressedVocabulary<
-               ad_utility::vocabulary::VocabularyInMemory, TypeParam,
-               4>::fromZeroCopyDeserializer(readSerializer));
+  auto view =
+      (CompressedVocabulary<VocabularyInMemory, TypeParam,
+                            4>::fromZeroCopyDeserializer(readSerializer));
   assertThatRangesAreEqual(vocab, view);
 
   ad_utility::deleteFile(filename);
@@ -330,7 +342,7 @@ TYPED_TEST(CompressedVocabularyF, ScanAll) {
     auto range = vocab.scanAll();
     auto it = ql::ranges::begin(range);
     ASSERT_NE(it, ql::ranges::end(range));
-    ad_utility::vocabulary::IndexAndWord indexAndWord = *it;
+    IndexAndWord indexAndWord = *it;
     EXPECT_EQ(indexAndWord.index_, 0);
     EXPECT_EQ(indexAndWord.word_, words.at(0));
   }
@@ -402,9 +414,8 @@ namespace {
 // number of words per decoder block is deliberately small, so that the tests
 // below span several blocks.
 using CompressedVocabularyWithHoles =
-    ad_utility::vocabulary::CompressedVocabulary<
-        ad_utility::vocabulary::VocabularyInMemoryBinSearch,
-        ad_utility::vocabulary::FsstSquaredCompressionWrapper, 4>;
+    CompressedVocabulary<VocabularyInMemoryBinSearch,
+                         FsstSquaredCompressionWrapper, 4>;
 
 // For an underlying vocabulary with holes, the `WordWriter` has to take an
 // explicit index for each word.
@@ -677,7 +688,7 @@ TYPED_TEST(CompressedVocabularyF, ScanAllEmptyWordInVocabulary) {
   const std::vector<std::string> words{"alpha", "", "beta", "", "gamma"};
   auto vocab = createVocab(words);
   std::vector<std::string> scannedWords;
-  for (const ad_utility::vocabulary::IndexAndWord& entry : vocab.scanAll()) {
+  for (const IndexAndWord& entry : vocab.scanAll()) {
     if (entry.word_.empty()) {
       EXPECT_NE(entry.word_.data(), nullptr);
     }
@@ -708,14 +719,14 @@ TYPED_TEST(CompressedVocabularyF, ScanAllViewInvalidAfterNextPull) {
   auto range = vocab.scanAll();
   auto it = ql::ranges::begin(range);
   ASSERT_NE(it, ql::ranges::end(range));
-  ad_utility::vocabulary::IndexAndWord first = *it;
+  IndexAndWord first = *it;
   ASSERT_EQ(first.index_, 0u);
   ASSERT_EQ(first.word_, words[0]);
   const char* firstData = first.word_.data();
 
   ++it;
   ASSERT_NE(it, ql::ranges::end(range));
-  ad_utility::vocabulary::IndexAndWord second = *it;
+  IndexAndWord second = *it;
   ASSERT_EQ(second.index_, 1u);
   ASSERT_EQ(second.word_, words[1]);
 
@@ -739,9 +750,7 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchAcrossDecoderBlocks) {
 
   const std::string filename = std::string{gtestCurrentTestName()} + "-blocks";
   ad_utility::deleteFile(filename, false);
-  ad_utility::vocabulary::CompressedVocabulary<
-      ad_utility::vocabulary::VocabularyInMemory, TypeParam, 2>
-      vocab;
+  CompressedVocabulary<VocabularyInMemory, TypeParam, 2> vocab;
   {
     auto writerPtr = vocab.makeDiskWriterPtr(filename);
     writeWordsAndFinish(*writerPtr, words);

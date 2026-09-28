@@ -13,8 +13,6 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"
 
-namespace ad_utility::vocabulary {
-
 // A CRTP Mixin class that implements the binary search functions `lower_bound`,
 // `upper_bound`, `lower_bound_iterator`, and `upper_bound_iterator` for
 // different vocabulary classes. These classes require functions `begin()` and
@@ -93,7 +91,5 @@ class VocabularyBinarySearchMixin {
     return std::pair{begin, end};
   }
 };
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYBINARYSEARCHMIXIN_H

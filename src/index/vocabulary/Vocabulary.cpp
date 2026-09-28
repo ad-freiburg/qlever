@@ -18,8 +18,6 @@
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 
-namespace ad_utility::vocabulary {
-
 using std::string;
 
 // ____________________________________________________________________________
@@ -341,4 +339,3 @@ template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
     const nlohmann::json& prefixes);
 template void RdfsVocabulary::initializeExternalizePrefixes<
     std::vector<std::string>>(const std::vector<std::string>& prefixes);
-}  // namespace ad_utility::vocabulary

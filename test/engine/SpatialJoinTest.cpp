@@ -233,7 +233,7 @@ using VarToColVec = std::vector<std::pair<V, ColumnIndexAndTypeInfo>>;
 std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
     QueryExecutionContext* qec, PayloadVariables pv = PayloadVariables::all(),
     SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM) {
-  ad_utility::vocabulary::EncodedIriManager encodedIriManager;
+  EncodedIriManager encodedIriManager;
   const auto sharedHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   // also include some garbage input geometries

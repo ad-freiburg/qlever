@@ -30,8 +30,6 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/StringUtils.h"
 
-namespace ad_utility::vocabulary {
-
 // TODO<joka921> Include the relevant constants directly here.
 
 // ____________________________________________________________________________
@@ -100,11 +98,15 @@ class PrefixCompressor {
     if (prefixIdx.has_value()) {
       const std::string& prefix = prefixToCode_[*prefixIdx];
       AD_CORRECTNESS_CHECK(prefix.size() <= out.size());
-      std::memcpy(out.data(), prefix.data(), prefix.size());
+      if (!prefix.empty()) {
+        std::memcpy(out.data(), prefix.data(), prefix.size());
+      }
       outputSize = prefix.size();
     }
     AD_CORRECTNESS_CHECK(rest.size() <= out.size() - outputSize);
-    std::memcpy(out.data() + outputSize, rest.data(), rest.size());
+    if (!rest.empty()) {
+      std::memcpy(out.data() + outputSize, rest.data(), rest.size());
+    }
     return outputSize + rest.size();
   }
 
@@ -224,7 +226,5 @@ class PrefixCompressor {
   // ___________________________________________________________________________
   const auto& prefixToCode() const { return prefixToCode_; }
 };
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_PREFIXCOMPRESSOR_H

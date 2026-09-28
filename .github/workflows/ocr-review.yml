@@ -26,10 +26,17 @@ jobs:
         github.event.comment.author_association == 'COLLABORATOR') &&
        (startsWith(github.event.comment.body, '/open-code-review') ||
         startsWith(github.event.comment.body, '@open-code-review')))
-    runs-on: [self-hosted, linux, x64, ocr-local]
-    timeout-minutes: 120
+    # GitHub-hosted: this job is LLM-API-bound, not CPU-bound, so it must
+    # not occupy fleet compile runners (CI speedup 2026-09-24). ubuntu-latest
+    # ships node/npm; the per-run npm/HOME isolation below is kept as-is.
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
     env:
-      PATH: /home/userNoPriv/.local/bin:/home/userNoPriv/.local/share/npm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      # The review tool self-upgrades in the background when the registry
+      # `latest` is newer than the pinned install; the upgrade replaces the
+      # running tree mid-job and the review spawn then fails with ENOENT.
+      # Pinned 1.11.7 must stay put, so updates stay off in CI.
+      OCR_NO_UPDATE: '1'
     steps:
       - name: Resolve PR context for comment-triggered reviews
         id: pr-context
@@ -44,6 +51,10 @@ jobs:
             });
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('head_sha', pr.head.sha);
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
       - name: Isolate npm prefix for this run
         run: |
           # Concurrent OCR jobs on the same self-hosted host share HOME *and*
@@ -51,29 +62,43 @@ jobs:
           # prefix must additionally be unique per run: one job's
           # `npm install -g` would otherwise delete the `ocr` binary out from
           # under another job's `ocr config` step (node MODULE_NOT_FOUND).
-          # The shared npm cache stays as-is (content-addressed).
+          # The npm cache must be per-run too: the shared ~/.npm/_cacache
+          # lives on NFS home and concurrent jobs fail there with
+          # "Unknown system error -122" on Wolga.
           prefix="${RUNNER_TEMP}/ocr-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           mkdir -p "${prefix}"
           echo "NPM_CONFIG_PREFIX=${prefix}" >> "$GITHUB_ENV"
           echo "OCR_NPM_PREFIX=${prefix}" >> "$GITHUB_ENV"
           echo "${prefix}/bin" >> "$GITHUB_PATH"
-      - name: Mint GitHub App token
-        id: app-token
-        if: ${{ vars.OCR_APP_ID != '' }}
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
-        with:
-          app-id: ${{ vars.OCR_APP_ID }}
-          private-key: ${{ secrets.OCR_APP_PRIVATE_KEY }}
-          owner: marvin7122
-          repositories: qlever
+          # The job-level PATH override masks GITHUB_PATH additions, so
+          # export the prefix bin explicitly for subsequent steps.
+          echo "PATH=${prefix}/bin:${PATH}" >> "$GITHUB_ENV"
+          npmcache="${RUNNER_TEMP}/ocr-npm-cache-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "${npmcache}"
+          echo "NPM_CONFIG_CACHE=${npmcache}" >> "$GITHUB_ENV"
+          echo "OCR_NPM_CACHE=${npmcache}" >> "$GITHUB_ENV"
+          # HOME itself must be per-run too: the review tool creates
+          # ~/.opencodereview, and NFS home rejects new writes with
+          # "disk quota exceeded" on Wolga. RUNNER_TEMP is local SSD.
+          ocrhome="${RUNNER_TEMP}/ocr-home-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "${ocrhome}"
+          echo "HOME=${ocrhome}" >> "$GITHUB_ENV"
+          echo "OCR_HOME=${ocrhome}" >> "$GITHUB_ENV"
       - name: Review pull request
         uses: alibaba/open-code-review@810aeb5dc2e2b9485f5a1981485e65b25250f609 # v1.11.7
         with:
-          github_token: ${{ steps.app-token.outputs.token || github.token }}
+          # Deliberately the job-scoped GITHUB_TOKEN, not an App installation
+          # token: installation tokens expire after 1 hour, but large-diff
+          # reviews run for hours and must still post results at the end.
+          github_token: ${{ github.token }}
           llm_url: ${{ vars.OCR_LLM_URL }}
           llm_auth_token: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           llm_model: ${{ vars.OCR_LLM_MODEL }}
           llm_use_anthropic: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
+          # Meta's Model API (api.meta.ai) validates strictly against the
+          # OpenAI schema and rejects the OCR default extra body
+          # {"thinking": {"type": "disabled"}}, so send an empty object.
+          llm_extra_body: '{}'
           base_ref: ${{ steps.pr-context.outputs.base_ref }}
           head_sha: ${{ steps.pr-context.outputs.head_sha }}
           review_concurrency: '1'
@@ -83,24 +108,13 @@ jobs:
           upload_artifacts: 'true'
           stream_progress: 'true'
           ocr_version: '1.11.7'
-      - name: Mint fresh App token for stamping
-        id: app-token-stamp
-        if: ${{ vars.OCR_APP_ID != '' }}
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
-        with:
-          # Installation tokens expire after 1 hour; the review above can run
-          # for hours, so the token minted at job start may be dead by now.
-          app-id: ${{ vars.OCR_APP_ID }}
-          private-key: ${{ secrets.OCR_APP_PRIVATE_KEY }}
-          owner: marvin7122
-          repositories: qlever
       - name: Stamp summary with Actions run URL
         if: always()
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           OCR_POSTER_LABEL: OCR stock
         with:
-          github-token: ${{ steps.app-token-stamp.outputs.token || steps.app-token.outputs.token || github.token }}
+          github-token: ${{ github.token }}
           script: |
             const runId = context.runId;
             const attempt = context.runAttempt || 1;
@@ -127,6 +141,6 @@ jobs:
                 body: `${stamp}\n${body}`,
               });
             }
-      - name: Remove isolated npm prefix
+      - name: Remove isolated npm prefix, cache, and home
         if: always()
-        run: rm -rf "${OCR_NPM_PREFIX:?}"
+        run: rm -rf "${OCR_NPM_PREFIX:?}" "${OCR_NPM_CACHE:?}" "${OCR_HOME:?}"

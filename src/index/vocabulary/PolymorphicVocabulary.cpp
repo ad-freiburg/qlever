@@ -14,8 +14,6 @@
 #include "engine/CallFixedSize.h"
 #include "util/Exception.h"
 
-namespace ad_utility::vocabulary {
-
 // _____________________________________________________________________________
 void PolymorphicVocabulary::open(const std::string& filename) {
   std::visit([&filename](auto& vocab) { vocab.open(filename); }, vocab_);
@@ -133,4 +131,3 @@ void PolymorphicVocabulary::resetToType(VocabularyType type) {
       AD_FAIL();
   }
 }
-}  // namespace ad_utility::vocabulary

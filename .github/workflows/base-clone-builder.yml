@@ -1,0 +1,46 @@
+name: Build base image clones (rootless workaround)
+
+# One-time builder for the Wolga migration. Rootless podman on the cluster
+# hosts cannot unpack upstream Ubuntu layers (files owned by non-root
+# groups, e.g. /etc/gshadow, need subuid ranges the build user lacks).
+# This workflow rebuilds on GitHub (where docker runs as root) with every
+# file owned 0:0, so the flattened tarball imports cleanly under a
+# single-UID mapping. Manual dispatch only; download the artifacts and
+# `podman load` them on the cluster host.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - misc/ci-images/base/**
+      - .github/workflows/base-clone-builder.yml
+
+permissions:
+  contents: read
+
+jobs:
+  clone:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        base: ["24.04", "22.04"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+          sparse-checkout: misc/ci-images/base
+      - name: Build flattened clone
+        run: |
+          docker build -f misc/ci-images/base/Dockerfile.ubuntu${{ matrix.base }} \
+            -t qlever-base-clone:${{ matrix.base }} misc/ci-images/base
+          docker save qlever-base-clone:${{ matrix.base }} \
+            -o qlever-base-clone-${{ matrix.base }}.tar
+          ls -la qlever-base-clone-${{ matrix.base }}.tar
+      - name: Upload clone tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: qlever-base-clone-${{ matrix.base }}
+          path: qlever-base-clone-${{ matrix.base }}.tar
+          retention-days: 7

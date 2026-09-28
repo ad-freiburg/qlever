@@ -1,0 +1,39 @@
+# QLever CI image: conan leg on Ubuntu 22.04.
+# Mirrors native-build-conan.yml (hosted `ubuntu-22.04` leg) so the Wolga leg
+# behaves exactly the same: system GCC, third-party libs via conan
+# (`install-third-party-libraries: false`), conan profile auto-detected
+# inside the leg.
+# NOTE: build this on GitHub (docker as root, see
+# .github/workflows/toolchain-image-builder.yml), NOT rootless on the
+# cluster: unpacking upstream Ubuntu layers and dpkg chowns need UID/GID
+# ranges the cluster build user lacks. The trailing chown makes every file
+# 0:0 so the tarball imports cleanly under a single-UID mapping via
+# `podman load` on the cluster host.
+FROM ubuntu:22.04
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 LC_CTYPE=C.UTF-8 DEBIAN_FRONTEND=noninteractive
+# Rootless build containers cannot setgroups(2), so apt's privilege-dropping
+# sandbox dies with "Operation not permitted". Disable it: CI legs run as
+# root anyway, so the sandbox buys nothing here.
+RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/99-no-sandbox
+# build-essential = hosted "Install basic compiler" step. libbz2-dev: the
+# hosted ubuntu-22.04 runner image ships it, and spatialjoin's Misc.h
+# includes <bzlib.h> from the system even when conan provides bzip2.
+RUN apt-get update && apt-get install -y \
+    build-essential ninja-build git wget pkg-config mold \
+    python3-pip python3-yaml unzip python3-icu libbz2-dev \
+ && rm -rf /var/lib/apt/lists/*
+# Hosted leg requires cmake >= 3.27, Jammy ships 3.22: same tarball install
+# as install-dependencies-ubuntu (cmake-version 3.27, build 0).
+RUN wget https://cmake.org/files/v3.27/cmake-3.27.0-linux-x86_64.tar.gz \
+ && tar -xzvf cmake-3.27.0-linux-x86_64.tar.gz \
+ && mv cmake-3.27.0-linux-x86_64 /opt/cmake \
+ && rm cmake-3.27.0-linux-x86_64.tar.gz
+ENV PATH="/opt/cmake/bin:${PATH}"
+# Hosted leg: `sudo pip3 install conan` (unpinned 2.x).
+RUN pip3 install conan
+ENV CC=gcc CXX=g++
+# Flatten ownership so the image imports rootless (see header NOTE).
+RUN find / -xdev \( -path /etc/hosts -o -path /etc/hostname -o -path /etc/resolv.conf \) -prune \
+    -o -exec chown 0:0 {} + 2>/dev/null || true \
+ && chmod 640 /etc/shadow /etc/gshadow \
+ && echo TOOLCHAIN-IMAGE-OK

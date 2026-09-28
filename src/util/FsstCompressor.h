@@ -132,8 +132,6 @@ class FsstDecoder {
     return result;
   }
 
-  // Duplicate decompress(std::string_view) definition removed.
-
   // ___________________________________________________________________________
   // Allow this type to be trivially serializable,
   CPP_template(typename T, typename U)(
@@ -184,18 +182,19 @@ class FsstRepeatedDecoder {
 
   // ___________________________________________________________________________
   // Decompress `str` into `out`. `out.size()` must be at least
-  // `maxDecompressedSize(str)`. For `N >= 2`, ensure `scratch` has at least
-  // `out.size()` bytes and alternate writes between `out` and `scratch` such
-  // that the final stage always writes to `out`. Return the number of bytes
-  // written.
+  // `maxDecompressedSize(str)`. For `N >= 2`, grow `scratch` to the largest
+  // intermediate bound and alternate writes so the final stage uses `out`.
+  // Return the number of bytes written.
   [[nodiscard]] size_t decompressInto(std::string_view str, ql::span<char> out,
                                       std::string& scratch) const {
     AD_CONTRACT_CHECK(out.size() >= maxDecompressedSize(str));
     if constexpr (N == 1) {
       return decoders_[0].decompressInto(str, out);
     } else {
-      if (scratch.size() < out.size()) {
-        scratch.resize(out.size());
+      const size_t scratchBound =
+          maxDecompressedSize(str) / FsstDecoder::maxExpansionFactor;
+      if (scratch.size() < scratchBound) {
+        scratch.resize(scratchBound);
       }
       std::array<ql::span<char>, 2> buffers{out, ql::span<char>{scratch}};
       // For even `N`, write the first stage to `scratch` and the last to `out`.

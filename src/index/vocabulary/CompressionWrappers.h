@@ -120,9 +120,7 @@ struct DecoderMultiplexer {
   // `compressed` with `decoderIndex`.
   [[nodiscard]] size_t maxDecompressedSize(std::string_view compressed,
                                            size_t decoderIndex) const {
-    const size_t bound =
-        decoders_.at(decoderIndex).maxDecompressedSize(compressed);
-    return bound;
+    return decoders_.at(decoderIndex).maxDecompressedSize(compressed);
   }
 
   // ___________________________________________________________________________
@@ -133,9 +131,9 @@ struct DecoderMultiplexer {
   [[nodiscard]] size_t decompressInto(std::string_view compressed,
                                       size_t decoderIndex, ql::span<char> out,
                                       std::string& scratch) const {
+    const auto& decoder = decoders_.at(decoderIndex);
     AD_CORRECTNESS_CHECK(!out.empty() || compressed.empty());
     DISABLE_CLANG_UNUSED_RESULT_WARNING
-    auto& decoder = decoders_.at(decoderIndex);
     size_t decompressedSize;
     if constexpr (RequiresScratchDecompressInto<Decoder>) {
       decompressedSize = decoder.decompressInto(compressed, out, scratch);
