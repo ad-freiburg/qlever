@@ -19,6 +19,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/Algorithm.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
@@ -875,10 +876,10 @@ bool Operation::isDeterministic() const {
 
 // _____________________________________________________________________________
 bool Operation::isVariableAlwaysDefined(const Variable& variable) const {
-  const auto& varToCol = getExternallyVisibleVariableColumns();
-  auto it = varToCol.find(variable);
-  return it != varToCol.end() &&
-         it->second.mightContainUndef_ ==
+  auto columnInfo =
+      ad_utility::findOptional(getExternallyVisibleVariableColumns(), variable);
+  return columnInfo.has_value() &&
+         columnInfo->mightContainUndef_ ==
              ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
 }
 
