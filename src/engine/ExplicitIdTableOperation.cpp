@@ -60,9 +60,9 @@ Result ExplicitIdTableOperation::computeResult(
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> ExplicitIdTableOperation::getChildrenImpl()
+qlm::vector<QueryExecutionTree*> ExplicitIdTableOperation::getChildrenImpl()
     const {
-  return {};
+  return qlm::vector<QueryExecutionTree*>{allocator()};
 }
 
 // _____________________________________________________________________________
