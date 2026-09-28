@@ -24,6 +24,7 @@
 
 namespace ad_utility {
 
+#ifdef QLEVER_HAS_IO_URING
 namespace {
 // Return `preferredCpu` when it is in this process's affinity mask, otherwise
 // the first CPU in the mask. Falls back to `preferredCpu` when the mask
@@ -45,6 +46,7 @@ unsigned firstCpuInAffinityOr(unsigned preferredCpu) {
   return preferredCpu;
 }
 }  // namespace
+#endif  // QLEVER_HAS_IO_URING
 
 //______________________________________________________________________________
 void SyncIoPolicy::readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
