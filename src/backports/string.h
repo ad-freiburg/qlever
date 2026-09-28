@@ -44,6 +44,10 @@ CPP_template(typename CharT, typename Traits, typename Allocator,
   // `resize`, which zero-fills the new characters first, let `op` overwrite
   // them, and shrink to the size it returns. Both paths leave `str` in the
   // same state; only the fallback pays for the extra fill.
+  // P1072R10 (basic_string::resize_and_overwrite):
+  // https://web.archive.org/web/20260102024635/https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2021/p1072r10.html
+  // Feature-test macro value 202110L in [version.syn] of the C++ draft:
+  // https://web.archive.org/web/20251223023007/http://eel.is/c++draft/version.syn
 #if defined(__cpp_lib_string_resize_and_overwrite) && \
     __cpp_lib_string_resize_and_overwrite >= 202110L
   // Move `op` into the lambda like the standard, which takes its operation
