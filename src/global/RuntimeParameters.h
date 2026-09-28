@@ -50,12 +50,6 @@ struct RuntimeParameters {
   // (default) disables software prefetching.
   SizeT vocabLookupPrefetchDistance_{0, "vocab-lookup-prefetch-distance"};
 
-  // If set, the export writes IRIs that begin with one of a fixed set of
-  // well-known prefixes (Wikidata entity and direct property, RDF, RDFS, OWL,
-  // schema.org, XSD) with the aligned vector stores of `VectorizedPrefixTable`
-  // for the prefix and a plain copy for the rest. The output is the same.
-  Bool useVectorizedPrefixExport_{false, "use-vectorized-prefix-export"};
-
   // If the time estimate for a sort operation is larger by more than this
   // factor than the remaining time, then the sort is canceled with a
   // timeout exception.
