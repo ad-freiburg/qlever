@@ -25,6 +25,8 @@
 #include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
 #include "index/IndexImpl.h"
+#include "index/LocalVocab.h"
+#include "index/LocalVocabEntry.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "rdfTypes/GeoRectangle.h"
 
@@ -839,6 +841,80 @@ TEST(GeoRectanglePrefilterGrid, evaluate) {
   auto keptSpanning = toPointers(expr.evaluate(
       indexImpl, {spanningBlocks.data(), spanningBlocks.size()}, 2));
   EXPECT_THAT(keptSpanning, ::testing::ElementsAre(&spanningBlocks[1]));
+}
+
+// Test that a block whose first or last ID is a WKT literal inserted by an
+// update (an ID of type `LocalVocabIndex`) is kept, also when the cell of the
+// literal has no words, so that its position in the vocabulary lies outside
+// the ID range of its cell.
+TEST(GeoRectanglePrefilterGrid, evaluateKeepsInsertedLiterals) {
+  const Index& index = gridQec()->getIndex();
+  auto getId = ad_utility::testing::makeGetId(index);
+  auto wkt = [](std::string_view content) {
+    return absl::StrCat("\"", content, "\"", wktDatatype);
+  };
+  size_t blockIdx = 0;
+  auto makeBlock = [&blockIdx](ValueId first, ValueId last) {
+    AD_CONTRACT_CHECK(first <= last);
+    auto vocabId10 = Id::makeFromVocabIndex(VocabIndex::make(10));
+    ++blockIdx;
+    return CompressedBlockMetadata{
+        {{},
+         0,
+         {vocabId10, vocabId10, first, Id::makeUndefined()},
+         {vocabId10, vocabId10, last, Id::makeUndefined()},
+         {},
+         false},
+        blockIdx};
+  };
+  auto keptBlocks = [&index](
+                        const GeoRectangleExpression& expr,
+                        const std::vector<CompressedBlockMetadata>& blocks) {
+    std::vector<const CompressedBlockMetadata*> result;
+    for (const auto& range :
+         expr.evaluate(index.getImpl(), {blocks.data(), blocks.size()}, 2)) {
+      for (const auto& block : range) {
+        result.push_back(&block);
+      }
+    }
+    return result;
+  };
+
+  // The WKT literals of cell 0 and cell 10 of the index, and a literal in the
+  // empty cell 3, inserted by an update, which comes between them.
+  auto [cell0First, cell0Last] =
+      std::minmax({getId(wkt("LINESTRING(-100 -50, -101 -50)")),
+                   getId(wkt("LINESTRING(-102 -50, -103 -50)"))});
+  auto [cell10First, cell10Last] =
+      std::minmax({getId(wkt("LINESTRING(10 10, 11 10)")),
+                   getId(wkt("LINESTRING(12 10, 13 10)"))});
+  LocalVocab localVocab;
+  Id inserted =
+      Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+          LocalVocabEntry::fromStringRepresentation(
+              wkt("LINESTRING(170.5 -80, 171 -80)"),
+              index.getImpl().getLocalVocabContext())));
+  ASSERT_LT(cell0Last, inserted);
+  ASSERT_LT(inserted, cell10First);
+
+  // A query rectangle inside cell 3.
+  GeoRectangleExpression expr{GeoRectangle{170.0, -81.0, 172.0, -79.0}};
+
+  // The inserted literal as the first ID of a block: that block is kept, the
+  // blocks of cell 0 and cell 10 are pruned.
+  std::vector<CompressedBlockMetadata> blocks;
+  blocks.push_back(makeBlock(cell0First, cell0Last));
+  blocks.push_back(makeBlock(inserted, cell10First));
+  blocks.push_back(makeBlock(cell10Last, cell10Last));
+  EXPECT_THAT(keptBlocks(expr, blocks), ::testing::ElementsAre(&blocks[1]));
+
+  // The inserted literal as the last ID of a block: that block is kept.
+  std::vector<CompressedBlockMetadata> blocksWithLast;
+  blocksWithLast.push_back(makeBlock(cell0First, cell0First));
+  blocksWithLast.push_back(makeBlock(cell0Last, inserted));
+  blocksWithLast.push_back(makeBlock(cell10First, cell10Last));
+  EXPECT_THAT(keptBlocks(expr, blocksWithLast),
+              ::testing::ElementsAre(&blocksWithLast[1]));
 }
 
 // The row prefilter with a grid decides WKT literals by their cell bits.
