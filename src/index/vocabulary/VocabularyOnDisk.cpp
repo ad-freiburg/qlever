@@ -15,9 +15,11 @@
 
 #include <algorithm>
 #include <array>
+#include <optional>
 
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
+#include "util/AdaptiveBatchController.h"
 #include "util/ExceptionHandling.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -437,8 +439,21 @@ void VocabularyOnDisk::open(const std::string& filename) {
   ioManagers_ = std::make_unique<ad_utility::data_structures::ThreadSafeQueue<
       std::unique_ptr<ad_utility::BatchManagerBase>>>(
       NUM_VOCAB_BATCH_IO_MANAGERS);
+  // Configure the opt-in adaptive io_uring batch sizing of the vocabulary's
+  // batch managers from the runtime parameters `iouring-adaptive-batch-*`.
+  // Without it (the default), every manager created by `makeBatchManager`
+  // submits with the fixed window of `DEFAULT_IO_URING_RING_SIZE` reads.
+  std::optional<ad_utility::AdaptiveBatchController> adaptiveBatchController;
+  if (getRuntimeParameter<&RuntimeParameters::ioUringAdaptiveBatchEnabled_>()) {
+    adaptiveBatchController.emplace(ad_utility::AdaptiveBatchController{
+        getRuntimeParameter<&RuntimeParameters::ioUringAdaptiveBatchMinSize_>(),
+        getRuntimeParameter<
+            &RuntimeParameters::ioUringAdaptiveBatchMaxSize_>()});
+  }
   bool preferIoUring = true;
   for (size_t i = 0; i < NUM_VOCAB_BATCH_IO_MANAGERS; ++i) {
-    ioManagers_->push(ad_utility::makeBatchManager(preferIoUring));
+    ioManagers_->push(ad_utility::makeBatchManager(
+        preferIoUring, ad_utility::DEFAULT_IO_URING_RING_SIZE,
+        adaptiveBatchController));
   }
 }

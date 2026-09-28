@@ -14,11 +14,15 @@
 #include <gtest/gtest_prod.h>
 
 #include <cstdint>
+#include <optional>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "util/AdaptiveBatchController.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 
@@ -29,6 +33,10 @@
 #include "backports/span.h"
 
 namespace ad_utility {
+
+// Default number of submission slots of an io_uring ring (and the fixed
+// submission window of a `BatchManager` without an adaptive controller).
+inline constexpr unsigned DEFAULT_IO_URING_RING_SIZE = 256;
 
 template <typename T>
 CPP_requires(ReadPolicy_,
@@ -71,6 +79,25 @@ class BatchManagerBase {
 // validating the input spans) and delegates the reads from the underlying
 // Vocabulary to the `Policy`, which must satisfy the `ReadPolicy` concept
 // above.
+
+// Detection helpers for optional controller support (`IoUringPolicy` has
+// it, `SyncIoPolicy` does not). Written with `std::void_t` instead of a
+// C++20 requires-expression so the C++17 backports build keeps working;
+// see the same idiom in `util/Synchronized.h`.
+template <typename T, typename = void>
+struct HasAdaptiveBatchControllerSetter : std::false_type {};
+template <typename T>
+struct HasAdaptiveBatchControllerSetter<
+    T, std::void_t<decltype(std::declval<T&>().setAdaptiveBatchController(
+           std::declval<AdaptiveBatchController>()))>> : std::true_type {};
+template <typename T, typename = void>
+struct HasAdaptiveBatchControllerGetter : std::false_type {};
+template <typename T>
+struct HasAdaptiveBatchControllerGetter<
+    T,
+    std::void_t<decltype(std::declval<const T&>().adaptiveBatchController())>>
+    : std::true_type {};
+
 template <typename ReadPolicy>
 class BatchManager final : public BatchManagerBase {
   static_assert(
@@ -85,7 +112,8 @@ class BatchManager final : public BatchManagerBase {
  public:
   using BatchHandle = typename BatchManagerBase::BatchHandle;
 
-  explicit BatchManager(unsigned ringSize = 256) : policy_(ringSize) {}
+  explicit BatchManager(unsigned ringSize = DEFAULT_IO_URING_RING_SIZE)
+      : policy_(ringSize) {}
 
   BatchManager(const BatchManager&) = delete;
   BatchManager& operator=(const BatchManager&) = delete;
@@ -105,6 +133,32 @@ class BatchManager final : public BatchManagerBase {
 
   // Block until every read in `handle` has completed.
   void wait(BatchHandle handle) override { policy_.wait(handle); }
+
+  // Enable adaptive batch sizing on the policy. Only policies with
+  // controller support (`IoUringPolicy`) accept it; for policies without a
+  // `setAdaptiveBatchController` member (`SyncIoPolicy`, whose blocking
+  // reads have nothing to pace) this method throws.
+  void setAdaptiveBatchController(AdaptiveBatchController controller) {
+    if constexpr (HasAdaptiveBatchControllerSetter<ReadPolicy>::value) {
+      policy_.setAdaptiveBatchController(std::move(controller));
+    } else {
+      AD_THROW(
+          "adaptive batch sizing is not supported by this read policy: "
+          "blocking reads cannot be paced");
+    }
+  }
+
+  // Return the policy's controller, or `std::nullopt` when adaptive batch
+  // sizing is disabled or the policy has no `adaptiveBatchController`
+  // member (`SyncIoPolicy`).
+  [[nodiscard]] std::optional<AdaptiveBatchController> adaptiveBatchController()
+      const {
+    if constexpr (HasAdaptiveBatchControllerGetter<ReadPolicy>::value) {
+      return policy_.adaptiveBatchController();
+    } else {
+      return std::nullopt;
+    }
+  }
 
  private:
   [[no_unique_address]] ReadPolicy policy_;
@@ -131,7 +185,9 @@ struct SyncIoPolicy {
   //
   // NOTE: GCC rejects `[[maybe_unused]]` on a defaulted parameter; cast to
   // void.
-  explicit SyncIoPolicy(unsigned ringSize = 256) { (void)ringSize; }
+  explicit SyncIoPolicy(unsigned ringSize = DEFAULT_IO_URING_RING_SIZE) {
+    (void)ringSize;
+  }
 
   ~SyncIoPolicy() = default;
   SyncIoPolicy(const SyncIoPolicy&) = delete;
@@ -175,6 +231,11 @@ class IoUringPolicy {
   io_uring ring_{};
   unsigned ringSize_;
 
+  // Optional ratio controller for adaptive batch sizing. Disabled
+  // (`std::nullopt`) by default, in which case `addBatch` keeps the exact
+  // fixed-window behavior. Enabled via `setAdaptiveBatchController`.
+  std::optional<AdaptiveBatchController> adaptiveBatchController_;
+
   // Total number of reads that occupy a ring slot but have not yet been reaped
   // via a completion queue entry (CQE), i.e. that are prepared or submitted but
   // not yet completed. Used to detect whether the ring is full.
@@ -201,12 +262,23 @@ class IoUringPolicy {
   uint64_t nextRequestIdToAssign_ = 0;
 
   // Maps a read's request id to its metadata. An entry is inserted when the
-  // read is prepared in `addBatch` and erased when its completion is reaped in
-  // `drainOneCqe`.
+  // read is prepared in `addBatch` and erased when its completion is reaped.
   ad_utility::HashMap<uint64_t, InFlightRead> inFlightReadsByRequestId_;
 
-  // Wait for one CQE and update the in-flight bookkeeping.
-  void drainOneCqe();
+  // Block until at least `minComplete` CQEs are ready (capped at the number
+  // of reads the kernel has received), then reap every ready CQE. Throw after
+  // the whole wave is reaped if any read in it failed or was short.
+  // `minComplete` must be > 0 and at most `numInFlightReadRequests_`.
+  void drainAtLeast(unsigned minComplete);
+
+  // Apply one completion to the in-flight bookkeeping. Always updates the
+  // counts, also for a failed read. Return a static error message if the read
+  // failed or was short, and `nullptr` otherwise.
+  [[nodiscard]] const char* processCqe(int numBytesRead, uint64_t requestId);
+
+  // Submit all prepared SQEs to the kernel. Throw if `io_uring_submit`
+  // fails, including the error description in the message.
+  void submitOrThrow();
 
  public:
   IoUringPolicy(const IoUringPolicy&) = delete;
@@ -215,6 +287,27 @@ class IoUringPolicy {
   // `ringSize` must be > 0 (power of 2 preferred; liburing rounds up).
   explicit IoUringPolicy(unsigned ringSize);
   ~IoUringPolicy();
+
+  // Enable adaptive batch sizing with `controller`. The bounds are
+  // normalized against `ringSize_` (see `AdaptiveBatchController::
+  // normalized`); this is the single normalization boundary, so callers
+  // may pass raw configured values.
+  void setAdaptiveBatchController(AdaptiveBatchController controller) {
+    adaptiveBatchController_ =
+        controller.normalized(static_cast<size_t>(ringSize_));
+  }
+
+  // The controller from `setAdaptiveBatchController`, or `std::nullopt`
+  // when adaptive batch sizing is disabled (the default).
+  [[nodiscard]] std::optional<AdaptiveBatchController> adaptiveBatchController()
+      const {
+    return adaptiveBatchController_;
+  }
+
+  // Minimum number of completions to wait for when the ring is full or
+  // `wait()` blocks. Waiting for several CQEs and reaping all ready ones in
+  // one pass amortizes `io_uring_enter` and the CQ-head update over the wave.
+  static constexpr unsigned REAP_WAVE = 8;
 
   // Enqueue a batch of read requests and submit them to the kernel. Blocks the
   // calling thread only when the submission queue is full, in order to drain
@@ -265,13 +358,23 @@ bool pageCacheFastPathIsSupported();
 // syscall fails at runtime clear `preferIoUring` and fall back to a
 // `SyncIoManager`. Passing the flag by reference makes this probe-once: after
 // the first failure, every subsequent call goes straight to the sync manager,
-// so we don't repeat a failing syscall.
+// so we don't repeat a failing syscall. The optional `adaptiveBatchController`
+// opts the io_uring backend into adaptive batch sizing; the default
+// (`std::nullopt`) keeps the fixed submission window.
 inline std::unique_ptr<BatchManagerBase> makeBatchManager(
-    bool& preferIoUring, unsigned ringSize = 256) {
+    bool& preferIoUring, unsigned ringSize = DEFAULT_IO_URING_RING_SIZE,
+    std::optional<AdaptiveBatchController> adaptiveBatchController =
+        std::nullopt) {
 #ifdef QLEVER_HAS_IO_URING
   if (preferIoUring) {
     try {
-      return std::make_unique<BatchManager<IoUringPolicy>>(ringSize);
+      auto manager = std::make_unique<BatchManager<IoUringPolicy>>(ringSize);
+      // The controller only paces io_uring submissions; without it the
+      // manager keeps the fixed-window behavior.
+      if (adaptiveBatchController.has_value()) {
+        manager->setAdaptiveBatchController(*adaptiveBatchController);
+      }
+      return manager;
     } catch (const std::exception& e) {
       preferIoUring = false;
       AD_LOG_WARN << "io_uring is compiled in but unavailable at runtime ("
@@ -284,6 +387,14 @@ inline std::unique_ptr<BatchManagerBase> makeBatchManager(
 #else
   preferIoUring = false;
 #endif
+  // The synchronous fallback performs blocking reads, which have nothing to
+  // pace. Say so loudly when a controller was requested: silently dropping
+  // it would mislead the caller into believing pacing is active.
+  if (adaptiveBatchController.has_value()) {
+    AD_LOG_WARN << "adaptive batch sizing requested, but vocabulary lookups "
+                   "fall back to synchronous pread; continuing without pacing"
+                << std::endl;
+  }
   return std::make_unique<BatchManager<SyncIoPolicy>>(ringSize);
 }
 

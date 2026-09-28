@@ -283,6 +283,24 @@ struct RuntimeParameters {
   // client earlier. If false, every chunk has the fixed size of 1 MiB.
   Bool adaptiveExportChunkSize_{false, "adaptive-export-chunk-size"};
 
+  // Opt-in adaptive io_uring batch sizing for vocabulary lookups
+  // (`AdaptiveBatchController`): adapt the effective submission batch size
+  // to the ratio of outstanding I/Os to still-pending reads instead of
+  // submitting against the fixed ring window. Disabled by default, in which
+  // case the fixed-window behavior is unchanged.
+  Bool ioUringAdaptiveBatchEnabled_{false, "iouring-adaptive-batch-enabled"};
+  // Minimum number of prepared reads before the controller may flush early.
+  // Must be at least one (enforced by a parameter constraint). Smaller
+  // groups are never flushed early by the controller, but the ring-full
+  // bound still submits them when the ring has no free slot.
+  SizeT ioUringAdaptiveBatchMinSize_{16, "iouring-adaptive-batch-min-size"};
+  // Maximum number of prepared reads before a forced submit, so large
+  // batches still submit incrementally. Must be at least one (enforced by a
+  // parameter constraint). When the controller is installed, both bounds
+  // are clamped to the ring size, and a maximum below the minimum is raised
+  // to the minimum.
+  SizeT ioUringAdaptiveBatchMaxSize_{256, "iouring-adaptive-batch-max-size"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
