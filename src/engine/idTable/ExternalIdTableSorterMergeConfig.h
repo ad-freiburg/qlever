@@ -63,7 +63,7 @@ constexpr inline size_t MAX_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK = 1024;
 // that may be on its way to the spill file, and the
 // `numBufferedBlocksPerChunk` that the block storage keeps in memory (see
 // above).
-constexpr inline size_t mergePhaseOutputBlocksPerChunk(
+constexpr size_t mergePhaseOutputBlocksPerChunk(
     size_t numBufferedBlocksPerChunk) {
   return numBufferedBlocksPerChunk + 2;
 }
@@ -262,7 +262,7 @@ inline MergePhaseParameters computeMergePhaseParameters(
   // `numRows` rows each fit into the memory limit.
   auto fits = [&largestOutputBlockSize](size_t numInFlight, size_t numRows) {
     auto largest = largestOutputBlockSize(numInFlight);
-    return largest.has_value() && largest.value() >= numRows;
+    return largest >= numRows;
   };
 
   if (config.outputBlockSizeOverride_.has_value()) {
@@ -286,16 +286,14 @@ inline MergePhaseParameters computeMergePhaseParameters(
   for (size_t numInFlight = config.parallelism_; numInFlight > 1;
        --numInFlight) {
     auto numRows = largestOutputBlockSize(numInFlight);
-    if (numRows.has_value() &&
-        numRows.value() >= MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE) {
+    if (numRows >= MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE) {
       return withBufferedBlocks(numRows.value(), numInFlight);
     }
   }
   // Not even two chunks leave room for a reasonably sized output block, so
   // merge with a single chunk and give it everything that is left.
   auto numRows = largestOutputBlockSize(1);
-  if (!numRows.has_value() ||
-      numRows.value() <= MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE) {
+  if (numRows <= MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE) {
     throw std::runtime_error{
         absl::StrCat("Insufficient memory for merging ", config.numRuns_,
                      " blocks. Please increase the memory settings")};

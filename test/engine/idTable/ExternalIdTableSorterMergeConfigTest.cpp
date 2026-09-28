@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "../../util/AllocatorTestHelpers.h"
+#include "../../util/AsioTestHelpers.h"
 #include "backports/filesystem.h"
 #endif
 
@@ -297,18 +298,7 @@ IdTableStatic<0> makeBlock(int64_t value) {
   return block;
 }
 
-// Run everything that is ready to run on the `ioContext` until nothing is left,
-// see `test/engine/idTable/CompressedIdTableBlockStorageTest.cpp`.
-void pollUntilQuiescent(net::io_context& ioContext) {
-  while (true) {
-    if (ioContext.stopped()) {
-      ioContext.restart();
-    }
-    if (ioContext.poll() == 0) {
-      return;
-    }
-  }
-}
+using ad_utility::testing::pollUntilQuiescent;
 }  // namespace
 
 // _____________________________________________________________________________
