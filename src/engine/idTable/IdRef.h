@@ -25,7 +25,7 @@ namespace columnBasedIdTable {
 inline Id::BitRepresentation getBitsCompat(const Id id) {
   const auto bits = id.getBits();
   return {static_cast<uint8_t>(bits >> Id::numDataBits),
-          bits & (Id::T{1} << Id::numDataBits) - 1};
+          bits & ((Id::T{1} << Id::numDataBits) - 1)};
 }
 inline Id idFromBitsCompat(const Id::BitRepresentation bits) {
   return Id::fromBits((static_cast<Id::T>(bits.datatype_) << Id::numDataBits) |
@@ -87,6 +87,19 @@ class BasicIdRef {
   const BasicIdRef& operator=(const BasicIdRef& other) const {
     static_assert(!IsConst, "`ConstIdRef` is not assignable.");
     return *this = static_cast<Id>(other);
+  }
+
+  // Swap the referenced `Id`s (not the proxy's own pointers). Needed because
+  // `std::iter_swap`/`ranges::iter_swap` (used e.g. by `ranges::sort` on an
+  // `IdColumn`'s iterators) call the unqualified `swap(*a, *b)`; `*a`/`*b`
+  // are prvalues of this proxy type, which the generic `std::swap(T&, T&)`
+  // can't bind to (it takes lvalue references), so this overload -- found
+  // via ADL -- is required instead.
+  friend void swap(const BasicIdRef a, const BasicIdRef b) {
+    static_assert(!IsConst, "`ConstIdRef` is not swappable.");
+    const Id tmp = a;
+    a = b;
+    b = tmp;
   }
 
   // The following functions all just forward to the corresponding function

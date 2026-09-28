@@ -112,11 +112,11 @@ class IdColumnVector {
     return {&payloads_[i], &datatypes_[i]};
   }
   [[nodiscard]] reference at(size_t i) {
-    payloads_.at(i);
+    (void)payloads_.at(i);
     return (*this)[i];
   }
   [[nodiscard]] const_reference at(size_t i) const {
-    payloads_.at(i);
+    (void)payloads_.at(i);
     return (*this)[i];
   }
 
