@@ -559,8 +559,7 @@ std::optional<ad_utility::GeoRectangle> SpatialJoin::boundingRectangleOfColumn(
 }
 
 // ____________________________________________________________________________
-std::pair<std::shared_ptr<QueryExecutionTree>,
-          std::shared_ptr<QueryExecutionTree>>
+SpatialJoin::ChildrenAfterRuntimeGeoBlockPrefilter
 SpatialJoin::applyRuntimeGeoBlockPrefilter(
     std::shared_ptr<QueryExecutionTree> childLeft,
     std::shared_ptr<QueryExecutionTree> childRight, const Variable& varLeft,
@@ -573,21 +572,23 @@ SpatialJoin::applyRuntimeGeoBlockPrefilter(
       std::get_if<LibSpatialJoinConfig>(&config_.task_) == nullptr ||
       !getRuntimeParameter<
           &RuntimeParameters::enablePrefilterOnIndexScans_>()) {
-    return {std::move(childLeft), std::move(childRight)};
+    return {std::move(childLeft), std::move(childRight), nullptr, nullptr};
   }
   double padding =
       std::get<LibSpatialJoinConfig>(config_.task_).maxDist_.value_or(0.0);
 
-  // The (estimated) smaller side gets materialized (which `prepareJoin` does
-  // anyway) and provides the bounding rectangle; the other side's scan gets
-  // its blocks pruned. Avoid computing the rectangle over very large sides.
+  // The (estimated) smaller side gets materialized (its result is returned,
+  // so that `prepareJoin` reuses it) and provides the bounding rectangle; the
+  // other side's scan gets its blocks pruned. Avoid computing the rectangle
+  // over very large sides.
   constexpr uint64_t maxSmallSideRows = 16'000'000;
+  std::shared_ptr<const Result> smallResult;
   auto tryPrefilter = [&](const std::shared_ptr<QueryExecutionTree>& smallChild,
                           const Variable& smallVar,
                           const std::shared_ptr<QueryExecutionTree>& bigChild,
                           const Variable& bigVar)
       -> std::optional<std::shared_ptr<QueryExecutionTree>> {
-    auto smallResult = smallChild->getResult();
+    smallResult = smallChild->getResult();
     const auto& smallTable = smallResult->idTableView();
     if (smallTable.size() > maxSmallSideRows) {
       return std::nullopt;
@@ -617,19 +618,23 @@ SpatialJoin::applyRuntimeGeoBlockPrefilter(
   const auto& smallVar = leftIsSmaller ? varLeft : varRight;
   const auto& bigChild = leftIsSmaller ? childRight : childLeft;
   const auto& bigVar = leftIsSmaller ? varRight : varLeft;
-  if (auto prefiltered = tryPrefilter(smallChild, smallVar, bigChild, bigVar)) {
-    return leftIsSmaller
-               ? std::pair{std::move(childLeft), std::move(prefiltered.value())}
-               : std::pair{std::move(prefiltered.value()),
-                           std::move(childRight)};
+  auto prefiltered = tryPrefilter(smallChild, smallVar, bigChild, bigVar);
+  if (prefiltered.has_value()) {
+    (leftIsSmaller ? childRight : childLeft) = std::move(prefiltered.value());
   }
-  return {std::move(childLeft), std::move(childRight)};
+  return {std::move(childLeft), std::move(childRight),
+          leftIsSmaller ? smallResult : nullptr,
+          leftIsSmaller ? nullptr : smallResult};
 }
 
 // ____________________________________________________________________________
 PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
-  auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
-    std::shared_ptr<const Result> resTable = child->getResult();
+  // The result of a child, or `precomputed` if the child was already
+  // materialized by the runtime block prefilter below.
+  auto getIdTable = [](const std::shared_ptr<QueryExecutionTree>& child,
+                       std::shared_ptr<const Result> precomputed) {
+    std::shared_ptr<const Result> resTable =
+        precomputed != nullptr ? std::move(precomputed) : child->getResult();
     auto idTablePtr = &resTable->idTableView();
     return std::pair{idTablePtr, std::move(resTable)};
   };
@@ -642,8 +647,10 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   std::chrono::milliseconds timeBlockPrefilter{0};
   auto originalLeft = childLeft;
   auto originalRight = childRight;
-  std::tie(childLeft, childRight) = applyRuntimeGeoBlockPrefilter(
+  auto prefilterResult = applyRuntimeGeoBlockPrefilter(
       childLeft, childRight, joinVarLeft, joinVarRight, timeBlockPrefilter);
+  childLeft = std::move(prefilterResult.childLeft_);
+  childRight = std::move(prefilterResult.childRight_);
 
   // If a side was replaced by a tree with prefiltered blocks, the replacement
   // does the actual work, but the parent's runtime information keeps pointing
@@ -695,8 +702,10 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
       };
 
   // Input tables.
-  auto [idTableLeft, resultLeft] = getIdTable(childLeft);
-  auto [idTableRight, resultRight] = getIdTable(childRight);
+  auto [idTableLeft, resultLeft] =
+      getIdTable(childLeft, std::move(prefilterResult.resultLeft_));
+  auto [idTableRight, resultRight] =
+      getIdTable(childRight, std::move(prefilterResult.resultRight_));
   adoptRuntimeInfo(originalLeft, childLeft);
   adoptRuntimeInfo(originalRight, childRight);
 

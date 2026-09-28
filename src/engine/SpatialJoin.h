@@ -218,15 +218,28 @@ class SpatialJoin : public Operation {
   static std::optional<ad_utility::GeoRectangle> boundingRectangleOfColumn(
       const IdTableView<0>& table, ColumnIndex column, const Index& index);
 
+  // The children of the join after `applyRuntimeGeoBlockPrefilter` below
+  // (one of them possibly replaced by a tree with pruned blocks), and the
+  // result of the side that was materialized for its bounding rectangle
+  // (`nullptr` for the other side), so that `prepareJoin` does not compute
+  // that side a second time (which would be a cache hit, but one that
+  // overwrites the runtime information of the side with the time of the
+  // cache lookup).
+  struct ChildrenAfterRuntimeGeoBlockPrefilter {
+    std::shared_ptr<QueryExecutionTree> childLeft_;
+    std::shared_ptr<QueryExecutionTree> childRight_;
+    std::shared_ptr<const Result> resultLeft_;
+    std::shared_ptr<const Result> resultRight_;
+  };
+
   // For joins whose sides are only known at execution time: materialize the
   // (estimated) smaller side, compute the padded bounding rectangle of its
   // geometries from the precomputed geometry info, and prune the blocks of
   // the other side's index scan before it is read. Returns the (possibly
-  // replaced) children. Conservative and result-preserving; a no-op if the
-  // other side is not an index scan sorted by its geometry variable.
-  std::pair<std::shared_ptr<QueryExecutionTree>,
-            std::shared_ptr<QueryExecutionTree>>
-  applyRuntimeGeoBlockPrefilter(
+  // replaced) children and the materialized side. Conservative and
+  // result-preserving; a no-op if the other side is not an index scan sorted
+  // by its geometry variable.
+  ChildrenAfterRuntimeGeoBlockPrefilter applyRuntimeGeoBlockPrefilter(
       std::shared_ptr<QueryExecutionTree> childLeft,
       std::shared_ptr<QueryExecutionTree> childRight, const Variable& varLeft,
       const Variable& varRight,
