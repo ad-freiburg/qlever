@@ -305,9 +305,10 @@ class IndexImpl {
   }
 
   // Set the secondary vocabulary, see above. PRECONDITION: Must only be called
-  // before the first query is answered (e.g. right after construction). NOTE:
-  // This setter is not named `setSecondaryVocabForTesting` even though only
-  // tests currently call it, because it is about to get a non-test caller
+  // before the first query is answered (e.g. right after construction).
+  //
+  // NOTE: This setter is not named `setSecondaryVocabForTesting` even though
+  // only tests currently call it, because it is about to get a non-test caller
   // (see above).
   void setSecondaryVocab(
       std::shared_ptr<const SecondaryVocabulary> secondaryVocab) {

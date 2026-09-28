@@ -41,10 +41,11 @@ void SecondaryVocabulary::appendSegment(CompactVectorOfStrings<char> segment) {
       "pairwise distinct");
 
   // Determine where in `sortedIndices_` the new words have to go, which also
-  // checks that none of them is already contained. NOTE: Both of these have to
-  // happen before `segment` is appended below, because `wordAt` must only see
-  // the words that were already contained, and because a rejected segment has
-  // to leave this vocabulary unchanged.
+  // checks that none of them is already contained.
+  //
+  // NOTE: Both of these have to happen before `segment` is appended below,
+  // because `wordAt` must only see the words that were already contained, and
+  // because a rejected segment has to leave this vocabulary unchanged.
   std::vector<size_t> insertPositions = insertPositionsInSortedIndices(segment);
 
   uint64_t firstGlobalIndex = numWords();
@@ -74,7 +75,7 @@ std::string_view SecondaryVocabulary::operator[](
   // `globalIndex`.
   auto it = ql::ranges::upper_bound(segmentOffsets_, globalIndex);
   size_t segmentIdx = static_cast<size_t>(it - segmentOffsets_.begin()) - 1;
-  return segments_.at(segmentIdx)[globalIndex - segmentOffsets_[segmentIdx]];
+  return segments_[segmentIdx][globalIndex - segmentOffsets_[segmentIdx]];
 }
 
 // _____________________________________________________________________________

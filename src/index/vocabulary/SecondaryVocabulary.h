@@ -125,11 +125,11 @@ class SecondaryVocabulary {
   // the sorted order is the job of the caller. This allows the segments to be
   // read-only, zero-copy views, which cannot be reordered.
   //
-  // NOTE: If `segment` is a zero-copy view (see
+  // NOTE 1: If `segment` is a zero-copy view (see
   // `CompactVectorOfStrings::fromZeroCopyDeserializer`), the buffer that it
   // points into has to outlive this `SecondaryVocabulary`.
   //
-  // NOTE: An empty `segment` is ignored, that is, it doesn't count as a
+  // NOTE 2: An empty `segment` is ignored, that is, it doesn't count as a
   // segment (see `numSegments`).
   void appendSegment(CompactVectorOfStrings<char> segment);
 
