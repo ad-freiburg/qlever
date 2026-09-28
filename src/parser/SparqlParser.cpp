@@ -15,11 +15,11 @@ namespace {
 // Parse the given string as the given clause. If the datasets are not empty,
 // then they are fixed during the parsing and cannot be changed by the SPARQL.
 template <typename ContextType>
-auto parseOperation(
-    BnodeMgr bnodeMgr,
-    const ad_utility::vocabulary::EncodedIriManager* encodedIriManager,
-    ContextType* (SparqlAutomaticParser::*f)(void), std::string operation,
-    const std::vector<DatasetClause>& datasets) {
+auto parseOperation(BnodeMgr bnodeMgr,
+                    const EncodedIriManager* encodedIriManager,
+                    ContextType* (SparqlAutomaticParser::*f)(void),
+                    std::string operation,
+                    const std::vector<DatasetClause>& datasets) {
   using S = std::string;
   // The second argument is the `PrefixMap` for QLever's internal IRIs.
   // The third argument are the datasets from outside the query, which override
@@ -43,8 +43,8 @@ auto parseOperation(
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parseQuery(
-    const ad_utility::vocabulary::EncodedIriManager* encodedIriManager,
-    std::string query, const std::vector<DatasetClause>& datasets) {
+    const EncodedIriManager* encodedIriManager, std::string query,
+    const std::vector<DatasetClause>& datasets) {
   ad_utility::BlankNodeManager bnodeMgr;
   auto res = parseOperation(&bnodeMgr, encodedIriManager, &AntlrParser::query,
                             std::move(query), datasets);
@@ -56,8 +56,7 @@ ParsedQuery SparqlParser::parseQuery(
 
 // _____________________________________________________________________________
 std::vector<ParsedQuery> SparqlParser::parseUpdate(
-    BnodeMgr bnodeMgr,
-    const ad_utility::vocabulary::EncodedIriManager* encodedIriManager,
+    BnodeMgr bnodeMgr, const EncodedIriManager* encodedIriManager,
     std::string update, const std::vector<DatasetClause>& datasets) {
   return parseOperation(bnodeMgr, encodedIriManager, &AntlrParser::update,
                         std::move(update), datasets);

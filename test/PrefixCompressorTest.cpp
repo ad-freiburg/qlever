@@ -19,7 +19,7 @@
 #include "util/Views.h"
 
 TEST(PrefixCompressor, CompressionPreservesWords) {
-  ad_utility::vocabulary::PrefixCompressor p;
+  PrefixCompressor p;
   p.buildCodebook(std::vector<std::string>{"alp", "alpha", "al"});
 
   std::vector<std::string> words{
@@ -33,7 +33,7 @@ TEST(PrefixCompressor, CompressionPreservesWords) {
 }
 
 TEST(PrefixCompressor, OverlappingPrefixes) {
-  ad_utility::vocabulary::PrefixCompressor p;
+  PrefixCompressor p;
   p.buildCodebook(std::vector<std::string>{"alp", "alpha", "al"});
 
   // 1 byte for prefix "alpha" + 3 bytes for "bet".
@@ -51,7 +51,7 @@ TEST(PrefixCompressor, OverlappingPrefixes) {
 }
 
 TEST(PrefixCompressor, TooManyPrefixesThrow) {
-  ad_utility::vocabulary::PrefixCompressor p;
+  PrefixCompressor p;
   std::vector<std::string> tooManyPrefixes;
   for (size_t i = 0; i < NUM_COMPRESSION_PREFIXES + 1; ++i) {
     tooManyPrefixes.push_back(std::to_string(i));
@@ -61,7 +61,7 @@ TEST(PrefixCompressor, TooManyPrefixesThrow) {
 
 // _____________________________________________________________________________
 TEST(PrefixCompressor, DecompressIntoMatchesDecompress) {
-  ad_utility::vocabulary::PrefixCompressor p;
+  PrefixCompressor p;
   p.buildCodebook(std::vector<std::string>{"alp", "alpha", "al"});
   auto checkWord = [&](std::string_view word) {
     const std::string compressed = p.compress(word);
@@ -74,7 +74,7 @@ TEST(PrefixCompressor, DecompressIntoMatchesDecompress) {
     EXPECT_EQ(viaString, word);
   };
   for (std::string_view word :
-       {"a", "al", "alp", "alpine", "alpha", "alphabet", "nothing"}) {
+       {"", "a", "al", "alp", "alpine", "alpha", "alphabet", "nothing"}) {
     checkWord(word);
   }
   const std::string onlyPrefix = p.compress("alpha");
@@ -95,7 +95,7 @@ TEST(PrefixCompressor, DecompressIntoMatchesDecompress) {
 
 // _____________________________________________________________________________
 TEST(PrefixCompressor, PrefixIndexBoundaryMarkers) {
-  ad_utility::vocabulary::PrefixCompressor p;
+  PrefixCompressor p;
   p.buildCodebook(std::vector<std::string>{"alpha"});
 
   const std::string compressedAlpha = p.compress("alpha");
@@ -150,7 +150,7 @@ TEST(PrefixCompressor, PrefixIndexBoundaries) {
 }
 
 TEST(PrefixCompressor, MaximumNumberOfPrefixes) {
-  ad_utility::vocabulary::PrefixCompressor p;
+  PrefixCompressor p;
   std::vector<std::string> maximalNumberOfPrefixes;
   for (size_t i = 0; i < NUM_COMPRESSION_PREFIXES; ++i) {
     maximalNumberOfPrefixes.push_back("aaaaa" + std::to_string(i));

@@ -142,7 +142,7 @@ TEST(TripleComponent, toRdfLiteral) {
 
   // Test encoded IRI - covers the "else" branch in toRdfLiteral
   // Create an EncodedIriManager with a test prefix
-  ad_utility::vocabulary::EncodedIriManager encodedIriManager{
+  EncodedIriManager encodedIriManager{
       std::vector<std::string>{"http://example.org/"}};
   std::string encodableIri = "<http://example.org/123>";
   auto encodedIdOpt = encodedIriManager.encode(encodableIri);

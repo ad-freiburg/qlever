@@ -20,8 +20,6 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 
-namespace ad_utility::vocabulary {
-
 // A vocabulary that stores all words in memory. The vocabulary supports
 // "holes", meaning that the indices of the contained words don't have to be
 // contiguous (but ascending). All accesses are implemented using binary search.
@@ -204,7 +202,5 @@ class VocabularyInMemoryBinSearch
   // zero-copy view is read-only).
   Indices& ownedIndices() { return std::get<Indices>(indices_); }
 };
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H

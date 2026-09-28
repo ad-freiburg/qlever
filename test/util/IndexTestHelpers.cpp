@@ -318,7 +318,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
 
   if (c.secondaryVocabWords.has_value()) {
     index.getImpl().setSecondaryVocabForTesting(
-        std::make_shared<ad_utility::vocabulary::SecondaryVocabulary>(
+        std::make_shared<SecondaryVocabulary>(
             std::move(c.secondaryVocabWords).value()));
   }
 

@@ -33,7 +33,7 @@ class IndexImpl;
 // the index building, when the vocabulary hasn't been built yet.
 [[nodiscard]] std::optional<Id> toValueIdIfNotString(
     const TripleComponent& tripleComponent,
-    const ad_utility::vocabulary::EncodedIriManager* encodedIriManager);
+    const EncodedIriManager* encodedIriManager);
 
 // Convert `tripleComponent` to an `Id`. If it is a literal or IRI, resolve it
 // using the vocabularies of `index`, that is, its main vocabulary (which yields

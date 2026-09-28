@@ -610,7 +610,7 @@ struct StrIriDtTag {
           asStringViewUnsafe(literal.value().getContent());
       // We do not need to encode numeric IRIs because the behavior of the
       // regular one is also valid.
-      ad_utility::vocabulary::EncodedIriManager ev;
+      EncodedIriManager ev;
       auto tc =
           TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
               content, inputIri.value(), ev);

@@ -52,8 +52,7 @@ class VocabularyCreator {
 
   // Create and return a `VocabularyOnDisk` from words.
   void createVocabularyImpl(const std::vector<std::string>& words) {
-    auto writer =
-        ad_utility::vocabulary::VocabularyOnDisk::WordWriter(vocabFilename_);
+    auto writer = VocabularyOnDisk::WordWriter(vocabFilename_);
     for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
       EXPECT_EQ(writer(word, false), static_cast<uint64_t>(i));
     }
@@ -71,7 +70,7 @@ class VocabularyCreator {
   // words.size()).
   auto createVocabulary(const std::vector<std::string>& words) {
     createVocabularyImpl(words);
-    ad_utility::vocabulary::VocabularyOnDisk vocabulary;
+    VocabularyOnDisk vocabulary;
     vocabulary.open(vocabFilename_);
     return vocabulary;
   }
@@ -99,15 +98,13 @@ class VocabularyOnDiskHandle {
   // should be destroyed before the `creator_`: the `vocabulary_` must be torn
   // down before the `creator_` unlinks the file.
   VocabularyCreator creator_;
-  ad_utility::vocabulary::VocabularyOnDisk vocabulary_;
+  VocabularyOnDisk vocabulary_;
 
  public:
   // Access the underlying vocabulary transparently, so call sites can treat
   // the handle like the `VocabularyOnDisk` it wraps.
-  ad_utility::vocabulary::VocabularyOnDisk& operator*() { return vocabulary_; }
-  ad_utility::vocabulary::VocabularyOnDisk* operator->() {
-    return &vocabulary_;
-  }
+  VocabularyOnDisk& operator*() { return vocabulary_; }
+  VocabularyOnDisk* operator->() { return &vocabulary_; }
 };
 
 VocabularyOnDiskHandle createVocabularyFromWords(
@@ -220,7 +217,7 @@ TEST(VocabularyOnDisk, ReadLegacyMmapVectorOffsetsFormat) {
                 ad_utility::MmapVectorMetaData::numBytes);
   offsetsFile.close();
 
-  ad_utility::vocabulary::VocabularyOnDisk vocabulary;
+  VocabularyOnDisk vocabulary;
   vocabulary.open(vocabFilename);
   ASSERT_EQ(vocabulary.size(), words.size());
   for (size_t i = 0; i < words.size(); ++i) {
@@ -298,8 +295,8 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedMatchesIndividualLookups) {
   // `VocabLookupInput` takes ownership of the batches, so keep a copy to
   // compare against.
   const auto expectedBatches = batches;
-  auto streamed = vocab->lookupBatchesStreamed(
-      ad_utility::vocabulary::VocabLookupInput{std::move(batches)});
+  auto streamed =
+      vocab->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
   vocabulary_test::assertStreamedLookupMatchesVocabularyAtIndices(
       *vocab, streamed, expectedBatches);
 }
@@ -308,8 +305,8 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedMatchesIndividualLookups) {
 TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyStreamYieldsNothing) {
   auto vocab = createExampleVocabulary();
   std::vector<std::vector<size_t>> noBatches;
-  auto streamed = vocab->lookupBatchesStreamed(
-      ad_utility::vocabulary::VocabLookupInput{std::move(noBatches)});
+  auto streamed =
+      vocab->lookupBatchesStreamed(VocabLookupInput{std::move(noBatches)});
   EXPECT_EQ(ql::ranges::distance(streamed), 0);
 }
 
@@ -318,8 +315,8 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyStreamYieldsNothing) {
 TEST(VocabularyOnDisk, LookupBatchesStreamedOutOfRangeIndexThrows) {
   auto vocab = createExampleVocabulary();
   std::vector<std::vector<size_t>> batches{{0, 99}};
-  auto streamed = vocab->lookupBatchesStreamed(
-      ad_utility::vocabulary::VocabLookupInput{std::move(batches)});
+  auto streamed =
+      vocab->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
   EXPECT_ANY_THROW({
     for ([[maybe_unused]] auto& r : streamed) {
     }
@@ -332,8 +329,8 @@ TEST(VocabularyOnDisk, LookupBatchesStreamedOutOfRangeIndexThrows) {
 TEST(VocabularyOnDisk, LookupBatchesStreamedEmptyBatchThrows) {
   auto vocab = createExampleVocabulary();
   std::vector<std::vector<size_t>> batches{{2, 0}, {}, {1}};
-  auto streamed = vocab->lookupBatchesStreamed(
-      ad_utility::vocabulary::VocabLookupInput{std::move(batches)});
+  auto streamed =
+      vocab->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
   EXPECT_ANY_THROW({
     for ([[maybe_unused]] auto& r : streamed) {
     }

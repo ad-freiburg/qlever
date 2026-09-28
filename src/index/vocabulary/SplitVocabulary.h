@@ -25,8 +25,6 @@
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
-namespace ad_utility::vocabulary {
-
 // The signature of the SplitFunction for a SplitVocabulary. For each literal or
 // IRI, it should return a marker index which of the underlying vocabularies of
 // the SplitVocabulary should be used. The underlying vocabularies except 0
@@ -196,32 +194,7 @@ class SplitVocabulary {
 
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    AD_CONTRACT_CHECK(!indices.empty());
-    auto markerIndicesAndPositions =
-        partitionMarkerIndicesAndPositions<numberOfVocabs>(
-            indices, [](uint64_t markedIndex) {
-              return std::pair{getMarker(markedIndex),
-                               getVocabIndex(markedIndex)};
-            });
-
-    MarkerBatchLookups<numberOfVocabs> markerLookups;
-    for (auto&& [marker, vocabVariant] :
-         ::ranges::views::enumerate(underlying_)) {
-      const auto& markerIndices = markerIndicesAndPositions[marker];
-      if (markerIndices.empty()) {
-        continue;
-      }
-      markerLookups[marker] = std::visit(
-          [&](const auto& vocab) {
-            return vocab.lookupBatch(markerIndices.getUnderlyingIndices());
-          },
-          vocabVariant);
-      AD_CORRECTNESS_CHECK(markerLookups[marker]->size() ==
-                           markerIndices.size());
-    }
-
-    return mergeMarkerBatchesInInputOrder(std::move(markerLookups),
-                                          markerIndicesAndPositions);
+    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
   }
 
   //____________________________________________________________________________
@@ -392,7 +365,5 @@ using SplitGeoVocabulary =
     SplitVocabulary<detail::splitVocabulary::GeoSplitFunc,
                     detail::splitVocabulary::GeoFilenameFunc,
                     UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

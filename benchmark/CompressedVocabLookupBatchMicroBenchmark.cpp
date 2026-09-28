@@ -31,9 +31,9 @@ namespace {
 
 class CompressedVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
  private:
-  using Vocab = ad_utility::vocabulary::CompressedVocabulary<
-      ad_utility::vocabulary::VocabularyInMemory,
-      ad_utility::vocabulary::FsstSquaredCompressionWrapper, 64>;
+  using Vocab = CompressedVocabulary<
+      VocabularyInMemory, ad_utility::vocabulary::FsstSquaredCompressionWrapper,
+      64>;
 
   // Remove the `*.words` and `*.codebooks` files of a vocabulary basename.
   // Best effort: failures (e.g. files that were never created) are ignored.

@@ -43,9 +43,9 @@ class RdfsVocabularyCreator {
   RdfsVocabularyCreator& operator=(const RdfsVocabularyCreator&) = delete;
   ~RdfsVocabularyCreator() { deleteFiles(); }
 
-  ad_utility::vocabulary::RdfsVocabulary createVocabulary(
-      const ad_utility::HashSet<std::string>& words, VocabularyType type) {
-    ad_utility::vocabulary::RdfsVocabulary v;
+  RdfsVocabulary createVocabulary(const ad_utility::HashSet<std::string>& words,
+                                  VocabularyType type) {
+    RdfsVocabulary v;
     v.resetToType(type);
     v.createFromSet(words, filename_);
     return v;
@@ -71,14 +71,14 @@ class RdfsVocabularyHandle {
   RdfsVocabularyHandle(RdfsVocabularyHandle&&) = delete;
   RdfsVocabularyHandle& operator=(const RdfsVocabularyHandle&&) = delete;
 
-  ad_utility::vocabulary::RdfsVocabulary& operator*() { return vocabulary_; }
-  ad_utility::vocabulary::RdfsVocabulary* operator->() { return &vocabulary_; }
+  RdfsVocabulary& operator*() { return vocabulary_; }
+  RdfsVocabulary* operator->() { return &vocabulary_; }
 
  private:
   // `vocabulary_` listed after `creator_`, so `vocabulary_` is destroyed first,
   // releasing the files before `creator_` removes them.
   RdfsVocabularyCreator creator_;
-  ad_utility::vocabulary::RdfsVocabulary vocabulary_;
+  RdfsVocabulary vocabulary_;
 };
 
 RdfsVocabularyHandle createExampleVocabulary(
@@ -90,7 +90,7 @@ RdfsVocabularyHandle createExampleVocabulary(
 
 // _____________________________________________________________________________
 TEST(VocabularyTest, getIdForWordTest) {
-  std::vector<ad_utility::vocabulary::TextVocabulary> vec(2);
+  std::vector<TextVocabulary> vec(2);
 
   ad_utility::HashSet<std::string> s{"a", "ab", "ba", "car"};
   for (auto& v : vec) {
@@ -106,7 +106,7 @@ TEST(VocabularyTest, getIdForWordTest) {
   }
 
   // with case-insensitive ordering
-  ad_utility::vocabulary::TextVocabulary voc;
+  TextVocabulary voc;
   voc.setLocale("en", "US", false);
   ad_utility::HashSet<string> s2{"a", "A", "Ba", "car"};
   auto filename = "vocTest2.dat";
@@ -128,7 +128,7 @@ TEST(VocabularyTest, getIdForWordTest) {
 
 // _____________________________________________________________________________
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
-  ad_utility::vocabulary::TextVocabulary v;
+  TextVocabulary v;
   ad_utility::HashSet<string> s{"wordA0", "wordA1", "wordB2", "wordB3",
                                 "wordB4"};
   auto filename = "vocTest3.dat";
@@ -171,7 +171,7 @@ TEST(VocabularyTest, createFromSetTest) {
   s.insert("ab");
   s.insert("ba");
   s.insert("car");
-  ad_utility::vocabulary::TextVocabulary v;
+  TextVocabulary v;
   auto filename = "vocTest4.dat";
   v.createFromSet(s, filename);
   WordVocabIndex idx;
@@ -185,14 +185,14 @@ TEST(VocabularyTest, createFromSetTest) {
 
 // _____________________________________________________________________________
 TEST(VocabularyTest, IncompleteLiterals) {
-  ad_utility::vocabulary::TripleComponentComparator comp("en", "US", false);
+  TripleComponentComparator comp("en", "US", false);
 
   ASSERT_TRUE(comp("\"fieldofwork", "\"GOLD\"@en"));
 }
 
 // _____________________________________________________________________________
 TEST(Vocabulary, PrefixFilter) {
-  ad_utility::vocabulary::RdfsVocabulary vocabulary;
+  RdfsVocabulary vocabulary;
   vocabulary.setLocale("en", "US", true);
   ad_utility::HashSet<string> words;
 
@@ -205,7 +205,7 @@ TEST(Vocabulary, PrefixFilter) {
 
   // Found in internal but not in external vocabulary.
   auto ranges = vocabulary.prefixRanges("\"exp");
-  ad_utility::vocabulary::RdfsVocabulary::PrefixRanges expectedRanges{
+  RdfsVocabulary::PrefixRanges expectedRanges{
       {std::pair{VocabIndex::make(1u), VocabIndex::make(2u)}}};
   ASSERT_EQ(ranges, expectedRanges);
   ad_utility::deleteFile(filename);
@@ -216,19 +216,19 @@ TEST(Vocabulary, IsGeoInfoAvailable) {
   using ad_utility::VocabularyType;
   using enum VocabularyType::Enum;
 
-  ad_utility::vocabulary::RdfsVocabulary v1;
+  RdfsVocabulary v1;
   v1.resetToType(VocabularyType{OnDiskCompressed});
   ASSERT_FALSE(v1.isGeoInfoAvailable());
 
-  ad_utility::vocabulary::RdfsVocabulary v2;
+  RdfsVocabulary v2;
   v2.resetToType(VocabularyType{InMemoryUncompressed});
   ASSERT_FALSE(v2.isGeoInfoAvailable());
 
-  ad_utility::vocabulary::RdfsVocabulary v3;
+  RdfsVocabulary v3;
   v3.resetToType(VocabularyType{OnDiskCompressedGeoSplit});
   ASSERT_TRUE(v3.isGeoInfoAvailable());
 
-  ad_utility::vocabulary::TextVocabulary v4;
+  TextVocabulary v4;
   ASSERT_FALSE(v4.isGeoInfoAvailable());
 }
 
@@ -256,8 +256,8 @@ TEST(VocabularyTest, LookupBatchesStreamed) {
   std::vector<std::vector<size_t>> batches{{2, 0}, {3}};
   // `VocabLookupInput` takes ownership, so keep a copy to compare against.
   const auto expectedBatches = batches;
-  auto streamed = v->lookupBatchesStreamed(
-      ad_utility::vocabulary::VocabLookupInput{std::move(batches)});
+  auto streamed =
+      v->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
   vocabulary_test::assertStreamedLookupMatchesVocabularyAtIndices(
       *v, streamed, expectedBatches);
 }
@@ -266,8 +266,8 @@ TEST(VocabularyTest, LookupBatchesStreamed) {
 TEST(VocabularyTest, LookupBatchesStreamedEmptyBatchThrows) {
   auto v = createExampleVocabulary();
   std::vector<std::vector<size_t>> batches{{2, 0}, {}, {3}};
-  auto streamed = v->lookupBatchesStreamed(
-      ad_utility::vocabulary::VocabLookupInput{std::move(batches)});
+  auto streamed =
+      v->lookupBatchesStreamed(VocabLookupInput{std::move(batches)});
   EXPECT_ANY_THROW({
     for ([[maybe_unused]] auto& r : streamed) {
     }
@@ -278,8 +278,8 @@ TEST(VocabularyTest, LookupBatchesStreamedEmptyBatchThrows) {
 TEST(VocabularyTest, LookupBatchesStreamedEmptyStreamYieldsNothing) {
   auto v = createExampleVocabulary();
   std::vector<std::vector<size_t>> noBatches;
-  auto streamed = v->lookupBatchesStreamed(
-      ad_utility::vocabulary::VocabLookupInput{std::move(noBatches)});
+  auto streamed =
+      v->lookupBatchesStreamed(VocabLookupInput{std::move(noBatches)});
   EXPECT_EQ(ql::ranges::distance(streamed), 0);
 }
 
@@ -294,7 +294,7 @@ void testZeroCopyRoundTripPolymorphic(
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
 
-  ad_utility::vocabulary::RdfsVocabulary vocabulary;
+  RdfsVocabulary vocabulary;
   vocabulary.resetToType(type);
   ad_utility::HashSet<string> words{"alpha", "beta", "car", "delta"};
   auto filename = gtestCurrentTestName();
@@ -308,7 +308,7 @@ void testZeroCopyRoundTripPolymorphic(
       std::move(writeSerializer).data()};
   // The reader has to select the matching type before loading, exactly as with
   // the regular `open` mechanism.
-  ad_utility::vocabulary::RdfsVocabulary readVocabulary;
+  RdfsVocabulary readVocabulary;
   readVocabulary.resetToType(type);
   readVocabulary.loadFromZeroCopyDeserializer(readSerializer);
 
@@ -334,7 +334,7 @@ TEST(Vocabulary, ZeroCopyRoundTripPolymorphicCompressed) {
 
 // _____________________________________________________________________________
 TEST(Vocabulary, ZeroCopyBlobThrowsWhenNotInMemory) {
-  ad_utility::vocabulary::RdfsVocabulary vocabulary;
+  RdfsVocabulary vocabulary;
   vocabulary.resetToType(ad_utility::VocabularyType::OnDiskCompressed);
 
   // Note that the messages only differ in their first few words, which is
@@ -364,7 +364,7 @@ TEST(Vocabulary, ScanAll) {
   using enum VocabularyType::Enum;
   // `scanAll` delegates to the underlying vocabulary and must yield all words
   // in order, matching `operator[]`.
-  ad_utility::vocabulary::RdfsVocabulary vocabulary;
+  RdfsVocabulary vocabulary;
   vocabulary.resetToType(VocabularyType{OnDiskCompressed});
   ad_utility::HashSet<string> words{"alpha", "beta", "car", "delta"};
   auto filename = gtestCurrentTestName();
@@ -372,8 +372,7 @@ TEST(Vocabulary, ScanAll) {
   vocabulary.createFromSet(words, filename);
 
   std::vector<std::string> scanned;
-  for (const ad_utility::vocabulary::IndexAndWord& indexAndWord :
-       vocabulary.scanAll()) {
+  for (const IndexAndWord& indexAndWord : vocabulary.scanAll()) {
     // For a non-split vocabulary the indices are contiguous and `scanAll` must
     // agree with `operator[]`.
     EXPECT_EQ(indexAndWord.word_,
@@ -387,7 +386,7 @@ TEST(Vocabulary, ScanAll) {
 
 // _____________________________________________________________________________
 TEST(Vocabulary, ZeroCopyRoundTripDirectVocabularyInMemory) {
-  ad_utility::vocabulary::TextVocabulary vocabulary;
+  TextVocabulary vocabulary;
   ad_utility::HashSet<string> words{"wordA", "wordB", "wordC"};
   auto filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
@@ -398,7 +397,7 @@ TEST(Vocabulary, ZeroCopyRoundTripDirectVocabularyInMemory) {
 
   ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
       std::move(writeSerializer).data()};
-  ad_utility::vocabulary::TextVocabulary readVocabulary;
+  TextVocabulary readVocabulary;
   readVocabulary.loadFromZeroCopyDeserializer(readSerializer);
 
   ASSERT_EQ(vocabulary.size(), readVocabulary.size());
