@@ -74,13 +74,19 @@ class PrefixCompressor {
   // ___________________________________________________________________________
   // Return the decompressed size of a compressed word whose prefix index is
   // `prefixIdx` and whose size without the leading code byte is `restSize`.
+  //
+  // This helper and `decompressIntoWithIndex` run once per decoded word. Their
+  // bounds checks therefore use `AD_CONTRACT_CHECK`, which is an inline branch,
+  // and not `AD_CORRECTNESS_CHECK`, which calls an out-of-line function even
+  // when the check passes (four calls per word made `decompress` slower than
+  // the code it replaced). The checks stay active in release builds.
   [[nodiscard]] size_t decompressedSizeWithIndex(
       size_t restSize, std::optional<size_t> prefixIdx) const {
     if (prefixIdx.has_value()) {
-      AD_CORRECTNESS_CHECK(*prefixIdx < prefixToCode_.size());
+      AD_CONTRACT_CHECK(*prefixIdx < prefixToCode_.size());
       const size_t prefixSize = prefixToCode_[*prefixIdx].size();
-      AD_CORRECTNESS_CHECK(prefixSize <=
-                           std::numeric_limits<size_t>::max() - restSize);
+      AD_CONTRACT_CHECK(prefixSize <=
+                        std::numeric_limits<size_t>::max() - restSize);
       return prefixSize + restSize;
     }
     return restSize;
@@ -99,13 +105,13 @@ class PrefixCompressor {
     size_t outputSize = 0;
     if (prefixIdx.has_value()) {
       const std::string& prefix = prefixToCode_[*prefixIdx];
-      AD_CORRECTNESS_CHECK(prefix.size() <= out.size());
+      AD_CONTRACT_CHECK(prefix.size() <= out.size());
       if (!prefix.empty()) {
         std::memcpy(out.data(), prefix.data(), prefix.size());
       }
       outputSize = prefix.size();
     }
-    AD_CORRECTNESS_CHECK(rest.size() <= out.size() - outputSize);
+    AD_CONTRACT_CHECK(rest.size() <= out.size() - outputSize);
     if (!rest.empty()) {
       std::memcpy(out.data() + outputSize, rest.data(), rest.size());
     }
