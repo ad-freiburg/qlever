@@ -154,8 +154,9 @@ inline constexpr bool ::ranges::enable_view<
     columnBasedIdTable::BasicIdColumnView<IsConst>> = true;
 #else
 template <bool IsConst>
-inline constexpr bool std::ranges::enable_view<
-    columnBasedIdTable::BasicIdColumnView<IsConst>> = true;
+inline constexpr bool
+    std::ranges::enable_view<columnBasedIdTable::BasicIdColumnView<IsConst>> =
+        true;
 #endif
 
 // Type aliases for the columns of an `IdTable`. Currently just aliases for

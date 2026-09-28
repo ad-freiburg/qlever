@@ -80,9 +80,7 @@ class BasicIdColumnIterator {
     datatype_ += n;
     return *this;
   }
-  BasicIdColumnIterator& operator-=(difference_type n) {
-    return *this += -n;
-  }
+  BasicIdColumnIterator& operator-=(difference_type n) { return *this += -n; }
   friend BasicIdColumnIterator operator+(BasicIdColumnIterator it,
                                          difference_type n) {
     it += n;

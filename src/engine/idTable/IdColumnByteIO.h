@@ -47,10 +47,9 @@ inline std::vector<char> packIdColumnToBytes(const ConstIdColumnRef& column) {
 // `bytes.size()` must be exactly `column.size() * BYTES_PER_ID_COLUMN_ENTRY`.
 inline void unpackBytesToIdColumn(ql::span<const char> bytes,
                                   const IdColumnRef& column) {
-  AD_CONTRACT_CHECK(bytes.size() ==
-                    column.size() * BYTES_PER_ID_COLUMN_ENTRY);
+  AD_CONTRACT_CHECK(bytes.size() == column.size() * BYTES_PER_ID_COLUMN_ENTRY);
   const char* in = bytes.data();
-  for (auto && i : column) {
+  for (auto&& i : column) {
     uint8_t datatype;
     uint64_t payload;
     std::memcpy(&datatype, in, sizeof(datatype));

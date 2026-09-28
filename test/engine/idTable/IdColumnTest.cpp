@@ -45,13 +45,13 @@ TestAllocator testAllocator() {
 // bit representation is not just a pointer.
 std::vector<Id> sampleIds() {
   return {Id::makeUndefined(),
-         Id::makeFromBool(true),
-         Id::makeFromBool(false),
-         Id::makeFromInt(42),
-         Id::makeFromInt(-42),
-         Id::makeFromDouble(13.37),
-         Id::makeFromVocabIndex(VocabIndex::make(123)),
-         Id::makeFromBlankNodeIndex(BlankNodeIndex::make(7))};
+          Id::makeFromBool(true),
+          Id::makeFromBool(false),
+          Id::makeFromInt(42),
+          Id::makeFromInt(-42),
+          Id::makeFromDouble(13.37),
+          Id::makeFromVocabIndex(VocabIndex::make(123)),
+          Id::makeFromBlankNodeIndex(BlankNodeIndex::make(7))};
 }
 }  // namespace
 
@@ -100,7 +100,7 @@ TEST(IdColumnTest, viewConstructionAccessAndDefaultState) {
   }
 
   columnBasedIdTable::IdColumnRef view{payloads.data(), datatypes.data(),
-                                    payloads.size()};
+                                       payloads.size()};
   ASSERT_EQ(view.size(), ids.size());
   for (size_t i = 0; i < ids.size(); ++i) {
     EXPECT_EQ(static_cast<Id>(view[i]), ids.at(i));
@@ -225,11 +225,11 @@ TEST(IdColumnTest, idColumnVectorEraseAndInsert) {
 
 // _____________________________________________________________________________
 TEST(IdColumnTest, columnStorageTraitsResolvesGenericAndIdCase) {
-  static_assert(std::is_same_v<
-                ColumnStorageTraits<std::vector<int>, int>::Ref, int&>);
+  static_assert(
+      std::is_same_v<ColumnStorageTraits<std::vector<int>, int>::Ref, int&>);
   static_assert(
       std::is_same_v<ColumnStorageTraits<std::vector<int>, int>::Column,
-                    ql::span<int>>);
+                     ql::span<int>>);
 
   static_assert(
       std::is_same_v<
@@ -238,10 +238,9 @@ TEST(IdColumnTest, columnStorageTraitsResolvesGenericAndIdCase) {
       std::is_same_v<
           ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::ConstRef,
           ConstIdRef>);
-  static_assert(
-      std::is_same_v<
-          ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::Column,
-          columnBasedIdTable::IdColumnRef>);
+  static_assert(std::is_same_v<
+                ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::Column,
+                columnBasedIdTable::IdColumnRef>);
   static_assert(
       std::is_same_v<
           ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::ConstColumn,
