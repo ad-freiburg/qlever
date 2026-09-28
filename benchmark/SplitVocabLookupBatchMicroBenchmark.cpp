@@ -29,6 +29,7 @@
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyTypes.h"
 
 namespace ad_benchmark {
 namespace {
@@ -161,6 +162,20 @@ class SplitVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
       }
       return totalBytes;
     };
+    // What `SplitVocabulary::lookupBatch` did before it partitioned by marker:
+    // the generic fallback, one owning `std::string` per word, all kept alive
+    // in the result. This is the baseline that the batched path replaces.
+    const auto runFallback = [&](const std::vector<size_t>& batch) {
+      size_t totalBytes = 0;
+      for (size_t repetition = 0; repetition < repetitions; ++repetition) {
+        auto result =
+            ad_utility::vocabulary::sequentialLookupBatch(vocab_, batch);
+        for (const auto& word : result) {
+          totalBytes += word.size();
+        }
+      }
+      return totalBytes;
+    };
     const auto runSequential = [&](const std::vector<size_t>& batch) {
       size_t totalBytes = 0;
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
@@ -174,10 +189,14 @@ class SplitVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
 
     group.addMeasurement("sequential operator[], mixed markers",
                          [&] { return runSequential(mixedBatch_); });
+    group.addMeasurement("fallback sequentialLookupBatch, mixed markers",
+                         [&] { return runFallback(mixedBatch_); });
     group.addMeasurement("batched lookupBatch, mixed markers",
                          [&] { return runBatched(mixedBatch_); });
     group.addMeasurement("sequential operator[], single marker",
                          [&] { return runSequential(singleMarkerBatch_); });
+    group.addMeasurement("fallback sequentialLookupBatch, single marker",
+                         [&] { return runFallback(singleMarkerBatch_); });
     group.addMeasurement("batched lookupBatch, single marker",
                          [&] { return runBatched(singleMarkerBatch_); });
     return results;

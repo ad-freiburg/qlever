@@ -29,6 +29,7 @@
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyTypes.h"
 
 namespace ad_benchmark {
 namespace {
@@ -150,6 +151,19 @@ class SplitVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
         for (size_t index : batch_) {
           std::string word{vocab_[index]};
+          totalBytes += word.size();
+        }
+      }
+      return totalBytes;
+    });
+    // The generic fallback that `SplitVocabulary::lookupBatch` used before it
+    // partitioned by marker (one owning `std::string` per word).
+    group.addMeasurement("fallback sequentialLookupBatch", [&] {
+      size_t totalBytes = 0;
+      for (size_t repetition = 0; repetition < repetitions; ++repetition) {
+        auto result =
+            ad_utility::vocabulary::sequentialLookupBatch(vocab_, batch_);
+        for (const auto& word : result) {
           totalBytes += word.size();
         }
       }
