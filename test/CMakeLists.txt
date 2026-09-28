@@ -600,6 +600,8 @@ addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
 
 addLinkAndDiscoverTestNoLibs(IoUringManagerTest qlever_util)
 
+addLinkAndDiscoverTestNoLibs(FiberIoSchedulerTest qlever_util)
+
 addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
 addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)

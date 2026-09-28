@@ -23,6 +23,7 @@
 #include <stdexcept>
 
 #include "util/Exception.h"
+#include "util/FiberIoScheduler.h"
 #include "util/Log.h"
 
 namespace ad_utility {
@@ -217,17 +218,11 @@ void IoUringPolicy::addBatch(int fd,
     // The ring has no free slot, so make room: submit what we have prepared so
     // far and block until enough completions have been drained. This hard
     // safety bound applies with and without the controller.
-    if (numInFlightReadRequests_ >= ringSize_) {
+    if (isRingFull()) {
       // Flush the SQEs prepared so far to the kernel so the kernel can start
       // servicing them. Their completions will free up submission slots.
-      // Wait for a wave of completions instead of one, and reap every ready
-      // CQE, so a large batch refills the ring in waves rather than one SQE
-      // per reaped CQE.
       submitOrThrow();
-      while (numInFlightReadRequests_ >= ringSize_) {
-        drainAtLeast(static_cast<unsigned>(
-            std::min<size_t>(REAP_WAVE, numInFlightReadRequests_)));
-      }
+      drainUntilSlotFree();
       numPreparedSinceSubmit = 0;
     } else if (adaptiveBatchController_.has_value()) {
       const AdaptiveBatchController& controller = *adaptiveBatchController_;
@@ -280,7 +275,41 @@ void IoUringPolicy::addBatch(int fd,
 }
 
 //______________________________________________________________________________
+bool IoUringPolicy::isBatchComplete(BatchHandle handle) const {
+  // `processCqe` erases a batch as soon as its last read completes, so a
+  // present entry always still has outstanding reads.
+  return numInFlightReadRequestsPerBatch_.find(handle) ==
+         numInFlightReadRequestsPerBatch_.end();
+}
+
+//______________________________________________________________________________
+void IoUringPolicy::drainUntilSlotFree() {
+#ifdef QLEVER_HAS_FIBER_IO
+  if (FiberIoScheduler::isInsideFiber()) {
+    FiberIoScheduler::local().waitForFreeSlot(*this);
+    return;
+  }
+#endif
+  // Wait for a wave of completions instead of one, and reap every ready CQE,
+  // so a large batch refills the ring in waves rather than one SQE per reaped
+  // CQE.
+  while (isRingFull()) {
+    drainAtLeast(static_cast<unsigned>(
+        std::min<size_t>(REAP_WAVE, numInFlightReadRequests_)));
+  }
+}
+
+//______________________________________________________________________________
 void IoUringPolicy::wait(BatchHandle handle) {
+#ifdef QLEVER_HAS_FIBER_IO
+  // Inside a scheduler fiber, cooperate (reap and yield) instead of parking
+  // the thread. Outside fibers, keep the blocking behavior, so existing
+  // callers such as `VocabularyOnDisk::lookupBatch` are unaffected.
+  if (FiberIoScheduler::isInsideFiber()) {
+    FiberIoScheduler::local().waitForBatch(*this, handle);
+    return;
+  }
+#endif
   // Drain completions until this batch is gone. `processCqe` erases a batch as
   // soon as its last read completes, so a present entry always still has
   // outstanding reads. Waiting for up to `REAP_WAVE` CQEs never waits longer
@@ -336,11 +365,44 @@ void IoUringPolicy::drainAtLeast(unsigned minComplete) {
                           std::strerror(-ret)));
   }
 
+  reapAvailableCompletions();
+}
+
+//______________________________________________________________________________
+void IoUringPolicy::drainOneCqe() { drainAtLeast(1); }
+
+//______________________________________________________________________________
+bool IoUringPolicy::tryReapOneCqe() {
+  // Peek at the completion queue without blocking. Returns 0 with `cqe` set
+  // when a completion is available, `-EAGAIN` when the queue is empty.
+  io_uring_cqe* cqe = nullptr;
+  const int ret = io_uring_peek_cqe(&ring_, &cqe);
+  if (ret == -EAGAIN) {
+    return false;
+  }
+  if (ret < 0) {
+    AD_THROW(absl::StrCat("io_uring_peek_cqe failed in IoUringPolicy: ",
+                          std::strerror(-ret)));
+  }
+  AD_CORRECTNESS_CHECK(cqe != nullptr);
+  // Recover the id via the 64-bit `user_data` field, see `addBatch`, and
+  // consume the CQE before any throw.
+  const char* errorMessage = processCqe(cqe->res, io_uring_cqe_get_data64(cqe));
+  io_uring_cqe_seen(&ring_, cqe);
+  if (errorMessage != nullptr) {
+    AD_THROW(errorMessage);
+  }
+  return true;
+}
+
+//______________________________________________________________________________
+size_t IoUringPolicy::reapAvailableCompletions() {
   // Reap every ready CQE in chunks. `io_uring_peek_batch_cqe` does not block;
   // `io_uring_cq_advance` releases a whole chunk with one CQ-head update
-  // instead of one `io_uring_cqe_seen` per CQE. Every CQE of the wave is
-  // applied to the bookkeeping before any error is thrown, so the in-flight
-  // counts stay consistent and no CQE is processed twice.
+  // instead of one `io_uring_cqe_seen` per CQE. Every ready CQE is applied to
+  // the bookkeeping before any error is thrown, so the in-flight counts stay
+  // consistent and no CQE is processed twice.
+  size_t numReaped = 0;
   const char* firstErrorMessage = nullptr;
   std::array<io_uring_cqe*, 64> cqes{};
   while (true) {
@@ -358,10 +420,12 @@ void IoUringPolicy::drainAtLeast(unsigned minComplete) {
       }
     }
     io_uring_cq_advance(&ring_, n);
+    numReaped += n;
   }
   if (firstErrorMessage != nullptr) {
     AD_THROW(firstErrorMessage);
   }
+  return numReaped;
 }
 
 //______________________________________________________________________________

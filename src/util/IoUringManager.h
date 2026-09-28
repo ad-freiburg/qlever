@@ -280,6 +280,11 @@ class IoUringPolicy {
   // fails, including the error description in the message.
   void submitOrThrow();
 
+  // Drain completions until the ring has a free submission slot. Called from
+  // a fiber body this cooperates via `FiberIoScheduler` instead of parking
+  // the thread; called from a plain thread it blocks in `drainAtLeast`.
+  void drainUntilSlotFree();
+
  public:
   IoUringPolicy(const IoUringPolicy&) = delete;
   IoUringPolicy& operator=(const IoUringPolicy&) = delete;
@@ -322,8 +327,45 @@ class IoUringPolicy {
 
   // Block until every read in the batch that is represented by the `handle` has
   // completed. (The `handle` was submitted along the read requests using
-  // `addBatch`.) Throws on any I/O error.
+  // `addBatch`.) Throws on any I/O error. When called from inside a
+  // `FiberIoScheduler` fiber (and fiber support is compiled in, see
+  // `QLEVER_HAS_FIBER_IO`), this cooperates instead of parking the thread:
+  // it reaps available completions and yields to sibling fibers while the
+  // batch is still in flight, parking only as a last resort. Called from a
+  // plain thread it keeps the current blocking behavior.
   void wait(BatchHandle handle);
+
+  // Block until at least one completion is available, then reap every ready
+  // completion and attribute it to its batch (not necessarily the awaited
+  // one). Throws on I/O errors exactly like `wait`. Used for the last-resort
+  // park in `FiberIoScheduler::waitUntil`: a parking fiber still serves its
+  // siblings while parked. Requires at least one read in flight.
+  void drainOneCqe();
+
+  // Try to reap a single available completion without blocking. Returns true
+  // if a completion was reaped (and attributed to its batch), false if no
+  // completion was currently available. Never blocks: it peeks at the
+  // completion queue instead of waiting. Throws on I/O errors exactly like
+  // `wait`.
+  bool tryReapOneCqe();
+
+  // Reap every currently available completion without blocking. Returns the
+  // number of completions reaped. Used by the cooperative fiber scheduler
+  // (`FiberIoScheduler`) to drain a full round of completions before deciding
+  // whether to yield or park.
+  size_t reapAvailableCompletions();
+
+  // True once every read of `handle` has completed, i.e. the batch entry is
+  // gone. A handle that was never submitted (or an empty batch, which
+  // `addBatch` returns early for without recording) also reports complete,
+  // matching the `wait` loop it backs.
+  bool isBatchComplete(BatchHandle handle) const;
+
+  // Number of reads that occupy a ring slot but have not yet been reaped.
+  size_t numOutstandingReads() const { return numInFlightReadRequests_; }
+
+  // True once submitting one more read would exceed the ring capacity.
+  bool isRingFull() const { return numInFlightReadRequests_ >= ringSize_; }
 };
 
 using BatchIoManager = BatchManager<IoUringPolicy>;

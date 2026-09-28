@@ -392,6 +392,58 @@ else ()
     MESSAGE(STATUS "USE_IO_URING is OFF, building without io_uring support")
 endif ()
 
+### Cooperative fiber scheduling over io_uring (optional, requires
+### Boost.Fiber and Boost.Context from the conan Boost package). Without it,
+### `FiberIoScheduler` degrades gracefully: batch bodies run sequentially and
+### `IoUringPolicy::wait` keeps its blocking behavior.
+option(USE_FIBER_IO "Enable cooperative fiber scheduling for io_uring batch waits (requires Boost.Fiber and Boost.Context)" ON)
+if (USE_FIBER_IO)
+    # Per-package lookups (not another find_package(Boost ...)): the main
+    # Boost_DIR cache entry would pin a repeated Boost lookup to the system
+    # config and ignore HINTS, while the per-package DIR entries are
+    # re-searched while cached as NOTFOUND.
+    find_package(boost_fiber QUIET CONFIG)
+    find_package(boost_context QUIET CONFIG)
+    # Fallback for machines whose system Boost ships headers but no compiled
+    # fiber/context libraries (e.g. the Ural benchmark host): a self-built
+    # 1.83.0 prefix, statically linked so binaries carry no extra runtime
+    # loader path (the cluster dispatcher only provides liburing on
+    # LD_LIBRARY_PATH). Env BOOST_FIBER_PREFIX overrides the conventional
+    # Ural path below.
+    if ((NOT TARGET Boost::fiber OR NOT TARGET Boost::context))
+      foreach(_fiber_prefix $ENV{BOOST_FIBER_PREFIX} /local/data-ssd/stoetzem/boost-1.83.0)
+        if (NOT _fiber_prefix_dir AND EXISTS "${_fiber_prefix}/lib/cmake")
+          set(_fiber_prefix_dir "${_fiber_prefix}")
+        endif()
+      endforeach()
+    endif()
+    if (_fiber_prefix_dir)
+      set(_saved_Boost_USE_STATIC_LIBS ${Boost_USE_STATIC_LIBS})
+      set(Boost_USE_STATIC_LIBS ON)
+      set(boost_fiber_DIR "${_fiber_prefix_dir}/lib/cmake/boost_fiber-1.83.0" CACHE PATH "" FORCE)
+      set(boost_context_DIR "${_fiber_prefix_dir}/lib/cmake/boost_context-1.83.0" CACHE PATH "" FORCE)
+      # Drop stale dependency lists leaked by the system BoostConfig into our
+      # directory scope; the prefix configs resolve their own deps.
+      unset(_BOOST_FIBER_DEPS)
+      unset(_BOOST_CONTEXT_DEPS)
+      find_package(boost_fiber QUIET CONFIG)
+      find_package(boost_context QUIET CONFIG)
+      set(Boost_USE_STATIC_LIBS ${_saved_Boost_USE_STATIC_LIBS})
+      unset(_saved_Boost_USE_STATIC_LIBS)
+    endif()
+    unset(_fiber_prefix_dir)
+    unset(_fiber_prefix)
+    if (TARGET Boost::fiber AND TARGET Boost::context)
+        MESSAGE(STATUS "Found Boost.Fiber and Boost.Context, enabling fiber cooperative scheduling")
+        add_compile_definitions(QLEVER_HAS_FIBER_IO)
+        link_libraries(Boost::fiber Boost::context)
+    else ()
+        MESSAGE(STATUS "USE_FIBER_IO is ON but Boost.Fiber/Context were not found, building without fiber scheduling support")
+    endif ()
+else ()
+    MESSAGE(STATUS "USE_FIBER_IO is OFF, building without fiber scheduling support")
+endif ()
+
 ### ZSTD
 find_package(ZSTD QUIET)
 if (TARGET zstd::libzstd_static)
