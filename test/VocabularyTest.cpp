@@ -237,7 +237,7 @@ TEST(VocabularyTest, LookupBatch) {
   auto v = createExampleVocabulary();
   std::vector<size_t> indices{2, 0, 3, 1};
   auto result = v->lookupBatch(indices);
-  EXPECT_THAT((*result), ::testing::ElementsAre("ba", "a", "car", "ab"));
+  EXPECT_THAT(result, ::testing::ElementsAre("ba", "a", "car", "ab"));
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*v, result,
                                                                 indices);
   // An empty batch is an invalid request and must throw.
@@ -246,7 +246,7 @@ TEST(VocabularyTest, LookupBatch) {
   // Duplicate indices: each position resolved independently.
   std::vector<size_t> dup{1, 1, 0};
   auto dupResult = v->lookupBatch(dup);
-  EXPECT_THAT((*dupResult), ::testing::ElementsAre("ab", "ab", "a"));
+  EXPECT_THAT(dupResult, ::testing::ElementsAre("ab", "ab", "a"));
 }
 
 // Each streamed result must equal the eager `lookupBatch` for that batch's

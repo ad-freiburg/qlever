@@ -290,11 +290,11 @@ TEST(VocabularyInMemoryBinSearch, lookupBatch) {
   // An index that is not contained (one of the "holes") yields a placeholder.
   std::vector<size_t> indicesWithMissingOnes{0, 5, 9};
   auto result = vocab.lookupBatch(indicesWithMissingOnes);
-  ASSERT_EQ(result->size(), 3);
-  EXPECT_EQ((*result)[0], "alpha");
-  EXPECT_EQ((*result)[1],
+  ASSERT_EQ(result.size(), 3);
+  EXPECT_EQ(result[0], "alpha");
+  EXPECT_EQ(result[1],
             ad_utility::vocabulary::placeholderForMissingVocabIndex(5));
-  EXPECT_EQ((*result)[2], "gamma");
+  EXPECT_EQ(result[2], "gamma");
 }
 
 // _____________________________________________________________________________

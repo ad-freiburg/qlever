@@ -392,7 +392,7 @@ template <typename Vocab, typename Indices>
 void assertLookupResultMatchesVocabularyAtIndices(
     const Vocab& vocab, const VocabBatchLookupResult& lookupResult,
     const Indices& indices) {
-  ASSERT_EQ(lookupResult->size(), ql::ranges::distance(indices));
+  ASSERT_EQ(lookupResult.size(), ql::ranges::distance(indices));
 
   auto at = [&](size_t i) -> decltype(auto) {
     if constexpr (requires { vocab[i]; }) {
@@ -404,7 +404,7 @@ void assertLookupResultMatchesVocabularyAtIndices(
   };
 
   for (const auto& [resultWord, idx] :
-       ::ranges::views::zip(*lookupResult, indices)) {
+       ::ranges::views::zip(lookupResult, indices)) {
     EXPECT_EQ(resultWord, at(idx)) << " at  vocabulary index " << idx;
   }
 }
