@@ -526,7 +526,7 @@ TEST(CompressedVocabularyWithHoles, accessOperator) {
 // batch must not feed the plain-text placeholder to the decoder.
 TEST(CompressedVocabularyWithHoles, lookupBatchMatchesAccessOperator) {
   std::string filename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&filename] { deleteVocabularyFiles(filename); };
+  auto cleanup = getFileCleanup(filename);
   auto vocab =
       createVocabularyWithHoles(filename, wordsWithHoles(), indicesWithHoles());
   // Mix contained indices, holes, duplicates, and an index past the end.
