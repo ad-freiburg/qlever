@@ -51,11 +51,6 @@ struct RuntimeParameters {
   Bool useSimdEscapeClassifierCsvTsv_{false,
                                       "use-simd-escape-classifier-csv-tsv"};
 
-  // If set, `stream_generator` (the buffer behind the Turtle, CSV and TSV
-  // export) copies the yielded strings into its buffer with non-temporal
-  // (cache-bypassing) stores instead of `std::memcpy`.
-  Bool useNonTemporalExportBuffer_{false, "use-non-temporal-export-buffer"};
-
   // Number of words ahead that a batched lookup in an in-memory vocabulary
   // (`VocabularyInMemory::lookupBatch`) prefetches into the CPU cache. Zero
   // (default) disables software prefetching.

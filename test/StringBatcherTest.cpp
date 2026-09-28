@@ -10,8 +10,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "global/RuntimeParameters.h"
-#include "util/RuntimeParametersTestHelpers.h"
 #include "util/stream_generator.h"
 
 using namespace ad_utility::streams;
@@ -57,85 +55,6 @@ TEST(StringBatcher, StreamMacros) {
     result.emplace_back(batch);
   };
   EXPECT_THAT(result, ::testing::ElementsAre("hellohellohello"));
-}
-
-// _____________________________________________________________________________
-// Verify that toggling the `use-non-temporal-export-buffer` runtime
-// parameter (which switches `stream_generator_promise::copyIntoBuffer`
-// between `std::memcpy` and `StreamingBufferWriter::streamCopyNoFence`)
-// yields byte-identical output. This covers both the small-value path and
-// the buffer-boundary-spanning (overflow) path.
-TEST(StreamGenerator, NonTemporalBufferParameterYieldsIdenticalOutput) {
-  auto runWithParam = [](bool useNonTemporal) {
-    setRuntimeParameter<&RuntimeParameters::useNonTemporalExportBuffer_>(
-        useNonTemporal);
-    std::string result;
-    // 20 chars of payload against a 8-byte buffer forces several
-    // suspend/resume + overflow cycles through `yield_value`.
-    for (const auto& batch : yieldSomething(4)) {
-      result.append(batch);
-    }
-    return result;
-  };
-
-  bool originalValue =
-      getRuntimeParameter<&RuntimeParameters::useNonTemporalExportBuffer_>();
-
-  std::string withMemcpy = runWithParam(false);
-  std::string withNonTemporal = runWithParam(true);
-
-  EXPECT_EQ(withMemcpy, "hellohellohellohello");
-  EXPECT_EQ(withMemcpy, withNonTemporal);
-
-  // Restore the default so this test doesn't affect others.
-  setRuntimeParameter<&RuntimeParameters::useNonTemporalExportBuffer_>(
-      originalValue);
-}
-
-namespace {
-// Yield a single character (so that the following copies into the buffer do
-// not start at a 64-byte aligned address) and then `numValues` times `value`.
-stream_generator yieldLargeValues(std::string_view value, size_t numValues) {
-  co_yield 'x';
-  for (size_t i = 0; i < numValues; ++i) {
-    co_yield value;
-  }
-}
-}  // namespace
-
-// _____________________________________________________________________________
-// Values of at least `minNonTemporalCopySize` bytes are copied with
-// non-temporal stores when `use-non-temporal-export-buffer` is set. The output
-// must be the same as with `std::memcpy`, also for the copies that overflow
-// the 1 MiB buffer of `stream_generator`.
-TEST(StreamGenerator,
-     NonTemporalBufferParameterLargeValuesYieldIdenticalOutput) {
-  constexpr size_t valueSize =
-      stream_generator::promise_type::minNonTemporalCopySize + 17;
-  std::string value(valueSize, 'a');
-  for (size_t i = 0; i < value.size(); ++i) {
-    value[i] = static_cast<char>('a' + i % 26);
-  }
-  // More than 1 MiB in total, so that some values span two buffers.
-  constexpr size_t numValues = 20;
-
-  auto runWithParam = [&value](bool useNonTemporal) {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::useNonTemporalExportBuffer_>(useNonTemporal);
-    std::string result;
-    // The parameter is read when the generator is created.
-    for (const auto& batch : yieldLargeValues(value, numValues)) {
-      result.append(batch);
-    }
-    return result;
-  };
-
-  std::string withMemcpy = runWithParam(false);
-  std::string withNonTemporal = runWithParam(true);
-  ASSERT_EQ(withMemcpy.size(), 1 + numValues * valueSize);
-  EXPECT_EQ(withMemcpy.front(), 'x');
-  EXPECT_EQ(withMemcpy.substr(1, valueSize), value);
-  EXPECT_EQ(withMemcpy, withNonTemporal);
 }
 
 #endif
