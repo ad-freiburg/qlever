@@ -37,6 +37,16 @@ namespace qlever::indexFormatConverter {
 // current format only in the encoding of geo points, and the source format
 // encodes geo points in the same way as the target format.
 //
+// NOTE: There is deliberately no conversion of the geo points to the current
+// `ZOrder` encoding. We did write a draft in #3432 and it worked fine, but it's
+// a lot of code that needs to be reviewed and maintained. Instead, we decided
+// to keep support for the `LatMajor` encoding of geo points, so that versions
+// of QLever with the new encoding can still load an index with the old
+// encoding (with a deprecation warning, and the index can be rebuilt with the
+// new one). When there are no geo points in the index, there is no friction at
+// all. The only drawback is that we have to support two different encodings of
+// geo points in the code base, at least for some time.
+//
 // `convertIndexToCurrentFormat` checks that the source format still is the
 // previous index format (`qlever::previousIndexFormatVersion`) and that the
 // target format still can be loaded by the current version of QLever (see
