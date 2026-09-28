@@ -35,8 +35,6 @@
 namespace ad_benchmark {
 namespace {
 
-using PolymorphicVocabulary;
-
 class PolymorphicVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
  private:
   // Remove a whole directory tree. Best effort: failures are ignored.

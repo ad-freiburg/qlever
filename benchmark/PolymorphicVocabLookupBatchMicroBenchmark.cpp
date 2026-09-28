@@ -35,8 +35,6 @@
 namespace ad_benchmark {
 namespace {
 
-using PolymorphicVocabulary;
-
 class PolymorphicVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
  private:
   // Remove the files of a vocabulary basename: the base file itself plus the
