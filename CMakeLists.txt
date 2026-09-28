@@ -405,17 +405,13 @@ if (USE_FIBER_IO)
     find_package(boost_fiber QUIET CONFIG)
     find_package(boost_context QUIET CONFIG)
     # Fallback for machines whose system Boost ships headers but no compiled
-    # fiber/context libraries (e.g. the Ural benchmark host): a self-built
-    # 1.83.0 prefix, statically linked so binaries carry no extra runtime
-    # loader path (the cluster dispatcher only provides liburing on
-    # LD_LIBRARY_PATH). Env BOOST_FIBER_PREFIX overrides the conventional
-    # Ural path below.
-    if ((NOT TARGET Boost::fiber OR NOT TARGET Boost::context))
-      foreach(_fiber_prefix $ENV{BOOST_FIBER_PREFIX} /local/data-ssd/stoetzem/boost-1.83.0)
-        if (NOT _fiber_prefix_dir AND EXISTS "${_fiber_prefix}/lib/cmake")
-          set(_fiber_prefix_dir "${_fiber_prefix}")
-        endif()
-      endforeach()
+    # fiber/context libraries: a self-built Boost 1.83.0 prefix given in the
+    # environment variable BOOST_FIBER_PREFIX, linked statically so binaries
+    # need no extra runtime loader path.
+    if ((NOT TARGET Boost::fiber OR NOT TARGET Boost::context)
+        AND DEFINED ENV{BOOST_FIBER_PREFIX}
+        AND EXISTS "$ENV{BOOST_FIBER_PREFIX}/lib/cmake")
+      set(_fiber_prefix_dir "$ENV{BOOST_FIBER_PREFIX}")
     endif()
     if (_fiber_prefix_dir)
       set(_saved_Boost_USE_STATIC_LIBS ${Boost_USE_STATIC_LIBS})
@@ -432,7 +428,6 @@ if (USE_FIBER_IO)
       unset(_saved_Boost_USE_STATIC_LIBS)
     endif()
     unset(_fiber_prefix_dir)
-    unset(_fiber_prefix)
     if (TARGET Boost::fiber AND TARGET Boost::context)
         MESSAGE(STATUS "Found Boost.Fiber and Boost.Context, enabling fiber cooperative scheduling")
         add_compile_definitions(QLEVER_HAS_FIBER_IO)
