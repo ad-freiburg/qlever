@@ -15,7 +15,6 @@
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/ConstructTypes.h"
 #include "global/Constants.h"
-#include "global/RuntimeParameters.h"
 
 namespace {
 using namespace qlever::constructExport;
