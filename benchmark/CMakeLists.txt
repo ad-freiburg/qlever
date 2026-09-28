@@ -37,5 +37,35 @@ if (NOT _NO_BENCHMARK)
     addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)
 
     addAndLinkBenchmark(SparqlExpressionBenchmark engine testUtil gtest gmock)
+    addAndLinkBenchmark(FsstScratchBufferBenchmark fsst)
+
+    addAndLinkBenchmark(SerializerMicroBenchmark engine sparqlParser qlever_util)
+
+    addAndLinkBenchmark(ChunkStreamingBenchmark engine testUtil)
+
+    addAndLinkBenchmark(PrefixCompressorBenchmark)
+
+    addAndLinkBenchmark(VocabBatchLookupBenchmark vocabulary)
+
+    addAndLinkBenchmark(VocabularyBatchLookupMicroBenchmark vocabulary)
+
+    addAndLinkBenchmark(VocabularyBatchLookupEndToEndBenchmark vocabulary)
+
+    addAndLinkBenchmark(CompressedVocabLookupBatchMicroBenchmark vocabulary
+        fsst)
+
+    addAndLinkBenchmark(CompressedVocabLookupBatchEndToEndBenchmark vocabulary
+        fsst)
+
+    addAndLinkBenchmark(SplitVocabLookupBatchMicroBenchmark vocabulary)
+
+    addAndLinkBenchmark(SplitVocabLookupBatchEndToEndBenchmark vocabulary)
+
+    addAndLinkBenchmark(PolymorphicVocabLookupBatchMicroBenchmark vocabulary)
+
+    addAndLinkBenchmark(PolymorphicVocabLookupBatchEndToEndBenchmark vocabulary)
+
+    add_executable(AdaptiveChunkBenchmark AdaptiveChunkBenchmark.cpp)
+    linkBenchmark(AdaptiveChunkBenchmark engine sparqlParser qlever_util)
 
 endif()

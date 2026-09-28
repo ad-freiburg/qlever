@@ -1,12 +1,14 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -64,6 +66,28 @@ TEST(RuntimeParameters, lazyIndexScanNumThreadsIsStrictlyPositive) {
       std::runtime_error);
   EXPECT_NO_THROW(params.setFromAssignment("lazy-index-scan-num-threads=1"));
   EXPECT_EQ(params.lazyIndexScanNumThreads_.get(), 1u);
+}
+
+// Test the defaults of the adaptive io_uring batch sizing parameters and that
+// the value `0` is rejected for both batch size bounds.
+TEST(RuntimeParameters, ioUringAdaptiveBatchParameters) {
+  RuntimeParameters params;
+  EXPECT_FALSE(params.ioUringAdaptiveBatchEnabled_.get());
+  EXPECT_EQ(params.ioUringAdaptiveBatchMinSize_.get(), 16u);
+  EXPECT_EQ(params.ioUringAdaptiveBatchMaxSize_.get(), 256u);
+  for (const auto* name :
+       {"iouring-adaptive-batch-min-size", "iouring-adaptive-batch-max-size"}) {
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        params.setFromAssignment(absl::StrCat(name, "=0")),
+        AllOf(HasSubstr(name), HasSubstr("strictly positive")),
+        std::runtime_error);
+  }
+  params.setFromAssignment("iouring-adaptive-batch-enabled=true");
+  params.setFromAssignment("iouring-adaptive-batch-min-size=4");
+  params.setFromAssignment("iouring-adaptive-batch-max-size=64");
+  EXPECT_TRUE(params.ioUringAdaptiveBatchEnabled_.get());
+  EXPECT_EQ(params.ioUringAdaptiveBatchMinSize_.get(), 4u);
+  EXPECT_EQ(params.ioUringAdaptiveBatchMaxSize_.get(), 64u);
 }
 
 // Test that `getKeys` and `toMap` (the building blocks of

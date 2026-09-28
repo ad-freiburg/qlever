@@ -304,7 +304,7 @@ TEST(VocabularyTest, LookupBatch) {
   auto v = createExampleVocabulary();
   std::vector<size_t> indices{2, 0, 3, 1};
   auto result = v->lookupBatch(indices);
-  EXPECT_THAT((*result), ::testing::ElementsAre("ba", "a", "car", "ab"));
+  EXPECT_THAT(result, ::testing::ElementsAre("ba", "a", "car", "ab"));
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*v, result,
                                                                 indices);
   // An empty batch is an invalid request and must throw.
@@ -313,11 +313,22 @@ TEST(VocabularyTest, LookupBatch) {
   // Duplicate indices: each position resolved independently.
   std::vector<size_t> dup{1, 1, 0};
   auto dupResult = v->lookupBatch(dup);
-  EXPECT_THAT((*dupResult), ::testing::ElementsAre("ab", "ab", "a"));
+  EXPECT_THAT(dupResult, ::testing::ElementsAre("ab", "ab", "a"));
 }
 
 // Each streamed result must equal the eager `lookupBatch` for that batch's
 // indices, and the batches must be yielded in input order.
+// The split-phase lookup must resolve like `lookupBatch`, in input order. An
+// empty batch and a null handle are invalid.
+TEST(VocabularyTest, BeginFinishLookup) {
+  auto v = createExampleVocabulary();
+  std::vector<size_t> indices{3, 1, 3, 0, 2};
+  auto result = v->finishLookup(v->beginLookup(indices));
+  EXPECT_THAT(result, ::testing::ElementsAre("car", "ab", "car", "a", "ba"));
+  EXPECT_ANY_THROW(v->beginLookup(ql::span<const size_t>{}));
+  EXPECT_ANY_THROW(v->finishLookup(nullptr));
+}
+
 TEST(VocabularyTest, LookupBatchesStreamed) {
   auto v = createExampleVocabulary();
   std::vector<std::vector<size_t>> batches{{2, 0}, {3}};
