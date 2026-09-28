@@ -619,4 +619,106 @@ TEST(FormatTriple, NTriplesQualifiesEveryTypedDatatype) {
   expectQualified(GEO_WKT_LITERAL.data());
 }
 
+// ============================================================================
+//                     TESTS FOR `formatTripleRle`
+// ============================================================================
+
+// _____________________________________________________________________________
+TEST(FormatTripleRle, ByteIdenticalToFormatTripleForSingleTriple) {
+  auto triple = EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                                makeTerm("<http://o>")};
+  RleConstructTripleCache cache;
+  EXPECT_EQ(formatTriple(triple, ad_utility::MediaType::turtle),
+            formatTripleRle(triple, ad_utility::MediaType::turtle, cache));
+}
+
+// _____________________________________________________________________________
+// A run of triples sharing the same subject/predicate `EvaluatedTerm`
+// instance (as produced by `ConstructBatchEvaluator`'s `IdCache` for
+// repeated `Id`s) must produce byte-identical output to `formatTriple`,
+// whether or not the cache hits.
+TEST(FormatTripleRle, RunOfRepeatedSubjectPredicateMatchesFormatTriple) {
+  auto subject = makeTerm("<http://s>");
+  auto predicate = makeTerm("<http://p>");
+  RleConstructTripleCache cache;
+  for (const std::string& objStr :
+       {"<http://o1>", "<http://o2>", "<http://o3>"}) {
+    auto triple = EvaluatedTriple{subject, predicate, makeTerm(objStr)};
+    EXPECT_EQ(formatTriple(triple, ad_utility::MediaType::turtle),
+              formatTripleRle(triple, ad_utility::MediaType::turtle, cache));
+  }
+}
+
+// _____________________________________________________________________________
+// After a run ends (new subject `EvaluatedTerm` instance, even with an
+// equal string value), `formatTripleRle` must re-format and must not leak
+// the previous run's cached bytes.
+TEST(FormatTripleRle, RunBoundaryReformatsSubjectAndPredicate) {
+  RleConstructTripleCache cache;
+  auto triple1 =
+      EvaluatedTriple{makeTerm("<http://s1>"), makeTerm("<http://p1>"),
+                      makeTerm("<http://o1>")};
+  EXPECT_EQ(formatTriple(triple1, ad_utility::MediaType::csv),
+            formatTripleRle(triple1, ad_utility::MediaType::csv, cache));
+
+  // Different `EvaluatedTerm` instances (distinct shared_ptrs), even though
+  // one has the same string value as before, must not hit the stale cache.
+  auto triple2 =
+      EvaluatedTriple{makeTerm("<http://s1>"), makeTerm("<http://p2>"),
+                      makeTerm("<http://o2>")};
+  EXPECT_EQ(formatTriple(triple2, ad_utility::MediaType::csv),
+            formatTripleRle(triple2, ad_utility::MediaType::csv, cache));
+}
+
+// _____________________________________________________________________________
+TEST(FormatTripleRle, CsvEscapingStillAppliedOnCacheHit) {
+  auto subject = makeTerm("sub,ject");
+  auto predicate = makeTerm("<http://p>");
+  RleConstructTripleCache cache;
+  auto triple1 = EvaluatedTriple{subject, predicate, makeTerm("<http://o1>")};
+  auto triple2 = EvaluatedTriple{subject, predicate, makeTerm("<http://o2>")};
+  EXPECT_EQ(formatTriple(triple1, ad_utility::MediaType::csv),
+            formatTripleRle(triple1, ad_utility::MediaType::csv, cache));
+  EXPECT_EQ(formatTriple(triple2, ad_utility::MediaType::csv),
+            formatTripleRle(triple2, ad_utility::MediaType::csv, cache));
+}
+
+// _____________________________________________________________________________
+// The byte-identity contract also holds for `tsv` and `ntriples`, including
+// the `^^<datatype>` qualification of typed literals in `ntriples` output.
+// Each triple is formatted twice so the second call exercises the cache.
+TEST(FormatTripleRle, TsvAndNTriplesByteIdentical) {
+  auto subject = makeTerm("<http://s>");
+  auto predicate = makeTerm("<http://p>");
+  RleConstructTripleCache cache;
+  for (auto format :
+       {ad_utility::MediaType::tsv, ad_utility::MediaType::ntriples}) {
+    auto triple =
+        EvaluatedTriple{subject, predicate, makeTerm("\"42\"", XSD_INT_TYPE)};
+    EXPECT_EQ(formatTriple(triple, format),
+              formatTripleRle(triple, format, cache))
+        << "format = " << ad_utility::toString(format);
+    // Second call with the same instances: subject/predicate come from the
+    // cache, the typed literal is re-qualified.
+    EXPECT_EQ(formatTriple(triple, format),
+              formatTripleRle(triple, format, cache))
+        << "format = " << ad_utility::toString(format);
+  }
+}
+
+// _____________________________________________________________________________
+// A turtle literal object on a cache-hit row still passes through literal
+// escaping; the cached subject/predicate strings are spliced in unchanged.
+TEST(FormatTripleRle, TurtleLiteralEscapingAppliedOnCacheHit) {
+  auto subject = makeTerm("<http://s>");
+  auto predicate = makeTerm("<http://p>");
+  RleConstructTripleCache cache;
+  auto triple1 = EvaluatedTriple{subject, predicate, makeTerm("\"hello\"")};
+  auto triple2 = EvaluatedTriple{subject, predicate, makeTerm("\"wor\\\"ld\"")};
+  EXPECT_EQ(formatTriple(triple1, ad_utility::MediaType::turtle),
+            formatTripleRle(triple1, ad_utility::MediaType::turtle, cache));
+  EXPECT_EQ(formatTriple(triple2, ad_utility::MediaType::turtle),
+            formatTripleRle(triple2, ad_utility::MediaType::turtle, cache));
+}
+
 }  // namespace

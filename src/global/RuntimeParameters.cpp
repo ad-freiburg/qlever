@@ -40,6 +40,7 @@ RuntimeParameters::RuntimeParameters() {
   add(rebuildMaxConcurrentPermutationPairs_);
   add(lazyIndexScanMaxSizeMaterialization_);
   add(useBinsearchTransitivePath_);
+  add(useRlePrefixConstructExport_);
   add(groupByHashMapEnabled_);
   add(fastIntToStringForExport_);
   add(groupByDisableIndexScanOptimizations_);

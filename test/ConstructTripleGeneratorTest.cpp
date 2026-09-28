@@ -9,6 +9,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/IdTableHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/ConstructTripleGenerator.h"
 #include "engine/ConstructTripleInstantiator.h"
@@ -480,6 +481,36 @@ INSTANTIATE_TEST_SUITE_P(
         FormattedTriplesParam{ad_utility::MediaType::turtle, "<s> <p> <o> .\n"},
         FormattedTriplesParam{ad_utility::MediaType::csv, "<s>,<p>,<o>\n"},
         FormattedTriplesParam{ad_utility::MediaType::tsv, "<s>\t<p>\t<o>\n"}));
+
+// RLE wiring: enabling `use-rle-prefix-construct-export` yields byte-identical
+// output to the default path. The run spans multiple `BATCH_SIZE` batches
+// with a repeated subject `Id`, so the shared `RleConstructTripleCache` is
+// exercised across batch boundaries via `ConstructBatchEvaluator`'s `IdCache`.
+TEST_F(ConstructTripleGeneratorTest, rleFlagOnMatchesFlagOff) {
+  // One more row than a batch: every row resolves `?sub` to the same `<s>`.
+  std::vector<std::vector<Id>> rows(ConstructTripleGenerator::BATCH_SIZE + 1,
+                                    {idS_});
+  auto result = makeResult(makeIdTableFromVector(rows));
+  auto templateTriples = oneTriple(Variable{"?sub"}, iriV("<p>"), iriV("<o>"));
+  VariableToColumnMap varMap;
+  varMap[Variable{"?sub"}] = makeAlwaysDefinedColumn(0);
+
+  for (auto mediaType :
+       {ad_utility::MediaType::turtle, ad_utility::MediaType::csv,
+        ad_utility::MediaType::tsv, ad_utility::MediaType::ntriples}) {
+    auto runWithFlag = [&](bool useRle) {
+      auto guard = setRuntimeParameterForTest<
+          &RuntimeParameters::useRlePrefixConstructExport_>(useRle);
+      auto table = makeTableWithRange(*result, 0, rows.size());
+      auto range = ConstructTripleGenerator::generateFormattedTriples(
+          templateTriples, varMap, singleTableRange(std::move(table)), 0,
+          mediaType, makeConfig());
+      return collectFormatted(std::move(range));
+    };
+    EXPECT_EQ(runWithFlag(false), runWithFlag(true))
+        << "mediaType = " << static_cast<int>(mediaType);
+  }
+}
 
 // Only turtle, csv, and tsv are supported. Any other media type triggers a
 // contract check failure when the first triple is pulled from the range.

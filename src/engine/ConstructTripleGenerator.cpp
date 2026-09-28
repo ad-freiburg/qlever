@@ -13,6 +13,7 @@
 #include "engine/ConstructDeduplicator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
+#include "global/RuntimeParameters.h"
 
 namespace qlever::constructExport {
 
@@ -155,6 +156,26 @@ ConstructTripleGenerator::generateFormattedTriples(
       evaluateTables(templateTriples, variableColumns, std::move(rowIndices),
                      rowOffset, config);
 
+  // Fold RLE prefix runs via `formatTripleRle` (see
+  // `engine/ConstructTripleInstantiator.h`).
+  // Read the default-off `RuntimeParameters::useRlePrefixConstructExport_`
+  // flag; keep it default-off until end-to-end validation on the V2
+  // pipeline completes.
+  // Share a single `RleConstructTripleCache` across the whole single-pass
+  // streamed output range. Fold a run only for consecutive rows whose
+  // `EvaluatedTerm` instances are pointer-identical (repeated `Id`s served
+  // from `ConstructBatchEvaluator`'s `IdCache`); expect no folding for
+  // unsorted inputs or after `IdCache` evictions.
+  const bool useRle =
+      getRuntimeParameter<&RuntimeParameters::useRlePrefixConstructExport_>();
+  if (useRle) {
+    auto transformer = [mediaType, cache = RleConstructTripleCache{}](
+                           const EvaluatedTriple& triple) mutable {
+      return formatTripleRle(triple, mediaType, cache);
+    };
+    return InputRangeTypeErased(std::move(evaluatedTriples) |
+                                ql::views::transform(std::move(transformer)));
+  }
   auto transformer = [mediaType](const EvaluatedTriple& triple) {
     return formatTriple(triple, mediaType);
   };

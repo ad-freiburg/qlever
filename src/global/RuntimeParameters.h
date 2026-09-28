@@ -136,6 +136,13 @@ struct RuntimeParameters {
   SizeT lazyIndexScanMaxSizeMaterialization_{
       1'000'000, "lazy-index-scan-max-size-materialization"};
   Bool useBinsearchTransitivePath_{true, "use-binsearch-transitive-path"};
+  // Enables RLE prefix constant folding (see `formatTripleRle` in
+  // `engine/ConstructTripleInstantiator.h`) in the
+  // CONSTRUCT triple export loop: repeated consecutive subject/predicate
+  // terms in a sorted result stream are formatted once and spliced into
+  // subsequent rows instead of being re-formatted per row. Default off,
+  // since it has not yet been validated on the V2 export pipeline.
+  Bool useRlePrefixConstructExport_{false, "use-rle-prefix-construct-export"};
   Bool groupByHashMapEnabled_{false, "group-by-hash-map-enabled"};
   // Use the branchless integer-to-ASCII formatter from `util/FastIntToString.h`
   // instead of `std::to_string` when serializing `xsd:int` literal values
