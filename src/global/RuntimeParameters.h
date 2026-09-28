@@ -45,6 +45,12 @@ struct RuntimeParameters {
   // between otherwise equal queries.
   Bool stripColumns_{false, "strip-columns"};
 
+  // If set, the CSV and TSV export of SELECT results escapes the cells with
+  // the vectorized `ad_utility::simd::SimdEscapeClassifier` instead of
+  // `RdfEscaping::escapeForCsv`/`escapeForTsv`. The output is the same.
+  Bool useSimdEscapeClassifierCsvTsv_{false,
+                                      "use-simd-escape-classifier-csv-tsv"};
+
   // If the time estimate for a sort operation is larger by more than this
   // factor than the remaining time, then the sort is canceled with a
   // timeout exception.
