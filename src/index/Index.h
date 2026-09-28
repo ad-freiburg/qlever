@@ -110,12 +110,12 @@ class Index {
   // Read necessary metadata into memory and open file handles.
   void addTextFromOnDiskIndex();
 
-  using Vocab = ad_utility::vocabulary::RdfsVocabulary;
+  using Vocab = RdfsVocabulary;
   const Vocab& getVocab() const;
-  const ad_utility::vocabulary::EncodedIriManager& encodedIriManager() const;
+  const EncodedIriManager& encodedIriManager() const;
   Vocab& getNonConstVocabForTesting();
 
-  using TextVocab = ad_utility::vocabulary::TextVocabulary;
+  using TextVocab = TextVocabulary;
 
   // Get a (non-owning) pointer to the BlankNodeManager of this Index.
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
@@ -133,10 +133,8 @@ class Index {
   // --------------------------------------------------------------------------
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
-  ad_utility::vocabulary::RdfsVocabulary::AccessReturnType indexToString(
-      VocabIndex id) const;
-  ad_utility::vocabulary::TextVocabulary::AccessReturnType indexToString(
-      WordVocabIndex id) const;
+  RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
+  TextVocabulary::AccessReturnType indexToString(WordVocabIndex id) const;
 
   [[nodiscard]] Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 

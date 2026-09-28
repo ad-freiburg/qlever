@@ -9,20 +9,18 @@
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 
-using Vocab = ad_utility::vocabulary::UnicodeVocabulary<
-    ad_utility::vocabulary::VocabularyInMemory,
-    ad_utility::vocabulary::SimpleStringComparator>;
+using Vocab = UnicodeVocabulary<VocabularyInMemory, SimpleStringComparator>;
 using namespace vocabulary_test;
 
 auto createVocabulary(const std::vector<std::string>& words) {
-  ad_utility::vocabulary::SimpleStringComparator comparator{"en", "us", false};
+  SimpleStringComparator comparator{"en", "us", false};
   Vocab v{comparator};
-  ad_utility::vocabulary::VocabularyInMemory::Words w;
+  VocabularyInMemory::Words w;
   w.build(words);
   return Vocab(comparator, std::move(w));
 }
 
-using Level = ad_utility::vocabulary::SimpleStringComparator::Level;
+using Level = SimpleStringComparator::Level;
 TEST(UnicodeVocabulary, LowercaseAscii) {
   const std::vector<std::string> words{"alpha", "beta",    "camma",
                                        "delta", "epsilon", "frikadelle"};

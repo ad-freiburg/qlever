@@ -47,10 +47,8 @@ struct EndToEndSplitFilenameFunc {
 
 class SplitVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
  private:
-  using Vocab = ad_utility::vocabulary::SplitVocabulary<
-      EndToEndSplitFunc, EndToEndSplitFilenameFunc,
-      ad_utility::vocabulary::VocabularyInMemory,
-      ad_utility::vocabulary::VocabularyInMemory>;
+  using Vocab = SplitVocabulary<EndToEndSplitFunc, EndToEndSplitFilenameFunc,
+                                VocabularyInMemory, VocabularyInMemory>;
 
   // Remove a whole directory tree. Best effort: failures are ignored.
   struct TempDirCleanup {
@@ -113,8 +111,7 @@ class SplitVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
     vocab_ = buildVocabulary((cleanup_.dir_ / "vocab").string());
 
     std::vector<size_t> marked;
-    for (const ad_utility::vocabulary::IndexAndWord& indexAndWord :
-         vocab_.scanAll()) {
+    for (const IndexAndWord& indexAndWord : vocab_.scanAll()) {
       marked.push_back(static_cast<size_t>(indexAndWord.index_));
     }
     constexpr size_t batchSize = 100'000;

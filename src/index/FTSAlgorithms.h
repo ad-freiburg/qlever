@@ -14,9 +14,8 @@ class FTSAlgorithms {
  public:
   // Filters all IdTable entries out where the WordIndex does not lay inside the
   // idRange.
-  static IdTable filterByRange(
-      const ad_utility::vocabulary::IdRange<WordVocabIndex>& idRange,
-      const IdTable& idPreFilter);
+  static IdTable filterByRange(const IdRange<WordVocabIndex>& idRange,
+                               const IdTable& idPreFilter);
 };
 
 #endif  // QLEVER_SRC_INDEX_FTSALGORITHMS_H

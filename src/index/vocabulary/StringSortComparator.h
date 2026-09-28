@@ -18,8 +18,6 @@
 #include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 
-namespace ad_utility::vocabulary {
-
 /**
  * @brief This class compares strings, e.g. strings from the text index
  * vocabulary, according to the collation of the held `LocaleManagerT`. To
@@ -444,7 +442,5 @@ using TripleComponentComparatorNoICU =
 // `index/vocabulary/LocaleManager.h`).
 using SimpleStringComparator = SimpleStringComparatorImpl<LocaleManager>;
 using TripleComponentComparator = TripleComponentComparatorImpl<LocaleManager>;
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_STRINGSORTCOMPARATOR_H

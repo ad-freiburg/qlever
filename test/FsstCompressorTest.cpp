@@ -11,6 +11,7 @@
 #include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <range/v3/view/zip.hpp>
@@ -18,6 +19,7 @@
 
 #include "backports/span.h"
 #include "util/FsstCompressor.h"
+#include "util/GTestHelpers.h"
 
 TEST(FsstEncoder, firstTest) {
   std::vector<std::string> s{
@@ -394,6 +396,15 @@ TEST(FsstEncoder, DecompressIntoMatchesDecompress) {
 
     EXPECT_EQ(decompressedView, viaString);
     EXPECT_THAT(viaString, ::testing::Eq(word));
+
+    const size_t bound = decoder.maxDecompressedSize(compressed);
+    if (bound > 0) {
+      std::string undersized(bound - 1, '\0');
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          (void)decoder.decompressInto(
+              compressed, ql::span<char>{undersized.data(), undersized.size()}),
+          ::testing::HasSubstr("out.size() >= bound"));
+    }
   }
 }
 
@@ -442,11 +453,26 @@ class FsstRepeatedDecoderTest : public ::testing::Test {
       EXPECT_THAT(n2, ::testing::Eq(viaString.size()));
       EXPECT_THAT(std::string_view(intoBuf2.data(), n2),
                   ::testing::Eq(viaString));
+
+      const size_t bound = repeated.maxDecompressedSize(compressed[i]);
+      if (bound > 0) {
+        std::string undersized(bound - 1, '\0');
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            (void)repeated.decompressInto(
+                compressed[i],
+                ql::span<char>{undersized.data(), undersized.size()}, scratch),
+            ::testing::HasSubstr("out.size() >= maxDecompressedSize(str)"));
+      }
     }
 
     if constexpr (N >= 2) {
-      EXPECT_GE(scratch.size(),
-                repeated.maxDecompressedSize(compressed.front()));
+      size_t expectedScratchSize = 0;
+      for (std::string_view word : compressed) {
+        expectedScratchSize =
+            std::max(expectedScratchSize, repeated.maxDecompressedSize(word) /
+                                              FsstDecoder::maxExpansionFactor);
+      }
+      EXPECT_EQ(scratch.size(), expectedScratchSize);
     }
   }
 };

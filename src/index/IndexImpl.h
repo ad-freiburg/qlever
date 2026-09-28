@@ -121,7 +121,7 @@ class IndexImpl {
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
-  ad_utility::vocabulary::EncodedIriManager encodedIriManager_;
+  EncodedIriManager encodedIriManager_;
   ScoreData scoreData_;
 
   TextMetaData textMeta_;
@@ -213,8 +213,7 @@ class IndexImpl {
   bool wasLoadedFromDisk_ = false;
 
   // The secondary vocabulary, see `secondaryVocab()`.
-  std::shared_ptr<const ad_utility::vocabulary::SecondaryVocabulary>
-      secondaryVocab_;
+  std::shared_ptr<const SecondaryVocabulary> secondaryVocab_;
 
   // The implementation of the `LocalVocabContext` interface for this index.
   // NOTE: `IndexImpl` deliberately does not implement that interface itself, so
@@ -295,7 +294,7 @@ class IndexImpl {
   // when the index is read from disk, together with the persisted data that
   // the words belong to; until then the only way to obtain a secondary
   // vocabulary is `setSecondaryVocabForTesting`.
-  const ad_utility::vocabulary::SecondaryVocabulary* secondaryVocab() const {
+  const SecondaryVocabulary* secondaryVocab() const {
     return secondaryVocab_.get();
   }
 
@@ -305,8 +304,7 @@ class IndexImpl {
   // `test/util/IndexTestHelpers.h`), such that the vocabulary is part of the
   // index right from its creation.
   void setSecondaryVocabForTesting(
-      std::shared_ptr<const ad_utility::vocabulary::SecondaryVocabulary>
-          secondaryVocab) {
+      std::shared_ptr<const SecondaryVocabulary> secondaryVocab) {
     secondaryVocab_ = std::move(secondaryVocab);
   }
 
@@ -405,12 +403,10 @@ class IndexImpl {
   NumNormalAndInternal numDistinctCol0(Permutation::Enum permutation) const;
 
   // ___________________________________________________________________________
-  ad_utility::vocabulary::RdfsVocabulary::AccessReturnType indexToString(
-      VocabIndex id) const;
+  RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
 
   // ___________________________________________________________________________
-  ad_utility::vocabulary::TextVocabulary::AccessReturnType indexToString(
-      WordVocabIndex id) const;
+  TextVocabulary::AccessReturnType indexToString(WordVocabIndex id) const;
 
  public:
   // ___________________________________________________________________________
@@ -442,12 +438,12 @@ class IndexImpl {
   struct TextBlockMetadataAndWordInfo {
     TextBlockMetadataAndWordInfo(
         const TextBlockMetaData& tbmd,
-        const ad_utility::vocabulary::IdRange<WordVocabIndex>& includingIdRange)
+        const IdRange<WordVocabIndex>& includingIdRange)
         : tbmd_{tbmd},
-          optIdRange_{computeHasToBeFiltered(includingIdRange)
-                          ? std::optional<ad_utility::vocabulary::IdRange<
-                                WordVocabIndex>>{includingIdRange}
-                          : std::nullopt} {}
+          optIdRange_{
+              computeHasToBeFiltered(includingIdRange)
+                  ? std::optional<IdRange<WordVocabIndex>>{includingIdRange}
+                  : std::nullopt} {}
     // The TextBlockMetaData has the information on where the blocks boundaries
     // and internal boundaries are. It is necessary to retrieve either the
     // context list or entity list of a text block.
@@ -462,14 +458,12 @@ class IndexImpl {
     // construction.
     // Note: This range is inclusive so it is [lowerId, upperId],
     // NOT [lowerId, upperId)
-    const std::optional<ad_utility::vocabulary::IdRange<WordVocabIndex>>
-        optIdRange_;
+    const std::optional<IdRange<WordVocabIndex>> optIdRange_;
 
     // Returns true if the text block contains entries outside of the requested
     // range
     bool computeHasToBeFiltered(
-        const ad_utility::vocabulary::IdRange<WordVocabIndex>& includingIdRange)
-        const {
+        const IdRange<WordVocabIndex>& includingIdRange) const {
       return !(tbmd_._firstWordId >= includingIdRange.first().get() &&
                tbmd_._lastWordId <= includingIdRange.last().get());
     }

@@ -237,7 +237,7 @@ class MaterializedViewsPatternMatchingTest
   std::optional<qlever::Qlever> qlv_;
   std::optional<MaterializedViewsManager> manager_;
   std::shared_ptr<QueryExecutionContext> qec_;
-  ad_utility::vocabulary::EncodedIriManager encodedIriManager_;
+  EncodedIriManager encodedIriManager_;
 
   // ___________________________________________________________________________
   void SetUp() override {

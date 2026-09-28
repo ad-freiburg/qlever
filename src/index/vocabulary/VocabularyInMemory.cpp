@@ -4,8 +4,6 @@
 
 #include "index/vocabulary/VocabularyInMemory.h"
 
-namespace ad_utility::vocabulary {
-
 using std::string;
 
 // _____________________________________________________________________________
@@ -26,4 +24,3 @@ void VocabularyInMemory::writeToFile(const string& fileName) const {
   file << _words;
   AD_LOG_INFO << "Done, number of words: " << _words.size() << std::endl;
 }
-}  // namespace ad_utility::vocabulary

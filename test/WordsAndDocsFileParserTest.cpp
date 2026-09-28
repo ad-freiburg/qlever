@@ -28,8 +28,8 @@ using StringVec = std::vector<std::string>;
 
 /// Lambdas
 
-auto getLocaleManager = []() -> ad_utility::vocabulary::LocaleManager {
-  return ad_utility::vocabulary::LocaleManager("en", "US", false);
+auto getLocaleManager = []() -> LocaleManager {
+  return LocaleManager("en", "US", false);
 };
 
 auto wordsFileLineToWordLine =
@@ -44,7 +44,7 @@ auto wordsFileLineToWordLine =
 auto testWordsFileParser = [](const std::string& wordsFilePath,
                               const WordLineVec& expectedResult) {
   size_t i = 0;
-  ad_utility::vocabulary::LocaleManager localeManager = getLocaleManager();
+  LocaleManager localeManager = getLocaleManager();
   for (auto wordsFileLine : WordsFileParser{wordsFilePath, localeManager}) {
     ASSERT_TRUE(i < expectedResult.size());
     WordLine testLine = wordsFileLineToWordLine(wordsFileLine);
@@ -70,7 +70,7 @@ auto docsFileLineToDocLine = [](const DocsFileLine& docsFileLine) -> DocLine {
 auto testDocsFileParser = [](const std::string& docsFilePath,
                              const DocLineVec& expectedResult) {
   size_t i = 0;
-  ad_utility::vocabulary::LocaleManager localeManager = getLocaleManager();
+  LocaleManager localeManager = getLocaleManager();
   for (auto docsFileLine : DocsFileParser{docsFilePath, localeManager}) {
     ASSERT_TRUE(i < expectedResult.size());
     DocLine testLine = docsFileLineToDocLine(docsFileLine);
@@ -91,7 +91,7 @@ auto testTokenizeAndNormalizeText =
        ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
       auto t = generateLocationTrace(loc);
       size_t i = 0;
-      ad_utility::vocabulary::LocaleManager localeManager = getLocaleManager();
+      LocaleManager localeManager = getLocaleManager();
       for (auto normalizedWord :
            tokenizeAndNormalizeText(testText, localeManager)) {
         ASSERT_TRUE(i < normalizedTextAsVec.size());

@@ -138,7 +138,11 @@ void IoUringPolicy::addBatch(int fd,
     // so `drainOneCqe` can recover it.
     const uint64_t requestId = nextRequestIdToAssign_++;
     inFlightReadsByRequestId_[requestId] = InFlightRead{handle, numBytesToRead};
-    io_uring_sqe_set_data64(sqe, requestId);
+    // Store the id in the pointer-sized `user_data` field, which every
+    // liburing version provides. The 64-bit `io_uring_sqe_set_data64` helper
+    // requires a very recent liburing that older images (e.g. the gcc11 CI
+    // image with its distro liburing) do not have yet.
+    io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(requestId));
     numInFlightReadRequests_++;
   }
   // Flush the remaining prepared SQEs to the kernel (the loop above only
@@ -170,7 +174,9 @@ void ad_utility::IoUringPolicy::drainOneCqe() {
   // Recover the read's result (`cqe->res`) and the request id we stored in the
   // SQE, then consume the CQE so its slot is freed. Do this before any throw.
   const int numBytesRead = cqe->res;
-  const uint64_t requestId = io_uring_cqe_get_data64(cqe);
+  // Recover the id via the pointer-sized `user_data` field, see `addBatch`.
+  const uint64_t requestId =
+      reinterpret_cast<uint64_t>(io_uring_cqe_get_data(cqe));
   io_uring_cqe_seen(&ring_, cqe);
   numInFlightReadRequests_--;
 

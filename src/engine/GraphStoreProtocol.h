@@ -183,16 +183,14 @@ class GraphStoreProtocol {
 
   // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
   // which is a SPARQL Query.
-  static ParsedQuery transformGet(
-      const GraphOrDefault& graph,
-      const ad_utility::vocabulary::EncodedIriManager* encodedIriManager);
+  static ParsedQuery transformGet(const GraphOrDefault& graph,
+                                  const EncodedIriManager* encodedIriManager);
   FRIEND_TEST(GraphStoreProtocolTest, transformGet);
 
   // Transform a SPARQL Graph Store Protocol HEAD to an equivalent
   // `ParsedQuery`. The response is the same as for GET but without the body.
-  static ParsedQuery transformHead(
-      const GraphOrDefault& graph,
-      const ad_utility::vocabulary::EncodedIriManager* encodedIriManager);
+  static ParsedQuery transformHead(const GraphOrDefault& graph,
+                                   const EncodedIriManager* encodedIriManager);
 
   // Transform a SPARQL Graph Store Protocol PUT to equivalent ParsedQueries
   // which are SPARQL Updates.

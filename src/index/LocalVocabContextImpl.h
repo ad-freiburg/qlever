@@ -31,11 +31,10 @@ class LocalVocabContextImpl : public LocalVocabContext {
  private:
   using BlankNodeManagerPtr = std::unique_ptr<ad_utility::BlankNodeManager>;
 
-  using SecondaryVocabularyPtr =
-      std::shared_ptr<const ad_utility::vocabulary::SecondaryVocabulary>;
+  using SecondaryVocabularyPtr = std::shared_ptr<const SecondaryVocabulary>;
 
-  const ad_utility::vocabulary::RdfsVocabulary* vocabulary_;
-  const ad_utility::vocabulary::EncodedIriManager* encodedIriManager_;
+  const RdfsVocabulary* vocabulary_;
+  const EncodedIriManager* encodedIriManager_;
   // NOTE: This is a pointer to the owning `std::unique_ptr` and not to the
   // manager itself, because the manager is only created while the index is
   // being read, long after this object has been constructed.
@@ -46,11 +45,10 @@ class LocalVocabContextImpl : public LocalVocabContext {
   const SecondaryVocabularyPtr* secondaryVocab_;
 
  public:
-  LocalVocabContextImpl(
-      const ad_utility::vocabulary::RdfsVocabulary* vocabulary,
-      const ad_utility::vocabulary::EncodedIriManager* encodedIriManager,
-      const BlankNodeManagerPtr* blankNodeManager,
-      const SecondaryVocabularyPtr* secondaryVocab)
+  LocalVocabContextImpl(const RdfsVocabulary* vocabulary,
+                        const EncodedIriManager* encodedIriManager,
+                        const BlankNodeManagerPtr* blankNodeManager,
+                        const SecondaryVocabularyPtr* secondaryVocab)
       : vocabulary_{vocabulary},
         encodedIriManager_{encodedIriManager},
         blankNodeManager_{blankNodeManager},

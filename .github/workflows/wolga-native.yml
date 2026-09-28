@@ -47,7 +47,10 @@ jobs:
           IS_PR: ${{ github.event_name == 'pull_request' }}
         run: |
           if [ "$IS_PR" = true ]; then
-            echo 'matrix={"include":[{"image":"clang21","toolchain":"clang21","build-type":"Release","extra-flags":"","allocator-backend":"pmr"},{"image":"clang16","toolchain":"clang16","build-type":"RelWithDebInfo","extra-flags":"-fsanitize=address,undefined -fno-omit-frame-pointer","needs-seccomp":true,"container-env":"ASAN_OPTIONS=detect_leaks=0"},{"image":"gcc11","toolchain":"gcc11","build-type":"Release","extra-flags":"","additional-cmake-options":"-DUSE_CPP_17_BACKPORTS=ON -DEXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17=ON"}]}' >> "$GITHUB_OUTPUT"
+            # PRs (thesis deadline 2026-09-25): one leg, the sanitizer build that
+            # runs every test. Portability legs (gcc11 C++17 backports, clang21
+            # pmr) stay in the push matrix below and run on master.
+            echo 'matrix={"include":[{"image":"clang16","toolchain":"clang16","build-type":"RelWithDebInfo","extra-flags":"-fsanitize=address,undefined -fno-omit-frame-pointer","needs-seccomp":true,"container-env":"ASAN_OPTIONS=detect_leaks=0"}]}' >> "$GITHUB_OUTPUT"
           else
             echo 'matrix={"include":[{"image":"gcc13","toolchain":"gcc13","build-type":"Release","extra-flags":""},{"image":"clang21","toolchain":"clang21","build-type":"Release","extra-flags":"","allocator-backend":"pmr"},{"image":"clang16","toolchain":"clang16","build-type":"Release","extra-flags":""},{"image":"clang16","toolchain":"clang16","build-type":"RelWithDebInfo","extra-flags":"-fsanitize=address,undefined -fno-omit-frame-pointer","needs-seccomp":true,"container-env":"ASAN_OPTIONS=detect_leaks=0"},{"image":"clang16","toolchain":"clang16","build-type":"RelWithDebInfo","extra-flags":"-fsanitize=undefined","needs-seccomp":true},{"image":"gcc11","toolchain":"gcc11","build-type":"Release","extra-flags":""},{"image":"gcc11","toolchain":"gcc11","build-type":"Release","extra-flags":"","additional-cmake-options":"-DUSE_CPP_17_BACKPORTS=ON -DEXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17=ON"},{"image":"gcc12","toolchain":"gcc12","build-type":"Release","extra-flags":""},{"image":"clang18","toolchain":"clang18","build-type":"Release","extra-flags":""},{"image":"conan","run-kind":"conan","build-type":"Release"},{"image":"emsdk-6.0.5","run-kind":"emsdk","build-type":"Release"}]}' >> "$GITHUB_OUTPUT"
           fi
@@ -105,13 +108,24 @@ jobs:
               # legs without a `container-env` matrix key).
               if [ -n "${{ matrix.container-env }}" ]; then export ${{ matrix.container-env }}; fi
               # apt runs its downloads as _apt via setgroups, which rootless podman
-              # on Wolga cannot do (no /etc/subuid entry), so keep apt's sandbox root.
+              # on Wolga cannot do (no /etc/subuid entry), so keep the apt sandbox
+              # user root.
+              # NEVER put a single quote (apostrophe) anywhere in this script,
+              # comments included: it ends the bash -c string, and the rest of
+              # the script then runs on the HOST as the runner user (seen
+              # 2026-09-25: apt and cmake failing with Permission denied).
               # Compiler cache on the host SSD (mounted at /ccache, persists
               # across runs). Images carry no ccache binary, so install it
               # on first use (~30s, once per fresh container layer).
-              command -v ccache >/dev/null 2>&1 || (apt-get -o APT::Sandbox::User=root update -qq && apt-get -o APT::Sandbox::User=root install -qy ccache)
-              export CCACHE_DIR=/ccache CCACHE_MAXSIZE=10G CCACHE_COMPRESS=true
-              ccache -z >/dev/null
+              # ccache is optional: a failed install falls back to building
+              # without a compiler cache.
+              command -v ccache >/dev/null 2>&1 || (apt-get -o APT::Sandbox::User=root update -qq && apt-get -o APT::Sandbox::User=root install -qy ccache) || echo "ccache unavailable, building without it"
+              LAUNCHER=""
+              if command -v ccache >/dev/null 2>&1; then
+                export CCACHE_DIR=/ccache CCACHE_MAXSIZE=10G CCACHE_COMPRESS=true
+                ccache -z >/dev/null
+                LAUNCHER="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+              fi
               # cmake configure pulls third-party sources (googletest etc.)
               # over anonymous github clones, which fleet egress
               # occasionally fails and would otherwise fail the whole leg.
@@ -132,7 +146,7 @@ jobs:
               # (different toolchain/sanitizer flags) must not be reused.
               configure_with_retry cmake -B /work/build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
                 -DCMAKE_TOOLCHAIN_FILE="/work/toolchains/${{ matrix.toolchain }}.cmake" \
-                -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                ${LAUNCHER} \
                 -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror ${{ matrix.extra-flags }}" \
                 -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false \
                 -DENABLE_EXPENSIVE_CHECKS=true \
@@ -148,7 +162,7 @@ jobs:
               # CancellationException-429 flake.
               cmake --build /work/build --config ${{ matrix.build-type }} -- -j ${CI_BUILD_JOBS:-8}
               echo "--- ccache stats for ${{ matrix.toolchain }} (this leg) ---"
-              ccache -s
+              command -v ccache >/dev/null 2>&1 && ccache -s || true
               cd /work/build/test
               # Drop stale per-test dirs: /work/build persists across runs on
               # the same host, and leftover previous.*/rebuild.* dirs from a

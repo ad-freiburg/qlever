@@ -166,7 +166,7 @@ class VocabBatchLookupMicroBenchmark : public BenchmarkInterface {
       group.addMeasurement("ContiguousVocabBatchBuilder + memcpy", [&] {
         size_t checksum = 0;
         for (size_t repetition = 0; repetition < repetitions; ++repetition) {
-          ad_utility::vocabulary::ContiguousVocabBatchBuilder builder{sizes_};
+          ContiguousVocabBatchBuilder builder{sizes_};
           auto targets = builder.targets();
           AD_CORRECTNESS_CHECK(targets.size() == words_.size());
           for (size_t i = 0; i < words_.size(); ++i) {
@@ -184,7 +184,7 @@ class VocabBatchLookupMicroBenchmark : public BenchmarkInterface {
       group.addMeasurement("ArenaVocabBatchBuilder::appendWord", [&] {
         size_t checksum = 0;
         for (size_t repetition = 0; repetition < repetitions; ++repetition) {
-          ad_utility::vocabulary::ArenaVocabBatchBuilder builder{words_.size()};
+          ArenaVocabBatchBuilder builder{words_.size()};
           for (std::string_view word : words_) {
             builder.appendWord(word);
           }
@@ -208,7 +208,7 @@ AD_REGISTER_BENCHMARK(VocabBatchLookupMicroBenchmark);
 class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
  private:
   std::string filename_ = "VocabBatchLookupBenchmark.vocab.tmp";
-  ad_utility::vocabulary::VocabularyInMemoryBinSearch vocabulary_;
+  VocabularyInMemoryBinSearch vocabulary_;
   // Shuffled batch of vocabulary indices, resolved by every measurement.
   std::vector<size_t> batch_;
 
@@ -219,8 +219,7 @@ class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
     ad_utility::deleteFile(filename_, false);
     ad_utility::deleteFile(filename_ + ".ids", false);
     {
-      ad_utility::vocabulary::VocabularyInMemoryBinSearch::WordWriter writer{
-          filename_};
+      VocabularyInMemoryBinSearch::WordWriter writer{filename_};
       for (size_t i = 0; i < numWords; ++i) {
         writer(makeSyntheticWord(i), i);
       }

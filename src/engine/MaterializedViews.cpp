@@ -488,7 +488,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
     // NOTE: We do not need the `EncodedIriManager` because we are only
     // interested in analyzing the query structure, not in converting its
     // components to `ValueId`s.
-    ad_utility::vocabulary::EncodedIriManager e;
+    EncodedIriManager e;
     parsedQuery_ = SparqlParser::parseQuery(&e, originalQuery_.value(), {});
 
     // Compute the `BIND`-to-column map.

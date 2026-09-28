@@ -87,13 +87,12 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
       wordsSinceLastProgress = 0;
     }
   };
-  auto writeWordFromVocab =
-      [&vocab, &vocabWriter,
-       &noteWord](const ad_utility::vocabulary::IndexAndWord& indexAndWord) {
-        const auto& [_, word] = indexAndWord;
-        (*vocabWriter)(word, vocab.shouldBeExternalized(word));
-        noteWord();
-      };
+  auto writeWordFromVocab = [&vocab, &vocabWriter,
+                             &noteWord](const IndexAndWord& indexAndWord) {
+    const auto& [_, word] = indexAndWord;
+    (*vocabWriter)(word, vocab.shouldBeExternalized(word));
+    noteWord();
+  };
   auto writeWordFromLocalVocab = [&vocab, &vocabWriter, &localVocabMapping,
                                   &noteWord](const InsertionInfo& info) {
     const auto& [_, word, originalId] = info;
@@ -111,7 +110,7 @@ LocalVocabMapping mergeVocabs(const std::string& vocabularyName,
       // The tags ensure that the local vocab entries are sorted before all the
       // original vocab entries, even if they share the same vocab index as
       // insertion position.
-      [tag = 1](const ad_utility::vocabulary::IndexAndWord& indexAndWord) {
+      [tag = 1](const IndexAndWord& indexAndWord) {
         return std::tie(indexAndWord.index_, tag);
       },
       [tag = 0](const InsertionInfo& info) {

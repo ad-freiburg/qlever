@@ -78,13 +78,12 @@ class RdfParserBase {
       TurtleParserIntegerOverflowBehavior::Error;
   bool invalidLiteralsAreSkipped_ = false;
 
-  const ad_utility::vocabulary::EncodedIriManager* encodedIriManager_;
+  const EncodedIriManager* encodedIriManager_;
 
  public:
   virtual ~RdfParserBase() = default;
 
-  explicit RdfParserBase(
-      const ad_utility::vocabulary::EncodedIriManager* encodedIriManager)
+  explicit RdfParserBase(const EncodedIriManager* encodedIriManager)
       : encodedIriManager_{encodedIriManager} {}
 
   virtual TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() final {
@@ -155,7 +154,7 @@ class TurtleParser : public RdfParserBase {
   static TripleComponent literalAndDatatypeToTripleComponent(
       std::string_view normalizedLiteralContent,
       const TripleComponent::Iri& typeIri,
-      const ad_utility::vocabulary::EncodedIriManager& encodedIriManager);
+      const EncodedIriManager& encodedIriManager);
 
  private:
   // Impl of the method above, also used in rdfLiteral parsing.
@@ -250,12 +249,10 @@ class TurtleParser : public RdfParserBase {
   bool useSimplifiedGrammar_ = false;
 
  public:
-  explicit TurtleParser(
-      const ad_utility::vocabulary::EncodedIriManager* encodedIriManager)
+  explicit TurtleParser(const EncodedIriManager* encodedIriManager)
       : RdfParserBase{encodedIriManager} {}
-  explicit TurtleParser(
-      const ad_utility::vocabulary::EncodedIriManager* encodedIriManager,
-      TripleComponent defaultGraphIri)
+  explicit TurtleParser(const EncodedIriManager* encodedIriManager,
+                        TripleComponent defaultGraphIri)
       : RdfParserBase{encodedIriManager},
         defaultGraphIri_{std::move(defaultGraphIri)} {}
   TurtleParser(TurtleParser&& rhs) noexcept = default;
@@ -427,9 +424,8 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
   using Base = TurtleParser<Tokenizer_T>;
 
  public:
-  explicit NQuadParser(const ad_utility::vocabulary::EncodedIriManager* ev)
-      : Base{ev} {}
-  explicit NQuadParser(const ad_utility::vocabulary::EncodedIriManager* ev,
+  explicit NQuadParser(const EncodedIriManager* ev) : Base{ev} {}
+  explicit NQuadParser(const EncodedIriManager* ev,
                        TripleComponent defaultGraphId)
       : Base{ev}, defaultGraphId_{std::move(defaultGraphId)} {}
 
@@ -454,12 +450,10 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
  public:
   using Parser::baseIri;
   using Parser::prefixMap;
-  explicit RdfStringParser(
-      const ad_utility::vocabulary::EncodedIriManager* encodedIriManager)
+  explicit RdfStringParser(const EncodedIriManager* encodedIriManager)
       : Parser{encodedIriManager} {}
-  explicit RdfStringParser(
-      const ad_utility::vocabulary::EncodedIriManager* encodedIriManager,
-      TripleComponent defaultGraph)
+  explicit RdfStringParser(const EncodedIriManager* encodedIriManager,
+                           TripleComponent defaultGraph)
       : Parser{encodedIriManager, std::move(defaultGraph)} {}
   std::optional<std::vector<TurtleTriple>> getBatch() override {
     throw std::runtime_error(
@@ -499,7 +493,7 @@ CPP_template(typename Parser)(requires ql::concepts::derived_from<
   // Parse only a single object.
   static TripleComponent parseTripleObject(std::string_view objectString) {
     // TODO<joka921> Make it possible to use an optional here.
-    ad_utility::vocabulary::EncodedIriManager encodedIriManager;
+    EncodedIriManager encodedIriManager;
     RdfStringParser parser{&encodedIriManager};
     parser.setInputStream(objectString);
     parser.object();
@@ -584,15 +578,14 @@ class RdfStreamParser : public Parser {
 
  public:
   // Default construction needed for tests
-  explicit RdfStreamParser(const ad_utility::vocabulary::EncodedIriManager* ev)
-      : Parser{ev} {}
+  explicit RdfStreamParser(const EncodedIriManager* ev) : Parser{ev} {}
 
   // Construct a parser that reads from an `InputFileSpecification`. The parser
   // creates its own I/O thread and `AsyncBlockSource` internally. The
   // `blocksize` parameter controls the size of the underlying I/O block buffer.
   explicit RdfStreamParser(const qlever::InputFileSpecification& spec,
                            ad_utility::MemorySize blocksize,
-                           const ad_utility::vocabulary::EncodedIriManager* ev,
+                           const EncodedIriManager* ev,
                            TripleComponent defaultGraphIri =
                                qlever::specialIds().at(DEFAULT_GRAPH_IRI))
       : Parser{ev, std::move(defaultGraphIri)} {
@@ -658,7 +651,7 @@ class RdfParallelParser : public RdfParserBase {
   // `blocksize` parameter controls the size of the underlying I/O block buffer.
   RdfParallelParser(const qlever::InputFileSpecification& spec,
                     ad_utility::MemorySize blocksize,
-                    const ad_utility::vocabulary::EncodedIriManager* ev,
+                    const EncodedIriManager* ev,
                     const TripleComponent& defaultGraphIri =
                         qlever::specialIds().at(DEFAULT_GRAPH_IRI),
                     std::chrono::milliseconds sleepTimeForTesting =
@@ -746,8 +739,7 @@ class RdfParallelParser : public RdfParserBase {
 class RdfMultifileParser : public RdfParserBase {
  public:
   // Default construction needed for tests
-  explicit RdfMultifileParser(
-      const ad_utility::vocabulary::EncodedIriManager* encodedIriManager)
+  explicit RdfMultifileParser(const EncodedIriManager* encodedIriManager)
       : RdfParserBase{encodedIriManager} {}
 
   // Construct the parser from a type-erased input range of file specifications
@@ -757,7 +749,7 @@ class RdfMultifileParser : public RdfParserBase {
   // `TurtleParser` above for the limitations of the relaxed mode).
   RdfMultifileParser(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-      const ad_utility::vocabulary::EncodedIriManager* encodedIriManager,
+      const EncodedIriManager* encodedIriManager,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
       bool useRelaxedParsing = false);
 
