@@ -6,10 +6,16 @@
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/functional/function_ref.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <optional>
+#include <string>
+
 #include "../../util/GTestHelpers.h"
+#include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/File.h"
 
 namespace {
 // A class that executes a passed function in its constructor.
