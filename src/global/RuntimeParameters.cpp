@@ -25,7 +25,6 @@ RuntimeParameters::RuntimeParameters() {
   add(stripColumns_);
   add(vocabLookupPrefetchDistance_);
   add(useVectorizedPrefixExport_);
-  add(useAlignedVocabBatchLookupBuffer_);
   add(sortEstimateCancellationFactor_);
   add(cacheMaxNumEntries_);
   add(cacheMaxSize_);

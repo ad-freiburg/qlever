@@ -56,12 +56,6 @@ struct RuntimeParameters {
   // for the prefix and a plain copy for the rest. The output is the same.
   Bool useVectorizedPrefixExport_{false, "use-vectorized-prefix-export"};
 
-  // If set, the batched vocabulary lookup of the export
-  // (`resolveVocabIndexIds` in `ExportIds.h`) stages its indices in a
-  // cache-line aligned `AlignedBatchBuffer` instead of a `std::vector`.
-  Bool useAlignedVocabBatchLookupBuffer_{
-      false, "use-aligned-vocab-batch-lookup-buffer"};
-
   // If the time estimate for a sort operation is larger by more than this
   // factor than the remaining time, then the sort is canceled with a
   // timeout exception.
