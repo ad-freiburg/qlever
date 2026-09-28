@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <range/v3/view/enumerate.hpp>
+#include <range/v3/range/conversion.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -157,8 +157,12 @@ class SplitVocabulary {
   static_assert((markerBitMask >> markerShift) ==
                 ad_utility::bitMaskForLowerBits(markerBitMaskSize));
 
-  // Instances of the functions used for implementing the specific split logic
+  // Instance of the function used for implementing the specific split logic
   static constexpr SplitFunction splitFunction_{};
+
+ private:
+  // Array that holds all underlying vocabularies.
+  UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
 
   // The base filenames of all the underlying vocabularies for the given base
   // `filename` of this vocabulary, obtained by appending the
@@ -171,10 +175,6 @@ class SplitVocabulary {
     }
     return filenames;
   }
-
- private:
-  // Array that holds all underlying vocabularies.
-  UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
 
   // Implementation of `scanAll`, written separately because in C++17, lambdas
   // can't have explicit template parameters.
