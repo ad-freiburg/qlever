@@ -112,8 +112,10 @@ class CompressedVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
       AD_CONTRACT_CHECK(end != value && *end == '\0' && errno != ERANGE);
       return static_cast<size_t>(parsed);
     };
-    // Bound the workload even when configured through the environment.
-    constexpr size_t maxRepetitions = 10'000;
+    // Bound the workload even when configured through the environment. One
+    // repetition takes about 0.2 ms, so the bound allows measurements of well
+    // over 10 s (about 80,000 repetitions reach 10 s for both measurements).
+    constexpr size_t maxRepetitions = 1'000'000;
     const size_t repetitions = parseEnvironmentSize(
         std::getenv("COMPRESSED_VOCAB_MICRO_REPETITIONS"), 50);
     AD_CONTRACT_CHECK(repetitions > 0);

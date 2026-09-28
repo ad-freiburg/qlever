@@ -63,7 +63,4 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(PolymorphicVocabLookupBatchEndToEndBenchmark vocabulary)
 
-    add_executable(AdaptiveChunkBenchmark AdaptiveChunkBenchmark.cpp)
-    linkBenchmark(AdaptiveChunkBenchmark engine sparqlParser qlever_util)
-
 endif()
