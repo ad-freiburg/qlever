@@ -5,7 +5,7 @@
 #   fetch-hosted-bin.sh --tar <file.tar>  install a bin-<sha>.tar fetched elsewhere
 #
 # Unpacks into $STORE/<sha>/ (the Wolga u24 layout: <target>, CMakeCache.txt,
-# META-<target>, plus META), links $STORE/by-branch/<ref>/<target> when the
+# META-<target>, deps-<target>.txt when present, plus META), links $STORE/by-branch/<ref>/<target> when the
 # ref is a branch, and checks every binary with ldd and --version/--help.
 #
 # Download auth: listing a public repo's artifacts works without a token, but
@@ -98,8 +98,19 @@ for t in $targets; do
   [ -x "$src/$t" ] || die "$t missing in artifact"
   if [ -e "$dst/$t" ] && [ "$FORCE" != 1 ]; then
     echo "KEEP $dst/$t (exists; FORCE=1 to overwrite)"
+    # The dependency list depends only on the source tree of <sha>, so an
+    # existing binary (e.g. a Wolga build) still gets one if it has none.
+    if [ -f "$src/deps-$t.txt" ]; then
+      [ -e "$dst/deps-$t.txt" ] || cp -f "$src/deps-$t.txt" "$dst/deps-$t.txt"
+    fi
   else
     cp -f "$src/META-$t" "$dst/META-$t"
+    # Dependency closure for jobq's measurement cache (absent in artifacts
+    # of older workflow versions; jobq then uses its coarse key). It depends
+    # only on the source tree of <sha>, so an existing list stays valid.
+    if [ -f "$src/deps-$t.txt" ]; then
+      cp -f "$src/deps-$t.txt" "$dst/deps-$t.txt"
+    fi
     # Binary last, atomically (a --wait-for on the path sees a whole file).
     cp -f "$src/$t" "$dst/.$t.tmp.$$" && mv -f "$dst/.$t.tmp.$$" "$dst/$t"
     installed=1
