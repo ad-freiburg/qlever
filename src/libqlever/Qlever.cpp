@@ -34,6 +34,7 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
+#include "util/GlobalExecutor.h"
 #include "util/Log.h"
 #include "util/TimeTracer.h"
 
@@ -89,6 +90,12 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
   if (config.loadTextIndex_) {
     index.addTextFromOnDiskIndex();
   }
+  if (config.indexDescription_.has_value()) {
+    index.setKbName(config.indexDescription_.value());
+  }
+  if (config.textDescription_.has_value()) {
+    index.setTextName(config.textDescription_.value());
+  }
 
   materializedViewsManager.setOnDiskBase(config.baseName_);
 
@@ -116,6 +123,19 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
 void Qlever::buildIndex(IndexBuilderConfig config) {
   // Reject invalid configurations early and with an informative error message.
   config.validate();
+  // Make the size of the global thread pool respect the number of threads that
+  // was configured for the index build. The pool is created on its first use
+  // and cannot be resized afterwards, so a process that has already used it
+  // (for example because it has built an index before) has to live with the
+  // existing pool. That is not an error, but it is worth a warning.
+  if (!ad_utility::trySetGlobalExecutorNumThreads(config.numThreads_)) {
+    AD_LOG_WARN << "The global thread pool already exists with "
+                << ad_utility::globalExecutorNumThreads() << " threads, so the "
+                << config.numThreads_
+                << " threads that were configured for this index build cannot "
+                   "be applied to it"
+                << std::endl;
+  }
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Set memory limit and parser buffer size if specified.
@@ -124,6 +144,9 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   }
   if (config.parserBufferSize_.has_value()) {
     index.parserBufferSize() = config.parserBufferSize_.value();
+  }
+  if (config.indexRowsPerBlock_.has_value()) {
+    index.rowsPerBlock() = config.indexRowsPerBlock_.value();
   }
 
   // If no text index name was specified, take the part of the wordsfile after
@@ -143,14 +166,15 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
-  index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_);
+  index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,
+                                              config.patternsForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(
       std::move(config.blankNodeIriRegexes_));
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
     AD_CONTRACT_CHECK(!config.inputFiles_.empty());
-    index.createFromFiles(config.inputFiles_);
+    index.createFromFiles(config.inputFiles_, config.numThreads_);
   }
 
   if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {
@@ -308,7 +332,7 @@ PlannedQuery Qlever::planQuery(
 
   qp.setEnablePatternTrick(enablePatternTrick_);
   auto qet = qp.createExecutionTree(parsedQuery);
-  qet.isRoot() = true;
+  qet->isRoot() = true;
   PlannedQuery plannedQuery = {std::move(parsedQuery), std::move(qet), qec};
 
   auto& rootOperation = *plannedQuery.queryExecutionTree().getRootOperation();
@@ -319,13 +343,14 @@ PlannedQuery Qlever::planQuery(
     rootOperation.recursivelySetTimeConstraint(timeLimit.value());
   }
 
+  auto& queryPlanningInfo = rootOperation.getQueryPlanningInfo();
   if (requestTimer.has_value()) {
-    auto& qet = plannedQuery.queryExecutionTree();
-    auto timeForQueryPlanning = requestTimer->msecs();
-    auto& runtimeInfoWholeQuery =
-        qet.getRootOperation()->getRuntimeInfoWholeQuery();
-    runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
+    queryPlanningInfo.timeQueryPlanning = requestTimer->msecs();
   }
+  queryPlanningInfo.queryPlanning = qp.planningInfo();
+  // The runtime information that is sent over the websocket during the
+  // execution also carries this information about the query planning.
+  qec.setQueryPlanningInfo(queryPlanningInfo);
   return plannedQuery;
 }
 
@@ -392,6 +417,18 @@ void IndexBuilderConfig::validate() const {
         "The vocabulary type \"", vocabType_.toString(),
         "\" cannot be used for index building, the supported types are ",
         ad_utility::VocabularyType::getListOfValuesForIndexBuilding()));
+  }
+  if (numThreads_ == 0) {
+    throw std::invalid_argument(
+        "The number of threads for the index build (`num-threads`) must be at "
+        "least 1");
+  }
+  if (indexRowsPerBlock_ == 0 ||
+      indexRowsPerBlock_ > MAX_INDEX_ROWS_PER_BLOCK) {
+    throw std::invalid_argument(absl::StrCat(
+        "The number of rows per block of the index (`index-rows-per-block`) "
+        "must be between 1 and ",
+        MAX_INDEX_ROWS_PER_BLOCK));
   }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");

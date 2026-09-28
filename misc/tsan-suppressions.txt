@@ -1,0 +1,25 @@
+# Suppressions for ThreadSanitizer (TSAN). Pass this file to a TSAN-instrumented
+# binary via `TSAN_OPTIONS=suppressions=<path-to-this-file>`. The CI does this
+# in `.github/workflows/native-build.yml`. For the format of this file see
+# https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions
+
+# False positive in Boost.Asio (up to and including Boost 1.91). The function
+# `ref_count_down` in `boost/asio/detail/atomic_count.hpp` decrements the
+# reference count of a type-erased executor target (`shared_target_executor`,
+# which is used e.g. when a `strand<any_io_executor>` is stored in an
+# `any_io_executor`, as happens inside `co_spawn`) using a release-only
+# `fetch_sub` followed by an acquire `std::atomic_thread_fence`. TSAN does not
+# model fences. So when two threads drop their references to the same target
+# concurrently, the `delete` by the last one is reported as a data race with
+# the atomic decrement of the other thread. The code itself is correct (it is
+# the same pattern that `boost::shared_ptr` uses). Boost.Asio fixed this in
+# commit 92410f933e ("Fix thread sanitizer warnings due to atomic thread
+# fences"), which is contained in Boost 1.92. Remove the following two entries
+# once the CI uses at least that version.
+# NOTE: Either entry alone suffices, because a `race:` entry matches any frame
+# of either of the two reported stacks. The second one is a fallback for the
+# case that TSAN cannot restore the stack of the previous access (the
+# decrementing thread), because `ref_count_down` has already returned when the
+# other thread runs `delete`, so it does not appear in the deleting stack.
+race:boost::asio::detail::ref_count_down
+race:boost::asio::execution::detail::shared_target_executor::~shared_target_executor

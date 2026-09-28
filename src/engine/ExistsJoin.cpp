@@ -274,7 +274,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
                          const VariableOrderKey& key) {
                        return columns.at(key.variable_).columnIndex_;
                      });
-    auto tree = qec->makeShared<QueryExecutionTree>(qp.createExecutionTree(pq));
+    auto tree = qp.createExecutionTree(pq);
     // Hide non-visible variables in the subtree, so that they are not
     // accidentally joined, ideally collisions wouldn't happen in the first
     // place, but since we're creating our own instance of `QueryPlanner` we

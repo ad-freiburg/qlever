@@ -158,6 +158,77 @@ TEST(Exception, AD_FAIL) {
   }
 }
 
+// The following functions demonstrate and test that all the check macros can be
+// used inside `constexpr` functions, see the note on `constexpr` in
+// `util/Exception.h`. The `static_assert`s below actually evaluate them at
+// compile time, which is what pins down the property.
+namespace constexprChecks {
+constexpr int contractCheck(int x) {
+  AD_CONTRACT_CHECK(x > 0);
+  return x + 1;
+}
+
+constexpr int contractCheckWithMessage(int x) {
+  AD_CONTRACT_CHECK(x > 0, "x must be positive, but was ", x);
+  return x + 1;
+}
+
+constexpr int correctnessCheck(int x) {
+  AD_CORRECTNESS_CHECK(x > 0);
+  return x + 1;
+}
+
+constexpr int correctnessCheckWithMessage(int x) {
+  AD_CORRECTNESS_CHECK(x > 0, "x must be positive, but was ", x);
+  return x + 1;
+}
+
+constexpr int expensiveCheck(int x) {
+  AD_EXPENSIVE_CHECK(x > 0);
+  return x + 1;
+}
+
+// `AD_FAIL` is only valid on a branch that is not taken, else the function
+// could never be evaluated at compile time.
+constexpr int fail(int x) {
+  if (x > 0) {
+    return x + 1;
+  }
+  AD_FAIL();
+}
+
+static_assert(contractCheck(1) == 2);
+static_assert(contractCheckWithMessage(1) == 2);
+static_assert(correctnessCheck(1) == 2);
+static_assert(correctnessCheckWithMessage(1) == 2);
+static_assert(expensiveCheck(1) == 2);
+static_assert(fail(1) == 2);
+}  // namespace constexprChecks
+
+// _____________________________________________________________________________
+TEST(Exception, constexprChecks) {
+  using namespace constexprChecks;
+  using ::testing::HasSubstr;
+  // The same functions still throw at runtime if the condition is violated.
+  EXPECT_EQ(contractCheck(1), 2);
+  AD_EXPECT_THROW_WITH_MESSAGE(contractCheck(-1),
+                               HasSubstr("Assertion `x > 0` failed"));
+  AD_EXPECT_THROW_WITH_MESSAGE(contractCheckWithMessage(-1),
+                               HasSubstr("x must be positive, but was -1"));
+  AD_EXPECT_THROW_WITH_MESSAGE(correctnessCheck(-1),
+                               HasSubstr("Assertion `x > 0` failed"));
+  AD_EXPECT_THROW_WITH_MESSAGE(correctnessCheckWithMessage(-1),
+                               HasSubstr("x must be positive, but was -1"));
+  AD_EXPECT_THROW_WITH_MESSAGE(fail(-1),
+                               HasSubstr("This code should be unreachable"));
+  if (ad_utility::areExpensiveChecksEnabled) {
+    AD_EXPECT_THROW_WITH_MESSAGE(expensiveCheck(-1),
+                                 HasSubstr("Assertion `x > 0` failed"));
+  } else {
+    EXPECT_EQ(expensiveCheck(-1), 0);
+  }
+}
+
 TEST(Exception, AD_EXPENSIVE_CHECK) {
 #if (!defined(NDEBUG) || defined(AD_ENABLE_EXPENSIVE_CHECKS))
   ASSERT_ANY_THROW(AD_EXPENSIVE_CHECK(3 > 5));

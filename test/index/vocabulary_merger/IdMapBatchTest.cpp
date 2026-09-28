@@ -51,7 +51,8 @@ TEST(IdMapBatchWriter, writeSeveralBatches) {
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 3);
 
   {
-    IdMapBatchWriter writer{partialVocabBasename, filenames.suffixes_};
+    IdMapBatchWriter writer{
+        ad_utility::InputRangeTypeErased{filenames.idMapFiles_}};
     // The first batch has two distinct words with the global IDs `10` and
     // `11`. The first word occurs in the partial vocabularies `0` and `2`, the
     // second one only in `0`.
@@ -86,7 +87,10 @@ TEST(IdMapBatchWriter, writeSeveralBatches) {
 TEST(IdMapBatchWriter, noBatches) {
   auto [filenames, cleanup] =
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
-  { IdMapBatchWriter writer{partialVocabBasename, filenames.suffixes_}; }
+  {
+    IdMapBatchWriter writer{
+        ad_utility::InputRangeTypeErased{filenames.idMapFiles_}};
+  }
   EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[0]), ::testing::IsEmpty());
 }
 
@@ -102,7 +106,8 @@ TEST(IdMapBatchWriter, onlyValidMappingsAreWritten) {
   // the `WordBatchBuilder` does.
   batch.localIdxMappings_.mappings_.resize(1000);
   {
-    IdMapBatchWriter writer{partialVocabBasename, filenames.suffixes_};
+    IdMapBatchWriter writer{
+        ad_utility::InputRangeTypeErased{filenames.idMapFiles_}};
     writer.writeBatch(batch);
   }
   EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_[0]),

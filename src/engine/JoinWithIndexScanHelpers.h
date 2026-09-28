@@ -8,7 +8,7 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/IndexScan.h"
 #include "engine/Result.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationReader.h"
 #include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"

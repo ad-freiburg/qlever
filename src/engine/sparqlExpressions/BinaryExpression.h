@@ -11,7 +11,10 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_BINARYEXPRESSION_H
 
 #include <array>
+#include <tuple>
+#include <utility>
 
+#include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "util/ChunkedForLoop.h"
 
@@ -74,12 +77,13 @@ template <typename Function, typename LeftValueGetter,
           typename RightValueGetter, typename Left, typename Right>
 ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
     Left&& left, Right&& right, EvaluationContext* context) {
+  using namespace homogeneousNumeric;
   using LeftType = std::decay_t<Left>;
   using RightType = std::decay_t<Right>;
 
   Function function;
 
-  // Case 1: constant–constant.
+  // Constant–constant operands don't benefit from upfront classification.
   if constexpr (isConstantResult<LeftType> && isConstantResult<RightType>) {
     context->cancellationHandle_->throwIfCancelled();
     return function(LeftValueGetter{}(AD_FWD(left), context),
@@ -89,6 +93,45 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
                         isConstantResult<LeftType>) &&
                        (isVectorResult<RightType> ||
                         isConstantResult<RightType>)) {
+    // Use the homogeneous numeric fast path when both operands and value
+    // getters support it.
+    if constexpr (supportsNumericFastPath<LeftValueGetter> &&
+                  supportsNumericFastPath<RightValueGetter> &&
+                  supportsNumericFastPathOperand<Left>() &&
+                  supportsNumericFastPathOperand<Right>()) {
+      const auto classifications =
+          classifyNumericOperands(context, left, right);
+
+      if (auto homogeneousTypes = getHomogeneousNumericTypes(classifications);
+          homogeneousTypes.has_value()) {
+        return dispatchNumericTypes(
+            homogeneousTypes.value(),
+            [&left, &right, context](auto leftType,
+                                     auto rightType) -> ExpressionResult {
+              using LeftNumericType = typename decltype(leftType)::type;
+              using RightNumericType = typename decltype(rightType)::type;
+
+              return evaluateHomogeneousNumericOperation<
+                  Function, LeftNumericType, RightNumericType>(
+                  std::tie(left, right), context);
+            });
+      }
+
+      if (auto majorityTypes = getMajorityNumericTypes(classifications);
+          majorityTypes.has_value()) {
+        return dispatchNumericTypes(
+            majorityTypes.value(),
+            [&left, &right, context](auto leftType,
+                                     auto rightType) -> ExpressionResult {
+              using LeftNumericType = typename decltype(leftType)::type;
+              using RightNumericType = typename decltype(rightType)::type;
+
+              return evaluateSpeculativeNumericOperation<
+                  Function, LeftValueGetter, RightValueGetter, LeftNumericType,
+                  RightNumericType>(left, right, context);
+            });
+      }
+    }
     auto getLeft =
         makeIndexedValueGetter<LeftValueGetter>(AD_FWD(left), context);
     auto getRight =
@@ -103,7 +146,6 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
         [context]() { context->cancellationHandle_->throwIfCancelled(); });
 
     return result;
-
   } else {
     static_assert(ad_utility::alwaysFalse<std::tuple<LeftType, RightType>>,
                   "Unhandled binary expression operand types");

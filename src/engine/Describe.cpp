@@ -25,8 +25,8 @@ Describe::Describe(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> Describe::getChildren() {
-  return {subtree_.get()};
+qlm::vector<QueryExecutionTree*> Describe::getChildrenImpl() const {
+  return {{subtree_.get()}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -103,7 +103,8 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
 template <typename Allocator>
 static IdTable getNewBlankNodes(
     const Allocator& allocator,
-    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, ql::span<Id> input) {
+    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
+    ConstIdColumnRef input) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) resultColumn = result.getColumn(0);

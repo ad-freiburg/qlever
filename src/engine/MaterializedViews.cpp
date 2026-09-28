@@ -13,6 +13,7 @@
 
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <stdexcept>
 
 #include "backports/filesystem.h"
@@ -26,6 +27,7 @@
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
+#include "index/CompressedRelationWriter.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
@@ -328,9 +330,11 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 IndexMetaData MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
   std::string spoFilename = absl::StrCat(getFilenameBase(), VIEW_SPO_SUFFIX);
+  // NOTE: The block size of an index is not necessarily the default, see
+  // `INDEX_ROWS_PER_BLOCK_KEY`.
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
       numCols(), ad_utility::File{spoFilename, "w"},
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
+      qec_->getIndex().rowsPerBlock());
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
   IndexMetaData spoMetaData;
@@ -947,7 +951,7 @@ MaterializedView::computeCacheKey(
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     QueryPlanner qp{&qec, handle};
 
-    QueryExecutionTree executionTree{&qec};
+    std::shared_ptr<QueryExecutionTree> executionTree;
     try {
       executionTree = qp.createExecutionTree(parsed);
     } catch (const MaterializedViewConfigException&) {
@@ -960,7 +964,7 @@ MaterializedView::computeCacheKey(
     }
 
     ColumnMapping mapping;
-    for (const auto& [var, col] : executionTree.getVariableColumns()) {
+    for (const auto& [var, col] : executionTree->getVariableColumns()) {
       auto it = viewCols.find(var);
       // Internal variables and variables that are not selected by the
       // materialized view query are not present in the view. Therefore this
@@ -970,7 +974,7 @@ MaterializedView::computeCacheKey(
       }
       mapping.insert({col.columnIndex_, it->second.columnIndex_});
     }
-    return CacheKeyAndColumnMapping{executionTree.getCacheKey(),
+    return CacheKeyAndColumnMapping{executionTree->getCacheKey(),
                                     std::move(mapping)};
   };
 

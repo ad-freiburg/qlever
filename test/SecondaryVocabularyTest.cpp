@@ -632,7 +632,7 @@ std::string runQuery(QueryExecutionContext* qec, const std::string& query) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::string result;
   for (const auto& block : ExportQueryExecutionTrees::computeResult(
-           parsedQuery, executionTree, ad_utility::MediaType::tsv, timer,
+           parsedQuery, *executionTree, ad_utility::MediaType::tsv, timer,
            cancellationHandle)) {
     result += block;
   }
@@ -671,7 +671,7 @@ void runUpdate(ContextWithSecondaryVocab& context, const std::string& update) {
           QueryPlanner queryPlanner{&context.qec_, cancellationHandle};
           auto executionTree = queryPlanner.createExecutionTree(parsedQuery);
           ExecuteUpdate::executeUpdate(*context.index_, parsedQuery,
-                                       executionTree, deltaTriples,
+                                       *executionTree, deltaTriples,
                                        cancellationHandle);
         }
       });
@@ -762,8 +762,8 @@ TEST(SecondaryVocabIndex, updateWithWordOfTheSecondaryVocabulary) {
 // test that a future change of the secondary vocabulary has to keep passing.
 TEST(SecondaryVocabIndex, sameResultsWithAndWithoutSecondaryVocabulary) {
   // A knowledge graph with enough triples to span several blocks per
-  // permutation (a block holds two `Id`s per column in the tests, see
-  // `TestIndexConfig::blocksizePermutations`), and with objects of several
+  // permutation (a block holds two rows in the tests, see
+  // `TestIndexConfig::rowsPerBlock`), and with objects of several
   // datatypes.
   std::string kg;
   for (size_t i = 0; i < 12; ++i) {
