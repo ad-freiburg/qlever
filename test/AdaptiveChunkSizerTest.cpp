@@ -13,7 +13,6 @@
 
 namespace {
 
-using qlever::AdaptiveChunkBuffer;
 using qlever::AdaptiveChunkConfig;
 using qlever::AdaptiveChunkSizer;
 using qlever::AdaptiveChunkStats;
@@ -193,47 +192,6 @@ TEST(AdaptiveChunkSizerTest, CustomConfiguration) {
   // Next flush stays at 512 KB
   sizer.recordChunk(512 * 1024, 8000);
   EXPECT_EQ(sizer.currentChunkBytes(), 512 * 1024);
-}
-
-// =============================================================================
-// Unit Tests for AdaptiveChunkBuffer
-// =============================================================================
-
-TEST(AdaptiveChunkBufferTest, WriteAndFlushRampUp) {
-  AdaptiveChunkBuffer buffer;
-
-  EXPECT_EQ(buffer.bytesBuffered(), 0);
-  EXPECT_EQ(buffer.rowsBuffered(), 0);
-  EXPECT_FALSE(buffer.isReadyToFlush());
-
-  // Write small slice
-  buffer.write("Hello, World!\n");
-  buffer.recordRow();
-  EXPECT_EQ(buffer.bytesBuffered(), 14);
-  EXPECT_EQ(buffer.rowsBuffered(), 1);
-  EXPECT_EQ(buffer.currentView(), "Hello, World!\n");
-
-  // Flush buffer
-  std::string flushed = buffer.flush();
-  EXPECT_EQ(flushed, "Hello, World!\n");
-  EXPECT_EQ(buffer.bytesBuffered(), 0);
-  EXPECT_EQ(buffer.rowsBuffered(), 0);
-  EXPECT_EQ(buffer.sizer().chunksFlushed(), 1);
-  EXPECT_EQ(buffer.sizer().currentChunkBytes(), 128 * 1024);
-}
-
-// Writes beyond the current capacity keep every byte, also when the growth is
-// capped at `maxChunkBytes_` and a single write exceeds that cap.
-TEST(AdaptiveChunkBufferTest, GrowthBeyondMaxChunkBytesKeepsAllBytes) {
-  AdaptiveChunkBuffer buffer{AdaptiveChunkConfig{8, 16}};
-  const std::string first(12, 'a');
-  const std::string second(20, 'b');
-  buffer.write(first);
-  buffer.write(second);
-  EXPECT_EQ(buffer.bytesBuffered(), 32);
-  EXPECT_EQ(buffer.currentView(), first + second);
-  EXPECT_EQ(buffer.flush(), first + second);
-  EXPECT_EQ(buffer.sizer().currentChunkBytes(), 16);
 }
 
 }  // namespace

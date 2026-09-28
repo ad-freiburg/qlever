@@ -13,17 +13,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
-#include <limits>
-#include <memory>
-#include <optional>
-#include <string>
-#include <string_view>
 #include <utility>
-#include <vector>
 
 #include "util/Exception.h"
-#include "util/Log.h"
 
 namespace qlever::export_streaming {
 
@@ -247,88 +239,9 @@ class AdaptiveChunkSizer {
   }
 };
 
-// _____________________________________________________________________________
-// Self-Managing Adaptive Chunk Buffer.
-// Combines an `AdaptiveChunkSizer` with an underlying memory buffer,
-// automatically resizing its allocated memory on flush and providing
-// zero-allocation direct formatting utilities.
-class AdaptiveChunkBuffer {
- private:
-  AdaptiveChunkSizer sizer_;
-  std::vector<char> buffer_;
-  size_t writePos_{0};
-  size_t rowsInCurrentChunk_{0};
-
- public:
-  // ___________________________________________________________________________
-  explicit AdaptiveChunkBuffer(
-      AdaptiveChunkConfig config = AdaptiveChunkConfig{})
-      : sizer_{std::move(config)},
-        buffer_(sizer_.currentChunkBytes()),
-        writePos_{0},
-        rowsInCurrentChunk_{0} {}
-
-  // ___________________________________________________________________________
-  // Write a string_view slice into the buffer, expanding dynamically if needed.
-  // Doubling is capped at `maxChunkBytes_`, so the buffer only grows beyond
-  // that cap by exactly the bytes that a single oversized write needs.
-  void write(std::string_view sv) {
-    if (sv.empty()) {
-      return;
-    }
-    const size_t required = writePos_ + sv.size();
-    if (required > buffer_.size()) {
-      const size_t doubled =
-          std::min(buffer_.size() * 2, sizer_.config().maxChunkBytes_);
-      buffer_.resize(std::max(doubled, required));
-    }
-    std::memcpy(buffer_.data() + writePos_, sv.data(), sv.size());
-    writePos_ += sv.size();
-  }
-
-  // ___________________________________________________________________________
-  // Record the addition of a row/triple to the active chunk.
-  void recordRow() noexcept { ++rowsInCurrentChunk_; }
-
-  // ___________________________________________________________________________
-  // Check whether the active buffer has reached the current adaptive threshold.
-  [[nodiscard]] bool isReadyToFlush() const noexcept {
-    return sizer_.isChunkFull(writePos_, rowsInCurrentChunk_);
-  }
-
-  // ___________________________________________________________________________
-  // Non-owning view of the currently written bytes in the active chunk.
-  [[nodiscard]] std::string_view currentView() const noexcept {
-    return std::string_view(buffer_.data(), writePos_);
-  }
-
-  // ___________________________________________________________________________
-  // Extract active chunk and advance sizer to the next adaptive capacity level.
-  [[nodiscard]] std::string flush() {
-    std::string chunk(buffer_.data(), writePos_);
-    sizer_.recordChunk(writePos_, rowsInCurrentChunk_);
-
-    writePos_ = 0;
-    rowsInCurrentChunk_ = 0;
-    buffer_.resize(sizer_.currentChunkBytes());
-    return chunk;
-  }
-
-  // ___________________________________________________________________________
-  [[nodiscard]] size_t bytesBuffered() const noexcept { return writePos_; }
-  [[nodiscard]] size_t rowsBuffered() const noexcept {
-    return rowsInCurrentChunk_;
-  }
-  [[nodiscard]] const AdaptiveChunkSizer& sizer() const noexcept {
-    return sizer_;
-  }
-  [[nodiscard]] AdaptiveChunkSizer& sizer() noexcept { return sizer_; }
-};
-
 }  // namespace qlever::export_streaming
 
 namespace qlever {
-using export_streaming::AdaptiveChunkBuffer;
 using export_streaming::AdaptiveChunkConfig;
 using export_streaming::AdaptiveChunkSizer;
 using export_streaming::AdaptiveChunkStats;
