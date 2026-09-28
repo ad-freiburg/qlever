@@ -61,10 +61,13 @@ class VocabularyInternalExternal {
   auto scanAll() const { return externalVocab_.scanAll(); }
 
   //____________________________________________________________________________
-  // Look up words for `indices` in a batch, returning string views in request
-  // order. `indices` must not be empty. The returned result is self-contained:
-  // it retains shared ownership of the underlying word storage, so the views
-  // stay valid after this vocabulary is closed or destroyed.
+  // Look up the words for `indices` and return them in the order of
+  // `indices`. `indices` must not be empty. Words of the internal vocabulary
+  // are returned as views into this vocabulary (no copy), all other words are
+  // read with one batched lookup in the external vocabulary, whose buffer is
+  // owned by the result. Lifetime: the result must not be used after this
+  // vocabulary is closed or destroyed (the index outlives every query, so
+  // this holds for lookups during query processing).
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________
