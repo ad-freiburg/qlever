@@ -316,6 +316,21 @@ TEST(VocabularyTest, LookupBatch) {
   EXPECT_THAT(dupResult, ::testing::ElementsAre("ab", "ab", "a"));
 }
 
+// _____________________________________________________________________________
+// The builder overload appends the same words, in input order, to the
+// caller's builder; two calls append to the same builder.
+TEST(VocabularyTest, LookupBatchWithBuilder) {
+  auto v = createExampleVocabulary();
+  ArenaVocabBatchBuilder builder(6);
+  v->lookupBatch(std::vector<size_t>{2, 0, 3, 1}, builder);
+  v->lookupBatch(std::vector<size_t>{1, 1}, builder);
+  EXPECT_THAT(std::move(builder).finalize(),
+              ::testing::ElementsAre("ba", "a", "car", "ab", "ab", "ab"));
+
+  ArenaVocabBatchBuilder unused(1);
+  EXPECT_ANY_THROW(v->lookupBatch(ql::span<const size_t>{}, unused));
+}
+
 // Each streamed result must equal the eager `lookupBatch` for that batch's
 // indices, and the batches must be yielded in input order.
 TEST(VocabularyTest, LookupBatchesStreamed) {
