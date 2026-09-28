@@ -279,13 +279,16 @@ TEST(VocabularyOnDisk, LookupBatchMatchesIndividualLookups) {
 TEST(VocabularyOnDisk, LookupBatchPageCacheFastPathIsByteIdentical) {
   auto vocab = createExampleVocabulary();
   std::array<size_t, 13> indices{0, 1, 2, 3, 4, 2, 0, 3, 1, 1, 4, 0, 3};
+  // The fast path is on by default; restore the default after the test.
+  absl::Cleanup resetParameter{[]() {
+    setRuntimeParameter<
+        &RuntimeParameters::vocabularyIouringPageCacheFastPath_>(true);
+  }};
+  setRuntimeParameter<&RuntimeParameters::vocabularyIouringPageCacheFastPath_>(
+      false);
   auto withoutFastPath = vocab->lookupBatch(indices);
   setRuntimeParameter<&RuntimeParameters::vocabularyIouringPageCacheFastPath_>(
       true);
-  absl::Cleanup resetParameter{[]() {
-    setRuntimeParameter<
-        &RuntimeParameters::vocabularyIouringPageCacheFastPath_>(false);
-  }};
   auto withFastPath = vocab->lookupBatch(indices);
   EXPECT_THAT(withFastPath, ::testing::ElementsAreArray(withoutFastPath));
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
