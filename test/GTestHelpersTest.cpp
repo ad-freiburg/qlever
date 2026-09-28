@@ -75,7 +75,8 @@ TEST(GTestHelpersTest, PmrStringSsoCapacity) {
 TEST(GTestHelpersTest, RequirePmrStringInlineStorageRejectsInvalidSizes) {
   // `maxSize == 0` violates the precondition, and a size above the probed
   // capacity violates the platform premise; both must throw.
-  EXPECT_ANY_THROW(requirePmrStringInlineStorage(0));
+  AD_EXPECT_THROW_WITH_MESSAGE(requirePmrStringInlineStorage(0),
+                               ::testing::HasSubstr("maxSize > 0"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       requirePmrStringInlineStorage(pmrStringSsoCapacity() + 1),
       ::testing::HasSubstr("Platform premise violated"));
