@@ -1,0 +1,236 @@
+name: Build binaries
+
+# Builds Ural-compatible binaries on a GitHub-hosted ubuntu-24.04 runner, to
+# offload the Wolga `u24` build flavor (wolga-workload). Same toolchain and
+# configuration as that flavor:
+#   - Ubuntu 24.04, gcc 13.3 (the noble default), Boost 1.83, ICU 74
+#   - liburing 2.15 built from source (Ural's liburing-install is 2.15;
+#     the binary links liburing.so.2 dynamically, resolved on Ural via
+#     LD_LIBRARY_PATH=/local/data-ssd/stoetzem/liburing-install/lib)
+#   - -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=20 -DUSE_IO_URING=ON
+#     -DENABLE_BENCHMARKS=ON, ccache launchers, USE_PRECOMPILED_HEADERS=OFF
+#     (wolga-workload additionally sets FETCHCONTENT_FULLY_DISCONNECTED=ON
+#     because Wolga builds offline; it does not change the build).
+#
+# Usage (after this file is on the default branch):
+#     ghq workflow run build-binaries.yml -R marvin7122/qlever \
+#       -f ref=<branch-or-sha> -f targets="qlever-server <OtherTarget>"
+# Output: one artifact `bin-<sha>` holding `bin-<sha>.tar` with the layout of
+# the Ural bin-cache directory /local/data-ssd/stoetzem/bin-cache/<sha>/:
+#     <sha>/<target>...  <sha>/CMakeCache.txt  <sha>/META-<target>...
+#     <sha>/META         (sha, ref, targets, compiler, run)
+# The tar keeps the executable bits (artifact zips drop them). Install it on
+# Ural with fetch-hosted-bin.sh <run-id> (.github/scripts/).
+
+run-name: "build-binaries ${{ inputs.ref || github.head_ref || github.ref_name }} [${{ inputs.targets || 'qlever-server' }}]"
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or SHA to build (empty = the dispatch ref)
+        required: false
+        default: ''
+      targets:
+        description: Space-separated CMake targets, e.g. "qlever-server VocabularyBatchLookupAttributionBenchmark"
+        required: false
+        default: 'qlever-server'
+  # Self-test when this workflow or the fetch script changes in a PR.
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - .github/workflows/build-binaries.yml
+      - .github/scripts/fetch-hosted-bin.sh
+
+concurrency:
+  # Every dispatch runs on its own (in a shared group GitHub cancels all but
+  # the newest queued run); a new push to a PR cancels its older self-test.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Bump CCACHE_EPOCH to start from an empty compiler cache.
+  CCACHE_EPOCH: v1
+  LIBURING_VERSION: '2.15'
+
+jobs:
+  build:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
+    name: build (u24, gcc13, Release, liburing 2.15)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || '' }}
+          submodules: recursive
+          # Full history and tags: CompilationInfo.cmake embeds `git describe`
+          # (e.g. v0.6.0-560-g<sha>, as Wolga builds report in --version);
+          # a shallow clone yields 0.0.0-unknown.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve sha and targets
+        env:
+          IN_REF: ${{ inputs.ref }}
+          IN_TARGETS: ${{ inputs.targets }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          REF="${IN_REF:-${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}}"
+          TARGETS=$(printf '%s' "${IN_TARGETS:-qlever-server}" | tr -s ' \t\n' ' ' | sed 's/^ //; s/ $//')
+          case "${TARGETS}" in *[!A-Za-z0-9_.+\ -]*) echo "::error::bad targets '${TARGETS}'"; exit 1 ;; esac
+          echo "SHA=${SHA}" >> "$GITHUB_ENV"
+          echo "REF=${REF}" >> "$GITHUB_ENV"
+          echo "TARGETS=${TARGETS}" >> "$GITHUB_ENV"
+          echo "sha=${SHA} ref=${REF} targets=${TARGETS}"
+
+      - name: Install dependencies (Ubuntu 24.04 archive only)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qy --no-install-recommends \
+            gcc-13 g++-13 ccache \
+            libboost1.83-all-dev libicu-dev libzstd-dev libjemalloc-dev \
+            libssl-dev libbz2-dev zlib1g-dev tzdata pkg-config
+          gcc-13 --version | head -1
+          cmake --version | head -1
+
+      - name: Build liburing ${{ env.LIBURING_VERSION }}
+        run: |
+          URING="${RUNNER_TEMP}/liburing-install"
+          git clone -q --depth 1 -b "liburing-${LIBURING_VERSION}" \
+            https://github.com/axboe/liburing.git "${RUNNER_TEMP}/liburing"
+          cd "${RUNNER_TEMP}/liburing"
+          CC=gcc-13 CXX=g++-13 ./configure --prefix="${URING}" >/dev/null
+          make -j4 -C src >/dev/null
+          make install >/dev/null  # top level: also installs liburing.pc
+          grep '^Version' "${URING}/lib/pkgconfig/liburing.pc"
+          ls -la "${URING}/lib"
+          {
+            echo "URING=${URING}"
+            echo "PKG_CONFIG_PATH=${URING}/lib/pkgconfig"
+            echo "LIBRARY_PATH=${URING}/lib"
+            echo "LD_LIBRARY_PATH=${URING}/lib"
+          } >> "$GITHUB_ENV"
+
+      - name: Pick build directory and add swap
+        # The root disk has ~14 GB free; use /mnt when it is larger. Extra
+        # swap guards the -j4 build against OOM on the 16 GB runner.
+        run: |
+          BUILD_DIR="${GITHUB_WORKSPACE}/build-u24"
+          SWAP_FILE=/extra-swapfile
+          if [ -d /mnt ] && [ "$(df --output=avail -BG /mnt | tail -1 | tr -dc 0-9)" -ge 40 ]; then
+            sudo mkdir -p /mnt/build-u24
+            sudo chown "$(id -u):$(id -g)" /mnt/build-u24
+            BUILD_DIR=/mnt/build-u24
+            SWAP_FILE=/mnt/extra-swapfile
+          fi
+          sudo fallocate -l 8G "${SWAP_FILE}" && sudo chmod 600 "${SWAP_FILE}" \
+            && sudo mkswap "${SWAP_FILE}" && sudo swapon "${SWAP_FILE}" \
+            || echo "::warning::could not add swap"
+          echo "BUILD_DIR=${BUILD_DIR}" >> "$GITHUB_ENV"
+
+      - name: Configure ccache
+        run: |
+          {
+            echo "CCACHE_DIR=${HOME}/.cache/ccache"
+            echo "CCACHE_MAXSIZE=3G"
+            echo "CCACHE_COMPRESS=true"
+            echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}"
+            echo "CCACHE_NOHASHDIR=true"
+            echo "CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime"
+          } >> "$GITHUB_ENV"
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.cache/ccache
+          key: ccache-noble-u24bin-${{ env.CCACHE_EPOCH }}-${{ env.SHA }}
+          restore-keys: |
+            ccache-noble-u24bin-${{ env.CCACHE_EPOCH }}-
+
+      - name: Configure CMake (wolga-workload u24 flags)
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: |
+          cmake -S "${GITHUB_WORKSPACE}" -B "${BUILD_DIR}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DUSE_IO_URING=ON \
+            -DENABLE_BENCHMARKS=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DUSE_PRECOMPILED_HEADERS=OFF
+          grep -E '^(CMAKE_BUILD_TYPE|CMAKE_CXX_COMPILER|URING_[A-Z_]*LIBRARIES|URING_VERSION):' \
+            "${BUILD_DIR}/CMakeCache.txt" || true
+          grep -q '^URING_FOUND:INTERNAL=1' "${BUILD_DIR}/CMakeCache.txt" \
+            || { echo "::error::liburing not found by CMake"; exit 1; }
+
+      - name: Build
+        run: |
+          set -f  # no globbing when splitting TARGETS
+          ccache -z
+          # shellcheck disable=SC2086
+          cmake --build "${BUILD_DIR}" --target ${TARGETS} --parallel 4
+          ccache -s
+
+      - name: Save ccache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/ccache
+          key: ccache-noble-u24bin-${{ env.CCACHE_EPOCH }}-${{ env.SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Package (bin-cache layout)
+        run: |
+          set -f
+          PKG="${RUNNER_TEMP}/pkg"
+          DST="${PKG}/${SHA}"
+          mkdir -p "${DST}"
+          cp "${BUILD_DIR}/CMakeCache.txt" "${DST}/CMakeCache.txt"
+          CXX_PATH=$(grep -m1 '^CMAKE_CXX_COMPILER:' "${BUILD_DIR}/CMakeCache.txt" | cut -d= -f2)
+          COMPILER="${CXX_PATH} ($(g++-13 --version | head -1))"
+          BUILT=$(date -u +%FT%TZ)
+          for t in ${TARGETS}; do
+            found=$(find "${BUILD_DIR}" -name "$t" -type f -executable -not -path '*/_deps/*' | head -1)
+            [ -n "$found" ] || { echo "::error::target $t not found under ${BUILD_DIR}"; exit 1; }
+            cp "$found" "${DST}/$t"
+            if ldd "${DST}/$t" | grep -q 'not found'; then
+              ldd "${DST}/$t"; echo "::error::$t has unresolved libraries"; exit 1
+            fi
+            ldd "${DST}/$t" | grep -q "liburing.so.2 => ${URING}/" \
+              || { ldd "${DST}/$t"; echo "::error::$t does not link the built liburing ${LIBURING_VERSION}"; exit 1; }
+            {
+              echo "branch=${REF}"
+              echo "sha=${SHA}"
+              echo "target=$t"
+              echo "flavor=u24-hosted"
+              echo "compiler=${COMPILER}"
+              echo "liburing=${LIBURING_VERSION}"
+              echo "built_utc=${BUILT} host=github-hosted run=${GITHUB_RUN_ID}"
+            } > "${DST}/META-$t"
+          done
+          {
+            echo "sha=${SHA}"
+            echo "ref=${REF}"
+            echo "targets=${TARGETS}"
+            echo "compiler=${COMPILER}"
+            echo "liburing=${LIBURING_VERSION}"
+            echo "flavor=u24-hosted"
+            echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "built_utc=${BUILT}"
+          } > "${DST}/META"
+          if [ -x "${DST}/qlever-server" ]; then "${DST}/qlever-server" --version || true; fi
+          tar -C "${PKG}" -cf "${RUNNER_TEMP}/bin-${SHA}.tar" "${SHA}"
+          tar -tvf "${RUNNER_TEMP}/bin-${SHA}.tar"
+          cat "${DST}/META"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: bin-${{ env.SHA }}
+          path: ${{ runner.temp }}/bin-${{ env.SHA }}.tar
+          retention-days: 14
