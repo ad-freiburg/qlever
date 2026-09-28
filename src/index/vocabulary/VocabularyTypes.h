@@ -1,6 +1,6 @@
 // Copyright 2022 - 2026, The QLever Authors, in particular:
 //
-// 2022        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -789,11 +789,50 @@ VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
 }
 
 // _____________________________________________________________________________
+// Base class for the state of a split-phase vocabulary lookup, as returned by
+// a vocabulary's `beginLookup` and consumed by its `finishLookup`. The
+// concrete vocabulary stores the state it needs (e.g. the pooled I/O manager
+// and the in-flight read batch, for `VocabularyOnDisk`) in a derived class and
+// implements `finish()`, which blocks until all I/O of the lookup has
+// completed and returns the resolved strings. A handle refers to the
+// vocabulary that created it, so that vocabulary must outlive the handle.
+class VocabLookupHandleBase {
+ public:
+  virtual ~VocabLookupHandleBase() = default;
+
+  // Block until every read of the lookup has completed and return the resolved
+  // string representations, in the same order as the indices passed to the
+  // corresponding `beginLookup`.
+  [[nodiscard]] virtual VocabBatchLookupResult finish() = 0;
+};
+
+// A split-phase lookup handle for vocabularies whose lookups complete without
+// any I/O (e.g. fully in-memory vocabularies): `beginLookup` performs the full
+// lookup and `finish` just returns the stored result.
+struct EagerVocabLookupHandle : VocabLookupHandleBase {
+  VocabBatchLookupResult finish() override { return result_; }
+  VocabBatchLookupResult result_;
+};
+
+// _____________________________________________________________________________
 // Generic sequential fallback implementations of the batch-lookup interface,
-// used by all vocabularies that do not provide a specialized (e.g. io_uring)
+// used by all vocabularies that do not provide a specialized
 // implementation. They simply loop over the indices and issue the ordinary
 // single-word `operator[]` lookups one after another.
 namespace ad_utility::vocabulary {
+
+// Detection trait: whether `Vocab` provides a split-phase `beginLookup` member
+// callable with a `ql::span<const size_t>`. This is the C++17-compatible
+// replacement for the `if constexpr (requires { ... })` expression, which is
+// not available when the C++17 backports are enabled.
+template <typename Vocab, typename = void>
+struct HasBeginLookup : std::false_type {};
+
+template <typename Vocab>
+struct HasBeginLookup<
+    Vocab, std::void_t<decltype(std::declval<const Vocab&>().beginLookup(
+               std::declval<ql::span<const size_t>>()))>> : std::true_type {};
+
 // Return the placeholder that is reported for a vocabulary index that is not
 // contained in a vocabulary with "holes" (see `VocabularyInMemoryBinSearch`).
 // This happens when such a vocabulary was created by excluding some of the

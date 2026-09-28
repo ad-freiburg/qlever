@@ -11,6 +11,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 
+#include <memory>
 #include <range/v3/view/zip.hpp>
 #include <string>
 #include <string_view>
@@ -204,43 +205,48 @@ CPP_template(typename UnderlyingVocabulary,
   void lookupBatch(ql::span<const size_t> indices,
                    ArenaVocabBatchBuilder& builder) const {
     AD_CONTRACT_CHECK(!indices.empty());
-    auto compressedWords = underlyingVocabulary_.lookupBatch(indices);
-    AD_CORRECTNESS_CHECK(compressedWords.size() == indices.size());
-
-    std::string scratch;
-    for (const auto& [idx, compressedWord] :
-         ::ranges::views::zip(indices, compressedWords)) {
-      size_t decoderIdx;
-      if constexpr (underlyingHasHoles) {
-        const auto position = underlyingVocabulary_.positionOfIndex(idx);
-        if (!position.has_value()) {
-          builder.appendWord(
-              ad_utility::vocabulary::placeholderForMissingVocabIndex(idx));
-          continue;
-        }
-        decoderIdx = getDecoderIdxFromPosition(position.value());
-      } else {
-        decoderIdx = getDecoderIdx(idx);
-      }
-      AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders());
-      builder.appendDecompressedWord(
-          compressionWrapper_.maxDecompressedSize(compressedWord, decoderIdx),
-          [&](ql::span<char> outSpan) {
-            return compressionWrapper_.decompressInto(
-                compressedWord, decoderIdx, outSpan, scratch);
-          });
-    }
+    appendDecodedWords(indices, underlyingVocabulary_.lookupBatch(indices),
+                       builder);
   }
 
-  // Convenience overload that decodes into a builder on the default
-  // (untracked) PMR resource and returns the finalized result. Callers that
-  // must charge the decoded bytes against a memory limit have to use the
-  // overload above with a builder that uses the query's `AllocatorWithLimit`.
+  // Look up the words for `indices` and return them in the order of
+  // `indices`, decoded into a builder on the default (untracked) PMR
+  // resource. Callers that must charge the decoded bytes against a memory
+  // limit have to use the overload above with a builder that uses the query's
+  // `AllocatorWithLimit`. Implemented as `beginLookup` + `finishLookup`, so
+  // the synchronous and the split-phase lookup share one code path.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    return finishLookup(beginLookup(indices));
+  }
+
+  // Split-phase variant of `lookupBatch`: `beginLookup` submits the reads of
+  // the compressed words in the underlying vocabulary (without blocking if the
+  // underlying vocabulary has a split-phase lookup itself), `finishLookup`
+  // waits for them and decodes the words.
+  std::unique_ptr<VocabLookupHandleBase> beginLookup(
+      ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
-    ArenaVocabBatchBuilder builder(indices.size());
-    lookupBatch(indices, builder);
-    return std::move(builder).finalize();
+    auto handle = std::make_unique<CompressedLookupHandle>();
+    handle->vocab_ = this;
+    handle->indices_.assign(indices.begin(), indices.end());
+    // Compile-time check: if the underlying vocabulary supports the
+    // split-phase interface itself, delegate the reads to it; otherwise fall
+    // back to an eager in-memory lookup.
+    if constexpr (ad_utility::vocabulary::HasBeginLookup<
+                      UnderlyingVocabulary>::value) {
+      handle->underlyingHandle_ = underlyingVocabulary_.beginLookup(indices);
+    } else {
+      auto eager = std::make_unique<EagerVocabLookupHandle>();
+      eager->result_ = underlyingVocabulary_.lookupBatch(indices);
+      handle->underlyingHandle_ = std::move(eager);
+    }
+    return handle;
+  }
+
+  VocabBatchLookupResult finishLookup(
+      std::unique_ptr<VocabLookupHandleBase> handle) const {
+    AD_CONTRACT_CHECK(handle != nullptr);
+    return handle->finish();
   }
 
   //____________________________________________________________________________
@@ -653,6 +659,59 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
  private:
+  // Decode the `compressedWords` (one per index in `indices`, in the same
+  // order, as returned by a batch lookup in the underlying vocabulary) and
+  // append them to `builder`. Shared by the builder overload of `lookupBatch`
+  // and by `CompressedLookupHandle::finish`.
+  void appendDecodedWords(ql::span<const size_t> indices,
+                          const VocabBatchLookupResult& compressedWords,
+                          ArenaVocabBatchBuilder& builder) const {
+    AD_CORRECTNESS_CHECK(compressedWords.size() == indices.size());
+
+    std::string scratch;
+    for (const auto& [idx, compressedWord] :
+         ::ranges::views::zip(indices, compressedWords)) {
+      size_t decoderIdx;
+      if constexpr (underlyingHasHoles) {
+        const auto position = underlyingVocabulary_.positionOfIndex(idx);
+        if (!position.has_value()) {
+          builder.appendWord(
+              ad_utility::vocabulary::placeholderForMissingVocabIndex(idx));
+          continue;
+        }
+        decoderIdx = getDecoderIdxFromPosition(position.value());
+      } else {
+        decoderIdx = getDecoderIdx(idx);
+      }
+      AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders());
+      builder.appendDecompressedWord(
+          compressionWrapper_.maxDecompressedSize(compressedWord, decoderIdx),
+          [&](ql::span<char> outSpan) {
+            return compressionWrapper_.decompressInto(
+                compressedWord, decoderIdx, outSpan, scratch);
+          });
+    }
+  }
+
+  // The state of a split-phase lookup: the requested indices and the handle
+  // of the (possibly still in-flight) lookup of the compressed words in the
+  // underlying vocabulary. `finish` waits for that lookup and decodes the
+  // words into an arena on the default PMR resource.
+  class CompressedLookupHandle : public VocabLookupHandleBase {
+   public:
+    const CompressedVocabulary* vocab_ = nullptr;
+    std::vector<size_t> indices_;
+    std::unique_ptr<VocabLookupHandleBase> underlyingHandle_;
+
+    VocabBatchLookupResult finish() override {
+      AD_CORRECTNESS_CHECK(underlyingHandle_ != nullptr);
+      auto compressed = underlyingHandle_->finish();
+      ArenaVocabBatchBuilder builder(indices_.size());
+      vocab_->appendDecodedWords(indices_, compressed, builder);
+      return std::move(builder).finalize();
+    }
+  };
+
   // Get the correct decoder for the word at the given position. One decoder is
   // created per `NumWordsPerBlock` words that are pushed to the `WordWriter`,
   // so `position` has to be the position of the word in exactly that sequence

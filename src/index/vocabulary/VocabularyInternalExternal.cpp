@@ -12,6 +12,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <memory>
 #include <optional>
 #include <range/v3/view/enumerate.hpp>
 #include <string>
@@ -30,6 +31,12 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
 // _____________________________________________________________________________
 VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     ql::span<const size_t> indices) const {
+  return finishLookup(beginLookup(indices));
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<VocabLookupHandleBase> VocabularyInternalExternal::beginLookup(
+    ql::span<const size_t> indices) const {
   AD_CONTRACT_CHECK(!indices.empty());
 
   // One pass over `indices`: a word of the internal vocabulary is placed as a
@@ -38,32 +45,52 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   // vocabulary. The internal vocabulary has "holes", so each index needs one
   // membership probe (an allocation-free binary search); indices at or past
   // `internalVocab_.endIndex()` are known misses and skip the search.
-  MultiSourceVocabBatchAssembler assembler(indices.size());
-  MarkerIndicesAndPositions externalSlots;
+  auto handle = std::unique_ptr<MixedLookupHandle>(
+      new MixedLookupHandle(*this, indices.size()));
   const uint64_t internalEnd = internalVocab_.endIndex();
   for (const auto& [position, index] : ::ranges::views::enumerate(indices)) {
     auto internalWord = index < internalEnd ? internalVocab_[index]
                                             : std::optional<std::string_view>{};
     if (internalWord.has_value()) {
-      assembler.assignUnownedViewAtPosition(position, internalWord.value());
+      handle->assembler_.assignUnownedViewAtPosition(position,
+                                                     internalWord.value());
     } else {
-      externalSlots.addPair(index, position);
+      handle->externalSlots_.addPair(index, position);
     }
   }
 
-  if (externalSlots.empty()) {
-    return std::move(assembler).finalizeVocabBatchLookupResult();
+  // Submit the reads for all external words in one non-blocking
+  // `beginLookup`; `finish` waits for them.
+  if (!handle->externalSlots_.empty()) {
+    handle->externalHandle_ = externalVocab_.beginLookup(
+        handle->externalSlots_.getUnderlyingIndices());
   }
+  return handle;
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInternalExternal::finishLookup(
+    std::unique_ptr<VocabLookupHandleBase> handleBase) const {
+  AD_CONTRACT_CHECK(handleBase != nullptr);
+  return handleBase->finish();
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInternalExternal::MixedLookupHandle::finish() {
+  if (externalSlots_.empty()) {
+    return std::move(assembler_).finalizeVocabBatchLookupResult();
+  }
+  AD_CORRECTNESS_CHECK(externalHandle_ != nullptr);
   auto external =
-      externalVocab_.lookupBatch(externalSlots.getUnderlyingIndices());
-  if (externalSlots.size() == indices.size()) {
+      vocab_->externalVocab_.finishLookup(std::move(externalHandle_));
+  if (externalSlots_.size() == numIndices_) {
     // No internal hit: the positions are `0, 1, ...`, so the external batch
     // already is the result.
     return external;
   }
-  assembler.scatterSubBatchResultAtPositions(
-      std::move(external), externalSlots.getResultPositions());
-  return std::move(assembler).finalizeVocabBatchLookupResult();
+  assembler_.scatterSubBatchResultAtPositions(
+      std::move(external), externalSlots_.getResultPositions());
+  return std::move(assembler_).finalizeVocabBatchLookupResult();
 }
 
 // _____________________________________________________________________________

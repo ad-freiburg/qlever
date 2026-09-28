@@ -14,6 +14,7 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include <memory>
 #include <variant>
 
 #include "backports/type_traits.h"
@@ -131,6 +132,12 @@ class PolymorphicVocabulary {
   // decode directly into the arena. Other alternatives copy their results.
   void lookupBatch(ql::span<const size_t> indices,
                    ArenaVocabBatchBuilder& builder) const;
+
+  // Split-phase variant of `lookupBatch` (see `Vocabulary::beginLookup`).
+  std::unique_ptr<VocabLookupHandleBase> beginLookup(
+      ql::span<const size_t> indices) const;
+  VocabBatchLookupResult finishLookup(
+      std::unique_ptr<VocabLookupHandleBase> handle) const;
 
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;

@@ -1,6 +1,12 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 - 2026 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
 
@@ -149,6 +155,30 @@ TEST(VocabularyInternalExternal, LookupBatchMatchesAccessOperator) {
                                                ramOnly);
 }
 
+// _____________________________________________________________________________
+// The split-phase lookup must return the same words as `lookupBatch`, in
+// request order, for mixed, all-internal and all-external requests. Several
+// lookups may be in flight at the same time. `finishLookup` rejects a null
+// handle.
+TEST(VocabularyInternalExternal, BeginFinishLookupMatchesLookupBatch) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
+                                       "epsilon"};
+  auto vocab = createVocabulary("BeginFinishLookup")(words);
+  const std::array<size_t, 7> indices{4, 1, 0, 3, 1, 2, 4};
+  const std::array<size_t, 3> ramOnly{0, 1, 3};
+  const std::array<size_t, 3> diskOnly{2, 4, 2};
+  auto mixedHandle = vocab.beginLookup(indices);
+  auto ramOnlyHandle = vocab.beginLookup(ramOnly);
+  auto diskOnlyHandle = vocab.beginLookup(diskOnly);
+  assertLookupResultMatchesVocabularyAtIndices(
+      vocab, vocab.finishLookup(std::move(diskOnlyHandle)), diskOnly);
+  assertLookupResultMatchesVocabularyAtIndices(
+      vocab, vocab.finishLookup(std::move(ramOnlyHandle)), ramOnly);
+  assertLookupResultMatchesVocabularyAtIndices(
+      vocab, vocab.finishLookup(std::move(mixedHandle)), indices);
+  EXPECT_ANY_THROW(vocab.beginLookup(ql::span<const size_t>{}));
+  EXPECT_ANY_THROW(vocab.finishLookup(nullptr));
+}
 // _____________________________________________________________________________
 // Words of the internal vocabulary are returned as views into it (two lookups
 // of the same word see the same bytes); words of the external vocabulary are

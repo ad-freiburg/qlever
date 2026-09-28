@@ -1,8 +1,16 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
+
+#include <array>
 
 #include "VocabularyTestHelpers.h"
 #include "index/vocabulary/StringSortComparator.h"
@@ -98,4 +106,16 @@ TEST(UnicodeVocabulary, ScanAll) {
 TEST(UnicodeVocabulary, ScanAllEmptyVocabulary) {
   auto vocab = createVocabulary({});
   EXPECT_TRUE(scanAllToVector(vocab.scanAll()).empty());
+}
+
+// _____________________________________________________________________________
+TEST(UnicodeVocabulary, BeginFinishLookupMatchesAccessOperator) {
+  // `VocabularyInMemory` has no split-phase lookup, so `beginLookup` resolves
+  // the batch eagerly and `finishLookup` only hands out the result.
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
+  auto vocab = createVocabulary(words);
+  const std::array<size_t, 5> indices{3, 0, 2, 0, 1};
+  auto result = vocab.finishLookup(vocab.beginLookup(indices));
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+  EXPECT_ANY_THROW(vocab.finishLookup(nullptr));
 }

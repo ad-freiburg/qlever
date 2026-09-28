@@ -222,6 +222,26 @@ TEST(PolymorphicVocabulary, lookupBatchMatchesIndividualLookups) {
   }
 }
 
+// The split-phase lookup (`beginLookup` followed by `finishLookup`) must return
+// the same words as `vocab[]`, both for the underlying types that implement
+// `beginLookup` and for those that fall back to an eager `lookupBatch`.
+// `finishLookup` rejects a null handle. Checked for every `VocabularyType`.
+TEST(PolymorphicVocabulary, beginFinishLookupMatchesIndividualLookups) {
+  for (auto vocabType : VocabularyType::all()) {
+    auto [temporaryFile, cleanup] = ad_utility::testing::filenameForTesting();
+    std::string filename = temporaryFile.string();
+    auto deleteFiles = getFileCleanup(VocabularyType{vocabType}, filename);
+    PolymorphicVocabulary vocab;
+    setupVocab(vocab, vocabType, filename);
+
+    std::array<size_t, 6> indices{2, 0, 3, 1, 1, 0};
+    auto result = vocab.finishLookup(vocab.beginLookup(indices));
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(vocab, result,
+                                                                  indices);
+    EXPECT_ANY_THROW(vocab.finishLookup(nullptr));
+  }
+}
+
 // `lookupBatchesStreamed` must yield, for each batch and in input order,
 // exactly what the individual `vocab[]` lookups return. Checked for every
 // `VocabularyType`.
