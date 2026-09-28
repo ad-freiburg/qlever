@@ -7,6 +7,7 @@
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/Exception.h"
 
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
@@ -37,6 +38,19 @@ class UnicodeVocabulary {
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return _underlyingVocabulary.lookupBatch(indices);
+  }
+
+  // Append the words for `indices` to `builder`. Delegate when the underlying
+  // vocabulary supports this protocol. Otherwise copy its owning result.
+  void lookupBatch(ql::span<const size_t> indices,
+                   ArenaVocabBatchBuilder& builder) const {
+    AD_CONTRACT_CHECK(!indices.empty());
+    if constexpr (SupportsBuilderLookupBatch<UnderlyingVocabulary>) {
+      _underlyingVocabulary.lookupBatch(indices, builder);
+    } else {
+      appendVocabBatchLookupResult(_underlyingVocabulary.lookupBatch(indices),
+                                   builder);
+    }
   }
 
   //____________________________________________________________________________

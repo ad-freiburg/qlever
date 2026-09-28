@@ -488,6 +488,32 @@ class ArenaVocabBatchBuilder {
   }
 };
 
+// Append every word from `result` to `builder`. The copied bytes no longer
+// depend on the lifetime of `result` after this function returns.
+inline void appendVocabBatchLookupResult(const VocabBatchLookupResult& result,
+                                         ArenaVocabBatchBuilder& builder) {
+  for (std::string_view word : result) {
+    builder.appendWord(word);
+  }
+}
+
+// Whether `Vocab` provides the two-argument `lookupBatch` overload that
+// decodes into an `ArenaVocabBatchBuilder`. Implemented with `void_t` SFINAE
+// (instead of a requires-expression) so that it also works in C++17 builds,
+// where requires-expressions are unavailable.
+namespace detail {
+template <typename Vocab, typename = void>
+struct SupportsBuilderLookupBatchImpl : std::false_type {};
+template <typename Vocab>
+struct SupportsBuilderLookupBatchImpl<
+    Vocab, std::void_t<decltype(std::declval<const Vocab&>().lookupBatch(
+               std::declval<ql::span<const size_t>>(),
+               std::declval<ArenaVocabBatchBuilder&>()))>> : std::true_type {};
+}  // namespace detail
+template <typename Vocab>
+constexpr bool SupportsBuilderLookupBatch =
+    detail::SupportsBuilderLookupBatchImpl<Vocab>::value;
+
 // _____________________________________________________________________________
 // Construct a PMR arena-backed `VocabBatchLookupResult` by copying words into a
 // monotonic buffer arena.
