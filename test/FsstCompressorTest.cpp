@@ -11,6 +11,7 @@
 #include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <range/v3/view/zip.hpp>

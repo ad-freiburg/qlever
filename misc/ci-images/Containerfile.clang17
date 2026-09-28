@@ -1,0 +1,20 @@
+# QLever CI image: clang-17 on Ubuntu 24.04.
+# Mirrors .github/workflows/install-dependencies-ubuntu + install-compiler-ubuntu
+# so Wolga legs behave exactly like the GitHub-hosted legs. Boost 1.83 comes
+# from the standard Noble repositories (no PPA needed).
+FROM ubuntu:24.04
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 LC_CTYPE=C.UTF-8 DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y \
+    build-essential cmake ninja-build git wget pkg-config mold \
+    libicu-dev tzdata libzstd-dev libjemalloc-dev libssl-dev \
+    libboost1.83-all-dev libboost-url1.83-dev libboost-container1.83-dev \
+    libboost-filesystem1.83-dev \
+    python3-yaml unzip python3-icu liburing-dev uuid-dev \
+    gnupg lsb-release software-properties-common \
+ && rm -rf /var/lib/apt/lists/*
+RUN wget -q https://apt.llvm.org/llvm.sh && chmod +x llvm.sh \
+ && sed 's/apt-key del/echo/' llvm.sh -iy \
+ && ./llvm.sh 17 \
+ && apt-get install -y clang-17 \
+ && rm -rf /var/lib/apt/lists/* ./llvm.sh
+ENV CC=clang-17 CXX=clang++-17

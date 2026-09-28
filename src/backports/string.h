@@ -21,7 +21,10 @@ namespace ql {
 
 // Provide a C++17-compatible backport of C++23's
 // `std::basic_string::resize_and_overwrite` as a free function that takes the
-// string as the first parameter.
+// string as the first parameter. Deliberate deviation: the standard leaves a
+// returned size above `count` as undefined behavior, while this backport
+// enforces the same bound with `AD_CONTRACT_CHECK` on both branches, so a
+// violating operation fails loudly instead of corrupting the string.
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Operation)(
     requires ql::concepts::invocable<Operation, CharT*, size_t>&&
@@ -34,8 +37,13 @@ CPP_template(typename CharT, typename Traits, typename Allocator,
                                                size_t count, Operation&& op) {
 #if defined(__cpp_lib_string_resize_and_overwrite) && \
     __cpp_lib_string_resize_and_overwrite >= 202110L
-  str.resize_and_overwrite(count, [&op, count](CharT* data, size_t n) {
-    const size_t newSize = std::forward<Operation>(op)(data, n);
+  // Move `op` into the lambda like the standard, which takes its operation
+  // by value and invokes it as `std::move(op)(p, count)`. Capturing the
+  // forwarding reference by reference would dangle for move-only rvalue
+  // callables. The lambda is `mutable` so mutable callables keep working.
+  str.resize_and_overwrite(count, [op = std::forward<Operation>(op), count](
+                                      CharT* data, size_t n) mutable {
+    const size_t newSize = std::move(op)(data, n);
     AD_CONTRACT_CHECK(newSize <= count);
     return newSize;
   });

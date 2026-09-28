@@ -31,12 +31,10 @@ using PmrSsoProbeString =
 // _____________________________________________________________________________
 // Return the largest number of characters that a `PmrSsoProbeString` is
 // guaranteed by this helper to store inside its own object storage (SSO).
-// NOTE: Used by test/GTestHelpersTest.cpp, test/index/vocabulary/
-// CompressedVocabularyTest.cpp (via requirePmrStringInlineStorage) and
-// SplitVocabularyTest.cpp (gtestCurrentTestSuiteName); see also `clobberStack`
-// in `util/DanglingViewTestHelpers.h`. The SSO capacity of `std::basic_string`
-// is implementation-defined (e.g. 15 characters for libstdc++ and 22 for
-// libc++), so it is determined here by probing rather than hardcoded.
+// See also `clobberStack` in `util/DanglingViewTestHelpers.h`. The SSO
+// capacity of `std::basic_string` is implementation-defined (e.g. 15 characters
+// for libstdc++ and 22 for libc++), so it is determined here by probing rather
+// than hardcoded.
 inline size_t pmrStringSsoCapacity() {
   // A counting memory resource lets us detect an allocation directly instead of
   // guessing from pointer addresses: a string uses SSO exactly when
