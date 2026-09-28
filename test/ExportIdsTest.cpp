@@ -23,6 +23,7 @@
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/ParseableDuration.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -289,6 +290,48 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
   };
 
   // `idsToStringAndType` requires the input to be sorted by `ValueId`.
+  ql::ranges::sort(ids);
+
+  auto batchResults = ql::exportIds::idsToStringAndType(
+      index, ql::span<const Id>{ids}, localVocab);
+
+  ASSERT_EQ(batchResults.size(), ids.size());
+  for (size_t i = 0; i < ids.size(); ++i) {
+    EXPECT_EQ(batchResults[i],
+              ql::exportIds::idToStringAndType(index, ids[i], localVocab))
+        << "Mismatch at index " << i;
+  }
+}
+
+// Same as `idsToStringAndTypeBatchMatchesIndividualLookups`, but with
+// `use-aligned-vocab-batch-lookup-buffer` switched on, so the
+// `VocabIndex` batch in `resolveVocabIndexIds` is staged through
+// `AlignedBatchBuffer` instead of a plain `std::vector<size_t>`. The result
+// must be byte-identical to the default (flag off) path.
+TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookupsAlignedBuffer) {
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::useAlignedVocabBatchLookupBuffer_>(true);
+
+  std::string kg =
+      "<s> <p> <o> . "
+      "<s> <q> \"hello\" . "
+      "<s> <p> 42 . "
+      "<s> <p> 3.14 .";
+  auto qec = ad_utility::testing::getQec(kg);
+  const Index& index = qec->getIndex();
+  LocalVocab localVocab{};
+  auto getId = ad_utility::testing::makeGetId(index);
+
+  std::vector<Id> ids{
+      getId("<s>"),
+      getId("<p>"),
+      getId("<o>"),
+      getId("<q>"),
+      getId("\"hello\""),
+      Id::makeFromInt(42),
+      Id::makeFromDouble(3.14),
+      Id::makeUndefined(),
+  };
   ql::ranges::sort(ids);
 
   auto batchResults = ql::exportIds::idsToStringAndType(
