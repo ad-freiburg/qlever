@@ -56,4 +56,8 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(SplitVocabLookupBatchEndToEndBenchmark vocabulary)
 
+    addAndLinkBenchmark(PolymorphicVocabLookupBatchMicroBenchmark vocabulary)
+
+    addAndLinkBenchmark(PolymorphicVocabLookupBatchEndToEndBenchmark vocabulary)
+
 endif()
