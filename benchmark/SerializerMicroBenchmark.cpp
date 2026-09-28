@@ -395,17 +395,52 @@ std::vector<Arm> tabularArms(ad_utility::MediaType mediaType) {
 }
 
 // _____________________________________________________________________________
+// Optional overrides of the measurement parameters from the environment, for
+// runs with few triples and one pass (e.g. under valgrind, where only the
+// allocation and instruction counts matter). An unset or unparsable variable
+// keeps the default.
+size_t sizeFromEnv(const char* name, size_t defaultValue) {
+  const char* value = std::getenv(name);
+  if (value == nullptr) {
+    return defaultValue;
+  }
+  char* end = nullptr;
+  const unsigned long long parsed = std::strtoull(value, &end, 10);
+  return (end != value && *end == '\0') ? static_cast<size_t>(parsed)
+                                        : defaultValue;
+}
+
+// _____________________________________________________________________________
+double doubleFromEnv(const char* name, double defaultValue) {
+  const char* value = std::getenv(name);
+  if (value == nullptr) {
+    return defaultValue;
+  }
+  char* end = nullptr;
+  const double parsed = std::strtod(value, &end);
+  return (end != value && *end == '\0') ? parsed : defaultValue;
+}
+
+// _____________________________________________________________________________
 // Measurement protocol: per arm one untimed warm-up pass (which also
 // calibrates the number of passes so that one trial takes at least
 // `MIN_TRIAL_SECONDS`) and one pass with the allocation counter; then
 // `NUM_TRIALS` trials, interleaved across the arms (arm 0, arm 1, ..., arm 0,
 // ...). Reported per triple: median, min and max time over the trials, heap
 // allocations and output bytes. All arms must produce the same bytes.
+// Environment overrides: `SERIALIZER_BENCH_TRIPLES`, `SERIALIZER_BENCH_TRIALS`,
+// `SERIALIZER_BENCH_MIN_SECONDS` (0 = one pass per trial),
+// `SERIALIZER_BENCH_ARM` (only the arms whose name contains this string, e.g.
+// `legacy` or `batches`) and `SERIALIZER_BENCH_TABLE` (only the tables whose
+// title contains this string, e.g. `Turtle`).
 class SerializerMicroBenchmark : public BenchmarkInterface {
  private:
-  static constexpr size_t NUM_TRIPLES = 1'000'000;
-  static constexpr size_t NUM_TRIALS = 3;
-  static constexpr double MIN_TRIAL_SECONDS = 10.0;
+  static inline const size_t NUM_TRIPLES =
+      sizeFromEnv("SERIALIZER_BENCH_TRIPLES", 1'000'000);
+  static inline const size_t NUM_TRIALS =
+      std::max<size_t>(1, sizeFromEnv("SERIALIZER_BENCH_TRIALS", 3));
+  static inline const double MIN_TRIAL_SECONDS =
+      doubleFromEnv("SERIALIZER_BENCH_MIN_SECONDS", 10.0);
   std::vector<EvaluatedTriple> mixedTriples_;
   std::vector<EvaluatedTriple> titleTriples_;
 
@@ -421,9 +456,33 @@ class SerializerMicroBenchmark : public BenchmarkInterface {
     return std::chrono::duration<double>(Clock::now() - start).count();
   }
 
+  // The arms selected by `SERIALIZER_BENCH_ARM` (all if it is not set).
+  static std::vector<Arm> selectArms(std::vector<Arm> arms) {
+    const char* filter = std::getenv("SERIALIZER_BENCH_ARM");
+    if (filter == nullptr) {
+      return arms;
+    }
+    arms.erase(std::remove_if(arms.begin(), arms.end(),
+                              [filter](const Arm& arm) {
+                                return arm.name_.find(filter) ==
+                                       std::string::npos;
+                              }),
+               arms.end());
+    return arms;
+  }
+
   static void measure(BenchmarkResults& results, const std::string& title,
-                      const std::vector<Arm>& arms,
+                      std::vector<Arm> allArms,
                       const std::vector<EvaluatedTriple>& triples) {
+    const char* tableFilter = std::getenv("SERIALIZER_BENCH_TABLE");
+    if (tableFilter != nullptr &&
+        title.find(tableFilter) == std::string::npos) {
+      return;
+    }
+    const std::vector<Arm> arms = selectArms(std::move(allArms));
+    if (arms.empty()) {
+      return;
+    }
     const size_t n = triples.size();
     std::vector<size_t> passes(arms.size());
     std::vector<size_t> allocationsPerRun(arms.size());
@@ -474,6 +533,14 @@ class SerializerMicroBenchmark : public BenchmarkInterface {
     table.metadata().addKeyValuePair("triples", n);
     table.metadata().addKeyValuePair("trials", NUM_TRIALS);
     table.metadata().addKeyValuePair("sink-checksum", sinkChecksum);
+    // Deterministic per-arm counts as numeric metadata (for the hosted
+    // counters workflow, which reads numeric metadata from the JSON output).
+    for (size_t a = 0; a < arms.size(); ++a) {
+      table.metadata().addKeyValuePair(absl::StrCat("heap-allocations arm ", a),
+                                       allocationsPerRun[a]);
+      table.metadata().addKeyValuePair(absl::StrCat("output-bytes arm ", a),
+                                       bytesPerRun[a]);
+    }
     double baseMedian = 0;
     for (size_t a = 0; a < arms.size(); ++a) {
       auto sorted = nsPerTriple[a];
