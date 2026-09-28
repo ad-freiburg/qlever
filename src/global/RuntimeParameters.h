@@ -1,6 +1,12 @@
-//   Copyright 2024, University of Freiburg,
-//   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_RUNTIMEPARAMETERS_H
 #define QLEVER_RUNTIMEPARAMETERS_H
@@ -232,6 +238,16 @@ struct RuntimeParameters {
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
 
+  // If set to true, `VocabularyOnDisk::lookupBatch` first reads the vocabulary
+  // words (and their offsets) that are in the page cache with non-blocking
+  // `preadv2(RWF_NOWAIT)` calls (adjacent ranges coalesced into one call) and
+  // submits only the remaining reads to its `io_uring` ring. A read that hits
+  // the page cache then costs a share of one syscall instead of an `io_uring`
+  // submission and completion; a read that misses costs one extra failed
+  // syscall per run of adjacent ranges.
+  Bool vocabularyIouringPageCacheFastPath_{
+      false, "vocabulary-iouring-page-cache-fast-path"};
+
   // Configure the amount of threads to compress and write blocks per
   // permutation. A value of 0 indicates that the number of threads should be
   // determined automatically based on the number of available hardware threads.
@@ -254,6 +270,36 @@ struct RuntimeParameters {
   // triples (per template triple); bounded memory, partial deduplication.
   DeduplicationModeParameter constructDeduplication_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
+
+  // If set to `true`, CONSTRUCT query export of Turtle formats the
+  // triples using `FastExportStreamFormatter` (zero-allocation, in-buffer
+  // formatting) instead of the legacy per-term `std::string` construction
+  // in `formatTerm`/`formatTriple`. Output is required to be byte-identical
+  // to the legacy path; default `false` keeps master's behaviour unchanged.
+  Bool useFastExportStreamFormatter_{false, "use-fast-export-stream-formatter"};
+
+  // If true, the chunks of a streamed query result start at 64 KiB and double
+  // after every chunk up to the fixed 1 MiB, so that the first bytes reach the
+  // client earlier. If false, every chunk has the fixed size of 1 MiB.
+  Bool adaptiveExportChunkSize_{false, "adaptive-export-chunk-size"};
+
+  // Opt-in adaptive io_uring batch sizing for vocabulary lookups
+  // (`AdaptiveBatchController`): adapt the effective submission batch size
+  // to the ratio of outstanding I/Os to still-pending reads instead of
+  // submitting against the fixed ring window. Disabled by default, in which
+  // case the fixed-window behavior is unchanged.
+  Bool ioUringAdaptiveBatchEnabled_{false, "iouring-adaptive-batch-enabled"};
+  // Minimum number of prepared reads before the controller may flush early.
+  // Must be at least one (enforced by a parameter constraint). Smaller
+  // groups are never flushed early by the controller, but the ring-full
+  // bound still submits them when the ring has no free slot.
+  SizeT ioUringAdaptiveBatchMinSize_{16, "iouring-adaptive-batch-min-size"};
+  // Maximum number of prepared reads before a forced submit, so large
+  // batches still submit incrementally. Must be at least one (enforced by a
+  // parameter constraint). When the controller is installed, both bounds
+  // are clamped to the ring size, and a maximum below the minimum is raised
+  // to the minimum.
+  SizeT ioUringAdaptiveBatchMaxSize_{256, "iouring-adaptive-batch-max-size"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
