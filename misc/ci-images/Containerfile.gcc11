@@ -1,0 +1,32 @@
+# QLever CI image: gcc-11 on Ubuntu 22.04 (for the C++17 backports leg).
+# Mirrors .github/workflows/install-dependencies-ubuntu + install-compiler-ubuntu.
+# Jammy ships CMake 3.22 (< 3.27 required), so CMake comes from Kitware.
+# Boost 1.83 is not in Jammy: it comes from the mhier PPA (one-time build cost,
+# retried until it succeeds; CI legs then never touch the PPA again).
+FROM ubuntu:22.04
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 LC_CTYPE=C.UTF-8 DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y \
+    build-essential gcc-11 g++-11 ninja-build git wget pkg-config mold \
+    libicu-dev tzdata libzstd-dev libjemalloc-dev libssl-dev \
+    python3-yaml unzip python3-icu liburing-dev uuid-dev \
+    software-properties-common \
+ && rm -rf /var/lib/apt/lists/*
+RUN wget -q https://apt.kitware.com/kitware-archive.sh \
+ && chmod +x kitware-archive.sh && ./kitware-archive.sh \
+ && apt-get update && apt-get install -y cmake \
+ && rm -rf /var/lib/apt/lists/* ./kitware-archive.sh
+RUN add-apt-repository -y ppa:mhier/libboost-latest && apt-get update \
+ && apt-get install -y libboost1.83-all-dev libboost-url1.83-dev \
+    libboost-container1.83-dev libboost-filesystem1.83-dev \
+ && rm -rf /var/lib/apt/lists/*
+ENV CC=gcc-11 CXX=g++-11
+# NOTE: build this on GitHub (docker as root, see
+# .github/workflows/toolchain-image-builder.yml), NOT rootless on the
+# cluster (same UID/GID reason as above). Flatten ownership so the tarball
+# imports cleanly under a single-UID mapping via `podman load`.
+# Flatten ownership so the image imports rootless (chown -R / would die on
+# the read-only /etc/hosts, /etc/hostname and /etc/resolv.conf bind mounts).
+RUN find / -xdev \( -path /etc/hosts -o -path /etc/hostname -o -path /etc/resolv.conf \) -prune \
+    -o -exec chown 0:0 {} + 2>/dev/null || true \
+ && chmod 640 /etc/shadow /etc/gshadow \
+ && echo TOOLCHAIN-IMAGE-OK

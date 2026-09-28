@@ -44,12 +44,18 @@ ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:${PATH}"
 ENV EMSDK=/opt/emsdk
 # conan (hosted leg: `pipx install conan`).
 RUN pip3 install --break-system-packages conan
+# Hosted leg runs `conan profile detect --force` before writing
+# ~/.conan2/settings_user.yml; the Wolga leg does not, so bake the default
+# profile (and ~/.conan2) into the image.
+RUN conan profile detect --force
 # TypeScript for the qleverwasm link (hosted leg: `npm install -g
 # typescript@7`). Installed WITHOUT node/npm: every node binary aborts under
 # chroot build isolation (libuv fd assertion), so the tarball is fetched
 # from the registry and unpacked explicitly ignoring archived modes (plain
 # `tar -xf` chmod fails on this host, same root cause as the emsdk node
-# issue above). tsc is pure JS and runs on the image's node 26 at CI time.
+# issue above). TypeScript 7 is a native binary shipped in the optional
+# platform package @typescript/typescript-linux-x64, which a plain tarball
+# unpack skips (tsc then fails "Unable to resolve"), so unpack it too.
 # NOTE: `.../typescript@7` (range metadata) 404s; `.../typescript/latest`
 # resolves to the same 7.x that hosted `npm install -g typescript@7` gets.
 RUN TS_VER=$(curl -s https://registry.npmjs.org/typescript/latest \
@@ -57,6 +63,10 @@ RUN TS_VER=$(curl -s https://registry.npmjs.org/typescript/latest \
  && mkdir -p /usr/lib/node_modules/typescript \
  && curl -sL "https://registry.npmjs.org/typescript/-/typescript-${TS_VER}.tgz" \
     | tar -xz --no-same-permissions -C /usr/lib/node_modules/typescript \
+      --strip-components=1 \
+ && mkdir -p /usr/lib/node_modules/@typescript/typescript-linux-x64 \
+ && curl -sL "https://registry.npmjs.org/@typescript/typescript-linux-x64/-/typescript-linux-x64-${TS_VER}.tgz" \
+    | tar -xz --no-same-permissions -C /usr/lib/node_modules/@typescript/typescript-linux-x64 \
       --strip-components=1 \
  && ln -sf /usr/lib/node_modules/typescript/bin/tsc /usr/local/bin/tsc \
  && ln -sf /usr/lib/node_modules/typescript/bin/tsserver /usr/local/bin/tsserver
