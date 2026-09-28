@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <type_traits>
 #include <unordered_map>
@@ -217,6 +218,69 @@ struct SyncIoPolicy {
                                uint64_t fileOffset);
 };
 
+// The fixed-file slot table of one `io_uring` ring, without the ring itself:
+// which caller descriptor occupies which slot, and the `dup`ed descriptor that
+// the ring holds for it. The `dup` keeps the ring's table entry alive
+// independently of the caller's descriptor. The ring-specific step (installing
+// a descriptor into a slot) and the descriptor system calls are injected, so
+// the bookkeeping and its error paths do not need a live ring.
+class FixedFileSlots {
+ public:
+  // The vocabulary path serves exactly two stable files (the offsets file and
+  // the word-data file).
+  static constexpr size_t NUM_SLOTS = 2;
+
+  // Install `registeredFd` into ring slot `slot`. Return a non-negative value
+  // on success and a negative `errno` value on failure, like
+  // `io_uring_register_files_update`.
+  using InstallFunction = std::function<int(unsigned slot, int registeredFd)>;
+  // Duplicate `fd` with `dup` semantics: a new descriptor, or -1 and `errno`.
+  using DupFunction = std::function<int(int fd)>;
+  // Close a descriptor that this table `dup`ed.
+  using CloseFunction = std::function<void(int fd)>;
+
+ private:
+  // One slot: the caller's descriptor (`ownerFd`, never closed here) and its
+  // `dup` held by the ring (`registeredFd`). `-1` marks an unused slot.
+  struct Slot {
+    int ownerFd = -1;
+    int registeredFd = -1;
+  };
+  // The slots in registration order.
+  std::array<Slot, NUM_SLOTS> slots_;
+  InstallFunction install_;
+  DupFunction dup_;
+  CloseFunction close_;
+
+ public:
+  explicit FixedFileSlots(InstallFunction install,
+                          DupFunction dupFd = defaultDup,
+                          CloseFunction closeFd = defaultClose);
+  // Close every `dup`ed descriptor (see `releaseAll`).
+  ~FixedFileSlots();
+  FixedFileSlots(const FixedFileSlots&) = delete;
+  FixedFileSlots& operator=(const FixedFileSlots&) = delete;
+
+  // Return the slot of `fd`, and on first use `dup` it and install the
+  // duplicate into a free slot. Throw when all slots hold other descriptors,
+  // so a third file fails loudly instead of being read without registration,
+  // and when `dup` or the install fails; the table is then unchanged and no
+  // descriptor leaks. Slots are keyed by descriptor number, so the caller must
+  // keep `fd` open (and referring to the same file) while the table lives.
+  unsigned slotFor(int fd);
+
+  // Close every `dup`ed descriptor and mark all slots unused. Call it only
+  // after the ring's file table was unregistered. Calling it again is a no-op.
+  void releaseAll() noexcept;
+
+  // The number of slots that currently hold a descriptor.
+  size_t numUsedSlots() const;
+
+  // The `dup` and `close` system calls, the defaults of the constructor.
+  static int defaultDup(int fd);
+  static void defaultClose(int fd);
+};
+
 // Persistent io_uring manager that accepts multiple named batches of indices to
 // be read from the underlying storage medium, submits all SQEs in `addBatch`
 // (blocking if the ring is full), and lets the caller block on a specific batch
@@ -288,29 +352,15 @@ class IoUringPolicy {
 
   // The vocabulary path that uses this policy serves exactly two stable
   // files (the offsets file and the word-data file).
-  static constexpr size_t NUM_FIXED_FILES = 2;
+  static constexpr size_t NUM_FIXED_FILES = FixedFileSlots::NUM_SLOTS;
 
-  // One fixed-file slot: the descriptor seen by `addBatch` (`ownerFd`, never
-  // closed here) and the `dup`ed descriptor handed to the ring
-  // (`registeredFd`). The `dup` keeps the ring's file-table entry alive
-  // independently of the caller's descriptor lifetime. `-1` marks an unused
-  // slot.
-  struct FixedFile {
-    int ownerFd = -1;
-    int registeredFd = -1;
-  };
-
-  // The (at most) `NUM_FIXED_FILES` distinct files seen by `addBatch`, in
-  // registration order. Empty slots hold `FixedFile{}`.
-  std::array<FixedFile, NUM_FIXED_FILES> fixedFiles_;
-
-  // Return the fixed-file slot for `fd`, registering (and `dup`ing) it on
-  // first use. Throws when every slot is taken by another descriptor, so a
-  // third file fails loudly instead of silently falling back to an
-  // unregistered read. Slots are keyed by descriptor number, so the caller
-  // must keep `fd` open (and referring to the same file) for the lifetime of
-  // the policy.
-  unsigned fileIndexForFd(int fd);
+  // The ring's fixed-file table. Each new descriptor is installed into its
+  // slot with `IORING_REGISTER_FILES_UPDATE`: re-registering the whole table
+  // over an already registered one fails with `EBUSY`, and updating one slot
+  // leaves the other slots (and reads in flight on them) untouched.
+  FixedFileSlots fixedFileSlots_{[this](unsigned slot, int registeredFd) {
+    return io_uring_register_files_update(&ring_, slot, &registeredFd, 1);
+  }};
 
  public:
   IoUringPolicy(const IoUringPolicy&) = delete;

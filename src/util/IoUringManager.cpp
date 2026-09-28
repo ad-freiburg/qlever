@@ -30,6 +30,77 @@
 namespace ad_utility {
 
 //______________________________________________________________________________
+FixedFileSlots::FixedFileSlots(InstallFunction install, DupFunction dupFd,
+                               CloseFunction closeFd)
+    : install_{std::move(install)},
+      dup_{std::move(dupFd)},
+      close_{std::move(closeFd)} {}
+
+//______________________________________________________________________________
+FixedFileSlots::~FixedFileSlots() { releaseAll(); }
+
+//______________________________________________________________________________
+int FixedFileSlots::defaultDup(int fd) { return dup(fd); }
+
+//______________________________________________________________________________
+void FixedFileSlots::defaultClose(int fd) { close(fd); }
+
+//______________________________________________________________________________
+unsigned FixedFileSlots::slotFor(int fd) {
+  const auto slotIndex = [this](auto it) {
+    return static_cast<unsigned>(ql::ranges::distance(slots_.begin(), it));
+  };
+  if (const auto known = ql::ranges::find(slots_, fd, &Slot::ownerFd);
+      known != slots_.end()) {
+    return slotIndex(known);
+  }
+  const auto freeSlot = ql::ranges::find(slots_, -1, &Slot::ownerFd);
+  if (freeSlot == slots_.end()) {
+    AD_THROW(
+        "IoUringPolicy supports at most two vocabulary files as fixed files; "
+        "rejecting descriptor " +
+        std::to_string(fd) +
+        " instead of reading it without fixed-file registration");
+  }
+  const int duped = dup_(fd);
+  if (duped < 0) {
+    AD_THROW(
+        "dup failed in IoUringManager while registering fixed file for "
+        "descriptor " +
+        std::to_string(fd) + " (" + std::strerror(errno) + ")");
+  }
+  const unsigned slot = slotIndex(freeSlot);
+  const int installRet = install_(slot, duped);
+  if (installRet < 0) {
+    close_(duped);
+    AD_THROW(
+        "io_uring_register_files_update failed in IoUringManager for "
+        "slot " +
+        std::to_string(slot) + ", descriptor " + std::to_string(fd) +
+        " (error " + std::to_string(-installRet) + ")");
+  }
+  freeSlot->ownerFd = fd;
+  freeSlot->registeredFd = duped;
+  return slot;
+}
+
+//______________________________________________________________________________
+void FixedFileSlots::releaseAll() noexcept {
+  for (Slot& slot : slots_) {
+    if (slot.registeredFd >= 0) {
+      close_(slot.registeredFd);
+    }
+    slot = Slot{};
+  }
+}
+
+//______________________________________________________________________________
+size_t FixedFileSlots::numUsedSlots() const {
+  return static_cast<size_t>(ql::ranges::count_if(
+      slots_, [](const Slot& slot) { return slot.ownerFd >= 0; }));
+}
+
+//______________________________________________________________________________
 void SyncIoPolicy::readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
                                     uint64_t fileOffset) {
   // `pread` reads up to `numBytes` bytes from file descriptor `fd` at offset
@@ -213,54 +284,8 @@ IoUringPolicy::~IoUringPolicy() {
   // Drop the fixed-file table before tearing down the ring, then close the
   // `dup`ed descriptors. The caller's own descriptors were never closed here.
   io_uring_unregister_files(&ring_);
-  for (const FixedFile& slot : fixedFiles_) {
-    if (slot.registeredFd >= 0) {
-      close(slot.registeredFd);
-    }
-  }
+  fixedFileSlots_.releaseAll();
   io_uring_queue_exit(&ring_);
-}
-
-//______________________________________________________________________________
-unsigned IoUringPolicy::fileIndexForFd(int fd) {
-  const auto slotIndex = [this](auto it) {
-    return static_cast<unsigned>(ql::ranges::distance(fixedFiles_.begin(), it));
-  };
-  if (const auto known = ql::ranges::find(fixedFiles_, fd, &FixedFile::ownerFd);
-      known != fixedFiles_.end()) {
-    return slotIndex(known);
-  }
-  const auto freeSlot = ql::ranges::find(fixedFiles_, -1, &FixedFile::ownerFd);
-  if (freeSlot == fixedFiles_.end()) {
-    AD_THROW(
-        "IoUringPolicy supports at most two vocabulary files as fixed files; "
-        "rejecting descriptor " +
-        std::to_string(fd) +
-        " instead of reading it without fixed-file registration");
-  }
-  const int duped = dup(fd);
-  if (duped < 0) {
-    AD_THROW(
-        "dup failed in IoUringManager while registering fixed file for "
-        "descriptor " +
-        std::to_string(fd) + " (" + std::strerror(errno) + ")");
-  }
-  // Fill only this slot: re-registering the whole table over an already
-  // registered one fails with `EBUSY`, so update the single free slot.
-  // Other slots (and reads in flight on them) are untouched.
-  const unsigned slot = slotIndex(freeSlot);
-  const int updateRet = io_uring_register_files_update(&ring_, slot, &duped, 1);
-  if (updateRet < 0) {
-    close(duped);
-    AD_THROW(
-        "io_uring_register_files_update failed in IoUringManager for "
-        "slot " +
-        std::to_string(slot) + ", descriptor " + std::to_string(fd) +
-        " (error " + std::to_string(-updateRet) + ")");
-  }
-  freeSlot->ownerFd = fd;
-  freeSlot->registeredFd = duped;
-  return slotIndex(freeSlot);
 }
 
 //______________________________________________________________________________
@@ -276,10 +301,10 @@ void IoUringPolicy::addBatch(int fd,
   }
   // Resolve the fixed-file slot once per batch: every read in the batch
   // addresses the same file, so they all share the slot. Resolve before
-  // inserting the batch bookkeeping below: `fileIndexForFd` throws when the
+  // inserting the batch bookkeeping below: `slotFor` throws when the
   // descriptor cannot be registered, and a premature entry would leave a batch
   // with no submitted reads behind that `wait()` could never drain.
-  const unsigned fileIndex = fileIndexForFd(fd);
+  const unsigned fileIndex = fixedFileSlots_.slotFor(fd);
   numInFlightReadRequestsPerBatch_[handle] = numReadRequestsToPerform;
 
   // Reads prepared since the last `io_uring_submit` and reads of this batch
