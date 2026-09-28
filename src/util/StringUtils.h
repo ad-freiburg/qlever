@@ -5,7 +5,6 @@
 #ifndef QLEVER_SRC_UTIL_STRINGUTILS_H
 #define QLEVER_SRC_UTIL_STRINGUTILS_H
 
-#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -14,11 +13,8 @@
 #include "backports/iterator.h"
 #include "backports/keywords.h"
 #include "backports/span.h"
-#include "backports/string.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
-#include "util/Exception.h"
-#include "util/TypeTraits.h"
 #include "util/UnicodeSupport.h"
 
 namespace ad_utility {
@@ -296,25 +292,6 @@ constexpr std::string_view constexprStrCat() {
 // truncated to that length and get a "..." suffix appended to it. Shorter
 // strings are returned as-is.
 std::string truncateOperationString(std::string_view operation);
-
-// Allocate a string of `bound` bytes without zero-initialization, decode
-// directly into its buffer via the `decode` invocable (which receives a
-// `ql::span<char>` of that size and returns the number of bytes actually
-// written), and resize the string to that decoded size.
-CPP_template(typename Decode)(
-    requires ql::concepts::invocable<Decode, ql::span<char>>) std::string
-    decodeToOwnedString(size_t bound, Decode decode) {
-  if (bound == 0) {
-    return {};
-  }
-  std::string result;
-  ql::resize_and_overwrite(result, bound, [&](char* buf, size_t count) {
-    const size_t size = decode(ql::span<char>{buf, count});
-    AD_CONTRACT_CHECK(size <= bound);
-    return size;
-  });
-  return result;
-}
 }  // namespace ad_utility
 
 // A helper function for the `operator+` overloads below.

@@ -2006,10 +2006,8 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
   std::string query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } ORDER BY ?s ?p ?o";
 
   // Create test configuration with EncodedIriManager
-  auto encodedIriManager =
-      std::make_shared<ad_utility::vocabulary::EncodedIriManager>(
-          std::vector<std::string>{"http://example.org/",
-                                   "http://test.com/id/"});
+  auto encodedIriManager = std::make_shared<EncodedIriManager>(
+      std::vector<std::string>{"http://example.org/", "http://test.com/id/"});
 
   ad_utility::testing::TestIndexConfig config{kg};
   config.encodedPrefixesWithoutAngleBrackets =

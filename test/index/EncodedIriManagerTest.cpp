@@ -27,7 +27,7 @@ std::vector<size_t> getRandomIndices(size_t min, size_t max, size_t num) {
 // _____________________________________________________________________________
 TEST(EncodedIriManger, SimpleExample) {
   std::vector<std::string> prefixes = {"http://www.wikidata.org/entity/Q"};
-  ad_utility::vocabulary::EncodedIriManager encodedIriManager{prefixes};
+  EncodedIriManager encodedIriManager{prefixes};
   std::string Q42{"<http://www.wikidata.org/entity/Q423>"};
   auto id = encodedIriManager.encode(Q42);
   ASSERT_TRUE(id.has_value());
@@ -36,12 +36,11 @@ TEST(EncodedIriManger, SimpleExample) {
 
 // _____________________________________________________________________________
 TEST(EncodedIriManger, EncodingAndDecoding) {
-  auto indices = getRandomIndices(
-      0, (1ull << ad_utility::vocabulary::EncodedIriManager::NumDigits) - 1,
-      10'000);
+  auto indices =
+      getRandomIndices(0, (1ull << EncodedIriManager::NumDigits) - 1, 10'000);
   std::vector<std::pair<std::string, uint64_t>> stringsAndEncodings;
   std::vector<std::string> prefixes = {"http://www.wikidata.org/entity/Q"};
-  ad_utility::vocabulary::EncodedIriManager encodedIriManager{prefixes};
+  EncodedIriManager encodedIriManager{prefixes};
   for (auto index : indices) {
     std::string wdq =
         absl::StrCat("<http://www.wikidata.org/entity/Q", index, ">");
@@ -67,7 +66,7 @@ TEST(EncodedIriManger, EncodingAndDecoding) {
 // _____________________________________________________________________________
 TEST(EncodedIriManger, DifferentPrefixes) {
   std::vector<std::string> prefixes = {"a", "b"};
-  ad_utility::vocabulary::EncodedIriManager encodedIriManager{prefixes};
+  EncodedIriManager encodedIriManager{prefixes};
   auto s1 = "<a123>";
   auto s2 = "<b123>";
 
@@ -83,7 +82,7 @@ TEST(EncodedIriManger, DifferentPrefixes) {
 // _____________________________________________________________________________
 TEST(EncodedIriManger, Unencodable) {
   std::vector<std::string> prefixes = {"http://www.wikidata.org/entity/Q"};
-  ad_utility::vocabulary::EncodedIriManager encodedIriManager{prefixes};
+  EncodedIriManager encodedIriManager{prefixes};
   std::vector<std::string> unencodable = {
       "<http://www.wikidata.org/entity/Q42a3>",
       "<http://www.wikidata.org/entity/Q4233333333333333333333333333333333333>",
@@ -99,71 +98,62 @@ TEST(EncodedIriManger, Unencodable) {
 TEST(EncodedIriManger, illegalPrefixes) {
   using V = std::vector<std::string>;
   using namespace ::testing;
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      ad_utility::vocabulary::EncodedIriManager(V{"<blubb>"}),
-      HasSubstr("enclosed in angle brackets"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      ad_utility::vocabulary::EncodedIriManager(V{"blubb", "blubbi"}),
-      HasSubstr("may be a prefix"));
-  EXPECT_NO_THROW(
-      ad_utility::vocabulary::EncodedIriManager(V{"blubb", "blubb"}));
+  AD_EXPECT_THROW_WITH_MESSAGE(EncodedIriManager(V{"<blubb>"}),
+                               HasSubstr("enclosed in angle brackets"));
+  AD_EXPECT_THROW_WITH_MESSAGE(EncodedIriManager(V{"blubb", "blubbi"}),
+                               HasSubstr("may be a prefix"));
+  EXPECT_NO_THROW(EncodedIriManager(V{"blubb", "blubb"}));
 
   V v;
   for (size_t s = 0; s < 1000; ++s) {
     v.push_back(absl::StrCat("prefix", s, "bla"));
   }
-  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::vocabulary::EncodedIriManager{v},
+  AD_EXPECT_THROW_WITH_MESSAGE(EncodedIriManager{v},
                                HasSubstr("which is too many"));
 }
 
 // _____________________________________________________________________________
 TEST(EncodedIriManager, emptyPrefixes) {
   // Calls the default constructor.
-  ad_utility::vocabulary::EncodedIriManager em;
+  EncodedIriManager em;
   // Note: It is tempting to use `AD_EXPECT_NULLOPT` etc. here, but that
   // requires to pull in the equality comparison for IDs, which requires linking
   // against basically the whole codebase.
   EXPECT_FALSE(em.encode("<http://www.wikidata.org/entity/Q42>").has_value());
 
   // Calls the constructor with an explicitly empty list of prefixes.
-  ad_utility::vocabulary::EncodedIriManager em2(std::vector<std::string>{});
+  EncodedIriManager em2(std::vector<std::string>{});
   EXPECT_FALSE(em.encode("<http://www.wikidata.org/entity/Q42>").has_value());
 }
 
 // _____________________________________________________________________________
 TEST(EncodedIriManager, splitIntoPrefixIdxAndPayload) {
-  ad_utility::vocabulary::EncodedIriManager em{{"blabb", "blubb"}};
+  EncodedIriManager em{{"blabb", "blubb"}};
   auto id = em.encode("<blubb42>");
   ASSERT_TRUE(id.has_value());
   auto [prefixIdx, payload] =
-      ad_utility::vocabulary::EncodedIriManager::splitIntoPrefixIdxAndPayload(
-          id.value());
+      EncodedIriManager::splitIntoPrefixIdxAndPayload(id.value());
   EXPECT_EQ(prefixIdx, 1);
   std::string result;
-  ad_utility::vocabulary::EncodedIriManager::decodeDecimalFrom64Bit(result,
-                                                                    payload);
+  EncodedIriManager::decodeDecimalFrom64Bit(result, payload);
   EXPECT_EQ(result, "42");
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ad_utility::vocabulary::EncodedIriManager::splitIntoPrefixIdxAndPayload(
-          Id::makeUndefined()),
+      EncodedIriManager::splitIntoPrefixIdxAndPayload(Id::makeUndefined()),
       ::testing::HasSubstr("must be `EncodedVal`"));
 }
 
 // _____________________________________________________________________________
 TEST(EncodedIriManager, toStringWithGivenPrefix) {
-  auto str = ad_utility::vocabulary::EncodedIriManager::toStringWithGivenPrefix(
-      ad_utility::vocabulary::EncodedIriManager::encodeDecimalToNBit("7643"),
-      "<blibb_");
+  auto str = EncodedIriManager::toStringWithGivenPrefix(
+      EncodedIriManager::encodeDecimalToNBit("7643"), "<blibb_");
   EXPECT_EQ(str, "<blibb_7643>");
 }
 
 // _____________________________________________________________________________
 TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
-  ad_utility::vocabulary::EncodedIriManager em{{"blabb", "blubb"}};
-  auto id =
-      ad_utility::vocabulary::EncodedIriManager::makeIdFromPrefixIdxAndPayload(
-          1, ad_utility::vocabulary::EncodedIriManager::encodeDecimalToNBit(
-                 "7643"));
+  EncodedIriManager em{{"blabb", "blubb"}};
+  auto id = EncodedIriManager::makeIdFromPrefixIdxAndPayload(
+      1, EncodedIriManager::encodeDecimalToNBit("7643"));
   EXPECT_EQ(em.toString(id), "<blubb7643>");
 }
 
@@ -171,13 +161,12 @@ TEST(EncodedIriManager, makeIdFromPrefixIdxAndPayload) {
 TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
   auto testNumber = [](uint64_t number, ad_utility::source_location l =
                                             AD_CURRENT_SOURCE_LOC()) {
-    using m = ad_utility::vocabulary::EncodedIriManager;
+    using m = EncodedIriManager;
     auto trace = generateLocationTrace(l);
     EXPECT_EQ(number, m::decodeDecimalFrom64Bit(
                           m::encodeDecimalToNBit(std::to_string(number))));
   };
-  uint64_t MAX = std::stoull(
-      std::string(ad_utility::vocabulary::EncodedIriManager::NumDigits, '9'));
+  uint64_t MAX = std::stoull(std::string(EncodedIriManager::NumDigits, '9'));
   testNumber(0);
   testNumber(MAX);
   auto intGenerator = ad_utility::SlowRandomIntGenerator<uint64_t>(0, MAX);
@@ -189,10 +178,10 @@ TEST(EncodedIriManager, decodeDecimalFrom64Bit) {
 // _____________________________________________________________________________
 TEST(EncodedIriManager, getIndexOfPrefix) {
   {
-    auto manager = ad_utility::vocabulary::EncodedIriManager();
+    auto manager = EncodedIriManager();
     // No custom prefixes so only need to test the hardcoded ones.
-    for (const auto& [i, fixedPrefix] : ranges::views::enumerate(
-             ad_utility::vocabulary::AlwaysOnPrefixes::value)) {
+    for (const auto& [i, fixedPrefix] :
+         ranges::views::enumerate(AlwaysOnPrefixes::value)) {
       EXPECT_THAT(manager.getIndexOfPrefix(fixedPrefix),
                   testing::Optional(testing::Eq(i)));
     }
@@ -201,11 +190,11 @@ TEST(EncodedIriManager, getIndexOfPrefix) {
   }
   {
     std::vector<std::string> customPrefixes = {"http://qlever.dev"};
-    auto manager = ad_utility::vocabulary::EncodedIriManager(customPrefixes);
+    auto manager = EncodedIriManager(customPrefixes);
     // Create a list of all prefixes, including the hardcoded ones, for testing
     // the function.
     auto allPrefixes = customPrefixes;
-    for (auto prefix : ad_utility::vocabulary::AlwaysOnPrefixes::value) {
+    for (auto prefix : AlwaysOnPrefixes::value) {
       allPrefixes.emplace_back(prefix);
     }
     ql::ranges::sort(allPrefixes);
@@ -227,8 +216,7 @@ struct TestHardcodedPrefixes {
 // _____________________________________________________________________________
 TEST(EncodedIriManager, HardcodedPrefixes) {
   using Manager =
-      ad_utility::vocabulary::EncodedIriManagerImpl<Id::numDataBits, 8,
-                                                    TestHardcodedPrefixes>;
+      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
 
   // Default constructor includes hardcoded prefix.
   Manager em;
@@ -247,8 +235,7 @@ TEST(EncodedIriManager, HardcodedPrefixes) {
 // _____________________________________________________________________________
 TEST(EncodedIriManager, cannotAddHarcodedPrefixes) {
   using Manager =
-      ad_utility::vocabulary::EncodedIriManagerImpl<Id::numDataBits, 8,
-                                                    TestHardcodedPrefixes>;
+      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
 
   // Adding a hardcoded prefix a second time in the constructor is an error.
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -260,8 +247,7 @@ TEST(EncodedIriManager, cannotAddHarcodedPrefixes) {
 // _____________________________________________________________________________
 TEST(EncodedIriManager, HardcodedPrefixesJson) {
   using Manager =
-      ad_utility::vocabulary::EncodedIriManagerImpl<Id::numDataBits, 8,
-                                                    TestHardcodedPrefixes>;
+      EncodedIriManagerImpl<Id::numDataBits, 8, TestHardcodedPrefixes>;
 
   Manager em{{"http://other.org/"}};
   nlohmann::json j = em;

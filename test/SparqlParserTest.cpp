@@ -1596,7 +1596,7 @@ TEST(ParserTest, parseWithDatasets) {
       datasets, noGraphs));
 
   ad_utility::BlankNodeManager bnm;
-  ad_utility::vocabulary::EncodedIriManager ev;
+  EncodedIriManager ev;
   // If the datasets are specified externally, then `USING [NAMED]` is forbidden
   // by the SPARQL standard.
   AD_EXPECT_THROW_WITH_MESSAGE(

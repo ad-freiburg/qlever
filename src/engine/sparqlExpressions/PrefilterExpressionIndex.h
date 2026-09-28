@@ -39,7 +39,7 @@ class IndexImpl;
 namespace prefilterExpressions {
 
 using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
-using Vocab = ad_utility::vocabulary::RdfsVocabulary;
+using Vocab = RdfsVocabulary;
 
 // The maximum recursion depth for `info()` / `operator<<()`. A depth of `3`
 // should be sufficient for most `PrefilterExpressions` in our use case.

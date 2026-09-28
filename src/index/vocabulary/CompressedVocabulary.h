@@ -11,6 +11,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 
+#include <range/v3/view/zip.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -32,7 +33,6 @@
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
 
-namespace ad_utility::vocabulary {
 namespace detail {
 
 template <typename Vocabulary, typename Iterator>
@@ -180,31 +180,24 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
   //____________________________________________________________________________
-  // TODO: Compact or tail-trim the PMR arena allocations so batch memory
-  // tracks decoded payload sizes rather than maxDecompressedSize bounds.
-  // Batch-read the compressed words from the underlying vocabulary, then
-  // decompress each word with the decoder of its block into memory owned by the
-  // returned result. Unlike `sequentialLookupBatch` (still used by
-  // `VocabularyInMemory::lookupBatch` as the generic fallback), this
-  // specialization decodes directly into a PMR arena instead of materializing
-  // owning `std::string`s per word. The order of words in the result matches
-  // `indices`. Return a `VocabBatchLookupResult` keeping the PMR monotonic
-  // buffer resource alive and providing `string_view`s for each requested index
-  // in `indices`. `indices` must not be empty.
+  // Look up the words for `indices` and append them to `builder` in the
+  // order of `indices`. `indices` must not be empty. The compressed words of
+  // the whole batch are fetched with one `lookupBatch` call on the underlying
+  // vocabulary; each word is then decoded by the decoder of its block
+  // directly into the arena of `builder` (no `std::string` per word).
   //
   // For an underlying vocabulary with holes, a hole index has no stored word:
-  // like `operator[]`, report the placeholder for it instead of feeding the
+  // like `operator[]`, append the placeholder for it instead of feeding the
   // plain-text placeholder to the decoder.
-  // Note: each word reserves its full `maxDecompressedSize` bound in the
+  //
+  // Memory: each word reserves its full `maxDecompressedSize` bound in the
   // arena, so for FSST the slack between the worst-case expansion bound and
-  // the actually decoded size is retained until the returned result dies.
-  // No compaction or tail-trimming pass exists yet: peak batch memory stays
-  // proportional to the sum of the per-word bounds, not of the decoded
-  // payload sizes. When the caller passes an `ArenaVocabBatchBuilder` that
-  // was constructed with the Index/query `AllocatorWithLimit`, those
-  // allocations charge `--memory-max` and throw
+  // the decoded size is retained until the result dies. When `builder` was
+  // constructed with the query's `AllocatorWithLimit`, these allocations are
+  // charged against the memory limit and throw
   // `AllocationExceedsLimitException` instead of growing the process heap.
-  // Decompress into `builder`. The caller owns the arena and the allocator.
+  // TODO<marvin7122>: Tail-trim the arena allocations so that batch memory
+  // tracks the decoded sizes instead of the bounds.
   void lookupBatch(ql::span<const size_t> indices,
                    ArenaVocabBatchBuilder& builder) const {
     AD_CONTRACT_CHECK(!indices.empty());
@@ -216,8 +209,6 @@ CPP_template(typename UnderlyingVocabulary,
          ::ranges::views::zip(indices, compressedWords)) {
       size_t decoderIdx;
       if constexpr (underlyingHasHoles) {
-        // Translate the index to a position exactly once and reuse it for
-        // the decoder selection below (like `operator[]` does).
         const auto position = underlyingVocabulary_.positionOfIndex(idx);
         if (!position.has_value()) {
           builder.appendWord(
@@ -238,12 +229,10 @@ CPP_template(typename UnderlyingVocabulary,
     }
   }
 
-  // Convenience overload that decodes into a builder on the default (untracked)
-  // PMR resource. Callers that must charge the decoded bytes against a memory
-  // budget (e.g. the Index/query `AllocatorWithLimit` backing `--memory-max`)
-  // have to use the `ArenaVocabBatchBuilder` overload above with a
-  // budget-backed builder instead: this overload never throws
-  // `AllocationExceedsLimitException`, no matter how large the batch is.
+  // Convenience overload that decodes into a builder on the default
+  // (untracked) PMR resource and returns the finalized result. Callers that
+  // must charge the decoded bytes against a memory limit have to use the
+  // overload above with a builder that uses the query's `AllocatorWithLimit`.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     ArenaVocabBatchBuilder builder(indices.size());
@@ -726,7 +715,5 @@ CPP_template(typename UnderlyingVocabulary,
     return {std::move(decompressedWord), wordAndIndex.index()};
   }
 };
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H

@@ -76,7 +76,7 @@ TEST(StringMapping, flushResolvesSecondaryVocabIds) {
   Index index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
                                                    "<a> <b> <c> .");
   index.getImpl().setSecondaryVocabForTesting(
-      std::make_shared<ad_utility::vocabulary::SecondaryVocabulary>(
+      std::make_shared<SecondaryVocabulary>(
           std::vector<std::string>{"<d>", "<e>"}));
 
   StringMapping mapping;

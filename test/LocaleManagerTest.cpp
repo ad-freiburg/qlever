@@ -18,8 +18,8 @@ using ad_utility::source_location;
 
 // _____________________________________________________________________________
 TEST(LocaleManagerTest, Levels) {
-  using L = ad_utility::vocabulary::LocaleManager::Level;
-  ad_utility::vocabulary::LocaleManager loc;
+  using L = LocaleManager::Level;
+  LocaleManager loc;
 
   ASSERT_EQ(loc.compare("alpha", "ALPHA", L::SECONDARY), 0);
   ASSERT_LT(loc.compare("alpha", "ALPHA", L::TERTIARY), 0);
@@ -29,7 +29,7 @@ TEST(LocaleManagerTest, Levels) {
 
 // _____________________________________________________________________________
 TEST(LocaleManagerTest, getLowercaseUtf8) {
-  ad_utility::vocabulary::LocaleManager loc;
+  LocaleManager loc;
   ASSERT_EQ("schindler's list", loc.getLowercaseUtf8("Schindler's List"));
   ASSERT_EQ("#+-_foo__bar++", loc.getLowercaseUtf8("#+-_foo__Bar++"));
   ASSERT_EQ("fôéßaéé", loc.getLowercaseUtf8("FÔÉßaéÉ"));
@@ -37,15 +37,15 @@ TEST(LocaleManagerTest, getLowercaseUtf8) {
 
 // _____________________________________________________________________________
 TEST(LocaleManagerTest, Punctuation) {
-  using L = ad_utility::vocabulary::LocaleManager::Level;
+  using L = LocaleManager::Level;
   {
-    ad_utility::vocabulary::LocaleManager loc("en", "US", false);
+    LocaleManager loc("en", "US", false);
     ASSERT_LT(loc.compare("a.c", "ab", L::IDENTICAL), 0);
     ASSERT_LT(loc.compare(".a", "a", L::IDENTICAL), 0);
     ASSERT_LT(loc.compare(".a", "a", L::PRIMARY), 0);
   }
   {
-    ad_utility::vocabulary::LocaleManager loc("en", "US", true);
+    LocaleManager loc("en", "US", true);
     ASSERT_GT(loc.compare("a.c", "ab", L::IDENTICAL), 0);
     ASSERT_LT(loc.compare(".a", "a", L::IDENTICAL), 0);
     ASSERT_EQ(loc.compare(".a", "a", L::PRIMARY), 0);
@@ -63,7 +63,7 @@ TEST(LocaleManagerTest, Normalization) {
   std::string bs = "e\xcc\x81"s;
   ASSERT_EQ(2u, as.size());
   ASSERT_EQ(3u, bs.size());
-  ad_utility::vocabulary::LocaleManager loc;
+  LocaleManager loc;
   auto resA = loc.normalizeUtf8(as);
   auto resB = loc.normalizeUtf8(bs);
   ASSERT_EQ(resA, resB);
@@ -72,25 +72,21 @@ TEST(LocaleManagerTest, Normalization) {
 
 // _____________________________________________________________________________
 TEST(LocaleManager, PrefixSortKey) {
-  ad_utility::vocabulary::SimpleStringComparator comp("en", "US", true);
-  ad_utility::vocabulary::LocaleManager locIgnorePunct =
-      comp.getLocaleManager();
-  ad_utility::vocabulary::LocaleManager locRespectPunct("en", "US", false);
+  SimpleStringComparator comp("en", "US", true);
+  LocaleManager locIgnorePunct = comp.getLocaleManager();
+  LocaleManager locRespectPunct("en", "US", false);
 
   // Assert that all possible prefix sort keys of `s` are indeed prefixes
   // of the `SortKey` of `s`.
-  auto testSortKeysForLocale =
-      [](std::string_view s, const ad_utility::vocabulary::LocaleManager& loc) {
-        auto complete =
-            loc.getSortKey(
-                   s, ad_utility::vocabulary::LocaleManager::Level::PRIMARY)
-                .get();
-        for (size_t i = 0; i < s.size(); ++i) {
-          auto [numCodepoints, partial] = loc.getPrefixSortKey(s, i);
-          (void)numCodepoints;
-          ASSERT_TRUE(ql::starts_with(complete, partial.get()));
-        }
-      };
+  auto testSortKeysForLocale = [](std::string_view s,
+                                  const LocaleManager& loc) {
+    auto complete = loc.getSortKey(s, LocaleManager::Level::PRIMARY).get();
+    for (size_t i = 0; i < s.size(); ++i) {
+      auto [numCodepoints, partial] = loc.getPrefixSortKey(s, i);
+      (void)numCodepoints;
+      ASSERT_TRUE(ql::starts_with(complete, partial.get()));
+    }
+  };
 
   auto testSortKeys = [&testSortKeysForLocale, &locIgnorePunct,
                        &locRespectPunct](std::string_view s) {
@@ -121,10 +117,8 @@ TEST(LocaleManager, PrefixSortKey) {
   ASSERT_GT(a, b);
   ASSERT_EQ(a, a);
   ASSERT_NE(a, b);
-  ASSERT_FALSE(comp("vivæ", "vivae",
-                    ad_utility::vocabulary::LocaleManager::Level::PRIMARY));
-  ASSERT_FALSE(comp("vivæ", "vivae",
-                    ad_utility::vocabulary::LocaleManager::Level::PRIMARY));
+  ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
+  ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
 }
 
 #ifndef QLEVER_NO_UNICODE
@@ -134,16 +128,16 @@ TEST(LocaleManager, PrefixSortKey) {
 TEST(LocaleManagerTest, BogusLocaleThrows) {
   // A language string that is too long for ICU yields a "bogus" locale, which
   // the constructor must reject.
-  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::vocabulary::LocaleManagerICU(
-                                   std::string(1000, 'a'), "US", false),
-                               ::testing::HasSubstr("Could not create locale"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      LocaleManagerICU(std::string(1000, 'a'), "US", false),
+      ::testing::HasSubstr("Could not create locale"));
 }
 
 // _____________________________________________________________________________
 TEST(LocaleManagerTest, CopyAssignment) {
-  using L = ad_utility::vocabulary::LocaleManager::Level;
-  ad_utility::vocabulary::LocaleManagerICU ignorePunct("en", "US", true);
-  ad_utility::vocabulary::LocaleManagerICU respectPunct("en", "US", false);
+  using L = LocaleManager::Level;
+  LocaleManagerICU ignorePunct("en", "US", true);
+  LocaleManagerICU respectPunct("en", "US", false);
   // Precondition: the two managers disagree on punctuation handling.
   ASSERT_EQ(ignorePunct.compare(".a", "a", L::PRIMARY), 0);
   ASSERT_LT(respectPunct.compare(".a", "a", L::PRIMARY), 0);
@@ -151,7 +145,7 @@ TEST(LocaleManagerTest, CopyAssignment) {
   respectPunct = ignorePunct;
   EXPECT_EQ(respectPunct.compare(".a", "a", L::PRIMARY), 0);
   // Self-assignment is a no-op (via a reference to avoid `-Wself-assign`).
-  ad_utility::vocabulary::LocaleManagerICU& ref = respectPunct;
+  LocaleManagerICU& ref = respectPunct;
   respectPunct = ref;
   EXPECT_EQ(respectPunct.compare(".a", "a", L::PRIMARY), 0);
 }
@@ -162,11 +156,10 @@ TEST(LocaleManagerTest, RaiseThrowsOnIcuError) {
   // data but nonzero size makes `compareUTF8` fail with
   // `U_ILLEGAL_ARGUMENT_ERROR`, which `raise` turns into an exception. The null
   // pointer is never dereferenced, as ICU reports the error first.
-  ad_utility::vocabulary::LocaleManagerICU loc;
+  LocaleManagerICU loc;
   std::string_view nullView{static_cast<const char*>(nullptr), 5};
   AD_EXPECT_THROW_WITH_MESSAGE(
-      (void)loc.compare(nullView, "a",
-                        ad_utility::vocabulary::LocaleManager::Level::PRIMARY),
+      (void)loc.compare(nullView, "a", LocaleManager::Level::PRIMARY),
       ::testing::HasSubstr("U_ILLEGAL_ARGUMENT_ERROR"));
 }
 #endif  // QLEVER_NO_UNICODE
@@ -177,8 +170,8 @@ TEST(LocaleManagerTest, RaiseThrowsOnIcuError) {
 
 // _____________________________________________________________________________
 TEST(LocaleManager, NoICUPrefixSortKey) {
-  using L = ad_utility::vocabulary::LocaleManagerNoICU::Level;
-  ad_utility::vocabulary::LocaleManagerNoICU loc;
+  using L = LocaleManagerNoICU::Level;
+  LocaleManagerNoICU loc;
   // The bytewise prefix sort key is the first `min(prefixLength, size)` bytes.
   auto expectPrefix = [&loc](std::string_view s, size_t prefixLength,
                              size_t expectedNum,
@@ -197,8 +190,8 @@ TEST(LocaleManager, NoICUPrefixSortKey) {
 
 // _____________________________________________________________________________
 TEST(LocaleManager, NoICU) {
-  using L = ad_utility::vocabulary::LocaleManagerNoICU::Level;
-  ad_utility::vocabulary::LocaleManagerNoICU loc;
+  using L = LocaleManagerNoICU::Level;
+  LocaleManagerNoICU loc;
 
   // Comparison is bytewise, so (unlike ICU) case and punctuation matter and the
   // collation level is irrelevant.

@@ -15,10 +15,12 @@ ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 LC_CTYPE=C.UTF-8 DEBIAN_FRONTEND=noninteractive
 # sandbox dies with "Operation not permitted". Disable it: CI legs run as
 # root anyway, so the sandbox buys nothing here.
 RUN echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/99-no-sandbox
-# build-essential = hosted "Install basic compiler" step.
+# build-essential = hosted "Install basic compiler" step. libbz2-dev: the
+# hosted ubuntu-22.04 runner image ships it, and spatialjoin's Misc.h
+# includes <bzlib.h> from the system even when conan provides bzip2.
 RUN apt-get update && apt-get install -y \
     build-essential ninja-build git wget pkg-config mold \
-    python3-pip python3-yaml unzip python3-icu \
+    python3-pip python3-yaml unzip python3-icu libbz2-dev \
  && rm -rf /var/lib/apt/lists/*
 # Hosted leg requires cmake >= 3.27, Jammy ships 3.22: same tarball install
 # as install-dependencies-ubuntu (cmake-version 3.27, build 0).

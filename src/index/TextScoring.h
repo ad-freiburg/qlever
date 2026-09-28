@@ -15,16 +15,14 @@ class ScoreData {
   using TextScoringMetric = qlever::TextScoringMetric;
   ScoreData() = default;
 
-  explicit ScoreData(ad_utility::vocabulary::LocaleManager localeManager)
+  explicit ScoreData(LocaleManager localeManager)
       : localeManager_(std::move(localeManager)) {}
 
-  ScoreData(ad_utility::vocabulary::LocaleManager localeManager,
-            TextScoringMetric scoringMetric)
+  ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric)
       : scoringMetric_(std::move(scoringMetric)),
         localeManager_(std::move(localeManager)) {}
 
-  ScoreData(ad_utility::vocabulary::LocaleManager localeManager,
-            TextScoringMetric scoringMetric,
+  ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric,
             const std::pair<float, float>& bAndKParam)
       : scoringMetric_(std::move(scoringMetric)),
         b_(bAndKParam.first),
@@ -48,7 +46,7 @@ class ScoreData {
   float b_ = 0.75;
   float k_ = 1.75;
 
-  ad_utility::vocabulary::LocaleManager localeManager_;
+  LocaleManager localeManager_;
 
   // The invertedIndex_ connects words to documents (docIds) and the term
   // frequency of  those words inside the documents

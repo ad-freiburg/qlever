@@ -1556,7 +1556,7 @@ _:blank ex:b ex:c .
 // _____________________________________________________________________________
 TEST(RdfParserTest, EncodedIriManagerUsage) {
   // Create an EncodedIriManager with test prefixes
-  ad_utility::vocabulary::EncodedIriManager encodedIriManager{
+  EncodedIriManager encodedIriManager{
       {"http://example.org/", "http://test.com/id/"}};
 
   // Create parsers with the EncodedIriManager
@@ -1628,7 +1628,7 @@ TEST(RdfParserTest, EncodedIriManagerUsage) {
 TEST(RdfParserTest, EncodedIriManagerPrefixedNames) {
   // Test that prefixed names also get encoded when they resolve to encodable
   // IRIs
-  ad_utility::vocabulary::EncodedIriManager encodedIriManager{
+  EncodedIriManager encodedIriManager{
       {"http://example.org/", "http://test.com/id/"}};
 
   // Meta-matcher that creates matchers for encoded IRIs at any position in a

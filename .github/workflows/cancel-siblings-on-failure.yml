@@ -6,6 +6,10 @@ name: Cancel sibling runs on failure
 # Restarting (rerun --failed) stays a manual step after the fix lands.
 # OpenCodeReview is deliberately not watched (a review failure must not
 # kill builds), but it is still cancelled as a sibling by head SHA.
+# "CPP17 libQLever" is also not watched: on PRs it only runs when
+# 'ci'-labeled, and a workflow-level config failure in that optional leg
+# (e.g. an invalid matrix) must not cancel the always-on legs. It is still
+# cancelled as a sibling by head SHA when one of the watched legs fails.
 on:
   workflow_run:
     workflows:
@@ -13,7 +17,6 @@ on:
       - "Native build with conan"
       - "Native build with conan on MacOS"
       - "Native build with AppleClang on MacOS"
-      - "CPP17 libQLever"
       - "measure-code-coverage"
       - "sparql-conformance"
       - "sparql-conformance-new"

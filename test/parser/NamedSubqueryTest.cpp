@@ -16,7 +16,7 @@ namespace {
 
 // Parse the given query and return the resulting `ParsedQuery`.
 ParsedQuery parse(std::string query) {
-  static ad_utility::vocabulary::EncodedIriManager encodedIriManager;
+  static EncodedIriManager encodedIriManager;
   return SparqlParser::parseQuery(&encodedIriManager, std::move(query));
 }
 

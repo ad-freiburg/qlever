@@ -1,8 +1,7 @@
-// Copyright 2024 - 2026 The QLever Authors, in particular:
+// Copyright 2024 - 2025 The QLever Authors, in particular:
 //
 // 2024 Moritz Dom <domm@informatik.uni-freiburg.de>, UFR
 // 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2026 Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -220,11 +219,8 @@ TEST(BlankNodeManager, maxNumOfBlocks) {
   // Mock a high `minIndex_` to simulate reduced space in the `usedBlocksSet_`.
   BlankNodeManager bnm(ValueId::maxIndex - 256 * BlankNodeManager::blockSize_ +
                        2);
-  auto allocateBlock = [&]() {
-    [[maybe_unused]] auto block = bnm.allocateBlock();
-  };
   AD_EXPECT_THROW_WITH_MESSAGE(
-      allocateBlock(),
+      [[maybe_unused]] auto _ = bnm.allocateBlock(),
       ::testing::HasSubstr(
           "Critical high number of blank node blocks in use:"));
 }

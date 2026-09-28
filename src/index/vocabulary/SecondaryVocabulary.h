@@ -17,8 +17,6 @@
 
 #include "global/IndexTypes.h"
 
-namespace ad_utility::vocabulary {
-
 // The secondary vocabulary of an index. It stores words that were added after
 // the main index was built and that are not part of the vocabulary of that
 // main index, so that data containing such words can be persisted and reloaded
@@ -68,7 +66,5 @@ class SecondaryVocabulary {
   // `std::nullopt` otherwise.
   std::optional<SecondaryVocabIndex> getId(std::string_view word) const;
 };
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SECONDARYVOCABULARY_H

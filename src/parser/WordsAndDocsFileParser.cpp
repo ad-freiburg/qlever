@@ -12,8 +12,7 @@
 
 // _____________________________________________________________________________
 WordsAndDocsFileParser::WordsAndDocsFileParser(
-    const std::string& wordsOrDocsFile,
-    const ad_utility::vocabulary::LocaleManager& localeManager)
+    const std::string& wordsOrDocsFile, const LocaleManager& localeManager)
     : in_(wordsOrDocsFile), localeManager_(localeManager) {}
 
 // _____________________________________________________________________________

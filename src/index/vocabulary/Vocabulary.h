@@ -26,8 +26,6 @@
 #include "util/HashSet.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
-namespace ad_utility::vocabulary {
-
 template <typename IndexT = WordVocabIndex>
 class IdRange {
  public:
@@ -132,12 +130,10 @@ class Vocabulary {
   // Batch lookup: look up multiple indices at once and return their words.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
-  // Same as `lookupBatch(indices)`, but decode into `builder` when the
-  // underlying vocabulary supports it (compressed). Otherwise `builder` is
-  // unused and the underlying result is returned. Note: `builder` is consumed
-  // (moved-from) by this call and must not be reused.
-  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices,
-                                     ArenaVocabBatchBuilder& builder) const;
+  // Append the words for `indices` to `builder`. Delegate when the underlying
+  // vocabulary supports this protocol. Otherwise copy its owning result.
+  void lookupBatch(ql::span<const size_t> indices,
+                   ArenaVocabBatchBuilder& builder) const;
 
   // Streaming variant of batch lookup.
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;
@@ -360,7 +356,5 @@ using RdfsVocabulary = Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
                                   TripleComponentComparator, VocabIndex>;
 using TextVocabulary = Vocabulary<detail::UnderlyingVocabTextVocabulary,
                                   SimpleStringComparator, WordVocabIndex>;
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARY_H

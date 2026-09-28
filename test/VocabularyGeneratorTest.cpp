@@ -162,9 +162,8 @@ class MergeVocabularyTest : public ::testing::Test {
                     V(localIdx),
                     Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId)));
               } else {
-                using GeoVocab = ad_utility::vocabulary::SplitGeoVocabulary<
-                    ad_utility::vocabulary::CompressedVocabulary<
-                        ad_utility::vocabulary::VocabularyInternalExternal>>;
+                using GeoVocab = SplitGeoVocabulary<
+                    CompressedVocabulary<VocabularyInternalExternal>>;
                 if (GeoVocab::getMarkerForWord(w.iriOrLiteral()) == 1) {
                   globalId = GeoVocab::addMarker(globalId, 1);
                 }
@@ -227,7 +226,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
       }
     };
 
-    ad_utility::vocabulary::TripleComponentComparator comparator;
+    TripleComponentComparator comparator;
     res = mergeVocabulary(
         _basePath, 2,
         [&comparator](std::string_view a, bool aIsExternal, std::string_view b,

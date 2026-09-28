@@ -941,8 +941,8 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
 
   // Multiple key value pairs with the same key are not allowed.
   AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::ConfigManager::parseShortHand(
-                                   R"(complicatedKey:42, complicatedKey:43)"),
-                               ::testing::ContainsRegex("'complicatedKey'"));
+                                   R"(complicatedKey:42, complicatedKey:43)");
+                               , ::testing::ContainsRegex("'complicatedKey'"));
 
   // Final test: Is there an exception, if we try to parse the wrong syntax?
   ASSERT_ANY_THROW(ad_utility::ConfigManager::parseShortHand(

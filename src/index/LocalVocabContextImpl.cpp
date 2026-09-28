@@ -14,8 +14,8 @@
 // _____________________________________________________________________________
 int LocalVocabContextImpl::compareWords(std::string_view a,
                                         std::string_view b) const {
-  return vocabulary_->getCaseComparator().compare(
-      a, b, ad_utility::vocabulary::LocaleManager::Level::TOTAL);
+  return vocabulary_->getCaseComparator().compare(a, b,
+                                                  LocaleManager::Level::TOTAL);
 }
 
 // _____________________________________________________________________________

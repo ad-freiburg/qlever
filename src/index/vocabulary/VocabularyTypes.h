@@ -38,8 +38,6 @@
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
-namespace ad_utility::vocabulary {
-
 // _____________________________________________________________________________
 // Frozen owner of a batch's `string_view`s. Builders allocate and write, then
 // move the populated views and the backing storage into a derived class;
@@ -81,15 +79,19 @@ class MultiSourceVocabBatchAssembler;
 
 // _____________________________________________________________________________
 // Batch lookup result: views are always `storage_->viewSpan()`. There is no
-// constructor that takes an owner and a span independently.
+// constructor that takes an owner and a span independently. Copies share the
+// storage. A view stays valid as long as any copy of the result lives, with
+// one documented exception: a view that the producing vocabulary placed via
+// `MultiSourceVocabBatchAssembler::assignUnownedViewAtPosition` points into
+// that vocabulary's own memory and is valid as long as the vocabulary lives.
 class VocabBatchLookupResult {
  private:
   VocabBatchOwner storage_{};
   ql::span<const std::string_view> span_{};
 
+  // Assemblers take over `storage_` of the sub-batches they re-arrange, to
+  // keep the bytes behind the re-arranged views alive.
   friend class MultiSourceVocabBatchAssembler;
-  // Frozen storage accessed only by assemblers to keep child views alive.
-  [[nodiscard]] VocabBatchOwner owner() const noexcept { return storage_; }
 
  public:
   VocabBatchLookupResult() = default;
@@ -97,18 +99,7 @@ class VocabBatchLookupResult {
   explicit VocabBatchLookupResult(VocabBatchOwner storage)
       : storage_{std::move(storage)},
         span_{storage_ ? storage_->viewSpan()
-                       : ql::span<const std::string_view>{}} {
-    if (!span_.empty()) {
-      AD_CONTRACT_CHECK(storage_ != nullptr);
-    }
-  }
-
-  // Copies share the storage (cheap: `shared_ptr` + view) and are required,
-  // e.g., to collect results into a vector (see `VocabularyTestHelpers.h`).
-  // Declared explicitly: the custom move operations below would otherwise
-  // suppress the implicit copies (Rule of Five).
-  VocabBatchLookupResult(const VocabBatchLookupResult&) = default;
-  VocabBatchLookupResult& operator=(const VocabBatchLookupResult&) = default;
+                       : ql::span<const std::string_view>{}} {}
 
   // Moves reset the source span, so a moved-from result is empty (rather than
   // a null owner paired with a stale view into the moved-to storage).
@@ -124,6 +115,13 @@ class VocabBatchLookupResult {
     }
     return *this;
   }
+
+  // Copies are cheap and safe (`shared_ptr` + span share ownership of the
+  // frozen storage), so they stay available for future SplitVocabulary/merge
+  // code; declared explicitly so the user-declared moves above do not leave
+  // them only implicitly deleted.
+  VocabBatchLookupResult(const VocabBatchLookupResult&) = default;
+  VocabBatchLookupResult& operator=(const VocabBatchLookupResult&) = default;
 
   // Provide the container and range interface.
   [[nodiscard]] size_t size() const noexcept { return span_.size(); }
@@ -189,13 +187,13 @@ class ContiguousVocabBatchBuilder {
  private:
   std::vector<char> buffer_;
   std::vector<std::string_view> views_;
-  std::vector<char*> targets_;
+  std::vector<size_t> targetOffsets_;
 
  public:
-  // Copying would duplicate `targets_`/`views_` pointers that refer to this
-  // builder's own `buffer_`, leaving the copy with pointers into foreign
-  // storage. Moving is safe: `std::vector` moves transfer the heap buffer, so
-  // the pointers keep referring to the moved (now owned) storage.
+  // Copying would duplicate `views_` pointers that refer to this builder's own
+  // `buffer_`, leaving the copy with pointers into foreign storage. Moving is
+  // safe: `std::vector` moves transfer the heap buffer, so the pointers keep
+  // referring to the moved (now owned) storage.
   ContiguousVocabBatchBuilder(const ContiguousVocabBatchBuilder&) = delete;
   ContiguousVocabBatchBuilder& operator=(const ContiguousVocabBatchBuilder&) =
       delete;
@@ -212,27 +210,29 @@ class ContiguousVocabBatchBuilder {
     }
     buffer_.resize(totalBytes == 0 ? 1 : totalBytes);
     views_.reserve(wordSizes.size());
-    targets_.reserve(wordSizes.size());
+    targetOffsets_.reserve(wordSizes.size());
 
     size_t offset = 0;
     for (size_t size : wordSizes) {
       char* target = buffer_.data() + offset;
-      targets_.push_back(target);
+      targetOffsets_.push_back(offset);
       views_.emplace_back(target, size);
       offset += size;
     }
   }
 
-  // Return the precomputed destination for each requested word. The pointer at
-  // index i corresponds to the size supplied at index i to the constructor.
-  // The pointers refer to the builder's backing character buffer; for
-  // zero-sized words, each pointer remains valid within the allocated buffer.
-  // Note that multiple zero-sized words may share the same address (the
-  // offset is not advanced for size 0); nothing is ever written through
-  // those pointers, only empty views are read from them.
-  [[nodiscard]] ql::span<char*> targets() noexcept { return targets_; }
-  [[nodiscard]] ql::span<char* const> targets() const noexcept {
-    return targets_;
+  // Return an owning pointer array with one destination per requested word.
+  // The array can safely outlive this builder's metadata. Its pointers remain
+  // valid after `finalize()` because the result takes ownership of `buffer_`.
+  // They become invalid when that result is destroyed. Multiple zero-sized
+  // words may share an address, but no bytes are written through those entries.
+  [[nodiscard]] std::vector<char*> targets() noexcept {
+    std::vector<char*> result;
+    result.reserve(targetOffsets_.size());
+    for (size_t offset : targetOffsets_) {
+      result.push_back(buffer_.data() + offset);
+    }
+    return result;
   }
 
   [[nodiscard]] VocabBatchLookupResult finalize() && {
@@ -335,6 +335,20 @@ class StringVectorVocabBatchLookupData : public VocabBatchStorage {
     return VocabBatchLookupResult{
         std::shared_ptr<const VocabBatchStorage>{std::move(self)}};
   }
+
+  // Return the batch-lookup result for the owning `words` (one word per
+  // looked-up index, in order). This is the common pattern "store the
+  // materialized words, then point one view at each of them" in one call;
+  // callers never touch the buffer or the views. Use it only when the words
+  // really have to be materialized as `std::string`s; words that are decoded
+  // into caller-provided memory go into an `ArenaVocabBatchBuilder` instead,
+  // and words that already live in storage that outlives the result need no
+  // copy at all (see `MultiSourceVocabBatchAssembler`).
+  static VocabBatchLookupResult fromWords(std::vector<std::string> words) {
+    AD_CONTRACT_CHECK(!words.empty());
+    return asResult(
+        std::make_shared<StringVectorVocabBatchLookupData>(std::move(words)));
+  }
 };
 
 // _____________________________________________________________________________
@@ -380,16 +394,6 @@ struct IndexAndWord {
 // A type-erased input range vocabularies can use for `scanAll()`, that yields
 // all words of the vocabulary in order, together with their index.
 using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
-
-// _____________________________________________________________________________
-// Construct a result from owning strings and expose views into their storage.
-inline VocabBatchLookupResult makeStringVectorVocabBatchLookupResult(
-    std::vector<std::string> words) {
-  AD_CONTRACT_CHECK(!words.empty());
-  auto data =
-      std::make_shared<StringVectorVocabBatchLookupData>(std::move(words));
-  return StringVectorVocabBatchLookupData::asResult(std::move(data));
-}
 
 // _____________________________________________________________________________
 // Decompress a single word into `destination` using `decompress(span)`.
@@ -484,6 +488,15 @@ class ArenaVocabBatchBuilder {
   }
 };
 
+// Append every word from `result` to `builder`. The copied bytes no longer
+// depend on the lifetime of `result` after this function returns.
+inline void appendVocabBatchLookupResult(const VocabBatchLookupResult& result,
+                                         ArenaVocabBatchBuilder& builder) {
+  for (std::string_view word : result) {
+    builder.appendWord(word);
+  }
+}
+
 // Whether `Vocab` provides the two-argument `lookupBatch` overload that
 // decodes into an `ArenaVocabBatchBuilder`. Implemented with `void_t` SFINAE
 // (instead of a requires-expression) so that it also works in C++17 builds,
@@ -521,14 +534,35 @@ inline VocabBatchLookupResult makePmrVocabBatchLookupResult(
 }
 
 // _____________________________________________________________________________
-// Helper struct that encapsulates assembling string_views from multiple
-// independent vocabulary sources, verifying collision-free total coverage, and
-// aggregating storage ownership into a self-contained `VocabBatchLookupResult`.
+// Assemble one `VocabBatchLookupResult` from words that come from several
+// sources, without copying any word bytes. Every output position is filled
+// exactly once, by one of two means:
+//
+// 1. `scatterSubBatchResultAtPositions`: the views of a batch result that was
+//    received from another vocabulary are re-arranged into the given output
+//    positions, and that batch's storage is kept alive by the assembled
+//    result (shared ownership, no copy of the words).
+// 2. `assignUnownedViewAtPosition`: a view into storage that is NOT owned by
+//    the result, typically the words of an in-memory vocabulary. See that
+//    function for the lifetime contract.
+//
+// The assembler checks that no position is filled twice and that all
+// positions are filled before `finalizeVocabBatchLookupResult` hands out the
+// result.
 class MultiSourceVocabBatchAssembler {
  private:
   std::vector<std::string_view> assembledWordViews_;
   std::vector<bool> slotFilledTracking_;
   std::vector<VocabBatchOwner> storageOwners_;
+
+  // Fill one output position (shared by the two public placement functions,
+  // which differ only in how the storage behind `word` is kept alive).
+  void assignWordAtPosition(size_t resultPosition, std::string_view word) {
+    AD_CORRECTNESS_CHECK(resultPosition < assembledWordViews_.size());
+    AD_CORRECTNESS_CHECK(!slotFilledTracking_[resultPosition]);
+    slotFilledTracking_[resultPosition] = true;
+    assembledWordViews_[resultPosition] = word;
+  }
 
  public:
   // ___________________________________________________________________________
@@ -538,26 +572,19 @@ class MultiSourceVocabBatchAssembler {
     // Fail fast like every other factory in this file: finalization requires
     // a non-empty view list, so an empty assembler could never succeed.
     AD_CONTRACT_CHECK(totalExpectedWords > 0);
+    AD_CORRECTNESS_CHECK(assembledWordViews_.size() ==
+                         slotFilledTracking_.size());
   }
 
   // ___________________________________________________________________________
-  // Place a single resolved string_view into its corresponding output position.
-  // The caller must ensure that `word` stays alive until after finalization,
-  // e.g. by also registering the owning storage via `registerStorageOwner`
-  // (or by scattering a child result, which retains its owner automatically).
-  void assignWordAtPosition(size_t resultPosition, std::string_view word) {
-    AD_CORRECTNESS_CHECK(resultPosition < assembledWordViews_.size());
-    AD_CORRECTNESS_CHECK(!slotFilledTracking_[resultPosition]);
-    slotFilledTracking_[resultPosition] = true;
-    assembledWordViews_[resultPosition] = word;
-  }
-
-  // ___________________________________________________________________________
-  // Scatter a child batch lookup result across the specified output positions
-  // and retain the child's storage owner so its underlying string storage is
-  // kept alive.
+  // Place the `i`-th word of `subBatchResult` at output position
+  // `resultPositions[i]` and keep the storage of `subBatchResult` alive for
+  // as long as the assembled result lives. Only the views are re-arranged;
+  // the word bytes stay where they are. Taken by value so that a caller that
+  // no longer needs the batch can move it in without touching the reference
+  // count.
   void scatterSubBatchResultAtPositions(
-      const VocabBatchLookupResult& subBatchResult,
+      VocabBatchLookupResult subBatchResult,
       ql::span<const size_t> resultPositions) {
     AD_CONTRACT_CHECK(subBatchResult.size() == resultPositions.size());
 
@@ -565,25 +592,39 @@ class MultiSourceVocabBatchAssembler {
          ::ranges::views::zip(resultPositions, subBatchResult)) {
       assignWordAtPosition(resultPosition, word);
     }
-    if (auto owner = subBatchResult.owner(); owner != nullptr) {
-      storageOwners_.push_back(std::move(owner));
+    // Steal the owner of the (by-value) argument instead of copying it.
+    if (subBatchResult.storage_ != nullptr) {
+      storageOwners_.push_back(std::move(subBatchResult.storage_));
     }
   }
 
   // ___________________________________________________________________________
-  // Register a shared storage owner (e.g. an in-memory vocabulary buffer)
-  // that must outlive the assembled string_views.
-  void registerStorageOwner(VocabBatchOwner storageOwner) {
-    AD_CONTRACT_CHECK(storageOwner != nullptr);
-    storageOwners_.push_back(std::move(storageOwner));
+  // Place `word` at output position `resultPosition` WITHOUT taking any
+  // ownership of the bytes it points to.
+  //
+  // Lifetime contract: the bytes of `word` must stay valid and unchanged for
+  // as long as the assembled `VocabBatchLookupResult` (or any copy of it) is
+  // used. This holds for the words of a vocabulary that is kept in memory for
+  // its whole lifetime, as long as the vocabulary outlives the result, which
+  // is the case for lookups during query processing (the index, and thus its
+  // vocabularies, outlives every query). It does NOT hold for temporaries,
+  // for scratch buffers that are reused, or for the words of another batch
+  // result; use `scatterSubBatchResultAtPositions` for those.
+  void assignUnownedViewAtPosition(size_t resultPosition,
+                                   std::string_view word) {
+    assignWordAtPosition(resultPosition, word);
   }
 
   // ___________________________________________________________________________
-  // Finalize the assembled batch and return a self-contained
-  // `VocabBatchLookupResult` (can be called only once).
+  // Finalize the assembled batch and return it as a `VocabBatchLookupResult`
+  // that co-owns the storage of all scattered sub-batches (can be called only
+  // once).
   [[nodiscard]] VocabBatchLookupResult finalizeVocabBatchLookupResult() && {
+    AD_CORRECTNESS_CHECK(assembledWordViews_.size() ==
+                         slotFilledTracking_.size());
     AD_CORRECTNESS_CHECK(!assembledWordViews_.empty());
-    AD_CORRECTNESS_CHECK(!storageOwners_.empty());
+    // `storageOwners_` is empty iff all words were placed via
+    // `assignUnownedViewAtPosition`, which is valid.
     AD_CORRECTNESS_CHECK(ql::ranges::all_of(
         slotFilledTracking_, [](bool isFilled) { return isFilled; }));
 
@@ -611,6 +652,7 @@ class MarkerIndicesAndPositions {
   void reserve(size_t capacity) {
     underlyingIndices_.reserve(capacity);
     resultPositions_.reserve(capacity);
+    AD_CORRECTNESS_CHECK(underlyingIndices_.size() == resultPositions_.size());
   }
 
   // ___________________________________________________________________________
@@ -618,6 +660,7 @@ class MarkerIndicesAndPositions {
   void addPair(size_t underlyingIndex, size_t resultPosition) {
     underlyingIndices_.push_back(underlyingIndex);
     resultPositions_.push_back(resultPosition);
+    AD_CORRECTNESS_CHECK(underlyingIndices_.size() == resultPositions_.size());
   }
 
   // ___________________________________________________________________________
@@ -729,7 +772,7 @@ VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
     }
     auto lookupResult = releaseLookupResult(vocabMarker);
     assembler.scatterSubBatchResultAtPositions(
-        lookupResult, markerIndices.getResultPositions());
+        std::move(lookupResult), markerIndices.getResultPositions());
   }
   return std::move(assembler).finalizeVocabBatchLookupResult();
 }
@@ -750,6 +793,7 @@ VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
 // used by all vocabularies that do not provide a specialized (e.g. io_uring)
 // implementation. They simply loop over the indices and issue the ordinary
 // single-word `operator[]` lookups one after another.
+namespace ad_utility::vocabulary {
 // Return the placeholder that is reported for a vocabulary index that is not
 // contained in a vocabulary with "holes" (see `VocabularyInMemoryBinSearch`).
 // This happens when such a vocabulary was created by excluding some of the
@@ -851,7 +895,7 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
         return wordAsStringOrPlaceholder(vocab, idx);
       }));
 
-  return makeStringVectorVocabBatchLookupResult(std::move(words));
+  return StringVectorVocabBatchLookupData::fromWords(std::move(words));
 }
 
 // _____________________________________________________________________________
@@ -866,6 +910,8 @@ VocabLookupOutput lookupBatchesStreamed(const Vocab& vocab,
                              return vocab.lookupBatch(indices);
                            })};
 }
+
+}  // namespace ad_utility::vocabulary
 
 // _____________________________________________________________________________
 // A word and its index in the vocabulary from which it was obtained. Also
@@ -1003,7 +1049,5 @@ class WordWriterBase {
   // The base classes have to implement the actual logic for `finish` here.
   virtual void finishImpl() = 0;
 };
-
-}  // namespace ad_utility::vocabulary
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
