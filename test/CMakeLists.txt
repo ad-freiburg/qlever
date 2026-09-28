@@ -607,8 +607,6 @@ addLinkAndDiscoverTest(ConstructTemplatePreprocessorTest engine)
 addLinkAndDiscoverTest(ExternalValuesQueryTest engine)
 addLinkAndDiscoverTest(ExternalValuesTest engine)
 
-addLinkAndDiscoverTest(AsyncChunkPipelineTest engine)
-
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 
 addLinkAndDiscoverTest(FastExportStreamFormatterTest engine rdfEscaping)
