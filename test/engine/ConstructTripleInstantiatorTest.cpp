@@ -466,8 +466,8 @@ TEST(FormatTriple, FastTurtleBatchesMatchLegacyTurtle) {
     return batches;
   };
 
-  // With the default target size, only the triple with the large literal
-  // (more than 20000 bytes) does not fit into the first batch.
+  // With the default target size, all triples fit into one batch (the largest,
+  // with 10000 escaped newlines, takes about 20000 bytes).
   auto batches = formatInBatches(triples, FAST_TURTLE_BATCH_BYTES);
   EXPECT_EQ(absl::StrJoin(batches, ""), legacy);
   EXPECT_EQ(batches.size(), 1u);
