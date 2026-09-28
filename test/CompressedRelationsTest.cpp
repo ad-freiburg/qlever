@@ -2026,7 +2026,7 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfTasksInFlight) {
     // threads of the global thread pool (which the `--num-threads` option of
     // the index builder configures).
     auto [filename, cleanup] = testFilenameWithCleanup();
-    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
     EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
@@ -2034,15 +2034,13 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfTasksInFlight) {
     // `rebuild-permutation-writer-num-threads`) means "as many as the pool has
     // threads".
     auto [filename, cleanup] = testFilenameWithCleanup();
-    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
-                                    0};
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2, 0};
     EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
     // Check if minimum of 4 tasks is honored.
     auto [filename, cleanup] = testFilenameWithCleanup();
-    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
-                                    1};
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2, 1};
     EXPECT_EQ(maxNumTasksInFlight(writer), 4);
   }
   {
@@ -2500,7 +2498,7 @@ TEST(CompressedRelationWriter, directlyWrittenSmallRelationWithGraphs) {
 // next block must not be counted twice.
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
-  // A block size of 80 bytes means 10 triples per block.
+  // Blocks of 10 rows.
   std::vector<RelationInput> inputs;
   // 30 rows with 10 distinct `col1` IDs, each of which occurs three times. The
   // blocks end after 10, 20, and 30 rows, so the `col1` IDs `3` and `6` each
@@ -2518,10 +2516,10 @@ TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
   inputs.push_back(RelationInput{2, std::move(rowsOfSecondRelation)});
 
   checkPermutationIsIndependentOfInputBlockSize(
-      inputs, 80_B, inputBlockSizesForPathEquivalence);
+      inputs, 10, inputBlockSizesForPathEquivalence);
 
   auto [filename, cleanup] = testFilenameWithCleanup();
-  auto result = buildPermutation(inputs, 80_B, 1000, filename);
+  auto result = buildPermutation(inputs, 10, 1000, filename);
   ASSERT_EQ(result.largeRelationMetadata_.size(), 2);
   const auto& metadata1 = result.largeRelationMetadata_.at(0);
   EXPECT_EQ(metadata1.col0Id_, V(1));
