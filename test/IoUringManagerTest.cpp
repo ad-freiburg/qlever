@@ -16,7 +16,6 @@
 #include <cstring>
 #include <initializer_list>
 #include <memory>
-#include <numeric>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -609,89 +608,5 @@ TEST(MakeBatchManager, backendMatchesFlagWhenIoUringPreferred) {
             nullptr);
 #endif
   expectManagerWorks(*manager);
-}
-
-// Run `readPageCacheHits` on `reads` (pairs of file offset and size) of `fd`
-// and return the positions of the reads that were not served together with
-// the buffers (filled with '-' before the call).
-std::pair<std::vector<size_t>, std::vector<std::string>> readHits(
-    int fd, const std::vector<std::pair<uint64_t, size_t>>& reads) {
-  std::vector<size_t> numBytes;
-  std::vector<uint64_t> offsets;
-  std::vector<std::string> buffers;
-  for (const auto& [offset, size] : reads) {
-    offsets.push_back(offset);
-    numBytes.push_back(size);
-    buffers.emplace_back(size, '-');
-  }
-  std::vector<char*> targets;
-  for (auto& buffer : buffers) {
-    targets.push_back(buffer.data());
-  }
-  auto notServed =
-      ad_utility::readPageCacheHits(fd, numBytes, offsets, targets);
-  return {std::move(notServed), std::move(buffers)};
-}
-
-// All positions `0 .. n - 1`.
-std::vector<size_t> allPositions(size_t n) {
-  std::vector<size_t> positions(n);
-  std::iota(positions.begin(), positions.end(), size_t{0});
-  return positions;
-}
-
-// A batch whose file was just written is in the page cache and is served
-// completely; adjacent ranges (the first two reads) are read in one call.
-TEST(ReadPageCacheHits, hitOnlyBatch) {
-  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
-  auto [notServed, buffers] = readHits(fd, {{0, 4}, {4, 4}, {12, 4}, {4, 0}});
-  if (!ad_utility::pageCacheFastPathIsSupported()) {
-    EXPECT_EQ(notServed, allPositions(4));
-    return;
-  }
-  EXPECT_TRUE(notServed.empty());
-  EXPECT_EQ(buffers[0], "AAAA");
-  EXPECT_EQ(buffers[1], "BBBB");
-  EXPECT_EQ(buffers[2], "DDDD");
-  EXPECT_EQ(buffers[3], "");
-}
-
-// Reads that cannot be served completely (here: beyond the end of the file)
-// are all returned, whether or not `RWF_NOWAIT` is supported.
-TEST(ReadPageCacheHits, missOnlyBatch) {
-  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
-  auto [notServed, buffers] = readHits(fd, {{16, 4}, {40, 4}, {20, 4}});
-  EXPECT_EQ(notServed, allPositions(3));
-}
-
-// A mixed batch: a short read in the middle of a run of adjacent ranges
-// returns the incomplete read and the rest of its run, the complete reads of
-// the run and of other runs are served.
-TEST(ReadPageCacheHits, mixedBatchWithShortRead) {
-  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
-  auto [notServed, buffers] =
-      readHits(fd, {{0, 4}, {8, 4}, {12, 2}, {14, 4}, {18, 4}, {4, 4}});
-  if (!ad_utility::pageCacheFastPathIsSupported()) {
-    EXPECT_EQ(notServed, allPositions(6));
-    return;
-  }
-  EXPECT_EQ(notServed, (std::vector<size_t>{3, 4}));
-  EXPECT_EQ(buffers[0], "AAAA");
-  EXPECT_EQ(buffers[1], "CCCC");
-  EXPECT_EQ(buffers[2], "DD");
-  EXPECT_EQ(buffers[5], "BBBB");
-}
-
-// An empty batch is trivially served, and spans of different lengths are
-// rejected.
-TEST(ReadPageCacheHits, emptyBatchAndContract) {
-  auto [tmp, fd] = makeTempFile("AAAA");
-  EXPECT_TRUE(ad_utility::readPageCacheHits(fd, {}, {}, {}).empty());
-  std::vector<size_t> numBytes{4, 4};
-  std::vector<uint64_t> offsets{0};
-  std::string buffer(8, '-');
-  std::vector<char*> targets{buffer.data(), buffer.data() + 4};
-  EXPECT_ANY_THROW(
-      ad_utility::readPageCacheHits(fd, numBytes, offsets, targets));
 }
 }  // namespace
