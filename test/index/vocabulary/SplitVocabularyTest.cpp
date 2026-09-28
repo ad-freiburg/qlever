@@ -21,6 +21,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/filesystem.h"
 #include "backports/span.h"
+#include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -58,6 +59,17 @@ constexpr std::array<std::string_view, 3> testThreeFilenameSuffixes{".a", ".b",
 using ThreeSplitVocabulary =
     SplitVocabulary<decltype(testSplitThreeFunction), testThreeFilenameSuffixes,
                     VocabularyInMemory, VocabularyInMemory, VocabularyInMemory>;
+
+// The same splits over compressed vocabularies. Their `operator[]` returns a
+// `std::string`, so `SplitVocabulary::lookupBatch` forwards to or partitions
+// among their `lookupBatch` instead of copying from memory.
+using CompressedInMemory = CompressedVocabulary<VocabularyInMemory>;
+using TwoSplitCompressedVocabulary =
+    SplitVocabulary<decltype(testSplitTwoFunction), testTwoFilenameSuffixes,
+                    CompressedInMemory, CompressedInMemory>;
+using ThreeSplitCompressedVocabulary =
+    SplitVocabulary<decltype(testSplitThreeFunction), testThreeFilenameSuffixes,
+                    CompressedInMemory, CompressedInMemory, CompressedInMemory>;
 
 }  // namespace splitVocabTestHelpers
 
@@ -540,6 +552,65 @@ TEST(Vocabulary, SplitVocabularyLookupBatchRejectsOutOfRangeMarker) {
       static_cast<size_t>(3ull << ThreeSplitVocabulary::markerShift)};
   AD_EXPECT_THROW_WITH_MESSAGE(sv.lookupBatch(illegalMarker),
                                ::testing::HasSubstr("marker < numberOfVocabs"));
+  // The same for underlying vocabularies that are not kept in memory, where
+  // `lookupBatch` counts the markers before it looks anything up.
+  ThreeSplitCompressedVocabulary compressed;
+  const std::array<size_t, 2> legalThenIllegal{
+      0,
+      static_cast<size_t>(3ull << ThreeSplitCompressedVocabulary::markerShift)};
+  AD_EXPECT_THROW_WITH_MESSAGE(compressed.lookupBatch(legalThenIllegal),
+                               ::testing::HasSubstr("marker < numberOfVocabs"));
+}
+
+// Write the words `""`, `"abc"`, `"axyz"`, and `"xyz"` to a `SplitVocab` with
+// the two-way test split function (`"abc"` and `"axyz"` get marker 1), and
+// check `lookupBatch` against `operator[]` for batches that reach all the
+// cases of `SplitVocabulary::lookupBatch`.
+template <typename SplitVocab>
+void checkLookupBatchMatchesItemAtForAllCases(const std::string& filename) {
+  auto cleanup = vocabulary_test::makeVocabFileCleanup(
+      filename, SplitVocab::fileSuffixes());
+  SplitVocab sv;
+  auto ww = sv.makeDiskWriterPtr(filename);
+  (*ww)("\"\"", true);
+  (*ww)("\"abc\"", true);
+  (*ww)("\"axyz\"", true);
+  (*ww)("\"xyz\"", true);
+  ww->finish();
+  sv.readFromFile(filename);
+
+  auto check = [&sv](const auto& indices) {
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+        sv, sv.lookupBatch(indices), indices);
+  };
+  auto marked = [](uint64_t index, uint8_t marker) {
+    return static_cast<size_t>(SplitVocab::addMarker(index, marker));
+  };
+  // Mixed markers, reordered, with duplicates.
+  check(std::array{marked(1, 0), marked(0, 1), marked(1, 1), marked(0, 0),
+                   marked(1, 0), marked(0, 1)});
+  // Only marker 0 (forwarded without a copy), with a duplicate.
+  check(std::array{marked(1, 0), marked(0, 0), marked(1, 0)});
+  // Only marker 1 (forwarded after removing the marker bits).
+  check(std::array{marked(1, 1), marked(0, 1), marked(1, 1)});
+  // A single index of each marker.
+  check(std::array{marked(0, 0)});
+  check(std::array{marked(1, 1)});
+  AD_EXPECT_THROW_WITH_MESSAGE(sv.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
+  sv.close();
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyLookupBatchAllCasesMatchItemAt) {
+  // In-memory underlying vocabularies: one pass via `operator[]` into one
+  // arena.
+  checkLookupBatchMatchesItemAtForAllCases<TwoSplitVocabulary>(
+      absl::StrCat(gtestCurrentTestName(), ".inMemory"));
+  // Compressed underlying vocabularies: forwarding for a single marker,
+  // partitioning for mixed markers.
+  checkLookupBatchMatchesItemAtForAllCases<TwoSplitCompressedVocabulary>(
+      absl::StrCat(gtestCurrentTestName(), ".compressed"));
 }
 
 using namespace splitVocabTestHelpers;
