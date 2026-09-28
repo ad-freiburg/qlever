@@ -303,6 +303,11 @@ struct RuntimeParameters {
   // to the legacy path; default `false` keeps master's behaviour unchanged.
   Bool useFastExportStreamFormatter_{false, "use-fast-export-stream-formatter"};
 
+  // If true, the chunks of a streamed query result start at 64 KiB and double
+  // after every chunk up to the fixed 1 MiB, so that the first bytes reach the
+  // client earlier. If false, every chunk has the fixed size of 1 MiB.
+  Bool adaptiveExportChunkSize_{false, "adaptive-export-chunk-size"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
