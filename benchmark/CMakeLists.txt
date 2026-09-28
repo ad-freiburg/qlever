@@ -53,13 +53,6 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(PrefetchingBenchmark engine)
 
-    # Standalone main(), so not via addAndLinkBenchmark (which links
-    # benchmarkWithMain).
-    add_executable(BranchlessDispatcherBenchmark
-        BranchlessDispatcherBenchmark.cpp)
-    qlever_target_link_libraries(BranchlessDispatcherBenchmark engine
-        qlever_util)
-
     addAndLinkBenchmark(PrefixCompressorBenchmark)
 
     addAndLinkBenchmark(VocabBatchLookupBenchmark vocabulary)
