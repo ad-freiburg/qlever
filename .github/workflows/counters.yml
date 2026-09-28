@@ -1,0 +1,370 @@
+name: Counters
+
+# Deterministic counters (heap allocations, instructions) for a base/variant
+# pair, measured on GitHub-hosted runners instead of Ural. Allocation and
+# instruction counts do not depend on the machine, so they need neither the
+# exclusive Ural slot nor pinned cores. Timings stay on Ural.
+#
+# Each arm (base_ref, variant_ref) builds ONE CMake target with the flags of
+# build-binaries.yml (Ubuntu 24.04, gcc 13.3, Release, C++20, USE_IO_URING=ON,
+# liburing 2.15, jemalloc). The counters job then runs both binaries with the
+# same arguments and environment:
+#   json      native run with `-w <file>.json` (QLever benchmark targets);
+#             every numeric metadata value of every measurement becomes a
+#             row, e.g. the jemalloc `allocationRequests` / `allocatedBytes`
+#             that the stack's A/B benchmarks record around the timed loop.
+#   dhat      valgrind --tool=dhat: heap blocks and bytes allocated over the
+#             whole process (jemalloc's malloc is replaced via
+#             --soname-synonyms, so operator new and malloc are both counted).
+#   callgrind valgrind --tool=callgrind: instructions executed (Ir), plus the
+#             top functions (callgrind_annotate) as a file in the artifact.
+# With `scale_var` set, every counter runs at each value in `scales` (the
+# variable is exported with that value) and the summary reports
+#   delta = (value@max - value@min) / (max - min) [/ items_per_scale],
+# i.e. the cost of one extra scale unit (or one item) with the setup cost
+# (index/vocabulary build, process start) cancelled out.
+#
+# The workflow runs no shell code from its inputs: targets, env pairs and
+# arguments are checked against a restricted character set and passed as
+# argv words, never evaluated.
+#
+# Usage (after this file is on the default branch):
+#   ghq workflow run counters.yml -R marvin7122/qlever \
+#     -f base_ref=<branch-or-sha> -f variant_ref=<branch-or-sha> \
+#     -f target=<CMakeTarget> -f env="VAR=value ..." \
+#     -f scale_var=<VAR> -f scales="1 3" -f items_per_scale=<n>
+#   gh run download <run-id> -R marvin7122/qlever -n counters -D <dir>
+# Output artifact `counters`: counters.tsv (one row per arm/tool/metric/
+# scale), summary.tsv (base vs variant per metric), callgrind-*.txt,
+# logs/. The summary is also printed on the run page.
+
+run-name: "counters ${{ inputs.target || 'self-test' }} ${{ inputs.base_ref }} -> ${{ inputs.variant_ref }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: Base branch/SHA (for stack part k, part k-1)
+        required: true
+      variant_ref:
+        description: Variant branch/SHA
+        required: true
+      target:
+        description: One CMake target (a benchmark or other executable)
+        required: true
+      args:
+        description: Extra argv words for the binary (charset A-Za-z0-9_.,:=+/- and spaces)
+        required: false
+        default: ''
+      env:
+        description: Space-separated KEY=VALUE pairs exported for every run
+        required: false
+        default: ''
+      scale_var:
+        description: Env var that scales the measured work (empty = one run per tool)
+        required: false
+        default: ''
+      scales:
+        description: Space-separated values of scale_var (the summary uses min and max)
+        required: false
+        default: '1 2'
+      items_per_scale:
+        description: Items per scale unit (e.g. words per repetition); divides the delta
+        required: false
+        default: ''
+      tools:
+        description: Space-separated subset of "json dhat callgrind"
+        required: false
+        default: 'json dhat callgrind'
+      bench_json:
+        description: Append `-w <file>.json` (QLever benchmark targets); off for other executables
+        type: boolean
+        required: false
+        default: true
+  # Self-test when this file changes in a PR: the #3522 validation case
+  # (CompressedVocabulary operator[] allocations per decode, part 2 vs part 3).
+  pull_request:
+    paths:
+      - .github/workflows/counters.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CCACHE_EPOCH: v1
+  LIBURING_VERSION: '2.15'
+  BASE_REF: ${{ inputs.base_ref || 'bench/pr73-realpath-base' }}
+  VARIANT_REF: ${{ inputs.variant_ref || 'bench/pr73-realpath-variant' }}
+  TARGET: ${{ inputs.target || 'CompressedVocabularyLookupBenchmark' }}
+  RUN_ARGS: ${{ inputs.args || '' }}
+  RUN_ENV: ${{ inputs.env || (github.event_name == 'pull_request' && 'VOCAB_BENCH_WORDS=20000') || '' }}
+  SCALE_VAR: ${{ inputs.scale_var || (github.event_name == 'pull_request' && 'VOCAB_BENCH_REPETITIONS') || '' }}
+  SCALES: ${{ inputs.scales || (github.event_name == 'pull_request' && '1 3') || '1 2' }}
+  ITEMS_PER_SCALE: ${{ inputs.items_per_scale || (github.event_name == 'pull_request' && '20000') || '' }}
+  TOOLS: ${{ inputs.tools || 'json dhat callgrind' }}
+  BENCH_JSON: ${{ github.event_name == 'pull_request' || inputs.bench_json }}
+
+jobs:
+  build:
+    name: build ${{ matrix.arm }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: true
+      matrix:
+        arm: [base, variant]
+    steps:
+      - name: Check inputs
+        env:
+          ARM_REF: ${{ matrix.arm == 'base' && env.BASE_REF || env.VARIANT_REF }}
+        run: |
+          set -f
+          fail() { echo "::error::$1"; exit 1; }
+          case "${ARM_REF}" in ''|*[!A-Za-z0-9_./-]*) fail "bad ref '${ARM_REF}'" ;; esac
+          case "${TARGET}" in ''|*[!A-Za-z0-9_.+-]*) fail "bad target '${TARGET}'" ;; esac
+          case "${RUN_ARGS}" in *[!A-Za-z0-9_.,:=+/\ -]*) fail "bad args '${RUN_ARGS}'" ;; esac
+          for kv in ${RUN_ENV}; do
+            printf '%s\n' "$kv" | grep -Eq '^[A-Z_][A-Z0-9_]*=[A-Za-z0-9_.,:+/-]*$' || fail "bad env pair '$kv'"
+          done
+          [ -z "${SCALE_VAR}" ] || printf '%s\n' "${SCALE_VAR}" | grep -Eq '^[A-Z_][A-Z0-9_]*$' || fail "bad scale_var"
+          for s in ${SCALES}; do case "$s" in ''|*[!0-9]*) fail "bad scale '$s'" ;; esac; done
+          case "${ITEMS_PER_SCALE}" in *[!0-9]*) fail "bad items_per_scale" ;; esac
+          for t in ${TOOLS}; do case "$t" in json|dhat|callgrind) ;; *) fail "bad tool '$t'" ;; esac; done
+          echo "ARM_REF=${ARM_REF}" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.ARM_REF }}
+          submodules: recursive
+
+      - name: Install dependencies (Ubuntu 24.04 archive only)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qy --no-install-recommends \
+            gcc-13 g++-13 ccache \
+            libboost1.83-all-dev libicu-dev libzstd-dev libjemalloc-dev \
+            libssl-dev libbz2-dev zlib1g-dev tzdata pkg-config
+
+      - name: Build liburing ${{ env.LIBURING_VERSION }}
+        run: |
+          URING="${RUNNER_TEMP}/liburing-install"
+          git clone -q --depth 1 -b "liburing-${LIBURING_VERSION}" \
+            https://github.com/axboe/liburing.git "${RUNNER_TEMP}/liburing"
+          cd "${RUNNER_TEMP}/liburing"
+          CC=gcc-13 CXX=g++-13 ./configure --prefix="${URING}" >/dev/null
+          make -j4 -C src >/dev/null
+          make install >/dev/null
+          {
+            echo "URING=${URING}"
+            echo "PKG_CONFIG_PATH=${URING}/lib/pkgconfig"
+            echo "LIBRARY_PATH=${URING}/lib"
+            echo "LD_LIBRARY_PATH=${URING}/lib"
+          } >> "$GITHUB_ENV"
+
+      - name: Build directory, swap, ccache
+        run: |
+          BUILD_DIR="${GITHUB_WORKSPACE}/build-u24"
+          SWAP_FILE=/extra-swapfile
+          mkdir -p "${BUILD_DIR}"
+          if [ -d /mnt ] && [ "$(df --output=avail -BG /mnt | tail -1 | tr -dc 0-9)" -ge 40 ]; then
+            sudo mkdir -p /mnt/build-u24
+            sudo chown "$(id -u):$(id -g)" /mnt/build-u24
+            sudo mount --bind /mnt/build-u24 "${BUILD_DIR}"
+            SWAP_FILE=/mnt/extra-swapfile
+          fi
+          sudo fallocate -l 8G "${SWAP_FILE}" && sudo chmod 600 "${SWAP_FILE}" \
+            && sudo mkswap "${SWAP_FILE}" && sudo swapon "${SWAP_FILE}" \
+            || echo "::warning::could not add swap"
+          {
+            echo "BUILD_DIR=${BUILD_DIR}"
+            echo "CCACHE_DIR=${HOME}/.cache/ccache"
+            echo "CCACHE_MAXSIZE=3G"
+            echo "CCACHE_COMPRESS=true"
+            echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}"
+            echo "CCACHE_NOHASHDIR=true"
+            echo "CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime"
+            echo "SHA=$(git rev-parse HEAD)"
+          } >> "$GITHUB_ENV"
+
+      # Same cache family as build-binaries.yml (same compiler and flags).
+      - name: Restore ccache
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.cache/ccache
+          key: ccache-noble-u24bin-${{ env.CCACHE_EPOCH }}-${{ env.SHA }}
+          restore-keys: |
+            ccache-noble-u24bin-${{ env.CCACHE_EPOCH }}-
+
+      - name: Configure and build ${{ env.TARGET }}
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: |
+          cmake -S "${GITHUB_WORKSPACE}" -B "${BUILD_DIR}" \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=20 \
+            -DUSE_IO_URING=ON -DENABLE_BENCHMARKS=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DUSE_PRECOMPILED_HEADERS=OFF >/dev/null
+          grep -E '^(CMAKE_BUILD_TYPE|JEMALLOC_FOUND|URING_FOUND)' "${BUILD_DIR}/CMakeCache.txt" || true
+          ccache -z
+          cmake --build "${BUILD_DIR}" --target "${TARGET}" --parallel 4
+          ccache -s
+
+      - name: Save ccache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/ccache
+          key: ccache-noble-u24bin-${{ env.CCACHE_EPOCH }}-${{ env.SHA }}-${{ github.run_id }}-${{ matrix.arm }}
+
+      - name: Package
+        run: |
+          PKG="${RUNNER_TEMP}/pkg/${{ matrix.arm }}"
+          mkdir -p "${PKG}/lib"
+          found=$(find "${BUILD_DIR}" -name "${TARGET}" -type f -executable -not -path '*/_deps/*' | head -1)
+          [ -n "$found" ] || { echo "::error::target ${TARGET} not found"; exit 1; }
+          cp "$found" "${PKG}/${TARGET}"
+          cp -P "${URING}"/lib/liburing.so* "${PKG}/lib/"
+          printf 'arm=%s\nref=%s\nsha=%s\n' "${{ matrix.arm }}" "${ARM_REF}" "${SHA}" > "${PKG}/META"
+          ldd "${PKG}/${TARGET}"
+          tar -C "${RUNNER_TEMP}/pkg" -cf "${RUNNER_TEMP}/ctr-${{ matrix.arm }}.tar" "${{ matrix.arm }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ctr-bin-${{ matrix.arm }}
+          path: ${{ runner.temp }}/ctr-${{ matrix.arm }}.tar
+          retention-days: 3
+
+  counters:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - name: Install runtime and valgrind
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qy --no-install-recommends \
+            valgrind libboost1.83-all-dev libicu-dev libzstd-dev libjemalloc-dev libssl-dev
+          valgrind --version
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: ctr-bin-*
+          path: ${{ runner.temp }}/dl
+          merge-multiple: true
+
+      - name: Run counters
+        run: |
+          set -euo pipefail
+          set -f
+          W="${RUNNER_TEMP}/w"; OUT="${RUNNER_TEMP}/counters"
+          mkdir -p "$W" "$OUT/logs"
+          for arm in base variant; do tar -C "$W" -xf "${RUNNER_TEMP}/dl/ctr-${arm}.tar"; done
+          SC="${SCALES}"; [ -n "${SCALE_VAR}" ] || SC=0
+          printf 'arm\tref\tsha\ttarget\ttool\tmetric\tscale\tvalue\n' > "$OUT/counters.tsv"
+          # argv words; the checked charsets exclude quotes, globs and $.
+          # shellcheck disable=SC2206
+          ARGS=( ${RUN_ARGS} ); ENVS=( ${RUN_ENV} )
+          row() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$arm" "$ref" "$sha" "${TARGET}" "$@" >> "$OUT/counters.tsv"; }
+          for s in $SC; do
+            for arm in base variant; do
+              D="$W/$arm"; BIN="$D/${TARGET}"
+              ref=$(sed -n 's/^ref=//p' "$D/META"); sha=$(sed -n 's/^sha=//p' "$D/META")
+              RUNENV=( env "LD_LIBRARY_PATH=$D/lib" "${ENVS[@]}" )
+              [ -z "${SCALE_VAR}" ] || RUNENV+=( "${SCALE_VAR}=$s" )
+              tag="$arm-s$s"
+              jarg() { [ "${BENCH_JSON}" = true ] && printf '%s\n' -w "$W/$tag-$1.json" || true; }
+              for tool in ${TOOLS}; do
+                mapfile -t J < <(jarg "$tool")
+                case "$tool" in
+                  json)
+                    [ "${BENCH_JSON}" = true ] || { echo "::warning::json needs bench_json"; continue; }
+                    "${RUNENV[@]}" "$BIN" "${ARGS[@]}" "${J[@]}" > "$OUT/logs/$tag-json.log" 2>&1
+                    python3 - "$W/$tag-json.json" <<'PY' | while IFS=$'\t' read -r m v; do row json "$m" "$s" "$v"; done
+          import json, sys
+          def walk(o):
+              if isinstance(o, dict):
+                  if "measured-time" in o:
+                      yield o
+                  for v in o.values():
+                      yield from walk(v)
+              elif isinstance(o, list):
+                  for v in o:
+                      yield from walk(v)
+          for e in walk(json.load(open(sys.argv[1]))):
+              d = " ".join(str(e.get("descriptor", "")).split())
+              for k, v in (e.get("metadata") or {}).items():
+                  if isinstance(v, (int, float)) and not isinstance(v, bool):
+                      print(f"{d} :: {k}\t{v}")
+          PY
+                    ;;
+                  dhat)
+                    "${RUNENV[@]}" valgrind --tool=dhat --soname-synonyms='somalloc=libjemalloc.so*' \
+                      --dhat-out-file="$W/$tag.dhat.json" "$BIN" "${ARGS[@]}" "${J[@]}" > "$OUT/logs/$tag-dhat.log" 2>&1
+                    tot=$(grep -m1 -E '== Total: ' "$OUT/logs/$tag-dhat.log" | tr -d ,)
+                    row dhat heap_bytes "$s" "$(sed -E 's/.*Total: +([0-9]+) bytes.*/\1/' <<< "$tot")"
+                    row dhat heap_blocks "$s" "$(sed -E 's/.* in ([0-9]+) blocks.*/\1/' <<< "$tot")"
+                    ;;
+                  callgrind)
+                    "${RUNENV[@]}" valgrind --tool=callgrind --callgrind-out-file="$W/$tag.cg" \
+                      "$BIN" "${ARGS[@]}" "${J[@]}" > "$OUT/logs/$tag-callgrind.log" 2>&1
+                    row callgrind Ir "$s" "$(grep -m1 -E '== Collected : ' "$OUT/logs/$tag-callgrind.log" | sed -E 's/.*Collected : ([0-9]+).*/\1/')"
+                    callgrind_annotate "$W/$tag.cg" 2>/dev/null | head -60 > "$OUT/callgrind-$tag.txt" || true
+                    ;;
+                esac
+                echo "done $tag $tool"
+              done
+            done
+          done
+          python3 - "$OUT" "${SCALE_VAR}" "${ITEMS_PER_SCALE}" <<'PY'
+          import csv, sys, collections
+          out, var, items = sys.argv[1], sys.argv[2], sys.argv[3]
+          rows = list(csv.DictReader(open(f"{out}/counters.tsv"), delimiter="\t"))
+          v = collections.defaultdict(dict)
+          meta = {}
+          for r in rows:
+              v[(r["tool"], r["metric"])][(r["arm"], int(r["scale"]))] = float(r["value"])
+              meta[r["arm"]] = (r["ref"], r["sha"][:9])
+          div = float(items) if items else 1.0
+          unit = ("per item" if items else f"per unit of {var}") if var else "whole run"
+          def val(d, arm):
+              ss = sorted(s for (a, s) in d if a == arm)
+              if not ss:
+                  return float("nan")
+              if not var or len(ss) < 2:
+                  return d[(arm, ss[-1])]
+              lo, hi = ss[0], ss[-1]
+              return (d[(arm, hi)] - d[(arm, lo)]) / (hi - lo) / div
+          hdr = ["tool", "metric", "unit", "base", "variant", "delta_pct"]
+          lines = ["\t".join(hdr)]
+          for (tool, metric), d in v.items():
+              b, x = val(d, "base"), val(d, "variant")
+              pct = f"{100 * (x - b) / b:+.2f}%" if b else ("0.00%" if x == 0 else "n.a.")
+              lines.append("\t".join([tool, metric, unit, f"{b:.4f}", f"{x:.4f}", pct]))
+          open(f"{out}/summary.tsv", "w").write("\n".join(lines) + "\n")
+          with open(f"{out}/summary.md", "w") as f:
+              f.write(f"base {meta.get('base')} / variant {meta.get('variant')}\n\n")
+              f.write("| " + " | ".join(hdr) + " |\n|" + "---|" * len(hdr) + "\n")
+              for l in lines[1:]:
+                  f.write("| " + " | ".join(l.split("\t")) + " |\n")
+          PY
+          {
+            echo "base_ref=${BASE_REF}"; echo "variant_ref=${VARIANT_REF}"; echo "target=${TARGET}"
+            echo "args=${RUN_ARGS}"; echo "env=${RUN_ENV}"; echo "scale_var=${SCALE_VAR} scales=${SCALES} items_per_scale=${ITEMS_PER_SCALE}"
+            echo "tools=${TOOLS} bench_json=${BENCH_JSON}"; valgrind --version
+            echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } > "$OUT/env.txt"
+          cat "$OUT/env.txt" "$OUT/summary.md" | tee -a "$GITHUB_STEP_SUMMARY"
+          column -t -s $'\t' "$OUT/counters.tsv"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: counters
+          path: ${{ runner.temp }}/counters
+          retention-days: 30
