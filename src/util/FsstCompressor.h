@@ -49,23 +49,23 @@ struct CastToUnsignedPtr {
 constexpr CastToUnsignedPtr castToUnsignedPtr{};
 
 // _____________________________________________________________________________
-// Allocate `bound` bytes without zero-initialization, decode directly into the
-// string buffer, and resize to the actual decoded size.
+// Allocate `bound` bytes, decode directly into the string buffer, and shrink
+// to the decoded size. The bytes are left uninitialized where the standard
+// library provides `resize_and_overwrite` (see `ql::resize_and_overwrite`).
+// `ql::resize_and_overwrite` already checks that `decode` returns at most
+// `bound`. This helper runs once per decoded word, so it adds no further
+// checks: each `AD_CORRECTNESS_CHECK` is an out-of-line call in the per-word
+// loop.
 CPP_template(typename Decode)(
     requires ql::concepts::invocable<Decode, ql::span<char>>) std::string
     decompressToOwnedString(size_t bound, Decode decode) {
-  if (bound == 0) {
-    return {};
-  }
   std::string result;
-  size_t bytesWritten = 0;
-  ql::resize_and_overwrite(result, bound, [&](char* buf, size_t count) {
-    bytesWritten = decode(ql::span<char>{buf, count});
-    AD_CONTRACT_CHECK(bytesWritten <= bound);
-    return bytesWritten;
+  if (bound == 0) {
+    return result;
+  }
+  ql::resize_and_overwrite(result, bound, [&decode](char* buf, size_t count) {
+    return decode(ql::span<char>{buf, count});
   });
-  AD_CORRECTNESS_CHECK(result.size() <= bound);
-  AD_CORRECTNESS_CHECK(result.size() == bytesWritten);
   return result;
 }
 }  // namespace detail
@@ -124,12 +124,9 @@ class FsstDecoder {
   // Decompress a single string. Callers that already own an output buffer
   // should use `decompressInto` instead.
   [[nodiscard]] std::string decompress(std::string_view str) const {
-    const size_t bound = maxDecompressedSize(str);
-    std::string result = detail::decompressToOwnedString(
-        bound,
+    return detail::decompressToOwnedString(
+        maxDecompressedSize(str),
         [this, str](ql::span<char> out) { return decompressInto(str, out); });
-    AD_CORRECTNESS_CHECK(result.size() <= bound);
-    return result;
   }
 
   // ___________________________________________________________________________
