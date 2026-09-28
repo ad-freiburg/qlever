@@ -27,6 +27,7 @@ RuntimeParameters::RuntimeParameters() {
   add(useNonTemporalExportBuffer_);
   add(useBranchlessTypeDispatcher_);
   add(vocabLookupPrefetchDistance_);
+  add(useVectorizedPrefixExport_);
   add(sortEstimateCancellationFactor_);
   add(cacheMaxNumEntries_);
   add(cacheMaxSize_);
