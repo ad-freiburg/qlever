@@ -9,7 +9,10 @@
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
 
+#include <type_traits>
+
 #include "engine/CallFixedSize.h"
+#include "util/Exception.h"
 
 // _____________________________________________________________________________
 void PolymorphicVocabulary::open(const std::string& filename) {
@@ -62,27 +65,19 @@ VocabBatchLookupResult PolymorphicVocabulary::lookupBatch(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<VocabLookupHandleBase> PolymorphicVocabulary::beginLookup(
-    ql::span<const size_t> indices) const {
-  return std::visit(
-      [&indices](const auto& vocab) -> std::unique_ptr<VocabLookupHandleBase> {
-        if constexpr (ad_utility::vocabulary::HasBeginLookup<
-                          ql::remove_cvref_t<decltype(vocab)>>::value) {
-          return vocab.beginLookup(indices);
+void PolymorphicVocabulary::lookupBatch(ql::span<const size_t> indices,
+                                        ArenaVocabBatchBuilder& builder) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+  std::visit(
+      [&indices, &builder](const auto& vocab) {
+        if constexpr (SupportsBuilderLookupBatch<
+                          std::decay_t<decltype(vocab)>>) {
+          vocab.lookupBatch(indices, builder);
         } else {
-          auto handle = std::make_unique<EagerVocabLookupHandle>();
-          handle->result_ = vocab.lookupBatch(indices);
-          return handle;
+          appendVocabBatchLookupResult(vocab.lookupBatch(indices), builder);
         }
       },
       vocab_);
-}
-
-// _____________________________________________________________________________
-VocabBatchLookupResult PolymorphicVocabulary::finishLookup(
-    std::unique_ptr<VocabLookupHandleBase> handle) const {
-  AD_CONTRACT_CHECK(handle != nullptr);
-  return handle->finish();
 }
 
 // _____________________________________________________________________________

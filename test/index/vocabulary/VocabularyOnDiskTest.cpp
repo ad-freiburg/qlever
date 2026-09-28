@@ -280,14 +280,6 @@ TEST(VocabularyOnDisk, LookupBatchOutOfRangeIndexThrows) {
   auto vocab = createExampleVocabulary();
   std::array<size_t, 2> indices{0, 99};
   EXPECT_ANY_THROW(vocab->lookupBatch(indices));
-  // `beginLookup` throws before it submits any read. Destroying that handle
-  // must neither wait on an unsubmitted batch nor lose the pooled I/O manager,
-  // so a later lookup still works.
-  EXPECT_ANY_THROW(vocab->beginLookup(indices));
-  std::array<size_t, 3> validIndices{4, 0, 2};
-  auto result = vocab->lookupBatch(validIndices);
-  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*vocab, result,
-                                                                validIndices);
 }
 
 // Each batch yielded by `lookupBatchesStreamed` must equal the individual

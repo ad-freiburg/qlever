@@ -14,6 +14,7 @@
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/ConstructTypes.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 
 namespace {
 using namespace qlever::constructExport;
@@ -404,6 +405,44 @@ TEST(FormatTriple, TurtleLiteralObject) {
                                 makeTerm("\"hello\"")};
   EXPECT_EQ("<http://s> <http://p> \"hello\" .\n",
             formatTriple(triple, ad_utility::MediaType::turtle));
+}
+
+// _____________________________________________________________________________
+// The `use-fast-export-stream-formatter` runtime parameter switches Turtle
+// export to `FastExportStreamFormatter`. It must be byte-identical to the
+// legacy path for a representative mix of terms: plain IRIs, literals,
+// literals needing escaping, and numeric short forms.
+TEST(FormatTriple, FastExportStreamFormatterMatchesLegacyTurtle) {
+  const std::vector<EvaluatedTriple> triples{
+      EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                      makeTerm("<http://o>")},
+      EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                      makeTerm("\"hello\"")},
+      EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                      makeTerm("\"a \\\"quoted\\\" string\\nwith newline\"")},
+      EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                      makeTerm("42", XSD_INT_TYPE)},
+      EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
+                      makeTerm("NaN", XSD_DOUBLE_TYPE)},
+      // A literal whose escaped form is far larger than any initial buffer:
+      // every character needs escaping, so the output doubles in size.
+      EvaluatedTriple{
+          makeTerm("<http://s>"), makeTerm("<http://p>"),
+          makeTerm(absl::StrCat("\"", std::string(10000, '\n'), "\""))},
+  };
+
+  std::vector<std::string> legacyOutputs;
+  for (const auto& triple : triples) {
+    legacyOutputs.push_back(
+        formatTriple(triple, ad_utility::MediaType::turtle));
+  }
+
+  setRuntimeParameter<&RuntimeParameters::useFastExportStreamFormatter_>(true);
+  for (size_t i = 0; i < triples.size(); ++i) {
+    EXPECT_EQ(legacyOutputs[i],
+              formatTriple(triples[i], ad_utility::MediaType::turtle));
+  }
+  setRuntimeParameter<&RuntimeParameters::useFastExportStreamFormatter_>(false);
 }
 
 // _____________________________________________________________________________

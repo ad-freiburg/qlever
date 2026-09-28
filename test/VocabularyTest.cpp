@@ -1,12 +1,6 @@
-// Copyright 2011 - 2026, The QLever Authors, in particular:
-//
-// 2011 - 2026 Björn Buchhold <buchholb>
-// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
-//
-// UFR = University of Freiburg, Chair of Algorithms and Data Structures
-//
-// You may not use this file except in compliance with the Apache 2.0 License,
-// which can be found in the `LICENSE` file at the root of the QLever project.
+// Copyright 2011, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Björn Buchhold <buchholb>
 
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
@@ -310,7 +304,7 @@ TEST(VocabularyTest, LookupBatch) {
   auto v = createExampleVocabulary();
   std::vector<size_t> indices{2, 0, 3, 1};
   auto result = v->lookupBatch(indices);
-  EXPECT_THAT((*result), ::testing::ElementsAre("ba", "a", "car", "ab"));
+  EXPECT_THAT(result, ::testing::ElementsAre("ba", "a", "car", "ab"));
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*v, result,
                                                                 indices);
   // An empty batch is an invalid request and must throw.
@@ -319,23 +313,7 @@ TEST(VocabularyTest, LookupBatch) {
   // Duplicate indices: each position resolved independently.
   std::vector<size_t> dup{1, 1, 0};
   auto dupResult = v->lookupBatch(dup);
-  EXPECT_THAT((*dupResult), ::testing::ElementsAre("ab", "ab", "a"));
-}
-
-// The compressed on-disk vocabulary (`OnDiskCompressed`, the default type of
-// `createExampleVocabulary`) serves `lookupBatch` from one underlying batch
-// plus per-word decompression (the `io_uring` ring path for on-disk words).
-// Shuffled indices with duplicates must resolve exactly like sequential single
-// lookups, in input order.
-TEST(VocabularyTest, LookupBatchCompressedBatched) {
-  auto v = createExampleVocabulary();
-  std::vector<size_t> indices{3, 1, 3, 0, 2, 1, 0, 3, 2, 2, 1, 0};
-  auto result = v->lookupBatch(indices);
-  EXPECT_THAT((*result),
-              ::testing::ElementsAre("car", "ab", "car", "a", "ba", "ab", "a",
-                                     "car", "ba", "ba", "ab", "a"));
-  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(*v, result,
-                                                                indices);
+  EXPECT_THAT(dupResult, ::testing::ElementsAre("ab", "ab", "a"));
 }
 
 // Each streamed result must equal the eager `lookupBatch` for that batch's

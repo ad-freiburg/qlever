@@ -11,10 +11,8 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 
-#include <memory>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
@@ -67,18 +65,15 @@ class VocabularyInternalExternal {
   // vocabulary.
   auto scanAll() const { return externalVocab_.scanAll(); }
 
-  // Resolve `indices` in request order. Words present in `internalVocab_` are
-  // taken from RAM. The remaining indices are resolved in one
-  // `externalVocab_.lookupBatch` call (the on-disk path).
+  //____________________________________________________________________________
+  // Look up the words for `indices` and return them in the order of
+  // `indices`. `indices` must not be empty. Words of the internal vocabulary
+  // are returned as views into this vocabulary (no copy), all other words are
+  // read with one batched lookup in the external vocabulary, whose buffer is
+  // owned by the result. Lifetime: the result must not be used after this
+  // vocabulary is closed or destroyed (the index outlives every query, so
+  // this holds for lookups during query processing).
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
-
-  // Split-phase variant: RAM-cached indices are resolved immediately; the
-  // rest are submitted to `externalVocab_.beginLookup` without blocking.
-  std::unique_ptr<VocabLookupHandleBase> beginLookup(
-      ql::span<const size_t> indices) const;
-
-  VocabBatchLookupResult finishLookup(
-      std::unique_ptr<VocabLookupHandleBase> handle) const;
 
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
@@ -194,24 +189,6 @@ class VocabularyInternalExternal {
   }
 
  private:
-  class MixedLookupHandle : public VocabLookupHandleBase {
-   public:
-    VocabBatchLookupResult finish() override;
-
-   private:
-    // Only `VocabularyInternalExternal::beginLookup` sets up the state below.
-    // The handle is only reachable through `VocabLookupHandleBase`.
-    friend class VocabularyInternalExternal;
-
-    // The vocabulary that created this handle. It must outlive the handle.
-    const VocabularyInternalExternal* vocab_ = nullptr;
-    std::unique_ptr<VocabLookupHandleBase> externalHandle_;
-    std::vector<std::string> internalWords_;
-    std::vector<size_t> internalPositions_;
-    std::vector<size_t> externalPositions_;
-    size_t numIndices_ = 0;
-  };
-
   // The common implementation of `lower_bound`, `upper_bound`,
   // `lower_bound_iterator`, and `upper_bound_iterator`. The `boundFunction`
   // must be a lambda, that calls the corresponding function (e.g.

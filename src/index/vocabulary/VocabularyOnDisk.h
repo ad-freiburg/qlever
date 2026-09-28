@@ -1,18 +1,11 @@
-// Copyright 2016 - 2026, The QLever Authors, in particular:
-//
-// 2016 - 2026 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
-// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
-//
-// UFR = University of Freiburg, Chair of Algorithms and Data Structures
-//
-// You may not use this file except in compliance with the Apache 2.0 License,
-// which can be found in the `LICENSE` file at the root of the QLever project.
+// Copyright 2016, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Authors: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 #define QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -110,19 +103,6 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
-  // Split-phase variant of `lookupBatch`: `beginLookup` submits the offset
-  // reads and returns a handle immediately (without blocking), `finishLookup`
-  // blocks until the lookup is complete and returns the resolved strings. This
-  // lets a caller overlap the I/O of one batch with the CPU work of another
-  // (see the depth-2 pipeline in the CONSTRUCT export path).
-  std::unique_ptr<VocabLookupHandleBase> beginLookup(
-      ql::span<const size_t> indices) const;
-
-  // Complete a lookup started by `beginLookup`. `handle` must be the handle
-  // returned by `beginLookup` on this vocabulary.
-  VocabBatchLookupResult finishLookup(
-      std::unique_ptr<VocabLookupHandleBase> handle) const;
-
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(
       VocabLookupInput rangeOfIndexBatches) const;
@@ -200,48 +180,27 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   struct OffsetPair {
     uint64_t offset_;
     uint64_t nextOffset_;
+
+    [[nodiscard]] uint64_t offset() const noexcept { return offset_; }
+    [[nodiscard]] uint64_t nextOffset() const noexcept { return nextOffset_; }
+    // The word's size in bytes (`nextOffset_ - offset_`); the offsets must
+    // be well-formed, which is checked.
+    [[nodiscard]] size_t wordSize() const {
+      AD_CORRECTNESS_CHECK(nextOffset_ >= offset_);
+      return nextOffset_ - offset_;
+    }
   };
 
-  // The state of a split-phase lookup: owns the pooled I/O manager (removed
-  // from the pool by `beginLookup`) and the submitted offset-read batch until
-  // `finish` completes the lookup and returns the manager to the pool.
-  class LookupHandle : public VocabLookupHandleBase {
-   public:
-    // Requires `vocab_`, `manager_`, `indices_`, `offsetBatch_` and
-    // `offsetPairs_` to be set by `VocabularyOnDisk::beginLookup`.
-    VocabBatchLookupResult finish() override;
-
-    // Drain in-flight offset reads, then return the `manager_` if `finish`
-    // was never called. The reads target `offsetPairs_`, which dies here.
-    ~LookupHandle() override;
-
-   private:
-    // Only `VocabularyOnDisk::beginLookup` sets up the state below. The handle
-    // is only reachable through `VocabLookupHandleBase`, so no other code can
-    // mutate the targets of the in-flight reads.
-    friend class VocabularyOnDisk;
-
-    // The vocabulary that created this handle. It must outlive the handle.
-    const VocabularyOnDisk* vocab_ = nullptr;
-    std::unique_ptr<ad_utility::BatchManagerBase> manager_;
-    // The requested indices, owned so the offset reads can be completed after
-    // the caller's span has gone out of scope.
-    std::vector<size_t> indices_;
-    // The batched offset read submitted by `beginLookup`. Empty until the
-    // batch was actually submitted, so a handle whose `beginLookup` threw
-    // before the submission never waits on a batch it does not own.
-    std::optional<ad_utility::BatchManagerBase::BatchHandle> offsetBatch_;
-    // The target buffers of the submitted offset read.
-    std::vector<OffsetPair> offsetPairs_;
-
-    // Hand the `manager_` back to the pool. Used by `finish` and the
-    // destructor; the handle owns the manager until one of them runs.
-    void returnManagerToPool();
-  };
+  // Phase 1 of `lookupBatch`: for each requested index, read its `OffsetPair`
+  // (16 bytes) from the `.offsets` file in a single batched read via `manager`.
+  std::vector<OffsetPair> readOffsetPairs(ad_utility::BatchManagerBase& manager,
+                                          ql::span<const size_t> indices) const;
 
   // Phase 2 of `lookupBatch`: given the `offsetPairs` from phase 1, read the
   // string data from `file_` into one contiguous buffer in a single batched
   // read via `manager`, and return it as a `VocabBatchLookupResult`.
+  // `offsetPairs` must be non-empty (guaranteed by `lookupBatch`, which
+  // rejects empty input; the `ContiguousVocabBatchBuilder` requires it).
   VocabBatchLookupResult readStrings(
       ad_utility::BatchManagerBase& manager,
       ql::span<const OffsetPair> offsetPairs) const;
