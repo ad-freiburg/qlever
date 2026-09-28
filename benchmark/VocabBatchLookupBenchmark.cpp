@@ -131,8 +131,9 @@ class VocabBatchLookupMicroBenchmark : public BenchmarkInterface {
     BenchmarkResults results;
     auto& group =
         results.addGroup("Assemble 20,000-word batch (mean word length ~45)");
-    // Bound the total work even when configured through the environment.
-    constexpr size_t maxRepetitions = 1'000;
+    // Bound the total work even when configured through the environment
+    // (high enough for timed measurements of at least one second).
+    constexpr size_t maxRepetitions = 100'000;
     const size_t repetitions = parseEnvironmentSize(
         std::getenv("VOCAB_BATCH_MICRO_INNER_REPETITIONS"), 5);
     AD_CONTRACT_CHECK(repetitions > 0 && repetitions <= maxRepetitions);
@@ -262,7 +263,7 @@ class VocabBatchLookupEndToEndBenchmark : public BenchmarkInterface {
     auto& group = results.addGroup(
         "Resolve 4,096-word batch from 50,000-word "
         "VocabularyInMemoryBinSearch");
-    constexpr size_t maxRepetitions = 1'000;
+    constexpr size_t maxRepetitions = 100'000;
     const size_t repetitions = parseEnvironmentSize(
         std::getenv("VOCAB_BATCH_E2E_INNER_REPETITIONS"), 10);
     AD_CONTRACT_CHECK(repetitions > 0 && repetitions <= maxRepetitions);

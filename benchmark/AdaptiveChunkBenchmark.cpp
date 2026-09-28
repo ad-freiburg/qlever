@@ -27,7 +27,6 @@
 namespace ad_benchmark {
 
 using namespace std::chrono_literals;
-using qlever::AdaptiveChunkBuffer;
 using qlever::AdaptiveChunkConfig;
 using qlever::AdaptiveChunkSizer;
 
@@ -191,78 +190,6 @@ class AdaptiveChunkBenchmark : public BenchmarkInterface {
   }
 
   // ___________________________________________________________________________
-  // Benchmark 3: AdaptiveChunkBuffer integrated self-managing stream.
-  ChunkBenchmarkResult runAdaptiveChunkBuffer() const {
-    AdaptiveChunkBuffer buffer(AdaptiveChunkConfig{
-        .initialChunkBytes_ = 64 * 1024,
-        .maxChunkBytes_ = 4 * 1024 * 1024,
-        .growthFactor_ = 2.0,
-        .initialEstimatedRowBytes_ = 120.0,
-    });
-
-    ad_utility::timer::Timer totalTimer(ad_utility::timer::Timer::Started);
-    ad_utility::timer::Timer ttfbTimer(ad_utility::timer::Timer::Started);
-
-    double ttfbMs = 0.0;
-    size_t totalBytes = 0;
-    size_t chunksEmitted = 0;
-
-    std::string tempRow;
-    tempRow.reserve(256);
-
-    for (size_t i = 0; i < totalTriples_; ++i) {
-      tempRow.clear();
-      formatTripleToBuffer(i, tempRow);
-      buffer.write(tempRow);
-      buffer.recordRow();
-
-      if (buffer.isReadyToFlush()) {
-        std::string chunk = buffer.flush();
-        totalBytes += chunk.size();
-        ++chunksEmitted;
-
-        if (chunksEmitted == 1) {
-          ttfbTimer.stop();
-          ttfbMs =
-              ad_utility::timer::Timer::toSeconds(ttfbTimer.value()) * 1000.0;
-        }
-      }
-    }
-
-    if (buffer.bytesBuffered() > 0) {
-      std::string finalChunk = buffer.flush();
-      totalBytes += finalChunk.size();
-      ++chunksEmitted;
-      if (chunksEmitted == 1) {
-        ttfbTimer.stop();
-        ttfbMs =
-            ad_utility::timer::Timer::toSeconds(ttfbTimer.value()) * 1000.0;
-      }
-    }
-
-    totalTimer.stop();
-    const double duration =
-        ad_utility::timer::Timer::toSeconds(totalTimer.value());
-    const double mb = static_cast<double>(totalBytes) / (1024.0 * 1024.0);
-
-    return ChunkBenchmarkResult{
-        .mode = "Adaptive Buffer Stream",
-        .totalTriples = totalTriples_,
-        .totalBytes = totalBytes,
-        .chunksEmitted = chunksEmitted,
-        .ttfbMs = ttfbMs,
-        .durationSeconds = duration,
-        .throughputMBPerSec = duration > 0 ? (mb / duration) : 0.0,
-        .throughputTriplesPerSec =
-            duration > 0 ? (static_cast<double>(totalTriples_) / duration)
-                         : 0.0,
-        .avgChunkSizeKb = chunksEmitted > 0 ? (static_cast<double>(totalBytes) /
-                                               (chunksEmitted * 1024.0))
-                                            : 0.0,
-    };
-  }
-
-  // ___________________________________________________________________________
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
 
@@ -293,12 +220,6 @@ class AdaptiveChunkBenchmark : public BenchmarkInterface {
         "Adaptive Chunk Sizer (64KB -> 4MB)",
         [this, &adaptiveRes]() { adaptiveRes = runAdaptiveChunkSizer(); });
 
-    // Run Adaptive Buffer
-    ChunkBenchmarkResult bufferRes{};
-    results.addMeasurement(
-        "Adaptive Chunk Buffer Stream",
-        [this, &bufferRes]() { bufferRes = runAdaptiveChunkBuffer(); });
-
     auto printRow = [](const ChunkBenchmarkResult& res) {
       std::cout << std::left << std::setw(26) << res.mode << std::fixed
                 << std::setprecision(3) << std::setw(14) << res.ttfbMs
@@ -313,7 +234,6 @@ class AdaptiveChunkBenchmark : public BenchmarkInterface {
 
     printRow(fixedRes);
     printRow(adaptiveRes);
-    printRow(bufferRes);
 
     const double ttfbImprovement =
         adaptiveRes.ttfbMs > 0 ? (fixedRes.ttfbMs / adaptiveRes.ttfbMs) : 1.0;

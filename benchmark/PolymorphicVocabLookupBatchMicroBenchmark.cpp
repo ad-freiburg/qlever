@@ -13,7 +13,10 @@
 // `operator[]` lookups against a single `lookupBatch` call and against the
 // arena-based `lookupBatch(indices, builder)` overload. The compressed
 // vocabulary exercises the builder path (direct decode into the arena), the
-// uncompressed vocabulary exercises the fallback path (builder unused). This
+// uncompressed vocabulary exercises the copy path (its result is copied into
+// the builder). The "concrete" measurement opens the same files with the
+// concrete vocabulary type (no `std::visit`), which separates the cost of the
+// polymorphic dispatch from the cost of the underlying batched lookup. This
 // is complemented by `PolymorphicVocabLookupBatchEndToEndBenchmark`, which
 // measures the full write-open-batch pipeline at scale.
 
@@ -22,20 +25,21 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "absl/strings/str_cat.h"
 #include "backports/span.h"
+#include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 
 namespace ad_benchmark {
 namespace {
-
-using PolymorphicVocabulary;
 
 class PolymorphicVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
  private:
@@ -58,6 +62,10 @@ class PolymorphicVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
   std::vector<size_t> batch_;
   PolymorphicVocabulary compressedVocab_;
   PolymorphicVocabulary uncompressedVocab_;
+  // The same files, opened with the concrete types of the `OnDiskCompressed`
+  // and `OnDiskUncompressed` alternatives of `PolymorphicVocabulary`.
+  CompressedVocabulary<VocabularyInternalExternal> compressedConcrete_;
+  VocabularyInternalExternal uncompressedConcrete_;
   TempFileCleanup compressedCleanup_;
   TempFileCleanup uncompressedCleanup_;
 
@@ -99,6 +107,8 @@ class PolymorphicVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
     buildVocabulary(uncompressedVocab_,
                     ad_utility::VocabularyType::Enum::OnDiskUncompressed,
                     uncompressedCleanup_.basename_, numWords);
+    compressedConcrete_.open(compressedCleanup_.basename_);
+    uncompressedConcrete_.open(uncompressedCleanup_.basename_);
     batch_.reserve(batchSize);
     for (size_t i = 0; i < batchSize; ++i) {
       batch_.push_back((i % 5 == 0 && i > 0)
@@ -130,10 +140,22 @@ class PolymorphicVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
         parseEnvironmentSize(std::getenv("POLY_VOCAB_MICRO_REPETITIONS"), 50);
     AD_CONTRACT_CHECK(repetitions > 0);
     AD_CONTRACT_CHECK(repetitions <= maxRepetitions);
+    // Optional filter for profiling a single measurement: if set, only the
+    // measurements whose name contains this substring are run.
+    const char* onlyMeasurement = std::getenv("POLY_VOCAB_ONLY_MEASUREMENT");
+    const auto addMeasurement = [onlyMeasurement](auto& group,
+                                                  const std::string& name,
+                                                  auto measurement) {
+      if (onlyMeasurement == nullptr ||
+          name.find(onlyMeasurement) != std::string::npos) {
+        group.addMeasurement(name, std::move(measurement));
+      }
+    };
 
     const auto runComparison = [&](auto& group,
-                                   const PolymorphicVocabulary& vocab) {
-      group.addMeasurement("sequential operator[]", [&] {
+                                   const PolymorphicVocabulary& vocab,
+                                   const auto& concrete) {
+      addMeasurement(group, "sequential operator[]", [&] {
         size_t totalBytes = 0;
         for (size_t repetition = 0; repetition < repetitions; ++repetition) {
           for (size_t index : batch_) {
@@ -143,7 +165,7 @@ class PolymorphicVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
         }
         return totalBytes;
       });
-      group.addMeasurement("batched lookupBatch", [&] {
+      addMeasurement(group, "batched lookupBatch", [&] {
         size_t totalBytes = 0;
         for (size_t repetition = 0; repetition < repetitions; ++repetition) {
           auto result = vocab.lookupBatch(batch_);
@@ -153,7 +175,7 @@ class PolymorphicVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
         }
         return totalBytes;
       });
-      group.addMeasurement("batched lookupBatch with builder", [&] {
+      addMeasurement(group, "batched lookupBatch with builder", [&] {
         size_t totalBytes = 0;
         for (size_t repetition = 0; repetition < repetitions; ++repetition) {
           ArenaVocabBatchBuilder builder(batch_.size());
@@ -165,16 +187,37 @@ class PolymorphicVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
         }
         return totalBytes;
       });
+      addMeasurement(group, "concrete lookupBatch (no dispatch)", [&] {
+        size_t totalBytes = 0;
+        for (size_t repetition = 0; repetition < repetitions; ++repetition) {
+          auto result = concrete.lookupBatch(batch_);
+          for (const auto& word : result) {
+            totalBytes += word.size();
+          }
+        }
+        return totalBytes;
+      });
     };
 
-    auto& compressedGroup = results.addGroup(
-        "Synthetic micro-batches: 2,048 lookups into 2,048 words "
-        "(on-disk compressed, builder path)");
-    runComparison(compressedGroup, compressedVocab_);
-    auto& uncompressedGroup = results.addGroup(
-        "Synthetic micro-batches: 2,048 lookups into 2,048 words "
-        "(on-disk uncompressed, fallback path)");
-    runComparison(uncompressedGroup, uncompressedVocab_);
+    // Optional filter for profiling a single vocabulary: "compressed" or
+    // "uncompressed" runs only that group.
+    const char* onlyGroupEnv = std::getenv("POLY_VOCAB_ONLY_GROUP");
+    const std::string onlyGroup = onlyGroupEnv ? onlyGroupEnv : "";
+    AD_CONTRACT_CHECK(onlyGroup.empty() || onlyGroup == "compressed" ||
+                      onlyGroup == "uncompressed");
+    if (onlyGroup != "uncompressed") {
+      auto& compressedGroup = results.addGroup(
+          "Synthetic micro-batches: 2,048 lookups into 2,048 words "
+          "(on-disk compressed, builder path)");
+      runComparison(compressedGroup, compressedVocab_, compressedConcrete_);
+    }
+    if (onlyGroup != "compressed") {
+      auto& uncompressedGroup = results.addGroup(
+          "Synthetic micro-batches: 2,048 lookups into 2,048 words "
+          "(on-disk uncompressed, copy path)");
+      runComparison(uncompressedGroup, uncompressedVocab_,
+                    uncompressedConcrete_);
+    }
     return results;
   }
 };
