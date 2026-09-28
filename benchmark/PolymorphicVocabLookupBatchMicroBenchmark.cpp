@@ -135,7 +135,7 @@ class PolymorphicVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
       return static_cast<size_t>(parsed);
     };
     // Bound the workload even when configured through the environment.
-    constexpr size_t maxRepetitions = 10'000;
+    constexpr size_t maxRepetitions = 10'000'000;
     const size_t repetitions =
         parseEnvironmentSize(std::getenv("POLY_VOCAB_MICRO_REPETITIONS"), 50);
     AD_CONTRACT_CHECK(repetitions > 0);

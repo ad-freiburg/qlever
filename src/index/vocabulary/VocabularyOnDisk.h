@@ -242,6 +242,10 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     std::optional<ad_utility::BatchManagerBase::BatchHandle> offsetBatch_;
     // The target buffers of the submitted offset read.
     std::vector<OffsetPair> offsetPairs_;
+    // Whether this lookup uses the page-cache fast path (see
+    // `vocabulary-iouring-page-cache-fast-path`). Fixed by `beginLookup`, so
+    // both phases of one lookup take the same path.
+    bool pageCacheFastPath_ = false;
 
     // Hand the `manager_` back to the pool. Used by `finish` and the
     // destructor; the handle owns the manager until one of them runs.
@@ -252,10 +256,32 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // string data from `file_` into one contiguous buffer in a single batched
   // read via `manager`, and return it as a `VocabBatchLookupResult`.
   // `offsetPairs` must be non-empty (guaranteed by `lookupBatch`, which
-  // rejects empty input; the `ContiguousVocabBatchBuilder` requires it).
-  VocabBatchLookupResult readStrings(
-      ad_utility::BatchManagerBase& manager,
-      ql::span<const OffsetPair> offsetPairs) const;
+  // rejects empty input; the `ContiguousVocabBatchBuilder` requires it). With
+  // `pageCacheFastPath`, the words that are in the page cache are read with
+  // `readPageCacheHits` (adjacent words in one call), and only the others go
+  // through `manager`.
+  VocabBatchLookupResult readStrings(ad_utility::BatchManagerBase& manager,
+                                     ql::span<const OffsetPair> offsetPairs,
+                                     bool pageCacheFastPath) const;
+
+  // Submit the reads of `numBytes[i]` bytes at `offsets[i]` of `fd` into
+  // `buffers[i]` for every `i` in `positions` to `manager` as one batch,
+  // without waiting. Return `std::nullopt` (and submit nothing) if
+  // `positions` is empty.
+  static std::optional<ad_utility::BatchManagerBase::BatchHandle>
+  submitThroughManager(ad_utility::BatchManagerBase& manager, int fd,
+                       ql::span<const size_t> numBytes,
+                       ql::span<const uint64_t> offsets,
+                       ql::span<char*> buffers,
+                       ql::span<const size_t> positions);
+
+  // Read `numBytes[i]` bytes at `offsets[i]` of `fd` into `buffers[i]` for
+  // every `i` in `positions` through `manager` and wait for them.
+  static void readThroughManager(ad_utility::BatchManagerBase& manager, int fd,
+                                 ql::span<const size_t> numBytes,
+                                 ql::span<const uint64_t> offsets,
+                                 ql::span<char*> buffers,
+                                 ql::span<const size_t> positions);
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H
