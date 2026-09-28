@@ -1523,7 +1523,9 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
 
   // An input with a point and two without (with an object that is sorted
   // before resp. after all points), a helper to read the configuration of an
-  // index, and the start of the warning for `LatMajor`.
+  // index, and the start of the warning for `LatMajor`. Together, the two
+  // inputs without a point give a block whose objects span the range of all
+  // points.
   const std::string withPoint =
       "<a> <b> \"POINT(7.8 48.0)\"^^"
       "<http://www.opengis.net/ont/geosparql#wktLiteral> .";
@@ -1594,14 +1596,20 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
   }
 
   // Load an index in the previous format (which has no entry for the
-  // encoding). It uses `LatMajor`, and there is a warning iff it has points.
+  // encoding). It uses `LatMajor`, and there is a warning iff it has points,
+  // also when all objects are in a single block that spans the range of all
+  // points, with or without a point inside.
   for (const auto& [name, turtle, hasPoint] :
        {std::tuple{"point", withPoint, true},
         std::tuple{"iri", withoutPoint, false},
-        std::tuple{"blankNode", withoutPointBlankNode, false}}) {
+        std::tuple{"blankNode", withoutPointBlankNode, false},
+        std::tuple{"spanning", withoutPoint + withoutPointBlankNode, false},
+        std::tuple{"spanningWithPoint",
+                   withoutPoint + withPoint + withoutPointBlankNode, true}}) {
     std::string basename = absl::StrCat("geoPointEncoding.previous.", name);
     TestIndexConfig config{turtle};
     config.geoPointEncoding = GeoPointEncoding::LatMajor;
+    config.rowsPerBlock = 3;
     makeTestIndex(basename, std::move(config));
     auto configuration = readConfiguration(basename);
     configuration.erase("geo-point-encoding");

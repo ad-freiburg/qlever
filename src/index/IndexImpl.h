@@ -362,8 +362,10 @@ class IndexImpl {
   void applyGeoPointEncoding();
 
   // Return false if the loaded index certainly contains no geo point (as an
-  // `Id` of type `GeoPoint` in its permutations), and true otherwise. Only
-  // reads the metadata of the blocks, see the implementation for details.
+  // `Id` of type `GeoPoint` in its permutations), and true otherwise. Reads
+  // the metadata of the blocks and at most one block, see the implementation
+  // for details. Must be called before any updates are read (which is
+  // checked), because the metadata of the blocks does not reflect them.
   bool mayContainGeoPoints() const;
 
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {

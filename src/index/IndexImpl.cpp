@@ -1083,17 +1083,50 @@ bool IndexImpl::mayContainGeoPoints() const {
     return true;
   }
 
-  // Check whether the range of `Id`s of some block of the `OSP` permutation
-  // intersects the range of all points (`OSP` is sorted by the object, so the
-  // points form one contiguous range). The smallest and the largest point have
-  // the same bit representation in both encodings (all zeros resp. all ones).
+  // The range of all points. The smallest and the largest point have the same
+  // bit representation in both encodings (all zeros resp. all ones).
   const auto minPoint = Id::makeFromGeoPoint(GeoPoint{-90, -180}).getBits();
   const auto maxPoint = Id::makeFromGeoPoint(GeoPoint{90, 180}).getBits();
-  return ql::ranges::any_of(
-      osp_->metaData().blockData(), [&](const CompressedBlockMetadata& block) {
-        return block.firstTriple_.col0Id_.getBits() <= maxPoint &&
-               block.lastTriple_.col0Id_.getBits() >= minPoint;
-      });
+  auto isPoint = [minPoint, maxPoint](Id id) {
+    return id.getBits() >= minPoint && id.getBits() <= maxPoint;
+  };
+
+  // Get the blocks of the `OSP` permutation, which is sorted by the object, so
+  // that the points form one contiguous range of it. Check that there are no
+  // updates yet (see the documentation in the header).
+  auto locatedTriplesState =
+      deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  AD_CONTRACT_CHECK(
+      locatedTriplesState
+          ->getLocatedTriplesForPermutation<false>(Permutation::OSP)
+          .isEmpty());
+  BlockMetadataSpan blocks = osp_->metaData().blockData();
+
+  // Find the first block that does not end before the range of all points.
+  // Return false if there is none or if it starts after that range.
+  auto block = ql::ranges::find_if(blocks, [minPoint](const auto& block) {
+    return block.lastTriple_.col0Id_.getBits() >= minPoint;
+  });
+  if (block == blocks.end() ||
+      block->firstTriple_.col0Id_.getBits() > maxPoint) {
+    return false;
+  }
+
+  // Otherwise, read the objects of that block and check whether one of them is
+  // a point. This block contains a point if there is any: either its last
+  // object is a point, or it ends after the range of all points.
+  //
+  // NOTE: The metadata alone cannot decide this, because in most indexes
+  // without points, some block starts before and ends after the range of all
+  // points (the datatypes before, e.g. `VocabIndex`, and after, e.g.
+  // `BlankNodeIndex`, are common).
+  CompressedRelationReader::ScanSpecAndBlocks blockOnly{
+      {std::nullopt, std::nullopt, std::nullopt},
+      {BlockMetadataRange{block, block + 1}}};
+  auto objects = osp_->scan(
+      blockOnly, {}, std::make_shared<ad_utility::CancellationHandle<>>(),
+      *locatedTriplesState);
+  return ql::ranges::any_of(objects.getColumn(0), isPoint);
 }
 
 // _____________________________________________________________________________
