@@ -199,14 +199,25 @@ class PolymorphicVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
       });
     };
 
-    auto& compressedGroup = results.addGroup(
-        "Synthetic micro-batches: 2,048 lookups into 2,048 words "
-        "(on-disk compressed, builder path)");
-    runComparison(compressedGroup, compressedVocab_, compressedConcrete_);
-    auto& uncompressedGroup = results.addGroup(
-        "Synthetic micro-batches: 2,048 lookups into 2,048 words "
-        "(on-disk uncompressed, copy path)");
-    runComparison(uncompressedGroup, uncompressedVocab_, uncompressedConcrete_);
+    // Optional filter for profiling a single vocabulary: "compressed" or
+    // "uncompressed" runs only that group.
+    const char* onlyGroupEnv = std::getenv("POLY_VOCAB_ONLY_GROUP");
+    const std::string onlyGroup = onlyGroupEnv ? onlyGroupEnv : "";
+    AD_CONTRACT_CHECK(onlyGroup.empty() || onlyGroup == "compressed" ||
+                      onlyGroup == "uncompressed");
+    if (onlyGroup != "uncompressed") {
+      auto& compressedGroup = results.addGroup(
+          "Synthetic micro-batches: 2,048 lookups into 2,048 words "
+          "(on-disk compressed, builder path)");
+      runComparison(compressedGroup, compressedVocab_, compressedConcrete_);
+    }
+    if (onlyGroup != "compressed") {
+      auto& uncompressedGroup = results.addGroup(
+          "Synthetic micro-batches: 2,048 lookups into 2,048 words "
+          "(on-disk uncompressed, copy path)");
+      runComparison(uncompressedGroup, uncompressedVocab_,
+                    uncompressedConcrete_);
+    }
     return results;
   }
 };
