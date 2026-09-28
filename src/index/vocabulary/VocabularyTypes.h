@@ -863,7 +863,8 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
   // each of them. Words that the vocabulary returns as (optional) views are
   // copied straight into their slot: building a temporary `std::string` per
   // word (via `wordAsStringOrPlaceholder`) and moving it into the vector costs
-  // about 20 extra instructions per word. Only a missing word (a "hole", see
+  // about 30 extra instructions per word (callgrind, 4,096-word batch from a
+  // `VocabularyInMemoryBinSearch`). Only a missing word (a "hole", see
   // `wordAsStringOrPlaceholder`) takes that path.
   std::vector<std::string> words;
   words.reserve(indices.size());
