@@ -45,6 +45,8 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(IoUringDirectBenchmark qlever_util)
 
+    addAndLinkBenchmark(FastNumberFormatterBenchmark qlever_util)
+
     addAndLinkBenchmark(PrefixCompressorBenchmark)
 
     addAndLinkBenchmark(VocabBatchLookupBenchmark vocabulary)

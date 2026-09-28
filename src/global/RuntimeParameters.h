@@ -101,6 +101,11 @@ struct RuntimeParameters {
       1'000'000, "lazy-index-scan-max-size-materialization"};
   Bool useBinsearchTransitivePath_{true, "use-binsearch-transitive-path"};
   Bool groupByHashMapEnabled_{false, "group-by-hash-map-enabled"};
+  // Use the branchless integer-to-ASCII formatter from `util/FastIntToString.h`
+  // instead of `std::to_string` when serializing `xsd:int` literal values
+  // during export. Defaults to `false` (existing behavior), so it has to be
+  // enabled explicitly.
+  Bool fastIntToStringForExport_{false, "fast-int-to-string-for-export"};
   Bool groupByDisableIndexScanOptimizations_{
       false, "group-by-disable-index-scan-optimizations"};
   SizeT serviceMaxValueRows_{10'000, "service-max-value-rows"};
