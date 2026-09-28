@@ -17,7 +17,6 @@
 #include "engine/ConstructDeduplicator.h"
 #include "engine/FastExportStreamFormatter.h"
 #include "global/Constants.h"
-#include "global/RuntimeParameters.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
 #include "util/Views.h"
@@ -135,12 +134,11 @@ size_t turtleTermSizeUpperBound(const EvaluatedTermData& term) {
   return bound;
 }
 
-// Formats a single triple as Turtle using `FastExportStreamFormatter`
-// (in-buffer escaping) instead of the per-term `std::string` construction in
-// `formatTerm`. Produces output byte-identical to the legacy Turtle branch of
-// `formatTriple` below; only used when `use-fast-export-stream-formatter` is
-// enabled.
-std::string formatTripleFastTurtle(const EvaluatedTriple& evaluatedTriple) {
+}  // namespace
+
+// _____________________________________________________________________________
+std::string formatTripleAsTurtleWithFastFormatter(
+    const EvaluatedTriple& evaluatedTriple) {
   using ql::export_formatting::ExportFormat;
   using ql::export_formatting::FastExportStreamFormatter;
   const auto& [subject, predicate, object] = evaluatedTriple;
@@ -162,7 +160,6 @@ std::string formatTripleFastTurtle(const EvaluatedTriple& evaluatedTriple) {
   formatter.writeTriple(ExportFormat::Turtle, evaluatedTriple);
   return std::string{formatter.currentChunk()};
 }
-}  // namespace
 
 // _____________________________________________________________________________
 std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
@@ -171,12 +168,6 @@ std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
   using enum ad_utility::MediaType;
   static constexpr std::array supportedFormats{turtle, csv, tsv, ntriples};
   AD_CONTRACT_CHECK(ad_utility::contains(supportedFormats, format));
-
-  if (format == turtle &&
-      getRuntimeParameter<
-          &RuntimeParameters::useFastExportStreamFormatter_>()) {
-    return formatTripleFastTurtle(evaluatedTriple);
-  }
 
   const auto& [subject, predicate, object] = evaluatedTriple;
 

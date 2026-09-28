@@ -67,6 +67,14 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType);
 std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
                          const ad_utility::MediaType& format);
 
+// Formats a triple as Turtle with `FastExportStreamFormatter`, which escapes
+// into one reused buffer instead of building a `std::string` per term. The
+// result is byte-identical to `formatTriple(evaluatedTriple, turtle)`. Used
+// for the Turtle export if the runtime parameter
+// `use-fast-export-stream-formatter` is set.
+std::string formatTripleAsTurtleWithFastFormatter(
+    const EvaluatedTriple& evaluatedTriple);
+
 // Creates a `StringTriple` object. Needed for backwards compatibility with
 // `ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON`
 StringTriple createStringTriple(const EvaluatedTriple& evaluatedTriple,
