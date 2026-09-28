@@ -16,6 +16,7 @@
 #include <string_view>
 #include <vector>
 
+#include "backports/span.h"
 #include "global/IndexTypes.h"
 #include "util/CompactStringVector.h"
 
@@ -106,24 +107,20 @@ class SecondaryVocabulary {
   // `words` have to be sorted and pairwise distinct (which is checked, see
   // `appendSegment`), and none of them may be contained in the vocabulary of
   // the main index.
-  explicit SecondaryVocabulary(std::vector<std::string> words);
+  explicit SecondaryVocabulary(ql::span<const std::string> words);
 
   // Append `segment` as a new segment of this vocabulary. The global indices
   // of all the words that were already contained stay unchanged; `segment`'s
   // words are assigned the global indices that directly follow the ones of the
-  // previously last segment. This is the operation that will let persisted
-  // data (in particular the blobs of `NamedCachedQueryBlobManager`, in a
-  // follow-up change) load its segments into the secondary vocabulary of the
-  // corresponding index, one segment at a time.
+  // previously last segment.
   //
-  // The words of `segment` have to be sorted and pairwise distinct, and none
-  // of them may already be contained in one of the previous segments. Both of
-  // these are checked, and both checks happen before anything is modified, so
-  // that a rejected segment leaves this vocabulary unchanged. Establishing the
-  // sorted order is the job of whoever builds the segment (for a segment that
-  // was deserialized from a previously written one it trivially holds), and
-  // not of this function, because `segment` may be a zero-copy view that must
-  // not be reordered here.
+  // The words of `segment` have to be sorted (via the plain lexicographical
+  // bytewise comparison of `std::string(_view)`) and pairwise distinct, and
+  // none of them may already be contained in one of the previous segments. Both
+  // of these are checked, and both checks happen before anything is modified,
+  // so that a rejected segment leaves this vocabulary unchanged. Establishing
+  // the sorted order is the job of the caller. This allows the segments to be
+  // read-only, zero-copy views, which cannot be reordered.
   //
   // NOTE: If `segment` is a zero-copy view (see
   // `CompactVectorOfStrings::fromZeroCopyDeserializer`), the buffer that it

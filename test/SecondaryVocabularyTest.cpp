@@ -141,15 +141,17 @@ TEST(SecondaryVocabulary, wordsAndLookup) {
 TEST(SecondaryVocabulary, wordsHaveToBeSortedAndDistinct) {
   // The words of a segment get their global indices in the order in which
   // they are stored, which has to be the sorted order.
-  SecondaryVocabulary vocab{{"<b>", "<d>"}};
+  SecondaryVocabulary vocab{std::vector<std::string>{"<b>", "<d>"}};
   EXPECT_EQ(vocab[SecondaryVocabIndex::make(0)], "<b>");
   EXPECT_EQ(vocab[SecondaryVocabIndex::make(1)], "<d>");
 
   // Unsorted or duplicate words are a programming error.
-  AD_EXPECT_THROW_WITH_MESSAGE((SecondaryVocabulary{{"<d>", "<b>"}}),
-                               HasSubstr("have to be sorted and pairwise"));
-  AD_EXPECT_THROW_WITH_MESSAGE((SecondaryVocabulary{{"<b>", "<b>"}}),
-                               HasSubstr("have to be sorted and pairwise"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (SecondaryVocabulary{std::vector<std::string>{"<d>", "<b>"}}),
+      HasSubstr("have to be sorted and pairwise"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (SecondaryVocabulary{std::vector<std::string>{"<b>", "<b>"}}),
+      HasSubstr("have to be sorted and pairwise"));
 }
 
 // _____________________________________________________________________________
@@ -202,7 +204,7 @@ TEST(SecondaryVocabulary, appendSegmentMergesIntoTheSortedIndices) {
   // The words of the appended segments are interleaved with the ones that are
   // already contained, in front of them, and behind them, so that the merge
   // has to move existing entries in all of those ways.
-  SecondaryVocabulary vocab{{"<b>", "<d>"}};
+  SecondaryVocabulary vocab{std::vector<std::string>{"<b>", "<d>"}};
   vocab.appendSegment(makeSegment({"<a>", "<c>", "<e>"}));
   vocab.appendSegment(makeSegment({"<f>"}));
   vocab.appendSegment(makeSegment({"<A>"}));

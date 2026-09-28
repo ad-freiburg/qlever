@@ -13,10 +13,11 @@
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/shift.h"
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
-SecondaryVocabulary::SecondaryVocabulary(std::vector<std::string> words) {
+SecondaryVocabulary::SecondaryVocabulary(ql::span<const std::string> words) {
   CompactVectorOfStrings<char> segment;
   segment.build(words);
   appendSegment(std::move(segment));
@@ -62,6 +63,9 @@ std::string_view SecondaryVocabulary::operator[](
     SecondaryVocabIndex index) const {
   uint64_t globalIndex = index.get();
   AD_CONTRACT_CHECK(globalIndex < numWords());
+  // `segmentOffsets_[0] == 0 <= globalIndex`, so `it` is never `begin()`, and
+  // the segment before `it` is the last one that starts at or before
+  // `globalIndex`.
   auto it = ql::ranges::upper_bound(segmentOffsets_, globalIndex);
   size_t segmentIdx = static_cast<size_t>(it - segmentOffsets_.begin()) - 1;
   return segments_.at(segmentIdx)[globalIndex - segmentOffsets_[segmentIdx]];
@@ -117,9 +121,12 @@ void SecondaryVocabulary::mergeIntoSortedIndices(
   size_t writeIdx = numOldWords + numNewWords;
   size_t readIdx = numOldWords;
   for (size_t i = numNewWords; i > 0; --i) {
-    while (readIdx > insertPositions[i - 1]) {
-      sortedIndices_[--writeIdx] = sortedIndices_[--readIdx];
-    }
+    // Invariant: `writeIdx - readIdx == i`.
+    auto begin = sortedIndices_.begin();
+    ql::shift_right(begin + insertPositions[i - 1], begin + writeIdx,
+                    static_cast<std::ptrdiff_t>(i));
+    writeIdx -= readIdx - insertPositions[i - 1];
+    readIdx = insertPositions[i - 1];
     sortedIndices_[--writeIdx] = firstGlobalIndex + (i - 1);
   }
   AD_CORRECTNESS_CHECK(writeIdx == readIdx);
