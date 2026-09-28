@@ -375,6 +375,13 @@ else ()
     endif ()
 endif ()
 
+### Allocation counting (for measurements only)
+option(QLEVER_COUNT_ALLOCATIONS "Replace the global operator new by a counting version and log the number of allocations and allocated bytes of every export (see src/util/AllocationCounter.h). For measurements only, adds two atomic increments to every allocation." OFF)
+if (QLEVER_COUNT_ALLOCATIONS)
+    MESSAGE(STATUS "QLEVER_COUNT_ALLOCATIONS is ON, heap allocations are counted")
+    add_compile_definitions(QLEVER_COUNT_ALLOCATIONS)
+endif ()
+
 ### io_uring (optional, for asynchronous batch vocabulary I/O)
 option(USE_IO_URING "Enable io_uring support for batch vocabulary I/O (requires liburing)" ON)
 if (USE_IO_URING)
