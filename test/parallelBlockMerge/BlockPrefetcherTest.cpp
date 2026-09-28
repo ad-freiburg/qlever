@@ -190,6 +190,41 @@ void waitUntil(const std::function<bool()>& condition) {
   ASSERT_TRUE(condition());
 }
 
+// A sink whose `asyncGetNextBlock` throws right away instead of reporting the
+// exception as a value, which violates the contract of the
+// `PrefetchableSinkConcept`, but must still not leave the consumer hanging.
+class ThrowingSink {
+ private:
+  net::any_io_executor executor_;
+
+ public:
+  explicit ThrowingSink(net::any_io_executor executor)
+      : executor_{std::move(executor)} {}
+
+  // Throw, without initiating anything. The `async_initiate` is never reached,
+  // it only determines the return type.
+  template <typename CompletionToken>
+  auto asyncGetNextBlock(CompletionToken&& completionToken) {
+    throw std::runtime_error{"sink threw"};
+    return net::async_initiate<CompletionToken,
+                               void(std::exception_ptr, std::optional<Block>)>(
+        [](auto) {}, completionToken);
+  }
+
+  // Complete with nothing.
+  template <typename CompletionToken>
+  auto asyncStop(CompletionToken&& completionToken) {
+    return net::async_initiate<CompletionToken, void(std::exception_ptr)>(
+        [this](auto handler) {
+          auto executor = net::get_associated_executor(handler, executor_);
+          net::post(executor, [handler = std::move(handler)]() mutable {
+            std::move(handler)(nullptr);
+          });
+        },
+        completionToken);
+  }
+};
+
 using Prefetcher = BlockPrefetcher<Block, FakeSink>;
 
 }  // namespace
@@ -411,6 +446,47 @@ TEST(BlockPrefetcher, shutDownWhileOperationIsInFlight) {
     }
     EXPECT_EQ(sink.use_count(), 1);
     EXPECT_EQ(sink->maxNumInFlight(), 1u);
+  }
+}
+
+// _____________________________________________________________________________
+// A shutdown drops an exception that is still buffered without rethrowing it,
+// and afterwards `getNextBlock()` returns `std::nullopt` instead of throwing.
+TEST(BlockPrefetcher, shutDownDropsBufferedException) {
+  net::thread_pool pool{2};
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+  std::vector<FakeSink::Outcome> script{
+      Block{0}, std::make_exception_ptr(std::runtime_error{"merge failed"})};
+  auto sink = std::make_shared<FakeSink>(pool.get_executor(), script);
+  Prefetcher prefetcher{pool.get_executor(), sink, 10};
+  // Let the read-ahead buffer the block and the exception before the shutdown.
+  waitUntil([&] { return sink->numCalls() == 2; });
+  EXPECT_NO_THROW(prefetcher.shutDown());
+  EXPECT_EQ(sink.use_count(), 1);
+  EXPECT_EQ(prefetcher.getNextBlock(), std::nullopt);
+  EXPECT_EQ(sink->numCalls(), 2u);
+}
+
+// _____________________________________________________________________________
+// A sink that throws directly (instead of reporting the exception as a value)
+// does not leave the consumer hanging: the exception is rethrown by
+// `getNextBlock()`, and the shutdown neither stalls nor leaks the sink.
+TEST(BlockPrefetcher, sinkThatThrowsDirectly) {
+  for (bool consume : {true, false}) {
+    net::thread_pool pool{2};
+    absl::Cleanup joinPool = [&pool] { pool.join(); };
+    auto sink = std::make_shared<ThrowingSink>(pool.get_executor());
+    {
+      BlockPrefetcher<Block, ThrowingSink> prefetcher{pool.get_executor(), sink,
+                                                      2};
+      if (consume) {
+        AD_EXPECT_THROW_WITH_MESSAGE(prefetcher.getNextBlock(),
+                                     ::testing::StrEq("sink threw"));
+        AD_EXPECT_THROW_WITH_MESSAGE(prefetcher.getNextBlock(),
+                                     ::testing::StrEq("sink threw"));
+      }
+    }
+    EXPECT_EQ(sink.use_count(), 1);
   }
 }
 
