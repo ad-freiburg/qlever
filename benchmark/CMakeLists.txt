@@ -43,22 +43,9 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(ChunkStreamingBenchmark engine testUtil)
 
-    addAndLinkBenchmark(SimdEscapeBenchmark qlever_util)
-
     addAndLinkBenchmark(IoUringDirectBenchmark qlever_util)
 
-    addAndLinkBenchmark(StreamingBufferBenchmark qlever_util)
-
-    addAndLinkBenchmark(FastNumberFormatterBenchmark qlever_util)
-
     addAndLinkBenchmark(PrefetchingBenchmark engine)
-
-    # Standalone main(), so not via addAndLinkBenchmark (which links
-    # benchmarkWithMain).
-    add_executable(BranchlessDispatcherBenchmark
-        BranchlessDispatcherBenchmark.cpp)
-    qlever_target_link_libraries(BranchlessDispatcherBenchmark engine
-        qlever_util)
 
     addAndLinkBenchmark(PrefixCompressorBenchmark)
 

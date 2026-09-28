@@ -32,10 +32,8 @@
 #include <exception>
 #include <sstream>
 
-#include "global/RuntimeParameters.h"
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
-#include "util/StreamingBufferWriter.h"
 #include "util/TypeTraits.h"
 #endif
 
@@ -78,25 +76,8 @@ class stream_generator_promise {
   // Temporarily store data that didn't fit into the buffer so far.
   std::string_view overflow_;
   std::exception_ptr exception_;
-  // The value of the `use-non-temporal-export-buffer` runtime parameter, read
-  // once when the generator is created (reading it takes a lock, which is too
-  // expensive to do for every yielded value).
-  bool useNonTemporalStores_ =
-      ::getRuntimeParameter<&RuntimeParameters::useNonTemporalExportBuffer_>();
-  // Set whenever a non-temporal store was used to write into `data_` since
-  // the last fence. Checked (and cleared) in `value()` so that the buffer's
-  // contents are guaranteed visible before they are handed to the consumer.
-  bool pendingNonTemporalFence_ = false;
 
  public:
-  // Copies into the buffer that are shorter than this use `std::memcpy` even
-  // if `use-non-temporal-export-buffer` is set. A short copy fills only part of
-  // a cache line, whose remainder the next yielded value then writes with
-  // regular stores, and the consumer reads the whole buffer right after it
-  // was filled. Non-temporal stores are therefore only used for copies that
-  // span many complete cache lines.
-  static constexpr size_t minNonTemporalCopySize = 64 * 1024;
-
   using value_type = std::string_view;
   using reference_type = std::string_view;
   using pointer_type = value_type*;
@@ -116,8 +97,7 @@ class stream_generator_promise {
   suspend_sometimes yield_value(std::string_view value) noexcept {
     if (isBufferLargeEnough(value)) {
       if (!value.empty()) {
-        copyIntoBuffer(data_.data() + currentIndex_, value.data(),
-                       value.size());
+        std::memcpy(data_.data() + currentIndex_, value.data(), value.size());
       }
       currentIndex_ += value.size();
       overflow_ = {};
@@ -125,7 +105,7 @@ class stream_generator_promise {
       return suspend_sometimes{currentIndex_ == capacity_};
     }
     size_t fittingSize = capacity_ - currentIndex_;
-    copyIntoBuffer(data_.data() + currentIndex_, value.data(), fittingSize);
+    std::memcpy(data_.data() + currentIndex_, value.data(), fittingSize);
     currentIndex_ = capacity_;
     overflow_ = value.substr(fittingSize);
     return suspend_sometimes{true};
@@ -173,11 +153,7 @@ class stream_generator_promise {
 
   constexpr void return_void() const noexcept {}
 
-  reference_type value() noexcept {
-    if (pendingNonTemporalFence_) {
-      ad_utility::StreamingBufferWriter::sfence();
-      pendingNonTemporalFence_ = false;
-    }
+  reference_type value() const noexcept {
     return std::string_view{data_.data(), currentIndex_};
   }
 
@@ -196,21 +172,6 @@ class stream_generator_promise {
   // `value` in its entirety.
   bool isBufferLargeEnough(std::string_view value) const {
     return currentIndex_ + value.size() <= capacity_;
-  }
-
-  // Copy `count` bytes from `src` to `dest` (inside `data_`). If the
-  // `use-non-temporal-export-buffer` runtime parameter (off by default) was set
-  // when the generator was created and `count` is at least
-  // `minNonTemporalCopySize`, this uses non-temporal (cache-bypassing) stores;
-  // `value()` then fences before handing the buffer to the consumer.
-  // Otherwise, this is a plain `memcpy`.
-  void copyIntoBuffer(char* dest, const char* src, size_t count) {
-    if (useNonTemporalStores_ && count >= minNonTemporalCopySize) {
-      ad_utility::StreamingBufferWriter::streamCopyNoFence(dest, src, count);
-      pendingNonTemporalFence_ = true;
-    } else {
-      std::memcpy(dest, src, count);
-    }
   }
 };
 

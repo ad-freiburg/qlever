@@ -23,9 +23,6 @@ RuntimeParameters::RuntimeParameters() {
   };
 
   add(stripColumns_);
-  add(useSimdEscapeClassifierCsvTsv_);
-  add(useNonTemporalExportBuffer_);
-  add(useBranchlessTypeDispatcher_);
   add(vocabLookupPrefetchDistance_);
   add(useVectorizedPrefixExport_);
   add(useAlignedVocabBatchLookupBuffer_);
@@ -41,7 +38,6 @@ RuntimeParameters::RuntimeParameters() {
   add(lazyIndexScanMaxSizeMaterialization_);
   add(useBinsearchTransitivePath_);
   add(groupByHashMapEnabled_);
-  add(fastIntToStringForExport_);
   add(groupByDisableIndexScanOptimizations_);
   add(serviceMaxValueRows_);
   add(serviceMaxRedirects_);

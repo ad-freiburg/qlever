@@ -271,10 +271,6 @@ addLinkAndDiscoverTest(ParsedUriTest)
 
 addLinkAndDiscoverTestNoLibs(StringSortComparatorTest qlever_util)
 
-addLinkAndDiscoverTestNoLibs(FastIntToStringTest qlever_util)
-
-addLinkAndDiscoverTestNoLibs(SimdEscapeClassifierTest qlever_util rdfEscaping)
-
 addLinkAndDiscoverTestNoLibs(LocaleManagerTest stringUtils)
 
 addLinkAndDiscoverTestNoLibs(GenericCharTraitsTest)
@@ -292,8 +288,6 @@ addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
 addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
 addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
-
-addLinkAndDiscoverTestNoLibs(StreamingBufferWriterTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
 
