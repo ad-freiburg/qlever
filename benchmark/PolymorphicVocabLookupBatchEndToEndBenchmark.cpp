@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-// Full end-to-end benchmark for the polymorphic `lookupBatch` dispatch (PR
-// marvin7122/qlever#79): build a realistically sized compressed vocabulary
+// Full end-to-end benchmark for the polymorphic `lookupBatch` dispatch:
+// build a realistically sized compressed vocabulary
 // behind a `PolymorphicVocabulary` through the actual write-to-disk path,
 // read it back, and resolve a large batch of lookups in pseudo-random order
 // with duplicates, comparing sequential per-word `operator[]` lookups against
