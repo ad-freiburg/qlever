@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <cstdint>
 #include <cstdlib>
 #include <functional>
 #include <memory>
@@ -86,6 +87,58 @@ size_t decodeRepeatedIntoSpans(const Decoders& decoders,
 }
 
 // _____________________________________________________________________________
+// Allocation statistics of the calling thread, read from jemalloc (which
+// QLever links when it is installed) via `mallctl`. The symbol is declared
+// weak, so without jemalloc `available()` is false and no statistics are
+// recorded. All reads happen outside the timed region.
+extern "C" int mallctl(const char* name, void* oldp, size_t* oldlenp,
+                       void* newp, size_t newlen) __attribute__((weak));
+
+class JemallocThreadStats {
+ public:
+  struct Snapshot {
+    uint64_t requests = 0;  // Number of allocation requests (all threads).
+    uint64_t allocatedBytes = 0;  // Bytes allocated by this thread.
+  };
+
+  static bool available() { return mallctl != nullptr; }
+
+  // Flush this thread's cache so that the arena counters include all its
+  // requests, then read the counters.
+  static Snapshot read() {
+    Snapshot snapshot;
+    if (!available()) {
+      return snapshot;
+    }
+    mallctl("thread.tcache.flush", nullptr, nullptr, nullptr, 0);
+    uint64_t epoch = 1;
+    size_t length = sizeof(epoch);
+    mallctl("epoch", &epoch, &length, &epoch, length);
+    snapshot.requests = readUint64("stats.arenas.4096.small.nrequests") +
+                        readUint64("stats.arenas.4096.large.nrequests");
+    snapshot.allocatedBytes = readUint64("thread.allocated");
+    return snapshot;
+  }
+
+  // Reset and read the high-water mark of this thread's live heap bytes.
+  static void resetPeak() {
+    if (available()) {
+      mallctl("thread.peak.reset", nullptr, nullptr, nullptr, 0);
+    }
+  }
+  static uint64_t peakBytes() {
+    return available() ? readUint64("thread.peak.read") : 0;
+  }
+
+ private:
+  static uint64_t readUint64(const char* name) {
+    uint64_t value = 0;
+    size_t length = sizeof(value);
+    return mallctl(name, &value, &length, nullptr, 0) == 0 ? value : 0;
+  }
+};
+
+// _____________________________________________________________________________
 size_t parseEnvironmentSize(const char* varName, size_t defaultValue) {
   const char* value = std::getenv(varName);
   if (value == nullptr) {
@@ -118,6 +171,12 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
   // Scratch size of the stage-aware strategy: the largest intermediate stage
   // bound, `outputCapacity_ / 8`.
   size_t intermediateCapacity_ = 0;
+  // Largest sum of the requested sizes of the owning strings that are alive
+  // at the same time in the pre-API `decompress` (the previous and the
+  // current stage's string), over all words and stages.
+  size_t maxLiveOwnedStringBytes_ = 0;
+  // Largest one-shot scratch that `decompressInto(out)` allocates per word.
+  size_t maxOneShotScratchBytes_ = 0;
 
  public:
   FsstScratchBufferBenchmark() {
@@ -151,6 +210,22 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
           outputCapacity_, RepeatedDecoder::maxDecompressedSize(compressed));
     }
     intermediateCapacity_ = outputCapacity_ / FsstDecoder::maxExpansionFactor;
+    for (const std::string_view& compressed : compressed_) {
+      constexpr size_t factor = FsstDecoder::maxExpansionFactor;
+      size_t previousRequest = 0;
+      std::string current{compressed};
+      for (size_t stage = 0; stage < numberOfStages; ++stage) {
+        const size_t request = factor * current.size();
+        maxLiveOwnedStringBytes_ =
+            std::max(maxLiveOwnedStringBytes_, previousRequest + request);
+        current =
+            legacyDecompress(decoders_[numberOfStages - 1 - stage], current);
+        previousRequest = request;
+      }
+      maxOneShotScratchBytes_ =
+          std::max(maxOneShotScratchBytes_,
+                   RepeatedDecoder::maxDecompressedSize(compressed) / factor);
+    }
 
     // All arms must reproduce the original words.
     std::string output(outputCapacity_, '\0');
@@ -249,12 +324,49 @@ class FsstScratchBufferBenchmark : public BenchmarkInterface {
       };
       // Untimed warm-up pass.
       AD_CORRECTNESS_CHECK(run(1) > 0);
+      const auto before = JemallocThreadStats::read();
+      JemallocThreadStats::resetPeak();
       auto& entry = group.addMeasurement(arms[arm].first,
                                          [&]() { return run(repetitions); });
+      const uint64_t peak = JemallocThreadStats::peakBytes();
+      const auto after = JemallocThreadStats::read();
+      if (JemallocThreadStats::available()) {
+        // The counters include the benchmark infrastructure's own few
+        // allocations while it times the lambda.
+        entry.metadata().addKeyValuePair("allocationRequests",
+                                         after.requests - before.requests);
+        entry.metadata().addKeyValuePair(
+            "allocatedBytes", after.allocatedBytes - before.allocatedBytes);
+        entry.metadata().addKeyValuePair("peakLiveHeapBytesAboveStart", peak);
+      }
       entry.metadata().addKeyValuePair("decodes", numberOfWords * repetitions);
       entry.metadata().addKeyValuePair("outputCapacity", outputCapacity_);
       entry.metadata().addKeyValuePair("intermediateCapacity",
                                        intermediateCapacity_);
+      // Decode buffers by arm: owning strings per word (arms 0, 1), a
+      // one-shot scratch per word (arm 3), or buffers provisioned once
+      // before the timed region (arms 2, 4, 5, 6; arm 2's scratch grows to
+      // `intermediateCapacity_` during the warm-up).
+      const std::array<size_t, allArms> perWordBufferBytes{
+          maxLiveOwnedStringBytes_,
+          maxLiveOwnedStringBytes_,
+          0,
+          maxOneShotScratchBytes_,
+          0,
+          0,
+          0};
+      const std::array<size_t, allArms> provisionedBufferBytes{
+          0,
+          0,
+          outputCapacity_ + intermediateCapacity_,
+          outputCapacity_,
+          2 * outputCapacity_,
+          2 * outputCapacity_,
+          outputCapacity_ + intermediateCapacity_};
+      entry.metadata().addKeyValuePair("maxPerWordBufferBytes",
+                                       perWordBufferBytes[arm]);
+      entry.metadata().addKeyValuePair("provisionedBufferBytes",
+                                       provisionedBufferBytes[arm]);
     }
     return results;
   }
