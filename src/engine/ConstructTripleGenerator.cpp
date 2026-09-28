@@ -157,14 +157,13 @@ ConstructTripleGenerator::generateFormattedTriples(
                      rowOffset, config);
 
   // The runtime parameter is read once per export, not once per triple.
-  const bool useFastTurtleFormatter =
-      mediaType == ad_utility::MediaType::turtle &&
-      getRuntimeParameter<&RuntimeParameters::useFastExportStreamFormatter_>();
-  auto transformer = [mediaType,
-                      useFastTurtleFormatter](const EvaluatedTriple& triple) {
-    return useFastTurtleFormatter
-               ? formatTripleAsTurtleWithFastFormatter(triple)
-               : formatTriple(triple, mediaType);
+  if (mediaType == ad_utility::MediaType::turtle &&
+      getRuntimeParameter<
+          &RuntimeParameters::useFastExportStreamFormatter_>()) {
+    return formatTriplesAsTurtleInBatches(std::move(evaluatedTriples));
+  }
+  auto transformer = [mediaType](const EvaluatedTriple& triple) {
+    return formatTriple(triple, mediaType);
   };
   return InputRangeTypeErased(std::move(evaluatedTriples) |
                               ql::views::transform(transformer));

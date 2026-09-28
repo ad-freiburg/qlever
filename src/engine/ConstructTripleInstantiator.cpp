@@ -11,7 +11,9 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <algorithm>
 #include <cstring>
+#include <optional>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/ConstructDeduplicator.h"
@@ -134,6 +136,18 @@ size_t turtleTermSizeUpperBound(const EvaluatedTermData& term) {
   return bound;
 }
 
+// Upper bound on the number of bytes that `FastExportStreamFormatter` writes
+// for `triple` in Turtle: the three terms, two separating spaces, and the
+// trailing " .\n".
+size_t turtleTripleSizeUpperBound(const EvaluatedTriple& triple) {
+  const auto& [subject, predicate, object] = triple;
+  AD_CONTRACT_CHECK(subject != nullptr && predicate != nullptr &&
+                    object != nullptr);
+  return turtleTermSizeUpperBound(*subject) +
+         turtleTermSizeUpperBound(*predicate) +
+         turtleTermSizeUpperBound(*object) + 5;
+}
+
 }  // namespace
 
 // _____________________________________________________________________________
@@ -141,24 +155,54 @@ std::string formatTripleAsTurtleWithFastFormatter(
     const EvaluatedTriple& evaluatedTriple) {
   using ql::export_formatting::ExportFormat;
   using ql::export_formatting::FastExportStreamFormatter;
-  const auto& [subject, predicate, object] = evaluatedTriple;
-  AD_CONTRACT_CHECK(subject != nullptr && predicate != nullptr &&
-                    object != nullptr);
-  // Two separating spaces and the trailing " .\n".
-  const size_t sizeBound = turtleTermSizeUpperBound(*subject) +
-                           turtleTermSizeUpperBound(*predicate) +
-                           turtleTermSizeUpperBound(*object) + 5;
-  // Reused across calls to avoid a heap allocation per triple. It is sized to
-  // the upper bound before formatting, so the fixed-span formatter can never
-  // run out of space.
-  static thread_local std::vector<char> buffer;
-  if (buffer.size() < sizeBound) {
-    buffer.resize(sizeBound);
-  }
+  // Sized to the upper bound, so the fixed-span formatter never runs out of
+  // space, and shrunk to the written size afterwards.
+  std::string result(turtleTripleSizeUpperBound(evaluatedTriple), '\0');
   FastExportStreamFormatter formatter(
-      ql::span<char>(buffer.data(), buffer.size()));
+      ql::span<char>(result.data(), result.size()));
   formatter.writeTriple(ExportFormat::Turtle, evaluatedTriple);
-  return std::string{formatter.currentChunk()};
+  result.resize(formatter.currentChunk().size());
+  return result;
+}
+
+// _____________________________________________________________________________
+ad_utility::InputRangeTypeErased<std::string> formatTriplesAsTurtleInBatches(
+    ad_utility::InputRangeTypeErased<EvaluatedTriple> triples,
+    size_t targetBatchBytes) {
+  using ql::export_formatting::ExportFormat;
+  using ql::export_formatting::FastExportStreamFormatter;
+  AD_CONTRACT_CHECK(targetBatchBytes > 0);
+  // `pending` is the next triple to be formatted. It is pulled from `triples`
+  // before it is known whether it still fits into the current batch, so it has
+  // to survive until the next call if it does not.
+  auto nextBatch = [triples = std::move(triples), targetBatchBytes,
+                    pending = std::optional<EvaluatedTriple>{}]() mutable
+      -> std::optional<std::string> {
+    if (!pending.has_value()) {
+      pending = triples.get();
+    }
+    if (!pending.has_value()) {
+      return std::nullopt;
+    }
+    // The first triple of a batch always fits, also if it is larger than
+    // `targetBatchBytes`.
+    std::string batch(
+        std::max(targetBatchBytes, turtleTripleSizeUpperBound(pending.value())),
+        '\0');
+    FastExportStreamFormatter formatter(
+        ql::span<char>(batch.data(), batch.size()));
+    do {
+      formatter.writeTriple(ExportFormat::Turtle, pending.value());
+      pending = triples.get();
+    } while (pending.has_value() &&
+             formatter.currentChunk().size() +
+                     turtleTripleSizeUpperBound(pending.value()) <=
+                 batch.size());
+    batch.resize(formatter.currentChunk().size());
+    return batch;
+  };
+  return ad_utility::InputRangeTypeErased<std::string>{
+      ad_utility::InputRangeFromGetCallable{std::move(nextBatch)}};
 }
 
 // _____________________________________________________________________________
