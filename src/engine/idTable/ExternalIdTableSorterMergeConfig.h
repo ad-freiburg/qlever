@@ -19,10 +19,12 @@
 #include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "backports/asio.h"
 #include "engine/idTable/CompressedIdTableBlockStorage.h"
 #include "engine/idTable/IdTable.h"
+#include "global/RuntimeParameters.h"
 #include "util/CompressedBlockFile.h"
 #include "util/Exception.h"
 #include "util/GlobalExecutor.h"
@@ -38,9 +40,6 @@
 // `util/parallelBlockMerge/ParallelBlockMerge.h`), and it lives in a header of
 // its own because it is a self-contained computation that can be tested
 // without running a single merge.
-//
-// NOTE: The sorter does not use this header yet; switching its merge phase over
-// to the parallel merge with this configuration is done in a follow-up.
 namespace ad_utility::compressedExternalIdTable {
 
 // The smallest number of finished output blocks that the merge phase keeps in
@@ -68,6 +67,20 @@ constexpr size_t mergePhaseOutputBlocksPerChunk(
   return numBufferedBlocksPerChunk + 2;
 }
 
+// The number of spilled output blocks that the merge phase reads back from disk
+// concurrently, see `CompressedIdTableBlockStorage`. The blocks of the merge
+// have to be *consumed* in a single global order, so without such a read-ahead
+// every one of them would be decompressed one after the other in a single
+// thread, which for a merge that spills most of its output is a hard ceiling on
+// the throughput of the whole merge phase (a single core decompresses roughly
+// 1.5 GB/s, while the producers of 16 chunks compress several times that).
+// Only the chunk that is currently being consumed ever reads ahead, so this is
+// a single count for the whole merge phase and not one per chunk, and these
+// blocks are part of the `MergePhaseConfig::numBufferedOutputBlocks_` that the
+// merge phase reserves on the consumer side: they are taken from the read-ahead
+// of the consumer itself, see `makeMergeOptions`.
+constexpr inline size_t MERGE_PHASE_READ_AHEAD_BLOCKS = 4;
+
 // The compression that the merge phase applies to the output blocks that it
 // spills, see `makeMergePhaseBlockStorageFactory`. A positive value is an
 // ordinary ZSTD level (higher compresses better, but costs more CPU), a
@@ -81,11 +94,78 @@ constexpr size_t mergePhaseOutputBlocksPerChunk(
 constexpr inline CompressedBlockFile::CompressionLevel
     MERGE_PHASE_SPILL_COMPRESSION = -5;
 
+// The two compression levels with which a `CompressedExternalIdTableSorter`
+// writes its blocks: the blocks of the presorted runs (written by the
+// `CompressedExternalIdTableWriter`) and the output blocks that the merge
+// phase spills to disk. They are derived from the runtime parameter
+// `external-sorter-compression-level`, see
+// `RuntimeParameters::externalSorterCompressionLevel_` for its syntax.
+//
+// Throw a descriptive exception if the value of that parameter is neither
+// `default`, nor `none`, nor an integer.
+struct SorterCompressionLevels {
+  CompressedBlockFile::CompressionLevel presortedRuns_;
+  CompressedBlockFile::CompressionLevel mergePhaseSpill_;
+};
+
+// ___________________________________________________________________________
+inline SorterCompressionLevels sorterCompressionLevels() {
+  const std::string& value = getRuntimeParameter<
+      &RuntimeParameters::externalSorterCompressionLevel_>();
+  if (value == "default") {
+    return {ZSTD_DEFAULT_LEVEL, MERGE_PHASE_SPILL_COMPRESSION};
+  }
+  if (value == "none") {
+    return {NO_BLOCK_COMPRESSION, NO_BLOCK_COMPRESSION};
+  }
+  int level = 0;
+  try {
+    size_t numCharsParsed = 0;
+    level = std::stoi(value, &numCharsParsed);
+    AD_CONTRACT_CHECK(numCharsParsed == value.size());
+  } catch (const std::exception&) {
+    throw std::runtime_error{absl::StrCat(
+        "The value \"", value,
+        "\" of the runtime parameter `external-sorter-compression-level` is "
+        "neither `default`, nor `none`, nor an integer")};
+  }
+  return {level, level};
+}
+
 // The smallest number of rows that an output block of the merge phase may have.
 // The number of chunks that are merged concurrently is chosen as large as the
 // memory limit allows, but never so large that the output blocks would fall
 // below this size, see `computeMergePhaseParameters`.
 constexpr inline size_t MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE = 100'000;
+
+// The size (in elements) of the first chunk of the merge phase, and the number
+// of chunks over which that size is doubled: the leading chunks of the merge
+// have 1M, 2M, 4M, 8M and 16M elements, and all the following ones have the
+// uniform size that the parallelism implies (see
+// `parallelBlockMerge::MergeOptions::firstChunkSizes`).
+//
+// The consumer of the merge has to drain the chunks in the order of their
+// index, so the very first sorted rows are only available once the first chunk
+// has produced its first output block. Small leading chunks make that happen
+// much sooner, while the doubling makes sure that the ramp-up is over after a
+// negligible fraction of a large input and the merge then runs with the large
+// chunks that give it its throughput. Leading sizes that are not smaller than a
+// uniform chunk are ignored, so small inputs are unaffected.
+constexpr inline size_t FIRST_MERGE_PHASE_CHUNK_SIZE = 1'000'000;
+constexpr inline size_t NUM_RAMPED_UP_MERGE_PHASE_CHUNKS = 5;
+
+// The sizes of the leading chunks of the merge phase, see
+// `FIRST_MERGE_PHASE_CHUNK_SIZE`.
+inline std::vector<size_t> mergePhaseFirstChunkSizes() {
+  std::vector<size_t> sizes;
+  sizes.reserve(NUM_RAMPED_UP_MERGE_PHASE_CHUNKS);
+  size_t size = FIRST_MERGE_PHASE_CHUNK_SIZE;
+  for (size_t i = 0; i < NUM_RAMPED_UP_MERGE_PHASE_CHUNKS; ++i) {
+    sizes.push_back(size);
+    size *= 2;
+  }
+  return sizes;
+}
 
 // The hard floor for the size of an output block of the merge phase: if not
 // even a single chunk leaves room for a block of that many rows, then the merge
@@ -176,8 +256,9 @@ inline size_t numBufferedOutputBlocksPerChunk(const MergePhaseConfig& config,
     return MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK;
   }
   // The blocks that are not buffered by the chunks: those between the merge and
-  // the consumer, and the two per chunk that `mergePhaseOutputBlocksPerChunk`
-  // adds on top of the buffered ones.
+  // the consumer (which include the read-ahead of the spill files, see
+  // `MERGE_PHASE_READ_AHEAD_BLOCKS`), and the two per chunk that
+  // `mergePhaseOutputBlocksPerChunk` adds on top of the buffered ones.
   const size_t numUnbufferedBlocks =
       config.numBufferedOutputBlocks_ + 2 * numChunksInFlight;
   const size_t numAffordableBlocks =
@@ -310,6 +391,19 @@ inline parallelBlockMerge::MergeOptions makeMergeOptions(
       parameters.outputBlockSize_);
   options.parallelismHint = config.parallelism_;
   options.maxNumChunksInFlight = parameters.numChunksInFlight_;
+  options.firstChunkSizes = mergePhaseFirstChunkSizes();
+  // The output blocks that the merge phase reserves on the consumer side (see
+  // `MergePhaseConfig::numBufferedOutputBlocks_`) are the one that the consumer
+  // currently holds, the one that the merge is just finishing, the ones that
+  // the storage reads back from the spill files in advance (see
+  // `MERGE_PHASE_READ_AHEAD_BLOCKS`), and the rest, which the consumer reads
+  // ahead. The read-ahead is never zero, see
+  // `MergeOptions::numPrefetchedOutputBlocks`.
+  constexpr size_t numReservedBlocks = MERGE_PHASE_READ_AHEAD_BLOCKS + 2;
+  options.numPrefetchedOutputBlocks =
+      config.numBufferedOutputBlocks_ > numReservedBlocks
+          ? config.numBufferedOutputBlocks_ - numReservedBlocks
+          : 1;
   return options;
 }
 
@@ -344,22 +438,22 @@ inline std::string makeSpillFilename(const std::string& sorterFilename,
 // does not exist in the C++17 backports mode, where
 // `parallelBlockMergeToRange` merges serially and ignores the factory
 // altogether (see there). A placeholder therefore suffices in that mode.
-template <size_t NumCols>
+template <size_t NumCols, typename Block = void>
 auto makeMergePhaseBlockStorageFactory(
-    ql::any_io_executor ioExecutor, std::string spillFilenamePrefix,
-    AllocatorWithLimit<Id> allocator,
-    size_t numBufferedBlocksPerChunk =
+    [[maybe_unused]] ql::any_io_executor ioExecutor,
+    [[maybe_unused]] std::string spillFilenamePrefix,
+    [[maybe_unused]] AllocatorWithLimit<Id> allocator,
+    [[maybe_unused]] size_t numBufferedBlocksPerChunk =
         MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK,
-    CompressedBlockFile::CompressionLevel compression =
+    [[maybe_unused]] CompressedBlockFile::CompressionLevel compression =
         MERGE_PHASE_SPILL_COMPRESSION) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  (void)ioExecutor, (void)spillFilenamePrefix, (void)allocator,
-      (void)numBufferedBlocksPerChunk, (void)compression;
   return std::monostate{};
 #else
-  return makeCompressedIdTableStorageFactory<NumCols>(
+  return makeCompressedIdTableStorageFactory<NumCols, Block>(
       std::move(ioExecutor), std::move(spillFilenamePrefix),
-      std::move(allocator), numBufferedBlocksPerChunk, compression);
+      std::move(allocator), numBufferedBlocksPerChunk,
+      MERGE_PHASE_READ_AHEAD_BLOCKS, compression);
 #endif
 }
 

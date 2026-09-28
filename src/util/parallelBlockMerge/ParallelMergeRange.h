@@ -19,7 +19,10 @@
 
 #include <boost/asio/any_io_executor.hpp>
 #include <cstddef>
+#include <exception>
+#include <future>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <utility>
 
@@ -44,6 +47,12 @@ namespace detail {
 // costs memory (it holds those blocks, plus the one that it is about to hand
 // over), which the caller has to account for.
 //
+// The range releases everything that the merge owns as soon as that merge is
+// over, and not only when the range itself is destroyed: reaching the end (and
+// likewise an exception that reaches the consumer) runs exactly the same
+// teardown as the destructor, see `releaseEverything()`. That is essential and
+// not merely tidy, see the comment there.
+//
 // IMPORTANT: The executor of the merge has to be run by *other* threads (for
 // example by a `boost::asio::thread_pool`), because the thread that iterates
 // over this range is blocked while it waits for the next block and can
@@ -60,10 +69,20 @@ class ParallelMergeRange
  private:
   using Prefetcher = BlockPrefetcher<Block, Sink>;
 
+  // All of the following are dropped by `releaseEverything()`, which is what
+  // makes a range that is over hold on to nothing at all. In particular
+  // `state_ == nullptr` is exactly the state "everything was released".
   std::shared_ptr<State> state_;
   std::shared_ptr<Sink> sink_;
   // The read-ahead, which is the only thing that ever reads from the `sink_`.
   std::unique_ptr<Prefetcher> prefetcher_;
+  // Becomes ready when the merge has released everything that it owns, see
+  // `releaseEverything()`.
+  std::future<void> mergeIsComplete_;
+  // The exception that `get()` has propagated to the consumer, if any. It is
+  // kept, such that every further call to `get()` rethrows it, exactly as the
+  // sink itself does.
+  std::exception_ptr exception_;
 
  public:
   // Construct from the `executor` of a merge that was already started, its
@@ -78,24 +97,23 @@ class ParallelMergeRange
     AD_CONTRACT_CHECK(state_ != nullptr);
     AD_CONTRACT_CHECK(sink_ != nullptr);
     AD_CONTRACT_CHECK(numPrefetchedBlocks > 0);
+    mergeIsComplete_ = state_->asyncWaitForCompletion();
     prefetcher_ = std::make_unique<Prefetcher>(std::move(executor), sink_,
                                                numPrefetchedBlocks);
   }
 
-  // Stop the merge, such that the coroutines that are still in flight finish
-  // instead of waiting for a consumer that is gone, and shut down the
-  // read-ahead (which stops the sink by itself, see
-  // `BlockPrefetcher::shutDown()`).
+  // Release everything that this range holds, see `releaseEverything()`. It is
+  // typically already gone, because a range that was consumed to its end (or
+  // that has propagated an exception) has released everything right away.
   //
   // NOTE: This blocks the calling thread, which therefore must not be one of
   // the threads that run the executor of the merge, see the IMPORTANT note at
   // the class comment above.
-  ~ParallelMergeRange() override {
-    state_->stop();
-    prefetcher_->shutDown();
-  }
+  ~ParallelMergeRange() override { releaseEverything(); }
 
-  // Return the next block of the merge, or `std::nullopt` at its end.
+  // Return the next block of the merge, or `std::nullopt` at its end. Rethrow
+  // an exception that the merge has pushed. Release everything that the merge
+  // owns as soon as either of the two happens, see `releaseEverything()`.
   //
   // IMPORTANT: This is *synchronous and blocking*: it waits until the next
   // block is available and hence occupies its thread for that whole time (which
@@ -105,7 +123,81 @@ class ParallelMergeRange
   // coroutines that produce the very block it waits for. In the extreme case of
   // a single-threaded executor the *first* call already deadlocks. See also the
   // IMPORTANT note in the class comment above.
-  std::optional<Block> get() override { return prefetcher_->getNextBlock(); }
+  std::optional<Block> get() override {
+    if (exception_ != nullptr) {
+      std::rethrow_exception(exception_);
+    }
+    if (prefetcher_ == nullptr) {
+      // Everything was already released, so this range is simply over.
+      return std::nullopt;
+    }
+    std::optional<Block> block;
+    try {
+      block = prefetcher_->getNextBlock();
+    } catch (...) {
+      // The consumer of a range that has thrown may well keep that range alive
+      // for a long time, so the merge has to be torn down here as well.
+      exception_ = std::current_exception();
+      releaseEverything();
+      throw;
+    }
+    if (!block.has_value()) {
+      releaseEverything();
+    }
+    return block;
+  }
+
+ private:
+  // Stop the merge, such that the coroutines that are still in flight finish
+  // instead of waiting for a consumer that is gone, then wait until they are
+  // actually done, and drop everything that this range holds. Idempotent, and
+  // called both when this range is over (see `get()`) and when it is destroyed.
+  //
+  // The wait is essential and not merely tidy. The merge owns its input for as
+  // long as a single one of its coroutines is still running, and it keeps
+  // *reading* from that input until it sees the stop (see the LIFETIME note at
+  // `ParallelMergeState`). Consumers in turn legitimately dispose of the
+  // resources behind that input as soon as the merge is over: a
+  // `CompressedExternalIdTableSorter`, for example, may be `clear()`ed right
+  // afterwards, which closes and deletes the very file that the input reads its
+  // blocks from.
+  //
+  // IMPORTANT: Reaching the end of the range has to release the input just like
+  // the destructor does, because a consumer that has read a range to its end
+  // legitimately keeps that (now exhausted) range alive while it disposes of
+  // the input. `CompressedIdTableRunsInput` for example unregisters itself from
+  // `CompressedExternalIdTableWriter::registerActiveReader` only in its
+  // *destructor*, and `IndexImpl::buildOspWithPatterns` exhausts such a range,
+  // keeps it in a local variable, and then calls `clear()` on the sorter, which
+  // throws while a reader is still registered.
+  //
+  // NOTE: The order of the steps below is subtle. The merge is stopped
+  // *first*, such that the coroutines that are still in flight finish instead
+  // of waiting for a consumer that is gone. Then the read-ahead is shut down
+  // (which stops the sink by itself and waits until nothing reads from it any
+  // more, see `BlockPrefetcher::shutDown()`), which has to happen before the
+  // sink and the state are dropped, and which also releases the blocks that
+  // were read ahead. The wait for the merge itself comes last, because the
+  // coroutines only release the state once our own references are gone.
+  //
+  // NOTE: Both waits block the calling thread, which therefore must not be one
+  // of the threads that run the executor of the merge, see the IMPORTANT note
+  // at the class comment above.
+  void releaseEverything() {
+    if (state_ == nullptr) {
+      // Everything was already released, in particular `mergeIsComplete_` was
+      // already waited for.
+      return;
+    }
+    state_->stop();
+    prefetcher_->shutDown();
+    prefetcher_.reset();
+    // Drop our own references first, so that the merge can release its state as
+    // soon as its last coroutine is done.
+    sink_.reset();
+    state_.reset();
+    mergeIsComplete_.wait();
+  }
 };
 
 }  // namespace detail

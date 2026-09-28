@@ -28,6 +28,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 #include "engine/idTable/CompressedIdTableChunkQueue.h"
@@ -54,6 +55,14 @@ namespace net = boost::asio;
 // This class is nothing but the owner of one `compressedIdTable::ChunkQueue`
 // per chunk, which does all the actual work (see
 // `CompressedIdTableChunkQueue.h`) and owns the file that its chunk spills to.
+// In particular, the queue is also where the spilled blocks are read back
+// concurrently (see the READ-AHEAD note there) and where a block that stays in
+// memory is brought into the layout that the consumer expects (see the
+// FINALIZATION note there).
+//
+// The block type defaults to `IdTableStatic`; any other type needs a
+// `compressedIdTable::BlockCodec` that says how it is compressed and read back
+// (as the row-major block of the merge phase has, see `RowMajorMergeBlock.h`).
 //
 // THREAD SAFETY: The asynchronous operations may be initiated from anywhere,
 // because they schedule themselves onto `strand_`, which nothing ever blocks.
@@ -62,16 +71,22 @@ namespace net = boost::asio;
 // LIFETIME: This storage has to outlive every operation of it that is in
 // flight, which the parallel merge guarantees. Its queues and its `State` are
 // the exception, as those are shared with the operations.
-template <size_t NumCols = 0>
+template <size_t NumCols = 0, typename BlockType = void>
 class CompressedIdTableBlockStorage : public NoCopyNoMove {
  public:
-  using Block = IdTableStatic<NumCols>;
+  // NOTE: The default of the `BlockType` is spelled `void` (and not
+  // `IdTableStatic<NumCols>`) on purpose: a default that depends on `NumCols`
+  // would make `NumCols` undeducible for every function template that takes
+  // such a storage as an argument, because `IdTableStatic` is parameterized by
+  // an `int` and not by a `size_t`.
+  using Block = std::conditional_t<std::is_void_v<BlockType>,
+                                   IdTableStatic<NumCols>, BlockType>;
   using OptionalBlock = parallelBlockMerge::OptionalBlock<Block>;
   using GetResult = parallelBlockMerge::GetResult<Block>;
   using Strand = parallelBlockMerge::Strand;
 
  private:
-  using ChunkQueue = compressedIdTable::ChunkQueue<NumCols>;
+  using ChunkQueue = compressedIdTable::ChunkQueue<NumCols, BlockType>;
 
   // A queue is held by `shared_ptr`, because every operation of it keeps a copy
   // for its whole duration, so that a chunk which is erased while one of its
@@ -93,6 +108,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   Strand strand_;
   AllocatorWithLimit<Id> allocator_;
   size_t maxBufferedBlocksPerChunk_;
+  size_t maxReadAheadBlocks_;
   std::string filenamePrefix_;
   CompressedBlockFile::CompressionLevel compressionLevel_;
   std::shared_ptr<State> state_ = std::make_shared<State>();
@@ -101,10 +117,13 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   // Construct from the `ioExecutor` on which the compression, the
   // decompression and the I/O are run and from which the strands of this
   // storage and of its chunks are derived, the name of the file to spill to,
-  // the `allocator` for the blocks that are read back, and the number of blocks
-  // that are kept in memory per chunk before that chunk starts spilling. That
-  // number may be zero, in which case every block is spilled. The
-  // `compressionLevel` decides how the spilled blocks are stored, see
+  // the `allocator` for the blocks that are read back, the number of blocks
+  // that are kept in memory per chunk before that chunk starts spilling, and
+  // the number of spilled blocks that are read back concurrently (see the
+  // READ-AHEAD note at `CompressedIdTableChunkQueue.h`). The former may be
+  // zero, in which case every block is spilled; the latter may be zero as
+  // well, in which case a spilled block is only read once the consumer asks for
+  // it. The `compressionLevel` decides how the spilled blocks are stored, see
   // `CompressedBlockFile::CompressionLevel`.
   //
   // NOTE: The `filenamePrefix` is not a filename but the prefix of one per
@@ -114,12 +133,14 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   CompressedIdTableBlockStorage(
       net::any_io_executor ioExecutor, std::string filenamePrefix,
       AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerChunk,
+      size_t maxReadAheadBlocks = 0,
       CompressedBlockFile::CompressionLevel compressionLevel =
           ZSTD_DEFAULT_LEVEL)
       : ioExecutor_{std::move(ioExecutor)},
         strand_{net::make_strand(ioExecutor_)},
         allocator_{std::move(allocator)},
         maxBufferedBlocksPerChunk_{maxBufferedBlocksPerChunk},
+        maxReadAheadBlocks_{maxReadAheadBlocks},
         filenamePrefix_{std::move(filenamePrefix)},
         compressionLevel_{compressionLevel} {}
 
@@ -230,6 +251,32 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
         AD_FWD(completionToken));
   }
 
+  // Complete with the number of blocks of the chunk with the given `chunkIndex`
+  // that the read-ahead has claimed and that have not been consumed yet, see
+  // `ChunkQueue::asyncNumPendingReadsForTesting`. Only used for testing.
+  // Asynchronous, because that number lives on the strand of that chunk.
+  template <typename CompletionToken>
+  auto asyncNumPendingReadsForTesting(size_t chunkIndex,
+                                      CompletionToken&& completionToken) {
+    return net::co_spawn(
+        strand_,
+        [](size_t chunkIndex,
+           std::shared_ptr<State> state) -> net::awaitable<size_t> {
+          auto iterator = state->chunks_.find(chunkIndex);
+          if (iterator == state->chunks_.end()) {
+            co_return 0;
+          }
+          // NOTE: The queue is held by a `shared_ptr` of its own, which
+          // outlives the `co_await` even if its chunk is erased meanwhile.
+          SharedChunkQueue chunk = iterator->second;
+          size_t numPendingReads =
+              co_await chunk->asyncNumPendingReadsForTesting(
+                  net::use_awaitable);
+          co_return numPendingReads;
+        }(chunkIndex, state_),
+        AD_FWD(completionToken));
+  }
+
  private:
   // Return the queue of the chunk with the given `chunkIndex`, creating it if
   // that chunk has none yet.
@@ -241,7 +288,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
     if (chunk == nullptr) {
       chunk = std::make_shared<ChunkQueue>(
           ioExecutor_, allocator_, spillFilename(chunkIndex), compressionLevel_,
-          maxBufferedBlocksPerChunk_);
+          maxBufferedBlocksPerChunk_, maxReadAheadBlocks_);
     }
     return chunk;
   }
@@ -249,22 +296,24 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
 
 // A factory for a `CompressedIdTableBlockStorage`, for the constructor of
 // `InOrderBlockSink`. The arguments are those of the constructor of that class.
-template <size_t NumCols>
+template <size_t NumCols, typename BlockType = void>
 auto makeCompressedIdTableStorageFactory(
     net::any_io_executor ioExecutor, std::string filenamePrefix,
     AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerChunk,
+    size_t maxReadAheadBlocks = 0,
     CompressedBlockFile::CompressionLevel compressionLevel =
         ZSTD_DEFAULT_LEVEL) {
   return [ioExecutor = std::move(ioExecutor),
           filenamePrefix = std::move(filenamePrefix),
           allocator = std::move(allocator), maxBufferedBlocksPerChunk,
-          compressionLevel](
+          maxReadAheadBlocks, compressionLevel](
              [[maybe_unused]] const parallelBlockMerge::Strand& strand) {
     // NOTE: This storage brings a strand of its own, so the one that the
     // sink offers is not needed.
-    return CompressedIdTableBlockStorage<NumCols>{
-        ioExecutor, filenamePrefix, allocator, maxBufferedBlocksPerChunk,
-        compressionLevel};
+    return CompressedIdTableBlockStorage<NumCols, BlockType>{
+        ioExecutor,         filenamePrefix,
+        allocator,          maxBufferedBlocksPerChunk,
+        maxReadAheadBlocks, compressionLevel};
   };
 }
 

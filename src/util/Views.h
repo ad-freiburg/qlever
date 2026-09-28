@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_UTIL_VIEWS_H
 #define QLEVER_SRC_UTIL_VIEWS_H
 
+#include <deque>
 #include <future>
 #include <iterator>
 #include <memory>
@@ -19,8 +20,10 @@
 #include "util/CompilerWarnings.h"
 #include "util/ExceptionHandling.h"
 #include "util/Generator.h"
+#include "util/GlobalExecutor.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
+#include "util/PostAndGetFuture.h"
 #include "util/ResetWhenMoved.h"
 
 namespace ad_utility {
@@ -115,10 +118,19 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 
 // Takes a view of blocks and yields the elements of the same view, but removes
 // consecutive duplicates inside the blocks and across block boundaries.
+//
+// The duplicates inside a block are removed on the global thread pool, for up
+// to `numBlocksInFlight` blocks at a time, because that is by far the most
+// expensive part and it is independent for each block. Only the boundary
+// between two consecutive blocks needs the previous block: its last element
+// (which the deduplication never changes, because it is the last element of a
+// sorted block) is recorded before the block is handed to the pool. The blocks
+// are yielded in their original order.
 template <typename SortedBlockView,
           typename BlockType = ql::ranges::range_value_t<SortedBlockView>,
           typename ValueType = ql::ranges::range_value_t<BlockType>>
-InputRangeTypeErased<BlockType> uniqueBlockView(SortedBlockView view) {
+InputRangeTypeErased<BlockType> uniqueBlockView(
+    SortedBlockView view, size_t numBlocksInFlight = 0) {
   struct UniqueBlockViewFromGet : InputRangeFromGet<BlockType> {
     SortedBlockView view_;
 
@@ -129,39 +141,78 @@ InputRangeTypeErased<BlockType> uniqueBlockView(SortedBlockView view) {
     std::optional<ValueType> lastValueFromPreviousBlock_{std::nullopt};
     size_t numInputs_{0};
     size_t numUnique_{0};
+    size_t numBlocksInFlight_;
+    // The blocks that are currently being deduplicated, in their order.
+    std::deque<std::future<BlockType>> pending_;
 
-    explicit UniqueBlockViewFromGet(SortedBlockView view)
+    explicit UniqueBlockViewFromGet(SortedBlockView view,
+                                    size_t numBlocksInFlight)
         : view_{std::move(view)},
           nonEmptyView_(
               ql::views::filter(view_, std::not_fn(ql::ranges::empty))),
-          iter_{ql::ranges::begin(nonEmptyView_)} {}
+          iter_{ql::ranges::begin(nonEmptyView_)},
+          numBlocksInFlight_{std::max<size_t>(
+              1, numBlocksInFlight == 0 ? 2 * globalExecutorNumThreads()
+                                        : numBlocksInFlight)} {}
 
-    std::optional<BlockType> get() override {
-      if (iter_ == ql::ranges::end(nonEmptyView_)) {
-        AD_LOG_INFO << "Number of inputs to `uniqueView`: " << numInputs_
-                    << '\n';
-        AD_LOG_INFO << "Number of unique elements: " << numUnique_ << std::endl;
-        return std::nullopt;
-      }
-
-      auto block = std::move(*iter_);
-      ++iter_;
-      numInputs_ += block.size();
-      auto beg = lastValueFromPreviousBlock_
+    // Remove the duplicates of a single `block`, given the last value of the
+    // block before it (if any). This is the part that runs on the pool.
+    static BlockType deduplicate(BlockType block,
+                                 std::optional<ValueType> lastOfPrevious) {
+      auto beg = lastOfPrevious
                      ? ql::ranges::find_if(
-                           block, [&p = lastValueFromPreviousBlock_.value()](
+                           block, [&p = lastOfPrevious.value()](
                                       const auto& el) { return el != p; })
                      : block.begin();
-      lastValueFromPreviousBlock_ = block.back();
       auto it = std::unique(beg, block.end());
       block.erase(it, block.end());
       block.erase(block.begin(), beg);
-      numUnique_ += block.size();
       return block;
     }
+
+    // Hand blocks to the pool until `numBlocksInFlight_` of them are pending
+    // or the input is exhausted.
+    void fillPipeline() {
+      while (pending_.size() < numBlocksInFlight_ &&
+             iter_ != ql::ranges::end(nonEmptyView_)) {
+        auto block = std::move(*iter_);
+        ++iter_;
+        numInputs_ += block.size();
+        auto lastOfPrevious = lastValueFromPreviousBlock_;
+        lastValueFromPreviousBlock_ = block.back();
+        pending_.push_back(postAndGetFuture(
+            globalExecutor(),
+            [block = std::move(block),
+             lastOfPrevious = std::move(lastOfPrevious)]() mutable {
+              return deduplicate(std::move(block), std::move(lastOfPrevious));
+            }));
+      }
+    }
+
+    std::optional<BlockType> get() override {
+      while (true) {
+        fillPipeline();
+        if (pending_.empty()) {
+          AD_LOG_INFO << "Number of inputs to `uniqueView`: " << numInputs_
+                      << '\n';
+          AD_LOG_INFO << "Number of unique elements: " << numUnique_
+                      << std::endl;
+          return std::nullopt;
+        }
+        auto block = pending_.front().get();
+        pending_.pop_front();
+        // A block may become empty (all of its elements were equal to the last
+        // one of the previous block); such a block is skipped.
+        if (block.empty()) {
+          continue;
+        }
+        numUnique_ += block.size();
+        return block;
+      }
+    }
   };
-  return InputRangeTypeErased{
-      std::make_unique<UniqueBlockViewFromGet>(std::move(view))};
+  return InputRangeTypeErased{std::make_unique<UniqueBlockViewFromGet>(
+      std::move(view), numBlocksInFlight)};
 }
 
 // Like `OwningView` above, but the const overloads to `begin()` and `end()` do
