@@ -38,13 +38,13 @@ namespace {
 // The base configuration of all the tests below. The numbers are chosen such
 // that the memory arithmetic can be verified by hand: a row has
 // `2 * sizeof(Id) = 16` bytes, and the input blocks of a single chunk occupy
-// `numRuns_ * numColumns_ * inputBlockSize_ = 200` bytes.
+// `numRuns_ * numColumns_ * inputBlockSizePerColumn_ = 200` bytes.
 MergePhaseConfig baseConfig() {
   MergePhaseConfig config;
   config.numRuns_ = 1;
   config.numColumns_ = 2;
   config.memoryLimit_ = ad_utility::MemorySize::bytes(20'000'400);
-  config.inputBlockSize_ = ad_utility::MemorySize::bytes(100);
+  config.inputBlockSizePerColumn_ = ad_utility::MemorySize::bytes(100);
   config.numBufferedOutputBlocks_ = 4;
   config.maxOutputBlockSize_ = 1_GB;
   config.parallelism_ = 2;
@@ -145,7 +145,7 @@ TEST(ExternalIdTableSorterMergeConfig, pinnedOutputBlockSize) {
 TEST(ExternalIdTableSorterMergeConfig, derivedBlockSizeLeavesNothingToBuffer) {
   auto parameters = computeMergePhaseParameters(baseConfig());
   EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
-            MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
+            MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
 }
 
 // _____________________________________________________________________________
@@ -167,7 +167,7 @@ TEST(ExternalIdTableSorterMergeConfig, pinnedBlockSizeIsSpentOnBuffering) {
   config.outputBlockSizeOverride_ = 125'000;
   parameters = computeMergePhaseParameters(config);
   EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
-            MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
+            MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
 
   // A memory limit that does not even suffice for the input blocks of a single
   // chunk leaves nothing to buffer with, and a pinned block size is still not
@@ -176,7 +176,7 @@ TEST(ExternalIdTableSorterMergeConfig, pinnedBlockSizeIsSpentOnBuffering) {
   config.memoryLimit_ = ad_utility::MemorySize::bytes(150);
   parameters = computeMergePhaseParameters(config);
   EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
-            MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
+            MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
 }
 
 // _____________________________________________________________________________
@@ -191,7 +191,7 @@ TEST(ExternalIdTableSorterMergeConfig, theTwinPermutationOfTheIndexBuild) {
   config.numRuns_ = 3;
   config.numColumns_ = 4;
   config.memoryLimit_ = 4_GB;
-  config.inputBlockSize_ = 500_kB;
+  config.inputBlockSizePerColumn_ = 500_kB;
   config.numBufferedOutputBlocks_ = 12;
   config.maxOutputBlockSize_ = 1_GB;
   config.parallelism_ = 16;
@@ -215,26 +215,25 @@ TEST(ExternalIdTableSorterMergeConfig, theBufferingIsCapped) {
 }
 
 // _____________________________________________________________________________
-// The tiny memory limits of the unit tests would always collapse the merge to a
-// single chunk, so those tests disable the memory limit entirely, which yields
-// small output blocks and full parallelism.
+// A disabled memory limit yields full parallelism and the ordinary minimal
+// output block size. Unit tests that want many small blocks pin their size.
 TEST(ExternalIdTableSorterMergeConfig, ignoredMemoryLimit) {
   auto config = baseConfig();
   config.memoryLimit_ = 1_B;
   config.parallelism_ = 7;
   config.ignoreMemoryLimit_ = true;
   auto parameters = computeMergePhaseParameters(config);
-  EXPECT_EQ(parameters.outputBlockSize_, 5u);
+  EXPECT_EQ(parameters.outputBlockSize_, MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE);
   EXPECT_EQ(parameters.numChunksInFlight_, 7u);
   // A disabled memory limit says nothing about how much may be buffered, so the
   // minimum is used, which keeps the spilling path exercised by the tests.
   EXPECT_EQ(parameters.numBufferedBlocksPerChunk_,
-            MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
+            MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK);
 
   // A pinned block size still wins.
-  config.outputBlockSizeOverride_ = 17;
+  config.outputBlockSizeOverride_ = 5;
   parameters = computeMergePhaseParameters(config);
-  EXPECT_EQ(parameters.outputBlockSize_, 17u);
+  EXPECT_EQ(parameters.outputBlockSize_, 5u);
   EXPECT_EQ(parameters.numChunksInFlight_, 7u);
 }
 
@@ -315,8 +314,8 @@ void pollUntilQuiescent(net::io_context& ioContext) {
 // _____________________________________________________________________________
 // The factory wires the spill file, the allocator, the number of buffered
 // blocks and the compression into the storage. The observable consequence of
-// `MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK` is that the file of a chunk
-// appears as soon as that chunk holds one block more than that.
+// `MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK` is that the file of a
+// chunk appears as soon as that chunk holds one block more than that.
 TEST(ExternalIdTableSorterMergeConfig, blockStorageFactory) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());
@@ -335,7 +334,7 @@ TEST(ExternalIdTableSorterMergeConfig, blockStorageFactory) {
 
   // Store one block more than the storage may keep in memory, so that the last
   // one has to be spilled.
-  size_t numBlocks = MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK + 1;
+  size_t numBlocks = MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK + 1;
   std::vector<bool> wasStored;
   for (size_t i = 0; i < numBlocks; ++i) {
     net::post(strand, [&storage, &wasStored, i]() {
