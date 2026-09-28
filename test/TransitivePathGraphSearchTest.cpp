@@ -9,7 +9,6 @@
 
 #include <gmock/gmock.h>
 
-#include <chrono>
 #include <limits>
 #include <memory>
 #include <thread>
@@ -274,24 +273,10 @@ TEST(GraphSearchTestExtraTests, cancellationCheck) {
 
   // Trigger a `CHECK_WINDOW_MISSED` cancellation state which will make the
   // handle's watchdog write logs containing the algorithmName specified in
-  // checkCancellation. The watchdog runs on its own thread, so no fixed
-  // sleep can guarantee that it has observed the missed check window yet (on
-  // a loaded machine the watchdog thread might not have run even once).
-  // Retry until the message is logged instead of assuming a fixed number of
-  // check intervals.
+  // checkCancellation.
   ep.cancellationHandle_->startWatchDog();
-  const auto deadline =
-      std::chrono::steady_clock::now() + std::chrono::seconds{30};
-  while (stream.str().find(
-             "The TEST graph search algorithm received a cancellation "
-             "signal.") == std::string::npos) {
-    ASSERT_LT(std::chrono::steady_clock::now(), deadline)
-        << "The watchdog never reported a missed check window";
-    // The watchdog needs one interval to observe `WAITING_FOR_CHECK` and a
-    // second interval to advance it to `CHECK_WINDOW_MISSED`.
-    std::this_thread::sleep_for(2 * DESIRED_CANCELLATION_CHECK_INTERVAL);
-    ep.checkCancellation("TEST");
-  }
+  std::this_thread::sleep_for(2 * DESIRED_CANCELLATION_CHECK_INTERVAL);
+  ep.checkCancellation("TEST");
 
   EXPECT_THAT(
       stream.str(),
