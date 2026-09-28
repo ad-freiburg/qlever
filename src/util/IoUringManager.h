@@ -78,6 +78,9 @@ class BatchManagerBase {
 // ring, which holds because `IoUringPolicy` is single-threaded use only.
 struct IoUringSetupOptions {
   bool useSqPoll = false;
+  // Preferred CPU for the SQPoll thread. The constructor remaps it to the
+  // first CPU in this process's affinity mask when it is not in the mask
+  // (e.g. offline or isolated), instead of letting the kernel deny the setup.
   unsigned sqThreadCpu = 0;
   unsigned sqThreadIdleMs = 2000;
   bool deferTaskrun = false;

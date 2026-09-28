@@ -10,6 +10,7 @@
 
 #include "util/IoUringManager.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <sched.h>
 #include <unistd.h>
@@ -22,6 +23,28 @@
 #include "util/Log.h"
 
 namespace ad_utility {
+
+namespace {
+// Return `preferredCpu` when it is in this process's affinity mask, otherwise
+// the first CPU in the mask. Falls back to `preferredCpu` when the mask
+// cannot be read; the kernel setup then reports the error as before.
+unsigned firstCpuInAffinityOr(unsigned preferredCpu) {
+  cpu_set_t affinity;
+  CPU_ZERO(&affinity);
+  if (sched_getaffinity(0, sizeof(affinity), &affinity) != 0) {
+    return preferredCpu;
+  }
+  if (CPU_ISSET(preferredCpu, &affinity)) {
+    return preferredCpu;
+  }
+  for (unsigned cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
+    if (CPU_ISSET(cpu, &affinity)) {
+      return cpu;
+    }
+  }
+  return preferredCpu;
+}
+}  // namespace
 
 //______________________________________________________________________________
 void SyncIoPolicy::readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
@@ -67,6 +90,7 @@ IoUringPolicy::IoUringPolicy(unsigned ringSize)
 IoUringPolicy::IoUringPolicy(unsigned ringSize,
                              const IoUringSetupOptions& setupOptions)
     : ringSize_(ringSize) {
+  AD_CORRECTNESS_CHECK(ringSize > 0);
   // Set up the submission and completion queues, shared between this process
   // and the kernel, with (at least) `ringSize_` submission slots in the
   // submission queue. liburing rounds the requested size up to a power of two,
@@ -87,7 +111,16 @@ IoUringPolicy::IoUringPolicy(unsigned ringSize,
   struct io_uring_params params {};
   if (setupOptions.useSqPoll) {
     params.flags |= IORING_SETUP_SQPOLL | IORING_SETUP_SQ_AFF;
-    params.sq_thread_cpu = setupOptions.sqThreadCpu;
+    // Pin the poll thread to a CPU in this process's affinity mask, like
+    // `sqPollAvailable()` probes: the configured CPU may be offline or
+    // isolated, in which case the kernel would deny the setup with `-EINVAL`.
+    params.sq_thread_cpu = firstCpuInAffinityOr(setupOptions.sqThreadCpu);
+    if (params.sq_thread_cpu != setupOptions.sqThreadCpu) {
+      AD_LOG_WARN << "SQPoll CPU " << setupOptions.sqThreadCpu
+                  << " is not in this process's affinity mask; pinning the "
+                     "poll thread to CPU "
+                  << params.sq_thread_cpu << " instead" << std::endl;
+    }
     params.sq_thread_idle = setupOptions.sqThreadIdleMs;
   }
   if (setupOptions.deferTaskrun) {
@@ -153,14 +186,19 @@ bool IoUringPolicy::sqPollAvailable() {
     // A tiny ring keeps the probe cheap; 8 is below liburing's minimum and
     // gets rounded up.
     const int ret = io_uring_queue_init_params(8, &probe, &params);
-    if (ret == 0) {
-      io_uring_queue_exit(&probe);
-      return true;
+    if (ret != 0) {
+      // No ring was created, so there is nothing to release.
+      if (ret == -EPERM) {
+        // Missing `CAP_SYS_NICE`: no CPU will be granted a poller.
+        return false;
+      }
+      continue;
     }
-    if (ret == -EPERM) {
-      // Missing `CAP_SYS_NICE`: no CPU will be granted a poller.
-      return false;
-    }
+    // The guard releases the probe ring when this scope exits, so the
+    // early return below cannot leak it even if more control flow is added
+    // later.
+    absl::Cleanup probeGuard{[&probe] { io_uring_queue_exit(&probe); }};
+    return true;
   }
   return false;
 }
