@@ -412,6 +412,12 @@ TEST(GeoRectanglePrefilter, runtimeBlockPrefilter) {
   ASSERT_TRUE(details.contains("num-geoms-before-block-prefilter"));
   EXPECT_GT(details.at("num-geoms-before-block-prefilter").get<int64_t>(),
             details.at("num-geoms-after-block-prefilter").get<int64_t>());
+
+  // The small side was materialized once, by the prefilter, and that result
+  // was reused for the join. A second `getResult` would be a cache hit that
+  // records the time of the cache lookup instead of the computation.
+  EXPECT_EQ(valuesTree->getRootOperation()->runtimeInfo().cacheStatus_,
+            ad_utility::CacheStatus::computed);
 }
 
 // The runtime block prefilter reaches a scan whose blocks it can prune even
