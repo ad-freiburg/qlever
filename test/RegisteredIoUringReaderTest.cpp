@@ -668,7 +668,13 @@ TEST(RegisteredIoUringReader, RegisterThrowsWithoutLiveRing) {
 
 // _____________________________________________________________________________
 TEST(RegisteredIoUringReader, MoveSemantics) {
-  RegisteredIoUringReader source;
+  // The reader that ends up in `other` below reads an unaligned buffered
+  // request, so it must not be configured for Direct I/O (the synchronous
+  // fallback, used when no ring is available, enforces 4 KiB alignment
+  // otherwise).
+  RegisteredReaderConfig bufferedConfig;
+  bufferedConfig.useDirectIo = false;
+  RegisteredIoUringReader source{bufferedConfig};
   RegisteredIoUringReader movedTo{std::move(source)};
   // The moved-to reader is fully functional.
   EXPECT_EQ(movedTo.submitBatch({}), 0u);
@@ -676,9 +682,8 @@ TEST(RegisteredIoUringReader, MoveSemantics) {
 
   auto [tmpFile, cleanup] = makeTempFileWithContent(100);
   DirectIoFile file{tmpFile.string(), false};
-  RegisteredReaderConfig config;
-  config.useDirectIo = false;
-  RegisteredIoUringReader other{config};
+  // Move assignment replaces the target's configuration and ring.
+  RegisteredIoUringReader other;
   other = std::move(movedTo);
   std::vector<char> buffer(100, 0);
   std::vector<BlockReadRequest> requests{BlockReadRequest{
