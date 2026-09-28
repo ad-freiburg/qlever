@@ -157,10 +157,12 @@ struct MergeOptions {
   // `parallelBlockMergeToRange` (the blocking consumer) looks at this; the
   // serial merge and a caller that reads the sink itself ignore it.
   //
-  // The value `1` is the smallest possible read-ahead: a single block is
-  // fetched while the consumer works on the block that it currently holds. The
-  // value `0` is not allowed and rejected by an `AD_CONTRACT_CHECK`, because a
-  // merge without any read-ahead at all would never make progress.
+  // The value `1` is the smallest possible read-ahead: one block is kept ready
+  // (and one more is being fetched) while the consumer works on the block that
+  // it currently holds. The value `0` is not allowed and rejected by an
+  // `AD_CONTRACT_CHECK`: the buffer of the read-ahead would then be a mere
+  // rendezvous between the consumer and the read-ahead, so nothing would be
+  // read ahead at all.
   //
   // NOTE: Every one of these blocks costs memory, and so does the block that
   // the operation which is currently in flight is about to deliver, so a caller

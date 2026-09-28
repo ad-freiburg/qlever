@@ -1335,7 +1335,7 @@ TEST(ParallelBlockMerge, rangeRequiresAStateAndASink) {
                                ::testing::HasSubstr("state_ != nullptr"));
   AD_EXPECT_THROW_WITH_MESSAGE(Range(executor, state, nullptr, 2),
                                ::testing::HasSubstr("sink_ != nullptr"));
-  // A read-ahead of zero blocks would never make any progress, see
+  // A read-ahead of zero blocks would not read anything ahead, see
   // `MergeOptions::numPrefetchedOutputBlocks`.
   AD_EXPECT_THROW_WITH_MESSAGE(Range(executor, state, sink, 0),
                                ::testing::HasSubstr("numPrefetchedBlocks > 0"));

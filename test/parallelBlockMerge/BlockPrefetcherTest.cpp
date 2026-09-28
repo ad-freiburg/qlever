@@ -295,7 +295,6 @@ TEST(BlockPrefetcher, readAheadIsBounded) {
     // is full, and drops the buffered blocks.
     prefetcher.shutDown();
     EXPECT_TRUE(sink->wasStopped());
-    EXPECT_TRUE(sink->wasStopped());
     EXPECT_EQ(sink.use_count(), 1);
     EXPECT_EQ(sink->maxNumInFlight(), 1u);
   }
