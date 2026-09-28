@@ -9,7 +9,10 @@
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
 
+#include <type_traits>
+
 #include "engine/CallFixedSize.h"
+#include "util/Exception.h"
 
 // _____________________________________________________________________________
 void PolymorphicVocabulary::open(const std::string& filename) {
@@ -58,6 +61,22 @@ VocabBatchLookupResult PolymorphicVocabulary::lookupBatch(
     ql::span<const size_t> indices) const {
   return std::visit(
       [&indices](const auto& vocab) { return vocab.lookupBatch(indices); },
+      vocab_);
+}
+
+// _____________________________________________________________________________
+void PolymorphicVocabulary::lookupBatch(ql::span<const size_t> indices,
+                                        ArenaVocabBatchBuilder& builder) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+  std::visit(
+      [&indices, &builder](const auto& vocab) {
+        if constexpr (SupportsBuilderLookupBatch<
+                          std::decay_t<decltype(vocab)>>) {
+          vocab.lookupBatch(indices, builder);
+        } else {
+          appendVocabBatchLookupResult(vocab.lookupBatch(indices), builder);
+        }
+      },
       vocab_);
 }
 
