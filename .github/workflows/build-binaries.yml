@@ -118,13 +118,18 @@ jobs:
       - name: Pick build directory and add swap
         # The root disk has ~14 GB free; use /mnt when it is larger. Extra
         # swap guards the -j4 build against OOM on the 16 GB runner.
+        # The build dir stays inside the checkout (as on Wolga, <wt>/build-u24):
+        # CompilationInfo.cmake runs git from the build dir, and outside a
+        # repository --version would report 0.0.0-unknown. /mnt is bind-mounted
+        # there instead of used directly.
         run: |
           BUILD_DIR="${GITHUB_WORKSPACE}/build-u24"
           SWAP_FILE=/extra-swapfile
+          mkdir -p "${BUILD_DIR}"
           if [ -d /mnt ] && [ "$(df --output=avail -BG /mnt | tail -1 | tr -dc 0-9)" -ge 40 ]; then
             sudo mkdir -p /mnt/build-u24
             sudo chown "$(id -u):$(id -g)" /mnt/build-u24
-            BUILD_DIR=/mnt/build-u24
+            sudo mount --bind /mnt/build-u24 "${BUILD_DIR}"
             SWAP_FILE=/mnt/extra-swapfile
           fi
           sudo fallocate -l 8G "${SWAP_FILE}" && sudo chmod 600 "${SWAP_FILE}" \
@@ -201,8 +206,12 @@ jobs:
             if ldd "${DST}/$t" | grep -q 'not found'; then
               ldd "${DST}/$t"; echo "::error::$t has unresolved libraries"; exit 1
             fi
-            ldd "${DST}/$t" | grep -q "liburing.so.2 => ${URING}/" \
-              || { ldd "${DST}/$t"; echo "::error::$t does not link the built liburing ${LIBURING_VERSION}"; exit 1; }
+            # Targets without io_uring code drop liburing (--as-needed); a
+            # target that needs it must resolve it to the 2.15 built above.
+            if ldd "${DST}/$t" | grep -q 'liburing\.so' \
+               && ! ldd "${DST}/$t" | grep -q "liburing.so.2 => ${URING}/"; then
+              ldd "${DST}/$t"; echo "::error::$t does not link the built liburing ${LIBURING_VERSION}"; exit 1
+            fi
             {
               echo "branch=${REF}"
               echo "sha=${SHA}"
