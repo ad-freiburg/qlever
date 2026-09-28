@@ -1,0 +1,217 @@
+name: Build and test
+
+# On-demand hosted build + gtest verification (2026-09-28): one gcc13
+# Release build plus ctest on a GitHub-hosted ubuntu-24.04 runner, with
+# ccache via actions/cache. Agents use it instead of queueing on the
+# self-hosted Wolga/Ural runners:
+#     ghq workflow run build-and-test.yml -R marvin7122/qlever \
+#       -f ref=<branch-or-sha> -f targets="<t1> <t2>"
+# `targets` is a space-separated list of CMake targets. Test binaries are
+# registered as ctest tests of the same name (QLEVER_ONE_TEST_CASE_PER_FILE),
+# so exactly those tests run. Empty `targets` builds and tests everything.
+#
+# Triggers:
+# - workflow_dispatch: the use case above.
+# - push to master: keeps a warm ccache on the default branch. GitHub only
+#   shares caches from the default branch, so dispatches on other refs
+#   would otherwise start cold.
+# - pull_request: only when this file changes (self-test of the workflow).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - '.github/workflows/build-and-test.yml'
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or SHA to build (empty = the dispatch ref)
+        required: false
+        default: ''
+      targets:
+        description: Space-separated CMake targets (gtest binaries) to build and run; empty = all targets, all tests
+        required: false
+        default: ''
+      upload_server:
+        description: Also build qlever-server and upload it (plus its shared libraries) as an artifact
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  # One run per PR branch / dispatched ref; a newer push or dispatch for the
+  # same ref cancels the older run. The event name keeps a dispatch on a PR
+  # branch from cancelling that PR's own check.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Bump CCACHE_EPOCH to start from an empty compiler cache.
+  CCACHE_EPOCH: v1
+  COMPILER: gcc13
+  BUILD_TYPE: Release
+
+jobs:
+  build-test:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
+    name: build + ctest (gcc13, Release)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || '' }}
+          submodules: recursive
+
+      - name: Install dependencies (Ubuntu 24.04 archive only, no PPAs)
+        # gcc-13, Boost 1.83 (incl. Boost.URL), mold and ccache all ship in
+        # the noble archive, so this job does not depend on Launchpad PPAs.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qy --no-install-recommends \
+            g++-13 mold ccache \
+            libboost1.83-all-dev libicu-dev libzstd-dev libjemalloc-dev \
+            libssl-dev tzdata pkg-config
+          cmake --version
+
+      - name: Pick build directory and add swap
+        # The root disk has ~14 GB free; use the larger /mnt disk when the
+        # image provides one. Extra swap guards the -j4 build against OOM
+        # on the 16 GB runner.
+        run: |
+          df -h / /mnt || true
+          free -g
+          BUILD_DIR="${GITHUB_WORKSPACE}/build"
+          if [ -d /mnt ] && [ "$(df --output=avail -BG /mnt | tail -1 | tr -dc 0-9)" -ge 40 ]; then
+            sudo mkdir -p /mnt/qlever-build
+            sudo chown "$(id -u):$(id -g)" /mnt/qlever-build
+            BUILD_DIR=/mnt/qlever-build
+            SWAP_FILE=/mnt/extra-swapfile
+          else
+            SWAP_FILE=/extra-swapfile
+          fi
+          sudo fallocate -l 8G "${SWAP_FILE}" && sudo chmod 600 "${SWAP_FILE}" \
+            && sudo mkswap "${SWAP_FILE}" && sudo swapon "${SWAP_FILE}" \
+            || echo "::warning::could not add swap"
+          free -g
+          echo "BUILD_DIR=${BUILD_DIR}" >> "$GITHUB_ENV"
+          mkdir -p "${GITHUB_WORKSPACE}/ci-logs"
+
+      - name: Configure ccache
+        run: |
+          echo "CCACHE_DIR=${HOME}/.cache/ccache" >> "$GITHUB_ENV"
+          echo "CCACHE_MAXSIZE=3G" >> "$GITHUB_ENV"
+          echo "CCACHE_COMPRESS=true" >> "$GITHUB_ENV"
+          echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}" >> "$GITHUB_ENV"
+          echo "CCACHE_NOHASHDIR=true" >> "$GITHUB_ENV"
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.cache/ccache
+          # Per compiler + build type + flags epoch; falls back to the most
+          # recent cache of the same configuration (master's is shared with
+          # every PR).
+          key: ccache-noble-${{ env.COMPILER }}-${{ env.BUILD_TYPE }}-${{ env.CCACHE_EPOCH }}-${{ github.sha }}
+          restore-keys: |
+            ccache-noble-${{ env.COMPILER }}-${{ env.BUILD_TYPE }}-${{ env.CCACHE_EPOCH }}-
+
+      - name: Configure CMake
+        run: |
+          cmake -S "${GITHUB_WORKSPACE}" -B "${BUILD_DIR}" \
+            -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+            -DCMAKE_TOOLCHAIN_FILE="${GITHUB_WORKSPACE}/toolchains/${COMPILER}.cmake" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror" \
+            -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false \
+            -DENABLE_EXPENSIVE_CHECKS=true \
+            -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold" \
+            -DBUILD_SHARED_LIBS=ON -DQLEVER_ONE_TEST_CASE_PER_FILE=ON \
+            -DUSE_PRECOMPILED_HEADERS=OFF -DCHEAPER_COMPILATION=OFF \
+            -DQLEVER_ALLOCATOR_BACKEND=limit \
+            2>&1 | tee "${GITHUB_WORKSPACE}/ci-logs/configure.log"
+
+      - name: Build
+        env:
+          TARGETS: ${{ inputs.targets }}
+          UPLOAD_SERVER: ${{ inputs.upload_server }}
+        run: |
+          set -o pipefail
+          set -f  # no globbing when splitting TARGETS
+          ccache -z
+          # Word splitting of TARGETS is intended (space-separated list).
+          # shellcheck disable=SC2086
+          set -- ${TARGETS}
+          if [ "${UPLOAD_SERVER}" = true ] && [ $# -gt 0 ]; then
+            set -- "$@" qlever-server
+          fi
+          TARGET_ARGS=()
+          for t in "$@"; do TARGET_ARGS+=(--target "$t"); done
+          cmake --build "${BUILD_DIR}" --config ${BUILD_TYPE} "${TARGET_ARGS[@]}" -- -j 4 \
+            2>&1 | tee "${GITHUB_WORKSPACE}/ci-logs/build.log"
+          ccache -s | tee "${GITHUB_WORKSPACE}/ci-logs/ccache-stats.log"
+
+      - name: Save ccache
+        # Runs even when the build fails, so the next run still benefits.
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/ccache
+          key: ccache-noble-${{ env.COMPILER }}-${{ env.BUILD_TYPE }}-${{ env.CCACHE_EPOCH }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Test
+        env:
+          TARGETS: ${{ inputs.targets }}
+        working-directory: ${{ env.BUILD_DIR }}/test
+        run: |
+          set -o pipefail
+          set -f  # no globbing when splitting TARGETS
+          CTEST_ARGS=(-C ${BUILD_TYPE} -j 4 --output-on-failure)
+          if [ -n "${TARGETS// /}" ]; then
+            # Exact test names; non-test targets simply match nothing.
+            REGEX="^($(printf '%s\n' ${TARGETS} | sed 's/[][\\.*^$+?(){}|]/\\&/g' | paste -sd '|'))\$"
+            echo "ctest -R ${REGEX}"
+            CTEST_ARGS+=(-R "${REGEX}" --no-tests=ignore)
+          fi
+          ctest "${CTEST_ARGS[@]}" . 2>&1 | tee "${GITHUB_WORKSPACE}/ci-logs/ctest.log"
+
+      - name: Collect logs
+        if: always()
+        run: |
+          cp "${BUILD_DIR}/test/Testing/Temporary/LastTest.log" "${GITHUB_WORKSPACE}/ci-logs/" 2>/dev/null || true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-and-test-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-logs/
+          retention-days: 14
+
+      - name: Package qlever-server
+        if: inputs.upload_server
+        run: |
+          PKG="${RUNNER_TEMP}/qlever-server"
+          mkdir -p "${PKG}/lib"
+          cp "${BUILD_DIR}/qlever-server" "${PKG}/"
+          # Shared build (BUILD_SHARED_LIBS=ON): ship the project libraries
+          # the binary links against. Run with
+          #   LD_LIBRARY_PATH=lib ./qlever-server ...
+          # System libraries (Boost 1.83, ICU 74, ...) come from the host.
+          ldd "${BUILD_DIR}/qlever-server" | awk '{print $3}' \
+            | grep -F "${BUILD_DIR}" | xargs -r -I{} cp {} "${PKG}/lib/"
+          ls -la "${PKG}" "${PKG}/lib" | head -50
+
+      - name: Upload qlever-server
+        if: inputs.upload_server
+        uses: actions/upload-artifact@v7
+        with:
+          name: qlever-server-${{ github.run_id }}
+          path: ${{ runner.temp }}/qlever-server/
+          retention-days: 7

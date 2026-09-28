@@ -15,6 +15,11 @@ on:
       - misc/ci-images/base/**
       - .github/workflows/base-clone-builder.yml
 
+# A newer push to the same PR branch cancels the older run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

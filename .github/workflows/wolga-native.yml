@@ -36,9 +36,12 @@ jobs:
   # legs (formerly `skip-if-pr`) are not created at all on pull requests, so
   # they no longer occupy a build runner just to exit early. Runs on the
   # lightweight `wolga` runners, not on build runners.
+  #
+  # Hosted runners (2026-09-28): this picker only echoes a JSON line, so it
+  # runs on a GitHub-hosted runner instead of queueing for a `wolga` slot.
   legs:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
-    runs-on: [self-hosted, linux, x64, wolga]
+    runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.pick.outputs.matrix }}
     steps:
@@ -58,10 +61,18 @@ jobs:
   build:
     needs: legs
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
-    # Pinned to image-bearing hosts: only runners sharing the podman storage
-    # that holds localhost/qlever-ci carry wolga-img (Wolga fleet).
-    runs-on: [self-hosted, linux, x64, wolga-img]
-    timeout-minutes: 240
+    # Runner selection (2026-09-28): the clang16 ASan/UBSan leg (the only
+    # leg on pull requests) runs on a GitHub-hosted ubuntu-24.04 runner, on
+    # PRs and on master. The fork is public, so hosted runners are free and
+    # run ~20 jobs in parallel, while the self-hosted pool had 2-3 image
+    # runners online for 40+ queued runs. Master runs of this leg also
+    # seed the hosted ccache that every PR restores (GitHub shares caches
+    # only from the default branch). All other legs stay pinned to
+    # image-bearing hosts: only runners sharing the podman storage that
+    # holds localhost/qlever-ci carry wolga-img (Wolga fleet).
+    runs-on: ${{ (github.event_name == 'pull_request' || contains(matrix.extra-flags, 'address')) && 'ubuntu-24.04' || fromJSON('["self-hosted","linux","x64","wolga-img"]') }}
+    # Hosted limit is 360; a cold hosted ASan build takes ~2-2.5 h.
+    timeout-minutes: 330
     strategy:
       fail-fast: false
       # Up to 4 legs of one run in parallel: legs land on different fleet
@@ -89,8 +100,90 @@ jobs:
         if: github.event_name != 'pull_request' || matrix.skip-if-pr != true
         with:
           submodules: recursive
+      # Hosted runners start empty: carry the compiler cache in actions/cache,
+      # keyed per toolchain + build type + compiler flags. restore-keys falls
+      # back to the newest cache of the same configuration (master's cache is
+      # visible to every PR, a PR's own cache to its later pushes).
+      - name: Compute ccache key
+        id: ccache-key
+        if: runner.environment == 'github-hosted'
+        env:
+          FLAGS: ${{ matrix.build-type }} ${{ matrix.extra-flags }} ${{ matrix.additional-cmake-options }} ${{ matrix.allocator-backend }}
+        run: echo "prefix=ccache-noble-${{ matrix.toolchain }}-$(printf '%s' "$FLAGS" | sha1sum | cut -c1-12)-v1-" >> "$GITHUB_OUTPUT"
+      - name: Restore ccache
+        if: runner.environment == 'github-hosted'
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.cache/ccache
+          key: ${{ steps.ccache-key.outputs.prefix }}${{ github.sha }}
+          restore-keys: ${{ steps.ccache-key.outputs.prefix }}
+      - name: Native ${{ matrix.toolchain }} build + tests on the hosted runner
+        if: runner.environment == 'github-hosted' && (!matrix.run-kind || matrix.run-kind == 'native')
+        shell: bash
+        env:
+          TOOLCHAIN: ${{ matrix.toolchain }}
+          BUILD_TYPE: ${{ matrix.build-type }}
+          EXTRA_FLAGS: ${{ matrix.extra-flags }}
+          CONTAINER_ENV: ${{ matrix.container-env }}
+          ADDITIONAL_CMAKE_OPTIONS: ${{ matrix.additional-cmake-options }}
+          ALLOCATOR_BACKEND: ${{ matrix.allocator-backend || 'limit' }}
+        # Same configure flags and tests as the container step below; the
+        # toolchain comes from the Ubuntu 24.04 archive (clang-16, Boost
+        # 1.83 incl. Boost.URL, mold, ccache; no Launchpad PPAs).
+        run: |
+          set -euo pipefail
+          CLANG_MAJOR="${TOOLCHAIN#clang}"
+          sudo apt-get update -qq
+          sudo apt-get install -qy --no-install-recommends \
+            "clang-${CLANG_MAJOR}" "libclang-rt-${CLANG_MAJOR}-dev" mold ccache \
+            libboost1.83-all-dev libicu-dev libzstd-dev libjemalloc-dev \
+            libssl-dev tzdata pkg-config
+          # Sanitizer runtimes of clang < 18 crash on the 32-bit mmap
+          # randomization of the hosted 24.04 kernel.
+          sudo sysctl vm.mmap_rnd_bits=28
+          # Disk: prefer the large /mnt disk; otherwise free ~20 GB on /.
+          df -h / /mnt || true
+          BUILD_DIR="${GITHUB_WORKSPACE}/build"
+          SWAP_FILE=/extra-swapfile
+          if [ -d /mnt ] && [ "$(df --output=avail -BG /mnt | tail -1 | tr -dc 0-9)" -ge 40 ]; then
+            sudo mkdir -p /mnt/qlever-build
+            sudo chown "$(id -u):$(id -g)" /mnt/qlever-build
+            BUILD_DIR=/mnt/qlever-build
+            SWAP_FILE=/mnt/extra-swapfile
+          else
+            sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          fi
+          # Extra swap guards the -j4 sanitizer build against OOM (16 GB RAM).
+          { sudo fallocate -l 8G "${SWAP_FILE}" && sudo chmod 600 "${SWAP_FILE}" \
+            && sudo mkswap "${SWAP_FILE}" && sudo swapon "${SWAP_FILE}"; } \
+            || echo "::warning::could not add swap"
+          df -h / /mnt || true
+          free -g
+          if [ -n "${CONTAINER_ENV}" ]; then export ${CONTAINER_ENV}; fi
+          export CCACHE_DIR="${HOME}/.cache/ccache" CCACHE_MAXSIZE=4G CCACHE_COMPRESS=true
+          export CCACHE_BASEDIR="${GITHUB_WORKSPACE}" CCACHE_NOHASHDIR=true
+          export CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime
+          ccache -z >/dev/null
+          # shellcheck disable=SC2086
+          cmake -S "${GITHUB_WORKSPACE}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+            -DCMAKE_TOOLCHAIN_FILE="${GITHUB_WORKSPACE}/toolchains/${TOOLCHAIN}.cmake" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror ${EXTRA_FLAGS}" \
+            -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false \
+            -DENABLE_EXPENSIVE_CHECKS=true \
+            ${ADDITIONAL_CMAKE_OPTIONS} \
+            -DADDITIONAL_LINKER_FLAGS="-B /usr/bin/mold" \
+            -DBUILD_SHARED_LIBS=ON -DQLEVER_ONE_TEST_CASE_PER_FILE=ON \
+            -DUSE_PRECOMPILED_HEADERS=ON -DCHEAPER_COMPILATION=OFF \
+            -DQLEVER_ALLOCATOR_BACKEND="${ALLOCATOR_BACKEND}"
+          # 4 vCPU, 16 GB RAM (+8 GB swap).
+          cmake --build "${BUILD_DIR}" --config "${BUILD_TYPE}" -- -j 4
+          echo "--- ccache stats for ${TOOLCHAIN} (this leg) ---"
+          ccache -s || true
+          cd "${BUILD_DIR}/test"
+          env CTEST_OUTPUT_ON_FAILURE=1 ctest -C "${BUILD_TYPE}" -j 4 .
       - name: Native ${{ matrix.toolchain }} build + tests inside prebuilt CI image
-        if: (github.event_name != 'pull_request' || matrix.skip-if-pr != true) && (!matrix.run-kind || matrix.run-kind == 'native')
+        if: runner.environment != 'github-hosted' && (github.event_name != 'pull_request' || matrix.skip-if-pr != true) && (!matrix.run-kind || matrix.run-kind == 'native')
         shell: bash
         run: |
           mkdir -p "${PODMAN_ROOT}" "${PODMAN_TMP}" "${CCACHE_BASE}/${{ matrix.toolchain }}"
@@ -170,6 +263,15 @@ jobs:
               find /work/build - \( -name "previous.*" -o -name "rebuild.*" \) -exec rm -rf {} + 2>/dev/null || true
               env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{ matrix.build-type }} -j 8 .
             '
+      - name: Save ccache
+        # Runs even when the build or tests fail, so the next run still
+        # benefits from the compiled objects.
+        if: always() && runner.environment == 'github-hosted' && steps.ccache-key.outputs.prefix != ''
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/ccache
+          key: ${{ steps.ccache-key.outputs.prefix }}${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Conan build + tests + benchmarks + E2E inside prebuilt CI image
         if: matrix.run-kind == 'conan'
         shell: bash
