@@ -27,9 +27,7 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
 VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
     ql::span<const size_t> indices) const {
   AD_CONTRACT_CHECK(!indices.empty());
-  // Collect the indices that miss the internal vocabulary, so that the
-  // external vocabulary serves all of them in one batch (from its `io_uring`
-  // ring pool).
+  // Misses go out in one external batch (from its `io_uring` ring pool).
   auto data = std::make_shared<StringVectorVocabBatchLookupData>();
   data->buffer().resize(indices.size());
   std::vector<size_t> missPositions;
@@ -46,16 +44,14 @@ VocabBatchLookupResult VocabularyInternalExternal::lookupBatch(
   }
   if (!missIndices.empty()) {
     auto external = externalVocab_.lookupBatch(missIndices);
-    // Internal invariant (not violable via the public interface): the external
-    // lookup yields one word per index, in order.
+    // One word per index, in order.
     AD_CORRECTNESS_CHECK(external->size() == missIndices.size());
     for (const auto& [position, word] :
          ::ranges::views::zip(missPositions, *external)) {
       data->buffer()[position] = std::string{word};
     }
   }
-  // Build the views only after the buffer is complete, so that no reallocation
-  // can move the bytes the views point into.
+  // Build views last: growing the buffer can reallocate and dangle them.
   data->views().reserve(data->buffer().size());
   for (const auto& word : data->buffer()) {
     data->views().emplace_back(word);

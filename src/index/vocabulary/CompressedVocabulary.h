@@ -161,18 +161,13 @@ CPP_template(typename UnderlyingVocabulary,
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     AD_CONTRACT_CHECK(!indices.empty());
     if constexpr (underlyingHasHoles) {
-      // Indices that are holes report a placeholder; keep the per-index path
-      // that implements that mapping.
+      // Holes report a placeholder; keep the per-index path for them.
       return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
     } else {
-      // Fetch the compressed words in one batch through the underlying
-      // vocabulary (an on-disk underlying vocabulary serves this from its
-      // `io_uring` ring pool), then decompress each word with the decoder for
-      // its block. The underlying lookup preserves order, so each word pairs
-      // with the index at the same position, exactly like the sequential path.
+      // One underlying batch (from the `io_uring` ring pool when on disk),
+      // decompressed per block. Order is preserved, like the sequential path.
       auto compressed = underlyingVocabulary_.lookupBatch(indices);
-      // Internal invariant (not violable via the public interface): the
-      // underlying lookup yields one word per index, in order.
+      // One word per index, in order.
       AD_CORRECTNESS_CHECK(compressed->size() == indices.size());
       auto data = std::make_shared<StringVectorVocabBatchLookupData>();
       data->buffer().reserve(indices.size());
@@ -181,8 +176,7 @@ CPP_template(typename UnderlyingVocabulary,
         data->buffer().push_back(
             compressionWrapper_.decompress(word, getDecoderIdx(index)));
       }
-      // Build the views after the buffer is complete, so no reallocation can
-      // move the bytes the views point into.
+      // Build views last: growing the buffer can reallocate and dangle them.
       data->views().reserve(data->buffer().size());
       for (const auto& word : data->buffer()) {
         data->views().emplace_back(word);

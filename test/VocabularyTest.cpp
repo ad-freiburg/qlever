@@ -322,11 +322,8 @@ TEST(VocabularyTest, LookupBatch) {
   EXPECT_THAT((*dupResult), ::testing::ElementsAre("ab", "ab", "a"));
 }
 
-// The compressed on-disk vocabulary (`OnDiskCompressed`, the default type of
-// `createExampleVocabulary`) serves `lookupBatch` from one underlying batch
-// plus per-word decompression (the `io_uring` ring path for on-disk words).
-// Shuffled indices with duplicates must resolve exactly like sequential single
-// lookups, in input order.
+// One underlying batch plus per-word decompression must match sequential
+// lookups, in input order, with duplicates.
 TEST(VocabularyTest, LookupBatchCompressedBatched) {
   auto v = createExampleVocabulary();
   std::vector<size_t> indices{3, 1, 3, 0, 2, 1, 0, 3, 2, 2, 1, 0};

@@ -141,10 +141,8 @@ TEST(VocabularyInternalExternal, ScanAllEmptyVocabulary) {
 
 // _____________________________________________________________________________
 TEST(VocabularyInternalExternal, LookupBatch) {
-  // Shuffled indices with duplicates, mixing internal-vocabulary hits (odd
-  // indices are cached in RAM, see `VocabularyCreator`) and external-vocabulary
-  // misses (even indices). The batch result must match the sequential single
-  // lookups in input order.
+  // Shuffled indices with duplicates across RAM hits and disk misses must
+  // match sequential lookups in input order.
   const std::vector<std::string> words{"alpha", "beta",    "gamma",
                                        "delta", "epsilon", "zeta"};
   auto vocab = createVocabulary("LookupBatch")(words);
