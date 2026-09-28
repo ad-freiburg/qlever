@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "backports/span.h"
@@ -58,9 +59,11 @@
 // earlier segments. Lexicographic ranks, in contrast, do change when a segment
 // is appended.
 //
-// There is no *semantic* (that is, by string value) order among the words of
-// this vocabulary; they compare by their `Id`s alone, which is why all `Id`s
-// of this vocabulary compare greater than all `Id`s of the main vocabulary.
+// The `Id`s of this vocabulary, in contrast to the `Id`s of the main
+// vocabulary, do not represent a *semantic* (that is, by string value) order
+// of the words, but only the order in which the words were inserted. In
+// particular, all `Id`s of this vocabulary compare greater than all `Id`s of
+// the main vocabulary.
 //
 // NOTE: The lexicographic order used above is the cheap bytewise order of
 // `std::string_view`, and this class deliberately takes no comparator. Looking
@@ -125,6 +128,9 @@ class SecondaryVocabulary {
   // NOTE: If `segment` is a zero-copy view (see
   // `CompactVectorOfStrings::fromZeroCopyDeserializer`), the buffer that it
   // points into has to outlive this `SecondaryVocabulary`.
+  //
+  // NOTE: An empty `segment` is ignored, that is, it doesn't count as a
+  // segment (see `numSegments`).
   void appendSegment(CompactVectorOfStrings<char> segment);
 
   // Return the number of words across all segments.
@@ -160,9 +166,16 @@ class SecondaryVocabulary {
   void mergeIntoSortedIndices(const std::vector<size_t>& insertPositions,
                               uint64_t firstGlobalIndex);
 
+  // Return the first position in `[first, sortedIndices_.end())` whose word is
+  // not less than `word`, together with whether the word at that position is
+  // equal to `word` (that is, whether `word` is contained in that range).
+  std::pair<std::vector<uint64_t>::const_iterator, bool>
+  lowerBoundInSortedIndices(std::string_view word,
+                            std::vector<uint64_t>::const_iterator first) const;
+
   // Return the word with the given global index. Used as the projection that
   // orders (and looks up) global indices by the word that each of them refers
-  // to, in `getId` and `insertPositionsInSortedIndices`.
+  // to, in `lowerBoundInSortedIndices`.
   std::string_view wordAt(uint64_t globalIndex) const;
 };
 

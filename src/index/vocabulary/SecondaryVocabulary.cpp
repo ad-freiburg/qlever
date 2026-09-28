@@ -15,6 +15,7 @@
 #include "backports/algorithm.h"
 #include "backports/shift.h"
 #include "util/Exception.h"
+#include "util/Views.h"
 
 // _____________________________________________________________________________
 SecondaryVocabulary::SecondaryVocabulary(ql::span<const std::string> words) {
@@ -25,6 +26,11 @@ SecondaryVocabulary::SecondaryVocabulary(ql::span<const std::string> words) {
 
 // _____________________________________________________________________________
 void SecondaryVocabulary::appendSegment(CompactVectorOfStrings<char> segment) {
+  // Empty segments would only bloat `segments_` and `segmentOffsets_`.
+  if (segment.size() == 0) {
+    return;
+  }
+
   // Check that the words of `segment` are sorted and pairwise distinct. This
   // is a precondition that the caller has to establish (see the declaration),
   // because `segment` may be a zero-copy view that must not be reordered here.
@@ -74,9 +80,8 @@ std::string_view SecondaryVocabulary::operator[](
 // _____________________________________________________________________________
 std::optional<SecondaryVocabIndex> SecondaryVocabulary::getId(
     std::string_view word) const {
-  auto project = [this](uint64_t globalIndex) { return wordAt(globalIndex); };
-  auto it = ql::ranges::lower_bound(sortedIndices_, word, {}, project);
-  if (it == sortedIndices_.end() || project(*it) != word) {
+  auto [it, found] = lowerBoundInSortedIndices(word, sortedIndices_.begin());
+  if (!found) {
     return std::nullopt;
   }
   return SecondaryVocabIndex::make(*it);
@@ -85,20 +90,19 @@ std::optional<SecondaryVocabIndex> SecondaryVocabulary::getId(
 // _____________________________________________________________________________
 std::vector<size_t> SecondaryVocabulary::insertPositionsInSortedIndices(
     const CompactVectorOfStrings<char>& segment) const {
-  auto project = [this](uint64_t globalIndex) { return wordAt(globalIndex); };
   std::vector<size_t> insertPositions;
   insertPositions.reserve(segment.size());
   // The words of `segment` are sorted, so their insert positions are
   // non-decreasing and the search range can be shrunk from the left as we go.
-  auto begin = sortedIndices_.begin();
+  auto begin = sortedIndices_.cbegin();
   for (std::string_view word : segment) {
-    auto it =
-        ql::ranges::lower_bound(begin, sortedIndices_.end(), word, {}, project);
-    AD_CONTRACT_CHECK(it == sortedIndices_.end() || project(*it) != word,
+    auto [it, found] = lowerBoundInSortedIndices(word, begin);
+    AD_CONTRACT_CHECK(!found,
                       "The words of a secondary vocabulary have to be "
                       "distinct, but the word ",
                       word, " is already contained in a previous segment");
-    insertPositions.push_back(static_cast<size_t>(it - sortedIndices_.begin()));
+    insertPositions.push_back(
+        static_cast<size_t>(it - sortedIndices_.cbegin()));
     begin = it;
   }
   return insertPositions;
@@ -111,25 +115,35 @@ void SecondaryVocabulary::mergeIntoSortedIndices(
   size_t numNewWords = insertPositions.size();
   sortedIndices_.resize(numOldWords + numNewWords);
 
-  // Fill `sortedIndices_` from the back. `writeIdx` is one past the position
-  // that is written next, and `readIdx` one past the previously contained
-  // global index that is moved next. Going backwards through the new words,
-  // first move all the previously contained global indices that have to end up
-  // behind the current new word, then write that new word's global index. The
-  // global indices at the positions in front of `insertPositions.front()` stay
-  // where they are, so each of them is moved at most once.
-  size_t writeIdx = numOldWords + numNewWords;
-  size_t readIdx = numOldWords;
-  for (size_t i = numNewWords; i > 0; --i) {
-    // Invariant: `writeIdx - readIdx == i`.
-    auto begin = sortedIndices_.begin();
-    ql::shift_right(begin + insertPositions[i - 1], begin + writeIdx,
-                    static_cast<std::ptrdiff_t>(i));
-    writeIdx -= readIdx - insertPositions[i - 1];
-    readIdx = insertPositions[i - 1];
-    sortedIndices_[--writeIdx] = firstGlobalIndex + (i - 1);
+  // Fill `sortedIndices_` from the back. `previousInsertPos` is the position
+  // at which the global index of the previously handled new word was written
+  // (initially the end). Going backwards through the new words, for the new
+  // word `i`, first shift the previously contained global indices that have to
+  // end up behind it to the right by `i + 1` positions (which makes room for
+  // the global indices of the new words `0, ..., i`), then write the global
+  // index of word `i` directly in front of the shifted ones. The global
+  // indices at the positions in front of `insertPositions.front()` stay where
+  // they are, so each of them is moved at most once.
+  auto previousInsertPos = sortedIndices_.end();
+  for (size_t i : ad_utility::integerRange(numNewWords) | ql::views::reverse) {
+    auto insertPos = sortedIndices_.begin() +
+                     static_cast<std::ptrdiff_t>(insertPositions[i]);
+    ql::shift_right(insertPos, previousInsertPos,
+                    static_cast<std::ptrdiff_t>(i + 1));
+    previousInsertPos = insertPos + static_cast<std::ptrdiff_t>(i);
+    *previousInsertPos = firstGlobalIndex + i;
   }
-  AD_CORRECTNESS_CHECK(writeIdx == readIdx);
+}
+
+// _____________________________________________________________________________
+std::pair<std::vector<uint64_t>::const_iterator, bool>
+SecondaryVocabulary::lowerBoundInSortedIndices(
+    std::string_view word, std::vector<uint64_t>::const_iterator first) const {
+  auto project = [this](uint64_t globalIndex) { return wordAt(globalIndex); };
+  auto it =
+      ql::ranges::lower_bound(first, sortedIndices_.cend(), word, {}, project);
+  bool found = it != sortedIndices_.cend() && project(*it) == word;
+  return {it, found};
 }
 
 // _____________________________________________________________________________

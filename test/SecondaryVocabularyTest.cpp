@@ -225,6 +225,35 @@ TEST(SecondaryVocabulary, appendSegmentMergesIntoTheSortedIndices) {
 }
 
 // _____________________________________________________________________________
+TEST(SecondaryVocabulary, appendEmptySegmentIsNoOp) {
+  // An empty segment appended to an empty vocabulary.
+  SecondaryVocabulary emptyVocab{};
+  emptyVocab.appendSegment(makeSegment({}));
+  EXPECT_EQ(emptyVocab.numWords(), 0);
+  EXPECT_EQ(emptyVocab.numSegments(), 0);
+  EXPECT_EQ(emptyVocab.getId("<b>"), std::nullopt);
+
+  // The same holds for the constructor.
+  SecondaryVocabulary constructedEmpty{std::vector<std::string>{}};
+  EXPECT_EQ(constructedEmpty.numWords(), 0);
+  EXPECT_EQ(constructedEmpty.numSegments(), 0);
+
+  // An empty segment appended to a nonempty vocabulary, followed by a nonempty
+  // one, whose global indices directly follow the ones of the first segment.
+  SecondaryVocabulary vocab{secondaryVocabWords};
+  vocab.appendSegment(makeSegment({}));
+  EXPECT_EQ(vocab.numWords(), secondaryVocabWords.size());
+  EXPECT_EQ(vocab.numSegments(), 1);
+  expectWordsAndIdsMatch(vocab, secondaryVocabWords);
+
+  vocab.appendSegment(makeSegment({"<f>"}));
+  EXPECT_EQ(vocab.numWords(), 4);
+  EXPECT_EQ(vocab.numSegments(), 2);
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(3)], "<f>");
+  EXPECT_EQ(vocab.getId("<f>"), SecondaryVocabIndex::make(3));
+}
+
+// _____________________________________________________________________________
 TEST(SecondaryVocabulary, appendZeroCopySegment) {
   SecondaryVocabulary vocab{secondaryVocabWords};
 
