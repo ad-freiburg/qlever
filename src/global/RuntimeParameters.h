@@ -56,6 +56,14 @@ struct RuntimeParameters {
   // (cache-bypassing) stores instead of `std::memcpy`.
   Bool useNonTemporalExportBuffer_{false, "use-non-temporal-export-buffer"};
 
+  // If set, the export formats `Bool` and `Int` values through the 16-entry
+  // lookup table of `ql::engine::BranchlessTypeDispatcher` instead of the
+  // `switch` in `ExportIds::idToStringAndTypeForEncodedValue`. Only these two
+  // datatypes are routed through the table, because only their table
+  // formatters produce the same bytes as the `switch` (the table's `Double`
+  // formatter does not special-case NaN and infinities).
+  Bool useBranchlessTypeDispatcher_{false, "use-branchless-type-dispatcher"};
+
   // If the time estimate for a sort operation is larger by more than this
   // factor than the remaining time, then the sort is canceled with a
   // timeout exception.
