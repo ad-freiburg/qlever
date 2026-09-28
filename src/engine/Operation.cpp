@@ -216,7 +216,11 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           }
           signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
-        [this](Result::GeneratorState state) {
+        [this](Result::GeneratorState state,
+               std::chrono::microseconds duration) {
+          // The call that exhausted the generator did not yield a chunk, but
+          // its time still belongs to this operation.
+          updateRuntimeStats(false, 0, getResultWidth(), duration);
           runtimeInfo().status_ = [state]() {
             using enum Result::GeneratorState;
             switch (state) {

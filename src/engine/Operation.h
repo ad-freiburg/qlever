@@ -718,6 +718,7 @@ class Operation {
   FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled);
   FRIEND_TEST(Operation, testSubMillisecondsIncrementsAreStillTracked);
   FRIEND_TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd);
+  FRIEND_TEST(Operation, verifyTimeAfterLastChunkIsAddedToRuntimeInformation);
   FRIEND_TEST(Operation,
               ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption);
   FRIEND_TEST(Operation,
