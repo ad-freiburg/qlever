@@ -19,9 +19,9 @@
 //   `std::string` per word, all kept alive in the result), and
 // - `SplitVocabulary::lookupBatch`.
 // Mixed-marker batches and single-marker batches are measured separately.
-// Every measurement repeats the batch `SPLIT_VOCAB_MICRO_REPETITIONS` times
-// (default 50) after one untimed warm-up repetition; the time per word is the
-// measured time divided by `repetitions * 2048`.
+// Every measurement repeats the batch until `SPLIT_VOCAB_MIN_SECONDS` (default
+// 10) have passed, after one untimed warm-up pass; the time per word is the
+// measured time divided by the `words` in the measurement's metadata.
 // This is complemented by `SplitVocabLookupBatchEndToEndBenchmark`, which uses
 // a larger vocabulary and batch.
 
@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
@@ -89,6 +90,31 @@ size_t sizeFromEnvironment(const char* name, size_t defaultValue,
   return static_cast<size_t>(parsed);
 }
 
+// Add the measurement `name` to `group`: call `lookupOnce` (one pass over a
+// batch of `wordsPerCall` words, returning the number of bytes looked up)
+// again and again until at least `minSeconds` have passed. The number of
+// calls, the number of words, and the bytes per call are recorded as metadata,
+// so the time per word is the measured time divided by `words`.
+template <typename LookupOnce>
+void addTimedMeasurement(ResultGroup& group, const std::string& name,
+                         double minSeconds, size_t wordsPerCall,
+                         const LookupOnce& lookupOnce) {
+  size_t calls = 0;
+  size_t totalBytes = 0;
+  auto& entry = group.addMeasurement(name, [&] {
+    const auto start = std::chrono::steady_clock::now();
+    do {
+      totalBytes += lookupOnce();
+      ++calls;
+    } while (
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
+            .count() < minSeconds);
+  });
+  entry.metadata().addKeyValuePair("calls", calls);
+  entry.metadata().addKeyValuePair("words", calls * wordsPerCall);
+  entry.metadata().addKeyValuePair("bytes-per-call", totalBytes / calls);
+}
+
 // Deterministic synthetic words: short tokens plus URI-like words with shared
 // prefixes. Every third URI-like word starts with `"a` and is routed to
 // marker 1. Sorted, as the vocabulary writers require sorted input.
@@ -121,7 +147,7 @@ template <typename Underlying>
 void measureUnderlying(BenchmarkResults& results, const std::string& label,
                        const std::vector<std::string>& words,
                        const std::filesystem::path& basename,
-                       size_t repetitions) {
+                       double minSeconds) {
   using Vocab = MicroSplitVocab<Underlying>;
   Vocab vocab;
   {
@@ -199,24 +225,22 @@ void measureUnderlying(BenchmarkResults& results, const std::string& label,
     runBatched(*batch, 1);
   }
 
-  auto& group = results.addGroup(
-      absl::StrCat(label, ": ", batchSize, " lookups into ", words.size(),
-                   " words, ", repetitions, " repetitions"));
-  group.addMeasurement("sequential operator[], mixed markers",
-                       [&] { return runSequential(mixedBatch, repetitions); });
-  group.addMeasurement("fallback sequentialLookupBatch, mixed markers",
-                       [&] { return runFallback(mixedBatch, repetitions); });
-  group.addMeasurement("batched lookupBatch, mixed markers",
-                       [&] { return runBatched(mixedBatch, repetitions); });
-  group.addMeasurement("sequential operator[], single marker", [&] {
-    return runSequential(singleMarkerBatch, repetitions);
-  });
-  group.addMeasurement("fallback sequentialLookupBatch, single marker", [&] {
-    return runFallback(singleMarkerBatch, repetitions);
-  });
-  group.addMeasurement("batched lookupBatch, single marker", [&] {
-    return runBatched(singleMarkerBatch, repetitions);
-  });
+  auto& group = results.addGroup(absl::StrCat(
+      label, ": ", batchSize, " lookups into ", words.size(), " words"));
+  for (const auto& [batch, suffix] :
+       {std::pair{&mixedBatch, ", mixed markers"},
+        std::pair{&singleMarkerBatch, ", single marker"}}) {
+    const auto& b = *batch;
+    addTimedMeasurement(group, absl::StrCat("sequential operator[]", suffix),
+                        minSeconds, batchSize,
+                        [&] { return runSequential(b, 1); });
+    addTimedMeasurement(
+        group, absl::StrCat("fallback sequentialLookupBatch", suffix),
+        minSeconds, batchSize, [&] { return runFallback(b, 1); });
+    addTimedMeasurement(group, absl::StrCat("batched lookupBatch", suffix),
+                        minSeconds, batchSize,
+                        [&] { return runBatched(b, 1); });
+  }
   vocab.close();
 }
 
@@ -228,8 +252,8 @@ class SplitVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
 
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results;
-    const size_t repetitions =
-        sizeFromEnvironment("SPLIT_VOCAB_MICRO_REPETITIONS", 50, 1'000'000);
+    const double minSeconds = static_cast<double>(
+        sizeFromEnvironment("SPLIT_VOCAB_MIN_SECONDS", 10, 3600));
     const auto words = makeWords();
     TempDirCleanup cleanup{std::filesystem::temp_directory_path() /
                            "splitVocabLookupBatchMicro"};
@@ -238,10 +262,10 @@ class SplitVocabLookupBatchMicroBenchmark : public BenchmarkInterface {
     std::filesystem::create_directories(cleanup.dir_);
     measureUnderlying<VocabularyInMemory>(results, "VocabularyInMemory", words,
                                           cleanup.dir_ / "inMemory",
-                                          repetitions);
+                                          minSeconds);
     measureUnderlying<CompressedVocabulary<VocabularyInMemory>>(
         results, "CompressedVocabulary<VocabularyInMemory>", words,
-        cleanup.dir_ / "compressed", repetitions);
+        cleanup.dir_ / "compressed", minSeconds);
     return results;
   }
 };
