@@ -124,7 +124,7 @@ TEST(VocabBatchLookupData, ContiguousBuilderZeroSizedWordsAndMixed) {
 // _____________________________________________________________________________
 
 TEST(VocabBatchLookupData, MakeStringVectorResultKeepsViewsValid) {
-  auto result = makeStringVectorVocabBatchLookupResult({"alpha", "beta"});
+  auto result = StringVectorVocabBatchLookupData::fromWords({"alpha", "beta"});
 
   EXPECT_THAT(result, ::testing::ElementsAre("alpha", "beta"));
 }
@@ -133,7 +133,7 @@ TEST(VocabBatchLookupData, MakeStringVectorResultKeepsViewsValid) {
 // Moves transfer ownership and leave the source empty, never a null owner
 // paired with a stale view into the moved-to storage.
 TEST(VocabBatchLookupData, MovedFromResultIsEmpty) {
-  auto result = makeStringVectorVocabBatchLookupResult({"foo", "bar"});
+  auto result = StringVectorVocabBatchLookupData::fromWords({"foo", "bar"});
   ASSERT_EQ(result.size(), 2u);
 
   auto moved = std::move(result);
@@ -141,7 +141,7 @@ TEST(VocabBatchLookupData, MovedFromResultIsEmpty) {
   EXPECT_EQ(result.size(), 0u);
   EXPECT_THAT(moved, ::testing::ElementsAre("foo", "bar"));
 
-  auto target = makeStringVectorVocabBatchLookupResult({"x"});
+  auto target = StringVectorVocabBatchLookupData::fromWords({"x"});
   target = std::move(moved);
   EXPECT_TRUE(moved.empty());
   EXPECT_THAT(target, ::testing::ElementsAre("foo", "bar"));
@@ -151,13 +151,13 @@ TEST(VocabBatchLookupData, MovedFromResultIsEmpty) {
 // Copies share ownership of the frozen storage: both the copy and the
 // original observe the same words, and both stay valid.
 TEST(VocabBatchLookupData, CopiedResultSharesStorage) {
-  auto original = makeStringVectorVocabBatchLookupResult({"foo", "bar"});
+  auto original = StringVectorVocabBatchLookupData::fromWords({"foo", "bar"});
   auto copy = original;
   EXPECT_THAT(copy, ::testing::ElementsAre("foo", "bar"));
   EXPECT_THAT(original, ::testing::ElementsAre("foo", "bar"));
   EXPECT_EQ(copy[0].data(), original[0].data());
 
-  auto assigned = makeStringVectorVocabBatchLookupResult({"x"});
+  auto assigned = StringVectorVocabBatchLookupData::fromWords({"x"});
   assigned = original;
   EXPECT_THAT(assigned, ::testing::ElementsAre("foo", "bar"));
   EXPECT_EQ(assigned[1].data(), original[1].data());
@@ -173,8 +173,8 @@ TEST(VocabBatchLookupData, MultiSourceAssemblerRejectsEmptyTotal) {
 
 // _____________________________________________________________________________
 TEST(VocabBatchLookupData, ScatterBatchResultRetainsOwner) {
-  auto first = makeStringVectorVocabBatchLookupResult({"apple", "banana"});
-  auto second = makeStringVectorVocabBatchLookupResult({"cherry"});
+  auto first = StringVectorVocabBatchLookupData::fromWords({"apple", "banana"});
+  auto second = StringVectorVocabBatchLookupData::fromWords({"cherry"});
 
   MultiSourceVocabBatchAssembler assembler(3);
   const std::array<size_t, 2> firstPos{0, 2};
@@ -188,8 +188,8 @@ TEST(VocabBatchLookupData, ScatterBatchResultRetainsOwner) {
 
 // _____________________________________________________________________________
 TEST(VocabBatchLookupData, MultiSourceAssemblerDoesNotCopyBytes) {
-  auto first = makeStringVectorVocabBatchLookupResult({"alpha", "beta"});
-  auto second = makeStringVectorVocabBatchLookupResult({"gamma"});
+  auto first = StringVectorVocabBatchLookupData::fromWords({"alpha", "beta"});
+  auto second = StringVectorVocabBatchLookupData::fromWords({"gamma"});
 
   const char* alphaData = first[0].data();
   const char* gammaData = second[0].data();
@@ -282,7 +282,7 @@ TEST(PmrVocabBatchLookupData, IncrementalAppendsProduceWordsInOrder) {
 
 // _____________________________________________________________________________
 TEST(VocabBatchLookupData, ScatterSubBatchSizeMismatchThrows) {
-  auto batch = makeStringVectorVocabBatchLookupResult({"only-one"});
+  auto batch = StringVectorVocabBatchLookupData::fromWords({"only-one"});
   MultiSourceVocabBatchAssembler assembler(2);
   const std::array<size_t, 2> positions{0, 1};
   // Test a mismatch between two result positions and one batch word.
@@ -320,8 +320,8 @@ TEST(VocabBatchLookupData, MakePmrVocabBatchLookupResultCopiesWords) {
 
 // _____________________________________________________________________________
 TEST(VocabBatchLookupData, ScatterSubBatchDoubleWriteThrows) {
-  auto batch1 = makeStringVectorVocabBatchLookupResult({"first"});
-  auto batch2 = makeStringVectorVocabBatchLookupResult({"second"});
+  auto batch1 = StringVectorVocabBatchLookupData::fromWords({"first"});
+  auto batch2 = StringVectorVocabBatchLookupData::fromWords({"second"});
   MultiSourceVocabBatchAssembler assembler(2);
   const std::array<size_t, 1> pos0{0};
   assembler.scatterSubBatchResultAtPositions(std::move(batch1), pos0);
@@ -334,7 +334,7 @@ TEST(VocabBatchLookupData, ScatterSubBatchDoubleWriteThrows) {
 // Verify that a legitimately empty word does not trip any correctness check:
 // the filled/unfilled invariant is structural, not based on the view contents.
 TEST(VocabBatchLookupData, MultiSourceVocabBatchAssemblerToleratesEmptyWord) {
-  auto batch = makeStringVectorVocabBatchLookupResult({"", "x"});
+  auto batch = StringVectorVocabBatchLookupData::fromWords({"", "x"});
   MultiSourceVocabBatchAssembler assembler(2);
   const std::array<size_t, 2> positions{1, 0};
   assembler.scatterSubBatchResultAtPositions(std::move(batch), positions);
@@ -346,11 +346,12 @@ TEST(VocabBatchLookupData, MultiSourceVocabBatchAssemblerToleratesEmptyWord) {
 // _____________________________________________________________________________
 TEST(VocabBatchLookupData, MultiSourceVocabBatchAssemblerSuccessfulAssembly) {
   MultiSourceVocabBatchAssembler assembler(3);
-  auto middleBatch = makeStringVectorVocabBatchLookupResult({"middle"});
+  auto middleBatch = StringVectorVocabBatchLookupData::fromWords({"middle"});
   const std::array<size_t, 1> middlePosition{1};
   assembler.scatterSubBatchResultAtPositions(std::move(middleBatch),
                                              middlePosition);
-  auto subBatch = makeStringVectorVocabBatchLookupResult({"first", "last"});
+  auto subBatch =
+      StringVectorVocabBatchLookupData::fromWords({"first", "last"});
   const std::array<size_t, 2> subPositions{0, 2};
   assembler.scatterSubBatchResultAtPositions(std::move(subBatch), subPositions);
 
@@ -363,11 +364,12 @@ TEST(VocabBatchLookupData, MultiSourceVocabBatchAssemblerSuccessfulAssembly) {
 TEST(VocabBatchLookupData,
      MultiSourceVocabBatchAssemblerDoubleAssignmentThrows) {
   MultiSourceVocabBatchAssembler assembler(2);
-  auto firstBatch = makeStringVectorVocabBatchLookupResult({"first"});
+  auto firstBatch = StringVectorVocabBatchLookupData::fromWords({"first"});
   const std::array<size_t, 1> position{0};
   assembler.scatterSubBatchResultAtPositions(std::move(firstBatch), position);
 
-  auto overwriteBatch = makeStringVectorVocabBatchLookupResult({"overwrite"});
+  auto overwriteBatch =
+      StringVectorVocabBatchLookupData::fromWords({"overwrite"});
   AD_EXPECT_THROW_WITH_MESSAGE(
       assembler.scatterSubBatchResultAtPositions(std::move(overwriteBatch),
                                                  position),
@@ -378,7 +380,7 @@ TEST(VocabBatchLookupData,
 TEST(VocabBatchLookupData,
      MultiSourceVocabBatchAssemblerIncompleteCoverageThrows) {
   MultiSourceVocabBatchAssembler assembler(2);
-  auto subBatch = makeStringVectorVocabBatchLookupResult({"first"});
+  auto subBatch = StringVectorVocabBatchLookupData::fromWords({"first"});
   const std::array<size_t, 1> subPositions{0};
   assembler.scatterSubBatchResultAtPositions(std::move(subBatch), subPositions);
   // Leave slot 1 unassigned.
@@ -393,14 +395,15 @@ TEST(VocabBatchLookupData,
      MultiSourceVocabBatchAssemblerOutOfBoundsPositionThrows) {
   MultiSourceVocabBatchAssembler assembler(2);
   auto outOfBoundsBatch =
-      makeStringVectorVocabBatchLookupResult({"out-of-bounds"});
+      StringVectorVocabBatchLookupData::fromWords({"out-of-bounds"});
   const std::array<size_t, 1> invalidPos{2};
   AD_EXPECT_THROW_WITH_MESSAGE(
       assembler.scatterSubBatchResultAtPositions(std::move(outOfBoundsBatch),
                                                  invalidPos),
       ::testing::HasSubstr("resultPosition < assembledWordViews_.size()"));
 
-  auto subBatch = makeStringVectorVocabBatchLookupResult({"out-of-bounds"});
+  auto subBatch =
+      StringVectorVocabBatchLookupData::fromWords({"out-of-bounds"});
   const std::array<size_t, 1> otherInvalidPos{5};
   AD_EXPECT_THROW_WITH_MESSAGE(
       assembler.scatterSubBatchResultAtPositions(std::move(subBatch),
@@ -411,8 +414,8 @@ TEST(VocabBatchLookupData,
 // _____________________________________________________________________________
 TEST(VocabBatchLookupData, MarkerBatchLookupsAndMergeInInputOrder) {
   MarkerBatchLookups<2> lookups;
-  lookups[0] = makeStringVectorVocabBatchLookupResult({"apple", "cherry"});
-  lookups[1] = makeStringVectorVocabBatchLookupResult({"banana"});
+  lookups[0] = StringVectorVocabBatchLookupData::fromWords({"apple", "cherry"});
+  lookups[1] = StringVectorVocabBatchLookupData::fromWords({"banana"});
 
   IndicesAndPositionsByMarker<2> partitions;
   partitions[0].addPair(0, 0);  // apple -> pos 0

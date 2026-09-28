@@ -331,6 +331,20 @@ class StringVectorVocabBatchLookupData : public VocabBatchStorage {
     return VocabBatchLookupResult{
         std::shared_ptr<const VocabBatchStorage>{std::move(self)}};
   }
+
+  // Return the batch-lookup result for the owning `words` (one word per
+  // looked-up index, in order). This is the common pattern "store the
+  // materialized words, then point one view at each of them" in one call;
+  // callers never touch the buffer or the views. Use it only when the words
+  // really have to be materialized as `std::string`s; words that are decoded
+  // into caller-provided memory go into an `ArenaVocabBatchBuilder` instead,
+  // and words that already live in storage that outlives the result need no
+  // copy at all (see `MultiSourceVocabBatchAssembler`).
+  static VocabBatchLookupResult fromWords(std::vector<std::string> words) {
+    AD_CONTRACT_CHECK(!words.empty());
+    return asResult(
+        std::make_shared<StringVectorVocabBatchLookupData>(std::move(words)));
+  }
 };
 
 // _____________________________________________________________________________
@@ -376,16 +390,6 @@ struct IndexAndWord {
 // A type-erased input range vocabularies can use for `scanAll()`, that yields
 // all words of the vocabulary in order, together with their index.
 using VocabularyScanRange = ad_utility::InputRangeTypeErased<IndexAndWord>;
-
-// _____________________________________________________________________________
-// Construct a result from owning strings and expose views into their storage.
-inline VocabBatchLookupResult makeStringVectorVocabBatchLookupResult(
-    std::vector<std::string> words) {
-  AD_CONTRACT_CHECK(!words.empty());
-  auto data =
-      std::make_shared<StringVectorVocabBatchLookupData>(std::move(words));
-  return StringVectorVocabBatchLookupData::asResult(std::move(data));
-}
 
 // _____________________________________________________________________________
 // Decompress a single word into `destination` using `decompress(span)`.
@@ -827,7 +831,7 @@ VocabBatchLookupResult sequentialLookupBatch(const Vocab& vocab,
         return wordAsStringOrPlaceholder(vocab, idx);
       }));
 
-  return makeStringVectorVocabBatchLookupResult(std::move(words));
+  return StringVectorVocabBatchLookupData::fromWords(std::move(words));
 }
 
 // _____________________________________________________________________________
