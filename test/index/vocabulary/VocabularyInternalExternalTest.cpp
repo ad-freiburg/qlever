@@ -4,6 +4,10 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+#include <string>
+#include <vector>
+
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
@@ -111,6 +115,52 @@ TEST(VocabularyInternalExternal, AccessOperator) {
       createVocabularyFromDisk("AccessOperator2"));
 }
 
+// _____________________________________________________________________________
+TEST(VocabularyInternalExternal, LookupBatchMatchesAccessOperator) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
+                                       "epsilon"};
+  // The batch result must preserve request order across all-internal,
+  // all-external, and mixed-source requests, including duplicates.
+  auto vocab = createVocabulary("LookupBatch")(words);
+  const std::array<size_t, 7> indices{4, 1, 0, 3, 1, 2, 4};
+  auto result = vocab.lookupBatch(indices);
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
+
+  // Use the test writer's RAM cache for even IDs and read odd IDs from disk.
+  const std::array<size_t, 3> ramOnly{0, 2, 4};
+  assertLookupResultMatchesVocabularyAtIndices(
+      vocab, vocab.lookupBatch(ramOnly), ramOnly);
+  const std::array<size_t, 3> diskOnly{1, 3, 1};
+  assertLookupResultMatchesVocabularyAtIndices(
+      vocab, vocab.lookupBatch(diskOnly), diskOnly);
+
+  // Keep a mixed result alive while another lookup is performed, exercising
+  // ownership of the backing storage returned by both vocabulary sources.
+  auto retainedMixedResult = vocab.lookupBatch(indices);
+  auto subsequentResult = vocab.lookupBatch(ramOnly);
+  assertLookupResultMatchesVocabularyAtIndices(vocab, retainedMixedResult,
+                                               indices);
+  assertLookupResultMatchesVocabularyAtIndices(vocab, subsequentResult,
+                                               ramOnly);
+}
+
+// _____________________________________________________________________________
+// Verify that `VocabBatchLookupResult` string views remain valid after the
+// `VocabularyInternalExternal` is closed.
+TEST(VocabularyInternalExternal, LookupBatchResultOutlivesClose) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
+  auto vocab = createVocabulary("LookupBatchOutlivesClose")(words);
+  const std::array<size_t, 4> indices{0, 1, 2, 3};
+  auto result = vocab.lookupBatch(indices);
+  vocab.close();
+
+  EXPECT_THAT(result,
+              ::testing::ElementsAre("alpha", "beta", "gamma", "delta"));
+}
+
+// _____________________________________________________________________________
 TEST(VocabularyInternalExternal, EmptyVocabulary) {
   testEmptyVocabulary(createVocabulary("EmptyVocabulary"));
 }
