@@ -477,6 +477,8 @@ addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
 addLinkAndDiscoverTest(RandomTest)
 
+addLinkAndDiscoverTest(RegisteredIoUringReaderTest)
+
 addLinkAndDiscoverTest(FindUndefRangesTest engine)
 
 addLinkAndDiscoverTest(AddCombinedRowToTableTest engine qlever_util)
