@@ -38,6 +38,8 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(FsstScratchBufferBenchmark fsst)
 
+    addAndLinkBenchmark(SerializerMicroBenchmark engine sparqlParser qlever_util)
+
     addAndLinkBenchmark(PrefixCompressorBenchmark)
 
     addAndLinkBenchmark(VocabBatchLookupBenchmark vocabulary)
