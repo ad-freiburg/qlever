@@ -404,7 +404,7 @@ std::vector<Arm> tabularArms(ad_utility::MediaType mediaType) {
 class SerializerMicroBenchmark : public BenchmarkInterface {
  private:
   static constexpr size_t NUM_TRIPLES = 1'000'000;
-  static constexpr size_t NUM_TRIALS = 10;
+  static constexpr size_t NUM_TRIALS = 3;
   static constexpr double MIN_TRIAL_SECONDS = 10.0;
   std::vector<EvaluatedTriple> mixedTriples_;
   std::vector<EvaluatedTriple> titleTriples_;
