@@ -9,6 +9,7 @@
 
 #include "index/vocabulary/VocabBlockCache.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -32,13 +33,8 @@ VocabBlockCache::VocabBlockCache(VocabBlockCache&& other) noexcept
       numHits_{std::exchange(other.numHits_, 0)},
       numMisses_{std::exchange(other.numMisses_, 0)},
       numEvictions_{std::exchange(other.numEvictions_, 0)} {
-  // The moved-from slots keep dangling `data_` pointers, but they are never
-  // dereferenced: the moved-from instance has no storage anymore, and any
-  // `resize` reassigns all pointers. Still, clear them for hygiene.
-  for (auto& slot : other.slots_) {
-    slot.data_ = nullptr;
-    slot.occupied_ = false;
-  }
+  // The moved-from `other` transferred its storage above; its slots are only
+  // ever destroyed, cleared, or reassigned afterwards, never dereferenced.
 }
 
 // _____________________________________________________________________________
@@ -51,41 +47,44 @@ VocabBlockCache& VocabBlockCache::operator=(VocabBlockCache&& other) noexcept {
     numHits_ = std::exchange(other.numHits_, 0);
     numMisses_ = std::exchange(other.numMisses_, 0);
     numEvictions_ = std::exchange(other.numEvictions_, 0);
-    for (auto& slot : other.slots_) {
-      slot.data_ = nullptr;
-      slot.occupied_ = false;
-    }
   }
   return *this;
 }
 
 // _____________________________________________________________________________
 size_t VocabBlockCache::size() const {
-  size_t occupied = 0;
-  for (const auto& slot : slots_) {
-    occupied += slot.occupied_ ? 1 : 0;
-  }
-  return occupied;
+  return std::count_if(slots_.begin(), slots_.end(),
+                       [](const Slot& slot) { return slot.occupied_; });
 }
 
 // _____________________________________________________________________________
 void VocabBlockCache::resize(size_t numBlocks) {
-  clear();
-  slots_.resize(numBlocks);
-  hand_ = 0;
-  if (numBlocks == 0) {
-    return;
+  // Guard the allocation-size multiplication: an unchecked wrap would
+  // allocate an undersized chunk and corrupt the heap on the first `insert`.
+  if (numBlocks > SIZE_MAX / kBlockSize) {
+    AD_THROW("vocabulary block cache size " + std::to_string(numBlocks) +
+             " blocks would overflow the allocation size");
   }
-  void* storage = nullptr;
-  if (::posix_memalign(&storage, kBlockSize, numBlocks * kBlockSize) != 0) {
+  // Build the new state in locals first and only commit once every
+  // potentially throwing step succeeded, so a failed allocation keeps the
+  // previous content untouched (strong guarantee).
+  void* raw = nullptr;
+  if (numBlocks > 0 &&
+      ::posix_memalign(&raw, kBlockSize, numBlocks * kBlockSize) != 0) {
     AD_THROW("Failed to allocate " + std::to_string(numBlocks) + " blocks of " +
              std::to_string(kBlockSize) +
              " bytes for the vocabulary block cache");
   }
-  storage_ = static_cast<char*>(storage);
+  std::unique_ptr<char[], FreeDeleter> newStorage{static_cast<char*>(raw)};
+  std::vector<Slot> newSlots;
+  newSlots.resize(numBlocks);
   for (size_t i = 0; i < numBlocks; ++i) {
-    slots_[i].data_ = storage_ + i * kBlockSize;
+    newSlots[i].data_ = newStorage.get() + i * kBlockSize;
   }
+  clear();
+  storage_ = std::move(newStorage);
+  slots_ = std::move(newSlots);
+  hand_ = 0;
 }
 
 // _____________________________________________________________________________
@@ -142,14 +141,17 @@ void VocabBlockCache::insert(dev_t dev, ino_t ino, uint64_t blockNo,
   slot.ino_ = ino;
   slot.blockNo_ = blockNo;
   slot.occupied_ = true;
-  slot.referenced_ = true;
+  // Fresh inserts start unreferenced: only `lookup` (and overwrite-insert of
+  // an existing key) sets the bit, so an explicitly re-referenced block wins
+  // the next eviction sweep over a merely inserted one.
+  slot.referenced_ = false;
   std::memcpy(slot.data_, data, kBlockSize);
   hand_ = (hand_ + 1) % slots_.size();
 }
 
 // _____________________________________________________________________________
 void VocabBlockCache::clear() {
-  ::free(std::exchange(storage_, nullptr));
+  storage_.reset();
   slots_.clear();
   slots_.shrink_to_fit();
   hand_ = 0;

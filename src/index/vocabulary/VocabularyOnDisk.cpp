@@ -281,17 +281,27 @@ void VocabularyOnDisk::readBatchCached(ad_utility::BatchManagerBase& manager,
       }
       continue;
     }
-    // Leading partial block: never cached.
+    // Leading block: fully covered (and thus cacheable) when the read starts
+    // at a block boundary, otherwise a partial edge that is never cached.
     uint64_t firstBlockEnd = (firstBlock + 1) * blockSize;
-    queueMiss(firstBlockEnd - fileOffset, fileOffset, target, std::nullopt);
+    if (fileOffset == firstBlock * blockSize) {
+      serveFullBlock(firstBlock, target);
+    } else {
+      queueMiss(firstBlockEnd - fileOffset, fileOffset, target, std::nullopt);
+    }
     // Fully covered middle blocks: served from the cache on hits.
     for (uint64_t blockNo = firstBlock + 1; blockNo < lastBlock; ++blockNo) {
       serveFullBlock(blockNo, target + (blockNo * blockSize - fileOffset));
     }
-    // Trailing partial block: never cached.
+    // Trailing block: fully covered (and thus cacheable) when the read ends
+    // at a block boundary, otherwise a partial edge that is never cached.
     uint64_t lastBlockStart = lastBlock * blockSize;
-    queueMiss(fileOffset + size - lastBlockStart, lastBlockStart,
-              target + (lastBlockStart - fileOffset), std::nullopt);
+    if (fileOffset + size == (lastBlock + 1) * blockSize) {
+      serveFullBlock(lastBlock, target + (lastBlockStart - fileOffset));
+    } else {
+      queueMiss(fileOffset + size - lastBlockStart, lastBlockStart,
+                target + (lastBlockStart - fileOffset), std::nullopt);
+    }
   }
 
   if (!missSizes.empty()) {

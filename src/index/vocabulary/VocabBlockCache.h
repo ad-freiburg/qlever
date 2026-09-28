@@ -14,6 +14,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <memory>
 #include <vector>
 
 namespace ad_utility::vocab {
@@ -35,8 +37,9 @@ namespace ad_utility::vocab {
 // * Tag index keyed by `(device, inode, block number)`; the device+inode pair
 //   identifies the underlying file, so entries from different vocabularies
 //   never alias.
-// * Clock-hand eviction: each slot carries a reference bit that `lookup` sets
-//   and eviction clears, so frequently reused blocks survive.
+// * Clock-hand eviction: each slot carries a reference bit that `lookup` (and
+//   re-insertion of the same key) sets and eviction clears, so frequently
+//   reused blocks survive over merely inserted ones.
 // * Per-thread sharding: each thread owns its shard (see
 //   `threadLocalVocabBlockCache`), so the lookup path takes no locks.
 //
@@ -86,20 +89,34 @@ class VocabBlockCache {
     ino_t ino_ = 0;
     uint64_t blockNo_ = 0;
     bool occupied_ = false;
-    // Clock reference bit: set by `lookup` and `insert`, cleared by eviction.
+    // Clock reference bit: set by `lookup` and by overwrite-insert of an
+    // existing key, cleared by eviction. Fresh inserts start cleared.
     bool referenced_ = false;
     // Points into `storage_`, `nullptr` when `capacity() == 0`.
     char* data_ = nullptr;
   };
 
-  // Find the slot holding `key`, or `nullptr` if absent.
+  // Find the slot holding `key`, or `nullptr` if absent. Linear scan: the
+  // capacity is small in practice (tens of blocks, see the
+  // `vocab-block-cache-size` runtime parameter), so a hash index would only
+  // add overhead. Revisit if profiling ever shows this lookup as hot.
   Slot* findSlot(dev_t dev, ino_t ino, uint64_t blockNo);
   // Free `storage_` and reset all members.
   void clear();
 
+  // Deleter for the `posix_memalign`-allocated `storage_` chunk below (plain
+  // `unique_ptr<char[]>` would release with `delete[]`, which must not be
+  // paired with `posix_memalign`).
+  struct FreeDeleter {
+    void operator()(void* p) const noexcept { ::free(p); }
+  };
+
   std::vector<Slot> slots_;
-  // Single aligned chunk of `capacity() * kBlockSize` bytes (or `nullptr`).
-  char* storage_ = nullptr;
+  // Single aligned chunk of `capacity() * kBlockSize` bytes (or `nullptr`
+  // when `capacity() == 0`). Exclusive ownership: acquisition happens only
+  // in `resize`, release only in `clear` (called by the destructor and the
+  // move assignment), so the lifetime needs no manual `::free` calls.
+  std::unique_ptr<char[], FreeDeleter> storage_;
   // Clock-hand position for eviction.
   size_t hand_ = 0;
   uint64_t numHits_ = 0;

@@ -42,8 +42,11 @@ void expectCachedBlock(VocabBlockCache& cache, dev_t dev, ino_t ino,
                        const std::array<char, blockSize>& expected) {
   const char* cached = cache.lookup(dev, ino, blockNo);
   ASSERT_NE(cached, nullptr) << "block " << blockNo << " should be cached";
-  EXPECT_EQ(std::string_view{cached, blockSize},
-            std::string_view{expected.data(), blockSize});
+  // NOTE: no braced-init with a comma directly inside EXPECT_EQ (the
+  // preprocessor would split the macro arguments); compare named views.
+  std::string_view actual{cached, blockSize};
+  std::string_view want{expected.data(), blockSize};
+  EXPECT_EQ(actual, want);
 }
 
 constexpr dev_t testDev = 42;
