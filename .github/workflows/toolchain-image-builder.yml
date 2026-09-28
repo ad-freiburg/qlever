@@ -14,10 +14,8 @@ on:
     paths:
       - misc/ci-images/Containerfile.*
       - .github/workflows/toolchain-image-builder.yml
-  pull_request:
-    paths:
-      - misc/ci-images/Containerfile.*
-      - .github/workflows/toolchain-image-builder.yml
+  # Minimal PR profile 2026-09-28: no pull_request trigger; fork PRs only
+  # run Build and test, Format check and Codespell. Run via workflow_dispatch.
 
 permissions:
   contents: read

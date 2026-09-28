@@ -1,9 +1,9 @@
 name: Build and test
 
-# On-demand hosted build + gtest verification (2026-09-28): one gcc13
+# The only build of fork PR CI (minimal PR profile, 2026-09-28): one gcc13
 # Release build plus ctest on a GitHub-hosted ubuntu-24.04 runner, with
-# ccache via actions/cache. Agents use it instead of queueing on the
-# self-hosted Wolga/Ural runners:
+# ccache via actions/cache. No sanitizers, no other compilers; those legs
+# run only on demand (workflow_dispatch). Also usable on demand for any ref:
 #     ghq workflow run build-and-test.yml -R marvin7122/qlever \
 #       -f ref=<branch-or-sha> -f targets="<t1> <t2>"
 # `targets` is a space-separated list of CMake targets. Test binaries are
@@ -15,13 +15,11 @@ name: Build and test
 # - push to master: keeps a warm ccache on the default branch. GitHub only
 #   shares caches from the default branch, so dispatches on other refs
 #   would otherwise start cold.
-# - pull_request: only when this file changes (self-test of the workflow).
+# - pull_request: every push to a 'ci'-labeled PR (the PR build + ctest).
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
-    paths:
-      - '.github/workflows/build-and-test.yml'
   push:
     branches: [ master ]
   workflow_dispatch:

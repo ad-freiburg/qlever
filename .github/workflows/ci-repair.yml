@@ -16,6 +16,9 @@ on:
       - Check index version
       - Format check
     types: [completed]
+    # Minimal PR profile 2026-09-28: repair master runs only. PR runs do not
+    # trigger CI repair (no workflow_run run is created for PR branches).
+    branches: [master]
 
 permissions:
   contents: write

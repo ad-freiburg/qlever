@@ -18,11 +18,12 @@ name: Wolga native
 # Legs without a runnable image are present below as commented placeholders.
 
 on:
-  push:
-    branches: [ master ]
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-  merge_group:
+  # Minimal PR profile 2026-09-28: the Wolga fleet is paused (it overloaded
+  # the host), so no automatic trigger may queue on `wolga-img`. No
+  # pull_request trigger (fork PRs only run Build and test, Format check and
+  # Codespell) and no push/merge_group trigger (master legs need Wolga).
+  # Run via workflow_dispatch once Wolga is back.
+  workflow_dispatch:
 
 concurrency:
   group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
