@@ -180,6 +180,8 @@ addLinkAndDiscoverTest(RegexSetTest qlever_util)
 
 addLinkAndDiscoverTest(BinaryDiffApplierTest qlever_util)
 
+addLinkAndDiscoverTestNoLibs(SwarDelimiterPackerTest)
+
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
 
 addLinkAndDiscoverTest(CryptographicHashUtilsTest qlever_util)

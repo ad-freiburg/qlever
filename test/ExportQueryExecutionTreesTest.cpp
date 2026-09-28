@@ -1536,7 +1536,35 @@ TEST(ExportQueryExecutionTrees, BinaryExport) {
   ASSERT_EQ(ad_utility::testing::IntId(31), id3);
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
+// The `use-swar-export-delimiters` runtime parameter switches the legacy
+// SELECT CSV/TSV export loop between scalar character appends and packed
+// `ad_utility::SwarDelimiterPacker` writes for the field separator and the
+// end-of-row newline. The output must be byte-identical either way, and the
+// parameter must default to off.
+TEST(ExportQueryExecutionTrees, SwarExportDelimitersByteIdentical) {
+  EXPECT_FALSE(
+      getRuntimeParameter<&RuntimeParameters::useSwarExportDelimiters_>());
+
+  std::string kg =
+      "<a> <p1> <o1> . <a> <p2> \"lit\" . <b> <p1> <o2> . <b> <p2> <o3>";
+  std::string query = "SELECT ?s ?p ?o WHERE {?s ?p ?o} ORDER BY ?s ?p ?o";
+
+  for (auto mediaType :
+       {ad_utility::MediaType::csv, ad_utility::MediaType::tsv}) {
+    std::string baseline = runQueryStreamableResult(kg, query, mediaType);
+    std::string swarResult;
+    {
+      auto cleanup = setRuntimeParameterForTest<
+          &RuntimeParameters::useSwarExportDelimiters_>(true);
+      swarResult = runQueryStreamableResult(kg, query, mediaType);
+    }
+    EXPECT_EQ(baseline, swarResult);
+  }
+  EXPECT_FALSE(
+      getRuntimeParameter<&RuntimeParameters::useSwarExportDelimiters_>());
+}
+
 TEST(ExportQueryExecutionTrees, CornerCases) {
   std::string kg = "<s> <p> <o>";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";

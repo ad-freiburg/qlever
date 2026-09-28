@@ -321,6 +321,13 @@ struct RuntimeParameters {
   // same either way.
   Bool constructSkipUnboundSimd_{false, "construct-skip-unbound-simd"};
 
+  // If set to `true`, the legacy (non-V2) CSV/TSV export of SELECT query
+  // results packs the per-field delimiter and end-of-row newline via
+  // `ad_utility::SwarDelimiterPacker` (a single unaligned store) instead of
+  // appending them as individual scalar characters. Default `false` so that
+  // master's export behaviour and byte output are unchanged.
+  Bool useSwarExportDelimiters_{false, "use-swar-export-delimiters"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
