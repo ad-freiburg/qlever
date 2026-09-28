@@ -22,20 +22,21 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "absl/strings/str_cat.h"
 #include "backports/span.h"
+#include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 
 namespace ad_benchmark {
 namespace {
-
-using PolymorphicVocabulary;
 
 class PolymorphicVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
  private:
@@ -54,6 +55,9 @@ class PolymorphicVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
   std::vector<size_t> batch_;
   TempDirCleanup cleanup_;
   PolymorphicVocabulary vocab_;
+  // The same files, opened with the concrete type of the `OnDiskCompressed`
+  // alternative (no `std::visit`), to separate the dispatch from the lookup.
+  CompressedVocabulary<VocabularyInternalExternal> concrete_;
 
   // Write `numWords` deterministic Wikidata-like IRIs to disk and read them
   // back into a vocabulary with the given basename.
@@ -91,6 +95,7 @@ class PolymorphicVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
     std::filesystem::remove_all(cleanup_.dir_, ec);
     std::filesystem::create_directories(cleanup_.dir_, ec);
     vocab_ = buildVocabulary((cleanup_.dir_ / "vocab").string(), numWords);
+    concrete_.open((cleanup_.dir_ / "vocab").string());
 
     constexpr size_t batchSize = 100'000;
     batch_.reserve(batchSize);
@@ -127,8 +132,19 @@ class PolymorphicVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
         parseEnvironmentSize(std::getenv("POLY_VOCAB_E2E_REPETITIONS"), 5);
     AD_CONTRACT_CHECK(repetitions > 0);
     AD_CONTRACT_CHECK(repetitions <= maxRepetitions);
+    // Optional filter for profiling a single measurement: if set, only the
+    // measurements whose name contains this substring are run.
+    const char* onlyMeasurement = std::getenv("POLY_VOCAB_ONLY_MEASUREMENT");
+    const auto addMeasurement = [onlyMeasurement](auto& group,
+                                                  const std::string& name,
+                                                  auto measurement) {
+      if (onlyMeasurement == nullptr ||
+          name.find(onlyMeasurement) != std::string::npos) {
+        group.addMeasurement(name, std::move(measurement));
+      }
+    };
 
-    group.addMeasurement("sequential operator[]", [&] {
+    addMeasurement(group, "sequential operator[]", [&] {
       size_t totalBytes = 0;
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
         for (size_t index : batch_) {
@@ -138,7 +154,7 @@ class PolymorphicVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
       }
       return totalBytes;
     });
-    group.addMeasurement("batched lookupBatch", [&] {
+    addMeasurement(group, "batched lookupBatch", [&] {
       size_t totalBytes = 0;
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
         auto result = vocab_.lookupBatch(batch_);
@@ -148,12 +164,22 @@ class PolymorphicVocabLookupBatchEndToEndBenchmark : public BenchmarkInterface {
       }
       return totalBytes;
     });
-    group.addMeasurement("batched lookupBatch with builder", [&] {
+    addMeasurement(group, "batched lookupBatch with builder", [&] {
       size_t totalBytes = 0;
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
         ArenaVocabBatchBuilder builder(batch_.size());
         vocab_.lookupBatch(batch_, builder);
         auto result = std::move(builder).finalize();
+        for (const auto& word : result) {
+          totalBytes += word.size();
+        }
+      }
+      return totalBytes;
+    });
+    addMeasurement(group, "concrete lookupBatch (no dispatch)", [&] {
+      size_t totalBytes = 0;
+      for (size_t repetition = 0; repetition < repetitions; ++repetition) {
+        auto result = concrete_.lookupBatch(batch_);
         for (const auto& word : result) {
           totalBytes += word.size();
         }
