@@ -75,9 +75,11 @@ class VocabularyInMemory
   }
 
   //____________________________________________________________________________
-  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
-  }
+  // Look up the words at `indices`. If the runtime parameter
+  // `vocab-lookup-prefetch-distance` is nonzero, the offset and data lines of
+  // the words that many positions ahead are software-prefetched (see
+  // `ad_utility::forEachWordPrefetched`); the result is the same.
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {

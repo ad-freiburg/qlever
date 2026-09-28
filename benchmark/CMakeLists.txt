@@ -51,6 +51,8 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(FastNumberFormatterBenchmark qlever_util)
 
+    addAndLinkBenchmark(PrefetchingBenchmark engine)
+
     # Standalone main(), so not via addAndLinkBenchmark (which links
     # benchmarkWithMain).
     add_executable(BranchlessDispatcherBenchmark
