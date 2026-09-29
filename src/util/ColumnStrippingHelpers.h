@@ -41,13 +41,14 @@ class VarsRequiredFromSubtree {
   // variables to varsRequiredFromSubtree_ in case they are not already part of
   // varsRequiredFromSubtree_.
   void add(const Variable& varForOperation) {
-    if (!ad_utility::contains(*varsRequiredFromSubtree_, varForOperation)) {
-      if (varsRequiredFromSubtree_ == &varsRequestedFromParentTree_) {
-        newVariables_ = varsRequestedFromParentTree_;
-        varsRequiredFromSubtree_ = &newVariables_;
-      }
-      newVariables_.insert(varForOperation);
+    if (ad_utility::contains(*varsRequiredFromSubtree_, varForOperation)) {
+      return;
     }
+    if (varsRequiredFromSubtree_ == &varsRequestedFromParentTree_) {
+      newVariables_ = varsRequestedFromParentTree_;
+      varsRequiredFromSubtree_ = &newVariables_;
+    }
+    newVariables_.insert(varForOperation);
   }
 
   // Return all variables that are required form the subtree after having added
