@@ -11,7 +11,9 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_MERGEPIPELINE_H
 
 #include <atomic>
+#include <deque>
 #include <exception>
+#include <future>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -24,9 +26,13 @@
 #include "index/vocabulary_merger/VocabularyMetaData.h"
 #include "index/vocabulary_merger/VocabularyWriter.h"
 #include "index/vocabulary_merger/WordBatch.h"
+#include "util/GlobalExecutor.h"
 #include "util/Iterators.h"
+#include "util/Log.h"
+#include "util/PostAndGetFuture.h"
 #include "util/RegexSet.h"
 #include "util/TaskQueue.h"
+#include "util/Timer.h"
 
 // The asynchronous part of the merging pipeline of the vocabulary merger (see
 // the comment above `mergeVocabulary` in `index/VocabularyMerger.h`), which is
@@ -52,8 +58,7 @@ class VocabularyMergePipelineImpl {
   // use, and after every queue that its tasks push to: the tasks of the
   // `wordWriterQueue_` use the `vocabularyWriter_` and push to both of the
   // other queues, and the tasks of the `idMapWriterQueue_` use the
-  // `idMapBatchWriter_`. The relative order of the `idMapWriterQueue_` and the
-  // `mergedWordsDestructionQueue_` is therefore arbitrary.
+  // `idMapBatchWriter_`.
   IdMapBatchWriterT idMapBatchWriter_;
   VocabularyWriter vocabularyWriter_;
   // The first exception that one of the stages threw, if any, and a flag that
@@ -70,10 +75,20 @@ class VocabularyMergePipelineImpl {
   std::mutex exceptionMutex_;
   ad_utility::TaskQueue<false> idMapWriterQueue_{
       VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Writing the ID maps"};
-  ad_utility::TaskQueue<false> mergedWordsDestructionQueue_{
-      VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Destroying the merged words"};
+  // The destruction of the merged words of the batches runs on the global
+  // thread pool (see `util/GlobalExecutor.h`), one task per batch; these are
+  // the tasks that are not known to be done yet, oldest first. Freeing the
+  // strings of a batch is slow enough (and slower still on a thread other than
+  // the ones that allocated them) that a single thread of its own fell behind.
+  std::deque<std::future<void>> pendingDestructions_;
+  std::mutex pendingDestructionsMutex_;
   ad_utility::TaskQueue<false> wordWriterQueue_{
       VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Writing the merged vocabulary"};
+  // The time that each of the three stages has spent working (as opposed to
+  // waiting for its queue), in milliseconds, for the log line of `finish()`.
+  std::atomic<uint64_t> writerBusyMs_{0};
+  std::atomic<uint64_t> idMapBusyMs_{0};
+  std::atomic<uint64_t> destructionBusyMs_{0};
 
  public:
   // Create the pipeline. The `idMapFilenames` are the files of the partial ID
@@ -99,27 +114,54 @@ class VocabularyMergePipelineImpl {
                            &blankNodeIriRegexes]() mutable {
       runAndCatchException([this, &batch, &wordCallback,
                             &blankNodeIriRegexes]() {
+        ad_utility::Timer timer{ad_utility::Timer::Started};
         auto idMapBatch = vocabularyWriter_.writeWordsToVocabulary(
             batch.uniqueWords_, std::move(batch.localIdxMappings_),
             wordCallback, blankNodeIriRegexes);
+        writerBusyMs_ += timer.msecs().count();
 
         // The merged words are no longer needed. Their destruction (which
         // involves freeing one string per word) is expensive enough to be done
         // by yet another thread. NOTE: The `clear()` is the actual work of this
         // task; it happens on the queue's thread, as does the destruction of
         // the (then empty) buffers.
-        mergedWordsDestructionQueue_.push(
-            [buffers = std::move(batch.mergedWordBuffers_)]() mutable {
-              buffers.clear();
-            });
+        destroyOnPool(std::move(batch.mergedWordBuffers_));
 
         idMapWriterQueue_.push([this, idMapBatch = std::move(idMapBatch)]() {
           runAndCatchException([this, &idMapBatch]() {
+            ad_utility::Timer timer{ad_utility::Timer::Started};
             idMapBatchWriter_.writeBatch(idMapBatch);
+            idMapBusyMs_ += timer.msecs().count();
           });
         });
       });
     });
+  }
+
+  // Hand the destruction of the `buffers` of a batch to the global thread
+  // pool, and first wait for the oldest pending destructions if too many of
+  // them are in flight (they hold the memory of their batches).
+  template <typename Buffers>
+  void destroyOnPool(Buffers buffers) {
+    waitForPendingDestructions(VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE);
+    auto future = ad_utility::postAndGetFuture(
+        ad_utility::globalExecutor(),
+        [this, buffers = std::move(buffers)]() mutable {
+          ad_utility::Timer timer{ad_utility::Timer::Started};
+          buffers.clear();
+          destructionBusyMs_ += timer.msecs().count();
+        });
+    std::lock_guard lock{pendingDestructionsMutex_};
+    pendingDestructions_.push_back(std::move(future));
+  }
+
+  // Wait until at most `maxNumPending` destructions are pending.
+  void waitForPendingDestructions(size_t maxNumPending) {
+    std::lock_guard lock{pendingDestructionsMutex_};
+    while (pendingDestructions_.size() > maxNumPending) {
+      pendingDestructions_.front().get();
+      pendingDestructions_.pop_front();
+    }
   }
 
   // Whether one of the stages has thrown an exception. The caller should then
@@ -133,7 +175,7 @@ class VocabularyMergePipelineImpl {
   VocabularyMetaData finish() {
     // NOTE: The order is important, see the declaration of the members.
     wordWriterQueue_.finish();
-    mergedWordsDestructionQueue_.finish();
+    waitForPendingDestructions(0);
     idMapWriterQueue_.finish();
     // Propagate an exception from one of the stages to the caller. NOTE: All
     // the queues have been joined, so reading `exception_` here is safe. The ID
@@ -145,6 +187,11 @@ class VocabularyMergePipelineImpl {
     }
     idMapBatchWriter_.finish();
     vocabularyWriter_.logFinalProgress();
+    AD_LOG_INFO << "Time spent by the stages of the vocabulary merge: writing "
+                   "the vocabulary "
+                << writerBusyMs_ << " ms, writing the ID maps " << idMapBusyMs_
+                << " ms, destroying the merged words " << destructionBusyMs_
+                << " ms" << std::endl;
     return std::move(vocabularyWriter_.metaData());
   }
 

@@ -125,10 +125,12 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
     WordBatchBuilder builder;
     auto push = makePush(pipeline, wordCallback, noRegexes);
     // `"a"` is only in the first partial vocabulary, `"b"` in both (and
-    // externalized in the second one), `"c"` only in the second one.
-    builder.addMergedWords({makeQueueWord("\"a\"", false, 0, 0),
-                            makeQueueWord("\"b\"", false, 0, 1),
-                            makeQueueWord("\"b\"", true, 1, 0),
+    // externalized in the second one, which the merge has folded into the
+    // merged word, see `QueueWord::moreOccurrences_`), `"c"` only in the
+    // second one.
+    auto b = makeQueueWord("\"b\"", true, 0, 1);
+    b.moreOccurrences_.emplace_back(1, 0);
+    builder.addMergedWords({makeQueueWord("\"a\"", false, 0, 0), std::move(b),
                             makeQueueWord("\"c\"", false, 1, 1)},
                            lessThan, push);
     builder.finish(push);

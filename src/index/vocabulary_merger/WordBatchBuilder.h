@@ -55,10 +55,18 @@ class WordBatchBuilder {
   // Whether any of the occurrences of the `pendingWord_` that have been seen
   // so far was marked as external.
   bool pendingWordIsExternal_ = false;
-  // The index mappings for the occurrences of the `pendingWord_` that have
-  // been seen so far. Their `indexOfWordInBatch_` is only filled in by
+  // The occurrences of the `pendingWord_` live in two places, both of which
+  // `commitPendingWord` writes to the batch directly. The merged word from
+  // which the `pendingWord_` was taken (if it still lives in one of the
+  // `mergedWordBuffers_` of the `currentBatch_`, which is not the case for a
+  // word that was carried over from the previous batch) holds its own
+  // occurrences, see `QueueWord::moreOccurrences_`; the `pendingMappings_`
+  // hold the occurrences of further merged words that were equal to the
+  // `pendingWord_` (the same word at the boundary of two buffers), and those
+  // of a carried-over word. Their `indexOfWordInBatch_` is only filled in by
   // `commitPendingWord`. NOTE: A word occurs at most once per partial
   // vocabulary, so this vector stays small.
+  const QueueWord* pendingQueueWord_ = nullptr;
   std::vector<LocalIdxToBatchMapping> pendingMappings_;
   // The batch that is currently being filled.
   WordBatch currentBatch_{VOCAB_MERGER_WORD_BATCH_SIZE};
@@ -75,10 +83,13 @@ class WordBatchBuilder {
   // (see the class comment above). Whenever a batch is full (see
   // `VOCAB_MERGER_WORD_BATCH_SIZE` and `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`),
   // it is handed to the `batchCallback`. The `QueueWord`s must be passed in
-  // alphabetical order wrt the `comparator` (also across multiple calls). NOTE:
-  // This order is only checked if the expensive checks are enabled (see
-  // `AD_EXPENSIVE_CHECK`), because the additional comparison per word is rather
-  // costly.
+  // alphabetical order wrt the `comparator` (also across multiple calls), and
+  // the words of a single `buffer` must be distinct (the merge folds the
+  // occurrences of a word within a buffer into a single merged word, see
+  // `QueueWord::moreOccurrences_`), so that only the first word of a buffer can
+  // be equal to the last word of the previous one. NOTE: The order is only
+  // checked if the expensive checks are enabled (see `AD_EXPENSIVE_CHECK`),
+  // because the additional comparison per word is rather costly.
   CPP_template(typename W, typename F)(
       requires WordComparator<W> CPP_and WordBatchCallback<
           F>) void addMergedWords(std::vector<QueueWord> buffer,
@@ -97,10 +108,14 @@ class WordBatchBuilder {
   CPP_template(typename F)(requires WordBatchCallback<F>) void flush(
       const F& batchCallback);
 
-  // Add the `pendingWord_` and its `pendingMappings_` to the `currentBatch_`.
-  // This must only be called once it is known that no further occurrence of
-  // that word can arrive. Do nothing if there is no pending word.
+  // Add the `pendingWord_` and its occurrences to the `currentBatch_`. This
+  // must only be called once it is known that no further occurrence of that
+  // word can arrive. Do nothing if there is no pending word.
   void commitPendingWord();
+
+  // Append the occurrences of the merged `word` (its own and the ones folded
+  // into it, see `QueueWord::moreOccurrences_`) to the `pendingMappings_`.
+  void appendOccurrencesToPendingMappings(const QueueWord& word);
 
   // Reset the `currentBatch_` and allocate its buffers.
   void startNewBatch();
@@ -119,9 +134,25 @@ CPP_template_def(typename W,
   currentBatch_.mergedWordBuffers_.push_back(std::move(buffer));
   const auto& words = currentBatch_.mergedWordBuffers_.back();
 
-  // Iterate (avoid duplicates).
+  // Iterate (avoid duplicates). NOTE: The merge has already folded the
+  // occurrences of a word within a buffer into a single merged word (see
+  // `QueueWord::moreOccurrences_`), so the words of a buffer are distinct, and
+  // only its first word can be equal to the `pendingWord_` (the same word at
+  // the boundary of two buffers). The comparison is therefore only done for
+  // that first word: reading the bytes of every word (which are spread over the
+  // heap) was the most expensive part of this loop. The occurrences of a word
+  // are written to the batch straight from the merged word when the word is
+  // committed, see `commitPendingWord`.
+  bool isFirstWordOfBuffer = true;
   for (const auto& top : words) {
-    if (!hasPendingWord_ || top.iriOrLiteral() != pendingWord_) {
+    if (isFirstWordOfBuffer && hasPendingWord_ &&
+        top.iriOrLiteral() == pendingWord_) {
+      // If a word appears with different values for `isExternal`, then we
+      // externalize it. NOTE: This is only correct because the word is still
+      // held back, and hence has not been written to the vocabulary yet.
+      pendingWordIsExternal_ = pendingWordIsExternal_ || top.isExternal();
+      appendOccurrencesToPendingMappings(top);
+    } else {
       AD_EXPENSIVE_CHECK(
           !hasPendingWord_ || comparator(pendingWord_, top.iriOrLiteral()),
           "Total vocabulary order violated for ", pendingWord_, " and ",
@@ -131,22 +162,11 @@ CPP_template_def(typename W,
       commitPendingWord();
       pendingWord_ = top.iriOrLiteral();
       pendingWordIsExternal_ = top.isExternal();
+      pendingQueueWord_ = &top;
       hasPendingWord_ = true;
-    } else {
-      // If a word appears with different values for `isExternal`, then we
-      // externalize it. NOTE: This is only correct because the word is still
-      // held back, and hence has not been written to the vocabulary yet.
-      pendingWordIsExternal_ = pendingWordIsExternal_ || top.isExternal();
     }
+    isFirstWordOfBuffer = false;
     currentBatchWordSizeInBytes_ += top.iriOrLiteral().size();
-    // Remember the local index of this occurrence of the `pendingWord_`. The
-    // index of the word within its batch is only filled in by
-    // `commitPendingWord`, so we write the dummy `indexOfWordInBatchDummy` for
-    // now. The actual entry of the ID map is only created (and written) once
-    // the global ID of the word is known.
-    pendingMappings_.push_back(LocalIdxToBatchMapping{
-        static_cast<uint32_t>(top.partialFileId_), indexOfWordInBatchDummy,
-        VocabIndex::make(top.id())});
   }
 
   // A batch is complete as soon as one of the two limits is reached.
@@ -184,6 +204,12 @@ CPP_template_def(typename F)(
   std::unique_ptr<std::string> carriedOverWord;
   if (hasPendingWord_) {
     carriedOverWord = std::make_unique<std::string>(pendingWord_);
+    // The merged word itself goes with the batch, so its occurrences have to
+    // be copied as well.
+    if (pendingQueueWord_ != nullptr) {
+      appendOccurrencesToPendingMappings(*pendingQueueWord_);
+      pendingQueueWord_ = nullptr;
+    }
   }
   batchCallback(std::move(currentBatch_));
   startNewBatch();
@@ -196,17 +222,23 @@ CPP_template_def(typename F)(
 // _____________________________________________________________________________
 inline void WordBatchBuilder::commitPendingWord() {
   if (!hasPendingWord_) {
-    AD_CORRECTNESS_CHECK(pendingMappings_.empty());
+    AD_CORRECTNESS_CHECK(pendingMappings_.empty() &&
+                         pendingQueueWord_ == nullptr);
     return;
   }
   auto& mappings = currentBatch_.localIdxMappings_.mappings_;
   size_t& numMappings = currentBatch_.localIdxMappings_.numMappings_;
+  const size_t numNewMappings =
+      (pendingQueueWord_ == nullptr
+           ? 0
+           : 1 + pendingQueueWord_->moreOccurrences_.size()) +
+      pendingMappings_.size();
   // The mappings are allocated in advance (see `startNewBatch`), so the
   // following `resize` (which would have to copy the mappings that are already
   // in the buffer) typically is a no-op, and the writes below are simple
   // unchecked stores.
-  if (mappings.size() < numMappings + pendingMappings_.size()) {
-    mappings.resize(numMappings + pendingMappings_.size());
+  if (mappings.size() < numMappings + numNewMappings) {
+    mappings.resize(numMappings + numNewMappings);
   }
   auto& uniqueWords = currentBatch_.uniqueWords_;
   uniqueWords.push_back(UniqueWord{pendingWord_, pendingWordIsExternal_});
@@ -216,6 +248,21 @@ inline void WordBatchBuilder::commitPendingWord() {
   // merging (which is one iteration per merged word, see `addMergedWords`).
   AD_CORRECTNESS_CHECK(uniqueWords.size() <= maxNumUniqueWordsPerBatch);
   auto indexOfWordInBatch = static_cast<uint32_t>(uniqueWords.size() - 1);
+  // The occurrences of the merged word itself (see the `pendingQueueWord_`),
+  // then the ones that were collected from equal merged words.
+  if (pendingQueueWord_ != nullptr) {
+    const auto& word = *pendingQueueWord_;
+    mappings[numMappings] =
+        LocalIdxToBatchMapping{static_cast<uint32_t>(word.partialFileId_),
+                               indexOfWordInBatch, VocabIndex::make(word.id())};
+    ++numMappings;
+    for (const auto& [partialFileId, localIndex] : word.moreOccurrences_) {
+      mappings[numMappings] = LocalIdxToBatchMapping{
+          partialFileId, indexOfWordInBatch, VocabIndex::make(localIndex)};
+      ++numMappings;
+    }
+    pendingQueueWord_ = nullptr;
+  }
   for (auto mapping : pendingMappings_) {
     mapping.indexOfWordInBatch_ = indexOfWordInBatch;
     mappings[numMappings] = mapping;
@@ -223,6 +270,21 @@ inline void WordBatchBuilder::commitPendingWord() {
   }
   pendingMappings_.clear();
   hasPendingWord_ = false;
+}
+
+// _____________________________________________________________________________
+inline void WordBatchBuilder::appendOccurrencesToPendingMappings(
+    const QueueWord& word) {
+  // The index of the word within its batch is only filled in by
+  // `commitPendingWord`, so the dummy `indexOfWordInBatchDummy` is written for
+  // now.
+  pendingMappings_.push_back(LocalIdxToBatchMapping{
+      static_cast<uint32_t>(word.partialFileId_), indexOfWordInBatchDummy,
+      VocabIndex::make(word.id())});
+  for (const auto& [partialFileId, localIndex] : word.moreOccurrences_) {
+    pendingMappings_.push_back(LocalIdxToBatchMapping{
+        partialFileId, indexOfWordInBatchDummy, VocabIndex::make(localIndex)});
+  }
 }
 
 // _____________________________________________________________________________

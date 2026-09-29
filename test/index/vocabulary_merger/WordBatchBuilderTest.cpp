@@ -62,8 +62,11 @@ std::string fillWord(size_t i) { return absl::StrFormat("\"word%08d\"", i); }
 }  // namespace
 
 // _____________________________________________________________________________
-// The duplicates are eliminated, and each occurrence of a word yields one ID
-// index mapping that refers to the distinct word it belongs to.
+// Each occurrence of a word yields one ID index mapping that refers to the
+// distinct word it belongs to: the occurrences that the merge has folded into
+// a merged word (see `QueueWord::moreOccurrences_`), and the ones of a merged
+// word at the start of the next buffer that is equal to the last word of the
+// previous buffer.
 TEST(WordBatchBuilder, deduplicationAndMappings) {
   std::vector<WordBatch> batches;
   auto collect = [&batches](WordBatch batch) {
@@ -71,21 +74,25 @@ TEST(WordBatchBuilder, deduplicationAndMappings) {
   };
 
   WordBatchBuilder builder;
-  builder.addMergedWords(
-      {makeQueueWord("\"a\"", false, 0, 0), makeQueueWord("\"b\"", false, 0, 1),
-       makeQueueWord("\"b\"", false, 1, 0)},
-      lessThan, collect);
+  auto b = makeQueueWord("\"b\"", false, 0, 1);
+  b.moreOccurrences_.emplace_back(1, 0);
+  builder.addMergedWords({makeQueueWord("\"a\"", false, 0, 0), std::move(b)},
+                         lessThan, collect);
+  builder.addMergedWords({makeQueueWord("\"b\"", false, 2, 5),
+                          makeQueueWord("\"c\"", false, 2, 6)},
+                         lessThan, collect);
   // A batch that is not full is only handed on by `finish()`.
   EXPECT_THAT(batches, ::testing::IsEmpty());
 
   builder.finish(collect);
   ASSERT_EQ(batches.size(), 1u);
-  EXPECT_THAT(
-      wordsOf(batches[0]),
-      ::testing::ElementsAre(Pair("\"a\"", false), Pair("\"b\"", false)));
+  EXPECT_THAT(wordsOf(batches[0]),
+              ::testing::ElementsAre(Pair("\"a\"", false), Pair("\"b\"", false),
+                                     Pair("\"c\"", false)));
   EXPECT_THAT(mappingsOf(batches[0]),
               ::testing::ElementsAre(Mapping{0, 0, 0}, Mapping{0, 1, 1},
-                                     Mapping{1, 1, 0}));
+                                     Mapping{1, 1, 0}, Mapping{2, 1, 5},
+                                     Mapping{2, 2, 6}));
 }
 
 // _____________________________________________________________________________
@@ -101,8 +108,9 @@ TEST(WordBatchBuilder, noWords) {
 }
 
 // _____________________________________________________________________________
-// If a word occurs with different values for `isExternal`, then the merged
-// word is externalized, no matter in which order the occurrences arrive.
+// If a word occurs with different values for `isExternal` at the boundary of
+// two buffers, then the merged word is externalized, no matter in which order
+// the occurrences arrive.
 TEST(WordBatchBuilder, externalizationWithinOneBatch) {
   for (bool firstIsExternal : {false, true}) {
     std::vector<WordBatch> batches;
@@ -110,13 +118,16 @@ TEST(WordBatchBuilder, externalizationWithinOneBatch) {
       batches.push_back(std::move(batch));
     };
     WordBatchBuilder builder;
-    builder.addMergedWords({makeQueueWord("\"a\"", firstIsExternal, 0, 0),
-                            makeQueueWord("\"a\"", !firstIsExternal, 1, 0)},
+    builder.addMergedWords({makeQueueWord("\"a\"", firstIsExternal, 0, 0)},
+                           lessThan, collect);
+    builder.addMergedWords({makeQueueWord("\"a\"", !firstIsExternal, 1, 0)},
                            lessThan, collect);
     builder.finish(collect);
     ASSERT_EQ(batches.size(), 1u);
     EXPECT_THAT(wordsOf(batches[0]),
                 ::testing::ElementsAre(Pair("\"a\"", true)));
+    EXPECT_THAT(mappingsOf(batches[0]),
+                ::testing::ElementsAre(Mapping{0, 0, 0}, Mapping{1, 0, 0}));
   }
 }
 

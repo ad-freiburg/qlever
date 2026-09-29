@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "index/IndexBuilderTypes.h"
 #include "util/MemorySize/MemorySize.h"
@@ -22,15 +23,26 @@
 // interface of that header.
 namespace ad_utility::vocabulary_merger::detail {
 
-// Helper `struct` for a word from a partial vocabulary.
+// Helper `struct` for a word from a partial vocabulary. While the partial
+// vocabularies are merged, the further occurrences of the same word in other
+// partial vocabularies are collected in the `moreOccurrences_` (see
+// `PartialVocabularyRunsInput::appendToBlock`), so that the words that leave
+// the merge are distinct within a block, with one entry per occurrence.
 struct QueueWord {
+  // An occurrence of a word in a partial vocabulary: the index of the partial
+  // vocabulary and the local index of the word in it.
+  using Occurrence = std::pair<uint32_t, uint64_t>;
+
   QueueWord() = default;
   QueueWord(TripleComponentWithIndex&& v, size_t file)
       : entry_(std::move(v)), partialFileId_(file) {}
   // The word, its local ID, and the information whether it will be
-  // externalized.
+  // externalized (in any of its occurrences).
   TripleComponentWithIndex entry_;
   size_t partialFileId_;  // from which partial vocabulary did this word come
+  // The occurrences of the same word in other partial vocabularies than the
+  // `partialFileId_`, see above. Empty for a word that was read from a file.
+  std::vector<Occurrence> moreOccurrences_;
 
   [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
   // NOTE: The `const` overloads are needed because the first stage of the
