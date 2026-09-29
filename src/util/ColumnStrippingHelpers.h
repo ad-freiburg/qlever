@@ -34,10 +34,12 @@ class VarsRequiredFromSubtree {
   const std::set<Variable>& varsRequestedFromParentTree_;
 
  public:
+  // `varsRequestedFromParentTree` must outlive this object, as its address
+  // is stored in `varsRequiredFromSubtree_`.
   explicit VarsRequiredFromSubtree(
-      const std::set<Variable>& varsRequestedFromParentTree)
-      : varsRequiredFromSubtree_{&varsRequestedFromParentTree},
-        varsRequestedFromParentTree_{varsRequestedFromParentTree} {}
+      const std::set<Variable>* varsRequestedFromParentTree)
+      : varsRequiredFromSubtree_{varsRequestedFromParentTree},
+        varsRequestedFromParentTree_{*varsRequestedFromParentTree} {}
 
   // The function add() has to be called whenever there are variables that are
   // needed by the operation itself to be executed. This function adds all these
