@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <range/v3/view/zip.hpp>
 #include <string_view>
@@ -441,6 +442,34 @@ TEST(FsstEncoder, DecompressIntoMatchesDecompress) {
           ::testing::HasSubstr("out.size() >= bound"));
     }
   }
+}
+
+// _____________________________________________________________________________
+// Goal: `maxDecompressedSize` rejects inputs whose worst-case expansion
+// overflows `size_t`, for one stage and in every stage of a repeated decoder.
+// Method: `maxDecompressedSize` only reads `str.size()`, so a view that claims
+// more bytes than exist (and is never dereferenced) reaches the guards.
+TEST(FsstEncoder, MaxDecompressedSizeRejectsOverflow) {
+  constexpr size_t factor = FsstDecoder::maxExpansionFactor;
+  constexpr size_t max = std::numeric_limits<size_t>::max();
+  const char dummy = 'x';
+  auto viewOfSize = [&dummy](size_t size) {
+    return std::string_view{&dummy, size};
+  };
+
+  EXPECT_EQ(FsstDecoder::maxDecompressedSize(viewOfSize(max / factor)),
+            max / factor * factor);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)FsstDecoder::maxDecompressedSize(viewOfSize(max / factor + 1)),
+      ::testing::HasSubstr("maxExpansionFactor"));
+
+  // Three stages: the input passes the first two checks and fails the third.
+  constexpr size_t limit3 = max / factor / factor / factor;
+  EXPECT_EQ(FsstRepeatedDecoder<3>::maxDecompressedSize(viewOfSize(limit3)),
+            limit3 * factor * factor * factor);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)FsstRepeatedDecoder<3>::maxDecompressedSize(viewOfSize(limit3 + 1)),
+      ::testing::HasSubstr("maxExpansionFactor"));
 }
 
 // _____________________________________________________________________________
