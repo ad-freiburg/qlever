@@ -37,6 +37,7 @@ inline auto isLessThanWithoutLocalVocab(const Id& a, const Id& b) {
 }
 
 inline auto getIdBits(const Id& id) { return id.getBits(); }
+inline auto getIdDataType(const Id& id) { return id.getDatatype(); }
 
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;

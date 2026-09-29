@@ -184,7 +184,7 @@ TEST(SecondaryVocabIndex, sortsDirectlyAfterTheMainVocabulary) {
                       secondaryVocabId(1)};
   for (size_t i = 0; i <= static_cast<size_t>(Datatype::MaxValue); ++i) {
     auto datatype = static_cast<Datatype>(i);
-    bool isCovered = ::ranges::contains(ids, datatype, &Id::getDatatype);
+    bool isCovered = ::ranges::contains(ids, datatype, &getIdDataType);
     ASSERT_EQ(isCovered, datatype != Datatype::LocalVocabIndex)
         << toString(datatype);
   }
@@ -194,7 +194,7 @@ TEST(SecondaryVocabIndex, sortsDirectlyAfterTheMainVocabulary) {
   // mergeable into a scan of the main index), and they directly follow them, in
   // ascending order of their indices.
   auto positionOfVocabIndex =
-      ql::ranges::find(ids, Datatype::VocabIndex, &Id::getDatatype);
+      ql::ranges::find(ids, Datatype::VocabIndex, &getIdDataType);
   ASSERT_GE(ids.end() - positionOfVocabIndex, 3);
   EXPECT_EQ(*(positionOfVocabIndex + 1), secondaryVocabId(0));
   EXPECT_EQ(*(positionOfVocabIndex + 2), secondaryVocabId(1));
