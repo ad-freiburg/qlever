@@ -249,7 +249,7 @@ Distinct::makeTreeWithStrippedColumns(
     const std::set<Variable>& variables) const {
   // Add variables and the variables corresponding to the keepIndices_ to the
   // variables that are required from the subtree.
-  VarsRequiredFromSubtree helper(variables);
+  VarsRequiredFromSubtree helper(&variables);
   std::vector<const Variable*> keepVars;
   for (const auto& jcl : keepIndices_) {
     const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
