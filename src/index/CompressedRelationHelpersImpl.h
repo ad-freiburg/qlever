@@ -42,10 +42,11 @@ constexpr Id::T bitsOfIdWithoutLocalVocab(Id id) {
 // with various distributions of duplicates) materializing the arrays was as
 // fast as a handwritten comparison of the bits with an early exit, and both
 // were 20-35% faster than comparing the `Id`s themselves.
-template <size_t... Cols, typename Row>
-constexpr std::array<Id::T, sizeof...(Cols)> pickBitsOfColumns(const Row& row) {
+template <size_t... Cols>
+inline constexpr auto pickBitsOfColumns =
+    [](const auto& row) -> std::array<Id::T, sizeof...(Cols)> {
   return {bitsOfIdWithoutLocalVocab(row[Cols])...};
-}
+};
 
 // Compares two rows based on the columns `c1Idx`, `c2Idx`, and
 // `ADDITIONAL_COLUMN_GRAPH_ID` only (it ignores the column `c0Idx` as well as
@@ -54,17 +55,16 @@ constexpr std::array<Id::T, sizeof...(Cols)> pickBitsOfColumns(const Row& row) {
 struct ComparatorForConstCol0 {
   template <typename A, typename B>
   constexpr bool operator()(const A& a, const B& b) const {
-    return pickBitsOfColumns<c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID>(a) <
-           pickBitsOfColumns<c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID>(b);
+    auto pickBits = pickBitsOfColumns<c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID>;
+    return pickBits(a) < pickBits(b);
   }
 };
 
 // Helper function to make a row from `IdTable` easier to compare. This selects
 // the binary representation of the cells of the given row in the columns
 // `c0Idx`, `c1Idx`, and `c2Idx`, see `pickBitsOfColumns` above.
-inline auto pickFirstThreeColumnsOfIdsWithoutLocalVocab = [](const auto& row) {
-  return pickBitsOfColumns<c0Idx, c1Idx, c2Idx>(row);
-};
+inline constexpr auto pickFirstThreeColumnsOfIdsWithoutLocalVocab =
+    pickBitsOfColumns<c0Idx, c1Idx, c2Idx>;
 
 // Collect elements of type `T` in batches of size 100'000 and apply the
 // `Function` to each batch. For the last batch (which might be smaller)  the

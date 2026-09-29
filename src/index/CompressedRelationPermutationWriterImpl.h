@@ -36,10 +36,9 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
     // column, not the additional payload. The comparison is performed on the
     // bits of the `Id`s, which is much cheaper, see `pickBitsOfColumns`.
     auto compare = [](const auto& a, const auto& b) {
-      return pickBitsOfColumns<c0Idx, c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID>(
-                 a) <
-             pickBitsOfColumns<c0Idx, c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID>(
-                 b);
+      auto pickBits =
+          pickBitsOfColumns<c0Idx, c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID>;
+      return pickBits(a) < pickBits(b);
     };
     ql::ranges::sort(blockOfSmallRelations, compare);
     AD_CORRECTNESS_CHECK(!blockOfSmallRelations.empty());
