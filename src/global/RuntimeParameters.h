@@ -272,12 +272,12 @@ struct RuntimeParameters {
   DeduplicationModeParameter constructDeduplication_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
 
-  // If set to `true`, CONSTRUCT query export of Turtle formats the
-  // triples using `FastExportStreamFormatter` (zero-allocation, in-buffer
-  // formatting) instead of the legacy per-term `std::string` construction
-  // in `formatTerm`/`formatTriple`. Output is required to be byte-identical
-  // to the legacy path; default `false` keeps master's behaviour unchanged.
-  Bool useFastExportStreamFormatter_{false, "use-fast-export-stream-formatter"};
+  // If set to `true` (the default), the Turtle export of CONSTRUCT queries
+  // formats the triples with `FastExportStreamFormatter` into strings of about
+  // 64 KiB (`formatTriplesAsTurtleInBatches`) instead of building a
+  // `std::string` per term and per triple (`formatTerm`/`formatTriple`). The
+  // output is byte-identical; `false` selects the previous path.
+  Bool useFastExportStreamFormatter_{true, "use-fast-export-stream-formatter"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
