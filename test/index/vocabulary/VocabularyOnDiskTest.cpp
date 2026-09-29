@@ -359,6 +359,12 @@ TEST(VocabularyOnDisk, DroppedInFlightHandleReturnsManager) {
   EXPECT_ANY_THROW(vocab->finishLookup(nullptr));
 }
 
+// Before `open`, a vocabulary has no I/O manager pool.
+TEST(VocabularyOnDisk, NoIoManagersBeforeOpen) {
+  VocabularyOnDisk vocab;
+  EXPECT_EQ(vocab.numIoManagers(), 0u);
+}
+
 // More lookups than the pool has managers may be in flight at once (the
 // depth-2 lookup and the fibers of one CONSTRUCT batch hold several managers
 // on one thread): `beginLookup` then creates a new manager instead of blocking
