@@ -2563,14 +2563,8 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   (void)leftSideTransitivePath;
   return TransitivePathJoinCols();
 #else
-  // If there are more than two pairs of join columns, we have a graph
-  // variable. In that case, we compute the full transitive hull (followed by a
-  // multi-column join).
-  if (jcs.size() > 2) {
-    return TransitivePathJoinCols();
-  }
-
-  // The index in `jcs` of the transitive path side and the other side.
+  // The index in a pair of join columns from `jcs` of the transitive path side
+  // and the other side.
   auto transitivePathIndex = static_cast<size_t>(!leftSideTransitivePath);
   auto otherIndex = static_cast<size_t>(leftSideTransitivePath);
 
@@ -2578,34 +2572,32 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   // transitive path can be bound (and we return that pair), or the graph
   // variable is bound (in which case we return `std::nullopt`).
   auto graphColIndex = TransitivePathBase::firstGraphOrPayloadColumnIndex();
-  if (jcs.size() == 1) {
-    size_t transitiveCol = jcs[0][transitivePathIndex];
-    size_t otherCol = jcs[0][otherIndex];
-    if (transitiveCol >= graphColIndex) {
+
+  SideTuple colsA;
+  SideTuple colsB;
+
+  for (const auto& jc : jcs) {
+    size_t transCol = jc[transitivePathIndex];
+    size_t otherCol = jc[otherIndex];
+
+    if (transCol == 0) {
+      AD_CORRECTNESS_CHECK(!colsA.has_value());
+      colsA = std::make_tuple(transCol, otherCol);
+    } else if (transCol == 1) {
+      AD_CORRECTNESS_CHECK(!colsB.has_value());
+      colsB = std::make_tuple(transCol, otherCol);
+    } else if (transCol >= graphColIndex) {
+      // We do not need to process the graph column's or payload index.
+      continue;
+    } else {
       return {};
     }
-    return TransitivePathJoinCols(std::make_tuple(transitiveCol, otherCol));
   }
 
-  // At this point, we know that we have exactly two pairs of join columns,
-  // where one pertains to the graph variable and the other to one side of the
-  // transitive path operation. Return the pair that does not pertain to the
-  // graph variable.
-  size_t transitiveColA = jcs[0][transitivePathIndex];
-  size_t otherColA = jcs[0][otherIndex];
-  size_t transitiveColB = jcs[1][transitivePathIndex];
-  size_t otherColB = jcs[1][otherIndex];
-  if (transitiveColA < graphColIndex) {
-    if (transitiveColB == graphColIndex) {
-      return TransitivePathJoinCols(std::make_tuple(transitiveColA, otherColA));
-    }
-    // Bind two regular columns at once.
-    return TransitivePathJoinCols(std::make_tuple(transitiveColA, otherColA),
-                                  std::make_tuple(transitiveColB, otherColB));
+  if (!colsA.has_value()) {
+    std::swap(colsA, colsB);
   }
-  AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
-  AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
-  return TransitivePathJoinCols(std::make_tuple(transitiveColB, otherColB));
+  return TransitivePathJoinCols(colsA, colsB);
 #endif
 }
 

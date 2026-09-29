@@ -3325,15 +3325,13 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
     h::expect(
         "SELECT * "
         "{ VALUES (?g ?a ?b) { (1 1 1) } GRAPH ?g { ?a <label>+ ?b } }",
-        h::MultiColumnJoin(
-            h::Sort(h::ValuesClause("VALUES (?g\t?a\t?b) { (1 1 1) }")),
-            h::Sort(h::transitivePath(
-                left, right, 1, std::numeric_limits<size_t>::max(),
-                // Sort by ?g
-                h::Sort(h::IndexScanFromStrings(
-                    "?_QLever_internal_variable_qp_0", "<label>",
-                    "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                    {Variable{"?g"}}, {3}))))));
+        h::transitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
+                          h::ValuesClause("VALUES (?g\t?a\t?b) { (1 1 1) }"),
+                          h::ValuesClause("VALUES (?g\t?a\t?b) { (1 1 1) }"),
+                          h::Sort(h::IndexScanFromStrings(
+                              "?_QLever_internal_variable_qp_0", "<label>",
+                              "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                              {Variable{"?g"}}, {3}))));
 
     h::expectWithGivenBudgets(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . VALUES ?a { UNDEF } } }",
