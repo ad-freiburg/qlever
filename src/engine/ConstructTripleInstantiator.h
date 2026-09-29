@@ -84,7 +84,7 @@ inline constexpr size_t FAST_TURTLE_BATCH_BYTES = 64 * 1024;
 // concatenation of `formatTriple(triple, turtle)` for all triples, but there
 // is one heap allocation per batch instead of several per triple. Used for the
 // Turtle export if the runtime parameter `use-fast-export-stream-formatter` is
-// set.
+// set (the default).
 ad_utility::InputRangeTypeErased<std::string> formatTriplesAsTurtleInBatches(
     ad_utility::InputRangeTypeErased<EvaluatedTriple> triples,
     size_t targetBatchBytes = FAST_TURTLE_BATCH_BYTES);
