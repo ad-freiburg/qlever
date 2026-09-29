@@ -53,8 +53,9 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
     auto firstCol0 = blockOfSmallRelations.at(0, 0);
     auto lastCol0 =
         blockOfSmallRelations.at(blockOfSmallRelations.numRows() - 1, 0);
-    writer_.compressAndWriteBlock(firstCol0, lastCol0,
-                                  std::move(blockOfSmallRelations), false);
+    writer_.compressAndWriteBlock(
+        firstCol0, lastCol0, BlockToWrite{std::move(blockOfSmallRelations)},
+        false);
   }
 };
 
@@ -205,9 +206,10 @@ struct CompressedRelationWriter::PermutationWriter {
 
   // Write a single block of the current large relation with `writer1_`, count
   // its distinct `col1` IDs, and also push the block into the twin sorter for
-  // `writer2_`. The `block` is a view of the rows of the block, and the `owner`
-  // keeps those rows alive for as long as `writer1_` (which compresses and
-  // writes the block asynchronously) still looks at them.
+  // `writer2_`. The `block` is a view either of the rows of the `relation_`
+  // buffer or of a subset of the rows of the current `inputBlock_`, and the
+  // `owner` keeps those rows alive for as long as `writer1_` (which compresses
+  // and writes the block asynchronously) still looks at them.
   void writeBlockOfLargeRelation(IdTableView<0> block,
                                  BlockToWrite::Owner owner) {
     using namespace compressedRelationHelpers;
@@ -393,20 +395,28 @@ struct CompressedRelationWriter::PermutationWriter {
         // block, which is exactly the case if a triple change is found before
         // the end of the rows; otherwise further equal triples may follow in
         // the next input block, which then have to end up in the same block.
-        if (relation_.empty() && end - begin >= blocksize_) {
+        std::optional<size_t> directBlockEnd = [&]() -> std::optional<size_t> {
+          if (!relation_.empty() || end - begin < blocksize_) {
+            return std::nullopt;
+          }
           size_t blockEnd =
               findFirstTripleChange(permutedCols, begin + blocksize_, end,
                                     pickFirstThreeColumnsOfIdsWithoutLocalVocab(
                                         permutedCols[begin + blocksize_ - 1]));
-          if (blockEnd < end) {
-            // Note: The rows of this view are kept alive via the `inputBlock_`
-            // member, see `addBlockOfLargeRelationWithoutCopying`.
-            addBlockOfLargeRelationWithoutCopying(
-                permutedCols.subView(begin, blockEnd - begin));
-            increaseTripleCounter(blockEnd - begin);
-            begin = blockEnd;
-            continue;
+          if (blockEnd == end) {
+            return std::nullopt;
           }
+          return blockEnd;
+        }();
+        if (directBlockEnd.has_value()) {
+          size_t blockEnd = directBlockEnd.value();
+          // Note: The rows of this view are kept alive via the `inputBlock_`
+          // member, see `addBlockOfLargeRelationWithoutCopying`.
+          addBlockOfLargeRelationWithoutCopying(
+              permutedCols.subView(begin, blockEnd - begin));
+          increaseTripleCounter(blockEnd - begin);
+          begin = blockEnd;
+          continue;
         }
         // The buffer is not yet full, so we can simply append the rows that
         // are missing to reach the `blocksize_`.

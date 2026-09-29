@@ -48,7 +48,7 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   // We write small relations to a single block, so we specify the last
   // argument to `true` to invoke the `smallBlocksCallback_`.
   compressAndWriteBlock(currentBlockFirstCol0_, currentBlockLastCol0_,
-                        std::move(smallRelationsBuffer_), true);
+                        BlockToWrite{std::move(smallRelationsBuffer_)}, true);
   smallRelationsBuffer_ = takeBlockBuffer();
 }
 // ____________________________________________________________________________
@@ -227,14 +227,15 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     // At this point we know that the `block` contains at least a single triple
     // larger than `lastRowFromPrevious`, so we can safely write the
     // `bufferedBlock`.
-    addBlockForLargeRelation(col0Id, std::move(*bufferedBlock));
+    addBlockForLargeRelation(col0Id, BlockToWrite{std::move(*bufferedBlock)});
     bufferedBlock = std::move(block);
   }
 
   // Write the remaining triples from the buffer.
   if (bufferedBlock.has_value()) {
     AD_CORRECTNESS_CHECK(!bufferedBlock.value().empty());
-    addBlockForLargeRelation(col0Id, std::move(bufferedBlock.value()));
+    addBlockForLargeRelation(col0Id,
+                             BlockToWrite{std::move(bufferedBlock.value())});
   }
 
   return finishLargeRelation(distinctCol1Counter.getAndReset());

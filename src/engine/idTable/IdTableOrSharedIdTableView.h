@@ -38,7 +38,8 @@ class IdTableOrSharedIdTableView {
 
  public:
   // Construct an owning table.
-  IdTableOrSharedIdTableView(IdTable table) : data_{std::move(table)} {}
+  explicit IdTableOrSharedIdTableView(IdTable table)
+      : data_{std::move(table)} {}
 
   // Construct a non-owning table. The `owner` has to keep the memory that the
   // `view` points to alive.
