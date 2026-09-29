@@ -59,6 +59,49 @@ TEST(FastExportStreamFormatterTest, TurtleEmbeddedQuotesEscapedOnce) {
   EXPECT_EQ(collector.output_, "\"Title with \\\"quotes\\\"\"");
 }
 
+// Literals and TSV fields with special characters at the start, in the
+// middle, at the end and back to back are escaped exactly like the legacy
+// `RdfEscaping` functions, in streaming mode and in a fixed span of exactly
+// the escaped size (the escaping reserves the exact size, not an upper bound).
+TEST(FastExportStreamFormatterTest, EscapingMatchesLegacyAtAllPositions) {
+  const std::string longRun(300, 'x');
+  const std::array<std::string, 7> contents{
+      "\\starts with a backslash",
+      "ends with a quote\"",
+      "a\nb\rc\"d\\e",
+      "\"\"\\\\\n\n\r\r",
+      "\"",
+      absl::StrCat(longRun, "\"", longRun, "\n", longRun),
+      "no special characters"};
+  for (const auto& content : contents) {
+    for (std::string_view suffix : {"", "@en", "^^<http://example.org/dt>"}) {
+      const std::string literal = absl::StrCat("\"", content, "\"", suffix);
+      const std::string expected =
+          RdfEscaping::validRDFLiteralFromNormalized(literal);
+      EvaluatedTermData term{literal, nullptr};
+      CollectingFormatter collector;
+      collector.formatter_.writeTerm(term, ExportFormat::Turtle);
+      static_cast<void>(std::move(collector.formatter_).finalize());
+      EXPECT_EQ(collector.output_, expected);
+      std::string exact(expected.size(), '\0');
+      FastExportStreamFormatter fixed{
+          ql::span<char>(exact.data(), exact.size())};
+      fixed.writeTerm(term, ExportFormat::Turtle);
+      EXPECT_EQ(fixed.currentChunk(), expected);
+    }
+    const std::string tsvField = absl::StrCat("\t", content, "\t\n");
+    const std::string expectedTsv = RdfEscaping::escapeForTsv(tsvField);
+    CollectingFormatter collector;
+    collector.formatter_.writeEscapedTsv(tsvField);
+    static_cast<void>(std::move(collector.formatter_).finalize());
+    EXPECT_EQ(collector.output_, expectedTsv);
+    std::string exact(expectedTsv.size(), '\0');
+    FastExportStreamFormatter fixed{ql::span<char>(exact.data(), exact.size())};
+    fixed.writeEscapedTsv(tsvField);
+    EXPECT_EQ(fixed.currentChunk(), expectedTsv);
+  }
+}
+
 // A fully-qualified encoded literal in CSV output is escaped exactly like
 // `RdfEscaping::escapeForCsv` applied to the whole term in `formatTriple`.
 // A double-typed literal always takes the fully-qualified form (unlike ints,

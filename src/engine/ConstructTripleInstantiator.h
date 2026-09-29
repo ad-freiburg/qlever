@@ -17,6 +17,7 @@
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTypes.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/Iterators.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever::constructExport {
@@ -66,6 +67,27 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType);
 // format `format`.
 std::string formatTriple(const EvaluatedTriple& evaluatedTriple,
                          const ad_utility::MediaType& format);
+
+// Formats a triple as Turtle with `FastExportStreamFormatter`, which escapes
+// directly into the result instead of building a `std::string` per term. The
+// result is byte-identical to `formatTriple(evaluatedTriple, turtle)`.
+std::string formatTripleAsTurtleWithFastFormatter(
+    const EvaluatedTriple& evaluatedTriple);
+
+// The default target size of the strings of `formatTriplesAsTurtleInBatches`.
+inline constexpr size_t FAST_TURTLE_BATCH_BYTES = 64 * 1024;
+
+// Formats all `triples` as Turtle with `FastExportStreamFormatter`, many
+// triples per returned string: a string ends before the first triple that
+// might not fit into `targetBatchBytes` (a single larger triple gets a string
+// of its own). The concatenation of the strings is byte-identical to the
+// concatenation of `formatTriple(triple, turtle)` for all triples, but there
+// is one heap allocation per batch instead of several per triple. Used for the
+// Turtle export if the runtime parameter `use-fast-export-stream-formatter` is
+// set.
+ad_utility::InputRangeTypeErased<std::string> formatTriplesAsTurtleInBatches(
+    ad_utility::InputRangeTypeErased<EvaluatedTriple> triples,
+    size_t targetBatchBytes = FAST_TURTLE_BATCH_BYTES);
 
 // Creates a `StringTriple` object. Needed for backwards compatibility with
 // `ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON`

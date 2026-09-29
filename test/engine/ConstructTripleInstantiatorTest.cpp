@@ -8,13 +8,13 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 #include <gtest/gtest.h>
 
 #include "../util/GTestHelpers.h"
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/ConstructTypes.h"
 #include "global/Constants.h"
-#include "global/RuntimeParameters.h"
 
 namespace {
 using namespace qlever::constructExport;
@@ -408,12 +408,11 @@ TEST(FormatTriple, TurtleLiteralObject) {
 }
 
 // _____________________________________________________________________________
-// The `use-fast-export-stream-formatter` runtime parameter switches Turtle
-// export to `FastExportStreamFormatter`. It must be byte-identical to the
-// legacy path for a representative mix of terms: plain IRIs, literals,
-// literals needing escaping, and numeric short forms.
-TEST(FormatTriple, FastExportStreamFormatterMatchesLegacyTurtle) {
-  const std::vector<EvaluatedTriple> triples{
+namespace {
+// A representative mix of terms for the Turtle formatter tests: plain IRIs,
+// literals, literals needing escaping, and numeric short forms.
+std::vector<EvaluatedTriple> triplesForFastTurtleFormatter() {
+  return {
       EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
                       makeTerm("<http://o>")},
       EvaluatedTriple{makeTerm("<http://s>"), makeTerm("<http://p>"),
@@ -430,19 +429,70 @@ TEST(FormatTriple, FastExportStreamFormatterMatchesLegacyTurtle) {
           makeTerm("<http://s>"), makeTerm("<http://p>"),
           makeTerm(absl::StrCat("\"", std::string(10000, '\n'), "\""))},
   };
+}
+}  // namespace
 
-  std::vector<std::string> legacyOutputs;
+// _____________________________________________________________________________
+// `formatTripleAsTurtleWithFastFormatter` must be byte-identical to the legacy
+// path.
+TEST(FormatTriple, FastExportStreamFormatterMatchesLegacyTurtle) {
+  for (const auto& triple : triplesForFastTurtleFormatter()) {
+    EXPECT_EQ(formatTriple(triple, ad_utility::MediaType::turtle),
+              formatTripleAsTurtleWithFastFormatter(triple));
+  }
+}
+
+// _____________________________________________________________________________
+// `formatTriplesAsTurtleInBatches` (used for the Turtle export with
+// `use-fast-export-stream-formatter`) must produce the same bytes as the legacy
+// path, in batches that respect the target size unless a single triple is
+// larger.
+TEST(FormatTriple, FastTurtleBatchesMatchLegacyTurtle) {
+  const auto triples = triplesForFastTurtleFormatter();
+  std::string legacy;
   for (const auto& triple : triples) {
-    legacyOutputs.push_back(
-        formatTriple(triple, ad_utility::MediaType::turtle));
+    absl::StrAppend(&legacy,
+                    formatTriple(triple, ad_utility::MediaType::turtle));
   }
 
-  setRuntimeParameter<&RuntimeParameters::useFastExportStreamFormatter_>(true);
+  auto formatInBatches = [](std::vector<EvaluatedTriple> input,
+                            size_t targetBatchBytes) {
+    std::vector<std::string> batches;
+    for (std::string& batch : formatTriplesAsTurtleInBatches(
+             ad_utility::InputRangeTypeErased{std::move(input)},
+             targetBatchBytes)) {
+      batches.push_back(std::move(batch));
+    }
+    return batches;
+  };
+
+  // With the default target size, all triples fit into one batch (the largest,
+  // with 10000 escaped newlines, takes about 20000 bytes).
+  auto batches = formatInBatches(triples, FAST_TURTLE_BATCH_BYTES);
+  EXPECT_EQ(absl::StrJoin(batches, ""), legacy);
+  EXPECT_EQ(batches.size(), 1u);
+
+  // A target of 100 bytes: the batches stay within the target, and the large
+  // triple gets a batch of its own.
+  batches = formatInBatches(triples, 100);
+  EXPECT_EQ(absl::StrJoin(batches, ""), legacy);
+  EXPECT_GT(batches.size(), 2u);
+  EXPECT_EQ(batches.back(),
+            formatTriple(triples.back(), ad_utility::MediaType::turtle));
+  for (size_t i = 0; i + 1 < batches.size(); ++i) {
+    EXPECT_LE(batches[i].size(), 100u);
+  }
+
+  // A target of one byte gives one batch per triple.
+  batches = formatInBatches(triples, 1);
+  ASSERT_EQ(batches.size(), triples.size());
   for (size_t i = 0; i < triples.size(); ++i) {
-    EXPECT_EQ(legacyOutputs[i],
+    EXPECT_EQ(batches[i],
               formatTriple(triples[i], ad_utility::MediaType::turtle));
   }
-  setRuntimeParameter<&RuntimeParameters::useFastExportStreamFormatter_>(false);
+
+  // No triples, no batches.
+  EXPECT_TRUE(formatInBatches({}, FAST_TURTLE_BATCH_BYTES).empty());
 }
 
 // _____________________________________________________________________________

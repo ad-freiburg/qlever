@@ -2311,3 +2311,22 @@ INSTANTIATE_TEST_SUITE_P(
         LruWindowParam{5, "abcde"},
         // window 10: all duplicates are caught, 5 unique triples remain.
         LruWindowParam{10, "abcde"}));
+
+// _____________________________________________________________________________
+// With `use-fast-export-stream-formatter`, the Turtle export of a CONSTRUCT
+// query is formatted by `FastExportStreamFormatter`; the bytes must not change.
+TEST(ExportQueryExecutionTrees, ConstructTurtleFastFormatterProducesSameBytes) {
+  const std::string kg =
+      "<s> <p> \"plain\" . <s> <p> \"with \\\"quotes\\\" and \\\\ and \\n\" ."
+      " <s> <q> 42 . <s> <q> \"3.5\"^^<http://www.w3.org/2001/XMLSchema#double>"
+      " . <s> <r> \"text\"@en . <s> <r> _:b .";
+  const std::string query = "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
+  auto run = [&](bool useFastFormatter) {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::useFastExportStreamFormatter_>(useFastFormatter);
+    return runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle);
+  };
+  const std::string legacy = run(false);
+  EXPECT_THAT(legacy, ::testing::HasSubstr("\\\"quotes\\\""));
+  EXPECT_EQ(run(true), legacy);
+}
