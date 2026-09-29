@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "../../util/AllocatorTestHelpers.h"
+#include "../../util/AsioTestHelpers.h"
 #include "../../util/AsyncTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "backports/filesystem.h"
@@ -194,34 +195,15 @@ constexpr std::array<ad_utility::CompressedBlockFile::CompressionLevel, 2>
     compressionLevels{ad_utility::ZSTD_DEFAULT_LEVEL,
                       ad_utility::NO_BLOCK_COMPRESSION};
 
-// Run every handler of the `context` that is ready to run, and keep doing that
-// until nothing is left to run. Afterwards all the operations that were
-// initiated before have either completed or are suspended, which is what makes
+// Everything that is ready to run is run by `pollUntilQuiescent`, which makes
 // the direct tests below deterministic.
 //
 // NOTE: In contrast to the harness of
 // `test/parallelBlockMerge/BlockStorageTest.cpp`, a single `poll()` does not
 // suffice here, because a single operation of this storage is a whole chain of
 // posted handlers that alternates between the strand of the storage, the strand
-// of a chunk, and the blocking compression and I/O. `poll()` returns the number
-// of handlers that it ran, so the loop stops as soon as everything is
-// quiescent.
-//
-// NOTE: This deliberately uses `poll` and not `run`, because `run` would never
-// return while an operation of the storage is still suspended (a suspended
-// operation counts as outstanding work). The `restart` is required because an
-// `io_context` stops itself as soon as it runs out of work, after which `poll`
-// would do nothing at all.
-void pollUntilQuiescent(net::io_context& context) {
-  while (true) {
-    if (context.stopped()) {
-      context.restart();
-    }
-    if (context.poll() == 0) {
-      return;
-    }
-  }
-}
+// of a chunk, and the blocking compression and I/O.
+using ad_utility::testing::pollUntilQuiescent;
 
 // Run the handlers of `context` one at a time until the `predicate` holds, or
 // until nothing is left to run. This is how a test stops in the middle of an
