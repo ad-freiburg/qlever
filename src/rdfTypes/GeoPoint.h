@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "backports/three_way_comparison.h"
 #include "rdfTypes/Literal.h"
@@ -157,6 +158,20 @@ class GeoPoint {
   // identical value. Ignores the upper 4 bits (only uses the lower
   // `numDataBits`)
   static GeoPoint fromBitRepresentation(T bits);
+
+  // The closed intervals of bit representations (in the given `encoding`)
+  // that together contain all points of the geographic rectangle with the
+  // given corners (borders included), ascending and disjoint. This is what a
+  // prefilter on the `Id`s of points needs. For `LatMajor`, this is the one
+  // interval of the whole latitude band of the rectangle. For `ZOrder`, the
+  // rectangle is decomposed into aligned quadtree cells, each of which is one
+  // interval (see above); the cells at the border of the rectangle are not
+  // refined below 1/32 of its smaller side, so the intervals cover at most a
+  // few percent more than the rectangle, and there are at most a few hundred
+  // of them, independent of the size of the rectangle.
+  static std::vector<std::pair<T, T>> intervalsForRectangle(
+      const GeoPoint& lowerLeft, const GeoPoint& upperRight,
+      GeoPointEncodingEnum encoding);
 
   // Construct a GeoPoint from a Literal if this Literal represents a WKT POINT,
   // otherwise return nothing.
