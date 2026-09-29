@@ -13,6 +13,7 @@
 
 #include <array>
 #include <cstdint>
+#include <range/v3/view/enumerate.hpp>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -138,9 +139,7 @@ void padToChunkAlignment(BlobWriter& writer) {
 // its size field with the number of payload bytes that have been written since.
 void endChunk(BlobWriter& writer, const ChunkHandle& handle) {
   uint64_t payloadSize = writer.getCurrentPosition() - handle.payloadPosition_;
-  writer.overwriteBytes(handle.sizeFieldPosition_,
-                        reinterpret_cast<const char*>(&payloadSize),
-                        sizeof(payloadSize));
+  serializeAtPosition(writer, handle.sizeFieldPosition_, payloadSize);
 }
 
 // Write one complete chunk whose payload is written by `writePayload`.
@@ -290,17 +289,25 @@ void writeMetadataAndFilteredVocabulary(
 // the index, which happens when SPARQL UPDATE operations were applied before
 // the entry was pinned.
 //
-// The new words that `rewrite` encounters are appended in the order in which
-// they are encountered, and together form the single segment that the blob adds
-// to its secondary vocabulary (see `newSegment`).
+// The new words that `rewrite` encounters together form the single segment
+// that the blob adds to its secondary vocabulary (see `newSegment`). The words
+// of a segment have to be sorted (see `SecondaryVocabulary::appendSegment`),
+// so all new words have to be collected first, and then `sortNewWords` has to
+// be called, which assigns the final indices, before the first rewritten `Id`
+// is used.
 class SecondaryVocabularyBuilder {
  private:
   // The index in the secondary vocabulary of the blob, for every new word that
   // has an index so far.
   ad_utility::HashMap<std::string, uint64_t> wordToIndex_;
 
-  // The new words, in the order in which they were encountered.
+  // The new words, in the order in which they were encountered, and in sorted
+  // order once `sortNewWords` has been called.
   std::vector<std::string> newWords_;
+
+  // Whether `sortNewWords` has been called, after which no more new words may
+  // be encountered.
+  bool newWordsAreSorted_ = false;
 
  public:
   // Rewrite a single `Id` of a named cache entry. An `Id` that does not refer
@@ -325,6 +332,7 @@ class SecondaryVocabularyBuilder {
     std::string word = entry.toStringRepresentation();
     auto iterator = wordToIndex_.find(word);
     if (iterator == wordToIndex_.end()) {
+      AD_CORRECTNESS_CHECK(!newWordsAreSorted_);
       uint64_t index = wordToIndex_.size();
       iterator = wordToIndex_.emplace(word, index).first;
       newWords_.push_back(std::move(word));
@@ -333,12 +341,26 @@ class SecondaryVocabularyBuilder {
         SecondaryVocabIndex::make(iterator->second));
   }
 
+  // Sort the new words that `rewrite` has encountered so far, and renumber
+  // their indices accordingly. Must be called after all new words have been
+  // collected, and before any `Id` returned by `rewrite` is used, because it
+  // changes the indices of the new words.
+  void sortNewWords() {
+    ql::ranges::sort(newWords_);
+    for (auto [index, word] : ::ranges::views::enumerate(newWords_)) {
+      wordToIndex_.at(word) = index;
+    }
+    newWordsAreSorted_ = true;
+  }
+
   // Whether `rewrite` has encountered any new word, and hence whether a segment
   // of the secondary vocabulary has to be written at all.
   bool hasNewWords() const { return !newWords_.empty(); }
 
-  // The segment with the new words that `rewrite` has encountered.
+  // The segment with the new words that `rewrite` has encountered. Requires
+  // that `sortNewWords` has been called.
   CompactVectorOfStrings<char> newSegment() const {
+    AD_CORRECTNESS_CHECK(newWordsAreSorted_);
     CompactVectorOfStrings<char> segment;
     segment.build(newWords_);
     return segment;
@@ -405,7 +427,8 @@ void collectNewWords(const NamedResultCache::Value& value,
 }
 
 // Run `collectNewWords` (the first pass over the cache entries, see there)
-// over all of `entries`.
+// over all of `entries`, and then sort the collected words (see
+// `SecondaryVocabularyBuilder::sortNewWords`).
 void collectAllNewWords(
     const std::vector<std::pair<
         NamedResultCache::Key, std::shared_ptr<const NamedResultCache::Value>>>&
@@ -414,6 +437,7 @@ void collectAllNewWords(
   for (const auto& [key, value] : entries) {
     collectNewWords(*value, builder);
   }
+  builder.sortNewWords();
 }
 
 // Write the payload of the chunk of one entry of the `NamedResultCache`: its
@@ -556,7 +580,7 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // The first pass over the cache entries, which assigns the `Id`s of the
   // secondary vocabulary of the blob to all the words that only exist as local
   // vocab entries (see `collectNewWords`).
-  auto entries = qlever.namedResultCache_.getAllEntries();
+  auto entries = qlever.namedResultCache_.getAllEntriesSortedByKey();
   SecondaryVocabularyBuilder vocabularyBuilder;
   collectAllNewWords(entries, vocabularyBuilder);
 

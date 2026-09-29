@@ -13,7 +13,7 @@
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
 
 template <size_t N = 0>

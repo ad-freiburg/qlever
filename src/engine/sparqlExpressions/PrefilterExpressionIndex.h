@@ -18,8 +18,11 @@
 
 #include "global/Id.h"
 #include "global/ValueIdComparators.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationMetadata.h"
+#include "index/LocalVocab.h"
 #include "index/vocabulary/Vocabulary.h"
+#include "parser/TripleComponent.h"
+#include "rdfTypes/Variable.h"
 #include "util/Iterators.h"
 
 // NOTE: The prefiltering needs the vocabulary of the index (and not only the
@@ -28,13 +31,14 @@ class IndexImpl;
 
 // For certain SparqlExpressions it is possible to perform a pre-filtering
 // procedure w.r.t. relevant data blocks/ValueId values, by making use of the
-// available metadata (see CompressedBlockMetadata in CompressedRelation.h)
-// while performing the index scan. As a result, the actual SparqlExpression
-// evaluation is performed for a smaller IdTable if a PrefilterExpression
-// (declared in this file) for the respective SparqlExpression is available and
-// compatible with the IndexScan. The following SparqlExpressions construct a
-// PrefilterExpression if possible: logical-or, logical-and, logical-negate
-// (unary), relational-ops and strstarts.
+// available metadata (see CompressedBlockMetadata in
+// CompressedRelationMetadata.h) while performing the index scan. As a result,
+// the actual SparqlExpression evaluation is performed for a smaller IdTable if
+// a PrefilterExpression (declared in this file) for the respective
+// SparqlExpression is available and compatible with the IndexScan. The
+// following SparqlExpressions construct a PrefilterExpression if possible:
+// logical-or, logical-and, logical-negate (unary), relational-ops and
+// strstarts.
 
 namespace prefilterExpressions {
 

@@ -8,7 +8,9 @@
 #include <gmock/gmock.h>
 
 #include <atomic>
+#include <chrono>
 #include <ranges>
+#include <semaphore>
 
 #include "./util/GTestHelpers.h"
 #include "util/ThreadSafeQueue.h"
@@ -428,4 +430,109 @@ TEST(ThreadSafeQueue, queueManager) {
       std::bind_front(RunQueueManagerTest{}, normalExecution));
   runWithBothQueueTypes(
       std::bind_front(RunQueueManagerTest{}, bothThrowImmediately));
+}
+
+// ________________________________________________________________
+TEST(ThreadSafeQueue, tryPush) {
+  ThreadSafeQueue<size_t> queue{2};
+  EXPECT_EQ(queue.tryPush(0), TryPushResult::Pushed);
+  EXPECT_EQ(queue.tryPush(1), TryPushResult::Pushed);
+  // The queue is full, so the value is not pushed, but the call still returns
+  // immediately.
+  EXPECT_EQ(queue.tryPush(2), TryPushResult::Full);
+  EXPECT_EQ(queue.pop(), 0);
+  EXPECT_EQ(queue.tryPush(2), TryPushResult::Pushed);
+  EXPECT_EQ(queue.pop(), 1);
+  EXPECT_EQ(queue.pop(), 2);
+  queue.finish();
+  EXPECT_EQ(queue.tryPush(3), TryPushResult::Finished);
+  EXPECT_EQ(queue.pop(), std::nullopt);
+}
+
+// ________________________________________________________________
+TEST(ThreadSafeQueue, tryPushOnlyMovesTheValueIfItWasPushed) {
+  // The guarantee that a producer relies on when it hands the very same value
+  // over again once there is space.
+  ThreadSafeQueue<std::string> queue{1};
+  std::string value = "first";
+  EXPECT_EQ(queue.tryPush(std::move(value)), TryPushResult::Pushed);
+  std::string rejected = "second";
+  EXPECT_EQ(queue.tryPush(std::move(rejected)), TryPushResult::Full);
+  EXPECT_EQ(rejected, "second");
+  EXPECT_EQ(queue.pop(), "first");
+  EXPECT_EQ(queue.tryPush(std::move(rejected)), TryPushResult::Pushed);
+  EXPECT_EQ(queue.pop(), "second");
+
+  queue.finish();
+  std::string tooLate = "third";
+  EXPECT_EQ(queue.tryPush(std::move(tooLate)), TryPushResult::Finished);
+  EXPECT_EQ(tooLate, "third");
+}
+
+// ________________________________________________________________
+TEST(ThreadSafeQueue, tryPushAfterException) {
+  ThreadSafeQueue<size_t> queue{2};
+  queue.pushException(std::make_exception_ptr(std::runtime_error{"Producer"}));
+  EXPECT_EQ(queue.tryPush(0), TryPushResult::Finished);
+  AD_EXPECT_THROW_WITH_MESSAGE(queue.pop(), ::testing::StrEq("Producer"));
+}
+
+// ________________________________________________________________
+TEST(ThreadSafeQueue, popWithInterruptibleWait) {
+  using namespace std::chrono_literals;
+  ThreadSafeQueue<size_t> queue{2};
+  // One permit is released per call to the callback, so that the producer below
+  // can wait for the consumer to actually be waiting.
+  std::counting_semaphore<> numCalls{0};
+  auto count = [&numCalls]() { numCalls.release(); };
+
+  // Nothing has to be waited for, so the callback is not called at all.
+  queue.push(42);
+  EXPECT_EQ(queue.pop(1ms, count), 42);
+  EXPECT_FALSE(numCalls.try_acquire());
+
+  // While waiting, the callback is called repeatedly: the producer only pushes
+  // after the callback has been called twice, so the consumer provably went
+  // through at least one full interval.
+  ad_utility::JThread producer{[&queue, &numCalls]() {
+    numCalls.acquire();
+    numCalls.acquire();
+    queue.push(1);
+  }};
+  EXPECT_EQ(queue.pop(1ms, count), 1);
+  producer.join();
+
+  queue.finish();
+  EXPECT_EQ(queue.pop(1ms, count), std::nullopt);
+}
+
+// ________________________________________________________________
+TEST(ThreadSafeQueue, popIsInterruptedByAThrowingCallback) {
+  using namespace std::chrono_literals;
+  ThreadSafeQueue<size_t> queue{2};
+  auto interrupt = []() { throw std::runtime_error{"interrupted"}; };
+  AD_EXPECT_THROW_WITH_MESSAGE(queue.pop(1ms, interrupt),
+                               ::testing::StrEq("interrupted"));
+  // The queue is unaffected by the interruption and can still be used.
+  EXPECT_EQ(queue.tryPush(1), TryPushResult::Pushed);
+  EXPECT_EQ(queue.pop(1ms, interrupt), 1);
+}
+
+// ________________________________________________________________
+// A consumer that is already blocked in `pop` is woken up by a pushed
+// exception. This pins down the invariant that `pushException` also sets
+// `finish`, on which the wait condition of both `pop` overloads relies.
+TEST(ThreadSafeQueue, popWithInterruptibleWaitIsWokenByAPushedException) {
+  using namespace std::chrono_literals;
+  ThreadSafeQueue<size_t> queue{2};
+  // The first call to the callback means that the consumer is now waiting.
+  std::counting_semaphore<> isWaiting{0};
+  auto signalWaiting = [&isWaiting]() { isWaiting.release(); };
+  ad_utility::JThread producer{[&queue, &isWaiting]() {
+    isWaiting.acquire();
+    queue.pushException(std::make_exception_ptr(std::runtime_error{"late"}));
+  }};
+  AD_EXPECT_THROW_WITH_MESSAGE(queue.pop(1ms, signalWaiting),
+                               ::testing::StrEq("late"));
+  producer.join();
 }

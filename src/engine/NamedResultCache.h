@@ -101,8 +101,8 @@ class NamedResultCache {
   // deterministic (and not the arbitrary order of the underlying hash map), so
   // that serializing the same contents twice yields the same bytes, which a
   // byte-level comparison of serialized caches relies on.
-  std::vector<std::pair<Key, std::shared_ptr<const Value>>> getAllEntries()
-      const;
+  std::vector<std::pair<Key, std::shared_ptr<const Value>>>
+  getAllEntriesSortedByKey() const;
 
   // NOTE: The following two templated serialization functions are defined in
   // the `NamedResultCacheSerializer.h` header which has to be included by the

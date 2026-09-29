@@ -54,11 +54,12 @@ using ::testing::HasSubstr;
 using ::testing::Optional;
 using ::testing::UnorderedElementsAre;
 
-// The words of the secondary vocabulary that the tests below use, in
-// insertion order (which is the order of their `Id`s, see
-// `SecondaryVocabulary`). In the semantic order of the main vocabulary (see
-// `makeIndexWithSecondaryVocab`), `"a"` is sorted before all of its words,
-// `<b>` between `<a>` and `<c>`, and `<d>` between `<c>` and `<p>`.
+// The words of the secondary vocabulary that the tests below use, sorted, so
+// that they can be appended as a single segment; their global indices are
+// their positions in this vector (see `SecondaryVocabulary`). In the semantic
+// order of the main vocabulary (see `makeIndexWithSecondaryVocab`), `"a"` is
+// sorted before all of its words, `<b>` between `<a>` and `<c>`, and `<d>`
+// between `<c>` and `<p>`.
 const std::vector<std::string> secondaryVocabWords{"\"a\"", "<b>", "<d>"};
 
 // The `Id` of the word of the secondary vocabulary at the given index.
@@ -137,16 +138,20 @@ TEST(SecondaryVocabulary, wordsAndLookup) {
 }
 
 // _____________________________________________________________________________
-TEST(SecondaryVocabulary, wordsDoNotHaveToBeSortedButHaveToBeDistinct) {
-  // Words may be in any order; they simply get their `Id`s in insertion
-  // order.
-  SecondaryVocabulary vocab{{"<d>", "<b>"}};
-  EXPECT_EQ(vocab[SecondaryVocabIndex::make(0)], "<d>");
-  EXPECT_EQ(vocab[SecondaryVocabIndex::make(1)], "<b>");
+TEST(SecondaryVocabulary, wordsHaveToBeSortedAndDistinct) {
+  // The words of a segment get their global indices in the order in which
+  // they are stored, which has to be the sorted order.
+  SecondaryVocabulary vocab{std::vector<std::string>{"<b>", "<d>"}};
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(0)], "<b>");
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(1)], "<d>");
 
-  // Duplicate words are still a programming error.
-  AD_EXPECT_THROW_WITH_MESSAGE((SecondaryVocabulary{{"<b>", "<b>"}}),
-                               HasSubstr("have to be distinct"));
+  // Unsorted or duplicate words are a programming error.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (SecondaryVocabulary{std::vector<std::string>{"<d>", "<b>"}}),
+      HasSubstr("have to be sorted and pairwise"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (SecondaryVocabulary{std::vector<std::string>{"<b>", "<b>"}}),
+      HasSubstr("have to be sorted and pairwise"));
 }
 
 // _____________________________________________________________________________
@@ -173,21 +178,79 @@ TEST(SecondaryVocabulary, appendSegmentKeepsExistingIndicesStable) {
 // _____________________________________________________________________________
 TEST(SecondaryVocabulary, appendSegmentRejectsWordAlreadyContained) {
   SecondaryVocabulary vocab{secondaryVocabWords};
-  AD_EXPECT_THROW_WITH_MESSAGE(vocab.appendSegment(makeSegment({"<f>", "<b>"})),
-                               HasSubstr("have to be distinct"));
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.appendSegment(makeSegment({"<b>", "<f>"})),
+                               HasSubstr("the word <b> is already contained"));
   // The rejected segment must not have been appended.
   EXPECT_EQ(vocab.numWords(), secondaryVocabWords.size());
   EXPECT_EQ(vocab.numSegments(), 1);
+  expectWordsAndIdsMatch(vocab, secondaryVocabWords);
 }
 
 // _____________________________________________________________________________
-TEST(SecondaryVocabulary, appendSegmentRejectsInternalDuplicates) {
+TEST(SecondaryVocabulary, appendSegmentRejectsUnsortedOrDuplicateWords) {
   SecondaryVocabulary vocab{};
   AD_EXPECT_THROW_WITH_MESSAGE(
-      vocab.appendSegment(makeSegment({"<f>", "<g>", "<f>"})),
-      HasSubstr("have to be distinct"));
+      vocab.appendSegment(makeSegment({"<f>", "<g>", "<e>"})),
+      HasSubstr("have to be sorted and pairwise"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      vocab.appendSegment(makeSegment({"<f>", "<f>", "<g>"})),
+      HasSubstr("have to be sorted and pairwise"));
   EXPECT_EQ(vocab.numWords(), 0);
   EXPECT_EQ(vocab.numSegments(), 0);
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, appendSegmentMergesIntoTheSortedIndices) {
+  // The words of the appended segments are interleaved with the ones that are
+  // already contained, in front of them, and behind them, so that the merge
+  // has to move existing entries in all of those ways.
+  SecondaryVocabulary vocab{std::vector<std::string>{"<b>", "<d>"}};
+  vocab.appendSegment(makeSegment({"<a>", "<c>", "<e>"}));
+  vocab.appendSegment(makeSegment({"<f>"}));
+  vocab.appendSegment(makeSegment({"<A>"}));
+
+  // The global indices are the ones from the order in which the words were
+  // appended, not the lexicographic ones.
+  const std::vector<std::string> wordsInGlobalOrder{"<b>", "<d>", "<a>", "<c>",
+                                                    "<e>", "<f>", "<A>"};
+  EXPECT_EQ(vocab.numWords(), wordsInGlobalOrder.size());
+  EXPECT_EQ(vocab.numSegments(), 4);
+  expectWordsAndIdsMatch(vocab, wordsInGlobalOrder);
+
+  // Words that are not contained, in front of, between, and behind the
+  // contained ones.
+  EXPECT_EQ(vocab.getId("<0>"), std::nullopt);
+  EXPECT_EQ(vocab.getId("<c1>"), std::nullopt);
+  EXPECT_EQ(vocab.getId("<g>"), std::nullopt);
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, appendEmptySegmentIsNoOp) {
+  // An empty segment appended to an empty vocabulary.
+  SecondaryVocabulary emptyVocab{};
+  emptyVocab.appendSegment(makeSegment({}));
+  EXPECT_EQ(emptyVocab.numWords(), 0);
+  EXPECT_EQ(emptyVocab.numSegments(), 0);
+  EXPECT_EQ(emptyVocab.getId("<b>"), std::nullopt);
+
+  // The same holds for the constructor.
+  SecondaryVocabulary constructedEmpty{std::vector<std::string>{}};
+  EXPECT_EQ(constructedEmpty.numWords(), 0);
+  EXPECT_EQ(constructedEmpty.numSegments(), 0);
+
+  // An empty segment appended to a nonempty vocabulary, followed by a nonempty
+  // one, whose global indices directly follow the ones of the first segment.
+  SecondaryVocabulary vocab{secondaryVocabWords};
+  vocab.appendSegment(makeSegment({}));
+  EXPECT_EQ(vocab.numWords(), secondaryVocabWords.size());
+  EXPECT_EQ(vocab.numSegments(), 1);
+  expectWordsAndIdsMatch(vocab, secondaryVocabWords);
+
+  vocab.appendSegment(makeSegment({"<f>"}));
+  EXPECT_EQ(vocab.numWords(), 4);
+  EXPECT_EQ(vocab.numSegments(), 2);
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(3)], "<f>");
+  EXPECT_EQ(vocab.getId("<f>"), SecondaryVocabIndex::make(3));
 }
 
 // _____________________________________________________________________________
@@ -600,7 +663,7 @@ std::string runQuery(QueryExecutionContext* qec, const std::string& query) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::string result;
   for (const auto& block : ExportQueryExecutionTrees::computeResult(
-           parsedQuery, executionTree, ad_utility::MediaType::tsv, timer,
+           parsedQuery, *executionTree, ad_utility::MediaType::tsv, timer,
            cancellationHandle)) {
     result += block;
   }
@@ -639,7 +702,7 @@ void runUpdate(ContextWithSecondaryVocab& context, const std::string& update) {
           QueryPlanner queryPlanner{&context.qec_, cancellationHandle};
           auto executionTree = queryPlanner.createExecutionTree(parsedQuery);
           ExecuteUpdate::executeUpdate(*context.index_, parsedQuery,
-                                       executionTree, deltaTriples,
+                                       *executionTree, deltaTriples,
                                        cancellationHandle);
         }
       });
@@ -730,8 +793,8 @@ TEST(SecondaryVocabIndex, updateWithWordOfTheSecondaryVocabulary) {
 // test that a future change of the secondary vocabulary has to keep passing.
 TEST(SecondaryVocabIndex, sameResultsWithAndWithoutSecondaryVocabulary) {
   // A knowledge graph with enough triples to span several blocks per
-  // permutation (a block holds two `Id`s per column in the tests, see
-  // `TestIndexConfig::blocksizePermutations`), and with objects of several
+  // permutation (a block holds two rows in the tests, see
+  // `TestIndexConfig::rowsPerBlock`), and with objects of several
   // datatypes.
   std::string kg;
   for (size_t i = 0; i < 12; ++i) {

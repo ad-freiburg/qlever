@@ -9,13 +9,16 @@
 
 #include "index/vocabulary/SecondaryVocabulary.h"
 
+#include <functional>
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/shift.h"
 #include "util/Exception.h"
+#include "util/Views.h"
 
 // _____________________________________________________________________________
-SecondaryVocabulary::SecondaryVocabulary(std::vector<std::string> words) {
+SecondaryVocabulary::SecondaryVocabulary(ql::span<const std::string> words) {
   CompactVectorOfStrings<char> segment;
   segment.build(words);
   appendSegment(std::move(segment));
@@ -23,26 +26,32 @@ SecondaryVocabulary::SecondaryVocabulary(std::vector<std::string> words) {
 
 // _____________________________________________________________________________
 void SecondaryVocabulary::appendSegment(CompactVectorOfStrings<char> segment) {
-  // Check that the words within `segment` are pairwise distinct, via a sorted
-  // copy of the words (the segment itself may be in arbitrary order).
-  std::vector<std::string_view> wordsOfSegment(segment.begin(), segment.end());
-  ql::ranges::sort(wordsOfSegment);
-  AD_CONTRACT_CHECK(
-      ql::ranges::adjacent_find(wordsOfSegment) == wordsOfSegment.end(),
-      "The words of a secondary vocabulary have to be distinct");
-
-  // Check that none of the words of `segment` is already contained in this
-  // vocabulary. NOTE: This has to happen before `segment` is appended below,
-  // because `getId` must only find the words that were already contained.
-  for (std::string_view word : wordsOfSegment) {
-    AD_CONTRACT_CHECK(
-        !getId(word).has_value(),
-        "The words of a secondary vocabulary have to be distinct");
+  // Empty segments would only bloat `segments_` and `segmentOffsets_`.
+  if (segment.size() == 0) {
+    return;
   }
 
-  segmentOffsets_.push_back(numWords());
+  // Check that the words of `segment` are sorted and pairwise distinct. This
+  // is a precondition that the caller has to establish (see the declaration),
+  // because `segment` may be a zero-copy view that must not be reordered here.
+  AD_CONTRACT_CHECK(
+      ql::ranges::adjacent_find(segment, std::greater_equal<>{}) ==
+          segment.end(),
+      "The words of a segment of a secondary vocabulary have to be sorted and "
+      "pairwise distinct");
+
+  // Determine where in `sortedIndices_` the new words have to go, which also
+  // checks that none of them is already contained.
+  //
+  // NOTE: Both of these have to happen before `segment` is appended below,
+  // because `wordAt` must only see the words that were already contained, and
+  // because a rejected segment has to leave this vocabulary unchanged.
+  std::vector<size_t> insertPositions = insertPositionsInSortedIndices(segment);
+
+  uint64_t firstGlobalIndex = numWords();
+  segmentOffsets_.push_back(firstGlobalIndex);
   segments_.push_back(std::move(segment));
-  rebuildSortedIndices();
+  mergeIntoSortedIndices(insertPositions, firstGlobalIndex);
 }
 
 // _____________________________________________________________________________
@@ -61,31 +70,81 @@ std::string_view SecondaryVocabulary::operator[](
     SecondaryVocabIndex index) const {
   uint64_t globalIndex = index.get();
   AD_CONTRACT_CHECK(globalIndex < numWords());
+  // `segmentOffsets_[0] == 0 <= globalIndex`, so `it` is never `begin()`, and
+  // the segment before `it` is the last one that starts at or before
+  // `globalIndex`.
   auto it = ql::ranges::upper_bound(segmentOffsets_, globalIndex);
   size_t segmentIdx = static_cast<size_t>(it - segmentOffsets_.begin()) - 1;
-  return segments_.at(segmentIdx)[globalIndex - segmentOffsets_[segmentIdx]];
+  return segments_[segmentIdx][globalIndex - segmentOffsets_[segmentIdx]];
 }
 
 // _____________________________________________________________________________
 std::optional<SecondaryVocabIndex> SecondaryVocabulary::getId(
     std::string_view word) const {
-  auto project = [this](uint64_t globalIndex) { return wordAt(globalIndex); };
-  auto it = ql::ranges::lower_bound(sortedIndices_, word, {}, project);
-  if (it == sortedIndices_.end() || project(*it) != word) {
+  auto [it, found] = lowerBoundInSortedIndices(word, sortedIndices_.begin());
+  if (!found) {
     return std::nullopt;
   }
   return SecondaryVocabIndex::make(*it);
 }
 
 // _____________________________________________________________________________
-void SecondaryVocabulary::rebuildSortedIndices() {
-  sortedIndices_.clear();
-  sortedIndices_.reserve(numWords());
-  for (uint64_t i = 0; i < numWords(); ++i) {
-    sortedIndices_.push_back(i);
+std::vector<size_t> SecondaryVocabulary::insertPositionsInSortedIndices(
+    const CompactVectorOfStrings<char>& segment) const {
+  std::vector<size_t> insertPositions;
+  insertPositions.reserve(segment.size());
+  // The words of `segment` are sorted, so their insert positions are
+  // non-decreasing and the search range can be shrunk from the left as we go.
+  auto begin = sortedIndices_.cbegin();
+  for (std::string_view word : segment) {
+    auto [it, found] = lowerBoundInSortedIndices(word, begin);
+    AD_CONTRACT_CHECK(!found,
+                      "The words of a secondary vocabulary have to be "
+                      "distinct, but the word ",
+                      word, " is already contained in a previous segment");
+    insertPositions.push_back(
+        static_cast<size_t>(it - sortedIndices_.cbegin()));
+    begin = it;
   }
+  return insertPositions;
+}
+
+// _____________________________________________________________________________
+void SecondaryVocabulary::mergeIntoSortedIndices(
+    const std::vector<size_t>& insertPositions, uint64_t firstGlobalIndex) {
+  size_t numOldWords = sortedIndices_.size();
+  size_t numNewWords = insertPositions.size();
+  sortedIndices_.resize(numOldWords + numNewWords);
+
+  // Fill `sortedIndices_` from the back. `previousInsertPos` is the position
+  // at which the global index of the previously handled new word was written
+  // (initially the end). Going backwards through the new words, for the new
+  // word `i`, first shift the previously contained global indices that have to
+  // end up behind it to the right by `i + 1` positions (which makes room for
+  // the global indices of the new words `0, ..., i`), then write the global
+  // index of word `i` directly in front of the shifted ones. The global
+  // indices at the positions in front of `insertPositions.front()` stay where
+  // they are, so each of them is moved at most once.
+  auto previousInsertPos = sortedIndices_.end();
+  for (size_t i : ad_utility::integerRange(numNewWords) | ql::views::reverse) {
+    auto insertPos = sortedIndices_.begin() +
+                     static_cast<std::ptrdiff_t>(insertPositions[i]);
+    ql::shift_right(insertPos, previousInsertPos,
+                    static_cast<std::ptrdiff_t>(i + 1));
+    previousInsertPos = insertPos + static_cast<std::ptrdiff_t>(i);
+    *previousInsertPos = firstGlobalIndex + i;
+  }
+}
+
+// _____________________________________________________________________________
+std::pair<std::vector<uint64_t>::const_iterator, bool>
+SecondaryVocabulary::lowerBoundInSortedIndices(
+    std::string_view word, std::vector<uint64_t>::const_iterator first) const {
   auto project = [this](uint64_t globalIndex) { return wordAt(globalIndex); };
-  ql::ranges::sort(sortedIndices_, {}, project);
+  auto it =
+      ql::ranges::lower_bound(first, sortedIndices_.cend(), word, {}, project);
+  bool found = it != sortedIndices_.cend() && project(*it) == word;
+  return {it, found};
 }
 
 // _____________________________________________________________________________

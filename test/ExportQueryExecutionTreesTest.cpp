@@ -48,7 +48,7 @@ std::string runQueryStreamableResult(
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
   auto strGenerator = ExportQueryExecutionTrees::computeResult(
-      pq, qet, mediaType, timer, std::move(cancellationHandle));
+      pq, *qet, mediaType, timer, std::move(cancellationHandle));
 
   std::string result;
   for (const auto& block : strGenerator) {
@@ -78,7 +78,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::string resStr;
   for (auto c : ExportQueryExecutionTrees::computeResult(
-           pq, qet, mediaType, timer, std::move(cancellationHandle))) {
+           pq, *qet, mediaType, timer, std::move(cancellationHandle))) {
     resStr += c;
   }
   return nlohmann::json::parse(resStr);
@@ -1657,7 +1657,7 @@ TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
   ad_utility::Timer timer(ad_utility::Timer::Started);
   EXPECT_ANY_THROW(([&]() {
     [[maybe_unused]] auto generator = ExportQueryExecutionTrees::computeResult(
-        pq, qet, GetParam(), timer, std::move(cancellationHandle));
+        pq, *qet, GetParam(), timer, std::move(cancellationHandle));
   }()));
 }
 
@@ -1889,14 +1889,14 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
   std::this_thread::sleep_for(1ms);
 
   auto jsonStream = ExportQueryExecutionTrees::computeResultAsQLeverJSON(
-      pq, qet, pq._limitOffset, timer, std::move(cancellationHandle));
+      pq, *qet, pq._limitOffset, timer, std::move(cancellationHandle));
 
   std::string aggregateString{};
   for (std::string_view chunk : jsonStream) {
     aggregateString += chunk;
   }
   nlohmann::json json = nlohmann::json::parse(aggregateString);
-  auto originalRuntimeInfo = qet.getRootOperation()->runtimeInfo();
+  auto originalRuntimeInfo = qet->getRootOperation()->runtimeInfo();
 
   EXPECT_EQ(json["query"], query);
   EXPECT_EQ(json["status"], "OK");
@@ -2029,7 +2029,7 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   std::string result;
   for (const auto& chunk : ExportQueryExecutionTrees::computeResult(
-           parsedQuery, qet, ad_utility::MediaType::sparqlXml, timer,
+           parsedQuery, *qet, ad_utility::MediaType::sparqlXml, timer,
            std::move(cancellationHandle2))) {
     result += chunk;
   }
@@ -2047,7 +2047,7 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   std::string tsvResult;
   for (const auto& chunk : ExportQueryExecutionTrees::computeResult(
-           parsedQuery, qet, ad_utility::MediaType::tsv, tsvTimer,
+           parsedQuery, *qet, ad_utility::MediaType::tsv, tsvTimer,
            std::move(cancellationHandle3))) {
     tsvResult += chunk;
   }

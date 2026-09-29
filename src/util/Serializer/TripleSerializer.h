@@ -93,21 +93,21 @@ CPP_template(typename Serializer)(
                        ad_utility::dereference);
 }
 
-// Serialize the local vocabulary to the output stream, but without any of its
-// words: write exactly the format of `serializeLocalVocab` above, with the
+// Serialize only the blank node blocks of the local vocabulary, and none of
+// its words: write exactly the format of `serializeLocalVocab` above, with the
 // number of words set to zero, such that `deserializeLocalVocab` reads it back
-// as a local vocab that holds only the blank node blocks (and returns an empty
-// mapping). Use this if the caller has stored the words elsewhere, as
+// as a local vocab that holds only those blank node blocks (and returns an
+// empty mapping). Use this if the caller has stored the words elsewhere, as
 // `NamedCachedQueryBlobManager` does: it moves the words of the local vocab of
 // a named cache entry to the secondary vocabulary of the blob, and rewrites
 // the `Id`s of the entry accordingly, so that the words must not be written a
 // second time here.
 CPP_template(typename Serializer)(
     requires serialization::WriteSerializer<
-        Serializer>) void serializeLocalVocabWithoutWords(Serializer&
-                                                              serializer,
-                                                          const LocalVocab&
-                                                              vocab) {
+        Serializer>) void serializeOnlyBlankNodeBlocksFromLocalVocab(Serializer&
+                                                                         serializer,
+                                                                     const LocalVocab&
+                                                                         vocab) {
   serializer << vocab.getOwnedLocalBlankNodeBlocks();
   serializer << uint64_t{0};
 }
@@ -157,7 +157,7 @@ CPP_template(typename Range, typename Serializer)(
 }
 
 // TODO<joka921> Comments.
-inline void remapLocalVocab(ql::span<Id> ids,
+inline void remapLocalVocab(IdColumnRef ids,
                             const absl::flat_hash_map<Id::T, Id>& mapping) {
   for (Id& id : ids) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
@@ -171,7 +171,7 @@ inline void remapLocalVocab(ql::span<Id> ids,
 template <typename Serializer>
 void deserializeIds(Serializer& serializer,
                     const absl::flat_hash_map<Id::T, Id>& mapping,
-                    ql::span<Id> ids) {
+                    IdColumnRef ids) {
   serializer >> ids;
   remapLocalVocab(ids, mapping);
 }

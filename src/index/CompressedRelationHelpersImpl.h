@@ -1,15 +1,18 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2021 - 2025 The QLever Authors, in particular:
 //
 // 2021 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2025        Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
-#include "index/CompressedRelation.h"
-#include "util/ExceptionHandling.h"
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
+
+#include "index/CompressedRelationWriter.h"
+#include "util/ExceptionHandling.h"
 
 namespace compressedRelationHelpers {
 
@@ -127,10 +130,18 @@ class DistinctIdCounter {
     lastSeen_ = id;
   }
 
+  // Reset the counter, so that it can be reused for the next relation. Use
+  // this instead of `getAndReset` if the count itself is not needed.
+  void reset() {
+    lastSeen_ = std::numeric_limits<Id>::max();
+    count_ = 0;
+  }
+
   // ___________________________________________________________________________
   size_t getAndReset() {
-    lastSeen_ = std::numeric_limits<Id>::max();
-    return std::exchange(count_, 0);
+    auto count = count_;
+    reset();
+    return count;
   }
 };
 

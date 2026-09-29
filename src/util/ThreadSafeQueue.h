@@ -8,6 +8,7 @@
 
 #include <absl/cleanup/cleanup.h>
 
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <optional>
@@ -20,6 +21,18 @@
 #include "util/jthread.h"
 
 namespace ad_utility::data_structures {
+
+// The possible results of `ThreadSafeQueue::tryPush`, see there.
+enum class TryPushResult {
+  // The value was pushed to the queue.
+  Pushed,
+  // The queue was full, so the value was not pushed. The caller has to try
+  // again later, typically after a consumer has popped a value.
+  Full,
+  // `finish` was called (or an exception was pushed), so the value was not
+  // pushed and no further value will ever be accepted.
+  Finished
+};
 
 // A queue to which multiple threads can push and from which multiple threads
 // can pop in a thread-safe manner. Any producer or consumer can call `finish`;
@@ -63,6 +76,28 @@ class ThreadSafeQueue : public ad_utility::NoCopyNoMove {
     lock.unlock();
     pushNotification_.notify_one();
     return true;
+  }
+
+  // Like `push`, but never blocks: if the queue is full, the value is not
+  // pushed and `TryPushResult::Full` is returned, and the caller has to try
+  // again later. Use this in a producer that must not block, for example one on
+  // a thread that has to stay responsive. The `value` is only moved from if the
+  // result is `Pushed`, so that the caller can hand the very same value over
+  // again once there is space.
+  TryPushResult tryPush(T&& value) {
+    using enum TryPushResult;
+    {
+      std::unique_lock lock{mutex_};
+      if (finish_) {
+        return Finished;
+      }
+      if (queue_.size() >= maxSize_) {
+        return Full;
+      }
+      queue_.push(std::move(value));
+    }
+    pushNotification_.notify_one();
+    return Pushed;
   }
 
   // The semantics of pushing an exception are as follows: All subsequent
@@ -115,18 +150,55 @@ class ThreadSafeQueue : public ad_utility::NoCopyNoMove {
   // explicit call to `finish` is missing.
   ~ThreadSafeQueue() { finish(); }
 
-  // Blocks until another thread pushes an element via push() which is
-  // hen returned or signalLastElementWasPushed() is called resulting in an
-  // empty optional, whatever happens first
+  // Block until another thread pushes an element, which is then returned, or
+  // until `finish` is called, which results in an empty optional, whatever
+  // happens first.
   std::optional<T> pop() {
     std::unique_lock lock{mutex_};
-    pushNotification_.wait(lock, [this] {
-      return !queue_.empty() || finish_ || pushedException_;
-    });
+    pushNotification_.wait(lock, [this] { return canPop(); });
+    return popNextValue(lock);
+  }
+
+  // Like `pop`, but call `onWait` before each wait, so at least once every
+  // `interval` for as long as waiting is necessary (and not at all if a value
+  // is available right away). This makes the wait interruptible: `onWait` may
+  // throw, in which case the exception is propagated and the queue is left
+  // unchanged, which lets a blocked consumer react to a cancelled query.
+  // The mutex is not held while `onWait` runs, so `onWait` may even call
+  // `finish` on this queue.
+  //
+  // NOTE: Throwing is the only way for `onWait` to abort. Returning `false`
+  // would require a richer return type than `std::optional<T>`, as the caller
+  // then has to distinguish "value", "queue done" and "aborted".
+  CPP_template_2(typename Callback)(requires ql::concepts::invocable<Callback>)
+      std::optional<T> pop(std::chrono::milliseconds interval,
+                           const Callback& onWait) {
+    std::unique_lock lock{mutex_};
+    while (!canPop()) {
+      lock.unlock();
+      onWait();
+      lock.lock();
+      pushNotification_.wait_for(lock, interval, [this] { return canPop(); });
+    }
+    return popNextValue(lock);
+  }
+
+ private:
+  // Whether a call to `pop` can currently return without waiting. `mutex_` has
+  // to be held while this is called. A pushed exception needs no separate
+  // check, because `pushException` also sets `finish_`.
+  bool canPop() const { return !queue_.empty() || finish_; }
+
+  // The common part of the two `pop` functions above: rethrow a pushed
+  // exception, report the end of the queue, or return its front element.
+  // `lock` has to hold `mutex_`, and `canPop()` has to be true.
+  std::optional<T> popNextValue(std::unique_lock<std::mutex>& lock) {
     if (pushedException_) {
       std::rethrow_exception(pushedException_);
     }
-    if (finish_ && queue_.empty()) {
+    // `canPop()` and no exception, so an empty queue means that `finish` was
+    // called and that everything has been popped.
+    if (queue_.empty()) {
       return std::nullopt;
     }
     std::optional<T> value = std::move(queue_.front());
