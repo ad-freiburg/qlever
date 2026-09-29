@@ -12,6 +12,8 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <climits>
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
@@ -30,6 +32,7 @@
 #include "util/GTestHelpers.h"
 #include "util/IoUringManager.h"
 #include "util/Log.h"
+#include "util/PageCacheReadTestHelpers.h"
 
 namespace {
 
@@ -680,6 +683,115 @@ TEST(ReadPageCacheHits, mixedBatchWithShortRead) {
   EXPECT_EQ(buffers[1], "CCCC");
   EXPECT_EQ(buffers[2], "DD");
   EXPECT_EQ(buffers[5], "BBBB");
+}
+
+// Fault injection for `readPageCacheHits`: the tests below replace its
+// `preadv2(RWF_NOWAIT)` call. They need the fast path to be compiled in.
+using pageCacheReadTestHelpers::ScopedPageCacheRead;
+
+// Number of calls of the injected page-cache reads below.
+size_t numPageCacheReads = 0;
+
+// The system call, counted.
+int64_t countedSystemRead(int fd, const ::iovec* iov, int iovcnt,
+                          int64_t offset) {
+  ++numPageCacheReads;
+  return ad_utility::detail::systemPageCacheRead(fd, iov, iovcnt, offset);
+}
+
+// `EOPNOTSUPP`, counted.
+int64_t countedNotSupported(int fd, const ::iovec* iov, int iovcnt,
+                            int64_t offset) {
+  ++numPageCacheReads;
+  return pageCacheReadTestHelpers::notSupported(fd, iov, iovcnt, offset);
+}
+
+// Only the first 6 bytes of every run are "cached".
+int64_t sixBytesCached(int fd, const ::iovec* iov, int iovcnt, int64_t offset) {
+  int64_t numBytesRead =
+      ad_utility::detail::systemPageCacheRead(fd, iov, iovcnt, offset);
+  return numBytesRead < 0 ? numBytesRead : std::min<int64_t>(numBytesRead, 6);
+}
+
+// `RWF_NOWAIT` may return 0 before the end of the file (readv(2)).
+int64_t zeroBytes(int, const ::iovec*, int, int64_t) { return 0; }
+
+// Skip a test if `RWF_NOWAIT` is not available on this platform.
+#define SKIP_WITHOUT_PAGE_CACHE_FAST_PATH()                 \
+  if (!ad_utility::pageCacheFastPathIsSupported()) {        \
+    GTEST_SKIP() << "preadv2(RWF_NOWAIT) is not available"; \
+  }
+
+// Reads that are not cached (`EAGAIN`) are all returned, their buffers stay
+// untouched, and the fast path stays enabled.
+TEST(ReadPageCacheHits, notCachedReadsAreReturned) {
+  SKIP_WITHOUT_PAGE_CACHE_FAST_PATH();
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  ScopedPageCacheRead inject{&pageCacheReadTestHelpers::nothingCached};
+  auto [notServed, buffers] = readHits(fd, {{0, 4}, {4, 4}, {12, 4}});
+  EXPECT_EQ(notServed, allPositions(3));
+  EXPECT_EQ(buffers[0], "----");
+  EXPECT_TRUE(ad_utility::pageCacheFastPathIsSupported());
+}
+
+// A partial read serves the reads it covers completely; the incomplete read
+// and the rest of its run are returned. A read of 0 bytes serves nothing.
+TEST(ReadPageCacheHits, partialAndZeroByteReads) {
+  SKIP_WITHOUT_PAGE_CACHE_FAST_PATH();
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  {
+    ScopedPageCacheRead inject{&sixBytesCached};
+    auto [notServed, buffers] = readHits(fd, {{0, 4}, {4, 4}, {12, 4}});
+    EXPECT_EQ(notServed, (std::vector<size_t>{1}));
+    EXPECT_EQ(buffers[0], "AAAA");
+    EXPECT_EQ(buffers[2], "DDDD");
+  }
+  {
+    ScopedPageCacheRead inject{&zeroBytes};
+    auto [notServed, buffers] = readHits(fd, {{0, 4}, {4, 4}, {12, 4}});
+    EXPECT_EQ(notServed, allPositions(3));
+  }
+}
+
+// `EOPNOTSUPP` disables the fast path for the process: the failed run and all
+// later runs of the batch are returned without further calls, and so are all
+// reads of later batches.
+TEST(ReadPageCacheHits, notSupportedDisablesTheFastPath) {
+  SKIP_WITHOUT_PAGE_CACHE_FAST_PATH();
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  numPageCacheReads = 0;
+  {
+    ScopedPageCacheRead inject{&countedNotSupported};
+    auto [notServed, buffers] = readHits(fd, {{0, 4}, {8, 4}, {12, 2}});
+    EXPECT_EQ(notServed, allPositions(3));
+    EXPECT_EQ(numPageCacheReads, 1u);
+    EXPECT_FALSE(ad_utility::pageCacheFastPathIsSupported());
+    auto [notServed2, buffers2] = readHits(fd, {{0, 4}});
+    EXPECT_EQ(notServed2, allPositions(1));
+    EXPECT_EQ(numPageCacheReads, 1u);
+  }
+  // The guard re-enabled the fast path.
+  EXPECT_TRUE(ad_utility::pageCacheFastPathIsSupported());
+}
+
+// A run of more than `IOV_MAX` adjacent reads is split into several calls.
+TEST(ReadPageCacheHits, runsAreSplitAtIovMax) {
+  SKIP_WITHOUT_PAGE_CACHE_FAST_PATH();
+  const size_t numReads = static_cast<size_t>(IOV_MAX) + 1;
+  std::string content(numReads, 'x');
+  content.back() = 'y';
+  auto [tmp, fd] = makeTempFile(content);
+  std::vector<std::pair<uint64_t, size_t>> reads;
+  for (size_t i = 0; i < numReads; ++i) {
+    reads.emplace_back(i, 1);
+  }
+  numPageCacheReads = 0;
+  ScopedPageCacheRead inject{&countedSystemRead};
+  auto [notServed, buffers] = readHits(fd, reads);
+  EXPECT_TRUE(notServed.empty());
+  EXPECT_EQ(numPageCacheReads, 2u);
+  EXPECT_EQ(buffers.front(), "x");
+  EXPECT_EQ(buffers.back(), "y");
 }
 
 // An empty batch is trivially served, and spans of different lengths are

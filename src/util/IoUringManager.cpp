@@ -58,6 +58,36 @@ std::atomic<bool> pageCacheFastPathSupported{true};
 #endif
 }  // namespace
 
+namespace detail {
+//______________________________________________________________________________
+int64_t systemPageCacheRead(int fd, const ::iovec* iov, int iovcnt,
+                            int64_t offset) {
+#ifdef QL_PAGE_CACHE_FAST_PATH
+  return preadv2(fd, iov, iovcnt, static_cast<off_t>(offset), RWF_NOWAIT);
+#else
+  (void)fd;
+  (void)iov;
+  (void)iovcnt;
+  (void)offset;
+  errno = EOPNOTSUPP;
+  return -1;
+#endif
+}
+
+//______________________________________________________________________________
+PageCacheRead& pageCacheRead() {
+  static PageCacheRead function = &systemPageCacheRead;
+  return function;
+}
+
+//______________________________________________________________________________
+void resetPageCacheFastPathSupport() {
+#ifdef QL_PAGE_CACHE_FAST_PATH
+  pageCacheFastPathSupported.store(true, std::memory_order_relaxed);
+#endif
+}
+}  // namespace detail
+
 //______________________________________________________________________________
 bool pageCacheFastPathIsSupported() {
 #ifdef QL_PAGE_CACHE_FAST_PATH
@@ -100,9 +130,9 @@ std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
     // See https://man7.org/linux/man-pages/man2/preadv2.2.html: with
     // `RWF_NOWAIT`, the call fails with `EAGAIN` (or returns fewer bytes)
     // instead of waiting for the storage device when data is not cached.
-    const ssize_t numBytesRead =
-        preadv2(fd, iovecs.data(), static_cast<int>(iovecs.size()),
-                static_cast<off_t>(offsets[runBegin]), RWF_NOWAIT);
+    const int64_t numBytesRead = detail::pageCacheRead()(
+        fd, iovecs.data(), static_cast<int>(iovecs.size()),
+        static_cast<int64_t>(offsets[runBegin]));
     if (numBytesRead < 0 && errno == EOPNOTSUPP) {
       if (pageCacheFastPathSupported.exchange(false)) {
         AD_LOG_WARN << "preadv2 with RWF_NOWAIT is not supported for the "
