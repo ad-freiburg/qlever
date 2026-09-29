@@ -25,8 +25,8 @@ namespace ad_utility {
 // copying them, even if the rows are consumed asynchronously.
 class IdTableOrSharedIdTableView {
  public:
-  // A type-erased owner of the rows of a non-owning table.
-  using Owner = std::shared_ptr<const void>;
+  // The owner of the rows of a non-owning table.
+  using Owner = std::shared_ptr<const IdTableStatic<0>>;
 
  private:
   // A view together with the owner of the rows that it points to.

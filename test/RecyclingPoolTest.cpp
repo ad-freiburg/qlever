@@ -9,9 +9,10 @@
 
 #include <gmock/gmock.h>
 
-#include <thread>
+#include <stdexcept>
 
 #include "util/RecyclingPool.h"
+#include "util/jthread.h"
 
 using ad_utility::RecyclingPool;
 using Pool = RecyclingPool<std::vector<int>>;
@@ -85,7 +86,7 @@ TEST(RecyclingPool, makeRecyclingOwner) {
 TEST(RecyclingPool, concurrentUse) {
   Pool pool;
   static constexpr size_t numThreads = 4;
-  std::vector<std::thread> threads;
+  std::vector<ad_utility::JThread> threads;
   for (size_t i = 0; i < numThreads; ++i) {
     threads.emplace_back([&pool]() {
       for (int j = 0; j < 1000; ++j) {
@@ -93,9 +94,21 @@ TEST(RecyclingPool, concurrentUse) {
       }
     });
   }
-  for (auto& thread : threads) {
-    thread.join();
-  }
+  // Join all the threads.
+  threads.clear();
   EXPECT_LE(pool.numStoredObjects(), numThreads);
   EXPECT_GE(pool.numStoredObjects(), 1);
+}
+
+// _____________________________________________________________________________
+TEST(RecyclingPool, throwingFactoryLeavesPoolUnchanged) {
+  Pool pool;
+  auto throwingFactory = []() -> std::vector<int> {
+    throw std::runtime_error{"factory failed"};
+  };
+  EXPECT_THROW(pool.take(throwingFactory), std::runtime_error);
+  // The failed `take` didn't count as a taken object, so a foreign object is
+  // still dropped.
+  pool.giveBack({42});
+  EXPECT_EQ(pool.numStoredObjects(), 0);
 }

@@ -2519,7 +2519,7 @@ TEST(CompressedRelationWriter, directlyWrittenSmallRelationWithGraphs) {
 // next block must not be counted twice.
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
-  // A block size of 80 bytes means 10 triples per block.
+  // Blocks of 10 rows each.
   std::vector<RelationInput> inputs;
   // 30 rows with 10 distinct `col1` IDs, each of which occurs three times. The
   // blocks end after 10, 20, and 30 rows, so the `col1` IDs `3` and `6` each
@@ -2537,10 +2537,10 @@ TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
   inputs.push_back(RelationInput{2, std::move(rowsOfSecondRelation)});
 
   checkPermutationIsIndependentOfInputBlockSize(
-      inputs, 80_B, inputBlockSizesForPathEquivalence);
+      inputs, 10, inputBlockSizesForPathEquivalence);
 
   auto [filename, cleanup] = testFilenameWithCleanup();
-  auto result = buildPermutation(inputs, 80_B, 1000, filename);
+  auto result = buildPermutation(inputs, 10, 1000, filename);
   ASSERT_EQ(result.largeRelationMetadata_.size(), 2);
   const auto& metadata1 = result.largeRelationMetadata_.at(0);
   EXPECT_EQ(metadata1.col0Id_, V(1));

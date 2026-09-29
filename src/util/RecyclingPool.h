@@ -13,14 +13,19 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "util/Synchronized.h"
 
 namespace ad_utility {
 
-// A thread-safe pool of objects (typically buffers whose memory is expensive to
-// allocate) that are no longer needed and can therefore be reused. An object
+// A thread-safe pool of objects (typically large buffers) that are no longer
+// needed and can therefore be reused. Note: The allocation of a fresh buffer is
+// cheap in itself, because Linux only backs the memory of a process with
+// physical pages once that memory is actually touched. The expensive part are
+// the many page faults when a fresh buffer is filled for the first time, which
+// are avoided by reusing the (already touched) memory of a buffer. An object
 // is obtained via `take`, which reuses an object from the pool if there is one
 // and creates a new one otherwise, and it is handed back via `giveBack` once it
 // is no longer needed.
@@ -41,23 +46,31 @@ class RecyclingPool {
   };
   Synchronized<State> state_;
 
+  // Moving an object out of the pool must not throw, so that `take` can't
+  // leave the pool in an inconsistent state.
+  static_assert(std::is_nothrow_move_constructible_v<T>);
+
  public:
   // Return an object from the pool if there is one, and `makeNew()` otherwise.
   // Note: The returned object is in the state in which it was given back, so
-  // the caller typically has to reset it (e.g. `clear()` a buffer).
+  // the caller typically has to reset it (e.g. `clear()` a buffer). If
+  // `makeNew()` throws, then the pool remains unchanged.
   template <typename MakeNew>
   T take(const MakeNew& makeNew) {
     {
       auto state = state_.wlock();
-      ++state->numTaken_;
       if (!state->objects_.empty()) {
         T result = std::move(state->objects_.back());
         state->objects_.pop_back();
+        ++state->numTaken_;
         return result;
       }
     }
-    // Create the new object without holding the lock.
-    return std::invoke(makeNew);
+    // Create the new object without holding the lock, and only count it as
+    // taken once its creation has succeeded.
+    T result = std::invoke(makeNew);
+    ++state_.wlock()->numTaken_;
+    return result;
   }
 
   // Store the `object`, which is no longer needed, in the pool for reuse by a

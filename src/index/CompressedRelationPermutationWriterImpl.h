@@ -11,7 +11,6 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 
-#include <array>
 #include <memory>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -35,15 +34,12 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
 
     // We only need to sort by the columns of the triple + the graph
     // column, not the additional payload. The comparison is performed on the
-    // bits of the `Id`s, which is much cheaper, see
-    // `bitsOfIdWithoutLocalVocab`.
-    auto pickBits = [](const auto& row) {
-      return std::array{
-          bitsOfIdWithoutLocalVocab(row[0]), bitsOfIdWithoutLocalVocab(row[1]),
-          bitsOfIdWithoutLocalVocab(row[2]), bitsOfIdWithoutLocalVocab(row[3])};
-    };
-    auto compare = [&pickBits](const auto& a, const auto& b) {
-      return pickBits(a) < pickBits(b);
+    // bits of the `Id`s, which is much cheaper, see `pickBitsOfColumns`.
+    auto compare = [](const auto& a, const auto& b) {
+      return pickBitsOfColumns<c0Idx, c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID>(
+                 a) <
+             pickBitsOfColumns<c0Idx, c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID>(
+                 b);
     };
     ql::ranges::sort(blockOfSmallRelations, compare);
     AD_CORRECTNESS_CHECK(!blockOfSmallRelations.empty());
@@ -324,6 +320,21 @@ struct CompressedRelationWriter::PermutationWriter {
         << "s" << std::endl;
   }
 
+  // Return the index of the first element `e` in `range[begin, end)` for which
+  // `projection(e) != value`, or `end` if there is no such element. This is
+  // the common implementation of `findFirstTripleChange` and `findEndOfRun`
+  // below.
+  template <typename Range, typename Value, typename Projection>
+  static size_t findFirstDifferent(const Range& range, size_t begin, size_t end,
+                                   const Value& value,
+                                   const Projection& projection) {
+    auto it = ql::ranges::find_if(
+        range.begin() + begin, range.begin() + end,
+        [&value](const auto& projected) { return projected != value; },
+        projection);
+    return static_cast<size_t>(it - range.begin());
+  }
+
   // Return the index of the first row in `rows[begin, end)` whose first three
   // columns differ from the `lastTriple`, or `end` if there is no such row.
   // This is the first position at which a new block for a large relation may
@@ -342,13 +353,9 @@ struct CompressedRelationWriter::PermutationWriter {
   template <typename Rows, typename Triple>
   static size_t findFirstTripleChange(const Rows& rows, size_t begin,
                                       size_t end, const Triple& lastTriple) {
-    using compressedRelationHelpers::
-        pickFirstThreeColumnsOfIdsWithoutLocalVocab;
-    auto it = ql::ranges::find_if(
-        rows.begin() + begin, rows.begin() + end,
-        [&lastTriple](const auto& triple) { return triple != lastTriple; },
-        pickFirstThreeColumnsOfIdsWithoutLocalVocab);
-    return static_cast<size_t>(it - rows.begin());
+    return findFirstDifferent(
+        rows, begin, end, lastTriple,
+        compressedRelationHelpers::pickFirstThreeColumnsOfIdsWithoutLocalVocab);
   }
 
   // The special case of `findFirstTripleChange` above where the rows are
@@ -471,12 +478,9 @@ struct CompressedRelationWriter::PermutationWriter {
   template <typename Col0>
   static size_t findEndOfRun(const Col0& col0, size_t begin) {
     using compressedRelationHelpers::bitsOfIdWithoutLocalVocab;
-    const auto col0Bits = bitsOfIdWithoutLocalVocab(col0[begin]);
-    auto it = ql::ranges::find_if(
-        col0.begin() + begin, col0.end(), [col0Bits](Id id) {
-          return bitsOfIdWithoutLocalVocab(id) != col0Bits;
-        });
-    return static_cast<size_t>(it - col0.begin());
+    return findFirstDifferent(col0, begin, col0.size(),
+                              bitsOfIdWithoutLocalVocab(col0[begin]),
+                              bitsOfIdWithoutLocalVocab);
   }
 
   // Write the maximal batch of consecutive complete small relations that
@@ -581,7 +585,6 @@ struct CompressedRelationWriter::PermutationWriter {
   // `PermutationWriter` object.
   IfPair<PermutationPairResult, PermutationSingleResult> writePermutation(
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples) {
-    using compressedRelationHelpers::bitsOfIdWithoutLocalVocab;
     inputWaitTimer_.cont();
 
     auto col0 = permutation_.keys().at(0);
@@ -614,9 +617,7 @@ struct CompressedRelationWriter::PermutationWriter {
       size_t runBegin = 0;
       while (runBegin < block.numRows()) {
         Id col0Id = firstCol[runBegin];
-        if (!col0IdCurrentRelation_.has_value() ||
-            bitsOfIdWithoutLocalVocab(col0IdCurrentRelation_.value()) !=
-                bitsOfIdWithoutLocalVocab(col0Id)) {
+        if (col0Id != col0IdCurrentRelation_) {
           finishRelation();
           col0IdCurrentRelation_ = col0Id;
         }
