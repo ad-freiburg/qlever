@@ -1,0 +1,471 @@
+name: Timing screening
+
+# Timing SCREENING for a base/variant pair on many GitHub-hosted runners at
+# once. It does not replace Ural: verdict rows (defaults, regressions) stay on
+# the Ural micro lane / ural-wq. Hosted VMs are noisy and differ in CPU model,
+# so a single hosted A/B means little. Here every runner is its own
+# same-VM experiment, and the verdict is taken ACROSS runners:
+#   1. build: base_ref and variant_ref, one CMake target each (the
+#      build-binaries.yml flags: u24, gcc 13.3, Release, liburing 2.15).
+#   2. time (matrix, `runners` VMs in parallel): on each VM, both binaries run
+#      interleaved in ABBA order (round r: A B for odd r, B A for even r),
+#      pinned with `taskset -c 1`. One untimed warm-up per arm comes first.
+#      The scale variable (e.g. the benchmark's repetition count) is
+#      calibrated on the base so that every measurement takes >= min_seconds.
+#      A measurement is the benchmark's own `measured-time` (sum over the
+#      measurements whose descriptor contains `measurement`; with
+#      bench_json=false, the process wall time). It is divided by
+#      scale x items_per_scale when that is given.
+#      Per-VM delta = median(variant) / median(base) - 1.
+#      With aa_control, the same VM also runs base against base (A/A) with
+#      the same schedule. This gives a null distribution of the per-VM delta.
+#   3. aggregate: median of the per-VM deltas, min-max and quartiles across
+#      VMs, and the share of VMs whose delta has the sign of the median.
+#      Verdict: "variant faster/slower" if >= 80 % of VMs agree in sign AND
+#      |median delta| >= 3 %; otherwise "parity (screening)".
+#
+# Usage (after this file is on the default branch):
+#   ghq workflow run timing.yml -R marvin7122/qlever \
+#     -f base_ref=<k-1 branch/sha> -f variant_ref=<k branch/sha> \
+#     -f target=<BenchTarget> -f env="VAR=value ..." \
+#     -f scale_var=<REPETITIONS_VAR> -f items_per_scale=<items per unit> \
+#     [-f runners=16] [-f trials=3] [-f min_seconds=10] [-f aa_control=true]
+#   gh run download <run-id> -R marvin7122/qlever -n timing -D <dir>
+# Artifact `timing`: summary.md / summary.tsv (verdict per comparison),
+# per-vm.tsv (one delta per VM), measurements.tsv (every timed run), and
+# cpus.tsv (the CPU model of each VM).
+# No input is evaluated as shell code; inputs are charset-checked and
+# passed as argv words / environment entries.
+
+run-name: "timing ${{ inputs.target || 'self-test' }} ${{ inputs.base_ref }} -> ${{ inputs.variant_ref }} x${{ inputs.runners || '12' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: Base branch/SHA (for stack part k, part k-1)
+        required: true
+      variant_ref:
+        description: Variant branch/SHA
+        required: true
+      target:
+        description: One CMake target (a QLever benchmark binary)
+        required: true
+      env:
+        description: Space-separated KEY=VALUE pairs exported for every run
+        required: false
+        default: ''
+      args:
+        description: Extra argv words for the binary (charset A-Za-z0-9_.,:=+/- and spaces)
+        required: false
+        default: ''
+      scale_var:
+        description: Env var that scales the timed work (repetitions); calibrated to >= min_seconds
+        required: true
+      items_per_scale:
+        description: Items per scale unit (e.g. words per repetition) for ns/item; empty = seconds per unit
+        required: false
+        default: ''
+      measurement:
+        description: Only measurements whose descriptor contains this text (empty = all, summed)
+        required: false
+        default: ''
+      runners:
+        description: Number of parallel VMs (1-20)
+        required: false
+        default: '12'
+      trials:
+        description: ABBA rounds per VM (each round times both arms once)
+        required: false
+        default: '3'
+      min_seconds:
+        description: Minimum seconds per timed measurement
+        required: false
+        default: '10'
+      aa_control:
+        description: Also run base vs base (A/A null control) on every VM
+        type: boolean
+        required: false
+        default: true
+      bench_json:
+        description: Use the benchmark's measured-time (`-w`); false = process wall time
+        type: boolean
+        required: false
+        default: true
+  # Self-test when this file changes in a PR: the #3522 effect on the real
+  # decode path (Ural micro lane: 55 -> 105 ns/lookup, +90 %) with the A/A
+  # null control on every VM.
+  pull_request:
+    paths:
+      - .github/workflows/timing.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CCACHE_EPOCH: v1
+  LIBURING_VERSION: '2.15'
+  BASE_REF: ${{ inputs.base_ref || 'bench/pr73-realpath-base' }}
+  VARIANT_REF: ${{ inputs.variant_ref || 'bench/pr73-realpath-variant' }}
+  TARGET: ${{ inputs.target || 'CompressedVocabularyLookupBenchmark' }}
+  RUN_ENV: ${{ inputs.env || '' }}
+  RUN_ARGS: ${{ inputs.args || '' }}
+  SCALE_VAR: ${{ inputs.scale_var || 'VOCAB_BENCH_REPETITIONS' }}
+  ITEMS_PER_SCALE: ${{ inputs.items_per_scale || (github.event_name == 'pull_request' && '200000') || '' }}
+  MEASUREMENT: ${{ inputs.measurement || '' }}
+  TRIALS: ${{ inputs.trials || '3' }}
+  MIN_SECONDS: ${{ inputs.min_seconds || '10' }}
+  AA_CONTROL: ${{ github.event_name == 'pull_request' || inputs.aa_control }}
+  BENCH_JSON: ${{ github.event_name == 'pull_request' || inputs.bench_json }}
+
+jobs:
+  setup:
+    runs-on: ubuntu-24.04
+    outputs:
+      vms: ${{ steps.check.outputs.vms }}
+    steps:
+      - name: Check inputs
+        id: check
+        env:
+          RUNNERS: ${{ inputs.runners || '12' }}
+        run: |
+          set -f
+          fail() { echo "::error::$1"; exit 1; }
+          for r in "${BASE_REF}" "${VARIANT_REF}"; do
+            case "$r" in ''|*[!A-Za-z0-9_./-]*) fail "bad ref '$r'" ;; esac
+          done
+          case "${TARGET}" in ''|*[!A-Za-z0-9_.+-]*) fail "bad target '${TARGET}'" ;; esac
+          case "${RUN_ARGS}" in *[!A-Za-z0-9_.,:=+/\ -]*) fail "bad args '${RUN_ARGS}'" ;; esac
+          case "${MEASUREMENT}" in *[!A-Za-z0-9_.,:=+/\ -]*) fail "bad measurement '${MEASUREMENT}'" ;; esac
+          for kv in ${RUN_ENV}; do
+            printf '%s\n' "$kv" | grep -Eq '^[A-Z_][A-Z0-9_]*=[A-Za-z0-9_.,:+/-]*$' || fail "bad env pair '$kv'"
+          done
+          printf '%s\n' "${SCALE_VAR}" | grep -Eq '^[A-Z_][A-Z0-9_]*$' || fail "bad scale_var"
+          case "${ITEMS_PER_SCALE}" in *[!0-9]*) fail "bad items_per_scale" ;; esac
+          for n in "${RUNNERS}" "${TRIALS}" "${MIN_SECONDS}"; do
+            case "$n" in ''|*[!0-9]*) fail "bad number '$n'" ;; esac
+          done
+          [ "${RUNNERS}" -ge 1 ] && [ "${RUNNERS}" -le 20 ] || fail "runners must be 1-20"
+          [ "${TRIALS}" -ge 1 ] && [ "${TRIALS}" -le 10 ] || fail "trials must be 1-10"
+          echo "vms=$(python3 -c "import json,sys; print(json.dumps(list(range(1, int(sys.argv[1]) + 1))))" "${RUNNERS}")" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: setup
+    name: build ${{ matrix.arm }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: true
+      matrix:
+        arm: [base, variant]
+    env:
+      ARM_REF: ${{ matrix.arm == 'base' && (inputs.base_ref || 'bench/pr73-realpath-base') || (inputs.variant_ref || 'bench/pr73-realpath-variant') }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.ARM_REF }}
+          submodules: recursive
+
+      - name: Install dependencies (Ubuntu 24.04 archive only)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qy --no-install-recommends \
+            gcc-13 g++-13 ccache \
+            libboost1.83-all-dev libicu-dev libzstd-dev libjemalloc-dev \
+            libssl-dev libbz2-dev zlib1g-dev tzdata pkg-config
+
+      - name: Build liburing ${{ env.LIBURING_VERSION }}
+        run: |
+          URING="${RUNNER_TEMP}/liburing-install"
+          git clone -q --depth 1 -b "liburing-${LIBURING_VERSION}" \
+            https://github.com/axboe/liburing.git "${RUNNER_TEMP}/liburing"
+          cd "${RUNNER_TEMP}/liburing"
+          CC=gcc-13 CXX=g++-13 ./configure --prefix="${URING}" >/dev/null
+          make -j4 -C src >/dev/null
+          make install >/dev/null
+          {
+            echo "URING=${URING}"
+            echo "PKG_CONFIG_PATH=${URING}/lib/pkgconfig"
+            echo "LIBRARY_PATH=${URING}/lib"
+            echo "LD_LIBRARY_PATH=${URING}/lib"
+          } >> "$GITHUB_ENV"
+
+      - name: Build directory, swap, ccache
+        run: |
+          BUILD_DIR="${GITHUB_WORKSPACE}/build-u24"
+          SWAP_FILE=/extra-swapfile
+          mkdir -p "${BUILD_DIR}"
+          if [ -d /mnt ] && [ "$(df --output=avail -BG /mnt | tail -1 | tr -dc 0-9)" -ge 40 ]; then
+            sudo mkdir -p /mnt/build-u24
+            sudo chown "$(id -u):$(id -g)" /mnt/build-u24
+            sudo mount --bind /mnt/build-u24 "${BUILD_DIR}"
+            SWAP_FILE=/mnt/extra-swapfile
+          fi
+          sudo fallocate -l 8G "${SWAP_FILE}" && sudo chmod 600 "${SWAP_FILE}" \
+            && sudo mkswap "${SWAP_FILE}" && sudo swapon "${SWAP_FILE}" \
+            || echo "::warning::could not add swap"
+          {
+            echo "BUILD_DIR=${BUILD_DIR}"
+            echo "CCACHE_DIR=${HOME}/.cache/ccache"
+            echo "CCACHE_MAXSIZE=3G"
+            echo "CCACHE_COMPRESS=true"
+            echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}"
+            echo "CCACHE_NOHASHDIR=true"
+            echo "CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime"
+            echo "SHA=$(git rev-parse HEAD)"
+          } >> "$GITHUB_ENV"
+
+      # Same cache family as build-binaries.yml (same compiler and flags).
+      - name: Restore ccache
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.cache/ccache
+          key: ccache-noble-u24bin-${{ env.CCACHE_EPOCH }}-${{ env.SHA }}
+          restore-keys: |
+            ccache-noble-u24bin-${{ env.CCACHE_EPOCH }}-
+
+      - name: Configure and build ${{ env.TARGET }}
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: |
+          cmake -S "${GITHUB_WORKSPACE}" -B "${BUILD_DIR}" \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=20 \
+            -DUSE_IO_URING=ON -DENABLE_BENCHMARKS=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DUSE_PRECOMPILED_HEADERS=OFF >/dev/null
+          grep -E '^(CMAKE_BUILD_TYPE|JEMALLOC_FOUND|URING_FOUND)' "${BUILD_DIR}/CMakeCache.txt" || true
+          ccache -z
+          cmake --build "${BUILD_DIR}" --target "${TARGET}" --parallel 4
+          ccache -s
+
+      - name: Save ccache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/ccache
+          key: ccache-noble-u24bin-${{ env.CCACHE_EPOCH }}-${{ env.SHA }}-${{ github.run_id }}-${{ matrix.arm }}
+
+      - name: Package
+        run: |
+          PKG="${RUNNER_TEMP}/pkg/${{ matrix.arm }}"
+          mkdir -p "${PKG}/lib"
+          found=$(find "${BUILD_DIR}" -name "${TARGET}" -type f -executable -not -path '*/_deps/*' | head -1)
+          [ -n "$found" ] || { echo "::error::target ${TARGET} not found"; exit 1; }
+          cp "$found" "${PKG}/${TARGET}"
+          cp -P "${URING}"/lib/liburing.so* "${PKG}/lib/"
+          printf 'arm=%s\nref=%s\nsha=%s\n' "${{ matrix.arm }}" "${ARM_REF}" "${SHA}" > "${PKG}/META"
+          ldd "${PKG}/${TARGET}"
+          tar -C "${RUNNER_TEMP}/pkg" -cf "${RUNNER_TEMP}/tim-${{ matrix.arm }}.tar" "${{ matrix.arm }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tim-bin-${{ matrix.arm }}
+          path: ${{ runner.temp }}/tim-${{ matrix.arm }}.tar
+          retention-days: 3
+
+
+  time:
+    needs: [setup, build]
+    name: time vm${{ matrix.vm }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        vm: ${{ fromJSON(needs.setup.outputs.vms) }}
+    steps:
+      - name: Install runtime libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qy --no-install-recommends \
+            libboost1.83-all-dev libicu-dev libzstd-dev libjemalloc-dev libssl-dev
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: tim-bin-*
+          path: ${{ runner.temp }}/dl
+          merge-multiple: true
+
+      - name: Interleaved A/B on this VM
+        env:
+          VM: ${{ matrix.vm }}
+        run: |
+          set -euo pipefail
+          W="${RUNNER_TEMP}/w"; OUT="${RUNNER_TEMP}/out"
+          mkdir -p "$W" "$OUT"
+          for arm in base variant; do tar -C "$W" -xf "${RUNNER_TEMP}/dl/tim-${arm}.tar"; done
+          python3 - "$W" "$OUT" <<'PY'
+          import json, os, statistics as st, subprocess, sys, time, math
+          W, OUT = sys.argv[1], sys.argv[2]
+          E = os.environ
+          vm, target = E["VM"], E["TARGET"]
+          args = E.get("RUN_ARGS", "").split()
+          extra = dict(kv.split("=", 1) for kv in E.get("RUN_ENV", "").split())
+          svar, items = E["SCALE_VAR"], E.get("ITEMS_PER_SCALE", "")
+          meas, trials = E.get("MEASUREMENT", ""), int(E["TRIALS"])
+          min_s, bench_json = float(E["MIN_SECONDS"]), E["BENCH_JSON"] == "true"
+          cpu = next((l.split(":", 1)[1].strip() for l in open("/proc/cpuinfo") if l.startswith("model name")), "?")
+          ncpu = os.cpu_count() or 1
+          pin = ["taskset", "-c", "1"] if ncpu > 1 else []
+          meta = {a: dict(l.strip().split("=", 1) for l in open(f"{W}/{a}/META")) for a in ("base", "variant")}
+          counter = [0]
+
+          def walk(o):
+              if isinstance(o, dict):
+                  if "measured-time" in o:
+                      yield o
+                  for v in o.values():
+                      yield from walk(v)
+              elif isinstance(o, list):
+                  for v in o:
+                      yield from walk(v)
+
+          def run(arm, scale):
+              counter[0] += 1
+              env = dict(os.environ, **extra)
+              env[svar] = str(scale)
+              env["LD_LIBRARY_PATH"] = f"{W}/{arm}/lib"
+              cmd = pin + [f"{W}/{arm}/{target}"] + args
+              jf = f"{W}/m{counter[0]}.json"
+              if bench_json:
+                  cmd += ["-w", jf]
+              t0 = time.perf_counter()
+              p = subprocess.run(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+              wall = time.perf_counter() - t0
+              if p.returncode != 0:
+                  sys.exit(f"{arm} scale {scale} failed rc={p.returncode}: {p.stderr[-2000:]}")
+              if not bench_json:
+                  return wall
+              es = [e for e in walk(json.load(open(jf))) if meas in str(e.get("descriptor", ""))]
+              if not es:
+                  sys.exit(f"no measurement matching '{meas}' in {jf}")
+              return sum(float(e["measured-time"]) for e in es)
+
+          # Calibrate on the base: grow the scale until one measurement
+          # takes >= min_seconds. This run is also the untimed warm-up.
+          scale, t = 1, run("base", 1)
+          while t < min_s:
+              scale = max(scale + 1, math.ceil(scale * 1.15 * min_s / max(t, 1e-3)))
+              t = run("base", scale)
+          run("variant", scale)  # untimed warm-up of the variant
+          div = scale * (float(items) if items else 1.0)
+          unit = "ns/item" if items else f"s per {svar} unit"
+          k = 1e9 if items else 1.0
+          comps = [("ab", "base", "variant")]
+          if E["AA_CONTROL"] == "true":
+              comps.append(("aa", "base", "base"))
+          rows, deltas = [], []
+          for comp, a, b in comps:
+              vals = {"A": [], "B": []}
+              for r in range(1, trials + 1):
+                  order = [("A", a), ("B", b)] if r % 2 else [("B", b), ("A", a)]
+                  for lab, arm in order:
+                      s = run(arm, scale)
+                      if s < min_s:
+                          print(f"::warning::vm{vm} {comp} {lab} round {r}: {s:.2f} s < {min_s} s")
+                      vals[lab].append(k * s / div)
+                      rows.append([vm, comp, lab, arm, r, scale, f"{s:.4f}", f"{k * s / div:.6g}", unit])
+              ma, mb = st.median(vals["A"]), st.median(vals["B"])
+              deltas.append([vm, comp, f"{ma:.6g}", f"{mb:.6g}", f"{100 * (mb / ma - 1):.3f}",
+                             f"{min(vals['A']):.6g}", f"{max(vals['A']):.6g}",
+                             f"{min(vals['B']):.6g}", f"{max(vals['B']):.6g}", unit, scale, trials, cpu, ncpu])
+              print(f"vm{vm} {comp}: A {ma:.4g} B {mb:.4g} {unit} -> {100 * (mb / ma - 1):+.2f} %")
+          with open(f"{OUT}/measurements.tsv", "w") as f:
+              for r in rows:
+                  f.write("\t".join(map(str, r)) + "\n")
+          with open(f"{OUT}/per-vm.tsv", "w") as f:
+              for r in deltas:
+                  f.write("\t".join(map(str, r)) + "\n")
+          with open(f"{OUT}/meta.tsv", "w") as f:
+              f.write("\t".join([vm, meta["base"]["ref"], meta["base"]["sha"], meta["variant"]["ref"], meta["variant"]["sha"], cpu, str(ncpu)]) + "\n")
+          PY
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tim-vm-${{ matrix.vm }}
+          path: ${{ runner.temp }}/out
+          retention-days: 3
+
+  aggregate:
+    needs: time
+    if: always() && needs.time.result != 'cancelled'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: tim-vm-*
+          path: ${{ runner.temp }}/vms
+      - name: Aggregate across VMs
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/timing"; mkdir -p "$OUT"
+          python3 - "${RUNNER_TEMP}/vms" "$OUT" <<'PY'
+          import glob, os, statistics as st, sys
+          src, out = sys.argv[1], sys.argv[2]
+          E = os.environ
+          def cat(name, header):
+              rows = []
+              for f in sorted(glob.glob(f"{src}/*/{name}")):
+                  rows += [l.rstrip("\n").split("\t") for l in open(f) if l.strip()]
+              with open(f"{out}/{name}", "w") as g:
+                  g.write("\t".join(header) + "\n")
+                  for r in rows:
+                      g.write("\t".join(r) + "\n")
+              return rows
+          meas = cat("measurements.tsv", ["vm", "comparison", "label", "arm", "round", "scale", "seconds", "value", "unit"])
+          pv = cat("per-vm.tsv", ["vm", "comparison", "median_A", "median_B", "delta_pct", "min_A", "max_A", "min_B", "max_B", "unit", "scale", "trials", "cpu", "ncpu"])
+          meta = cat("meta.tsv", ["vm", "base_ref", "base_sha", "variant_ref", "variant_sha", "cpu", "ncpu"])
+          cpus = {}
+          for m in meta:
+              cpus[m[5]] = cpus.get(m[5], 0) + 1
+          with open(f"{out}/cpus.tsv", "w") as g:
+              for c, n in sorted(cpus.items(), key=lambda x: -x[1]):
+                  g.write(f"{n}\t{c}\n")
+          hdr = ["comparison", "vms", "median_delta_pct", "min", "q1", "q3", "max", "same_sign_share", "median_A", "median_B", "unit", "verdict"]
+          lines = []
+          for comp in ("ab", "aa"):
+              rs = [r for r in pv if r[1] == comp]
+              if not rs:
+                  continue
+              d = sorted(float(r[4]) for r in rs)
+              med = st.median(d)
+              share = sum(1 for x in d if (x > 0) == (med > 0) and x != 0) / len(d)
+              q = st.quantiles(d, n=4) if len(d) >= 2 else [d[0], d[0], d[0]]
+              if share >= 0.8 and abs(med) >= 3.0:
+                  verdict = ("variant slower" if med > 0 else "variant faster") + " (screening)"
+              else:
+                  verdict = "parity (screening)"
+              if comp == "aa":
+                  verdict = "A/A control: " + ("OK (no false effect)" if verdict.startswith("parity") else "FALSE EFFECT - screening unreliable")
+              lines.append([comp, str(len(d)), f"{med:+.2f}", f"{d[0]:+.2f}", f"{q[0]:+.2f}", f"{q[2]:+.2f}", f"{d[-1]:+.2f}",
+                            f"{share:.2f}", f"{st.median(float(r[2]) for r in rs):.4g}", f"{st.median(float(r[3]) for r in rs):.4g}", rs[0][9], verdict])
+          with open(f"{out}/summary.tsv", "w") as g:
+              g.write("\t".join(hdr) + "\n")
+              for l in lines:
+                  g.write("\t".join(l) + "\n")
+          m0 = meta[0] if meta else ["", "?", "?", "?", "?"]
+          with open(f"{out}/summary.md", "w") as g:
+              g.write(f"target `{E['TARGET']}`: base `{m0[1]}` {m0[2][:9]} / variant `{m0[3]}` {m0[4][:9]}; "
+                      f"{E['TRIALS']} ABBA rounds per VM, >= {E['MIN_SECONDS']} s per measurement, taskset -c 1; "
+                      f"delta = median(B)/median(A) - 1 per VM (B = variant for ab, base again for aa).\n"
+                      f"Rule: faster/slower only if >= 80 % of VMs agree in sign and |median delta| >= 3 %.\n\n")
+              g.write("| " + " | ".join(hdr) + " |\n|" + "---|" * len(hdr) + "\n")
+              for l in lines:
+                  g.write("| " + " | ".join(l) + " |\n")
+              g.write("\nPer VM (delta %): " + ", ".join(f"vm{r[0]} {r[1]} {float(r[4]):+.1f}" for r in sorted(pv, key=lambda r: (r[1], int(r[0])))) + "\n")
+              g.write("\nCPU models: " + "; ".join(f"{n}x {c}" for c, n in cpus.items()) + "\n")
+              g.write(f"\nrun: {E['GITHUB_SERVER_URL']}/{E['GITHUB_REPOSITORY']}/actions/runs/{E['GITHUB_RUN_ID']}\n")
+          PY
+          cat "$OUT/summary.md" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: timing
+          path: ${{ runner.temp }}/timing
+          retention-days: 30
