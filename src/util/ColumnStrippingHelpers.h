@@ -39,7 +39,9 @@ class VarsRequiredFromSubtree {
   explicit VarsRequiredFromSubtree(
       const std::set<Variable>* varsRequestedFromParentTree)
       : varsRequiredFromSubtree_{varsRequestedFromParentTree},
-        varsRequestedFromParentTree_{*varsRequestedFromParentTree} {}
+        varsRequestedFromParentTree_{*varsRequestedFromParentTree} {
+    AD_CORRECTNESS_CHECK(varsRequestedFromParentTree != nullptr);
+  }
 
   // The function add() has to be called whenever there are variables that are
   // needed by the operation itself to be executed. This function adds all these
