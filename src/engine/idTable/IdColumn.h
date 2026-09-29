@@ -59,7 +59,7 @@ class BasicIdColumnView {
   BasicIdColumnView() = default;
 
   BasicIdColumnView(PayloadPointer payloads, DatatypePointer datatypes,
-                    size_t size)
+                    const size_t size)
       : payloads_{payloads}, datatypes_{datatypes}, size_{size} {}
 
   // Any `BasicIdColumnView` may access the (private) members of any other
@@ -82,12 +82,10 @@ class BasicIdColumnView {
   [[nodiscard]] bool empty() const noexcept { return size_ == 0; }
 
   [[nodiscard]] Reference operator[](size_t i) const {
+    AD_CONTRACT_CHECK(i < size_);
     return {payloads_ + i, datatypes_ + i};
   }
-  [[nodiscard]] Reference at(size_t i) const {
-    AD_CONTRACT_CHECK(i < size_);
-    return (*this)[i];
-  }
+  [[nodiscard]] Reference at(size_t i) const { return (*this)[i]; }
   [[nodiscard]] Reference front() const { return (*this)[0]; }
   [[nodiscard]] Reference back() const { return (*this)[size_ - 1]; }
 
@@ -99,16 +97,16 @@ class BasicIdColumnView {
   // Return the subrange `[offset, offset + count)`. If `count == npos`
   // (the default), the subrange reaches until the end of this view.
   [[nodiscard]] BasicIdColumnView subspan(size_t offset,
-                                          size_t count = npos) const {
+                                          const size_t count = npos) const {
     AD_CONTRACT_CHECK(offset <= size_);
     size_t actualCount = count == npos ? size_ - offset : count;
     AD_CONTRACT_CHECK(offset + actualCount <= size_);
     return {payloads_ + offset, datatypes_ + offset, actualCount};
   }
-  [[nodiscard]] BasicIdColumnView first(size_t count) const {
+  [[nodiscard]] BasicIdColumnView first(const size_t count) const {
     return subspan(0, count);
   }
-  [[nodiscard]] BasicIdColumnView last(size_t count) const {
+  [[nodiscard]] BasicIdColumnView last(const size_t count) const {
     AD_CONTRACT_CHECK(count <= size_);
     return subspan(size_ - count, count);
   }

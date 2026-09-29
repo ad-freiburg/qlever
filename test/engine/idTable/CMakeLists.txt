@@ -5,3 +5,11 @@ addLinkAndDiscoverTest(CompressedIdTableBlocksTest engine index testUtil)
 addLinkAndDiscoverTest(CompressedIdTableBlockStorageTest engine index testUtil)
 
 addLinkAndDiscoverTest(IdColumnTest engine testUtil)
+
+addLinkAndDiscoverTest(IdColumnIteratorTest engine testUtil)
+
+addLinkAndDiscoverTest(IdRefTest engine testUtil)
+
+addLinkAndDiscoverTest(IdColumnVectorTest engine testUtil)
+
+addLinkAndDiscoverTest(IdColumnByteIOTest engine testUtil)
