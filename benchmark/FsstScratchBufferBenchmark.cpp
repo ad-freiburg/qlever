@@ -17,6 +17,8 @@
 // One untimed warm-up pass runs before each timed measurement. The
 // constructor checks that all arms decode every word to the original bytes.
 
+#include <dlfcn.h>
+
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -88,11 +90,18 @@ size_t decodeRepeatedIntoSpans(const Decoders& decoders,
 
 // _____________________________________________________________________________
 // Allocation statistics of the calling thread, read from jemalloc (which
-// QLever links when it is installed) via `mallctl`. The symbol is declared
-// weak, so without jemalloc `available()` is false and no statistics are
-// recorded. All reads happen outside the timed region.
-extern "C" int mallctl(const char* name, void* oldp, size_t* oldlenp,
-                       void* newp, size_t newlen) __attribute__((weak));
+// QLever links when it is installed) via `mallctl`. The function is looked up
+// at runtime, so the benchmark also links without jemalloc (e.g. on macOS,
+// where a weak reference to an undefined symbol does not link); then
+// `available()` is false and no statistics are recorded. All reads happen
+// outside the timed region.
+using MallctlFunction = int (*)(const char* name, void* oldp, size_t* oldlenp,
+                                void* newp, size_t newlen);
+MallctlFunction mallctlFunction() {
+  static const MallctlFunction function =
+      reinterpret_cast<MallctlFunction>(dlsym(RTLD_DEFAULT, "mallctl"));
+  return function;
+}
 
 class JemallocThreadStats {
  public:
@@ -101,7 +110,7 @@ class JemallocThreadStats {
     uint64_t allocatedBytes = 0;  // Bytes allocated by this thread.
   };
 
-  static bool available() { return mallctl != nullptr; }
+  static bool available() { return mallctlFunction() != nullptr; }
 
   // Flush this thread's cache so that the arena counters include all its
   // requests, then read the counters.
@@ -110,10 +119,10 @@ class JemallocThreadStats {
     if (!available()) {
       return snapshot;
     }
-    mallctl("thread.tcache.flush", nullptr, nullptr, nullptr, 0);
+    mallctlFunction()("thread.tcache.flush", nullptr, nullptr, nullptr, 0);
     uint64_t epoch = 1;
     size_t length = sizeof(epoch);
-    mallctl("epoch", &epoch, &length, &epoch, length);
+    mallctlFunction()("epoch", &epoch, &length, &epoch, length);
     snapshot.requests = readUint64("stats.arenas.4096.small.nrequests") +
                         readUint64("stats.arenas.4096.large.nrequests");
     snapshot.allocatedBytes = readUint64("thread.allocated");
@@ -123,7 +132,7 @@ class JemallocThreadStats {
   // Reset and read the high-water mark of this thread's live heap bytes.
   static void resetPeak() {
     if (available()) {
-      mallctl("thread.peak.reset", nullptr, nullptr, nullptr, 0);
+      mallctlFunction()("thread.peak.reset", nullptr, nullptr, nullptr, 0);
     }
   }
   static uint64_t peakBytes() {
@@ -134,7 +143,8 @@ class JemallocThreadStats {
   static uint64_t readUint64(const char* name) {
     uint64_t value = 0;
     size_t length = sizeof(value);
-    return mallctl(name, &value, &length, nullptr, 0) == 0 ? value : 0;
+    return mallctlFunction()(name, &value, &length, nullptr, 0) == 0 ? value
+                                                                     : 0;
   }
 };
 

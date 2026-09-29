@@ -49,26 +49,25 @@ struct CastToUnsignedPtr {
 constexpr CastToUnsignedPtr castToUnsignedPtr{};
 
 // _____________________________________________________________________________
-// Allocate `bound` bytes without zero-initialization, decode directly into the
-// string buffer, and resize to the actual decoded size.
+// Allocate `bound` bytes, decode directly into the string buffer, and shrink
+// to the decoded size. The bytes are left uninitialized where the standard
+// library provides `resize_and_overwrite` (see `ql::resize_and_overwrite`),
+// which also checks that `decode` returns at most `bound`.
 CPP_template(typename Decode)(
     requires ql::concepts::invocable<Decode, ql::span<char>>) std::string
     decompressToOwnedString(size_t bound, Decode decode) {
-  if (bound == 0) {
-    return {};
-  }
   std::string result;
-  size_t bytesWritten = 0;
-  ql::resize_and_overwrite(result, bound, [&](char* buf, size_t count) {
-    bytesWritten = decode(ql::span<char>{buf, count});
-    AD_CONTRACT_CHECK(bytesWritten <= bound);
-    return bytesWritten;
+  ql::resize_and_overwrite(result, bound, [&decode](char* buf, size_t count) {
+    return decode(ql::span<char>{buf, count});
   });
-  AD_CORRECTNESS_CHECK(result.size() <= bound);
-  AD_CORRECTNESS_CHECK(result.size() == bytesWritten);
   return result;
 }
 }  // namespace detail
+
+// _____________________________________________________________________________
+// Forward declaration, `FsstDecoder` befriends it.
+template <size_t N>
+class FsstRepeatedDecoder;
 
 // _____________________________________________________________________________
 // A simple C++ wrapper around the C-API of the `FSST` library. It consists of
@@ -77,6 +76,22 @@ CPP_template(typename Decode)(
 class FsstDecoder {
  private:
   fsst_decoder_t decoder_;
+
+  // `FsstRepeatedDecoder::decompress` chains the stages through
+  // `decompressTruncated`.
+  template <size_t N>
+  friend class FsstRepeatedDecoder;
+
+  // ___________________________________________________________________________
+  // Decompress `str` into `out`, which may have any size. Return the size of
+  // the decompressed string. If it is larger than `out.size()`, `out` holds
+  // only a prefix of it (FSST truncates, it never writes past `out`).
+  [[nodiscard]] size_t decompressTruncated(std::string_view str,
+                                           ql::span<char> out) const {
+    auto cast = detail::castToUnsignedPtr;
+    return fsst_decompress(&decoder_, str.size(), cast(str.data()), out.size(),
+                           cast(out.data()));
+  }
 
  public:
   // _____________________________________________________________________________
@@ -94,6 +109,12 @@ class FsstDecoder {
   // FSST guarantees that decompression expands data by at most a factor of 8.
   // This value is used to safely size caller-provided output buffers.
   static constexpr size_t maxExpansionFactor = 8;
+
+  // ___________________________________________________________________________
+  // Size of the stack buffer that `decompress` decodes into before it copies
+  // the result into an owning string. Decoded strings of this size or longer
+  // take a slower path with a second decode.
+  static constexpr size_t decodeStackBufferSize = 1024;
 
   // ___________________________________________________________________________
   // Return an upper bound on the decompressed size of `str`.
@@ -124,12 +145,27 @@ class FsstDecoder {
   // Decompress a single string. Callers that already own an output buffer
   // should use `decompressInto` instead.
   [[nodiscard]] std::string decompress(std::string_view str) const {
-    const size_t bound = maxDecompressedSize(str);
-    std::string result = detail::decompressToOwnedString(
-        bound,
-        [this, str](ql::span<char> out) { return decompressInto(str, out); });
-    AD_CORRECTNESS_CHECK(result.size() <= bound);
-    return result;
+    // Decode into a stack buffer and copy the exact bytes into the result.
+    // This allocates the decoded size (nothing for strings that fit the small
+    // string buffer) instead of the 8x bound, and does not zero-fill the
+    // bound. Longer strings decode a second time into a heap buffer of the
+    // now known exact size.
+    std::array<char, decodeStackBufferSize> buffer;
+    const size_t size =
+        decompressTruncated(str, ql::span<char>{buffer.data(), buffer.size()});
+    // Strictly less: for a decoder in FSST's zero-terminated mode,
+    // `fsst_decompress` overwrites the last byte of a buffer that the result
+    // fills completely. The heap buffer below has one spare byte for the same
+    // reason.
+    if (size < buffer.size()) {
+      return std::string(buffer.data(), size);
+    }
+    return detail::decompressToOwnedString(
+        size + 1, [this, str, size](ql::span<char> out) {
+          const size_t written = decompressTruncated(str, out);
+          AD_CORRECTNESS_CHECK(written == size);
+          return written;
+        });
   }
 
   // ___________________________________________________________________________
@@ -231,14 +267,42 @@ class FsstRepeatedDecoder {
     if constexpr (N == 1) {
       return decoders_[0].decompress(str);
     } else {
-      std::string current = decoders_[N - 1].decompress(str);
-      for (size_t stage = 1; stage < N; ++stage) {
-        current = decoders_[N - 1 - stage].decompress(current);
+      // Decode the intermediate stages through two alternating stack buffers,
+      // so only the last stage allocates (one allocation per word instead of
+      // one per stage). If an intermediate result does not fit, decode stage
+      // by stage into owning strings.
+      std::array<std::array<char, FsstDecoder::decodeStackBufferSize>, 2>
+          buffers;
+      std::string_view input = str;
+      size_t bufferIdx = 0;
+      for (size_t stage = N - 1; stage > 0; --stage) {
+        auto& buffer = buffers[bufferIdx];
+        const size_t size = decoders_[stage].decompressTruncated(
+            input, ql::span<char>{buffer.data(), buffer.size()});
+        // Strictly less, see `FsstDecoder::decompress`.
+        if (size >= buffer.size()) {
+          return decompressStageByStage(str);
+        }
+        input = std::string_view{buffer.data(), size};
+        bufferIdx ^= 1;
       }
-      return current;
+      return decoders_[0].decompress(input);
     }
   }
 
+ private:
+  // ___________________________________________________________________________
+  // Decompress `str` with one owning string per stage. Used by `decompress`
+  // for words whose intermediate results do not fit its stack buffers.
+  std::string decompressStageByStage(std::string_view str) const {
+    std::string current = decoders_[N - 1].decompress(str);
+    for (size_t stage = 1; stage < N; ++stage) {
+      current = decoders_[N - 1 - stage].decompress(current);
+    }
+    return current;
+  }
+
+ public:
   // ___________________________________________________________________________
   // Allow this type to be trivially serializable,
   CPP_template(typename T, typename U)(
