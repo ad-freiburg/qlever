@@ -787,6 +787,30 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
       ad_utility::Exception);
 }
 
+// _____________________________________________________________________________
+TEST(IndexRebuilder, materializeToIndexRefusesGeoCellGrid) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+
+  // An index whose vocabulary has a geo cell grid cannot be rebuilt yet.
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <p> \"LINESTRING(7 48, 8 49)\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral> ."};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  config.geoCellGridLevel = 2;
+  auto qec = ad_utility::testing::getQec(config);
+  const auto& index = qec->getIndex();
+
+  auto [state, vocab, blankNodes] =
+      index.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever::materializeToIndex(index.getImpl(), "newIndex", state, vocab,
+                                 blankNodes, cancellationHandle, "rebuildLog"),
+      ::testing::HasSubstr("geo cell grid"));
+}
+
 namespace {
 // Return the directories in the current directory whose name starts with
 // `prefix`.
