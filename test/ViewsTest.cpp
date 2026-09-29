@@ -190,6 +190,35 @@ TEST(Views, CallbackOnEndView) {
   EXPECT_EQ(numCalls, 3);
 }
 
+// Overwriting a view invokes its callback, unless it was already invoked.
+TEST(Views, CallbackOnEndViewMoveAssignment) {
+  using namespace ad_utility;
+  std::vector<int> calls;
+  auto makeView = [&calls](int id) {
+    return CallbackOnEndView{integerRange(10u),
+                             [&calls, id]() { calls.push_back(id); }};
+  };
+  {
+    auto a = makeView(1);
+    auto b = makeView(2);
+    a = std::move(b);
+    EXPECT_THAT(calls, ::testing::ElementsAre(1));
+
+    // Self-assignment doesn't invoke the callback.
+    auto& alias = a;
+    a = std::move(alias);
+    EXPECT_THAT(calls, ::testing::ElementsAre(1));
+
+    for ([[maybe_unused]] auto i : a) {
+    }
+    EXPECT_THAT(calls, ::testing::ElementsAre(1, 2));
+    // The callback of `a` was already invoked at the end of the iteration.
+    a = makeView(3);
+    EXPECT_THAT(calls, ::testing::ElementsAre(1, 2));
+  }
+  EXPECT_THAT(calls, ::testing::ElementsAre(1, 2, 3));
+}
+
 TEST(Views, CallbackOnEndViewConcepts) {
   [[maybe_unused]] auto nonthrowing = [](auto&&...) noexcept {};
   using V =

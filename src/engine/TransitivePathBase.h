@@ -15,6 +15,7 @@
 #include "backports/functional.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
 struct TransitivePathSide {
@@ -258,11 +259,13 @@ class TransitivePathBase : public Operation {
                                           size_t targetSideCol,
                                           bool yieldOnce) const;
 
-  // Return an execution tree that checks whether the given `tripleComponent`
-  // occurs as a subject or an object in the knowledge graph, and filters it out
-  // if it doesn't.
-  static std::shared_ptr<QueryExecutionTree> checkValueExistsInGraph(
-      QueryExecutionContext* qec, Graphs activeGraphs,
+  // Return an execution tree that yields the given `tripleComponent` as the
+  // single starting point of the empty path. If a `graphVariable` is set, the
+  // value is combined with all the graphs of `activeGraphs` via a cartesian
+  // product, because the implementations require a graph id for every starting
+  // point.
+  static std::shared_ptr<QueryExecutionTree> makeStartingPoint(
+      QueryExecutionContext* qec, const Graphs& activeGraphs,
       const std::optional<Variable>& graphVariable,
       const TripleComponent& tripleComponent);
 
@@ -335,7 +338,7 @@ class TransitivePathBase : public Operation {
       const std::optional<Variable>& graphVariable = std::nullopt);
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
   VariableToColumnMap computeVariableToColumnMap() const override;

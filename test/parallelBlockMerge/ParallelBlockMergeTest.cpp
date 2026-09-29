@@ -7,16 +7,21 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <chrono>
 #include <cstddef>
 #include <functional>
+#include <future>
+#include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -24,14 +29,17 @@
 #include <utility>
 #include <vector>
 
+#include "../util/AsyncTestHelpers.h"
+#include "../util/GTestHelpers.h"
+#include "../util/ParallelBlockMergeTestHelpers.h"
+#include "./InMemoryBlockStorage.h"
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "util/CancellationHandle.h"
-#include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/ParallelBlockMergeTestHelpers.h"
 #include "util/SourceLocation.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
+#include "util/parallelBlockMerge/ParallelMergeRange.h"
 
 // The tests of the helpers from `MergeHelpers.h` (in particular of
 // `computeChunkBoundaries`) live in `MergeHelpersTest.cpp`.
@@ -1105,6 +1113,420 @@ TEST(ParallelBlockMerge, emptyExecutorIsRejected) {
       ::testing::HasSubstr("executor of a parallel block merge must not be"));
   // The merge never got as far as creating its sink.
   EXPECT_EQ(sink, nullptr);
+}
+
+// ___________________________________________________________________________
+// `parallelBlockMergeToRange`: the parallel merge plus the `InOrderBlockSink`
+// that turns the concurrently produced blocks back into a single sequential
+// range, see `InOrderBlockSink.h`. The tests above never see that sink (they
+// collect the blocks per chunk), so the tests below cover what it adds: the
+// global order of the blocks, the serial fast path, and the teardown when the
+// consumer abandons the range.
+// ___________________________________________________________________________
+
+namespace {
+// Merge the `input` on a thread pool with `numThreads` threads, consume the
+// resulting range, and return all of its elements in a single vector.
+template <bool moveElements = false, typename Input, typename Comparator>
+std::vector<typename Input::value_type> mergeToRangeAndCollect(
+    Input input, Comparator comparator, MergeOptions options = {},
+    size_t numThreads = 4, size_t bufferedBlocksPerChunk = 2,
+    ad_utility::SharedCancellationHandle cancellationHandle =
+        detail::freshCancellationHandle()) {
+  options.parallelismHint = numThreads;
+  net::thread_pool pool{numThreads};
+  // All the coroutines that are still in flight have to finish before the pool
+  // is destroyed, otherwise this hangs. This also has to happen if the consumer
+  // below exits via an exception, and only after the range is destroyed (which
+  // stops the merge), hence the cleanup that is declared before the range.
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+  std::vector<typename Input::value_type> result;
+  auto blocks = parallelBlockMergeToRange<moveElements>(
+      pool.get_executor(), std::move(input), std::move(comparator),
+      makeInMemoryStorageFactory<typename Input::Block>(bufferedBlocksPerChunk),
+      std::move(options), std::move(cancellationHandle));
+  for (auto& block : blocks) {
+    EXPECT_FALSE(block.empty());
+    for (auto& element : block) {
+      result.push_back(std::move(element));
+    }
+  }
+  return result;
+}
+
+// Return `MergeOptions` that force the parallel code path also for the small
+// inputs of these tests, see `MergeOptions::shouldMergeSerially()`.
+MergeOptions alwaysParallelOptions(size_t outputBlockSize = 7) {
+  MergeOptions options = parallelOptions(outputBlockSize);
+  options.serialNumElementsThreshold = 0;
+  return options;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, rangeYieldsTheGloballySortedResult) {
+  auto testRandomInts = [](size_t blockSize, size_t numRuns, size_t minSize,
+                           size_t maxSize) {
+    auto runs = makeRandomRuns(numRuns, minSize, maxSize);
+    auto expected = sortedConcatenation(runs);
+    auto result =
+        mergeToRangeAndCollect(makeVectorInput(runs, blockSize), std::less<>{},
+                               alwaysParallelOptions(blockSize), 8);
+    EXPECT_TRUE(ql::ranges::is_sorted(result));
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  };
+  testRandomInts(16, 8, 100, 200);
+  // A block size of one, so that no input block is shared between two chunks.
+  testRandomInts(1, 4, 20, 30);
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, rangeWithASingleInFlightChunk) {
+  // A single in-flight chunk is perfectly legal and does not deadlock, because
+  // a chunk whose storage is full suspends instead of blocking its thread.
+  auto runs = makeRandomRuns(16, 200, 300);
+  auto expected = sortedConcatenation(runs);
+  MergeOptions options = alwaysParallelOptions(16);
+  for (size_t maxNumChunksInFlight : {1, 2}) {
+    options.maxNumChunksInFlight = maxNumChunksInFlight;
+    EXPECT_THAT(mergeToRangeAndCollect(makeVectorInput(runs, 16), std::less<>{},
+                                       options, 4,
+                                       /*bufferedBlocksPerChunk=*/1),
+                ::testing::ElementsAreArray(expected));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, rangeTakesTheSerialFastPath) {
+  auto runs = makeRandomRuns(8, 100, 200);
+  auto expected = sortedConcatenation(runs);
+  // Both conditions of the fast path merge in the calling thread, so an empty
+  // executor (which the parallel path rejects) suffices.
+  MergeOptions singleThreaded = alwaysParallelOptions(16);
+  singleThreaded.parallelismHint = 1;
+  MergeOptions smallInput = alwaysParallelOptions(16);
+  smallInput.parallelismHint = 8;
+  smallInput.serialNumElementsThreshold = std::numeric_limits<size_t>::max();
+  for (const MergeOptions& options : {singleThreaded, smallInput}) {
+    SizeVec result;
+    for (const auto& block : parallelBlockMergeToRange<false>(
+             ql::any_io_executor{}, makeVectorInput(runs, 16), std::less<>{},
+             makeInMemoryStorageFactory<SizeVec>(2), options)) {
+      result.insert(result.end(), block.begin(), block.end());
+    }
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, consumerAbandonsRangeEarly) {
+  auto runs = makeRandomRuns(50, 2000, 2000);
+  net::thread_pool pool{8};
+  MergeOptions options = alwaysParallelOptions(16);
+  options.parallelismHint = 8;
+  // This must neither hang, nor crash, nor leak. The destructor of the range
+  // has to stop the merge, and the state has to stay alive until the last
+  // coroutine that refers to it is done.
+  {
+    auto blocks = parallelBlockMergeToRange<false>(
+        pool.get_executor(), makeVectorInput(runs, 64), std::less<>{},
+        makeInMemoryStorageFactory<SizeVec>(2), options);
+    auto it = blocks.begin();
+    ASSERT_NE(it, blocks.end());
+    EXPECT_FALSE(it->empty());
+    ++it;
+    ASSERT_NE(it, blocks.end());
+    EXPECT_FALSE(it->empty());
+  }
+  // Abandoning the range without consuming anything at all also works.
+  {
+    [[maybe_unused]] auto blocks = parallelBlockMergeToRange<false>(
+        pool.get_executor(), makeVectorInput(runs, 64), std::less<>{},
+        makeInMemoryStorageFactory<SizeVec>(2), options);
+  }
+  pool.join();
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, exceptionFromChunkPropagatesThroughRange) {
+  // The exception of a chunk has to arrive at the thread that iterates over
+  // the range, which waits on a `future`, see `ParallelMergeRange::get`. Some
+  // of the chunks succeed and others fail, see `expectExceptionPropagates`, and
+  // abandoning the range afterwards must neither hang nor crash.
+  expectExceptionPropagates([](InstrumentedInput input) {
+    return mergeToRangeAndCollect(std::move(input), std::less<>{},
+                                  alwaysParallelOptions(16), 4);
+  });
+}
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, cancellationThroughRange) {
+  expectCancellationThrows(
+      [](SizeInput input, ad_utility::SharedCancellationHandle handle) {
+        return mergeToRangeAndCollect(std::move(input), std::less<>{},
+                                      alwaysParallelOptions(16), 4, 2,
+                                      std::move(handle));
+      });
+}
+
+// _____________________________________________________________________________
+ASYNC_TEST(ParallelBlockMerge, singleThreadedConsumer) {
+  // A single thread suffices for an asynchronous consumer that reads the sink
+  // directly, even if many more chunks than that are in flight, because a chunk
+  // that has to wait for the consumer suspends instead of blocking the only
+  // thread. (The blocking `parallelBlockMergeToRange` in contrast requires the
+  // executor to be run by other threads, see there.)
+  auto runs = makeRandomRuns(8, 300, 400);
+  auto expected = sortedConcatenation(runs);
+  MergeOptions options = alwaysParallelOptions(16);
+  options.parallelismHint = 8;
+  using Sink = InOrderBlockSink<SizeVec, InMemoryBlockStorage<SizeVec>>;
+  auto executor = ioContext.get_executor();
+  std::shared_ptr<Sink> sink;
+  auto state = parallelBlockMergeToSink<false>(
+      executor, makeVectorInput(runs, 16), std::less<>{},
+      [&sink, &executor](size_t numChunks) {
+        sink = std::make_shared<Sink>(
+            executor, numChunks,
+            makeInMemoryStorageFactory<SizeVec>(/*bufferedBlocksPerChunk=*/1));
+        return sink;
+      },
+      options);
+  SizeVec result;
+  while (auto block = co_await sink->asyncGetNextBlock(net::use_awaitable)) {
+    result.insert(result.end(), block->begin(), block->end());
+  }
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+
+namespace {
+// The minimal state and sink that a `detail::ParallelMergeRange` can be
+// instantiated with, for the test of its contract checks below. Neither of
+// them is ever used, because that range is never constructed successfully.
+struct DummyMergeState {
+  using Block = SizeVec;
+  void stop() {}
+};
+struct DummySink {
+  template <typename Token>
+  auto asyncGetNextBlock(Token&& token) {
+    return net::async_initiate<Token, void(std::exception_ptr,
+                                           std::optional<SizeVec>)>(
+        []([[maybe_unused]] auto handler) {}, token);
+  }
+  template <typename Token>
+  auto asyncStop(Token&& token) {
+    return net::async_initiate<Token, void(std::exception_ptr)>(
+        []([[maybe_unused]] auto handler) {}, token);
+  }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(ParallelBlockMerge, rangeRequiresAStateAndASink) {
+  // The range always holds the merge that it reads from alive, so a missing
+  // state or sink is a contract violation, see `detail::ParallelMergeRange`.
+  using Range = detail::ParallelMergeRange<DummyMergeState, DummySink>;
+  auto state = std::make_shared<DummyMergeState>();
+  auto sink = std::make_shared<DummySink>();
+  net::io_context ioContext;
+  auto executor = ioContext.get_executor();
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(executor, nullptr, sink, 2),
+                               ::testing::HasSubstr("state_ != nullptr"));
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(executor, state, nullptr, 2),
+                               ::testing::HasSubstr("sink_ != nullptr"));
+  // A read-ahead of zero blocks would not read anything ahead, see
+  // `MergeOptions::numPrefetchedOutputBlocks`.
+  AD_EXPECT_THROW_WITH_MESSAGE(Range(executor, state, sink, 0),
+                               ::testing::HasSubstr("numPrefetchedBlocks > 0"));
+}
+
+// ___________________________________________________________________________
+// The read-ahead of the range, which keeps
+// `MergeOptions::numPrefetchedOutputBlocks` output blocks ready, see
+// `detail::BlockPrefetcher` (which has its own tests in
+// `BlockPrefetcherTest.cpp`).
+// ___________________________________________________________________________
+
+namespace {
+// A `BlockStorageConcept` that counts the blocks which the consumer side has
+// pulled out of it and forwards everything else to an `InMemoryBlockStorage`.
+// That counter is exactly the number of output blocks that the read-ahead has
+// fetched so far, which is what the test below observes.
+template <typename Block>
+class CountingBlockStorage {
+ public:
+  using OptionalBlock = ad_utility::parallelBlockMerge::OptionalBlock<Block>;
+  using GetResult = ad_utility::parallelBlockMerge::GetResult<Block>;
+  using Counter = std::shared_ptr<std::atomic<size_t>>;
+
+ private:
+  InMemoryBlockStorage<Block> storage_;
+  Counter numBlocksRead_;
+
+ public:
+  // Construct from the arguments of the underlying `InMemoryBlockStorage` plus
+  // the counter that the blocks are counted in.
+  CountingBlockStorage(Strand strand, size_t maxBufferedBlocksPerChunk,
+                       Counter numBlocksRead)
+      : storage_{std::move(strand), maxBufferedBlocksPerChunk},
+        numBlocksRead_{std::move(numBlocksRead)} {}
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto storeBlock(size_t chunkIndex, OptionalBlock block,
+                  CompletionToken&& completionToken) {
+    return storage_.storeBlock(chunkIndex, std::move(block),
+                               AD_FWD(completionToken));
+  }
+
+  // ________________________________________________________________________
+  template <typename CompletionToken>
+  auto getBlock(size_t chunkIndex, CompletionToken&& completionToken) {
+    return net::async_initiate<CompletionToken,
+                               void(std::exception_ptr, GetResult)>(
+        [this, chunkIndex](auto handler) mutable {
+          // NOTE: The inner handler has no executor of its own and hence runs
+          // on the strand, just like the outer one, so the counter is only ever
+          // touched there.
+          storage_.getBlock(chunkIndex, [this, handler = std::move(handler)](
+                                            std::exception_ptr exception,
+                                            GetResult result) mutable {
+            if (result.hasValue()) {
+              numBlocksRead_->fetch_add(1);
+            }
+            std::move(handler)(std::move(exception), std::move(result));
+          });
+        },
+        completionToken);
+  }
+
+  // ________________________________________________________________________
+  void cancelAll() noexcept { storage_.cancelAll(); }
+};
+
+// A factory for a `CountingBlockStorage`, for the constructor of
+// `InOrderBlockSink`.
+template <typename Block>
+auto makeCountingStorageFactory(
+    size_t maxBufferedBlocksPerChunk,
+    typename CountingBlockStorage<Block>::Counter numBlocksRead) {
+  return [maxBufferedBlocksPerChunk,
+          numBlocksRead = std::move(numBlocksRead)](const Strand& strand) {
+    return CountingBlockStorage<Block>{strand, maxBufferedBlocksPerChunk,
+                                       numBlocksRead};
+  };
+}
+
+static_assert(BlockStorageConcept<CountingBlockStorage<SizeVec>, SizeVec>);
+
+// Return options for the parallel path with the given read-ahead.
+MergeOptions optionsWithPrefetching(size_t numPrefetchedOutputBlocks,
+                                    size_t outputBlockSize = 7) {
+  MergeOptions options = alwaysParallelOptions(outputBlockSize);
+  options.numPrefetchedOutputBlocks = numPrefetchedOutputBlocks;
+  return options;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// The read-ahead must not change the result, no matter how many blocks it keeps
+// ready: a single one, a few, the default, and many more than the merge will
+// ever produce.
+TEST(ParallelBlockMerge, rangeWithDifferentAmountsOfReadAhead) {
+  auto runs = makeRandomRuns(8, 100, 200);
+  auto expected = sortedConcatenation(runs);
+  for (size_t numPrefetched : {1u, 2u, 10u, 1000u}) {
+    auto result =
+        mergeToRangeAndCollect(makeVectorInput(runs, 16), std::less<>{},
+                               optionsWithPrefetching(numPrefetched));
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected))
+        << "with " << numPrefetched << " prefetched blocks";
+  }
+}
+
+// _____________________________________________________________________________
+// The read-ahead actually happens: a consumer that takes a single block and
+// then idles finds the buffer filled up to the configured number of blocks,
+// whereas a read-ahead of a single block hands out at most one further block.
+TEST(ParallelBlockMerge, readAheadFillsTheBufferWhileTheConsumerIdles) {
+  auto runs = makeRandomRuns(4, 2000, 2000);
+  // Return the number of output blocks that the merge has handed to the
+  // consumer side after the consumer has taken a single block and then idled.
+  auto numBlocksReadWhileIdling = [&runs](size_t numPrefetched) {
+    auto numBlocksRead = std::make_shared<std::atomic<size_t>>(0);
+    net::thread_pool pool{4};
+    absl::Cleanup joinPool = [&pool] { pool.join(); };
+    auto blocks = parallelBlockMergeToRange<false>(
+        pool.get_executor(), makeVectorInput(runs, 16), std::less<>{},
+        makeCountingStorageFactory<SizeVec>(1, numBlocksRead),
+        optionsWithPrefetching(numPrefetched));
+    auto it = blocks.begin();
+    EXPECT_NE(it, blocks.end());
+    // The read-ahead runs in the background while this thread does nothing at
+    // all, which is exactly the situation that it is for.
+    std::this_thread::sleep_for(std::chrono::milliseconds{200});
+    return numBlocksRead->load();
+  };
+  // With a read-ahead of a single block there are at most three blocks: the
+  // one that the consumer holds, the single one that was read ahead, and the
+  // one that the read-ahead holds while it waits for room in its buffer.
+  EXPECT_LE(numBlocksReadWhileIdling(1), 3u);
+  // With a read-ahead of ten blocks the buffer fills up to ten blocks plus the
+  // two blocks from above, and the read-ahead then pauses. The lower bound is
+  // deliberately loose, such that a heavily loaded machine does not make this
+  // flaky.
+  size_t numBlocksWithReadAhead = numBlocksReadWhileIdling(10);
+  EXPECT_GE(numBlocksWithReadAhead, 6u);
+  EXPECT_LE(numBlocksWithReadAhead, 12u);
+}
+
+// _____________________________________________________________________________
+// Abandoning the range while a read-ahead is in flight must neither hang nor
+// crash: the destructor stops the merge first, so the operation that is in
+// flight completes promptly, and only then are the blocks and the sink
+// released, see the destructor of `detail::ParallelMergeRange`.
+TEST(ParallelBlockMerge, consumerAbandonsRangeWhileReadingAhead) {
+  auto runs = makeRandomRuns(50, 2000, 2000);
+  // Repeat this a few times, because the exact moment at which the range is
+  // destroyed is what this test is about.
+  for (size_t i = 0; i < 5; ++i) {
+    for (size_t numPrefetched : {1u, 64u}) {
+      net::thread_pool pool{8};
+      MergeOptions options = optionsWithPrefetching(numPrefetched, 16);
+      options.parallelismHint = 8;
+      {
+        auto blocks = parallelBlockMergeToRange<false>(
+            pool.get_executor(), makeVectorInput(runs, 64), std::less<>{},
+            makeInMemoryStorageFactory<SizeVec>(2), options);
+        auto it = blocks.begin();
+        ASSERT_NE(it, blocks.end());
+        EXPECT_FALSE(it->empty());
+      }
+      // Abandoning the range without consuming anything at all, which is the
+      // case where the very first operation of the read-ahead is still in
+      // flight.
+      {
+        [[maybe_unused]] auto blocks = parallelBlockMergeToRange<false>(
+            pool.get_executor(), makeVectorInput(runs, 64), std::less<>{},
+            makeInMemoryStorageFactory<SizeVec>(2), options);
+      }
+      pool.join();
+    }
+  }
+}
+
+// _____________________________________________________________________________
+// An exception still reaches the consumer, also when it arrives while several
+// blocks are already buffered by the read-ahead.
+TEST(ParallelBlockMerge, exceptionPropagatesThroughTheReadAhead) {
+  for (size_t numPrefetched : {1u, 64u}) {
+    expectExceptionPropagates([numPrefetched](InstrumentedInput input) {
+      return mergeToRangeAndCollect(std::move(input), std::less<>{},
+                                    optionsWithPrefetching(numPrefetched, 16),
+                                    4);
+    });
+  }
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
