@@ -44,8 +44,15 @@ void SyncIoPolicy::readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
   }
 }
 
+// `preadv2` with `RWF_NOWAIT` exists on Linux only. Emscripten's headers
+// define `RWF_NOWAIT`, but its libc has no `preadv2`; there, and wherever
+// `RWF_NOWAIT` is missing, the fast path is compiled out.
+#if defined(__linux__) && defined(RWF_NOWAIT) && !defined(__EMSCRIPTEN__)
+#define QL_PAGE_CACHE_FAST_PATH
+#endif
+
 namespace {
-#ifdef RWF_NOWAIT
+#ifdef QL_PAGE_CACHE_FAST_PATH
 // Cleared once a `preadv2(RWF_NOWAIT)` fails with `EOPNOTSUPP`.
 std::atomic<bool> pageCacheFastPathSupported{true};
 #endif
@@ -53,7 +60,7 @@ std::atomic<bool> pageCacheFastPathSupported{true};
 
 //______________________________________________________________________________
 bool pageCacheFastPathIsSupported() {
-#ifdef RWF_NOWAIT
+#ifdef QL_PAGE_CACHE_FAST_PATH
   return pageCacheFastPathSupported.load(std::memory_order_relaxed);
 #else
   return false;
@@ -67,7 +74,7 @@ std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
   AD_CONTRACT_CHECK(offsets.size() == numBytes.size() &&
                     buffers.size() == numBytes.size());
   std::vector<size_t> notServed;
-#ifdef RWF_NOWAIT
+#ifdef QL_PAGE_CACHE_FAST_PATH
   const size_t numReads = numBytes.size();
   std::vector<iovec> iovecs;
   size_t runBegin = 0;
