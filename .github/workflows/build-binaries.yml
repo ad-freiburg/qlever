@@ -18,6 +18,7 @@ name: Build binaries
 # Output: one artifact `bin-<sha>` holding `bin-<sha>.tar` with the layout of
 # the Ural bin-cache directory /local/data-ssd/stoetzem/bin-cache/<sha>/:
 #     <sha>/<target>...  <sha>/CMakeCache.txt  <sha>/META-<target>...
+#     <sha>/deps-<target>... (dependency closure, .github/scripts/deps-extract.py)
 #     <sha>/META         (sha, ref, targets, compiler, run)
 # The tar keeps the executable bits (artifact zips drop them). Install it on
 # Ural with fetch-hosted-bin.sh <run-id> (.github/scripts/).
@@ -41,6 +42,7 @@ on:
     paths:
       - .github/workflows/build-binaries.yml
       - .github/scripts/fetch-hosted-bin.sh
+      - .github/scripts/deps-extract.py
 
 concurrency:
   # Every dispatch runs on its own (in a shared group GitHub cancels all but
@@ -72,6 +74,14 @@ jobs:
           # a shallow clone yields 0.0.0-unknown.
           fetch-depth: 0
           fetch-tags: true
+
+      # The workflow's own helper scripts (deps-extract.py), independent of
+      # the ref being built (older refs do not contain them).
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .ci-tools
+          sparse-checkout: .github/scripts
 
       - name: Resolve sha and targets
         env:
@@ -221,6 +231,16 @@ jobs:
               echo "liburing=${LIBURING_VERSION}"
               echo "built_utc=${BUILT} host=github-hosted run=${GITHUB_RUN_ID}"
             } > "${DST}/META-$t"
+            # Dependency closure for Ural's jobq measurement cache
+            # (bin-cache/<sha>/deps-<target>.txt; jobq falls back to its
+            # coarse key when the file is missing).
+            if python3 "${GITHUB_WORKSPACE}/.ci-tools/.github/scripts/deps-extract.py" \
+                 "${BUILD_DIR}" "$t" > "${DST}/deps-$t.txt"; then
+              echo "deps-$t.txt: $(wc -l < "${DST}/deps-$t.txt") files"
+            else
+              rm -f "${DST}/deps-$t.txt"
+              echo "::warning::no dependency list for $t (jobq uses its coarse key)"
+            fi
           done
           {
             echo "sha=${SHA}"
