@@ -136,6 +136,8 @@ TEST(AdaptiveChunkSizerTest, IsChunkFullPredicate) {
   EXPECT_FALSE(sizer.isChunkFull(0, 0));
   EXPECT_FALSE(sizer.isChunkFull(100, targetRows - 1));
   EXPECT_TRUE(sizer.isChunkFull(100, targetRows));
+  // The byte target alone fills a chunk, also without rows.
+  EXPECT_TRUE(sizer.isChunkFull(targetBytes, 0));
 }
 
 TEST(AdaptiveChunkSizerTest, ResetRestoresInitialState) {
@@ -203,6 +205,30 @@ TEST(AdaptiveChunkSizerTest, LargeGrowthFactorIsCappedAtMax) {
   EXPECT_ANY_THROW(AdaptiveChunkSizer{config});
   config.growthFactor_ = 0.5;
   EXPECT_ANY_THROW(AdaptiveChunkSizer{config});
+}
+
+// Every inconsistent configuration is rejected by the constructor.
+TEST(AdaptiveChunkSizerTest, InvalidConfigurationIsRejected) {
+  auto expectRejected = [](auto modify) {
+    AdaptiveChunkConfig config;
+    modify(config);
+    EXPECT_ANY_THROW(AdaptiveChunkSizer{config});
+  };
+  expectRejected([](AdaptiveChunkConfig& c) { c.initialChunkBytes_ = 0; });
+  expectRejected([](AdaptiveChunkConfig& c) {
+    c.maxChunkBytes_ = c.initialChunkBytes_ - 1;
+  });
+  expectRejected(
+      [](AdaptiveChunkConfig& c) { c.initialEstimatedRowBytes_ = 0.0; });
+  expectRejected([](AdaptiveChunkConfig& c) { c.minChunkRows_ = 0; });
+  expectRejected([](AdaptiveChunkConfig& c) {
+    c.maxChunkRows_ = c.minChunkRows_;
+    c.minChunkRows_ = c.maxChunkRows_ + 1;
+  });
+  // The default configuration and the smallest consistent one are accepted.
+  EXPECT_NO_THROW(AdaptiveChunkSizer{AdaptiveChunkConfig{}});
+  EXPECT_NO_THROW(
+      (AdaptiveChunkSizer{AdaptiveChunkConfig{1, 1, 1.0, 1.0, 1, 1}}));
 }
 
 TEST(AdaptiveChunkSizerTest, CustomConfiguration) {

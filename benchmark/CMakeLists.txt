@@ -37,9 +37,17 @@ if (NOT _NO_BENCHMARK)
     addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)
 
     addAndLinkBenchmark(SparqlExpressionBenchmark engine testUtil gtest gmock)
-    addAndLinkBenchmark(FsstScratchBufferBenchmark fsst)
+    addAndLinkBenchmark(FsstScratchBufferBenchmark fsst ${CMAKE_DL_LIBS})
 
     addAndLinkBenchmark(SerializerMicroBenchmark engine sparqlParser qlever_util)
+    # The benchmark replaces the global `operator new`/`operator delete` by a
+    # counting malloc/free pair. After inlining that `operator delete`, GCC
+    # reports its `free` as a mismatch for pointers from `operator new`; a
+    # `#pragma GCC diagnostic` in the file does not reach those inlined call
+    # sites (GCC 11), so the (false positive) warning is disabled for this
+    # target only.
+    target_compile_options(SerializerMicroBenchmark PRIVATE
+        $<$<CXX_COMPILER_ID:GNU>:-Wno-mismatched-new-delete>)
 
     addAndLinkBenchmark(PrefixCompressorBenchmark)
 
