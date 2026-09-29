@@ -413,8 +413,9 @@ TEST(FastExportStreamFormatterTest, ToExportFormat) {
   EXPECT_EQ(toExportFormat(MediaType::ntriples), ExportFormat::NTriples);
   EXPECT_EQ(toExportFormat(MediaType::csv), ExportFormat::Csv);
   EXPECT_EQ(toExportFormat(MediaType::tsv), ExportFormat::Tsv);
-  AD_EXPECT_THROW_WITH_MESSAGE(toExportFormat(MediaType::sparqlJson),
-                               ::testing::HasSubstr("Unsupported media type"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      static_cast<void>(toExportFormat(MediaType::sparqlJson)),
+      ::testing::HasSubstr("Unsupported media type"));
 }
 
 // The special-character tables, evaluated at runtime, mark exactly the
@@ -429,16 +430,21 @@ TEST(FastExportStreamFormatterTest, SpecialCharacterTables) {
     }
     return result;
   };
-  EXPECT_EQ(marked(detail::makeCsvSpecialTable()), "\n\r\",");
-  EXPECT_EQ(marked(detail::makeTsvSpecialTable()), "\t\n");
-  EXPECT_EQ(marked(detail::makeTurtleSpecialTable()), "\n\r\"\\");
+  EXPECT_EQ(marked(ql::export_formatting::detail::makeCsvSpecialTable()),
+            "\n\r\",");
+  EXPECT_EQ(marked(ql::export_formatting::detail::makeTsvSpecialTable()),
+            "\t\n");
+  EXPECT_EQ(marked(ql::export_formatting::detail::makeTurtleSpecialTable()),
+            "\n\r\"\\");
   for (size_t length = 0; length < 20; ++length) {
     for (size_t pos = 0; pos <= length; ++pos) {
       std::string s(length, 'a');
-      EXPECT_FALSE(detail::hasSpecialCharacters<detail::csvSpecialTable>(s));
+      EXPECT_FALSE(ql::export_formatting::detail::hasSpecialCharacters<
+                   ql::export_formatting::detail::csvSpecialTable>(s));
       if (pos < length) {
         s[pos] = ',';
-        EXPECT_TRUE(detail::hasSpecialCharacters<detail::csvSpecialTable>(s))
+        EXPECT_TRUE(ql::export_formatting::detail::hasSpecialCharacters<
+                    ql::export_formatting::detail::csvSpecialTable>(s))
             << length << " " << pos;
       }
     }
