@@ -589,6 +589,68 @@ TEST(IndexTest, geoCellGridFromConfiguration) {
       ::testing::HasSubstr("Invalid value 300"));
 }
 
+// _____________________________________________________________________________
+TEST(IndexTest, indexRowsPerBlockFromConfiguration) {
+  // The block size with which the permutations of an index were written is
+  // stored in its configuration, so that permutations of that index that are
+  // written later on (a materialized view, for example) get the same blocks.
+  ad_utility::testing::TestIndexConfig config{"<a> <p> <o> . <a> <p> <o2> ."};
+  config.rowsPerBlock = 4;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& base = qec->getIndex().getOnDiskBase();
+  EXPECT_EQ(qec->getIndex().rowsPerBlock(), 4);
+  {
+    nlohmann::json configuration;
+    std::ifstream in{absl::StrCat(base, CONFIGURATION_FILE)};
+    in >> configuration;
+    EXPECT_EQ(configuration.at(INDEX_ROWS_PER_BLOCK_KEY), 4);
+  }
+
+  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
+  auto loadWithConfiguration =
+      [&](const std::function<void(nlohmann::json&)>& modify) {
+        nlohmann::json configuration;
+        {
+          std::ifstream in{configFilename};
+          in >> configuration;
+        }
+        modify(configuration);
+        {
+          auto out = ad_utility::makeOfstream(configFilename);
+          out << configuration;
+        }
+        Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+        index.createFromOnDiskIndex(base, false);
+        return index.rowsPerBlock();
+      };
+
+  // The block size of the index build is read back.
+  EXPECT_EQ(loadWithConfiguration([](nlohmann::json&) {}), 4);
+  EXPECT_EQ(loadWithConfiguration([](nlohmann::json& configuration) {
+              configuration[INDEX_ROWS_PER_BLOCK_KEY] = 512;
+            }),
+            512);
+
+  // An index that was built before the block size was stored uses the default.
+  EXPECT_EQ(loadWithConfiguration([](nlohmann::json& configuration) {
+              configuration.erase(std::string{INDEX_ROWS_PER_BLOCK_KEY});
+            }),
+            DEFAULT_INDEX_ROWS_PER_BLOCK);
+
+  // A block size of zero is rejected, it would mean blocks without rows, and
+  // so is a block size that is too large to be held in RAM.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration([](nlohmann::json& configuration) {
+        configuration[INDEX_ROWS_PER_BLOCK_KEY] = 0;
+      }),
+      ::testing::HasSubstr("Invalid value 0"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration([](nlohmann::json& configuration) {
+        configuration[INDEX_ROWS_PER_BLOCK_KEY] = MAX_INDEX_ROWS_PER_BLOCK + 1;
+      }),
+      ::testing::HasSubstr("must be between 1 and 3125000"));
+}
+
 // Regression test for #3191.
 TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
   ad_utility::testing::TestIndexConfig config{
@@ -1204,7 +1266,7 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   auto [directory, cleanup] = makeTemporaryDirectory("loadConfigFromOldIndex");
   auto onDiskBase = directory + "/index";
   IndexImpl other{ad_utility::makeUnlimitedAllocator<Id>()};
-  other.blocksizePermutationPerColumn() = 1337_B;
+  other.rowsPerBlock() = 1337;
   nlohmann::json stats;
 
   Index::NumNormalAndInternal numTriples{42, 1337};
@@ -1226,8 +1288,7 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   EXPECT_EQ(index.numDistinctPredicates(), numPredicates);
   EXPECT_EQ(index.numSubjects_, numSubjects);
   EXPECT_EQ(index.numObjects_, numObjects);
-  EXPECT_EQ(index.blocksizePermutationPerColumn(),
-            other.blocksizePermutationPerColumn());
+  EXPECT_EQ(index.rowsPerBlock(), other.rowsPerBlock());
   EXPECT_EQ(index.configurationJson_, stats);
 
   // The version written to disk will also have these fields.

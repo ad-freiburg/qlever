@@ -12,6 +12,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 class Filter : public Operation {
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
@@ -47,8 +48,8 @@ class Filter : public Operation {
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; }
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {_subtree.get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{_subtree.get()}, allocator()};
   }
 
  public:

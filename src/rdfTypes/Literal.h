@@ -130,6 +130,15 @@ class Literal : public BasicLiteral<true> {
   explicit Literal(BasicLiteral<true>&& base)
       : BasicLiteral<true>(std::move(base)) {}
 
+  // Create a `Literal` from `storage`, which must already contain the
+  // normalized content including the surrounding quotes, and then append the
+  // `descriptor` (a datatype IRI or a language tag). To keep the whole literal
+  // a single allocation, the capacity of `storage` should also account for the
+  // descriptor, see `maxSuffixSize` in `Literal.cpp`.
+  static Literal withDescriptor(
+      std::string storage,
+      std::optional<std::variant<Iri, std::string>> descriptor);
+
  public:
   using BasicLiteral<true>::toStringRepresentation;
 

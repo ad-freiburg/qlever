@@ -10,6 +10,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/VectorWithMemoryLimit.h"
 
 class Minus : public Operation {
@@ -66,8 +67,8 @@ class Minus : public Operation {
   size_t getCostEstimate() override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {_left.get(), _right.get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{_left.get(), _right.get()}, allocator()};
   }
 
  public:

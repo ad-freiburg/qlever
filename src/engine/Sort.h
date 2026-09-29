@@ -16,6 +16,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
 #include "index/LocalVocab.h"
+#include "util/ContainersWithAllocator.h"
 
 // This operation sorts an `IdTable` by the `internal` order of the IDs. This
 // order is cheap to compute (just a bitwise compare of integers), but is
@@ -90,8 +91,8 @@ class Sort : public Operation {
   [[nodiscard]] size_t getResultWidth() const override;
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {subtree_.get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{subtree_.get()}, allocator()};
   }
 
  public:

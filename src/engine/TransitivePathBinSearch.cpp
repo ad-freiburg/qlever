@@ -14,12 +14,12 @@
 #include "engine/TransitivePathBase.h"
 
 // _____________________________________________________________________________
-BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
-                           ql::span<const Id> targetIds,
-                           const std::optional<ql::span<const Id>>& graphIds)
+BinSearchMap::BinSearchMap(ConstIdColumnRef startIds,
+                           ConstIdColumnRef targetIds,
+                           const std::optional<ConstIdColumnRef>& graphIds)
     : startIds_{startIds},
       targetIds_{targetIds},
-      graphIds_{graphIds.has_value() ? graphIds.value() : ql::span<const Id>{}},
+      graphIds_{graphIds.has_value() ? graphIds.value() : ConstIdColumnRef{}},
       // Set size to zero if graphs are active to avoid undefined behaviour in
       // case we forget to call `setActiveGraph`.
       sizeOfActiveGraph_{graphIds.has_value() ? 0 : startIds_.size()} {
@@ -35,7 +35,7 @@ BinSearchMap::BinSearchMap(ql::span<const Id> startIds,
 }
 
 // _____________________________________________________________________________
-ql::span<const Id> BinSearchMap::successors(Id node) const {
+ConstIdColumnRef BinSearchMap::successors(Id node) const {
   auto range = ql::ranges::equal_range(
       startIds_.subspan(offsetOfActiveGraph_, sizeOfActiveGraph_), node);
 

@@ -34,6 +34,9 @@ TEST(MergeOptions, Defaults) {
   EXPECT_EQ(options.maxNumChunksInFlight, 0u);
   EXPECT_EQ(options.serialNumElementsThreshold,
             DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD);
+  EXPECT_EQ(options.numPrefetchedOutputBlocks,
+            DEFAULT_PARALLEL_MERGE_NUM_PREFETCHED_OUTPUT_BLOCKS);
+  EXPECT_EQ(DEFAULT_PARALLEL_MERGE_NUM_PREFETCHED_OUTPUT_BLOCKS, 10u);
 }
 
 // _____________________________________________________________________________
