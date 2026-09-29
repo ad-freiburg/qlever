@@ -1,6 +1,8 @@
-// Copyright 2026, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Anna Kaiser (anna.kaiser@uni-freiburg.de)
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Anna Kaiser <anna.kaiser@uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #ifndef COLUMN_STRIPPING_HELPERS_H
 #define COLUMN_STRIPPING_HELPERS_H
