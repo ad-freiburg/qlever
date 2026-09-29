@@ -17,6 +17,8 @@
 // `util/parallelBlockMerge/ParallelMergeState.h`.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include <absl/cleanup/cleanup.h>
+
 #include <boost/asio/any_io_executor.hpp>
 #include <cstddef>
 #include <exception>
@@ -130,20 +132,20 @@ class ParallelMergeRange
       // Everything was already released, so this range is simply over.
       return std::nullopt;
     }
-    std::optional<Block> block;
+    // Tear down the merge unless it yields a block. This also covers an
+    // exception, because the consumer of a range that has thrown may well keep
+    // that range alive for a long time.
+    absl::Cleanup release = [this] { releaseEverything(); };
     try {
-      block = prefetcher_->getNextBlock();
+      auto block = prefetcher_->getNextBlock();
+      if (block.has_value()) {
+        std::move(release).Cancel();
+      }
+      return block;
     } catch (...) {
-      // The consumer of a range that has thrown may well keep that range alive
-      // for a long time, so the merge has to be torn down here as well.
       exception_ = std::current_exception();
-      releaseEverything();
       throw;
     }
-    if (!block.has_value()) {
-      releaseEverything();
-    }
-    return block;
   }
 
  private:

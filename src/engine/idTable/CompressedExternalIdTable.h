@@ -893,6 +893,8 @@ inline std::atomic<bool>
 // sorter whose caller does not request a block size itself. Unit tests set
 // this to a small value, such that also their tiny inputs are merged into many
 // blocks by many concurrent chunks, and the parallel code path is exercised.
+// TODO<joka921> Get rid of this global and instead pass the block size down
+// explicitly through the tests.
 inline std::atomic<size_t>
     EXTERNAL_ID_TABLE_SORTER_OUTPUT_BLOCK_SIZE_FOR_TESTING = 0;
 
@@ -1089,11 +1091,9 @@ class CompressedExternalIdTableSorter
           auto block = blocks.get();
           if (!block.has_value()) {
             AD_CORRECTNESS_CHECK(
-                numPopped == sorter->numElementsPushed_, [&numPopped, sorter] {
-                  return absl::StrCat(
-                      "numPopped: ", numPopped,
-                      "num elements pushed:", sorter->numElementsPushed_);
-                });
+                numPopped == sorter->numElementsPushed_,
+                "numPopped: ", numPopped,
+                ", num elements pushed: ", sorter->numElementsPushed_);
             return LoopControl::makeBreak();
           }
           numPopped += block.value().numRows();

@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_UTIL_RANGETHATRELEASESONEND_H
 #define QLEVER_SRC_UTIL_RANGETHATRELEASESONEND_H
 
+#include <absl/cleanup/cleanup.h>
+
 #include <optional>
 #include <utility>
 
@@ -40,17 +42,13 @@ class RangeThatReleasesOnEnd : public InputRangeFromGet<T> {
     if (!range_.has_value()) {
       return std::nullopt;
     }
-    std::optional<T> element;
-    try {
-      element = range_.value().get();
-    } catch (...) {
-      // The consumer of a range that has thrown may well keep that range alive
-      // for a long time, so release the inner range here as well.
-      range_.reset();
-      throw;
-    }
-    if (!element.has_value()) {
-      range_.reset();
+    // Release the inner range unless it yields an element. This also covers
+    // an exception, because the consumer of a range that has thrown may well
+    // keep that range alive for a long time.
+    absl::Cleanup release = [this] { range_.reset(); };
+    auto element = range_.value().get();
+    if (element.has_value()) {
+      std::move(release).Cancel();
     }
     return element;
   }
