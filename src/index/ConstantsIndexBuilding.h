@@ -81,19 +81,29 @@ constexpr inline size_t NUM_PARALLEL_PARSER_THREADS = 8;
 // same time
 constexpr inline size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 
-// The number of index mappings (which is the same as the number of merged
-// words) that are collected in a single batch of the vocabulary merging (see
-// `index/vocabulary_merger/WordBatch.h`). This is also the number of words in
-// an output block of the parallel merge of the partial vocabularies, see
-// `vocabularyMergeOptions` in `VocabularyMergerImpl.h`.
+// The number of words (and their maximal total size) in an output block of the
+// parallel merge of the partial vocabularies, see `vocabularyMergeOptions` in
+// `VocabularyMergerImpl.h`. The second limit keeps a block of very few but
+// very long words from becoming too large.
 constexpr inline size_t VOCAB_MERGER_WORD_BATCH_SIZE = 100'000;
-
-// The maximal total size of the words in a single batch of the vocabulary
-// merging. A batch is handed on as soon as one of this limit and
-// `VOCAB_MERGER_WORD_BATCH_SIZE` is reached, such that a batch of very few but
-// very long words doesn't become too large.
 constexpr inline ad_utility::MemorySize VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE =
     ad_utility::MemorySize::megabytes(10);
+
+// The number of merged words after which the vocabulary merger cuts a new
+// segment (see `index/vocabulary_merger/Segment.h`), which is the unit of work
+// of the stages behind the merge. Larger segments mean fewer tasks but more
+// memory per task and a later start of the writing.
+constexpr inline size_t VOCAB_MERGER_SEGMENT_NUM_WORDS = 1u << 20;
+
+// The estimated memory per segment that is being built or waiting to be
+// committed (its merged words plus its outputs), which bounds the number of
+// segments in flight together with the memory limit of the index build.
+constexpr inline ad_utility::MemorySize VOCAB_MERGER_MEMORY_PER_SEGMENT =
+    ad_utility::MemorySize::megabytes(256);
+
+// The number of threads that write the partial ID maps, see
+// `index/vocabulary_merger/IdMapWriters.h`.
+constexpr inline size_t VOCAB_MERGER_NUM_ID_MAP_WRITER_THREADS = 8;
 
 // The amount of input (the serialized words of the partial vocabularies,
 // counted with their repetitions in different partial vocabularies) that a
@@ -114,13 +124,9 @@ constexpr inline size_t VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK =
     8 * VOCAB_MERGER_INPUT_PER_CHUNK.getBytes() /
         VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE.getBytes() +
     2;
-// The maximal number of batches that may be waiting in each of the queues of
-// the merging pipeline of the vocabulary merger (see the comment above
-// `mergeVocabulary` in `index/VocabularyMerger.h`). NOTE: A batch keeps all
-// the merged words alive that it was created from (at most
-// `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`, see there), and all of the queues can
-// be full at the same time, so the additional memory footprint of the merging
-// is a multiple of this number of batches.
+// The maximal number of segments that may be waiting in each of the queues of
+// the ID map writers of the vocabulary merger (see
+// `index/vocabulary_merger/IdMapWriters.h`).
 constexpr inline size_t VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE = 3;
 
 // The default number of rows of a block of the permutations (and of the other

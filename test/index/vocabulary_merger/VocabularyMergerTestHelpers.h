@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -22,8 +23,10 @@
 
 #include "../../util/FileTestHelpers.h"
 #include "../../util/IdTestHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/VocabIndex.h"
 #include "index/PartialVocabularyFilenames.h"
+#include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/QueueWord.h"
 
 // Helpers that are shared by the tests of the vocabulary merger (see
@@ -60,8 +63,8 @@ struct PartialVocabularyFiles {
   // The file that holds the words of each of the partial vocabularies.
   std::vector<std::string> wordsFiles_;
   // The file that holds the ID map of each of the partial vocabularies. Hand
-  // these to the `IdMapBatchWriter` and the `VocabularyMergePipeline`, which
-  // take the filenames directly.
+  // these to the `IdMapWriters` and the `SegmentCommitter`, which take the
+  // filenames directly.
   std::vector<std::string> idMapFiles_;
 };
 
@@ -117,6 +120,53 @@ inline auto makeCollectingWordCallback(
 inline auto makeCountingWordCallback(size_t& numWords) {
   return [&numWords](std::string_view, bool) -> uint64_t { return numWords++; };
 }
+
+// The `ParallelWordWriterBase` (see `index/vocabulary/VocabularyTypes.h`)
+// that `mergeVocabulary` expects, made from a `WordCallback`: a single
+// sub-vocabulary whose words are handed to the `callback` one by one, in
+// order.
+template <typename Callback>
+SingleVocabularyParallelWriter makeParallelWriter(Callback callback) {
+  return SingleVocabularyParallelWriter{
+      std::make_unique<BlockWriterFromCallback<Callback>>(std::move(callback))};
+}
+
+// A `ParallelWordWriterBase` with two sub-vocabularies, which simulates a
+// `SplitVocabulary` of a main and a geo vocabulary for testing purposes: the
+// WKT literals go to the second sub-vocabulary, and the index of a word is
+// its position in its sub-vocabulary, with the marker bit `1 << 59` for the
+// geo vocabulary. The words of each sub-vocabulary are collected in `words_`
+// and `geoWords_`, together with their `isExternal` flags.
+class TestSplitWriter : public ParallelWordWriterBase {
+ public:
+  std::vector<std::pair<std::string, bool>> words_;
+  std::vector<std::pair<std::string, bool>> geoWords_;
+
+ private:
+  using Writer =
+      BlockWriterFromCallback<std::function<uint64_t(std::string_view, bool)>>;
+  Writer writer_{makeCollectingWordCallback(words_)};
+  Writer geoWriter_{makeCollectingWordCallback(geoWords_)};
+
+ public:
+  static constexpr uint64_t geoMarker = uint64_t{1} << 59;
+  static bool isGeoWord(std::string_view word) {
+    return ql::starts_with(word, "\"") &&
+           ql::ends_with(
+               word, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  }
+  uint8_t numSubVocabularies() const override { return 2; }
+  uint8_t subVocabularyOf(std::string_view word) const override {
+    return isGeoWord(word) ? 1 : 0;
+  }
+  uint64_t indexOf(uint8_t sub, uint64_t position,
+                   std::string_view) const override {
+    return sub == 1 ? (position | geoMarker) : position;
+  }
+  BlockWriterBase& blockWriter(uint8_t sub) override {
+    return sub == 1 ? geoWriter_ : writer_;
+  }
+};
 }  // namespace vocabularyMergerTestHelpers
 
 #endif  // QLEVER_TEST_INDEX_VOCABULARY_MERGER_VOCABULARYMERGERTESTHELPERS_H

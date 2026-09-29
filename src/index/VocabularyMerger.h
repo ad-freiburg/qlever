@@ -20,11 +20,8 @@
 #include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary_merger/Concepts.h"
 #include "index/vocabulary_merger/IdMap.h"
-#include "index/vocabulary_merger/MergePipeline.h"
 #include "index/vocabulary_merger/QueueWord.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
-#include "index/vocabulary_merger/WordBatch.h"
-#include "index/vocabulary_merger/WordBatchBuilder.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/TypeTraits.h"
@@ -44,46 +41,41 @@ namespace ad_utility::vocabulary_merger {
 // IDs is written to `partialVocabularyIdMapFilename(basename, idx)`.
 // Return the number of total Words merged and the lower and upper bound of
 // language tagged predicates. Argument `comparator` gives the way to order
-// strings (case-sensitive or not). Argument `wordCallback`
-// is called for each merged word in the vocabulary in the order of their
-// appearance. Argument `blankNodeIriRegexes` is a (possibly empty) set of
-// compiled regexes; IRIs that are fully matched by any of them are treated as
-// blank nodes (see `TripleComponentWithIndex::isBlankNode`). The regexes are
-// compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`).
+// strings (case-sensitive or not). The merged words are written to the
+// `writer` (see `ParallelWordWriterBase` in `index/vocabulary/
+// VocabularyTypes.h`), which is not finished by this function. Argument
+// `blankNodeIriRegexes` is a (possibly empty) set of compiled regexes; IRIs
+// that are fully matched by any of them are treated as blank nodes (see
+// `TripleComponentWithIndex::isBlankNode`). The regexes are compiled by the
+// caller (see `IndexImpl::setBlankNodeIriRegexes`).
 //
 // The partial vocabularies are merged by the parallel block merge (see
 // `util/parallelBlockMerge/ParallelBlockMerge.h`) on the global thread pool:
 // the words are split into ranges by the block index of the partial
 // vocabulary files (see `index/vocabulary_merger/PartialVocabularyFile.h`),
 // each range is merged by a chunk of its own, and the merged blocks arrive in
-// the order of the vocabulary. Behind the merge, the words are processed by a
-// pipeline of four threads, which communicate via task queues, such that all
-// of them can work concurrently:
+// the order of the vocabulary on the thread that calls this function. That
+// thread does no per-word work at all:
 //
-// 1. The thread that calls `mergeVocabulary` receives the merged blocks in
-//    sorted order and eliminates the duplicates (a word typically occurs in
-//    many of the partial vocabularies). It collects the distinct words as well
-//    as the index mappings for the partial ID maps in batches (see
-//    `detail::WordBatchBuilder`) and hands each batch to the second thread.
-// 2. The `wordWriterQueue_`'s thread writes the distinct words of a batch to
-//    the vocabulary (via the `wordCallback`) and thereby determines their
-//    global IDs (see `detail::VocabularyWriter`).
-// 3. The `idMapWriterQueue_`'s thread writes the entries of the partial ID
-//    maps (which only now know their global IDs) to those maps (see
-//    `detail::IdMapBatchWriter`).
-// 4. The `mergedWordsDestructionQueue_`'s thread destroys the merged words of
-//    a batch (which involves freeing one string per word) once they have been
-//    written to the vocabulary.
-//
-// The last three of those stages are owned by the
-// `detail::VocabularyMergePipeline`.
-template <typename W, typename C>
+// 1. It cuts the merged blocks into segments (see
+//    `index/vocabulary_merger/Segment.h`), each of which is a task on the
+//    thread pool: eliminate the duplicates, detect the blank nodes, assign the
+//    words to the sub-vocabularies of the `writer` and give them their
+//    segment-local IDs, collect the ID map entries, and destroy the merged
+//    words.
+// 2. It commits the finished segments in order (see
+//    `index/vocabulary_merger/SegmentCommitter.h`): the global IDs are the
+//    segment-local IDs plus the number of words in the previous segments, the
+//    ID map entries go to the threads that write the partial ID maps (see
+//    `index/vocabulary_merger/IdMapWriters.h`), and the words go to the blocks
+//    of their sub-vocabulary, which are prepared (compressed) on the thread
+//    pool and appended to the files by one thread per sub-vocabulary.
+template <typename W>
 auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
-                     W comparator, C& wordCallback,
+                     W comparator, ParallelWordWriterBase& writer,
                      ad_utility::MemorySize memoryToUse,
                      const ad_utility::RegexSet& blankNodeIriRegexes = {})
-    -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>);
+    -> CPP_ret(VocabularyMetaData)(requires WordComparator<W>);
 
 // Read the partial ID map from the given file (see `IdMapWriter`) into a hash
 // map. NOTE: The keys are plain `VocabIndex`es, because inside a partial

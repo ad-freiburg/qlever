@@ -5,9 +5,12 @@
 // Only performs the "mergeVocabulary" step of the IndexBuilder pipeline
 // Can be used e.g. for benchmarking this step to develop faster IndexBuilders.
 
+#include <memory>
+
 #include "global/FileSuffixConstants.h"
 #include "index/VocabularyMerger.h"
 #include "index/vocabulary/Vocabulary.h"
+#include "index/vocabulary/VocabularyTypes.h"
 
 // ____________________________________________________________________________________________________
 int main(int argc, char** argv) {
@@ -28,12 +31,15 @@ int main(int argc, char** argv) {
     return count++;
   };
 
-  VocabularyOnDisk vocab;
+  SingleVocabularyParallelWriter writer{
+      std::make_unique<BlockWriterFromCallback<decltype(wordCallback)>>(
+          wordCallback)};
   TripleComponentComparator comparator;
   ad_utility::vocabulary_merger::mergeVocabulary(
       basename, numFiles,
       [&comparator](std::string_view a, std::string_view b) {
         return comparator(a, b, TripleComponentComparator::Level::TOTAL);
       },
-      wordCallback, 4_GB);
+      writer, 4_GB);
+  writer.finish();
 }

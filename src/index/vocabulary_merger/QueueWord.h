@@ -45,9 +45,9 @@ struct QueueWord {
   std::vector<Occurrence> moreOccurrences_;
 
   [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
-  // NOTE: The `const` overloads are needed because the first stage of the
-  // merging (see `index/vocabulary_merger/WordBatchBuilder.h`) only reads the
-  // merged words; it never modifies them.
+  // NOTE: The `const` overloads are needed because the stage behind the
+  // merging (see `index/vocabulary_merger/Segment.h`) only reads the merged
+  // words; it never modifies them.
   [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
 
   [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }

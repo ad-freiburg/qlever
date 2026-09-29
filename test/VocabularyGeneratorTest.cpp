@@ -191,36 +191,23 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   // mergeVocabulary only gets the name of the directory and the number of
   // partial vocabularies.
   VocabularyMetaData res;
-  std::vector<std::pair<std::string, bool>> mergeResult;
-  std::vector<std::pair<std::string, bool>> geoMergeResult;
+  // Simulate the writer of a split vocabulary with a main and a geo
+  // vocabulary for testing purposes, see `TestSplitWriter`.
+  TestSplitWriter writer;
   {
-    // Simulate `Vocabulary::WordWriter::operation()` for testing purposes
-    auto internalVocabularyAction = [&mergeResult, &geoMergeResult](
-                                        const auto& word,
-                                        bool isExternal) -> uint64_t {
-      if (ql::starts_with(word, "\"") &&
-          ql::ends_with(
-              word, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
-        geoMergeResult.emplace_back(word, isExternal);
-        return (geoMergeResult.size() - 1) | (1ull << 59);
-      } else {
-        mergeResult.emplace_back(word, isExternal);
-        return mergeResult.size() - 1;
-      }
-    };
-
     TripleComponentComparator comparator;
     res = mergeVocabulary(
         basePath_, 2,
         [&comparator](std::string_view a, std::string_view b) {
           return comparator(a, b, TripleComponentComparator::Level::TOTAL);
         },
-        internalVocabularyAction, 1_GB);
+        writer, 1_GB);
+    writer.finish();
   }
 
-  EXPECT_THAT(mergeResult,
+  EXPECT_THAT(writer.words_,
               ::testing::ElementsAreArray(expectedMergedVocabulary_));
-  EXPECT_THAT(geoMergeResult,
+  EXPECT_THAT(writer.geoWords_,
               ::testing::ElementsAreArray(expectedMergedGeoVocabulary_));
 
   // No language tags in text file
@@ -239,11 +226,12 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 // _____________________________________________________________________________
 TEST(MergeVocabulary, mergeVocabularyAssertion) {
   // The violated order is only detected if the expensive checks are enabled
-  // (see `WordBatchBuilder::addMergedWords`).
+  // (see `buildSegment` in `index/vocabulary_merger/Segment.h`).
   if constexpr (!ad_utility::areExpensiveChecksEnabled) {
     GTEST_SKIP();
   }
-  auto callback = [](const auto&, bool) { return uint64_t{0}; };
+  auto writer =
+      makeParallelWriter([](const auto&, bool) { return uint64_t{0}; });
 
   auto [filenames, cleanup] =
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 2);
@@ -255,7 +243,7 @@ TEST(MergeVocabulary, mergeVocabularyAssertion) {
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
-                      std::less{}, callback, 1_GB),
+                      std::less{}, writer, 1_GB),
       ::testing::HasSubstr("vocabulary order violated"), ad_utility::Exception);
 }
 
@@ -281,7 +269,7 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
   // treated as blank nodes), together with the vocabulary index they get. None
   // of the words is external.
   std::vector<std::pair<std::string, bool>> vocabularyWords;
-  auto wordCallback = makeCollectingWordCallback(vocabularyWords);
+  auto writer = makeParallelWriter(makeCollectingWordCallback(vocabularyWords));
 
   // Two (compiled) regexes:
   // - `<http://ex/bn_.*>` fully matches the two `bn_` IRIs (and neither the
@@ -292,7 +280,7 @@ TEST(MergeVocabulary, treatIrisAsBlankNodesViaRegex) {
   ad_utility::RegexSet blankNodeIriRegexes{
       {"<http://ex/bn_.*>", "<http://ex/apple"}, "for the test"};
   mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
-                  std::less{}, wordCallback, 1_GB, blankNodeIriRegexes);
+                  std::less{}, writer, 1_GB, blankNodeIriRegexes);
 
   // Only the two `bn_` IRIs became blank nodes; the two other IRIs and the
   // literal remain in the vocabulary, in sorted order.
@@ -380,16 +368,15 @@ TEST(VocabularyGeneratorTest, createInternalMappingFirstWordDuplicates) {
 
 // _____________________________________________________________________________
 // Merge words that occur in *every* partial vocabulary, such that the
-// occurrences of a single word are spread over two consecutive batches of
-// merged words. Such a word is only written to the vocabulary (and hence only
-// gets its global ID) after the first of those batches has been handed to the
-// writing thread, so this exercises the deliberate holding back of the last
-// distinct word by the `WordBatchBuilder`.
+// occurrences of a single word are spread over two consecutive blocks of
+// merged words (the merge folds the occurrences of a word within a block, but
+// not across blocks). This exercises the deliberate holding back of the last
+// distinct word by `buildSegment`.
 TEST(MergeVocabulary, duplicateWordsAcrossBatchBoundaries) {
-  // The words are currently collected in batches of 100000. Three partial
-  // vocabularies with the same 120000 words yield 360000 index mappings, so we
-  // get several batches, and as 100000 is not divisible by three, the
-  // occurrences of a word are indeed split by a batch boundary.
+  // The merged words come in blocks of 100000. Three partial vocabularies with
+  // the same 120000 words yield 360000 occurrences, so we get several blocks,
+  // and as 100000 is not divisible by three, the occurrences of a word are
+  // indeed split by a block boundary.
   static constexpr size_t numWords = 120'000;
   static constexpr size_t numFiles = 3;
   auto [filenames, cleanup] = makePartialVocabularyFilenamesInFreshDirectory(
@@ -407,10 +394,11 @@ TEST(MergeVocabulary, duplicateWordsAcrossBatchBoundaries) {
   }
 
   size_t numWordsInCallback = 0;
-  auto wordCallback = makeCountingWordCallback(numWordsInCallback);
+  auto writer =
+      makeParallelWriter(makeCountingWordCallback(numWordsInCallback));
   auto result =
       mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
-                      std::less{}, wordCallback, 1_GB);
+                      std::less{}, writer, 1_GB);
   // Each word is written to the vocabulary exactly once.
   EXPECT_EQ(numWordsInCallback, numWords);
   EXPECT_EQ(result.numWordsTotal(), numWords);
@@ -429,10 +417,10 @@ TEST(MergeVocabulary, duplicateWordsAcrossBatchBoundaries) {
 
 // _____________________________________________________________________________
 // Merge a word that occurs in two partial vocabularies with different
-// `isExternal` flags, such that the two occurrences are split by a batch
+// `isExternal` flags, such that the two occurrences are split by a block
 // boundary. The merged word has to become external, which is only correct
-// because the `WordBatchBuilder` holds the word back until no further
-// occurrence of it can arrive.
+// because `buildSegment` holds the word back until no further occurrence of it
+// can arrive.
 TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
   // The last word is the only one that occurs in both partial vocabularies,
   // and only its occurrence in the second one is marked as external.
@@ -440,7 +428,7 @@ TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
   auto [filenames, cleanup] =
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 2);
 
-  // The first partial vocabulary fills a whole batch and ends with `"zzz"`,
+  // The first partial vocabulary fills a whole block and ends with `"zzz"`,
   // which is the only word of the second partial vocabulary, there marked as
   // external.
   {
@@ -458,10 +446,10 @@ TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
   }
 
   std::vector<std::pair<std::string, bool>> vocabulary;
-  auto wordCallback = makeCollectingWordCallback(vocabulary);
+  auto writer = makeParallelWriter(makeCollectingWordCallback(vocabulary));
   auto result =
       mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
-                      std::less{}, wordCallback, 1_GB);
+                      std::less{}, writer, 1_GB);
   EXPECT_EQ(result.numWordsTotal(), numWords);
 
   // `"zzz"` is written exactly once, and it is externalized because one of its
@@ -473,14 +461,14 @@ TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
               ::testing::ElementsAre(IdMapEntry{L(0), V(numWords - 1)}));
 }
 // _____________________________________________________________________________
-// An exception that is thrown while a batch is written (here by the word
+// An exception that is thrown while a block is written (here by the word
 // callback, in practice e.g. by a full disk) happens on the writing thread. It
 // must be propagated to the caller of `mergeVocabulary` and must not terminate
-// the process, and the batches that are still queued must not be written.
+// the process, and the blocks that are still queued must not be written.
 TEST(MergeVocabulary, exceptionFromWritingThreadIsPropagated) {
-  // More words than fit into a single batch (see
-  // `VOCAB_MERGER_WORD_BATCH_SIZE`), so that there is a second batch that
-  // has to be skipped after the first one has failed.
+  // More words than fit into a single block of the writer (see
+  // `SmallBlockWriter` below), so that there is a second block that has to be
+  // skipped after the first one has failed.
   static constexpr size_t numWords = 120'000;
   auto [filenames, cleanup] =
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
@@ -495,21 +483,31 @@ TEST(MergeVocabulary, exceptionFromWritingThreadIsPropagated) {
     ++numCalls;
     throw std::runtime_error{"The vocabulary could not be written"};
   };
+  // A block writer with small blocks, so that the words form several blocks.
+  class SmallBlockWriter
+      : public BlockWriterFromCallback<decltype(wordCallback)> {
+   public:
+    using BlockWriterFromCallback<
+        decltype(wordCallback)>::BlockWriterFromCallback;
+    size_t blockSize() const override { return 100'000; }
+  };
+  SingleVocabularyParallelWriter writer{
+      std::make_unique<SmallBlockWriter>(wordCallback)};
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
-                      std::less{}, wordCallback, 1_GB),
+                      std::less{}, writer, 1_GB),
       ::testing::HasSubstr("could not be written"), std::runtime_error);
-  // The first word of the first batch threw, and the second batch was skipped.
+  // The first word of the first block threw, and the second block was skipped.
   EXPECT_EQ(numCalls, 1u);
 }
 
 // _____________________________________________________________________________
-// Merge a number of words that is large enough for the index mappings to be
-// handed to the asynchronous writer in several batches, and check that all the
-// mappings arrive in the correct ID map, in the correct order.
+// Merge a number of words that is large enough for the merged words to come
+// in several blocks, and check that all the mappings arrive in the correct ID
+// map, in the correct order.
 TEST(MergeVocabulary, manyWordsWithSeveralIdMapBatches) {
-  // The mappings are currently written in batches of 100000, so this leads to
-  // several batches, of which the last one is only partially filled.
+  // The merged words come in blocks of 100000, so this leads to several
+  // blocks, of which the last one is only partially filled.
   static constexpr size_t numWords = 250'000;
   auto [filenames, cleanup] =
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 2);
@@ -527,10 +525,11 @@ TEST(MergeVocabulary, manyWordsWithSeveralIdMapBatches) {
   // All the words are distinct, so they simply get the vocabulary indices
   // `0, 1, ...` in sorted order.
   size_t numWordsInCallback = 0;
-  auto wordCallback = makeCountingWordCallback(numWordsInCallback);
+  auto writer =
+      makeParallelWriter(makeCountingWordCallback(numWordsInCallback));
   auto result =
       mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
-                      std::less{}, wordCallback, 1_GB);
+                      std::less{}, writer, 1_GB);
   EXPECT_EQ(numWordsInCallback, numWords);
   EXPECT_EQ(result.numWordsTotal(), numWords);
 

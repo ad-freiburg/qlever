@@ -197,13 +197,12 @@ TEST(PartialVocabularyFile, mergeInParallel) {
   }
 
   std::vector<std::pair<std::string, bool>> vocabulary;
-  auto wordCallback = makeCollectingWordCallback(vocabulary);
+  auto writer = makeParallelWriter(makeCollectingWordCallback(vocabulary));
   auto comparator = [](std::string_view a, std::string_view b) {
     return a < b;
   };
-  auto metaData =
-      mergeVocabulary(partialVocabBasename, 4, comparator, wordCallback,
-                      ad_utility::MemorySize::gigabytes(1));
+  auto metaData = mergeVocabulary(partialVocabBasename, 4, comparator, writer,
+                                  ad_utility::MemorySize::gigabytes(1));
   ASSERT_EQ(vocabulary.size(), numWords);
   EXPECT_EQ(metaData.numWordsTotal(), numWords);
   for (size_t k = 0; k < numWords; ++k) {
