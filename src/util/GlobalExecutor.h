@@ -66,13 +66,6 @@ size_t globalExecutorNumThreads();
 // need: they post tasks that only have to be completed before the process ends.
 // A phase that needs to know when its own work is done therefore has to
 // establish that itself.
-//
-// NOTE: It is safe to share this executor between concurrent users of the
-// parallel merge (see `util/parallelBlockMerge/ParallelBlockMerge.h`), because
-// a chunk of a merge that cannot make progress suspends instead of occupying
-// its thread, so that concurrent merges cannot starve each other. It is however
-// *not* safe to *consume* a merge from one of the threads of the executor that
-// the merge runs on, see `parallelBlockMerge::parallelBlockMergeToRange`.
 ql::any_io_executor globalExecutor();
 
 }  // namespace ad_utility

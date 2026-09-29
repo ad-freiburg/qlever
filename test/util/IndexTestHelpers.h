@@ -31,6 +31,21 @@
 // be used for unit tests.
 
 namespace ad_utility::testing {
+// Set the global `EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING`
+// flag to `value` and restore its previous value when the returned cleanup is
+// destroyed. Note: The flag is global, so setting it without such a cleanup
+// would make every test that runs afterwards silently depend on the value that
+// was set here.
+[[nodiscard]] inline auto setIgnoreMemoryLimit(bool value) {
+  bool previousValue =
+      ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING
+          .exchange(value);
+  return absl::Cleanup{[previousValue] {
+    ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
+        previousValue;
+  }};
+}
+
 // Return a pointer to a single, lazily-initialized `EncodedIriManager`
 // instance shared across all tests.
 inline const EncodedIriManager* encodedIriManager() {

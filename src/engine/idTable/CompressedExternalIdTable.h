@@ -938,14 +938,11 @@ class CompressedExternalIdTableSorter
   // See the `moveResultOnMerge()` getter function for documentation.
   bool moveResultOnMerge_ = true;
 
-  // The executor on which the merge phase runs, together with the number of
-  // threads that run it.
-  //
-  // NOTE: The default executor is the process-wide shared thread pool (see
-  // `ad_utility::globalExecutor`), so the assumed parallelism has to be the
-  // size of exactly that pool and not the number of hardware threads. The two
-  // differ as soon as the pool was sized explicitly, see
-  // `ad_utility::setGlobalExecutorNumThreads`.
+  // The executor on which the merge phase runs, and the number of chunks that
+  // are merged concurrently on it. The parallelism is only a performance hint
+  // and doesn't have to equal the number of threads of the executor: A smaller
+  // value leaves part of a (possibly much larger) executor to other work, a
+  // larger one merely oversubscribes it.
   ql::any_io_executor mergeExecutor_ =
       compressedExternalIdTable::defaultSorterMergeExecutor();
   size_t mergeParallelism_ = ad_utility::globalExecutorNumThreads();
@@ -1048,9 +1045,6 @@ class CompressedExternalIdTableSorter
     AD_CONTRACT_CHECK(!mergeIsActive_.load());
     mergeIsActive_.store(true);
 
-    // NOTE: No asynchronous stream is needed on top of the merge, because the
-    // parallel merge already buffers its finished output blocks ahead of the
-    // consumer, see `makeBlockStorageFactory`.
     using namespace ad_utility;
     return InputRangeTypeErased{
         CallbackOnEndView{sortedBlocks<N>(blocksize), [&, this]() noexcept {

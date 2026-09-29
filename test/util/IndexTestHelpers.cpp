@@ -8,6 +8,7 @@
 
 #include <array>
 #include <memory>
+#include <utility>
 
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
@@ -33,11 +34,6 @@ namespace ad_utility::testing {
 Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
-  EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  EXTERNAL_ID_TABLE_SORTER_OUTPUT_BLOCK_SIZE_FOR_TESTING = 5;
-  // Decrease various default batch sizes such that there are multiple batches
-  // also for the very small test indices (important for test coverage).
-  DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
   index.parserBufferSize() =
       parserBufferSize;  // Note that the default value remains unchanged, but
@@ -164,6 +160,30 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   // NOTE: The SPO and SOP permutations currently don't have patterns stored.
   // with them.
 }
+
+// Set the global settings that make the index building of the very small test
+// indices exercise the same code paths as that of large indices, and return a
+// cleanup that restores the previous values of these settings when it is
+// destroyed. Note: The settings are global, so setting them without such a
+// cleanup would make every test that runs afterwards silently depend on them.
+[[nodiscard]] auto setGlobalIndexBuildingSettingsForTesting() {
+  bool previousIgnoreMemoryLimit =
+      EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING.exchange(true);
+  size_t previousOutputBlockSize =
+      EXTERNAL_ID_TABLE_SORTER_OUTPUT_BLOCK_SIZE_FOR_TESTING.exchange(5);
+  // Decrease various default batch sizes such that there are multiple batches
+  // also for the very small test indices (important for test coverage).
+  size_t previousProgressBarBatchSize =
+      std::exchange(DEFAULT_PROGRESS_BAR_BATCH_SIZE, 2);
+  return absl::Cleanup{[previousIgnoreMemoryLimit, previousOutputBlockSize,
+                        previousProgressBarBatchSize] {
+    EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
+        previousIgnoreMemoryLimit;
+    EXTERNAL_ID_TABLE_SORTER_OUTPUT_BLOCK_SIZE_FOR_TESTING =
+        previousOutputBlockSize;
+    DEFAULT_PROGRESS_BAR_BATCH_SIZE = previousProgressBarBatchSize;
+  }};
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -173,6 +193,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // stream when it goes out of scope at the end of this function.
   std::ostringstream ignoreLogStream;
   auto logCleanup = setGlobalLoggingStreamForTesting(&ignoreLogStream);
+  // The returned cleanup likewise restores the previous global settings for the
+  // index building at the end of this function.
+  auto settingsCleanup = setGlobalIndexBuildingSettingsForTesting();
   // Remove previous index files. This is necessary because if we previously
   // built the same index without patterns or all 6 permutations, we wouldn't
   // overwrite the patterns or the missing permutations. This would lead to a

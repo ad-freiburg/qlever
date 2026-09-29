@@ -16,6 +16,7 @@
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
+#include "../../util/IndexTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -30,24 +31,11 @@ using ad_utility::compressedExternalIdTable::blocksizeForMemory;
 using ad_utility::compressedExternalIdTable::memoryForBlocksize;
 using namespace ad_utility::memory_literals;
 
+using ad_utility::testing::setIgnoreMemoryLimit;
+
 namespace {
 
 static constexpr size_t NUM_COLS = NumColumnsIndexBuilding;
-
-// Set the global `EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING`
-// flag to `value` and restore its previous value when the returned cleanup is
-// destroyed. Note: The flag is global, so setting it without such a cleanup
-// would make every test that runs afterwards silently depend on the value that
-// was set here.
-[[nodiscard]] auto setIgnoreMemoryLimit(bool value) {
-  bool previousValue =
-      ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING
-          .exchange(value);
-  return absl::Cleanup{[previousValue] {
-    ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
-        previousValue;
-  }};
-}
 
 // From a `generator` that yields  `IdTable`s, create a single `IdTable` that is
 // the concatenation of all the yielded tables.
@@ -781,7 +769,7 @@ struct SortResultWithExecutorStatistics {
 // result together with the statistics of that `io_context`.
 SortResultWithExecutorStatistics sortWithParallelism(
     const IdTable& input, size_t numThreads, const std::string& filename) {
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   net::io_context ioContext;
   // NOTE: The `work_guard` keeps the threads alive while the sorter is still
   // being filled, i.e. while the `io_context` has no work at all yet.
@@ -843,7 +831,7 @@ TEST(CompressedExternalIdTable, sorterWithSerialMerge) {
 // merge still held the file open on one of the executor's threads and the
 // `clear()` below threw "... is currently being iterated over".
 TEST(CompressedExternalIdTable, clearDirectlyAfterParallelMerge) {
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   std::string filename = gtestCurrentTestName() + ".dat";
   absl::Cleanup cleanup = [&filename] {
     ad_utility::deleteFile(filename, false);
@@ -888,7 +876,7 @@ TEST(CompressedExternalIdTable, clearDirectlyAfterParallelMerge) {
 // reader that it registered with the `CompressedExternalIdTableWriter`), see
 // `parallelBlockMerge::detail::ParallelMergeRange::releaseEverything`.
 TEST(CompressedExternalIdTable, clearWhileTheExhaustedOutputRangeIsStillAlive) {
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   std::string filename = gtestCurrentTestName() + ".dat";
   absl::Cleanup cleanup = [&filename] {
     ad_utility::deleteFile(filename, false);
@@ -1041,7 +1029,7 @@ TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
     ad_utility::deleteFile(filename, false);
     deleteSpillFiles(spillPrefix);
   };
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   IdTable input =
       createRandomlyFilledIdTable(NUM_ROWS_PARALLEL_MERGE, NUM_COLS);
 
@@ -1108,7 +1096,7 @@ SortResultWithSpillFileSize sortWithSpillCompression(
     const IdTable& input,
     ad_utility::CompressedBlockFile::CompressionLevel compression,
     const std::string& filename, const std::string& spillPrefix) {
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   net::io_context ioContext;
   // NOTE: The `work_guard` keeps the threads alive while the sorter is still
   // being filled, i.e. while the `io_context` has no work at all yet.
@@ -1315,7 +1303,7 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // number of rows yields two runs.
   constexpr size_t numRows = 170'000;
 
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(false);
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
       filename, NUM_COLS, memory, ad_utility::testing::makeAllocator(),
       blocksizeCompression};
