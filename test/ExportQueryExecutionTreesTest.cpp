@@ -1974,12 +1974,13 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
 }
 
 // _____________________________________________________________________________
-// With `adaptive-export-chunk-size`, the chunked transfer starts with a 64 KiB
-// chunk and doubles the chunk size after every chunk up to the 1 MiB buffer of
-// the `stream_generator`. The concatenated bytes are the same as without it.
+// With `adaptive-export-chunk-size` (the default), the chunked transfer starts
+// with a 64 KiB chunk and doubles the chunk size after every chunk up to the
+// 1 MiB buffer of the `stream_generator`. The concatenated bytes are the same
+// as without it.
 TEST(ExportQueryExecutionTrees, adaptiveExportChunkSize) {
   using S = ad_utility::streams::stream_generator;
-  EXPECT_FALSE(
+  EXPECT_TRUE(
       getRuntimeParameter<&RuntimeParameters::adaptiveExportChunkSize_>());
   constexpr size_t KiB = size_t{1} << 10;
   // 3 MiB of output, yielded in pieces that do not align with chunk borders.
@@ -2003,16 +2004,16 @@ TEST(ExportQueryExecutionTrees, adaptiveExportChunkSize) {
     return std::pair{std::move(sizes), std::move(bytes)};
   };
 
-  auto [fixedSizes, fixedBytes] = chunkSizesAndBytes();
-  EXPECT_THAT(fixedSizes, ElementsAre(1024 * KiB, 1024 * KiB, 1024 * KiB));
-
-  auto cleanup =
-      setRuntimeParameterForTest<&RuntimeParameters::adaptiveExportChunkSize_>(
-          true);
   auto [adaptiveSizes, adaptiveBytes] = chunkSizesAndBytes();
   EXPECT_THAT(adaptiveSizes,
               ElementsAre(64 * KiB, 128 * KiB, 256 * KiB, 512 * KiB, 1024 * KiB,
                           1024 * KiB, 64 * KiB));
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::adaptiveExportChunkSize_>(
+          false);
+  auto [fixedSizes, fixedBytes] = chunkSizesAndBytes();
+  EXPECT_THAT(fixedSizes, ElementsAre(1024 * KiB, 1024 * KiB, 1024 * KiB));
   EXPECT_EQ(adaptiveBytes, fixedBytes);
 }
 
