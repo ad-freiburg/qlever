@@ -236,6 +236,17 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchWithBuilderThroughDelegation) {
 }
 
 // _____________________________________________________________________________
+// Both `lookupBatch` overloads reject an empty batch.
+TYPED_TEST(CompressedVocabularyF, LookupBatchRejectsEmptyIndices) {
+  auto vocab = this->createCompressedVocabulary()(
+      std::vector<std::string>{"alpha", "beta"});
+  ql::span<const size_t> noIndices{};
+  ArenaVocabBatchBuilder builder(1);
+  EXPECT_ANY_THROW(vocab.lookupBatch(noIndices, builder));
+  EXPECT_ANY_THROW(static_cast<void>(vocab.lookupBatch(noIndices)));
+}
+
+// _____________________________________________________________________________
 // A vocabulary containing the empty string word ("") must decompress correctly
 // through `lookupBatch` without allocations or crashes across all compressors
 // (exercising the `boundOnDecompressedWordSize == 0` fast path).
@@ -832,4 +843,13 @@ TEST(DecoderMultiplexer, DirectDecompressIntoAndMaxDecompressedSize) {
       std::out_of_range);
   EXPECT_THROW(static_cast<void>(mux.decompress(compressed, invalidIndex)),
                std::out_of_range);
+
+  // An empty output buffer is valid only for an empty compressed word, which
+  // decompresses to zero bytes; for a non-empty word it is rejected before the
+  // decoder is called.
+  ql::span<char> empty{};
+  EXPECT_EQ(mux.decompressInto("", 0, empty, scratch), 0u);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      static_cast<void>(mux.decompressInto(compressed, 0, empty, scratch)),
+      ::testing::HasSubstr("!out.empty() || compressed.empty()"));
 }

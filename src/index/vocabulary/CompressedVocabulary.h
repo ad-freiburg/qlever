@@ -194,14 +194,13 @@ CPP_template(typename UnderlyingVocabulary,
   // like `operator[]`, append the placeholder for it instead of feeding the
   // plain-text placeholder to the decoder.
   //
-  // Memory: each word reserves its full `maxDecompressedSize` bound in the
-  // arena, so for FSST the slack between the worst-case expansion bound and
-  // the decoded size is retained until the result dies. When `builder` was
-  // constructed with the query's `AllocatorWithLimit`, these allocations are
-  // charged against the memory limit and throw
-  // `AllocationExceedsLimitException` instead of growing the process heap.
-  // TODO<marvin7122>: Tail-trim the arena allocations so that batch memory
-  // tracks the decoded sizes instead of the bounds.
+  // Memory: each word is decoded into one reused buffer of its
+  // `maxDecompressedSize` bound and then copied into the arena with its
+  // decoded size, so the arena holds exactly the decoded bytes (for FSST the
+  // bound is several times the decoded size). When `builder` was constructed
+  // with the query's `AllocatorWithLimit`, these allocations are charged
+  // against the memory limit and throw `AllocationExceedsLimitException`
+  // instead of growing the process heap.
   void lookupBatch(ql::span<const size_t> indices,
                    ArenaVocabBatchBuilder& builder) const {
     AD_CONTRACT_CHECK(!indices.empty());
@@ -669,6 +668,7 @@ CPP_template(typename UnderlyingVocabulary,
     AD_CORRECTNESS_CHECK(compressedWords.size() == indices.size());
 
     std::string scratch;
+    std::string decoded;
     for (const auto& [idx, compressedWord] :
          ::ranges::views::zip(indices, compressedWords)) {
       size_t decoderIdx;
@@ -684,12 +684,17 @@ CPP_template(typename UnderlyingVocabulary,
         decoderIdx = getDecoderIdx(idx);
       }
       AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders());
-      builder.appendDecompressedWord(
-          compressionWrapper_.maxDecompressedSize(compressedWord, decoderIdx),
+      const size_t bound =
+          compressionWrapper_.maxDecompressedSize(compressedWord, decoderIdx);
+      if (bound > decoded.size()) {
+        decoded.resize(bound);
+      }
+      builder.appendWord(decompressIntoSpan(
+          ql::span<char>{decoded.data(), decoded.size()}, bound,
           [&](ql::span<char> outSpan) {
             return compressionWrapper_.decompressInto(
                 compressedWord, decoderIdx, outSpan, scratch);
-          });
+          }));
     }
   }
 
