@@ -91,7 +91,7 @@ net::awaitable<void> sortRecursively(State& state, size_t posIndexStart,
     // No block has been moved yet, so physical and logical positions agree.
     auto first = state.getBlockBegin(posIndexStart);
     auto mid = state.getBlockBegin(posIndexMid);
-    auto last = state.getRange(posIndexEnd - 1).last;
+    auto last = state.getBlock(posIndexEnd - 1).last;
     co_await state.runConcurrently(parallelQuicksort(state, first, mid),
                                    parallelQuicksort(state, mid, last));
   }
@@ -165,8 +165,8 @@ net::awaitable<void> sortOnExecutor(Iterator first, Iterator last, Compare comp,
     co_return;
   }
 
-  SortState<Iterator, Compare> state{first,  last,       std::move(comp),
-                                     params, numThreads, exec};
+  SortState<Iterator, Compare> state{first, last, std::move(comp), params,
+                                     exec};
   co_await startSort(state, numThreads);
 }
 
@@ -192,8 +192,7 @@ void runSort(Iterator first, Iterator last, Compare comp, uint32_t numThreads,
 //
 // `numThreads` is a hint for how many tasks of the sort run at the same time.
 // For the best performance, `exec` should be run by at least that many threads.
-// It determines the number of parts of the sort and of scratch buffers (one
-// block each).
+// It determines the number of parts of the sort.
 //
 // IMPORTANT: The calling thread blocks until the sort is done, so `exec` has to
 // be run by other threads (e.g. a `boost::asio::thread_pool` that this thread

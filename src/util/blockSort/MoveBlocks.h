@@ -42,11 +42,11 @@ void moveSequence(State& state, const std::vector<size_t>& cycle) {
   auto lease = state.acquireBuffer();
   auto buffer = lease.range();
 
-  auto target = state.getRange(cycle[0]);
+  auto target = state.getBlock(cycle[0]);
   bsc::move_forward(buffer, target);
   for (size_t i = 1; i < cycle.size(); ++i) {
     auto source = target;
-    target = state.getRange(cycle[i]);
+    target = state.getBlock(cycle[i]);
     bsc::move_forward(source, target);
   }
   bsc::move_forward(target, buffer);

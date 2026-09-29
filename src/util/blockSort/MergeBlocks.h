@@ -42,11 +42,11 @@ void mergeRangePos(State& state, typename State::RangePos positions) {
   auto lease = state.acquireBuffer();
   auto buffer = lease.range();
 
-  auto previous = state.getRange(state.index_[positions.first].pos());
+  auto previous = state.getBlock(state.index_[positions.first].pos());
   bsc::move_forward(buffer, previous);
   auto current = previous;
   for (size_t pos = positions.first + 1; pos != positions.last; ++pos) {
-    current = state.getRange(state.index_[pos].pos());
+    current = state.getBlock(state.index_[pos].pos());
     bsc::merge_flow(previous, buffer, current, state.cmp_);
     previous = current;
   }
@@ -62,7 +62,7 @@ void tailProcess(State& state, std::vector<bsd::block_pos>& positions1,
   positions2.pop_back();
 
   size_t posBack1 = positions1.back().pos();
-  auto rangeBack1 = state.getRange(posBack1);
+  auto rangeBack1 = state.getBlock(posBack1);
   if (!bsc::is_mergeable(rangeBack1, state.tailRange_, state.cmp_)) {
     return;
   }
@@ -72,7 +72,7 @@ void tailProcess(State& state, std::vector<bsd::block_pos>& positions1,
                             state.cmp_);
   }
   size_t posBefore = positions1[positions1.size() - 2].pos();
-  if (bsc::is_mergeable(state.getRange(posBefore), rangeBack1, state.cmp_)) {
+  if (bsc::is_mergeable(state.getBlock(posBefore), rangeBack1, state.cmp_)) {
     positions2.emplace_back(posBack1, false);
     positions1.pop_back();
   }
@@ -97,8 +97,8 @@ net::awaitable<void> cutRange(State& state,
         ++pos;
       }
       if (pos < posLast) {
-        bsc::merge_uncontiguous(state.getRange(state.index_[pos - 1].pos()),
-                                state.getRange(state.index_[pos].pos()),
+        bsc::merge_uncontiguous(state.getBlock(state.index_[pos - 1].pos()),
+                                state.getBlock(state.index_[pos].pos()),
                                 lease.range(), state.cmp_);
       } else {
         pos = posLast;
@@ -130,7 +130,7 @@ net::awaitable<void> extractRanges(State& state,
     bsd::block_pos blockAtBegin = state.index_[runBegin];
     // The block of the current run with the greatest last element, and its
     // side. Only blocks from the other side can overlap with it.
-    auto rangeMax = state.getRange(blockAtBegin.pos());
+    auto rangeMax = state.getBlock(blockAtBegin.pos());
     bool sideMax = blockAtBegin.side();
     auto rangeCurrent = rangeMax;
     bool sideCurrent = sideMax;
@@ -140,7 +140,7 @@ net::awaitable<void> extractRanges(State& state,
       bool isMergeable = false;
       if (!isEnd) {
         bsd::block_pos blockAtPos = state.index_[pos];
-        rangeCurrent = state.getRange(blockAtPos.pos());
+        rangeCurrent = state.getBlock(blockAtPos.pos());
         sideCurrent = blockAtPos.side();
         isMergeable = sideMax != sideCurrent &&
                       bsc::is_mergeable(rangeMax, rangeCurrent, state.cmp_);
@@ -186,7 +186,7 @@ net::awaitable<void> mergeBlocks(State& state, size_t posIndex1,
 
   ql::ranges::merge(positions1, positions2, state.index_.begin() + posIndex1,
                     [&state](bsd::block_pos a, bsd::block_pos b) {
-                      return state.blockIsLess(a, b);
+                      return state.blockIsLessByFirstElement(a, b);
                     });
   co_await extractRanges(
       state, typename State::RangePos{

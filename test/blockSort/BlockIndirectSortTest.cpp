@@ -589,24 +589,20 @@ TEST(BlockIndirectSort, taskGroupSkipsChildrenWhenStopped) {
 }
 
 // _____________________________________________________________________________
-// A `SlotPool` hands out every slot once, and `acquire()` waits for a slot to
-// be released.
-TEST(BlockIndirectSort, slotPool) {
-  SlotPool pool{2};
-  size_t first = pool.acquire();
-  size_t second = pool.acquire();
-  EXPECT_NE(first, second);
-  EXPECT_LT(std::max(first, second), 2u);
-
-  std::atomic<bool> acquired{false};
-  std::thread waiter{[&] {
-    size_t slot = pool.acquire();
-    acquired = true;
-    EXPECT_EQ(slot, first);
-  }};
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  EXPECT_FALSE(acquired);
-  pool.release(first);
-  waiter.join();
-  EXPECT_TRUE(acquired);
+// `ScratchBuffers` allocates a new buffer if all are taken, and reuses a buffer
+// once it has been returned.
+TEST(BlockIndirectSort, scratchBuffers) {
+  ScratchBuffers<int> buffers{3, 7};
+  int* reused = nullptr;
+  {
+    auto first = buffers.acquire();
+    auto second = buffers.acquire();
+    EXPECT_NE(first.range().first, second.range().first);
+    EXPECT_EQ(std::vector(first.range().first, first.range().last),
+              std::vector({7, 7, 7}));
+    reused = first.range().first;
+  }
+  // The buffer that was returned last is handed out first.
+  auto third = buffers.acquire();
+  EXPECT_EQ(third.range().first, reused);
 }

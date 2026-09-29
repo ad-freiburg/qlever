@@ -28,77 +28,53 @@
 #include <cstddef>
 #include <iterator>
 #include <mutex>
-#include <thread>
+#include <range/v3/range/conversion.hpp>
 #include <utility>
 #include <vector>
 
 #include "backports/asio.h"
 #include "util/Exception.h"
 #include "util/NoCopyNoMove.h"
+#include "util/Synchronized.h"
+#include "util/Views.h"
 #include "util/blockSort/TaskGroup.h"
 
 namespace ad_utility::blockSort::detail {
 
 // The parts of Boost.Sort that are reused as they are: `range` with its merge
-// and move primitives, and `block_pos` (a block position plus a side bit).
+// and move primitives, and `block_pos` (a block position plus a side bit). We
+// use Boost's `range` instead of `ql::ranges::subrange`, because these
+// primitives only accept the former.
 namespace bsc = boost::sort::common;
 namespace bsd = boost::sort::blk_detail;
 
-// Hands out the numbers `0, ..., numSlots - 1`, each to one holder at a time.
-class SlotPool : public ad_utility::NoCopyNoMove {
- private:
-  std::mutex mutex_;
-  // The slots that are currently not taken.
-  std::vector<size_t> unused_;
-
- public:
-  // Create a pool of `numSlots` free slots.
-  explicit SlotPool(size_t numSlots) {
-    unused_.reserve(numSlots);
-    for (size_t i = 0; i < numSlots; ++i) {
-      unused_.push_back(i);
-    }
-  }
-
-  // Take a free slot. Only spins if all slots are taken, which for the scratch
-  // buffers only happens if more threads run the executor than there are
-  // buffers.
-  [[nodiscard]] size_t acquire() {
-    for (;;) {
-      {
-        std::lock_guard lock{mutex_};
-        if (!unused_.empty()) {
-          size_t slot = unused_.back();
-          unused_.pop_back();
-          return slot;
-        }
-      }
-      std::this_thread::yield();
-    }
-  }
-
-  // Give back a slot that was taken with `acquire()`.
-  void release(size_t slot) {
-    std::lock_guard lock{mutex_};
-    unused_.push_back(slot);
-  }
-};
-
-// A fixed pool of scratch buffers of `bufferSize` elements each, borrowed by
-// the tasks that merge or move blocks. Replaces the `thread_local` buffer of
+// A pool of scratch buffers of `bufferSize` elements each, borrowed by the
+// tasks that merge or move blocks. Replaces the `thread_local` buffer of
 // Boost's `backbone`, which doesn't work for coroutines that may change
 // threads.
 //
-// A buffer is never held across a suspension point, so one buffer per thread
-// is enough and `acquire()` doesn't wait in practice.
+// A buffer is allocated when it is first needed and reused afterwards, so
+// `acquire()` never waits. A buffer is never held across a suspension point,
+// so there are at most as many buffers as threads that run the executor.
 //
 // Not movable, because the `Lease`s point into this object.
 template <typename Value>
 class ScratchBuffers : public ad_utility::NoCopyNoMove {
  private:
-  std::vector<Value> storage_;
+  using Buffer = std::vector<Value>;
   size_t bufferSize_;
-  SlotPool slots_;
+  // The value that new buffers are filled with, a copy of the first element of
+  // the input, because not every `Value` is default-constructible (e.g. an
+  // `IdTable` row with a dynamic number of columns). It is only a placeholder:
+  // the elements of a buffer are always overwritten before they are read, but
+  // they have to be live objects, because they are move-assigned to (Boost does
+  // the same).
+  Value prototype_;
+  struct Buffers {
+    std::vector<Buffer> unused_;
+    size_t numAllocated_ = 0;
+  };
+  ad_utility::Synchronized<Buffers, std::mutex> buffers_;
 
  public:
   // A borrowed buffer, returned to the pool on destruction.
@@ -109,29 +85,38 @@ class ScratchBuffers : public ad_utility::NoCopyNoMove {
   class Lease : public ad_utility::NoCopyNoMove {
    private:
     ScratchBuffers* pool_;
-    size_t slot_;
+    Buffer buffer_;
 
    public:
-    // Hold the buffer with index `slot` of `pool`.
-    Lease(ScratchBuffers* pool, size_t slot) : pool_{pool}, slot_{slot} {}
-    ~Lease() { pool_->slots_.release(slot_); }
+    // Hold `buffer`, which belongs to `pool`.
+    Lease(ScratchBuffers* pool, Buffer buffer)
+        : pool_{pool}, buffer_{std::move(buffer)} {}
+    // Doesn't allocate, see `acquire()`.
+    ~Lease() { pool_->buffers_.wlock()->unused_.push_back(std::move(buffer_)); }
     // The elements of the borrowed buffer.
-    [[nodiscard]] bsc::range<Value*> range() const {
-      Value* first = pool_->storage_.data() + slot_ * pool_->bufferSize_;
-      return {first, first + pool_->bufferSize_};
+    [[nodiscard]] bsc::range<Value*> range() {
+      return {buffer_.data(), buffer_.data() + buffer_.size()};
     }
   };
 
-  // Allocate `numBuffers` buffers of `bufferSize` copies of `initialValue`
-  // (the elements are move-assigned to, so they have to be live objects).
-  ScratchBuffers(size_t numBuffers, size_t bufferSize,
-                 const Value& initialValue)
-      : storage_(numBuffers * bufferSize, initialValue),
-        bufferSize_{bufferSize},
-        slots_{numBuffers} {}
+  // A pool of buffers of `bufferSize` copies of `prototype`.
+  ScratchBuffers(size_t bufferSize, Value prototype)
+      : bufferSize_{bufferSize}, prototype_{std::move(prototype)} {}
 
-  // Borrow a buffer, see `SlotPool::acquire`.
-  [[nodiscard]] Lease acquire() { return Lease{this, slots_.acquire()}; }
+  // Borrow a free buffer, or allocate a new one if all are taken.
+  [[nodiscard]] Lease acquire() {
+    {
+      auto buffers = buffers_.wlock();
+      if (!buffers->unused_.empty()) {
+        Buffer buffer = std::move(buffers->unused_.back());
+        buffers->unused_.pop_back();
+        return Lease{this, std::move(buffer)};
+      }
+      // Make room for all buffers, so that returning one never allocates.
+      buffers->unused_.reserve(++buffers->numAllocated_);
+    }
+    return Lease{this, Buffer(bufferSize_, prototype_)};
+  }
 };
 
 // The number of blocks that a single task merges or moves.
@@ -155,11 +140,11 @@ template <typename Iterator, typename Compare>
 class SortState {
  public:
   using Value = typename std::iterator_traits<Iterator>::value_type;
-  using RangeIt = bsc::range<Iterator>;
+  using IteratorRange = bsc::range<Iterator>;
   using RangePos = bsc::range<size_t>;
 
   // The whole range to sort.
-  RangeIt globalRange_;
+  IteratorRange globalRange_;
   size_t blockSize_;
   size_t maxElementsPerTask_;
   size_t numElements_;
@@ -167,34 +152,31 @@ class SortState {
   // `index_[i]` is the block that ends up at position `i`.
   std::vector<bsd::block_pos> index_;
   // The last block if it is incomplete, empty otherwise.
-  RangeIt tailRange_;
+  IteratorRange tailRange_;
   Compare cmp_;
   ScratchBuffers<Value> buffers_;
   ql::any_io_executor executor_;
   // Set as soon as any task of this sort has failed, see `TaskGroup`.
   std::atomic<bool> stopped_{false};
 
-  // Sort `[first, last)` with `numBuffers` scratch buffers. The range must not
-  // be empty, which `runSort` makes sure of.
+  // Sort `[first, last)`. The range must not be empty, which `runSort` makes
+  // sure of.
   SortState(Iterator first, Iterator last, Compare cmp, SortParams params,
-            size_t numBuffers, ql::any_io_executor executor)
+            ql::any_io_executor executor)
       : globalRange_{first, last},
         blockSize_{params.blockSize},
         maxElementsPerTask_{params.maxElementsPerTask},
         numElements_{static_cast<size_t>(last - first)},
         numBlocks_{(numElements_ + blockSize_ - 1) / blockSize_},
+        index_{::ranges::to<std::vector<bsd::block_pos>>(
+            ad_utility::integerRange(numBlocks_))},
         tailRange_{numElements_ % blockSize_ == 0
                        ? last
                        : getBlockBegin(numBlocks_ - 1),
                    last},
         cmp_{std::move(cmp)},
-        buffers_{numBuffers, blockSize_, Value(*first)},
-        executor_{std::move(executor)} {
-    index_.reserve(numBlocks_);
-    for (size_t i = 0; i < numBlocks_; ++i) {
-      index_.emplace_back(i);
-    }
-  }
+        buffers_{blockSize_, Value(*first)},
+        executor_{std::move(executor)} {}
 
   // The first element of the block at physical position `pos`.
   [[nodiscard]] Iterator getBlockBegin(size_t pos) const {
@@ -202,15 +184,16 @@ class SortState {
   }
 
   // The elements of the block at physical position `pos`.
-  [[nodiscard]] RangeIt getRange(size_t pos) const {
+  [[nodiscard]] IteratorRange getBlock(size_t pos) const {
     Iterator first = getBlockBegin(pos);
-    Iterator last =
+    Iterator end =
         pos == numBlocks_ - 1 ? globalRange_.last : first + blockSize_;
-    return {first, last};
+    return {first, end};
   }
 
   // Whether the block `a` sorts before the block `b` by their first elements.
-  [[nodiscard]] bool blockIsLess(bsd::block_pos a, bsd::block_pos b) const {
+  [[nodiscard]] bool blockIsLessByFirstElement(bsd::block_pos a,
+                                               bsd::block_pos b) const {
     return cmp_(*getBlockBegin(a.pos()), *getBlockBegin(b.pos()));
   }
 
