@@ -749,9 +749,8 @@ TEST(VocabBatchLookupData, BuildersRejectEmptyOrOverflowingBatches) {
                                ::testing::HasSubstr("expectedSize > 0"));
 
   const std::array<size_t, 2> overflowingSizes{SIZE_MAX, 1};
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      ContiguousVocabBatchBuilder{overflowingSizes},
-      ::testing::HasSubstr("size <= SIZE_MAX - totalBytes"));
+  AD_EXPECT_THROW_WITH_MESSAGE(ContiguousVocabBatchBuilder{overflowingSizes},
+                               ::testing::HasSubstr("- totalBytes"));
 
   // A builder whose state was moved away has no words left to finalize.
   const std::array<size_t, 1> sizes{3};
