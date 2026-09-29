@@ -78,12 +78,12 @@ void tailProcess(State& state, std::vector<bsd::block_pos>& positions1,
   }
 }
 
-// Merge `positions` (more than `groupSize` blocks) in parallel by cutting it
-// into parts. Merging the two blocks at a cut makes the parts independent.
+// Merge `positions` (more than `BLOCKS_PER_TASK` blocks) in parallel by cutting
+// it into parts. Merging the two blocks at a cut makes the parts independent.
 template <typename State>
 net::awaitable<void> cutRange(State& state,
                               typename State::RangePos positions) {
-  size_t numParts = (positions.size() + groupSize - 1) / groupSize;
+  size_t numParts = (positions.size() + BLOCKS_PER_TASK - 1) / BLOCKS_PER_TASK;
   size_t sizePart = positions.size() / numParts;
   co_await state.withChildren([&state, positions, sizePart](TaskGroup& group) {
     auto lease = state.acquireBuffer();
@@ -113,7 +113,7 @@ net::awaitable<void> cutRange(State& state,
 // Spawn the merge of `run`, cut into parts if it is big.
 template <typename State>
 void spawnRun(State& state, TaskGroup& group, typename State::RangePos run) {
-  if (run.size() > groupSize) {
+  if (run.size() > BLOCKS_PER_TASK) {
     group.spawn(cutRange(state, run));
   } else {
     group.spawnFunction([&state, run]() { mergeRangePos(state, run); });

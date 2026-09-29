@@ -52,12 +52,12 @@ void moveSequence(State& state, const std::vector<size_t>& cycle) {
   bsc::move_forward(target, buffer);
 }
 
-// Rotate a long cycle (at least `groupSize` blocks) by rotating its parts in
-// parallel, and then the cycle of the last blocks of the parts, which are
+// Rotate a long cycle (at least `BLOCKS_PER_TASK` blocks) by rotating its parts
+// in parallel, and then the cycle of the last blocks of the parts, which are
 // still in the wrong place.
 template <typename State>
 net::awaitable<void> moveLongSequence(State& state, std::vector<size_t> cycle) {
-  size_t numParts = (cycle.size() + groupSize - 1) / groupSize;
+  size_t numParts = (cycle.size() + BLOCKS_PER_TASK - 1) / BLOCKS_PER_TASK;
   size_t sizePart = cycle.size() / numParts;
   std::vector<size_t> remainder;
   co_await state.withChildren([&state, &cycle, &remainder, numParts,
@@ -79,7 +79,7 @@ net::awaitable<void> moveLongSequence(State& state, std::vector<size_t> cycle) {
 // Spawn the rotation of `cycle`, cut into parts if it is long.
 template <typename State>
 void spawnCycle(State& state, TaskGroup& group, std::vector<size_t> cycle) {
-  if (cycle.size() < groupSize) {
+  if (cycle.size() < BLOCKS_PER_TASK) {
     group.spawnFunction(
         [&state, cycle = std::move(cycle)]() { moveSequence(state, cycle); });
   } else {

@@ -54,6 +54,7 @@ namespace {
 
 namespace net = boost::asio;
 using ad_utility::blockSort::blockIndirectSort;
+using ad_utility::blockSort::blockIndirectSortAsync;
 using namespace ad_utility::blockSort::detail;
 
 // The thread pool shared by all tests.
@@ -259,10 +260,10 @@ std::vector<Key> makeKeys(Shape shape, size_t numKeys, std::mt19937_64& gen) {
 // shared thread pool.
 template <typename Values>
 void runSortOn(typename Values::Container& values,
-               const FuzzCompare<typename Values::Less>& comp, uint32_t nthread,
-               SortParams params) {
+               const FuzzCompare<typename Values::Less>& comp,
+               uint32_t numThreads, SortParams params) {
   auto range = Values::range(values);
-  runSort(range.begin(), range.end(), comp, nthread,
+  runSort(range.begin(), range.end(), comp, numThreads,
           threadPool().get_executor(), params);
 }
 
@@ -281,10 +282,10 @@ void fuzzSort(size_t numIterations, bool withFailures, size_t maxBlockSize) {
   };
   for (size_t iteration = 0; iteration < numIterations; ++iteration) {
     SortParams params{random(1, maxBlockSize), random(16, 128)};
-    auto nthread = static_cast<uint32_t>(random(1, 12));
+    auto numThreads = static_cast<uint32_t>(random(1, 12));
     // Sizes around the one from which the block indirect part is used.
     size_t blockPathSize =
-        size_t{minNumThreadsForBlocks} * params.blockSize * groupSize;
+        size_t{minNumThreadsForBlocks} * params.blockSize * BLOCKS_PER_TASK;
     size_t numKeys =
         random(0, 3) == 0 ? random(0, 40) : random(0, 3 * blockPathSize);
     if (random(0, 3) == 0) {
@@ -296,7 +297,7 @@ void fuzzSort(size_t numIterations, bool withFailures, size_t maxBlockSize) {
         "iteration=", iteration, " shape=", static_cast<int>(shape),
         " numKeys=", numKeys, " blockSize=", params.blockSize,
         " maxElementsPerTask=", params.maxElementsPerTask,
-        " nthread=", nthread));
+        " numThreads=", numThreads));
     auto keys = makeKeys(shape, numKeys, gen);
     auto values = Values::fromKeys(keys);
 
@@ -312,7 +313,7 @@ void fuzzSort(size_t numIterations, bool withFailures, size_t maxBlockSize) {
 
     bool threw = false;
     try {
-      runSortOn<Values>(values, comp, nthread, params);
+      runSortOn<Values>(values, comp, numThreads, params);
     } catch (const std::runtime_error& e) {
       EXPECT_EQ(e.what(), comparisonFailed);
       threw = true;
@@ -325,37 +326,47 @@ void fuzzSort(size_t numIterations, bool withFailures, size_t maxBlockSize) {
   }
 }
 
-// The tests for one value type: the fuzzer with and without failures, and the
-// checks of the public interface (with the default tuning parameters).
-template <typename Values>
-void testValueType(size_t numIterations, size_t maxBlockSize) {
-  fuzzSort<Values>(numIterations, false, maxBlockSize);
-  fuzzSort<Values>(numIterations, true, maxBlockSize);
-
-  // The public interface rejects an empty executor.
-  auto values = Values::fromKeys({3, 1, 2});
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      blockIndirectSort(Values::range(values),
-                        FuzzCompare<typename Values::Less>{}, numPoolThreads,
-                        ql::any_io_executor{}),
-      ::testing::HasSubstr("exec"));
-
-  // The public interface sorts.
-  std::mt19937_64 gen{42};
-  auto keys = makeKeys(Shape::Random, 10'000, gen);
-  values = Values::fromKeys(keys);
-  blockIndirectSort(Values::range(values), FuzzCompare<typename Values::Less>{},
-                    numPoolThreads, threadPool().get_executor());
-  ql::ranges::sort(keys);
-  EXPECT_EQ(Values::toKeys(values), keys);
-}
-
 // Run `awaitable` on the shared thread pool, wait for it, and rethrow its
 // exception.
 void runOnPool(net::awaitable<void> awaitable) {
   net::co_spawn(threadPool().get_executor(), std::move(awaitable),
                 net::use_future)
       .get();
+}
+
+// The tests for one value type: the fuzzer with and without failures, and the
+// checks of the public interface, blocking and awaitable (with the default
+// tuning parameters).
+template <typename Values>
+void testValueType(size_t numIterations, size_t maxBlockSize) {
+  fuzzSort<Values>(numIterations, false, maxBlockSize);
+  fuzzSort<Values>(numIterations, true, maxBlockSize);
+  using Less = FuzzCompare<typename Values::Less>;
+  auto executor = threadPool().get_executor();
+
+  // The public interface rejects an empty executor.
+  auto values = Values::fromKeys({3, 1, 2});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      blockIndirectSort(Values::range(values), Less{}, numPoolThreads,
+                        ql::any_io_executor{}),
+      ::testing::HasSubstr("exec"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runOnPool(blockIndirectSortAsync(Values::range(values), Less{},
+                                       numPoolThreads, ql::any_io_executor{})),
+      ::testing::HasSubstr("exec"));
+
+  // The public interface sorts.
+  std::mt19937_64 gen{42};
+  auto keys = makeKeys(Shape::Random, 10'000, gen);
+  auto sortedKeys = keys;
+  ql::ranges::sort(sortedKeys);
+  values = Values::fromKeys(keys);
+  blockIndirectSort(Values::range(values), Less{}, numPoolThreads, executor);
+  EXPECT_EQ(Values::toKeys(values), sortedKeys);
+  values = Values::fromKeys(keys);
+  runOnPool(blockIndirectSortAsync(Values::range(values), Less{},
+                                   numPoolThreads, executor));
+  EXPECT_EQ(Values::toKeys(values), sortedKeys);
 }
 
 // Spawn a child into `group` that only finishes 50 ms after it has started,
@@ -406,17 +417,41 @@ TEST(BlockIndirectSort, idTableRows) {
 // big enough for all of its phases.
 TEST(BlockIndirectSort, defaultParameters) {
   size_t numKeys =
-      size_t{numPoolThreads} * blockSizeFor<uint32_t>() * groupSize;
+      size_t{numPoolThreads} * blockSizeFor<uint32_t>() * BLOCKS_PER_TASK;
   // Distinct keys in random order, so that the expected result is known without
   // a (slow) reference sort.
   std::vector<Key> expected(numKeys);
   std::iota(expected.begin(), expected.end(), Key{0});
   auto values = Uint32Values::fromKeys(expected);
   ql::ranges::shuffle(values, std::mt19937_64{7});
-  blockIndirectSort(Uint32Values::range(values), FuzzCompare<std::less<>>{},
-                    numPoolThreads, threadPool().get_executor());
+  // An lvalue range is sorted in place.
+  blockIndirectSort(values, FuzzCompare<std::less<>>{}, numPoolThreads,
+                    threadPool().get_executor());
   EXPECT_EQ(Uint32Values::toKeys(values), expected);
 }
+
+// _____________________________________________________________________________
+// Which ranges the public interface accepts: `blockIndirectSort` takes lvalues
+// and borrowed ranges, `blockIndirectSortAsync` only borrowed ranges, see its
+// comment. Temporaries that own their elements are rejected by both.
+namespace {
+template <typename Range>
+constexpr bool canSort = requires(Range&& range) {
+  blockIndirectSort(std::forward<Range>(range), std::less<>{}, 1,
+                    ql::any_io_executor{});
+};
+template <typename Range>
+constexpr bool canSortAsync = requires(Range&& range) {
+  blockIndirectSortAsync(std::forward<Range>(range), std::less<>{}, 1,
+                         ql::any_io_executor{});
+};
+static_assert(canSort<std::vector<uint32_t>&>);
+static_assert(canSort<ql::span<uint32_t>>);
+static_assert(!canSort<std::vector<uint32_t>>);
+static_assert(!canSortAsync<std::vector<uint32_t>&>);
+static_assert(canSortAsync<ql::span<uint32_t>>);
+static_assert(!canSortAsync<std::vector<uint32_t>>);
+}  // namespace
 
 // _____________________________________________________________________________
 // Concurrent sorts on the same executor don't interfere.

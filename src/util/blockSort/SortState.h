@@ -135,7 +135,7 @@ class ScratchBuffers : public ad_utility::NoCopyNoMove {
 };
 
 // The number of blocks that a single task merges or moves.
-constexpr size_t groupSize = 64;
+constexpr size_t BLOCKS_PER_TASK = 64;
 
 // The tuning parameters of a sort. The public interface derives them from the
 // size of the elements, see `blockIndirectSort`; only tests use smaller values,

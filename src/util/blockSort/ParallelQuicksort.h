@@ -16,8 +16,8 @@
 // accompanying file `LICENSE_1_0.txt` or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
 
-#ifndef QLEVER_SRC_UTIL_BLOCKSORT_PARALLELSORT_H
-#define QLEVER_SRC_UTIL_BLOCKSORT_PARALLELSORT_H
+#ifndef QLEVER_SRC_UTIL_BLOCKSORT_PARALLELQUICKSORT_H
+#define QLEVER_SRC_UTIL_BLOCKSORT_PARALLELQUICKSORT_H
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
@@ -93,8 +93,8 @@ template <typename Iterator, typename Compare>
 // concurrently, until `level` reaches zero or a part has fewer than
 // `maxElementsPerTask_` elements, which is then sorted by a single task.
 template <typename State, typename Iterator>
-net::awaitable<void> divideSort(State& state, Iterator first, Iterator last,
-                                uint32_t level) {
+net::awaitable<void> parallelQuicksortImpl(State& state, Iterator first,
+                                           Iterator last, uint32_t level) {
   using Value = typename State::Value;
   const auto& cmp = state.cmp_;
   if (ql::ranges::is_sorted(first, last, cmp)) {
@@ -131,13 +131,15 @@ net::awaitable<void> divideSort(State& state, Iterator first, Iterator last,
   }
   ql::ranges::iter_swap(first, cLast);
 
-  co_await state.runConcurrently(divideSort(state, first, cLast, level - 1),
-                                 divideSort(state, cFirst, last, level - 1));
+  co_await state.runConcurrently(
+      parallelQuicksortImpl(state, first, cLast, level - 1),
+      parallelQuicksortImpl(state, cFirst, last, level - 1));
 }
 
 // Sort `[first, last)` with a parallel quicksort, Boost's `parallel_sort`.
 template <typename State, typename Iterator>
-net::awaitable<void> parallelSort(State& state, Iterator first, Iterator last) {
+net::awaitable<void> parallelQuicksort(State& state, Iterator first,
+                                       Iterator last) {
   const auto& cmp = state.cmp_;
   // Cheap special cases: already sorted, or sorted in reverse.
   if (ql::ranges::is_sorted(first, last, cmp)) {
@@ -151,11 +153,11 @@ net::awaitable<void> parallelSort(State& state, Iterator first, Iterator last) {
   size_t numElements = static_cast<size_t>(last - first);
   auto level = static_cast<uint32_t>(
       (std::bit_width(numElements / state.maxElementsPerTask_) * 3) / 2);
-  co_await divideSort(state, first, last, level);
+  co_await parallelQuicksortImpl(state, first, last, level);
 }
 
 }  // namespace ad_utility::blockSort::detail
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#endif  // QLEVER_SRC_UTIL_BLOCKSORT_PARALLELSORT_H
+#endif  // QLEVER_SRC_UTIL_BLOCKSORT_PARALLELQUICKSORT_H
