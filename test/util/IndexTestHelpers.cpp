@@ -169,20 +169,16 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 [[nodiscard]] auto setGlobalIndexBuildingSettingsForTesting() {
   bool previousIgnoreMemoryLimit =
       EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING.exchange(true);
-  size_t previousOutputBlockSize =
-      EXTERNAL_ID_TABLE_SORTER_OUTPUT_BLOCK_SIZE_FOR_TESTING.exchange(5);
   // Decrease various default batch sizes such that there are multiple batches
   // also for the very small test indices (important for test coverage).
   size_t previousProgressBarBatchSize =
       std::exchange(DEFAULT_PROGRESS_BAR_BATCH_SIZE, 2);
-  return absl::Cleanup{[previousIgnoreMemoryLimit, previousOutputBlockSize,
-                        previousProgressBarBatchSize] {
-    EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
-        previousIgnoreMemoryLimit;
-    EXTERNAL_ID_TABLE_SORTER_OUTPUT_BLOCK_SIZE_FOR_TESTING =
-        previousOutputBlockSize;
-    DEFAULT_PROGRESS_BAR_BATCH_SIZE = previousProgressBarBatchSize;
-  }};
+  return absl::Cleanup{
+      [previousIgnoreMemoryLimit, previousProgressBarBatchSize] {
+        EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
+            previousIgnoreMemoryLimit;
+        DEFAULT_PROGRESS_BAR_BATCH_SIZE = previousProgressBarBatchSize;
+      }};
 }
 }  // namespace
 

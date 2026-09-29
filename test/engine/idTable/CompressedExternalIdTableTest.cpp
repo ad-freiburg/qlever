@@ -1309,25 +1309,47 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
       blocksizeCompression};
   net::thread_pool pool{8};
   sorter.setMergeExecutor(pool.get_executor(), 8);
+  // Merge twice (which requires that the result is not moved out), such that
+  // we can check that the warning is logged only once per sorter.
+  sorter.moveResultOnMerge() = false;
   IdTable input = createRandomlyFilledIdTable(numRows, NUM_COLS);
   for (const auto& row : input) {
     sorter.push(row);
   }
 
-  CopyableIdTable<0> result{NUM_COLS, ad_utility::testing::makeAllocator()};
+  std::vector<CopyableIdTable<0>> results;
   std::string logOutput;
   {
     auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
-    auto blocks = sorter.getSortedBlocks<0>();
-    result = idTableFromBlockGenerator(blocks);
+    for (size_t i = 0; i < 2; ++i) {
+      auto blocks = sorter.getSortedBlocks<0>();
+      results.push_back(idTableFromBlockGenerator(blocks));
+    }
     logOutput = logStream.str();
   }
-  EXPECT_THAT(logOutput,
-              ::testing::ContainsRegex(
-                  "merge phase of the external sorter can only merge 1 chunks "
-                  "concurrently instead of the 8 chunks"));
-  EXPECT_EQ(result.numRows(), numRows);
-  EXPECT_TRUE(ql::ranges::is_sorted(result, SortByOSP{}));
+  const std::string warning =
+      "merge phase of the external sorter can only merge 1 chunks "
+      "concurrently instead of the 8 chunks";
+  EXPECT_THAT(logOutput, ::testing::HasSubstr(warning));
+  EXPECT_EQ(logOutput.find(warning), logOutput.rfind(warning));
+  for (const auto& result : results) {
+    EXPECT_EQ(result.numRows(), numRows);
+    EXPECT_TRUE(ql::ranges::is_sorted(result, SortByOSP{}));
+  }
+  pool.join();
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, setMergeExecutorRejectsZeroParallelism) {
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+      filename, NUM_COLS, 1_MB, ad_utility::testing::makeAllocator(), 5_kB};
+  net::thread_pool pool{1};
+  AD_EXPECT_THROW_WITH_MESSAGE(sorter.setMergeExecutor(pool.get_executor(), 0),
+                               ::testing::HasSubstr("parallelism > 0"));
   pool.join();
 }
 

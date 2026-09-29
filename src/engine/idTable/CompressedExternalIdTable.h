@@ -889,15 +889,6 @@ class CompressedExternalIdTableSorterTypeErased {
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
-// If nonzero, the number of rows of the output blocks of the merge phase of a
-// sorter whose caller does not request a block size itself. Unit tests set
-// this to a small value, such that also their tiny inputs are merged into many
-// blocks by many concurrent chunks, and the parallel code path is exercised.
-// TODO<joka921> Get rid of this global and instead pass the block size down
-// explicitly through the tests.
-inline std::atomic<size_t>
-    EXTERNAL_ID_TABLE_SORTER_OUTPUT_BLOCK_SIZE_FOR_TESTING = 0;
-
 // The implementation of sorting a single block
 template <typename Comparator>
 struct BlockSorter {
@@ -1207,11 +1198,6 @@ class CompressedExternalIdTableSorter
     config.maxOutputBlockSize_ = maxOutputBlocksize_;
     config.parallelism_ = mergeParallelism_;
     config.outputBlockSizeOverride_ = blocksize;
-    if (size_t blocksizeForTesting =
-            EXTERNAL_ID_TABLE_SORTER_OUTPUT_BLOCK_SIZE_FOR_TESTING;
-        !blocksize.has_value() && blocksizeForTesting != 0) {
-      config.outputBlockSizeOverride_ = blocksizeForTesting;
-    }
     config.ignoreMemoryLimit_ =
         EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING;
     return config;
