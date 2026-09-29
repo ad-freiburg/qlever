@@ -14,13 +14,16 @@
 #include "util/Algorithm.h"
 
 // A helper for the columns stripping of operations.
-// It collects a set of variables (specified in the constructor and via the `add` function), together with the common optimization for the case that all variables are part of the set specified in the constructor.
-// This optimizes the common case that the set of variables that is exported from an operation is a superset of the set of variables that this operation needs from its children.
-// Please note, that the resulting variables that are required from the subtree
-// can contain variables that the subtree does not provide. This is especially
-// the case when an operation has several Subtrees (as for example the
-// Join-Operation. In that case, the varsRequiredFromSubtree_ are the same for
-// the left and the right subtree).
+// It collects a set of variables (specified in the constructor and via the
+// `add` function), together with the common optimization for the case that all
+// variables are part of the set specified in the constructor. This optimizes
+// the common case that the set of variables that is exported from an operation
+// is a superset of the set of variables that this operation needs from its
+// children. Please note, that the resulting variables that are required from
+// the subtree can contain variables that the subtree does not provide. This is
+// especially the case when an operation has several Subtrees (as for example
+// the Join-Operation. In that case, the varsRequiredFromSubtree_ are the same
+// for the left and the right subtree).
 class VarsRequiredFromSubtree {
  private:
   // Buffer variable
