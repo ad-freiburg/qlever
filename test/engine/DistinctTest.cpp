@@ -452,7 +452,7 @@ TEST(Distinct, makeTreeWithStrippedColumns) {
     EXPECT_TRUE(strColMap.contains(V{"?d"}));
 
     // Check whether the Distinct-Operation has updated its keepIndices_.
-    std::vector<QueryExecutionTree*> subtree =
+    auto subtree =
         stripColumnsOperation->getChildren();
     ASSERT_TRUE(subtree.at(0) != nullptr);
     auto distinctOp = subtree.at(0)->getRootOperation();
