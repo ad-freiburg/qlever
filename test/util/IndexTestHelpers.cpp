@@ -34,6 +34,7 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  EXTERNAL_ID_TABLE_SORTER_OUTPUT_BLOCK_SIZE_FOR_TESTING = 5;
   // Decrease various default batch sizes such that there are multiple batches
   // also for the very small test indices (important for test coverage).
   DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
@@ -219,12 +220,11 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   }
   {
     Index index = makeIndexWithTestSettings(c.parserBufferSize);
-    // This is enough for 2 triples per block. This is deliberately chosen as a
-    // small value, s.t. the tiny knowledge graphs from unit tests also contain
-    // multiple blocks. Should this value or the semantics of it (how many
-    // triples it may store) ever change, then some unit tests might have to be
-    // adapted.
-    index.blocksizePermutationsPerColumn() = c.blocksizePermutations;
+    // By default 2 triples per block. This is deliberately chosen as a small
+    // value, s.t. the tiny knowledge graphs from unit tests also contain
+    // multiple blocks. Should this value ever change, then some unit tests
+    // might have to be adapted.
+    index.rowsPerBlock() = c.rowsPerBlock;
     index.setOnDiskBase(indexBasename);
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
@@ -326,9 +326,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   }
 
   if (c.secondaryVocabWords.has_value()) {
-    index.getImpl().setSecondaryVocabForTesting(
-        std::make_shared<SecondaryVocabulary>(
-            std::move(c.secondaryVocabWords).value()));
+    index.getImpl().setSecondaryVocab(
+        std::make_shared<SecondaryVocabulary>(c.secondaryVocabWords.value()));
   }
 
   if (c.usePatterns && c.loadAllPermutations) {

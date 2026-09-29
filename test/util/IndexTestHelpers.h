@@ -69,7 +69,7 @@ struct TestIndexConfig {
   bool loadAllPermutations = true;
   bool usePatterns = true;
   bool usePrefixCompression = true;
-  ad_utility::MemorySize blocksizePermutations = 16_B;
+  size_t rowsPerBlock = 2;
   bool createTextIndex = false;
   bool addWordsFromLiterals = true;
   std::optional<std::pair<std::string, std::string>>
@@ -92,11 +92,12 @@ struct TestIndexConfig {
   bool addHasWordTriples = false;
   // The words of the secondary vocabulary of the index (see
   // `index/vocabulary/SecondaryVocabulary.h`). They have to be sorted and
-  // distinct, and must not be contained in `turtleInput`, because the
-  // secondary vocabulary is disjoint from the vocabulary of the main index.
-  // NOTE: A secondary vocabulary can currently only be created for testing
-  // (see `IndexImpl::setSecondaryVocabForTesting`), which is what this member
-  // does.
+  // pairwise distinct (see `SecondaryVocabulary::appendSegment`), and must not
+  // be contained in `turtleInput`, because the secondary vocabulary is
+  // disjoint from the vocabulary of the main index.
+  //
+  // NOTE: A secondary vocabulary is currently only created for testing (see
+  // `IndexImpl::setSecondaryVocab`), which is what this member does.
   std::optional<std::vector<std::string>> secondaryVocabWords = std::nullopt;
   // The number of threads used during the index build (see
   // `Index::createFromFiles`).
@@ -123,7 +124,7 @@ struct TestIndexConfig {
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
     return H::combine(
         std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
-        c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
+        c.usePrefixCompression, c.rowsPerBlock, c.createTextIndex,
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
         c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
@@ -132,9 +133,9 @@ struct TestIndexConfig {
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
-      usePrefixCompression, blocksizePermutations, createTextIndex,
-      addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
-      scoringMetric, bAndKParam, indexType, vocabularyType,
+      usePrefixCompression, rowsPerBlock, createTextIndex, addWordsFromLiterals,
+      contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
+      bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
       addHasWordTriples, secondaryVocabWords, numThreads, parseInParallel,
       additionalSettings)

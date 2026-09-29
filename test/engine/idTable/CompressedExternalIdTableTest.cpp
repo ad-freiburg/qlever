@@ -623,6 +623,137 @@ TEST(CompressedExternalIdTable, clearResetsBoundaryMetadata) {
 }
 
 namespace {
+// Merge all the runs of the `writer` serially via a
+// `CompressedIdTableRunsInput` and return the merged rows.
+template <size_t NumStaticCols>
+std::vector<IdTable::row_type> mergeRunsSerially(
+    ad_utility::CompressedExternalIdTableWriter& writer) {
+  using namespace ad_utility::parallelBlockMerge;
+  MergeOptions options;
+  options.outputBlockSize = OutputBlockSize::numElements(2);
+  std::vector<IdTable::row_type> result;
+  for (auto& block : serialBlockMergeToRange<false>(
+           ad_utility::CompressedIdTableRunsInput<NumStaticCols>{writer},
+           SortTriple<0, 1, 2, false>{}, options)) {
+    EXPECT_LE(block.numRows(), 2u);
+    auto dynamicBlock = std::move(block).toDynamic();
+    for (const auto& row : dynamicBlock) {
+      result.emplace_back(row);
+    }
+  }
+  return result;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Merging the runs of a writer via a `CompressedIdTableRunsInput` yields all
+// the rows of all the runs in sorted order, for different block sizes and for
+// a dynamic and a static number of columns.
+TEST(CompressedExternalIdTable, runsInputMergedSerially) {
+  auto tables = testTables();
+  std::vector<IdTable::row_type> expected;
+  for (const auto& table : tables) {
+    for (const auto& row : table) {
+      expected.emplace_back(row);
+    }
+  }
+  ql::ranges::sort(expected, SortTriple<0, 1, 2, false>{});
+  for (auto blockSize : {16_B, 24_B, 800_B}) {
+    std::string filename =
+        gtestCurrentTestName() + std::to_string(blockSize.getBytes()) + ".dat";
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+    for (const auto& table : tables) {
+      writer.writeIdTable(table);
+    }
+    EXPECT_THAT(mergeRunsSerially<0>(writer),
+                ::testing::ElementsAreArray(expected));
+    EXPECT_THAT(mergeRunsSerially<3>(writer),
+                ::testing::ElementsAreArray(expected));
+  }
+}
+
+// _____________________________________________________________________________
+// A `CompressedIdTableRunsInput` forwards the block metadata of its writer.
+TEST(CompressedExternalIdTable, runsInputForwardsTheBlockMetadata) {
+  auto tables = testTables();
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+  for (const auto& table : tables) {
+    writer.writeIdTable(table);
+  }
+  ad_utility::CompressedIdTableRunsInput<0> input{writer};
+  ASSERT_EQ(input.numRuns(), tables.size());
+  for (size_t run = 0; run < input.numRuns(); ++run) {
+    ASSERT_EQ(input.numBlocks(run), writer.numBlocksOfIdTable(run));
+    for (size_t b = 0; b < input.numBlocks(run); ++b) {
+      EXPECT_EQ(input.numElementsInBlock(run, b),
+                writer.numRowsInBlock(run, b));
+      EXPECT_EQ(input.firstElement(run, b), writer.firstRowOfBlock(run, b));
+      EXPECT_EQ(input.lastElement(run, b), writer.lastRowOfBlock(run, b));
+      EXPECT_EQ(input.getBlock(run, b), writer.readBlockOfIdTable(run, b));
+    }
+  }
+  auto block = input.makeEmptyBlock();
+  EXPECT_EQ(block.numColumns(), 3u);
+  EXPECT_EQ(block.numRows(), 0u);
+  input.appendToBlock(block, writer.firstRowOfBlock(0, 0));
+  ASSERT_EQ(block.numRows(), 1u);
+  EXPECT_EQ(block.at(0), writer.firstRowOfBlock(0, 0));
+  EXPECT_EQ(input.memorySizeOfElement(block.at(0)), 3 * 8_B);
+}
+
+// _____________________________________________________________________________
+// A `CompressedIdTableRunsInput` registers itself as an active reader of its
+// writer for its whole lifetime (a move transfers the registration), so writing
+// to or clearing the writer throws while it is alive.
+TEST(CompressedExternalIdTable, runsInputIsAnActiveReader) {
+  auto tables = testTables();
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, 3, ad_utility::testing::makeAllocator(), 16_B};
+  writer.writeIdTable(tables.at(0));
+  auto expectWriterIsLocked = [&writer, &tables](bool isLocked) {
+    if (isLocked) {
+      AD_EXPECT_THROW_WITH_MESSAGE(writer.writeIdTable(tables.at(1)),
+                                   ::testing::HasSubstr("iterated over"));
+      AD_EXPECT_THROW_WITH_MESSAGE(writer.clear(),
+                                   ::testing::HasSubstr("iterated over"));
+    } else {
+      EXPECT_NO_THROW(writer.writeIdTable(tables.at(1)));
+    }
+  };
+  {
+    std::optional<ad_utility::CompressedIdTableRunsInput<0>> input{
+        std::in_place, writer};
+    expectWriterIsLocked(true);
+    // Moving transfers the registration, the moved-from object no longer holds
+    // it.
+    ad_utility::CompressedIdTableRunsInput<0> movedTo{std::move(input.value())};
+    input.reset();
+    expectWriterIsLocked(true);
+    // Move assignment unregisters the overwritten object and takes over the
+    // registration of the moved-from object, so exactly one remains.
+    ad_utility::CompressedIdTableRunsInput<0> other{writer};
+    other = std::move(movedTo);
+    expectWriterIsLocked(true);
+  }
+  expectWriterIsLocked(false);
+  EXPECT_NO_THROW(writer.clear());
+}
+
+namespace {
 // The number of rows and the memory limit that are used by the tests of the
 // parallel merge below. With 4 columns and a memory limit of 1 MB, a single
 // presorted run holds `1'000'000 / (4 * 8 * 2) = 15'625` rows, so that 200'000
@@ -933,7 +1064,8 @@ TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
     }
     // Deliberately small output blocks, such that a single chunk produces
     // several of them and therefore has to spill, because only
-    // `MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK` of them stay in memory.
+    // `MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK` of them stay in
+    // memory.
     auto blocks = sorter.getSortedBlocks<0>(1000);
     // A spill file is created with the first block that its chunk spills, so
     // there is none before the merge has produced anything. The chunks that

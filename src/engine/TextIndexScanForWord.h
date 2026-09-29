@@ -9,6 +9,7 @@
 
 #include "engine/Operation.h"
 #include "parser/TextSearchQuery.h"
+#include "util/ContainersWithAllocator.h"
 
 // This operation retrieves all text records from the fulltext index that
 // contain a certain word or prefix.
@@ -58,8 +59,8 @@ class TextIndexScanForWord : public Operation {
   // the text variable and the completed word (if it was prefixed)
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
   }
 
   void setVariableToColumnMap();

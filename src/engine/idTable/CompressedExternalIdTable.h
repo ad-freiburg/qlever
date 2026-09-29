@@ -30,8 +30,10 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
 #include "util/TransparentFunctors.h"
+#include "util/UniqueCleanup.h"
 #include "util/Views.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
+#include "util/views/ChunkedIotaView.h"
 
 namespace ad_utility {
 
@@ -84,15 +86,10 @@ class CompressedExternalIdTableWriter {
   std::vector<size_t> startOfSingleIdTables_;
 
   // For each block (indexed exactly like the `ColumnMetadata` of a single
-  // column), the first and the last row of that block, stored as
-  // `[first_0, last_0, first_1, ...]`. The block boundaries are identical for
-  // all columns (see `writeIdTable`), so a single vector suffices. This
-  // metadata is used by the merge phase (see
-  // `util/parallelBlockMerge/ParallelBlockMerge.h`) to split the runs into
-  // disjoint value ranges that can be merged independently. It lives in RAM
-  // only and is never serialized, so adding it does not change the index
-  // format.
-  std::vector<IdTable::row_type> firstAndLastRowPerBlock_;
+  // column), the first and the last row of that block. This metadata is
+  // required for the parallel merger.
+  std::vector<std::pair<IdTable::row_type, IdTable::row_type>>
+      firstAndLastRowPerBlock_;
 
   ad_utility::AllocatorWithLimit<Id> allocator_;
   // Each column of each `IdTable` will be split up into blocks of this size and
@@ -105,9 +102,8 @@ class CompressedExternalIdTableWriter {
   // Keep track of the number of active output generators to detect whether we
   // are currently reading from the file and it is thus unsafe to add to the
   // contents.
-  // NOTE: This is an atomic, because the readers of the merge phase (see
-  // `CompressedIdTableRunsInput`) register and unregister themselves from
-  // arbitrary threads.
+  // NOTE: This is an atomic, because it is accessed concurrently in the
+  // parallel merge.
   std::atomic<size_t> numActiveGenerators_{0};
 
  public:
@@ -154,29 +150,21 @@ class CompressedExternalIdTableWriter {
     // The `[lower, upper)` row ranges of the blocks into which the `table` is
     // split. It is defined once and used by both loops below, such that the
     // first and last rows that are stored always match the stored blocks.
-    namespace rv = ::ranges::views;
-    auto blockRanges =
-        rv::chunk(rv::iota(size_t{0}, table.numRows()), blockSize) |
-        rv::transform([](const auto& chunk) {
-          size_t lower = *chunk.begin();
-          return std::pair{lower,
-                           lower + static_cast<size_t>(::ranges::size(chunk))};
-        });
-    // Store the first and the last row of each block, which the merge phase
-    // needs to split the runs into disjoint ranges, see
+    auto blockRanges = chunkedIotaView(size_t{0}, table.numRows(), blockSize);
+    // Store the first and the last row of each block, which a merge of the runs
+    // needs to split them into disjoint ranges, see
     // `firstAndLastRowPerBlock_`. This cannot be done inside the per-column
     // tasks below, because each of those only sees a single column.
     for (auto [lower, upper] : blockRanges) {
-      firstAndLastRowPerBlock_.push_back(IdTable::row_type{table[lower]});
-      firstAndLastRowPerBlock_.push_back(IdTable::row_type{table[upper - 1]});
+      firstAndLastRowPerBlock_.emplace_back(table[lower], table[upper - 1]);
     }
     // The columns are compressed and stored in parallel.
     // TODO<joka921> Use parallelism per block instead of per column (more
     // fine-grained) but only once we have a reasonable abstraction for
     // parallelism.
-    std::vector<std::future<void>> compressColumFutures;
+    std::vector<std::future<void>> compressColumnFutures;
     for (auto i : ql::views::iota(0u, numColumns())) {
-      compressColumFutures.push_back(
+      compressColumnFutures.push_back(
           std::async(std::launch::async, [this, i, blockRanges, &table]() {
             auto& blockMetadata = blocksPerColumn_.at(i);
             decltype(auto) column = table.getColumn(i);
@@ -195,7 +183,7 @@ class CompressedExternalIdTableWriter {
             }
           }));
     }
-    for (auto& fut : compressColumFutures) {
+    for (auto& fut : compressColumnFutures) {
       fut.get();
     }
   }
@@ -231,15 +219,15 @@ class CompressedExternalIdTableWriter {
   // The first row of the given block of the given `IdTable`.
   const IdTable::row_type& firstRowOfBlock(size_t idTableIdx,
                                            size_t blockIdx) const {
-    return firstAndLastRowPerBlock_.at(2 *
-                                       globalBlockIdx(idTableIdx, blockIdx));
+    return firstAndLastRowPerBlock_.at(globalBlockIdx(idTableIdx, blockIdx))
+        .first;
   }
 
   // The last row of the given block of the given `IdTable`.
   const IdTable::row_type& lastRowOfBlock(size_t idTableIdx,
                                           size_t blockIdx) const {
-    return firstAndLastRowPerBlock_.at(
-        2 * globalBlockIdx(idTableIdx, blockIdx) + 1);
+    return firstAndLastRowPerBlock_.at(globalBlockIdx(idTableIdx, blockIdx))
+        .second;
   }
 
   // Read and decompress the given block of the given `IdTable`. Thread-safe:
@@ -254,7 +242,7 @@ class CompressedExternalIdTableWriter {
   // Register a reader that accesses the blocks directly (via
   // `readBlockOfIdTable`), such that the writer knows that it is currently
   // being read from, see `numActiveGenerators_`.
-  void registerActiveReader() { ++numActiveGenerators_; }
+  void registerActiveReader() noexcept { ++numActiveGenerators_; }
 
   // Unregister a reader that was previously registered via
   // `registerActiveReader`.
@@ -305,7 +293,7 @@ class CompressedExternalIdTableWriter {
 
   // Translate the index of a block that is local to the `IdTable` with the
   // given index into the corresponding global block index (which is the index
-  // into the `ColumnMetadata` of a single column and, times two, into
+  // into the `ColumnMetadata` of a single column and into
   // `firstAndLastRowPerBlock_`).
   size_t globalBlockIdx(size_t idTableIdx, size_t blockIdx) const {
     size_t global = startOfSingleIdTables_.at(idTableIdx) + blockIdx;
@@ -334,10 +322,8 @@ class CompressedExternalIdTableWriter {
 
   // Read and decompress column `columnIdx` of the block at `blockIdx` into
   // `block`. This is the shared per-column kernel used by both `readBlock` and
-  // `readBlockSequential`. May be called concurrently for distinct `columnIdx`
-  // values on the same `block` (as done by `readBlock`), and also concurrently
-  // for the same `columnIdx` from several threads, because it only takes a
-  // shared lock on the file (`File::read` with an explicit offset is `pread`).
+  // `readBlockSequential`. May be called concurrently, as it only takes a
+  // shared lock on the file.
   template <size_t NumCols = 0>
   void decompressColumnIntoBlock(size_t blockIdx, size_t columnIdx,
                                  IdTableStatic<NumCols>& block) const {
@@ -385,7 +371,7 @@ class CompressedExternalIdTableWriter {
   // Like `readBlock`, but decompresses columns sequentially rather than in
   // parallel. This avoids per-block thread creation, making it suitable both
   // for use inside a single persistent background thread (e.g.
-  // `runStreamAsync`) and for the many threads of the merge phase (see
+  // `runStreamAsync`) and for many threads that read concurrently (see
   // `readBlockOfIdTable`).
   template <size_t NumCols = 0>
   IdTableStatic<NumCols> readBlockSequential(size_t blockIdx) const {
@@ -424,10 +410,14 @@ class CompressedExternalIdTableWriter {
 
 // An input policy for `ad_utility::parallelBlockMerge` that reads the blocks of
 // the `IdTable`s (= presorted runs) stored in a
-// `CompressedExternalIdTableWriter`. The `Element` is a dynamic, owning `Row`,
-// which can be compared against the (proxy) row references of an
-// `IdTableStatic<NumStaticCols>` because all comparators used in QLever are
-// templated on both of their argument types.
+// `CompressedExternalIdTableWriter`. The `Element` is a dynamic, owning `Row`
+// (and not the static `value_type`), because the `writer` is not templated on
+// the number of columns and can thus only store dynamic rows for the first and
+// last row of each block. The `Element` is only used for the computation of the
+// block boundaries, not in the tight merging loops, so the dynamic rows have
+// no relevant runtime cost. It can be compared against the (proxy) row
+// references of an `IdTableStatic<NumStaticCols>` because all comparators used
+// in QLever are templated on both of their argument types.
 //
 // The class registers itself as an active reader of the `writer` for its whole
 // lifetime (see `CompressedExternalIdTableWriter::registerActiveReader`), such
@@ -440,84 +430,94 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   using value_type = typename Block::value_type;
 
  private:
-  // The `writer` that stores the runs. It is `nullptr` if and only if this
-  // object was moved from.
-  CompressedExternalIdTableWriter* writer_;
+  // Unregister this object as an active reader of its `writer`. Runs on
+  // destruction and when this object is overwritten by a move assignment.
+  struct Unregister {
+    void operator()(CompressedExternalIdTableWriter* writer) const noexcept {
+      writer->unregisterActiveReader();
+    }
+  };
+  // The `writer` that stores the runs, together with the registration of this
+  // object as an active reader of it. The class owns that registration, so it
+  // must not be copied (hence the `NoCopy` base class). It has to be movable,
+  // because `parallelBlockMergeToRange` takes its input by value.
+  //
+  // NOTE: Because of the `UniqueCleanup`, the implicit move operations are
+  // correct: A moved-from object doesn't unregister anything on destruction,
+  // and a move assignment first unregisters the overwritten object.
+  ad_utility::unique_cleanup::UniqueCleanup<CompressedExternalIdTableWriter*,
+                                            Unregister>
+      writer_;
 
  public:
   // Construct from the `writer`, which has to outlive this object. Flush the
   // `writer`, such that all blocks that were written so far can be read again.
   explicit CompressedIdTableRunsInput(CompressedExternalIdTableWriter& writer)
-      : writer_{&writer} {
-    writer_->flush();
-    writer_->registerActiveReader();
-  }
-
-  // The class owns the registration as an active reader, so it must not be
-  // copied (hence the `NoCopy` base class). It has to be movable, because
-  // `parallelBlockMergeToRange` takes its input by value, and the move has to
-  // be written by hand, because it has to reset the source.
-  CompressedIdTableRunsInput(CompressedIdTableRunsInput&& other) noexcept
-      : writer_{std::exchange(other.writer_, nullptr)} {}
-  CompressedIdTableRunsInput& operator=(
-      CompressedIdTableRunsInput&& other) noexcept {
-    std::swap(writer_, other.writer_);
-    return *this;
-  }
+      : writer_{flushAndRegister(writer), Unregister{}} {}
 
   // ________________________________________________________________________
-  ~CompressedIdTableRunsInput() {
-    if (writer_ != nullptr) {
-      writer_->unregisterActiveReader();
-    }
-  }
-
-  // ________________________________________________________________________
-  size_t numRuns() const { return writer_->numIdTables(); }
+  size_t numRuns() const { return writer().numIdTables(); }
 
   // ________________________________________________________________________
   size_t numBlocks(size_t run) const {
-    return writer_->numBlocksOfIdTable(run);
+    return writer().numBlocksOfIdTable(run);
   }
 
   // ________________________________________________________________________
   size_t numElementsInBlock(size_t run, size_t block) const {
-    return writer_->numRowsInBlock(run, block);
+    return writer().numRowsInBlock(run, block);
   }
 
   // ________________________________________________________________________
   const Element& firstElement(size_t run, size_t block) const {
-    return writer_->firstRowOfBlock(run, block);
+    return writer().firstRowOfBlock(run, block);
   }
 
   // ________________________________________________________________________
   const Element& lastElement(size_t run, size_t block) const {
-    return writer_->lastRowOfBlock(run, block);
+    return writer().lastRowOfBlock(run, block);
   }
 
   // Read and decompress a single block. This is the only function that performs
   // I/O; it is thread-safe, because it only takes a shared lock on the
   // underlying file.
   Block getBlock(size_t run, size_t block) const {
-    return writer_->template readBlockOfIdTable<NumStaticCols>(run, block);
+    return writer().template readBlockOfIdTable<NumStaticCols>(run, block);
   }
 
   // ________________________________________________________________________
   Block makeEmptyBlock() const {
-    return Block{writer_->numColumns(), writer_->allocator()};
+    return Block{writer().numColumns(), writer().allocator()};
   }
 
   // ________________________________________________________________________
   template <typename R>
-  void appendToBlock(Block& block, R&& row) const {
+  void appendToBlock(Block& block, const R& row) const {
     block.push_back(row);
   }
 
-  // The memory of a single row, which is one `Id` per column.
+  // The memory of a single row, which is one `Id` per column. It is the same
+  // for all rows, so the `row` is not needed, but the argument is required by
+  // the input concept of `parallelBlockMerge`.
   template <typename R>
   MemorySize memorySizeOfElement([[maybe_unused]] const R& row) const {
-    return MemorySize::bytes(writer_->numColumns() * sizeof(Id));
+    return MemorySize::bytes(writer().numColumns() * sizeof(Id));
   }
+
+ private:
+  // Flush the `writer` and register the caller as an active reader. This runs
+  // before the `writer_` is constructed, such that a throwing `flush` doesn't
+  // leave an active `Unregister` behind without a matching registration.
+  static CompressedExternalIdTableWriter* flushAndRegister(
+      CompressedExternalIdTableWriter& writer) {
+    writer.flush();
+    writer.registerActiveReader();
+    return &writer;
+  }
+
+  // Access the `writer_` (the first `*` yields the stored pointer). Must not
+  // be called on a moved-from object.
+  CompressedExternalIdTableWriter& writer() const { return **writer_; }
 };
 
 // Make a mismatch with the `InputConcept` a clear compile error.
@@ -889,6 +889,13 @@ class CompressedExternalIdTableSorterTypeErased {
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
+// If nonzero, the number of rows of the output blocks of the merge phase of a
+// sorter whose caller does not request a block size itself. Unit tests set
+// this to a small value, such that also their tiny inputs are merged into many
+// blocks by many concurrent chunks, and the parallel code path is exercised.
+inline std::atomic<size_t>
+    EXTERNAL_ID_TABLE_SORTER_OUTPUT_BLOCK_SIZE_FOR_TESTING = 0;
+
 // The implementation of sorting a single block
 template <typename Comparator>
 struct BlockSorter {
@@ -1128,15 +1135,13 @@ class CompressedExternalIdTableSorter
                            }
                          })};
       }
-      namespace rv = ::ranges::views;
       auto chunked =
-          rv::chunk(rv::iota(size_t{0}, block.numRows()), blocksizeOutput) |
-          rv::transform([&](const auto& chunk) {
-            auto chunkStart = *chunk.begin();
-            auto chunkSize = ::ranges::size(chunk);
+          chunkedIotaView(size_t{0}, block.numRows(), blocksizeOutput) |
+          ql::views::transform([&](const auto& chunk) {
+            auto [chunkStart, chunkEnd] = chunk;
             auto curBlock = IdTableStatic<NumStaticCols>(
                 this->numColumns_, this->writer_.allocator());
-            curBlock.insertAtEnd(block, chunkStart, chunkStart + chunkSize);
+            curBlock.insertAtEnd(block, chunkStart, chunkEnd);
             return IdTableStatic<N>(std::move(curBlock).template toStatic<N>());
           });
       return ad_utility::InputRangeTypeErased(std::move(chunked));
@@ -1157,11 +1162,19 @@ class CompressedExternalIdTableSorter
   ad_utility::InputRangeTypeErased<IdTableStatic<N>> mergeRuns(
       const compressedExternalIdTable::MergePhaseConfig& config,
       const compressedExternalIdTable::MergePhaseParameters& parameters) {
+    auto options =
+        compressedExternalIdTable::makeMergeOptions(config, parameters);
+    // The read-ahead of the merged range has to fit into the
+    // `numBufferedOutputBlocks_` that the memory accounting reserves on the
+    // consumer side: it holds `numPrefetchedOutputBlocks + 1` blocks, and the
+    // consumer holds one more, see `MergeOptions::numPrefetchedOutputBlocks`.
+    options.numPrefetchedOutputBlocks =
+        static_cast<size_t>(std::max(1, numBufferedOutputBlocks_ - 2));
     auto merged =
         parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
             mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
             this->comparator_, makeBlockStorageFactory<N>(parameters),
-            compressedExternalIdTable::makeMergeOptions(config, parameters),
+            std::move(options),
             // NOTE: The sorter has no cancellation handle of its own, and the
             // merge requires one that is not `nullptr`, so this is a fresh
             // handle that is never cancelled.
@@ -1194,12 +1207,17 @@ class CompressedExternalIdTableSorter
     config.numRuns_ = this->writer_.numIdTables();
     config.numColumns_ = this->numColumns_;
     config.memoryLimit_ = this->memory_;
-    config.inputBlockSize_ = this->writer_.blockSizeUncompressed();
+    config.inputBlockSizePerColumn_ = this->writer_.blockSizeUncompressed();
     config.numBufferedOutputBlocks_ =
         static_cast<size_t>(numBufferedOutputBlocks_);
     config.maxOutputBlockSize_ = maxOutputBlocksize_;
     config.parallelism_ = mergeParallelism_;
     config.outputBlockSizeOverride_ = blocksize;
+    if (size_t blocksizeForTesting =
+            EXTERNAL_ID_TABLE_SORTER_OUTPUT_BLOCK_SIZE_FOR_TESTING;
+        !blocksize.has_value() && blocksizeForTesting != 0) {
+      config.outputBlockSizeOverride_ = blocksizeForTesting;
+    }
     config.ignoreMemoryLimit_ =
         EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING;
     return config;
