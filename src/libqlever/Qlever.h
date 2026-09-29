@@ -32,6 +32,7 @@
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
+#include "index/GeoPointEncoding.h"
 #include "index/Index.h"
 #include "index/IndexRebuilderTypes.h"
 #include "index/IndexSwap.h"
@@ -129,6 +130,11 @@ struct IndexBuilderConfig : CommonConfig {
   // IDs. See `src/index/vocabulary/VocabularyType.h` for the possible options.
   ad_utility::VocabularyType vocabType_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
+
+  // How geo points are encoded in the `Id`s of the index, see
+  // `ad_utility::GeoPointEncoding`. The encoding `LatMajor` is deprecated.
+  ad_utility::GeoPointEncoding geoPointEncoding_{
+      ad_utility::GeoPointEncoding::ZOrder};
 
   // If set to true, then certain temporary files which are created while
   // building the index are not deleted. This can be useful for debugging.

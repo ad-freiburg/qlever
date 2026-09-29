@@ -241,6 +241,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         c.vocabularyType.has_value()
             ? c.vocabularyType.value()
             : VocabularyType::randomForIndexBuilding());
+    index.getImpl().setGeoPointEncodingForIndexBuilding(c.geoPointEncoding);
     if (c.encodedPrefixesWithoutAngleBrackets.has_value() ||
         !c.encodedIriPatterns.empty()) {
       index.getImpl().setPrefixesForEncodedValues(
@@ -325,9 +326,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   }
 
   if (c.secondaryVocabWords.has_value()) {
-    index.getImpl().setSecondaryVocabForTesting(
-        std::make_shared<SecondaryVocabulary>(
-            std::move(c.secondaryVocabWords).value()));
+    index.getImpl().setSecondaryVocab(
+        std::make_shared<SecondaryVocabulary>(c.secondaryVocabWords.value()));
   }
 
   if (c.usePatterns && c.loadAllPermutations) {
