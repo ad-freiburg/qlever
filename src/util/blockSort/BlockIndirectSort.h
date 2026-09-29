@@ -236,11 +236,12 @@ CPP_template(typename Range, typename Compare)(
 // accepts borrowed ranges (e.g. `ql::span{vec}`): a coroutine only reads its
 // parameters once it is awaited, when a temporary that was passed by reference
 // may already be gone.
-template <ql::ranges::random_access_range Range, typename Compare>
-requires ql::ranges::borrowed_range<Range>
-boost::asio::awaitable<void> blockIndirectSortAsync(Range range, Compare comp,
-                                                    uint32_t numThreads,
-                                                    ql::any_io_executor exec) {
+CPP_template(typename Range, typename Compare)(
+    requires ql::ranges::random_access_range<Range> CPP_and
+        ql::ranges::borrowed_range<Range>)
+    boost::asio::awaitable<void> blockIndirectSortAsync(
+        Range range, Compare comp, uint32_t numThreads,
+        ql::any_io_executor exec) {
   AD_CONTRACT_CHECK(static_cast<bool>(exec));
   auto first = ql::ranges::begin(range);
   auto last = first + ql::ranges::distance(range);
