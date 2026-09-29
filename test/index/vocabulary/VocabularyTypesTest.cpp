@@ -702,3 +702,132 @@ TEST(VocabularyTypes, sequentialLookupBatchWithMissingWords) {
       sequentialLookupBatch(VocabWithHolesThrowing{}, indices),
       ::testing::HasSubstr("replaceOptionalByPlaceholderOnExport"));
 }
+
+// _____________________________________________________________________________
+// A vocabulary whose `operator[]` returns a plain view is copied word by word.
+TEST(VocabularyTypes, sequentialLookupBatchWithoutHoles) {
+  using namespace ad_utility::vocabulary;
+  std::vector<size_t> indices{3, 7};
+  auto result = sequentialLookupBatch(VocabWithoutHoles{}, indices);
+  EXPECT_THAT(result, ::testing::ElementsAre("word", "word"));
+  // Each word is an owned copy, not a view into the vocabulary's literal.
+  EXPECT_NE(result[0].data(), result[1].data());
+}
+
+// _____________________________________________________________________________
+// The result's accessors, including the null-owner and self-move edge cases.
+TEST(VocabBatchLookupData, ResultAccessorsAndEdgeCases) {
+  VocabBatchLookupResult fromNullOwner{VocabBatchOwner{}};
+  EXPECT_TRUE(fromNullOwner.empty());
+  EXPECT_EQ(fromNullOwner.size(), 0u);
+
+  auto result = StringVectorVocabBatchLookupData::fromWords({"a", "bc"});
+  ASSERT_NE(result.data(), nullptr);
+  EXPECT_EQ(result.data()[1], "bc");
+  AD_EXPECT_THROW_WITH_MESSAGE((void)result[2],
+                               ::testing::HasSubstr("index < span_.size()"));
+
+  // Self-move assignment keeps the result intact.
+  auto& alias = result;
+  result = std::move(alias);
+  EXPECT_THAT(result, ::testing::ElementsAre("a", "bc"));
+}
+
+// _____________________________________________________________________________
+// Every factory and builder rejects an empty batch, and the contiguous builder
+// rejects word sizes whose sum overflows.
+TEST(VocabBatchLookupData, BuildersRejectEmptyOrOverflowingBatches) {
+  AD_EXPECT_THROW_WITH_MESSAGE(StringVectorVocabBatchLookupData::fromWords({}),
+                               ::testing::HasSubstr("!words.empty()"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makePmrVocabBatchLookupResult(ql::span<const std::string_view>{}),
+      ::testing::HasSubstr("!words.empty()"));
+  AD_EXPECT_THROW_WITH_MESSAGE(ArenaVocabBatchBuilder{0},
+                               ::testing::HasSubstr("expectedSize > 0"));
+  auto alloc = ad_utility::makeAllocatorWithLimit<Id>(1_MB);
+  AD_EXPECT_THROW_WITH_MESSAGE((ArenaVocabBatchBuilder{0, alloc}),
+                               ::testing::HasSubstr("expectedSize > 0"));
+
+  const std::array<size_t, 2> overflowingSizes{SIZE_MAX, 1};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ContiguousVocabBatchBuilder{overflowingSizes},
+      ::testing::HasSubstr("size <= SIZE_MAX - totalBytes"));
+
+  // A builder whose state was moved away has no words left to finalize.
+  const std::array<size_t, 1> sizes{3};
+  ContiguousVocabBatchBuilder contiguous{sizes};
+  ContiguousVocabBatchBuilder contiguousMovedTo{std::move(contiguous)};
+  // NOLINTNEXTLINE(bugprone-use-after-move)
+  AD_EXPECT_THROW_WITH_MESSAGE((void)std::move(contiguous).finalize(),
+                               ::testing::HasSubstr("!views_.empty()"));
+  ArenaVocabBatchBuilder arena{1};
+  AD_EXPECT_THROW_WITH_MESSAGE((void)std::move(arena).finalize(),
+                               ::testing::HasSubstr("!views_.empty()"));
+}
+
+// _____________________________________________________________________________
+// A batch of only empty words: the contiguous builder still allocates one byte
+// so that the empty views point at a valid address, and the arena stores empty
+// words without allocating.
+TEST(VocabBatchLookupData, BatchesOfEmptyWords) {
+  const std::array<size_t, 2> sizes{0, 0};
+  ContiguousVocabBatchBuilder contiguous{sizes};
+  auto contiguousResult = std::move(contiguous).finalize();
+  EXPECT_THAT(contiguousResult, ::testing::ElementsAre("", ""));
+  EXPECT_NE(contiguousResult[0].data(), nullptr);
+
+  ArenaVocabBatchBuilder arena{2};
+  arena.appendWord("");
+  arena.appendWord("x");
+  EXPECT_THAT(std::move(arena).finalize(), ::testing::ElementsAre("", "x"));
+}
+
+// _____________________________________________________________________________
+// `AllocatorAsMemoryResource` is equal only to itself.
+TEST(VocabBatchLookupData, AllocatorAsMemoryResourceIsEqualOnlyToItself) {
+  auto alloc = ad_utility::makeAllocatorWithLimit<std::byte>(1_MB);
+  AllocatorAsMemoryResource first{alloc};
+  AllocatorAsMemoryResource second{alloc};
+  EXPECT_TRUE(first.is_equal(first));
+  EXPECT_FALSE(first.is_equal(second));
+}
+
+// _____________________________________________________________________________
+// `MarkerIndicesAndPositions` keeps its two arrays paired, and merging skips
+// markers without indices.
+TEST(VocabBatchLookupData, MarkerIndicesAndPositionsAndEmptyMarker) {
+  MarkerIndicesAndPositions pairs;
+  pairs.reserve(2);
+  EXPECT_TRUE(pairs.empty());
+  pairs.addPair(7, 1);
+  pairs.addPair(9, 0);
+  EXPECT_THAT(pairs.getUnderlyingIndices(), ::testing::ElementsAre(7, 9));
+  EXPECT_THAT(pairs.getResultPositions(), ::testing::ElementsAre(1, 0));
+  EXPECT_EQ(pairs.size(), 2u);
+
+  MarkerBatchLookups<3> lookups;
+  lookups[2] = StringVectorVocabBatchLookupData::fromWords({"x", "y"});
+  IndicesAndPositionsByMarker<3> partitions;
+  partitions[2].addPair(0, 1);
+  partitions[2].addPair(1, 0);
+  // Markers 0 and 1 have no indices, so their (empty) slots are never read.
+  auto result = mergeMarkerBatchesInInputOrder(std::move(lookups), partitions);
+  EXPECT_THAT(result, ::testing::ElementsAre("y", "x"));
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyTypes, WordAndIndexAccessorsAndEnd) {
+  WordAndIndex end = WordAndIndex::end();
+  EXPECT_TRUE(end.isEnd());
+  EXPECT_EQ(end.indexOrDefault(42), 42u);
+  AD_EXPECT_THROW_WITH_MESSAGE((void)end.word(),
+                               ::testing::HasSubstr("has_value()"));
+  AD_EXPECT_THROW_WITH_MESSAGE((void)end.index(),
+                               ::testing::HasSubstr("has_value()"));
+
+  WordAndIndex wordAndIndex{std::string{"word"}, 3};
+  EXPECT_FALSE(wordAndIndex.isEnd());
+  EXPECT_EQ(wordAndIndex.word(), "word");
+  EXPECT_EQ(wordAndIndex.index(), 3u);
+  EXPECT_EQ(wordAndIndex.indexOrDefault(42), 3u);
+}
