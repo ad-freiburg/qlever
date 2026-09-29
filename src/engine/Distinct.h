@@ -64,14 +64,14 @@ class Distinct : public Operation {
 
   bool knownEmptyResult() override { return subtree_->knownEmptyResult(); }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
+
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {{subtree_.get()}, allocator()};
   }
-
-  std::optional<std::shared_ptr<QueryExecutionTree>>
-  makeTreeWithStrippedColumns(
-      const std::set<Variable>& variables) const override;
 
  protected:
   [[nodiscard]] std::string getCacheKeyImpl() const override;
