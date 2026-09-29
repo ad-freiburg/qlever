@@ -60,12 +60,11 @@ struct AllocationTracker {
 // Global new/delete instrumentation for allocation counting during benchmark
 // runs. The malloc/free pairing below is intentional and matched, but GCC
 // cannot see across the replaceable global operators and reports a false
-// positive -Wmismatched-new-delete. GCC raises it while compiling the
-// allocation call sites (via inlining), so a pragma around the `operator
-// delete` definitions alone does not cover it (observed on GCC 11 with
-// -Werror); the warning is therefore suppressed file-wide (GCC only). The
-// sized-deallocation overloads must stay: GCC's -Wsized-deallocation (part of
-// -Wextra) rejects an unsized `operator delete` without its sized partner.
+// positive -Wmismatched-new-delete at the inlined call sites. A pragma in this
+// file does not reach those (GCC 11), so `benchmark/CMakeLists.txt` disables
+// the warning for this target (GCC only). The sized-deallocation overloads must
+// stay: GCC's -Wsized-deallocation (part of -Wextra) rejects an unsized
+// `operator delete` without its sized partner.
 //
 // Skipped under AddressSanitizer or ThreadSanitizer: their runtimes
 // already provide these replaceable allocation functions, so defining them
@@ -79,11 +78,6 @@ struct AllocationTracker {
 #endif
 #elif defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
 #define SERIALIZER_MICRO_BENCHMARK_UNDER_SANITIZER 1
-#endif
-
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
 #endif
 
 #ifndef SERIALIZER_MICRO_BENCHMARK_UNDER_SANITIZER
@@ -596,7 +590,3 @@ AD_REGISTER_BENCHMARK(SerializerMicroBenchmark);
 
 }  // namespace
 }  // namespace ad_benchmark
-
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
