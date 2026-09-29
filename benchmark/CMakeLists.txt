@@ -37,7 +37,7 @@ if (NOT _NO_BENCHMARK)
     addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)
 
     addAndLinkBenchmark(SparqlExpressionBenchmark engine testUtil gtest gmock)
-    addAndLinkBenchmark(FsstScratchBufferBenchmark fsst)
+    addAndLinkBenchmark(FsstScratchBufferBenchmark fsst ${CMAKE_DL_LIBS})
 
     addAndLinkBenchmark(SerializerMicroBenchmark engine sparqlParser qlever_util)
     # The benchmark replaces the global `operator new`/`operator delete` by a
