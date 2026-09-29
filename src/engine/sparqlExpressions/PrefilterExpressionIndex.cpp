@@ -17,6 +17,7 @@
 #include "global/ValueIdComparators.h"
 #include "index/IndexImpl.h"
 #include "util/ConstexprMap.h"
+#include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
 
 namespace prefilterExpressions {
@@ -53,10 +54,19 @@ static Id getIdFromColumnIndex(
 // order.
 // (3) Columns with `column index < evaluationColumn` must contain equal
 // values (`ValueId`s).
+//
+// NOTE: These are invariants of the block metadata of an index, which no query
+// can violate, and the check is linear in the number of blocks. It is run at
+// query planning time, once per prefilter evaluation, so it is only enabled
+// together with the other expensive checks (like the same check in the
+// constructor of `ScanSpecAndBlocks`).
 static void checkRequirementsBlockMetadata(
-    ql::span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
-  CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
-      input, evaluationColumn);
+    [[maybe_unused]] ql::span<const CompressedBlockMetadata> input,
+    [[maybe_unused]] size_t evaluationColumn) {
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
+        input, evaluationColumn);
+  }
 }
 
 namespace detail {

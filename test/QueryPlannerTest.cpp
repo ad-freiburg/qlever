@@ -367,6 +367,60 @@ TEST(QueryPlanner, testFilterAfterJoin) {
       qec);
 }
 
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3429 : A
+// filter must not be applied to a subtree in which one of its variables might
+// be UNDEF, because a subsequent join can still bind that variable, in which
+// case the filter has to be evaluated on the bound value.
+TEST(QueryPlanner, filtersAreNotAppliedToPossiblyUndefinedVariables) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<s> <r> <x>. <s> <r2> <y>.");
+
+  // `?p` might be UNDEF because of the `VALUES` clause. Applying the filter
+  // directly to the `VALUES` clause would remove the UNDEF row and thus make
+  // the whole result empty, although the correct result is "all triples with a
+  // predicate other than `<r>`".
+  auto undefValues = h::ValuesClause("VALUES (?p) { (UNDEF) }");
+  std::string queryWithUndef =
+      "SELECT * { ?s ?p ?o . FILTER(?p != <r>) VALUES ?p { UNDEF } }";
+  // The greedy planner applies the filter to the index scan, where `?p` is
+  // always defined.
+  h::expectGreedy(queryWithUndef,
+                  h::Join(h::Sort(undefValues),
+                          h::Filter("?p != <r>", scan("?s", "?p", "?o"))),
+                  qec);
+  // The dynamic programming planner applies it after the join.
+  h::expectDynamicProgramming(
+      queryWithUndef,
+      h::Filter("?p != <r>",
+                h::Join(h::Sort(undefValues), scan("?s", "?p", "?o"))),
+      qec);
+
+  // The definedness is tracked per variable: `?s` is always defined by the
+  // `VALUES` clause, so the filter on `?s` may still be applied to it (and to
+  // the index scan), while the filter on the possibly undefined `?o` may only
+  // be applied at the very end.
+  std::string queryWithTwoFilters =
+      "SELECT * { ?s <r> ?x . VALUES (?s ?o) { (<s> UNDEF) } "
+      "FILTER(?s != <x>) FILTER(?o != <y>) }";
+  auto valuesWithFilter = h::Sort(h::Filter(
+      "?s != <x>", h::ValuesClause("VALUES (?s\t?o) { (<s> UNDEF) }")));
+  h::expectGreedy(
+      queryWithTwoFilters,
+      h::Filter("?o != <y>",
+                h::Join(valuesWithFilter,
+                        h::Filter("?s != <x>", scan("?s", "<r>", "?x")))),
+      qec);
+
+  // Sanity check that filters are still applied as early as possible if all
+  // their variables are always defined.
+  h::expectGreedy(
+      "SELECT * { ?s ?p ?o . FILTER(?p != <r>) VALUES ?p { <r2> } }",
+      h::Join(h::Sort(h::Filter("?p != <r>",
+                                h::ValuesClause("VALUES (?p) { (<r2>) }"))),
+              h::Filter("?p != <r>", scan("?s", "?p", "?o"))),
+      qec);
+}
+
 TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
@@ -613,8 +667,8 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
       "} LIMIT 300");
   QueryPlanner qp = makeQueryPlanner();
   auto qet = qp.createExecutionTree(pq);
-  ASSERT_TRUE(qet->isVariableCovered(Variable{"?1"}));
-  ASSERT_TRUE(qet->isVariableCovered(Variable{"?0"}));
+  ASSERT_TRUE(qet->containsVariable(Variable{"?1"}));
+  ASSERT_TRUE(qet->containsVariable(Variable{"?0"}));
 }
 
 TEST(QueryPlanner, testSimpleOptional) {
@@ -4082,4 +4136,50 @@ TEST(QueryPlanner, nonDeterministicOperandNotDistributedOverUnion) {
       // the join has to be on top!
       h::Join(::testing::A<const QueryExecutionTree&>(),
               ::testing::A<const QueryExecutionTree&>()));
+}
+
+// Test the information about how each connected component of a query was
+// planned.
+TEST(QueryPlanner, planningInfo) {
+  // The information for the given query.
+  auto planningInfo = [](std::string query) {
+    QueryPlanner qp = makeQueryPlanner();
+    ParsedQuery pq = parseQuery(std::move(query));
+    qp.createExecutionTree(pq);
+    return qp.planningInfo();
+  };
+
+  // A path of three triples is one connected component, with six connected
+  // subgraphs (three single triples, two pairs, and all three).
+  auto info = planningInfo("SELECT * { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w }");
+  ASSERT_EQ(info.size(), 1u);
+  EXPECT_EQ(info[0].algorithm_, PlanningAlgorithm::DYNAMIC_PROGRAMMING);
+  EXPECT_EQ(info[0].numNodes_, 3u);
+  EXPECT_EQ(info[0].numConnectedSubgraphs_, 6u);
+  EXPECT_EQ(info[0].budget_,
+            getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>());
+  EXPECT_GT(info[0].numCandidatePlans_, 0u);
+
+  // Two connected components, with a budget of one.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(1);
+  info = planningInfo("SELECT * { ?x <p> ?y . ?y <q> ?z . ?a <r> ?b }");
+  ASSERT_EQ(info.size(), 2u);
+  ql::ranges::sort(info, {}, &ConnectedComponentPlanningInfo::numNodes_);
+
+  // The component with a single triple has one connected subgraph and needs no
+  // joins.
+  EXPECT_EQ(info[0].algorithm_, PlanningAlgorithm::DYNAMIC_PROGRAMMING);
+  EXPECT_EQ(info[0].numNodes_, 1u);
+  EXPECT_EQ(info[0].numConnectedSubgraphs_, 1u);
+  EXPECT_EQ(info[0].numCandidatePlans_, 0u);
+
+  // The component with two triples has three connected subgraphs, of which
+  // only two are counted (the counting stops at the budget plus one), so it is
+  // planned greedily.
+  EXPECT_EQ(info[1].algorithm_, PlanningAlgorithm::GREEDY);
+  EXPECT_EQ(info[1].numNodes_, 2u);
+  EXPECT_EQ(info[1].numConnectedSubgraphs_, 2u);
+  EXPECT_EQ(info[1].budget_, 1u);
+  EXPECT_GT(info[1].numCandidatePlans_, 0u);
 }

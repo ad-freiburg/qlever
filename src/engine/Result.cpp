@@ -150,7 +150,7 @@ void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
       idTable.getColumns(),
       [offset = limitOffset.actualOffset(idTable.numRows()),
        upperBound =
-           limitOffset.upperBound(idTable.numRows())](ql::span<Id> column) {
+           limitOffset.upperBound(idTable.numRows())](IdColumnRef column) {
         ql::shift_left(column.begin(), column.begin() + upperBound, offset);
       });
   // Resize the `IdTable` if necessary.
