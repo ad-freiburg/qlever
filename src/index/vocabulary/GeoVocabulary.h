@@ -11,11 +11,15 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_GEOVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_GEOVOCABULARY_H
 
+#include <atomic>
 #include <cstdint>
+#include <deque>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -197,6 +201,14 @@ class GeoVocabulary {
   // Custom word writer, which precomputes and writes geometry info along with
   // the words. With a grid, it also checks that the words arrive ordered by
   // cell and puts the cell index into the upper bits of the returned indices.
+  //
+  // The `GeometryInfo` of a word (which for a large polygon costs a parse and
+  // several s2 computations) is not computed on the calling thread, but in
+  // batches on the global thread pool (see `util/GlobalExecutor.h`): the
+  // position of a word in the `geoInfoFile_` is known as soon as the word
+  // arrives, so its record can be written whenever its batch is done. The
+  // calling thread only computes the cell of a word (with a grid), which
+  // needs no more than the bounding box.
   class WordWriter : public WordWriterBase {
    private:
     // The writer of the underlying vocabulary, which stores the strings.
@@ -210,9 +222,17 @@ class GeoVocabulary {
     std::optional<GeoCellGrid::CellIndex> lastCellIndex_;
     // The number of words written so far (the position of the next word).
     uint64_t numWords_ = 0;
-    // Counters for the warnings that `finishImpl` prints.
-    size_t numInvalidGeometries_ = 0;
-    size_t numInvalidPolygonArea_ = 0;
+    // Counters for the warnings that `finishImpl` prints. Atomic, because the
+    // batches on the thread pool increment them.
+    std::atomic<size_t> numInvalidGeometries_ = 0;
+    std::atomic<size_t> numInvalidPolygonArea_ = 0;
+    // The words whose `GeometryInfo` has not been computed yet, and the
+    // position (in the `geoInfoFile_`) of the first of them.
+    std::vector<std::string> currentBatch_;
+    uint64_t firstPositionOfCurrentBatch_ = 0;
+    size_t currentBatchSize_ = 0;
+    // The batches that are being computed on the thread pool, oldest first.
+    std::deque<std::future<void>> pendingBatches_;
 
    public:
     // Initialize the `geoInfoFile_` by writing its header and open a word
@@ -229,6 +249,14 @@ class GeoVocabulary {
     void finishImpl() override;
 
     ~WordWriter() override;
+
+   private:
+    // Hand the `currentBatch_` to the thread pool, which computes the
+    // `GeometryInfo` of its words and writes the records to the
+    // `geoInfoFile_`. Before that, wait for the oldest pending batches if too
+    // many of them are in flight, so that the memory stays bounded and an
+    // exception from a batch does not go unnoticed for long.
+    void flushBatch();
   };
 
   // The files of the underlying vocabulary, which is stored under the base
