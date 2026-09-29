@@ -8,6 +8,7 @@
 
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
@@ -284,4 +285,106 @@ TEST(GeoPoint, latMajorEncoding) {
     EXPECT_NEAR(GeoPoint::fromBitRepresentation(bits).getLat(), 48.0, 1e-6);
     EXPECT_NEAR(GeoPoint::fromBitRepresentation(bits).getLng(), 7.8, 1e-6);
   }
+}
+
+// Test the intervals of bit representations that contain all points of a
+// rectangle, for both encodings.
+TEST(GeoPoint, intervalsForRectangle) {
+  using T = GeoPoint::T;
+  using E = GeoPointEncodingEnum;
+  auto quantize = [](double lat, double lng) {
+    return std::pair(GeoPoint::quantizeCoordinate(lat, 90),
+                     GeoPoint::quantizeCoordinate(lng, 180));
+  };
+  auto point = [](T lat, T lng) {
+    return GeoPoint{GeoPoint::dequantizeCoordinate(lat, 90),
+                    GeoPoint::dequantizeCoordinate(lng, 180)};
+  };
+
+  // For `LatMajor`, the one interval of the latitude band, from the westmost
+  // point of the lower latitude to the eastmost point of the upper latitude.
+  GeoPoint lowerLeft{48.0, 7.8};
+  GeoPoint upperRight{48.1, 7.9};
+  auto [latMin, lngMin] = quantize(48.0, 7.8);
+  auto [latMax, lngMax] = quantize(48.1, 7.9);
+  auto band =
+      GeoPoint::intervalsForRectangle(lowerLeft, upperRight, E::LatMajor);
+  ASSERT_EQ(band.size(), 1);
+  EXPECT_EQ(band[0].first,
+            GeoPoint::combineCoordinates(latMin, 0, E::LatMajor));
+  EXPECT_EQ(band[0].second,
+            GeoPoint::combineCoordinates(latMax, GeoPoint::maxCoordinateEncoded,
+                                         E::LatMajor));
+
+  // For `ZOrder`, a rectangle that is exactly one aligned quadtree cell (of
+  // side 2^20 here) yields the one interval of that cell.
+  constexpr T side = T{1} << 20;
+  auto cell = GeoPoint::intervalsForRectangle(
+      point(100 * side, 200 * side), point(101 * side - 1, 201 * side - 1),
+      E::ZOrder);
+  ASSERT_EQ(cell.size(), 1);
+  EXPECT_EQ(cell[0].first,
+            GeoPoint::interleaveCoordinates(100 * side, 200 * side));
+  EXPECT_EQ(cell[0].second,
+            GeoPoint::interleaveCoordinates(101 * side - 1, 201 * side - 1));
+
+  // Two cells that are siblings in the quadtree (adjacent in Z-order) are
+  // merged into one interval, two cells that are not remain two intervals.
+  auto siblings = GeoPoint::intervalsForRectangle(
+      point(100 * side, 200 * side), point(101 * side - 1, 202 * side - 1),
+      E::ZOrder);
+  ASSERT_EQ(siblings.size(), 1);
+  EXPECT_EQ(siblings[0].second,
+            GeoPoint::interleaveCoordinates(101 * side - 1, 202 * side - 1));
+  auto nonSiblings = GeoPoint::intervalsForRectangle(
+      point(100 * side, 201 * side), point(101 * side - 1, 203 * side - 1),
+      E::ZOrder);
+  EXPECT_EQ(nonSiblings.size(), 2);
+
+  // For a rectangle that is not aligned to the quadtree (the one from above,
+  // about 11 km by 7 km), the intervals are ascending and disjoint, at most a
+  // few hundred, and cover at most 13 percent more than the rectangle
+  // (border cells of at most 1/32 of the smaller side on each side).
+  auto intervals =
+      GeoPoint::intervalsForRectangle(lowerLeft, upperRight, E::ZOrder);
+  EXPECT_GT(intervals.size(), 10);
+  EXPECT_LT(intervals.size(), 300);
+  double covered = 0;
+  for (size_t i = 0; i < intervals.size(); ++i) {
+    EXPECT_LE(intervals[i].first, intervals[i].second);
+    if (i > 0) {
+      EXPECT_GT(intervals[i].first, intervals[i - 1].second + 1);
+    }
+    covered +=
+        static_cast<double>(intervals[i].second - intervals[i].first) + 1;
+  }
+  double area = static_cast<double>(latMax - latMin + 1) *
+                static_cast<double>(lngMax - lngMin + 1);
+  EXPECT_GE(covered, area);
+  EXPECT_LE(covered, 1.13 * area);
+
+  // Every point of the rectangle (here: its corners and a grid of points
+  // inside) lies in one of the intervals, and a point outside the rectangle by
+  // more than 1/32 of its side lies in none.
+  auto contained = [&intervals](const GeoPoint& p) {
+    T bits = GeoPoint::combineCoordinates(
+        GeoPoint::quantizeCoordinate(p.getLat(), 90),
+        GeoPoint::quantizeCoordinate(p.getLng(), 180), E::ZOrder);
+    return ql::ranges::any_of(intervals, [bits](const auto& interval) {
+      return interval.first <= bits && bits <= interval.second;
+    });
+  };
+  for (int i = 0; i <= 10; ++i) {
+    for (int j = 0; j <= 10; ++j) {
+      EXPECT_TRUE(contained(GeoPoint{48.0 + 0.01 * i, 7.8 + 0.01 * j}));
+    }
+  }
+  EXPECT_FALSE(contained(GeoPoint{47.995, 7.85}));
+  EXPECT_FALSE(contained(GeoPoint{48.105, 7.85}));
+  EXPECT_FALSE(contained(GeoPoint{48.05, 7.795}));
+  EXPECT_FALSE(contained(GeoPoint{48.05, 7.905}));
+
+  // The lower left corner must not be above or right of the upper right one.
+  EXPECT_ANY_THROW(
+      GeoPoint::intervalsForRectangle(upperRight, lowerLeft, E::ZOrder));
 }
