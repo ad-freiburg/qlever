@@ -141,6 +141,7 @@ class PrefixCompressor {
 
   FRIEND_TEST(PrefixCompressor, PrefixIndexBoundaryMarkers);
   FRIEND_TEST(PrefixCompressor, PrefixIndexBoundaries);
+  FRIEND_TEST(PrefixCompressor, HelperContractChecks);
 
  public:
   // ___________________________________________________________________________
