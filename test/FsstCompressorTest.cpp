@@ -13,6 +13,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <range/v3/view/zip.hpp>
 #include <string_view>
@@ -379,6 +381,40 @@ TEST(FsstEncoder, firstTest) {
 }
 
 // _____________________________________________________________________________
+// A deterministic string of `n` pseudo-random printable characters, which FSST
+// compresses poorly (so that it stays long after every compression stage).
+static std::string pseudoRandomString(size_t n, uint32_t seed = 12345) {
+  std::string result(n, ' ');
+  uint32_t state = seed;
+  for (char& c : result) {
+    state = state * 1664525u + 1013904223u;
+    c = static_cast<char>('!' + (state >> 24) % 90);
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+// Goal: `decompress` decodes into a stack buffer of
+// `FsstDecoder::decodeStackBufferSize` bytes and falls back to a heap buffer
+// for longer strings. Method: decode words just below, at and above that size
+// (and much longer ones) and compare them with the originals.
+TEST(FsstEncoder, DecompressAroundTheStackBufferSize) {
+  constexpr size_t bufferSize = FsstDecoder::decodeStackBufferSize;
+  const std::vector<std::string> words{pseudoRandomString(bufferSize - 1, 1),
+                                       pseudoRandomString(bufferSize, 2),
+                                       pseudoRandomString(bufferSize + 1, 3),
+                                       pseudoRandomString(3 * bufferSize, 4),
+                                       std::string(5 * bufferSize, 'x'),
+                                       "short",
+                                       ""};
+  auto [buffer, compressedViews, decoder] = FsstEncoder::compressAll(words);
+  for (const auto& [word, compressed] :
+       ::ranges::views::zip(words, compressedViews)) {
+    EXPECT_EQ(decoder.decompress(compressed), word);
+  }
+}
+
+// _____________________________________________________________________________
 // Goal: `decompressInto` (the arena-bound path used by `lookupBatch`) must
 // produce byte-for-byte the same output as the string-returning `decompress`.
 // Method: compress the words, decode each compressed word through both
@@ -409,8 +445,50 @@ TEST(FsstEncoder, DecompressIntoMatchesDecompress) {
 }
 
 // _____________________________________________________________________________
+// Goal: `maxDecompressedSize` rejects inputs whose worst-case expansion
+// overflows `size_t`, for one stage and in every stage of a repeated decoder.
+// Method: `maxDecompressedSize` only reads `str.size()`, so a view that claims
+// more bytes than exist (and is never dereferenced) reaches the guards.
+TEST(FsstEncoder, MaxDecompressedSizeRejectsOverflow) {
+  constexpr size_t factor = FsstDecoder::maxExpansionFactor;
+  constexpr size_t max = std::numeric_limits<size_t>::max();
+  const char dummy = 'x';
+  auto viewOfSize = [&dummy](size_t size) {
+    return std::string_view{&dummy, size};
+  };
+
+  EXPECT_EQ(FsstDecoder::maxDecompressedSize(viewOfSize(max / factor)),
+            max / factor * factor);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)FsstDecoder::maxDecompressedSize(viewOfSize(max / factor + 1)),
+      ::testing::HasSubstr("maxExpansionFactor"));
+
+  // Three stages: the input passes the first two checks and fails the third.
+  constexpr size_t limit3 = max / factor / factor / factor;
+  EXPECT_EQ(FsstRepeatedDecoder<3>::maxDecompressedSize(viewOfSize(limit3)),
+            limit3 * factor * factor * factor);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)FsstRepeatedDecoder<3>::maxDecompressedSize(viewOfSize(limit3 + 1)),
+      ::testing::HasSubstr("maxExpansionFactor"));
+}
+
+// _____________________________________________________________________________
 class FsstRepeatedDecoderTest : public ::testing::Test {
  protected:
+  // ___________________________________________________________________________
+  // A word that stays short in the intermediate stages but is longer than the
+  // stack buffer of `FsstDecoder::decompress` after the last stage.
+  static std::string longWord() {
+    return std::string(5 * FsstDecoder::decodeStackBufferSize, 'x');
+  }
+
+  // ___________________________________________________________________________
+  // A word whose intermediate stages do not fit the stack buffers of
+  // `FsstRepeatedDecoder::decompress` either.
+  static std::string randomWord() {
+    return pseudoRandomString(3 * FsstDecoder::decodeStackBufferSize);
+  }
+
   // ___________________________________________________________________________
   template <size_t N>
   static void expectRepeatedDecompressIntoMatches(
@@ -484,14 +562,14 @@ class FsstRepeatedDecoderTest : public ::testing::Test {
 // cascaded stages, decodes via both interfaces, and compares all three.
 TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressOneStage) {
   expectRepeatedDecompressIntoMatches<1>(
-      {"alpha", "", "beta", "gamma-gamma-gamma", ""});
+      {"alpha", "", "beta", "gamma-gamma-gamma", "", longWord(), randomWord()});
 }
 
 // _____________________________________________________________________________
 // See above, with two cascaded FSST stages.
 TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressTwoStages) {
   expectRepeatedDecompressIntoMatches<2>(
-      {"alpha", "", "beta", "gamma-gamma-gamma", ""});
+      {"alpha", "", "beta", "gamma-gamma-gamma", "", longWord(), randomWord()});
 }
 
 // _____________________________________________________________________________
@@ -499,5 +577,5 @@ TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressTwoStages) {
 // production).
 TEST_F(FsstRepeatedDecoderTest, decompressIntoMatchesDecompressThreeStages) {
   expectRepeatedDecompressIntoMatches<3>(
-      {"alpha", "", "beta", "gamma-gamma-gamma", ""});
+      {"alpha", "", "beta", "gamma-gamma-gamma", "", longWord(), randomWord()});
 }

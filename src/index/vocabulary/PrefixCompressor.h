@@ -141,6 +141,7 @@ class PrefixCompressor {
 
   FRIEND_TEST(PrefixCompressor, PrefixIndexBoundaryMarkers);
   FRIEND_TEST(PrefixCompressor, PrefixIndexBoundaries);
+  FRIEND_TEST(PrefixCompressor, HelperContractChecks);
 
  public:
   // ___________________________________________________________________________
@@ -183,18 +184,15 @@ class PrefixCompressor {
   }
 
   // ___________________________________________________________________________
-  // Return the decompressed form of the given (non-empty) `compressedWord`.
-  // The concatenation allocates the exact size once and copies each part once;
-  // filling the string through `decompressIntoWithIndex` would need
-  // `ql::resize_and_overwrite`, whose C++17/C++20 fallback zero-fills the
-  // string first, and measured slower than this.
+  // Decompress the given `compressedWord`.
   [[nodiscard]] std::string decompress(std::string_view compressedWord) const {
     AD_CONTRACT_CHECK(!compressedWord.empty());
-    const auto prefixIdx = prefixIndex(compressedWord);
-    if (prefixIdx.has_value()) {
-      return prefixToCode_[*prefixIdx] + compressedWord.substr(1);
+    auto idx = static_cast<uint8_t>(compressedWord[0]) - MIN_COMPRESSION_PREFIX;
+    if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
+      return prefixToCode_[idx] + compressedWord.substr(1);
+    } else {
+      return std::string(compressedWord.substr(1));
     }
-    return std::string(compressedWord.substr(1));
   }
 
   // ___________________________________________________________________________

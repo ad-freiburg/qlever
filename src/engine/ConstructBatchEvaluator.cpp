@@ -90,12 +90,11 @@ void collectColumnMisses(size_t idTableColumnIdx,
 // depth-2 variant keeps the lookup of the next vocabulary sub-batch in flight
 // while the current one is consumed. Reads only `index`/`localVocab` (plus at
 // most two pooled I/O managers per caller), so concurrent phase B bodies share
-// no mutable state and may run as fibers.
+// no mutable state and may run as fibers. Only called for columns with
+// misses (phase B skips the others).
 void resolveColumnMisses(const Index& index, const LocalVocab& localVocab,
                          ColumnWork& work) {
-  if (work.missIds_.empty()) {
-    return;
-  }
+  AD_CORRECTNESS_CHECK(!work.missIds_.empty());
   work.missResolved_ =
       ql::exportIds::idsToStringAndTypeDepth2(index, work.missIds_, localVocab);
 }

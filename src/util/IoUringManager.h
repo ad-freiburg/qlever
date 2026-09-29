@@ -466,8 +466,10 @@ using BatchIoManager = BatchManager<SyncIoPolicy>;
 // or any other error leaves the read (and, for a failed call, the rest of its
 // run) to the caller. If the kernel or file system rejects `RWF_NOWAIT`
 // (`EOPNOTSUPP`), the fast path is disabled for the rest of the process (see
-// `pageCacheFastPathIsSupported`), which is logged once. Without
-// `RWF_NOWAIT` support at compile time, every read is returned.
+// `pageCacheFastPathIsSupported`), which is logged once. Where `preadv2` with
+// `RWF_NOWAIT` is not available (outside Linux, and in Emscripten builds),
+// the function exists but serves nothing: every read is returned, and
+// `pageCacheFastPathIsSupported()` is false.
 // Precondition: the three spans have the same length.
 // `preadv2` and `RWF_NOWAIT` (Linux >= 4.14), including the caveat that a
 // `RWF_NOWAIT` read may return 0 before the end of the file (such a read is

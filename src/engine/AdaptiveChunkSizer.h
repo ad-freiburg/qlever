@@ -184,12 +184,6 @@ class AdaptiveChunkSizer {
   }
 
   // ___________________________________________________________________________
-  // Convenience alias for recordChunk.
-  void recordChunkFlushed(size_t bytesWritten, size_t rowCount) {
-    recordChunk(bytesWritten, rowCount);
-  }
-
-  // ___________________________________________________________________________
   // Reset sizer back to initial 64 KB state (e.g. for reusing across queries).
   void reset() noexcept {
     currentChunkBytesTarget_ = config_.initialChunkBytes_;
@@ -207,9 +201,6 @@ class AdaptiveChunkSizer {
   }
   [[nodiscard]] uint64_t totalRows() const noexcept {
     return totalRowsObserved_;
-  }
-  [[nodiscard]] const AdaptiveChunkConfig& config() const noexcept {
-    return config_;
   }
 
   // ___________________________________________________________________________
