@@ -26,12 +26,20 @@
 // for the left and the right subtree).
 class VarsRequiredFromSubtree {
  private:
+ // Is used so that assert is executed before dereferencation of pointer.
+  static const std::set<Variable>& checkAndDereference(
+      const std::set<Variable>* ptr) {
+    AD_CORRECTNESS_CHECK(ptr != nullptr);
+    return *ptr;
+  }
+
+ private:
   // Buffer variable
   std::set<Variable> newVariables_;
   // The resulting variables that are required from the subtree.
   const std::set<Variable>* varsRequiredFromSubtree_;
   // Store the variables that are requested by the Parenttree.
-  const std::set<Variable>& varsRequestedFromParentTree_;
+  const std::set<Variable> varsRequestedFromParentTree_;
 
  public:
   // `varsRequestedFromParentTree` must outlive this object, as its address
@@ -39,9 +47,8 @@ class VarsRequiredFromSubtree {
   explicit VarsRequiredFromSubtree(
       const std::set<Variable>* varsRequestedFromParentTree)
       : varsRequiredFromSubtree_{varsRequestedFromParentTree},
-        varsRequestedFromParentTree_{*varsRequestedFromParentTree} {
-    AD_CORRECTNESS_CHECK(varsRequestedFromParentTree != nullptr);
-  }
+        varsRequestedFromParentTree_{
+            checkAndDereference(varsRequestedFromParentTree)} {}
 
   // The function add() has to be called whenever there are variables that are
   // needed by the operation itself to be executed. This function adds all these
