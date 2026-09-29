@@ -94,6 +94,8 @@ makeTreeWithOptionalStripOperation(
           })) {
     return treeWithOperationAsRoot;
   }
+  // TODO <joka921> It would be more efficient but more complicated to tell the
+  // DISTINCT operation directly to not export some of its keepIndices_.
   return ad_utility::makeExecutionTree<StripColumns>(
       qec, std::move(treeWithOperationAsRoot), variablesRequestedFromParent);
 }
