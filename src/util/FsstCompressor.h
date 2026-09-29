@@ -49,7 +49,12 @@ class FsstDecoder {
   // Construct from the internal `fsst_decoder_t`. Note that the typical way to
   // obtain an `FsstDecoder` is by first creating a `FsstEncoder` and calling
   // `getDecoder()` on that encoder.
-  explicit FsstDecoder(const fsst_decoder_t& decoder) : decoder_{decoder} {}
+  explicit FsstDecoder(const fsst_decoder_t& decoder) : decoder_{decoder} {
+    // NOTE: `fsst_decoder` leaves the (unused) `version` field of the struct
+    // uninitialized. It is set here, so that the serialized decoders are the
+    // same for the same input, no matter on which thread they were created.
+    decoder_.version = 0;
+  }
 
   // Decompress a  single string.
   std::string decompress(std::string_view str) const {

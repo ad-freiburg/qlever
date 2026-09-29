@@ -259,6 +259,46 @@ class GeoVocabulary {
     void flushBatch();
   };
 
+  // The block-wise counterpart of the `WordWriter` (see `BlockWriterBase`):
+  // the geometry info of the words of a block is computed in `prepare`, on
+  // whichever thread prepares the block, and written to its position in the
+  // `geoInfoFile_` in `append`. With a grid, `indexOf` computes the cell of a
+  // word from the literal (exactly as `WordWriter::operator()`), and the order
+  // of the cells is checked in `prepare` (within a block) and `append` (across
+  // blocks). The files are the same as those of the `WordWriter`.
+  class BlockWriter : public BlockWriterBase {
+   private:
+    std::unique_ptr<BlockWriterBase> underlyingWriter_;
+    ad_utility::File geoInfoFile_;
+    std::optional<GeoCellGrid> grid_;
+    std::optional<GeoCellGrid::CellIndex> lastCellIndex_;
+    uint64_t numWords_ = 0;
+    std::atomic<size_t> numInvalidGeometries_ = 0;
+    std::atomic<size_t> numInvalidPolygonArea_ = 0;
+
+    struct Prepared : public PreparedBlockBase {
+      std::unique_ptr<PreparedBlockBase> underlying_;
+      std::vector<GeometryInfoBuffer> records_;
+      uint64_t firstPosition_;
+      // The cells of the first and the last word (only with a grid).
+      std::optional<GeoCellGrid::CellIndex> firstCellIndex_;
+      std::optional<GeoCellGrid::CellIndex> lastCellIndex_;
+    };
+
+   public:
+    // Constructor, see `WordWriter`.
+    BlockWriter(const UnderlyingVocabulary& vocabulary,
+                const std::string& filename, std::optional<GeoCellGrid> grid);
+
+    size_t blockSize() const override { return underlyingWriter_->blockSize(); }
+    uint64_t indexOf(uint64_t position, std::string_view word) const override;
+    std::unique_ptr<PreparedBlockBase> prepare(WordBlock block) override;
+    void append(std::unique_ptr<PreparedBlockBase> prepared) override;
+
+   private:
+    void finishImpl() override;
+  };
+
   // The files of the underlying vocabulary, which is stored under the base
   // filename itself, plus the file with the geometry information.
   static FileSuffixes fileSuffixes() {
@@ -273,6 +313,12 @@ class GeoVocabulary {
   std::unique_ptr<WordWriter> makeDiskWriterPtr(
       const std::string& filename) const {
     return std::make_unique<WordWriter>(literals_, filename, grid_);
+  }
+
+  // ___________________________________________________________________________
+  std::unique_ptr<BlockWriterBase> makeBlockWriterPtr(
+      const std::string& filename) const {
+    return std::make_unique<BlockWriter>(literals_, filename, grid_);
   }
 
   // ___________________________________________________________________________

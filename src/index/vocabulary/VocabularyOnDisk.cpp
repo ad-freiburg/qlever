@@ -250,6 +250,21 @@ uint64_t VocabularyOnDisk::WordWriter::operator()(
 }
 
 // _____________________________________________________________________________
+void VocabularyOnDisk::WordWriter::writeBlock(const WordBlock& block) {
+  AD_CONTRACT_CHECK(block.firstPosition_ == numWords_);
+  const size_t numWords = block.numWords();
+  // The offsets of the block are relative to its data, the ones in the file
+  // are absolute.
+  offsetBuffer_.resize(numWords);
+  for (size_t i = 0; i < numWords; ++i) {
+    offsetBuffer_[i] = currentOffset_ + block.offsets_[i];
+  }
+  offsetsFile_.write(offsetBuffer_.data(), numWords * sizeof(uint64_t));
+  currentOffset_ += file_.write(block.data_.data(), block.data_.size());
+  numWords_ += numWords;
+}
+
+// _____________________________________________________________________________
 void VocabularyOnDisk::WordWriter::finishImpl() {
   // End offset of last vocabulary entry, also consistent with the empty
   // vocabulary.

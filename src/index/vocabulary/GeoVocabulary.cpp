@@ -264,6 +264,115 @@ GeoVocabulary<V>::WordWriter::~WordWriter() {
 
 // ____________________________________________________________________________
 template <typename V>
+GeoVocabulary<V>::BlockWriter::BlockWriter(
+    const V& vocabulary, const std::string& filename,
+    std::optional<ad_utility::GeoCellGrid> grid)
+    : underlyingWriter_{vocabulary.makeBlockWriterPtr(filename)},
+      geoInfoFile_{getGeoInfoFilename(filename), "w"},
+      grid_{grid} {
+  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+uint64_t GeoVocabulary<V>::BlockWriter::indexOf(uint64_t position,
+                                                std::string_view word) const {
+  if (!grid_.has_value()) {
+    return position;
+  }
+  // The same cell as `WordWriter::operator()` assigns, see there.
+  return grid_->indexFromCellAndPosition(grid_->cellIndexFromWktLiteral(word),
+                                         position);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+std::unique_ptr<PreparedBlockBase> GeoVocabulary<V>::BlockWriter::prepare(
+    WordBlock block) {
+  auto prepared = std::make_unique<Prepared>();
+  prepared->firstPosition_ = block.firstPosition_;
+  // The records of all the words, and with a grid the check that the cells
+  // are non-decreasing within the block, see `WordWriter::flushBatch` and
+  // `WordWriter::operator()`.
+  prepared->records_.reserve(block.numWords());
+  for (size_t i = 0; i < block.numWords(); ++i) {
+    std::string_view word = block.word(i);
+    const void* ptr = &invalidGeoInfoBuffer;
+    auto info = GeometryInfo::fromWktLiteral(word);
+    if (info.has_value()) {
+      if (!info.value().getMetricArea().isValid()) {
+        ++numInvalidPolygonArea_;
+      }
+      ptr = &info.value();
+    } else {
+      ++numInvalidGeometries_;
+    }
+    std::memcpy(&prepared->records_.emplace_back(), ptr, geoInfoOffset);
+    if (grid_.has_value()) {
+      auto cellIndex = cellIndexOfWord(grid_.value(), info, word);
+      AD_CONTRACT_CHECK(!prepared->lastCellIndex_.has_value() ||
+                            prepared->lastCellIndex_.value() <= cellIndex,
+                        "WKT literals were not passed to the GeoVocabulary in "
+                        "the order of their geo grid cells");
+      if (!prepared->firstCellIndex_.has_value()) {
+        prepared->firstCellIndex_ = cellIndex;
+      }
+      prepared->lastCellIndex_ = cellIndex;
+    }
+  }
+  prepared->underlying_ = underlyingWriter_->prepare(std::move(block));
+  return prepared;
+}
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::BlockWriter::append(
+    std::unique_ptr<PreparedBlockBase> preparedBase) {
+  auto& prepared = static_cast<Prepared&>(*preparedBase);
+  AD_CONTRACT_CHECK(prepared.firstPosition_ == numWords_);
+  const size_t numWords = prepared.records_.size();
+  if (grid_.has_value() && numWords > 0) {
+    // Keep one position free, see `WordWriter::operator()`.
+    AD_CONTRACT_CHECK(numWords_ + numWords < grid_->maxNumWords(),
+                      "Too many WKT literals for the configured geo cell "
+                      "grid, please rebuild with a smaller grid level");
+    AD_CONTRACT_CHECK(
+        !lastCellIndex_.has_value() ||
+            lastCellIndex_.value() <= prepared.firstCellIndex_.value(),
+        "WKT literals were not passed to the GeoVocabulary in "
+        "the order of their geo grid cells");
+    lastCellIndex_ = prepared.lastCellIndex_;
+  }
+  auto offset = static_cast<off_t>(geoInfoHeader + numWords_ * geoInfoOffset);
+  auto numBytes = numWords * geoInfoOffset;
+  auto numBytesWritten =
+      geoInfoFile_.write(prepared.records_.data(), numBytes, offset);
+  AD_CORRECTNESS_CHECK(numBytesWritten == static_cast<ssize_t>(numBytes),
+                       "Writing the geometry info of a block of WKT "
+                       "literals failed");
+  numWords_ += numWords;
+  underlyingWriter_->append(std::move(prepared.underlying_));
+}
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::BlockWriter::finishImpl() {
+  underlyingWriter_->finish();
+  geoInfoFile_.close();
+  if (numInvalidGeometries_ > 0) {
+    AD_LOG_WARN << "Geometry preprocessing skipped " << numInvalidGeometries_
+                << " invalid WKT literal"
+                << (numInvalidGeometries_ == 1 ? "" : "s") << std::endl;
+  }
+  if (numInvalidPolygonArea_ > 0) {
+    AD_LOG_WARN << "Geometry preprocessing could not compute the area for "
+                << numInvalidPolygonArea_ << " malformed polygon geometr"
+                << (numInvalidPolygonArea_ == 1 ? "y" : "ies") << std::endl;
+  }
+}
+
+// ____________________________________________________________________________
+template <typename V>
 std::optional<GeometryInfo> GeoVocabulary<V>::geoInfoAtPosition(
     uint64_t position) const {
   AD_CONTRACT_CHECK(position < size());

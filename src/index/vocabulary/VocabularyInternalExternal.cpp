@@ -35,6 +35,26 @@ uint64_t VocabularyInternalExternal::WordWriter::operator()(
 }
 
 // _____________________________________________________________________________
+void VocabularyInternalExternal::BlockWriter::append(
+    std::unique_ptr<PreparedBlockBase> prepared) {
+  const WordBlock& block = static_cast<Prepared&>(*prepared).block_;
+  AD_CONTRACT_CHECK(block.firstPosition_ == writer_.idx_);
+  writer_.externalWriter_.writeBlock(block);
+  // The same rule as in `WordWriter::operator()`, only the external writer
+  // has already been fed.
+  for (size_t i = 0; i < block.numWords(); ++i) {
+    if (!block.isExternal_[i] ||
+        writer_.sinceMilestone_ >= writer_.milestoneDistance_ ||
+        writer_.idx_ == 0) {
+      writer_.internalWriter_(block.word(i), writer_.idx_);
+      writer_.sinceMilestone_ = 0;
+    }
+    ++writer_.sinceMilestone_;
+    ++writer_.idx_;
+  }
+}
+
+// _____________________________________________________________________________
 void VocabularyInternalExternal::WordWriter::finishImpl() {
   internalWriter_.finish();
   externalWriter_.finish();
