@@ -137,18 +137,10 @@ CPP_template(bool moveElements, typename Input,
   //
   // NOTE: The `RangeThatReleasesOnEnd` is what makes the merge release its
   // input (which the `state` above owns) as soon as the result is exhausted,
-  // and not only when the returned range is destroyed.
-  //
-  // IMPORTANT: Reaching the end of a merge has to release its input, because a
-  // consumer that has read a range to its end legitimately keeps that (now
-  // exhausted) range alive while it disposes of that input.
-  // `CompressedIdTableRunsInput` for example unregisters itself from
-  // `CompressedExternalIdTableWriter::registerActiveReader` only in its
-  // *destructor*, and `IndexImpl::buildOspWithPatterns` exhausts such a range,
-  // keeps it in a local variable, and then calls `clear()` on the sorter, which
-  // throws while a reader is still registered. The parallel merge does the same
-  // thing (and additionally waits for its coroutines) in
-  // `detail::ParallelMergeRange::releaseEverything`.
+  // and not only when the returned range is destroyed. This is a correctness
+  // requirement and not merely tidy, see the IMPORTANT note at
+  // `detail::ParallelMergeRange::releaseEverything`, which does the same thing
+  // for the parallel merge (and additionally waits for its coroutines).
   return ad_utility::InputRangeTypeErased<Block>{
       std::make_unique<ad_utility::RangeThatReleasesOnEnd<Block>>(
           ad_utility::InputRangeTypeErased<Block>{

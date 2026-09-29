@@ -122,7 +122,11 @@ void testExternalSorterImpl(
   // the same directory. A hardcoded name would make the tests that use this
   // helper overwrite each other's sorter file.
   std::string filename = gtestCurrentTestName() + ".testExternalSorter.dat";
-  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  // NOTE: The sorter deletes its file in its destructor, so this only matters
+  // if the sorter is never destroyed, and is silent otherwise.
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
   using namespace ad_utility::memory_literals;
 
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
@@ -1289,13 +1293,12 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // presorted runs are created, and such that
   // `compressedExternalIdTable::computeMergePhaseParameters` ends up with a
   // single chunk in flight without throwing: the input blocks of a single
-  // chunk cost
-  // `2 * 4 * 250'000 = 2 MB`, so two concurrent chunks leave
-  // `(8 - 4) MB / (12 + 3 * 2) = 222 kB` (that is `6944` rows) per output
+  // chunk cost `2 * 4 * 250'000 = 2 MB`, so two concurrent chunks leave
+  // `(8 - 4) MB / (4 + 3 * 2) = 400 kB` (that is `12'500` rows) per output
   // block, which is far below `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`, whereas a
-  // single chunk still leaves `(8 - 2) MB / (12 + 3) = 400 kB` (that is
-  // `12'500` rows), which is above the hard floor of
-  // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows. The `12` are the default
+  // single chunk still leaves `(8 - 2) MB / (4 + 3) = 857 kB` (that is
+  // `26'785` rows), which is above the hard floor of
+  // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows. The `4` are the default
   // of `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`.
   const auto memory = ad_utility::MemorySize::bytes(8'000'000);
   const auto blocksizeCompression = ad_utility::MemorySize::bytes(250'000);

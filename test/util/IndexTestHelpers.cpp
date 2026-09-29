@@ -164,8 +164,10 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 // Set the global settings that make the index building of the very small test
 // indices exercise the same code paths as that of large indices, and return a
 // cleanup that restores the previous values of these settings when it is
-// destroyed. Note: The settings are global, so setting them without such a
-// cleanup would make every test that runs afterwards silently depend on them.
+// destroyed.
+//
+// NOTE: The settings are global, so setting them without such a cleanup would
+// make every test that runs afterwards silently depend on them.
 [[nodiscard]] auto setGlobalIndexBuildingSettingsForTesting() {
   bool previousIgnoreMemoryLimit =
       EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING.exchange(true);
