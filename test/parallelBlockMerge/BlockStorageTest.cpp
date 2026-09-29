@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-#include "./InMemoryBlockStorage.h"
+#include "util/parallelBlockMerge/InMemoryBlockStorage.h"
 
 using namespace ad_utility::parallelBlockMerge;
 
@@ -255,6 +255,48 @@ TEST(InMemoryBlockStorage, theSentinelDropsTheChunk) {
   runOnStrand(ioContext, strand, [&] { get(storage, 0, gets, false); });
   EXPECT_TRUE(gets.sawSentinel_);
   EXPECT_EQ(storage.numLiveChunksForTesting(), 0u);
+}
+
+// _____________________________________________________________________________
+// With `releaseChunkOnConsumption`, storing the end-of-chunk sentinel only
+// completes once the consumer has retrieved it.
+TEST(InMemoryBlockStorage, releaseChunkOnConsumption) {
+  net::io_context ioContext;
+  auto strand = net::make_strand(ioContext.get_executor());
+  Storage storage{strand, 2, /*releaseChunkOnConsumption=*/true};
+  StoreOutcomes stores;
+  GetOutcomes gets;
+  runOnStrand(ioContext, strand, [&] {
+    store(storage, 0, Storage::OptionalBlock{Block{1}}, stores);
+    store(storage, 0, Storage::OptionalBlock{std::nullopt}, stores);
+  });
+  // The block was stored, the sentinel is buffered but its store has not
+  // completed, because nobody has retrieved it yet.
+  EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(true));
+  runOnStrand(ioContext, strand, [&] { get(storage, 0, gets, false); });
+  EXPECT_THAT(gets.blocks_, ::testing::ElementsAre(Block{1}));
+  EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(true));
+  // Retrieving the sentinel completes the store of the sentinel.
+  runOnStrand(ioContext, strand, [&] { get(storage, 0, gets, false); });
+  EXPECT_TRUE(gets.sawSentinel_);
+  EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(true, true));
+  EXPECT_EQ(storage.numLiveChunksForTesting(), 0u);
+}
+
+// _____________________________________________________________________________
+// A producer that waits for the consumption of its sentinel is woken up by
+// `cancelAll` as well.
+TEST(InMemoryBlockStorage, cancelAllWakesUpAProducerWaitingForConsumption) {
+  net::io_context ioContext;
+  auto strand = net::make_strand(ioContext.get_executor());
+  Storage storage{strand, 2, /*releaseChunkOnConsumption=*/true};
+  StoreOutcomes stores;
+  runOnStrand(ioContext, strand, [&] {
+    store(storage, 0, Storage::OptionalBlock{std::nullopt}, stores);
+  });
+  EXPECT_TRUE(stores.wasStored_.empty());
+  runOnStrand(ioContext, strand, [&] { storage.cancelAll(); });
+  EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(false));
 }
 
 // _____________________________________________________________________________

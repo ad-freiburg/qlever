@@ -37,9 +37,9 @@
 
 #include "../util/AsyncTestHelpers.h"
 #include "../util/ParallelBlockMergeTestHelpers.h"
-#include "./InMemoryBlockStorage.h"
 #include "util/Exception.h"
 #include "util/parallelBlockMerge/BlockSinkPolicy.h"
+#include "util/parallelBlockMerge/InMemoryBlockStorage.h"
 #include "util/parallelBlockMerge/InOrderBlockSink.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 
