@@ -831,3 +831,17 @@ TEST(VocabularyTypes, WordAndIndexAccessorsAndEnd) {
   EXPECT_EQ(wordAndIndex.index(), 3u);
   EXPECT_EQ(wordAndIndex.indexOrDefault(42), 3u);
 }
+
+// _____________________________________________________________________________
+// A decoder may write fewer bytes than its bound, including none at all; the
+// arena then holds a (possibly empty) view of exactly the written bytes.
+TEST(PmrVocabBatchLookupData, DecompressedWordShorterThanBound) {
+  ArenaVocabBatchBuilder builder{2};
+  builder.appendDecompressedWord(8, [](ql::span<char>) -> size_t { return 0; });
+  builder.appendDecompressedWord(8, [](ql::span<char> destination) -> size_t {
+    destination[0] = 'a';
+    destination[1] = 'b';
+    return 2;
+  });
+  EXPECT_THAT(std::move(builder).finalize(), ::testing::ElementsAre("", "ab"));
+}
