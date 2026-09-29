@@ -45,6 +45,18 @@ namespace ad_utility::blockSort::detail {
 // and move primitives, and `block_pos` (a block position plus a side bit). We
 // use Boost's `range` instead of `ql::ranges::subrange`, because these
 // primitives only accept the former.
+//
+// The primitives on `bsc::range` that are used, all on sorted ranges:
+// * `move_forward(dest, src)`: move the elements of `src` to the beginning of
+//   `dest` (note the order of the arguments).
+// * `is_mergeable(a, b, cmp)`: whether `a` and `b` overlap, i.e. whether `a`
+//   followed by `b` is not sorted.
+// * `merge_uncontiguous(a, b, buffer, cmp)`: merge `a` and `b`, which need not
+//   be adjacent, such that `a` gets the smallest elements and `b` the rest.
+// * `merge_flow(target, buffer, next, cmp)`: one step of merging a run block by
+//   block. `target` is a block whose elements have been moved away, `buffer`
+//   holds the elements carried over. Move the smallest elements of `buffer` and
+//   `next` to `target`, and the rest to `buffer`. All three have the same size.
 namespace bsc = boost::sort::common;
 namespace bsd = boost::sort::blk_detail;
 
@@ -121,6 +133,15 @@ class ScratchBuffers : public ad_utility::NoCopyNoMove {
 
 // The number of blocks that a single task merges or moves.
 constexpr size_t BLOCKS_PER_TASK = 64;
+
+// The size of the parts when `numBlocks` blocks are cut into parts of at most
+// `BLOCKS_PER_TASK` blocks that are as equal as possible. Unlike Boost, this
+// rounds up, so that the last part is the smallest (like the last chunk of
+// `ad_utility::chunkedIotaView`) instead of the largest.
+constexpr size_t partSize(size_t numBlocks) {
+  size_t numParts = (numBlocks + BLOCKS_PER_TASK - 1) / BLOCKS_PER_TASK;
+  return (numBlocks + numParts - 1) / numParts;
+}
 
 // The tuning parameters of a sort. The public interface derives them from the
 // size of the elements, see `blockIndirectSort`; only tests use smaller values,

@@ -28,6 +28,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <utility>
 
 #include "backports/algorithm.h"
 #include "util/blockSort/SortState.h"
@@ -89,13 +90,52 @@ template <typename Iterator, typename Compare>
       [&cmp](const auto& a, const auto& b) -> bool { return cmp(b, a); });
 }
 
+// Partition `[first, last)` around the pivot at `*first` (a Hoare partition,
+// like Boost): afterwards, `[first, leftEnd)` holds elements that are at most
+// the pivot, the pivot is at `leftEnd`, and `[rightBegin, last)` holds elements
+// that are at least the pivot. Elements equal to the pivot may end up on both
+// sides. `ql::ranges::partition` was measured to be a few percent slower for
+// distinct elements.
+//
+// NOTE: The scans need no bounds checks: the pivot at `first` stops the scan
+// from the right, and the median of nine (see `movePivotToFront`) leaves
+// another element that is at least the pivot, which stops the scan from the
+// left. After a swap, the swapped elements stop the scans.
+template <typename Iterator, typename Compare>
+[[nodiscard]] std::pair<Iterator, Iterator> hoarePartition(Iterator first,
+                                                           Iterator last,
+                                                           const Compare& cmp) {
+  // A copy, because `*first` may be a proxy.
+  const typename std::iterator_traits<Iterator>::value_type pivot = *first;
+  Iterator leftEnd = last - 1;
+  Iterator rightBegin = first + 1;
+  while (cmp(*rightBegin, pivot)) {
+    ++rightBegin;
+  }
+  while (cmp(pivot, *leftEnd)) {
+    --leftEnd;
+  }
+  while (rightBegin < leftEnd) {
+    ql::ranges::iter_swap(rightBegin, leftEnd);
+    ++rightBegin;
+    --leftEnd;
+    while (cmp(*rightBegin, pivot)) {
+      ++rightBegin;
+    }
+    while (cmp(pivot, *leftEnd)) {
+      --leftEnd;
+    }
+  }
+  ql::ranges::iter_swap(first, leftEnd);
+  return {leftEnd, rightBegin};
+}
+
 // Boost's `divide_sort`: partition `[first, last)` and sort the two parts
 // concurrently, until `level` reaches zero or a part has fewer than
 // `maxElementsPerTask_` elements, which is then sorted by a single task.
 template <typename State, typename Iterator>
 net::awaitable<void> parallelQuicksortImpl(State& state, Iterator first,
                                            Iterator last, uint32_t level) {
-  using Value = typename State::Value;
   const auto& cmp = state.cmp_;
   if (ql::ranges::is_sorted(first, last, cmp)) {
     co_return;
@@ -106,34 +146,11 @@ net::awaitable<void> parallelQuicksortImpl(State& state, Iterator first,
     co_return;
   }
 
-  // Partition around the median of nine. The pivot is a copy, because `*first`
-  // may be a proxy.
   movePivotToFront(first, last, cmp);
-  const Value pivot = *first;
-  Iterator cFirst = first + 1;
-  Iterator cLast = last - 1;
-  while (cmp(*cFirst, pivot)) {
-    ++cFirst;
-  }
-  while (cmp(pivot, *cLast)) {
-    --cLast;
-  }
-  while (cFirst < cLast) {
-    ql::ranges::iter_swap(cFirst, cLast);
-    ++cFirst;
-    --cLast;
-    while (cmp(*cFirst, pivot)) {
-      ++cFirst;
-    }
-    while (cmp(pivot, *cLast)) {
-      --cLast;
-    }
-  }
-  ql::ranges::iter_swap(first, cLast);
-
+  auto [leftEnd, rightBegin] = hoarePartition(first, last, cmp);
   co_await state.runConcurrently(
-      parallelQuicksortImpl(state, first, cLast, level - 1),
-      parallelQuicksortImpl(state, cFirst, last, level - 1));
+      parallelQuicksortImpl(state, first, leftEnd, level - 1),
+      parallelQuicksortImpl(state, rightBegin, last, level - 1));
 }
 
 // Sort `[first, last)` with a parallel quicksort, Boost's `parallel_sort`.

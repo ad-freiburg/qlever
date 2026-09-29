@@ -522,6 +522,14 @@ TEST(BlockIndirectSort, taskGroupWaitsForChildren) {
 
   // A group without children.
   runOnPool(TaskGroup::withChildren(executor, stopped, [](TaskGroup&) {}));
+
+  // A child that spawns another child into its own group.
+  std::atomic<bool> grandchildRan{false};
+  runOnPool(TaskGroup::withChildren(executor, stopped, [&](TaskGroup& group) {
+    group.spawnFunction(
+        [&group, &grandchildRan] { group.spawn(setFlag(grandchildRan)); });
+  }));
+  EXPECT_TRUE(grandchildRan);
 }
 
 // _____________________________________________________________________________

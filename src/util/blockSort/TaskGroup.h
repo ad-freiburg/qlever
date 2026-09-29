@@ -115,7 +115,8 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
   }
 
   // Spawn `child` on the executor. Prefer `spawnFunction` for children that
-  // don't suspend.
+  // don't suspend. A running child may also spawn further children into its
+  // own group, because it counts as pending until it is done.
   //
   // NOTE: `co_spawn` starts the coroutine via `dispatch`, i.e. inline on a
   // thread of the executor, which would run all children serially. The `post`

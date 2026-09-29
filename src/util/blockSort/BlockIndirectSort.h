@@ -77,7 +77,7 @@ net::awaitable<void> sortRecursively(State& state, size_t posIndexStart,
                                      size_t posIndexEnd,
                                      uint32_t numRecursionsLeft) {
   // `runSort` limits the number of threads such that every part has at least
-  // `BLOCKS_PER_TASK` blocks, see `tailProcess` for why this matters.
+  // `BLOCKS_PER_TASK` blocks, see `mergeTail` for why this matters.
   AD_CORRECTNESS_CHECK(posIndexEnd - posIndexStart >= BLOCKS_PER_TASK);
   size_t posIndexMid = std::midpoint(posIndexStart, posIndexEnd);
 
@@ -95,7 +95,7 @@ net::awaitable<void> sortRecursively(State& state, size_t posIndexStart,
     co_await state.runConcurrently(parallelQuicksort(state, first, mid),
                                    parallelQuicksort(state, mid, last));
   }
-  co_await mergeBlocks(state, posIndexStart, posIndexMid, posIndexEnd);
+  co_await mergeSortedHalves(state, posIndexStart, posIndexMid, posIndexEnd);
 }
 
 // The root task of a sort, Boost's `start_function`.
