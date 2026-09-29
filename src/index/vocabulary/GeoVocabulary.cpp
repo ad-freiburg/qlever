@@ -10,19 +10,24 @@
 
 #include "index/vocabulary/GeoVocabulary.h"
 
+#include <spatialjoin/Sweeper.h>
+
 #include <stdexcept>
 #include <vector>
 
+#include "backports/filesystem.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyConstraints.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/ParsedGeometry.h"
 #include "util/Exception.h"
 #include "util/File.h"
 
 using ad_utility::GeometryInfo;
+using ad_utility::ParsedGeometry;
 
 // ____________________________________________________________________________
 template <typename V>
@@ -39,20 +44,27 @@ template <typename V>
 void GeoVocabulary<V>::open(const std::string& filename) {
   literals_.open(filename);
 
-  geoInfoFile_.open(getGeoInfoFilename(filename).c_str(), "r");
-
-  // Read header of `geoInfoFile_` to determine version
-  std::decay_t<decltype(ad_utility::GEOMETRY_INFO_VERSION)> versionOfFile = 0;
-  geoInfoFile_.read(&versionOfFile, geoInfoHeader, 0);
-
-  // Check version of geo info file
-  if (versionOfFile != ad_utility::GEOMETRY_INFO_VERSION) {
-    throw std::runtime_error(absl::StrCat(
-        "The geometry info version of ", getGeoInfoFilename(filename), " is ",
-        versionOfFile, ", which is incompatible with version ",
-        ad_utility::GEOMETRY_INFO_VERSION,
-        " as required by this version of QLever. Please rebuild your index."));
-  }
+  // Open the geo info file and the parsed geometries file, and check that
+  // their headers hold the versions this code expects.
+  auto openWithVersionCheck =
+      [](ad_utility::File& file, const std::string& filename,
+         uint64_t expectedVersion, std::string_view what) {
+        file.open(filename.c_str(), "r");
+        uint64_t versionOfFile = 0;
+        file.read(&versionOfFile, sizeof(versionOfFile), 0);
+        if (versionOfFile != expectedVersion) {
+          throw std::runtime_error(absl::StrCat(
+              "The ", what, " version of ", filename, " is ", versionOfFile,
+              ", which is incompatible with version ", expectedVersion,
+              " as required by this version of QLever. Please rebuild your "
+              "index."));
+        }
+      };
+  openWithVersionCheck(geoInfoFile_, getGeoInfoFilename(filename),
+                       ad_utility::GEOMETRY_INFO_VERSION, "geometry info");
+  openWithVersionCheck(parsedGeometriesFile_,
+                       getParsedGeometriesFilename(filename),
+                       ad_utility::PARSED_GEOMETRY_VERSION, "parsed geometry");
 
   endIndex_ = computeEndIndex();
 }
@@ -62,6 +74,7 @@ template <typename V>
 void GeoVocabulary<V>::close() {
   literals_.close();
   geoInfoFile_.close();
+  parsedGeometriesFile_.close();
   endIndex_ = 0;
 }
 
@@ -111,12 +124,29 @@ VocabBatchLookupResult GeoVocabulary<V>::lookupBatch(
 template <typename V>
 GeoVocabulary<V>::WordWriter::WordWriter(
     const V& vocabulary, const std::string& filename,
-    std::optional<ad_utility::GeoCellGrid> grid)
+    std::optional<ad_utility::GeoCellGrid> grid,
+    size_t parsedGeometriesMinLength)
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"},
-      grid_{grid} {
-  // Initialize geo info file with header
+      grid_{grid},
+      parsedGeometriesFile_{getParsedGeometriesFilename(filename), "w"},
+      parsedGeometriesMinLength_{parsedGeometriesMinLength} {
+  // Initialize the geo info file and the parsed geometries file with their
+  // headers.
   geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
+  parsedGeometriesFileSize_ =
+      parsedGeometriesFile_.write(&ad_utility::PARSED_GEOMETRY_VERSION,
+                                  sizeof(ad_utility::PARSED_GEOMETRY_VERSION));
+
+  // The sweeper that computes the parsed geometries, if any are to be stored.
+  // Its temporary files (which it deletes itself) go next to the vocabulary.
+  if (parsedGeometriesMinLength_ > 0) {
+    ql::filesystem::path path{filename};
+    std::string dir = path.parent_path().string();
+    sweeper_ = std::make_unique<sj::Sweeper>(
+        ParsedGeometry::sweeperConfig(), dir.empty() ? "." : dir,
+        absl::StrCat(path.filename().string(), ".spatialjoin"));
+  }
 }
 
 // ____________________________________________________________________________
@@ -128,19 +158,43 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   // Store the WKT literal as a string in the underlying vocabulary
   index = (*underlyingWordWriter_)(word, isExternal);
 
-  // Precompute `GeometryInfo` and write the `GeometryInfo` to disk, or write a
-  // zero buffer of the same size (indicating an invalid geometry). This is
-  // required to ensure direct access by index is still possible on the file.
-  const void* ptr = &invalidGeoInfoBuffer;
+  // Precompute the `GeometryInfo`.
   auto info = GeometryInfo::fromWktLiteral(word);
   if (info.has_value()) {
     if (!info.value().getMetricArea().isValid()) {
       ++numInvalidPolygonArea_;
     }
-    ptr = &info.value();
   } else {
     ++numInvalidGeometries_;
   }
+
+  // For a valid literal of at least the minimum length, store the parsed
+  // geometry (see `ParsedGeometry`) as its number of bytes followed by the
+  // bytes, and remember its offset in the `GeometryInfo`.
+  if (parsedGeometriesMinLength_ > 0 &&
+      word.size() >= parsedGeometriesMinLength_) {
+    auto parsed = info.has_value()
+                      ? ParsedGeometry::fromWktLiteral(word, *sweeper_)
+                      : std::nullopt;
+    if (parsed.has_value()) {
+      std::string bytes = parsed.value().toBytes();
+      uint64_t numBytes = bytes.size();
+      info.value().setParsedGeometryOffset(parsedGeometriesFileSize_);
+      parsedGeometriesFileSize_ +=
+          parsedGeometriesFile_.write(&numBytes, sizeof(numBytes));
+      parsedGeometriesFileSize_ +=
+          parsedGeometriesFile_.write(bytes.data(), bytes.size());
+      ++numParsedGeometries_;
+    } else {
+      ++numParsedGeometriesSkipped_;
+    }
+  }
+
+  // Write the `GeometryInfo` to disk, or a zero buffer of the same size
+  // (indicating an invalid geometry). This is required to ensure direct
+  // access by index is still possible on the file.
+  const void* ptr = info.has_value() ? static_cast<const void*>(&info.value())
+                                     : &invalidGeoInfoBuffer;
   geoInfoFile_.write(ptr, geoInfoOffset);
 
   if (grid_.has_value()) {
@@ -169,7 +223,17 @@ void GeoVocabulary<V>::WordWriter::finishImpl() {
   // try to close the file handle twice
   underlyingWordWriter_->finish();
   geoInfoFile_.close();
+  parsedGeometriesFile_.close();
 
+  if (numParsedGeometries_ + numParsedGeometriesSkipped_ > 0) {
+    AD_LOG_INFO << "Stored the parsed geometries of " << numParsedGeometries_
+                << " of the "
+                << numParsedGeometries_ + numParsedGeometriesSkipped_
+                << " WKT literals with at least " << parsedGeometriesMinLength_
+                << " bytes (the others are invalid geometries or cannot be "
+                   "parsed by libspatialjoin)"
+                << std::endl;
+  }
   if (numInvalidGeometries_ > 0) {
     AD_LOG_WARN << "Geometry preprocessing skipped " << numInvalidGeometries_
                 << " invalid WKT literal"
@@ -214,6 +278,24 @@ std::optional<GeometryInfo> GeoVocabulary<V>::geoInfoAtPosition(
 
   // Interpret the buffer as a `GeometryInfo` object
   return absl::bit_cast<GeometryInfo>(buffer);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+std::optional<ParsedGeometry> GeoVocabulary<V>::getParsedGeometry(
+    uint64_t index) const {
+  auto info = getGeoInfo(index);
+  if (!info.has_value() || info.value().getParsedGeometryOffset() < 0) {
+    return std::nullopt;
+  }
+
+  // Read the number of bytes and then the bytes (see the `WordWriter`).
+  uint64_t offset = info.value().getParsedGeometryOffset();
+  uint64_t numBytes = 0;
+  parsedGeometriesFile_.read(&numBytes, sizeof(numBytes), offset);
+  std::string bytes(numBytes, '\0');
+  parsedGeometriesFile_.read(bytes.data(), numBytes, offset + sizeof(numBytes));
+  return ParsedGeometry::fromBytes(bytes);
 }
 
 // Explicit template instantiations

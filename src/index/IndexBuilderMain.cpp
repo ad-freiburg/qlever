@@ -280,6 +280,24 @@ int main(int argc, char** argv) {
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
   add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
+  add("geo-cell-grid-level", po::value(&config.geoCellGridLevel_),
+      "The level L of the geo cell grid for WKT literals. The earth's surface "
+      "is divided into 2^L x 2^L cells, and the ID of each WKT literal encodes "
+      "its cell, which is the basis for the geo cell prefilter of spatial "
+      "joins. 0 (the default) means no grid. A grid requires "
+      "`--vocabulary-type on-disk-compressed-geo-split`.");
+  add("geo-cell-grid-scheme", po::value(&config.geoCellGridScheme_),
+      "The scheme by which the geo cell grid assigns cells: `flat` (the "
+      "default), `flat-4-shifts`, `hierarchical`, or `hierarchical-3-shifts` "
+      "(see `GeoCellGrid`). Only relevant with a grid level > 0.");
+
+  add("geo-point-encoding", po::value(&config.geoPointEncoding_),
+      "How geo points are encoded in the IDs of the index: `z-order` (the "
+      "default), or `lat-major`, which is how they were encoded before "
+      "2026-09-26. The encoding `lat-major` is deprecated, only use it if "
+      "you need to be compatible with software that decodes the IDs of an "
+      "index. With it, a spatial prefilter on points can only restrict the "
+      "latitude.");
 
   add("encode-as-id",
       po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),
@@ -324,6 +342,16 @@ int main(int argc, char** argv) {
       DEFAULT_INDEX_ROWS_PER_BLOCK, ".");
   add("index-rows-per-block", po::value(&indexRowsPerBlock),
       rowsPerBlockDescription.c_str());
+  add("parsed-geometries-min-length",
+      po::value(&config.parsedGeometriesMinLength_),
+      "Parse the WKT literals with at least this many bytes at index build "
+      "time and store them in their parsed form (with the geo vocabulary), so "
+      "that spatial joins do not have to parse them at query time. Parsing a "
+      "huge geometry (a country boundary with millions of points) takes "
+      "seconds per spatial join, parsing an ordinary geometry takes "
+      "microseconds, so a value like 100000 covers the geometries that "
+      "matter at a negligible cost in index size and build time. Default: 0 "
+      "(store none).");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),

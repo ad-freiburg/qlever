@@ -612,6 +612,15 @@ TEST(GeometryInfoTest, ComputeMetricLengthCollectionAnyGeom) {
   EXPECT_METRICLENGTH_NEAR(MetricLength{expected}, result);
 }
 
+// Test that the offset of the parsed geometry is "none" unless it is set (the
+// `GeoVocabulary::WordWriter` sets it after storing the parsed geometry).
+TEST(GeometryInfoTest, ParsedGeometryOffset) {
+  auto g = GeometryInfo::fromWktLiteral(litPolygon);
+  EXPECT_EQ(g.value().getParsedGeometryOffset(), -1);
+  g.value().setParsedGeometryOffset(42);
+  EXPECT_EQ(g.value().getParsedGeometryOffset(), 42);
+}
+
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
   // These assertions check that we are not wasting space with alignment bytes
@@ -623,11 +632,13 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
   static_assert(sizeof(MetricArea) == sizeof(double));
 
   using EncodedGeometryTypeAndCentroid = uint64_t;
+  using ParsedGeometryOffset = int64_t;
   static_assert(sizeof(GeometryInfo) ==
                 4 +  // Currently we need 4 B alignment
                     sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
-                    sizeof(MetricLength) + sizeof(MetricArea));
+                    sizeof(MetricLength) + sizeof(MetricArea) +
+                    sizeof(ParsedGeometryOffset));
 }
 
 // _____________________________________________________________________________

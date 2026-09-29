@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "backports/three_way_comparison.h"
 #include "rdfTypes/Literal.h"
@@ -39,14 +40,18 @@ struct CoordinateOutOfRangeException : public std::exception {
 // can be arranged in its bit representation, see `GeoPoint` below. The
 // encoding is a property of an index: all points of an index (and all points
 // that a process creates while it uses that index) must use the same encoding.
+// See `index/GeoPointEncoding.h` for the names under which the encodings appear
+// in the configuration of an index and as an option of `qlever-index`.
 enum class GeoPointEncodingEnum : uint8_t {
   // The bits of the two coordinates are interleaved (Z-order). This is the
-  // only encoding for which a geographic rectangle maps to a small set of
-  // ranges of bit representations.
+  // default, and the only encoding for which a geographic rectangle maps to a
+  // small set of ranges of bit representations.
   ZOrder = 0,
   // The latitude is in the upper and the longitude in the lower half of the
   // bits, so the bit representations are sorted by latitude first. This is
-  // how the points of all existing indexes are encoded.
+  // how points were encoded until 2026-09-26. It is deprecated and only
+  // supported for compatibility with indexes (and software that decodes the
+  // `Id`s of an index) from before that date.
   LatMajor = 1,
 };
 
@@ -126,10 +131,10 @@ class GeoPoint {
     return {bits >> numDataBitsCoordinate, bits & maxCoordinateEncoded};
   }
 
-  // The encoding of all points of this process, which has to be the encoding
-  // of the index that the process builds or uses, and must not change while
-  // points are encoded or decoded. The default is `LatMajor`, which is the
-  // encoding of all existing indexes.
+  // The encoding of all points of this process, which is the encoding of the
+  // index that the process builds or uses. It is set when an index is built
+  // (from the option of `qlever-index`) or loaded (from the configuration of
+  // the index), and must not change while points are encoded or decoded.
   //
   // NOTE: This is a process-wide setting, so a process cannot use two indexes
   // with different encodings at the same time.
@@ -158,6 +163,20 @@ class GeoPoint {
   // `numDataBits`)
   static GeoPoint fromBitRepresentation(T bits);
 
+  // The closed intervals of bit representations (in the given `encoding`)
+  // that together contain all points of the geographic rectangle with the
+  // given corners (borders included), ascending and disjoint. This is what a
+  // prefilter on the `Id`s of points needs. For `LatMajor`, this is the one
+  // interval of the whole latitude band of the rectangle. For `ZOrder`, the
+  // rectangle is decomposed into aligned quadtree cells, each of which is one
+  // interval (see above); the cells at the border of the rectangle are not
+  // refined below 1/32 of its smaller side, so the intervals cover at most a
+  // few percent more than the rectangle, and there are at most a few hundred
+  // of them, independent of the size of the rectangle.
+  static std::vector<std::pair<T, T>> intervalsForRectangle(
+      const GeoPoint& lowerLeft, const GeoPoint& upperRight,
+      GeoPointEncodingEnum encoding);
+
   // Construct a GeoPoint from a Literal if this Literal represents a WKT POINT,
   // otherwise return nothing.
   static std::optional<GeoPoint> parseFromLiteral(
@@ -171,7 +190,7 @@ class GeoPoint {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GeoPoint, lat_, lng_)
 
  private:
-  static inline std::atomic encoding_{GeoPointEncodingEnum::LatMajor};
+  static inline std::atomic encoding_{GeoPointEncodingEnum::ZOrder};
 
   // Spread the lower 30 bits of `x` to the even bit positions 0, 2, ..., 58,
   // and the inverse (which ignores the odd bits).

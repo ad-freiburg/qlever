@@ -7,12 +7,14 @@
 
 #include "../../GeometryInfoTestHelpers.h"
 #include "VocabularyTestHelpers.h"
+#include "backports/StartsWithAndEndsWith.h"
 #include "gmock/gmock.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "rdfTypes/ParsedGeometry.h"
 #include "util/File.h"
 
 namespace {
@@ -268,6 +270,52 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
           absl::StrCat("The geometry info version of ",
                        AnyGeoVocab::getGeoInfoFilename(geometryFilename),
                        " is 0, which is incompatible")));
+}
+
+// Test that the vocabulary stores the parsed geometries (see `ParsedGeometry`)
+// of exactly the valid literals with at least the configured length.
+TEST(GeoVocabularyTest, ParsedGeometries) {
+  // A polygon with two rings, a shorter line, and an invalid literal longer
+  // than the polygon.
+  std::vector<std::string> literals{
+      "\"POLYGON((7.8 48.0, 7.9 48.0, 7.9 48.1, 7.8 48.1, 7.8 48.0), "
+      "(7.82 48.02, 7.88 48.02, 7.88 48.08, 7.82 48.08, 7.82 48.02))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"LINESTRING(7.8 48.0, 7.9 48.1)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"POLYGON((1 1, 2 2, 3 450, 1 1, 2 2, 3 450, 1 1, 2 2, 3 450, 1 1, "
+      "2 2, 3 450, 1 1, 2 2, 3 450, 1 1, 2 2, 3 450, 1 1, 2 2, 3 450))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  ql::ranges::sort(literals);
+  const std::string filename = gtestCurrentTestName();
+  auto cleanup = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename);
+
+  // Build the vocabulary with a minimum length between the line and the
+  // polygon.
+  AnyGeoVocab geoVocab;
+  geoVocab.setParsedGeometriesMinLength(100);
+  auto wordWriter = geoVocab.makeDiskWriterPtr(filename);
+  for (const auto& literal : literals) {
+    (*wordWriter)(literal, true);
+  }
+  wordWriter->finish();
+  geoVocab.open(filename);
+
+  // Only the polygon has a parsed geometry (one part), and only its geometry
+  // info has an offset.
+  for (size_t i = 0; i < literals.size(); ++i) {
+    bool isPolygon = ql::starts_with(literals[i], "\"POLYGON((7.8");
+    auto parsed = geoVocab.getParsedGeometry(i);
+    EXPECT_EQ(parsed.has_value(), isPolygon) << literals[i];
+    if (parsed.has_value()) {
+      EXPECT_EQ(parsed.value().parts().size(), 1);
+    }
+    auto info = geoVocab.getGeoInfo(i);
+    if (info.has_value()) {
+      EXPECT_EQ(info.value().getParsedGeometryOffset() >= 0, isPolygon);
+    }
+  }
+  geoVocab.close();
 }
 
 // _____________________________________________________________________________
