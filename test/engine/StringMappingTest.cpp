@@ -72,12 +72,11 @@ TEST(StringMapping, flushResolvesSecondaryVocabIds) {
   // `flush` resolves the collected `Id`s via `ql::exportIds::idToLiteralOrIri`,
   // so an `Id` of a secondary vocabulary requires the index to actually have
   // such a vocabulary. Use a fresh index instead of the shared one of `getQec`,
-  // because `setSecondaryVocabForTesting` must not leak into other tests.
+  // because `setSecondaryVocab` must not leak into other tests.
   Index index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
                                                    "<a> <b> <c> .");
-  index.getImpl().setSecondaryVocabForTesting(
-      std::make_shared<SecondaryVocabulary>(
-          std::vector<std::string>{"<d>", "<e>"}));
+  index.getImpl().setSecondaryVocab(std::make_shared<SecondaryVocabulary>(
+      std::vector<std::string>{"<d>", "<e>"}));
 
   StringMapping mapping;
   Id vocabId = Id::makeFromVocabIndex(VocabIndex::make(1));
