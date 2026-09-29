@@ -1708,8 +1708,9 @@ TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndef) {
     auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
         SparqlTripleSimple{Variable{"?start"}, iri("<b>"), Variable{"?other"}});
-    auto boundPath = T->bindLeftSide(
-        indexScan, indexScan->getVariableColumn(Variable{"?start"}));
+    auto boundPath =
+        T->bindSides(indexScan, std::nullopt,
+                     indexScan->getVariableColumn(Variable{"?start"}));
 
     EXPECT_TRUE(
         boundPath->columnOriginatesFromGraphOrUndef(Variable{"?start"}));
