@@ -15,9 +15,11 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "./util/GTestHelpers.h"
 #include "backports/span.h"
+#include "engine/ConstructTripleInstantiator.h"
 #include "engine/ConstructTypes.h"
 #include "engine/FastExportStreamFormatter.h"
 #include "global/Constants.h"
@@ -57,6 +59,49 @@ TEST(FastExportStreamFormatterTest, TurtleEmbeddedQuotesEscapedOnce) {
   collector.formatter_.writeTerm(term, ExportFormat::Turtle);
   static_cast<void>(std::move(collector.formatter_).finalize());
   EXPECT_EQ(collector.output_, "\"Title with \\\"quotes\\\"\"");
+}
+
+// Literals and TSV fields with special characters at the start, in the
+// middle, at the end and back to back are escaped exactly like the legacy
+// `RdfEscaping` functions, in streaming mode and in a fixed span of exactly
+// the escaped size (the escaping reserves the exact size, not an upper bound).
+TEST(FastExportStreamFormatterTest, EscapingMatchesLegacyAtAllPositions) {
+  const std::string longRun(300, 'x');
+  const std::array<std::string, 7> contents{
+      "\\starts with a backslash",
+      "ends with a quote\"",
+      "a\nb\rc\"d\\e",
+      "\"\"\\\\\n\n\r\r",
+      "\"",
+      absl::StrCat(longRun, "\"", longRun, "\n", longRun),
+      "no special characters"};
+  for (const auto& content : contents) {
+    for (std::string_view suffix : {"", "@en", "^^<http://example.org/dt>"}) {
+      const std::string literal = absl::StrCat("\"", content, "\"", suffix);
+      const std::string expected =
+          RdfEscaping::validRDFLiteralFromNormalized(literal);
+      EvaluatedTermData term{literal, nullptr};
+      CollectingFormatter collector;
+      collector.formatter_.writeTerm(term, ExportFormat::Turtle);
+      static_cast<void>(std::move(collector.formatter_).finalize());
+      EXPECT_EQ(collector.output_, expected);
+      std::string exact(expected.size(), '\0');
+      FastExportStreamFormatter fixed{
+          ql::span<char>(exact.data(), exact.size())};
+      fixed.writeTerm(term, ExportFormat::Turtle);
+      EXPECT_EQ(fixed.currentChunk(), expected);
+    }
+    const std::string tsvField = absl::StrCat("\t", content, "\t\n");
+    const std::string expectedTsv = RdfEscaping::escapeForTsv(tsvField);
+    CollectingFormatter collector;
+    collector.formatter_.writeEscapedTsv(tsvField);
+    static_cast<void>(std::move(collector.formatter_).finalize());
+    EXPECT_EQ(collector.output_, expectedTsv);
+    std::string exact(expectedTsv.size(), '\0');
+    FastExportStreamFormatter fixed{ql::span<char>(exact.data(), exact.size())};
+    fixed.writeEscapedTsv(tsvField);
+    EXPECT_EQ(fixed.currentChunk(), expectedTsv);
+  }
 }
 
 // A fully-qualified encoded literal in CSV output is escaped exactly like
@@ -201,6 +246,234 @@ TEST(FastExportStreamFormatterTest, FixedSpanOverflowThrows) {
   formatter.writeRaw("ab");
   AD_EXPECT_THROW_WITH_MESSAGE(formatter.writeRaw("cdef"),
                                ::testing::HasSubstr("buffer overflow"));
+}
+
+// _____________________________________________________________________________
+// A wide mix of terms: IRIs, blank nodes, plain / language-tagged / typed
+// vocabulary literals with every special character of every format at
+// several positions (inside and beyond the first 8-byte block of the scan),
+// empty literals, and encoded literals in short and fully-qualified form.
+std::vector<EvaluatedTerm> termsForAllFormats() {
+  std::vector<EvaluatedTerm> terms;
+  auto add = [&terms](std::string s, const char* type = nullptr) {
+    terms.push_back(std::make_shared<const EvaluatedTermData>(
+        EvaluatedTermData{std::move(s), type}));
+  };
+  add("<http://example.org/s>");
+  add("<http://example.org/with,comma\"quote>");
+  add("_:b0");
+  add("\"\"");
+  add("\"plain\"");
+  add("\"text\"@en");
+  add("\"typed\"^^<http://www.w3.org/2001/XMLSchema#string>");
+  for (std::string special : {"\\", "\"", "\n", "\r", "\t", ","}) {
+    for (size_t pos : {0u, 3u, 7u, 8u, 12u, 15u, 16u, 21u}) {
+      std::string content(24, 'a');
+      content.insert(pos, special);
+      add(absl::StrCat("\"", content, "\""));
+      add(absl::StrCat("\"", content, "\"@de"));
+    }
+  }
+  add("\"" + std::string(5000, '\n') + "\"");
+  add("42", XSD_INT_TYPE);
+  add("-3.25", XSD_DECIMAL_TYPE);
+  add("true", XSD_BOOLEAN_TYPE);
+  add("1", XSD_BOOLEAN_TYPE);
+  add("NaN", XSD_DOUBLE_TYPE);
+  add("2024-01-02", XSD_DATE_TYPE);
+  return terms;
+}
+
+// `writeTriple` produces exactly the bytes of the legacy `formatTriple` for
+// every term in every position and every format (Turtle, N-Triples, CSV,
+// TSV), in streaming mode with a small chunk (forcing flushes and a chunk
+// that grows for the largest term) and in a fixed span.
+TEST(FastExportStreamFormatterTest, WriteTripleMatchesLegacyForAllFormats) {
+  using ad_utility::MediaType;
+  const auto terms = termsForAllFormats();
+  const auto& iri = terms.front();
+  for (MediaType mediaType : {MediaType::turtle, MediaType::ntriples,
+                              MediaType::csv, MediaType::tsv}) {
+    const ExportFormat format = toExportFormat(mediaType);
+    std::vector<EvaluatedTriple> triples;
+    // The legacy Turtle / N-Triples path escapes literals only in the object
+    // position (the only position where a literal can occur); CSV and TSV
+    // escape every position.
+    const bool tabular =
+        format == ExportFormat::Csv || format == ExportFormat::Tsv;
+    for (const auto& term : terms) {
+      if (tabular) {
+        triples.push_back(EvaluatedTriple{term, iri, iri});
+        triples.push_back(EvaluatedTriple{iri, term, iri});
+      }
+      triples.push_back(EvaluatedTriple{iri, iri, term});
+    }
+    std::string legacy;
+    for (const auto& triple : triples) {
+      absl::StrAppend(&legacy, formatTriple(triple, mediaType));
+    }
+
+    std::string streamed;
+    FastExportStreamFormatter formatter{
+        [&streamed](std::string_view chunk) { streamed.append(chunk); },
+        FastExportStreamFormatter::SAFETY_WATERMARK * 2};
+    for (const auto& triple : triples) {
+      formatter.writeTriple(format, triple);
+    }
+    EXPECT_EQ(formatter.totalTriples(), triples.size());
+    EXPECT_EQ(formatter.totalBytesWritten(), legacy.size());
+    const auto summary = std::move(formatter).finalize();
+    EXPECT_EQ(streamed, legacy) << ad_utility::toString(mediaType);
+    EXPECT_EQ(summary.totalTriples_, triples.size());
+    EXPECT_EQ(summary.totalBytesWritten_, legacy.size());
+
+    std::string fixed(legacy.size(), '\0');
+    FastExportStreamFormatter fixedFormatter{
+        ql::span<char>{fixed.data(), fixed.size()}};
+    for (const auto& triple : triples) {
+      fixedFormatter.writeTriple(format, triple);
+    }
+    EXPECT_EQ(fixedFormatter.currentChunk(), legacy);
+    EXPECT_EQ(fixedFormatter.bytesBuffered(), legacy.size());
+    // A flush in fixed-span mode has no sink: the bytes only count as
+    // written.
+    fixedFormatter.flush();
+    EXPECT_EQ(fixedFormatter.bytesBuffered(), 0u);
+    EXPECT_EQ(fixedFormatter.totalBytesWritten(), legacy.size());
+    const auto fixedSummary = std::move(fixedFormatter).finalize();
+    EXPECT_EQ(fixedSummary.chunksEmitted_, 0u);
+  }
+}
+
+// `writeLiteral` writes the content verbatim, then a language tag (with or
+// without its `@`) or a datatype, the language tag taking precedence.
+TEST(FastExportStreamFormatterTest, WriteLiteralSuffixes) {
+  CollectingFormatter collector;
+  auto& f = collector.formatter_;
+  f.writeLiteral("a");
+  f.writeLiteral("b", "http://dt");
+  f.writeLiteral("c", "", "en");
+  f.writeLiteral("d", "", "@de");
+  f.writeLiteral("e", "http://dt", "fr");
+  f.writeLiteral("");
+  static_cast<void>(std::move(f).finalize());
+  EXPECT_EQ(collector.output_,
+            "\"a\"\"b\"^^<http://dt>\"c\"@en\"d\"@de\"e\"@fr\"\"");
+}
+
+// CSV fields: only fields with `,`, `"`, `\r` or `\n` are quoted, embedded
+// quotes are doubled (also several and at both ends), like
+// `RdfEscaping::escapeForCsv`.
+TEST(FastExportStreamFormatterTest, CsvEscapingMatchesLegacy) {
+  for (std::string_view field :
+       {"", "plain", "a,b", "\"", "\"\"", "\"start", "end\"", "mid\"dle",
+        "two\"quo\"tes", "cr\rhere", "nl\nhere", "long field without specials",
+        "long field with a comma, beyond eight bytes"}) {
+    CollectingFormatter collector;
+    collector.formatter_.writeEscapedCsv(field);
+    static_cast<void>(std::move(collector.formatter_).finalize());
+    EXPECT_EQ(collector.output_, RdfEscaping::escapeForCsv(std::string{field}))
+        << "field: " << field;
+  }
+}
+
+// A single field larger than the whole streaming chunk grows the chunk, and
+// the following writes continue in the grown chunk.
+TEST(FastExportStreamFormatterTest, StreamingChunkGrowsForLargeField) {
+  CollectingFormatter collector;
+  auto& f = collector.formatter_;
+  const std::string large(3 * FastExportStreamFormatter::DEFAULT_CHUNK_SIZE,
+                          'y');
+  f.writeRaw("head");
+  f.writeRaw(large);
+  f.writeRaw("");
+  f.writeChar('!');
+  EXPECT_EQ(f.totalBytesWritten(), 4 + large.size() + 1);
+  const auto summary = std::move(f).finalize();
+  EXPECT_EQ(collector.output_, absl::StrCat("head", large, "!"));
+  EXPECT_EQ(summary.chunksEmitted_, 2u);
+}
+
+// A flush without buffered bytes emits no chunk.
+TEST(FastExportStreamFormatterTest, FlushWithoutDataEmitsNothing) {
+  size_t numChunks = 0;
+  FastExportStreamFormatter f{[&numChunks](std::string_view) { ++numChunks; }};
+  f.flush();
+  f.writeRaw("x");
+  f.flush();
+  f.flush();
+  EXPECT_EQ(numChunks, 1u);
+  EXPECT_EQ(std::move(f).finalize().chunksEmitted_, 1u);
+}
+
+// Every supported media type maps to its format; others are rejected.
+TEST(FastExportStreamFormatterTest, ToExportFormat) {
+  using ad_utility::MediaType;
+  EXPECT_EQ(toExportFormat(MediaType::turtle), ExportFormat::Turtle);
+  EXPECT_EQ(toExportFormat(MediaType::ntriples), ExportFormat::NTriples);
+  EXPECT_EQ(toExportFormat(MediaType::csv), ExportFormat::Csv);
+  EXPECT_EQ(toExportFormat(MediaType::tsv), ExportFormat::Tsv);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      static_cast<void>(toExportFormat(MediaType::sparqlJson)),
+      ::testing::HasSubstr("Unsupported media type"));
+}
+
+// The special-character tables, evaluated at runtime, mark exactly the
+// characters that the respective escaping changes.
+TEST(FastExportStreamFormatterTest, SpecialCharacterTables) {
+  auto marked = [](const std::array<bool, 256>& table) {
+    std::string result;
+    for (size_t c = 0; c < table.size(); ++c) {
+      if (table[c]) {
+        result.push_back(static_cast<char>(c));
+      }
+    }
+    return result;
+  };
+  EXPECT_EQ(marked(ql::export_formatting::detail::makeCsvSpecialTable()),
+            "\n\r\",");
+  EXPECT_EQ(marked(ql::export_formatting::detail::makeTsvSpecialTable()),
+            "\t\n");
+  EXPECT_EQ(marked(ql::export_formatting::detail::makeTurtleSpecialTable()),
+            "\n\r\"\\");
+  for (size_t length = 0; length < 20; ++length) {
+    for (size_t pos = 0; pos <= length; ++pos) {
+      std::string s(length, 'a');
+      EXPECT_FALSE(ql::export_formatting::detail::hasSpecialCharacters<
+                   ql::export_formatting::detail::csvSpecialTable>(s));
+      if (pos < length) {
+        s[pos] = ',';
+        EXPECT_TRUE(ql::export_formatting::detail::hasSpecialCharacters<
+                    ql::export_formatting::detail::csvSpecialTable>(s))
+            << length << " " << pos;
+      }
+    }
+  }
+}
+
+// Contract checks: a streaming formatter needs a sink, an empty fixed span is
+// allowed, a Turtle literal needs its quotes, a triple needs
+// all three terms, and rows are only CSV or TSV.
+TEST(FastExportStreamFormatterTest, ContractChecks) {
+  EXPECT_ANY_THROW(
+      FastExportStreamFormatter{FastExportStreamFormatter::ChunkSink{}});
+  FastExportStreamFormatter empty{ql::span<char>{}};
+  EXPECT_TRUE(empty.currentChunk().empty());
+
+  CollectingFormatter collector;
+  auto& f = collector.formatter_;
+  EXPECT_ANY_THROW(f.writeEscapedTurtleLiteral("no quote"));
+  EXPECT_ANY_THROW(f.writeEscapedTurtleLiteral("\"unterminated"));
+  auto term = std::make_shared<const EvaluatedTermData>(
+      EvaluatedTermData{"<http://s>", nullptr});
+  EXPECT_ANY_THROW(f.writeTriple(ExportFormat::Turtle,
+                                 EvaluatedTriple{nullptr, term, term}));
+  EXPECT_ANY_THROW(f.writeTriple(ExportFormat::Turtle,
+                                 EvaluatedTriple{term, nullptr, term}));
+  EXPECT_ANY_THROW(f.writeTriple(ExportFormat::Turtle,
+                                 EvaluatedTriple{term, term, nullptr}));
+  std::array<std::string_view, 1> cells{"x"};
+  EXPECT_ANY_THROW(f.writeRow(ExportFormat::NTriples, cells));
 }
 
 }  // namespace

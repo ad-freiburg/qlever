@@ -299,15 +299,30 @@ class FastExportStreamFormatter {
       return;
     }
 
-    for (char c : field) {
-      if (c == '\t') {
-        writeChar(' ');
-      } else if (c == '\n') {
-        writeRaw("\\n");
+    // Reserve the exact output size once (only a newline grows, to two
+    // bytes), then copy the runs between special characters in bulk.
+    ensureAvailable(field.size() + static_cast<size_t>(std::count(
+                                       field.begin(), field.end(), '\n')));
+    char* out = bufferPtr_ + writePos_;
+    const char* end = field.data() + field.size();
+    for (const char* in = field.data(); in != end; ++in) {
+      const char* runStart = in;
+      while (in != end && !detail::tsvSpecialTable[static_cast<uint8_t>(*in)]) {
+        ++in;
+      }
+      std::memcpy(out, runStart, static_cast<size_t>(in - runStart));
+      out += in - runStart;
+      if (in == end) {
+        break;
+      }
+      if (*in == '\t') {
+        *out++ = ' ';
       } else {
-        writeChar(c);
+        *out++ = '\\';
+        *out++ = 'n';
       }
     }
+    writePos_ = static_cast<size_t>(out - bufferPtr_);
   }
 
   // ___________________________________________________________________________
@@ -333,19 +348,31 @@ class FastExportStreamFormatter {
     // Write opening quote
     writeChar('"');
     std::string_view content = normLiteral.substr(1, posLastQuote - 1);
-    for (char c : content) {
-      if (c == '\\') {
-        writeRaw("\\\\");
-      } else if (c == '"') {
-        writeRaw("\\\"");
-      } else if (c == '\n') {
-        writeRaw("\\n");
-      } else if (c == '\r') {
-        writeRaw("\\r");
-      } else {
-        writeChar(c);
+    // Reserve the exact output size once (every special character becomes two
+    // bytes), then copy the runs between special characters in bulk.
+    ensureAvailable(
+        content.size() +
+        static_cast<size_t>(
+            std::count_if(content.begin(), content.end(), [](char c) {
+              return detail::turtleSpecialTable[static_cast<uint8_t>(c)];
+            })));
+    char* out = bufferPtr_ + writePos_;
+    const char* end = content.data() + content.size();
+    for (const char* in = content.data(); in != end; ++in) {
+      const char* runStart = in;
+      while (in != end &&
+             !detail::turtleSpecialTable[static_cast<uint8_t>(*in)]) {
+        ++in;
       }
+      std::memcpy(out, runStart, static_cast<size_t>(in - runStart));
+      out += in - runStart;
+      if (in == end) {
+        break;
+      }
+      *out++ = '\\';
+      *out++ = *in == '\n' ? 'n' : *in == '\r' ? 'r' : *in;
     }
+    writePos_ = static_cast<size_t>(out - bufferPtr_);
     // Write closing quote and any trailing lang/datatype suffix
     writeRaw(normLiteral.substr(posLastQuote));
   }
