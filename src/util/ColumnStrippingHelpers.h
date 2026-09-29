@@ -61,15 +61,18 @@ class VarsRequiredFromSubtree {
   const std::set<Variable>& get() const { return *varsRequiredFromSubtree_; }
 };
 
-// This function creates an execution tree which has the given Operation as
-// root. There are some variables that are needed by the operation itself, but
-// are not requested by the parent tree. In this case, an additional execution
-// tree is generated, which inserts a StipColumn-Operation over the given
-// Operation. This StripColumn-Operation strips the variables that were needed
-// by the given operation but are not requested from the parent. If all
-// variables, that are needed for the given operation to be executed are also
-// requested from the parent, then the treeWithOperationAsRoot is returned and
-// no additional StripColumns-Operation is inserted in the execution tree.
+// A helper for the column stripping of operations.
+// This function creates an execution tree with the given Operation as its root.
+// Some operations need certain variables to perform their operation, even
+// though these variables are not necessarily part of the result requested by
+// the parent. (For example, the operation Sort needs the variables it sorts by,
+// but the parent may request the sorted result without requesting those
+// variables themselves.) If such a variable is needed by the operation but not
+// requested by the parent, an additional StripColumns operation is inserted
+// above the given operation to remove it after the operation has been
+// executed. If all variables needed by the operation are also requested by
+// the parent, the tree with the given Operation as root is returned
+// unchanged and without an additional StripColumns operation.
 template <typename Operation, typename... Args>
 std::optional<std::shared_ptr<QueryExecutionTree>>
 makeTreeWithOptionalStripOperation(
