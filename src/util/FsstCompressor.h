@@ -57,9 +57,6 @@ CPP_template(typename Decode)(
     requires ql::concepts::invocable<Decode, ql::span<char>>) std::string
     decompressToOwnedString(size_t bound, Decode decode) {
   std::string result;
-  if (bound == 0) {
-    return result;
-  }
   ql::resize_and_overwrite(result, bound, [&decode](char* buf, size_t count) {
     return decode(ql::span<char>{buf, count});
   });
