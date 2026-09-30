@@ -52,7 +52,7 @@ class ValuesForTesting : public Operation {
         sizeEstimate_{table.numRows()},
         costEstimate_{table.numRows()},
         resultSortedColumns_{sortedColumns.begin(), sortedColumns.end(),
-                 ctx->getAllocator()},
+                             ctx->getAllocator()},
         multiplicity_{multiplicity},
         forceFullyMaterialized_{forceFullyMaterialized} {
     AD_CONTRACT_CHECK(variables_.size() == table.numColumns());
@@ -79,7 +79,7 @@ class ValuesForTesting : public Operation {
         costEstimate_{0},
         unlikelyToFitInCache_{unlikelyToFitInCache},
         resultSortedColumns_{sortedColumns.begin(), sortedColumns.end(),
-                 ctx->getAllocator()},
+                             ctx->getAllocator()},
         multiplicity_{std::nullopt} {
     AD_CONTRACT_CHECK(
         ql::ranges::all_of(this->tables(), [this](const IdTable& table) {
@@ -247,7 +247,7 @@ class ValuesForTesting : public Operation {
         costEstimate_{other.costEstimate_},
         unlikelyToFitInCache_{other.unlikelyToFitInCache_},
         resultSortedColumns_{other.resultSortedColumns_.begin(),
-                 other.resultSortedColumns_.end(), allocator()},
+                             other.resultSortedColumns_.end(), allocator()},
         multiplicity_{other.multiplicity_},
         forceFullyMaterialized_{other.forceFullyMaterialized_} {
     for (const auto& [idTable, localVocab] : other.tables_) {
@@ -260,7 +260,7 @@ class ValuesForTesting : public Operation {
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
   std::unique_ptr<Operation> cloneImpl() const override {
-    return std::make_unique<ValuesForTesting>( ValuesForTesting{*this});
+    return std::make_unique<ValuesForTesting>(ValuesForTesting{*this});
   }
 
   qlm::vector<ColumnIndex> resultSortedColumns_;

@@ -22,19 +22,19 @@ Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
 // _____________________________________________________________________________
 qlm::string Load::getCacheKeyImpl() const {
   if (getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>()) {
-    return qlm::string{absl::StrCat(
-                 "LOAD ", loadClause_.iri_.toStringRepresentation(),
-                 loadClause_.silent_ ? " SILENT" : ""),
-               allocator()};
+    return qlm::string{
+        absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation(),
+                     loadClause_.silent_ ? " SILENT" : ""),
+        allocator()};
   }
   return qlm::string{absl::StrCat("LOAD ", cacheBreaker_), allocator()};
 }
 
 // _____________________________________________________________________________
 qlm::string Load::getDescriptor() const {
-  return qlm::string{absl::StrCat("LOAD ",
-                                  loadClause_.iri_.toStringRepresentation()),
-                     allocator()};
+  return qlm::string{
+      absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation()),
+      allocator()};
 }
 
 // _____________________________________________________________________________
@@ -66,7 +66,7 @@ bool Load::knownEmptyResult() { return false; }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Load::cloneImpl() const {
-  return std::make_unique<Load>( _executionContext, loadClause_);
+  return std::make_unique<Load>(_executionContext, loadClause_);
 }
 
 // _____________________________________________________________________________

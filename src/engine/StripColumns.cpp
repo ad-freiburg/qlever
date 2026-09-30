@@ -84,8 +84,8 @@ bool StripColumns::knownEmptyResult() { return child_->knownEmptyResult(); }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> StripColumns::cloneImpl() const {
-  return std::make_unique<StripColumns>( getExecutionContext(),
-                                       child_->clone(), subset_, varToCol_);
+  return std::make_unique<StripColumns>(getExecutionContext(), child_->clone(),
+                                        subset_, varToCol_);
 }
 
 // _____________________________________________________________________________

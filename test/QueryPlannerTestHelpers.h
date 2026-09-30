@@ -427,12 +427,11 @@ constexpr inline PathSearch pathSearch;
 
 inline auto ValuesClause = [](std::string cacheKey) {
   return RootOperation<::Values>(
-      AllOf(AD_PROPERTY(
-          Values, getCacheKey,
-          testing::Truly([cacheKey = std::move(cacheKey)](
-                             const qlm::string& actual) {
-            return std::string_view{actual} == cacheKey;
-          }))));
+      AllOf(AD_PROPERTY(Values, getCacheKey,
+                        testing::Truly([cacheKey = std::move(cacheKey)](
+                                           const qlm::string& actual) {
+                          return std::string_view{actual} == cacheKey;
+                        }))));
 };
 
 // Match a SpatialJoin operation, set arguments to ignore to -1

@@ -74,7 +74,7 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
-    std::unique_ptr<Operation> cloneImpl() const override;
+  std::unique_ptr<Operation> cloneImpl() const override;
 
   // Initialize the map from the subresult.
   HashMapWrapper setupEdgesMap(

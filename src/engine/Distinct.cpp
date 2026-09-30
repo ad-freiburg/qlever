@@ -233,8 +233,8 @@ IdTable Distinct::outOfPlaceDistinct(const IdTableView<0>& dynInput) const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Distinct::cloneImpl() const {
-  return std::make_unique<Distinct>( _executionContext,
-                                   subtree_->clone(), keepIndices_);
+  return std::make_unique<Distinct>(_executionContext, subtree_->clone(),
+                                    keepIndices_);
 }
 
 // ____________________________________________________________________________

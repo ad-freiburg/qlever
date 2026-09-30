@@ -197,7 +197,7 @@ qlm::string TextLimit::getCacheKeyImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> TextLimit::cloneImpl() const {
-  return std::make_unique<TextLimit>(
-      _executionContext, limit_, child_->clone(),
-      textRecordColumn_, entityColumns_, scoreColumns_);
+  return std::make_unique<TextLimit>(_executionContext, limit_, child_->clone(),
+                                     textRecordColumn_, entityColumns_,
+                                     scoreColumns_);
 }

@@ -108,9 +108,9 @@ qlm::vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
 
 // _____________________________________________________________________________
 qlm::string TextIndexScanForWord::getDescriptor() const {
-  return qlm::string{absl::StrCat("TextIndexScanForWord on ",
-                                  config_.varToBindText_.name()),
-                     allocator()};
+  return qlm::string{
+      absl::StrCat("TextIndexScanForWord on ", config_.varToBindText_.name()),
+      allocator()};
 }
 
 // _____________________________________________________________________________
@@ -124,5 +124,5 @@ qlm::string TextIndexScanForWord::getCacheKeyImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> TextIndexScanForWord::cloneImpl() const {
-  return std::make_unique<TextIndexScanForWord>( *this);
+  return std::make_unique<TextIndexScanForWord>(*this);
 }

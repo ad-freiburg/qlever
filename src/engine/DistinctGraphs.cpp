@@ -34,8 +34,8 @@ DistinctGraphs::DistinctGraphs(QueryExecutionContext* qec,
 
 // ____________________________________________________________________________
 std::unique_ptr<Operation> DistinctGraphs::cloneImpl() const {
-  return std::make_unique<DistinctGraphs>(
-      _executionContext, graphVariable_, includeDefaultGraph_);
+  return std::make_unique<DistinctGraphs>(_executionContext, graphVariable_,
+                                          includeDefaultGraph_);
 }
 
 // ____________________________________________________________________________

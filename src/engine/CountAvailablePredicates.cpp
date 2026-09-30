@@ -4,12 +4,13 @@
 
 #include "engine/CountAvailablePredicates.h"
 
+#include <vector>
+
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "global/Pattern.h"
 #include "global/RuntimeParameters.h"
-#include <vector>
 #include "util/ContainersWithAllocator.h"
 #include "util/ParallelExecutor.h"
 
@@ -19,9 +20,8 @@ CountAvailablePredicates::CountAvailablePredicates(
     size_t subjectColumnIndex, Variable predicateVariable,
     Variable countVariable)
     : Operation(qec),
-      subtree_(QueryExecutionTree::createSortedTree(std::move(subtree),
-                                                    std::vector<ColumnIndex>{
-                                                        subjectColumnIndex})),
+      subtree_(QueryExecutionTree::createSortedTree(
+          std::move(subtree), std::vector<ColumnIndex>{subjectColumnIndex})),
       subjectColumnIndex_(subjectColumnIndex),
       predicateVariable_(std::move(predicateVariable)),
       countVariable_(std::move(countVariable)) {}
@@ -42,7 +42,8 @@ qlm::string CountAvailablePredicates::getCacheKeyImpl() const {
 // _____________________________________________________________________________
 qlm::string CountAvailablePredicates::getDescriptor() const {
   if (subtree_ == nullptr) {
-    return qlm::string{"CountAvailablePredicates for a all entities", allocator()};
+    return qlm::string{"CountAvailablePredicates for a all entities",
+                       allocator()};
   }
   return qlm::string{"CountAvailablePredicates", allocator()};
 }

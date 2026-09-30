@@ -384,10 +384,9 @@ qlm::string GroupByImpl::getDescriptor() const {
   if (_groupByVariables.empty()) {
     return qlm::string{"GroupBy (implicit)", allocator()};
   }
-    return qlm::string{
-      "GroupBy on " +
-        absl::StrJoin(_groupByVariables, " ", &Variable::AbslFormatter),
-      allocator()};
+  return qlm::string{"GroupBy on " + absl::StrJoin(_groupByVariables, " ",
+                                                   &Variable::AbslFormatter),
+                     allocator()};
 }
 
 size_t GroupByImpl::getResultWidth() const {
@@ -1969,9 +1968,8 @@ bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
-  return std::make_unique<GroupByImpl>( _executionContext,
-                                      _groupByVariables, _aliases,
-                                      _subtree->clone());
+  return std::make_unique<GroupByImpl>(_executionContext, _groupByVariables,
+                                       _aliases, _subtree->clone());
 }
 
 // _____________________________________________________________________________

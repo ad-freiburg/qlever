@@ -578,12 +578,12 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto tree = unionOperation.makeSortedTree({0, 1, 2, 3});
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
-      EXPECT_THAT(variant->getResultSortedOn(), ::testing::ElementsAre(0, 1, 2,
-                                       3));
-      EXPECT_THAT(
+    EXPECT_THAT(variant->getResultSortedOn(),
+                ::testing::ElementsAre(0, 1, 2, 3));
+    EXPECT_THAT(
         variant->getChildren().at(0)->getRootOperation()->getResultSortedOn(),
         ::testing::ElementsAre(0, 1, 2));
-      EXPECT_THAT(
+    EXPECT_THAT(
         variant->getChildren().at(1)->getRootOperation()->getResultSortedOn(),
         ::testing::ElementsAre(0, 1));
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);
@@ -596,12 +596,12 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto tree = unionOperation.makeSortedTree({0, 3, 1, 2});
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
-      EXPECT_THAT(variant->getResultSortedOn(), ::testing::ElementsAre(0, 3, 1,
-                                       2));
-      EXPECT_THAT(
+    EXPECT_THAT(variant->getResultSortedOn(),
+                ::testing::ElementsAre(0, 3, 1, 2));
+    EXPECT_THAT(
         variant->getChildren().at(0)->getRootOperation()->getResultSortedOn(),
         ::testing::ElementsAre(0, 1, 2));
-      EXPECT_THAT(
+    EXPECT_THAT(
         variant->getChildren().at(1)->getRootOperation()->getResultSortedOn(),
         ::testing::ElementsAre(0, 1));
     auto result = variant->getResult(true, ComputationMode::FULLY_MATERIALIZED);

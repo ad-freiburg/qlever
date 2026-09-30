@@ -323,8 +323,8 @@ std::shared_ptr<const Result> Operation::getResult(
     signalQueryUpdate(RuntimeInformation::SendPriority::Always);
   }
   auto& cache = _executionContext->getQueryTreeCache();
-    auto cacheKeyString = getCacheKey();
-    const QueryCacheKey cacheKey = {
+  auto cacheKeyString = getCacheKey();
+  const QueryCacheKey cacheKey = {
       std::string{cacheKeyString.begin(), cacheKeyString.end()},
       _executionContext->locatedTriplesState().index_};
   const bool pinFinalResultButNotSubtrees =
@@ -478,11 +478,12 @@ void Operation::storeToNamedResultCache(const Result& result) {
 
   // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
   // it would require a major refactoring of the `Result` class.
-    auto cacheKeyString = getCacheKey();
+  auto cacheKeyString = getCacheKey();
   auto valueForNamedResultCache = NamedResultCache::Value{
       std::make_shared<const IdTable>(result.cloneIdTable()),
       getExternallyVisibleVariableColumns(),
-      std::vector<ColumnIndex>{result.sortedBy().begin(), result.sortedBy().end()},
+      std::vector<ColumnIndex>{result.sortedBy().begin(),
+                               result.sortedBy().end()},
       result.localVocab().clone(),
       std::string{cacheKeyString.begin(), cacheKeyString.end()},
       geoIndex()};

@@ -17,9 +17,9 @@ GroupBy::GroupBy(QueryExecutionContext* qec,
                  std::vector<Alias> aliases,
                  std::shared_ptr<QueryExecutionTree> subtree)
     : Operation{qec},
-      _impl{std::make_unique<GroupByImpl>(
-          qec, std::move(groupByVariables), std::move(aliases),
-          std::move(subtree))} {}
+      _impl{std::make_unique<GroupByImpl>(qec, std::move(groupByVariables),
+                                          std::move(aliases),
+                                          std::move(subtree))} {}
 
 // _____________________________________________________________________________
 GroupBy::~GroupBy() = default;
@@ -89,10 +89,10 @@ bool GroupBy::isDeterministicImpl() const { return _impl->isDeterministic(); }
 std::unique_ptr<Operation> GroupBy::cloneImpl() const {
   // We need to return a `unique_ptr<GroupBy>` to let the unit tests for `clone`
   // pass and to make `GroupByImpl` a true hidden implementation.
-    auto ptr = std::unique_ptr<GroupByImpl>{
+  auto ptr = std::unique_ptr<GroupByImpl>{
       static_cast<GroupByImpl*>(_impl->cloneImpl().release())};
-    return std::make_unique<GroupBy>(_impl->getExecutionContext(),
-                     std::move(ptr));
+  return std::make_unique<GroupBy>(_impl->getExecutionContext(),
+                                   std::move(ptr));
 }
 
 // _____________________________________________________________________________

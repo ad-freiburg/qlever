@@ -212,9 +212,8 @@ std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::createSortedTreeAnyPermutation(
     std::shared_ptr<QueryExecutionTree> qet,
     const std::vector<ColumnIndex>& sortColumns) {
-  qlm::vector<ColumnIndex> converted{
-      sortColumns.begin(), sortColumns.end(),
-      qet->getRootOperation()->allocator()};
+  qlm::vector<ColumnIndex> converted{sortColumns.begin(), sortColumns.end(),
+                                     qet->getRootOperation()->allocator()};
   return createSortedTreeAnyPermutation(std::move(qet), converted);
 }
 
@@ -222,8 +221,8 @@ std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::createSortedTreeAnyPermutation(
     std::shared_ptr<QueryExecutionTree> qet,
     std::initializer_list<ColumnIndex> sortColumns) {
-  return createSortedTreeAnyPermutation(
-      std::move(qet), std::vector<ColumnIndex>{sortColumns});
+  return createSortedTreeAnyPermutation(std::move(qet),
+                                        std::vector<ColumnIndex>{sortColumns});
 }
 
 // ________________________________________________________________________________________________________________
@@ -263,18 +262,16 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     return std::move(sortedQet).value();
   }
 
-  return ad_utility::makeExecutionTree<Sort>(rootOperation->getExecutionContext(),
-                                             std::move(qet),
-                                             std::move(sortColumnsStd),
-                                             explicitSort);
+  return ad_utility::makeExecutionTree<Sort>(
+      rootOperation->getExecutionContext(), std::move(qet),
+      std::move(sortColumnsStd), explicitSort);
 }
 
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
     const std::vector<ColumnIndex>& sortColumns, bool explicitSort) {
-  qlm::vector<ColumnIndex> converted{
-      sortColumns.begin(), sortColumns.end(),
-      qet->getRootOperation()->allocator()};
+  qlm::vector<ColumnIndex> converted{sortColumns.begin(), sortColumns.end(),
+                                     qet->getRootOperation()->allocator()};
   return createSortedTree(std::move(qet), converted, explicitSort);
 }
 
@@ -332,8 +329,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
     }
     // The sizes can only match because `distinctIndices` contains no
     // duplicates (a documented precondition of this function).
-    AD_CORRECTNESS_CHECK(translatedIndices.size() ==
-                         distinctIndicesStd.size());
+    AD_CORRECTNESS_CHECK(translatedIndices.size() == distinctIndicesStd.size());
     AD_CORRECTNESS_CHECK(distinctQet.value()->getRootOperation()->isDistinctBy(
         translatedIndices));
     return std::move(distinctQet).value();
@@ -346,9 +342,9 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
     std::shared_ptr<QueryExecutionTree> qet,
     const std::vector<ColumnIndex>& distinctIndices) {
-  qlm::vector<ColumnIndex> converted{
-      distinctIndices.begin(), distinctIndices.end(),
-      qet->getRootOperation()->allocator()};
+  qlm::vector<ColumnIndex> converted{distinctIndices.begin(),
+                                     distinctIndices.end(),
+                                     qet->getRootOperation()->allocator()};
   return createDistinctTree(std::move(qet), converted);
 }
 

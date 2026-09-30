@@ -41,8 +41,7 @@ class NeutralElementOperation : public Operation {
   bool knownEmptyResult() override { return false; }
 
   std::unique_ptr<Operation> cloneImpl() const override {
-    return std::make_unique<NeutralElementOperation>(
-                                                    _executionContext);
+    return std::make_unique<NeutralElementOperation>(_executionContext);
   }
 
  protected:

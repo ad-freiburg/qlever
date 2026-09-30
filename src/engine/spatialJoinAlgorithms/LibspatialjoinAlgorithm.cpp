@@ -397,6 +397,7 @@ Result LibspatialjoinAlgorithm::run() {
       "time-for-collecting-results-from-threads", tCollect.msecs().count());
 
   // Return the result.
-  return Result(std::move(result), qlm::vector<ColumnIndex>{qec_->getAllocator()},
+  return Result(std::move(result),
+                qlm::vector<ColumnIndex>{qec_->getAllocator()},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }

@@ -61,8 +61,8 @@ qlm::string Describe::getCacheKeyImpl() const {
     ql::ranges::transform(defaultGraphs.value(), std::back_inserter(graphIdVec),
                           &toRdfLiteral);
     ql::ranges::sort(graphIdVec);
-    result.append(absl::StrCat(
-        "\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " ")));
+    result.append(
+        absl::StrCat("\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " ")));
   }
   return result;
 }
@@ -266,6 +266,6 @@ Result Describe::computeResult([[maybe_unused]] bool requestLaziness) {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Describe::cloneImpl() const {
-  return std::make_unique<Describe>( _executionContext,
-                                   subtree_->clone(), describe_);
+  return std::make_unique<Describe>(_executionContext, subtree_->clone(),
+                                    describe_);
 }

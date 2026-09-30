@@ -56,7 +56,7 @@ class StallForeverOperation : public Operation {
 
   // _____________________________________________________________________________
   std::unique_ptr<Operation> cloneImpl() const override {
-    return std::make_unique<StallForeverOperation>( _executionContext);
+    return std::make_unique<StallForeverOperation>(_executionContext);
   }
 };
 // _____________________________________________________________________________
@@ -166,10 +166,10 @@ class AlwaysFailOperation : public Operation {
   // _____________________________________________________________________________
   std::unique_ptr<Operation> cloneImpl() const override {
     if (variable_.has_value()) {
-      return std::make_unique<AlwaysFailOperation>( _executionContext,
-                                                  variable_.value());
+      return std::make_unique<AlwaysFailOperation>(_executionContext,
+                                                   variable_.value());
     }
-    return std::make_unique<AlwaysFailOperation>( _executionContext);
+    return std::make_unique<AlwaysFailOperation>(_executionContext);
   }
 };
 
@@ -208,10 +208,10 @@ class CustomGeneratorOperation : public Operation {
   // _____________________________________________________________________________
   std::unique_ptr<Operation> cloneImpl() const override {
     return std::make_unique<CustomGeneratorOperation>(
-        _executionContext,
-        []() -> Result::Generator {
-          throw std::runtime_error{"CustomGeneratorOperation clone is not "
-                                   "supported for generator state"};
+        _executionContext, []() -> Result::Generator {
+          throw std::runtime_error{
+              "CustomGeneratorOperation clone is not "
+              "supported for generator state"};
           co_return;
         }());
   }

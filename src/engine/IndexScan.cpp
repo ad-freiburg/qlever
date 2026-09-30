@@ -179,11 +179,10 @@ qlm::string IndexScan::getDescriptor() const {
       additionalVariables_ | ql::views::filter(isNotStripped) |
           ql::views::transform(
               [](const auto& var) -> decltype(auto) { return var.name(); }));
-  return qlm::string{absl::StrCat(
-                         "IndexScan ", permutation().readableName(), " ",
-                         absl::StrJoin(components.begin(), components.end(),
-                                       " ")),
-                     allocator()};
+  return qlm::string{
+      absl::StrCat("IndexScan ", permutation().readableName(), " ",
+                   absl::StrJoin(components.begin(), components.end(), " ")),
+      allocator()};
 }
 
 // _____________________________________________________________________________
@@ -989,8 +988,8 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
 // _____________________________________________________________________________
 std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
-      _executionContext, permutation_, locatedTriplesSharedState_,
-      subject_, predicate_, object_, additionalColumns_, additionalVariables_,
+      _executionContext, permutation_, locatedTriplesSharedState_, subject_,
+      predicate_, object_, additionalColumns_, additionalVariables_,
       graphsToFilter_, scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
       varsToKeep_, sizeEstimateIsExact_, sizeEstimate_);
 }

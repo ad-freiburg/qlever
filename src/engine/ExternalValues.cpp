@@ -74,5 +74,5 @@ void ExternalValues::updateValues(parsedQuery::SparqlValues newValues) {
 
 // ____________________________________________________________________________
 std::unique_ptr<Operation> ExternalValues::cloneImpl() const {
-  return std::make_unique<ExternalValues>( *this);
+  return std::make_unique<ExternalValues>(*this);
 }

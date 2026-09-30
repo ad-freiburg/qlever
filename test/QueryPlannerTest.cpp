@@ -138,7 +138,7 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
     {
       qlm::vector<size_t> keep{qlever::makeUnlimitedAllocator<size_t>()};
       QueryPlanner::TripleGraph tgnew(tg, keep);
-            ASSERT_EQ("", tgnew.asString());
+      ASSERT_EQ("", tgnew.asString());
     }
     {
       qlm::vector<size_t> keep{qlever::makeUnlimitedAllocator<size_t>()};
@@ -159,8 +159,7 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
       qlm::vector<size_t> keep{qlever::makeUnlimitedAllocator<size_t>()};
       keep.push_back(0);
       QueryPlanner::TripleGraph tgnew(tg, keep);
-    ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()",
-                    tgnew.asString());
+      ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()", tgnew.asString());
       ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
     }
     {
@@ -586,8 +585,8 @@ qet-width: 3
 }
 )xxx");
 
-    const auto cacheKey = qet->getCacheKey();
-    auto actual = strip(std::string{cacheKey.begin(), cacheKey.end()});
+  const auto cacheKey = qet->getCacheKey();
+  auto actual = strip(std::string{cacheKey.begin(), cacheKey.end()});
 
   if (actual != possible1 && actual != possible2 && actual != possible3 &&
       actual != possible4 && actual != possible5) {

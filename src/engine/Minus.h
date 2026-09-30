@@ -28,14 +28,14 @@ class Minus : public Operation {
         std::shared_ptr<QueryExecutionTree> right);
 
  protected:
-    qlm::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
  public:
-    qlm::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-    qlm::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 

@@ -111,11 +111,13 @@ qlm::string HasPredicateScan::getDescriptor() const {
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:
-      return qlm::string{"HasPredicateScan free subject: " +
-                 toRdfLiteral(subject_), allocator()};
+      return qlm::string{
+          "HasPredicateScan free subject: " + toRdfLiteral(subject_),
+          allocator()};
     case ScanType::FREE_O:
-      return qlm::string{"HasPredicateScan free object: " +
-                 toRdfLiteral(object_), allocator()};
+      return qlm::string{
+          "HasPredicateScan free object: " + toRdfLiteral(object_),
+          allocator()};
     case ScanType::FULL_SCAN:
       return qlm::string{"HasPredicateScan full scan", allocator()};
     case ScanType::SUBQUERY_S:
@@ -152,11 +154,10 @@ qlm::vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
       return qlm::vector<ColumnIndex>{{0}, allocator()};
     case ScanType::FULL_SCAN:
       return qlm::vector<ColumnIndex>{{0}, allocator()};
-    case ScanType::SUBQUERY_S:
-      {
-        const auto& sortedOn = subtree().resultSortedOn();
-        return {sortedOn.begin(), sortedOn.end(), allocator()};
-      }
+    case ScanType::SUBQUERY_S: {
+      const auto& sortedOn = subtree().resultSortedOn();
+      return {sortedOn.begin(), sortedOn.end(), allocator()};
+    }
   }
   return qlm::vector<ColumnIndex>{allocator()};
 }
@@ -411,7 +412,7 @@ HasPredicateScan::ScanType HasPredicateScan::getType() const { return type_; }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> HasPredicateScan::cloneImpl() const {
-  auto copy = std::make_unique<HasPredicateScan>( *this);
+  auto copy = std::make_unique<HasPredicateScan>(*this);
   if (subtree_.has_value()) {
     copy->subtree_.value().subtree_ = subtree().clone();
   }

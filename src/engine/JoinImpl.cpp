@@ -51,9 +51,9 @@ JoinImpl::JoinImpl(QueryExecutionContext* qec,
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
   // enforce the sorting here.
-    t1 = QueryExecutionTree::createSortedTree(
+  t1 = QueryExecutionTree::createSortedTree(
       std::move(t1), std::vector<ColumnIndex>{t1JoinCol});
-    t2 = QueryExecutionTree::createSortedTree(
+  t2 = QueryExecutionTree::createSortedTree(
       std::move(t2), std::vector<ColumnIndex>{t2JoinCol});
 
   // Make the order of the two subtrees deterministic. That way, queries that
@@ -750,7 +750,7 @@ ad_utility::AddCombinedRowToIdTable JoinImpl::makeRowAdder(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> JoinImpl::cloneImpl() const {
-  auto copy = std::make_unique<JoinImpl>( *this);
+  auto copy = std::make_unique<JoinImpl>(*this);
   copy->left_ = left_->clone();
   copy->right_ = right_->clone();
   return copy;

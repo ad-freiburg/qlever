@@ -64,11 +64,13 @@ qlm::vector<QueryExecutionTree*> CartesianProductJoin::getChildrenImpl() const {
 
 // ____________________________________________________________________________
 qlm::string CartesianProductJoin::getCacheKeyImpl() const {
-    return qlm::string{"CARTESIAN PRODUCT JOIN " +
-       ad_utility::lazyStrJoin(
-             ql::views::transform(
-                 childView(), [](auto& child) { return child.getCacheKey(); }),
-         " "), allocator()};
+  return qlm::string{
+      "CARTESIAN PRODUCT JOIN " +
+          ad_utility::lazyStrJoin(
+              ql::views::transform(
+                  childView(), [](auto& child) { return child.getCacheKey(); }),
+              " "),
+      allocator()};
 }
 
 // ____________________________________________________________________________
@@ -504,6 +506,6 @@ std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
   for (const auto& operation : children_) {
     copy.push_back(operation->clone());
   }
-  return std::make_unique<CartesianProductJoin>(
-      _executionContext, std::move(copy), chunkSize_);
+  return std::make_unique<CartesianProductJoin>(_executionContext,
+                                                std::move(copy), chunkSize_);
 }

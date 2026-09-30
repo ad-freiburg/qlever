@@ -233,9 +233,9 @@ IdTable Bind::computeExpressionBind(
         for (auto& resultValue : resultGenerator) {
           outputColumn[i] =
               sparqlExpression::detail::constantExpressionResultToId(
-                      std::move(resultValue), *localVocab);
+                  std::move(resultValue), *localVocab);
           i++;
-                    checkCancellation();
+          checkCancellation();
         }
       }
     }
@@ -253,6 +253,5 @@ bool Bind::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
-  return std::make_unique<Bind>( _executionContext,
-                               _subtree->clone(), _bind);
+  return std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
 }

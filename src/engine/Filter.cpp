@@ -134,7 +134,7 @@ CPP_template_def(typename Table)(requires IdTableLike<Table>)
 CPP_template_def(int WIDTH,
                  typename Table)(requires IdTableLike<Table>) void Filter::
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
-              qlm::vector<ColumnIndex> sortedBy) const {
+                      qlm::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =
@@ -256,6 +256,6 @@ bool Filter::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Filter::cloneImpl() const {
-  return std::make_unique<Filter>( _executionContext,
-                                 _subtree->clone(), _expression);
+  return std::make_unique<Filter>(_executionContext, _subtree->clone(),
+                                  _expression);
 }

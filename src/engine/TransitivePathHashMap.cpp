@@ -96,7 +96,7 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> TransitivePathHashMap::cloneImpl() const {
-  auto copy = std::make_unique<TransitivePathHashMap>( *this);
+  auto copy = std::make_unique<TransitivePathHashMap>(*this);
   copy->subtree_ = subtree_->clone();
   copy->lhs_ = lhs_.clone();
   copy->rhs_ = rhs_.clone();

@@ -123,7 +123,7 @@ size_t Union::getResultWidth() const {
 
 qlm::vector<ColumnIndex> Union::resultSortedOn() const {
   return qlm::vector<ColumnIndex>{targetOrder_.begin(), targetOrder_.end(),
-                                 allocator()};
+                                  allocator()};
 }
 
 // _____________________________________________________________________________
@@ -389,7 +389,7 @@ Result::LazyResult Union::computeResultLazily(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Union::cloneImpl() const {
-  auto copy = std::make_unique<Union>( *this);
+  auto copy = std::make_unique<Union>(*this);
   for (auto& subtree : copy->_subtrees) {
     subtree = subtree->clone();
   }

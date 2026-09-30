@@ -280,9 +280,8 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Sort::cloneImpl() const {
-  return std::make_unique<Sort>( _executionContext,
-                               subtree_->clone(), sortColumnIndices_,
-                               explicitSort_);
+  return std::make_unique<Sort>(_executionContext, subtree_->clone(),
+                                sortColumnIndices_, explicitSort_);
 }
 
 // _____________________________________________________________________________

@@ -524,17 +524,16 @@ inline BoundingBoxAlgorithm getDummySpatialJoinAlgsForWrapperTesting(
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
-  PreparedSpatialJoinParams params{nullptr,
-                                   nullptr,
-                                   nullptr,
-                                   nullptr,
-                                   0,
-                                   0,
-                                     qlm::vector<ColumnIndex>{
-                                       qec.value()->getAllocator()},
-                                     qlm::vector<ColumnIndex>{
-                                       qec.value()->getAllocator()},
-                                   1};
+  PreparedSpatialJoinParams params{
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      0,
+      0,
+      qlm::vector<ColumnIndex>{qec.value()->getAllocator()},
+      qlm::vector<ColumnIndex>{qec.value()->getAllocator()},
+      1};
 
   return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};
 }

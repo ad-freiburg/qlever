@@ -246,8 +246,8 @@ qlm::string SpatialJoin::getDescriptor() const {
     // Config type
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return qlm::string{absl::StrCat("MaxDistJoin ", left, " to ", right,
-                  " of ", config.maxDist_, " meter(s)"),
-             allocator()};
+                                      " of ", config.maxDist_, " meter(s)"),
+                         allocator()};
     } else if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
       auto descriptor = absl::StrCat("Spatial Join of ", left, " and ", right,
                                      " using ", config.joinType_);
@@ -261,8 +261,8 @@ qlm::string SpatialJoin::getDescriptor() const {
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return qlm::string{absl::StrCat("NearestNeighborsJoin ", left, " to ",
-                  right, " of max. ", config.maxResults_),
-             allocator()};
+                                      right, " of max. ", config.maxResults_),
+                         allocator()};
     }
   };
   return std::visit(visitor, config_.task_);

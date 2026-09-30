@@ -66,8 +66,8 @@ void NeutralOptional::onLimitOffsetChanged(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> NeutralOptional::cloneImpl() const {
-  return std::make_unique<NeutralOptional>( getExecutionContext(),
-                                          tree_->clone());
+  return std::make_unique<NeutralOptional>(getExecutionContext(),
+                                           tree_->clone());
 }
 
 // _____________________________________________________________________________

@@ -634,7 +634,7 @@ Result OptionalJoin::optionalJoinWithIndexScan(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> OptionalJoin::cloneImpl() const {
-  auto copy = std::make_unique<OptionalJoin>( *this);
+  auto copy = std::make_unique<OptionalJoin>(*this);
   copy->_left = _left->clone();
   copy->_right = _right->clone();
   return copy;

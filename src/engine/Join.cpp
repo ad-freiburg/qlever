@@ -22,9 +22,9 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            ColumnIndex t2JoinCol, bool keepJoinColumn,
            bool allowSwappingChildrenOnlyForTesting)
     : Operation(qec),
-      impl_(std::make_unique<JoinImpl>(
-          qec, std::move(t1), std::move(t2), t1JoinCol,
-          t2JoinCol, keepJoinColumn, allowSwappingChildrenOnlyForTesting)) {}
+      impl_(std::make_unique<JoinImpl>(qec, std::move(t1), std::move(t2),
+                                       t1JoinCol, t2JoinCol, keepJoinColumn,
+                                       allowSwappingChildrenOnlyForTesting)) {}
 
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::unique_ptr<JoinImpl>&& impl)

@@ -36,16 +36,15 @@ std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
 // ____________________________________________________________________________
 qlm::string Values::getCacheKeyImpl() const {
   return qlm::string{absl::StrCat("VALUES (", parsedValues_.variablesToString(),
-                                  ") { ", parsedValues_.valuesToString(),
-                                  " }"),
+                                  ") { ", parsedValues_.valuesToString(), " }"),
                      allocator()};
 }
 
 // ____________________________________________________________________________
 qlm::string Values::getDescriptor() const {
-  return qlm::string{absl::StrCat("Values with variables ",
-                                  parsedValues_.variablesToString()),
-                     allocator()};
+  return qlm::string{
+      absl::StrCat("Values with variables ", parsedValues_.variablesToString()),
+      allocator()};
 }
 
 // ____________________________________________________________________________
@@ -167,5 +166,5 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Values::cloneImpl() const {
-  return std::make_unique<Values>( *this);
+  return std::make_unique<Values>(*this);
 }

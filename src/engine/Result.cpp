@@ -165,9 +165,10 @@ Result::Result(IdTableVocabPair pair, qlm::vector<ColumnIndex> sortedBy)
              std::move(pair.localVocab_)} {}
 
 Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
-  : Result{std::move(pair.idTable_),
-       toQlmSortedColumns(std::move(sortedBy), pair.idTable_.getAllocator()),
-       std::move(pair.localVocab_)} {}
+    : Result{
+          std::move(pair.idTable_),
+          toQlmSortedColumns(std::move(sortedBy), pair.idTable_.getAllocator()),
+          std::move(pair.localVocab_)} {}
 
 Result::Result(IdTableVocabPair pair,
                std::initializer_list<ColumnIndex> sortedBy)
@@ -181,11 +182,11 @@ Result::Result(IdTableVocabPair pair,
 Result::Result(Generator idTables, qlm::vector<ColumnIndex> sortedBy)
     : Result{LazyResult{std::move(idTables)}, std::move(sortedBy)} {}
 
-Result::Result(Generator idTables,
-               std::initializer_list<ColumnIndex> sortedBy)
+Result::Result(Generator idTables, std::initializer_list<ColumnIndex> sortedBy)
     : Result{LazyResult{std::move(idTables)},
-             qlm::vector<ColumnIndex>{sortedBy.begin(), sortedBy.end(),
-                                      qlever::makeUnlimitedAllocator<ColumnIndex>()}} {}
+             qlm::vector<ColumnIndex>{
+                 sortedBy.begin(), sortedBy.end(),
+                 qlever::makeUnlimitedAllocator<ColumnIndex>()}} {}
 #endif
 
 // _____________________________________________________________________________
@@ -207,11 +208,11 @@ Result::Result(LazyResult idTables, qlm::vector<ColumnIndex> sortedBy)
           })}},
       sortedBy_{std::move(sortedBy)} {}
 
-Result::Result(LazyResult idTables,
-               std::initializer_list<ColumnIndex> sortedBy)
+Result::Result(LazyResult idTables, std::initializer_list<ColumnIndex> sortedBy)
     : Result{std::move(idTables),
-             qlm::vector<ColumnIndex>{sortedBy.begin(), sortedBy.end(),
-                                      qlever::makeUnlimitedAllocator<ColumnIndex>()}} {}
+             qlm::vector<ColumnIndex>{
+                 sortedBy.begin(), sortedBy.end(),
+                 qlever::makeUnlimitedAllocator<ColumnIndex>()}} {}
 
 namespace {
 // _____________________________________________________________________________

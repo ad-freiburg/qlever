@@ -36,7 +36,6 @@ class QueryPlanner {
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
  private:
-
   ParsedQuery::DatasetClauses activeDatasetClauses_;
   // The variable of the innermost `GRAPH ?var` clause that the planner
   // currently is planning.
@@ -227,8 +226,8 @@ class QueryPlanner {
     // The return value will have exactly the same size as `node`s and
     // `result[i]` will be the index of the connected component of `nodes[i]`.
     // The connected components will be contiguous and start at 0.
-        static std::vector<size_t> computeConnectedComponents(
-                const PlanVec& nodes,
+    static std::vector<size_t> computeConnectedComponents(
+        const PlanVec& nodes,
         const FiltersAndOptionalSubstitutes& filtersAndOptionalSubstitutes) {
       QueryGraph graph;
       graph.setupGraph(nodes, filtersAndOptionalSubstitutes);
@@ -276,7 +275,7 @@ class QueryPlanner {
   // result. This is relevant for subqueries, which are currently optimized
   // independently of the rest of the query, but where it depends on the rest
   // of the query, which ordering of the result is best.
-    PlanVec createExecutionTrees(ParsedQuery& pq, bool isSubquery = false);
+  PlanVec createExecutionTrees(ParsedQuery& pq, bool isSubquery = false);
 
  protected:
   QueryExecutionContext* getQec() const { return _qec; }
@@ -307,7 +306,7 @@ class QueryPlanner {
   // and the functions that call it are `const`.
   mutable size_t numCandidatePlans_ = 0;
 
-    PlanVec optimize(ParsedQuery::GraphPattern* rootPattern);
+  PlanVec optimize(ParsedQuery::GraphPattern* rootPattern);
 
   // Add all the possible index scans for the triple represented by the node.
   // The triple is "ordinary" in the sense that it is neither a text triple with
@@ -416,9 +415,8 @@ class QueryPlanner {
 
   // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // computed automatically.
-  PlanVec createJoinCandidates(
-      const SubtreePlan& a, const SubtreePlan& b,
-      boost::optional<const TripleGraph&> tg) const;
+  PlanVec createJoinCandidates(const SubtreePlan& a, const SubtreePlan& b,
+                               boost::optional<const TripleGraph&> tg) const;
 
   // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // configured by `jcs`.
@@ -427,15 +425,17 @@ class QueryPlanner {
 
   // Same as `createJoinCandidates(SubtreePlan, SubtreePlan, JoinColumns)`, but
   // creates a cartesian product when `jcs` is empty.
-  PlanVec createJoinCandidatesAllowEmpty(
-      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
+  PlanVec createJoinCandidatesAllowEmpty(const SubtreePlan& a,
+                                         const SubtreePlan& b,
+                                         const JoinColumns& jcs) const;
 
   // Whenever a join is applied to a `Union`, add candidates that try applying
   // join to the children of the union directly, which can be more efficient if
   // one of the children has an optimized join, which can happen for
   // `TransitivePath` for example.
-  PlanVec applyJoinDistributivelyToUnion(
-      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
+  PlanVec applyJoinDistributivelyToUnion(const SubtreePlan& a,
+                                         const SubtreePlan& b,
+                                         const JoinColumns& jcs) const;
 
   // Return a pair of join columns (the first from the transitive path
   // operation, the second from the other operation with which the result of the
@@ -500,8 +500,7 @@ class QueryPlanner {
                          const PlanMatrix& dpTab) const;
 
   PlanVec getPatternTrickRow(
-      const parsedQuery::SelectClause& selectClause,
-      const PlanMatrix& dpTab,
+      const parsedQuery::SelectClause& selectClause, const PlanMatrix& dpTab,
       const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple);
 
   PlanVec getHavingRow(const ParsedQuery& pq, const PlanMatrix& dpTab) const;
@@ -619,8 +618,7 @@ class QueryPlanner {
   // component of the input. Throws if the subtrees in the `connectedComponent`
   // are not in fact connected (via their variables).
   PlanVec runDynamicProgrammingOnConnectedComponent(
-      PlanVec connectedComponent,
-      const FiltersAndOptionalSubstitutes& filters,
+      PlanVec connectedComponent, const FiltersAndOptionalSubstitutes& filters,
       const TextLimitVec& textLimits, const TripleGraph& tg,
       ReplacementPlans&& replacementPlans) const;
 
@@ -628,8 +626,7 @@ class QueryPlanner {
   // algorithm that always greedily chooses the smallest result of the possible
   // join operations using the "Greedy Operator Ordering (GOO)" algorithm.
   PlanVec runGreedyPlanningOnConnectedComponent(
-      PlanVec connectedComponent,
-      const FiltersAndOptionalSubstitutes& filters,
+      PlanVec connectedComponent, const FiltersAndOptionalSubstitutes& filters,
       const TextLimitVec& textLimits, const TripleGraph& tg,
       ReplacementPlans&& replacementPlans) const;
 
@@ -692,8 +689,9 @@ class QueryPlanner {
         : planner_{planner},
           rootPattern_{rootPattern},
           qec_{planner._qec},
-          candidatePlans_{qec_ ? qlever::Allocator<PlanVec>{qec_->getAllocator()}
-                               : qlever::makeUnlimitedAllocator<PlanVec>()},
+          candidatePlans_{qec_
+                              ? qlever::Allocator<PlanVec>{qec_->getAllocator()}
+                              : qlever::makeUnlimitedAllocator<PlanVec>()},
           filtersAndSubst_{
               wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
 
@@ -770,9 +768,8 @@ class QueryPlanner {
    */
   size_t findCheapestExecutionTree(const vector<SubtreePlan>& lastRow) const;
   static size_t findSmallestExecutionTree(const vector<SubtreePlan>& lastRow);
-  static size_t findUniqueNodeIds(
-      const vector<SubtreePlan>& connectedComponent,
-      bool allowReplacementPlans = false);
+  static size_t findUniqueNodeIds(const vector<SubtreePlan>& connectedComponent,
+                                  bool allowReplacementPlans = false);
 
   // Helper for `fillDpTab` that extracts a subset of possible
   // `ReplacementPlans` that is applicable to a connected component given by the

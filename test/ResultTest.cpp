@@ -142,10 +142,10 @@ TEST_P(ResultSortTest, verifyAssertSortOrderIsRespectedSucceedsWhenSorted) {
 
   for (auto& generator : getAllSubSplits(idTable)) {
     const auto& sortedBy = std::get<1>(GetParam());
-    Result result{
-      Result::LazyResult{std::move(generator)},
-      qlm::vector<ColumnIndex>{sortedBy.begin(), sortedBy.end(),
-                   qlever::makeUnlimitedAllocator<ColumnIndex>()}};
+    Result result{Result::LazyResult{std::move(generator)},
+                  qlm::vector<ColumnIndex>{
+                      sortedBy.begin(), sortedBy.end(),
+                      qlever::makeUnlimitedAllocator<ColumnIndex>()}};
     if (std::get<0>(GetParam())) {
       EXPECT_NO_THROW(consumeGenerator(result.idTables()));
     } else {
@@ -386,7 +386,7 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
   for (auto& generator : getAllSubSplits(idTable)) {
     uint32_t callCounter = 0;
     Result result{Result::LazyResult{std::move(generator)},
-            std::initializer_list<ColumnIndex>{}};
+                  std::initializer_list<ColumnIndex>{}};
     result.cacheDuringConsumption(
         [&](const std::optional<IdTableVocabPair>& aggregator,
             const IdTableVocabPair&) {
@@ -466,11 +466,10 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
     }
     {
       // Now test the limit offset application for shared results;
-      Result result2{
-          std::make_shared<const IdTable>(idTable.clone()),
-          qlm::vector<ColumnIndex>{
-            qlever::makeUnlimitedAllocator<ColumnIndex>()},
-          LocalVocab{}};
+      Result result2{std::make_shared<const IdTable>(idTable.clone()),
+                     qlm::vector<ColumnIndex>{
+                         qlever::makeUnlimitedAllocator<ColumnIndex>()},
+                     LocalVocab{}};
       result2.applyLimitOffset(limitOffset, callback);
       EXPECT_EQ(callCounter, 2);
       EXPECT_EQ(result2.idTableView(), comparisonTable);
@@ -481,7 +480,7 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
     std::vector<size_t> colSizes{};
     uint32_t totalRows = 0;
     Result result{Result::LazyResult{std::move(generator)},
-          std::initializer_list<ColumnIndex>{}};
+                  std::initializer_list<ColumnIndex>{}};
     result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
                                              const IdTableView<0>& innerTable) {
       // NOTE: duration can't be tested here, processors are too fast
@@ -532,7 +531,7 @@ TEST(Result, verifyApplyLimitOffsetHandlesZeroLimitCorrectly) {
   for (auto& generator : getAllSubSplits(idTable)) {
     uint32_t callCounter = 0;
     Result result{Result::LazyResult{std::move(generator)},
-            std::initializer_list<ColumnIndex>{}};
+                  std::initializer_list<ColumnIndex>{}};
     result.applyLimitOffset(
         limitOffset, [&](std::chrono::microseconds, const IdTableView<0>&) {
           ++callCounter;
@@ -562,7 +561,7 @@ TEST(Result, verifyApplyLimitOffsetHandlesNonZeroOffsetWithoutLimitCorrectly) {
   for (auto& generator : getAllSubSplits(idTable)) {
     uint32_t callCounter = 0;
     Result result{Result::LazyResult{std::move(generator)},
-            std::initializer_list<ColumnIndex>{}};
+                  std::initializer_list<ColumnIndex>{}};
     result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
                                              const IdTableView<0>& innerTable) {
       for (const auto& row : innerTable) {
@@ -597,7 +596,7 @@ TEST(Result, verifyApplyLimitOffsetIsNoOpWhenLimitClauseIsRedundant) {
 
   for (auto& generator : getAllSubSplits(idTable)) {
     Result result{Result::LazyResult{std::move(generator)},
-            std::initializer_list<ColumnIndex>{}};
+                  std::initializer_list<ColumnIndex>{}};
     result.applyLimitOffset(
         limitOffset, [&](std::chrono::microseconds, const IdTableView<0>&) {
           ++callCounter;
@@ -629,7 +628,7 @@ TEST_P(ResultLimitTest,
 
   for (auto& generator : getAllSubSplits(idTable)) {
     Result result{Result::LazyResult{std::move(generator)},
-            std::initializer_list<ColumnIndex>{}};
+                  std::initializer_list<ColumnIndex>{}};
     result.assertThatLimitWasRespected(std::get<1>(GetParam()));
 
     if (std::get<0>(GetParam())) {
@@ -681,7 +680,7 @@ TEST_P(ResultDefinednessTest,
   }
   for (auto& generator : getAllSubSplits(*std::get<1>(GetParam()))) {
     Result result{Result::LazyResult{std::move(generator)},
-            std::initializer_list<ColumnIndex>{}};
+                  std::initializer_list<ColumnIndex>{}};
     result.checkDefinedness(map);
     if (std::get<0>(GetParam())) {
       EXPECT_NO_THROW(consumeGenerator(result.idTables()));
@@ -702,10 +701,10 @@ INSTANTIATE_TEST_SUITE_P(
 
 // _____________________________________________________________________________
 TEST(Result, assertionOnNullptrConstruction) {
-  EXPECT_ANY_THROW(Result(Result::IdTablePtr(nullptr),
-                           qlm::vector<ColumnIndex>{
-                               qlever::makeUnlimitedAllocator<ColumnIndex>()},
-                           LocalVocab{}));
+  EXPECT_ANY_THROW(Result(
+      Result::IdTablePtr(nullptr),
+      qlm::vector<ColumnIndex>{qlever::makeUnlimitedAllocator<ColumnIndex>()},
+      LocalVocab{}));
 }
 
 // _____________________________________________________________________________

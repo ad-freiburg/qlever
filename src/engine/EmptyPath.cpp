@@ -149,10 +149,10 @@ qlm::vector<QueryExecutionTree*> EmptyPath::getChildrenImpl() const {
 
 // _____________________________________________________________________________
 qlm::string EmptyPath::getDescriptor() const {
-  return qlm::string{absl::StrCat(
-                         "EmptyPath for ", variable_.name(),
-                         checkedChild_.has_value() ? " (existence check)" : ""),
-                     allocator()};
+  return qlm::string{
+      absl::StrCat("EmptyPath for ", variable_.name(),
+                   checkedChild_.has_value() ? " (existence check)" : ""),
+      allocator()};
 }
 
 // _____________________________________________________________________________
@@ -280,9 +280,9 @@ std::unique_ptr<Operation> EmptyPath::cloneImpl() const {
   if (checkedChild_.has_value()) {
     checkedChild = checkedChild_.value().clone();
   }
-  return std::make_unique<EmptyPath>( getExecutionContext(),
-                                    variable_, activeGraphs_, graphVariable_,
-                                    std::move(checkedChild));
+  return std::make_unique<EmptyPath>(getExecutionContext(), variable_,
+                                     activeGraphs_, graphVariable_,
+                                     std::move(checkedChild));
 }
 
 // _____________________________________________________________________________
