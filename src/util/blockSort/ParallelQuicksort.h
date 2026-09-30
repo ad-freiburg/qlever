@@ -100,6 +100,9 @@ template <typename Iterator, typename Compare>
   // replace the forward scan, but the backward scan would then need a reverse
   // iterator and `.base() - 1`, which is harder to read than these loops.
   for (;;) {
+    // Here, `rightBegin` and `leftEnd` are either `first` (the pivot) and
+    // `last`, or two elements that were just swapped to their correct sides,
+    // so it is safe to move both before the first comparison.
     do {
       ++rightBegin;
     } while (cmp(*rightBegin, pivot));
