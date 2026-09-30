@@ -688,6 +688,8 @@ struct UtilGeomProjectionVisitor {
     // Here projection is already done during parsing.
     auto [parsed, wktType, crsType, sourceCrs] =
         ParseGeoPointOrWktVisitor{}(geoPointOrWkt, targetCrs_);
+    // `sourceCrs_` is ignored here, because a `GeoPointOrWkt` carries its own
+    // source CRS, which is extracted during parsing.
     return ParseResult{std::move(parsed), wktType, targetCrs_, sourceCrs};
   }
 };
@@ -702,8 +704,7 @@ template <typename T, typename U>
 CPP_concept IsPairOfUtilGeoms =
     SimilarToAnyTypeIn<T, ParsedWkt> && SimilarToAnyTypeIn<U, ParsedWkt>;
 
-// Visitor to compute the distance in meters given a geometry that has been
-// converted to web mercator projection.
+// Visitor to compute the distance in meters given any supported geometry.
 struct MetricDistanceVisitor {
   // Handle `ParsedWkt` variant.
   double operator()(const ParsedWkt& a, const ParsedWkt& b) const {
@@ -728,9 +729,8 @@ struct MetricDistanceVisitor {
   }
 
   // Handle `GeoPointOrWkt` (raw unparsed geometries).
-  std::optional<double> operator()(
-      const std::optional<GeoPointOrWkt>& a,
-      const std::optional<GeoPointOrWkt>& b) const {
+  std::optional<double> operator()(const GeoPointOrWkt& a,
+                                   const GeoPointOrWkt& b) const {
     // Projection to WebMerc is handled by 'ParseGeoPointOrWktVisitor'.
     return MetricDistanceVisitor{}(
         ParseGeoPointOrWktVisitor{}(a, CRSType::WEB_MERCATOR),
@@ -739,8 +739,8 @@ struct MetricDistanceVisitor {
 };
 
 // Compute the metric distance between any combination of supported geometry
-// types. Note that the coordinate pairs of the geometry must first be projected
-// to web mercator, e.g. using `projectWebMerc` above.
+// types. The coordinate pairs of the geometry are automatically projected
+// to web mercator.
 constexpr MetricDistanceVisitor computeMetricDistance;
 
 }  // namespace ad_utility::detail
