@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <iterator>
 #include <mutex>
+#include <optional>
 #include <range/v3/range/conversion.hpp>
 #include <utility>
 #include <vector>
@@ -120,17 +121,21 @@ class ScratchBuffers : public ad_utility::NoCopyNoMove {
 
   // Borrow a free buffer, or allocate a new one if all are taken.
   [[nodiscard]] Lease acquire() {
-    {
-      auto buffers = buffers_.wlock();
-      if (!buffers->unused_.empty()) {
-        Buffer buffer = std::move(buffers->unused_.back());
-        buffers->unused_.pop_back();
-        return Lease{this, std::move(buffer)};
-      }
-      // Make room for all buffers, so that returning one never allocates.
-      buffers->unused_.reserve(++buffers->numAllocated_);
-    }
-    return Lease{this, Buffer(bufferSize_, prototype_)};
+    std::optional<Buffer> unused =
+        buffers_.withWriteLock([](Buffers& buffers) -> std::optional<Buffer> {
+          if (buffers.unused_.empty()) {
+            // Make room for all buffers, so that returning one never
+            // allocates.
+            buffers.unused_.reserve(++buffers.numAllocated_);
+            return std::nullopt;
+          }
+          Buffer buffer = std::move(buffers.unused_.back());
+          buffers.unused_.pop_back();
+          return buffer;
+        });
+    // Allocate a new buffer outside of the lock.
+    return Lease{this, unused.has_value() ? std::move(unused).value()
+                                          : Buffer(bufferSize_, prototype_)};
   }
 };
 
