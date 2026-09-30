@@ -39,9 +39,9 @@ const std::string partialVocabBasename = "segmentCommitterTest";
 std::shared_ptr<const Segment> makeSegment(
     const std::vector<std::string>& words, uint32_t partial,
     size_t numPartialVocabularies, ParallelWordWriterBase& writer) {
-  std::vector<std::vector<QueueWord>> blocks(1);
+  std::vector<MergeBlock> blocks(1);
   for (size_t i = 0; i < words.size(); ++i) {
-    blocks[0].push_back(makeQueueWord(words[i], true, partial, i));
+    pushWord(blocks[0], words[i], true, partial, i);
   }
   return std::make_shared<const Segment>(
       buildSegment(std::move(blocks), writer, ad_utility::RegexSet{},

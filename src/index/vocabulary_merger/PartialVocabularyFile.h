@@ -168,11 +168,12 @@ class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
 class PartialVocabularyRunsInput : public ad_utility::NoCopy {
  public:
   using Element = detail::QueueWord;
-  using Block = std::vector<detail::QueueWord>;
+  using Block = detail::MergeBlock;
 
  private:
   // The metadata of a block, with the first and the last word already in the
-  // form that the merge compares.
+  // form that the merge compares. Their words point into the
+  // `boundaryWords_` of the run.
   struct BlockInfo {
     uint64_t offset_;
     uint64_t numBytes_;
@@ -183,6 +184,10 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
   struct Run {
     ad_utility::File file_;
     std::vector<BlockInfo> blocks_;
+    // The first and the last words of all blocks, back to back. This is a
+    // `std::vector` and not a `std::string`, because it must not move its
+    // bytes when the `Run` is moved (a short string would).
+    std::vector<char> boundaryWords_;
   };
   std::vector<Run> runs_;
 
@@ -229,7 +234,7 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     return runs_.at(run).blocks_.at(block).last_;
   }
 
-  // Read and deserialize a block.
+  // Read a block. The words are parsed in place, see `MergeBlock`.
   Block getBlock(size_t run, size_t block) const {
     const auto& info = runs_.at(run).blocks_.at(block);
     std::vector<char> bytes(info.numBytes_);
@@ -237,37 +242,28 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
         bytes.data(), info.numBytes_, static_cast<off_t>(info.offset_));
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<uint64_t>(numBytesRead) == info.numBytes_);
-    serialization::ByteBufferReadSerializer reader{std::move(bytes)};
-    Block result;
-    result.reserve(info.numWords_);
-    for (uint64_t i = 0; i < info.numWords_; ++i) {
-      TripleComponentWithIndex word;
-      reader >> word;
-      result.emplace_back(std::move(word), run);
-    }
-    return result;
+    return Block{std::move(bytes), info.numWords_, static_cast<uint32_t>(run)};
   }
 
   Block makeEmptyBlock() const { return {}; }
 
-  // Append a merged `word` to an output `block` of the merge. A word that is
-  // equal to the last word of the block (the same word from another partial
+  // Append a merged `word` to an output `block` of the merge (a copy of the
+  // word, the `word` itself lives in an input block). A word that is equal to
+  // the last word of the block (the same word from another partial
   // vocabulary; the merge yields equal words consecutively) is not appended,
   // but recorded as a further occurrence of that last word, see
-  // `QueueWord::moreOccurrences_`. This removes most of the duplicates on the
-  // threads of the merge, so that the single thread behind the merge only sees
-  // the duplicates at the block boundaries.
-  template <typename R>
-  void appendToBlock(Block& block, R&& word) const {
+  // `MergeBlock::addOccurrenceToLastWord`. This removes most of the
+  // duplicates on the threads of the merge, so that the single thread behind
+  // the merge only sees the duplicates at the block boundaries.
+  void appendToBlock(Block& block, const Element& word) const {
     if (!block.empty() && block.back().iriOrLiteral() == word.iriOrLiteral()) {
-      auto& last = block.back();
-      last.isExternal() = last.isExternal() || word.isExternal();
-      last.moreOccurrences_.emplace_back(
-          static_cast<uint32_t>(word.partialFileId_), word.id());
-      AD_CORRECTNESS_CHECK(word.moreOccurrences_.empty());
+      AD_CORRECTNESS_CHECK(word.numMoreOccurrences_ == 0);
+      block.back().isExternal() =
+          block.back().isExternal() || word.isExternal();
+      block.addOccurrenceToLastWord(word.partialFileId_, word.id());
       return;
     }
-    block.push_back(std::forward<R>(word));
+    block.push(word);
   }
 
   MemorySize memorySizeOfElement(const Element& word) const {
@@ -277,7 +273,7 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
  private:
   // Open a partial vocabulary file and read its block index.
   static Run openRun(const std::string& filename, size_t runIdx) {
-    Run run{ad_utility::File{filename, "r"}, {}};
+    Run run{ad_utility::File{filename, "r"}, {}, {}};
     uint64_t sizeOfFile = run.file_.sizeOfFile();
     AD_CONTRACT_CHECK(sizeOfFile >= 2 * sizeof(uint64_t),
                       "The partial vocabulary file ", filename,
@@ -305,13 +301,35 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     serialization::ByteBufferReadSerializer reader{std::move(bytes)};
     std::vector<PartialVocabularyBlockMetadata> blocks;
     reader >> blocks;
+    // The first and the last words of the blocks are stored back to back in
+    // `boundaryWords_`, which is allocated once and never resized afterwards,
+    // so that the `Element`s can point into it.
+    size_t numBoundaryBytes = 0;
+    for (const auto& block : blocks) {
+      numBoundaryBytes += block.first_.iriOrLiteral().size() +
+                          block.last_.iriOrLiteral().size();
+    }
+    run.boundaryWords_.reserve(numBoundaryBytes);
+    auto makeElement = [&run, runIdx](const TripleComponentWithIndex& word) {
+      auto& storage = run.boundaryWords_;
+      size_t offset = storage.size();
+      storage.insert(storage.end(), word.iriOrLiteral().begin(),
+                     word.iriOrLiteral().end());
+      Element element;
+      element.word_ = {storage.data() + offset, word.iriOrLiteral().size()};
+      element.isExternal_ = word.isExternal();
+      element.index_ = word.index_;
+      element.partialFileId_ = static_cast<uint32_t>(runIdx);
+      return element;
+    };
     run.blocks_.reserve(blocks.size());
-    for (auto& block : blocks) {
+    for (const auto& block : blocks) {
       AD_CORRECTNESS_CHECK(block.numWords_ > 0);
       run.blocks_.push_back({block.offset_, block.numBytes_, block.numWords_,
-                             Element{std::move(block.first_), runIdx},
-                             Element{std::move(block.last_), runIdx}});
+                             makeElement(block.first_),
+                             makeElement(block.last_)});
     }
+    AD_CORRECTNESS_CHECK(run.boundaryWords_.size() == numBoundaryBytes);
     return run;
   }
 };

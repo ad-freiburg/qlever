@@ -76,16 +76,15 @@ TEST(Segment, buildSegment) {
   // `_:bn`. The word `"b"` occurs in the partial vocabularies 0 (block 0,
   // not external) and 1 (block 1, external), the literal `"a"` in 0 and 2
   // (folded within the block).
-  std::vector<std::vector<QueueWord>> blocks(2);
-  auto a = makeQueueWord("\"a\"", true, 0, 5);
-  a.moreOccurrences_.emplace_back(2, 0);
-  blocks[0].push_back(std::move(a));
-  blocks[0].push_back(makeQueueWord("\"b\"", false, 0, 6));
-  blocks[1].push_back(makeQueueWord("\"b\"", true, 1, 1));
-  blocks[1].push_back(makeQueueWord(wkt, true, 2, 1));
-  blocks[1].push_back(makeQueueWord("@en@<p>", false, 1, 2));
-  blocks[1].push_back(makeQueueWord(special, false, 0, 7));
-  blocks[1].push_back(makeQueueWord("_:bn", false, 1, 3));
+  std::vector<MergeBlock> blocks(2);
+  pushWord(blocks[0], "\"a\"", true, 0, 5);
+  blocks[0].addOccurrenceToLastWord(2, 0);
+  pushWord(blocks[0], "\"b\"", false, 0, 6);
+  pushWord(blocks[1], "\"b\"", true, 1, 1);
+  pushWord(blocks[1], wkt, true, 2, 1);
+  pushWord(blocks[1], "@en@<p>", false, 1, 2);
+  pushWord(blocks[1], special, false, 0, 7);
+  pushWord(blocks[1], "_:bn", false, 1, 3);
 
   TestSplitWriter writer;
   Segment segment = buildSegment(std::move(blocks), writer,
@@ -143,9 +142,9 @@ TEST(Segment, buildSegment) {
 // nodes, and that a violated order is detected (if the expensive checks are
 // enabled).
 TEST(Segment, blankNodeRegexesAndOrder) {
-  std::vector<std::vector<QueueWord>> blocks(1);
-  blocks[0].push_back(makeQueueWord("<http://ex/bn_1>", false, 0, 0));
-  blocks[0].push_back(makeQueueWord("<http://ex/x>", false, 0, 1));
+  std::vector<MergeBlock> blocks(1);
+  pushWord(blocks[0], "<http://ex/bn_1>", false, 0, 0);
+  pushWord(blocks[0], "<http://ex/x>", false, 0, 1);
   ad_utility::RegexSet regexes{{"<http://ex/bn_.*>"}, "for the test"};
   auto writer = makeParallelWriter(
       makeCountingWordCallback(*std::make_unique<size_t>(0).release()));
@@ -156,9 +155,9 @@ TEST(Segment, blankNodeRegexesAndOrder) {
   EXPECT_EQ(segment.words_[0].word(0), "<http://ex/x>");
 
   if constexpr (ad_utility::areExpensiveChecksEnabled) {
-    std::vector<std::vector<QueueWord>> unordered(1);
-    unordered[0].push_back(makeQueueWord("\"b\"", false, 0, 0));
-    unordered[0].push_back(makeQueueWord("\"a\"", false, 0, 1));
+    std::vector<MergeBlock> unordered(1);
+    pushWord(unordered[0], "\"b\"", false, 0, 0);
+    pushWord(unordered[0], "\"a\"", false, 0, 1);
     AD_EXPECT_THROW_WITH_MESSAGE(
         buildSegment(std::move(unordered), writer, regexes, 1, lessThan),
         ::testing::HasSubstr("vocabulary order violated"));

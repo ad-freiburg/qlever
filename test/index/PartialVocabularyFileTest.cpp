@@ -24,7 +24,7 @@
 
 using namespace ad_utility::vocabulary_merger;
 using namespace vocabularyMergerTestHelpers;
-using ad_utility::vocabulary_merger::detail::QueueWord;
+using ad_utility::vocabulary_merger::detail::MergeBlock;
 
 namespace {
 // The basename of the partial vocabulary files of the tests below.
@@ -58,7 +58,7 @@ void writePartialVocabulary(const std::string& filename,
 
 // The words of a block as (word, isExternal, local index) tuples.
 std::vector<std::tuple<std::string, bool, uint64_t>> tuplesOfBlock(
-    const std::vector<QueueWord>& block) {
+    const MergeBlock& block) {
   std::vector<std::tuple<std::string, bool, uint64_t>> result;
   for (const auto& word : block) {
     result.emplace_back(word.iriOrLiteral(), word.isExternal(), word.id());
@@ -136,11 +136,12 @@ TEST(PartialVocabularyFile, appendToBlockFoldsDuplicates) {
   writePartialVocabulary(filenames.wordsFiles_[0], {"\"a\""});
   PartialVocabularyRunsInput input{partialVocabBasename, 1};
   auto block = input.makeEmptyBlock();
-  auto word = [](std::string w, bool isExternal, uint64_t localIndex,
-                 size_t partial) {
-    return QueueWord{
-        TripleComponentWithIndex{std::move(w), isExternal, localIndex},
-        partial};
+  // The words that the merge hands to `appendToBlock` live in an input block.
+  MergeBlock source;
+  auto word = [&source](std::string_view w, bool isExternal,
+                        uint64_t localIndex, uint32_t partial) {
+    source.push(w, isExternal, partial, localIndex);
+    return source.back();
   };
   input.appendToBlock(block, word("\"a\"", false, 3, 0));
   input.appendToBlock(block, word("\"a\"", true, 5, 2));
@@ -151,12 +152,12 @@ TEST(PartialVocabularyFile, appendToBlockFoldsDuplicates) {
   EXPECT_TRUE(block[0].isExternal());
   EXPECT_EQ(block[0].partialFileId_, 0u);
   EXPECT_EQ(block[0].id(), 3u);
-  EXPECT_THAT(block[0].moreOccurrences_,
+  EXPECT_THAT(block.moreOccurrences(block[0]),
               ::testing::ElementsAre(std::pair{2u, uint64_t{5}},
                                      std::pair{4u, uint64_t{1}}));
   EXPECT_EQ(block[1].iriOrLiteral(), "\"b\"");
   EXPECT_FALSE(block[1].isExternal());
-  EXPECT_TRUE(block[1].moreOccurrences_.empty());
+  EXPECT_TRUE(block.moreOccurrences(block[1]).empty());
 }
 
 // Test that an empty partial vocabulary has no blocks, and that a file without

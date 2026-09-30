@@ -44,14 +44,12 @@ inline auto BN = ad_utility::testing::BlankNodeId;
 // A `WordComparator` that simply compares the words lexicographically.
 constexpr std::less<> lessThan{};
 
-// Create the `QueueWord` for the occurrence of `word` with the given
-// `localIndex` in the partial vocabulary `partialFileId`.
-inline ad_utility::vocabulary_merger::detail::QueueWord makeQueueWord(
-    std::string word, bool isExternal, size_t partialFileId,
-    uint64_t localIndex) {
-  return ad_utility::vocabulary_merger::detail::QueueWord{
-      TripleComponentWithIndex{std::move(word), isExternal, localIndex},
-      partialFileId};
+// Append the occurrence of `word` with the given `localIndex` in the partial
+// vocabulary `partialFileId` to the `block`.
+inline void pushWord(ad_utility::vocabulary_merger::detail::MergeBlock& block,
+                     std::string_view word, bool isExternal,
+                     uint32_t partialFileId, uint64_t localIndex) {
+  block.push(word, isExternal, partialFileId, localIndex);
 }
 
 // The number and filenames of a set of partial vocabularies, as created by

@@ -96,6 +96,7 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      ad_utility::MemorySize memoryToUse,
                      const ad_utility::RegexSet& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(requires WordComparator<W>) {
+  using detail::MergeBlock;
   using detail::QueueWord;
   using detail::Segment;
   // Return true iff `p1` is smaller than `p2` according to the order of the
@@ -151,7 +152,7 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
       writer,
       partialVocabularyIdMapFilenames(basename, numPartialVocabularies)};
   std::deque<std::future<std::shared_ptr<const Segment>>> segments;
-  std::vector<std::vector<QueueWord>> currentBlocks;
+  std::vector<MergeBlock> currentBlocks;
   size_t currentNumWords = 0;
   ad_utility::Timer waitTimer{ad_utility::Timer::Started};
   ad_utility::Timer commitTimer{ad_utility::Timer::Stopped};
@@ -192,7 +193,7 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
     commitTimer.stop();
   };
 
-  for (std::vector<QueueWord>& block : mergedWords) {
+  for (MergeBlock& block : mergedWords) {
     waitTimer.stop();
     // Stop merging as soon as one of the stages has failed, the exception is
     // rethrown by `finish()` below.

@@ -156,12 +156,12 @@ struct Segment {
 // `comparator`, which is only checked if the expensive checks are enabled.
 // The `blocks` are destroyed by this function.
 CPP_template(typename W)(requires WordComparator<W>) Segment
-    buildSegment(std::vector<std::vector<QueueWord>> blocks,
+    buildSegment(std::vector<MergeBlock> blocks,
                  const ParallelWordWriterBase& writer,
                  const ad_utility::RegexSet& blankNodeIriRegexes,
                  size_t numPartialVocabularies,
                  [[maybe_unused]] const W& comparator) {
-  using Occurrence = QueueWord::Occurrence;
+  using Occurrence = MergeBlock::Occurrence;
   Segment segment;
   const uint8_t numSubs = writer.numSubVocabularies();
   AD_CONTRACT_CHECK(numSubs > 0 && numSubs < blankNodeSubVocabulary);
@@ -190,10 +190,10 @@ CPP_template(typename W)(requires WordComparator<W>) Segment
   bool hasPendingWord = false;
   bool pendingIsExternal = false;
   std::vector<Occurrence> pendingOccurrences;
-  auto addOccurrences = [&pendingOccurrences](const QueueWord& word) {
-    pendingOccurrences.emplace_back(static_cast<uint32_t>(word.partialFileId_),
-                                    word.id());
-    for (const auto& occurrence : word.moreOccurrences_) {
+  auto addOccurrences = [&pendingOccurrences](const MergeBlock& block,
+                                              const QueueWord& word) {
+    pendingOccurrences.emplace_back(word.partialFileId_, word.id());
+    for (const auto& occurrence : block.moreOccurrences(word)) {
       pendingOccurrences.push_back(occurrence);
     }
   };
@@ -233,7 +233,7 @@ CPP_template(typename W)(requires WordComparator<W>) Segment
       if (isFirstWordOfBlock && hasPendingWord &&
           word.iriOrLiteral() == pendingWord) {
         pendingIsExternal = pendingIsExternal || word.isExternal();
-        addOccurrences(word);
+        addOccurrences(block, word);
       } else {
         AD_EXPENSIVE_CHECK(
             !hasPendingWord || comparator(pendingWord, word.iriOrLiteral()),
@@ -242,7 +242,7 @@ CPP_template(typename W)(requires WordComparator<W>) Segment
         commitPendingWord();
         pendingWord = word.iriOrLiteral();
         pendingIsExternal = word.isExternal();
-        addOccurrences(word);
+        addOccurrences(block, word);
         hasPendingWord = true;
       }
       isFirstWordOfBlock = false;
