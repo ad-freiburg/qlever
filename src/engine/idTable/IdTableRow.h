@@ -13,6 +13,7 @@
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "global/Id.h"
+#include "util/Algorithm.h"
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -245,11 +246,13 @@ class RowReferenceImpl {
 
    protected:
     // The implementation of swapping two `RowReference`s (passed either by
-    // value or by reference).
+    // value or by reference) with their future `Id` column returning a proxy by
+    // value.
     CPP_template(typename AType, typename BType)(
         requires(!isConst)) static void swapImpl(AType&& a, BType&& b) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
-        std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
+        ad_utility::assignSwap<T>(operatorBracketImpl(a, i),
+                                  operatorBracketImpl(b, i));
       }
     }
 

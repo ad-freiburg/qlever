@@ -170,6 +170,34 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
   return out;
 }
 
+/**
+ * Swap the values referenced by `a` and `b` via read (implicit conversion to
+ * `T`) and write (`operator=(T)`) instead of via `std::swap`. Needed for
+ * proxy reference types -- e.g. a column element that only implicitly
+ * converts to/from its value type `T`, not a real `T&` (see
+ * `columnBasedIdTable::BasicIdRef` in `engine/idTable/IdRef.h`) -- where
+ * `std::swap<T>(T&, T&)` can't be used: a proxy returned by value from an
+ * accessor is a prvalue, which can't bind to `std::swap`'s `T&` parameters.
+ * `T` has to be given explicitly, since it can't be deduced from `A`/`B` when
+ * those are a proxy type rather than `T` itself.
+ *
+ * Every assignment goes through an explicit `static_cast<T>` rather than a
+ * bare implicit conversion: when `A`/`B` are the same proxy type (the usual
+ * case -- both `a` and `b` come from the same kind of accessor), assigning
+ * one proxy from the other directly would make that proxy's own, compiler-
+ * generated copy/move assignment operator an exact-match candidate, which
+ * standard overload resolution prefers over the proxy's `operator=(T)` that
+ * requires a user-defined conversion. That would silently rebind the proxy's
+ * internal pointer(s) instead of writing through it -- the cast forces the
+ * intended read-then-write via `T` unconditionally.
+ */
+template <typename T, typename A, typename B>
+void assignSwap(A&& a, B&& b) {
+  T tmp = static_cast<T>(std::move(a));
+  a = static_cast<T>(std::move(b));
+  b = static_cast<T>(std::move(tmp));
+}
+
 // Remove duplicates in the given vector without changing the order. For
 // example: 4, 6, 6, 2, 2, 4, 2 becomes 4, 6, 2.
 //
