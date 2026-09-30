@@ -51,10 +51,9 @@ using DAnyGeometry = AnyGeometry<CoordType>;
 struct ParseResult {
   std::optional<ParsedWkt> parsedWkt_;
   WKTType wktType_;
-  // The coordinate reference system in which 'parsedWkt_' is expressed.
+  // The coordinate reference system (CRS) in which `parsedWkt_` is expressed.
   CRSType actualCrs_;
-  // The CRS that was specified in the original WKT literal's IRI (before
-  // projection).
+  // The CRS named by the IRI of the WKT literal (before the projection).
   CRSType sourceCrs_;
 };
 constexpr inline CRSType defaultCrs = CRSType::CRS84;
@@ -89,9 +88,9 @@ inline std::string addDatatype(const std::string_view wkt) {
 }
 
 // Tries to extract the geometry type and parse the geometry given by a WKT
-// literal with quotes and datatype using `pb_util`.
-// If specified the geometry will be projected to a specific spatial reference
-// system.
+// literal with quotes and datatype using `pb_util`. The coordinates are
+// projected to `projCrs` while parsing (from the CRS named by the IRI at the
+// start of the literal, or CRS84 if there is no such IRI).
 inline ParseResult parseWkt(const std::string_view& wkt,
                             CRSType projCrs = defaultCrs) {
   auto wktLiteral = removeDatatype(wkt);
@@ -162,22 +161,21 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         parsed = collection;
         break;
       }
-      case NONE:
-        // Set actual CRS type to unsupported as wkt type is invalid.
-        projCrs = CRSType::UNSUPPORTED;
-        crsType = CRSType::UNSUPPORTED;
-        break;
       default:
         break;
     }
   } catch (const std::runtime_error& error) {
     AD_LOG_DEBUG << "Error parsing WKT `" << wkt << "`: " << error.what()
                  << std::endl;
+  }
+
+  // Without a geometry (invalid WKT type or a parse error), there is no CRS to
+  // report either.
+  if (!parsed.has_value()) {
     type = WKTType::NONE;
     projCrs = CRSType::UNSUPPORTED;
     crsType = CRSType::UNSUPPORTED;
   }
-
   return ParseResult{std::move(parsed), type, projCrs, crsType};
 }
 
@@ -217,8 +215,8 @@ inline std::optional<BoundingBox> boundingBoxAsGeoPoints(
   }
 }
 
-// Convert a `GeoPoint` to a point as required by `pb_util`.
-// Optionally this can directly project the point into a different goal CRS.
+// Convert a `GeoPoint` (always in CRS84) to a point as required by `pb_util`,
+// projected to `projCrs`.
 inline Point<CoordType> geoPointToUtilPoint(const GeoPoint& point,
                                             CRSType projCrs = defaultCrs) {
   return projectToCRS(Point<CoordType>{point.getLng(), point.getLat()},
@@ -626,8 +624,8 @@ CPP_concept VectorBasedGeometry = isVector<T> || SimilarTo<T, DLine>;
 // Helper to translate the coordinates of a given geometry to another projection
 // (the projection is applied to each coordinate pair).
 struct UtilGeomProjectionVisitor {
-  // For this projection to work accordingly the points need to be in
-  // 'sourceCrs'. After the projection the actual CRS Type will be 'targetCrs_'.
+  // The points to project must be in `sourceCrs_`, the projected points are in
+  // `targetCrs_`.
   CRSType sourceCrs_;
   CRSType targetCrs_;
 
@@ -685,11 +683,11 @@ struct UtilGeomProjectionVisitor {
   // Handle `GeoPointOrWkt` (raw unparsed geometry).
   ParseResult operator()(
       const std::optional<GeoPointOrWkt>& geoPointOrWkt) const {
-    // Here projection is already done during parsing.
+    // A `GeoPointOrWkt` carries its own source CRS (the IRI of the literal),
+    // so `sourceCrs_` is ignored and the projection to `targetCrs_` is done
+    // while parsing.
     auto [parsed, wktType, crsType, sourceCrs] =
         ParseGeoPointOrWktVisitor{}(geoPointOrWkt, targetCrs_);
-    // `sourceCrs_` is ignored here, because a `GeoPointOrWkt` carries its own
-    // source CRS, which is extracted during parsing.
     return ParseResult{std::move(parsed), wktType, targetCrs_, sourceCrs};
   }
 };
@@ -731,7 +729,7 @@ struct MetricDistanceVisitor {
   // Handle `GeoPointOrWkt` (raw unparsed geometries).
   std::optional<double> operator()(const GeoPointOrWkt& a,
                                    const GeoPointOrWkt& b) const {
-    // Projection to WebMerc is handled by 'ParseGeoPointOrWktVisitor'.
+    // The projection to web mercator is done by `ParseGeoPointOrWktVisitor`.
     return MetricDistanceVisitor{}(
         ParseGeoPointOrWktVisitor{}(a, CRSType::WEB_MERCATOR),
         ParseGeoPointOrWktVisitor{}(b, CRSType::WEB_MERCATOR));

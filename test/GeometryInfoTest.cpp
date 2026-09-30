@@ -207,15 +207,16 @@ const auto getAllTestLiterals = []() {
 const auto getAllExpectedParseResults = []() {
   using enum WKTType;
   return std::vector<ParseResult>{
-      {expectedPoint, POINT, CRS84, CRS84},
-      {expectedPoint, POINT, CRS84, WGS84},
-      {expectedPoint, POINT, CRS84, WEB_MERCATOR},
-      {expectedLine, LINESTRING, CRS84, CRS84},
-      {expectedPolygon, POLYGON, CRS84, CRS84},
-      {expectedMultiPoint, MULTIPOINT, CRS84, CRS84},
-      {expectedMultiLineString, MULTILINESTRING, CRS84, CRS84},
-      {expectedMultiPolygon, MULTIPOLYGON, CRS84, CRS84},
-      {expectedCollection, COLLECTION, CRS84, CRS84}};
+      {expectedPoint, POINT, CRSType::CRS84, CRSType::CRS84},
+      {expectedPoint, POINT, CRSType::CRS84, CRSType::WGS84},
+      {expectedPoint, POINT, CRSType::CRS84, CRSType::WEB_MERCATOR},
+      {expectedLine, LINESTRING, CRSType::CRS84, CRSType::CRS84},
+      {expectedPolygon, POLYGON, CRSType::CRS84, CRSType::CRS84},
+      {expectedMultiPoint, MULTIPOINT, CRSType::CRS84, CRSType::CRS84},
+      {expectedMultiLineString, MULTILINESTRING, CRSType::CRS84,
+       CRSType::CRS84},
+      {expectedMultiPolygon, MULTIPOLYGON, CRSType::CRS84, CRSType::CRS84},
+      {expectedCollection, COLLECTION, CRSType::CRS84, CRSType::CRS84}};
 };
 
 constexpr std::array<uint32_t, 9> allTestLiteralNumGeometries{1, 1, 1, 1, 1,
@@ -409,7 +410,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_NEAR(g.getLat(), p2.getY(), 0.0001);
 
   // Test projection to WGS84 (swapped coordinates).
-  auto p3 = geoPointToUtilPoint(g, WGS84);
+  auto p3 = geoPointToUtilPoint(g, CRSType::WGS84);
   EXPECT_NEAR(g.getLng(), p3.getY(), 0.0001);
   EXPECT_NEAR(g.getLat(), p3.getX(), 0.0001);
 
@@ -454,18 +455,18 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_EQ(computeMetricArea(ParsedWkt{DPoint{4, 5}}), 0);
   EXPECT_EQ(computeMetricArea(ParsedWkt{DLine{DPoint{1, 2}, DPoint{3, 4}}}), 0);
 
-  // Test different Crs Iris.
+  // Test literals with a CRS IRI.
   auto parseRes3 = parseWkt(litPointWGS84);
   EXPECT_THAT(parseRes3,
               parseResultNear(ParseResult{expectedPoint, POINT, defaultCrs,
-                                          util::geo::CRSType::WGS84}));
+                                          CRSType::WGS84}));
 
   auto parseRes4 = parseWkt(litPointWebMerc);
   EXPECT_THAT(parseRes4,
               parseResultNear(ParseResult{expectedPoint, POINT, defaultCrs,
-                                          util::geo::CRSType::WEB_MERCATOR}));
+                                          CRSType::WEB_MERCATOR}));
 
-  // Test empty 'Line' that leads to 'std::runtime_error'.
+  // Test an empty `LINESTRING`, which leads to a `std::runtime_error`.
   auto parseRes5 = parseWkt(emptyLitLineString);
   EXPECT_THAT(parseRes5, parseResultNear(ParseResult{
                              std::nullopt, WKTType::NONE, CRSType::UNSUPPORTED,
@@ -714,10 +715,11 @@ TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
   ASSERT_EQ(literals.size(), geometries.size());
 
   for (size_t i = 0; i < literals.size(); ++i) {
-    // TODO<yarox-1> Skip tests with a CRS IRI. Currently 'getWKT' cannot
-    // reconstruct with the appropriate IRI.
-    if ((literals[i] == litPointWGS84) || (literals[i] == litPointWebMerc))
+    // TODO<yarox-1> `utilGeomToWkt` cannot reconstruct the CRS IRI yet, so
+    // skip the literals that have one.
+    if (literals[i] == litPointWGS84 || literals[i] == litPointWebMerc) {
       continue;
+    }
 
     auto parsedWkt = geometries[i].parsedWkt_;
     auto expected = removeDatatype(literals[i]);
