@@ -16,6 +16,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "util/ExceptionHandling.h"
 #include "util/Synchronized.h"
 
 namespace ad_utility {
@@ -93,11 +94,21 @@ class RecyclingPool {
   // `pool` is shared, so that it may safely outlive all other owners.
   static std::shared_ptr<T> makeRecyclingOwner(
       std::shared_ptr<RecyclingPool> pool, T object) {
-    auto recycle = [pool = std::move(pool)](T* ptr) {
-      pool->giveBack(std::move(*ptr));
-      delete ptr;
+    // The `Holder` gives its object back to the pool when it is destroyed. The
+    // returned `shared_ptr` points to the object, but owns the `Holder`.
+    struct Holder {
+      std::shared_ptr<RecyclingPool> pool_;
+      T object_;
+      Holder(std::shared_ptr<RecyclingPool> pool, T object)
+          : pool_{std::move(pool)}, object_{std::move(object)} {}
+      ~Holder() {
+        terminateIfThrows([this]() { pool_->giveBack(std::move(object_)); },
+                          "while giving an object back to a `RecyclingPool`");
+      }
     };
-    return std::shared_ptr<T>{new T{std::move(object)}, std::move(recycle)};
+    auto holder = std::make_shared<Holder>(std::move(pool), std::move(object));
+    T* objectPtr = &holder->object_;
+    return std::shared_ptr<T>{std::move(holder), objectPtr};
   }
 };
 

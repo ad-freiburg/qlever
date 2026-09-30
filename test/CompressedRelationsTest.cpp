@@ -2515,8 +2515,8 @@ TEST(CompressedRelationWriter, directlyWrittenSmallRelationWithGraphs) {
 }
 
 // The number of distinct `col1` IDs of a large relation is counted per block,
-// so an ID that ends one block and also starts the
-// next block must not be counted twice.
+// so an ID that ends one block and also starts the next block must not be
+// counted twice.
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
   // Blocks of 10 rows each.
