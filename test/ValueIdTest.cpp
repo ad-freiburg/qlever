@@ -627,3 +627,61 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   // (`type != LocalVocabIndex` and `otherType == LocalVocabIndex`) is the case
   // of `intId` and `dateId` above.
 }
+
+// _____________________________________________________________________________
+TEST(IdTest, getBitsL_matchesTheMethod) {
+  for (Id id : {Id::makeUndefined(), Id::makeFromInt(42), Id::makeFromInt(-42),
+                Id::makeFromDouble(13.37), Id::makeFromBool(true)}) {
+    EXPECT_EQ(Id::getBitsL(id), id.getBits());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IdTest, isUndefinedL_matchesTheMethod) {
+  EXPECT_TRUE(Id::isUndefinedL(Id::makeUndefined()));
+  EXPECT_EQ(Id::isUndefinedL(Id::makeUndefined()),
+            Id::makeUndefined().isUndefined());
+
+  for (Id id : {Id::makeFromInt(0), Id::makeFromInt(-42),
+                Id::makeFromDouble(1.5), Id::makeFromBool(true)}) {
+    EXPECT_FALSE(Id::isUndefinedL(id));
+    EXPECT_EQ(Id::isUndefinedL(id), id.isUndefined());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IdTest, isDefinedL_isTheExactOppositeOfIsUndefinedId) {
+  for (Id id : {Id::makeUndefined(), Id::makeFromInt(0), Id::makeFromInt(7),
+                Id::makeFromDouble(-3.14)}) {
+    EXPECT_EQ(Id::isDefinedL(id), !id.isUndefined());
+    EXPECT_EQ(Id::isDefinedL(id), !Id::isUndefinedL(id));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IdTest, isUndefinedL_worksAsAGenericAlgorithmPredicateLikeTheLambdaDid) {
+  // The whole point of `isUndefinedId` replacing the local
+  // `[](const Id& id) { return id.isUndefined(); }` lambdas at their call
+  // sites: passed to a generic algorithm (here `ql::ranges::any_of`), a
+  // reference to the global function must behave exactly like the inline
+  // lambda it replaced.
+  std::vector withoutUndefined{Id::makeFromInt(1), Id::makeFromInt(2),
+                               Id::makeFromDouble(3.5)};
+  std::vector withUndefined{Id::makeFromInt(1), Id::makeUndefined(),
+                            Id::makeFromDouble(3.5)};
+
+  auto isUndefinedLambda = [](const Id& id) { return id.isUndefined(); };
+
+  // 1. The lambda directly
+  EXPECT_FALSE(ql::ranges::any_of(withoutUndefined, isUndefinedLambda));
+  EXPECT_TRUE(ql::ranges::any_of(withUndefined, isUndefinedLambda));
+
+  // 2. Id::isUndefinedL, the replacement
+  EXPECT_FALSE(ql::ranges::any_of(withoutUndefined, Id::isUndefinedL));
+  EXPECT_TRUE(ql::ranges::any_of(withUndefined, Id::isUndefinedL));
+
+  for (const auto& ids : {withoutUndefined, withUndefined}) {
+    EXPECT_EQ(ql::ranges::any_of(ids, isUndefinedLambda),
+              ql::ranges::any_of(ids, Id::isUndefinedL));
+  }
+}

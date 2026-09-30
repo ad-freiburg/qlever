@@ -294,6 +294,8 @@ struct FakeId {
   auto operator==(const FakeId& other) const {
     return value_.getBits() == other.value_.getBits() && tag_ == other.tag_;
   }
+  // Needs be be here to act really like a ValueId
+  [[nodiscard]] bool isUndefined() const { return value_.isUndefined(); }
 
   friend std::ostream& operator<<(std::ostream& os, const FakeId& id) {
     return os << "FakeId{" << id.value_ << ", " << id.tag_ << "}";

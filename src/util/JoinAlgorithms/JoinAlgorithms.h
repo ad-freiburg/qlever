@@ -620,7 +620,7 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
     // TODO<joka921> We could probably also apply this optimization if both
     // inputs contain UNDEF values only in the last column, and possibly
     // also not only for `OPTIONAL` joins.
-    auto endOfUndef = ql::ranges::find_if_not(leftSub, &isUndefinedId);
+    auto endOfUndef = ql::ranges::find_if_not(leftSub, Id::isUndefinedL);
 
     auto findSmallerUndefRangeLeft = [leftSub, endOfUndef](auto&&...) {
       return ad_utility::IteratorRange{leftSub.begin(), endOfUndef};
@@ -1810,7 +1810,7 @@ CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
 
     // Set up the generator for UNDEF values in the left last column.
     // TODO<joka921> Could optimize the case that there is no UNDEF at all.
-    auto endOfUndef = ql::ranges::find_if_not(lastColLeft, &isUndefinedId);
+    auto endOfUndef = ql::ranges::find_if_not(lastColLeft, Id::isUndefinedL);
     auto findSmallerUndefRangeLeft = [&lastColLeft, endOfUndef](auto&&...) {
       return ad_utility::IteratorRange{lastColLeft.begin(), endOfUndef};
     };
@@ -1955,7 +1955,7 @@ void zipperJoinForBlocksWithPotentialUndef(
   auto rightSide = detail::makeJoinSide(rightBlocks, rightProjection);
 
   detail::BlockZipperJoinImpl impl{leftSide, rightSide, lessThan,
-                                   compatibleRowAction, &isUndefinedId};
+                                   compatibleRowAction, Id::isUndefinedL};
   impl.template runJoin<joinType>();
 }
 

@@ -225,7 +225,7 @@ class ValuesForTesting : public Operation {
       }
       bool containsUndef =
           ql::ranges::any_of(tables(), [&i](const IdTable& table) {
-            return ql::ranges::any_of(table.getColumn(i), &isUndefinedId);
+            return ql::ranges::any_of(table.getColumn(i), Id::isUndefinedL);
           });
       using enum ColumnIndexAndTypeInfo::UndefStatus;
       m[variables_.at(i).value()] = ColumnIndexAndTypeInfo{
