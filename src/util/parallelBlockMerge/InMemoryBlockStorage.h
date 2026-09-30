@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_TEST_PARALLELBLOCKMERGE_INMEMORYBLOCKSTORAGE_H
-#define QLEVER_TEST_PARALLELBLOCKMERGE_INMEMORYBLOCKSTORAGE_H
+#ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_INMEMORYBLOCKSTORAGE_H
+#define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_INMEMORYBLOCKSTORAGE_H
 
 // A model of the `BlockStorageConcept` that simply keeps the blocks in memory.
 // It only makes sense together with the `InOrderBlockSink`, which is
@@ -42,8 +42,13 @@ namespace ad_utility::parallelBlockMerge {
 // end-of-chunk sentinel travels through the same channel, so storing it can
 // suspend as well.
 //
-// NOTE: This lives in `test/` because the real merges spill their blocks to
-// disk; move it to `src/` as soon as there is a production user for it.
+// With `releaseChunkOnConsumption`, storing the sentinel only completes once
+// the consumer has retrieved it, that is, once the whole output of the chunk
+// has been consumed. A producer that holds a slot among the chunks in flight
+// (see `ParallelMergeState`) for as long as its chunk runs then keeps that slot
+// until its output is consumed, which bounds the number of chunks whose output
+// is buffered, and hence the memory, to the chunks in flight. Without it, a
+// merge that is faster than its consumer buffers its entire output.
 //
 // NOTE: A plain (non-concurrent) channel suffices, and the `HashMap` needs no
 // synchronization, because every operation runs on `strand_`, see the CONTRACT
@@ -61,11 +66,21 @@ class InMemoryBlockStorage {
   // consumer hold on to one across a suspension, while the map entry is removed
   // as soon as that chunk is done (see `getBlock`).
   using SharedBlockChannel = std::shared_ptr<BlockChannel>;
+  // The channel through which the consumer acknowledges the retrieval of the
+  // end-of-chunk sentinel, see `releaseChunkOnConsumption` above.
+  using AckChannel =
+      net::experimental::channel<void(boost::system::error_code)>;
+  using SharedAckChannel = std::shared_ptr<AckChannel>;
+  struct Chunk {
+    SharedBlockChannel blocks_;
+    SharedAckChannel ack_;
+  };
 
  private:
   Strand strand_;
   size_t maxBufferedBlocksPerChunk_;
-  HashMap<size_t, SharedBlockChannel> chunks_;
+  bool releaseChunkOnConsumption_;
+  HashMap<size_t, Chunk> chunks_;
   // Set by `cancelAll`, only to check the precondition that no operation is
   // initiated afterwards. That check matters, because the teardown of the sink
   // is only airtight as long as no channel is created after the cancellation,
@@ -74,11 +89,14 @@ class InMemoryBlockStorage {
 
  public:
   // Construct from the `strand` that all the operations of this storage are
-  // confined to, and the number of blocks that are buffered per chunk (which
-  // has to be at least one).
-  InMemoryBlockStorage(Strand strand, size_t maxBufferedBlocksPerChunk)
+  // confined to, the number of blocks that are buffered per chunk (which has
+  // to be at least one), and whether storing the end-of-chunk sentinel waits
+  // for its consumption (see the class comment).
+  InMemoryBlockStorage(Strand strand, size_t maxBufferedBlocksPerChunk,
+                       bool releaseChunkOnConsumption = false)
       : strand_{std::move(strand)},
-        maxBufferedBlocksPerChunk_{maxBufferedBlocksPerChunk} {
+        maxBufferedBlocksPerChunk_{maxBufferedBlocksPerChunk},
+        releaseChunkOnConsumption_{releaseChunkOnConsumption} {
     AD_CONTRACT_CHECK(maxBufferedBlocksPerChunk > 0);
   }
 
@@ -89,27 +107,39 @@ class InMemoryBlockStorage {
                   CompletionToken&& completionToken) {
     return net::async_initiate<CompletionToken, void(std::exception_ptr, bool)>(
         [this, chunkIndex, block = std::move(block)](auto handler) mutable {
-          SharedBlockChannel channel;
+          Chunk chunk;
           try {
-            channel = getOrCreateChannel(chunkIndex);
+            chunk = getOrCreateChunk(chunkIndex);
           } catch (...) {
             std::move(handler)(std::current_exception(), false);
             return;
           }
-          // NOTE: The `channel` is moved into the completion handler, so that
-          // it stays alive while this operation is suspended, no matter what
+          // Whether the completion has to wait for the consumer to retrieve
+          // this sentinel, see `releaseChunkOnConsumption`.
+          bool waitForAck = releaseChunkOnConsumption_ && !block.has_value();
+          // NOTE: The channels are moved into the completion handler, so that
+          // they stay alive while this operation is suspended, no matter what
           // happens to the map entry in the meantime.
-          auto* channelPtr = channel.get();
+          auto* channelPtr = chunk.blocks_.get();
           channelPtr->async_send(
               boost::system::error_code{}, std::move(block),
-              [channel = std::move(channel), handler = std::move(handler)](
-                  boost::system::error_code errorCode) mutable {
+              [chunk = std::move(chunk), handler = std::move(handler),
+               waitForAck](boost::system::error_code errorCode) mutable {
                 // NOTE: This runs on `strand_`, because the channel was created
                 // with `strand_` as its executor and this handler has no
                 // executor of its own that would override that. The only error
                 // that can occur is that the channel was cancelled, see
                 // `cancelAll`.
-                std::move(handler)(std::exception_ptr{}, !errorCode);
+                if (errorCode || !waitForAck) {
+                  std::move(handler)(std::exception_ptr{}, !errorCode);
+                  return;
+                }
+                auto* ackPtr = chunk.ack_.get();
+                ackPtr->async_receive(
+                    [chunk = std::move(chunk), handler = std::move(handler)](
+                        boost::system::error_code errorCode) mutable {
+                      std::move(handler)(std::exception_ptr{}, !errorCode);
+                    });
               });
         },
         completionToken);
@@ -122,19 +152,18 @@ class InMemoryBlockStorage {
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr, GetResult)>(
         [this, chunkIndex](auto handler) mutable {
-          SharedBlockChannel channel;
+          Chunk chunk;
           try {
-            channel = getOrCreateChannel(chunkIndex);
+            chunk = getOrCreateChunk(chunkIndex);
           } catch (...) {
             std::move(handler)(std::current_exception(), GetResult{});
             return;
           }
-          // NOTE: The `channel` is moved into the completion handler, see
-          // `storeBlock` above. Here it also keeps the channel alive while the
-          // handler erases the very map entry that owns it.
-          auto* channelPtr = channel.get();
-          channelPtr->async_receive([this, chunkIndex,
-                                     channel = std::move(channel),
+          // NOTE: The channels are moved into the completion handler, see
+          // `storeBlock` above. Here they also keep the channels alive while
+          // the handler erases the very map entry that owns them.
+          auto* channelPtr = chunk.blocks_.get();
+          channelPtr->async_receive([this, chunkIndex, chunk = std::move(chunk),
                                      handler = std::move(handler)](
                                         boost::system::error_code errorCode,
                                         OptionalBlock block) mutable {
@@ -148,6 +177,12 @@ class InMemoryBlockStorage {
               // everything that belongs to it may be dropped, see
               // `BlockStorageConcept::getBlock`.
               eraseChunk(chunkIndex);
+              if (releaseChunkOnConsumption_) {
+                // Let the producer of the sentinel complete, see
+                // `releaseChunkOnConsumption`. The ack channel has room for
+                // this one value, so this never suspends.
+                chunk.ack_->try_send(boost::system::error_code{});
+              }
               std::move(handler)(std::exception_ptr{}, GetResult::endOfChunk());
               return;
             }
@@ -175,7 +210,8 @@ class InMemoryBlockStorage {
     // `cancel()` tells a suspended send from a suspended receive by the
     // internal send state that `close()` overwrites.
     for (const auto& chunk : chunks_) {
-      chunk.second->cancel();
+      chunk.second.blocks_->cancel();
+      chunk.second.ack_->cancel();
     }
   }
 
@@ -195,18 +231,16 @@ class InMemoryBlockStorage {
 
   // Return the channel of the chunk with the given `chunkIndex`, creating it if
   // it does not exist yet.
-  SharedBlockChannel getOrCreateChannel(size_t chunkIndex) {
+  Chunk getOrCreateChunk(size_t chunkIndex) {
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
     AD_CORRECTNESS_CHECK(!wasCancelled_);
-    auto& channel = chunks_[chunkIndex];
-    if (channel == nullptr) {
-      // NOTE: The channel lives on the strand as well, so that the operations
-      // on it are dispatched through the strand no matter which executor the
-      // initiating caller reports.
-      channel =
+    auto& chunk = chunks_[chunkIndex];
+    if (chunk.blocks_ == nullptr) {
+      chunk.blocks_ =
           std::make_shared<BlockChannel>(strand_, maxBufferedBlocksPerChunk_);
+      chunk.ack_ = std::make_shared<AckChannel>(strand_, 1);
     }
-    return channel;
+    return chunk;
   }
 };
 
@@ -214,14 +248,34 @@ class InMemoryBlockStorage {
 // `maxBufferedBlocksPerChunk` blocks per chunk, for the constructor of
 // `InOrderBlockSink`.
 template <typename Block>
-auto makeInMemoryStorageFactory(size_t maxBufferedBlocksPerChunk) {
-  return [maxBufferedBlocksPerChunk](const Strand& strand) {
-    return InMemoryBlockStorage<Block>{strand, maxBufferedBlocksPerChunk};
+auto makeInMemoryStorageFactory(size_t maxBufferedBlocksPerChunk,
+                                bool releaseChunkOnConsumption = false) {
+  return [maxBufferedBlocksPerChunk,
+          releaseChunkOnConsumption](const Strand& strand) {
+    return InMemoryBlockStorage<Block>{strand, maxBufferedBlocksPerChunk,
+                                       releaseChunkOnConsumption};
   };
 }
 
 }  // namespace ad_utility::parallelBlockMerge
 
+#else
+
+#include <cstddef>
+#include <variant>
+
+namespace ad_utility::parallelBlockMerge {
+// The parallel merge always takes its serial path in C++17 mode, which ignores
+// the storage factory, so this placeholder lets callers pass one
+// unconditionally.
+template <typename Block>
+auto makeInMemoryStorageFactory(
+    [[maybe_unused]] size_t maxBufferedBlocksPerChunk,
+    [[maybe_unused]] bool releaseChunkOnConsumption = false) {
+  return std::monostate{};
+}
+}  // namespace ad_utility::parallelBlockMerge
+
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#endif  // QLEVER_TEST_PARALLELBLOCKMERGE_INMEMORYBLOCKSTORAGE_H
+#endif  // QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_INMEMORYBLOCKSTORAGE_H
