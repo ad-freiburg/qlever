@@ -646,6 +646,32 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 }
 
 // _____________________________________________________________________________
+TEST(Operation, verifyTimeAfterLastChunkIsAddedToRuntimeInformation) {
+  auto idTable = makeIdTableFromVector({{}});
+  CustomGeneratorOperation operation{
+      getQec(), [](const IdTable& idTable) -> Result::Generator {
+        co_yield {idTable.clone(), LocalVocab{}};
+        // Work that is done after the last chunk, e.g. a filter that discards
+        // the remaining input, has to be accounted for, too.
+        std::this_thread::sleep_for(5ms);
+      }(idTable)};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  auto result =
+      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+  auto& rti = operation.runtimeInfo();
+  auto totalTimeBefore = rti.totalTime_;
+
+  for ([[maybe_unused]] auto& _ : result.idTables()) {
+  }
+  EXPECT_EQ(rti.status_, Status::lazilyMaterializedCompleted);
+  // Only lower bounds, a high system load can only make the sleep longer.
+  EXPECT_GE(rti.totalTime_, totalTimeBefore + 5ms);
+  EXPECT_GE(rti.originalTotalTime_, totalTimeBefore + 5ms);
+  EXPECT_GE(rti.originalOperationTime_, 5ms);
+}
+
+// _____________________________________________________________________________
 TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
   uint32_t updateCallCounter = 0;
   auto idTable = makeIdTableFromVector({{}});

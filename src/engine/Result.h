@@ -219,14 +219,21 @@ class Result : public ad_utility::NoCopy {
   // an exception occurred during consumption, with `GeneratorState::CANCELLED`
   // if said exception is a cancellation exception or with
   // `GeneratorState::FINISHED` when the generator is done processing or
-  // abandoned and destroyed.
+  // abandoned and destroyed. The second argument of `onGeneratorFinished` is
+  // the time spent in the call that exhausted (or failed to advance) the
+  // original generator. It is not part of any chunk, but still has to be
+  // accounted for, because the original generator may do expensive work after
+  // the last chunk (for example, a filter that discards all remaining input).
+  // It is zero if the generator was abandoned before being exhausted, or if
+  // `onNewChunk` threw (the time of that chunk was already passed to it).
   //
   // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
   // wrong variant.
   void runOnNewChunkComputed(
       std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
           onNewChunk,
-      std::function<void(GeneratorState)> onGeneratorFinished);
+      std::function<void(GeneratorState, std::chrono::microseconds)>
+          onGeneratorFinished);
 
   // Wrap the generator stored in `data_` within a new generator that aggregates
   // the entries yielded by the generator into a cacheable `IdTable`. Once
