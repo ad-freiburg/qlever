@@ -1804,7 +1804,7 @@ void IndexImpl::writePartialVocabulary(
     ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
     // This sort is single-threaded because this function runs on the shared
     // thread pool of `buildPartialVocabularies`, which already keeps all cores
-    // busy. `pdqsort` is used because it is about 10% faster than
+    // busy. The sort uses `pdqsort` because it is about 10% faster than
     // `ql::ranges::sort` here (measured on DBLP).
     boost::sort::pdqsort(
         vec.begin(), vec.end(),
