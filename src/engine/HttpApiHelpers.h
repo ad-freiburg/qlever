@@ -79,6 +79,13 @@ std::optional<uint64_t> determineSendLimit(
     const ad_utility::url_parser::ParamValueMap& params,
     ad_utility::MediaType mediaType);
 
+// Extract the required `view-name` parameter for a materialized-view
+// command; `actionName` (e.g. "Writing", "Loading", "Deleting") names the
+// action being performed, for the error message if the parameter is missing.
+std::string getViewNameParameter(
+    const ad_utility::url_parser::ParamValueMap& params,
+    std::string_view actionName);
+
 // Implementation details for the function `determineSendLimit`.
 namespace detail {
 // Parse the `send` parameter (historical name): the maximum number of

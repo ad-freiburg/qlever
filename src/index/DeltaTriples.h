@@ -314,6 +314,11 @@ class DeltaTriples {
                             OwnedBlocksEntry>>
   copyLocalVocab() const;
 
+  // Get the index that these delta triples belong to. Used to check that an
+  // update is applied to the delta triples of the same index that it was
+  // planned against (see `Qlever::applyUpdate`).
+  const IndexImpl& getIndex() const { return index_; }
+
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Compute the diff between `oldState` (the snapshot used to start the index
   // rebuild) and `newState` (the current snapshot), remap the IDs using

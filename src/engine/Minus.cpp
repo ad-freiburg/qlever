@@ -10,6 +10,7 @@
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "util/Algorithm.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -147,7 +148,7 @@ IdTable Minus::copyMatchingRows(
   AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
 
   // Transform into dense vector of indices.
-  std::vector<size_t> nonMatchingIndices;
+  qlm::vector<size_t> nonMatchingIndices{allocator()};
   for (size_t row = 0; row < left.numRows(); ++row) {
     if (keepEntry.at(row) == reference) {
       nonMatchingIndices.push_back(row);

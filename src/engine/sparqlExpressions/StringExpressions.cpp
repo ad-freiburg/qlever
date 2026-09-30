@@ -126,8 +126,7 @@ struct ApplyBaseIfPresent {
     if (!base.has_value()) {
       return std::get<LocalVocabEntry>(std::move(iri));
     }
-    return LiteralOrIri{Iri::fromIrirefConsiderBase(
-        extractIri(iri).toStringRepresentation(), base.value())};
+    return LiteralOrIri{extractIri(iri).resolveAgainstBase(base.value())};
   }
 };
 using IriOrUriExpression =

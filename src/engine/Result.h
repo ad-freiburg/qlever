@@ -18,12 +18,15 @@
 #include "index/LocalVocab.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/InputRangeUtils.h"
+#include "util/NoCopyNoMove.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
 // is either a table accessible via `idTableView()` or can be consumed through a
 // generator via `idTables()` when it is supposed to be lazily evaluated.
-class Result {
+//
+// A `Result` is move-only to prevent accidental copies of a result table.
+class Result : public ad_utility::NoCopy {
  public:
   using IdTablePtr = std::shared_ptr<const IdTable>;
 
@@ -189,14 +192,6 @@ class Result {
 #endif
   Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy);
 
-  // Prevent accidental copying of a result table.
-  Result(const Result& other) = delete;
-  Result& operator=(const Result& other) = delete;
-
-  // Moving of a result table is OK.
-  Result(Result&& other) = default;
-  Result& operator=(Result&& other) = default;
-
   // Wrap the generator stored in `data_` within a new generator that calls
   // `onNewChunk` every time a new `IdTableVocabPair` is yielded by the original
   // generator and passed this new `IdTableVocabPair` along with microsecond
@@ -206,14 +201,21 @@ class Result {
   // an exception occurred during consumption, with `GeneratorState::CANCELLED`
   // if said exception is a cancellation exception or with
   // `GeneratorState::FINISHED` when the generator is done processing or
-  // abandoned and destroyed.
+  // abandoned and destroyed. The second argument of `onGeneratorFinished` is
+  // the time spent in the call that exhausted (or failed to advance) the
+  // original generator. It is not part of any chunk, but still has to be
+  // accounted for, because the original generator may do expensive work after
+  // the last chunk (for example, a filter that discards all remaining input).
+  // It is zero if the generator was abandoned before being exhausted, or if
+  // `onNewChunk` threw (the time of that chunk was already passed to it).
   //
   // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
   // wrong variant.
   void runOnNewChunkComputed(
       std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
           onNewChunk,
-      std::function<void(GeneratorState)> onGeneratorFinished);
+      std::function<void(GeneratorState, std::chrono::microseconds)>
+          onGeneratorFinished);
 
   // Wrap the generator stored in `data_` within a new generator that aggregates
   // the entries yielded by the generator into a cacheable `IdTable`. Once

@@ -14,6 +14,7 @@
 #include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Types.h"
 #include "util/HashSet.h"
+#include "util/NoCopyNoMove.h"
 
 namespace qlever::constructExport {
 
@@ -22,19 +23,15 @@ namespace qlever::constructExport {
 // - constants (IRIs/literals): evaluates and stores the string value.
 // - variables: precomputes the column index into the `IdTable`.
 // - blank nodes: precomputes the format prefix/suffix.
-class ConstructTemplatePreprocessor {
+//
+// This is a single-use builder: it is constructed as a temporary by the static
+// entry points below, run exactly once, and then discarded, so it may neither
+// be copied nor moved.
+class ConstructTemplatePreprocessor : public ad_utility::NoCopyNoMove {
  public:
   using Triples = ad_utility::sparql_types::Triples;
   using Iri = ad_utility::triple_component::Iri;
 
-  // Single-use builder: constructed as a temporary by the static entry points
-  // below, run exactly once, then discarded.
-  ConstructTemplatePreprocessor(const ConstructTemplatePreprocessor&) = delete;
-  ConstructTemplatePreprocessor& operator=(
-      const ConstructTemplatePreprocessor&) = delete;
-  ConstructTemplatePreprocessor(ConstructTemplatePreprocessor&&) = delete;
-  ConstructTemplatePreprocessor& operator=(ConstructTemplatePreprocessor&&) =
-      delete;
   ~ConstructTemplatePreprocessor() = default;
 
   // Preprocess the template triples. Returns the preprocessed triples together

@@ -12,6 +12,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "parser/Alias.h"
+#include "util/ContainersWithAllocator.h"
 
 // This is a class that follows the PIMPL idiom and wraps the actual
 // `GroupByImpl` class. It exposes only the constructors and virtual member
@@ -40,7 +41,11 @@ class GroupBy : public Operation {
   float getMultiplicity(size_t col) override;
   uint64_t getSizeEstimateBeforeLimit() override;
   size_t getCostEstimate() override;
-  std::vector<QueryExecutionTree*> getChildren() override;
+
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
+ public:
   VariableToColumnMap computeVariableToColumnMap() const override;
   Result computeResult(bool requestLaziness) override;
   std::unique_ptr<Operation> cloneImpl() const override;

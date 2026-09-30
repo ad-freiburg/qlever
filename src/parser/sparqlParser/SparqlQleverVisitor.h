@@ -17,6 +17,7 @@
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "parser/data/GraphRef.h"
 #include "parser/sparqlParser/DatasetClause.h"
+#include "util/HashSet.h"
 #include "util/ParsedUri.h"
 #undef EOF
 #include "parser/Quads.h"
@@ -104,6 +105,18 @@ class SparqlQleverVisitor {
   // The map from prefixes to their full IRIs.
   PrefixMap prefixMap_{};
 
+  // A named subquery (defined via `WITH %name AS { ... }`): the parsed group
+  // graph pattern together with the variables that are visible in it.
+  struct NamedSubquery {
+    ParsedQuery::GraphPattern pattern_;
+    std::vector<Variable> visibleVariables_;
+  };
+
+  // The named subqueries that have been defined so far, by name (including
+  // the leading `%`). Each `INCLUDE %name` is expanded to a copy of the
+  // corresponding pattern.
+  ad_utility::HashMap<std::string, NamedSubquery> namedSubqueries_{};
+
   // The `BASE` IRI of the query if any.
   std::optional<qlever::util::ParsedUri> baseIri_{};
 
@@ -141,6 +154,24 @@ class SparqlQleverVisitor {
                                : std::exchange(treatBlankNodesAs_, newValue);
     return absl::Cleanup{[previous, this]() { treatBlankNodesAs_ = previous; }};
   }
+
+  // According to the SPARQL 1.1 standard (section 5.1.1), a blank node label
+  // "can be used in only a single basic graph pattern in any query". To detect
+  // violations of this rule, we remember all blank node labels seen so far, as
+  // well as the subset of them that belongs to the basic graph pattern that is
+  // currently being parsed. The latter is cleared whenever a basic graph
+  // pattern ends, which is the case when a group `{ ... }` is entered and
+  // after every graph pattern that is not a triples block. Note that a
+  // `FILTER` belongs to the surrounding basic graph pattern and does not end
+  // it.
+  ad_utility::HashSet<std::string> allBlankNodeLabels_{};
+  ad_utility::HashSet<std::string> blankNodeLabelsInCurrentBasicGraphPattern_{};
+
+  // Report an error if the blank node label `label` (including the leading
+  // `_:`) has already been used in a different basic graph pattern. Otherwise,
+  // remember that it was used in the current basic graph pattern.
+  void checkBlankNodeLabelIsNotReusedAcrossBasicGraphPatterns(
+      const std::string& label, const antlr4::ParserRuleContext* ctx);
 
   // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
   // members.
@@ -200,6 +231,29 @@ class SparqlQleverVisitor {
   void visit(Parser::PrefixDeclContext* ctx);
 
   ParsedQuery visit(Parser::SelectQueryContext* ctx);
+
+  // Visit the definition of a named subquery (`WITH %name AS { ... }`) and
+  // store the parsed pattern in the `namedSubqueries_` map.
+  void visit(Parser::NamedSubqueryDefinitionContext* ctx);
+
+  // A valid `INCLUDE %name` (as the entire body of a subquery) is expanded in
+  // `visit(GroupGraphPatternContext*)` and never reaches this function, so
+  // this function always reports an error for a misplaced `INCLUDE`.
+  [[noreturn]] static GraphPatternOperation visit(
+      Parser::IncludeClauseContext* ctx);
+
+  // If the body of the given group graph pattern is exactly one `INCLUDE`
+  // clause, return that clause, otherwise `nullptr`.
+  static Parser::IncludeClauseContext* getSoleIncludeClause(
+      Parser::GroupGraphPatternSubContext* ctx);
+
+  // Expand the sole `INCLUDE %name` body of the group graph pattern `ctx`
+  // into a copy of the pattern of the corresponding named subquery. Report an
+  // error if the group is not the body of a subquery or that subquery uses
+  // `SELECT *`.
+  ParsedQuery::GraphPattern visitSoleInclude(
+      Parser::IncludeClauseContext* includeCtx,
+      Parser::GroupGraphPatternContext* ctx);
 
   SubQueryAndMaybeValues visit(Parser::SubSelectContext* ctx);
 
@@ -585,6 +639,27 @@ class SparqlQleverVisitor {
   // internal variable by calling `getNewInternalVariable()` above.
   auto makeInternalVariableGenerator();
 
+  // The result of `visitInFreshQueryContext` below: the result of the visit
+  // call, together with the final state of the fresh `parsedQuery_` and
+  // `visibleVariables_`.
+  template <typename Result>
+  struct FreshQueryContextResult {
+    Result result_;
+    ParsedQuery parsedQuery_;
+    std::vector<Variable> visibleVariables_;
+  };
+
+  // Visit the given context with a fresh (initially empty) `parsedQuery_`,
+  // `visibleVariables_`, and `blankNodeLabelsInCurrentBasicGraphPattern_` and
+  // restore the previous state afterwards, also when an exception is thrown.
+  // This is used for the parts of a query that are parsed in a clean
+  // environment, without access to the variables of the outer query, namely the
+  // argument of `EXISTS` and the definition of a named subquery.
+  template <typename Ctx>
+  auto visitInFreshQueryContext(Ctx* ctx)
+      -> FreshQueryContextResult<
+          decltype(std::declval<SparqlQleverVisitor&>().visit(ctx))>;
+
   // Create a new generated blank node.
   BlankNode newBlankNode();
 
@@ -694,6 +769,15 @@ class SparqlQleverVisitor {
   void warnOrThrowIfUnboundVariables(Context* ctx,
                                      const SparqlExpressionPimpl& expression,
                                      std::string_view clauseName);
+
+  // Throw an exception if `expression` contains an aggregate function. The
+  // SPARQL standard only allows aggregates in the SELECT, HAVING, and ORDER BY
+  // clauses (see Section 11.1 of the SPARQL 1.1 standard). `clauseName` is the
+  // name of the clause in which the `expression` occurs; it is only used for
+  // the error message.
+  static void throwIfContainsAggregate(const antlr4::ParserRuleContext* ctx,
+                                       const SparqlExpressionPimpl& expression,
+                                       std::string_view clauseName);
 
   // Convert an instance of `Triples` to a `BasicGraphPattern` so it can be used
   // just like a WHERE clause. Most of the time this just changes the type and

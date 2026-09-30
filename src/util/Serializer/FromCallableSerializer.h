@@ -11,6 +11,7 @@
 #define QLEVER_SRC_UTIL_SERIALIZERFROMCALLABLESERIALIZER_H
 
 #include "backports/concepts.h"
+#include "util/NoCopyNoMove.h"
 #include "util/Serializer/Serializer.h"
 
 namespace ad_utility::serialization {
@@ -23,7 +24,8 @@ namespace ad_utility::serialization {
 // that stream in its `operator()`.
 CPP_template(typename ReadFunction)(
     requires ql::concepts::invocable<ReadFunction, char*,
-                                     size_t>) class ReadViaCallableSerializer {
+                                     size_t>) class ReadViaCallableSerializer
+    : public NoCopy {
  public:
   using SerializerType = ReadSerializerTag;
 
@@ -41,13 +43,6 @@ CPP_template(typename ReadFunction)(
   void serializeBytes(char* bytePointer, size_t numBytes) {
     readFunction_(bytePointer, numBytes);
   }
-
-  // Serializers are move-only types.
-  ReadViaCallableSerializer(const ReadViaCallableSerializer&) = delete;
-  ReadViaCallableSerializer& operator=(const ReadViaCallableSerializer&) =
-      delete;
-  ReadViaCallableSerializer(ReadViaCallableSerializer&&) = default;
-  ReadViaCallableSerializer& operator=(ReadViaCallableSerializer&&) = default;
 };
 
 // A serializer that lifts a simple callable (called the `WriteFunction`) to a
@@ -60,7 +55,8 @@ CPP_template(typename ReadFunction)(
 // that stream in its `operator()`.
 CPP_template(typename WriteFunction)(
     requires ql::concepts::invocable<WriteFunction, const char*,
-                                     size_t>) class WriteViaCallableSerializer {
+                                     size_t>) class WriteViaCallableSerializer
+    : public NoCopy {
  public:
   using SerializerType = WriteSerializerTag;
 
@@ -78,13 +74,6 @@ CPP_template(typename WriteFunction)(
   void serializeBytes(const char* bytePointer, size_t numBytes) {
     writeFunction_(bytePointer, numBytes);
   }
-
-  // Serializers are move-only types.
-  WriteViaCallableSerializer(const WriteViaCallableSerializer&) = delete;
-  WriteViaCallableSerializer& operator=(const WriteViaCallableSerializer&) =
-      delete;
-  WriteViaCallableSerializer(WriteViaCallableSerializer&&) = default;
-  WriteViaCallableSerializer& operator=(WriteViaCallableSerializer&&) = default;
 };
 }  // namespace ad_utility::serialization
 

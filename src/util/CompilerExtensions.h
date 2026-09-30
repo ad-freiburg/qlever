@@ -43,6 +43,15 @@ There might be some performance degradations."
 #define AD_ALWAYS_INLINE inline
 #endif
 
+// A generic macro that prevents a function from being inlined. This is useful
+// for uncommon slow paths whose code should not increase the size of a hot
+// evaluation loop.
+#if defined(__GNUC__) || defined(__clang__)
+#define AD_NO_INLINE [[gnu::noinline]]
+#else
+#define AD_NO_INLINE
+#endif
+
 // A macro for the `[[clang::lifetimebound]]` attribute, which marks a function
 // parameter (or the implicit `this`) as the owner of the storage that the
 // return value borrows from. Clang then warns (`-Wdangling`) when the returned

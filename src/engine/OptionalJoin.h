@@ -8,6 +8,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 // Forward declaration
 class IndexScan;
@@ -72,10 +73,12 @@ class OptionalJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
-    return {_left.get(), _right.get()};
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{_left.get(), _right.get()}, allocator()};
   }
 
+ public:
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
 
@@ -111,8 +114,13 @@ class OptionalJoin : public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Helper function for `tryIndexNestedLoopJoinIfSuitable` which makes the
-  // logic reusable.
+  // logic reusable. Note that this depends on the size estimates and hence may
+  // change when a `LIMIT` is pushed into `_left`, see `onLimitOffsetChanged`.
   bool isIndexNestedLoopJoinSuitable() const;
+
+  // The join columns of the left input, in the order in which `_left` is
+  // sorted.
+  std::vector<ColumnIndex> leftJoinColumns() const;
 
   // Nested loop join optimization than can apply when a memory intensive sort
   // can be avoided this way.

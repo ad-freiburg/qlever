@@ -55,7 +55,15 @@ void expectRtiHasDimensions(
 }
 }  // namespace
 
-// ________________________________________________
+// _____________________________________________________________________________
+TEST(OperationTest, constructorRequiresQueryExecutionContext) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      NeutralElementOperation{nullptr},
+      ::testing::HasSubstr(
+          "An `Operation` requires a `QueryExecutionContext`"));
+}
+
+// _____________________________________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
   LimitOffsetClause l;
   {
@@ -183,7 +191,7 @@ class OperationTestFixture : public testing::Test {
 
   std::shared_ptr<Index> index = []() {
     TestIndexConfig indexConfig{};
-    indexConfig.blocksizePermutations = 32_B;
+    indexConfig.rowsPerBlock = 4;
 
     return std::make_shared<Index>(makeTestIndex(std::move(indexConfig)));
   }();
@@ -222,6 +230,32 @@ TEST_F(OperationTestFixture,
                       "status", Eq("fully materialized completed"))),
                   ParsedAsJson(HasKeyMatching(
                       "status", Eq("fully materialized completed")))));
+}
+
+// Test that the updates of the runtime information carry the information about
+// the query planning, once it is set.
+TEST_F(OperationTestFixture, updatesCarryInformationAboutTheQueryPlanning) {
+  // Without that information, an update is just the runtime information of the
+  // operations.
+  operation.getResult(true);
+  ASSERT_FALSE(jsonHistory.empty());
+  EXPECT_FALSE(nlohmann::json::parse(jsonHistory.back()).contains("meta"));
+
+  // With it, every update carries it as the key `meta`, with the same content
+  // as in the `application/qlever-results+json` format.
+  QueryPlanningInfo queryPlanningInfo;
+  queryPlanningInfo.timeQueryPlanning = std::chrono::milliseconds{17};
+  queryPlanningInfo.queryPlanning.push_back(
+      {PlanningAlgorithm::DYNAMIC_PROGRAMMING, 3, 6, 1500, 42});
+  qec.setQueryPlanningInfo(queryPlanningInfo);
+  jsonHistory.clear();
+  qec.clearCacheUnpinnedOnly();
+  operation.getResult(true);
+  ASSERT_FALSE(jsonHistory.empty());
+  for (const auto& json : jsonHistory) {
+    EXPECT_EQ(nlohmann::ordered_json::parse(json)["meta"],
+              nlohmann::ordered_json(queryPlanningInfo));
+  }
 }
 
 // _____________________________________________________________________________
@@ -554,9 +588,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
 
 // _____________________________________________________________________________
 TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   uint32_t updateCallCounter = 0;
   auto idTable = makeIdTableFromVector({{}});
   auto index = std::make_shared<Index>(makeTestIndex(
@@ -602,6 +634,32 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
                                });
 
   EXPECT_EQ(updateCallCounter, 4);
+}
+
+// _____________________________________________________________________________
+TEST(Operation, verifyTimeAfterLastChunkIsAddedToRuntimeInformation) {
+  auto idTable = makeIdTableFromVector({{}});
+  CustomGeneratorOperation operation{
+      getQec(), [](const IdTable& idTable) -> Result::Generator {
+        co_yield {idTable.clone(), LocalVocab{}};
+        // Work that is done after the last chunk, e.g. a filter that discards
+        // the remaining input, has to be accounted for, too.
+        std::this_thread::sleep_for(5ms);
+      }(idTable)};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  auto result =
+      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+  auto& rti = operation.runtimeInfo();
+  auto totalTimeBefore = rti.totalTime_;
+
+  for ([[maybe_unused]] auto& _ : result.idTables()) {
+  }
+  EXPECT_EQ(rti.status_, Status::lazilyMaterializedCompleted);
+  // Only lower bounds, a high system load can only make the sleep longer.
+  EXPECT_GE(rti.totalTime_, totalTimeBefore + 5ms);
+  EXPECT_GE(rti.originalTotalTime_, totalTimeBefore + 5ms);
+  EXPECT_GE(rti.originalOperationTime_, 5ms);
 }
 
 // _____________________________________________________________________________

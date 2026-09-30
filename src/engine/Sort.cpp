@@ -200,8 +200,8 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
       sorter->pushBlock(std::move(idTableAndLocalVocab.idTable_));
       mergedLocalVocab.mergeWith(idTableAndLocalVocab.localVocab_);
     } else {
-      // NOTE: `pushBlock` iterates over the rows and calls `push` for each,
-      // which buffers rows and flushes to disk when the buffer is full. This
+      // NOTE: `pushBlock` copies the columns of the input into the sorter's
+      // internal buffer and flushes that buffer to disk when it is full. This
       // avoids having to clone the (potentially large) input table.
       sorter->pushBlock(*it);
     }

@@ -22,12 +22,16 @@
 
 namespace ad_utility {
 // Run the given tasks in parallel and wait for their completion. This function
-// will spawn a new thread for each task. If one of the tasks throws an
-// exception, this exception will be rethrown in the main thread. If multiple
-// tasks throw exceptions, only the first one will be rethrown.
-inline void runTasksInParallel(
-    std::vector<std::packaged_task<void()>>&& tasks) {
-  std::vector<std::future<void>> futures;
+// will spawn a new thread for each task. If `R` (the result type of the tasks)
+// is not `void`, the results are returned in a `std::vector<R>`, in the same
+// order as the corresponding tasks. If one of the tasks throws an exception,
+// this exception will be rethrown in the main thread, after all the other
+// tasks have completed. If multiple tasks throw exceptions, only the first one
+// will be rethrown.
+template <typename R>
+auto runTasksInParallel(std::vector<std::packaged_task<R()>>&& tasks)
+    -> std::conditional_t<std::is_void_v<R>, void, std::vector<R>> {
+  std::vector<std::future<R>> futures;
   futures.reserve(tasks.size());
   std::vector<JThread> threads;
   threads.reserve(tasks.size());
@@ -35,9 +39,18 @@ inline void runTasksInParallel(
     futures.push_back(task.get_future());
     threads.push_back(JThread{std::move(task)});
   }
-  // Wait for completion.
-  for (auto& future : futures) {
-    future.get();
+  if constexpr (std::is_void_v<R>) {
+    // Wait for completion.
+    for (auto& future : futures) {
+      future.get();
+    }
+  } else {
+    std::vector<R> results;
+    results.reserve(futures.size());
+    for (auto& future : futures) {
+      results.push_back(future.get());
+    }
+    return results;
   }
 }
 
