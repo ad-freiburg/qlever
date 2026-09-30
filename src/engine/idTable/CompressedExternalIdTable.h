@@ -732,6 +732,13 @@ CPP_class_template(size_t NumStaticCols,
   // in an arbitrary order. Only use this for inputs that are sorted (or
   // otherwise reordered) afterwards anyway, which for the
   // `CompressedExternalIdTableSorter` is always the case.
+  //
+  // NOTE: This function is the *only* one of this class that several threads
+  // may call at the same time. While such calls are in flight, no other member
+  // (not even the `const` `size()`) may be called concurrently with them; the
+  // pushing threads have to be joined first. Once they are, every other member
+  // may be used again without further ado, because they all begin with
+  // `finishConcurrentPushes` below.
   CPP_template(typename Table)(
       requires IdTableLike<Table>) void pushBlockConcurrently(const Table&
                                                                   table) {
@@ -784,7 +791,9 @@ CPP_class_template(size_t NumStaticCols,
     numRowsReserved_ = 0;
   }
 
-  // ___________________________________________________________________
+  // The number of rows that have been pushed so far. Rows that are currently
+  // being pushed by a concurrent `pushBlockConcurrently` are already counted
+  // here, so this must not be called while such a push is in flight, see there.
   size_t size() const { return numElementsPushed_; }
 
   // Return a lambda that takes a `ValueType` and calls `push` for that value.
