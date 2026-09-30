@@ -340,9 +340,10 @@ size_t SpatialJoin::getCostEstimate() {
     } else {
       AD_CORRECTNESS_CHECK(
           ad_utility::contains(
-              qlm::array{SpatialJoinAlgorithm{S2_GEOMETRY},
-                         SpatialJoinAlgorithm{BOUNDING_BOX},
-                         SpatialJoinAlgorithm{S2_POINT_POLYLINE}},
+                qlm::array<SpatialJoinAlgorithm, 3>{
+                  SpatialJoinAlgorithm{S2_GEOMETRY},
+                  SpatialJoinAlgorithm{BOUNDING_BOX},
+                  SpatialJoinAlgorithm{S2_POINT_POLYLINE}},
               config_.algo_),
           "Unknown SpatialJoin Algorithm.");
 
@@ -492,7 +493,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   auto getIdTable = [](qlm::shared_ptr<QueryExecutionTree> child) {
     qlm::shared_ptr<const Result> resTable = child->getResult();
     auto idTablePtr = &resTable->idTableView();
-    return qlm::pair{idTablePtr, std::move(resTable)};
+    return qlm::pair<const IdTableView<0>*, qlm::shared_ptr<const Result>>{
+        idTablePtr, std::move(resTable)};
   };
 
   auto [childLeft, childRight, joinVarLeft, joinVarRight] =
@@ -647,8 +649,12 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
 std::unique_ptr<Operation> SpatialJoin::cloneImpl() const {
   return std::make_unique<SpatialJoin>(
       _executionContext, config_,
-      childLeft_ ? qlm::optional{childLeft_->clone()} : std::nullopt,
-      childRight_ ? qlm::optional{childRight_->clone()} : std::nullopt,
+    childLeft_ ? qlm::optional<qlm::shared_ptr<QueryExecutionTree>>{
+             childLeft_->clone()}
+           : std::nullopt,
+    childRight_ ? qlm::optional<qlm::shared_ptr<QueryExecutionTree>>{
+          childRight_->clone()}
+        : std::nullopt,
       substitutesFilterOp_);
 }
 

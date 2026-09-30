@@ -133,7 +133,8 @@ class SpatialJoin : public Operation {
 
   // Helper functions for unit tests
   qlm::pair<double, size_t> onlyForTestingGetTask() const {
-    return qlm::pair{getMaxDist().value_or(-1.0), getMaxResults().value_or(-1)};
+    return qlm::pair<double, size_t>{getMaxDist().value_or(-1.0),
+                                     getMaxResults().value_or(-1)};
   }
 
   const SpatialJoinConfiguration& onlyForTestingGetConfig() const {
@@ -141,7 +142,7 @@ class SpatialJoin : public Operation {
   }
 
   qlm::pair<Variable, Variable> onlyForTestingGetVariables() const {
-    return qlm::pair{config_.left_, config_.right_};
+    return qlm::pair<Variable, Variable>{config_.left_, config_.right_};
   }
 
   qlm::optional<Variable> onlyForTestingGetDistanceVariable() const {
