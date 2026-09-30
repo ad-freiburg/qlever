@@ -194,6 +194,9 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
   // NOTE: This is `noexcept`, because a child that could neither be queued nor
   // started can't be accounted for without leaving the group inconsistent.
   void postChild(absl::AnyInvocable<void() &&> task) noexcept {
+    // Relaxed, like the increment of the reference count of a
+    // `std::shared_ptr`: the caller already holds a count, so this can't race
+    // with the decrement to zero, and the `post` orders the child after this.
     numPending_.fetch_add(1, std::memory_order_relaxed);
     net::post(executor_, [this, task = std::move(task)]() mutable noexcept {
       if (stopped_.load(std::memory_order_acquire)) {
