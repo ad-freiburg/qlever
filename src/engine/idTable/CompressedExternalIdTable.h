@@ -791,9 +791,14 @@ CPP_class_template(size_t NumStaticCols,
     numRowsReserved_ = 0;
   }
 
-  // The number of rows that have been pushed so far. Rows that are currently
-  // being pushed by a concurrent `pushBlockConcurrently` are already counted
-  // here, so this must not be called while such a push is in flight, see there.
+  // The number of rows that have been pushed so far.
+  //
+  // NOTE: Must not be called while a `pushBlockConcurrently` is in flight. The
+  // count itself is accurate even then, because it is incremented when a
+  // pusher reserves its rows and therefore under the `concurrentPushMutex_`,
+  // but this read is not synchronized against those increments. It becomes
+  // safe once the pushing threads have been joined and `finishConcurrentPushes`
+  // has run.
   size_t size() const { return numElementsPushed_; }
 
   // Return a lambda that takes a `ValueType` and calls `push` for that value.
