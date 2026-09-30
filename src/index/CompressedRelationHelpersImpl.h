@@ -13,9 +13,9 @@
 
 #include <array>
 #include <functional>
-#include <numeric>
 #include <optional>
 
+#include "backports/numeric.h"
 #include "index/CompressedRelationWriter.h"
 #include "util/ExceptionHandling.h"
 
@@ -160,13 +160,12 @@ inline DistinctIdCountOfBlock countDistinctIds(ql::span<const Id> column) {
   // Note: The comparison of the bits (instead of the general comparison of
   // `Id`s) is not only much cheaper per element, it also makes this reduction
   // vectorizable, which matters because it touches every single ID.
-  size_t count =
-      1 + std::transform_reduce(
-              column.begin() + 1, column.end(), column.begin(), size_t{0},
-              std::plus<>{}, [](Id current, Id previous) {
-                return static_cast<size_t>(bitsOfIdWithoutLocalVocab(current) !=
-                                           bitsOfIdWithoutLocalVocab(previous));
-              });
+  size_t count = ql::transform_reduce(
+      column.begin() + 1, column.end(), column.begin(), size_t{1},
+      std::plus<>{}, [](Id current, Id previous) {
+        return static_cast<size_t>(bitsOfIdWithoutLocalVocab(current) !=
+                                   bitsOfIdWithoutLocalVocab(previous));
+      });
   return {count, column.front(), column.back()};
 }
 
