@@ -57,8 +57,10 @@ size_t globalExecutorNumThreads();
 // (the `--num-threads / -j` option of the index builder, see
 // `setGlobalExecutorNumThreads`).
 //
-// NOTE: So far the only user is the merge phase of the external sorters (see
-// `engine/idTable/ExternalIdTableSorterMergeConfig.h`); porting the remaining
+// NOTE: So far the users are the merge phase of the external sorters (see
+// `engine/idTable/ExternalIdTableSorterMergeConfig.h`) and the removal of
+// duplicates from a sorted sequence of blocks (see
+// `ad_utility::uniqueBlockView` in `util/Views.h`); porting the remaining
 // phases of the index build onto this pool is work in progress.
 //
 // NOTE: The pool has static lifetime and we never `join()` or `stop()` it, so

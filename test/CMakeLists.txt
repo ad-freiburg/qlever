@@ -337,7 +337,7 @@ addLinkAndDiscoverTest(VocabularyTest vocabulary)
 
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
-addLinkAndDiscoverTestNoLibs(ViewsTest)
+addLinkAndDiscoverTestNoLibs(ViewsTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
@@ -624,6 +624,8 @@ addLinkAndDiscoverTest(LogTest)
 addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(GlobalExecutorTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(PostAndGetFutureTest)
 
 addLinkAndDiscoverTest(MetricsTest metrics)
 

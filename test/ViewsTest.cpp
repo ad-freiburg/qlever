@@ -97,6 +97,92 @@ TEST(Views, uniqueBlockView) {
   ASSERT_EQ(ints, result);
 }
 
+namespace {
+using IntBlocks = std::vector<std::vector<int>>;
+
+// Run `uniqueBlockView` on the `blocks` with the given `numBlocksInFlight` and
+// collect the resulting blocks (not only their elements), so that the tests can
+// also check the blocking of the output.
+IntBlocks collectUniqueBlocks(IntBlocks blocks, size_t numBlocksInFlight) {
+  IntBlocks result;
+  for (auto& block :
+       ad_utility::uniqueBlockView(std::move(blocks), numBlocksInFlight)) {
+    result.push_back(std::move(block));
+  }
+  return result;
+}
+
+// Check that `uniqueBlockView` turns the `input` into the `expected` blocks,
+// for every number of blocks in flight that is interesting for the `input`:
+// the default (zero, meaning "twice the number of threads of the global thread
+// pool"), a single block (which makes the pipeline effectively serial), and
+// enough blocks to hold the complete input at once.
+void expectUniqueBlocks(
+    const IntBlocks& input, const IntBlocks& expected,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
+  for (size_t numBlocksInFlight :
+       {size_t{0}, size_t{1}, size_t{2}, size_t{3}, input.size() + 1}) {
+    EXPECT_THAT(collectUniqueBlocks(input, numBlocksInFlight),
+                ::testing::ContainerEq(expected))
+        << "numBlocksInFlight was " << numBlocksInFlight;
+  }
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(Views, uniqueBlockViewEmptyInput) {
+  expectUniqueBlocks({}, {});
+  // Blocks that are empty to begin with are filtered out.
+  expectUniqueBlocks({{}, {}, {}}, {});
+}
+
+// _____________________________________________________________________________
+TEST(Views, uniqueBlockViewSingleBlock) {
+  expectUniqueBlocks({{1, 1, 2, 2, 2, 3}}, {{1, 2, 3}});
+  // A single block without any duplicates is passed through unchanged.
+  expectUniqueBlocks({{1, 2, 3}}, {{1, 2, 3}});
+}
+
+// _____________________________________________________________________________
+TEST(Views, uniqueBlockViewDuplicatesAcrossBlockBoundaries) {
+  // The duplicates of `2` and `4` straddle a block boundary, so they can only
+  // be removed by taking the last element of the previous block into account.
+  expectUniqueBlocks({{1, 2, 2}, {2, 3, 4}, {4, 4, 5}}, {{1, 2}, {3, 4}, {5}});
+}
+
+// _____________________________________________________________________________
+TEST(Views, uniqueBlockViewBlocksThatBecomeEmpty) {
+  // The second and third block consist only of duplicates of the last element
+  // of the first block, so they become empty and are not yielded at all.
+  expectUniqueBlocks({{1, 1, 2}, {2, 2}, {2}, {2, 3}}, {{1, 2}, {3}});
+  // The same, but the blocks that become empty are the last ones.
+  expectUniqueBlocks({{1, 2}, {2}, {2, 2}}, {{1, 2}});
+}
+
+// _____________________________________________________________________________
+TEST(Views, uniqueBlockViewManyBlocksInFlight) {
+  // A single value that spans many blocks: every block but the first one
+  // becomes empty, so the pipeline has to skip many more blocks than it has in
+  // flight at any time.
+  IntBlocks input;
+  for (size_t i = 0; i < 100; ++i) {
+    input.push_back({7, 7, 7, 7});
+  }
+  input.push_back({7, 8});
+  expectUniqueBlocks(input, {{7}, {8}});
+
+  // Many blocks without any duplicates, to check that the order of the blocks
+  // is preserved although they are deduplicated concurrently.
+  IntBlocks distinctInput;
+  IntBlocks distinctExpected;
+  for (int i = 0; i < 100; ++i) {
+    distinctInput.push_back({3 * i, 3 * i + 1, 3 * i + 1, 3 * i + 2});
+    distinctExpected.push_back({3 * i, 3 * i + 1, 3 * i + 2});
+  }
+  expectUniqueBlocks(distinctInput, distinctExpected);
+}
+
 TEST(Views, owningView) {
   using namespace ad_utility;
   // Static asserts for the desired concepts.
