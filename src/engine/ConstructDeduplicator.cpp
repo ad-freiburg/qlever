@@ -63,7 +63,7 @@ DeduplicationKey ConstructDeduplicator::makeFullTripleKey(
         AD_CORRECTNESS_CHECK(c.dedupId_.has_value());
         return c.dedupId_.value();
       },
-      [&ctx, rowIdxInIdTable](const PrecomputedVariable& v) {
+      [&ctx, rowIdxInIdTable](const PrecomputedVariable& v) -> ValueId {
         return ctx.idTable_[rowIdxInIdTable][v.columnIndex_];
       },
       [](const PrecomputedBlankNode&) -> ValueId {
