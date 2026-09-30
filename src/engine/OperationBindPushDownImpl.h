@@ -39,8 +39,9 @@ CPP_template_def(typename MakeCloneWithNewChildren)(
       // children attached yet.
       continue;
     }
-    if (!child->getRootOperation()->coversVariables(bindExpressionVars) ||
-        child->isVariableCovered(bind._target)) {
+    if (!child->getRootOperation()->areVariablesAlwaysDefined(
+            bindExpressionVars) ||
+        child->containsVariable(bind._target)) {
       continue;
     }
     auto result = child->getRootOperation()->makeTreeWithBindColumn(bind);

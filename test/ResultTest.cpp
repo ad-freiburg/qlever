@@ -205,7 +205,7 @@ TEST(Result, verifyRunOnNewChunkComputedThrowsWithFullyMaterializedResult) {
 
   EXPECT_THROW(result.runOnNewChunkComputed(
                    [](const IdTableVocabPair&, std::chrono::microseconds) {},
-                   [](Result::GeneratorState) {}),
+                   [](Result::GeneratorState, std::chrono::microseconds) {}),
                ad_utility::Exception);
 }
 
@@ -228,6 +228,8 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
         co_yield {t2.clone(), LocalVocab{}};
         std::this_thread::sleep_for(5ms);
         co_yield {t3.clone(), LocalVocab{}};
+        // Work after the last chunk is reported to `onGeneratorFinished`.
+        std::this_thread::sleep_for(5ms);
       }(queryExecutionContext, idTable1, idTable2, idTable3),
       {}};
   uint32_t callCounter = 0;
@@ -251,8 +253,9 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
           EXPECT_GE(duration, 5ms);
         }
       },
-      [&](Result::GeneratorState state) {
+      [&](Result::GeneratorState state, std::chrono::microseconds duration) {
         EXPECT_EQ(state, Result::GeneratorState::FINISHED);
+        EXPECT_GE(duration, 5ms);
         finishedConsuming = true;
       });
 
@@ -277,8 +280,9 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnError) {
       [&](const IdTableVocabPair&, std::chrono::microseconds) {
         ++callCounterGenerator;
       },
-      [&](Result::GeneratorState state) {
+      [&](Result::GeneratorState state, std::chrono::microseconds duration) {
         EXPECT_EQ(state, Result::GeneratorState::FAILED);
+        EXPECT_GE(duration, std::chrono::microseconds::zero());
         ++callCounterFinished;
       });
 
@@ -306,8 +310,9 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnCancellation) {
       [&](const IdTableVocabPair&, std::chrono::microseconds) {
         ++callCounterGenerator;
       },
-      [&](Result::GeneratorState state) {
+      [&](Result::GeneratorState state, std::chrono::microseconds duration) {
         EXPECT_EQ(state, Result::GeneratorState::CANCELLED);
+        EXPECT_GE(duration, std::chrono::microseconds::zero());
         ++callCounterFinished;
       });
 
@@ -317,6 +322,35 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnCancellation) {
       ad_utility::CancellationException);
 
   EXPECT_EQ(callCounterGenerator, 0);
+  EXPECT_EQ(callCounterFinished, 1);
+}
+
+// _____________________________________________________________________________
+TEST(Result, verifyRunOnNewChunkDoesNotReportChunkTimeTwiceOnError) {
+  Result result{[](IdTable idTable) -> Result::Generator {
+                  std::this_thread::sleep_for(1ms);
+                  co_yield {std::move(idTable), LocalVocab{}};
+                }(makeIdTableFromVector({{}})),
+                {}};
+  uint32_t callCounterFinished = 0;
+
+  result.runOnNewChunkComputed(
+      [](const IdTableVocabPair&, std::chrono::microseconds) {
+        throw std::runtime_error{
+            "verifyRunOnNewChunkDoesNotReportChunkTimeTwiceOnError"};
+      },
+      [&](Result::GeneratorState state, std::chrono::microseconds duration) {
+        EXPECT_EQ(state, Result::GeneratorState::FAILED);
+        // The time of the chunk was already passed to `onNewChunk`.
+        EXPECT_EQ(duration, std::chrono::microseconds::zero());
+        ++callCounterFinished;
+      });
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      consumeGenerator(result.idTables()),
+      HasSubstr("verifyRunOnNewChunkDoesNotReportChunkTimeTwiceOnError"),
+      std::runtime_error);
+
   EXPECT_EQ(callCounterFinished, 1);
 }
 
@@ -335,8 +369,9 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnPartialConsumption) {
         [&](const IdTableVocabPair&, std::chrono::microseconds) {
           ++callCounterGenerator;
         },
-        [&](Result::GeneratorState state) {
+        [&](Result::GeneratorState state, std::chrono::microseconds duration) {
           EXPECT_EQ(state, Result::GeneratorState::FINISHED);
+          EXPECT_EQ(duration, std::chrono::microseconds::zero());
           ++callCounterFinished;
         });
 

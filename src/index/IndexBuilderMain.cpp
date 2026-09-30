@@ -281,6 +281,14 @@ int main(int argc, char** argv) {
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
   add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
 
+  add("geo-point-encoding", po::value(&config.geoPointEncoding_),
+      "How geo points are encoded in the IDs of the index: `z-order` (the "
+      "default), or `lat-major`, which is how they were encoded before "
+      "2026-09-26. The encoding `lat-major` is deprecated, only use it if "
+      "you need to be compatible with software that decodes the IDs of an "
+      "index. With it, a spatial prefilter on points can only restrict the "
+      "latitude.");
+
   add("encode-as-id",
       po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),
       "Space-separated list of IRI prefixes (without angle brackets). "
