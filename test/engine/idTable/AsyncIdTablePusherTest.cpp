@@ -152,6 +152,35 @@ TEST(AsyncIdTablePusher, emptyTableAndReuse) {
 }
 
 // _____________________________________________________________________________
+TEST(AsyncIdTablePusher, noAccessWhileInFlight) {
+  auto alloc = ad_utility::testing::makeAllocator();
+  net::thread_pool pool{2};
+  // The sink blocks until `release` is fulfilled, which keeps the push that
+  // fills the block in flight.
+  std::promise<void> sinkEntered;
+  std::promise<void> release;
+  auto releaseFuture = release.get_future().share();
+  Pusher pusher{pool.get_executor(), 2, 10, alloc,
+                [&sinkEntered, releaseFuture](IdTableStatic<0>) {
+                  sinkEntered.set_value();
+                  releaseFuture.wait();
+                }};
+  auto table = createRandomlyFilledIdTable(10, 2);
+  auto future = pusher.asyncPushBlock(table, net::use_future);
+  sinkEntered.get_future().wait();
+  AD_EXPECT_THROW_WITH_MESSAGE(pusher.numPendingRows(),
+                               ::testing::HasSubstr("still in flight"));
+  AD_EXPECT_THROW_WITH_MESSAGE(pusher.finish(),
+                               ::testing::HasSubstr("still in flight"));
+
+  // Once the push has completed, both are allowed again.
+  release.set_value();
+  future.get();
+  EXPECT_EQ(pusher.numPendingRows(), 0);
+  EXPECT_EQ(pusher.finish().numRows(), 0);
+}
+
+// _____________________________________________________________________________
 TEST(AsyncIdTablePusher, exceptionInSink) {
   auto alloc = ad_utility::testing::makeAllocator();
   net::thread_pool pool{4};

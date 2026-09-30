@@ -717,10 +717,11 @@ CPP_class_template(size_t NumStaticCols,
 
   // The number of rows that have been pushed so far.
   //
-  // NOTE: Must not be called while an `asyncPushBlock` is in flight. The rows
-  // of such pushes are only added to `numElementsPushed_` once they are handed
-  // over in complete blocks (or by `finishConcurrentPushes`), which is why the
-  // pending rows of the `asyncPusher_` are added here.
+  // NOTE: Must not be called while an `asyncPushBlock` is in flight (which is
+  // checked by the `asyncPusher_`). The rows of such pushes are only added to
+  // `numElementsPushed_` once they are handed over in complete blocks (or by
+  // `finishConcurrentPushes`), which is why the pending rows of the
+  // `asyncPusher_` are added here.
   size_t size() const {
     return numElementsPushed_ +
            (asyncPusher_.has_value() ? asyncPusher_->numPendingRows() : 0);
@@ -1069,9 +1070,10 @@ class CompressedExternalIdTableSorter
   //
   // NOTE: This function is the *only* one of this class that may be called
   // concurrently. While such pushes are in flight, no other member (not even
-  // the `const` `size()`) may be called; all the pushes have to be completed
-  // first. Afterwards every other member may be used again without further
-  // ado, because they all begin with `finishConcurrentPushes`.
+  // the `const` `size()`) may be called (which is checked, they throw); all
+  // the pushes have to be completed first. Afterwards every other member may be
+  // used again without further ado, because they all begin with
+  // `finishConcurrentPushes`.
   CPP_template(typename Table, typename CompletionToken)(
       requires IdTableLike<Table>) auto asyncPushBlock(const Table& table,
                                                        CompletionToken&&

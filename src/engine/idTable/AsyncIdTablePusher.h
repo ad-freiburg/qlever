@@ -13,6 +13,7 @@
 #include <absl/functional/any_invocable.h>
 
 #include <algorithm>
+#include <atomic>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
@@ -28,6 +29,7 @@
 #include "engine/idTable/IdTableConcepts.h"
 #include "util/AsyncHandlerUtils.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/Forward.h"
 
 namespace ad_utility {
@@ -85,6 +87,13 @@ class AsyncIdTablePusher {
   Allocator allocator_;
   Sink sink_;
 
+  // The number of `asyncPushBlock`s that have been started, but whose
+  // completion handler has not yet been called. It is used to check that no
+  // push is in flight when this is required (see `finish`, `numPendingRows`,
+  // and the destructor). It is the only member that may be accessed from any
+  // thread.
+  std::atomic<size_t> numOperationsInFlight_ = 0;
+
   // All the following members are only accessed from within `strand_` (or by
   // `finish`, when no push is in flight), so no further synchronization is
   // needed.
@@ -100,9 +109,9 @@ class AsyncIdTablePusher {
   // The number of rows of `block_` that have been handed out to pushes, which
   // is also the row at which the next push may start copying.
   size_t numRowsReserved_ = 0;
-  // The number of copies into `block_` that are currently running outside of
-  // the strand. The block may only be handed to the `sink_` once this has
-  // dropped to zero.
+  // The number of copy operations into `block_` that are currently running
+  // outside of the strand. The block may only be handed to the `sink_` once
+  // this has dropped to zero.
   size_t numOutstandingCopies_ = 0;
   // The pushes that found `block_` full while copies into it were still
   // running. They are resumed as soon as the block has been handed over.
@@ -126,6 +135,15 @@ class AsyncIdTablePusher {
         sink_{std::move(sink)},
         block_{numColumns_, allocator_} {
     AD_CONTRACT_CHECK(blocksize_ > 0);
+  }
+
+  // Terminate the program if an `asyncPushBlock` is still in flight, because
+  // it would then access this destroyed object.
+  ~AsyncIdTablePusher() {
+    ad_utility::terminateIfThrows(
+        [this]() { checkNoOperationInFlight(); },
+        "An `AsyncIdTablePusher` was destroyed while an `asyncPushBlock` was "
+        "still in flight.");
   }
 
   // Asynchronously push all the rows of the `table`. Accept any Asio
@@ -152,6 +170,7 @@ class AsyncIdTablePusher {
                      operation = std::move(operation)](auto handler) mutable {
       operation->handler_ =
           makeHandlerExecutorAware(std::move(handler), executor_);
+      numOperationsInFlight_.fetch_add(1, std::memory_order_relaxed);
       boost::asio::dispatch(strand_,
                             [this, operation = std::move(operation)]() mutable {
                               pushNextChunk(std::move(operation));
@@ -165,8 +184,9 @@ class AsyncIdTablePusher {
   // Return the number of pushed rows that have not yet been handed to the
   // `sink_`, which `finish` below then returns.
   //
-  // PRECONDITION: No `asyncPushBlock` is in flight.
+  // PRECONDITION: No `asyncPushBlock` is in flight, which is checked.
   size_t numPendingRows() const {
+    checkNoOperationInFlight();
     return blockIsResized_ ? numRowsReserved_ : 0;
   }
 
@@ -175,9 +195,11 @@ class AsyncIdTablePusher {
   // it can be used again. After a push has completed with an exception, the
   // pushed rows are unspecified.
   //
-  // PRECONDITION: No `asyncPushBlock` is in flight, in particular all of them
-  // have completed and the threads that started them have been joined.
+  // PRECONDITION: No `asyncPushBlock` is in flight (which is checked), in
+  // particular all of them have completed and the threads that started them
+  // have been joined.
   Block finish() {
+    checkNoOperationInFlight();
     AD_CORRECTNESS_CHECK(numOutstandingCopies_ == 0 &&
                          waitingForNextBlock_.empty());
     exception_ = nullptr;
@@ -192,6 +214,14 @@ class AsyncIdTablePusher {
   }
 
  private:
+  // Throw if an `asyncPushBlock` is still in flight.
+  void checkNoOperationInFlight() const {
+    AD_CONTRACT_CHECK(
+        numOperationsInFlight_.load(std::memory_order_acquire) == 0,
+        "An `asyncPushBlock` is still in flight, all of them have to be "
+        "completed first.");
+  }
+
   // Reserve the next range of rows of `block_` for the `operation` and copy
   // them outside of the strand, or complete the `operation` if all its rows
   // have been pushed (or an exception occurred). Must be called on the strand.
@@ -200,6 +230,10 @@ class AsyncIdTablePusher {
     // do for it.
     auto completeIfDone = [this, &operation]() {
       if (exception_ || operation->numPushed_ == operation->numRows_) {
+        // NOTE: The decrement happens before the `handler_` is called (which
+        // posts it), so that everyone who observes the completion also
+        // observes the decremented counter.
+        numOperationsInFlight_.fetch_sub(1, std::memory_order_release);
         std::move(operation->handler_)(exception_);
         return true;
       }
