@@ -337,7 +337,9 @@ addLinkAndDiscoverTest(VocabularyTest vocabulary)
 
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
-addLinkAndDiscoverTestNoLibs(ViewsTest qlever_util)
+addLinkAndDiscoverTestNoLibs(ViewsTest)
+
+addLinkAndDiscoverTestNoLibs(UniqueBlockViewTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 

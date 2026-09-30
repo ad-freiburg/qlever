@@ -55,6 +55,7 @@
 #include "util/UnicodeSupport.h"
 #include "util/Views.h"
 #include "util/json.h"
+#include "util/views/UniqueBlockView.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
