@@ -942,7 +942,11 @@ class SortBlockBuffer {
       for (size_t col = 0; col < numColumns_; ++col) {
         auto source = table.getColumn(col).subspan(beginRow, numNewRows);
         auto destination = target.getColumn(col).subspan(targetRow, numNewRows);
-        ql::ranges::copy(source, destination.begin());
+        // NOTE: Deliberately use `std::copy` instead of `ql::ranges::copy`,
+        // because only the former is reliably turned into a `std::memmove` for
+        // trivially copyable value types like `Id`, see the NOTE in
+        // `IdTable::insertAtEnd`. This is the hot copy of a concurrent push.
+        std::copy(source.begin(), source.end(), destination.begin());
       }
       return;
     }
