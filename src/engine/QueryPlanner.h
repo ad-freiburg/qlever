@@ -442,10 +442,10 @@ class QueryPlanner {
     const SideTuple startCols_;
     const SideTuple targetCols_;
 
-    TransitivePathJoinCols() = default;
-    explicit TransitivePathJoinCols(SideTuple p) : startCols_(p) {}
     TransitivePathJoinCols(SideTuple p, SideTuple s)
-        : startCols_(p), targetCols_(s) {}
+        : startCols_(p), targetCols_(s) {
+      AD_CORRECTNESS_CHECK(startCols_.has_value() || !targetCols_.has_value());
+    }
   };
 
   // Return two pairs of join columns (the first from the transitive path

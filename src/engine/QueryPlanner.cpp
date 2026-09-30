@@ -2582,11 +2582,6 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   auto transitivePathIndex = static_cast<size_t>(!leftSideTransitivePath);
   auto otherIndex = static_cast<size_t>(leftSideTransitivePath);
 
-  // If there is one pair of join columns, then either exactly one side of the
-  // transitive path can be bound (and we return that pair), or the graph
-  // variable is bound (in which case we return `std::nullopt`).
-  auto graphColIndex = TransitivePathBase::firstGraphOrPayloadColumnIndex();
-
   SideTuple colsA;
   SideTuple colsB;
 
@@ -2600,11 +2595,6 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
     } else if (transCol == 1) {
       AD_CORRECTNESS_CHECK(!colsB.has_value());
       colsB = std::make_tuple(transCol, otherCol);
-    } else if (transCol >= graphColIndex) {
-      // We do not need to process the graph column's or payload index.
-      continue;
-    } else {
-      return {};
     }
   }
 
