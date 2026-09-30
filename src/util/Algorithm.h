@@ -193,9 +193,14 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
  */
 template <typename T, typename A, typename B>
 void assignSwap(A&& a, B&& b) {
-  T tmp = static_cast<T>(std::move(a));
-  a = static_cast<T>(std::move(b));
-  b = static_cast<T>(std::move(tmp));
+  // NOLINTBEGIN(bugprone-move-forwarding-reference) -- `A`/`B` exist to
+  // accept a proxy prvalue, not to forward; must always move, like
+  // `std::swap`, so `std::forward` would silently copy instead for a
+  // real `T&` argument.
+  T tmp = static_cast<T>(std::move(a));  // NOSONAR
+  a = static_cast<T>(std::move(b));      // NOSONAR
+  b = static_cast<T>(std::move(tmp));    // NOSONAR
+  // NOLINTEND(bugprone-move-forwarding-reference)
 }
 
 // Remove duplicates in the given vector without changing the order. For
