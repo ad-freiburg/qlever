@@ -11,7 +11,9 @@
 #include <absl/strings/str_cat.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <future>
+#include <mutex>
 #include <optional>
 #include <utility>
 
@@ -618,6 +620,23 @@ CPP_class_template(size_t NumStaticCols,
     compressAndWriteFuture_ = std::move(future);
   }
 
+  // The state of the concurrent pushing of blocks, see
+  // `pushBlockConcurrently`. While that mode is active, the `currentBlock_` is
+  // resized to a complete block up front, and `numRowsReserved_` (and not the
+  // size of the buffer) is the number of rows that have actually been pushed.
+  // All three members are protected by the `concurrentPushMutex_`, and the
+  // condition variable is notified whenever one of them changes.
+  std::mutex concurrentPushMutex_;
+  std::condition_variable concurrentPushCv_;
+  bool blockIsResizedForConcurrentPush_ = false;
+  // The number of rows of the `currentBlock_` that have been handed out to
+  // pushers, which is also the position at which the next pusher may copy.
+  size_t numRowsReserved_ = 0;
+  // The number of pushers that currently copy their rows into the
+  // `currentBlock_`. The block may only be written (and the mode may only be
+  // left) once this has dropped to zero.
+  size_t numOutstandingCopies_ = 0;
+
   // Flag that is `true` if this is the first iteration over the table, and
   // `false` if there has already been a previous iteration.
   std::atomic<bool> isFirstIteration_ = true;
@@ -653,6 +672,7 @@ CPP_class_template(size_t NumStaticCols,
   CPP_template(typename R)(
       requires compressedExternalIdTable::detail::HasPushBack<
           decltype(currentBlock_), R>) void push(const R& row) {
+    finishConcurrentPushes();
     ++numElementsPushed_;
     currentBlock_.push_back(row);
     if (currentBlock_.size() >= blocksize_) {
@@ -671,6 +691,7 @@ CPP_class_template(size_t NumStaticCols,
   // been called for each row individually.
   CPP_template(typename Table)(requires IdTableLike<Table>) void pushBlock(
       const Table& table) {
+    finishConcurrentPushes();
     AD_CONTRACT_CHECK(table.numColumns() == numColumns_);
     const size_t numRows = table.numRows();
     numElementsPushed_ += numRows;
@@ -690,6 +711,77 @@ CPP_class_template(size_t NumStaticCols,
         resetCurrentBlock(true);
       }
     }
+  }
+
+  // A variant of `pushBlock` above that may be called concurrently from
+  // several threads. Its purpose is that the copying of the rows (which for
+  // large blocks is by far the most expensive part of a push) happens in
+  // parallel instead of being serialized by a lock.
+  //
+  // This works as follows: The `currentBlock_` is resized to a complete block
+  // up front, so that a pusher only has to *reserve* the range of rows into
+  // which it then copies. The reserving is what the lock is held for; it is a
+  // handful of integer operations, so the next pusher can start its copy
+  // almost immediately. The only point at which the pushers have to be
+  // synchronized is when a block is full and has to be handed to the sorting
+  // machinery: the pusher that fills the block up waits for all the copies
+  // that are still outstanding before it writes it.
+  //
+  // NOTE: The rows of a single `table` are not necessarily contiguous in the
+  // resulting blocks, and the blocks contain the rows of the concurrent pushes
+  // in an arbitrary order. Only use this for inputs that are sorted (or
+  // otherwise reordered) afterwards anyway, which for the
+  // `CompressedExternalIdTableSorter` is always the case.
+  CPP_template(typename Table)(
+      requires IdTableLike<Table>) void pushBlockConcurrently(const Table&
+                                                                  table) {
+    AD_CONTRACT_CHECK(table.numColumns() == numColumns_);
+    const size_t numRows = table.numRows();
+    size_t numPushed = 0;
+    while (numPushed < numRows) {
+      size_t targetRow = 0;
+      size_t numToPush = 0;
+      {
+        std::unique_lock lock{concurrentPushMutex_};
+        prepareBlockForConcurrentPush(lock);
+        targetRow = numRowsReserved_;
+        numToPush = std::min(concurrentPushBlocksize() - targetRow,
+                             numRows - numPushed);
+        numRowsReserved_ += numToPush;
+        numElementsPushed_ += numToPush;
+        ++numOutstandingCopies_;
+      }
+      // NOTE: This is the expensive part, and it deliberately runs without the
+      // lock being held, so that it runs concurrently with the copies of the
+      // other pushers.
+      insertIntoCurrentBlockAt(table, numPushed, numPushed + numToPush,
+                               targetRow);
+      numPushed += numToPush;
+      {
+        std::lock_guard lock{concurrentPushMutex_};
+        AD_CORRECTNESS_CHECK(numOutstandingCopies_ > 0);
+        --numOutstandingCopies_;
+      }
+      concurrentPushCv_.notify_all();
+    }
+  }
+
+  // Leave the mode of `pushBlockConcurrently` above, if it is currently
+  // active: Wait for all outstanding copies and shrink the `currentBlock_`
+  // back to the rows that were actually pushed, so that all the other
+  // functions of this class see the buffer in its normal state again. This is
+  // called by all those functions, so that `pushBlockConcurrently` may be
+  // freely mixed with them.
+  void finishConcurrentPushes() {
+    std::unique_lock lock{concurrentPushMutex_};
+    if (!blockIsResizedForConcurrentPush_) {
+      return;
+    }
+    concurrentPushCv_.wait(lock,
+                           [this]() { return numOutstandingCopies_ == 0; });
+    currentBlock_.resize(numRowsReserved_);
+    blockIsResizedForConcurrentPush_ = false;
+    numRowsReserved_ = 0;
   }
 
   // ___________________________________________________________________
@@ -713,6 +805,7 @@ CPP_class_template(size_t NumStaticCols,
   // currently active, else an exception is thrown by the underlying
   // `CompressedExternalIdTableWriter`.
   void clear() {
+    finishConcurrentPushes();
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
     waitForFuture();
@@ -723,6 +816,67 @@ CPP_class_template(size_t NumStaticCols,
   }
 
  protected:
+  // The number of rows of a complete block in the mode of
+  // `pushBlockConcurrently`. It is the `blocksize_`, except that a
+  // `blocksize_` of zero (which only happens for the very small memory limits
+  // of some unit tests) is rounded up to one, so that every push makes
+  // progress.
+  size_t concurrentPushBlocksize() const {
+    return std::max<size_t>(blocksize_, 1);
+  }
+
+  // Copy the rows `[beginRow, endRow)` of the `table` into the already
+  // existing rows of the `currentBlock_` that start at `targetRow`. In
+  // contrast to `IdTable::insertAtEnd` this doesn't change the size of the
+  // `currentBlock_`, so several such copies into disjoint target ranges may
+  // run concurrently, see `pushBlockConcurrently` above.
+  CPP_template(typename Table)(
+      requires IdTableLike<
+          Table>) void insertIntoCurrentBlockAt(const Table& table,
+                                                size_t beginRow, size_t endRow,
+                                                size_t targetRow) {
+    AD_CORRECTNESS_CHECK(beginRow <= endRow && endRow <= table.numRows());
+    const size_t numNewRows = endRow - beginRow;
+    AD_CORRECTNESS_CHECK(targetRow + numNewRows <= currentBlock_.numRows());
+    for (size_t col = 0; col < numColumns_; ++col) {
+      auto source = table.getColumn(col).subspan(beginRow, numNewRows);
+      auto destination =
+          currentBlock_.getColumn(col).subspan(targetRow, numNewRows);
+      // NOTE: Deliberately use `std::copy` and not `ql::ranges::copy`, because
+      // only the former is reliably turned into a `std::memmove`, see the
+      // detailed note in `IdTable::insertAtEnd`.
+      std::copy(source.begin(), source.end(), destination.begin());
+    }
+  }
+
+  // Make sure that the `currentBlock_` is resized to a complete block and has
+  // room for at least one more row, writing it out if it is already full. The
+  // `lock` (which has to be held on the `concurrentPushMutex_`) is temporarily
+  // released while waiting for the outstanding copies of the other pushers.
+  // See `pushBlockConcurrently` above.
+  void prepareBlockForConcurrentPush(std::unique_lock<std::mutex>& lock) {
+    if (!blockIsResizedForConcurrentPush_) {
+      numRowsReserved_ = currentBlock_.numRows();
+      currentBlock_.resize(concurrentPushBlocksize());
+      blockIsResizedForConcurrentPush_ = true;
+    }
+    while (numRowsReserved_ >= concurrentPushBlocksize()) {
+      if (numOutstandingCopies_ > 0) {
+        // Note: The predicate of the enclosing loop is rechecked after the
+        // wait, because another pusher may have written the block in the
+        // meantime, in which case there is nothing left to do here.
+        concurrentPushCv_.wait(lock);
+        continue;
+      }
+      // The block is exactly full and nobody is copying into it anymore, so it
+      // can be written. The next block is then again resized up front.
+      transformAndWriteBlock(std::move(currentBlock_));
+      resetCurrentBlock(true);
+      currentBlock_.resize(concurrentPushBlocksize());
+      numRowsReserved_ = 0;
+    }
+  }
+
   // Clear the current block. If `reserve` is `true`, we subsequently also
   // reserve the `blocksize_`.
   void resetCurrentBlock(bool reserve) {
@@ -763,6 +917,7 @@ CPP_class_template(size_t NumStaticCols,
   // and return `true`. Using this function allows for an efficient usage of
   // this class for very small inputs.
   bool transformAndPushLastBlock() {
+    finishConcurrentPushes();
     if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
     }
@@ -863,6 +1018,10 @@ class CompressedExternalIdTableSorterTypeErased {
   virtual void pushBlock(const IdTableStatic<0>& block) = 0;
   // Push a complete block given as a non-owning view at once.
   virtual void pushBlock(const IdTableView<0>& block) = 0;
+  // Push a complete block given as a non-owning view, in a way that several
+  // threads may do at the same time, see
+  // `CompressedExternalIdTableBase::pushBlockConcurrently`.
+  virtual void pushBlockConcurrently(const IdTableView<0>& block) = 0;
   // Get the sorted output after all blocks have been pushed. If `blocksize ==
   // nullopt`, the size of the returned blocks will be chosen automatically.
   virtual ad_utility::InputRangeTypeErased<IdTableStatic<0>> getSortedOutput(
@@ -983,6 +1142,9 @@ class CompressedExternalIdTableSorter
   // Explicitly inherit the `push` function, such that we can use it unqualified
   // within this class.
   using Base::push;
+  // The override of the type-erased interface below would otherwise hide the
+  // template of the base class, which takes any kind of `IdTable`.
+  using Base::pushBlockConcurrently;
 
   // Set the executor on which the merge phase runs, together with the number of
   // threads that run that executor. Use this to share a thread pool with other
@@ -1056,6 +1218,12 @@ class CompressedExternalIdTableSorter
   // given as a non-owning view at once.
   void pushBlock(const IdTableView<0>& block) override {
     Base::pushBlock(block);
+  }
+
+  // The implementation of the type-erased interface. Push a complete block
+  // given as a non-owning view, concurrently with other pushes.
+  void pushBlockConcurrently(const IdTableView<0>& block) override {
+    Base::pushBlockConcurrently(block);
   }
 
   // The implementation of the type-erased interface. Get the sorted blocks as
