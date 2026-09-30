@@ -126,6 +126,14 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 // (which the deduplication never changes, because it is the last element of a
 // sorted block) is recorded before the block is handed to the pool. The blocks
 // are yielded in their original order.
+//
+// NOTE: A block that becomes completely empty (all of its elements were
+// duplicates of the last element of the previous block) is skipped, so the
+// number of yielded blocks may be smaller than the number of input blocks.
+//
+// NOTE: `numBlocksInFlight` input blocks are held in memory at the same time.
+// A value of zero (the default) means twice the number of threads of the
+// global thread pool.
 template <typename SortedBlockView,
           typename BlockType = ql::ranges::range_value_t<SortedBlockView>,
           typename ValueType = ql::ranges::range_value_t<BlockType>>
