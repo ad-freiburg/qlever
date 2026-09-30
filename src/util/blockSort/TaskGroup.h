@@ -16,13 +16,16 @@
 #include <absl/functional/any_invocable.h>
 
 #include <atomic>
+#include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <cstddef>
 #include <exception>
+#include <functional>
 #include <mutex>
 #include <utility>
 
@@ -36,18 +39,29 @@ namespace ad_utility::blockSort::detail {
 
 namespace net = boost::asio;
 
-// The children that a coroutine spawns onto an executor, with structured
-// exception handling: a group only exists inside `withChildren` or
-// `runConcurrently`, which always wait for all of its children, also if the
-// parent throws after spawning some of them, and then rethrow the first
-// exception of the parent or of a child. Exceptions hence propagate through the
-// awaiting coroutines like through ordinary function calls.
+// Run several tasks (coroutines or plain functions) concurrently on an
+// executor and wait asynchronously until all of them have finished, similar to
+// `boost::asio::experimental::make_parallel_group` or
+// `std::execution::when_all`. A group only exists inside `withChildren` or
+// `runConcurrently`: they run the code of the parent, which may spawn children
+// into the group, and then suspend the parent (without blocking a thread) until
+// all children have finished, also if the parent threw after spawning some of
+// them.
 //
-// Replaces Boost's `counter` + `backbone::exec`: a parent that waits for its
-// children suspends instead of spinning.
+// Exceptions: an exception of the parent or of a child doesn't cancel the other
+// tasks of the group. Once all of them have finished, the first exception that
+// was recorded is rethrown to the caller of `withChildren` or
+// `runConcurrently` (if several tasks fail concurrently, which one is
+// unspecified), and all others are dropped. Exceptions hence propagate through
+// the awaiting coroutines like through ordinary function calls.
 //
-// An exception also sets the `stopped` flag that all groups of a sort share, so
-// that children that haven't started yet anywhere in the sort are skipped.
+// Stopping: all groups of a sort share the `stopped` flag, which the first
+// exception anywhere in the sort sets (it is never reset). From then on,
+// children that haven't started yet are skipped in all groups and count as
+// finished, while running children and the code of the parents run to
+// completion. A group whose children were only skipped finishes without an
+// exception; the exception reaches the caller of the sort through the group of
+// the failed task and the groups that await it.
 //
 // NOTE: A failure to allocate the bookkeeping of a child (the queued handler or
 // the frame of a coroutine) terminates the program, see `postChild`.
@@ -59,8 +73,8 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
   std::atomic<bool>& stopped_;
   // The first exception of the parent or of a child.
   ad_utility::Synchronized<std::exception_ptr, std::mutex> firstError_;
-  // The unfinished children, plus one for the parent until `join()` has stored
-  // its handler.
+  // The number of unfinished children, plus one for the parent until `join()`
+  // has stored its handler.
   std::atomic<size_t> numPending_{1};
   // Resumes the parent. Only used by whoever brings `numPending_` to zero.
   absl::AnyInvocable<void() &&> resumeParent_;
@@ -166,8 +180,17 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
   auto initiateJoin(CompletionToken&& token) {
     return net::async_initiate<CompletionToken, void()>(
         [this](auto handler) {
-          // Store the handler before giving up the parent's count.
-          resumeParent_ = std::move(handler);
+          // Store the handler before giving up the parent's count. It resumes
+          // the parent via the associated executor of the handler (the
+          // executor of the parent's coroutine): inline if the calling thread
+          // already runs on it, e.g. if the last child ran on the same thread
+          // pool, otherwise via a hop to that executor.
+          resumeParent_ = [handler = std::move(handler),
+                           executor = &executor_]() mutable {
+            auto handlerExecutor =
+                net::get_associated_executor(handler, *executor);
+            net::dispatch(handlerExecutor, std::move(handler));
+          };
           if (numPending_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
             // All children are done. Post, because we are still inside the
             // initiation.
@@ -211,7 +234,7 @@ class TaskGroup : public ad_utility::NoCopyNoMove {
   // `*this`, so the handler is moved out into a temporary first.
   void childIsDone() {
     if (numPending_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-      std::exchange(resumeParent_, nullptr)();
+      std::invoke(std::exchange(resumeParent_, nullptr));
     }
   }
 };

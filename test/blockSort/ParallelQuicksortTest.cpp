@@ -16,16 +16,17 @@
 #include <array>
 #include <atomic>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <future>
 #include <memory>
 #include <random>
-#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -55,6 +56,7 @@ namespace {
 
 namespace net = boost::asio;
 using namespace ad_utility::blockSort::detail;
+using namespace ad_utility::blockSort::detail::quicksort;
 
 // The thread pool shared by all tests.
 constexpr uint32_t numPoolThreads = 8;
@@ -63,8 +65,21 @@ boost::asio::thread_pool& threadPool() {
   return pool;
 }
 
+// The exception that the tests throw. Its message is a string literal, so that
+// it owns no memory besides the exception object itself. The freeing of a
+// message that is owned by the exception (e.g. by a `std::runtime_error`) would
+// be reported as a false positive by TSAN, see `misc/tsan-suppressions.txt`.
+class TestException : public std::exception {
+ private:
+  const char* message_;
+
+ public:
+  explicit TestException(const char* message) : message_{message} {}
+  const char* what() const noexcept override { return message_; }
+};
+
 // The message of the exception that a `FuzzCompare` throws.
-constexpr std::string_view comparisonFailed = "comparison failed";
+constexpr const char* comparisonFailed = "comparison failed";
 
 // A comparator whose behavior is chosen at runtime: it sorts by `Less` in
 // ascending or descending order, and it can throw on its `throwAt`-th call
@@ -81,7 +96,7 @@ struct FuzzCompare {
   template <typename A, typename B>
   bool operator()(const A& a, const B& b) const {
     if (callsUntilThrow_->fetch_sub(1, std::memory_order_relaxed) == 0) {
-      throw std::runtime_error{std::string{comparisonFailed}};
+      throw TestException{comparisonFailed};
     }
     return descending_ ? Less{}(b, a) : Less{}(a, b);
   }
@@ -307,11 +322,13 @@ void fuzzSort(size_t numIterations, bool withFailures) {
       ql::ranges::reverse(keys);
     }
 
+    // `throwAt` may exceed the number of comparisons of the sort, so the sort
+    // may or may not throw, hence no `AD_EXPECT_THROW_WITH_MESSAGE`.
     bool threw = false;
     try {
       runSortOn<Values>(values, comp, maxElementsPerTask);
-    } catch (const std::runtime_error& e) {
-      EXPECT_EQ(e.what(), comparisonFailed);
+    } catch (const TestException& e) {
+      EXPECT_STREQ(e.what(), comparisonFailed);
       threw = true;
     }
     if (threw) {
@@ -324,7 +341,7 @@ void fuzzSort(size_t numIterations, bool withFailures) {
 
 // The fuzzer for one value type, with and without failures, and the rejection
 // of too small tasks (a task must sort at least 16 elements on its own, see
-// `movePivotToFront`) with the same comparator.
+// `computePivotAndMoveToFront`) with the same comparator.
 template <typename Values>
 void testValueType(size_t numIterations) {
   fuzzSort<Values>(numIterations, false);
@@ -351,8 +368,25 @@ void spawnSlowChild(TaskGroup& group, std::atomic<bool>& finished) {
 
 // A coroutine that throws.
 net::awaitable<void> throwingCoroutine() {
-  throw std::runtime_error{"coroutine failed"};
+  throw TestException{"coroutine failed"};
   co_return;
+}
+
+// Await `withChildren` with `numChildren` children on the shared thread pool,
+// and return whether the awaiting coroutine runs on `strand` afterwards.
+net::awaitable<bool> isOnStrandAfterJoin(
+    const net::strand<ql::any_io_executor>& strand, size_t numChildren) {
+  ql::any_io_executor executor = threadPool().get_executor();
+  std::atomic<bool> stopped{false};
+  co_await TaskGroup::withChildren(
+      executor, stopped, [numChildren](TaskGroup& group) {
+        for (size_t i = 0; i < numChildren; ++i) {
+          group.spawnFunction([] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+          });
+        }
+      });
+  co_return strand.running_in_this_thread();
 }
 
 // A coroutine that sets `flag`.
@@ -381,11 +415,30 @@ TEST(ParallelQuicksort, idTableRows) {
 // _____________________________________________________________________________
 // The default number of elements per task shrinks with the size of the
 // elements, down to a minimum.
-TEST(ParallelQuicksort, maxElementsPerTask) {
-  EXPECT_EQ(maxElementsPerTask<char>(), size_t{1} << 18);
-  EXPECT_EQ(maxElementsPerTask<uint32_t>(), size_t{1} << 17);
-  EXPECT_EQ((maxElementsPerTask<std::array<char, 64>>()), size_t{1} << 15);
-  EXPECT_EQ((maxElementsPerTask<std::array<char, 4096>>()), size_t{1} << 13);
+TEST(ParallelQuicksort, defaultMaxElementsPerTask) {
+  EXPECT_EQ(defaultMaxElementsPerTask<char>(), size_t{1} << 18);
+  EXPECT_EQ(defaultMaxElementsPerTask<uint32_t>(), size_t{1} << 17);
+  EXPECT_EQ((defaultMaxElementsPerTask<std::array<char, 64>>()),
+            size_t{1} << 15);
+  EXPECT_EQ((defaultMaxElementsPerTask<std::array<char, 4096>>()),
+            size_t{1} << 13);
+}
+
+// _____________________________________________________________________________
+// `median3` sorts its three elements in place and returns the middle one, for
+// all orders of the elements, also with duplicates.
+TEST(ParallelQuicksort, median3) {
+  for (std::array<int, 3> sorted :
+       {std::array{1, 2, 3}, std::array{1, 2, 2}, std::array{1, 1, 2}}) {
+    auto values = sorted;
+    do {
+      auto input = values;
+      auto median = median3(input.begin(), input.begin() + 1, input.begin() + 2,
+                            std::less<>{});
+      EXPECT_EQ(median, input.begin() + 1) << ::testing::PrintToString(values);
+      EXPECT_EQ(input, sorted) << ::testing::PrintToString(values);
+    } while (std::next_permutation(values.begin(), values.end()));
+  }
 }
 
 // _____________________________________________________________________________
@@ -419,22 +472,21 @@ TEST(TaskGroup, keepsFirstException) {
   ql::any_io_executor executor = threadPool().get_executor();
   std::atomic<bool> stopped{false};
   std::atomic<bool> childStarted{false};
-  try {
-    runOnPool(TaskGroup::withChildren(executor, stopped, [&](TaskGroup& group) {
-      group.spawnFunction([&childStarted] {
-        childStarted = true;
-        throw std::runtime_error{"child failed"};
-      });
-      while (!childStarted) {
-        std::this_thread::yield();
-      }
-      throw std::runtime_error{"body failed"};
-    }));
-    ADD_FAILURE() << "No exception was thrown";
-  } catch (const std::runtime_error& e) {
-    EXPECT_THAT(e.what(), ::testing::AnyOf(::testing::StrEq("child failed"),
-                                           ::testing::StrEq("body failed")));
-  }
+  auto body = [&childStarted](TaskGroup& group) {
+    group.spawnFunction([&childStarted] {
+      childStarted = true;
+      throw TestException{"child failed"};
+    });
+    while (!childStarted) {
+      std::this_thread::yield();
+    }
+    throw TestException{"body failed"};
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      runOnPool(TaskGroup::withChildren(executor, stopped, body)),
+      ::testing::AnyOf(::testing::StrEq("child failed"),
+                       ::testing::StrEq("body failed")),
+      TestException);
 }
 
 // _____________________________________________________________________________
@@ -483,12 +535,11 @@ TEST(TaskGroup, propagatesExceptions) {
     EXPECT_TRUE(slowFinished);
     EXPECT_TRUE(stopped);
   };
-  expectThrows([](TaskGroup&) { throw std::runtime_error{"body failed"}; },
+  expectThrows([](TaskGroup&) { throw TestException{"body failed"}; },
                "body failed");
   expectThrows(
       [](TaskGroup& group) {
-        group.spawnFunction(
-            [] { throw std::runtime_error{"function failed"}; });
+        group.spawnFunction([] { throw TestException{"function failed"}; });
       },
       "function failed");
   expectThrows([](TaskGroup& group) { group.spawn(throwingCoroutine()); },
@@ -527,4 +578,19 @@ TEST(TaskGroup, skipsChildrenWhenStopped) {
                                        setFlag(ran)));
   EXPECT_TRUE(inlinedRan);
   EXPECT_FALSE(ran);
+}
+
+// _____________________________________________________________________________
+// The parent is resumed on the executor of its coroutine (here a strand), not
+// on the thread of the child that finished last. Without children, the parent
+// is resumed from within `join()`, which is a separate code path.
+TEST(TaskGroup, resumesParentOnItsExecutor) {
+  auto strand =
+      net::make_strand(ql::any_io_executor{threadPool().get_executor()});
+  for (size_t numChildren : {0, 1, 5}) {
+    EXPECT_TRUE(net::co_spawn(strand, isOnStrandAfterJoin(strand, numChildren),
+                              net::use_future)
+                    .get())
+        << "numChildren=" << numChildren;
+  }
 }
