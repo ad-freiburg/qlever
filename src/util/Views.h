@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_UTIL_VIEWS_H
 #define QLEVER_SRC_UTIL_VIEWS_H
 
+#include <boost/asio/packaged_task.hpp>
+#include <boost/asio/post.hpp>
 #include <deque>
 #include <future>
 #include <iterator>
@@ -23,7 +25,6 @@
 #include "util/GlobalExecutor.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
-#include "util/PostAndGetFuture.h"
 #include "util/ResetWhenMoved.h"
 
 namespace ad_utility {
@@ -167,7 +168,7 @@ InputRangeTypeErased<BlockType> uniqueBlockView(SortedBlockView view,
     // block before it (if any). This is the part that runs on the pool.
     static BlockType deduplicate(BlockType block,
                                  std::optional<ValueType> lastOfPrevious) {
-      auto beg = lastOfPrevious
+      auto beg = lastOfPrevious.has_value()
                      ? ql::ranges::find_if(
                            block, [&p = lastOfPrevious.value()](
                                       const auto& el) { return el != p; })
@@ -188,17 +189,18 @@ InputRangeTypeErased<BlockType> uniqueBlockView(SortedBlockView view,
         numInputs_ += block.size();
         auto lastOfPrevious = lastValueFromPreviousBlock_;
         lastValueFromPreviousBlock_ = block.back();
-        pending_.push_back(postAndGetFuture(
+        pending_.push_back(boost::asio::post(
             globalExecutor(),
-            [block = std::move(block),
-             lastOfPrevious = std::move(lastOfPrevious)]() mutable {
+            std::packaged_task<BlockType()>{[block = std::move(block),
+                                             lastOfPrevious = std::move(
+                                                 lastOfPrevious)]() mutable {
               return deduplicate(std::move(block), std::move(lastOfPrevious));
-            }));
+            }}));
       }
     }
 
     std::optional<BlockType> get() override {
-      while (true) {
+      for (;;) {
         fillPipeline();
         if (pending_.empty()) {
           AD_LOG_INFO << "Number of inputs to `uniqueView`: " << numInputs_
