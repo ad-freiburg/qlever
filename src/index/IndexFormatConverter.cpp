@@ -155,15 +155,15 @@ std::string filenameForPermutation(std::string_view basename,
 // cannot be used to look up a key in a `nlohmann::json` object.
 constexpr const char* indexFormatVersionKey = "index-format-version";
 
-// Check that the source and the target format of this converter (see
-// `sourceVersion` and `targetVersion`) still are the previous resp. the current
-// index format. If they are not, then the index format has changed again and
-// this converter has to be updated (see the note at
-// `qlever::indexFormatVersion`), so this is a programming error and not
-// something that a user can fix.
+// Check that the source format of this converter (see `sourceVersion`) still
+// is the previous index format, and that its target format (see
+// `targetVersion`) still is a format that the current version of QLever loads
+// without conversion. If not, then the index format has changed again and this
+// converter has to be updated (see the note at `qlever::indexFormatVersion`),
+// so this is a programming error and not something that a user can fix.
 void checkThatTheSupportedFormatsAreUpToDate() {
   AD_CORRECTNESS_CHECK(
-      targetVersion == indexFormatVersion,
+      isLoadableIndexFormatVersion(targetVersion),
       "The index converter converts to the index format ",
       versionAsString(targetVersion), ", but the current index format is ",
       versionAsString(indexFormatVersion),
@@ -199,9 +199,11 @@ nlohmann::json readAndCheckConfiguration(const std::string& basename) {
   }
   auto version =
       configuration.at(indexFormatVersionKey).get<IndexFormatVersion>();
-  if (version == targetVersion) {
+  if (isLoadableIndexFormatVersion(version)) {
     throw std::runtime_error{absl::StrCat(
-        "The index \"", basename, "\" already is in the current index format (",
+        "The index \"", basename,
+        "\" already is in an index format that the current version of QLever "
+        "can use (",
         versionAsString(version), "), so there is nothing to convert.")};
   }
   if (version != sourceVersion) {
@@ -366,27 +368,24 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
 // only complete once the multiplicities have been exchanged with the twin
 // permutation (see `permutationPairs` above).
 //
-// NOTE: The block size of the permutation is not stored in an index, so the
-// converted permutation uses the default, exactly like a freshly built index
-// (`IndexImpl::blocksizePermutationPerColumn_`, which nothing but a unit test
-// ever changes, and correspondingly `blocksizeOfConvertedPermutations` here).
-// The blocks of the converted permutation may therefore differ from the blocks
-// of the permutation that it was converted from, which is irrelevant for its
-// content, but not for its metadata: a relation that is large enough to occupy
-// blocks of its own in the permutation that is converted can be small enough to
-// share a block with other relations in the converted permutation. Such a
-// relation has no `CompressedRelationMetadata` of its own anymore, that
-// metadata is derived from its block instead (see
+// NOTE: The permutation is written with `rowsPerBlock`, the block size of the
+// index that is converted (see `convertIndexToCurrentFormat`), so it has
+// exactly the blocks of a fresh build of that index. These blocks can still
+// differ from the blocks of the permutation that it was converted from, which
+// is irrelevant for its content, but not for its metadata: a relation that is
+// large enough to occupy blocks of its own in the permutation that is converted
+// can be small enough to share a block with other relations in the converted
+// permutation. Such a relation has no `CompressedRelationMetadata` of its own
+// anymore, that metadata is derived from its block instead (see
 // `CompressedRelationReader::getMetadataForSmallRelation`). The number of
 // blocks, the `numRows_` and the multiplicities of the converted permutation
 // can therefore differ from those of the permutation that it was converted
 // from; they are exactly those that a freshly built index would have.
 IndexMetaData writePermutation(
-    const std::string& filename, size_t numColumns,
+    const std::string& filename, size_t numColumns, size_t rowsPerBlock,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> blocks) {
   auto writer = std::make_unique<CompressedRelationWriter>(
-      numColumns, ad_utility::File{filename, "w"},
-      blocksizeOfConvertedPermutations());
+      numColumns, ad_utility::File{filename, "w"}, rowsPerBlock);
   IndexMetaData metaData;
   auto callback =
       [&metaData](ql::span<const CompressedRelationMetadata> metadata) {
@@ -508,12 +507,12 @@ Index::NumNormalAndInternal numPermutationsOfIndex(
 // threadsafe `progress` callback instead of being logged here.
 IndexMetaData convertPermutation(const Permutation& oldPermutation,
                                  const std::string& newBasename,
-                                 bool isInternal,
+                                 bool isInternal, size_t rowsPerBlock,
                                  const std::function<void(size_t)>& progress) {
   std::string newFilename =
       filenameForPermutation(newBasename, oldPermutation, isInternal);
   auto newMetaData =
-      writePermutation(newFilename, getNumColumns(oldPermutation),
+      writePermutation(newFilename, getNumColumns(oldPermutation), rowsPerBlock,
                        scanAndConvertIds(oldPermutation, progress));
   newMetaData.setName(oldPermutation.metaData().getName());
   verifyConvertedPermutation(oldPermutation.metaData(), newMetaData,
@@ -524,10 +523,11 @@ IndexMetaData convertPermutation(const Permutation& oldPermutation,
 // Convert all permutations of the index with the base name `oldBasename` and
 // write them to the index with the base name `newBasename`. The `numTriples`
 // are the numbers of triples from the configuration of that index, which are
-// the total for the progress bar below.
+// the total for the progress bar below, and `rowsPerBlock` is its block size.
 void convertPermutations(const std::string& oldBasename,
                          const std::string& newBasename,
                          const Index::NumNormalAndInternal& numTriples,
+                         size_t rowsPerBlock,
                          std::vector<fs::path>& handledFiles) {
   // Each triple is written once per permutation, which gives the total number
   // of triples that the conversion of the permutations writes.
@@ -590,9 +590,10 @@ void convertPermutations(const std::string& oldBasename,
     // `futureB` waits for the other conversion to finish before the exception
     // leaves this function. That is exactly what we want: no thread must still
     // be writing to the incomplete index when the caller handles the error.
-    auto convert = [&newBasename, isInternal,
+    auto convert = [&newBasename, isInternal, rowsPerBlock,
                     &progress](const Permutation& permutation) {
-      return convertPermutation(permutation, newBasename, isInternal, progress);
+      return convertPermutation(permutation, newBasename, isInternal,
+                                rowsPerBlock, progress);
     };
     auto futureB =
         std::async(std::launch::async, convert, std::cref(*permutationB));
@@ -634,10 +635,10 @@ void convertPatterns(const std::string& oldBasename,
 
 // Convert the materialized view with the given `name` of the index with the
 // base name `oldBasename` and write it to the index with the base name
-// `newBasename`.
+// `newBasename`, with the block size `rowsPerBlock` of that index.
 void convertMaterializedView(const std::string& oldBasename,
                              const std::string& newBasename,
-                             const std::string& name) {
+                             const std::string& name, size_t rowsPerBlock) {
   AD_LOG_INFO << "Converting the materialized view \"" << name << "\" ..."
               << std::endl;
   std::string oldViewBasename = materializedViewFilenameBase(oldBasename, name);
@@ -656,7 +657,7 @@ void convertMaterializedView(const std::string& oldBasename,
   ad_utility::ConcurrentProgressBar progressBar{
       "Triples converted: ", numTriples, batchSizeFor(numTriples)};
   auto newMetaData = writePermutation(
-      newFilename, getNumColumns(oldPermutation),
+      newFilename, getNumColumns(oldPermutation), rowsPerBlock,
       scanAndConvertIds(oldPermutation, progressCallbackFor(progressBar)));
   progressBar.logFinalProgressString();
   newMetaData.setName(newViewBasename);
@@ -687,9 +688,11 @@ void convertMaterializedView(const std::string& oldBasename,
 }
 
 // Convert all materialized views of the index with the base name `oldBasename`
-// and write them to the index with the base name `newBasename`.
+// and write them to the index with the base name `newBasename`, with the block
+// size `rowsPerBlock` of that index.
 void convertMaterializedViews(const std::string& oldBasename,
-                              const std::string& newBasename) {
+                              const std::string& newBasename,
+                              size_t rowsPerBlock) {
   // Each view has exactly one info file, so the names of the views are exactly
   // the infixes of those files (`<basename>.view.<name><suffix>`).
   auto viewFiles =
@@ -718,7 +721,7 @@ void convertMaterializedViews(const std::string& oldBasename,
         "view, or delete the incomplete views.")};
   }
   for (const auto& name : names) {
-    convertMaterializedView(oldBasename, newBasename, name);
+    convertMaterializedView(oldBasename, newBasename, name, rowsPerBlock);
   }
 }
 
@@ -843,6 +846,11 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
   auto configuration = readAndCheckConfiguration(oldBasename);
   throwIfPersistedUpdatesExist(oldBasename);
 
+  // The converted permutations must have the block size of the index that is
+  // converted, because the configuration (which records that block size) is
+  // copied unchanged, see below.
+  size_t rowsPerBlock = IndexImpl::rowsPerBlock(configuration);
+
   // The converted index must not overwrite any existing file.
   fs::path newDirectory = fs::path{newBasename}.parent_path();
   if (!newDirectory.empty()) {
@@ -867,11 +875,11 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
   convertPermutations(
       oldBasename, newBasename,
       static_cast<Index::NumNormalAndInternal>(configuration.at("num-triples")),
-      handledFiles);
+      rowsPerBlock, handledFiles);
   convertPatterns(oldBasename, newBasename, handledFiles);
   copyFilesThatNeedNoConversion(oldBasename, newBasename, handledFiles);
   checkAllFilesWereHandled(oldBasename, handledFiles);
-  convertMaterializedViews(oldBasename, newBasename);
+  convertMaterializedViews(oldBasename, newBasename, rowsPerBlock);
 
   // Write the configuration last, with the version of the target format. An
   // index without its configuration file cannot be loaded at all, so if the

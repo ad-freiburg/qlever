@@ -19,6 +19,7 @@
 #include "index/GraphFilter.h"
 #include "rdfTypes/Variable.h"
 #include "util/Algorithm.h"
+#include "util/ContainersWithAllocator.h"
 
 // Operation that produces a single-column result containing all distinct
 // graph IRIs present in the index. It is used to evaluate SPARQL patterns of
@@ -92,8 +93,8 @@ class DistinctGraphs : public Operation {
 
  private:
   // `DistinctGraphs` reads directly from the index and has no children.
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override {
-    return {};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
   }
 
   // The variable name is not part of the cache key, the result is the same
