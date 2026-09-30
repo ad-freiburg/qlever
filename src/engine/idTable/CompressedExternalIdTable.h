@@ -23,6 +23,7 @@
 #include <variant>
 
 #include "backports/algorithm.h"
+#include "backports/asio.h"
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
 #include "engine/idTable/ExternalSorterSettings.h"
@@ -1821,15 +1822,12 @@ class CompressedExternalIdTableSorter
   // See the `moveResultOnMerge()` getter function for documentation.
   bool moveResultOnMerge_ = true;
 
-  // The executor on which the merge phase runs, together with the number of
-  // threads that run it.
-  //
-  // NOTE: The default executor is the process-wide shared thread pool (see
-  // `ad_utility::globalExecutor`), so the assumed parallelism has to be the
-  // size of exactly that pool and not the number of hardware threads. The two
-  // differ as soon as the pool was sized explicitly, for example via the
-  // `--num-threads` option of the index builder.
-  boost::asio::any_io_executor mergeExecutor_ =
+  // The executor on which the merge phase runs, and the number of chunks that
+  // are merged concurrently on it. The parallelism is only a performance hint
+  // and doesn't have to equal the number of threads of the executor: A smaller
+  // value leaves part of a (possibly much larger) executor to other work, a
+  // larger one merely oversubscribes it.
+  ql::any_io_executor mergeExecutor_ =
       compressedExternalIdTable::defaultSorterMergeExecutor();
   size_t mergeParallelism_ = ad_utility::globalExecutorNumThreads();
 
@@ -1892,8 +1890,7 @@ class CompressedExternalIdTableSorter
   //
   // IMPORTANT: The `executor` must not be run by the thread that consumes the
   // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`.
-  void setMergeExecutor(boost::asio::any_io_executor executor,
-                        size_t parallelism) {
+  void setMergeExecutor(ql::any_io_executor executor, size_t parallelism) {
     AD_CONTRACT_CHECK(parallelism > 0);
     mergeExecutor_ = std::move(executor);
     mergeParallelism_ = parallelism;
@@ -1941,10 +1938,6 @@ class CompressedExternalIdTableSorter
     AD_CONTRACT_CHECK(!mergeIsActive_.load());
     mergeIsActive_.store(true);
 
-    // NOTE: The blocks are read ahead by the merge itself (see
-    // `numBufferedOutputBlocks_` and
-    // `parallelBlockMerge::MergeOptions::numPrefetchedOutputBlocks`), so no
-    // asynchronous stream is needed on top of it.
     using namespace ad_utility;
     return InputRangeTypeErased{
         CallbackOnEndView{sortedBlocks<N>(blocksize), [&, this]() noexcept {
@@ -1995,11 +1988,9 @@ class CompressedExternalIdTableSorter
           auto block = blocks.get();
           if (!block.has_value()) {
             AD_CORRECTNESS_CHECK(
-                numPopped == sorter->numElementsPushed_, [&numPopped, sorter] {
-                  return absl::StrCat(
-                      "numPopped: ", numPopped,
-                      "num elements pushed:", sorter->numElementsPushed_);
-                });
+                numPopped == sorter->numElementsPushed_,
+                "numPopped: ", numPopped,
+                ", num elements pushed: ", sorter->numElementsPushed_);
             return LoopControl::makeBreak();
           }
           numPopped += block.value().numRows();

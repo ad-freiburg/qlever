@@ -51,11 +51,16 @@ size_t globalExecutorNumThreads();
 // call to this function.
 //
 // There is deliberately only a single such pool: its users are the phases of
-// the index build (the merge phase of the external sorters and the permutation
-// writer), which all want to use the machine's threads and would oversubscribe
-// it if each of them had a pool of its own. A single pool also makes the total
-// parallelism of the process configurable via a single knob (the `--num-threads
-// / -j` option of the index builder, see `setGlobalExecutorNumThreads`).
+// the index build, all of which want to use the machine's threads and would
+// oversubscribe it if each of them had a pool of its own. A single pool also
+// makes the total parallelism of the process configurable via a single knob
+// (the `--num-threads / -j` option of the index builder, see
+// `setGlobalExecutorNumThreads`).
+//
+// NOTE: So far the users are the merge phase of the external sorters (see
+// `engine/idTable/ExternalIdTableSorterMergeConfig.h`) and the permutation
+// writer (see `index/CompressedRelationWriter.h`); porting the remaining
+// phases of the index build onto this pool is work in progress.
 //
 // NOTE: The pool has static lifetime and we never `join()` or `stop()` it, so
 // it outlives everything that posts to it, which is exactly what its users

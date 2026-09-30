@@ -12,7 +12,6 @@
 
 #include <cstddef>
 #include <memory>
-#include <optional>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -24,6 +23,7 @@
 #include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
+#include "util/RangeThatReleasesOnEnd.h"
 #include "util/Views.h"
 #include "util/parallelBlockMerge/BlockSinkPolicy.h"
 #include "util/parallelBlockMerge/BlockStorage.h"
@@ -80,55 +80,6 @@
 // included, is available in both modes.
 namespace ad_utility::parallelBlockMerge {
 
-namespace detail {
-// A lazy range of blocks that owns the range it yields from and drops that
-// range (and hence everything the merge behind it owns) as soon as it is
-// exhausted, instead of only when this object is destroyed. An exception that
-// the inner range throws releases it likewise.
-//
-// IMPORTANT: Reaching the end of a merge has to release its input, because a
-// consumer that has read a range to its end legitimately keeps that (now
-// exhausted) range alive while it disposes of that input.
-// `CompressedIdTableRunsInput` for example unregisters itself from
-// `CompressedExternalIdTableWriter::registerActiveReader` only in its
-// *destructor*, and `IndexImpl::buildOspWithPatterns` exhausts such a range,
-// keeps it in a local variable, and then calls `clear()` on the sorter, which
-// throws while a reader is still registered. The parallel merge does the same
-// thing (and additionally waits for its coroutines) in
-// `detail::ParallelMergeRange::releaseEverything`.
-template <typename Block>
-class RangeThatReleasesOnEnd : public ad_utility::InputRangeFromGet<Block> {
- private:
-  std::optional<ad_utility::InputRangeTypeErased<Block>> range_;
-
- public:
-  // Construct from the `range` to yield from and to release on its end.
-  explicit RangeThatReleasesOnEnd(ad_utility::InputRangeTypeErased<Block> range)
-      : range_{std::move(range)} {}
-
-  // Yield the next block of the inner range, and release that range as soon as
-  // it is over. Afterwards this range simply has nothing left to yield.
-  std::optional<Block> get() override {
-    if (!range_.has_value()) {
-      return std::nullopt;
-    }
-    std::optional<Block> block;
-    try {
-      block = range_.value().get();
-    } catch (...) {
-      // The consumer of a range that has thrown may well keep that range alive
-      // for a long time, so release the inner range here as well.
-      range_.reset();
-      throw;
-    }
-    if (!block.has_value()) {
-      range_.reset();
-    }
-    return block;
-  }
-};
-}  // namespace detail
-
 // ___________________________________________________________________________
 // The public entry points.
 // ___________________________________________________________________________
@@ -151,7 +102,7 @@ class RangeThatReleasesOnEnd : public ad_utility::InputRangeFromGet<Block> {
 //
 // The returned range releases the `input` (and everything else that the merge
 // owns) as soon as it is exhausted, and not only when it is destroyed, see
-// `detail::RangeThatReleasesOnEnd`.
+// `ad_utility::RangeThatReleasesOnEnd`.
 //
 // If `moveElements` is `true`, then the elements are moved out of the input
 // blocks.
@@ -186,10 +137,12 @@ CPP_template(bool moveElements, typename Input,
   //
   // NOTE: The `RangeThatReleasesOnEnd` is what makes the merge release its
   // input (which the `state` above owns) as soon as the result is exhausted,
-  // and not only when the returned range is destroyed. See there for why that
-  // matters.
+  // and not only when the returned range is destroyed. This is a correctness
+  // requirement and not merely tidy, see the IMPORTANT note at
+  // `detail::ParallelMergeRange::releaseEverything`, which does the same thing
+  // for the parallel merge (and additionally waits for its coroutines).
   return ad_utility::InputRangeTypeErased<Block>{
-      std::make_unique<detail::RangeThatReleasesOnEnd<Block>>(
+      std::make_unique<ad_utility::RangeThatReleasesOnEnd<Block>>(
           ad_utility::InputRangeTypeErased<Block>{
               ql::views::join(std::move(chunks))})};
 }

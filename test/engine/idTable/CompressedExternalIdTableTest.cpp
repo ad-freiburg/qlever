@@ -16,6 +16,7 @@
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
+#include "../../util/IndexTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/RuntimeParameters.h"
@@ -31,24 +32,11 @@ using ad_utility::compressedExternalIdTable::blocksizeForMemory;
 using ad_utility::compressedExternalIdTable::memoryForBlocksize;
 using namespace ad_utility::memory_literals;
 
+using ad_utility::testing::setIgnoreMemoryLimit;
+
 namespace {
 
 static constexpr size_t NUM_COLS = NumColumnsIndexBuilding;
-
-// Set the global `EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING`
-// flag to `value` and restore its previous value when the returned cleanup is
-// destroyed. Note: The flag is global, so setting it without such a cleanup
-// would make every test that runs afterwards silently depend on the value that
-// was set here.
-[[nodiscard]] auto setIgnoreMemoryLimit(bool value) {
-  bool previousValue =
-      ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING
-          .exchange(value);
-  return absl::Cleanup{[previousValue] {
-    ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
-        previousValue;
-  }};
-}
 
 // From a `generator` that yields  `IdTable`s, create a single `IdTable` that is
 // the concatenation of all the yielded tables.
@@ -135,7 +123,11 @@ void testExternalSorterImpl(
   // the same directory. A hardcoded name would make the tests that use this
   // helper overwrite each other's sorter file.
   std::string filename = gtestCurrentTestName() + ".testExternalSorter.dat";
-  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  // NOTE: The sorter deletes its file in its destructor, so this only matters
+  // if the sorter is never destroyed, and is silent otherwise.
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
   using namespace ad_utility::memory_literals;
 
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
@@ -744,69 +736,6 @@ std::vector<IdTable::row_type> mergeRunsSerially(
   }
   return result;
 }
-
-// The number of rows and the memory limit that are used by the tests of the
-// parallel merge below. With 4 columns and a memory limit of 1 MB, a single
-// presorted run holds `1'000'000 / (4 * 8 * 2) = 15'625` rows, so that 200'000
-// rows yield 13 runs. The number of rows is also well above
-// `DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD`, such that the genuinely
-// parallel code path of the merge is taken.
-constexpr size_t NUM_ROWS_PARALLEL_MERGE = 200'000;
-constexpr size_t EXPECTED_NUM_RUNS_PARALLEL_MERGE = 13;
-constexpr size_t BLOCKSIZE_OUTPUT_PARALLEL_MERGE = 10'000;
-
-// The result of `sortWithParallelism` below: the sorted table together with the
-// number of Boost.Asio handlers that the threads of the merge executor have
-// executed, and the number of those threads that ran at least one handler. The
-// latter two are the observable trace of the merge on that executor, and hence
-// the way to assert that the genuinely parallel code path (which is the only
-// one that touches the executor at all) was really taken.
-struct SortResultWithExecutorStatistics {
-  CopyableIdTable<0> table_;
-  size_t numHandlers_;
-  size_t numBusyThreads_;
-};
-
-// Sort the `input` with a `CompressedExternalIdTableSorter` whose merge phase
-// runs on an `io_context` with `numThreads` threads, and return the sorted
-// result together with the statistics of that `io_context`.
-SortResultWithExecutorStatistics sortWithParallelism(
-    const IdTable& input, size_t numThreads, const std::string& filename) {
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  net::io_context ioContext;
-  // NOTE: The `work_guard` keeps the threads alive while the sorter is still
-  // being filled, i.e. while the `io_context` has no work at all yet.
-  auto workGuard = net::make_work_guard(ioContext);
-  std::atomic<size_t> numHandlers{0};
-  std::atomic<size_t> numBusyThreads{0};
-  std::vector<ad_utility::JThread> workers;
-  for (size_t i = 0; i < numThreads; ++i) {
-    workers.emplace_back([&ioContext, &numHandlers, &numBusyThreads] {
-      // NOTE: `io_context::run` returns the number of handlers that this thread
-      // has executed.
-      size_t numHandlersOfThisThread = ioContext.run();
-      numHandlers += numHandlersOfThisThread;
-      if (numHandlersOfThisThread > 0) {
-        ++numBusyThreads;
-      }
-    });
-  }
-
-  CopyableIdTable<0> table{NUM_COLS, ad_utility::testing::makeAllocator()};
-  {
-    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
-        filename, NUM_COLS, 1_MB, ad_utility::testing::makeAllocator(), 5_kB};
-    sorter.setMergeExecutor(ioContext.get_executor(), numThreads);
-    for (const auto& row : input) {
-      sorter.push(row);
-    }
-    auto blocks = sorter.getSortedBlocks<0>(BLOCKSIZE_OUTPUT_PARALLEL_MERGE);
-    table = idTableFromBlockGenerator(blocks);
-  }
-  workGuard.reset();
-  workers.clear();
-  return {std::move(table), numHandlers.load(), numBusyThreads.load()};
-}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -917,6 +846,72 @@ TEST(CompressedExternalIdTable, runsInputIsAnActiveReader) {
   EXPECT_NO_THROW(writer.clear());
 }
 
+namespace {
+// The number of rows and the memory limit that are used by the tests of the
+// parallel merge below. With 4 columns and a memory limit of 1 MB, a single
+// presorted run holds `1'000'000 / (4 * 8 * 2) = 15'625` rows, so that 200'000
+// rows yield 13 runs. The number of rows is also well above
+// `DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD`, such that the genuinely
+// parallel code path of the merge is taken.
+constexpr size_t NUM_ROWS_PARALLEL_MERGE = 200'000;
+constexpr size_t EXPECTED_NUM_RUNS_PARALLEL_MERGE = 13;
+constexpr size_t BLOCKSIZE_OUTPUT_PARALLEL_MERGE = 10'000;
+
+// The result of `sortWithParallelism` below: the sorted table together with the
+// number of Boost.Asio handlers that the threads of the merge executor have
+// executed, and the number of those threads that ran at least one handler. The
+// latter two are the observable trace of the merge on that executor, and hence
+// the way to assert that the genuinely parallel code path (which is the only
+// one that touches the executor at all) was really taken.
+struct SortResultWithExecutorStatistics {
+  CopyableIdTable<0> table_;
+  size_t numHandlers_;
+  size_t numBusyThreads_;
+};
+
+// Sort the `input` with a `CompressedExternalIdTableSorter` whose merge phase
+// runs on an `io_context` with `numThreads` threads, and return the sorted
+// result together with the statistics of that `io_context`.
+SortResultWithExecutorStatistics sortWithParallelism(
+    const IdTable& input, size_t numThreads, const std::string& filename) {
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  net::io_context ioContext;
+  // NOTE: The `work_guard` keeps the threads alive while the sorter is still
+  // being filled, i.e. while the `io_context` has no work at all yet.
+  auto workGuard = net::make_work_guard(ioContext);
+  std::atomic<size_t> numHandlers{0};
+  std::atomic<size_t> numBusyThreads{0};
+  std::vector<ad_utility::JThread> workers;
+  for (size_t i = 0; i < numThreads; ++i) {
+    workers.emplace_back([&ioContext, &numHandlers, &numBusyThreads] {
+      // NOTE: `io_context::run` returns the number of handlers that this thread
+      // has executed.
+      size_t numHandlersOfThisThread = ioContext.run();
+      numHandlers += numHandlersOfThisThread;
+      if (numHandlersOfThisThread > 0) {
+        ++numBusyThreads;
+      }
+    });
+  }
+
+  CopyableIdTable<0> table{NUM_COLS, ad_utility::testing::makeAllocator()};
+  {
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+        filename, NUM_COLS, 1_MB, ad_utility::testing::makeAllocator(), 5_kB};
+    sorter.setMergeExecutor(ioContext.get_executor(), numThreads);
+    for (const auto& row : input) {
+      sorter.push(row);
+    }
+    auto blocks = sorter.getSortedBlocks<0>(BLOCKSIZE_OUTPUT_PARALLEL_MERGE);
+    table = idTableFromBlockGenerator(blocks);
+  }
+  workGuard.reset();
+  workers.clear();
+  return {std::move(table), numHandlers.load(), numBusyThreads.load()};
+}
+}  // namespace
+
+// _____________________________________________________________________________
 // The same assertions as in `sorterRandomInputs`, but with a merge parallelism
 // of one, which gives a deterministic single-threaded reference implementation
 // of the merge.
@@ -941,7 +936,7 @@ TEST(CompressedExternalIdTable, sorterWithSerialMerge) {
 // merge still held the file open on one of the executor's threads and the
 // `clear()` below threw "... is currently being iterated over".
 TEST(CompressedExternalIdTable, clearDirectlyAfterParallelMerge) {
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   std::string filename = gtestCurrentTestName() + ".dat";
   absl::Cleanup cleanup = [&filename] {
     ad_utility::deleteFile(filename, false);
@@ -986,7 +981,7 @@ TEST(CompressedExternalIdTable, clearDirectlyAfterParallelMerge) {
 // reader that it registered with the `CompressedExternalIdTableWriter`), see
 // `parallelBlockMerge::detail::ParallelMergeRange::releaseEverything`.
 TEST(CompressedExternalIdTable, clearWhileTheExhaustedOutputRangeIsStillAlive) {
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   std::string filename = gtestCurrentTestName() + ".dat";
   absl::Cleanup cleanup = [&filename] {
     ad_utility::deleteFile(filename, false);
@@ -1139,7 +1134,7 @@ TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
     ad_utility::deleteFile(filename, false);
     deleteSpillFiles(spillPrefix);
   };
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   IdTable input =
       createRandomlyFilledIdTable(NUM_ROWS_PARALLEL_MERGE, NUM_COLS);
 
@@ -1206,7 +1201,7 @@ SortResultWithSpillFileSize sortWithSpillCompression(
     const IdTable& input,
     ad_utility::CompressedBlockFile::CompressionLevel compression,
     const std::string& filename, const std::string& spillPrefix) {
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   net::io_context ioContext;
   // NOTE: The `work_guard` keeps the threads alive while the sorter is still
   // being filled, i.e. while the `io_context` has no work at all yet.
@@ -1399,8 +1394,7 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // presorted runs are created, and such that
   // `compressedExternalIdTable::computeMergePhaseParameters` ends up with a
   // single chunk in flight without throwing: the input blocks of a single
-  // chunk cost
-  // `2 * 4 * 250'000 = 2 MB`, so two concurrent chunks leave
+  // chunk cost `2 * 4 * 250'000 = 2 MB`, so two concurrent chunks leave
   // `(8 - 4) MB / (12 + 3 * 2) = 222 kB` (that is `6944` rows) per output
   // block, which is far below `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`, whereas a
   // single chunk still leaves `(8 - 2) MB / (12 + 3) = 400 kB` (that is
@@ -1413,31 +1407,53 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // number of rows yields two runs.
   constexpr size_t numRows = 170'000;
 
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(false);
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
       filename, NUM_COLS, memory, ad_utility::testing::makeAllocator(),
       blocksizeCompression};
   net::thread_pool pool{8};
   sorter.setMergeExecutor(pool.get_executor(), 8);
+  // Merge twice (which requires that the result is not moved out), such that
+  // we can check that the warning is logged only once per sorter.
+  sorter.moveResultOnMerge() = false;
   IdTable input = createRandomlyFilledIdTable(numRows, NUM_COLS);
   for (const auto& row : input) {
     sorter.push(row);
   }
 
-  CopyableIdTable<0> result{NUM_COLS, ad_utility::testing::makeAllocator()};
+  std::vector<CopyableIdTable<0>> results;
   std::string logOutput;
   {
     auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
-    auto blocks = sorter.getSortedBlocks<0>();
-    result = idTableFromBlockGenerator(blocks);
+    for (size_t i = 0; i < 2; ++i) {
+      auto blocks = sorter.getSortedBlocks<0>();
+      results.push_back(idTableFromBlockGenerator(blocks));
+    }
     logOutput = logStream.str();
   }
-  EXPECT_THAT(logOutput,
-              ::testing::ContainsRegex(
-                  "merge phase of the external sorter can only merge 1 chunks "
-                  "concurrently instead of the 8 chunks"));
-  EXPECT_EQ(result.numRows(), numRows);
-  EXPECT_TRUE(ql::ranges::is_sorted(result, SortByOSP{}));
+  const std::string warning =
+      "merge phase of the external sorter can only merge 1 chunks "
+      "concurrently instead of the 8 chunks";
+  EXPECT_THAT(logOutput, ::testing::HasSubstr(warning));
+  EXPECT_EQ(logOutput.find(warning), logOutput.rfind(warning));
+  for (const auto& result : results) {
+    EXPECT_EQ(result.numRows(), numRows);
+    EXPECT_TRUE(ql::ranges::is_sorted(result, SortByOSP{}));
+  }
+  pool.join();
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, setMergeExecutorRejectsZeroParallelism) {
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+      filename, NUM_COLS, 1_MB, ad_utility::testing::makeAllocator(), 5_kB};
+  net::thread_pool pool{1};
+  AD_EXPECT_THROW_WITH_MESSAGE(sorter.setMergeExecutor(pool.get_executor(), 0),
+                               ::testing::HasSubstr("parallelism > 0"));
   pool.join();
 }
 
@@ -1665,7 +1681,7 @@ void testPushBlockConcurrently(const std::vector<IdTable>& tables,
   auto trace = generateLocationTrace(l);
   SCOPED_TRACE(absl::StrCat("blocksize = ", blocksize));
   auto alloc = ad_utility::testing::makeAllocator();
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
 
   std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
   absl::Cleanup cleanup = [&filename] {

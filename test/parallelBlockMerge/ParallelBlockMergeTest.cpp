@@ -1298,7 +1298,7 @@ TEST(ParallelBlockMerge, exhaustedRangeReleasesTheInputWhileItStaysAlive) {
 
 // _____________________________________________________________________________
 // The very same holds for the serial merge, which has no coroutines to wait for
-// but owns its input just as much, see `detail::RangeThatReleasesOnEnd`.
+// but owns its input just as much, see `ad_utility::RangeThatReleasesOnEnd`.
 TEST(ParallelBlockMerge,
      exhaustedSerialRangeReleasesTheInputWhileItStaysAlive) {
   auto runs = makeRandomRuns(4, 50, 100);
