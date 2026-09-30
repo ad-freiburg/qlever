@@ -61,8 +61,6 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     ad_utility::File offsetsFile_;
     uint64_t currentOffset_ = 0;
     uint64_t numWords_ = 0;
-    // The absolute offsets of the words of a block, see `writeBlock`.
-    std::vector<uint64_t> offsetBuffer_;
 
    public:
     // Constructor, used by `VocabularyOnDisk::wordWriter`.
@@ -70,11 +68,16 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     // Add the next word to the vocabulary and return its index.
     uint64_t operator()(std::string_view word, bool isExternalDummy) override;
 
-    // Add the words of a `block` (which have to be the next words of the
-    // vocabulary, see `WordBlock::firstPosition_`) at once, with exactly the
-    // same result as adding them one by one. This is the bulk path of the
-    // `VocabularyInternalExternal::BlockWriter`.
-    void writeBlock(const WordBlock& block);
+    // The bulk path of the `VocabularyInternalExternal::BlockWriter`, which
+    // has exactly the same result as adding the words one by one: first
+    // reserve the range of the files for a `block` (which has to hold the
+    // next words of the vocabulary, see `WordBlock::firstPosition_`), which
+    // returns the offset of its data in the file and has to be called in the
+    // order of the blocks, then write the block at that offset, which is
+    // thread-safe (a positioned write) and may happen in any order. All the
+    // writes have to be complete before `finish()`.
+    uint64_t reserveBlock(const WordBlock& block);
+    void writeBlockAt(const WordBlock& block, uint64_t dataOffset) const;
 
     ~WordWriter() override;
 

@@ -344,20 +344,37 @@ void GeoVocabulary<V>::BlockWriter::append(
     lastCellIndex_ = prepared.lastCellIndex_;
   }
   auto offset = static_cast<off_t>(geoInfoHeader + numWords_ * geoInfoOffset);
-  auto numBytes = numWords * geoInfoOffset;
-  auto numBytesWritten =
-      geoInfoFile_.write(prepared.records_.data(), numBytes, offset);
-  AD_CORRECTNESS_CHECK(numBytesWritten == static_cast<ssize_t>(numBytes),
-                       "Writing the geometry info of a block of WKT "
-                       "literals failed");
   numWords_ += numWords;
   underlyingWriter_->append(std::move(prepared.underlying_));
+  // The records are written by the pool, see `WordWriter::flushBatch` for
+  // the bound on the writes in flight.
+  const size_t maxNumPendingWrites = 2 * ad_utility::globalExecutorNumThreads();
+  while (pendingWrites_.size() >= maxNumPendingWrites) {
+    pendingWrites_.front().get();
+    pendingWrites_.pop_front();
+  }
+  pendingWrites_.push_back(ad_utility::postAndGetFuture(
+      ad_utility::globalExecutor(),
+      [this, records = std::move(prepared.records_), offset]() {
+        auto numBytes = records.size() * geoInfoOffset;
+        auto numBytesWritten =
+            geoInfoFile_.write(records.data(), numBytes, offset);
+        AD_CORRECTNESS_CHECK(numBytesWritten == static_cast<ssize_t>(numBytes),
+                             "Writing the geometry info of a block of WKT "
+                             "literals failed");
+      }));
 }
 
 // ____________________________________________________________________________
 template <typename V>
 void GeoVocabulary<V>::BlockWriter::finishImpl() {
   underlyingWriter_->finish();
+  // Wait for the writes on the pool (and rethrow their exceptions) before the
+  // file is closed.
+  for (auto& write : pendingWrites_) {
+    write.get();
+  }
+  pendingWrites_.clear();
   geoInfoFile_.close();
   if (numInvalidGeometries_ > 0) {
     AD_LOG_WARN << "Geometry preprocessing skipped " << numInvalidGeometries_

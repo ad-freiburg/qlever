@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 
+#include <deque>
+#include <future>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -14,6 +16,7 @@
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/Serializer/Serializer.h"
 
 // A vocabulary that stores all the words on disk. Additionally, some of the
@@ -141,12 +144,19 @@ class VocabularyInternalExternal {
   };
 
   // The block-wise counterpart of the `WordWriter` (see `BlockWriterBase`).
-  // The words of a block are appended to the external vocabulary at once;
-  // which of them are also cached in RAM is decided exactly as by the
-  // `WordWriter`, so the files are the same. Nothing is done in `prepare`.
+  // Which of the words of a block are also cached in RAM is decided on the
+  // appending thread exactly as by the `WordWriter`, so the files are the
+  // same; the bytes of the block are then written to the external vocabulary
+  // by a task on the global thread pool (a positioned write, see
+  // `VocabularyOnDisk::WordWriter::writeBlockAt`), so that the appending
+  // thread is not bounded by the bandwidth of a single writer. Nothing is done
+  // in `prepare`.
   class BlockWriter : public BlockWriterBase {
    private:
     WordWriter writer_;
+    // The writes that are running on the pool, oldest first (each holds its
+    // block); bounded, see `append`.
+    std::deque<std::future<void>> pendingWrites_;
 
     struct Prepared : public PreparedBlockBase {
       WordBlock block_;
@@ -167,8 +177,18 @@ class VocabularyInternalExternal {
     }
     void append(std::unique_ptr<PreparedBlockBase> prepared) override;
 
+    // Finish if that has not happened yet, so that no write is left running
+    // on the pool.
+    ~BlockWriter() override {
+      ad_utility::terminateIfThrows(
+          [this]() { this->finish(); },
+          "Calling `finish` from the destructor of "
+          "`VocabularyInternalExternal::BlockWriter`");
+    }
+
    private:
-    void finishImpl() override { writer_.finish(); }
+    // Wait for the writes on the pool, then finish the word writer.
+    void finishImpl() override;
   };
 
   // The files of the internal and the external vocabulary, which are stored

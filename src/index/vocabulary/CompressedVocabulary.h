@@ -573,6 +573,14 @@ CPP_template(typename UnderlyingVocabulary,
       return prepared;
     }
 
+    // Finish if that has not happened yet, see
+    // `DiskWriterFromUncompressedWords`.
+    ~BlockWriter() override {
+      ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                    "Calling `finish` from the destructor of "
+                                    "`CompressedVocabulary::BlockWriter`");
+    }
+
     // Append the compressed block to the underlying vocabulary and store its
     // decoder.
     void append(std::unique_ptr<PreparedBlockBase> preparedBase) override {
