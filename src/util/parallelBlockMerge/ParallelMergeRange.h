@@ -28,6 +28,7 @@
 #include <utility>
 
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
 #include "util/NoCopyNoMove.h"
 #include "util/parallelBlockMerge/BlockPrefetcher.h"
@@ -110,7 +111,12 @@ class ParallelMergeRange
   // NOTE: This blocks the calling thread, which therefore must not be one of
   // the threads that run the executor of the merge, see the IMPORTANT note at
   // the class comment above.
-  ~ParallelMergeRange() override { releaseEverything(); }
+  ~ParallelMergeRange() override {
+    ad_utility::terminateIfThrows(
+        [this] { releaseEverything(); },
+        "Releasing the merge in the destructor of a `ParallelMergeRange` "
+        "failed.");
+  }
 
   // Return the next block of the merge, or `std::nullopt` at its end. Rethrow
   // an exception that the merge has pushed. Release everything that the merge
