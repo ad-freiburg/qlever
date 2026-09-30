@@ -89,6 +89,7 @@ std::vector<uint64_t> writeInBlocks(
   // asynchronously.
   auto flush = [&](uint8_t sub) {
     WordBlock block = std::exchange(openBlocks[sub], WordBlock{});
+    openBlocks[sub].payloadSize_ = block.payloadSize_;
     if (block.empty()) {
       return;
     }
@@ -102,10 +103,19 @@ std::vector<uint64_t> writeInBlocks(
   };
 
   std::vector<uint64_t> numWords(numSubs, 0);
+  for (uint8_t sub = 0; sub < numSubs; ++sub) {
+    openBlocks[sub].payloadSize_ =
+        writer->blockWriter(sub).precomputedPayloadSize();
+  }
+  std::string payload;
   for (const auto& [word, isExternal] : words) {
     uint8_t sub = writer->subVocabularyOf(word);
     indices.push_back(writer->indexOf(sub, numWords[sub]++, word));
-    openBlocks[sub].push(word, isExternal);
+    payload.resize(openBlocks[sub].payloadSize_);
+    if (!payload.empty()) {
+      writer->blockWriter(sub).precompute(word, payload.data());
+    }
+    openBlocks[sub].push(word, isExternal, payload);
     if (openBlocks[sub].numWords() == writer->blockWriter(sub).blockSize()) {
       flush(sub);
     }

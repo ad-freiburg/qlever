@@ -59,7 +59,7 @@ class IdMapWriters {
         std::max<size_t>(1, std::min(numThreads, idMapWriters_.size()));
     for (size_t i = 0; i < numThreads; ++i) {
       queues_.push_back(std::make_unique<ad_utility::TaskQueue<false>>(
-          VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE, 1, "Writing the ID maps"));
+          VOCAB_MERGER_ID_MAP_QUEUE_SIZE, 1, "Writing the ID maps"));
     }
   }
 

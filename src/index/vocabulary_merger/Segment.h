@@ -166,6 +166,14 @@ CPP_template(typename W)(requires WordComparator<W>) Segment
   const uint8_t numSubs = writer.numSubVocabularies();
   AD_CONTRACT_CHECK(numSubs > 0 && numSubs < blankNodeSubVocabulary);
   segment.words_.resize(numSubs);
+  // The per-word payload that the writers precompute, see
+  // `BlockWriterBase::precompute`.
+  std::vector<size_t> payloadSizes(numSubs);
+  for (uint8_t sub = 0; sub < numSubs; ++sub) {
+    payloadSizes[sub] = writer.blockWriter(sub).precomputedPayloadSize();
+    segment.words_[sub].payloadSize_ = payloadSizes[sub];
+  }
+  std::string payload;
   // Every merged word has at least one occurrence.
   size_t numMergedWords = 0;
   for (const auto& block : blocks) {
@@ -203,7 +211,11 @@ CPP_template(typename W)(requires WordComparator<W>) Segment
       id = makeSegmentLocalId(
           sub, writer.indexOf(sub, words.numWords(), pendingWord));
       segment.metaData_.addWord(pendingWord, id);
-      words.push(pendingWord, pendingIsExternal);
+      payload.resize(payloadSizes[sub]);
+      if (!payload.empty()) {
+        writer.blockWriter(sub).precompute(pendingWord, payload.data());
+      }
+      words.push(pendingWord, pendingIsExternal, payload);
     }
     for (const auto& [partialFileId, localIndex] : pendingOccurrences) {
       AD_CORRECTNESS_CHECK(partialFileId < numPartialVocabularies &&

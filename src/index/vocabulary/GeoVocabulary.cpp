@@ -287,28 +287,44 @@ uint64_t GeoVocabulary<V>::BlockWriter::indexOf(uint64_t position,
 
 // ____________________________________________________________________________
 template <typename V>
+void GeoVocabulary<V>::BlockWriter::precompute(std::string_view word,
+                                               char* payload) const {
+  // The record of the word, or a zero buffer of the same size for an invalid
+  // geometry, see `WordWriter::flushBatch`.
+  const void* ptr = &invalidGeoInfoBuffer;
+  auto info = GeometryInfo::fromWktLiteral(word);
+  if (info.has_value()) {
+    if (!info.value().getMetricArea().isValid()) {
+      ++numInvalidPolygonArea_;
+    }
+    ptr = &info.value();
+  } else {
+    ++numInvalidGeometries_;
+  }
+  std::memcpy(payload, ptr, geoInfoOffset);
+}
+
+// ____________________________________________________________________________
+template <typename V>
 std::unique_ptr<PreparedBlockBase> GeoVocabulary<V>::BlockWriter::prepare(
     WordBlock block) {
+  AD_CONTRACT_CHECK(block.payloadSize_ == geoInfoOffset);
   auto prepared = std::make_unique<Prepared>();
   prepared->firstPosition_ = block.firstPosition_;
-  // The records of all the words, and with a grid the check that the cells
-  // are non-decreasing within the block, see `WordWriter::flushBatch` and
+  // The records come precomputed with the block (see `precompute`); with a
+  // grid, check that the cells are non-decreasing within the block, see
   // `WordWriter::operator()`.
   prepared->records_.reserve(block.numWords());
   for (size_t i = 0; i < block.numWords(); ++i) {
     std::string_view word = block.word(i);
-    const void* ptr = &invalidGeoInfoBuffer;
-    auto info = GeometryInfo::fromWktLiteral(word);
-    if (info.has_value()) {
-      if (!info.value().getMetricArea().isValid()) {
-        ++numInvalidPolygonArea_;
-      }
-      ptr = &info.value();
-    } else {
-      ++numInvalidGeometries_;
-    }
-    std::memcpy(&prepared->records_.emplace_back(), ptr, geoInfoOffset);
+    std::memcpy(&prepared->records_.emplace_back(), block.payload(i).data(),
+                geoInfoOffset);
     if (grid_.has_value()) {
+      const auto& record = prepared->records_.back();
+      std::optional<GeometryInfo> info;
+      if (record != invalidGeoInfoBuffer) {
+        info = absl::bit_cast<GeometryInfo>(record);
+      }
       auto cellIndex = cellIndexOfWord(grid_.value(), info, word);
       AD_CONTRACT_CHECK(!prepared->lastCellIndex_.has_value() ||
                             prepared->lastCellIndex_.value() <= cellIndex,

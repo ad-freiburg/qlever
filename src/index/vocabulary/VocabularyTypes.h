@@ -429,12 +429,25 @@ struct WordBlock {
   std::vector<uint64_t> offsets_{0};
   std::vector<bool> isExternal_;
   uint64_t firstPosition_ = 0;
+  // The precomputed payload of the words, `payloadSize_` bytes per word (see
+  // `BlockWriterBase::precompute`), empty if the vocabulary has none.
+  std::string payload_;
+  size_t payloadSize_ = 0;
 
-  // Append a word.
-  void push(std::string_view word, bool isExternal) {
+  // Append a word, with its precomputed `payload` (of `payloadSize_` bytes,
+  // empty if the vocabulary has none).
+  void push(std::string_view word, bool isExternal,
+            std::string_view payload = {}) {
+    AD_CORRECTNESS_CHECK(payload.size() == payloadSize_);
     data_.append(word);
     offsets_.push_back(data_.size());
     isExternal_.push_back(isExternal);
+    payload_.append(payload);
+  }
+
+  // The payload of the `i`-th word.
+  std::string_view payload(size_t i) const {
+    return std::string_view{payload_}.substr(i * payloadSize_, payloadSize_);
   }
 
   size_t numWords() const { return isExternal_.size(); }
@@ -496,8 +509,22 @@ class BlockWriterBase {
     return position;
   }
 
+  // The number of bytes that `precompute` produces per word, `0` if the
+  // vocabulary precomputes nothing.
+  virtual size_t precomputedPayloadSize() const { return 0; }
+
+  // Compute the payload of a `word` (see `precomputedPayloadSize`) into
+  // `payload`, which has that many bytes. This is the expensive per-word work
+  // of a vocabulary (the geometry info of a WKT literal), which the caller can
+  // do wherever it has the words and idle threads; the block then carries the
+  // payload (see `WordBlock::payload_`), and `prepare` uses it instead of
+  // computing it. Thread-safe. Never called if the size is `0`.
+  virtual void precompute([[maybe_unused]] std::string_view word,
+                          [[maybe_unused]] char* payload) const {}
+
   // Do the part of the writing of the `block` that does not depend on any
-  // other block. Thread-safe.
+  // other block. Thread-safe. The block carries the precomputed payload of its
+  // words if `precomputedPayloadSize()` is not `0`.
   virtual std::unique_ptr<PreparedBlockBase> prepare(WordBlock block) = 0;
 
   // Append a prepared block to the vocabulary. Called from a single thread,
@@ -546,6 +573,9 @@ class ParallelWordWriterBase {
 
   // The block writer of the sub-vocabulary `sub`.
   virtual BlockWriterBase& blockWriter(uint8_t sub) = 0;
+  const BlockWriterBase& blockWriter(uint8_t sub) const {
+    return const_cast<ParallelWordWriterBase*>(this)->blockWriter(sub);
+  }
 
   // Finish all the block writers.
   void finish() {

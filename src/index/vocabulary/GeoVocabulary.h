@@ -260,13 +260,16 @@ class GeoVocabulary {
   };
 
   // The block-wise counterpart of the `WordWriter` (see `BlockWriterBase`):
-  // the geometry info of the words of a block is computed in `prepare`, on
-  // whichever thread prepares the block, and written to its position in the
-  // `geoInfoFile_` by a task on the global thread pool that `append` starts
-  // (a positioned write). With a grid, `indexOf` computes the cell of a word
-  // from the literal (exactly as `WordWriter::operator()`), and the order of
-  // the cells is checked in `prepare` (within a block) and `append` (across
-  // blocks). The files are the same as those of the `WordWriter`.
+  // the geometry info record of a word is computed by `precompute` (the
+  // expensive per-word work, which the caller does wherever it has the words
+  // and idle threads, see `BlockWriterBase::precompute`) and arrives with the
+  // block as its payload; `prepare` only checks the cell order, and the
+  // records are written to their position in the `geoInfoFile_` by a task on
+  // the global thread pool that `append` starts (a positioned write). With a
+  // grid, `indexOf` computes the cell of a word from the literal (exactly as
+  // `WordWriter::operator()`), and the order of the cells is checked in
+  // `prepare` (within a block) and `append` (across blocks). The files are the
+  // same as those of the `WordWriter`.
   class BlockWriter : public BlockWriterBase {
    private:
     std::unique_ptr<BlockWriterBase> underlyingWriter_;
@@ -274,8 +277,10 @@ class GeoVocabulary {
     std::optional<GeoCellGrid> grid_;
     std::optional<GeoCellGrid::CellIndex> lastCellIndex_;
     uint64_t numWords_ = 0;
-    std::atomic<size_t> numInvalidGeometries_ = 0;
-    std::atomic<size_t> numInvalidPolygonArea_ = 0;
+    // Counters for the warnings that `finishImpl` prints. Atomic, because
+    // `precompute` runs on any thread.
+    mutable std::atomic<size_t> numInvalidGeometries_ = 0;
+    mutable std::atomic<size_t> numInvalidPolygonArea_ = 0;
     // The writes of the records that are running on the pool, oldest first;
     // bounded, see `append`.
     std::deque<std::future<void>> pendingWrites_;
@@ -296,6 +301,9 @@ class GeoVocabulary {
 
     size_t blockSize() const override { return underlyingWriter_->blockSize(); }
     uint64_t indexOf(uint64_t position, std::string_view word) const override;
+    // The geometry info record of a word, see `precompute`.
+    size_t precomputedPayloadSize() const override { return geoInfoOffset; }
+    void precompute(std::string_view word, char* payload) const override;
     std::unique_ptr<PreparedBlockBase> prepare(WordBlock block) override;
     void append(std::unique_ptr<PreparedBlockBase> prepared) override;
 

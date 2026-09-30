@@ -126,8 +126,9 @@ constexpr inline size_t VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK =
     2;
 // The maximal number of segments that may be waiting in each of the queues of
 // the ID map writers of the vocabulary merger (see
-// `index/vocabulary_merger/IdMapWriters.h`).
-constexpr inline size_t VOCAB_MERGER_WORD_BATCH_QUEUE_SIZE = 3;
+// `index/vocabulary_merger/IdMapWriters.h`). A queued segment holds its ID map
+// entries (about 16 bytes per merged word) in memory.
+constexpr inline size_t VOCAB_MERGER_ID_MAP_QUEUE_SIZE = 16;
 
 // The default number of rows of a block of the permutations (and of the other
 // sorted lists of an index). If chosen too large, then we lose performance for

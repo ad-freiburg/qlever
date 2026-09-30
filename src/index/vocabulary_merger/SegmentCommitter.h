@@ -194,11 +194,17 @@ class SegmentCommitter {
     result.data_.reserve(numBytes);
     result.offsets_.reserve(block.numWords_ + 1);
     result.isExternal_.reserve(block.numWords_);
+    if (!block.pieces_.empty()) {
+      result.payloadSize_ = block.pieces_.front()
+                                .segment_->words_[block.pieces_.front().sub_]
+                                .payloadSize_;
+      result.payload_.reserve(block.numWords_ * result.payloadSize_);
+    }
     for (const Piece& piece : block.pieces_) {
       const WordBlock& words = piece.segment_->words_[piece.sub_];
       for (size_t i = piece.firstWord_; i < piece.firstWord_ + piece.numWords_;
            ++i) {
-        result.push(words.word(i), words.isExternal_[i]);
+        result.push(words.word(i), words.isExternal_[i], words.payload(i));
       }
     }
     return result;
