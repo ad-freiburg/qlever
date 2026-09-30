@@ -186,7 +186,7 @@ addLinkAndDiscoverTest(CacheTest)
 
 addLinkAndDiscoverTestSerialNoLibs(ConcurrentCacheTest)
 
-addLinkAndDiscoverTestSerialNoLibs(ColumnStrippingHelpersTest)
+addLinkAndDiscoverTest(ColumnStrippingHelpersTest engine)
 
 # This test also seems to use the same filenames and should be fixed.
 addLinkAndDiscoverTest(FileTest)
