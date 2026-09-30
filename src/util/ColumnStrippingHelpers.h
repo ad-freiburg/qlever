@@ -12,6 +12,7 @@
 #include "engine/StripColumns.h"
 #include "rdfTypes/Variable.h"
 #include "util/Algorithm.h"
+#include "engine/QueryExecutionTree.h"
 
 // A helper for the columns stripping of operations.
 // It collects a set of variables (specified in the constructor and via the
@@ -58,7 +59,7 @@ class VarsRequiredFromSubtree {
     if (ad_utility::contains(*varsRequiredFromSubtree_, varForOperation)) {
       return;
     }
-    if (varsRequiredFromSubtree_ == &varsRequestedFromParentTree_) {
+    if (varsRequiredFromSubtree_ != &newVariables_) {
       newVariables_ = varsRequestedFromParentTree_;
       varsRequiredFromSubtree_ = &newVariables_;
     }
@@ -68,6 +69,9 @@ class VarsRequiredFromSubtree {
   // Return all variables that are required form the subtree after having added
   // all relevant variables via add().
   const std::set<Variable>& get() const { return *varsRequiredFromSubtree_; }
+
+  // FRIEND_TESTs
+  FRIEND_TEST(VarsRequiredFromSubtree, add);
 };
 
 // A helper for the column stripping of operations.
