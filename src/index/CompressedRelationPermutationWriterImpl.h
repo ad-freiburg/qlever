@@ -11,6 +11,8 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 
+#include <array>
+
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationWriter.h"
@@ -35,8 +37,8 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
     // `compareWithoutLocalVocab` to compare the IDs cheaper, but this
     // sort is far from being a performance bottleneck.
     auto compare = [](const auto& a, const auto& b) {
-      return std::tie(a[0], a[1], a[2], a[3]) <
-             std::tie(b[0], b[1], b[2], b[3]);
+      return std::array<Id, 4>{a[0], a[1], a[2], a[3]} <
+             std::array<Id, 4>{b[0], b[1], b[2], b[3]};
     };
     ql::ranges::sort(blockOfSmallRelations, compare);
     AD_CORRECTNESS_CHECK(!blockOfSmallRelations.empty());

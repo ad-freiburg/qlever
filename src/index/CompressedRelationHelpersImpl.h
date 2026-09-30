@@ -11,6 +11,8 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
 
+#include <array>
+
 #include "index/CompressedRelationWriter.h"
 #include "util/ExceptionHandling.h"
 
@@ -24,8 +26,9 @@ static constexpr size_t c2Idx = 2;
 struct ComparatorForConstCol0 {
   template <typename A, typename B>
   bool operator()(const A& a, const B& b) const {
-    return std::tie(a[c1Idx], a[c2Idx], a[ADDITIONAL_COLUMN_GRAPH_ID]) <
-           std::tie(b[c1Idx], b[c2Idx], b[ADDITIONAL_COLUMN_GRAPH_ID]);
+    std::array<Id, 3> aVals{a[c1Idx], a[c2Idx], a[ADDITIONAL_COLUMN_GRAPH_ID]};
+    std::array<Id, 3> bVals{b[c1Idx], b[c2Idx], b[ADDITIONAL_COLUMN_GRAPH_ID]};
+    return aVals < bVals;
   }
 };
 
