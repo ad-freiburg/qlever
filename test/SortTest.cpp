@@ -282,6 +282,9 @@ TEST(Sort, clone) {
 // uses 4 blocks where block 3 exceeds the threshold, so block 4 exercises the
 // "remaining blocks" loop in `computeResultExternal`.
 TEST(Sort, externalSortLazyInput) {
+  // The inputs of this test are so small that the memory limit of the external
+  // sorter would report false positives.
+  auto ignoreMemoryLimit = ad_utility::testing::setIgnoreMemoryLimit(true);
   auto qec = ad_utility::testing::getQec();
 
   // Create multiple tables to simulate lazy input. Total size needs to exceed
@@ -326,6 +329,9 @@ TEST(Sort, externalSortLazyInput) {
 
 // Test external sorting with fully materialized input.
 TEST(Sort, externalSortMaterializedInput) {
+  // The inputs of this test are so small that the memory limit of the external
+  // sorter would report false positives.
+  auto ignoreMemoryLimit = ad_utility::testing::setIgnoreMemoryLimit(true);
   auto qec = ad_utility::testing::getQec();
 
   // Clear cache to avoid hits from previous tests.
@@ -371,6 +377,9 @@ TEST(Sort, externalSortMaterializedInput) {
 
 // Test external sorting with lazy output.
 TEST(Sort, externalSortLazyOutput) {
+  // The inputs of this test are so small that the memory limit of the external
+  // sorter would report false positives.
+  auto ignoreMemoryLimit = ad_utility::testing::setIgnoreMemoryLimit(true);
   auto qec = ad_utility::testing::getQec();
 
   // Clear cache at start to avoid hits from previous tests.
