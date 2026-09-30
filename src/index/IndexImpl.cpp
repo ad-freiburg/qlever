@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 
 #include <atomic>
+#include <boost/sort/pdqsort/pdqsort.hpp>
 #include <cstdio>
 #include <functional>
 #include <future>
@@ -1801,16 +1802,16 @@ void IndexImpl::writePartialVocabulary(
   }();
   {
     ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
-    // `doParallelSort` is `false` because this function runs on the shared
+    // This sort is single-threaded because this function runs on the shared
     // thread pool of `buildPartialVocabularies`, which already keeps all cores
-    // busy, so an additional parallel sort here would only add contention.
-    sortVocabVector(
-        &vec,
+    // busy. The sort uses `pdqsort` because it is about 10% faster than
+    // `ql::ranges::sort` here (measured on DBLP).
+    boost::sort::pdqsort(
+        vec.begin(), vec.end(),
         [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
           return c.isLessInTotalWithExternalFlag(
               a.first, a.second.isExternal(), b.first, b.second.isExternal());
-        },
-        false);
+        });
   }
   auto mapping = [&]() {
     ad_utility::TimeBlockAndLog l{"creating internal mapping"};
