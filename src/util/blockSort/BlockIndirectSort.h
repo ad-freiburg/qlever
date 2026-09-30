@@ -116,26 +116,16 @@ net::awaitable<void> startSort(State& state, uint32_t numThreads) {
   co_await moveBlocks(state);
 }
 
-// The default number of elements per block (Boost's `block_size`): bigger
-// elements get smaller blocks, so that a block stays in cache.
-template <typename Value>
-[[nodiscard]] constexpr uint32_t blockSizeFor() {
-  constexpr size_t numBytes = sizeof(Value);
-  constexpr uint32_t sizes[] = {4096, 4096, 4096, 4096, 2048,
-                                1024, 768,  512,  256,  128};
-  // Indexed by the number of bits of `numBytes - 1`, capped at 256 bytes.
-  return sizes[std::bit_width(std::min(numBytes, size_t{257}) - 1)];
-}
-
 // The default tuning parameters for elements of type `Value`.
 template <typename Value>
 [[nodiscard]] constexpr SortParams defaultSortParams() {
-  return {blockSizeFor<Value>(), maxElementsPerTask<Value>()};
+  return {blockSizeFor<Value>(), defaultMaxElementsPerTask<Value>()};
 }
 
 // Sort `[first, last)` with the given tuning parameters, see
-// `blockIndirectSort` below. Has to run on `exec`, because the tasks of the
-// sort resume their parents on whichever thread of `exec` they finish.
+// `blockIndirectSort` below. Should run on `exec`: the tasks of the sort resume
+// their parents on the executor of the parent, so running elsewhere is correct,
+// but costs a hop between the executors for every join.
 template <typename Iterator, typename Compare>
 net::awaitable<void> sortOnExecutor(Iterator first, Iterator last, Compare comp,
                                     uint32_t numThreads,
@@ -165,8 +155,8 @@ net::awaitable<void> sortOnExecutor(Iterator first, Iterator last, Compare comp,
     co_return;
   }
 
-  SortState<Iterator, Compare> state{first, last, std::move(comp), params,
-                                     exec};
+  BlockSortState<Iterator, Compare> state{first, last, std::move(comp), params,
+                                          exec};
   co_await startSort(state, numThreads);
 }
 

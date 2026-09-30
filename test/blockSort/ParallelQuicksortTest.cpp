@@ -16,15 +16,16 @@
 #include <array>
 #include <atomic>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <functional>
 #include <future>
 #include <memory>
-#include <numeric>
 #include <random>
 #include <string>
 #include <thread>
@@ -38,13 +39,15 @@
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
-#include "util/blockSort/BlockIndirectSort.h"
+#include "util/blockSort/ParallelQuicksort.h"
+#include "util/blockSort/SortState.h"
+#include "util/blockSort/TaskGroup.h"
 
 // The tests of this file are organized around one fuzzer per element type
 // (`fuzzSort`), which sorts inputs of random shapes and sizes with random
-// tuning parameters, thread counts, and failing comparators, and compares the
-// result with `std::sort`. The small tuning parameters make every code path of
-// the algorithm reachable with small inputs.
+// tuning parameters and failing comparators, and compares the result with
+// `std::sort`. The small tuning parameters make every code path of the
+// algorithm reachable with small inputs.
 //
 // NOTE: All sorts of one element type use the same comparator type
 // (`FuzzCompare`), so that they all use (and cover) the same instantiation of
@@ -52,9 +55,8 @@
 namespace {
 
 namespace net = boost::asio;
-using ad_utility::blockSort::blockIndirectSort;
-using ad_utility::blockSort::blockIndirectSortAsync;
 using namespace ad_utility::blockSort::detail;
+using namespace ad_utility::blockSort::detail::quicksort;
 
 // The thread pool shared by all tests.
 constexpr uint32_t numPoolThreads = 8;
@@ -188,8 +190,7 @@ struct IdTableValues {
 };
 
 // The shapes of the fuzzed inputs, each of which is a special case somewhere
-// in the algorithm (sorted parts, reversed parts, runs of equal elements, a
-// tail that belongs elsewhere, blocks that don't overlap, ...).
+// in the algorithm (sorted parts, reversed parts, runs of equal elements, ...).
 enum class Shape {
   Random,
   FewDistinct,
@@ -268,24 +269,31 @@ std::vector<Key> makeKeys(Shape shape, size_t numKeys, std::mt19937_64& gen) {
   return keys;
 }
 
-// Sort `values` with `runSort` (so with explicit tuning parameters) on the
-// shared thread pool.
+// Run `awaitable` on the shared thread pool, wait for it, and rethrow its
+// exception.
+void runOnPool(net::awaitable<void> awaitable) {
+  net::co_spawn(threadPool().get_executor(), std::move(awaitable),
+                net::use_future)
+      .get();
+}
+
+// Sort `values` with `parallelQuicksort` on the shared thread pool.
 template <typename Values>
 void runSortOn(typename Values::Container& values,
                const FuzzCompare<typename Values::Less>& comp,
-               uint32_t numThreads, SortParams params) {
+               size_t maxElementsPerTask) {
   auto range = Values::range(values);
-  runSort(range.begin(), range.end(), comp, numThreads,
-          threadPool().get_executor(), params);
+  SortState state{comp, maxElementsPerTask, threadPool().get_executor()};
+  runOnPool(parallelQuicksort(state, range.begin(), range.end()));
 }
 
 // Sort `numIterations` random inputs of `Values` with random tuning
-// parameters, thread counts and shapes, and expect the result of `std::sort`.
-// With `withFailures`, the comparator throws at a random point (or not at all
-// if the sort needs fewer comparisons), in which case the exception has to
-// reach the caller.
+// parameters and shapes, and expect the result of `std::sort`. With
+// `withFailures`, the comparator throws at a random point (or not at all if the
+// sort needs fewer comparisons), in which case the exception has to reach the
+// caller.
 template <typename Values>
-void fuzzSort(size_t numIterations, bool withFailures, size_t maxBlockSize) {
+void fuzzSort(size_t numIterations, bool withFailures) {
   auto seed = std::random_device{}();
   SCOPED_TRACE(absl::StrCat("seed=", seed));
   std::mt19937_64 gen{seed};
@@ -293,23 +301,14 @@ void fuzzSort(size_t numIterations, bool withFailures, size_t maxBlockSize) {
     return std::uniform_int_distribution<size_t>{lower, upper}(gen);
   };
   for (size_t iteration = 0; iteration < numIterations; ++iteration) {
-    SortParams params{random(1, maxBlockSize), random(16, 128)};
-    auto numThreads = static_cast<uint32_t>(random(1, 12));
-    // Sizes around the one from which the block indirect part is used.
-    size_t blockPathSize =
-        size_t{minNumThreadsForBlocks} * params.blockSize * BLOCKS_PER_TASK;
+    size_t maxElementsPerTask = random(16, 128);
+    // Big enough for several levels of parallel recursion.
     size_t numKeys =
-        random(0, 3) == 0 ? random(0, 40) : random(0, 3 * blockPathSize);
-    if (random(0, 3) == 0) {
-      // An input without a tail.
-      numKeys -= numKeys % params.blockSize;
-    }
+        random(0, 3) == 0 ? random(0, 40) : random(0, 100 * maxElementsPerTask);
     auto shape = static_cast<Shape>(random(0, numShapes - 1));
     SCOPED_TRACE(absl::StrCat(
         "iteration=", iteration, " shape=", static_cast<int>(shape),
-        " numKeys=", numKeys, " blockSize=", params.blockSize,
-        " maxElementsPerTask=", params.maxElementsPerTask,
-        " numThreads=", numThreads));
+        " numKeys=", numKeys, " maxElementsPerTask=", maxElementsPerTask));
     auto keys = makeKeys(shape, numKeys, gen);
     auto values = Values::fromKeys(keys);
 
@@ -323,9 +322,11 @@ void fuzzSort(size_t numIterations, bool withFailures, size_t maxBlockSize) {
       ql::ranges::reverse(keys);
     }
 
+    // `throwAt` may exceed the number of comparisons of the sort, so the sort
+    // may or may not throw, hence no `AD_EXPECT_THROW_WITH_MESSAGE`.
     bool threw = false;
     try {
-      runSortOn<Values>(values, comp, numThreads, params);
+      runSortOn<Values>(values, comp, maxElementsPerTask);
     } catch (const TestException& e) {
       EXPECT_STREQ(e.what(), comparisonFailed);
       threw = true;
@@ -338,110 +339,111 @@ void fuzzSort(size_t numIterations, bool withFailures, size_t maxBlockSize) {
   }
 }
 
-// Run `awaitable` on the shared thread pool, wait for it, and rethrow its
-// exception.
-void runOnPool(net::awaitable<void> awaitable) {
-  net::co_spawn(threadPool().get_executor(), std::move(awaitable),
-                net::use_future)
-      .get();
+// The fuzzer for one value type, with and without failures, and the rejection
+// of too small tasks (a task must sort at least 16 elements on its own, see
+// `computePivotAndMoveToFront`) with the same comparator.
+template <typename Values>
+void testValueType(size_t numIterations) {
+  fuzzSort<Values>(numIterations, false);
+  fuzzSort<Values>(numIterations, true);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (SortState{FuzzCompare<typename Values::Less>{}, 15,
+                 threadPool().get_executor()}),
+      ::testing::HasSubstr("maxElementsPerTask_ >= 16"));
 }
 
-// The tests for one value type: the fuzzer with and without failures, and the
-// checks of the public interface, blocking and awaitable (with the default
-// tuning parameters).
-template <typename Values>
-void testValueType(size_t numIterations, size_t maxBlockSize) {
-  fuzzSort<Values>(numIterations, false, maxBlockSize);
-  fuzzSort<Values>(numIterations, true, maxBlockSize);
-  using Less = FuzzCompare<typename Values::Less>;
-  auto executor = threadPool().get_executor();
+// Spawn a child into `group` that only finishes 50 ms after it has started,
+// and wait until it has started.
+void spawnSlowChild(TaskGroup& group, std::atomic<bool>& finished) {
+  std::atomic<bool> started{false};
+  group.spawnFunction([&started, &finished] {
+    started = true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    finished = true;
+  });
+  while (!started) {
+    std::this_thread::yield();
+  }
+}
 
-  // The public interface rejects an empty executor.
-  auto values = Values::fromKeys({3, 1, 2});
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      blockIndirectSort(Values::range(values), Less{}, numPoolThreads,
-                        ql::any_io_executor{}),
-      ::testing::HasSubstr("exec"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      runOnPool(blockIndirectSortAsync(Values::range(values), Less{},
-                                       numPoolThreads, ql::any_io_executor{})),
-      ::testing::HasSubstr("exec"));
+// A coroutine that throws.
+net::awaitable<void> throwingCoroutine() {
+  throw TestException{"coroutine failed"};
+  co_return;
+}
 
-  // The public interface sorts.
-  std::mt19937_64 gen{42};
-  auto keys = makeKeys(Shape::Random, 10'000, gen);
-  auto sortedKeys = keys;
-  ql::ranges::sort(sortedKeys);
-  values = Values::fromKeys(keys);
-  blockIndirectSort(Values::range(values), Less{}, numPoolThreads, executor);
-  EXPECT_EQ(Values::toKeys(values), sortedKeys);
-  values = Values::fromKeys(keys);
-  runOnPool(blockIndirectSortAsync(Values::range(values), Less{},
-                                   numPoolThreads, executor));
-  EXPECT_EQ(Values::toKeys(values), sortedKeys);
+// Await `withChildren` with `numChildren` children on the shared thread pool,
+// and return whether the awaiting coroutine runs on `strand` afterwards.
+net::awaitable<bool> isOnStrandAfterJoin(
+    const net::strand<ql::any_io_executor>& strand, size_t numChildren) {
+  ql::any_io_executor executor = threadPool().get_executor();
+  std::atomic<bool> stopped{false};
+  co_await TaskGroup::withChildren(
+      executor, stopped, [numChildren](TaskGroup& group) {
+        for (size_t i = 0; i < numChildren; ++i) {
+          group.spawnFunction([] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+          });
+        }
+      });
+  co_return strand.running_in_this_thread();
+}
+
+// A coroutine that sets `flag`.
+net::awaitable<void> setFlag(std::atomic<bool>& flag) {
+  flag = true;
+  co_return;
 }
 
 }  // namespace
 
 // _____________________________________________________________________________
 // Small elements that are cheap to move.
-TEST(BlockIndirectSort, uint32) { testValueType<Uint32Values>(400, 16); }
+TEST(ParallelQuicksort, uint32) { testValueType<Uint32Values>(400); }
 
 // _____________________________________________________________________________
 // Elements that are not trivially copyable.
-TEST(BlockIndirectSort, strings) { testValueType<StringValues>(200, 8); }
+TEST(ParallelQuicksort, strings) { testValueType<StringValues>(200); }
 
 // _____________________________________________________________________________
 // The rows of an `IdTable` with a static and a dynamic number of columns.
-TEST(BlockIndirectSort, idTableRows) {
-  testValueType<IdTableValues<3>>(150, 4);
-  testValueType<IdTableValues<0>>(150, 4);
+TEST(ParallelQuicksort, idTableRows) {
+  testValueType<IdTableValues<3>>(150);
+  testValueType<IdTableValues<0>>(150);
 }
 
 // _____________________________________________________________________________
-// The public interface with its default tuning parameters and an input that is
-// big enough for all of its phases.
-TEST(BlockIndirectSort, defaultParameters) {
-  size_t numKeys =
-      size_t{numPoolThreads} * blockSizeFor<uint32_t>() * BLOCKS_PER_TASK;
-  // Distinct keys in random order, so that the expected result is known without
-  // a (slow) reference sort.
-  std::vector<Key> expected(numKeys);
-  std::iota(expected.begin(), expected.end(), Key{0});
-  auto values = Uint32Values::fromKeys(expected);
-  ql::ranges::shuffle(values, std::mt19937_64{7});
-  // An lvalue range is sorted in place.
-  blockIndirectSort(values, FuzzCompare<std::less<>>{}, numPoolThreads,
-                    threadPool().get_executor());
-  EXPECT_EQ(Uint32Values::toKeys(values), expected);
+// The default number of elements per task shrinks with the size of the
+// elements, down to a minimum.
+TEST(ParallelQuicksort, defaultMaxElementsPerTask) {
+  EXPECT_EQ(defaultMaxElementsPerTask<char>(), size_t{1} << 18);
+  EXPECT_EQ(defaultMaxElementsPerTask<uint32_t>(), size_t{1} << 17);
+  EXPECT_EQ((defaultMaxElementsPerTask<std::array<char, 64>>()),
+            size_t{1} << 15);
+  EXPECT_EQ((defaultMaxElementsPerTask<std::array<char, 4096>>()),
+            size_t{1} << 13);
 }
 
 // _____________________________________________________________________________
-// Which ranges the public interface accepts: `blockIndirectSort` takes lvalues
-// and borrowed ranges, `blockIndirectSortAsync` only borrowed ranges, see its
-// comment. Temporaries that own their elements are rejected by both.
-namespace {
-template <typename Range>
-constexpr bool canSort = requires(Range&& range) {
-  blockIndirectSort(std::forward<Range>(range), std::less<>{}, 1,
-                    ql::any_io_executor{});
-};
-template <typename Range>
-constexpr bool canSortAsync = requires(Range&& range) {
-  blockIndirectSortAsync(std::forward<Range>(range), std::less<>{}, 1,
-                         ql::any_io_executor{});
-};
-static_assert(canSort<std::vector<uint32_t>&>);
-static_assert(canSort<ql::span<uint32_t>>);
-static_assert(!canSort<std::vector<uint32_t>>);
-static_assert(!canSortAsync<std::vector<uint32_t>&>);
-static_assert(canSortAsync<ql::span<uint32_t>>);
-static_assert(!canSortAsync<std::vector<uint32_t>>);
-}  // namespace
+// `median3` sorts its three elements in place and returns the middle one, for
+// all orders of the elements, also with duplicates.
+TEST(ParallelQuicksort, median3) {
+  for (std::array<int, 3> sorted :
+       {std::array{1, 2, 3}, std::array{1, 2, 2}, std::array{1, 1, 2}}) {
+    auto values = sorted;
+    do {
+      auto input = values;
+      auto median = median3(input.begin(), input.begin() + 1, input.begin() + 2,
+                            std::less<>{});
+      EXPECT_EQ(median, input.begin() + 1) << ::testing::PrintToString(values);
+      EXPECT_EQ(input, sorted) << ::testing::PrintToString(values);
+    } while (std::next_permutation(values.begin(), values.end()));
+  }
+}
 
 // _____________________________________________________________________________
 // Concurrent sorts on the same executor don't interfere.
-TEST(BlockIndirectSort, concurrentSortsOnTheSameExecutor) {
+TEST(ParallelQuicksort, concurrentSortsOnTheSameExecutor) {
   constexpr size_t numSorts = 4;
   std::vector<std::vector<Key>> keys;
   std::vector<Uint32Values::Container> inputs;
@@ -452,9 +454,7 @@ TEST(BlockIndirectSort, concurrentSortsOnTheSameExecutor) {
   }
   std::vector<std::thread> callers;
   for (auto& input : inputs) {
-    callers.emplace_back([&input] {
-      runSortOn<Uint32Values>(input, {}, numPoolThreads, {16, 64});
-    });
+    callers.emplace_back([&input] { runSortOn<Uint32Values>(input, {}, 64); });
   }
   for (auto& caller : callers) {
     caller.join();
@@ -466,20 +466,131 @@ TEST(BlockIndirectSort, concurrentSortsOnTheSameExecutor) {
 }
 
 // _____________________________________________________________________________
-// `ScratchBuffers` allocates a new buffer if all are taken, and reuses a buffer
-// once it has been returned.
-TEST(BlockIndirectSort, scratchBuffers) {
-  ScratchBuffers<int> buffers{3, 7};
-  int* reused = nullptr;
-  {
-    auto first = buffers.acquire();
-    auto second = buffers.acquire();
-    EXPECT_NE(first.range().first, second.range().first);
-    EXPECT_EQ(std::vector(first.range().first, first.range().last),
-              std::vector({7, 7, 7}));
-    reused = first.range().first;
+// If both the body and a child throw, the first of the two exceptions reaches
+// the caller.
+TEST(TaskGroup, keepsFirstException) {
+  ql::any_io_executor executor = threadPool().get_executor();
+  std::atomic<bool> stopped{false};
+  std::atomic<bool> childStarted{false};
+  auto body = [&childStarted](TaskGroup& group) {
+    group.spawnFunction([&childStarted] {
+      childStarted = true;
+      throw TestException{"child failed"};
+    });
+    while (!childStarted) {
+      std::this_thread::yield();
+    }
+    throw TestException{"body failed"};
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      runOnPool(TaskGroup::withChildren(executor, stopped, body)),
+      ::testing::AnyOf(::testing::StrEq("child failed"),
+                       ::testing::StrEq("body failed")),
+      TestException);
+}
+
+// _____________________________________________________________________________
+// `withChildren` runs all children and waits for them, also for those that are
+// still running when the body is done.
+TEST(TaskGroup, waitsForChildren) {
+  ql::any_io_executor executor = threadPool().get_executor();
+  std::atomic<bool> stopped{false};
+  std::atomic<bool> slowFinished{false};
+  std::atomic<bool> flag{false};
+  runOnPool(TaskGroup::withChildren(executor, stopped, [&](TaskGroup& group) {
+    spawnSlowChild(group, slowFinished);
+    group.spawn(setFlag(flag));
+  }));
+  EXPECT_TRUE(slowFinished);
+  EXPECT_TRUE(flag);
+  EXPECT_FALSE(stopped);
+
+  // A group without children.
+  runOnPool(TaskGroup::withChildren(executor, stopped, [](TaskGroup&) {}));
+
+  // A child that spawns another child into its own group.
+  std::atomic<bool> grandchildRan{false};
+  runOnPool(TaskGroup::withChildren(executor, stopped, [&](TaskGroup& group) {
+    group.spawnFunction(
+        [&group, &grandchildRan] { group.spawn(setFlag(grandchildRan)); });
+  }));
+  EXPECT_TRUE(grandchildRan);
+}
+
+// _____________________________________________________________________________
+// The first exception of the body or of a child reaches the caller, but only
+// after all children have finished, and it stops the sort.
+TEST(TaskGroup, propagatesExceptions) {
+  ql::any_io_executor executor = threadPool().get_executor();
+  auto expectThrows = [&](auto body, std::string_view message) {
+    std::atomic<bool> stopped{false};
+    std::atomic<bool> slowFinished{false};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        runOnPool(TaskGroup::withChildren(executor, stopped,
+                                          [&](TaskGroup& group) {
+                                            spawnSlowChild(group, slowFinished);
+                                            body(group);
+                                          })),
+        ::testing::StrEq(message));
+    EXPECT_TRUE(slowFinished);
+    EXPECT_TRUE(stopped);
+  };
+  expectThrows([](TaskGroup&) { throw TestException{"body failed"}; },
+               "body failed");
+  expectThrows(
+      [](TaskGroup& group) {
+        group.spawnFunction([] { throw TestException{"function failed"}; });
+      },
+      "function failed");
+  expectThrows([](TaskGroup& group) { group.spawn(throwingCoroutine()); },
+               "coroutine failed");
+
+  // Both children of `runConcurrently`.
+  std::atomic<bool> stopped{false};
+  std::atomic<bool> flag{false};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runOnPool(TaskGroup::runConcurrently(executor, stopped,
+                                           throwingCoroutine(), setFlag(flag))),
+      ::testing::StrEq("coroutine failed"));
+  std::atomic<bool> stopped2{false};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runOnPool(TaskGroup::runConcurrently(executor, stopped2, setFlag(flag),
+                                           throwingCoroutine())),
+      ::testing::StrEq("coroutine failed"));
+  EXPECT_TRUE(flag);
+}
+
+// _____________________________________________________________________________
+// Once the sort is stopped, spawned children don't start anymore.
+TEST(TaskGroup, skipsChildrenWhenStopped) {
+  ql::any_io_executor executor = threadPool().get_executor();
+  std::atomic<bool> stopped{true};
+  std::atomic<bool> ran{false};
+  runOnPool(
+      TaskGroup::withChildren(executor, stopped, [&ran](TaskGroup& group) {
+        group.spawnFunction([&ran] { ran = true; });
+        group.spawn(setFlag(ran));
+      }));
+  EXPECT_FALSE(ran);
+  // Only the spawned child of `runConcurrently` is skipped.
+  std::atomic<bool> inlinedRan{false};
+  runOnPool(TaskGroup::runConcurrently(executor, stopped, setFlag(inlinedRan),
+                                       setFlag(ran)));
+  EXPECT_TRUE(inlinedRan);
+  EXPECT_FALSE(ran);
+}
+
+// _____________________________________________________________________________
+// The parent is resumed on the executor of its coroutine (here a strand), not
+// on the thread of the child that finished last. Without children, the parent
+// is resumed from within `join()`, which is a separate code path.
+TEST(TaskGroup, resumesParentOnItsExecutor) {
+  auto strand =
+      net::make_strand(ql::any_io_executor{threadPool().get_executor()});
+  for (size_t numChildren : {0, 1, 5}) {
+    EXPECT_TRUE(net::co_spawn(strand, isOnStrandAfterJoin(strand, numChildren),
+                              net::use_future)
+                    .get())
+        << "numChildren=" << numChildren;
   }
-  // The buffer that was returned last is handed out first.
-  auto third = buffers.acquire();
-  EXPECT_EQ(third.range().first, reused);
 }

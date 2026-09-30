@@ -31,10 +31,14 @@ race:boost::asio::execution::detail::shared_target_executor::~shared_target_exec
 # releases the last reference. The reference count is maintained inside
 # `libstdc++.so`, which is not instrumented, so TSAN does not see that the
 # release synchronizes with the other threads, and reports the freeing of the
-# exception object (via `exception_ptr::_M_release`) and of the message of a
-# `std::runtime_error` (via its destructor) as a data race with an earlier read
-# of the exception by another thread, for example of its `what()` in a `catch`
-# block. The code itself is correct, sharing exceptions between threads via
-# `std::exception_ptr` is explicitly allowed.
+# exception object in `exception_ptr::_M_release` as a data race with an
+# earlier read of the exception by another thread, for example of its `what()`
+# in a `catch` block. The code itself is correct, sharing exceptions between
+# threads via `std::exception_ptr` is explicitly allowed.
+# NOTE: This entry does not cover memory that the exception owns, like the
+# message of a `std::runtime_error`: it is freed by the destructor of the
+# exception, which `_M_release` calls from within `libstdc++.so`, so
+# `_M_release` does not appear in the reported stacks. The tests that pass
+# exceptions between threads therefore throw exceptions that own no memory
+# (see `TestException` in `test/blockSort/ParallelQuicksortTest.cpp`).
 race:std::__exception_ptr::exception_ptr::_M_release
-race:std::runtime_error::~runtime_error

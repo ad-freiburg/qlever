@@ -21,11 +21,14 @@
 
 #include <absl/functional/any_invocable.h>
 
+#include <algorithm>
 #include <atomic>
+#include <bit>
 #include <boost/asio/awaitable.hpp>
 #include <boost/sort/block_indirect_sort/blk_detail/block.hpp>
 #include <boost/sort/common/range.hpp>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <mutex>
 #include <range/v3/range/conversion.hpp>
@@ -131,6 +134,28 @@ class ScratchBuffers : public ad_utility::NoCopyNoMove {
   }
 };
 
+// The default number of elements that one task sorts on its own (see
+// `SortState::maxElementsPerTask_`), like in Boost: bigger elements get smaller
+// tasks, so that the work per task stays roughly comparable. It is 2^18 for
+// elements of a single byte and halves at 2, 8, 32, 128, and 512 bytes, down to
+// 2^13. For example, 4 bytes give 2^17, 8 bytes 2^16, and 64 bytes 2^15.
+template <typename Value>
+constexpr size_t defaultMaxElementsPerTask() {
+  auto bitsOfSize = static_cast<uint32_t>(std::bit_width(sizeof(Value))) / 2;
+  return size_t{1} << (18 - std::min(bitsOfSize, uint32_t{5}));
+}
+
+// The default number of elements per block (Boost's `block_size`): bigger
+// elements get smaller blocks, so that a block stays in cache.
+template <typename Value>
+[[nodiscard]] constexpr uint32_t blockSizeFor() {
+  constexpr size_t numBytes = sizeof(Value);
+  constexpr uint32_t sizes[] = {4096, 4096, 4096, 4096, 2048,
+                                1024, 768,  512,  256,  128};
+  // Indexed by the number of bits of `numBytes - 1`, capped at 256 bytes.
+  return sizes[std::bit_width(std::min(numBytes, size_t{257}) - 1)];
+}
+
 // The number of blocks that a single task merges or moves.
 constexpr size_t BLOCKS_PER_TASK = 64;
 
@@ -154,11 +179,56 @@ struct SortParams {
   size_t maxElementsPerTask;
 };
 
-// The state shared by the tasks of a single sort, Boost's `backbone` without
-// its work stack. The input is divided into `numBlocks_` blocks of
-// `blockSize_` elements; only the last one (the *tail*) may be shorter.
-template <typename Iterator, typename Compare>
+// The state shared by the tasks of a single sort, similar to
+// `boost::sort::blk_detail::backbone`.
+template <typename Compare>
 class SortState {
+ public:
+  // The maximal number of elements that a single task sorts on its own (with
+  // `pdqsort`); bigger ranges are split further, see `parallelQuicksort`. The
+  // default is `defaultMaxElementsPerTask`.
+  size_t maxElementsPerTask_;
+  // The comparator. It is called concurrently by all tasks of the sort.
+  Compare cmp_;
+  // The executor on which the tasks run. The `TaskGroup`s of the sort keep a
+  // reference to it.
+  ql::any_io_executor executor_;
+  // Set as soon as any task of this sort has failed, see `TaskGroup`.
+  std::atomic<bool> stopped_{false};
+
+  // A sort by `cmp` on `executor` whose tasks sort at most `maxElementsPerTask`
+  // elements on their own. `maxElementsPerTask` must be at least 16, because
+  // the pivot selection needs nine distinct samples.
+  SortState(Compare cmp, size_t maxElementsPerTask,
+            ql::any_io_executor executor)
+      : maxElementsPerTask_{maxElementsPerTask},
+        cmp_{std::move(cmp)},
+        executor_{std::move(executor)} {
+    AD_CONTRACT_CHECK(maxElementsPerTask_ >= 16);
+  }
+
+  // Run `body`, which spawns the children of a task of this sort, and wait for
+  // them, see `TaskGroup::withChildren`.
+  [[nodiscard]] net::awaitable<void> withChildren(
+      absl::AnyInvocable<void(TaskGroup&)> body) {
+    return TaskGroup::withChildren(executor_, stopped_, std::move(body));
+  }
+
+  // Run `inlined` and `spawned` concurrently and wait for both, see
+  // `TaskGroup::runConcurrently`.
+  [[nodiscard]] net::awaitable<void> runConcurrently(
+      net::awaitable<void> inlined, net::awaitable<void> spawned) {
+    return TaskGroup::runConcurrently(executor_, stopped_, std::move(inlined),
+                                      std::move(spawned));
+  }
+};
+
+// The state shared by the tasks of a block indirect sort of `[first, last)`,
+// the rest of Boost's `backbone` without its work stack. The input is divided
+// into `numBlocks_` blocks of `blockSize_` elements; only the last one (the
+// *tail*) may be shorter.
+template <typename Iterator, typename Compare>
+class BlockSortState : public SortState<Compare> {
  public:
   using Value = typename std::iterator_traits<Iterator>::value_type;
   using IteratorRange = bsc::range<Iterator>;
@@ -166,27 +236,27 @@ class SortState {
 
   // The whole range to sort.
   IteratorRange globalRange_;
+  // The number of elements per block, see `SortParams::blockSize`.
   size_t blockSize_;
-  size_t maxElementsPerTask_;
+  // The number of elements of `globalRange_`.
   size_t numElements_;
+  // The number of blocks, including the tail.
   size_t numBlocks_;
   // `index_[i]` is the block that ends up at position `i`.
   std::vector<bsd::block_pos> index_;
   // The last block if it is incomplete, empty otherwise.
   IteratorRange tailRange_;
-  Compare cmp_;
+  // The scratch buffers of `blockSize_` elements, see `acquireBuffer`.
   ScratchBuffers<Value> buffers_;
-  ql::any_io_executor executor_;
-  // Set as soon as any task of this sort has failed, see `TaskGroup`.
-  std::atomic<bool> stopped_{false};
 
   // Sort `[first, last)`. The range must not be empty, which `runSort` makes
   // sure of.
-  SortState(Iterator first, Iterator last, Compare cmp, SortParams params,
-            ql::any_io_executor executor)
-      : globalRange_{first, last},
+  BlockSortState(Iterator first, Iterator last, Compare cmp, SortParams params,
+                 ql::any_io_executor executor)
+      : SortState<Compare>{std::move(cmp), params.maxElementsPerTask,
+                           std::move(executor)},
+        globalRange_{first, last},
         blockSize_{params.blockSize},
-        maxElementsPerTask_{params.maxElementsPerTask},
         numElements_{static_cast<size_t>(last - first)},
         numBlocks_{(numElements_ + blockSize_ - 1) / blockSize_},
         index_{::ranges::to<std::vector<bsd::block_pos>>(
@@ -195,9 +265,7 @@ class SortState {
                        ? last
                        : getBlockBegin(numBlocks_ - 1),
                    last},
-        cmp_{std::move(cmp)},
-        buffers_{blockSize_, Value(*first)},
-        executor_{std::move(executor)} {}
+        buffers_{blockSize_, Value(*first)} {}
 
   // The first element of the block at physical position `pos`.
   [[nodiscard]] Iterator getBlockBegin(size_t pos) const {
@@ -215,27 +283,12 @@ class SortState {
   // Whether the block `a` sorts before the block `b` by their first elements.
   [[nodiscard]] bool blockIsLessByFirstElement(bsd::block_pos a,
                                                bsd::block_pos b) const {
-    return cmp_(*getBlockBegin(a.pos()), *getBlockBegin(b.pos()));
+    return this->cmp_(*getBlockBegin(a.pos()), *getBlockBegin(b.pos()));
   }
 
   // Borrow one of the scratch buffers of `blockSize_` elements.
   [[nodiscard]] typename ScratchBuffers<Value>::Lease acquireBuffer() {
     return buffers_.acquire();
-  }
-
-  // Run `body`, which spawns the children of a task of this sort, and wait for
-  // them, see `TaskGroup::withChildren`.
-  [[nodiscard]] net::awaitable<void> withChildren(
-      absl::AnyInvocable<void(TaskGroup&)> body) {
-    return TaskGroup::withChildren(executor_, stopped_, std::move(body));
-  }
-
-  // Run `inlined` and `spawned` concurrently and wait for both, see
-  // `TaskGroup::runConcurrently`.
-  [[nodiscard]] net::awaitable<void> runConcurrently(
-      net::awaitable<void> inlined, net::awaitable<void> spawned) {
-    return TaskGroup::runConcurrently(executor_, stopped_, std::move(inlined),
-                                      std::move(spawned));
   }
 };
 
