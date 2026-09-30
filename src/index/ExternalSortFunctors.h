@@ -26,6 +26,12 @@
 template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
   using T = std::array<Id, 3>;
+
+  static constexpr auto compare = [](const ValueId& a,
+                                     const ValueId& b) constexpr {
+    return a.compareWithoutLocalVocab(b);
+  };
+
   // comparison function
   template <typename T1, typename T2>
   bool operator()(const T1& a, const T2& b) const {
@@ -36,10 +42,6 @@ struct SortTriple {
                          b.size() >= ADDITIONAL_COLUMN_GRAPH_ID);
     }
 
-    static constexpr auto compare = [](const ValueId& a,
-                                       const ValueId& b) constexpr {
-      return a.compareWithoutLocalVocab(b);
-    };
     // TODO<joka921> The manual invoking is ugly, probably we could use
     // `ql::ranges::lexicographical_compare`, but we have to carefully measure
     // that this change doesn't slow down the index build.
@@ -65,6 +67,9 @@ struct SortTriple {
       return cGraph < 0;
     }
   }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 };
 
 using SortByPSO = SortTriple<1, 0, 2>;
