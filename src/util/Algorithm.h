@@ -197,9 +197,9 @@ void assignSwap(A&& a, B&& b) {
   // accept a proxy prvalue, not to forward; must always move, like
   // `std::swap`, so `std::forward` would silently copy instead for a
   // real `T&` argument.
-  T tmp = static_cast<T>(std::move(a));  // NOSONAR
-  a = static_cast<T>(std::move(b));      // NOSONAR
-  b = static_cast<T>(std::move(tmp));    // NOSONAR
+  auto tmp = static_cast<T>(std::move(a));  // NOSONAR
+  a = static_cast<T>(std::move(b));         // NOSONAR
+  b = static_cast<T>(std::move(tmp));       // NOSONAR
   // NOLINTEND(bugprone-move-forwarding-reference)
 }
 
