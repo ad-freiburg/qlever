@@ -11,6 +11,7 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_PARTIALVOCABULARYFILE_H
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -190,6 +191,15 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     std::vector<char> boundaryWords_;
   };
   std::vector<Run> runs_;
+  // The buffers of the blocks, see `detail::BufferPool`: a block of a file is
+  // a bit larger than `PARTIAL_VOCAB_BLOCK_SIZE` (its last word crosses that
+  // size), a block of merged words holds at most
+  // `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`.
+  std::shared_ptr<detail::BufferPool> pool_ =
+      std::make_shared<detail::BufferPool>(
+          PARTIAL_VOCAB_BLOCK_SIZE.getBytes() * 5 / 4,
+          VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE.getBytes() / 8,
+          /*maxNumBuffers=*/1u << 16);
 
  public:
   PartialVocabularyRunsInput(const std::string& basename,
@@ -237,15 +247,17 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
   // Read a block. The words are parsed in place, see `MergeBlock`.
   Block getBlock(size_t run, size_t block) const {
     const auto& info = runs_.at(run).blocks_.at(block);
-    std::vector<char> bytes(info.numBytes_);
+    std::vector<char> bytes = pool_->get(info.numBytes_);
+    bytes.resize(info.numBytes_);
     auto numBytesRead = runs_.at(run).file_.read(
         bytes.data(), info.numBytes_, static_cast<off_t>(info.offset_));
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<uint64_t>(numBytesRead) == info.numBytes_);
-    return Block{std::move(bytes), info.numWords_, static_cast<uint32_t>(run)};
+    return Block{std::move(bytes), info.numWords_, static_cast<uint32_t>(run),
+                 pool_};
   }
 
-  Block makeEmptyBlock() const { return {}; }
+  Block makeEmptyBlock() const { return Block{pool_}; }
 
   // Append a merged `word` to an output `block` of the merge (a copy of the
   // word, the `word` itself lives in an input block). A word that is equal to

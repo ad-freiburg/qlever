@@ -15,6 +15,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
+#include <mutex>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -67,12 +69,77 @@ inline ad_utility::MemorySize sizeOfQueueWord(const QueueWord& word) {
                                        word.iriOrLiteral().size());
 }
 
+// A pool of the buffers that the `MergeBlock`s below store their words in,
+// so that the merge reuses them instead of allocating and freeing one per
+// block: with an allocator that returns freed memory to the operating system
+// (jemalloc purges it after a short decay), the merge of billions of words
+// otherwise spends a quarter of the machine in the kernel on that. There are
+// two sizes of buffers, for the blocks of the partial vocabularies (a bit
+// more than `PARTIAL_VOCAB_BLOCK_SIZE`) and for the blocks of merged words. A
+// request for a larger buffer is served by a fresh one, which the pool does
+// not take back, and the pool holds at most `maxNumBuffers` of each size.
+class BufferPool {
+ private:
+  size_t smallCapacity_;
+  size_t largeCapacity_;
+  size_t maxNumBuffers_;
+  std::mutex mutex_;
+  std::vector<std::vector<char>> small_;
+  std::vector<std::vector<char>> large_;
+
+ public:
+  BufferPool(size_t smallCapacity, size_t largeCapacity, size_t maxNumBuffers)
+      : smallCapacity_{smallCapacity},
+        largeCapacity_{largeCapacity},
+        maxNumBuffers_{maxNumBuffers} {
+    AD_CONTRACT_CHECK(smallCapacity_ <= largeCapacity_);
+  }
+
+  size_t smallCapacity() const { return smallCapacity_; }
+  size_t largeCapacity() const { return largeCapacity_; }
+
+  // Get an empty buffer with a capacity of at least `minCapacity`.
+  std::vector<char> get(size_t minCapacity) {
+    size_t capacity = minCapacity <= smallCapacity_   ? smallCapacity_
+                      : minCapacity <= largeCapacity_ ? largeCapacity_
+                                                      : minCapacity;
+    if (minCapacity <= largeCapacity_) {
+      std::lock_guard lock{mutex_};
+      auto& pool = capacity == smallCapacity_ ? small_ : large_;
+      if (!pool.empty()) {
+        auto buffer = std::move(pool.back());
+        pool.pop_back();
+        return buffer;
+      }
+    }
+    std::vector<char> buffer;
+    buffer.reserve(capacity);
+    return buffer;
+  }
+
+  // Give a buffer back. Only a buffer with the capacity of one of the two
+  // sizes is kept.
+  void put(std::vector<char> buffer) {
+    if (buffer.capacity() != smallCapacity_ &&
+        buffer.capacity() != largeCapacity_) {
+      return;
+    }
+    buffer.clear();
+    std::lock_guard lock{mutex_};
+    auto& pool = buffer.capacity() == smallCapacity_ ? small_ : large_;
+    if (pool.size() < maxNumBuffers_) {
+      pool.push_back(std::move(buffer));
+    }
+  }
+};
+
 // A block of `QueueWord`s together with the storage that their words point
 // into: either the serialized bytes of a block of a partial vocabulary file
 // (see `PartialVocabularyRunsInput::getBlock`, which parses the words in place)
 // or, for a block of merged words, buffers that the words are copied into. The
 // buffers never move once a word points into them, so the block can be moved,
-// but not copied. The block is a random-access range of its words.
+// but not copied. The block is a random-access range of its words. The
+// buffers come from and go back to a `BufferPool` if the block has one.
 class MergeBlock {
  public:
   using Occurrence = detail::Occurrence;
@@ -80,27 +147,41 @@ class MergeBlock {
   using const_iterator = std::vector<QueueWord>::const_iterator;
 
  private:
-  // The size of a buffer of a block of merged words. A word that is longer
-  // gets a buffer of its own.
+  // The size of a buffer of a block of merged words without a pool. A word
+  // that is longer gets a buffer of its own.
   static constexpr size_t bufferSize_ = 1u << 20;
 
   std::vector<QueueWord> words_;
   std::vector<Occurrence> moreOccurrences_;
   std::vector<std::vector<char>> buffers_;
+  std::shared_ptr<BufferPool> pool_;
 
  public:
   MergeBlock() = default;
+  explicit MergeBlock(std::shared_ptr<BufferPool> pool)
+      : pool_{std::move(pool)} {}
   MergeBlock(const MergeBlock&) = delete;
   MergeBlock& operator=(const MergeBlock&) = delete;
   MergeBlock(MergeBlock&&) noexcept = default;
-  MergeBlock& operator=(MergeBlock&&) noexcept = default;
+  MergeBlock& operator=(MergeBlock&& other) noexcept {
+    clear();
+    words_ = std::move(other.words_);
+    moreOccurrences_ = std::move(other.moreOccurrences_);
+    buffers_ = std::move(other.buffers_);
+    pool_ = std::move(other.pool_);
+    return *this;
+  }
+  ~MergeBlock() { clear(); }
 
   // Construct a block over the serialized `bytes` of `numWords` words of the
   // partial vocabulary `partialFileId`, in the format that
   // `PartialVocabularyWriter` writes: for each word its length (`uint64_t`),
   // its bytes, its external flag (one byte) and its local index (`uint64_t`).
-  // The words are parsed in place, nothing is copied.
-  MergeBlock(std::vector<char> bytes, size_t numWords, uint32_t partialFileId) {
+  // The words are parsed in place, nothing is copied. The `bytes` go back to
+  // the `pool` (if any) when the block is destroyed.
+  MergeBlock(std::vector<char> bytes, size_t numWords, uint32_t partialFileId,
+             std::shared_ptr<BufferPool> pool = nullptr)
+      : pool_{std::move(pool)} {
     buffers_.push_back(std::move(bytes));
     const auto& buffer = buffers_.back();
     words_.reserve(numWords);
@@ -186,10 +267,15 @@ class MergeBlock {
   QueueWord& back() { return words_.back(); }
   const QueueWord& back() const { return words_.back(); }
 
-  // Release the words and the storage.
+  // Release the words and the storage (the buffers go back to the pool).
   void clear() {
     words_.clear();
     moreOccurrences_.clear();
+    if (pool_ != nullptr) {
+      for (auto& buffer : buffers_) {
+        pool_->put(std::move(buffer));
+      }
+    }
     buffers_.clear();
   }
 
@@ -200,7 +286,12 @@ class MergeBlock {
   std::string_view store(std::string_view word) {
     if (buffers_.empty() ||
         buffers_.back().size() + word.size() > buffers_.back().capacity()) {
-      buffers_.emplace_back().reserve(std::max(bufferSize_, word.size()));
+      if (pool_ != nullptr) {
+        buffers_.push_back(
+            pool_->get(std::max(pool_->largeCapacity(), word.size())));
+      } else {
+        buffers_.emplace_back().reserve(std::max(bufferSize_, word.size()));
+      }
     }
     auto& buffer = buffers_.back();
     size_t offset = buffer.size();
