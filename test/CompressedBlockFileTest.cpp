@@ -268,6 +268,42 @@ TEST(CompressedBlockFile, failedWriteThrows) {
 }
 
 // _____________________________________________________________________________
+// Test that several threads may append at the same time, and that every block
+// is readable afterwards. The appends reserve their range of the file with an
+// atomic counter, so they do not exclude each other.
+TEST(CompressedBlockFile, concurrentAppends) {
+  std::string filename = gtestCurrentTestName();
+  CompressedBlockFile file{filename};
+  static constexpr size_t numThreads = 8;
+  static constexpr size_t numBlocksPerThread = 25;
+  std::vector<std::vector<std::vector<char>>> expected(numThreads);
+  std::vector<std::vector<CompressedBlockFile::BlockMetadata>> metadata(
+      numThreads);
+  std::vector<std::thread> threads;
+  for (size_t threadIdx : ql::views::iota(size_t{0}, numThreads)) {
+    threads.emplace_back([&file, &expected, &metadata, threadIdx]() {
+      for (size_t i : ql::views::iota(size_t{0}, numBlocksPerThread)) {
+        expected.at(threadIdx).push_back(
+            makeBytes(500 + 13 * i, threadIdx * numBlocksPerThread + i + 1));
+        metadata.at(threadIdx).push_back(
+            file.appendBlock(expected.at(threadIdx).back().data(),
+                             expected.at(threadIdx).back().size()));
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+  for (size_t threadIdx : ql::views::iota(size_t{0}, numThreads)) {
+    for (size_t i : ql::views::iota(size_t{0}, numBlocksPerThread)) {
+      EXPECT_EQ(readBytes(file, metadata.at(threadIdx).at(i)),
+                expected.at(threadIdx).at(i))
+          << "thread " << threadIdx << ", block " << i;
+    }
+  }
+}
+
+// _____________________________________________________________________________
 TEST(CompressedBlockFile, concurrentReads) {
   std::string filename = gtestCurrentTestName();
   CompressedBlockFile file{filename};

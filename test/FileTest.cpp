@@ -6,7 +6,10 @@
 
 #include <array>
 #include <filesystem>
+#include <thread>
+#include <vector>
 
+#include "backports/algorithm.h"
 #include "util/File.h"
 #include "util/GTestHelpers.h"
 
@@ -59,6 +62,70 @@ TEST(File, move) {
 }  // namespace ad_utility
 
 // _____________________________________________________________________________
+// Test that the positioned `write` puts the bytes at the given offset, without
+// moving the file position, and that it extends the file when it writes past
+// its end.
+TEST(File, writeAtOffset) {
+  std::string filename = "testFileWriteAtOffset.tmp";
+  {
+    ad_utility::File file{filename, "w+"};
+    // The ranges are written out of order and leave a gap, which the file
+    // system fills with zeros.
+    EXPECT_EQ(file.write("world", 5, 8), 5);
+    EXPECT_EQ(file.write("hello", 5, 0), 5);
+    EXPECT_EQ(file.sizeOfFile(), 13);
+  }
+  {
+    ad_utility::File file{filename, "r"};
+    std::array<char, 13> buffer{};
+    EXPECT_EQ(file.read(buffer.data(), buffer.size(), 0), 13);
+    EXPECT_EQ(std::string(buffer.data(), 5), "hello");
+    EXPECT_EQ(std::string(buffer.data() + 8, 5), "world");
+    EXPECT_EQ(buffer[5], 0);
+  }
+  ad_utility::deleteFile(filename);
+}
+
+// Test that threads which write to ranges that do not overlap do not need any
+// synchronization. This is what lets the index build write the blocks of its
+// temporary files and of its permutations concurrently.
+TEST(File, concurrentWritesAtDisjointOffsets) {
+  std::string filename = "testFileConcurrentWrites.tmp";
+  static constexpr size_t numThreads = 8;
+  static constexpr size_t numBytesPerThread = 4096;
+  {
+    ad_utility::File file{filename, "w+"};
+    std::vector<std::thread> threads;
+    for (size_t threadIdx : ql::views::iota(size_t{0}, numThreads)) {
+      threads.emplace_back([&file, threadIdx]() {
+        std::vector<char> data(numBytesPerThread,
+                               static_cast<char>('a' + threadIdx));
+        auto offset = static_cast<off_t>(threadIdx * numBytesPerThread);
+        EXPECT_EQ(file.write(data.data(), data.size(), offset),
+                  static_cast<ssize_t>(numBytesPerThread));
+      });
+    }
+    for (auto& thread : threads) {
+      thread.join();
+    }
+    EXPECT_EQ(file.sizeOfFile(), numThreads * numBytesPerThread);
+  }
+  // Every thread's range holds that thread's byte, so nothing was interleaved.
+  ad_utility::File file{filename, "r"};
+  for (size_t threadIdx : ql::views::iota(size_t{0}, numThreads)) {
+    std::vector<char> buffer(numBytesPerThread);
+    auto offset = static_cast<off_t>(threadIdx * numBytesPerThread);
+    ASSERT_EQ(file.read(buffer.data(), buffer.size(), offset),
+              static_cast<ssize_t>(numBytesPerThread));
+    EXPECT_EQ(std::vector<char>(numBytesPerThread,
+                                static_cast<char>('a' + threadIdx)),
+              buffer)
+        << "thread " << threadIdx;
+  }
+  file.close();
+  ad_utility::deleteFile(filename);
+}
+
 TEST(File, getLastOffset) {
   ad_utility::File closedFile;
   ASSERT_FALSE(closedFile.isOpen());

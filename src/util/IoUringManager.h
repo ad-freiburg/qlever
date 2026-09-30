@@ -23,6 +23,13 @@
 
 #ifdef QLEVER_HAS_IO_URING
 #include <liburing.h>
+// `liburing.h` pulls in the kernel header `<linux/fs.h>`, which defines a macro
+// `BLOCK_SIZE`. That is a very common identifier, and a macro of that name
+// breaks every header that later declares something with that name (for
+// example `boost/sort/common/util/circular_buffer.hpp`, which is pulled in by
+// `util/blockSort/BlockIndirectSort.h`). QLever does not use the macro, so we
+// simply get rid of it again.
+#undef BLOCK_SIZE
 #endif
 
 #include "backports/span.h"

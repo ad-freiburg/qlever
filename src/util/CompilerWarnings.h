@@ -77,6 +77,25 @@
 #define GCC_REENABLE_WARNINGS
 #endif
 
+// Disable the warnings about `#warning` directives (`-Wcpp` for GCC,
+// `-W#warnings` for clang). QLever needs this for the third-party headers that
+// it includes from headers of its own: `<boost/sort/...>` includes the
+// `<ciso646>` of libstdc++, which since C++20 is deprecated and warns about
+// itself, see `util/blockSort/BlockIndirectSort.h`.
+#if defined(__clang__)
+#define DISABLE_PREPROCESSOR_WARNINGS \
+  _Pragma("clang diagnostic push")    \
+      _Pragma("clang diagnostic ignored \"-W#warnings\"")
+#define REENABLE_PREPROCESSOR_WARNINGS _Pragma("clang diagnostic pop")
+#elif defined(__GNUC__)
+#define DISABLE_PREPROCESSOR_WARNINGS \
+  _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wcpp\"")
+#define REENABLE_PREPROCESSOR_WARNINGS _Pragma("GCC diagnostic pop")
+#else
+#define DISABLE_PREPROCESSOR_WARNINGS
+#define REENABLE_PREPROCESSOR_WARNINGS
+#endif
+
 #ifdef __clang__
 #define DISABLE_CLANG_SELF_ASSIGN_WARNING \
   _Pragma("clang diagnostic push")        \

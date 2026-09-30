@@ -736,6 +736,58 @@ target_compile_options(civetweb PRIVATE -Wno-missing-field-initializers)
 # overloaded virtual functions.
 target_compile_options(pull PRIVATE -Wno-overloaded-virtual)
 
+################################
+# HPX (OPTIONAL)
+################################
+# HPX provides parallel algorithms (for example `hpx::sort`) that can be run on
+# a user-supplied executor, which QLever uses to run them on its global thread
+# pool (see `src/util/HpxAsioExecutor.h`). HPX is a very large dependency (its
+# fetch and build take much longer than the rest of QLever's dependencies
+# together), so it is disabled by default; when `USE_HPX` is `OFF`, HPX is
+# neither fetched nor configured nor compiled.
+option(USE_HPX "Build with the HPX library, which is used to sort the blocks of the external sorters on the global thread pool (see `src/util/HpxAsioExecutor.h`). This is a very large dependency, which is fetched and built only when this option is ON" OFF)
+if (USE_HPX)
+    # The HPX build hard-errors if it can neither find one of its optional
+    # allocators (tcmalloc, jemalloc, ...) nor is told to use the system
+    # allocator, and if it cannot find `hwloc` and `Asio`, both of which we
+    # therefore let it fetch. Note that the Asio that HPX fetches is
+    # *standalone* Asio (namespace `asio`), which is independent of the
+    # Boost.Asio (namespace `boost::asio`) that QLever uses.
+    set(HPX_WITH_MALLOC "system" CACHE STRING "" FORCE)
+    set(HPX_WITH_FETCH_HWLOC ON CACHE BOOL "" FORCE)
+    set(HPX_WITH_FETCH_ASIO ON CACHE BOOL "" FORCE)
+    # We only need the local (single-process) runtime of HPX, none of its
+    # distributed machinery, and none of its examples, tests, and docs.
+    set(HPX_WITH_NETWORKING OFF CACHE BOOL "" FORCE)
+    set(HPX_WITH_DISTRIBUTED_RUNTIME OFF CACHE BOOL "" FORCE)
+    set(HPX_WITH_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(HPX_WITH_TESTS OFF CACHE BOOL "" FORCE)
+    set(HPX_WITH_DOCUMENTATION OFF CACHE BOOL "" FORCE)
+    # By default HPX compiles itself with C++17 and rejects a manually set
+    # `CMAKE_CXX_STANDARD`; this tells it to use QLever's C++ standard instead,
+    # which it has to, because HPX's headers are part of QLever's compilation.
+    set(HPX_USE_CMAKE_CXX_STANDARD ON CACHE BOOL "" FORCE)
+    # HPX creates convenience targets that are named after its module
+    # directories, one of which clashes with a target that QLever already has.
+    # The directory added here shadows two of HPX's own CMake modules to move
+    # those names out of the way, see the comment in
+    # `cmake/hpx-overrides/HPX_AddPseudoTarget.cmake` for the details.
+    list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/hpx-overrides")
+    FetchContent_Declare(
+            hpx
+            GIT_REPOSITORY https://github.com/STEllAR-GROUP/hpx.git
+            GIT_TAG c9b81b401fbe6ba4a0306feff71d18ef01c71b34 # v1.11.0
+            GIT_SHALLOW TRUE
+            SYSTEM
+            EXCLUDE_FROM_ALL
+    )
+    FetchContent_MakeAvailable(hpx)
+    add_compile_definitions(QLEVER_USE_HPX)
+    message(STATUS "USE_HPX is ON, building with HPX from ${hpx_SOURCE_DIR}")
+else ()
+    message(STATUS "USE_HPX is OFF, building without HPX")
+endif ()
+
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
 message(STATUS "CXX_FLAGS_RELEASE are : " ${CMAKE_CXX_FLAGS_RELEASE})
