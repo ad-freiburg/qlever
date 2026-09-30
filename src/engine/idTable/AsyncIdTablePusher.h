@@ -13,7 +13,6 @@
 #include <absl/functional/any_invocable.h>
 
 #include <algorithm>
-#include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
@@ -27,6 +26,7 @@
 #include "backports/asio.h"
 #include "engine/idTable/IdTable.h"
 #include "engine/idTable/IdTableConcepts.h"
+#include "util/AsyncHandlerUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 
@@ -150,16 +150,8 @@ class AsyncIdTablePusher {
     operation->numRows_ = table.numRows();
     auto initiate = [this,
                      operation = std::move(operation)](auto handler) mutable {
-      auto handlerExecutor =
-          boost::asio::get_associated_executor(handler, executor_);
-      operation->handler_ = [handler = std::move(handler), handlerExecutor](
-                                std::exception_ptr exception) mutable {
-        boost::asio::post(handlerExecutor,
-                          [handler = std::move(handler),
-                           exception = std::move(exception)]() mutable {
-                            std::move(handler)(std::move(exception));
-                          });
-      };
+      operation->handler_ =
+          makeHandlerExecutorAware(std::move(handler), executor_);
       boost::asio::dispatch(strand_,
                             [this, operation = std::move(operation)]() mutable {
                               pushNextChunk(std::move(operation));
@@ -204,19 +196,20 @@ class AsyncIdTablePusher {
   // them outside of the strand, or complete the `operation` if all its rows
   // have been pushed (or an exception occurred). Must be called on the strand.
   void pushNextChunk(OperationPtr operation) {
-    if (exception_ || operation->numPushed_ == operation->numRows_) {
-      std::move(operation->handler_)(exception_);
+    // Complete the `operation` and return `true` if there is nothing more to
+    // do for it.
+    auto completeIfDone = [this, &operation]() {
+      if (exception_ || operation->numPushed_ == operation->numRows_) {
+        std::move(operation->handler_)(exception_);
+        return true;
+      }
+      return false;
+    };
+    if (completeIfDone()) {
       return;
     }
-    try {
-      if (!blockIsResized_) {
-        block_.resize(blocksize_);
-        blockIsResized_ = true;
-        numRowsReserved_ = 0;
-      }
-    } catch (...) {
-      exception_ = std::current_exception();
-      std::move(operation->handler_)(exception_);
+    resizeBlockIfNecessary();
+    if (completeIfDone()) {
       return;
     }
     if (numRowsReserved_ == blocksize_) {
@@ -231,37 +224,71 @@ class AsyncIdTablePusher {
         blocksize_ - targetRow, operation->numRows_ - operation->numPushed_);
     numRowsReserved_ += numToPush;
     ++numOutstandingCopies_;
-    // The destination of the copy. Neither `block_` nor its buffers change
-    // while copies are outstanding, so these spans stay valid.
-    std::vector<ql::span<Id>> targetColumns;
-    for (size_t col = 0; col < numColumns_; ++col) {
-      targetColumns.push_back(
-          block_.getColumn(col).subspan(targetRow, numToPush));
-    }
     // NOTE: This is the expensive part, and it deliberately runs outside of
     // the strand, so that it runs concurrently with the copies of the other
     // pushes.
     boost::asio::post(executor_, [this, operation = std::move(operation),
-                                  targetColumns = std::move(targetColumns),
-                                  numToPush]() mutable {
-      const size_t beginRow = operation->numPushed_;
-      for (size_t col = 0; col < numColumns_; ++col) {
-        auto source =
-            operation->sourceColumns_[col].subspan(beginRow, numToPush);
-        // NOTE: Deliberately use `std::copy` and not `ql::ranges::copy`,
-        // because only the former is reliably turned into a `std::memmove`,
-        // see the detailed note in `IdTable::insertAtEnd`.
-        std::copy(source.begin(), source.end(), targetColumns[col].begin());
-      }
+                                  targetRow, numToPush]() mutable {
+      copyColumnsOnExecutor(*operation, targetRow, numToPush);
       boost::asio::dispatch(strand_, [this, operation = std::move(operation),
                                       numToPush]() mutable {
-        AD_CORRECTNESS_CHECK(numOutstandingCopies_ > 0);
-        --numOutstandingCopies_;
-        operation->numPushed_ += numToPush;
-        handOverBlockIfComplete();
-        pushNextChunk(std::move(operation));
+        onCopyFinished(std::move(operation), numToPush);
       });
     });
+  }
+
+  // Resize `block_` to a complete block, unless this has already happened.
+  // Must be called on the strand.
+  void resizeBlockIfNecessary() {
+    recordException([this]() {
+      if (!blockIsResized_) {
+        block_.resize(blocksize_);
+        blockIsResized_ = true;
+        numRowsReserved_ = 0;
+      }
+    });
+  }
+
+  // Copy the next `numToPush` rows of the `operation` into the rows of
+  // `block_` that start at `targetRow`. This runs outside of the strand.
+  void copyColumnsOnExecutor(const PushOperation& operation, size_t targetRow,
+                             size_t numToPush) {
+    const size_t beginRow = operation.numPushed_;
+    for (size_t col = 0; col < numColumns_; ++col) {
+      auto source = operation.sourceColumns_[col].subspan(beginRow, numToPush);
+      // Neither `block_` nor its buffers change while copies are outstanding,
+      // so it is safe to access them here.
+      auto target = block_.getColumn(col).subspan(targetRow, numToPush);
+      // NOTE: Deliberately use `std::copy` and not `ql::ranges::copy`,
+      // because only the former is reliably turned into a `std::memmove`,
+      // see the detailed note in `IdTable::insertAtEnd`.
+      std::copy(source.begin(), source.end(), target.begin());
+    }
+  }
+
+  // Record that a copy of `numToPush` rows of the `operation` has finished,
+  // hand over `block_` if it is now complete, and continue with the next chunk
+  // of the `operation`. Must be called on the strand.
+  void onCopyFinished(OperationPtr operation, size_t numToPush) {
+    AD_CORRECTNESS_CHECK(numOutstandingCopies_ > 0);
+    --numOutstandingCopies_;
+    operation->numPushed_ += numToPush;
+    handOverBlockIfComplete();
+    pushNextChunk(std::move(operation));
+  }
+
+  // Call `function()`. If it throws, store the exception in `exception_`,
+  // unless an earlier exception has already been stored there. Must be called
+  // on the strand.
+  template <typename Function>
+  void recordException(Function function) {
+    try {
+      function();
+    } catch (...) {
+      if (!exception_) {
+        exception_ = std::current_exception();
+      }
+    }
   }
 
   // If `block_` is full and no copies into it are outstanding anymore, hand it
@@ -276,13 +303,7 @@ class AsyncIdTablePusher {
     std::swap(complete, block_);
     blockIsResized_ = false;
     numRowsReserved_ = 0;
-    try {
-      sink_(std::move(complete));
-    } catch (...) {
-      if (!exception_) {
-        exception_ = std::current_exception();
-      }
-    }
+    recordException([this, &complete]() { sink_(std::move(complete)); });
     auto waiting = std::move(waitingForNextBlock_);
     waitingForNextBlock_.clear();
     for (auto& operation : waiting) {
