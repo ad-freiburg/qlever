@@ -115,6 +115,10 @@ constexpr inline size_t VOCAB_MERGER_NUM_ID_MAP_WRITER_THREADS = 8;
 // it, see `vocabularyMergeOptions`.
 constexpr inline ad_utility::MemorySize VOCAB_MERGER_INPUT_PER_CHUNK =
     ad_utility::MemorySize::megabytes(128);
+// The number of chunks of that merge that may be in flight per thread of the
+// pool (bounded further by the memory), see `vocabularyMergeOptions` in
+// `VocabularyMergerImpl.h` for why this is more than one.
+constexpr inline size_t VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD = 4;
 // The number of output blocks that a chunk of that merge may buffer before it
 // suspends (the thread behind the merge takes the chunks in order). A block
 // holds at most `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE` of merged words and

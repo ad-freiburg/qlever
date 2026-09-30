@@ -66,15 +66,23 @@ inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
       std::max<size_t>(1, (numInputBytes + inputPerChunk - 1) / inputPerChunk);
   options.targetChunksPerThread = std::max<size_t>(
       1, (numChunks + options.parallelism() - 1) / options.parallelism());
-  // The decoded input blocks and the output of a chunk are several times
-  // larger than their serialized form (every word is a `std::string`).
-  constexpr size_t decodedFactor = 4;
+  // The blocks in memory are larger than their serialized form (a
+  // `QueueWord` per word next to the bytes, and the output of a chunk copies
+  // the words), by up to a factor of two.
+  constexpr size_t decodedFactor = 2;
   const uint64_t memoryPerChunk = (std::max<size_t>(numPartialVocabularies, 1) *
                                        PARTIAL_VOCAB_BLOCK_SIZE.getBytes() +
                                    inputPerChunk) *
                                   decodedFactor;
+  // A chunk keeps its slot until the thread behind the merge has taken its
+  // output, and that thread takes the chunks in order. With exactly one slot
+  // per thread, one slow chunk therefore idles the whole pool: the chunks
+  // behind it are done, hold their slots, and no new chunk may start. Several
+  // slots per thread let the merge run ahead of a slow chunk, within the
+  // memory limit.
   options.maxNumChunksInFlight = std::clamp<size_t>(
-      memoryToUse.getBytes() / memoryPerChunk, 1, options.parallelism());
+      memoryToUse.getBytes() / memoryPerChunk, 1,
+      VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD * options.parallelism());
   return options;
 }
 
