@@ -87,6 +87,17 @@ const Variable& SpatialJoinCachedIndex::getGeometryColumn() const {
   return geometryColumn_;
 }
 
+// _____________________________________________________________________________
+SpatialJoinCachedIndex SpatialJoinCachedIndex::withPermutedRows(
+    ql::span<const size_t> newRowOfOldRow) const {
+  SpatialJoinCachedIndex result = *this;
+  for (auto& [shapeIndex, row] : result.shapeIndexToRow_) {
+    AD_CONTRACT_CHECK(row < newRowOfOldRow.size());
+    row = newRowOfOldRow[row];
+  }
+  return result;
+}
+
 // ____________________________________________________________________________
 std::shared_ptr<const MutableS2ShapeIndex> SpatialJoinCachedIndex::getIndex()
     const {

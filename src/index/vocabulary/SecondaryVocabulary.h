@@ -20,6 +20,8 @@
 #include "backports/span.h"
 #include "global/IndexTypes.h"
 #include "util/CompactStringVector.h"
+#include "util/Exception.h"
+#include "util/Serializer/Serializer.h"
 
 // The secondary vocabulary of an index. It stores words that were added after
 // the main index was built and that are not part of the vocabulary of that
@@ -54,7 +56,7 @@
 //
 // The global index of a word never changes when further segments are appended,
 // which is what allows persisted data (in particular the blobs of
-// `NamedCachedQueryBlobManager`, in a follow-up change) to add words
+// `NamedCachedQueryBlobManager`) to add words
 // incrementally, one segment at a time, without invalidating the `Id`s of the
 // earlier segments. Lexicographic ranks, in contrast, do change when a segment
 // is appended.
@@ -145,6 +147,48 @@ class SecondaryVocabulary {
   // Look up `word`. Return its global index if it is contained in this
   // vocabulary, and `std::nullopt` otherwise.
   std::optional<SecondaryVocabIndex> getId(std::string_view word) const;
+
+  // Return a deep copy of this vocabulary, which owns all its segments (also
+  // if the segments of this vocabulary are zero-copy views), and in which all
+  // words have the same global indices as in this vocabulary. This is a
+  // function instead of a copy constructor, because the segments are
+  // move-only, and because the copy is expensive.
+  SecondaryVocabulary clone() const;
+
+  // Serialize the vocabulary as its number of segments followed by the
+  // segments, in the order in which they were appended, so that all words keep
+  // their global indices. When reading, `arg` has to be empty, and the segments
+  // are appended via `appendSegment`, which checks them, so that a corrupted
+  // input is rejected. If the `serializer` supports zero-copy deserialization
+  // (see `ZeroCopyReadSerializer`), then the segments are zero-copy views into
+  // its buffer, which then has to outlive this vocabulary (see NOTE 1 at
+  // `appendSegment`).
+  AD_SERIALIZE_FRIEND_FUNCTION(SecondaryVocabulary) {
+    using namespace ad_utility::serialization;
+    if constexpr (WriteSerializer<S>) {
+      serializer << static_cast<uint64_t>(arg.segments_.size());
+      for (const auto& segment : arg.segments_) {
+        serializer << segment;
+      }
+    } else {
+      AD_CONTRACT_CHECK(arg.numSegments() == 0,
+                        "A secondary vocabulary can only be deserialized into "
+                        "an empty one");
+      uint64_t numSegments = 0;
+      serializer >> numSegments;
+      for (uint64_t i = 0; i < numSegments; ++i) {
+        if constexpr (ZeroCopyReadSerializer<S>) {
+          arg.appendSegment(
+              CompactVectorOfStrings<char>::fromZeroCopyDeserializer(
+                  serializer));
+        } else {
+          CompactVectorOfStrings<char> segment;
+          serializer >> segment;
+          arg.appendSegment(std::move(segment));
+        }
+      }
+    }
+  }
 
  private:
   // Return, for each word of `segment` (in the order of `segment`), the

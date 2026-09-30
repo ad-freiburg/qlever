@@ -12,6 +12,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -271,6 +272,93 @@ TEST(SecondaryVocabulary, appendZeroCopySegment) {
   EXPECT_EQ(vocab[SecondaryVocabIndex::make(3)], "<f>");
   EXPECT_EQ(vocab[SecondaryVocabIndex::make(4)], "<g>");
   EXPECT_EQ(vocab.getId("<g>"), SecondaryVocabIndex::make(4));
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, clone) {
+  // A vocabulary with two segments, the second of which is a zero-copy view
+  // into the buffer of a serializer.
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer << makeSegment({"<a>", "<f>"});
+  std::optional<ad_utility::serialization::AlignedByteBufferReadSerializer>
+      readSerializer{std::in_place, std::move(writeSerializer).data()};
+  SecondaryVocabulary vocab{secondaryVocabWords};
+  vocab.appendSegment(
+      CompactVectorOfStrings<char>::fromZeroCopyDeserializer(*readSerializer));
+
+  auto clone = vocab.clone();
+  // The clone owns its segments, so it stays valid when the buffer of the
+  // zero-copy segment of the original is gone.
+  readSerializer.reset();
+  const std::vector<std::string> wordsInGlobalOrder{"\"a\"", "<b>", "<d>",
+                                                    "<a>", "<f>"};
+  EXPECT_EQ(clone.numWords(), 5);
+  EXPECT_EQ(clone.numSegments(), 2);
+  expectWordsAndIdsMatch(clone, wordsInGlobalOrder);
+
+  // The clone can be extended independently of the original.
+  clone.appendSegment(makeSegment({"<g>"}));
+  EXPECT_EQ(clone.getId("<g>"), SecondaryVocabIndex::make(5));
+  EXPECT_EQ(vocab.numWords(), 5);
+  EXPECT_EQ(vocab.numSegments(), 2);
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, serialization) {
+  SecondaryVocabulary vocab{secondaryVocabWords};
+  vocab.appendSegment(makeSegment({"<a>", "<f>"}));
+  const std::vector<std::string> wordsInGlobalOrder{"\"a\"", "<b>", "<d>",
+                                                    "<a>", "<f>"};
+
+  // Read back via a serializer that supports zero-copy deserialization, in
+  // which case the segments are views into its buffer, and via one that does
+  // not, in which case they own their words. The segments and hence the
+  // global indices of all words are the same in both cases.
+  auto check = [&wordsInGlobalOrder](auto& readSerializer) {
+    SecondaryVocabulary readVocab;
+    readSerializer >> readVocab;
+    EXPECT_EQ(readVocab.numSegments(), 2);
+    expectWordsAndIdsMatch(readVocab, wordsInGlobalOrder);
+
+    // Deserializing into a vocabulary that is not empty is not allowed.
+    SecondaryVocabulary nonEmpty{secondaryVocabWords};
+    AD_EXPECT_THROW_WITH_MESSAGE(readSerializer >> nonEmpty,
+                                 HasSubstr("only be deserialized into an "
+                                           "empty one"));
+  };
+  using namespace ad_utility::serialization;
+  AlignedByteBufferWriteSerializer alignedWriter;
+  alignedWriter << vocab;
+  AlignedByteBufferReadSerializer zeroCopyReader{
+      std::move(alignedWriter).data()};
+  static_assert(ZeroCopyReadSerializer<decltype(zeroCopyReader)>);
+  check(zeroCopyReader);
+
+  ByteBufferWriteSerializer writer;
+  writer << vocab;
+  ByteBufferReadSerializer owningReader{std::move(writer).data()};
+  static_assert(!ZeroCopyReadSerializer<decltype(owningReader)>);
+  check(owningReader);
+
+  // An empty vocabulary is serialized as zero segments.
+  ByteBufferWriteSerializer emptyWriter;
+  emptyWriter << SecondaryVocabulary{};
+  ByteBufferReadSerializer emptyReader{std::move(emptyWriter).data()};
+  SecondaryVocabulary readEmpty;
+  emptyReader >> readEmpty;
+  EXPECT_EQ(readEmpty.numSegments(), 0);
+  EXPECT_EQ(readEmpty.numWords(), 0);
+
+  // A corrupted input, in which a word occurs in two segments, is rejected
+  // by the checks of `appendSegment`.
+  ByteBufferWriteSerializer corruptedWriter;
+  corruptedWriter << uint64_t{2};
+  corruptedWriter << makeSegment({"<a>"});
+  corruptedWriter << makeSegment({"<a>"});
+  ByteBufferReadSerializer corruptedReader{std::move(corruptedWriter).data()};
+  SecondaryVocabulary corrupted;
+  AD_EXPECT_THROW_WITH_MESSAGE(corruptedReader >> corrupted,
+                               HasSubstr("is already contained"));
 }
 
 // _____________________________________________________________________________

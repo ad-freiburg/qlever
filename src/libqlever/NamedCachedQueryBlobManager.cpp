@@ -16,9 +16,13 @@
 #include <string_view>
 #include <type_traits>
 
+#include "engine/ExplicitIdTableOperation.h"
+#include "engine/NamedResultCacheSerializer.h"
 #include "index/IndexImpl.h"
 #include "index/vocabulary/BuildFilteredVocabulary.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
+#include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 #include "libqlever/Qlever.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Random.h"
@@ -33,14 +37,14 @@ namespace {
 // loading a blob written by an incompatible version of QLever.
 constexpr std::array<char, 8> blobMagicBytes{'Q', 'L', 'V', 'R',
                                              'B', 'L', 'O', 'B'};
-constexpr uint16_t blobFormatVersion = 1;
+using Manager = NamedCachedQueryBlobManager;
 
 // The number of bytes written by `writeBlobHeader`. Note that no alignment
 // padding is inserted between the two members, because `blobMagicBytes` has an
-// alignment of one and its size is a multiple of the alignment of
-// `blobFormatVersion`.
+// alignment of one and its size is a multiple of the alignment of the format
+// version.
 constexpr size_t blobHeaderSize =
-    sizeof(blobMagicBytes) + sizeof(blobFormatVersion);
+    sizeof(blobMagicBytes) + sizeof(Manager::formatVersionWithSecondaryVocab);
 static_assert(sizeof(blobMagicBytes) % alignof(uint16_t) == 0);
 
 // The message that is reported for any input that is not a blob written by
@@ -123,13 +127,16 @@ void writeMetadataAndFilteredVocabulary(
 
 // _____________________________________________________________________________
 void NamedCachedQueryBlobManager::writeBlobHeader(
-    ad_utility::serialization::AlignedByteBufferWriteSerializer& serializer) {
+    ad_utility::serialization::AlignedByteBufferWriteSerializer& serializer,
+    uint16_t formatVersion) {
+  AD_CONTRACT_CHECK(formatVersion == formatVersionWithoutSecondaryVocab ||
+                    formatVersion == formatVersionWithSecondaryVocab);
   serializer << blobMagicBytes;
-  serializer << blobFormatVersion;
+  serializer << formatVersion;
 }
 
 // _____________________________________________________________________________
-void NamedCachedQueryBlobManager::skipAndVerifyBlobHeader(
+uint16_t NamedCachedQueryBlobManager::skipAndVerifyBlobHeader(
     ad_utility::serialization::ByteBufferReadSerializerT<
         true, ql::span<const char>>& serializer) {
   // Explicitly check that the header is complete, so that a truncated blob is
@@ -145,10 +152,13 @@ void NamedCachedQueryBlobManager::skipAndVerifyBlobHeader(
   uint16_t version;
   serializer >> version;
   AD_CONTRACT_CHECK(
-      version == blobFormatVersion,
+      version == formatVersionWithoutSecondaryVocab ||
+          version == formatVersionWithSecondaryVocab,
       "The given blob was written by an incompatible version of QLever "
       "(format version ",
-      version, ", expected ", blobFormatVersion, ")");
+      version, ", expected ", formatVersionWithoutSecondaryVocab, " or ",
+      formatVersionWithSecondaryVocab, ")");
+  return version;
 }
 
 // _____________________________________________________________________________
@@ -201,10 +211,27 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // required so that the buffer can later be deserialized zero-copy (see
   // `deserialize`).
   ad_utility::serialization::AlignedByteBufferWriteSerializer serializer;
-  writeBlobHeader(serializer);
 
   auto indexAndViews = qlever.indexAndViewsSnapshot();
   const auto& indexImpl = indexAndViews->index_.getImpl();
+
+  // The secondary vocabulary of the blob consists of the one of the index (if
+  // any, for example because the index was itself loaded from a blob, so that
+  // the `Id`s of its words stay valid), extended by the new words of the
+  // named cache entries (see `NamedCacheSecondaryVocabRewriter.h`). Only if it
+  // is empty, the blob is written in the old format without a secondary
+  // vocabulary, which can also be read by older versions of QLever.
+  auto entries = qlever.namedResultCache_.getAllEntriesSortedByKey();
+  SecondaryVocabulary secondaryVocab = indexImpl.secondaryVocab() != nullptr
+                                           ? indexImpl.secondaryVocab()->clone()
+                                           : SecondaryVocabulary{};
+  namedCacheSecondaryVocab::addNewWordsToSecondaryVocab(entries,
+                                                        secondaryVocab);
+  bool hasSecondaryVocab = secondaryVocab.numWords() > 0;
+  writeBlobHeader(serializer, hasSecondaryVocab
+                                  ? formatVersionWithSecondaryVocab
+                                  : formatVersionWithoutSecondaryVocab);
+
   // Serialize the index metadata JSON together with the vocabulary, so that the
   // blob is self-contained and the loading side can set up the vocabulary
   // configuration without access to the on-disk index. Without excluded
@@ -220,7 +247,30 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
         serializer, indexImpl, indexImpl.getVocab().getUnderlyingVocabulary(),
         config.excludedEntryRegexes_);
   }
-  qlever.namedResultCache_.writeToSerializer(serializer);
+  if (hasSecondaryVocab) {
+    serializer << secondaryVocab;
+  }
+
+  // Write the named cache entries. An entry that contains `Id`s of type
+  // `LocalVocabIndex` is replaced by a rewritten copy (the entry in the named
+  // cache itself stays unchanged). The words of the local vocab of such a copy
+  // are not written, because they are no longer referenced (see
+  // `rewriteToSecondaryVocab`).
+  namedResultCacheSerializer::writeEntries(
+      serializer, entries,
+      [&secondaryVocab, &qlever](auto& entrySerializer,
+                                 const NamedResultCache::Value& value) {
+        if (!namedCacheSecondaryVocab::containsLocalVocabIds(value)) {
+          entrySerializer << value;
+          return;
+        }
+        auto rewritten = namedCacheSecondaryVocab::rewriteToSecondaryVocab(
+            value, secondaryVocab, qlever.allocator_);
+        namedResultCacheSerializer::writeValue(
+            entrySerializer, rewritten,
+            ExplicitIdTableOperation::viewOf(rewritten.result_).getColumns(),
+            rewritten.resultSortedOn_, /*writeLocalVocabWords=*/false);
+      });
   auto uncompressed = std::move(serializer).data();
 
   return compressBlob(uncompressed);
@@ -236,8 +286,9 @@ void NamedCachedQueryBlobManager::deserialize(
       "more than once on the same `Qlever` instance");
 
   // Decompress into `deserializedBlobLifetimeExtender_`, which is kept alive
-  // for the lifetime of this manager because the vocabulary and named result
-  // cache entries loaded below are zero-copy views directly into it.
+  // for the lifetime of this manager because the vocabulary, the secondary
+  // vocabulary, and the named result cache entries loaded below are zero-copy
+  // views directly into it.
   deserializedBlobLifetimeExtender_.emplace(
       decompressBlob(compressedBlob, allocator));
 
@@ -249,7 +300,7 @@ void NamedCachedQueryBlobManager::deserialize(
                                                        ql::span<const char>>
       reader{ql::span<const char>{deserializedBlobLifetimeExtender_.value()}};
 
-  skipAndVerifyBlobHeader(reader);
+  uint16_t formatVersion = skipAndVerifyBlobHeader(reader);
 
   auto indexAndViews = qlever.indexAndViewsSnapshot();
   auto& indexImpl = indexAndViews->index_.getImpl();
@@ -259,7 +310,7 @@ void NamedCachedQueryBlobManager::deserialize(
   // deserialization.
   rethrowWithContext(
       blobContentsNotReadableMessage,
-      [&indexImpl, &reader, &qlever, &indexAndViews]() {
+      [&indexImpl, &reader, &qlever, &indexAndViews, formatVersion]() {
         // Read and apply the index metadata JSON before loading the vocabulary,
         // so that the vocabulary is set up with the correct configuration
         // (locale, comparator, etc.).
@@ -267,6 +318,18 @@ void NamedCachedQueryBlobManager::deserialize(
         reader >> metadataJson;
         indexImpl.applyConfiguration(nlohmann::json::parse(metadataJson));
         indexImpl.loadVocabularyFromZeroCopyBlob(reader);
+        // The named cache entries may contain `Id`s of the secondary
+        // vocabulary, which therefore has to be set up before they are used.
+        // The words of the secondary vocabulary are zero-copy views into the
+        // blob, just like the ones of the vocabulary.
+        if (formatVersion == formatVersionWithSecondaryVocab) {
+          AD_CONTRACT_CHECK(indexImpl.secondaryVocab() == nullptr,
+                            "A blob with a secondary vocabulary cannot be "
+                            "loaded into an index that already has one");
+          auto secondaryVocab = std::make_shared<SecondaryVocabulary>();
+          reader >> *secondaryVocab;
+          indexImpl.setSecondaryVocab(std::move(secondaryVocab));
+        }
         qlever.namedResultCache_.readFromSerializer(
             reader, qlever.allocator_,
             indexAndViews->index_.getLocalVocabContext());
