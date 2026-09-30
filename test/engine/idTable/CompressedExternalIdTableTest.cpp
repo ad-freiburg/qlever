@@ -12,6 +12,8 @@
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
+#include <future>
 
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
@@ -1569,14 +1571,13 @@ TEST(CompressedExternalIdTable, pushBlockCreatesSameBlocksAsRowWisePush) {
 
 // _____________________________________________________________________________
 // Push the `tables` into a sorter with the given `blocksize`, using one thread
-// per table and `pushBlockConcurrently`, and check that the sorted output
+// per table that starts an `asyncPushBlock`, and check that the sorted output
 // consists of exactly the rows of all the tables. The `numAdditionalRowWise`
 // last rows of the last table are afterwards pushed one by one via `push`, to
 // check that the concurrent pushing can be mixed with the sequential one.
-void testPushBlockConcurrently(const std::vector<IdTable>& tables,
-                               size_t blocksize,
-                               size_t numAdditionalRowWise = 0,
-                               source_location l = AD_CURRENT_SOURCE_LOC()) {
+void testAsyncPushBlock(const std::vector<IdTable>& tables, size_t blocksize,
+                        size_t numAdditionalRowWise = 0,
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
   SCOPED_TRACE(absl::StrCat("blocksize = ", blocksize));
   auto alloc = ad_utility::testing::makeAllocator();
@@ -1588,6 +1589,8 @@ void testPushBlockConcurrently(const std::vector<IdTable>& tables,
   };
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> sorter{
       filename, NUM_COLS, memoryForBlocksize(blocksize, NUM_COLS), alloc};
+  net::thread_pool pool{4};
+  sorter.setMergeExecutor(pool.get_executor(), 4);
 
   // All the rows that are pushed, which is what the sorted output has to
   // consist of.
@@ -1596,12 +1599,17 @@ void testPushBlockConcurrently(const std::vector<IdTable>& tables,
     expected.insertAtEnd(table);
   }
 
+  std::vector<std::future<void>> futures(tables.size());
   {
     std::vector<ad_utility::JThread> threads;
-    for (const auto& table : tables) {
-      threads.emplace_back(
-          [&sorter, &table]() { sorter.pushBlockConcurrently(table); });
+    for (size_t i = 0; i < tables.size(); ++i) {
+      threads.emplace_back([&sorter, &tables, &futures, i]() {
+        futures[i] = sorter.asyncPushBlock(tables[i], net::use_future);
+      });
     }
+  }
+  for (auto& future : futures) {
+    future.get();
   }
   EXPECT_EQ(sorter.size(), expected.numRows());
 
@@ -1620,24 +1628,23 @@ void testPushBlockConcurrently(const std::vector<IdTable>& tables,
 }
 
 // _____________________________________________________________________________
-// `pushBlockConcurrently` may be called from several threads at the same time,
-// and the result is the same as if the rows had been pushed sequentially (the
-// order of the rows within a block is arbitrary, but the sorter sorts them
-// anyway).
-TEST(CompressedExternalIdTable, pushBlockConcurrently) {
+// `asyncPushBlock` may be called from several threads at the same time, and
+// the result is the same as if the rows had been pushed sequentially (the order
+// of the rows within a block is arbitrary, but the sorter sorts them anyway).
+TEST(CompressedExternalIdTable, asyncPushBlock) {
   std::vector<IdTable> tables;
   for (size_t i = 0; i < 8; ++i) {
     tables.push_back(createRandomlyFilledIdTable(500 + 37 * i, NUM_COLS));
   }
   // A blocksize that is much larger than a single table, one that is much
   // smaller, and the degenerate case of a single row per block.
-  testPushBlockConcurrently(tables, 10'000);
-  testPushBlockConcurrently(tables, 64);
-  testPushBlockConcurrently(tables, 1);
+  testAsyncPushBlock(tables, 10'000);
+  testAsyncPushBlock(tables, 64);
+  testAsyncPushBlock(tables, 1);
   // The pushes are so few that they never fill a single block, so the sorter
   // takes its "everything fits into a single block" shortcut.
-  testPushBlockConcurrently(tables, 100'000);
+  testAsyncPushBlock(tables, 100'000);
   // Mixing the concurrent pushes with sequential ones.
-  testPushBlockConcurrently(tables, 64, 20);
-  testPushBlockConcurrently(tables, 100'000, 20);
+  testAsyncPushBlock(tables, 64, 20);
+  testAsyncPushBlock(tables, 100'000, 20);
 }

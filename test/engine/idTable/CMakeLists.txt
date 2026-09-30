@@ -1,3 +1,5 @@
+addLinkAndDiscoverTest(AsyncIdTablePusherTest engine testUtil)
+
 addLinkAndDiscoverTest(CompressedExternalIdTableTest engine index testUtil)
 
 addLinkAndDiscoverTest(CompressedIdTableBlocksTest engine index testUtil)

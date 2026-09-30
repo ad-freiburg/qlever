@@ -1,0 +1,296 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#ifndef QLEVER_SRC_ENGINE_IDTABLE_ASYNCIDTABLEPUSHER_H
+#define QLEVER_SRC_ENGINE_IDTABLE_ASYNCIDTABLEPUSHER_H
+
+#include <absl/functional/any_invocable.h>
+
+#include <algorithm>
+#include <boost/asio/associated_executor.hpp>
+#include <boost/asio/async_result.hpp>
+#include <boost/asio/dispatch.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/strand.hpp>
+#include <cstddef>
+#include <exception>
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "backports/asio.h"
+#include "engine/idTable/IdTable.h"
+#include "engine/idTable/IdTableConcepts.h"
+#include "util/Exception.h"
+#include "util/Forward.h"
+
+namespace ad_utility {
+
+// Collect the rows of `IdTable`s that are pushed concurrently from several
+// threads into blocks of a fixed size, and hand each complete block to a
+// `Sink`. The purpose of this class is that the copying of the rows (which for
+// large tables is by far the most expensive part of a push) happens in
+// parallel instead of being serialized.
+//
+// This works as follows: The current block is resized to a complete block up
+// front, so that a push only has to *reserve* the range of rows into which it
+// then copies. The reserving runs on a strand; it is a handful of integer
+// operations, so the next push can start its copy almost immediately. The
+// copies themselves run on the underlying executor, outside of the strand. The
+// only point at which the pushes have to be synchronized is when a block is
+// full: it can only be handed to the `Sink` once all the copies into it have
+// finished. A push that finds the block full in the meantime does not block a
+// thread, but is queued on the strand and resumed as soon as the block has been
+// handed over.
+//
+// NOTE: The rows of a single pushed table are not necessarily contiguous in the
+// resulting blocks, and the blocks contain the rows of concurrent pushes in an
+// arbitrary order. Only use this for inputs that are sorted (or otherwise
+// reordered) afterwards anyway.
+template <size_t NumStaticCols>
+class AsyncIdTablePusher {
+ public:
+  using Block = IdTableStatic<NumStaticCols>;
+  // Receive a complete block. It is called on the strand of this class, so the
+  // calls never overlap, but a call delays all the pushes that wait for the
+  // next block, so it should be cheap or hand its work off.
+  using Sink = absl::AnyInvocable<void(Block)>;
+  // The type-erased completion handler of `asyncPushBlock`, see there.
+  using Handler = absl::AnyInvocable<void(std::exception_ptr)>;
+
+ private:
+  using Allocator = typename Block::Allocator;
+
+  // The state of a single `asyncPushBlock` that is in flight.
+  struct PushOperation {
+    // The columns of the pushed table.
+    std::vector<ql::span<const Id>> sourceColumns_;
+    size_t numRows_ = 0;
+    // The number of rows that have already been copied into a block.
+    size_t numPushed_ = 0;
+    Handler handler_;
+  };
+  using OperationPtr = std::shared_ptr<PushOperation>;
+
+  ql::any_io_executor executor_;
+  boost::asio::strand<ql::any_io_executor> strand_;
+  size_t numColumns_;
+  size_t blocksize_;
+  Allocator allocator_;
+  Sink sink_;
+
+  // All the following members are only accessed from within `strand_` (or by
+  // `finish`, when no push is in flight), so no further synchronization is
+  // needed.
+
+  // The block into which the rows are currently copied.
+  Block block_;
+  // `true` iff `block_` has been resized to a complete block of `blocksize_`
+  // rows up front. In that case the number of rows that have actually been
+  // pushed into it is `numRowsReserved_` and not its size. It is `false` before
+  // the first push, and after a complete block has been handed to the `sink_`,
+  // so that no memory is allocated for a block that nobody pushes into.
+  bool blockIsResized_ = false;
+  // The number of rows of `block_` that have been handed out to pushes, which
+  // is also the row at which the next push may start copying.
+  size_t numRowsReserved_ = 0;
+  // The number of copies into `block_` that are currently running outside of
+  // the strand. The block may only be handed to the `sink_` once this has
+  // dropped to zero.
+  size_t numOutstandingCopies_ = 0;
+  // The pushes that found `block_` full while copies into it were still
+  // running. They are resumed as soon as the block has been handed over.
+  std::vector<OperationPtr> waitingForNextBlock_;
+  // The first exception that was thrown, either by the `sink_` or while
+  // preparing a block. All pushes that are in flight or started afterwards
+  // complete with it.
+  std::exception_ptr exception_;
+
+ public:
+  // Construct a pusher that runs its work on the `executor` and hands blocks of
+  // `blocksize` rows with `numColumns` columns (which are allocated via the
+  // `allocator`) to the `sink`.
+  AsyncIdTablePusher(ql::any_io_executor executor, size_t numColumns,
+                     size_t blocksize, Allocator allocator, Sink sink)
+      : executor_{std::move(executor)},
+        strand_{boost::asio::make_strand(executor_)},
+        numColumns_{numColumns},
+        blocksize_{blocksize},
+        allocator_{std::move(allocator)},
+        sink_{std::move(sink)},
+        block_{numColumns_, allocator_} {
+    AD_CONTRACT_CHECK(blocksize_ > 0);
+  }
+
+  // Asynchronously push all the rows of the `table`. Accept any Asio
+  // completion token (e.g. `boost::asio::use_future` or a plain callable). The
+  // completion signature is `void(std::exception_ptr)`, where a non-null
+  // `exception_ptr` means that the rows could not be pushed. The completion
+  // handler is posted to its associated executor, or to the executor of this
+  // class if it has none. Concurrent calls are allowed and are the intended
+  // way of using this class.
+  //
+  // IMPORTANT: The `table` must stay alive and unchanged until the operation
+  // has completed, because its rows are only copied while it is in flight.
+  CPP_template(typename Table, typename CompletionToken)(
+      requires IdTableLike<Table>) auto asyncPushBlock(const Table& table,
+                                                       CompletionToken&&
+                                                           completionToken) {
+    AD_CONTRACT_CHECK(table.numColumns() == numColumns_);
+    auto operation = std::make_shared<PushOperation>();
+    for (size_t col = 0; col < numColumns_; ++col) {
+      operation->sourceColumns_.push_back(table.getColumn(col));
+    }
+    operation->numRows_ = table.numRows();
+    auto initiate = [this,
+                     operation = std::move(operation)](auto handler) mutable {
+      auto handlerExecutor =
+          boost::asio::get_associated_executor(handler, executor_);
+      operation->handler_ = [handler = std::move(handler), handlerExecutor](
+                                std::exception_ptr exception) mutable {
+        boost::asio::post(handlerExecutor,
+                          [handler = std::move(handler),
+                           exception = std::move(exception)]() mutable {
+                            std::move(handler)(std::move(exception));
+                          });
+      };
+      boost::asio::dispatch(strand_,
+                            [this, operation = std::move(operation)]() mutable {
+                              pushNextChunk(std::move(operation));
+                            });
+    };
+    return boost::asio::async_initiate<CompletionToken,
+                                       void(std::exception_ptr)>(
+        std::move(initiate), completionToken);
+  }
+
+  // Return the number of pushed rows that have not yet been handed to the
+  // `sink_`, which `finish` below then returns.
+  //
+  // PRECONDITION: No `asyncPushBlock` is in flight.
+  size_t numPendingRows() const {
+    return blockIsResized_ ? numRowsReserved_ : 0;
+  }
+
+  // Return the rows that have been pushed but not yet handed to the `sink_`,
+  // because they don't form a complete block, and reset this pusher, so that
+  // it can be used again. After a push has completed with an exception, the
+  // pushed rows are unspecified.
+  //
+  // PRECONDITION: No `asyncPushBlock` is in flight, in particular all of them
+  // have completed and the threads that started them have been joined.
+  Block finish() {
+    AD_CORRECTNESS_CHECK(numOutstandingCopies_ == 0 &&
+                         waitingForNextBlock_.empty());
+    exception_ = nullptr;
+    Block result{numColumns_, allocator_};
+    if (blockIsResized_) {
+      block_.resize(numRowsReserved_);
+      std::swap(result, block_);
+      blockIsResized_ = false;
+      numRowsReserved_ = 0;
+    }
+    return result;
+  }
+
+ private:
+  // Reserve the next range of rows of `block_` for the `operation` and copy
+  // them outside of the strand, or complete the `operation` if all its rows
+  // have been pushed (or an exception occurred). Must be called on the strand.
+  void pushNextChunk(OperationPtr operation) {
+    if (exception_ || operation->numPushed_ == operation->numRows_) {
+      std::move(operation->handler_)(exception_);
+      return;
+    }
+    try {
+      if (!blockIsResized_) {
+        block_.resize(blocksize_);
+        blockIsResized_ = true;
+        numRowsReserved_ = 0;
+      }
+    } catch (...) {
+      exception_ = std::current_exception();
+      std::move(operation->handler_)(exception_);
+      return;
+    }
+    if (numRowsReserved_ == blocksize_) {
+      // A full block whose copies had all finished would already have been
+      // handed over by `handOverBlockIfComplete`.
+      AD_CORRECTNESS_CHECK(numOutstandingCopies_ > 0);
+      waitingForNextBlock_.push_back(std::move(operation));
+      return;
+    }
+    const size_t targetRow = numRowsReserved_;
+    const size_t numToPush = std::min(
+        blocksize_ - targetRow, operation->numRows_ - operation->numPushed_);
+    numRowsReserved_ += numToPush;
+    ++numOutstandingCopies_;
+    // The destination of the copy. Neither `block_` nor its buffers change
+    // while copies are outstanding, so these spans stay valid.
+    std::vector<ql::span<Id>> targetColumns;
+    for (size_t col = 0; col < numColumns_; ++col) {
+      targetColumns.push_back(
+          block_.getColumn(col).subspan(targetRow, numToPush));
+    }
+    // NOTE: This is the expensive part, and it deliberately runs outside of
+    // the strand, so that it runs concurrently with the copies of the other
+    // pushes.
+    boost::asio::post(executor_, [this, operation = std::move(operation),
+                                  targetColumns = std::move(targetColumns),
+                                  numToPush]() mutable {
+      const size_t beginRow = operation->numPushed_;
+      for (size_t col = 0; col < numColumns_; ++col) {
+        auto source =
+            operation->sourceColumns_[col].subspan(beginRow, numToPush);
+        // NOTE: Deliberately use `std::copy` and not `ql::ranges::copy`,
+        // because only the former is reliably turned into a `std::memmove`,
+        // see the detailed note in `IdTable::insertAtEnd`.
+        std::copy(source.begin(), source.end(), targetColumns[col].begin());
+      }
+      boost::asio::dispatch(strand_, [this, operation = std::move(operation),
+                                      numToPush]() mutable {
+        AD_CORRECTNESS_CHECK(numOutstandingCopies_ > 0);
+        --numOutstandingCopies_;
+        operation->numPushed_ += numToPush;
+        handOverBlockIfComplete();
+        pushNextChunk(std::move(operation));
+      });
+    });
+  }
+
+  // If `block_` is full and no copies into it are outstanding anymore, hand it
+  // to the `sink_` and resume the pushes that have been waiting for the next
+  // block. Must be called on the strand.
+  void handOverBlockIfComplete() {
+    if (!blockIsResized_ || numRowsReserved_ < blocksize_ ||
+        numOutstandingCopies_ > 0) {
+      return;
+    }
+    Block complete{numColumns_, allocator_};
+    std::swap(complete, block_);
+    blockIsResized_ = false;
+    numRowsReserved_ = 0;
+    try {
+      sink_(std::move(complete));
+    } catch (...) {
+      if (!exception_) {
+        exception_ = std::current_exception();
+      }
+    }
+    auto waiting = std::move(waitingForNextBlock_);
+    waitingForNextBlock_.clear();
+    for (auto& operation : waiting) {
+      pushNextChunk(std::move(operation));
+    }
+  }
+};
+
+}  // namespace ad_utility
+
+#endif  // QLEVER_SRC_ENGINE_IDTABLE_ASYNCIDTABLEPUSHER_H
