@@ -565,6 +565,8 @@ addLinkAndDiscoverTest(LruCacheWithStatisticsTest)
 
 addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
 
+addLinkAndDiscoverTestNoLibs(RangeThatReleasesOnEndTest)
+
 addLinkAndDiscoverTest(TripleSerializerTest)
 
 addLinkAndDiscoverTest(GeometryInfoTest qlever_util)
