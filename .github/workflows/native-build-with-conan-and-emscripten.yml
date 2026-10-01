@@ -8,8 +8,9 @@ on:
     # (see the `publish` job below).
     branches: [ master ]
     tags: [ "v*" ]
-  pull_request:
-    branches: [ master ]
+  # NOTE: no pull_request trigger. PR builds run on the fleet
+  # (wolga-native.yml emsdk leg); the hosted build below exists only to
+  # feed the same-run artifact to `publish` on master/tags.
   merge_group:
 
 concurrency:
@@ -34,6 +35,7 @@ permissions:
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
     runs-on: ubuntu-24.04
 
     steps:

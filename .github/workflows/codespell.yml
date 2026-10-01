@@ -3,16 +3,24 @@
 name: Codespell
 
 on:
-  push:
-    branches: [ master ]
+  # CI-trim 2026-09-23: hosted legs skip push (GitHub queue latency fanned
+  # every merge into dozens of queued jobs). Fleet legs guard master; full
+  # signal via 'ci'-labeled PRs or manual dispatch.
   pull_request:
-    branches: [ master ]
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+# A newer push to the same PR branch cancels the older run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   codespell:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
     name: Check for spelling errors
     runs-on: ubuntu-latest
 
