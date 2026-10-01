@@ -24,12 +24,10 @@
 #include "util/Log.h"
 
 namespace ad_utility {
-// Wrapper class for file access. Is supposed to provide
-// methods that allow fast access to binary files.
-// Also features methods for dealing with ASCII files
-// but is less efficient then stl functions due
-// to the lack of buffering.
-// Many methods are copies from the CompleteSearch File.h
+// Wrapper class for a `FILE*` that provides fast access to binary files:
+// buffered sequential reading and writing, and positioned reading and writing
+// (via `pread` and `pwrite`) that do not touch the file position. Many methods
+// are copies from the CompleteSearch `File.h`.
 class File {
  private:
   using string = std::string;
@@ -38,14 +36,14 @@ class File {
   FILE* file_;
 
  public:
-  // Default constructor
+  // Default constructor, the `File` is not open.
   File() {
     file_ = NULL;
     name_ = "";
   }
 
-  // Constructor that creates an instance from the
-  // file system.
+  // Constructor that opens the file `filename` with the given `mode` (see
+  // `open` below).
   File(const char* filename, const char* mode) : name_(filename) {
     open(filename, mode);
   }
@@ -71,12 +69,13 @@ class File {
   File(File&& rhs) noexcept
       : name_{std::move(rhs.name_)}, file_{std::exchange(rhs.file_, nullptr)} {}
 
-  // Destructor closes file if still open
+  // Destructor, closes the file if it is still open.
   ~File() {
     if (isOpen()) close();
   }
 
-  // OPEN FILE (exit with error if fails, returns true otherwise)
+  // Open the file `filename` with the given `mode` (see `fopen`). Throw an
+  // exception if that fails, return `true` otherwise.
   bool open(const char* filename, const char* mode) {
     file_ = fopen(filename, mode);
     if (file_ == NULL) {
@@ -89,12 +88,12 @@ class File {
     return true;
   }
 
-  // overload  for c++ strings
+  // Overload for `std::string`.
   bool open(const string& filename, const char* mode) {
     return open(filename.c_str(), mode);
   }
 
-  // checks if the file is open.
+  // Check if the file is open.
   [[nodiscard]] bool isOpen() const { return (file_ != NULL); }
 
   // Return the underlying file descriptor.
@@ -147,15 +146,15 @@ class File {
 
   const std::string& name() const { return name_; }
 
-  // read from current file pointer position
-  // returns the number of bytes read
+  // Read `nofBytesToRead` bytes from the current file position (buffered, see
+  // `fread`). Return the number of bytes read.
   size_t read(void* targetBuffer, size_t nofBytesToRead) {
     AD_CONTRACT_CHECK(file_);
     return fread(targetBuffer, (size_t)1, nofBytesToRead, file_);
   }
 
-  // write to current file pointer position
-  // returns number of bytes written
+  // Write `nofBytesToWrite` bytes at the current file position (buffered, see
+  // `fwrite`). Return the number of bytes written.
   size_t write(const void* sourceBuffer, size_t nofBytesToWrite) {
     AD_CONTRACT_CHECK(file_);
     return fwrite(sourceBuffer, (size_t)1, nofBytesToWrite, file_);
@@ -165,11 +164,8 @@ class File {
   // that failed (for example because the disk is full), see `fflush`.
   bool flush() { return fflush(file_) == 0; }
 
-  // Seeks a position in the file.
-  // Sets the file position indicator for the stream.
-  // The new position is obtained by adding seekOffset
-  // bytes to the position seekOrigin.
-  // Returns true on success
+  // Set the file position to `seekOffset` bytes relative to `seekOrigin` (one
+  // of `SEEK_SET`, `SEEK_CUR`, `SEEK_END`). Return `true` on success.
   bool seek(off_t seekOffset, int seekOrigin) {
     AD_CONTRACT_CHECK((seekOrigin == SEEK_SET) || (seekOrigin == SEEK_CUR) ||
                       (seekOrigin == SEEK_END));
@@ -177,9 +173,9 @@ class File {
     return fseeko(file_, seekOffset, seekOrigin) == 0;
   }
 
-  // Read nofBytesToRead bytes from file starting at the given offset.
-  // Returns the number of bytes read or the error returned by pread()
-  // which is < 0
+  // Read `nofBytesToRead` bytes starting at the given `offset`, without using
+  // or changing the file position (this uses `pread`). Return the number of
+  // bytes read, or the negative error value returned by `pread`.
   ssize_t read(void* targetBuffer, size_t nofBytesToRead, off_t offset) const {
     AD_CONTRACT_CHECK(file_);
     const int fd = fileno(file_);
@@ -233,9 +229,8 @@ class File {
     }
   }
 
-  // Returns the number of bytes from the beginning
-  // is 0 on opening. Later equal the number of bytes written.
-  // -1 is returned when an error occurs
+  // Return the current file position (see `ftello`). Exit the program if that
+  // fails.
   [[nodiscard]] off_t tell() const {
     AD_CONTRACT_CHECK(file_);
     off_t returnValue = ftello(file_);
@@ -246,7 +241,8 @@ class File {
     return returnValue;
   }
 
-  // Returns the size of the file as off_t.
+  // Return the size of the file. This moves the file position to the end of
+  // the file.
   off_t sizeOfFile() {
     seek((off_t)0, SEEK_END);
     off_t sizeOfFile = tell();

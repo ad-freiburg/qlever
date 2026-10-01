@@ -183,8 +183,8 @@ TEST(File, writeAtOffsetReportsErrors) {
 
 // _____________________________________________________________________________
 // Test that threads which write to ranges that do not overlap do not need any
-// synchronization. This is what lets the index build write the blocks of its
-// temporary files and of its permutations concurrently.
+// synchronization. The lock-free appends to a `CompressedBlockFile` rely on
+// this (see #3589).
 TEST(File, concurrentWritesAtDisjointOffsets) {
   std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
