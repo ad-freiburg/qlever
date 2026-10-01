@@ -12,6 +12,7 @@
 #define QLEVER_SRC_UTIL_IOURINGMANAGER_H
 
 #include <gtest/gtest_prod.h>
+#include <sys/uio.h>
 
 #include <cstdint>
 #include <unordered_map>
@@ -265,6 +266,25 @@ std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
 // False once `readPageCacheHits` found that `RWF_NOWAIT` is not supported, or
 // if it is not available at compile time.
 bool pageCacheFastPathIsSupported();
+
+namespace detail {
+// The one `preadv2(fd, iov, iovcnt, offset, RWF_NOWAIT)` call per run that
+// `readPageCacheHits` makes, with the same contract (the number of bytes read,
+// or -1 with `errno` set). A replaceable function pointer so that unit tests
+// can inject `EAGAIN`, short reads and `EOPNOTSUPP`; production code never
+// changes it.
+using PageCacheRead = int64_t (*)(int fd, const ::iovec* iov, int iovcnt,
+                                  int64_t offset);
+// The default: the system call. Where it is not available it fails with
+// `EOPNOTSUPP` (it is never called there).
+int64_t systemPageCacheRead(int fd, const ::iovec* iov, int iovcnt,
+                            int64_t offset);
+// The function `readPageCacheHits` calls (initially `systemPageCacheRead`).
+PageCacheRead& pageCacheRead();
+// Undo the effect of an `EOPNOTSUPP` on `pageCacheFastPathIsSupported()`, for
+// tests that injected one.
+void resetPageCacheFastPathSupport();
+}  // namespace detail
 
 // Build a batch manager. When io_uring is compiled in and the runtime flag
 // `preferIoUring` is set, try to build an `IoUringManager`. If its setup
