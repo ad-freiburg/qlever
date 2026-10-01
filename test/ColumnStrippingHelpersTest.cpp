@@ -3,7 +3,7 @@
 // 2026 Anna Kaiser <anna.kaiser@uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
@@ -65,9 +65,9 @@ TEST(VarsRequiredFromSubtree, get) {
 }
 
 TEST(makeTreeWithOptionalStripOperation, basic) {
+  // Create an operation (in this test case the operation Distinct)
   IdTable input{makeIdTableFromVector(
       {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
-
   auto qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
 
@@ -75,47 +75,77 @@ TEST(makeTreeWithOptionalStripOperation, basic) {
       qec, std::move(input),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"},
                                            Variable{"?c"}, Variable{"?d"}});
+  Distinct distinct(qec, values, {1});
 
-  // TODO case that subtree with operation as root is returned
+  // Check the case in which an additional StripColumns-operation is added
   {
-    Distinct distinct_B(qec, values, {1});
-
-    std::set<Variable> variablesRequestedFromParent = {Variable{"?a"},
-                                                       Variable{"?b"}};
-
+    // Use helper and create subtree of the distinct operation.
+    std::set<Variable> variablesRequestedFromParent = {Variable{"?a"}};
     VarsRequiredFromSubtree helper(&variablesRequestedFromParent);
-
-    // Collect all the variables that are required from the subtree.
+    helper.add(Variable{"?b"});
     const std::set<Variable>& varsRequiredFromSubtree = helper.get();
+    QueryExecutionTree subtreeWithDistinctRoot(
+        qec, std::make_shared<Distinct>(distinct));
 
-    QueryExecutionTree subtree_A(qec, std::make_shared<Distinct>(distinct_B));
-
-    // Continue with the recursion and strip columns of subtree.
-    auto subtree_A_new = QueryExecutionTree::makeTreeWithStrippedColumns(
-        std::make_shared<QueryExecutionTree>(subtree_A),
+    auto subtree_new = QueryExecutionTree::makeTreeWithStrippedColumns(
+        std::make_shared<QueryExecutionTree>(subtreeWithDistinctRoot),
         varsRequiredFromSubtree);
 
-    // Create query execution tree with Distinct-Operation as root-Operation and
-    // add additional stripColumns-Operation if needed.
     const Variable varB = Variable{"?b"};
     auto tree = makeTreeWithOptionalStripOperation<Distinct>(
         qec, variablesRequestedFromParent, std::vector<const Variable*>{&varB},
-        std::move(subtree_A_new), std::vector<ColumnIndex>{1});
-
+        std::move(subtree_new), std::vector<ColumnIndex>{1});
     ASSERT_TRUE(tree.has_value());
-
     auto qet = *tree;
 
-    // TODO: check whether root-operation is a distinct-operation as expected
-    EXPECT_NE(dynamic_cast<Distinct*>(qet->getRootOperation().get()),
-              nullptr);
+    // Check whether root-operation is a StripColumns-operation with the expected
+    // variables.
+    auto stripColumnsOperation = dynamic_cast<StripColumns*>(qet->getRootOperation().get());
+    EXPECT_NE(stripColumnsOperation, nullptr);
+    auto var2colMapStripCols = qet->getVariableColumns();
+    EXPECT_EQ(var2colMapStripCols.size(), 1);
+    EXPECT_TRUE(var2colMapStripCols.contains(Variable{"?a"}));
 
+    // Check whether child of StripColumns-operation is Distinct-operation.
+    auto strColSubtree = stripColumnsOperation->getChildren();
+    ASSERT_TRUE(strColSubtree.at(0) != nullptr);
+    auto distinctOp = strColSubtree.at(0)->getRootOperation();
+    Distinct* distinctOperation = dynamic_cast<Distinct*>(distinctOp.get());
+    EXPECT_NE(distinctOperation, nullptr);
+    auto var2colMapDistinct = strColSubtree.at(0)->getVariableColumns();
+    EXPECT_EQ(var2colMapDistinct.size(), 2);
+    EXPECT_TRUE(var2colMapDistinct.contains(Variable{"?a"}));
+    EXPECT_TRUE(var2colMapDistinct.contains(Variable{"?b"}));
+  }
+
+  // Check the case in which no additional StripColumns-operation is added
+  {
+    // Use helper and create subtree of the distinct operation.
+    std::set<Variable> variablesRequestedFromParent = {Variable{"?a"},
+                                                       Variable{"?b"}};
+    VarsRequiredFromSubtree helper(&variablesRequestedFromParent);
+    helper.add(Variable{"?b"});
+    const std::set<Variable>& varsRequiredFromSubtree = helper.get();
+    QueryExecutionTree subtreeWithDistinctRoot(
+        qec, std::make_shared<Distinct>(distinct));
+
+    auto subtree_new = QueryExecutionTree::makeTreeWithStrippedColumns(
+        std::make_shared<QueryExecutionTree>(subtreeWithDistinctRoot),
+        varsRequiredFromSubtree);
+
+    const Variable varB = Variable{"?b"};
+    auto tree = makeTreeWithOptionalStripOperation<Distinct>(
+        qec, variablesRequestedFromParent, std::vector<const Variable*>{&varB},
+        std::move(subtree_new), std::vector<ColumnIndex>{1});
+    ASSERT_TRUE(tree.has_value());
+    auto qet = *tree;
+
+    // Check whether root-operation is a Distinct-operation with the expected
+    // variables.
+    EXPECT_NE(dynamic_cast<Distinct*>(qet->getRootOperation().get()), nullptr);
     auto var2colMap = qet->getVariableColumns();
     EXPECT_EQ(var2colMap.size(), 2);
     EXPECT_TRUE(var2colMap.contains(Variable{"?a"}));
     EXPECT_TRUE(var2colMap.contains(Variable{"?b"}));
   }
-
-  // TODO case that StripColumns as root is returned
-  {}
 }
