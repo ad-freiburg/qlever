@@ -22,7 +22,6 @@
 #include <boost/sort/pdqsort/pdqsort.hpp>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <numeric>
 #include <utility>
 
@@ -69,33 +68,27 @@ namespace net = boost::asio;
 // Boost's `BOOST_NTHREAD_BORDER`.
 constexpr uint32_t minNumThreadsForBlocks = 6;
 
-// Sort the blocks `[posIndexStart, posIndexEnd)`: split in half
-// `numRecursionsLeft` more times, sort the smallest halves with
-// `parallelQuicksort`, then merge the halves on the way back up.
+// Sort the blocks `[posIndexBegin, posIndexEnd)`: split them in half
+// `numRecursionsLeft` more times, sort each part with `parallelQuicksort`, then
+// merge the halves on the way back up.
 template <typename State>
-net::awaitable<void> sortRecursively(State& state, size_t posIndexStart,
+net::awaitable<void> sortRecursively(State& state, size_t posIndexBegin,
                                      size_t posIndexEnd,
                                      uint32_t numRecursionsLeft) {
   // `runSort` limits the number of threads such that every part has at least
   // `BLOCKS_PER_TASK` blocks, see `mergeTail` for why this matters.
-  AD_CORRECTNESS_CHECK(posIndexEnd - posIndexStart >= BLOCKS_PER_TASK);
-  size_t posIndexMid = std::midpoint(posIndexStart, posIndexEnd);
-
-  if (numRecursionsLeft != 0) {
-    co_await state.runConcurrently(
-        sortRecursively(state, posIndexStart, posIndexMid,
-                        numRecursionsLeft - 1),
-        sortRecursively(state, posIndexMid, posIndexEnd,
-                        numRecursionsLeft - 1));
-  } else {
+  AD_CORRECTNESS_CHECK(posIndexEnd - posIndexBegin >= BLOCKS_PER_TASK);
+  if (numRecursionsLeft == 0) {
     // No block has been moved yet, so physical and logical positions agree.
-    auto first = state.getBlockBegin(posIndexStart);
-    auto mid = state.getBlockBegin(posIndexMid);
-    auto last = state.getBlock(posIndexEnd - 1).last;
-    co_await state.runConcurrently(parallelQuicksort(state, first, mid),
-                                   parallelQuicksort(state, mid, last));
+    co_await parallelQuicksort(state, state.getBlockBoundary(posIndexBegin),
+                               state.getBlockBoundary(posIndexEnd));
+    co_return;
   }
-  co_await mergeSortedHalves(state, posIndexStart, posIndexMid, posIndexEnd);
+  size_t posIndexMid = std::midpoint(posIndexBegin, posIndexEnd);
+  co_await state.runConcurrently(
+      sortRecursively(state, posIndexBegin, posIndexMid, numRecursionsLeft - 1),
+      sortRecursively(state, posIndexMid, posIndexEnd, numRecursionsLeft - 1));
+  co_await mergeSortedHalves(state, posIndexBegin, posIndexMid, posIndexEnd);
 }
 
 // The root task of a sort, Boost's `start_function`.
@@ -108,10 +101,9 @@ net::awaitable<void> startSort(State& state, uint32_t numThreads) {
   }
   // Split into the largest power of two of parts that is smaller than
   // `numThreads` (e.g. 4 parts for 6 to 8 threads), like Boost. Each part is
-  // sorted by a parallel quicksort, so the other threads are used too. Each
-  // leaf of `sortRecursively` sorts two parts, hence the `- 2`.
+  // sorted by a parallel quicksort, so the other threads are used too.
   auto numRecursions =
-      static_cast<uint32_t>(std::bit_width(numThreads - 1)) - 2;
+      static_cast<uint32_t>(std::bit_width(numThreads - 1)) - 1;
   co_await sortRecursively(state, 0, state.numBlocks_, numRecursions);
   co_await moveBlocks(state);
 }
@@ -122,12 +114,12 @@ template <typename Value>
   return {blockSizeFor<Value>(), defaultMaxElementsPerTask<Value>()};
 }
 
-// Sort `[first, last)` with the given tuning parameters, see
+// Sort `[begin, end)` with the given tuning parameters, see
 // `blockIndirectSort` below. Should run on `exec`: the tasks of the sort resume
 // their parents on the executor of the parent, so running elsewhere is correct,
 // but costs a hop between the executors for every join.
 template <typename Iterator, typename Compare>
-net::awaitable<void> sortOnExecutor(Iterator first, Iterator last, Compare comp,
+net::awaitable<void> sortOnExecutor(Iterator begin, Iterator end, Compare comp,
                                     uint32_t numThreads,
                                     ql::any_io_executor exec,
                                     SortParams params) {
@@ -135,27 +127,27 @@ net::awaitable<void> sortOnExecutor(Iterator first, Iterator last, Compare comp,
   AD_CORRECTNESS_CHECK(params.maxElementsPerTask >= 16);
   // Cheap special cases: already sorted (including empty), or sorted in
   // reverse.
-  if (ql::ranges::is_sorted(first, last, comp)) {
+  if (ql::ranges::is_sorted(begin, end, comp)) {
     co_return;
   }
-  if (isDescending(first, last, comp)) {
-    ql::ranges::reverse(first, last);
+  if (isDescending(begin, end, comp)) {
+    ql::ranges::reverse(begin, end);
     co_return;
   }
 
   // At most one thread per group of blocks.
-  size_t numElements = static_cast<size_t>(last - first);
+  size_t numElements = static_cast<size_t>(end - begin);
   numThreads = std::min(
       numThreads, static_cast<uint32_t>(
                       numElements / (params.blockSize * BLOCKS_PER_TASK) + 1));
 
   // Sort small inputs (or without threads) in a single task.
   if (numElements < params.maxElementsPerTask || numThreads < 2) {
-    boost::sort::pdqsort(first, last, comp);
+    boost::sort::pdqsort(begin, end, comp);
     co_return;
   }
 
-  BlockSortState<Iterator, Compare> state{first, last, std::move(comp), params,
+  BlockSortState<Iterator, Compare> state{begin, end, std::move(comp), params,
                                           exec};
   co_await startSort(state, numThreads);
 }
@@ -163,11 +155,11 @@ net::awaitable<void> sortOnExecutor(Iterator first, Iterator last, Compare comp,
 // Blocking version of `sortOnExecutor`, see the note at `blockIndirectSort`.
 // Rethrows the first exception of any task.
 template <typename Iterator, typename Compare>
-void runSort(Iterator first, Iterator last, Compare comp, uint32_t numThreads,
+void runSort(Iterator begin, Iterator end, Compare comp, uint32_t numThreads,
              ql::any_io_executor exec, SortParams params) {
   net::co_spawn(
       exec,
-      sortOnExecutor(first, last, std::move(comp), numThreads, exec, params),
+      sortOnExecutor(begin, end, std::move(comp), numThreads, exec, params),
       net::use_future)
       .get();
 }
@@ -190,28 +182,27 @@ void runSort(Iterator first, Iterator last, Compare comp, uint32_t numThreads,
 // `blockIndirectSortAsync` below, which doesn't block.
 //
 // The iterators may hand out proxy references, like those of `IdTable`. The
-// `range` must be an lvalue or borrowed (e.g. a `ql::span` or a
-// `ql::ranges::subrange`), so that the caller's elements are sorted, not a
-// temporary.
+// elements are sorted in place, so sorting a temporary container (e.g. a
+// `std::vector` rvalue) has no visible effect.
 //
 // If an exception is thrown (e.g. by `comp`), it is rethrown once all tasks
 // have finished, and the contents of `range` are unspecified.
 //
-// In C++17 mode (no coroutines) this always sorts in the calling thread.
+// In C++17 mode (no coroutines), this always sorts single-threaded in the
+// calling thread; `numThreads` and `exec` are then not used.
 CPP_template(typename Range, typename Compare)(
-    requires ql::ranges::random_access_range<Range> CPP_and
-        ql::ranges::borrowed_range<
-            Range>) void blockIndirectSort(Range&& range, Compare comp,
-                                           [[maybe_unused]] uint32_t numThreads,
-                                           ql::any_io_executor exec) {
+    requires ql::ranges::random_access_range<
+        Range>) void blockIndirectSort(Range&& range, Compare comp,
+                                       [[maybe_unused]] uint32_t numThreads,
+                                       ql::any_io_executor exec) {
   AD_CONTRACT_CHECK(static_cast<bool>(exec));
-  auto first = ql::ranges::begin(range);
-  auto last = first + ql::ranges::distance(range);
+  auto begin = ql::ranges::begin(range);
+  auto end = begin + ql::ranges::distance(range);
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  boost::sort::pdqsort(first, last, comp);
+  boost::sort::pdqsort(begin, end, comp);
 #else
-  using Value = typename std::iterator_traits<decltype(first)>::value_type;
-  detail::runSort(first, last, std::move(comp), numThreads, std::move(exec),
+  using Value = ql::ranges::range_value_t<Range>;
+  detail::runSort(begin, end, std::move(comp), numThreads, std::move(exec),
                   detail::defaultSortParams<Value>());
 #endif
 }
@@ -222,25 +213,22 @@ CPP_template(typename Range, typename Compare)(
 // a `boost::asio::thread_pool` with a single thread). Afterwards, it resumes on
 // its own executor.
 //
-// NOTE: Unlike `blockIndirectSort`, this takes `range` by value and hence only
-// accepts borrowed ranges (e.g. `ql::span{vec}`): a coroutine only reads its
-// parameters once it is awaited, when a temporary that was passed by reference
-// may already be gone.
-CPP_template(typename Range, typename Compare)(
-    requires ql::ranges::random_access_range<Range> CPP_and
-        ql::ranges::borrowed_range<Range>)
+// NOTE: `range` is only accessed once the result is awaited, so it has to stay
+// alive until then. Temporaries in `co_await blockIndirectSortAsync(...)` do.
+CPP_template(typename Range,
+             typename Compare)(requires ql::ranges::random_access_range<Range>)
     boost::asio::awaitable<void> blockIndirectSortAsync(
-        Range range, Compare comp, uint32_t numThreads,
+        Range&& range, Compare comp, uint32_t numThreads,
         ql::any_io_executor exec) {
   AD_CONTRACT_CHECK(static_cast<bool>(exec));
-  auto first = ql::ranges::begin(range);
-  auto last = first + ql::ranges::distance(range);
-  using Value = typename std::iterator_traits<decltype(first)>::value_type;
+  auto begin = ql::ranges::begin(range);
+  auto end = begin + ql::ranges::distance(range);
+  using Value = ql::ranges::range_value_t<Range>;
   // The sort runs on `exec`, see `sortOnExecutor`, and the `co_spawn` brings
   // us back to our own executor.
   co_await boost::asio::co_spawn(
       exec,
-      detail::sortOnExecutor(first, last, std::move(comp), numThreads, exec,
+      detail::sortOnExecutor(begin, end, std::move(comp), numThreads, exec,
                              detail::defaultSortParams<Value>()),
       boost::asio::use_awaitable);
 }

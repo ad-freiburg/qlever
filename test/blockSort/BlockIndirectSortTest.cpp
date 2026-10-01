@@ -375,9 +375,9 @@ void testValueType(size_t numIterations, size_t maxBlockSize) {
   values = Values::fromKeys(keys);
   blockIndirectSort(Values::range(values), Less{}, numPoolThreads, executor);
   EXPECT_EQ(Values::toKeys(values), sortedKeys);
+  // An lvalue container is sorted in place, not a copy of it.
   values = Values::fromKeys(keys);
-  runOnPool(blockIndirectSortAsync(Values::range(values), Less{},
-                                   numPoolThreads, executor));
+  runOnPool(blockIndirectSortAsync(values, Less{}, numPoolThreads, executor));
   EXPECT_EQ(Values::toKeys(values), sortedKeys);
 }
 
@@ -417,9 +417,8 @@ TEST(BlockIndirectSort, defaultParameters) {
 }
 
 // _____________________________________________________________________________
-// Which ranges the public interface accepts: `blockIndirectSort` takes lvalues
-// and borrowed ranges, `blockIndirectSortAsync` only borrowed ranges, see its
-// comment. Temporaries that own their elements are rejected by both.
+// Both functions of the public interface accept lvalue containers as well as
+// views like `ql::span`.
 namespace {
 template <typename Range>
 constexpr bool canSort = requires(Range&& range) {
@@ -433,10 +432,8 @@ constexpr bool canSortAsync = requires(Range&& range) {
 };
 static_assert(canSort<std::vector<uint32_t>&>);
 static_assert(canSort<ql::span<uint32_t>>);
-static_assert(!canSort<std::vector<uint32_t>>);
-static_assert(!canSortAsync<std::vector<uint32_t>&>);
+static_assert(canSortAsync<std::vector<uint32_t>&>);
 static_assert(canSortAsync<ql::span<uint32_t>>);
-static_assert(!canSortAsync<std::vector<uint32_t>>);
 }  // namespace
 
 // _____________________________________________________________________________

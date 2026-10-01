@@ -65,7 +65,9 @@ void mergeRun(State& state, typename State::RangePos positions) {
 
 // Handle the incomplete last block (the *tail*) before `mergeSortedHalves`
 // merges `positions1` and `positions2`, the sorted blocks of the two sides, of
-// which `positions2` ends with the tail.
+// which `positions2` ends with the tail: the tail starts as the last entry of
+// the index, and stays there, because this function removes it from
+// `positions2`, so that the merge of the index leaves its entry untouched.
 //
 // The tail is shorter than the other blocks, so it can't be part of a run
 // (`merge_flow` needs blocks of equal size) and can't be moved (`moveBlocks`
@@ -173,7 +175,7 @@ template <typename State>
 void spawnMergeOfRun(State& state, TaskGroup& group,
                      typename State::RangePos run) {
   AD_CORRECTNESS_CHECK(run.size() >= 2);
-  // The tail is always the last block in the index.
+  // The tail is always the last block in the index, see `mergeTail`.
   AD_CORRECTNESS_CHECK(state.tailRange_.empty() || run.last < state.numBlocks_);
   // The order of the elements is only checked while the sort is running: after
   // an exception, children are skipped (see `TaskGroup`), so the blocks may
@@ -193,41 +195,42 @@ void spawnMergeOfRun(State& state, TaskGroup& group,
   });
 }
 
-// Find the runs in `positions` (see the glossary at the top). Blocks that don't
-// overlap with their neighbours are skipped.
+// Find the runs in `positions` (see the glossary at the top). A block overlaps
+// one of the blocks before it iff its first element is smaller than the
+// greatest last element before it, so a new run begins at each block that
+// doesn't. Blocks that don't overlap with their neighbours are skipped.
+//
+// NOTE: Unlike Boost's `extract_ranges`, this ignores the sides of the blocks:
+// two blocks of the same side never overlap, because each side is sorted, and
+// the merge of the index keeps the order of the blocks of each side (also for
+// the block that `mergeTail` moves to the other side, whose first element came
+// from the tail).
 template <typename State>
 std::vector<typename State::RangePos> findRuns(
     State& state, typename State::RangePos positions) {
-  std::vector<typename State::RangePos> runs;
-  size_t runBegin = positions.first;
-  bsd::block_pos blockAtBegin = state.index_[runBegin];
-  // The block of the current run with the greatest last element, and its
-  // side. Only blocks from the other side can overlap with it.
-  auto rangeMax = state.getBlock(blockAtBegin.pos());
-  bool sideMax = blockAtBegin.side();
-  auto rangeCurrent = rangeMax;
-  bool sideCurrent = sideMax;
-
-  for (size_t pos = runBegin + 1; pos <= positions.last; ++pos) {
-    bool isEnd = pos == positions.last;
-    bool isMergeable = false;
-    if (!isEnd) {
-      bsd::block_pos blockAtPos = state.index_[pos];
-      rangeCurrent = state.getBlock(blockAtPos.pos());
-      sideCurrent = blockAtPos.side();
-      isMergeable = sideMax != sideCurrent &&
-                    bsc::is_mergeable(rangeMax, rangeCurrent, state.cmp_);
+  auto blockAt = [&state](size_t pos) {
+    return state.getBlock(state.index_[pos].pos());
+  };
+  // The positions at which a run begins, followed by `positions.last`.
+  std::vector<size_t> runBegins{positions.first};
+  // The greatest last element of the blocks so far.
+  auto maxBack = blockAt(positions.first).back();
+  for (size_t pos = positions.first + 1; pos < positions.last; ++pos) {
+    auto block = blockAt(pos);
+    if (!state.cmp_(*block.first, *maxBack)) {
+      runBegins.push_back(pos);
     }
-    if (isEnd || !isMergeable) {
-      if (pos - runBegin > 1) {
-        runs.emplace_back(runBegin, pos);
-      }
-      runBegin = pos;
-      rangeMax = rangeCurrent;
-      sideMax = sideCurrent;
-    } else if (state.cmp_(*rangeMax.back(), *rangeCurrent.back())) {
-      rangeMax = rangeCurrent;
-      sideMax = sideCurrent;
+    if (state.cmp_(*maxBack, *block.back())) {
+      maxBack = block.back();
+    }
+  }
+  runBegins.push_back(positions.last);
+
+  // A run of a single block doesn't need to be merged.
+  std::vector<typename State::RangePos> runs;
+  for (size_t i = 0; i + 1 < runBegins.size(); ++i) {
+    if (runBegins[i + 1] - runBegins[i] > 1) {
+      runs.emplace_back(runBegins[i], runBegins[i + 1]);
     }
   }
   return runs;
@@ -251,8 +254,10 @@ net::awaitable<void> mergeSortedHalves(State& state, size_t posIndex1,
     positions2.emplace_back(state.index_[i].pos(), false);
   }
 
-  if (positions2.back().pos() == state.numBlocks_ - 1 &&
-      state.tailRange_.not_empty()) {
+  // Only the last range of the index contains the tail, as its last entry, see
+  // `mergeTail`.
+  if (posIndex3 == state.numBlocks_ && state.tailRange_.not_empty()) {
+    AD_CORRECTNESS_CHECK(positions2.back().pos() == state.numBlocks_ - 1);
     mergeTail(state, positions1, positions2);
   }
 

@@ -29,7 +29,6 @@
 #include <boost/sort/common/range.hpp>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <mutex>
 #include <optional>
 #include <range/v3/range/conversion.hpp>
@@ -37,6 +36,7 @@
 #include <vector>
 
 #include "backports/asio.h"
+#include "backports/iterator.h"
 #include "util/Exception.h"
 #include "util/NoCopyNoMove.h"
 #include "util/Synchronized.h"
@@ -61,6 +61,9 @@ namespace ad_utility::blockSort::detail {
 //   block. `target` is a block whose elements have been moved away, `buffer`
 //   holds the elements carried over. Move the smallest elements of `buffer` and
 //   `next` to `target`, and the rest to `buffer`. All three have the same size.
+//
+// NOTE: As in Boost, the end of a `bsc::range` is called `last`, although it
+// points past the last element, like the `end` of our iterator pairs.
 namespace bsc = boost::sort::common;
 namespace bsd = boost::sort::blk_detail;
 
@@ -228,14 +231,14 @@ class SortState {
   }
 };
 
-// The state shared by the tasks of a block indirect sort of `[first, last)`,
+// The state shared by the tasks of a block indirect sort of `[begin, end)`,
 // the rest of Boost's `backbone` without its work stack. The input is divided
 // into `numBlocks_` blocks of `blockSize_` elements; only the last one (the
 // *tail*) may be shorter.
 template <typename Iterator, typename Compare>
 class BlockSortState : public SortState<Compare> {
  public:
-  using Value = typename std::iterator_traits<Iterator>::value_type;
+  using Value = ql::iter_value_t<Iterator>;
   using IteratorRange = bsc::range<Iterator>;
   using RangePos = bsc::range<size_t>;
 
@@ -249,46 +252,47 @@ class BlockSortState : public SortState<Compare> {
   size_t numBlocks_;
   // `index_[i]` is the block that ends up at position `i`.
   std::vector<bsd::block_pos> index_;
-  // The last block if it is incomplete, empty otherwise.
+  // The last block if it is incomplete, empty otherwise. The tail is never
+  // moved, so it always stays the last entry of `index_` (see `mergeTail`).
   IteratorRange tailRange_;
   // The scratch buffers of `blockSize_` elements, see `acquireBuffer`.
   ScratchBuffers<Value> buffers_;
 
-  // Sort `[first, last)`. The range must not be empty, which `runSort` makes
+  // Sort `[begin, end)`. The range must not be empty, which `runSort` makes
   // sure of.
-  BlockSortState(Iterator first, Iterator last, Compare cmp, SortParams params,
+  BlockSortState(Iterator begin, Iterator end, Compare cmp, SortParams params,
                  ql::any_io_executor executor)
       : SortState<Compare>{std::move(cmp), params.maxElementsPerTask,
                            std::move(executor)},
-        globalRange_{first, last},
+        globalRange_{begin, end},
         blockSize_{params.blockSize},
-        numElements_{static_cast<size_t>(last - first)},
+        numElements_{static_cast<size_t>(end - begin)},
         numBlocks_{(numElements_ + blockSize_ - 1) / blockSize_},
         index_{::ranges::to<std::vector<bsd::block_pos>>(
             ad_utility::integerRange(numBlocks_))},
         tailRange_{numElements_ % blockSize_ == 0
-                       ? last
-                       : getBlockBegin(numBlocks_ - 1),
-                   last},
-        buffers_{blockSize_, Value(*first)} {}
+                       ? end
+                       : getBlockBoundary(numBlocks_ - 1),
+                   end},
+        buffers_{blockSize_, Value(*begin)} {}
 
-  // The first element of the block at physical position `pos`.
-  [[nodiscard]] Iterator getBlockBegin(size_t pos) const {
-    return globalRange_.first + pos * blockSize_;
+  // The boundary before the block at physical position `pos`: its first
+  // element for `pos < numBlocks_`, and the end of the range for
+  // `pos == numBlocks_`. The clamping handles the tail, which is shorter than
+  // `blockSize_`.
+  [[nodiscard]] Iterator getBlockBoundary(size_t pos) const {
+    return globalRange_.first + std::min(pos * blockSize_, numElements_);
   }
 
   // The elements of the block at physical position `pos`.
   [[nodiscard]] IteratorRange getBlock(size_t pos) const {
-    Iterator first = getBlockBegin(pos);
-    Iterator end =
-        pos == numBlocks_ - 1 ? globalRange_.last : first + blockSize_;
-    return {first, end};
+    return {getBlockBoundary(pos), getBlockBoundary(pos + 1)};
   }
 
   // Whether the block `a` sorts before the block `b` by their first elements.
   [[nodiscard]] bool blockIsLessByFirstElement(bsd::block_pos a,
                                                bsd::block_pos b) const {
-    return this->cmp_(*getBlockBegin(a.pos()), *getBlockBegin(b.pos()));
+    return this->cmp_(*getBlockBoundary(a.pos()), *getBlockBoundary(b.pos()));
   }
 
   // Borrow one of the scratch buffers of `blockSize_` elements.
