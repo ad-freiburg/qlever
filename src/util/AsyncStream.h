@@ -7,13 +7,13 @@
 
 #include <absl/cleanup/cleanup.h>
 
-#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/post.hpp>
 #include <exception>
 #include <future>
 #include <memory>
 #include <optional>
 
+#include "backports/asio.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
@@ -40,7 +40,7 @@ struct AsyncStreamGenerator
   std::optional<ad_utility::Timer> t_;
 
   AsyncStreamGenerator(Range range, const size_t bufferLimit,
-                       boost::asio::any_io_executor executor)
+                       ql::any_io_executor executor)
       : queue_{bufferLimit} {
     ifTiming([this] { t_.emplace(ad_utility::Timer::Started); });
 
@@ -153,7 +153,7 @@ template <typename Range, bool logTime = (ad_utility::compileTimeLogLevel >=
                                           ad_utility::LogLevel::Enum::TIMING)>
 ad_utility::InputRangeTypeErased<ql::ranges::range_value_t<Range>>
 runStreamAsync(Range range, size_t bufferLimit,
-               boost::asio::any_io_executor executor = {}) {
+               ql::any_io_executor executor = {}) {
   return ad_utility::InputRangeTypeErased{
       std::make_unique<detail::AsyncStreamGenerator<Range, logTime>>(
           std::move(range), bufferLimit, std::move(executor))};
