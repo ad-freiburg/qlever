@@ -13,10 +13,12 @@
 
 #include <array>
 #include <deque>
+#include <functional>
 #include <future>
 #include <optional>
 #include <utility>
 
+#include "backports/numeric.h"
 #include "index/CompressedRelationWriter.h"
 #include "util/ExceptionHandling.h"
 #include "util/GlobalExecutor.h"
@@ -24,6 +26,7 @@
 
 namespace compressedRelationHelpers {
 
+static constexpr size_t c0Idx = 0;
 static constexpr size_t c1Idx = 1;
 static constexpr size_t c2Idx = 2;
 
@@ -32,40 +35,41 @@ static constexpr size_t c2Idx = 2;
 // true for index building, because there are no `Id`s of a local vocabulary
 // then. Comparing the bits is much cheaper than the general comparison of
 // `Id`s, and (in contrast to the latter) it can be vectorized.
-inline Id::T bitsOfIdWithoutLocalVocab(Id id) {
+constexpr Id::T bitsOfIdWithoutLocalVocab(Id id) {
   AD_EXPENSIVE_CHECK(id.canBeComparedBitwise());
   return id.getBits();
 }
 
-// Compares two rows based on the second, third and fourth column only (it
-// ignores the first column as well as any payload columns). The comparison is
-// performed on the bits of the `Id`s, see `bitsOfIdWithoutLocalVocab` above.
-struct ComparatorForConstCol0 {
-  // Pick the bits of the cells that this comparator looks at. The resulting
-  // `std::array`s compare lexicographically, which is exactly the desired
-  // order.
-  template <typename Row>
-  static std::array<Id::T, 3> pickBits(const Row& row) {
-    return {bitsOfIdWithoutLocalVocab(row[c1Idx]),
-            bitsOfIdWithoutLocalVocab(row[c2Idx]),
-            bitsOfIdWithoutLocalVocab(row[ADDITIONAL_COLUMN_GRAPH_ID])};
-  }
+// Return the binary representation (see `bitsOfIdWithoutLocalVocab` above) of
+// the cells of the `row` with the given column indices `Cols`. The resulting
+// `std::array`s compare lexicographically, which makes the comparison of rows
+// by these columns really cheap. Note: In a micro benchmark (sorting 5M rows
+// with various distributions of duplicates) materializing the arrays was as
+// fast as a handwritten comparison of the bits with an early exit, and both
+// were 20-35% faster than comparing the `Id`s themselves.
+template <size_t... Cols>
+inline constexpr auto pickBitsOfColumns =
+    [](const auto& row) -> std::array<Id::T, sizeof...(Cols)> {
+  return {bitsOfIdWithoutLocalVocab(row[Cols])...};
+};
 
+// Compares two rows based on the columns `c1Idx`, `c2Idx`, and
+// `ADDITIONAL_COLUMN_GRAPH_ID` only (it ignores the column `c0Idx` as well as
+// any payload columns). The comparison is performed on the bits of the `Id`s,
+// see `pickBitsOfColumns` above.
+struct ComparatorForConstCol0 {
   template <typename A, typename B>
-  bool operator()(const A& a, const B& b) const {
+  constexpr bool operator()(const A& a, const B& b) const {
+    auto pickBits = pickBitsOfColumns<c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID>;
     return pickBits(a) < pickBits(b);
   }
 };
 
 // Helper function to make a row from `IdTable` easier to compare. This selects
-// the binary representation (see `bitsOfIdWithoutLocalVocab` above) of the
-// cells of the given row with the indices 0, 1 and 2. This way comparison
-// becomes really cheap.
-inline auto pickFirstThreeColumnsOfIdsWithoutLocalVocab = [](const auto& row) {
-  return std::array{bitsOfIdWithoutLocalVocab(row[0]),
-                    bitsOfIdWithoutLocalVocab(row[1]),
-                    bitsOfIdWithoutLocalVocab(row[2])};
-};
+// the binary representation of the cells of the given row in the columns
+// `c0Idx`, `c1Idx`, and `c2Idx`, see `pickBitsOfColumns` above.
+inline constexpr auto pickFirstThreeColumnsOfIdsWithoutLocalVocab =
+    pickBitsOfColumns<c0Idx, c1Idx, c2Idx>;
 
 // Collect elements of type `T` in batches of size 100'000 and apply the
 // `Function` to each batch. For the last batch (which might be smaller)  the
@@ -158,22 +162,71 @@ struct DistinctIdCountOfBlock {
 // and must not be empty.
 inline DistinctIdCountOfBlock countDistinctIds(ql::span<const Id> column) {
   AD_CORRECTNESS_CHECK(!column.empty());
-  size_t count = 1;
   // Note: The comparison of the bits (instead of the general comparison of
-  // `Id`s) is not only much cheaper per element, it also makes this loop
+  // `Id`s) is not only much cheaper per element, it also makes this reduction
   // vectorizable, which matters because it touches every single ID.
-  for (size_t i = 1; i < column.size(); ++i) {
-    count += static_cast<size_t>(bitsOfIdWithoutLocalVocab(column[i]) !=
-                                 bitsOfIdWithoutLocalVocab(column[i - 1]));
-  }
+  size_t count = ql::transform_reduce(
+      column.begin() + 1, column.end(), column.begin(), size_t{1},
+      std::plus<>{}, [](Id current, Id previous) {
+        return static_cast<size_t>(bitsOfIdWithoutLocalVocab(current) !=
+                                   bitsOfIdWithoutLocalVocab(previous));
+      });
   return {count, column.front(), column.back()};
 }
 
-// Read the blocks of the `BlockRange` (skipping empty blocks) and count the
-// distinct IDs in one of their columns on the global thread pool, while the
-// caller is still processing the preceding blocks. The blocks are yielded again
-// in their original order, because the further processing of the blocks has to
-// happen in order.
+// Count the distinct IDs in a sorted sequence of IDs that is split into several
+// consecutive blocks, which are added one after the other via `addBlock`.
+class DistinctIdCounter {
+  size_t count_ = 0;
+  // The bits (see `bitsOfIdWithoutLocalVocab`) of the last ID of the previously
+  // added block, which must not be counted again if the next block starts with
+  // it.
+  std::optional<Id::T> lastBitsOfPreviousBlock_;
+
+ public:
+  // Add the `column` of the next block, which has to be sorted, and whose
+  // first ID must not be smaller than the last ID of the previous block. An
+  // empty `column` is ignored.
+  void addBlock(ql::span<const Id> column) {
+    if (column.empty()) {
+      return;
+    }
+    addCountOfBlock(countDistinctIds(column));
+  }
+
+  // Like `addBlock`, but for a block whose `DistinctIdCountOfBlock` has
+  // already been computed (e.g. concurrently, see `AsyncDistinctIdCounter`).
+  void addCountOfBlock(const DistinctIdCountOfBlock& countOfBlock) {
+    count_ += countOfBlock.count_;
+    if (lastBitsOfPreviousBlock_ ==
+        bitsOfIdWithoutLocalVocab(countOfBlock.first_)) {
+      --count_;
+    }
+    lastBitsOfPreviousBlock_ = bitsOfIdWithoutLocalVocab(countOfBlock.last_);
+  }
+
+  // Reset the counter, so that it can be reused for the next relation. Use
+  // this instead of `getAndReset` if the count itself is not needed.
+  void reset() {
+    count_ = 0;
+    lastBitsOfPreviousBlock_.reset();
+  }
+
+  // Return the number of distinct IDs in all the blocks that have been added
+  // since the last reset, and reset the counter.
+  size_t getAndReset() {
+    auto count = count_;
+    reset();
+    return count;
+  }
+};
+
+// Read the blocks of the `BlockRange` (skipping empty blocks) and compute the
+// `DistinctIdCountOfBlock` of one of their columns on the global thread pool,
+// while the caller is still processing the preceding blocks. The blocks are
+// yielded again in their original order, because the further processing of the
+// blocks (including the folding of the counts via
+// `DistinctIdCounter::addCountOfBlock`) has to happen in order.
 template <typename BlockRange>
 class AsyncDistinctIdCounter {
  public:
@@ -192,10 +245,6 @@ class AsyncDistinctIdCounter {
   ql::ranges::iterator_t<BlockRange> it_;
   ql::ranges::sentinel_t<BlockRange> end_;
   std::deque<Entry> pending_;
-  // The last ID of the column of the previously yielded block, which must not
-  // be counted again if the next block starts with it.
-  Id lastIdOfPreviousBlock_ = Id::makeUndefined();
-  bool hasPreviousBlock_ = false;
 
   // NOTE: This member is deliberately declared last, so that its destructor
   // (which waits for all pending tasks) runs before the `pending_` blocks,
@@ -217,10 +266,9 @@ class AsyncDistinctIdCounter {
     AD_CONTRACT_CHECK(maxNumBlocksInFlight_ > 0);
   }
 
-  // Return the next non-empty block together with the number of distinct IDs in
-  // its column, where an ID that already ended the previous block is not
-  // counted again. Return `std::nullopt` once all blocks have been yielded.
-  std::optional<std::pair<Block, size_t>> next() {
+  // Return the next non-empty block together with the `DistinctIdCountOfBlock`
+  // of its column. Return `std::nullopt` once all blocks have been yielded.
+  std::optional<std::pair<Block, DistinctIdCountOfBlock>> next() {
     readAhead();
     if (pending_.empty()) {
       return std::nullopt;
@@ -229,15 +277,8 @@ class AsyncDistinctIdCounter {
     DistinctIdCountOfBlock countOfBlock = pending_.front().count_.get();
     Block block = std::move(pending_.front().block_);
     pending_.pop_front();
-    size_t count = countOfBlock.count_;
-    if (hasPreviousBlock_ &&
-        bitsOfIdWithoutLocalVocab(lastIdOfPreviousBlock_) ==
-            bitsOfIdWithoutLocalVocab(countOfBlock.first_)) {
-      --count;
-    }
-    lastIdOfPreviousBlock_ = countOfBlock.last_;
-    hasPreviousBlock_ = true;
-    return std::pair<Block, size_t>{std::move(block), count};
+    return std::pair<Block, DistinctIdCountOfBlock>{std::move(block),
+                                                    countOfBlock};
   }
 
  private:

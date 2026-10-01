@@ -24,6 +24,7 @@
 #include "backports/algorithm.h"
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/IdTableOrSharedIdTableView.h"
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
@@ -31,6 +32,7 @@
 #include "util/File.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/RecyclingPool.h"
 #include "util/Synchronized.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
@@ -59,7 +61,7 @@ class CompressedRelationWriter {
       ad_utility::makeUnlimitedAllocator<Id>();
   // A buffer for small relations that will be stored in the same block.
   SmallRelationsBuffer smallRelationsBuffer_{numColumns_, allocator_};
-  ad_utility::MemorySize uncompressedBlocksizePerColumn_;
+  size_t rowsPerBlock_;
 
   // When we store a large relation with multiple blocks then we keep track of
   // its `col0Id`, mostly for sanity checks.
@@ -76,18 +78,16 @@ class CompressedRelationWriter {
   using SmallBlocksCallback = std::function<void(IdTable)>;
   SmallBlocksCallback smallBlocksCallback_;
 
-  // A small pool of block buffers that have already been written and whose
+  // A pool of block buffers whose blocks have already been written and whose
   // memory can therefore be reused for the following blocks (see
-  // `takeRecycledBlock` and `recycleBlock`). Recycling is off by default and
-  // has to be enabled explicitly via `enableBlockRecycling`, because a buffer
-  // that nobody takes out of the pool again would only waste memory.
-  ad_utility::Synchronized<std::vector<IdTable>> recycledBlocks_;
-  bool recycleBlocks_ = false;
-
-  // The maximal number of buffers that are kept in the `recycledBlocks_`. It is
-  // set by `enableBlockRecycling`, because it depends on how many buffers the
-  // user has in flight at the same time.
-  size_t maxNumRecycledBlocks_ = 0;
+  // `takeBlockBuffer`). All blocks (of small as well as of large relations)
+  // have a similar size, so a single pool can serve all of them. The pool is
+  // shared, so that the two writers of a permutation pair (see
+  // `PermutationWriter`) and the `PermutationWriter` itself can use the same
+  // buffers, see `shareBlockBufferPoolWith`.
+  using BlockBufferPool = ad_utility::RecyclingPool<IdTable>;
+  std::shared_ptr<BlockBufferPool> blockBufferPool_ =
+      std::make_shared<BlockBufferPool>();
 
  public:
   /// Create using a filename, to which the relation data will be written.
@@ -96,13 +96,15 @@ class CompressedRelationWriter {
   /// the global thread pool is used (see `makeBlockWriteQueue`, which also
   /// explains why this is no longer a number of threads).
   explicit CompressedRelationWriter(
-      size_t numColumns, ad_utility::File f,
-      ad_utility::MemorySize uncompressedBlocksizePerColumn,
+      size_t numColumns, ad_utility::File f, size_t rowsPerBlock,
       std::optional<size_t> numWriterThreads = std::nullopt)
       : outfile_{std::move(f)},
         numColumns_{numColumns},
-        uncompressedBlocksizePerColumn_{uncompressedBlocksizePerColumn},
-        blockWriteQueue_{makeBlockWriteQueue(numWriterThreads)} {}
+        rowsPerBlock_{rowsPerBlock},
+        blockWriteQueue_{makeBlockWriteQueue(numWriterThreads)} {
+    AD_CONTRACT_CHECK(rowsPerBlock_ > 0,
+                      "A block must have room for at least one row");
+  }
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
   using MetadataCallback =
@@ -114,49 +116,13 @@ class CompressedRelationWriter {
   };
 
   // A block of rows that is to be compressed and written by this writer. It
-  // either owns its rows (as an `IdTable`, whose buffer can then be recycled,
-  // see `recycleBlock` below), or it is a non-owning view of rows that are
-  // owned elsewhere, together with a `shared_ptr` that keeps that owner alive
-  // for as long as the block is being written. The latter allows writing a
-  // block of a large relation directly from the input block in which its rows
-  // reside, without copying them into an intermediate buffer first, see
+  // either owns its rows (as an `IdTable`, whose buffer is then given back to
+  // the `blockBufferPool_`), or it is a non-owning view of rows that are owned
+  // elsewhere. The latter allows writing a block of a large relation directly
+  // from the input block in which its rows reside, without copying them into
+  // an intermediate buffer first, see
   // `PermutationWriter::addRowsOfCurrentRelation`.
-  class BlockToWrite {
-   public:
-    // A type-erased owner of the rows of a non-owning block.
-    using Owner = std::shared_ptr<const void>;
-
-   private:
-    // Exactly one of the following two is set: `table_` for an owning block,
-    // and `view_` (together with `owner_`) for a non-owning one.
-    std::optional<IdTable> table_;
-    std::optional<IdTableView<0>> view_;
-    Owner owner_;
-
-   public:
-    // Construct an owning block.
-    BlockToWrite(IdTable table) : table_{std::move(table)} {}
-
-    // Construct a non-owning block. The `owner_` has to keep the memory that
-    // the `view` points to alive.
-    BlockToWrite(IdTableView<0> view, Owner owner)
-        : view_{std::move(view)}, owner_{std::move(owner)} {}
-
-    // Return true iff this block owns its rows.
-    bool ownsRows() const { return table_.has_value(); }
-
-    // Return a view of the rows of this block. The view is valid for as long
-    // as this block lives.
-    IdTableView<0> view() const {
-      return ownsRows() ? table_.value().asStaticView<0>() : view_.value();
-    }
-
-    // Return the owned rows. May only be called if `ownsRows()` is true.
-    IdTable extractTable() && {
-      AD_CORRECTNESS_CHECK(ownsRows());
-      return std::move(table_).value();
-    }
-  };
+  using BlockToWrite = ad_utility::IdTableOrSharedIdTableView;
 
   // The `PermutationWriter` can be used to write single or pair permutations.
   // It is defined in `CompressedRelationPermutationWriterImpl.h`.
@@ -272,11 +238,7 @@ class CompressedRelationWriter {
   // Return the blocksize (in number of triples) of this writer. Note that the
   // actual sizes of blocks will slightly vary due to new relations starting in
   // new blocks etc.
-  size_t blocksize() const {
-    return std::max(
-        size_t{1},
-        size_t{uncompressedBlocksizePerColumn_.getBytes() / sizeof(Id)});
-  }
+  size_t blocksize() const { return rowsPerBlock_; }
 
  private:
   /// Finish writing all relations which have previously been added, but might
@@ -298,7 +260,7 @@ class CompressedRelationWriter {
   // Compress the `column` and write it to the `outfile_`. Return the offset and
   // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
-      ql::span<const Id> column);
+      ConstIdColumnRef column);
 
   // Return the number of columns that is stored inside the blocks.
   size_t numColumns() const { return numColumns_; }
@@ -430,30 +392,21 @@ class CompressedRelationWriter {
   // same `col0Id`.
   void addBlockForLargeRelation(Id col0Id, BlockToWrite relation);
 
-  // Enable the recycling of block buffers, see `recycledBlocks_` above, with a
-  // pool that holds at most `maxNumRecycledBlocks` buffers. That number should
-  // be the number of buffers that the caller has in flight at the same time,
-  // because a buffer that is given back when the pool is already full is
-  // destroyed and has to be allocated again later. Only call this if the
-  // blocks that are added to this writer are obtained from
-  // `takeRecycledBlock`.
-  void enableBlockRecycling(size_t maxNumRecycledBlocks) {
-    AD_CONTRACT_CHECK(maxNumRecycledBlocks > 0);
-    recycleBlocks_ = true;
-    maxNumRecycledBlocks_ = maxNumRecycledBlocks;
+  // Return an empty block buffer with room for at least `2 * blocksize()`
+  // rows, which is taken from the `blockBufferPool_` if possible (then its
+  // memory is typically already allocated). Thread-safe.
+  IdTable takeBlockBuffer();
+
+  // Use the same `blockBufferPool_` as the `other` writer.
+  void shareBlockBufferPoolWith(const CompressedRelationWriter& other) {
+    blockBufferPool_ = other.blockBufferPool_;
   }
 
-  // Return a block buffer with `numColumns` columns and zero rows, which is
-  // taken from the `recycledBlocks_` if possible (then its memory is already
-  // allocated) and freshly constructed from the `allocator` otherwise.
-  // Thread-safe.
-  IdTable takeRecycledBlock(
-      size_t numColumns, const ad_utility::AllocatorWithLimit<Id>& allocator);
-
-  // Store the `block`, whose contents are no longer needed, in the
-  // `recycledBlocks_` if recycling is enabled and the pool is not yet full.
-  // Otherwise simply destroy it. Thread-safe.
-  void recycleBlock(IdTable block);
+  // Return the `blockBufferPool_`, e.g. to give buffers back to it via
+  // `BlockBufferPool::makeRecyclingOwner`.
+  const std::shared_ptr<BlockBufferPool>& blockBufferPool() const {
+    return blockBufferPool_;
+  }
 
   // This function must be called after all blocks of a large relation have been
   // added via `addBlockForLargeRelation` before any other function may be
@@ -476,9 +429,9 @@ class CompressedRelationWriter {
   template <typename T>
   friend std::pair<std::vector<CompressedBlockMetadata>,
                    std::vector<CompressedRelationMetadata>>
-  compressedRelationTestWriteCompressedRelations(
-      T inputs, std::string filename, ad_utility::MemorySize blocksize,
-      size_t inputBlockSize);
+  compressedRelationTestWriteCompressedRelations(T inputs, std::string filename,
+                                                 size_t rowsPerBlock,
+                                                 size_t inputBlockSize);
 
   // Create the queue for the compression and writing of blocks. The blocks are
   // compressed and written on the global thread pool (see

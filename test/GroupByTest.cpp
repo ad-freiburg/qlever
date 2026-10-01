@@ -1978,7 +1978,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
 TEST(GroupByOptimizationsRegression,
      computeGroupByObjectWithCountWithNonUniformCol0) {
   // All triples share the same predicate `<p>` but have different objects.
-  // Use a non-default `blocksizePermutations` so that multiple triples land in
+  // Use a non-default `rowsPerBlock` so that multiple triples land in
   // the same block.
   TestIndexConfig config{
       "<s1> <p> <o1> . "
@@ -1986,7 +1986,7 @@ TEST(GroupByOptimizationsRegression,
       "<s3> <p> <o3> . "
       "<s4> <p> <o4> . "
       "<s5> <p> <o5> ."};
-  config.blocksizePermutations = 1_kB;
+  config.rowsPerBlock = 125;
   auto* qec = getQec(std::move(config));
 
   auto scan = makeExecutionTree<IndexScan>(
@@ -3258,6 +3258,32 @@ TEST(GroupBy, isDeterministic) {
     GroupBy gb{qec, {}, {nonDetAlias}, subtree};
     EXPECT_FALSE(gb.isDeterministic());
   }
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, isDeterministicOfNestedGroupBys) {
+  auto* qec = ad_utility::testing::getQec();
+  Variable x{"?x"};
+  std::shared_ptr<QueryExecutionTree> tree =
+      ad_utility::makeExecutionTree<ValuesForTestingCountingDeterminismChecks>(
+          qec, makeIdTableFromVector({{1}}),
+          std::vector<std::optional<Variable>>{x}, false,
+          std::vector<ColumnIndex>{0});
+  auto leaf = std::dynamic_pointer_cast<
+      const ValuesForTestingCountingDeterminismChecks>(
+      tree->getRootOperation());
+  ASSERT_NE(leaf, nullptr);
+
+  // The leaf of a chain of nested `GROUP BY`s must be visited exactly once.
+  // Previously, `GroupBy::isDeterministicImpl()` recursed into the subtree in
+  // addition to `Operation::isDeterministic()`, which made this exponential in
+  // the nesting depth, see https://github.com/ad-freiburg/qlever/issues/3557.
+  for (size_t i = 0; i < 40; ++i) {
+    tree = ad_utility::makeExecutionTree<GroupBy>(
+        qec, std::vector<Variable>{x}, std::vector<Alias>{}, std::move(tree));
+  }
+  EXPECT_TRUE(tree->getRootOperation()->isDeterministic());
+  EXPECT_EQ(leaf->numDeterminismChecks(), 1);
 }
 
 // Regression tests for https://github.com/ad-freiburg/qlever/issues/2960
