@@ -148,6 +148,22 @@ TEST(OwnedOrViewedVector, Serialization) {
     EXPECT_THAT(v, ElementsAre(1, 2));
   }
 
+  // The serialized bytes are exactly those of a `std::vector`, also with the
+  // padding of the aligned serialization, no matter whether the elements are
+  // owned or viewed. Write a leading `char`, so that padding is required.
+  {
+    auto serialize = [](const auto& elements) {
+      AlignedByteBufferWriteSerializer writer;
+      writer << char{'x'};
+      writer << elements;
+      return std::move(writer).data();
+    };
+    std::vector<int> elements{1, 2, 3};
+    auto expected = serialize(elements);
+    EXPECT_EQ(serialize(V{std::vector{1, 2, 3}}), expected);
+    EXPECT_EQ(serialize(V{ql::span<const int>{elements}}), expected);
+  }
+
   // Zero-copy deserialization yields a view into the buffer of the
   // serializer.
   {

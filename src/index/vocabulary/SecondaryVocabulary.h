@@ -202,10 +202,7 @@ class SecondaryVocabulary {
     if constexpr (WriteSerializer<S>) {
       serializer << serializationMagicBytes;
       serializer << serializationFormatVersion;
-      serializer << static_cast<uint64_t>(arg.segments_.size());
-      for (const auto& segment : arg.segments_) {
-        serializer << segment;
-      }
+      serializer << arg.segments_;
       serializer << arg.segmentOffsets_;
       serializer << arg.sortedIndices_;
     } else {
@@ -224,18 +221,21 @@ class SecondaryVocabulary {
                         "unsupported format version ",
                         formatVersion, ", expected ",
                         serializationFormatVersion);
-      uint64_t numSegments = 0;
-      serializer >> numSegments;
-      arg.segments_.reserve(numSegments);
-      for (uint64_t i = 0; i < numSegments; ++i) {
-        if constexpr (ZeroCopyReadSerializer<S>) {
+      if constexpr (ZeroCopyReadSerializer<S>) {
+        // Read the segments in the format of a `std::vector` (the number of
+        // segments, followed by the segments), but as zero-copy views.
+        size_t numSegments = 0;
+        serializer >> numSegments;
+        arg.segments_.reserve(numSegments);
+        for (size_t i = 0; i < numSegments; ++i) {
           arg.segments_.push_back(
               CompactVectorOfStrings<char>::fromZeroCopyDeserializer(
                   serializer));
-        } else {
-          serializer >> arg.segments_.emplace_back();
         }
+      } else {
+        serializer >> arg.segments_;
       }
+      const size_t numSegments = arg.segments_.size();
       auto readIndexArray = [&serializer](IndexArray& array) {
         if constexpr (ZeroCopyReadSerializer<S>) {
           array = IndexArray::fromZeroCopyDeserializer(serializer);

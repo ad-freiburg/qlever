@@ -20,6 +20,7 @@
 #include "backports/concepts.h"
 #include "backports/span.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 
@@ -126,7 +127,7 @@ class OwnedOrViewedVector {
                       "An `OwnedOrViewedVector` that is a non-owning view "
                       "cannot be modified");
     absl::Cleanup updateView{[this] { view_ = computeView(); }};
-    return std::forward<F>(function)(std::get<Vector>(storage_));
+    return AD_FWD(function)(std::get<Vector>(storage_));
   }
 
   // Serialization in the same format as a `std::vector<T>`. Reading always
