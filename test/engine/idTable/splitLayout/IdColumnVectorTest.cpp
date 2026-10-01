@@ -14,6 +14,8 @@
 #include "IdColumnTestHelpers.h"
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "engine/idTable/splitLayout/IdRef.h"
+#include "util/MemoryLimitTracker.h"
+#include "util/MemorySize/MemorySize.h"
 
 using namespace columnBasedIdTable::splitLayout;
 using testHelpers::sampleIds;
@@ -126,4 +128,21 @@ TEST(IdColumnVectorTest, asViewAndImplicitConversion) {
       };
   EXPECT_EQ(takesView(vec), vec.size());
   EXPECT_EQ(takesConstView(vec), vec.size());
+}
+
+// _____________________________________________________________________________
+TEST(IdColumnVectorTest, insertRollsBackOnDatatypesAllocationFailure) {
+  constexpr size_t numElements = 1000;
+  TestAllocator allocator{ad_utility::testing::makeAllocator(
+      ad_utility::MemorySize::bytes(numElements * sizeof(uint64_t) + 500))};
+  IdColumnVector vec{allocator};
+
+  std::vector toInsert(numElements, Id::makeFromInt(42));
+  EXPECT_THROW(
+      vec.insert(vec.asView().begin(), toInsert.begin(), toInsert.end()),
+      ad_utility::detail::AllocationExceedsLimitException);
+
+  // The vector must be left exactly as it was before the failed insert, not
+  // partially grown.
+  EXPECT_TRUE(vec.empty());
 }

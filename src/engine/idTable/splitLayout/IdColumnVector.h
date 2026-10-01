@@ -166,8 +166,15 @@ class IdColumnVector {
     }
     payloads_.insert(payloads_.begin() + offset, newPayloads.begin(),
                      newPayloads.end());
-    datatypes_.insert(datatypes_.begin() + offset, newDatatypes.begin(),
-                      newDatatypes.end());
+    try {
+      datatypes_.insert(datatypes_.begin() + offset, newDatatypes.begin(),
+                        newDatatypes.end());
+    } catch (...) {
+      // Rollback the insert into payloads_ if second insert fails
+      payloads_.erase(payloads_.begin() + offset,
+                      payloads_.begin() + offset + newPayloads.size());
+      throw;
+    }
   }
 
  public:
