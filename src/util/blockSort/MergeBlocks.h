@@ -211,10 +211,9 @@ std::vector<typename State::RangePos> findRuns(
     return state.getBlock(state.index_[pos].pos());
   };
   std::vector<typename State::RangePos> runs;
-  size_t runBegin = positions.first;
   // Close the current run at `runEnd` (exclusive). A run of a single block
   // doesn't need to be merged.
-  auto endRun = [&runs, &runBegin](size_t runEnd) {
+  auto endRun = [&runs, runBegin = positions.first](size_t runEnd) mutable {
     if (runEnd - runBegin > 1) {
       runs.emplace_back(runBegin, runEnd);
     }
