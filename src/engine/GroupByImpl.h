@@ -175,6 +175,9 @@ class GroupByImpl : public Operation {
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
   friend class groupBy::detail::LazyGroupByRange;
 
+  // `GroupBy` needs access to the private `isDeterministicImpl()`.
+  friend class GroupBy;
+
  public:
   // TODO<joka921> use `FRIEND_TEST` here once we have converged on the set
   // of tests to write.

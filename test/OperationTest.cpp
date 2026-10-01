@@ -3,12 +3,14 @@
 // Author: Johannes Kalmbach (joka921) <kalmbach@cs.uni-freiburg.de>
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include <optional>
 
 #include "engine/Bind.h"
 #include "engine/IndexScan.h"
+#include "engine/Join.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
@@ -637,6 +639,32 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 }
 
 // _____________________________________________________________________________
+TEST(Operation, verifyTimeAfterLastChunkIsAddedToRuntimeInformation) {
+  auto idTable = makeIdTableFromVector({{}});
+  CustomGeneratorOperation operation{
+      getQec(), [](const IdTable& idTable) -> Result::Generator {
+        co_yield {idTable.clone(), LocalVocab{}};
+        // Work that is done after the last chunk, e.g. a filter that discards
+        // the remaining input, has to be accounted for, too.
+        std::this_thread::sleep_for(5ms);
+      }(idTable)};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  auto result =
+      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+  auto& rti = operation.runtimeInfo();
+  auto totalTimeBefore = rti.totalTime_;
+
+  for ([[maybe_unused]] auto& _ : result.idTables()) {
+  }
+  EXPECT_EQ(rti.status_, Status::lazilyMaterializedCompleted);
+  // Only lower bounds, a high system load can only make the sleep longer.
+  EXPECT_GE(rti.totalTime_, totalTimeBefore + 5ms);
+  EXPECT_GE(rti.originalTotalTime_, totalTimeBefore + 5ms);
+  EXPECT_GE(rti.originalOperationTime_, 5ms);
+}
+
+// _____________________________________________________________________________
 TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
   uint32_t updateCallCounter = 0;
   auto idTable = makeIdTableFromVector({{}});
@@ -982,6 +1010,45 @@ TEST(OperationTest, isDeterministicPropagatesFromChildren) {
   auto sortedTree = ad_utility::makeExecutionTree<Sort>(
       qec, randBindTree, std::vector<ColumnIndex>{});
   EXPECT_FALSE(sortedTree->getRootOperation()->isDeterministic());
+}
+
+// _____________________________________________________________________________
+TEST(OperationTest, isDeterministicOfNestedJoins) {
+  using namespace ad_utility::testing;
+  auto* qec = getQec();
+  Variable x{"?x"};
+
+  std::vector<std::shared_ptr<const ValuesForTestingCountingDeterminismChecks>>
+      leaves;
+  auto makeLeaf = [&]() {
+    auto leaf = ad_utility::makeExecutionTree<
+        ValuesForTestingCountingDeterminismChecks>(
+        qec, makeIdTableFromVector({{1, 2}}),
+        std::vector<std::optional<Variable>>{
+            x, Variable{absl::StrCat("?o", leaves.size())}},
+        false, std::vector<ColumnIndex>{0});
+    leaves.push_back(std::dynamic_pointer_cast<
+                     const ValuesForTestingCountingDeterminismChecks>(
+        leaf->getRootOperation()));
+    AD_CORRECTNESS_CHECK(leaves.back() != nullptr);
+    return leaf;
+  };
+
+  // Each leaf of a left-deep chain of nested joins must be visited exactly
+  // once. Previously, `Join::isDeterministicImpl()` recursed into the subtree
+  // in addition to `Operation::isDeterministic()`, which made this exponential
+  // in the nesting depth, see
+  // https://github.com/ad-freiburg/qlever/issues/3557.
+  auto tree = makeLeaf();
+  for (size_t i = 0; i < 40; ++i) {
+    auto leftCol = tree->getVariableColumn(x);
+    tree = ad_utility::makeExecutionTree<Join>(qec, std::move(tree), makeLeaf(),
+                                               leftCol, 0);
+  }
+  EXPECT_TRUE(tree->getRootOperation()->isDeterministic());
+  for (const auto& leaf : leaves) {
+    EXPECT_EQ(leaf->numDeterminismChecks(), 1);
+  }
 }
 
 // _____________________________________________________________________________
