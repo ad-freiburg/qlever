@@ -172,12 +172,12 @@ CPP_template(typename UnderlyingVocabulary,
           if (buffer.size() < bound) {
             buffer.resize(bound);
           }
-          std::string_view decompressed =
-              decompressIntoSpan(ql::span<char>{buffer.data(), bound}, bound,
-                                 [&](ql::span<char> span) {
-                                   return compressionWrapper_.decompressInto(
-                                       word, decoderIdx, span, scratch);
-                                 });
+          std::string_view decompressed = decompressIntoSpan(
+              ql::span<char>{buffer.data(), bound}, bound,
+              [this, &word, decoderIdx, &scratch](ql::span<char> span) {
+                return compressionWrapper_.decompressInto(word, decoderIdx,
+                                                          span, scratch);
+              });
           return IndexAndWord{index, decompressed};
         });
   }
@@ -230,7 +230,8 @@ CPP_template(typename UnderlyingVocabulary,
       }
       builder.appendWord(decompressIntoSpan(
           ql::span<char>{decoded.data(), decoded.size()}, bound,
-          [&](ql::span<char> outSpan) {
+          [this, &compressedWord, decoderIdx,
+           &scratch](ql::span<char> outSpan) {
             return compressionWrapper_.decompressInto(
                 compressedWord, decoderIdx, outSpan, scratch);
           }));
