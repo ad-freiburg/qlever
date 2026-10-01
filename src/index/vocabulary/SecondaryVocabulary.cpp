@@ -16,6 +16,7 @@
 #include "backports/functional.h"
 #include "backports/shift.h"
 #include "util/Exception.h"
+#include "util/TransparentFunctors.h"
 #include "util/Views.h"
 
 // _____________________________________________________________________________
@@ -31,6 +32,13 @@ void SecondaryVocabulary::appendSegment(CompactVectorOfStrings<char> segment) {
   if (segment.size() == 0) {
     return;
   }
+
+  // A vocabulary that was read via zero-copy deserialization is read-only.
+  AD_CONTRACT_CHECK(
+      std::holds_alternative<std::vector<uint64_t>>(segmentOffsets_) &&
+          std::holds_alternative<std::vector<uint64_t>>(sortedIndices_),
+      "A secondary vocabulary that was read via zero-copy deserialization "
+      "cannot be extended, call `clone()` first");
 
   // Check that the words of `segment` are sorted and pairwise distinct. This
   // is a precondition that the caller has to establish (see the declaration),
@@ -50,7 +58,7 @@ void SecondaryVocabulary::appendSegment(CompactVectorOfStrings<char> segment) {
   std::vector<size_t> insertPositions = insertPositionsInSortedIndices(segment);
 
   uint64_t firstGlobalIndex = numWords();
-  owned(segmentOffsets_).push_back(firstGlobalIndex);
+  std::get<std::vector<uint64_t>>(segmentOffsets_).push_back(firstGlobalIndex);
   segments_.push_back(std::move(segment));
   mergeIntoSortedIndices(insertPositions, firstGlobalIndex);
 }
@@ -128,7 +136,7 @@ std::vector<size_t> SecondaryVocabulary::insertPositionsInSortedIndices(
 // _____________________________________________________________________________
 void SecondaryVocabulary::mergeIntoSortedIndices(
     const std::vector<size_t>& insertPositions, uint64_t firstGlobalIndex) {
-  auto& sortedIndices = owned(sortedIndices_);
+  auto& sortedIndices = std::get<std::vector<uint64_t>>(sortedIndices_);
   size_t numOldWords = sortedIndices.size();
   size_t numNewWords = insertPositions.size();
   sortedIndices.resize(numOldWords + numNewWords);
@@ -171,18 +179,5 @@ std::string_view SecondaryVocabulary::wordAt(uint64_t globalIndex) const {
 
 // _____________________________________________________________________________
 ql::span<const uint64_t> SecondaryVocabulary::view(const IndexArray& array) {
-  return std::visit(
-      [](const auto& alternative) {
-        return ql::span<const uint64_t>{alternative};
-      },
-      array);
-}
-
-// _____________________________________________________________________________
-std::vector<uint64_t>& SecondaryVocabulary::owned(IndexArray& array) {
-  if (auto* arrayView = std::get_if<ql::span<const uint64_t>>(&array)) {
-    std::vector<uint64_t> copy(arrayView->begin(), arrayView->end());
-    array = std::move(copy);
-  }
-  return std::get<std::vector<uint64_t>>(array);
+  return std::visit(ad_utility::staticCast<ql::span<const uint64_t>>, array);
 }

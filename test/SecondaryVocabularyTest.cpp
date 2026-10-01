@@ -321,16 +321,32 @@ TEST(SecondaryVocabulary, serialization) {
     EXPECT_EQ(readVocab.numSegments(), 2);
     expectWordsAndIdsMatch(readVocab, wordsInGlobalOrder);
 
-    // A vocabulary that was read can be extended (for the zero-copy case,
-    // this first copies the index arrays), and the global indices of its
-    // previous words stay unchanged.
-    readVocab.appendSegment(makeSegment({"<0>", "<g>"}));
+    // A vocabulary that was read via zero-copy deserialization is read-only
+    // (apart from empty segments, which are ignored), but its `clone()` can be
+    // extended. A vocabulary that was read into owned storage can be extended
+    // directly. In both cases, the global indices of the previous words stay
+    // unchanged.
+    using Serializer = std::decay_t<decltype(readSerializer)>;
+    auto extendable = [&readVocab]() {
+      if constexpr (ad_utility::serialization::ZeroCopyReadSerializer<
+                        Serializer>) {
+        readVocab.appendSegment(makeSegment({}));
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            readVocab.appendSegment(makeSegment({"<g>"})),
+            HasSubstr("cannot be extended, call `clone()` first"));
+        EXPECT_EQ(readVocab.numSegments(), 2);
+        return readVocab.clone();
+      } else {
+        return std::move(readVocab);
+      }
+    }();
+    extendable.appendSegment(makeSegment({"<0>", "<g>"}));
     auto extendedWords = wordsInGlobalOrder;
     extendedWords.push_back("<0>");
     extendedWords.push_back("<g>");
-    EXPECT_EQ(readVocab.numSegments(), 3);
-    expectWordsAndIdsMatch(readVocab, extendedWords);
-    AD_EXPECT_THROW_WITH_MESSAGE(readVocab.appendSegment(makeSegment({"<b>"})),
+    EXPECT_EQ(extendable.numSegments(), 3);
+    expectWordsAndIdsMatch(extendable, extendedWords);
+    AD_EXPECT_THROW_WITH_MESSAGE(extendable.appendSegment(makeSegment({"<b>"})),
                                  HasSubstr("is already contained"));
 
     // Deserializing into a vocabulary that is not empty is not allowed.

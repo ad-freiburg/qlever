@@ -99,7 +99,7 @@ class SecondaryVocabulary {
   // below), which is either owned, or a non-owning, zero-copy view into the
   // buffer of the serializer from which this vocabulary was read (see the
   // serialization below), in which case that buffer has to outlive this
-  // vocabulary. Access it via `view` or `owned` below.
+  // vocabulary. Access it via `view` below.
   using IndexArray =
       std::variant<std::vector<uint64_t>, ql::span<const uint64_t>>;
 
@@ -155,8 +155,8 @@ class SecondaryVocabulary {
   // segment (see `numSegments`).
   //
   // NOTE 3: If this vocabulary was read via zero-copy deserialization (see the
-  // serialization below), then the first call copies the `segmentOffsets_`
-  // and the `sortedIndices_` into owned storage, as they have to be modified.
+  // serialization below), then it is read-only, and appending a non-empty
+  // `segment` throws. To extend such a vocabulary, extend a `clone()` of it.
   void appendSegment(CompactVectorOfStrings<char> segment);
 
   // Return the number of words across all segments.
@@ -284,11 +284,6 @@ class SecondaryVocabulary {
 
   // Return a view of the given `array`, regardless of whether it is owned.
   static ql::span<const uint64_t> view(const IndexArray& array);
-
-  // Return the owned vector of the given `array`. If `array` currently is a
-  // view, then replace it by an owned copy first (which is required before
-  // modifying a vocabulary that was read via zero-copy deserialization).
-  static std::vector<uint64_t>& owned(IndexArray& array);
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SECONDARYVOCABULARY_H
