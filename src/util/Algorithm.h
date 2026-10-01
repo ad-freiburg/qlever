@@ -192,7 +192,7 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
  * intended read-then-write via `T` unconditionally.
  */
 template <typename T, typename A, typename B>
-void assignSwap(A&& a, B&& b) {
+void assignSwap(A&& a, B&& b) {  // NOSONAR
   // NOLINTBEGIN(bugprone-move-forwarding-reference) -- `A`/`B` exist to
   // accept a proxy prvalue, not to forward; must always move, like
   // `std::swap`, so `std::forward` would silently copy instead for a
