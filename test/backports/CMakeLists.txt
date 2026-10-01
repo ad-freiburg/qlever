@@ -15,5 +15,8 @@ addLinkAndDiscoverTestNoLibs(ThreeWayComparisonTest)
 addLinkAndDiscoverTestNoLibs(AtomicFlagTest)
 addLinkAndDiscoverTestNoLibs(FilesystemTest)
 addLinkAndDiscoverTestNoLibs(MemoryTest)
+<<<<<<< HEAD
 addLinkAndDiscoverTestNoLibs(StringTest)
 addLinkAndDiscoverTestNoLibs(NumericTest)
+=======
+>>>>>>> origin/upstream-stack/06a
