@@ -96,6 +96,11 @@ class VocabBatchLookupResult {
  public:
   VocabBatchLookupResult() = default;
 
+  // No custom cleanup: `storage_` owns the bytes via `shared_ptr` and
+  // `span_` is a non-owning view. Declared explicitly because this class
+  // manages shared ownership through the moves below (Sonar cpp:S3624).
+  ~VocabBatchLookupResult() = default;
+
   explicit VocabBatchLookupResult(VocabBatchOwner storage)
       : storage_{std::move(storage)},
         span_{storage_ ? storage_->viewSpan()
