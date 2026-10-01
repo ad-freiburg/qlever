@@ -70,7 +70,10 @@ class SpatialJoinCachedIndex {
   // from which this index was created are permuted, where `newRowOfOldRow[r]`
   // is the row to which the row `r` was moved. The contained (immutable)
   // `MutableS2ShapeIndex` is shared with this index, only the mapping from
-  // shape ids to rows differs.
+  // shape ids to rows differs. This is currently required when an `IdTable`
+  // that contains `LocalVocabEntry`s is serialized into a blob, because its
+  // rows are then rewritten and sorted again, see `rewriteToSecondaryVocab` in
+  // `NamedCacheSecondaryVocabRewriter.h`.
   SpatialJoinCachedIndex withPermutedRows(
       ql::span<const size_t> newRowOfOldRow) const;
 

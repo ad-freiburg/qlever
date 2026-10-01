@@ -12,6 +12,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -352,6 +353,8 @@ TEST(SecondaryVocabulary, serialization) {
   // A corrupted input, in which a word occurs in two segments, is rejected
   // by the checks of `appendSegment`.
   ByteBufferWriteSerializer corruptedWriter;
+  corruptedWriter << SecondaryVocabulary::serializationMagicBytes;
+  corruptedWriter << SecondaryVocabulary::serializationFormatVersion;
   corruptedWriter << uint64_t{2};
   corruptedWriter << makeSegment({"<a>"});
   corruptedWriter << makeSegment({"<a>"});
@@ -359,6 +362,29 @@ TEST(SecondaryVocabulary, serialization) {
   SecondaryVocabulary corrupted;
   AD_EXPECT_THROW_WITH_MESSAGE(corruptedReader >> corrupted,
                                HasSubstr("is already contained"));
+
+  // An input with wrong magic bytes or an unsupported format version is
+  // rejected.
+  ByteBufferWriteSerializer wrongMagicWriter;
+  wrongMagicWriter << std::array<char, 8>{'N', 'O', 'T', 'Q',
+                                          'L', 'E', 'V', 'R'};
+  wrongMagicWriter << SecondaryVocabulary::serializationFormatVersion;
+  wrongMagicWriter << uint64_t{0};
+  ByteBufferReadSerializer wrongMagicReader{std::move(wrongMagicWriter).data()};
+  SecondaryVocabulary wrongMagic;
+  AD_EXPECT_THROW_WITH_MESSAGE(wrongMagicReader >> wrongMagic,
+                               HasSubstr("expected magic bytes"));
+
+  ByteBufferWriteSerializer wrongVersionWriter;
+  wrongVersionWriter << SecondaryVocabulary::serializationMagicBytes;
+  wrongVersionWriter << static_cast<uint16_t>(
+      SecondaryVocabulary::serializationFormatVersion + 1);
+  wrongVersionWriter << uint64_t{0};
+  ByteBufferReadSerializer wrongVersionReader{
+      std::move(wrongVersionWriter).data()};
+  SecondaryVocabulary wrongVersion;
+  AD_EXPECT_THROW_WITH_MESSAGE(wrongVersionReader >> wrongVersion,
+                               HasSubstr("unsupported format version 2"));
 }
 
 // _____________________________________________________________________________

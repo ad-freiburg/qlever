@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_SECONDARYVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_SECONDARYVOCABULARY_H
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -82,6 +83,15 @@
 // replace the bytewise order used here; only once this class has to support
 // range queries as well will a comparator have to be passed in.
 class SecondaryVocabulary {
+ public:
+  // The magic bytes and the format version with which the serialization of a
+  // `SecondaryVocabulary` starts (see `AD_SERIALIZE_FRIEND_FUNCTION` below).
+  // The `serializationFormatVersion` has to be increased when the format of
+  // the serialization is changed.
+  static constexpr std::array<char, 8> serializationMagicBytes{
+      'Q', 'L', 'S', 'E', 'C', 'V', 'O', 'C'};
+  static constexpr uint16_t serializationFormatVersion = 1;
+
  private:
   // The words, stored as an append-only sequence of segments, each of which
   // holds its words in sorted order (see `appendSegment`).
@@ -148,24 +158,31 @@ class SecondaryVocabulary {
   // vocabulary, and `std::nullopt` otherwise.
   std::optional<SecondaryVocabIndex> getId(std::string_view word) const;
 
-  // Return a deep copy of this vocabulary, which owns all its segments (also
+  // Return a deep copy of this vocabulary, which owns all its segments (even
   // if the segments of this vocabulary are zero-copy views), and in which all
-  // words have the same global indices as in this vocabulary. This is a
-  // function instead of a copy constructor, because the segments are
+  // words have the same global indices as in this vocabulary. This is an
+  // explicit function instead of a copy constructor, because the segments are
   // move-only, and because the copy is expensive.
   SecondaryVocabulary clone() const;
 
-  // Serialize the vocabulary as its number of segments followed by the
+  // Serialize the vocabulary as the `serializationMagicBytes` and the
+  // `serializationFormatVersion`, followed by its number of segments and the
   // segments, in the order in which they were appended, so that all words keep
-  // their global indices. When reading, `arg` has to be empty, and the segments
-  // are appended via `appendSegment`, which checks them, so that a corrupted
-  // input is rejected. If the `serializer` supports zero-copy deserialization
-  // (see `ZeroCopyReadSerializer`), then the segments are zero-copy views into
-  // its buffer, which then has to outlive this vocabulary (see NOTE 1 at
-  // `appendSegment`).
+  // their global indices. The format version is stored explicitly, so that the
+  // format can be extended in the future without breaking the reading of
+  // previously serialized vocabularies (for example by also storing the
+  // `sortedIndices_`, which currently are recomputed when reading). When
+  // reading, `arg` has to be empty, the magic bytes and the version are
+  // checked, and the segments are appended via `appendSegment`, which checks
+  // them, so that a corrupted input is rejected. If the `serializer` supports
+  // zero-copy deserialization (see `ZeroCopyReadSerializer`), then the segments
+  // are zero-copy views into its buffer, which then has to outlive this
+  // vocabulary (see NOTE 1 at `appendSegment`).
   AD_SERIALIZE_FRIEND_FUNCTION(SecondaryVocabulary) {
     using namespace ad_utility::serialization;
     if constexpr (WriteSerializer<S>) {
+      serializer << serializationMagicBytes;
+      serializer << serializationFormatVersion;
       serializer << static_cast<uint64_t>(arg.segments_.size());
       for (const auto& segment : arg.segments_) {
         serializer << segment;
@@ -174,6 +191,18 @@ class SecondaryVocabulary {
       AD_CONTRACT_CHECK(arg.numSegments() == 0,
                         "A secondary vocabulary can only be deserialized into "
                         "an empty one");
+      std::decay_t<decltype(serializationMagicBytes)> magicBytes{};
+      serializer >> magicBytes;
+      AD_CONTRACT_CHECK(magicBytes == serializationMagicBytes,
+                        "The serialized secondary vocabulary does not start "
+                        "with the expected magic bytes");
+      uint16_t formatVersion = 0;
+      serializer >> formatVersion;
+      AD_CONTRACT_CHECK(formatVersion == serializationFormatVersion,
+                        "The serialized secondary vocabulary has the "
+                        "unsupported format version ",
+                        formatVersion, ", expected ",
+                        serializationFormatVersion);
       uint64_t numSegments = 0;
       serializer >> numSegments;
       for (uint64_t i = 0; i < numSegments; ++i) {

@@ -170,8 +170,9 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
     // NOTE 2: Even though we disallow the local vocab, it is crucial to
     // serialize the local vocab because of possible added blank node indices,
     // which we do handle correctly, and which also rely on the local vocab.
-    // NOTE 3: The blobs of `NamedCachedQueryBlobManager` support such entries
-    // by rewriting them first (see `NamedCacheSecondaryVocabRewriter.h`).
+    // NOTE 3: The blobs of `NamedCachedQueryBlobManager` support local vocab
+    // entries by rewriting them first (see
+    // `NamedCacheSecondaryVocabRewriter.h`).
     // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
     // allow local vocab entries here.
     AD_CORRECTNESS_CHECK(

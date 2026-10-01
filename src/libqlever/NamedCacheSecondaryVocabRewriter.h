@@ -99,7 +99,7 @@ Id rewriteId(Id id, const SecondaryVocabulary& secondaryVocab);
 NamedResultCache::Value rewriteToSecondaryVocab(
     const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,
-    NamedResultCache::Value::Allocator allocator);
+    const NamedResultCache::Value::Allocator& allocator);
 
 }  // namespace qlever::namedCacheSecondaryVocab
 

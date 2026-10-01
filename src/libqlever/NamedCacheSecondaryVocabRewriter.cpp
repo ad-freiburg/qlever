@@ -11,14 +11,17 @@
 
 #include <numeric>
 #include <optional>
+#include <range/v3/view/zip.hpp>
 #include <string>
 
 #include "backports/algorithm.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "index/LocalVocabEntry.h"
+#include "util/Algorithm.h"
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+#include "util/Views.h"
 
 namespace qlever::namedCacheSecondaryVocab {
 
@@ -59,6 +62,11 @@ bool rowLess(const IdTable& table, const std::vector<ColumnIndex>& sortedOn,
 // Return the permutation of the rows of `table` that sorts it by the
 // `sortedOn` columns (the row at position `i` of the sorted table is the row
 // `result[i]` of `table`), or `std::nullopt` if `table` already is sorted.
+//
+// TODO<joka921> The performance of this function (and of `permuteRows`) can be
+// improved, for example by using `CallFixedSize` to make the number of columns
+// a compile-time constant. We first want to make the feature work, and then
+// assess whether this is a bottleneck.
 std::optional<std::vector<size_t>> sortingPermutation(
     const IdTable& table, const std::vector<ColumnIndex>& sortedOn) {
   auto less = [&table, &sortedOn](size_t a, size_t b) {
@@ -77,17 +85,41 @@ std::optional<std::vector<size_t>> sortingPermutation(
 // `sortingPermutation`).
 IdTable permuteRows(const IdTable& table,
                     const std::vector<size_t>& permutation,
-                    NamedResultCache::Value::Allocator allocator) {
-  IdTable result{table.numColumns(), std::move(allocator)};
+                    const NamedResultCache::Value::Allocator& allocator) {
+  IdTable result{table.numColumns(), allocator};
   result.resize(table.numRows());
-  for (size_t column = 0; column < table.numColumns(); ++column) {
-    auto source = table.getColumn(column);
-    auto target = result.getColumn(column);
-    for (size_t row = 0; row < permutation.size(); ++row) {
+  for (auto&& [source, target] :
+       ::ranges::views::zip(table.getColumns(), result.getColumns())) {
+    for (size_t row : ad_utility::integerRange(permutation.size())) {
       target[row] = source[permutation[row]];
     }
   }
   return result;
+}
+
+// Insert the words of all those `Id`s of type `LocalVocabIndex` of `column`
+// into `newWords` that are neither contained in the vocabulary of the main
+// index nor in the `secondaryVocab` (see `addNewWordsToSecondaryVocab`). The
+// `handledEntries` are the `LocalVocabEntry`s that have already been handled
+// (also by previous calls), each of which is handled only once.
+void collectNewWords(
+    ql::span<const Id> column, const SecondaryVocabulary& secondaryVocab,
+    ad_utility::HashSet<const LocalVocabEntry*>& handledEntries,
+    ad_utility::HashSet<std::string>& newWords) {
+  for (Id id : column) {
+    if (id.getDatatype() != Datatype::LocalVocabIndex) {
+      continue;
+    }
+    const LocalVocabEntry* entry = id.getLocalVocabIndex();
+    if (!handledEntries.insert(entry).second ||
+        idInMainVocab(*entry).has_value()) {
+      continue;
+    }
+    const auto& word = entry->toStringRepresentation();
+    if (!secondaryVocab.getId(word).has_value()) {
+      newWords.insert(word);
+    }
+  }
 }
 }  // namespace
 
@@ -95,8 +127,9 @@ IdTable permuteRows(const IdTable& table,
 bool containsLocalVocabIds(const NamedResultCache::Value& value) {
   auto view = ExplicitIdTableOperation::viewOf(value.result_);
   return ql::ranges::any_of(view.getColumns(), [](const auto& column) {
-    return ql::ranges::find(column, Datatype::LocalVocabIndex,
-                            &Id::getDatatype) != ql::ranges::end(column);
+    return ad_utility::contains_if(column, [](Id id) {
+      return id.getDatatype() == Datatype::LocalVocabIndex;
+    });
   });
 }
 
@@ -110,20 +143,7 @@ size_t addNewWordsToSecondaryVocab(const Entries& entries,
   for (const auto& [key, value] : entries) {
     auto view = ExplicitIdTableOperation::viewOf(value->result_);
     for (const auto& column : view.getColumns()) {
-      for (Id id : column) {
-        if (id.getDatatype() != Datatype::LocalVocabIndex) {
-          continue;
-        }
-        const LocalVocabEntry* entry = id.getLocalVocabIndex();
-        if (!handledEntries.insert(entry).second ||
-            idInMainVocab(*entry).has_value()) {
-          continue;
-        }
-        const auto& word = entry->toStringRepresentation();
-        if (!secondaryVocab.getId(word).has_value()) {
-          newWords.insert(word);
-        }
-      }
+      collectNewWords(column, secondaryVocab, handledEntries, newWords);
     }
   }
 
@@ -159,14 +179,15 @@ Id rewriteId(Id id, const SecondaryVocabulary& secondaryVocab) {
 NamedResultCache::Value rewriteToSecondaryVocab(
     const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,
-    NamedResultCache::Value::Allocator allocator) {
+    const NamedResultCache::Value::Allocator& allocator) {
+  // Copy the table (via the given `allocator`), and rewrite the copy in place.
   auto view = ExplicitIdTableOperation::viewOf(value.result_);
   IdTable table{view.numColumns(), allocator};
-  table.resize(view.numRows());
-  for (size_t column = 0; column < view.numColumns(); ++column) {
-    ql::ranges::transform(
-        view.getColumn(column), table.getColumn(column).begin(),
-        [&secondaryVocab](Id id) { return rewriteId(id, secondaryVocab); });
+  table.insertAtEnd(view);
+  for (auto column : table.getColumns()) {
+    ql::ranges::for_each(column, [&secondaryVocab](Id& id) {
+      id = rewriteId(id, secondaryVocab);
+    });
   }
 
   std::optional<SpatialJoinCachedIndex> geoIndex = value.cachedGeoIndex_;
@@ -174,6 +195,9 @@ NamedResultCache::Value rewriteToSecondaryVocab(
       permutation.has_value()) {
     table = permuteRows(table, permutation.value(), allocator);
     if (geoIndex.has_value()) {
+      // Invert the `permutation`, because `withPermutedRows` requires the new
+      // row of each old row, whereas `permutation` contains the old row of
+      // each new row.
       std::vector<size_t> newRowOfOldRow(permutation->size());
       for (size_t newRow = 0; newRow < permutation->size(); ++newRow) {
         newRowOfOldRow[(*permutation)[newRow]] = newRow;
