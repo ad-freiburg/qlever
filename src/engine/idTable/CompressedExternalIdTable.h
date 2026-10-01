@@ -1066,7 +1066,8 @@ class CompressedExternalIdTableSorter
   // `setMergeExecutor`, and the completion signature is
   // `void(std::exception_ptr)`, see `AsyncIdTablePusher::asyncPushBlock` for
   // the details (in particular, the rows that the `table` view refers to have
-  // to stay alive until the operation has completed).
+  // to stay alive until the operation has completed, which can be guaranteed
+  // via an aliasing `shared_ptr`).
   //
   // NOTE: This function is the *only* one of this class that may be called
   // concurrently. While such pushes are in flight, no other member (not even

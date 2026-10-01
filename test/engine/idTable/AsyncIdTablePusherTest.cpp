@@ -209,14 +209,14 @@ TEST(AsyncIdTablePusher, completionHandlerRunsOnItsExecutor) {
   net::thread_pool handlerPool{1};
   Pusher pusher{pool.get_executor(), 1, 4, alloc, [](IdTableStatic<0>) {}};
   auto table = createRandomlyFilledIdTable(10, 1);
-  std::promise<bool> promise;
   auto handlerExecutor = handlerPool.get_executor();
-  pusher.asyncPushBlock(
-      viewOf(table),
-      net::bind_executor(
-          handlerExecutor, [&promise, handlerExecutor](std::exception_ptr ex) {
-            promise.set_value(ex == nullptr &&
-                              handlerExecutor.running_in_this_thread());
-          }));
-  EXPECT_TRUE(promise.get_future().get());
+  std::packaged_task<bool(std::exception_ptr)> task{
+      [handlerExecutor](std::exception_ptr ex) {
+        return ex == nullptr && handlerExecutor.running_in_this_thread();
+      }};
+  // Asio treats a `std::packaged_task` as a completion token (also when it is
+  // wrapped by `bind_executor`), so `asyncPushBlock` returns its future.
+  auto future = pusher.asyncPushBlock(
+      viewOf(table), net::bind_executor(handlerExecutor, std::move(task)));
+  EXPECT_TRUE(future.get());
 }

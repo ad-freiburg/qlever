@@ -65,7 +65,10 @@ class AsyncIdTablePusher {
   // The type-erased completion handler of `asyncPushBlock`, see there.
   using Handler = absl::AnyInvocable<void(std::exception_ptr)>;
   // The type in which `asyncPushBlock` takes the table to push. A view can be
-  // cheaply created from any `IdTable` via `asStaticView<0>()`.
+  // cheaply created from any `IdTable` via `asStaticView<0>()`. The
+  // `shared_ptr` allows a caller to tie the lifetime of the rows to the push
+  // operation, by creating it via the aliasing constructor of `std::shared_ptr`
+  // from a `shared_ptr` to an object that owns both the rows and the view.
   using TablePtr = std::shared_ptr<const IdTableView<0>>;
 
  private:
@@ -75,7 +78,7 @@ class AsyncIdTablePusher {
   struct PushOperation {
     // The pushed table. NOTE: The `shared_ptr` only keeps the view alive, the
     // rows that it refers to have to be kept alive by the caller of
-    // `asyncPushBlock`.
+    // `asyncPushBlock` (e.g. via an aliasing `shared_ptr`, see `TablePtr`).
     TablePtr table_;
     // The number of rows that have already been copied into a block.
     size_t numPushed_ = 0;
@@ -162,7 +165,11 @@ class AsyncIdTablePusher {
   // IMPORTANT: The `table` is a non-owning view. The `shared_ptr` keeps the
   // view itself alive, but the rows that it refers to must stay alive and
   // unchanged until the operation has completed, because they are only copied
-  // while it is in flight.
+  // while it is in flight. To guarantee this without further synchronization,
+  // the `table` can be an aliasing `shared_ptr` that shares the ownership of
+  // the rows, e.g. `TablePtr{owner, &owner->view_}`, where `owner` is a
+  // `shared_ptr` to a struct that holds both an `IdTable` and a view `view_`
+  // of it.
   template <typename CompletionToken>
   auto asyncPushBlock(TablePtr table, CompletionToken&& completionToken) {
     AD_CONTRACT_CHECK(table != nullptr);
