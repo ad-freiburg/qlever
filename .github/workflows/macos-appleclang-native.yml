@@ -1,12 +1,11 @@
 name: Native build with AppleClang on MacOS
 
 on:
-  # CI-trim 2026-09-23: hosted legs skip push/merge_group (GitHub queue
-  # latency fanned every merge into dozens of queued jobs). Fleet legs guard
-  # master; full signal via 'ci'-labeled PRs or manual dispatch.
-  # Fork PR profile 2026-09-25: no pull_request trigger (packaging/analysis,
-  # not code quality). Run manually via workflow_dispatch.
-  workflow_dispatch:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  merge_group:
 
 concurrency:
   group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
@@ -18,13 +17,12 @@ permissions:
 
 jobs:
   build:
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
     # The CMake configure and build commands are platform-agnostic and should work equally
     # well on Windows or Mac.  You can convert this to a matrix build if you need
     # cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         build-type: [Release]
     runs-on: macos-15

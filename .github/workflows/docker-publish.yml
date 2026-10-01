@@ -2,12 +2,10 @@ name: Docker build and publish
 
 on:
   push:
-    # CI-trim 2026-09-23: no dev-image builds on master push (GitHub queue
-    # latency). Release tags still publish; PRs still validate the build.
+    branches: [ master ]
     tags: [ 'v*.*.*' ]
-  # Fork PR profile 2026-09-25: no pull_request trigger (packaging/analysis,
-  # not code quality). Run manually via workflow_dispatch.
-  workflow_dispatch:
+  pull_request:
+    branches: [ master ]
 
 env:
   IMAGE: adfreiburg/qlever
@@ -35,7 +33,6 @@ permissions:
 
 jobs:
   build:
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci')
     strategy:
       matrix:
         include:
