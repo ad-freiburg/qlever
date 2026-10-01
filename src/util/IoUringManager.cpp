@@ -50,11 +50,11 @@ unsigned FixedFileSlots::slotFor(int fd) {
   const auto slotIndex = [this](auto it) {
     return static_cast<unsigned>(ql::ranges::distance(slots_.begin(), it));
   };
-  if (const auto known = ql::ranges::find(slots_, fd, &Slot::ownerFd);
+  if (const auto known = ql::ranges::find(slots_, fd, &Slot::ownerFd_);
       known != slots_.end()) {
     return slotIndex(known);
   }
-  const auto freeSlot = ql::ranges::find(slots_, -1, &Slot::ownerFd);
+  const auto freeSlot = ql::ranges::find(slots_, -1, &Slot::ownerFd_);
   if (freeSlot == slots_.end()) {
     AD_THROW(
         "IoUringPolicy supports at most two vocabulary files as fixed files; "
@@ -79,16 +79,16 @@ unsigned FixedFileSlots::slotFor(int fd) {
         std::to_string(slot) + ", descriptor " + std::to_string(fd) +
         " (error " + std::to_string(-installRet) + ")");
   }
-  freeSlot->ownerFd = fd;
-  freeSlot->registeredFd = duped;
+  freeSlot->ownerFd_ = fd;
+  freeSlot->registeredFd_ = duped;
   return slot;
 }
 
 //______________________________________________________________________________
 void FixedFileSlots::releaseAll() noexcept {
   for (Slot& slot : slots_) {
-    if (slot.registeredFd >= 0) {
-      close_(slot.registeredFd);
+    if (slot.registeredFd_ >= 0) {
+      close_(slot.registeredFd_);
     }
     slot = Slot{};
   }
@@ -97,7 +97,7 @@ void FixedFileSlots::releaseAll() noexcept {
 //______________________________________________________________________________
 size_t FixedFileSlots::numUsedSlots() const {
   return static_cast<size_t>(ql::ranges::count_if(
-      slots_, [](const Slot& slot) { return slot.ownerFd >= 0; }));
+      slots_, [](const Slot& slot) { return slot.ownerFd_ >= 0; }));
 }
 
 //______________________________________________________________________________

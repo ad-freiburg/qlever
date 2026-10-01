@@ -240,11 +240,11 @@ class FixedFileSlots {
   using CloseFunction = std::function<void(int fd)>;
 
  private:
-  // One slot: the caller's descriptor (`ownerFd`, never closed here) and its
-  // `dup` held by the ring (`registeredFd`). `-1` marks an unused slot.
+  // One slot: the caller's descriptor (`ownerFd_`, never closed here) and
+  // its `dup` held by the ring (`registeredFd_`). `-1` marks an unused slot.
   struct Slot {
-    int ownerFd = -1;
-    int registeredFd = -1;
+    int ownerFd_ = -1;
+    int registeredFd_ = -1;
   };
   // The slots in registration order.
   std::array<Slot, NUM_SLOTS> slots_;
