@@ -111,7 +111,10 @@ class QueryExecutionTree {
                                rootOperation_->getMultiplicity(col));
   }
 
-  bool isVariableCovered(Variable variable) const;
+  // Check whether the result of this tree has a column for the given variable.
+  // Note that this says nothing about whether that column might be UNDEF; use
+  // `Operation::isVariableAlwaysDefined` if that distinction matters.
+  bool containsVariable(Variable variable) const;
 
   bool knownEmptyResult();
 

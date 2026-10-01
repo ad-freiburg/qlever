@@ -21,6 +21,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/GeoPointEncoding.h"
 #include "index/Index.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
@@ -31,6 +32,23 @@
 // be used for unit tests.
 
 namespace ad_utility::testing {
+// Set the global `EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING`
+// flag to `value` and restore its previous value when the returned cleanup is
+// destroyed.
+//
+// NOTE: The flag is global, so setting it without such a cleanup would make
+// every test that runs afterwards silently depend on the value that was set
+// here.
+[[nodiscard]] inline auto setIgnoreMemoryLimit(bool value) {
+  bool previousValue =
+      ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING
+          .exchange(value);
+  return absl::Cleanup{[previousValue] {
+    ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
+        previousValue;
+  }};
+}
+
 // Return a pointer to a single, lazily-initialized `EncodedIriManager`
 // instance shared across all tests.
 inline const EncodedIriManager* encodedIriManager() {
@@ -111,6 +129,14 @@ struct TestIndexConfig {
   // `IndexImpl::readIndexBuilderSettingsFromFile`) as pairs of a key and a
   // value in JSON syntax (so a string value has to be quoted).
   std::vector<std::pair<std::string, std::string>> additionalSettings;
+  // The encoding of the geo points of the index (see
+  // `ad_utility::GeoPointEncoding`).
+  //
+  // NOTE: The encoding is a process-wide setting (see `GeoPoint::encoding`),
+  // which building or loading an index changes. A test that uses `LatMajor`
+  // should therefore not use the cached `getQec`, and restore the encoding.
+  ad_utility::GeoPointEncoding geoPointEncoding =
+      ad_utility::GeoPointEncoding::ZOrder;
 
   // A very typical use case is to only specify the turtle input, and leave all
   // the other members as the default. We therefore have a dedicated constructor
@@ -129,7 +155,7 @@ struct TestIndexConfig {
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
         c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
         c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
-        c.parseInParallel, c.additionalSettings);
+        c.parseInParallel, c.additionalSettings, c.geoPointEncoding.value());
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
@@ -138,7 +164,7 @@ struct TestIndexConfig {
       bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
       addHasWordTriples, secondaryVocabWords, numThreads, parseInParallel,
-      additionalSettings)
+      additionalSettings, geoPointEncoding)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.
