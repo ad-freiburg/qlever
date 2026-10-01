@@ -304,6 +304,44 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
 }
 
 // _____________________________________________________________________________
+// The depth-2 pipeline submits the next sub-batch while the current one is
+// consumed. With more than `maxVocabIndicesPerSubBatch` vocabulary IDs the
+// lookup spans several sub-batches and exercises the pipelined begin/finish
+// overlap; the results must still match the per-ID lookups.
+TEST(ExportIds, idsToStringAndTypeDepth2SpansMultipleSubBatches) {
+  // 300 subjects and 300 objects (plus the shared predicate) give 601
+  // vocabulary IDs, so the pipeline processes three sub-batches.
+  std::string kg;
+  for (size_t i = 0; i < 300; ++i) {
+    kg += "<s" + std::to_string(i) + "> <p> <o" + std::to_string(i) + "> . ";
+  }
+  auto qec = ad_utility::testing::getQec(kg);
+  const Index& index = qec->getIndex();
+  LocalVocab localVocab{};
+  auto getId = ad_utility::testing::makeGetId(index);
+
+  std::vector<Id> ids;
+  for (size_t i = 0; i < 300; ++i) {
+    ids.push_back(getId("<s" + std::to_string(i) + ">"));
+    ids.push_back(getId("<o" + std::to_string(i) + ">"));
+  }
+  ids.push_back(getId("<p>"));
+  ASSERT_GT(ids.size(), ql::exportIds::maxVocabIndicesPerSubBatch);
+
+  auto batchResults = ql::exportIds::idsToStringAndType(
+      index, ql::span<const Id>{ids}, localVocab);
+  auto depth2 = ql::exportIds::idsToStringAndTypeDepth2(
+      index, ql::span<const Id>{ids}, localVocab);
+  EXPECT_EQ(depth2, batchResults);
+  ASSERT_EQ(depth2.size(), ids.size());
+  for (size_t i = 0; i < ids.size(); ++i) {
+    EXPECT_EQ(depth2[i],
+              ql::exportIds::idToStringAndType(index, ids[i], localVocab))
+        << "Mismatch at index " << i;
+  }
+}
+
+// _____________________________________________________________________________
 // Empty span returns an empty vector.
 TEST(ExportIds, idsToStringAndTypeEmptyInput) {
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
