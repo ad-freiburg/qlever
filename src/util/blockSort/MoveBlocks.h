@@ -72,7 +72,9 @@ net::awaitable<void> moveLongSequence(State& state, std::vector<size_t> cycle) {
           });
     }
   });
-  // One block per part, so this is short enough for a single task.
+  // One block per part. Unlike Boost, this isn't cut into parts again if it
+  // has more than `BLOCKS_PER_TASK` blocks (which needs a cycle of more than
+  // 64 * 64 blocks), because moving a few hundred blocks in one task is cheap.
   moveSequence(state, remainder);
 }
 

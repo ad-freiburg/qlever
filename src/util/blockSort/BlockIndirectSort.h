@@ -75,8 +75,8 @@ template <typename State>
 net::awaitable<void> sortRecursively(State& state, size_t posIndexBegin,
                                      size_t posIndexEnd,
                                      uint32_t numRecursionsLeft) {
-  // `runSort` limits the number of threads such that every part has at least
-  // `BLOCKS_PER_TASK` blocks, see `mergeTail` for why this matters.
+  // `sortOnExecutor` limits the number of threads such that every part has at
+  // least `BLOCKS_PER_TASK` blocks, see `mergeTail` for why this matters.
   AD_CORRECTNESS_CHECK(posIndexEnd - posIndexBegin >= BLOCKS_PER_TASK);
   if (numRecursionsLeft == 0) {
     // No block has been moved yet, so physical and logical positions agree.

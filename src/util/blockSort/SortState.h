@@ -258,8 +258,8 @@ class BlockSortState : public SortState<Compare> {
   // The scratch buffers of `blockSize_` elements, see `acquireBuffer`.
   ScratchBuffers<Value> buffers_;
 
-  // Sort `[begin, end)`. The range must not be empty, which `runSort` makes
-  // sure of.
+  // Sort `[begin, end)`. The range must not be empty, which `sortOnExecutor`
+  // makes sure of.
   BlockSortState(Iterator begin, Iterator end, Compare cmp, SortParams params,
                  ql::any_io_executor executor)
       : SortState<Compare>{std::move(cmp), params.maxElementsPerTask,
