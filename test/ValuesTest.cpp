@@ -64,6 +64,17 @@ TEST(Values, emptyValuesClause) {
   EXPECT_FLOAT_EQ(emptyValuesOp.getMultiplicity(32), 1.0);
 }
 
+// A VALUES clause without variables, but with a row (`VALUES () { () }`) is
+// not empty, its result is a single empty solution.
+TEST(Values, emptyRowWithoutVariables) {
+  auto testQec = ad_utility::testing::getQec();
+  Values valuesOp(testQec, {{}, {{}}});
+  EXPECT_FALSE(valuesOp.knownEmptyResult());
+  auto result = valuesOp.getResult();
+  EXPECT_EQ(result->idTableView().numRows(), 1u);
+  EXPECT_EQ(result->idTableView().numColumns(), 0u);
+}
+
 // Check that `computeResult`, given a parsed VALUES clause, computes the
 // correct result table.
 TEST(Values, computeResult) {
