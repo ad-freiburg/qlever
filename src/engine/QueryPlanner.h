@@ -442,7 +442,6 @@ class QueryPlanner {
     const SideTuple startCols_;
     const SideTuple targetCols_;
 
-    TransitivePathJoinCols() = default;
     TransitivePathJoinCols(SideTuple p, SideTuple s)
         : startCols_(p), targetCols_(s) {
       AD_CORRECTNESS_CHECK(startCols_.has_value() || !targetCols_.has_value());

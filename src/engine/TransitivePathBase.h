@@ -52,6 +52,11 @@ struct TransitivePathSide {
     return std::move(os).str();
   }
 
+  std::optional<ColumnIndex> getJoinColumn() const {
+    return isBoundVariable() ? treeAndCol_->second
+                             : std::optional<ColumnIndex>();
+  };
+
   bool isSortedOnInputCol() const {
     if (!treeAndCol_.has_value()) {
       return false;

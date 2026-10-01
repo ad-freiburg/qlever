@@ -114,13 +114,9 @@ class TransitivePathImpl : public TransitivePathBase {
         startSide.value_, targetSide.value_, yieldOnce);
 
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
-    const std::optional<size_t> targetJoinColumn =
-        targetSide.isBoundVariable()
-            ? std::make_optional(targetSide.treeAndCol_->second)
-            : std::nullopt;
     size_t numberOfPayloadColumns =
         tree->getResultWidth() -
-        numJoinColumnsWith(tree, joinColumn, targetJoinColumn);
+        numJoinColumnsWith(tree, joinColumn, targetSide.getJoinColumn());
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce,
                                     numberOfPayloadColumns);
@@ -248,8 +244,8 @@ class TransitivePathImpl : public TransitivePathBase {
                 std::pair{targetId.value(), graphId}, edges,
                 graphVariable_.has_value()) |
             ql::views::transform([](const std::pair<Id, Id>& pair) {
-              return std::pair{std::make_optional(pair.first),
-                               std::make_optional(pair.second)};
+              return std::pair{std::optional(pair.first),
+                               std::optional(pair.second)};
             })};
       }
       return TargetNodeExpanded{
@@ -369,9 +365,7 @@ class TransitivePathImpl : public TransitivePathBase {
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
     size_t cols = tree->getResultWidth();
     std::optional<ColumnIndex> graphColumn = getActualGraphColumnIndex(tree);
-    std::optional<ColumnIndex> targetJoinColumn =
-        targetSide.isBoundVariable() ? targetSide.treeAndCol_->second
-                                     : std::optional<ColumnIndex>();
+    std::optional<ColumnIndex> targetJoinColumn = targetSide.getJoinColumn();
 
     std::vector<ColumnIndex> columnsWithoutJoinColumns =
         computeColumnsWithoutJoinColumns(joinColumn, cols, targetJoinColumn,
@@ -461,7 +455,7 @@ class TransitivePathImpl : public TransitivePathBase {
                          padding(graphColumn) + padding(targetColumn));
     size_t graphAndOtherIdentical =
         !(graphColumn.has_value() && targetColumn.has_value() &&
-          graphColumn.value() == targetColumn.has_value());
+          graphColumn.value() == targetColumn.value());
     columnsWithoutJoinColumn.reserve(totalColumns - padding(graphColumn) -
                                      padding(targetColumn) -
                                      graphAndOtherIdentical);

@@ -509,8 +509,9 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
   // output table's width.
   plan->resultWidth_ +=
       op->getResultWidth() -
-      numJoinColumnsWith(op, leftCol.has_value() ? *leftCol : *rightCol,
-                         leftCol.has_value() ? rightCol : leftCol);
+      numJoinColumnsWith(
+          op, leftCol.has_value() ? leftCol.value() : rightCol.value(),
+          leftCol.has_value() ? rightCol : leftCol);
 
   // Make sure mapping actually points to the last column if it's not one of
   // the regular variables.
