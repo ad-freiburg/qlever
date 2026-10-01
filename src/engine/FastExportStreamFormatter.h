@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "backports/span.h"
 #include "engine/ConstructTypes.h"
@@ -149,7 +150,6 @@ class FastExportStreamFormatter {
       : managedBuffer_(std::max(chunkSize, SAFETY_WATERMARK * 2)),
         bufferPtr_(managedBuffer_.data()),
         bufferCapacity_(managedBuffer_.size()),
-        writePos_(0),
         sink_(std::move(sink)),
         isStreaming_(true) {
     AD_CONTRACT_CHECK(sink_ != nullptr);
@@ -160,9 +160,7 @@ class FastExportStreamFormatter {
   explicit FastExportStreamFormatter(ql::span<char> targetSpan)
       : bufferPtr_(targetSpan.data()),
         bufferCapacity_(targetSpan.size()),
-        writePos_(0),
-        sink_(nullptr),
-        isStreaming_(false) {
+        sink_(nullptr) {
     AD_CONTRACT_CHECK(bufferPtr_ != nullptr || bufferCapacity_ == 0);
   }
 
@@ -301,11 +299,12 @@ class FastExportStreamFormatter {
 
     // Reserve the exact output size once (only a newline grows, to two
     // bytes), then copy the runs between special characters in bulk.
-    ensureAvailable(field.size() + static_cast<size_t>(std::count(
-                                       field.begin(), field.end(), '\n')));
+    ensureAvailable(field.size() +
+                    static_cast<size_t>(ql::ranges::count(field, '\n')));
     char* out = bufferPtr_ + writePos_;
     const char* end = field.data() + field.size();
-    for (const char* in = field.data(); in != end; ++in) {
+    const char* in = field.data();
+    while (in != end) {
       const char* runStart = in;
       while (in != end && !detail::tsvSpecialTable[static_cast<uint8_t>(*in)]) {
         ++in;
@@ -321,6 +320,7 @@ class FastExportStreamFormatter {
         *out++ = '\\';
         *out++ = 'n';
       }
+      ++in;
     }
     writePos_ = static_cast<size_t>(out - bufferPtr_);
   }
@@ -352,13 +352,13 @@ class FastExportStreamFormatter {
     // bytes), then copy the runs between special characters in bulk.
     ensureAvailable(
         content.size() +
-        static_cast<size_t>(
-            std::count_if(content.begin(), content.end(), [](char c) {
-              return detail::turtleSpecialTable[static_cast<uint8_t>(c)];
-            })));
+        static_cast<size_t>(ql::ranges::count_if(content, [](char c) {
+          return detail::turtleSpecialTable[static_cast<uint8_t>(c)];
+        })));
     char* out = bufferPtr_ + writePos_;
     const char* end = content.data() + content.size();
-    for (const char* in = content.data(); in != end; ++in) {
+    const char* in = content.data();
+    while (in != end) {
       const char* runStart = in;
       while (in != end &&
              !detail::turtleSpecialTable[static_cast<uint8_t>(*in)]) {
@@ -369,8 +369,15 @@ class FastExportStreamFormatter {
       if (in == end) {
         break;
       }
+      char escaped = *in;
+      if (*in == '\n') {
+        escaped = 'n';
+      } else if (*in == '\r') {
+        escaped = 'r';
+      }
       *out++ = '\\';
-      *out++ = *in == '\n' ? 'n' : *in == '\r' ? 'r' : *in;
+      *out++ = escaped;
+      ++in;
     }
     writePos_ = static_cast<size_t>(out - bufferPtr_);
     // Write closing quote and any trailing lang/datatype suffix
@@ -378,28 +385,37 @@ class FastExportStreamFormatter {
   }
 
   // ___________________________________________________________________________
+  // Write a term without a datatype: an IRI, a blank node, or a
+  // vocab-indexed literal.
+  void writeUntypedTerm(const qlever::constructExport::EvaluatedTermData& term,
+                        ExportFormat format) {
+    using enum ExportFormat;
+    if (format == Turtle || format == NTriples) {
+      if (ql::starts_with(term.rdfTermString_, '"')) {
+        writeEscapedTurtleLiteral(term.rdfTermString_);
+      } else {
+        writeRaw(term.rdfTermString_);
+      }
+    } else if (format == Csv) {
+      writeEscapedCsv(term.rdfTermString_);
+    } else {
+      AD_CORRECTNESS_CHECK(format == Tsv);
+      writeEscapedTsv(term.rdfTermString_);
+    }
+  }
+
+  // ___________________________________________________________________________
   // Write a single EvaluatedTermData term directly according to ExportFormat.
   void writeTerm(const qlever::constructExport::EvaluatedTermData& term,
                  ExportFormat format) {
+    using enum ExportFormat;
     if (term.rdfTermDataType_ == nullptr) {
-      // IRI, blank node, or vocab-indexed literal
-      if (format == ExportFormat::Turtle || format == ExportFormat::NTriples) {
-        if (ql::starts_with(term.rdfTermString_, '"')) {
-          writeEscapedTurtleLiteral(term.rdfTermString_);
-        } else {
-          writeRaw(term.rdfTermString_);
-        }
-      } else if (format == ExportFormat::Csv) {
-        writeEscapedCsv(term.rdfTermString_);
-      } else {
-        AD_CORRECTNESS_CHECK(format == ExportFormat::Tsv);
-        writeEscapedTsv(term.rdfTermString_);
-      }
+      writeUntypedTerm(term, format);
       return;
     }
 
     // Encoded literal value (e.g. integer, decimal, boolean, double)
-    const bool includeDataType = (format == ExportFormat::NTriples);
+    const bool includeDataType = (format == NTriples);
     const auto* i = static_cast<const char*>(XSD_INT_TYPE);
     const auto* d = static_cast<const char*>(XSD_DECIMAL_TYPE);
     const auto* b = static_cast<const char*>(XSD_BOOLEAN_TYPE);
@@ -410,14 +426,14 @@ class FastExportStreamFormatter {
          (term.rdfTermDataType_ == b && term.rdfTermString_.length() > 1));
 
     if (isShortForm) {
-      if (format == ExportFormat::Csv) {
+      if (format == Csv) {
         writeEscapedCsv(term.rdfTermString_);
-      } else if (format == ExportFormat::Tsv) {
+      } else if (format == Tsv) {
         writeEscapedTsv(term.rdfTermString_);
       } else {
         writeRaw(term.rdfTermString_);
       }
-    } else if (format == ExportFormat::Csv) {
+    } else if (format == Csv) {
       // Fully-qualified form: "value"^^<datatype>. Escape exactly like
       // `RdfEscaping::escapeForCsv` applied to the whole term in
       // `formatTriple`: quote the field and double embedded quotes.
@@ -452,14 +468,15 @@ class FastExportStreamFormatter {
                    const qlever::constructExport::EvaluatedTermData& s,
                    const qlever::constructExport::EvaluatedTermData& p,
                    const qlever::constructExport::EvaluatedTermData& o) {
-    if (format == ExportFormat::Turtle || format == ExportFormat::NTriples) {
+    using enum ExportFormat;
+    if (format == Turtle || format == NTriples) {
       writeTerm(s, format);
       writeChar(' ');
       writeTerm(p, format);
       writeChar(' ');
       writeTerm(o, format);
       writeRaw(" .\n");
-    } else if (format == ExportFormat::Csv) {
+    } else if (format == Csv) {
       writeTerm(s, format);
       writeChar(',');
       writeTerm(p, format);
@@ -467,7 +484,7 @@ class FastExportStreamFormatter {
       writeTerm(o, format);
       writeChar('\n');
     } else {
-      AD_CORRECTNESS_CHECK(format == ExportFormat::Tsv);
+      AD_CORRECTNESS_CHECK(format == Tsv);
       writeTerm(s, format);
       writeChar('\t');
       writeTerm(p, format);
@@ -491,14 +508,14 @@ class FastExportStreamFormatter {
   // ___________________________________________________________________________
   // Write a tabular row for SELECT query export.
   void writeRow(ExportFormat format, ql::span<const std::string_view> cells) {
-    AD_CONTRACT_CHECK(format == ExportFormat::Csv ||
-                      format == ExportFormat::Tsv);
-    const char delimiter = (format == ExportFormat::Csv) ? ',' : '\t';
+    using enum ExportFormat;
+    AD_CONTRACT_CHECK(format == Csv || format == Tsv);
+    const char delimiter = (format == Csv) ? ',' : '\t';
     for (size_t i = 0; i < cells.size(); ++i) {
       if (i > 0) {
         writeChar(delimiter);
       }
-      if (format == ExportFormat::Csv) {
+      if (format == Csv) {
         writeEscapedCsv(cells[i]);
       } else {
         writeEscapedTsv(cells[i]);
@@ -558,15 +575,16 @@ class FastExportStreamFormatter {
 [[nodiscard]] inline ExportFormat toExportFormat(
     ad_utility::MediaType mediaType) {
   using enum ad_utility::MediaType;
+  using enum ExportFormat;
   switch (mediaType) {
     case turtle:
-      return ExportFormat::Turtle;
+      return Turtle;
     case ntriples:
-      return ExportFormat::NTriples;
+      return NTriples;
     case csv:
-      return ExportFormat::Csv;
+      return Csv;
     case tsv:
-      return ExportFormat::Tsv;
+      return Tsv;
     default:
       AD_THROW(absl::StrCat("Unsupported media type for export formatter: ",
                             ad_utility::toString(mediaType)));
