@@ -160,22 +160,40 @@ class Date {
   // significant bits. If this is not the case for a platform, then the unit
   // tests will fail. If we need support for such platforms, we have to
   // implement the bitfields manually using bit shifting.
-  uint64_t timeZone_ : numBitsTimeZone = 0;
-  uint64_t second_ : numBitsSecond = 0;
-  uint64_t minute_ : numBitsMinute = 0;
-  uint64_t hour_ : numBitsHour = 0;
-  uint64_t day_ : numBitsDay = 1;
-  uint64_t month_ : numBitsMonth = 1;
-  uint64_t year_ : numBitsYear = 0;
+  uint64_t timeZone_ : numBitsTimeZone;
+  uint64_t second_ : numBitsSecond;
+  uint64_t minute_ : numBitsMinute;
+  uint64_t hour_ : numBitsHour;
+  uint64_t day_ : numBitsDay;
+  uint64_t month_ : numBitsMonth;
+  uint64_t year_ : numBitsYear;
   // These bits (the `numUsedBits` most significant bits) are always zero.
-  uint64_t unusedBits_ : numUnusedBits = 0;
+  uint64_t unusedBits_ : numUnusedBits;
+
+#ifdef QLEVER_CPP_17
+  // We need the default-constructibility for the C++17 version of `bit_cast`.
+ public:
+#endif
+  // Set all the bit-fields above to their default values. Note that we cannot
+  // use default member initializers for this, because those are only allowed
+  // for bit-fields since C++20. All other constructors delegate to this
+  // constructor, such that the bit-fields are always initialized.
+  constexpr Date()
+      : timeZone_(0),
+        second_(0),
+        minute_(0),
+        hour_(0),
+        day_(1),
+        month_(1),
+        year_(0),
+        unusedBits_(0) {}
 
  public:
   struct NoTimeZone {
-    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NoTimeZone)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(NoTimeZone, )
   };
   struct TimeZoneZ {
-    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TimeZoneZ)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TimeZoneZ, )
   };
   using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -184,7 +202,8 @@ class Date {
   /// Construct a `Date` from values for the different components. If any of the
   /// components is out of range, a `DateOutOfRangeException` is thrown.
   constexpr Date(int year, int month, int day, int hour = -1, int minute = 0,
-                 double second = 0.0, TimeZone timeZone = NoTimeZone{}) {
+                 double second = 0.0, TimeZone timeZone = NoTimeZone{})
+      : Date() {
     setYear(year);
     setMonth(month);
     setDay(day);
@@ -195,11 +214,6 @@ class Date {
     // Suppress the "unused member" warning on clang.
     (void)unusedBits_;
   }
-
-#ifdef QLEVER_CPP_17
-  // We need the default-constructibility for the C++17 version of `bit_cast`.
-  Date() = default;
-#endif
 
   /// Convert the `Date` to a `uint64_t`. This just casts the underlying
   /// representation.

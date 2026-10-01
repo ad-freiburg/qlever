@@ -75,7 +75,7 @@ static std::vector<uint8_t> bitsetToVector(uint64_t bitset) {
     }
   }
   return result;
-};
+}
 
 // _____________________________________________________________________________
 std::string toBitsetString(uint64_t x) {

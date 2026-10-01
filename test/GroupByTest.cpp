@@ -18,7 +18,6 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
-#include "engine/SpatialJoinAlgorithms.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -31,6 +30,7 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
+#include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
@@ -1978,7 +1978,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCountWithLimitAndOffset) {
 TEST(GroupByOptimizationsRegression,
      computeGroupByObjectWithCountWithNonUniformCol0) {
   // All triples share the same predicate `<p>` but have different objects.
-  // Use a non-default `blocksizePermutations` so that multiple triples land in
+  // Use a non-default `rowsPerBlock` so that multiple triples land in
   // the same block.
   TestIndexConfig config{
       "<s1> <p> <o1> . "
@@ -1986,7 +1986,7 @@ TEST(GroupByOptimizationsRegression,
       "<s3> <p> <o3> . "
       "<s4> <p> <o4> . "
       "<s5> <p> <o5> ."};
-  config.blocksizePermutations = 1_kB;
+  config.rowsPerBlock = 125;
   auto* qec = getQec(std::move(config));
 
   auto scan = makeExecutionTree<IndexScan>(
@@ -2471,7 +2471,7 @@ TEST(GroupBy, AddedHavingRows) {
   QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto tree = qp.createExecutionTree(pq);
 
-  auto res = tree.getResult();
+  auto res = tree->getResult();
 
   // The HAVING is implemented as an alias that creates an internal variable
   // which becomes part of the result, but is not selected by the query.
@@ -2482,12 +2482,145 @@ TEST(GroupBy, AddedHavingRows) {
       {Variable{"?x"}, {0, AlwaysDefined}},
       {Variable{"?count"}, {1, PossiblyUndefined}},
       {Variable{"?_QLever_internal_variable_0"}, {2, PossiblyUndefined}}};
-  EXPECT_THAT(tree.getVariableColumns(),
+  EXPECT_THAT(tree->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   const auto& table = res->idTableView();
   auto i = IntId;
   auto expected = makeIdTableFromVector({{i(0), i(3), Id::makeFromBool(true)}});
   EXPECT_EQ(table, expected);
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, CountDistinctStarIsNotAffectedByStrippedColumns) {
+  // `COUNT(DISTINCT *)` reads all the columns that are visible in the query
+  // body, although it doesn't explicitly mention any of the corresponding
+  // variables. The columns of the subtree therefore must not be stripped away
+  // (regression test for #3158). A plain `COUNT(*)` in contrast only looks at
+  // the number of rows, which stripping columns doesn't change.
+  auto* qec = ad_utility::testing::getQec();
+  auto i = IntId;
+  auto V = ad_utility::testing::VocabId;
+  Variable varR{"?r"};
+  Variable varA{"?a"};
+
+  // The input has 8 rows, of which 7 are distinct (the pair `(1, 200)` occurs
+  // twice), and 4 distinct values for `?r`.
+  auto makeInput = []() {
+    return makeIdTableFromVector({{0, 1000},
+                                  {1, 200},
+                                  {2, 300},
+                                  {3, 400},
+                                  {1, 500},
+                                  {1, 700},
+                                  {3, 200},
+                                  {1, 200}});
+  };
+
+  // Run the `GROUP BY` given by `groupByVariables` and `aliases` on the input
+  // above, once with and once without the optimization that strips the columns
+  // which none of the variables in the query refers to. Both runs must yield
+  // the `expected` result.
+  auto expectResult = [&](const std::vector<Variable>& groupByVariables,
+                          const std::vector<Alias>& aliases,
+                          const IdTable& expected,
+                          ad_utility::source_location l =
+                              AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    for (bool stripColumns : {false, true}) {
+      // The stripping happens in the constructor of `GroupByImpl`, so the
+      // parameter has to be set before creating it.
+      auto cleanup =
+          setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(
+              stripColumns);
+      auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeInput(), std::vector<std::optional<Variable>>{varR, varA});
+      GroupByImpl groupBy{qec, groupByVariables, aliases, std::move(subtree)};
+      EXPECT_EQ(groupBy.computeResultOnlyForTesting().idTableView(), expected)
+          << "stripColumns = " << stripColumns;
+    }
+  };
+
+  // The case from the issue: `(COUNT(*) AS ?total) (COUNT(DISTINCT *) AS ?d)`
+  // without a `GROUP BY`. Neither alias mentions a variable, so without the fix
+  // both columns were stripped and the distinct count collapsed to 1.
+  expectResult({},
+               {Alias{SparqlExpressionPimpl{makeCountStarExpression(false),
+                                            "COUNT(*) AS ?total"},
+                      Variable{"?total"}},
+                Alias{SparqlExpressionPimpl{makeCountStarExpression(true),
+                                            "COUNT(DISTINCT *) AS ?d"},
+                      Variable{"?d"}}},
+               makeIdTableFromVector({{i(8), i(7)}}));
+
+  // The same, but with the `COUNT(DISTINCT *)` nested inside a larger
+  // expression: `(COUNT(DISTINCT *) + 1 AS ?d)`.
+  expectResult(
+      {},
+      {Alias{SparqlExpressionPimpl{
+                 makeAddExpression(makeCountStarExpression(true),
+                                   std::make_unique<IdExpression>(i(1))),
+                 "COUNT(DISTINCT *) + 1 AS ?d"},
+             Variable{"?d"}}},
+      makeIdTableFromVector({{i(8)}}));
+
+  // Grouping doesn't help either: the group columns alone are not sufficient to
+  // compute the distinct count within a group, so `?a` must be kept as well.
+  expectResult({varR},
+               {Alias{SparqlExpressionPimpl{makeCountStarExpression(true),
+                                            "COUNT(DISTINCT *) AS ?d"},
+                      Variable{"?d"}}},
+               makeIdTableFromVector(
+                   {{V(0), i(1)}, {V(1), i(3)}, {V(2), i(1)}, {V(3), i(2)}}));
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, ColumnsThatAreUsedByNoAliasAreStripped) {
+  // The counterpart to the test above: as long as none of the aliases reads all
+  // the visible columns, the columns that are neither grouped nor used by any
+  // of the aliases are stripped from the subtree.
+  auto* qec = ad_utility::testing::getQec();
+  auto i = IntId;
+  auto V = ad_utility::testing::VocabId;
+  Variable varR{"?r"};
+  Variable varA{"?a"};
+  Variable varB{"?b"};
+
+  // `?r` is grouped and `?a` is used by the alias, but `?b` is used by neither,
+  // so only `?b` may be stripped.
+  std::vector<Alias> aliases{
+      Alias{SparqlExpressionPimpl{
+                std::make_unique<CountExpression>(
+                    false, std::make_unique<VariableExpression>(varA)),
+                "COUNT(?a) AS ?c"},
+            Variable{"?c"}}};
+  auto expected = makeIdTableFromVector({{V(0), i(2)}, {V(1), i(1)}});
+
+  using ::testing::Pair;
+  for (bool stripColumns : {false, true}) {
+    // The stripping happens in the constructor of `GroupByImpl`, so the
+    // parameter has to be set before creating it.
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(
+            stripColumns);
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{0, 10, 100}, {1, 20, 200}, {0, 30, 300}}),
+        std::vector<std::optional<Variable>>{varR, varA, varB});
+    GroupByImpl groupBy{qec, {varR}, aliases, std::move(subtree)};
+
+    // `?b` is only visible in the subtree if it wasn't stripped away.
+    auto expectedVariables =
+        stripColumns
+            ? std::vector{Pair(varR, ::testing::_), Pair(varA, ::testing::_)}
+            : std::vector{Pair(varR, ::testing::_), Pair(varA, ::testing::_),
+                          Pair(varB, ::testing::_)};
+    EXPECT_THAT(groupBy.getChildren().at(0)->getVariableColumns(),
+                ::testing::UnorderedElementsAreArray(expectedVariables))
+        << "stripColumns = " << stripColumns;
+
+    // Stripping the unused column doesn't change the result.
+    EXPECT_EQ(groupBy.computeResultOnlyForTesting().idTableView(), expected)
+        << "stripColumns = " << stripColumns;
+  }
 }
 
 TEST(GroupBy, Descriptor) {
@@ -3127,6 +3260,32 @@ TEST(GroupBy, isDeterministic) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(GroupBy, isDeterministicOfNestedGroupBys) {
+  auto* qec = ad_utility::testing::getQec();
+  Variable x{"?x"};
+  std::shared_ptr<QueryExecutionTree> tree =
+      ad_utility::makeExecutionTree<ValuesForTestingCountingDeterminismChecks>(
+          qec, makeIdTableFromVector({{1}}),
+          std::vector<std::optional<Variable>>{x}, false,
+          std::vector<ColumnIndex>{0});
+  auto leaf = std::dynamic_pointer_cast<
+      const ValuesForTestingCountingDeterminismChecks>(
+      tree->getRootOperation());
+  ASSERT_NE(leaf, nullptr);
+
+  // The leaf of a chain of nested `GROUP BY`s must be visited exactly once.
+  // Previously, `GroupBy::isDeterministicImpl()` recursed into the subtree in
+  // addition to `Operation::isDeterministic()`, which made this exponential in
+  // the nesting depth, see https://github.com/ad-freiburg/qlever/issues/3557.
+  for (size_t i = 0; i < 40; ++i) {
+    tree = ad_utility::makeExecutionTree<GroupBy>(
+        qec, std::vector<Variable>{x}, std::vector<Alias>{}, std::move(tree));
+  }
+  EXPECT_TRUE(tree->getRootOperation()->isDeterministic());
+  EXPECT_EQ(leaf->numDeterminismChecks(), 1);
+}
+
 // Regression tests for https://github.com/ad-freiburg/qlever/issues/2960
 
 // _____________________________________________________________________________
@@ -3299,6 +3458,103 @@ TEST(GroupBy, CoalesceWithAggregatesOfOptionalValues) {
 
   EXPECT_EQ(groupBy.computeResultOnlyForTesting(false).idTableView(),
             makeIdTableFromVector({{I(1), I(2000)}, {I(2), I(1990)}}));
+}
+
+// _____________________________________________________________________________
+// An aggregate that is wrapped inside a `COALESCE` used to make an implicit
+// `GROUP BY` (no `GROUP BY` variables) over an empty input fail, because the
+// `COALESCE` returned an empty vector (the evaluation context has size zero)
+// where `GroupBy` requires a constant.
+TEST(GroupBy, CoalesceWithAggregateOnEmptyImplicitGroup) {
+  auto* qec = getQec();
+  Variable o{"?o"};
+  Id U = Id::makeUndefined();
+
+  // Build `SELECT (COALESCE(makeChildren()...) AS ?c) WHERE { ... }` without a
+  // `GROUP BY` over an input with zero rows.
+  auto makeGroupBy = [qec, &o](const auto& makeChildren, bool inputIsLazy) {
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, IdTable{1, qec->getAllocator()},
+        std::vector<std::optional<Variable>>{o});
+    // The `GroupBy` always requests a lazy input (all the aggregates below
+    // support that), so the input has to be forced to be materialized for the
+    // materialized code path to be taken.
+    dynamic_cast<ValuesForTesting&>(*subtree->getRootOperation())
+        .forceFullyMaterialized() = !inputIsLazy;
+    return GroupByImpl{
+        qec,
+        {},
+        {Alias{SparqlExpressionPimpl{makeCoalesceExpression(makeChildren()),
+                                     "coalesce"},
+               Variable{"?c"}}},
+        std::move(subtree)};
+  };
+
+  // Check the value of that `COALESCE` for both the fully materialized code
+  // path (`doGroupBy`) and the lazy code path (`processEmptyImplicitGroup`).
+  auto expectCoalesce = [qec, &makeGroupBy](const auto& makeChildren,
+                                            Id expected,
+                                            ad_utility::source_location l =
+                                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto expectedTable = makeIdTableFromVector({{expected}});
+
+    // The two runs below compute the same subtree, so the cache has to be
+    // cleared in between, else the second run reuses the (materialized)
+    // result of the first one.
+    qec->getQueryTreeCache().clearAll();
+    EXPECT_EQ(makeGroupBy(makeChildren, false)
+                  .computeResultOnlyForTesting(false)
+                  .idTableView(),
+              expectedTable);
+
+    qec->getQueryTreeCache().clearAll();
+    auto groupBy = makeGroupBy(makeChildren, true);
+    auto result = groupBy.computeResultOnlyForTesting(true);
+    ASSERT_FALSE(result.isFullyMaterialized());
+    std::vector<IdTable> tables;
+    for (auto& [idTable, localVocab] : result.idTables()) {
+      tables.push_back(std::move(idTable));
+    }
+    ASSERT_EQ(tables.size(), 1);
+    EXPECT_EQ(tables.at(0), expectedTable);
+  };
+
+  auto sum = [&o]() {
+    return std::make_unique<SumExpression>(
+        false, std::make_unique<VariableExpression>(o));
+  };
+  auto min = [&o]() {
+    return std::make_unique<MinExpression>(
+        false, std::make_unique<VariableExpression>(o));
+  };
+  auto max = [&o]() {
+    return std::make_unique<MaxExpression>(
+        false, std::make_unique<VariableExpression>(o));
+  };
+  auto constant = [](Id id) {
+    return [id]() { return std::make_unique<IdExpression>(id); };
+  };
+  // Turn a set of factories for the individual children into a factory for the
+  // whole vector of children (which has to be created anew for each `GroupBy`).
+  auto children = [](auto... makeChild) {
+    return [makeChild...]() {
+      std::vector<SparqlExpression::Ptr> result;
+      (result.push_back(makeChild()), ...);
+      return result;
+    };
+  };
+
+  // `SUM` of the empty group is `0`, so the first child already binds the
+  // result.
+  expectCoalesce(children(sum, constant(I(1))), I(0));
+  // `MIN` and `MAX` of the empty group are UNDEF, so the fallback is used.
+  expectCoalesce(children(min, constant(I(1))), I(1));
+  expectCoalesce(children(max, constant(I(1))), I(1));
+  // If all the children are unbound, the result is UNDEF.
+  expectCoalesce(children(min, max), U);
+  // A `COALESCE` without any children is always UNDEF.
+  expectCoalesce(children(), U);
 }
 
 // _____________________________________________________________________________

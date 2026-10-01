@@ -19,6 +19,7 @@
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
+#include "engine/Bind.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
@@ -557,6 +558,58 @@ TEST(OptionalJoin, clone) {
 }
 
 // _____________________________________________________________________________
+TEST(OptionalJoin, limitAndOffsetArePushedDownToLeftChild) {
+  auto qec = ad_utility::testing::getQec();
+  auto a = makeIdTableFromVector({{0}});
+  auto makeOptionalJoin = [&qec, &a]() {
+    return OptionalJoin{qec, idTableToExecutionTree(qec, a),
+                        idTableToExecutionTree(qec, a)};
+  };
+  auto expectChildLimits = [](OptionalJoin& optionalJoin,
+                              std::optional<uint64_t> limit,
+                              ad_utility::source_location loc =
+                                  AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    auto children = optionalJoin.getChildren();
+    EXPECT_EQ(children.at(0)->getRootOperation()->getLimitOffset(),
+              LimitOffsetClause{limit});
+    // The right side is optional, so reducing it could drop matches.
+    EXPECT_TRUE(
+        children.at(1)->getRootOperation()->getLimitOffset().isUnconstrained());
+  };
+
+  {
+    // The left child only has to supply `limit + offset` rows.
+    auto optionalJoin = makeOptionalJoin();
+    optionalJoin.applyLimitOffset({2, 3});
+    expectChildLimits(optionalJoin, 5);
+  }
+  {
+    // A `LIMIT`/`OFFSET` that is applied on top of a previous one (which
+    // happens for nested subqueries) must not shrink the limit of the left
+    // child too much. Here the result consists of the rows 5 and 6, so the
+    // left child still has to supply 7 rows.
+    auto optionalJoin = makeOptionalJoin();
+    optionalJoin.applyLimitOffset({10, 5});
+    expectChildLimits(optionalJoin, 15);
+    optionalJoin.applyLimitOffset({2, 0});
+    expectChildLimits(optionalJoin, 7);
+  }
+  {
+    // Adding up the limit and the offset must not overflow.
+    auto optionalJoin = makeOptionalJoin();
+    optionalJoin.applyLimitOffset({std::numeric_limits<uint64_t>::max(), 1});
+    expectChildLimits(optionalJoin, std::nullopt);
+  }
+  {
+    // Without a limit there is no bound that could be pushed down.
+    auto optionalJoin = makeOptionalJoin();
+    optionalJoin.applyLimitOffset({std::nullopt, 8});
+    expectChildLimits(optionalJoin, std::nullopt);
+  }
+}
+
+// _____________________________________________________________________________
 TEST(OptionalJoin, lazyOptionalJoin) {
   std::vector<IdTable> expected;
   expected.push_back(makeIdTableFromVector({{V(1), V(11), U},
@@ -885,14 +938,14 @@ class OptionalJoinWithIndexScan
 
   void SetUp() override {
     // Create a small knowledge graph with controlled block structure.
-    // Using 8 bytes per column gives us a single triple per block.
+    // One row per block gives us a single triple per block.
     std::string kg =
         "<a> <p> <A> . <a> <p> <A2> . "
         "<b> <p> <B> . <b> <p> <B2> . "
         "<c> <p> <C> . <c> <p> <C2> . "
         "<d> <p> <D> . "
         "<e> <p> <E> . ";
-    setupQecWithKnowledgeGraph(kg, 8_B);
+    setupQecWithKnowledgeGraph(kg, 1);
   }
 
   // Create a common IndexScan instance for the right side.
@@ -1066,7 +1119,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsBasicFiltering) {
       "<s0> <p> <o1> .<s1> <p> <o1> . <s1> <p> <o2> . <s2> <p> <o3> .<s3> <p> "
       "<o3>. ";
   TestIndexConfig config{kg2};
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   auto qec2 = getQec(std::move(config));
 
   // Left side: two columns with UNDEF in second column.
@@ -1123,7 +1176,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
       "<s0> <p> <o1> .<s1> <p> <o1> . <s1> <p> <o2> . <s2> <p> <o3> .<s3> <p> "
       "<o3>. ";
   TestIndexConfig config{kg2};
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   auto qec2 = getQec(std::move(config));
 
   // Left side: two columns with UNDEF in second column.
@@ -1193,7 +1246,7 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsMultipleMatches) {
   // Test two-column optional join with multiple matches for one subject.
   std::string kg2 = "<s0> <p> 1. <s1> <p> 2 . <s1> <p> 3 . <s2> <p> 4 .";
   TestIndexConfig config{kg2};
-  config.blocksizePermutations = 8_B;
+  config.rowsPerBlock = 1;
   auto qec2 = getQec(std::move(config));
 
   auto s1 =
@@ -1247,3 +1300,141 @@ INSTANTIATE_TEST_SUITE_P(
       return absl::StrCat(requestLaziness ? "LazyResult" : "MaterializedResult",
                           materializeLeft ? "MaterializedLeft" : "LazyLeft");
     }));
+
+namespace {
+// _____________________________________________________________________________
+// Build an `OptionalJoin` on `?a` that reports being sorted on `?a`, but
+// switches to the index nested loop join (which does not preserve the order of
+// its left input) as soon as its left input becomes smaller than its right
+// input. `leftSize` rows are used for the left input, `rightSize` for the
+// right one, and all values of `?a` are matched by both inputs.
+std::shared_ptr<QueryExecutionTree> makeOptionalJoinThatIsResortedOnLimit(
+    QueryExecutionContext* qec, size_t leftSize, size_t rightSize) {
+  using Var = Variable;
+  using Vars = std::vector<std::optional<Variable>>;
+  auto makeTable = [](size_t numRows, size_t offset, bool ascending) {
+    VectorTable table;
+    for (size_t i = 0; i < numRows; ++i) {
+      auto value = static_cast<long long>(ascending ? i : numRows - 1 - i);
+      table.push_back({value, value + static_cast<long long>(offset)});
+    }
+    return makeIdTableFromVector(table);
+  };
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeTable(leftSize, 100, true), Vars{Var{"?a"}, Var{"?b"}}, false,
+      std::vector<ColumnIndex>{0});
+  // Deliberately unsorted, so that the `OptionalJoin` wraps it in a `Sort`,
+  // which is a precondition for the index nested loop join, and so that the
+  // reordering by that join is actually observable.
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeTable(rightSize, 200, false), Vars{Var{"?a"}, Var{"?c"}});
+  auto result = ad_utility::makeExecutionTree<OptionalJoin>(
+      qec, std::move(left), std::move(right));
+  // Without a limit the left input is the larger one, so the sort order is
+  // preserved.
+  EXPECT_TRUE(result->getRootOperation()->isSortedBy({0}));
+  return result;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Pushing a `LIMIT` into the left input can change the algorithm and with it
+// the sort order of an `OptionalJoin` inside that input, see the caution note
+// on `Operation::applyLimitOffset`. Check that the sort order this operation
+// requires of its left input is restored in that case.
+TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInput) {
+  using Var = Variable;
+  using Vars = std::vector<std::optional<Variable>>;
+  auto* qec = ad_utility::testing::getQec();
+  auto left = makeOptionalJoinThatIsResortedOnLimit(qec, 10, 5);
+  // Matches every value of `?a` in `left`, so that no row of the result may
+  // contain an UNDEF.
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector({{0, 7},
+                             {1, 7},
+                             {2, 7},
+                             {3, 7},
+                             {4, 7},
+                             {5, 7},
+                             {6, 7},
+                             {7, 7},
+                             {8, 7},
+                             {9, 7}}),
+      Vars{Var{"?a"}, Var{"?d"}}, false, std::vector<ColumnIndex>{0});
+
+  OptionalJoin optionalJoin{qec, std::move(left), std::move(right)};
+  // The limit is small enough to make the left input of the inner
+  // `OptionalJoin` smaller than its right input.
+  optionalJoin.applyLimitOffset({3});
+
+  EXPECT_TRUE(
+      optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy({0}));
+
+  qec->getQueryTreeCache().clearAll();
+  // Required because the children apply their `LIMIT` externally, which updates
+  // their runtime information.
+  optionalJoin.createRuntimeInfoFromEstimates(
+      optionalJoin.getRuntimeInfoPointer());
+  auto result = optionalJoin.computeResultOnlyForTesting();
+  for (const auto& row : result.idTableView()) {
+    for (const Id& id : row) {
+      EXPECT_NE(id, Id::makeUndefined());
+    }
+  }
+}
+
+// _____________________________________________________________________________
+// Same as the test above, but with a `Bind` between this operation and the
+// inner `OptionalJoin`, as in the query of issue #3241. `Bind` forwards the
+// sort order claim of its child tree, which is cached, so this checks that
+// applying a limit invalidates the cached claim (otherwise the repair reads a
+// stale "sorted" claim and restores nothing).
+TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
+  using Var = Variable;
+  using Vars = std::vector<std::optional<Variable>>;
+  auto* qec = ad_utility::testing::getQec();
+  auto left = ad_utility::makeExecutionTree<Bind>(
+      qec, makeOptionalJoinThatIsResortedOnLimit(qec, 10, 5),
+      parsedQuery::Bind{
+          sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
+              Var{"?b"}),
+          Var{"?e"}});
+  // Fill the cached sort order claims, like query planning does.
+  (void)left->resultSortedOn();
+  // Matches every value of `?a` in `left`, so that no row of the result may
+  // contain an UNDEF.
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector({{0, 7},
+                             {1, 7},
+                             {2, 7},
+                             {3, 7},
+                             {4, 7},
+                             {5, 7},
+                             {6, 7},
+                             {7, 7},
+                             {8, 7},
+                             {9, 7}}),
+      Vars{Var{"?a"}, Var{"?d"}}, false, std::vector<ColumnIndex>{0});
+
+  OptionalJoin optionalJoin{qec, std::move(left), std::move(right)};
+  // The limit is small enough to make the left input of the inner
+  // `OptionalJoin` smaller than its right input.
+  optionalJoin.applyLimitOffset({3});
+
+  EXPECT_TRUE(
+      optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy({0}));
+
+  qec->getQueryTreeCache().clearAll();
+  // Required because the children apply their `LIMIT` externally, which updates
+  // their runtime information.
+  optionalJoin.createRuntimeInfoFromEstimates(
+      optionalJoin.getRuntimeInfoPointer());
+  auto result = optionalJoin.computeResultOnlyForTesting();
+  for (const auto& row : result.idTableView()) {
+    for (const Id& id : row) {
+      EXPECT_NE(id, Id::makeUndefined());
+    }
+  }
+}

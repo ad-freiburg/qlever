@@ -17,6 +17,7 @@
 // Forward declarations
 class MutableS2ShapeIndex;
 class SpatialJoinCachedIndexImpl;
+class S2Polyline;
 
 // This class holds a `MutableS2ShapeIndex` that is created once by the named
 // cached result mechanism and is then kept constant and persisted across
@@ -68,6 +69,14 @@ class SpatialJoinCachedIndex {
   // `populateFromSerialized` below.
   struct TagForSerialization {};
   SpatialJoinCachedIndex(TagForSerialization);
+
+  // Retrieves and parses a line string from the given cell of an `IdTable`
+  // and converts it to an `S2Polyline`. Used when populating the index above.
+  // This function is only `public` for testing purposes and should otherwise
+  // not be used outside of this class.
+  static std::optional<S2Polyline> getPolyline(const IdTableView<0>& restable,
+                                               size_t row, ColumnIndex col,
+                                               const Index& index);
 
   // Serialize a `SpatialJoinCachedIndex`. When reading from a serializer, then
   // the target `arg` has to be constructed upfront via the constructor that

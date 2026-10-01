@@ -27,7 +27,8 @@ using ad_utility::source_location;
 namespace {
 
 // Create a `Sort` operation that sorts the `input` by the `sortColumns`.
-Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
+Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns,
+              bool explicitSort = false) {
   std::vector<std::optional<Variable>> vars;
   auto qec = ad_utility::testing::getQec();
   for (ColumnIndex i = 0; i < input.numColumns(); ++i) {
@@ -35,7 +36,7 @@ Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
-  return Sort{qec, subtree, sortColumns};
+  return Sort{qec, subtree, sortColumns, explicitSort};
 }
 
 // Test that the `input`, when being sorted by its 0-th column as its primary
@@ -229,6 +230,20 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
 }
 
 // _____________________________________________________________________________
+TEST(Sort, explicitSortIsOnlyKeptIfALimitIsPresent) {
+  VectorTable input{{0, 0}, {1, 1}};
+  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+  Sort sort = makeSort(std::move(inputTable), {0, 1}, true);
+  // Without a `LIMIT`/`OFFSET` the sort order of an explicit `INTERNAL SORT BY`
+  // is not observable, so it may be replaced by a different one.
+  EXPECT_TRUE(sort.makeSortedTree({1, 0}).has_value());
+  // With a `LIMIT` the sort order determines which rows are part of the result,
+  // so an additional `Sort` has to be placed on top of this operation instead.
+  sort.applyLimitOffset({1});
+  EXPECT_FALSE(sort.makeSortedTree({1, 0}).has_value());
+}
+
+// _____________________________________________________________________________
 
 TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   VectorTable input;
@@ -265,6 +280,9 @@ TEST(Sort, clone) {
 // uses 4 blocks where block 3 exceeds the threshold, so block 4 exercises the
 // "remaining blocks" loop in `computeResultExternal`.
 TEST(Sort, externalSortLazyInput) {
+  // The inputs of this test are so small that the memory limit of the external
+  // sorter would report false positives.
+  auto ignoreMemoryLimit = ad_utility::testing::setIgnoreMemoryLimit(true);
   auto qec = ad_utility::testing::getQec();
 
   // Create multiple tables to simulate lazy input. Total size needs to exceed
@@ -309,6 +327,9 @@ TEST(Sort, externalSortLazyInput) {
 
 // Test external sorting with fully materialized input.
 TEST(Sort, externalSortMaterializedInput) {
+  // The inputs of this test are so small that the memory limit of the external
+  // sorter would report false positives.
+  auto ignoreMemoryLimit = ad_utility::testing::setIgnoreMemoryLimit(true);
   auto qec = ad_utility::testing::getQec();
 
   // Clear cache to avoid hits from previous tests.
@@ -354,6 +375,9 @@ TEST(Sort, externalSortMaterializedInput) {
 
 // Test external sorting with lazy output.
 TEST(Sort, externalSortLazyOutput) {
+  // The inputs of this test are so small that the memory limit of the external
+  // sorter would report false positives.
+  auto ignoreMemoryLimit = ad_utility::testing::setIgnoreMemoryLimit(true);
   auto qec = ad_utility::testing::getQec();
 
   // Clear cache at start to avoid hits from previous tests.

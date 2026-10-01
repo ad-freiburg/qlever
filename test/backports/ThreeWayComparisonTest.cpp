@@ -206,6 +206,165 @@ TEST(ThreeWayComparisonTest, EqualityOnlyOperators) {
   static_assert(a != c, "Inequality operator failed");
 }
 
+// The following classes test the `_DERIVED` variants of the macros. Those have
+// to compare the base class subobjects first, and only then the members that
+// were explicitly passed to the macro.
+class TestBaseClass {
+  int x_;
+
+ public:
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(TestBaseClass, x_)
+
+  constexpr explicit TestBaseClass(int x) : x_(x) {}
+};
+
+class TestDerivedEqualityConstexpr : public TestBaseClass {
+  int y_;
+
+ public:
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(
+      TestDerivedEqualityConstexpr, TestBaseClass, y_)
+
+  constexpr TestDerivedEqualityConstexpr(int x, int y)
+      : TestBaseClass(x), y_(y) {}
+};
+
+class TestDerivedEquality : public TestBaseClass {
+  int y_;
+
+ public:
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(TestDerivedEquality,
+                                                      TestBaseClass, y_)
+
+  TestDerivedEquality(int x, int y) : TestBaseClass(x), y_(y) {}
+};
+
+class TestDerivedThreeWayConstexpr : public TestBaseClass {
+  int y_;
+
+ public:
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(
+      TestDerivedThreeWayConstexpr, TestBaseClass, y_)
+
+  constexpr TestDerivedThreeWayConstexpr(int x, int y)
+      : TestBaseClass(x), y_(y) {}
+};
+
+class TestDerivedThreeWay : public TestBaseClass {
+  int y_;
+
+ public:
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_DERIVED(TestDerivedThreeWay,
+                                                      TestBaseClass, y_)
+
+  TestDerivedThreeWay(int x, int y) : TestBaseClass(x), y_(y) {}
+};
+
+// A class that adds nothing to its base class and doesn't declare any
+// comparison operators of its own, such that a class derived from it has to
+// use the inherited operators.
+class TestIntermediateClass : public TestBaseClass {
+ public:
+  using TestBaseClass::TestBaseClass;
+};
+
+class TestDerivedFromIntermediate : public TestIntermediateClass {
+  int y_;
+
+ public:
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_DERIVED(
+      TestDerivedFromIntermediate, TestIntermediateClass, y_)
+
+  TestDerivedFromIntermediate(int x, int y) : TestIntermediateClass(x), y_(y) {}
+};
+
+// A derived class that adds no members of its own, so that only the base class
+// is compared.
+class TestDerivedWithoutOwnMembers : public TestBaseClass {
+ public:
+  QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR_DERIVED(
+      TestDerivedWithoutOwnMembers, TestBaseClass)
+
+  using TestBaseClass::TestBaseClass;
+};
+
+TEST(ThreeWayComparisonTest, DerivedEqualityOperators) {
+  // Differences in the base class must not be ignored.
+  static_assert(TestDerivedEqualityConstexpr(1, 2) ==
+                TestDerivedEqualityConstexpr(1, 2));
+  static_assert(TestDerivedEqualityConstexpr(1, 2) !=
+                TestDerivedEqualityConstexpr(3, 2));
+  static_assert(TestDerivedEqualityConstexpr(1, 2) !=
+                TestDerivedEqualityConstexpr(1, 3));
+  static_assert(!(TestDerivedEqualityConstexpr(1, 2) ==
+                  TestDerivedEqualityConstexpr(3, 2)));
+
+  EXPECT_EQ(TestDerivedEquality(1, 2), TestDerivedEquality(1, 2));
+  EXPECT_NE(TestDerivedEquality(1, 2), TestDerivedEquality(3, 2));
+  EXPECT_NE(TestDerivedEquality(1, 2), TestDerivedEquality(1, 3));
+
+  // The same, but with an intermediate class that inherits its operators.
+  EXPECT_EQ(TestDerivedFromIntermediate(1, 2),
+            TestDerivedFromIntermediate(1, 2));
+  EXPECT_NE(TestDerivedFromIntermediate(1, 2),
+            TestDerivedFromIntermediate(3, 2));
+  EXPECT_NE(TestDerivedFromIntermediate(1, 2),
+            TestDerivedFromIntermediate(1, 3));
+}
+
+TEST(ThreeWayComparisonTest, DerivedRelationalOperators) {
+  // The base class is compared first, so `(1, 7) < (2, 3)` although `7 > 3`.
+  static_assert(TestDerivedThreeWayConstexpr(1, 7) <
+                TestDerivedThreeWayConstexpr(2, 3));
+  static_assert(TestDerivedThreeWayConstexpr(1, 7) <=
+                TestDerivedThreeWayConstexpr(2, 3));
+  static_assert(TestDerivedThreeWayConstexpr(2, 3) >
+                TestDerivedThreeWayConstexpr(1, 7));
+  static_assert(TestDerivedThreeWayConstexpr(2, 3) >=
+                TestDerivedThreeWayConstexpr(1, 7));
+  // Equal base classes, so the additional member decides.
+  static_assert(TestDerivedThreeWayConstexpr(1, 3) <
+                TestDerivedThreeWayConstexpr(1, 7));
+  static_assert(TestDerivedThreeWayConstexpr(1, 7) >
+                TestDerivedThreeWayConstexpr(1, 3));
+  // Completely equal objects.
+  static_assert(TestDerivedThreeWayConstexpr(1, 3) <=
+                TestDerivedThreeWayConstexpr(1, 3));
+  static_assert(TestDerivedThreeWayConstexpr(1, 3) >=
+                TestDerivedThreeWayConstexpr(1, 3));
+  static_assert(!(TestDerivedThreeWayConstexpr(1, 3) <
+                  TestDerivedThreeWayConstexpr(1, 3)));
+  static_assert(!(TestDerivedThreeWayConstexpr(1, 3) >
+                  TestDerivedThreeWayConstexpr(1, 3)));
+  // The equality operators that come with the three-way comparison also have to
+  // consider the base class.
+  static_assert(TestDerivedThreeWayConstexpr(1, 3) ==
+                TestDerivedThreeWayConstexpr(1, 3));
+  static_assert(TestDerivedThreeWayConstexpr(1, 3) !=
+                TestDerivedThreeWayConstexpr(2, 3));
+
+  EXPECT_LT(TestDerivedThreeWay(1, 7), TestDerivedThreeWay(2, 3));
+  EXPECT_LE(TestDerivedThreeWay(1, 7), TestDerivedThreeWay(2, 3));
+  EXPECT_GT(TestDerivedThreeWay(2, 3), TestDerivedThreeWay(1, 7));
+  EXPECT_GE(TestDerivedThreeWay(2, 3), TestDerivedThreeWay(1, 7));
+  EXPECT_LT(TestDerivedThreeWay(1, 3), TestDerivedThreeWay(1, 7));
+  EXPECT_GT(TestDerivedThreeWay(1, 7), TestDerivedThreeWay(1, 3));
+  EXPECT_LE(TestDerivedThreeWay(1, 3), TestDerivedThreeWay(1, 3));
+  EXPECT_GE(TestDerivedThreeWay(1, 3), TestDerivedThreeWay(1, 3));
+  EXPECT_EQ(TestDerivedThreeWay(1, 3), TestDerivedThreeWay(1, 3));
+  EXPECT_NE(TestDerivedThreeWay(1, 3), TestDerivedThreeWay(2, 3));
+
+  // A derived class without own members compares only its base class.
+  static_assert(TestDerivedWithoutOwnMembers(1) <
+                TestDerivedWithoutOwnMembers(2));
+  static_assert(TestDerivedWithoutOwnMembers(2) >=
+                TestDerivedWithoutOwnMembers(1));
+  static_assert(TestDerivedWithoutOwnMembers(1) ==
+                TestDerivedWithoutOwnMembers(1));
+  static_assert(TestDerivedWithoutOwnMembers(1) !=
+                TestDerivedWithoutOwnMembers(2));
+}
+
 TEST(ThreeWayComparisonTest, StrongOrderingWithIntegers) {
   auto ordering = ql::strong_ordering::less;
 

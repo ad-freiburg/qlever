@@ -20,6 +20,7 @@
 #include <fstream>
 #include <future>
 #include <iterator>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -42,9 +43,11 @@
 // server-integration test below is compiled out there.
 #ifndef __EMSCRIPTEN__
 #include "engine/Server.h"
+#include "util/ResourceMonitor.h"
 #endif
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
+#include "index/IndexFormatVersion.h"
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderImpl.h"
 #include "index/TripleComponentConversions.h"
@@ -110,7 +113,7 @@ void deleteVocabFiles(const std::string& vocabBasename,
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeEmptyLocalVocab) {
-  auto type = ad_utility::VocabularyType::random();
+  auto type = ad_utility::VocabularyType::randomForIndexBuilding();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex(
@@ -136,7 +139,7 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeLocalVocab) {
-  auto type = ad_utility::VocabularyType::random();
+  auto type = ad_utility::VocabularyType::randomForIndexBuilding();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex("materializeLocalVocab",
@@ -227,7 +230,7 @@ TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
   constexpr size_t batchSize = 65'536;
   constexpr size_t numEntries = batchSize + 1'000;
 
-  auto type = ad_utility::VocabularyType::random();
+  auto type = ad_utility::VocabularyType::randomForIndexBuilding();
   ad_utility::testing::TestIndexConfig config{"<a> <c> <e> . <g> <i> <k> ."};
   config.vocabularyType = type;
   auto oldIndex = ad_utility::testing::makeTestIndex(
@@ -620,6 +623,21 @@ TEST(IndexRebuilder, materializeToIndex) {
         deltaTriples.insertTriples(
             cancellationHandle, {IdTriple<0>{std::array{V(2), V(1), V(0), g}},
                                  IdTriple<0>{std::array{B(1), B(2), B(3), g}}});
+        // Also insert `<a> <b> <c>` with the subject given as the local-vocab
+        // spelling of `<a>`, as an update with `BIND(IRI(...))` would produce
+        // it. The `Id` must be normalized to the `VocabIndex` `Id` of `<a>`,
+        // otherwise the rebuild below fails on the assertion in
+        // `materializeLocalVocab` (regression test for issue #3172). The
+        // triple already exists in the index, so the expected counts below
+        // are unchanged.
+        LocalVocab outsideVocab;
+        Id localA = Id::makeFromLocalVocabIndex(
+            outsideVocab.getIndexAndAddIfNotContained(
+                LocalVocabEntry::fromIriref("<a>",
+                                            index.getLocalVocabContext())));
+        deltaTriples.insertTriples(
+            cancellationHandle,
+            {IdTriple<0>{std::array{localA, V(1), V(2), g}}});
       });
 
       auto [state, vocab, blankNodes] =
@@ -752,6 +770,83 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   EXPECT_EQ(newIndex.numTriples().normal, 3);
 }
 
+// Test that rebuilding an index in the previous format (whose configuration has
+// no entry for the encoding of the geo points) gives an index in the current
+// format that keeps the `LatMajor` encoding of its points.
+TEST(IndexRebuilder, materializeToIndexKeepsGeoPointEncoding) {
+  absl::Cleanup restoreEncoding{
+      [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
+
+  // The names of the index and of the rebuilt index.
+  std::string sourceIndexName = gtestCurrentTestName();
+  std::string baseFolder = absl::StrCat(sourceIndexName, "-new");
+  std::string newIndexName = baseFolder + "/index";
+
+  // An index with one point in the previous format.
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <b> \"POINT(7.8 48.0)\"^^"
+      "<http://www.opengis.net/ont/geosparql#wktLiteral> ."};
+  config.geoPointEncoding = ad_utility::GeoPointEncoding::LatMajor;
+  ad_utility::testing::makeTestIndex(sourceIndexName, std::move(config));
+  nlohmann::json configuration;
+  ad_utility::makeIfstream(sourceIndexName + CONFIGURATION_FILE) >>
+      configuration;
+  configuration.erase("geo-point-encoding");
+  configuration["index-format-version"] =
+      qlever::indexFormatVersionWithLatMajorGeoPoints;
+  ad_utility::makeOfstream(sourceIndexName + CONFIGURATION_FILE)
+      << configuration;
+
+  // Load it, insert a second point, and rebuild it.
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  GeoPoint::setEncoding(GeoPointEncodingEnum::ZOrder);
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.createFromOnDiskIndex(sourceIndexName, false);
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
+                                               DeltaTriples& deltaTriples) {
+    auto g =
+        toValueId(TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                      DEFAULT_GRAPH_IRI)},
+                  index)
+            .value();
+    deltaTriples.insertTriples(
+        cancellationHandle,
+        {IdTriple<0>{std::array{Id::makeFromInt(1), Id::makeFromInt(2),
+                                Id::makeFromGeoPoint(GeoPoint{-33.9, 18.4}),
+                                g}}});
+  });
+  auto [state, vocab, blankNodes] =
+      index.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+  ql::filesystem::create_directory(baseFolder);
+  absl::Cleanup removeIndexFiles{
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+  qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
+                             blankNodes, cancellationHandle,
+                             newIndexName + ".log");
+
+  // The rebuilt index is in the current format with the entry `lat-major`, and
+  // both points are decoded correctly (the only objects are the two points, so
+  // `OSP` begins with the southern and ends with the northern one).
+  GeoPoint::setEncoding(GeoPointEncodingEnum::ZOrder);
+  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+  newIndex.createFromOnDiskIndex(newIndexName, false);
+  ad_utility::makeIfstream(newIndexName + CONFIGURATION_FILE) >> configuration;
+  EXPECT_EQ(
+      configuration["index-format-version"].get<qlever::IndexFormatVersion>(),
+      qlever::indexFormatVersion);
+  EXPECT_EQ(configuration["geo-point-encoding"], "lat-major");
+  const auto& blocks =
+      newIndex.getPermutation(Permutation::OSP).metaData().blockData();
+  GeoPoint south = blocks.front().firstTriple_.col0Id_.getGeoPoint();
+  GeoPoint north = blocks.back().lastTriple_.col0Id_.getGeoPoint();
+  EXPECT_NEAR(south.getLat(), -33.9, 1e-6);
+  EXPECT_NEAR(south.getLng(), 18.4, 1e-6);
+  EXPECT_NEAR(north.getLat(), 48.0, 1e-6);
+  EXPECT_NEAR(north.getLng(), 7.8, 1e-6);
+}
+
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
   auto cancellationHandle =
@@ -856,7 +951,15 @@ TEST(IndexRebuilder, serverIntegration) {
   // `serverIntegrationKeepPreviousIndexDirs` below.
   config.keepPreviousIndexDirs_ = qlever::KeepPreviousIndexDirs::All;
   constexpr std::string_view accessToken = "accessToken";
-  Server server{4321, 1, std::string{accessToken}, config};
+  // Assigns the IDs for the `index_rebuild_id` column of the resource-usage
+  // log. The test reads it in place of the `ResourceMonitor`.
+  auto indexRebuildIdTracker =
+      std::make_shared<ad_utility::IndexRebuildIdTracker>();
+  Server server{4321,  1,       std::string{accessToken}, config,
+                false, nullptr, indexRebuildIdTracker};
+
+  // No rebuild has run yet.
+  EXPECT_FALSE(indexRebuildIdTracker->currentId().has_value());
 
   // Create a GET request that triggers a rebuild of the index. The
   // `additionalParameters` are appended to the URL as they are, and the access
@@ -869,16 +972,16 @@ TEST(IndexRebuilder, serverIntegration) {
         withAccessToken ? absl::StrCat("&access-token=", accessToken) : ""));
   };
 
-  // Create the coroutine that lets the `server` process the given `request`.
-  auto makeTask = [&server](auto& request) {
-    return server.template onlyForTestingProcess<
-        std::decay_t<decltype(request)>, ad_utility::httpUtils::ResponseT>(
-        request);
+  // Create the coroutine that lets the `server` process the given `request`
+  // and returns the response that would have been sent.
+  auto makeTask = [&server](serverTestHelpers::ReqT& request) {
+    return serverTestHelpers::ServerForTesting::process(server, request);
   };
 
   // Perform the given `request` on the `threadPool` and return a future for the
   // response.
-  auto performRequest = [&threadPool, &makeTask](auto& request) {
+  auto performRequest = [&threadPool,
+                         &makeTask](serverTestHelpers::ReqT& request) {
     return net::co_spawn(threadPool, makeTask(request), net::use_future);
   };
 
@@ -887,15 +990,15 @@ TEST(IndexRebuilder, serverIntegration) {
   // The exception must not be handed out of the coroutine (in particular not
   // via `net::use_future` + `AD_EXPECT_THROW_WITH_MESSAGE`), see
   // `AsioTestHelpers.h` for the reason.
-  auto expectRequestFailsWith = [&threadPool, &makeTask](
-                                    auto& request, const auto& matcher,
-                                    ad_utility::source_location location =
-                                        AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(location);
-    EXPECT_THAT(ad_utility::testing::getErrorMessageOfCoroutine(
-                    threadPool, makeTask(request)),
-                ::testing::Optional(matcher));
-  };
+  auto expectRequestFailsWith =
+      [&threadPool, &makeTask](
+          serverTestHelpers::ReqT& request, const auto& matcher,
+          ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(location);
+        EXPECT_THAT(ad_utility::testing::getErrorMessageOfCoroutine(
+                        threadPool, makeTask(request)),
+                    ::testing::Optional(matcher));
+      };
 
   // Without access token this operation is not allowed!
   auto request0 = makeRebuildRequest("", false);
@@ -914,6 +1017,16 @@ TEST(IndexRebuilder, serverIntegration) {
   EXPECT_EQ(response1.base().result(), boost::beast::http::status::ok);
   EXPECT_EQ(response2.base().result(),
             boost::beast::http::status::too_many_requests);
+  // Both rebuilds are over, so no ID is reported any more.
+  EXPECT_FALSE(indexRebuildIdTracker->currentId().has_value());
+  // The rebuild that ran took the ID 1, and the rejected one took none
+  // because it was turned away before an ID was given out. So the next
+  // rebuild gets the ID 2.
+  indexRebuildIdTracker->markStart();
+  EXPECT_THAT(indexRebuildIdTracker->currentId(), ::testing::Optional(2u));
+  // End it again, so that the assertion after the failing rebuilds below sees
+  // a tracker that reports no ID.
+  indexRebuildIdTracker->markEnd();
 
   // With the default parameters, the old index was moved to a
   // `previous.<datetime>` directory, the new index took over the base name of
@@ -951,12 +1064,17 @@ TEST(IndexRebuilder, serverIntegration) {
   auto request6 = makeRebuildRequest("&rebuild-tmp-dir=..%2Fother");
   expectRequestFailsWith(request6, ::testing::HasSubstr("not a subdirectory"));
 
+  // These three rebuilds threw after they had started. The cleanup in
+  // `rebuildIndexUnlessInProgress` cleared the ID, which the log would
+  // otherwise report forever.
+  EXPECT_FALSE(indexRebuildIdTracker->currentId().has_value());
+
   threadPool.join();
 }
 
 // _____________________________________________________________________________
 TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
   cleanDirsWithPrefix("droppedState.");
   namespace net = boost::asio;
   net::thread_pool threadPool{1};
@@ -991,14 +1109,11 @@ TEST(IndexRebuilder, serverIntegrationDroppedStateWarnings) {
       "/?cmd=rebuild-index&access-token=accessToken"
       "&rebuild-tmp-dir=droppedState.tmp"
       "&rebuild-previous-index-dir=droppedState.old");
-  using ResT = ad_utility::httpUtils::ResponseT;
-  auto response =
-      net::co_spawn(
-          threadPool,
-          server.onlyForTestingProcess<std::decay_t<decltype(request)>, ResT>(
-              request),
-          net::use_future)
-          .get();
+  auto response = net::co_spawn(threadPool,
+                                serverTestHelpers::ServerForTesting::process(
+                                    server, request),
+                                net::use_future)
+                      .get();
   EXPECT_EQ(response.base().result(), boost::beast::http::status::ok);
 
   EXPECT_THAT(logStream.str(),
@@ -1145,12 +1260,11 @@ TEST(IndexRebuilder, serverIntegrationKeepPreviousIndexDirs) {
   // final coroutine resumption can still be inside the signal on that
   // context's scheduler event; the thread sanitizer reports this as a race
   // between `pthread_cond_signal` and `pthread_cond_destroy`.
-  auto performRequest = [&server, &threadPool](auto& request) {
+  auto performRequest = [&server,
+                         &threadPool](serverTestHelpers::ReqT& request) {
     return net::co_spawn(
                threadPool,
-               server.onlyForTestingProcess<std::decay_t<decltype(request)>,
-                                            ad_utility::httpUtils::ResponseT>(
-                   request),
+               serverTestHelpers::ServerForTesting::process(server, request),
                net::use_future)
         .get();
   };

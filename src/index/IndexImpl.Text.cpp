@@ -214,7 +214,7 @@ size_t IndexImpl::getSizeOfTextBlocksSum(
         return acc + tbmdAndWordInfo.tbmd_._entityCl._nofElements;
       };
   return std::accumulate(tbmds.begin(), tbmds.end(), size_t{0}, addSizeOfBlock);
-};
+}
 
 // _____________________________________________________________________________
 void IndexImpl::setTextName(const std::string& name) {

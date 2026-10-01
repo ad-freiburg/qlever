@@ -126,8 +126,7 @@ struct ApplyBaseIfPresent {
     if (!base.has_value()) {
       return std::get<LocalVocabEntry>(std::move(iri));
     }
-    return LiteralOrIri{Iri::fromIrirefConsiderBase(
-        extractIri(iri).toStringRepresentation(), base.value())};
+    return LiteralOrIri{extractIri(iri).resolveAgainstBase(base.value())};
   }
 };
 using IriOrUriExpression =
@@ -186,7 +185,7 @@ class SubstrImpl {
   static bool isNan(NumericValue n) {
     auto ptr = std::get_if<double>(&n);
     return ptr != nullptr && std::isnan(*ptr);
-  };
+  }
 
   // Round an integer or floating point to the nearest integer according to the
   // SPARQL standard. This means that -1.5 is rounded to -1.

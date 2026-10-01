@@ -9,6 +9,9 @@
 
 #include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
+
+class TripleComponent;
 
 class Values : virtual public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
@@ -48,7 +51,10 @@ class Values : virtual public Operation {
  public:
   virtual size_t getCostEstimate() override;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
+  }
 
  public:
   // These two are also used by class `Service`, hence public.
@@ -71,5 +77,9 @@ class Values : virtual public Operation {
   template <size_t I>
   void writeValues(IdTable* idTablePtr, LocalVocab* localVocab);
 };
+
+// Create a one-row `VALUES` clause that binds `value` to `variable`.
+std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
+    QueryExecutionContext* qec, Variable variable, TripleComponent value);
 
 #endif  // QLEVER_SRC_ENGINE_VALUES_H

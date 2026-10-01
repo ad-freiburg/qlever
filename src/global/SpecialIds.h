@@ -46,7 +46,7 @@ inline const ad_utility::HashMap<std::string, Id>& specialIds() {
     return result;
   }();
   return ids;
-};
+}
 
 // Return the [lowerBound, upperBound) for the special Ids.
 // This range can be used to filter them out in cases where we want to ignore

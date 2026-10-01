@@ -130,7 +130,7 @@ SparqlExpression::getPrefilterExpressionForMetadata(
     [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] bool isNegated) const {
   return {};
-};
+}
 
 // _____________________________________________________________________________
 bool SparqlExpression::isConstantExpression() const { return false; }
@@ -200,6 +200,12 @@ bool SparqlExpression::worksOnAggregatedData(
 
 // ________________________________________________________________
 bool SparqlExpression::isExistsExpression() const { return false; }
+
+// _____________________________________________________________________________
+bool SparqlExpression::readsAllVisibleColumns() const {
+  return ql::ranges::any_of(children(),
+                            &SparqlExpression::readsAllVisibleColumns);
+}
 
 //______________________________________________________________________________
 template <typename SparqlExpressionT>

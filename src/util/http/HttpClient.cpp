@@ -250,11 +250,9 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
     }
   };
 
-  return {.status_ = status,
-          .contentType_ = contentType,
-          .location_ = location,
-          .body_ = getBody(std::move(client), std::move(responseParser),
-                           std::move(buffer), std::move(handle))};
+  return {status, contentType, location,
+          getBody(std::move(client), std::move(responseParser),
+                  std::move(buffer), std::move(handle))};
 }
 
 // ____________________________________________________________________________
@@ -294,6 +292,10 @@ HttpClientImpl<StreamType>::sendWebSocketHandshake(const http::verb& method,
 template class HttpClientImpl<beast::tcp_stream>;
 template class HttpClientImpl<ssl::stream<tcp::socket>>;
 
+// The implementation below cannot work with Emscripten, which has no raw TCP
+// sockets. There, the function is implemented via the `fetch` API of the
+// surrounding JavaScript environment, see `HttpClientEmscripten.cpp`.
+#ifndef __EMSCRIPTEN__
 // ____________________________________________________________________________
 HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
@@ -390,4 +392,5 @@ HttpOrHttpsResponse sendHttpOrHttpsRequestWithProxy(
                                         "> exceeded maximum redirect limit of ",
                                         maxRedirects));
 }
+#endif  // __EMSCRIPTEN__
 #endif

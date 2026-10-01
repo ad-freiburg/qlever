@@ -19,7 +19,7 @@
 #include "util/ParallelExecutor.h"
 
 // _____________________________________________________________________________
-TEST(ParallelExecutor, noTasks) { ad_utility::runTasksInParallel({}); }
+TEST(ParallelExecutor, noTasks) { ad_utility::runTasksInParallel<void>({}); }
 
 // _____________________________________________________________________________
 TEST(ParallelExecutor, singleTask) {
@@ -64,6 +64,21 @@ TEST(ParallelExecutor, multipleTaskWithOneException) {
                std::runtime_error);
   for (size_t i = 0; i < NUM_TASKS; ++i) {
     EXPECT_TRUE(executed.at(i));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ParallelExecutor, tasksWithResultsAreCollectedInOrder) {
+  constexpr size_t NUM_TASKS = 10;
+  std::vector<std::packaged_task<size_t()>> tasks;
+  for (size_t i = 0; i < NUM_TASKS; ++i) {
+    tasks.push_back(std::packaged_task<size_t()>{[i]() { return i * i; }});
+  }
+  std::vector<size_t> results =
+      ad_utility::runTasksInParallel(std::move(tasks));
+  ASSERT_EQ(results.size(), NUM_TASKS);
+  for (size_t i = 0; i < NUM_TASKS; ++i) {
+    EXPECT_EQ(results.at(i), i * i);
   }
 }
 

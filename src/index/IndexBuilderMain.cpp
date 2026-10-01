@@ -194,6 +194,11 @@ int main(int argc, char** argv) {
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
+  // NOTE: Not parsed into `config.indexRowsPerBlock_` directly, because
+  // `boost::program_options` cannot parse a `std::optional<size_t>` (see the
+  // `validate` functions in `util/ProgramOptionsHelpers.h`). `NonNegative` also
+  // rejects a negative value right away.
+  std::optional<ad_utility::NonNegative> indexRowsPerBlock;
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 1;
 
@@ -273,8 +278,16 @@ int main(int argc, char** argv) {
       "keyword search in literals via `?literal ql:has-word \"word\"`.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
-      ad_utility::VocabularyType::getListOfSupportedValues());
+      ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
   add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
+
+  add("geo-point-encoding", po::value(&config.geoPointEncoding_),
+      "How geo points are encoded in the IDs of the index: `z-order` (the "
+      "default), or `lat-major`, which is how they were encoded before "
+      "2026-09-26. The encoding `lat-major` is deprecated, only use it if "
+      "you need to be compatible with software that decodes the IDs of an "
+      "index. With it, a spatial prefilter on points can only restrict the "
+      "latitude.");
 
   add("encode-as-id",
       po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),
@@ -308,6 +321,17 @@ int main(int argc, char** argv) {
   add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
+  auto rowsPerBlockDescription = absl::StrCat(
+      "The number of rows of one block of the permutations (and of the other "
+      "sorted lists of the index, like materialized views). Index scans "
+      "always read whole blocks, so a smaller value makes selective scans "
+      "read fewer rows, at the price of more block metadata (which is held in "
+      "RAM) and a slightly larger index. The value is stored in the index, so "
+      "that the server uses the same block size when it writes sorted lists "
+      "(for example, for a materialized view). Default: ",
+      DEFAULT_INDEX_ROWS_PER_BLOCK, ".");
+  add("index-rows-per-block", po::value(&indexRowsPerBlock),
+      rowsPerBlockDescription.c_str());
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),
@@ -315,8 +339,9 @@ int main(int argc, char** argv) {
       "mapping view names to SELECT queries for writing the view, for example: "
       R"({"view1": "SELECT ...", "view2": "SELECT ..."})");
   add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
-      "Disable the resource-usage log. By default a TSV log of the RSS and "
-      "CPU usage of the index build is written next to the index files "
+      "Disable the resource-usage log. By default a TSV log of the RSS, CPU "
+      "and disk I/O of the index build, plus the system-wide I/O stall (Linux "
+      "only), is written next to the index files "
       "(`<index-basename>.index.resource-usage-log.tsv`).");
   add("resource-usage-interval-s",
       po::value(&resourceUsageIntervalS)->default_value(1),
@@ -324,12 +349,21 @@ int main(int argc, char** argv) {
   auto logLevelDescription = absl::StrCat(
       "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
       "Default is INFO. The compile-time level (",
-      LogLevel{LOGLEVEL}.toString(),
+      LogLevel{ad_utility::compileTimeLogLevel}.toString(),
       ") applies as an upper bound — messages above it are never emitted "
       "regardless of this setting.");
   add("log-level",
       optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
       logLevelDescription.c_str());
+  add("num-threads,j", po::value(&config.numThreads_),
+      "The number of threads used during the index build. Must be at least 1. "
+      "Default: the number of hardware threads of the machine. NOTE: Currently "
+      "only the first pass (parsing the input and creating the partial "
+      "vocabularies) and the conversion to global IDs use this number; the "
+      "other phases use their own parallelism (making all phases respect this "
+      "option is work in progress). The memory of the first pass grows "
+      "linearly with this number, since each thread holds one batch of "
+      "`num-triples-per-batch` triples with its partial vocabulary in RAM.");
 
   // Process command line arguments.
   po::variables_map optionsMap;
@@ -369,6 +403,9 @@ int main(int argc, char** argv) {
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
+    if (indexRowsPerBlock.has_value()) {
+      config.indexRowsPerBlock_ = indexRowsPerBlock.value();
+    }
     config.validate();
     // For index building, use more threads for writing permutations than the
     // default (which is optimized for `rebuild-index`, where six permutations

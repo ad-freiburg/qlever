@@ -10,14 +10,14 @@
 
 // ____________________________________________________________________________
 PayloadVariables::PayloadVariables(std::vector<Variable> variables)
-    : variables_{std::move(variables)} {};
+    : variables_{std::move(variables)} {}
 
 // ____________________________________________________________________________
 PayloadVariables PayloadVariables::all() {
   PayloadVariables pv{};
   pv.setToAll();
   return pv;
-};
+}
 
 // ____________________________________________________________________________
 void PayloadVariables::addVariable(const Variable& variable) {
@@ -31,12 +31,12 @@ void PayloadVariables::addVariable(const Variable& variable) {
   };
 
   std::visit(addVarVisitor, variables_);
-};
+}
 
 // ____________________________________________________________________________
 void PayloadVariables::setToAll() {
   variables_ = detail::PayloadAllVariables{};
-};
+}
 
 // ____________________________________________________________________________
 bool PayloadVariables::empty() const {
@@ -52,12 +52,12 @@ bool PayloadVariables::empty() const {
   };
 
   return std::visit(emptyVisitor, variables_);
-};
+}
 
 // ____________________________________________________________________________
 bool PayloadVariables::isAll() const {
   return std::holds_alternative<detail::PayloadAllVariables>(variables_);
-};
+}
 
 // ____________________________________________________________________________
 const std::vector<Variable>& PayloadVariables::getVariables() const {
@@ -75,4 +75,4 @@ const std::vector<Variable>& PayloadVariables::getVariables() const {
   };
 
   return std::visit(getVarVisitor, variables_);
-};
+}

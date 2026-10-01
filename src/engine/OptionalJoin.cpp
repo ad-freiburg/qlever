@@ -44,7 +44,6 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
   bool rightHasUndefColumn = false;
   size_t numUndefColumnsLeft = 0;
   ColumnIndex undefColumnLeftIndex = 0;
-  std::vector<bool> leftUndefJoinCols;
   for (size_t i = 0; i < _joinColumns.size(); ++i) {
     auto [leftCol, rightCol] = _joinColumns.at(i);
     auto leftIt = _left->getVariableAndInfoByColumnIndex(leftCol);
@@ -94,7 +93,12 @@ string OptionalJoin::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&) {
+  // Note that we use the merged `getLimitOffset()` and not the clause that was
+  // passed in, which only holds the increment that was just added. The bound
+  // below depends on the total limit and offset, so for nested subqueries the
+  // increment alone would be too small.
+  const auto& limitOffset = getLimitOffset();
   if (limitOffset._limit.has_value()) {
     std::optional<uint64_t> safeLimit = std::nullopt;
     auto limit = limitOffset._limit.value();
@@ -111,7 +115,23 @@ void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
     // it can drop matches; we leave it untouched.
     _left = _left->clone();
     _left->applyLimitOffset(LimitOffsetClause{safeLimit});
+
+    // The pushdown may have un-sorted `_left`, which our join algorithms
+    // require to be sorted on the join columns, so restore that order (see the
+    // caution note on `Operation::applyLimitOffset`). This is cheap, as `_left`
+    // now yields at most `limit + offset` rows.
+    _left = QueryExecutionTree::createSortedTree(std::move(_left),
+                                                 leftJoinColumns());
   }
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> OptionalJoin::leftJoinColumns() const {
+  std::vector<ColumnIndex> result;
+  result.reserve(_joinColumns.size());
+  ql::ranges::transform(_joinColumns, std::back_inserter(result),
+                        [](const auto& cols) { return cols[0]; });
+  return result;
 }
 
 // _____________________________________________________________________________

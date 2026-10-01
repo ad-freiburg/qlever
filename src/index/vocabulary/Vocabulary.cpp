@@ -238,7 +238,7 @@ std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
     static_assert(NeverProvidesGeometryInfo<S>);
     return std::nullopt;
   }
-};
+}
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
@@ -251,7 +251,7 @@ bool Vocabulary<S, C, I>::isGeoInfoAvailable() const {
     static_assert(NeverProvidesGeometryInfo<S>);
     return false;
   }
-};
+}
 
 // _____________________________________________________________________________
 template <typename S, typename ComparatorType, typename I>

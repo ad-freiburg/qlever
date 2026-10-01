@@ -35,7 +35,15 @@ size_t PolymorphicVocabulary::size() const {
 
 // _____________________________________________________________________________
 std::string PolymorphicVocabulary::operator[](uint64_t i) const {
-  return std::visit([i](auto& vocab) { return std::string{vocab[i]}; }, vocab_);
+  // NOTE: We cannot simply use `std::string{vocab[i]}` here, because the
+  // `operator[]` of a vocabulary with holes returns a `std::optional` that is
+  // empty if `i` is one of those holes. In that case a placeholder is reported,
+  // for details see `wordAsStringOrPlaceholder`.
+  return std::visit(
+      [i](const auto& vocab) {
+        return ad_utility::vocabulary::wordAsStringOrPlaceholder(vocab, i);
+      },
+      vocab_);
 }
 
 // _____________________________________________________________________________
@@ -82,6 +90,28 @@ std::unique_ptr<WordWriterBase> PolymorphicVocabulary::makeDiskWriterPtr(
 }
 
 // _____________________________________________________________________________
+FileSuffixes PolymorphicVocabulary::fileSuffixes(VocabularyType type) {
+  // The names of the enum values are the same as the type aliases for the
+  // implementations, so we can shorten the following code using a macro.
+#undef AD_CASE
+#define AD_CASE(vocabType)              \
+  case VocabularyType::Enum::vocabType: \
+    return vocabType::fileSuffixes()
+
+  switch (type.value()) {
+    AD_CASE(InMemoryUncompressed);
+    AD_CASE(OnDiskUncompressed);
+    AD_CASE(InMemoryCompressed);
+    AD_CASE(OnDiskCompressed);
+    AD_CASE(OnDiskCompressedGeoSplit);
+    AD_CASE(InMemoryUncompressedWithHoles);
+    AD_CASE(InMemoryCompressedWithHoles);
+    default:
+      AD_FAIL();
+  }
+}
+
+// _____________________________________________________________________________
 void PolymorphicVocabulary::resetToType(VocabularyType type) {
   close();
   // The names of the enum values are the same as the type aliases for the
@@ -98,6 +128,8 @@ void PolymorphicVocabulary::resetToType(VocabularyType type) {
     AD_CASE(InMemoryCompressed);
     AD_CASE(OnDiskCompressed);
     AD_CASE(OnDiskCompressedGeoSplit);
+    AD_CASE(InMemoryUncompressedWithHoles);
+    AD_CASE(InMemoryCompressedWithHoles);
     default:
       AD_FAIL();
   }

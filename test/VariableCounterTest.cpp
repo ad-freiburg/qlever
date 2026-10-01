@@ -10,8 +10,8 @@
 #include <gmock/gmock.h>
 
 #include "./util/GTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "parser/GraphPatternOperation.h"
-#include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
 #include "parser/VariableCounter.h"
 
@@ -19,13 +19,13 @@
 namespace {
 
 using namespace ::testing;
+using ad_utility::testing::parseQuery;
 using parsedQuery::VariableCounter;
 using V = Variable;
 
 // Apply `VariableCounter` to the root graph pattern of the given SPARQL query.
 VariableCounter parseAndCount(std::string sparql) {
-  static EncodedIriManager encodedIriManager;
-  auto pq = SparqlParser::parseQuery(&encodedIriManager, std::move(sparql));
+  auto pq = parseQuery(std::move(sparql));
   VariableCounter counter;
   counter(pq._rootGraphPattern);
   return counter;
@@ -202,7 +202,8 @@ TEST(VariableCounterTest, MagicServices) {
           "SERVICE qlss: {"
           "_:config qlss:left ?e ;"
           "qlss:right ?z ;"
-          "qlss:maxDistance 500 . } }"),
+          "qlss:maxDistance 500 ;"
+          "qlss:algorithm qlss:s2 . } }"),
       counts({{V{"?e"}, 1}, {V{"?z"}, 1}}));
   EXPECT_THAT(
       parseAndCount(
@@ -212,6 +213,7 @@ TEST(VariableCounterTest, MagicServices) {
           "_:config qlss:left ?e ;"
           "qlss:right ?z ;"
           "qlss:maxDistance 500 ;"
+          "qlss:algorithm qlss:s2 ;"
           "qlss:bindDistance ?dist . } }"),
       counts({{V{"?e"}, 1}, {V{"?z"}, 1}, {V{"?dist"}, 1}}));
   EXPECT_THAT(
@@ -222,6 +224,7 @@ TEST(VariableCounterTest, MagicServices) {
           "_:config qlss:left ?e ;"
           "qlss:right ?z ;"
           "qlss:numNearestNeighbors 3 ;"
+          "qlss:algorithm qlss:s2 ;"
           "qlss:payload ?z ;"
           "qlss:payload ?w ."
           "{ ?a <q> ?z . ?b <r> ?w } } }"),

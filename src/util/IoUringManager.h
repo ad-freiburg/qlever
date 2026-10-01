@@ -148,8 +148,8 @@ struct SyncIoPolicy {
                 BatchHandle handle) const;
 
   void wait(BatchHandle) const {
-      // No-op: `addBatch` already completed all reads synchronously.
-  };
+    // No-op: `addBatch` already completed all reads synchronously.
+  }
 
   // Read exactly `numBytes` bytes from file descriptor `fd` at `fileOffset`
   // (from the start of the file) into `targetBuffer`. Throws exception if the

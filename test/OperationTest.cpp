@@ -3,12 +3,14 @@
 // Author: Johannes Kalmbach (joka921) <kalmbach@cs.uni-freiburg.de>
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include <optional>
 
 #include "engine/Bind.h"
 #include "engine/IndexScan.h"
+#include "engine/Join.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
@@ -55,7 +57,15 @@ void expectRtiHasDimensions(
 }
 }  // namespace
 
-// ________________________________________________
+// _____________________________________________________________________________
+TEST(OperationTest, constructorRequiresQueryExecutionContext) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      NeutralElementOperation{nullptr},
+      ::testing::HasSubstr(
+          "An `Operation` requires a `QueryExecutionContext`"));
+}
+
+// _____________________________________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
   LimitOffsetClause l;
   {
@@ -183,7 +193,7 @@ class OperationTestFixture : public testing::Test {
 
   std::shared_ptr<Index> index = []() {
     TestIndexConfig indexConfig{};
-    indexConfig.blocksizePermutations = 32_B;
+    indexConfig.rowsPerBlock = 4;
 
     return std::make_shared<Index>(makeTestIndex(std::move(indexConfig)));
   }();
@@ -222,6 +232,32 @@ TEST_F(OperationTestFixture,
                       "status", Eq("fully materialized completed"))),
                   ParsedAsJson(HasKeyMatching(
                       "status", Eq("fully materialized completed")))));
+}
+
+// Test that the updates of the runtime information carry the information about
+// the query planning, once it is set.
+TEST_F(OperationTestFixture, updatesCarryInformationAboutTheQueryPlanning) {
+  // Without that information, an update is just the runtime information of the
+  // operations.
+  operation.getResult(true);
+  ASSERT_FALSE(jsonHistory.empty());
+  EXPECT_FALSE(nlohmann::json::parse(jsonHistory.back()).contains("meta"));
+
+  // With it, every update carries it as the key `meta`, with the same content
+  // as in the `application/qlever-results+json` format.
+  QueryPlanningInfo queryPlanningInfo;
+  queryPlanningInfo.timeQueryPlanning = std::chrono::milliseconds{17};
+  queryPlanningInfo.queryPlanning.push_back(
+      {PlanningAlgorithm::DYNAMIC_PROGRAMMING, 3, 6, 1500, 42});
+  qec.setQueryPlanningInfo(queryPlanningInfo);
+  jsonHistory.clear();
+  qec.clearCacheUnpinnedOnly();
+  operation.getResult(true);
+  ASSERT_FALSE(jsonHistory.empty());
+  for (const auto& json : jsonHistory) {
+    EXPECT_EQ(nlohmann::ordered_json::parse(json)["meta"],
+              nlohmann::ordered_json(queryPlanningInfo));
+  }
 }
 
 // _____________________________________________________________________________
@@ -554,9 +590,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
 
 // _____________________________________________________________________________
 TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   uint32_t updateCallCounter = 0;
   auto idTable = makeIdTableFromVector({{}});
   auto index = std::make_shared<Index>(makeTestIndex(
@@ -602,6 +636,32 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
                                });
 
   EXPECT_EQ(updateCallCounter, 4);
+}
+
+// _____________________________________________________________________________
+TEST(Operation, verifyTimeAfterLastChunkIsAddedToRuntimeInformation) {
+  auto idTable = makeIdTableFromVector({{}});
+  CustomGeneratorOperation operation{
+      getQec(), [](const IdTable& idTable) -> Result::Generator {
+        co_yield {idTable.clone(), LocalVocab{}};
+        // Work that is done after the last chunk, e.g. a filter that discards
+        // the remaining input, has to be accounted for, too.
+        std::this_thread::sleep_for(5ms);
+      }(idTable)};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  auto result =
+      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+  auto& rti = operation.runtimeInfo();
+  auto totalTimeBefore = rti.totalTime_;
+
+  for ([[maybe_unused]] auto& _ : result.idTables()) {
+  }
+  EXPECT_EQ(rti.status_, Status::lazilyMaterializedCompleted);
+  // Only lower bounds, a high system load can only make the sleep longer.
+  EXPECT_GE(rti.totalTime_, totalTimeBefore + 5ms);
+  EXPECT_GE(rti.originalTotalTime_, totalTimeBefore + 5ms);
+  EXPECT_GE(rti.originalOperationTime_, 5ms);
 }
 
 // _____________________________________________________________________________
@@ -950,4 +1010,90 @@ TEST(OperationTest, isDeterministicPropagatesFromChildren) {
   auto sortedTree = ad_utility::makeExecutionTree<Sort>(
       qec, randBindTree, std::vector<ColumnIndex>{});
   EXPECT_FALSE(sortedTree->getRootOperation()->isDeterministic());
+}
+
+// _____________________________________________________________________________
+TEST(OperationTest, isDeterministicOfNestedJoins) {
+  using namespace ad_utility::testing;
+  auto* qec = getQec();
+  Variable x{"?x"};
+
+  std::vector<std::shared_ptr<const ValuesForTestingCountingDeterminismChecks>>
+      leaves;
+  auto makeLeaf = [&]() {
+    auto leaf = ad_utility::makeExecutionTree<
+        ValuesForTestingCountingDeterminismChecks>(
+        qec, makeIdTableFromVector({{1, 2}}),
+        std::vector<std::optional<Variable>>{
+            x, Variable{absl::StrCat("?o", leaves.size())}},
+        false, std::vector<ColumnIndex>{0});
+    leaves.push_back(std::dynamic_pointer_cast<
+                     const ValuesForTestingCountingDeterminismChecks>(
+        leaf->getRootOperation()));
+    AD_CORRECTNESS_CHECK(leaves.back() != nullptr);
+    return leaf;
+  };
+
+  // Each leaf of a left-deep chain of nested joins must be visited exactly
+  // once. Previously, `Join::isDeterministicImpl()` recursed into the subtree
+  // in addition to `Operation::isDeterministic()`, which made this exponential
+  // in the nesting depth, see
+  // https://github.com/ad-freiburg/qlever/issues/3557.
+  auto tree = makeLeaf();
+  for (size_t i = 0; i < 40; ++i) {
+    auto leftCol = tree->getVariableColumn(x);
+    tree = ad_utility::makeExecutionTree<Join>(qec, std::move(tree), makeLeaf(),
+                                               leftCol, 0);
+  }
+  EXPECT_TRUE(tree->getRootOperation()->isDeterministic());
+  for (const auto& leaf : leaves) {
+    EXPECT_EQ(leaf->numDeterminismChecks(), 1);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Operation, isDistinctByRecognizesLimitOne) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}, {0, 1}}),
+      Vars{Variable{"?x"}, Variable{"?y"}});
+
+  // Without a limit, `ValuesForTesting` is not known to be distinct.
+  EXPECT_FALSE(values->getRootOperation()->isDistinctBy(SC{0}));
+
+  // A limit greater than one doesn't help, as the result may still contain
+  // duplicates.
+  values->applyLimitOffset(LimitOffsetClause{._limit = 2});
+  EXPECT_FALSE(values->getRootOperation()->isDistinctBy(SC{0}));
+
+  // With `LIMIT 1` the result has at most one row, so it is trivially distinct
+  // wrt any set of columns.
+  values->applyLimitOffset(LimitOffsetClause{._limit = 1});
+  EXPECT_TRUE(values->getRootOperation()->isDistinctBy(SC{0}));
+  EXPECT_TRUE(values->getRootOperation()->isDistinctBy(SC{}));
+}
+
+// _____________________________________________________________________________
+TEST(Operation, makeDistinctTreeDefaultRequiresNotAlreadyDistinct) {
+  using TC = TripleComponent;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  // `IndexScan` overrides `isDistinctByImpl` but uses the default
+  // `makeDistinctTree` (which returns `nullopt`). The default implementation
+  // asserts that it is only called on operations that are not already distinct.
+  auto scan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
+                         TC{Variable{"?o"}}});
+  const auto& scanOp = *scan->getRootOperation();
+
+  ASSERT_TRUE(scanOp.isDistinctBy(SC{0, 1, 2}));
+  EXPECT_THROW(scanOp.makeDistinctTree(SC{0, 1, 2}), ad_utility::Exception);
+
+  ASSERT_FALSE(scanOp.isDistinctBy(SC{0}));
+  EXPECT_EQ(scanOp.makeDistinctTree(SC{0}), std::nullopt);
 }

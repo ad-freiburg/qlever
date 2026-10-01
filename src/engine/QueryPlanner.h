@@ -1,8 +1,14 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2015 - 2026 The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+// 2018 - 2026 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025        Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_QUERYPLANNER_H
 #define QLEVER_SRC_ENGINE_QUERYPLANNER_H
@@ -12,6 +18,7 @@
 
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/RuntimeInformation.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
@@ -48,8 +55,8 @@ class QueryPlanner {
 
   // Create the best execution tree for the given query according to the
   // optimization algorithm and cost estimates of the QueryPlanner.
-  QueryExecutionTree createExecutionTree(ParsedQuery& pq,
-                                         bool isSubquery = false);
+  std::shared_ptr<QueryExecutionTree> createExecutionTree(
+      ParsedQuery& pq, bool isSubquery = false);
 
   class TripleGraph {
    public:
@@ -121,8 +128,6 @@ class QueryPlanner {
     bool isSimilar(const TripleGraph& other) const;
     std::string asString() const;
 
-    bool isTextNode(size_t i) const;
-
     vector<vector<size_t>> _adjLists;
     ad_utility::HashMap<size_t, Node*> _nodeMap;
     std::list<TripleGraph::Node> _nodeStorage;
@@ -144,8 +149,8 @@ class QueryPlanner {
    public:
     enum Type { BASIC, OPTIONAL, MINUS };
 
-    explicit SubtreePlan(QueryExecutionContext* qec)
-        : _qet(std::make_shared<QueryExecutionTree>(qec)) {}
+    explicit SubtreePlan(std::shared_ptr<QueryExecutionTree> qet)
+        : _qet{std::move(qet)} {}
 
     template <typename Operation>
     SubtreePlan(QueryExecutionContext* qec,
@@ -174,6 +179,13 @@ class QueryPlanner {
   struct FilterAndOptionalSubstitute {
     SparqlFilter filter_;
     std::optional<SubtreePlan> substitute_;
+
+    // Enforce filter substitution. Replace the existing plan by the filtered
+    // one instead of adding the filtered plan as a candidate.
+    //
+    // NOTE: This may not be used for a `SpatialJoin` that has no child yet, as
+    // it will otherwise never have its second child attached.
+    bool forceSubstitution_ = false;
 
     bool hasSubstitute() const { return substitute_.has_value(); }
   };
@@ -244,6 +256,12 @@ class QueryPlanner {
 
   void setEnablePatternTrick(bool enablePatternTrick);
 
+  // How each connected component of the query graph was planned, in the order
+  // in which they were planned (see `ConnectedComponentPlanningInfo`).
+  const std::vector<ConnectedComponentPlanningInfo>& planningInfo() const {
+    return planningInfo_;
+  }
+
   // Create a set of possible execution trees for the given parsed query. The
   // best (cheapest) execution tree according to the QueryPlanner is part of
   // that set. When the query has no `ORDER BY` clause, the set contains one
@@ -274,6 +292,14 @@ class QueryPlanner {
   // are then passed on to the created `QueryExecutionTree` such that they can
   // be reported as part of the query result if desired.
   std::vector<std::string> warnings_;
+
+  // See `planningInfo()`.
+  std::vector<ConnectedComponentPlanningInfo> planningInfo_;
+
+  // The number of candidate plans that `merge` created so far, for the
+  // `numCandidatePlans_` of `planningInfo_`. It is `mutable` because `merge`
+  // and the functions that call it are `const`.
+  mutable size_t numCandidatePlans_ = 0;
 
   std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
@@ -321,7 +347,14 @@ class QueryPlanner {
   // filters with the corresponding substitute subtree plan. This is currently
   // used to translate GeoSPARQL filters to spatial join operations.
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
-      const std::vector<SparqlFilter>& filters) const;
+      const std::vector<SparqlFilter>& filters);
+
+  // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
+  // substitutes. This is sufficient for the filter modes that never apply
+  // substitutes and avoids constructing throwaway substitute plans (which
+  // would also consume internal variable names).
+  static FiltersAndOptionalSubstitutes wrapFiltersWithoutSubstitutes(
+      const std::vector<SparqlFilter>& filters);
 
   // TODO<RobinTF> Extract to dedicated module, this has little to do with
   // actual query planning.
@@ -505,6 +538,11 @@ class QueryPlanner {
     ReplaceUnfiltered,
     // Same as ReplaceUnfiltered, but do not apply filter substitutes.
     ReplaceUnfilteredNoSubstitutes,
+    // Only apply filter substitutes, but do not apply regular filters.
+    // Required by the dynamic programming approach for a connected component
+    // with fewer than 2 seeds, where a substitute is applicable. Currently
+    // needed for a `SpatialJoin` substitute with a fixed-value side.
+    SeedSubstitutesOnly,
     // Apply all filters (also the nonmatching ones) and replace the unfiltered
     // plans. This has to be called at the end of parsing a group graph pattern
     // where we have to make sure that all filters are applied.
@@ -651,8 +689,11 @@ class QueryPlanner {
     // create no single binding for a variable "by accident".
     ad_utility::HashSet<Variable> boundVariables_{};
 
-    // We remember the potential filter substitutions so we can avoid
-    // unnecessarily recomputing them.
+    // The filters of the `rootPattern_`, wrapped for `applyFiltersIfPossible`.
+    // No substitutes are computed here: this member is only used with
+    // `FilterMode::ApplyAllFiltersAndReplaceUnfiltered`, which never applies
+    // substitutes. The substitutes for the actual planning are seeded in
+    // `fillDpTab`.
     FiltersAndOptionalSubstitutes filtersAndSubst_;
 
     // ________________________________________________________________________
@@ -662,7 +703,7 @@ class QueryPlanner {
           rootPattern_{rootPattern},
           qec_{planner._qec},
           filtersAndSubst_{
-              planner.seedFilterSubstitutes(rootPattern->_filters)} {}
+              wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
 
     // This function is called for each of the graph patterns that are contained
     // in the `rootPattern_`. It dispatches to the various `visit...`functions
@@ -703,6 +744,14 @@ class QueryPlanner {
     // is made via the type member of the `SubtreePlan`s.
     void visitGroupOptionalOrMinus(std::vector<SubtreePlan>&& candidates);
 
+    // Helper function for `graphPatternOperationVisitor`. For a
+    // `GRAPH ?graphVar {...}` clause, make sure that `graphVar` is bound in
+    // every candidate: if a candidate does not already contain a column for
+    // `graphVar`, cross-join it with all graphs that could possibly match (see
+    // `DistinctGraphs::makeAllGraphs`).
+    void bindGraphVariableIfUnbound(const Variable& graphVar,
+                                    std::vector<SubtreePlan>& candidates);
+
     // This function finds a set of candidates that unite all the different
     // `candidatePlans_` and `candidateTriples_`. It then replaces the contents
     // of `candidatePlans_` with those plans and clears the `candidateTriples_`.
@@ -717,7 +766,7 @@ class QueryPlanner {
       auto v = planner_.optimize(pattern);
       auto idx = planner_.findCheapestExecutionTree(v);
       return std::move(v[idx]);
-    };
+    }
   };
 
   /**
