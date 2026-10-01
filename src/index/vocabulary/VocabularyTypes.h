@@ -104,13 +104,13 @@ class VocabBatchLookupResult {
   // Moves reset the source span, so a moved-from result is empty (rather than
   // a null owner paired with a stale view into the moved-to storage).
   VocabBatchLookupResult(VocabBatchLookupResult&& other) noexcept
-      : storage_{std::move(other.storage_)}, span_{std::move(other.span_)} {
+      : storage_{std::move(other.storage_)}, span_{other.span_} {
     other.span_ = {};
   }
   VocabBatchLookupResult& operator=(VocabBatchLookupResult&& other) noexcept {
     if (this != &other) {
       storage_ = std::move(other.storage_);
-      span_ = std::move(other.span_);
+      span_ = other.span_;
       other.span_ = {};
     }
     return *this;
