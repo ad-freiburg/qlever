@@ -53,7 +53,9 @@ void SyncIoPolicy::readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
 
 namespace {
 #ifdef QL_PAGE_CACHE_FAST_PATH
-// Cleared once a `preadv2(RWF_NOWAIT)` fails with `EOPNOTSUPP`.
+// Cleared once a `preadv2(RWF_NOWAIT)` fails with `EOPNOTSUPP`. The flag is a
+// best-effort hint without associated data, so `acquire`/`release` ordering
+// (instead of the default sequential consistency) is sufficient.
 std::atomic<bool> pageCacheFastPathSupported{true};
 #endif
 }  // namespace
@@ -83,7 +85,7 @@ PageCacheRead& pageCacheRead() {
 //______________________________________________________________________________
 void resetPageCacheFastPathSupport() {
 #ifdef QL_PAGE_CACHE_FAST_PATH
-  pageCacheFastPathSupported.store(true, std::memory_order_relaxed);
+  pageCacheFastPathSupported.store(true, std::memory_order_release);
 #endif
 }
 }  // namespace detail
@@ -91,7 +93,7 @@ void resetPageCacheFastPathSupport() {
 //______________________________________________________________________________
 bool pageCacheFastPathIsSupported() {
 #ifdef QL_PAGE_CACHE_FAST_PATH
-  return pageCacheFastPathSupported.load(std::memory_order_relaxed);
+  return pageCacheFastPathSupported.load(std::memory_order_acquire);
 #else
   return false;
 #endif
@@ -117,7 +119,7 @@ std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
            offsets[runEnd - 1] + numBytes[runEnd - 1] == offsets[runEnd]) {
       ++runEnd;
     }
-    if (!pageCacheFastPathSupported.load(std::memory_order_relaxed)) {
+    if (!pageCacheFastPathSupported.load(std::memory_order_acquire)) {
       for (size_t i = runBegin; i < numReads; ++i) {
         notServed.push_back(i);
       }
@@ -134,7 +136,8 @@ std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
         fd, iovecs.data(), static_cast<int>(iovecs.size()),
         static_cast<int64_t>(offsets[runBegin]));
     if (numBytesRead < 0 && errno == EOPNOTSUPP) {
-      if (pageCacheFastPathSupported.exchange(false)) {
+      if (pageCacheFastPathSupported.exchange(false,
+                                              std::memory_order_acq_rel)) {
         AD_LOG_WARN << "preadv2 with RWF_NOWAIT is not supported for the "
                        "vocabulary files; reading them without the "
                        "page-cache fast path"
