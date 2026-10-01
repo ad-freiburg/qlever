@@ -73,7 +73,10 @@ class BasicIdColumnView {
   // (rather than a conversion operator on the mutable view) avoids the
   // mutable instantiation having to name its own type as a target.
   CPP_template(typename = void)(requires IsConst)
-      /*implicit*/ BasicIdColumnView(const BasicIdColumnView<false>& other)
+      /*implicit*/ BasicIdColumnView(
+          const BasicIdColumnView<false>&
+              other)  // NOSONAR, implicit conversion is needed for future
+                      // IdRefProxy
       : payloads_{other.payloads_},
         datatypes_{other.datatypes_},
         size_{other.size_} {}

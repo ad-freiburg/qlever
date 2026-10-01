@@ -58,7 +58,7 @@ class BasicIdRef {
   // user-provided (for good reason, see there), which would otherwise make
   // the implicit generation of these two deprecated-but-not-removed.
   BasicIdRef(const BasicIdRef&) = default;
-  BasicIdRef(BasicIdRef&&) = default;
+  BasicIdRef(BasicIdRef&&) noexcept = default;
 
   // Implicit conversion to `Id`, e.g. to store the referenced value in a
   // variable, or to pass it to a function that expects a real `Id`.
@@ -86,7 +86,8 @@ class BasicIdRef {
   // corrupting data.
   const BasicIdRef& operator=(const BasicIdRef& other) const {
     static_assert(!IsConst, "`ConstIdRef` is not assignable.");
-    return *this = static_cast<Id>(other);
+    *this = static_cast<Id>(other);
+    return *this;
   }
 
   // Swap the referenced `Id`s (not the proxy's own pointers). Needed because
@@ -166,12 +167,13 @@ class BasicIdRef {
   friend bool operator==(const BasicIdRef a, const Id b) {
     return a.toId() == b;
   }
-  friend bool operator==(const Id a, const BasicIdRef b) {
-    return a == b.toId();
-  }
   template <bool OtherConst>
   friend bool operator==(const BasicIdRef a, const BasicIdRef<OtherConst> b) {
     return a.toId() == b.operator Id();
+  }
+#ifdef QLEVER_CPP_17
+  friend bool operator==(const Id a, const BasicIdRef b) {
+    return a == b.toId();
   }
   friend bool operator!=(const BasicIdRef a, const Id b) { return !(a == b); }
   friend bool operator!=(const Id a, const BasicIdRef b) { return !(a == b); }
@@ -180,9 +182,6 @@ class BasicIdRef {
     return !(a == b);
   }
 
-  // Relational operators, e.g. needed for `ql::ranges::equal_range`/`sort`
-  // on an `Id` column. Forwarded to `Id`'s own operators (datatype-major
-  // bitwise comparison, see `ValueId::compareThreeWay`).
   friend bool operator<(const BasicIdRef a, const Id b) { return a.toId() < b; }
   friend bool operator<(const Id a, const BasicIdRef b) { return a < b.toId(); }
   template <bool OtherConst>
@@ -215,6 +214,15 @@ class BasicIdRef {
   friend bool operator>=(const BasicIdRef a, const BasicIdRef<OtherConst> b) {
     return a.toId() >= b.operator Id();
   }
+#else
+  friend auto operator<=>(const BasicIdRef a, const Id b) {
+    return a.compareThreeWay(b);
+  }
+  template <bool OtherConst>
+  friend auto operator<=>(const BasicIdRef a, const BasicIdRef<OtherConst> b) {
+    return a.compareThreeWay(b.operator Id());
+  }
+#endif
 
   friend std::ostream& operator<<(std::ostream& ostr, const BasicIdRef ref) {
     return ostr << ref.toId();

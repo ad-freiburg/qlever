@@ -80,7 +80,10 @@ class BasicIdColumnIterator {
     datatype_ += n;
     return *this;
   }
-  BasicIdColumnIterator& operator-=(difference_type n) { return *this += -n; }
+  BasicIdColumnIterator& operator-=(difference_type n) {
+    *this += -n;
+    return *this;
+  }
   friend BasicIdColumnIterator operator+(BasicIdColumnIterator it,
                                          difference_type n) {
     it += n;
@@ -109,9 +112,11 @@ class BasicIdColumnIterator {
   bool operator==(const BasicIdColumnIterator& rhs) const {
     return payload_ == rhs.payload_;
   }
+#ifdef QLEVER_CPP_17
   bool operator!=(const BasicIdColumnIterator& rhs) const {
     return !(*this == rhs);
   }
+#endif
 };
 
 using IdColumnIterator = BasicIdColumnIterator<false>;
