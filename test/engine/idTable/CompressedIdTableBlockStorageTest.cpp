@@ -40,7 +40,6 @@
 #include "../../util/GTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedIdTableBlockStorage.h"
-#include "engine/idTable/RowMajorMergeBlock.h"
 #include "util/parallelBlockMerge/InOrderBlockSink.h"
 
 namespace {
@@ -663,81 +662,6 @@ TEST(CompressedIdTableBlockStorage, aConsumerWaitsForAReadThatIsInFlight) {
   EXPECT_THAT(gets.blocks_,
               ::testing::ElementsAre(makeRows(1, {0}), makeRows(1, {1})));
   EXPECT_TRUE(gets.sawSentinel_);
-}
-
-// _____________________________________________________________________________
-TEST(CompressedIdTableBlockStorage, aBlockInMemoryIsFinalized) {
-  // A block whose layout inside the merge is not the one that the consumer
-  // wants is converted by the storage, see the FINALIZATION note at the class
-  // comment of `compressedIdTable::ChunkQueue`.
-  constexpr size_t numCols = 3;
-  using Block = ad_utility::RowMajorMergeBlock<numCols>;
-  using RowMajorStorage =
-      ad_utility::CompressedIdTableBlockStorage<numCols, Block>;
-  static_assert(
-      ad_utility::parallelBlockMerge::BlockStorageConcept<RowMajorStorage,
-                                                          Block>);
-
-  // Two blocks, of which the first one stays in memory (and is therefore
-  // finalized) and the second one is spilled (and therefore comes back
-  // column-major from the file).
-  auto makeRowMajorBlock = [](const std::vector<int64_t>& values) {
-    Block block{ad_utility::testing::makeAllocator()};
-    for (int64_t value : values) {
-      Row row = makeRow(value, numCols);
-      ad_utility::rowMajorIdTable::Row<numCols> rowMajorRow{};
-      for (size_t columnIdx = 0; columnIdx < numCols; ++columnIdx) {
-        rowMajorRow[columnIdx] = Id::makeFromInt(row[columnIdx]);
-      }
-      block.push_back(rowMajorRow);
-    }
-    return block;
-  };
-
-  net::io_context ioContext;
-  std::string prefix = gtestCurrentTestName();
-  RowMajorStorage storage{ioContext.get_executor(), prefix,
-                          ad_utility::testing::makeAllocator(),
-                          /*maxBufferedBlocksPerChunk=*/1};
-
-  std::vector<std::vector<Row>> received;
-  std::vector<bool> wasRowMajor;
-  runAndPoll(ioContext, [&] {
-    storage.storeBlock(0, makeRowMajorBlock({0, 1}),
-                       [&](std::exception_ptr exception, bool wasStored) {
-                         ASSERT_EQ(exception, nullptr);
-                         ASSERT_TRUE(wasStored);
-                         storage.storeBlock(
-                             0, makeRowMajorBlock({2, 3, 4}),
-                             [](std::exception_ptr exception, bool wasStored) {
-                               ASSERT_EQ(exception, nullptr);
-                               ASSERT_TRUE(wasStored);
-                             });
-                       });
-  });
-
-  auto getOne = [&](auto&& self) -> void {
-    storage.getBlock(0, [&, self](std::exception_ptr exception,
-                                  typename RowMajorStorage::GetResult result) {
-      ASSERT_EQ(exception, nullptr);
-      ASSERT_FALSE(result.wasCancelled());
-      ASSERT_FALSE(result.isEndOfChunk());
-      Block block = std::move(result).get();
-      wasRowMajor.push_back(block.isRowMajor());
-      received.push_back(blockRows<numCols>(std::move(block).toColumnMajor(
-          ad_utility::testing::makeAllocator())));
-      if (received.size() < 2) {
-        self(self);
-      }
-    });
-  };
-  runAndPoll(ioContext, [&] { getOne(getOne); });
-
-  // Neither of the two blocks reaches the consumer row-major: the first one was
-  // finalized in memory, the second one came back from the file.
-  EXPECT_THAT(wasRowMajor, ::testing::ElementsAre(false, false));
-  EXPECT_THAT(received, ::testing::ElementsAre(makeRows(numCols, {0, 1}),
-                                               makeRows(numCols, {2, 3, 4})));
 }
 
 // _____________________________________________________________________________

@@ -14,12 +14,10 @@ namespace ad_utility::compressedExternalIdTable {
 
 // The runtime parameters that configure the external sorters (see
 // `CompressedExternalIdTable.h`), see
-// `RuntimeParameters::externalSorterRowMajor_`,
 // `RuntimeParameters::externalSorterCompressionLevel_`,
 // `RuntimeParameters::mergePhaseMaxChunksInFlight_` and
 // `RuntimeParameters::mergePhaseMaxOutputBlockRows_` for their meaning.
 struct ExternalSorterSettings {
-  bool rowMajor_;
   std::string compressionLevel_;
   size_t mergePhaseMaxChunksInFlight_;
   size_t mergePhaseMaxOutputBlockRows_;

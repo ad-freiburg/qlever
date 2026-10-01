@@ -231,22 +231,6 @@ struct RuntimeParameters {
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
 
-  // If set, the external sorters (see
-  // `engine/idTable/CompressedExternalIdTable.h`) store the rows of a block
-  // row-major while they collect, sort and merge them, instead of column-major
-  // as an `IdTable` does. This makes the sorting of a block and the merging of
-  // the presorted runs touch a single cache line per row instead of one per
-  // column, at the price of transposing the data once on the way in and once on
-  // the way out. The data that is written to disk stays column-major in both
-  // cases, so this does not change the format of any file. A sorter reads this
-  // parameter once, when it is constructed.
-  //
-  // NOTE: If the number of columns is only known at runtime, then the
-  // row-major mode is only available for up to
-  // `compressedExternalIdTable::MAX_NUM_COLUMNS_ROW_MAJOR` columns, and
-  // sorters with more columns than that silently stay column-major.
-  Bool externalSorterRowMajor_{false, "external-sorter-row-major"};
-
   // How the external sorters (see
   // `engine/idTable/CompressedExternalIdTable.h`) compress the blocks that
   // they write to disk: the blocks of the presorted runs (written by the

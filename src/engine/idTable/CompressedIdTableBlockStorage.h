@@ -56,13 +56,7 @@ namespace net = boost::asio;
 // per chunk, which does all the actual work (see
 // `CompressedIdTableChunkQueue.h`) and owns the file that its chunk spills to.
 // In particular, the queue is also where the spilled blocks are read back
-// concurrently (see the READ-AHEAD note there) and where a block that stays in
-// memory is brought into the layout that the consumer expects (see the
-// FINALIZATION note there).
-//
-// The block type defaults to `IdTableStatic`; any other type needs a
-// `compressedIdTable::BlockCodec` that says how it is compressed and read back
-// (as the row-major block of the merge phase has, see `RowMajorMergeBlock.h`).
+// concurrently (see the READ-AHEAD note there).
 //
 // THREAD SAFETY: The asynchronous operations may be initiated from anywhere,
 // because they schedule themselves onto `strand_`, which nothing ever blocks.
@@ -71,22 +65,16 @@ namespace net = boost::asio;
 // LIFETIME: This storage has to outlive every operation of it that is in
 // flight, which the parallel merge guarantees. Its queues and its `State` are
 // the exception, as those are shared with the operations.
-template <size_t NumCols = 0, typename BlockType = void>
+template <size_t NumCols = 0>
 class CompressedIdTableBlockStorage : public NoCopyNoMove {
  public:
-  // NOTE: The default of the `BlockType` is spelled `void` (and not
-  // `IdTableStatic<NumCols>`) on purpose: a default that depends on `NumCols`
-  // would make `NumCols` undeducible for every function template that takes
-  // such a storage as an argument, because `IdTableStatic` is parameterized by
-  // an `int` and not by a `size_t`.
-  using Block = std::conditional_t<std::is_void_v<BlockType>,
-                                   IdTableStatic<NumCols>, BlockType>;
+  using Block = IdTableStatic<NumCols>;
   using OptionalBlock = parallelBlockMerge::OptionalBlock<Block>;
   using GetResult = parallelBlockMerge::GetResult<Block>;
   using Strand = parallelBlockMerge::Strand;
 
  private:
-  using ChunkQueue = compressedIdTable::ChunkQueue<NumCols, BlockType>;
+  using ChunkQueue = compressedIdTable::ChunkQueue<NumCols>;
 
   // A queue is held by `shared_ptr`, because every operation of it keeps a copy
   // for its whole duration, so that a chunk which is erased while one of its
@@ -296,7 +284,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
 
 // A factory for a `CompressedIdTableBlockStorage`, for the constructor of
 // `InOrderBlockSink`. The arguments are those of the constructor of that class.
-template <size_t NumCols, typename BlockType = void>
+template <size_t NumCols>
 auto makeCompressedIdTableStorageFactory(
     net::any_io_executor ioExecutor, std::string filenamePrefix,
     AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerChunk,
@@ -310,7 +298,7 @@ auto makeCompressedIdTableStorageFactory(
              [[maybe_unused]] const parallelBlockMerge::Strand& strand) {
     // NOTE: This storage brings a strand of its own, so the one that the
     // sink offers is not needed.
-    return CompressedIdTableBlockStorage<NumCols, BlockType>{
+    return CompressedIdTableBlockStorage<NumCols>{
         ioExecutor,         filenamePrefix,
         allocator,          maxBufferedBlocksPerChunk,
         maxReadAheadBlocks, compressionLevel};

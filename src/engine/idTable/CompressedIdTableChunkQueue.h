@@ -74,23 +74,6 @@ namespace ad_utility::compressedIdTable {
 // FIFO, so the order is unaffected, and a consumer that reaches that place
 // either finds the block already there or waits for exactly that one read.
 //
-// FINALIZATION: A block that is read back from the file arrives in the layout
-// that the consumer of the merge wants, because `BlockCodec::read` produces it.
-// A block that is never spilled does not go through that codec at all, and for
-// a block type whose layout inside the merge differs from the one the consumer
-// wants (as the row-major block of the merge phase does, see
-// `RowMajorMergeBlock.h`) it therefore has to be converted separately. This
-// queue does that for every such block right when it is stored, on the
-// `ioExecutor_` and hence on the same worker threads that also decompress the
-// spilled blocks, so that the consumer never converts anything itself. A block
-// type that needs no such conversion (the column-major `IdTableStatic`, in
-// particular) is stored as it is and never leaves the strand, see
-// `BlockCodec::needsFinalization`.
-//
-// NOTE: A finalization allocates the converted block while the original one is
-// still alive, so a chunk transiently needs the memory of one extra block while
-// it stores one.
-//
 // THREAD SAFETY: All the state of this queue is confined to a strand of its
 // own, onto which its operations schedule themselves, so they may be initiated
 // from anywhere. Nothing ever blocks that strand, as the compression, the
@@ -103,19 +86,11 @@ namespace ad_utility::compressedIdTable {
 // exception: it has no operation of the storage behind it and therefore holds a
 // `shared_ptr` of its own. The spill file is shared with the I/O that runs on
 // the `ioExecutor` and may outlive the queue.
-template <size_t NumCols = 0, typename BlockType = void>
-class ChunkQueue
-    : public NoCopyNoMove,
-      public std::enable_shared_from_this<ChunkQueue<NumCols, BlockType>> {
+template <size_t NumCols = 0>
+class ChunkQueue : public NoCopyNoMove,
+                   public std::enable_shared_from_this<ChunkQueue<NumCols>> {
  public:
-  // NOTE: The default of the `BlockType` is spelled `void` (and not
-  // `IdTableStatic<NumCols>`) on purpose: a default that depends on `NumCols`
-  // would make `NumCols` undeducible for every function template that takes
-  // such a queue as an argument, because `IdTableStatic` is parameterized by an
-  // `int` and not by a `size_t`.
-  using Block = std::conditional_t<std::is_void_v<BlockType>,
-                                   IdTableStatic<NumCols>, BlockType>;
-  using Codec = BlockCodec<Block>;
+  using Block = IdTableStatic<NumCols>;
   using OptionalBlock = parallelBlockMerge::OptionalBlock<Block>;
   using GetResult = parallelBlockMerge::GetResult<Block>;
   using Strand = parallelBlockMerge::Strand;
@@ -126,11 +101,8 @@ class ChunkQueue
   using DoneChannel =
       net::experimental::channel<void(boost::system::error_code)>;
 
-  // A block whose preparation on the `ioExecutor_` is in flight and that has
-  // not been consumed yet. There are two kinds of those: a spilled block whose
-  // read back from the file the read-ahead has started (see the READ-AHEAD note
-  // above), and a block that stays in memory and is currently being brought
-  // into the layout of the consumer (see the FINALIZATION note above). It is
+  // A spilled block whose read back from the file the read-ahead has started
+  // and that has not been consumed yet, see the READ-AHEAD note above. It is
   // held by a `shared_ptr`, because the operation refers to it while its place
   // in the FIFO may already have been handed to a consumer.
   struct PendingBlock {
@@ -138,16 +110,12 @@ class ChunkQueue
     OptionalBlock block_;
     std::exception_ptr exception_;
     bool isDone_ = false;
-    // Whether this block counts towards `numBlocksInMemory_` (a finalization)
-    // or towards `numPendingReads_` (a read-ahead) of its queue.
-    bool isInMemory_;
     // The rendezvous with a consumer that reached this block before its
     // preparation was done. Its capacity is one, so the signal is buffered if
     // there is no such consumer (yet).
     DoneChannel done_;
 
-    PendingBlock(const Strand& strand, bool isInMemory)
-        : isInMemory_{isInMemory}, done_{strand, 1} {}
+    explicit PendingBlock(const Strand& strand) : done_{strand, 1} {}
   };
   using SharedPendingBlock = std::shared_ptr<PendingBlock>;
 
@@ -181,7 +149,7 @@ class ChunkQueue
   // if this is not empty, so the order of the entries is unaffected.
   std::deque<Entry> readAhead_;
   // The number of entries in `entries_` and `readAhead_` that are blocks which
-  // are still in memory (which includes the ones that are being finalized). The
+  // are still in memory. The
   // end-of-chunk sentinel does not count, because it occupies no memory and
   // therefore is never spilled.
   size_t numBlocksInMemory_ = 0;
@@ -357,17 +325,11 @@ class ChunkQueue
       co_return result;
     }
     if (std::holds_alternative<SharedPendingBlock>(entry)) {
-      // The preparation of this block has already been started (and possibly
-      // finished): either the read-ahead reads it back, or it stays in memory
-      // and is being finalized, see `PendingBlock`.
+      // The read-ahead has already started to read this block back, and may
+      // already have finished, see `PendingBlock`.
       auto pending = std::get<SharedPendingBlock>(std::move(entry));
-      if (pending->isInMemory_) {
-        AD_CORRECTNESS_CHECK(numBlocksInMemory_ > 0);
-        --numBlocksInMemory_;
-      } else {
-        AD_CORRECTNESS_CHECK(numPendingReads_ > 0);
-        --numPendingReads_;
-      }
+      AD_CORRECTNESS_CHECK(numPendingReads_ > 0);
+      --numPendingReads_;
       GetResult result = co_await servePendingBlock(std::move(pending));
       co_return result;
     }
@@ -429,7 +391,7 @@ class ChunkQueue
     AD_CORRECTNESS_CHECK(spillFile_ != nullptr);
     SharedPendingBlock pending;
     try {
-      pending = std::make_shared<PendingBlock>(strand_, false);
+      pending = std::make_shared<PendingBlock>(strand_);
     } catch (...) {
       // Only an exhausted memory can get us here, and the read-ahead is the
       // first thing that may then be dropped.
@@ -444,7 +406,8 @@ class ChunkQueue
                 // overlap with other reads and with a write of the same file,
                 // which is safe, because a `CompressedBlockFile` synchronizes
                 // its operations internally.
-                return OptionalBlock{Codec::read(*file, metadata, allocator)};
+                return OptionalBlock{
+                    readBlock<NumCols>(*file, metadata, allocator)};
               });
         },
         "Starting the read-ahead of a chunk failed.");
@@ -511,20 +474,12 @@ class ChunkQueue
   }
 
   // The body of `storeBlock` for a value that is kept in memory: append it to
-  // the FIFO, and account for it unless it is the end-of-chunk sentinel. A
-  // block whose layout the consumer cannot use is finalized first, see the
-  // FINALIZATION note at the class comment above.
+  // the FIFO, and account for it unless it is the end-of-chunk sentinel.
   //
   // PRECONDITION: This runs on `strand_`.
   void enqueueBlockWithoutSpilling(OptionalBlock block) {
     bool isBlock = block.has_value();
     Entry entry{std::move(block)};
-    if constexpr (Codec::needsFinalization) {
-      if (isBlock) {
-        entry = startFinalization(
-            std::get<OptionalBlock>(std::move(entry)).value());
-      }
-    }
     bool wasSent =
         entries_.try_send(boost::system::error_code{}, std::move(entry));
     // The channel is unbounded and is never closed, so the only way a send can
@@ -533,20 +488,6 @@ class ChunkQueue
     if (isBlock) {
       ++numBlocksInMemory_;
     }
-  }
-
-  // Start the finalization of a `block` that stays in memory on the
-  // `ioExecutor_` and return the FIFO entry that stands for it, see the
-  // FINALIZATION note at the class comment above.
-  //
-  // PRECONDITION: This runs on `strand_`.
-  Entry startFinalization(Block block) {
-    auto pending = std::make_shared<PendingBlock>(strand_, true);
-    startPreparation(
-        pending, [block = std::move(block), allocator = allocator_]() mutable {
-          return OptionalBlock{Codec::finalize(std::move(block), allocator)};
-        });
-    return Entry{std::move(pending)};
   }
 
   // The body of `storeBlock` for a block that has to be spilled: compress
@@ -564,11 +505,11 @@ class ChunkQueue
       // overlap with a read of the same file (never with another write, as
       // a chunk has a single producer). That is safe, because a
       // `CompressedBlockFile` synchronizes its operations internally. The
-      // block becomes readable as soon as `BlockCodec::write` has returned,
+      // block becomes readable as soon as `writeBlock` has returned,
       // because neither an append nor a read goes through the buffer of the
       // `FILE*`, and its chunk may indeed be consumed while further blocks are
       // still being written.
-      return Codec::write(*file, block, allocator);
+      return writeBlock(*file, block, 0, block.numRows());
     };
     BlockMetadata metadata = co_await runFunctionOnExecutor(
         ioExecutor_, std::move(writeToFile), net::use_awaitable);
@@ -604,7 +545,7 @@ class ChunkQueue
       // NOTE: The block is wrapped in an `std::optional`, because
       // `runFunctionOnExecutor` requires a default-constructible result and
       // an `IdTable` is not default-constructible.
-      return OptionalBlock{Codec::read(*file, metadata, allocator)};
+      return OptionalBlock{readBlock<NumCols>(*file, metadata, allocator)};
     };
     OptionalBlock block = co_await runFunctionOnExecutor(
         ioExecutor_, std::move(readFromFile), net::use_awaitable);

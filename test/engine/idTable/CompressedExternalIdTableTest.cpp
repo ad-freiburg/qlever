@@ -219,30 +219,6 @@ TEST(CompressedExternalIdTable, sorterRandomInputs) {
   testExternalSorter<0>(NUM_COLS, 0, 1_MB);
 }
 
-// Run the same battery of tests as `sorterRandomInputs` above, but with the
-// external sorters in the row-major mode, see `ad_utility::SortBlockBuffer`.
-// This covers all the phases of the sorter in that mode: the transposition of
-// the input, the sorting of a single block, the writing and reading of the
-// presorted runs, the merge (including the case where its output blocks are
-// spilled to disk), and the transposition of the output.
-TEST(CompressedExternalIdTable, sorterRandomInputsRowMajor) {
-  using namespace ad_utility::memory_literals;
-  const bool previousMode =
-      getRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>();
-  setRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>(true);
-  absl::Cleanup cleanup = [previousMode] {
-    setRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>(
-        previousMode);
-  };
-  testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB);
-  testExternalSorter<NUM_COLS>(NUM_COLS, 1000, 1_MB);
-  testExternalSorter<NUM_COLS>(NUM_COLS, 0, 1_MB);
-
-  testExternalSorter<0>(NUM_COLS, 10'000, 10_kB);
-  testExternalSorter<0>(NUM_COLS, 1000, 1_MB);
-  testExternalSorter<0>(NUM_COLS, 0, 1_MB);
-}
-
 // _____________________________________________________________________________
 // The blocks of a *column-major* buffer are sorted by
 // `ad_utility::blockSort::blockIndirectSort` through the proxy row references
@@ -1736,23 +1712,11 @@ void testPushBlockConcurrently(const std::vector<IdTable>& tables,
 // order of the rows within a block is arbitrary, but the sorter sorts them
 // anyway).
 TEST(CompressedExternalIdTable, pushBlockConcurrently) {
-  auto runForBothLayouts = [](auto testCase) {
-    for (bool rowMajor : {false, true}) {
-      setRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>(
-          rowMajor);
-      absl::Cleanup restore = []() {
-        setRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>(false);
-      };
-      SCOPED_TRACE(absl::StrCat("rowMajor = ", rowMajor));
-      testCase();
-    }
-  };
-
   std::vector<IdTable> tables;
   for (size_t i = 0; i < 8; ++i) {
     tables.push_back(createRandomlyFilledIdTable(500 + 37 * i, NUM_COLS));
   }
-  runForBothLayouts([&tables]() {
+  {
     // A blocksize that is much larger than a single table, one that is much
     // smaller, and the degenerate case of a single row per block.
     testPushBlockConcurrently(tables, 10'000);
@@ -1764,5 +1728,5 @@ TEST(CompressedExternalIdTable, pushBlockConcurrently) {
     // Mixing the concurrent pushes with sequential ones.
     testPushBlockConcurrently(tables, 64, 20);
     testPushBlockConcurrently(tables, 100'000, 20);
-  });
+  }
 }

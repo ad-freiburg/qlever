@@ -332,17 +332,6 @@ int main(int argc, char** argv) {
       DEFAULT_INDEX_ROWS_PER_BLOCK, ".");
   add("index-rows-per-block", po::value(&indexRowsPerBlock),
       rowsPerBlockDescription.c_str());
-  add("external-sorter-row-major",
-      optionFactory
-          .getProgramOption<&RuntimeParameters::externalSorterRowMajor_>()
-          ->implicit_value(true, "true"),
-      "Let the external sorters store the rows of a block row-major while they "
-      "collect, sort and merge them, instead of column-major as an `IdTable` "
-      "does. Sorting a block and merging the presorted runs then touch a "
-      "single cache line per row instead of one per column, at the price of "
-      "transposing the data once on the way in and once on the way out. The "
-      "data that is written to disk stays column-major either way, so this "
-      "does not change the format of the index.");
   add("external-sorter-compression-level",
       optionFactory.getProgramOption<
           &RuntimeParameters::externalSorterCompressionLevel_>(),

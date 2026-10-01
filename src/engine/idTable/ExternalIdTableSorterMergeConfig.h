@@ -438,7 +438,7 @@ inline std::string makeSpillFilename(const std::string& sorterFilename,
 // does not exist in the C++17 backports mode, where
 // `parallelBlockMergeToRange` merges serially and ignores the factory
 // altogether (see there). A placeholder therefore suffices in that mode.
-template <size_t NumCols, typename Block = void>
+template <size_t NumCols>
 auto makeMergePhaseBlockStorageFactory(
     [[maybe_unused]] ql::any_io_executor ioExecutor,
     [[maybe_unused]] std::string spillFilenamePrefix,
@@ -450,7 +450,7 @@ auto makeMergePhaseBlockStorageFactory(
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   return std::monostate{};
 #else
-  return makeCompressedIdTableStorageFactory<NumCols, Block>(
+  return makeCompressedIdTableStorageFactory<NumCols>(
       std::move(ioExecutor), std::move(spillFilenamePrefix),
       std::move(allocator), numBufferedBlocksPerChunk,
       MERGE_PHASE_READ_AHEAD_BLOCKS, compression);

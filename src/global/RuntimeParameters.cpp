@@ -66,7 +66,6 @@ RuntimeParameters::RuntimeParameters() {
   add(materializedViewPatternMatchNumAssignments_);
   add(materializedViewPatternMatchNumReplacementPlans_);
   add(serviceAllowedIriPrefixes_);
-  add(externalSorterRowMajor_);
   add(externalSorterCompressionLevel_);
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
@@ -152,7 +151,6 @@ std::vector<std::string> RuntimeParameters::getKeys() const {
 ad_utility::compressedExternalIdTable::ExternalSorterSettings
 ad_utility::compressedExternalIdTable::externalSorterSettings() {
   return {
-      getRuntimeParameter<&RuntimeParameters::externalSorterRowMajor_>(),
       getRuntimeParameter<
           &RuntimeParameters::externalSorterCompressionLevel_>(),
       getRuntimeParameter<&RuntimeParameters::mergePhaseMaxChunksInFlight_>(),
