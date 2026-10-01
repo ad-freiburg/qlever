@@ -338,14 +338,13 @@ size_t SpatialJoin::getCostEstimate() {
       auto numObjects = n + m;
       return numObjects * 4;
     } else {
-      AD_CORRECTNESS_CHECK(
-          ad_utility::contains(
-                qlm::array<SpatialJoinAlgorithm, 3>{
-                  SpatialJoinAlgorithm{S2_GEOMETRY},
-                  SpatialJoinAlgorithm{BOUNDING_BOX},
-                  SpatialJoinAlgorithm{S2_POINT_POLYLINE}},
-              config_.algo_),
-          "Unknown SpatialJoin Algorithm.");
+      AD_CORRECTNESS_CHECK(ad_utility::contains(
+                               qlm::array<SpatialJoinAlgorithm, 3>{
+                                   SpatialJoinAlgorithm{S2_GEOMETRY},
+                                   SpatialJoinAlgorithm{BOUNDING_BOX},
+                                   SpatialJoinAlgorithm{S2_POINT_POLYLINE}},
+                               config_.algo_),
+                           "Unknown SpatialJoin Algorithm.");
 
       // Let n be the size of the left table and m the size of the right table.
       // When using the S2Point index, we first create the index for the right
@@ -649,12 +648,14 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
 std::unique_ptr<Operation> SpatialJoin::cloneImpl() const {
   return std::make_unique<SpatialJoin>(
       _executionContext, config_,
-    childLeft_ ? qlm::optional<qlm::shared_ptr<QueryExecutionTree>>{
-             childLeft_->clone()}
-           : std::nullopt,
-    childRight_ ? qlm::optional<qlm::shared_ptr<QueryExecutionTree>>{
-          childRight_->clone()}
-        : std::nullopt,
+      childLeft_
+          ? qlm::optional<qlm::shared_ptr<QueryExecutionTree>>{childLeft_
+                                                                   ->clone()}
+          : std::nullopt,
+      childRight_
+          ? qlm::optional<qlm::shared_ptr<QueryExecutionTree>>{childRight_
+                                                                   ->clone()}
+          : std::nullopt,
       substitutesFilterOp_);
 }
 

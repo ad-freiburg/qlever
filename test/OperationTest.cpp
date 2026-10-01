@@ -344,11 +344,12 @@ TEST(OperationTest, estimatesForCachedResults) {
   };
   {
     auto qet = makeQet();
+    const auto qetCacheKeyString = qet->getCacheKey();
     const auto cacheKey =
-        std::string{qet->getCacheKey().begin(), qet->getCacheKey().end()};
+        std::string{qetCacheKeyString.begin(), qetCacheKeyString.end()};
+    const auto rootCacheKeyString = qet->getRootOperation()->getCacheKey();
     const auto rootCacheKey =
-        std::string{qet->getRootOperation()->getCacheKey().begin(),
-                    qet->getRootOperation()->getCacheKey().end()};
+        std::string{rootCacheKeyString.begin(), rootCacheKeyString.end()};
     EXPECT_EQ(cacheKey, rootCacheKey);
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
     EXPECT_EQ(qet->getCostEstimate(), 210u);
@@ -964,11 +965,12 @@ TEST(OperationTest, disableCachingGlobally) {
   ValuesForTesting valuesForTesting{
       qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
 
-  EXPECT_THAT(valuesForTesting.getCacheKey(), ::testing::IsEmpty());
+  const auto cacheKeyString = valuesForTesting.getCacheKey();
+  EXPECT_THAT(cacheKeyString, ::testing::IsEmpty());
 
-  QueryCacheKey cacheKey{std::string{valuesForTesting.getCacheKey().begin(),
-                                     valuesForTesting.getCacheKey().end()},
-                         qec->locatedTriplesState().index_};
+  QueryCacheKey cacheKey{
+      std::string{cacheKeyString.begin(), cacheKeyString.end()},
+      qec->locatedTriplesState().index_};
 
   // Initially not contained in the cache (because we cleared the cache).
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
