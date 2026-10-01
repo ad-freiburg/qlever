@@ -50,15 +50,18 @@ size_t globalExecutorNumThreads();
 // `globalExecutorNumThreads()` threads and which is created lazily on the first
 // call to this function.
 //
-// There is deliberately only a single such pool: its intended users are the
-// phases of the index build, all of which want to use the machine's threads and
-// would oversubscribe it if each of them had a pool of its own. A single pool
-// also makes the total parallelism of the process configurable via a single
-// knob (the `--num-threads / -j` option of the index builder, see
+// There is deliberately only a single such pool: its users are the phases of
+// the index build, all of which want to use the machine's threads and would
+// oversubscribe it if each of them had a pool of its own. A single pool also
+// makes the total parallelism of the process configurable via a single knob
+// (the `--num-threads / -j` option of the index builder, see
 // `setGlobalExecutorNumThreads`).
 //
-// NOTE: The pool is not used in production yet; porting the phases of the index
-// build onto it is work in progress.
+// NOTE: So far the users are the merge phase of the external sorters (see
+// `engine/idTable/ExternalIdTableSorterMergeConfig.h`) and the removal of
+// duplicates from a sorted sequence of blocks (see
+// `ad_utility::uniqueBlockView` in `util/views/UniqueBlockView.h`); porting
+// the remaining phases of the index build onto this pool is work in progress.
 //
 // NOTE: The pool has static lifetime and we never `join()` or `stop()` it, so
 // it outlives everything that posts to it, which is exactly what its users

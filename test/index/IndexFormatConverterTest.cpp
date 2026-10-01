@@ -241,7 +241,7 @@ TEST_F(IndexFormatConverterTest, convertedIndexHasTheSameContent) {
       newConfiguration;
   EXPECT_EQ(newConfiguration.at("index-format-version")
                 .get<qlever::IndexFormatVersion>(),
-            qlever::indexFormatVersion);
+            targetVersion);
   oldConfiguration.erase("index-format-version");
   newConfiguration.erase("index-format-version");
   EXPECT_EQ(oldConfiguration, newConfiguration);
@@ -405,7 +405,7 @@ TEST_F(IndexFormatConverterTest, upgradeIndexInPlace) {
       configuration;
   EXPECT_EQ(configuration.at("index-format-version")
                 .get<qlever::IndexFormatVersion>(),
-            qlever::indexFormatVersion);
+            targetVersion);
   auto [index, locatedTriples] = loadConvertedIndex();
   EXPECT_EQ(scanAllTriples(index, Permutation::SPO, locatedTriples).size(),
             expectedTriples().size());
@@ -429,7 +429,7 @@ TEST_F(IndexFormatConverterTest, upgradeIndexInPlace) {
   // format.
   AD_EXPECT_THROW_WITH_MESSAGE(
       upgradeIndexInPlace(oldBasename_),
-      HasSubstr("already is in the current index format"));
+      HasSubstr("already is in an index format that the current version"));
 }
 
 // _____________________________________________________________________________
@@ -439,7 +439,7 @@ TEST_F(IndexFormatConverterTest, refusesToConvertIndexTwice) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       convertIndexToCurrentFormat(newBasename_,
                                   (directory_ / "again").string()),
-      HasSubstr("already is in the current index format"));
+      HasSubstr("already is in an index format that the current version"));
   // The files of the converted index must not be overwritten.
   AD_EXPECT_THROW_WITH_MESSAGE(
       convertIndexToCurrentFormat(oldBasename_, newBasename_),
@@ -953,9 +953,11 @@ TEST(IndexFormatConverter, conversionDescription) {
 TEST(IndexFormatConverter, supportedFormatsAreUpToDate) {
   // The converter hardcodes the two index formats that it converts between, so
   // that it cannot silently be applied to a different change of the index
-  // format. Those two formats have to be the current index format and the one
-  // that directly precedes it (see the note at `qlever::indexFormatVersion`).
-  EXPECT_EQ(targetVersion, qlever::indexFormatVersion);
+  // format. The source format has to be the previous index format, and the
+  // target format one that the current version of QLever loads without
+  // conversion (see the note at `qlever::indexFormatVersion`).
+  EXPECT_TRUE(qlever::isLoadableIndexFormatVersion(targetVersion));
+  EXPECT_FALSE(qlever::isLoadableIndexFormatVersion(sourceVersion));
   EXPECT_EQ(sourceVersion, qlever::previousIndexFormatVersion);
   EXPECT_NE(sourceVersion, targetVersion);
 }
