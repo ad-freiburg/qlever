@@ -151,6 +151,10 @@ class CompressedBlockFile {
 
   // Truncate the file, such that it can be reused. All the metadata that were
   // returned by previous calls to `appendBlock` become invalid.
+  //
+  // PRECONDITION: No append may run concurrently with this. The offset of an
+  // append is reserved from `nextOffset_` *before* the lock on the file is
+  // taken, so the exclusive lock below does not order the two.
   void clear() {
     auto file = file_.wlock();
     file->close();
@@ -167,6 +171,12 @@ class CompressedBlockFile {
   // `std::runtime_error` if the write fails (for example because the disk is
   // full), so that this is noticed at the append and not only when the block
   // is read back.
+  //
+  // NOTE: A reservation whose write then fails leaves a hole in the file that
+  // the following blocks are already positioned past. That is harmless: the
+  // throw propagates out of `appendBlock`, so no `BlockMetadata` that could
+  // address the hole is ever handed out, and every other block keeps exactly
+  // the range that it reserved.
   size_t appendBytes(const void* data, size_t numBytes) {
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(numBytes));
     ssize_t numBytesWritten = file_.rlock()->write(data, numBytes, offset);

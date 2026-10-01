@@ -565,8 +565,9 @@ class ChunkQueue
       // a chunk has a single producer). That is safe, because a
       // `CompressedBlockFile` synchronizes its operations internally. The
       // block becomes readable as soon as `BlockCodec::write` has returned,
-      // because that file flushes every append, and its chunk may indeed be
-      // consumed while further blocks are still being written.
+      // because neither an append nor a read goes through the buffer of the
+      // `FILE*`, and its chunk may indeed be consumed while further blocks are
+      // still being written.
       return Codec::write(*file, block, allocator);
     };
     BlockMetadata metadata = co_await runFunctionOnExecutor(
