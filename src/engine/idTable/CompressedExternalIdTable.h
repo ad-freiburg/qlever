@@ -924,9 +924,12 @@ class CompressedExternalIdTableSorter
   MemorySize maxOutputBlocksize_ = 1_GB;
   // The number of merged blocks that are buffered during the output phase. It
   // is the number of output blocks that the memory accounting of the merge
-  // phase reserves memory for on the consumer side, see
-  // `compressedExternalIdTable::computeMergePhaseParameters`.
-  int numBufferedOutputBlocks_ = 4;
+  // phase reserves memory for on the consumer side (see
+  // `compressedExternalIdTable::computeMergePhaseParameters`), and how it is
+  // split between the read-ahead of the consumer, the read-ahead of the spill
+  // files and the two blocks that are always in the consumer's hands is decided
+  // by `compressedExternalIdTable::makeMergeOptions`, see there.
+  int numBufferedOutputBlocks_ = 12;
 
   // See the `moveResultOnMerge()` getter function for documentation.
   bool moveResultOnMerge_ = true;
@@ -1149,12 +1152,6 @@ class CompressedExternalIdTableSorter
       const compressedExternalIdTable::MergePhaseParameters& parameters) {
     auto options =
         compressedExternalIdTable::makeMergeOptions(config, parameters);
-    // The read-ahead of the merged range has to fit into the
-    // `numBufferedOutputBlocks_` that the memory accounting reserves on the
-    // consumer side: it holds `numPrefetchedOutputBlocks + 1` blocks, and the
-    // consumer holds one more, see `MergeOptions::numPrefetchedOutputBlocks`.
-    options.numPrefetchedOutputBlocks =
-        static_cast<size_t>(std::max(1, numBufferedOutputBlocks_ - 2));
     auto merged =
         parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
             mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},

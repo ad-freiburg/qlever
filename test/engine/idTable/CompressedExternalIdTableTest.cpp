@@ -1294,11 +1294,11 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // `compressedExternalIdTable::computeMergePhaseParameters` ends up with a
   // single chunk in flight without throwing: the input blocks of a single
   // chunk cost `2 * 4 * 250'000 = 2 MB`, so two concurrent chunks leave
-  // `(8 - 4) MB / (4 + 3 * 2) = 400 kB` (that is `12'500` rows) per output
+  // `(8 - 4) MB / (12 + 3 * 2) = 222 kB` (that is `6944` rows) per output
   // block, which is far below `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`, whereas a
-  // single chunk still leaves `(8 - 2) MB / (4 + 3) = 857 kB` (that is
-  // `26'785` rows), which is above the hard floor of
-  // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows. The `4` are the default
+  // single chunk still leaves `(8 - 2) MB / (12 + 3) = 400 kB` (that is
+  // `12'500` rows), which is above the hard floor of
+  // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows. The `12` are the default
   // of `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`.
   const auto memory = ad_utility::MemorySize::bytes(8'000'000);
   const auto blocksizeCompression = ad_utility::MemorySize::bytes(250'000);
