@@ -462,7 +462,8 @@ class ArenaVocabBatchBuilder {
     ql::pmr::polymorphic_allocator<char> allocator{buffer_.get()};
     char* mem = allocator.allocate(bound);
     views_.push_back(
-        decompressIntoSpan(ql::span<char>{mem, bound}, bound, decompress));
+        decompressIntoSpan(ql::span<char>{mem, bound}, bound,
+                           std::forward<DecompressFunc>(decompress)));
   }
 
   // Allocate storage inside the arena and copy the given word into it.
