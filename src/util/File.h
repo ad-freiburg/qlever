@@ -9,7 +9,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <cassert>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -25,12 +24,12 @@
 #include "util/Log.h"
 
 namespace ad_utility {
-//! Wrapper class for file access. Is supposed to provide
-//! methods that allow fast access to binary files.
-//! Also features methods for dealing with ASCII files
-//! but is less efficient then stl functions due
-//! to the lack of buffering.
-//! Many methods are copies from the CompleteSearch File.h
+// Wrapper class for file access. Is supposed to provide
+// methods that allow fast access to binary files.
+// Also features methods for dealing with ASCII files
+// but is less efficient then stl functions due
+// to the lack of buffering.
+// Many methods are copies from the CompleteSearch File.h
 class File {
  private:
   using string = std::string;
@@ -39,14 +38,14 @@ class File {
   FILE* file_;
 
  public:
-  //! Default constructor
+  // Default constructor
   File() {
     file_ = NULL;
     name_ = "";
   }
 
-  //! Constructor that creates an instance from the
-  //! file system.
+  // Constructor that creates an instance from the
+  // file system.
   File(const char* filename, const char* mode) : name_(filename) {
     open(filename, mode);
   }
@@ -72,12 +71,12 @@ class File {
   File(File&& rhs) noexcept
       : name_{std::move(rhs.name_)}, file_{std::exchange(rhs.file_, nullptr)} {}
 
-  //! Destructor closes file if still open
+  // Destructor closes file if still open
   ~File() {
     if (isOpen()) close();
   }
 
-  //! OPEN FILE (exit with error if fails, returns true otherwise)
+  // OPEN FILE (exit with error if fails, returns true otherwise)
   bool open(const char* filename, const char* mode) {
     file_ = fopen(filename, mode);
     if (file_ == NULL) {
@@ -95,12 +94,12 @@ class File {
     return open(filename.c_str(), mode);
   }
 
-  //! checks if the file is open.
+  // checks if the file is open.
   [[nodiscard]] bool isOpen() const { return (file_ != NULL); }
 
-  //! Return the underlying file descriptor.
+  // Return the underlying file descriptor.
   [[nodiscard]] int fd() const {
-    assert(file_);
+    AD_CONTRACT_CHECK(file_);
     return fileno(file_);
   }
 
@@ -130,7 +129,7 @@ class File {
     return result;
   }
 
-  //! Close file.
+  // Close file.
   bool close() {
     if (not isOpen()) {
       return true;
@@ -151,14 +150,14 @@ class File {
   // read from current file pointer position
   // returns the number of bytes read
   size_t read(void* targetBuffer, size_t nofBytesToRead) {
-    assert(file_);
+    AD_CONTRACT_CHECK(file_);
     return fread(targetBuffer, (size_t)1, nofBytesToRead, file_);
   }
 
   // write to current file pointer position
   // returns number of bytes written
   size_t write(const void* sourceBuffer, size_t nofBytesToWrite) {
-    assert(file_);
+    AD_CONTRACT_CHECK(file_);
     return fwrite(sourceBuffer, (size_t)1, nofBytesToWrite, file_);
   }
 
@@ -166,23 +165,23 @@ class File {
   // that failed (for example because the disk is full), see `fflush`.
   bool flush() { return fflush(file_) == 0; }
 
-  //! Seeks a position in the file.
-  //! Sets the file position indicator for the stream.
-  //! The new position is obtained by adding seekOffset
-  //! bytes to the position seekOrigin.
-  //! Returns true on success
+  // Seeks a position in the file.
+  // Sets the file position indicator for the stream.
+  // The new position is obtained by adding seekOffset
+  // bytes to the position seekOrigin.
+  // Returns true on success
   bool seek(off_t seekOffset, int seekOrigin) {
-    assert((seekOrigin == SEEK_SET) || (seekOrigin == SEEK_CUR) ||
-           (seekOrigin == SEEK_END));
-    assert(file_);
+    AD_CONTRACT_CHECK((seekOrigin == SEEK_SET) || (seekOrigin == SEEK_CUR) ||
+                      (seekOrigin == SEEK_END));
+    AD_CONTRACT_CHECK(file_);
     return fseeko(file_, seekOffset, seekOrigin) == 0;
   }
 
-  //! Read nofBytesToRead bytes from file starting at the given offset.
-  //! Returns the number of bytes read or the error returned by pread()
-  //! which is < 0
+  // Read nofBytesToRead bytes from file starting at the given offset.
+  // Returns the number of bytes read or the error returned by pread()
+  // which is < 0
   ssize_t read(void* targetBuffer, size_t nofBytesToRead, off_t offset) const {
-    assert(file_);
+    AD_CONTRACT_CHECK(file_);
     const int fd = fileno(file_);
     size_t bytesRead = 0;
     auto* to = static_cast<uint8_t*>(targetBuffer);
@@ -199,43 +198,44 @@ class File {
     return bytesRead;
   }
 
-  //! Write `nofBytesToWrite` bytes to the file at the given `offset`, without
-  //! using or changing the file position (this uses `pwrite`). Return the
-  //! number of bytes written, or the error returned by `pwrite`, which is < 0.
-  //! Writing past the end of the file extends it.
-  //!
-  //! NOTE: Several threads may call this concurrently, as long as they write
-  //! to ranges that do not overlap. It must not be mixed with the sequential
-  //! `write` above on the same file, because that one goes through the buffer
-  //! of the `FILE*`, which `pwrite` bypasses.
-  ssize_t write(const void* sourceBuffer, size_t nofBytesToWrite,
-                off_t offset) const {
-    assert(file_);
+  // Write `numBytesToWrite` bytes to the file at the given `offset`, without
+  // using or changing the file position (this uses `pwrite`). Throw an
+  // exception if not all the bytes could be written. Writing past the end of
+  // the file extends it.
+  //
+  // NOTE: Several threads may call this concurrently, as long as they write
+  // to ranges that do not overlap. It must not be mixed with the sequential
+  // `write` above on the same file, because that one goes through the buffer
+  // of the `FILE*`, which `pwrite` bypasses.
+  void write(const void* sourceBuffer, size_t numBytesToWrite,
+             off_t offset) const {
+    AD_CONTRACT_CHECK(file_);
     const int fd = fileno(file_);
     size_t bytesWritten = 0;
     const auto* from = static_cast<const uint8_t*>(sourceBuffer);
-    while (bytesWritten < nofBytesToWrite) {
-      size_t toWrite = nofBytesToWrite - bytesWritten;
+    while (bytesWritten < numBytesToWrite) {
+      size_t toWrite = numBytesToWrite - bytesWritten;
 
       const ssize_t ret = pwrite(fd, from + bytesWritten, toWrite,
                                  offset + static_cast<off_t>(bytesWritten));
 
-      if (ret < 0) {
-        return ret;
-      }
-      if (ret == 0) {
-        break;
+      // A return value of 0 is only possible for a write of 0 bytes, but we
+      // check for it anyway, to never loop forever.
+      if (ret <= 0) {
+        throw std::runtime_error{absl::StrCat(
+            "Writing ", numBytesToWrite, " bytes at offset ", offset,
+            " to file \"", name_, "\" failed after ", bytesWritten, " bytes (",
+            ret < 0 ? strerror(errno) : "no bytes were written", ")")};
       }
       bytesWritten += ret;
     }
-    return static_cast<ssize_t>(bytesWritten);
   }
 
-  //! Returns the number of bytes from the beginning
-  //! is 0 on opening. Later equal the number of bytes written.
-  //! -1 is returned when an error occurs
+  // Returns the number of bytes from the beginning
+  // is 0 on opening. Later equal the number of bytes written.
+  // -1 is returned when an error occurs
   [[nodiscard]] off_t tell() const {
-    assert(file_);
+    AD_CONTRACT_CHECK(file_);
     off_t returnValue = ftello(file_);
     if (returnValue == (off_t)-1) {
       std::cerr << "\n ERROR in tell() : " << strerror(errno) << std::endl;
@@ -244,7 +244,7 @@ class File {
     return returnValue;
   }
 
-  //! Returns the size of the file as off_t.
+  // Returns the size of the file as off_t.
   off_t sizeOfFile() {
     seek((off_t)0, SEEK_END);
     off_t sizeOfFile = tell();
