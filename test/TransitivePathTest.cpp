@@ -627,7 +627,11 @@ TEST_P(TransitivePathTest, bothBoundToVarWithUndef) {
 
   {
     auto opTable = makeIdTableFromVector({{10, 1, Id::makeUndefined(), 20}});
-    auto expected = makeIdTableFromVector({{1, 4, 10, 20}});
+    auto expected = makeIdTableFromVector({
+        {1, 4, 10, 20},
+        {1, 2, 10, 20},
+        {1, 3, 10, 20},
+    });
     bindAndCompareResult(opTable, expected);
   }
   {
@@ -638,7 +642,13 @@ TEST_P(TransitivePathTest, bothBoundToVarWithUndef) {
   {
     auto opTable = makeIdTableFromVector(
         {{10, Id::makeUndefined(), Id::makeUndefined(), 20}});
-    auto expected = makeIdTableFromVector({{1, 4, 10, 20}});
+    auto expected = makeIdTableFromVector({
+        {0, 5, 10, 20},
+        {1, 2, 10, 20},
+        {1, 3, 10, 20},
+        {4, 3, 10, 20},
+        {1, 4, 10, 20},
+    });
     bindAndCompareResult(opTable, expected);
   }
 }
@@ -684,7 +694,7 @@ TEST_P(TransitivePathTest, boundToVarWithUndefWithGraph) {
 TEST_P(TransitivePathTest, bothBoundToVarWithUndefWithGraph) {
   auto sub = makeIdTableFromVector({
       {0, 5, 100},
-      {1, 2, 101},
+      {1, 2, 100},
       {1, 4, 101},
       {4, 3, 101},
   });
@@ -706,18 +716,30 @@ TEST_P(TransitivePathTest, bothBoundToVarWithUndefWithGraph) {
 
   {
     auto opTable = makeIdTableFromVector({{10, 1, Id::makeUndefined(), 20}});
-    auto expected = makeIdTableFromVector({{1, 4, 10, 20, 101}});
+    auto expected = makeIdTableFromVector({
+        {1, 4, 10, 20, 101},
+        {1, 3, 10, 20, 101},
+        {1, 2, 10, 20, 100},
+    });
     bindAndCompareResult(opTable, expected);
   }
   {
     auto opTable = makeIdTableFromVector({{10, Id::makeUndefined(), 4, 20}});
-    auto expected = makeIdTableFromVector({{1, 4, 10, 20, 101}});
+    auto expected = makeIdTableFromVector({
+        {1, 4, 10, 20, 101},
+    });
     bindAndCompareResult(opTable, expected);
   }
   {
     auto opTable = makeIdTableFromVector(
         {{10, Id::makeUndefined(), Id::makeUndefined(), 20}});
-    auto expected = makeIdTableFromVector({{1, 4, 10, 20, 101}});
+    auto expected = makeIdTableFromVector({
+        {0, 5, 10, 20, 100},
+        {1, 2, 10, 20, 100},
+        {1, 4, 10, 20, 101},
+        {1, 3, 10, 20, 101},
+        {4, 3, 10, 20, 101},
+    });
     bindAndCompareResult(opTable, expected);
   }
 }
