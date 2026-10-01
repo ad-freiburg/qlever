@@ -691,9 +691,10 @@ CPP_template(typename UnderlyingVocabulary,
       }
       builder.appendWord(decompressIntoSpan(
           ql::span<char>{decoded.data(), decoded.size()}, bound,
-          [&](ql::span<char> outSpan) {
-            return compressionWrapper_.decompressInto(
-                compressedWord, decoderIdx, outSpan, scratch);
+          [this, decoderIdx, &scratch,
+           word = compressedWord](ql::span<char> outSpan) {
+            return compressionWrapper_.decompressInto(word, decoderIdx, outSpan,
+                                                      scratch);
           }));
     }
   }
