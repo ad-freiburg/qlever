@@ -304,6 +304,33 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
 }
 
 // _____________________________________________________________________________
+// More vocabulary IDs than fit one sub-batch (256) resolve in multiple
+// sub-batches: the `nextHandle` loop in `idsToStringAndType` fetches the next
+// handle while earlier batches are consumed.
+TEST(ExportIds, idsToStringAndTypeSpansMultipleSubBatches) {
+  std::string kg;
+  for (size_t i = 0; i < 300; ++i) {
+    kg += "<s> <p> <o" + std::to_string(i) + "> . ";
+  }
+  auto qec = ad_utility::testing::getQec(kg);
+  const Index& index = qec->getIndex();
+  LocalVocab localVocab{};
+  auto getId = ad_utility::testing::makeGetId(index);
+  std::vector<Id> ids;
+  for (size_t i = 0; i < 300; ++i) {
+    ids.push_back(getId("<o" + std::to_string(i) + ">"));
+  }
+  auto batchResults = ql::exportIds::idsToStringAndType(
+      index, ql::span<const Id>{ids}, localVocab);
+  ASSERT_EQ(batchResults.size(), ids.size());
+  for (size_t i = 0; i < ids.size(); ++i) {
+    EXPECT_EQ(batchResults[i],
+              ql::exportIds::idToStringAndType(index, ids[i], localVocab))
+        << "Mismatch at index " << i;
+  }
+}
+
+// _____________________________________________________________________________
 // Empty span returns an empty vector.
 TEST(ExportIds, idsToStringAndTypeEmptyInput) {
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
