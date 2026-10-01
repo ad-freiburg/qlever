@@ -80,8 +80,8 @@ net::awaitable<void> sortRecursively(State& state, size_t posIndexBegin,
   AD_CORRECTNESS_CHECK(posIndexEnd - posIndexBegin >= BLOCKS_PER_TASK);
   if (numRecursionsLeft == 0) {
     // No block has been moved yet, so physical and logical positions agree.
-    co_await parallelQuicksort(state, state.getBlockBoundary(posIndexBegin),
-                               state.getBlockBoundary(posIndexEnd));
+    co_await parallelQuicksort(state, state.getBlockBegin(posIndexBegin),
+                               state.getBlockBegin(posIndexEnd));
     co_return;
   }
   size_t posIndexMid = std::midpoint(posIndexBegin, posIndexEnd);

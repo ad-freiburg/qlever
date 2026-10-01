@@ -272,27 +272,28 @@ class BlockSortState : public SortState<Compare> {
             ad_utility::integerRange(numBlocks_))},
         tailRange_{numElements_ % blockSize_ == 0
                        ? end
-                       : getBlockBoundary(numBlocks_ - 1),
+                       : getBlockBegin(numBlocks_ - 1),
                    end},
         buffers_{blockSize_, Value(*begin)} {}
 
-  // The boundary before the block at physical position `pos`: its first
-  // element for `pos < numBlocks_`, and the end of the range for
-  // `pos == numBlocks_`. The clamping handles the tail, which is shorter than
+  // The first element of the block at physical position `pos`. This also works
+  // for `pos == numBlocks_` (a block past the last one), which gives the end of
+  // the range, so that `getBlockBegin(pos)` is always the end of the blocks
+  // before `pos`. The clamping handles the tail, which is shorter than
   // `blockSize_`.
-  [[nodiscard]] Iterator getBlockBoundary(size_t pos) const {
+  [[nodiscard]] Iterator getBlockBegin(size_t pos) const {
     return globalRange_.first + std::min(pos * blockSize_, numElements_);
   }
 
   // The elements of the block at physical position `pos`.
   [[nodiscard]] IteratorRange getBlock(size_t pos) const {
-    return {getBlockBoundary(pos), getBlockBoundary(pos + 1)};
+    return {getBlockBegin(pos), getBlockBegin(pos + 1)};
   }
 
   // Whether the block `a` sorts before the block `b` by their first elements.
   [[nodiscard]] bool blockIsLessByFirstElement(bsd::block_pos a,
                                                bsd::block_pos b) const {
-    return this->cmp_(*getBlockBoundary(a.pos()), *getBlockBoundary(b.pos()));
+    return this->cmp_(*getBlockBegin(a.pos()), *getBlockBegin(b.pos()));
   }
 
   // Borrow one of the scratch buffers of `blockSize_` elements.

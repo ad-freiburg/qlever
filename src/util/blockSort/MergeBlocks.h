@@ -195,44 +195,49 @@ void spawnMergeOfRun(State& state, TaskGroup& group,
   });
 }
 
-// Find the runs in `positions` (see the glossary at the top). A block overlaps
-// one of the blocks before it iff its first element is smaller than the
-// greatest last element before it, so a new run begins at each block that
-// doesn't. Blocks that don't overlap with their neighbours are skipped.
+// Find the runs in `positions` (see the glossary at the top). A new run
+// begins at each block that doesn't overlap any of the blocks before it.
+// Blocks that don't overlap with their neighbours are skipped.
 //
-// NOTE: Unlike Boost's `extract_ranges`, this ignores the sides of the blocks:
-// two blocks of the same side never overlap, because each side is sorted, and
-// the merge of the index keeps the order of the blocks of each side (also for
-// the block that `mergeTail` moves to the other side, whose first element came
-// from the tail).
+// NOTE: Unlike Boost's `extract_ranges`, this doesn't track the sides of the
+// blocks. The result is the same, because two blocks of the same side never
+// overlap (each side is sorted, and the merge of the index keeps the order of
+// the blocks of each side, also for the block that `mergeTail` moves to the
+// other side, whose first element came from the tail).
 template <typename State>
 std::vector<typename State::RangePos> findRuns(
     State& state, typename State::RangePos positions) {
   auto blockAt = [&state](size_t pos) {
     return state.getBlock(state.index_[pos].pos());
   };
-  // The positions at which a run begins, followed by `positions.last`.
-  std::vector<size_t> runBegins{positions.first};
-  // The greatest last element of the blocks so far.
+  std::vector<typename State::RangePos> runs;
+  size_t runBegin = positions.first;
+  // Close the current run at `runEnd` (exclusive). A run of a single block
+  // doesn't need to be merged.
+  auto endRun = [&runs, &runBegin](size_t runEnd) {
+    if (runEnd - runBegin > 1) {
+      runs.emplace_back(runBegin, runEnd);
+    }
+    runBegin = runEnd;
+  };
+  // The maximum of the elements so far.
   auto maxBack = blockAt(positions.first).back();
   for (size_t pos = positions.first + 1; pos < positions.last; ++pos) {
     auto block = blockAt(pos);
+    // The first element of `block` is the minimum of all remaining elements
+    // (each block is sorted, and the blocks are sorted by their first element).
+    // If it is not smaller than the maximum so far, no remaining element is
+    // smaller than any element before it, so a new run begins here.
     if (!state.cmp_(*block.first, *maxBack)) {
-      runBegins.push_back(pos);
+      endRun(pos);
     }
+    // Keep track of the maximum so far, which isn't necessarily in the last
+    // block.
     if (state.cmp_(*maxBack, *block.back())) {
       maxBack = block.back();
     }
   }
-  runBegins.push_back(positions.last);
-
-  // A run of a single block doesn't need to be merged.
-  std::vector<typename State::RangePos> runs;
-  for (size_t i = 0; i + 1 < runBegins.size(); ++i) {
-    if (runBegins[i + 1] - runBegins[i] > 1) {
-      runs.emplace_back(runBegins[i], runBegins[i + 1]);
-    }
-  }
+  endRun(positions.last);
   return runs;
 }
 
