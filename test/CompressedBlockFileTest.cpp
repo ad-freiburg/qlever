@@ -216,17 +216,30 @@ TEST(CompressedBlockFile, clearTruncatesAndAllowsReuse) {
     CompressedBlockFile file{filename};
     auto firstBytes = makeBytes(50'000, 1);
     auto firstBlock = file.appendBlock(firstBytes.data(), firstBytes.size());
+    // Append a second block, such that the offset of the next append is far
+    // away from 0 when the file is cleared below.
+    auto moreBytes = makeBytes(20'000, 2);
+    auto moreBlock = file.appendBlock(moreBytes.data(), moreBytes.size());
+    ASSERT_EQ(moreBlock.offsetInFile_, firstBlock.compressedSize_);
     ASSERT_GT(ql::filesystem::file_size(filename), 0u);
     ASSERT_EQ(readBytes(file, firstBlock), firstBytes);
+    ASSERT_EQ(readBytes(file, moreBlock), moreBytes);
 
     file.clear();
     EXPECT_EQ(ql::filesystem::file_size(filename), 0u);
 
-    // The file can be reused, and the new blocks again start at offset 0.
-    auto secondBytes = makeBytes(1234, 2);
+    // The file can be reused: the new blocks again start at offset 0 and again
+    // follow each other without a gap.
+    auto secondBytes = makeBytes(1234, 3);
     auto secondBlock = file.appendBlock(secondBytes.data(), secondBytes.size());
     EXPECT_EQ(secondBlock.offsetInFile_, 0u);
     EXPECT_EQ(readBytes(file, secondBlock), secondBytes);
+    auto thirdBytes = makeBytes(2345, 4);
+    auto thirdBlock = file.appendBlock(thirdBytes.data(), thirdBytes.size());
+    EXPECT_EQ(thirdBlock.offsetInFile_, secondBlock.compressedSize_);
+    EXPECT_EQ(readBytes(file, thirdBlock), thirdBytes);
+    EXPECT_EQ(ql::filesystem::file_size(filename),
+              secondBlock.compressedSize_ + thirdBlock.compressedSize_);
   }
   EXPECT_FALSE(ql::filesystem::exists(filename));
 }
@@ -252,8 +265,8 @@ TEST(CompressedBlockFile, destructorDeletesTheFile) {
 
 // _____________________________________________________________________________
 TEST(CompressedBlockFile, failedWriteThrows) {
-  // `/dev/full` accepts every write and then fails the flush with `ENOSPC`,
-  // exactly like a disk that ran full.
+  // Writing to `/dev/full` fails with `ENOSPC`, exactly like writing to a disk
+  // that ran full.
   const std::string devFull = "/dev/full";
   if (!ql::filesystem::exists(devFull)) {
     GTEST_SKIP() << "no " << devFull << " on this platform";
@@ -265,6 +278,128 @@ TEST(CompressedBlockFile, failedWriteThrows) {
       ::testing::AllOf(::testing::HasSubstr("Writing 100 bytes"),
                        ::testing::HasSubstr(devFull),
                        ::testing::HasSubstr("No space left on device")));
+}
+
+// _____________________________________________________________________________
+// Test that several threads may append at the same time, that they get
+// distinct and non-overlapping ranges of the file, and that every block is
+// readable afterwards. The appends reserve their range of the file with an
+// atomic counter, so they do not exclude each other.
+TEST(CompressedBlockFile, concurrentAppends) {
+  std::string filename = gtestCurrentTestName();
+  CompressedBlockFile file{filename};
+  static constexpr size_t numThreads = 8;
+  static constexpr size_t numBlocksPerThread = 25;
+  std::vector<std::vector<std::vector<char>>> expected(numThreads);
+  std::vector<std::vector<CompressedBlockFile::BlockMetadata>> metadata(
+      numThreads);
+  std::vector<std::thread> threads;
+  for (size_t threadIdx : ql::views::iota(size_t{0}, numThreads)) {
+    threads.emplace_back([&file, &expected, &metadata, threadIdx]() {
+      for (size_t i : ql::views::iota(size_t{0}, numBlocksPerThread)) {
+        expected.at(threadIdx).push_back(
+            makeBytes(500 + 13 * i, threadIdx * numBlocksPerThread + i + 1));
+        metadata.at(threadIdx).push_back(
+            file.appendBlock(expected.at(threadIdx).back().data(),
+                             expected.at(threadIdx).back().size()));
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  // The appends have reserved distinct ranges of the file: sorted by their
+  // offset, the blocks tile the file from 0 up to its size, with neither gaps
+  // nor overlaps between them.
+  std::vector<CompressedBlockFile::BlockMetadata> allBlocks;
+  for (const auto& blocksOfThread : metadata) {
+    allBlocks.insert(allBlocks.end(), blocksOfThread.begin(),
+                     blocksOfThread.end());
+  }
+  ASSERT_EQ(allBlocks.size(), numThreads * numBlocksPerThread);
+  ql::ranges::sort(allBlocks, [](const auto& a, const auto& b) {
+    return a.offsetInFile_ < b.offsetInFile_;
+  });
+  size_t expectedOffset = 0;
+  for (const auto& block : allBlocks) {
+    EXPECT_EQ(block.offsetInFile_, expectedOffset);
+    expectedOffset += block.compressedSize_;
+  }
+  EXPECT_EQ(ql::filesystem::file_size(filename), expectedOffset);
+
+  // Every block holds exactly the bytes that were appended for it.
+  for (size_t threadIdx : ql::views::iota(size_t{0}, numThreads)) {
+    for (size_t i : ql::views::iota(size_t{0}, numBlocksPerThread)) {
+      EXPECT_EQ(readBytes(file, metadata.at(threadIdx).at(i)),
+                expected.at(threadIdx).at(i))
+          << "thread " << threadIdx << ", block " << i;
+    }
+  }
+}
+
+// _____________________________________________________________________________
+// Test that appends may run while other threads read blocks that were appended
+// before. An append neither moves nor rewrites an existing block, so the
+// readers have to see the unchanged bytes all the time.
+TEST(CompressedBlockFile, appendsConcurrentWithReads) {
+  std::string filename = gtestCurrentTestName();
+  CompressedBlockFile file{filename};
+  static constexpr size_t numInitialBlocks = 20;
+  static constexpr size_t numWriterThreads = 4;
+  static constexpr size_t numReaderThreads = 4;
+  static constexpr size_t numBlocksPerWriter = 25;
+  static constexpr size_t numReadRounds = 20;
+
+  // The blocks that the reader threads below read over and over again.
+  std::vector<std::vector<char>> initialBytes;
+  std::vector<CompressedBlockFile::BlockMetadata> initialMetadata;
+  for (size_t i : ql::views::iota(size_t{0}, numInitialBlocks)) {
+    initialBytes.push_back(makeBytes(1000 + 37 * i, i + 1));
+    initialMetadata.push_back(file.appendBlock(initialBytes.back().data(),
+                                               initialBytes.back().size()));
+  }
+
+  std::vector<std::vector<std::vector<char>>> appended(numWriterThreads);
+  std::vector<std::vector<CompressedBlockFile::BlockMetadata>> appendedMetadata(
+      numWriterThreads);
+  std::vector<std::thread> threads;
+  for (size_t threadIdx : ql::views::iota(size_t{0}, numWriterThreads)) {
+    threads.emplace_back([&file, &appended, &appendedMetadata, threadIdx]() {
+      for (size_t i : ql::views::iota(size_t{0}, numBlocksPerWriter)) {
+        appended.at(threadIdx).push_back(
+            makeBytes(777 + 11 * i, 10'000 * (threadIdx + 1) + i));
+        appendedMetadata.at(threadIdx).push_back(
+            file.appendBlock(appended.at(threadIdx).back().data(),
+                             appended.at(threadIdx).back().size()));
+      }
+    });
+  }
+  for (size_t threadIdx : ql::views::iota(size_t{0}, numReaderThreads)) {
+    threads.emplace_back([&file, &initialBytes, &initialMetadata, threadIdx]() {
+      for (size_t round : ql::views::iota(size_t{0}, numReadRounds)) {
+        for (size_t i : ql::views::iota(size_t{0}, numInitialBlocks)) {
+          size_t idx = (i + threadIdx + round) % numInitialBlocks;
+          EXPECT_EQ(readBytes(file, initialMetadata.at(idx)),
+                    initialBytes.at(idx))
+              << "thread " << threadIdx << ", block " << idx;
+        }
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  // The blocks that were appended while the readers were running are readable,
+  // too.
+  for (size_t threadIdx : ql::views::iota(size_t{0}, numWriterThreads)) {
+    for (size_t i : ql::views::iota(size_t{0}, numBlocksPerWriter)) {
+      EXPECT_EQ(readBytes(file, appendedMetadata.at(threadIdx).at(i)),
+                appended.at(threadIdx).at(i))
+          << "thread " << threadIdx << ", block " << i;
+    }
+  }
 }
 
 // _____________________________________________________________________________
