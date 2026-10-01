@@ -67,9 +67,6 @@ struct SortTriple {
       return cGraph < 0;
     }
   }
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
 };
 
 using SortByPSO = SortTriple<1, 0, 2>;
