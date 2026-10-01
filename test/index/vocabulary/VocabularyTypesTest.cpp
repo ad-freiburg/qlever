@@ -434,6 +434,28 @@ TEST(VocabBatchLookupData, MarkerBatchLookupsAndMergeInInputOrder) {
 }
 
 // _____________________________________________________________________________
+// A marker group with no indices is skipped without releasing a lookup for it,
+// and the remaining groups still merge in input order. Also covers `reserve`
+// and the `data()` accessor of the merged result.
+TEST(VocabBatchLookupData, MergeSkipsEmptyMarkerGroup) {
+  MarkerBatchLookups<2> lookups;
+  lookups[0] = StringVectorVocabBatchLookupData::fromWords({"apple", "cherry"});
+  // lookups[1] stays unset: marker 1 has no indices, so it is skipped.
+
+  IndicesAndPositionsByMarker<2> partitions;
+  partitions[0].reserve(2);
+  partitions[0].addPair(0, 0);  // apple -> pos 0
+  partitions[0].addPair(1, 1);  // cherry -> pos 1
+  // partitions[1] stays empty, so marker 1 is skipped.
+
+  auto result = mergeMarkerBatchesInInputOrder(std::move(lookups), partitions);
+  EXPECT_THAT(result, ::testing::ElementsAre("apple", "cherry"));
+  ASSERT_NE(result.data(), nullptr);
+  EXPECT_EQ(result.data()[0], "apple");
+  EXPECT_EQ(result.data()[1], "cherry");
+}
+
+// _____________________________________________________________________________
 // Words that live in memory owned by a vocabulary can be placed without any
 // owner and without copying: the result points straight into that memory.
 TEST(VocabBatchLookupData, AssemblerUnownedViewsPointIntoTheirStorage) {
