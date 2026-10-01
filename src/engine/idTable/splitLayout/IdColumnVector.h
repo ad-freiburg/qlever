@@ -16,6 +16,7 @@
 #include "engine/idTable/splitLayout/IdColumn.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 #include "global/Id.h"
+#include "util/Exception.h"
 
 namespace columnBasedIdTable::splitLayout {
 
@@ -112,11 +113,13 @@ class IdColumnVector {
     return {&payloads_[i], &datatypes_[i]};
   }
   [[nodiscard]] reference at(size_t i) {
-    (void)payloads_.at(i);
+    AD_CONTRACT_CHECK(i < size());
+    payloads_.at(i);
     return (*this)[i];
   }
   [[nodiscard]] const_reference at(size_t i) const {
-    (void)payloads_.at(i);
+    AD_CONTRACT_CHECK(i < size());
+    payloads_.at(i);
     return (*this)[i];
   }
 
