@@ -11,7 +11,7 @@
 
 #include <vector>
 
-#include "./IdColumnTestHelpers.h"
+#include "IdColumnTestHelpers.h"
 #include "engine/idTable/splitLayout/IdColumnByteIO.h"
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 

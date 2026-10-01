@@ -10,8 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNITERATOR_H
 #define QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNITERATOR_H
 
-#include "IdRef.h"
 #include "backports/three_way_comparison.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 
 namespace columnBasedIdTable::splitLayout {
 

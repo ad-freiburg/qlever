@@ -10,10 +10,10 @@
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_COLUMNSTORAGETRAITS_H
 #define QLEVER_SRC_ENGINE_IDTABLE_COLUMNSTORAGETRAITS_H
 
-#include "IdColumn.h"
-#include "IdColumnVector.h"
-#include "IdRef.h"
 #include "backports/span.h"
+#include "engine/idTable/splitLayout/IdColumn.h"
+#include "engine/idTable/splitLayout/IdColumnVector.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 
 namespace columnBasedIdTable::splitLayout {
 // A customization point `IdTable` (see `IdTable.h`) uses to determine the

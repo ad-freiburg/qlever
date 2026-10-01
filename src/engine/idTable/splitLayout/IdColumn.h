@@ -13,10 +13,10 @@
 #include <cstddef>
 #include <limits>
 
-#include "IdColumnIterator.h"
-#include "IdRef.h"
 #include "backports/concepts.h"
 #include "backports/span.h"
+#include "engine/idTable/splitLayout/IdColumnIterator.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 #include "global/Id.h"
 #include "util/Exception.h"
 

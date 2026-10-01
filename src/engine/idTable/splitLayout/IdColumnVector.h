@@ -13,8 +13,8 @@
 #include <memory>
 #include <vector>
 
-#include "IdColumn.h"
-#include "IdRef.h"
+#include "engine/idTable/splitLayout/IdColumn.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 #include "global/Id.h"
 
 namespace columnBasedIdTable::splitLayout {
