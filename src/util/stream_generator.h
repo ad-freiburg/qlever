@@ -144,7 +144,11 @@ class stream_generator_promise {
   void setChunkCapacity(size_t capacity) {
     AD_CONTRACT_CHECK(capacity > 0 && capacity <= BUFFER_SIZE);
     nextCapacity_ = capacity;
-    if (currentIndex_ == 0 && overflow_.empty()) {
+    // `overflow_` is always empty when `currentIndex_ == 0`: the index starts
+    // at zero with an empty overflow and is reset to zero only in
+    // `commitOverflow`, which immediately refills from the overflow. A fresh
+    // chunk therefore starts exactly when `currentIndex_ == 0`.
+    if (currentIndex_ == 0) {
       capacity_ = capacity;
     }
   }
@@ -169,9 +173,13 @@ class stream_generator_promise {
 
  private:
   // Return true if the buffer still has enough capacity remaining to copy
-  // `value` in its entirety.
+  // `value` in its entirety. Written as a subtraction so that no addition can
+  // overflow: `currentIndex_` never exceeds `capacity_` (it only grows while
+  // the value fits, is set to exactly `capacity_` otherwise, and is reset to
+  // zero only in `commitOverflow`, which immediately refills from the
+  // overflow).
   bool isBufferLargeEnough(std::string_view value) const {
-    return currentIndex_ + value.size() <= capacity_;
+    return value.size() <= capacity_ - currentIndex_;
   }
 };
 
