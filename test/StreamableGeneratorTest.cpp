@@ -121,6 +121,14 @@ TEST(StreamableGenerator, ChunkCapacityAppliesFromTheNextChunk) {
 }
 
 // _____________________________________________________________________________
+TEST(StreamableGenerator, ChunkCapacityOnDefaultConstructedGeneratorThrows) {
+  // A default-constructed generator owns no coroutine, so changing the chunk
+  // capacity must fail its contract check instead of dereferencing null.
+  stream_generator generator;
+  EXPECT_ANY_THROW(generator.setChunkCapacity(4));
+}
+
+// _____________________________________________________________________________
 TEST(StreamableGenerator, ChunkCapacityMustFitTheBuffer) {
   auto generator = []() -> basic_stream_generator<TEST_BUFFER_SIZE> {
     co_yield "A";
