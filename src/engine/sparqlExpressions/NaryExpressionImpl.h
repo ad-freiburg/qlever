@@ -10,6 +10,8 @@
 #include <absl/functional/bind_front.h>
 #include <absl/strings/str_join.h>
 
+#include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
+#include "engine/sparqlExpressions/NumericExpressionWrappers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/CryptographicHashUtils.h"
@@ -53,6 +55,45 @@ class NaryExpressionBase : public SparqlExpression {
     return {children_.data(), children_.size()};
   }
 };
+
+// Convert an N-ary operand into a representation that can be accessed by index.
+// Variables and interval sets are materialized as ValueId vectors, while
+// existing vectors and constants are forwarded unchanged.
+template <typename T>
+decltype(auto) convertNaryOperandToVectorOrConstant(
+    T&& value, EvaluationContext* context) {
+  using Type = std::decay_t<T>;
+
+  if constexpr (ad_utility::isSimilar<Type, ad_utility::SetOfIntervals>) {
+    return ad_utility::SetOfIntervals::toIdVector(value, context->size(),
+                                                  context->_allocator);
+  } else if constexpr (ad_utility::isSimilar<Type, ::Variable>) {
+    return getIdsFromVariable(value, context);
+  } else {
+    static_assert(isVectorResult<Type> || isConstantResult<Type>);
+    return AD_FWD(value);
+  }
+}
+
+// Create an indexed accessor for an N-ary operand. Vector operands are read at
+// the requested row, while constant operands always return the same converted
+// value.
+template <typename ValueGetter, typename Operand>
+auto makeIndexedNaryValueGetter(Operand&& operand, EvaluationContext* context) {
+  using OperandType = std::decay_t<Operand>;
+
+  if constexpr (isVectorResult<OperandType>) {
+    AD_CORRECTNESS_CHECK(operand.size() == context->size());
+
+    return [&operand, context](size_t i) {
+      return ValueGetter{}(operand[i], context);
+    };
+  } else {
+    return [value = ValueGetter{}(AD_FWD(operand), context)](size_t) mutable {
+      return value;
+    };
+  }
+}
 
 template <typename NaryOperation>
 class NaryExpressionStronglyTyped
@@ -105,18 +146,92 @@ class NaryExpressionStronglyTyped
       constexpr static bool resultIsConstant =
           (... && isConstantResult<Operands>);
 
-      // The generator for the result of the operation.
-      auto resultGenerator = applyOperation(targetSize, naryOperation, context,
-                                            AD_FWD(operands)...);
+      using ValueGetters = typename NaryOperation::ValueGetters;
 
-      // Compute the result.
-      using ResultType = PromoteToLocalVocabEntry<
-          ql::ranges::range_value_t<decltype(resultGenerator)>>;
+      auto convertedOperands = std::tuple{
+          convertNaryOperandToVectorOrConstant(AD_FWD(operands), context)...};
+
+      using ConvertedOperands = decltype(convertedOperands);
+
+      constexpr bool supportsNumericFastPath =
+          []<size_t... I>(std::index_sequence<I...>) {
+            return (... && (homogeneousNumeric::supportsNumericFastPath<
+                                std::tuple_element_t<I, ValueGetters>> &&
+                            homogeneousNumeric::supportsNumericFastPathOperand<
+                                std::tuple_element_t<I, ConvertedOperands>>()));
+          }(std::index_sequence_for<Operands...>{});
+
+      // For numeric N-ary expressions, first try homogeneous execution, then a
+      // speculative majority-type path. Fall back to the generic indexed
+      // evaluation if neither optimization applies.
+      if constexpr (supportsNumericFastPath && !resultIsConstant) {
+        auto classifications = std::apply(
+            [context](const auto&... values) {
+              return homogeneousNumeric::classifyNumericOperands(context,
+                                                                 values...);
+            },
+            convertedOperands);
+
+        auto homogeneousTypes =
+            homogeneousNumeric::getHomogeneousNumericTypes(classifications);
+
+        if (homogeneousTypes.has_value()) {
+          return homogeneousNumeric::dispatchNumericTypes(
+              homogeneousTypes.value(),
+              [&]<typename... NumericTypes>(NumericTypes...) {
+                return homogeneousNumeric::evaluateHomogeneousNumericOperation<
+                    typename NaryOperation::Function,
+                    typename NumericTypes::type...>(
+                    std::apply(
+                        [](auto&... values) { return std::tie(values...); },
+                        convertedOperands),
+                    context);
+              });
+        }
+
+        auto majorityTypes =
+            homogeneousNumeric::getMajorityNumericTypes(classifications);
+
+        if (majorityTypes.has_value()) {
+          return homogeneousNumeric::dispatchNumericTypes(
+              majorityTypes.value(),
+              [&]<typename... NumericTypes>(NumericTypes...) {
+                return homogeneousNumeric::
+                    evaluateSpeculativeNaryNumericOperation<
+                        typename NaryOperation::Function, ValueGetters,
+                        typename NumericTypes::type...>(
+                        std::apply(
+                            [](auto&... values) { return std::tie(values...); },
+                            convertedOperands),
+                        context);
+              });
+        }
+      }
+
+      auto indexedGetters = [&]<size_t... I>(std::index_sequence<I...>) {
+        return std::tuple{
+            makeIndexedNaryValueGetter<std::tuple_element_t<I, ValueGetters>>(
+                std::get<I>(convertedOperands), context)...};
+      }(std::index_sequence_for<Operands...>{});
+
+      auto computeValue = [&](size_t i) {
+        return std::apply(
+            [&](auto&... getters) {
+              return naryOperation._function(getters(i)...);
+            },
+            indexedGetters);
+      };
+
+      using ResultType =
+          PromoteToLocalVocabEntry<std::decay_t<decltype(computeValue(0))>>;
+
       VectorWithMemoryLimit<ResultType> result{context->_allocator};
       result.reserve(targetSize);
-      for (auto&& element : resultGenerator) {
+
+      for (size_t i = 0; i < targetSize; ++i) {
+        auto value = computeValue(i);
         result.push_back(promoteToLocalVocabEntry(
-            std::move(element), context->getLocalVocabContext()));
+            std::move(value), context->getLocalVocabContext()));
       }
 
       if constexpr (resultIsConstant) {
@@ -351,41 +466,6 @@ using NaryExpression = NaryExpressionStronglyTyped<Args...>;
     using Base = NaryExpression<Operation<N, X, __VA_ARGS__>>;               \
     using Base::Base;                                                        \
   }
-
-// Takes a `Function` that returns a numeric value (integral or floating
-// point) and converts it to a function, that takes the same arguments and
-// returns the same result, but the return type is the `NumericValue` variant.
-template <typename Function, bool nanToUndef = false>
-struct NumericIdWrapper {
-  // Note: Sonarcloud suggests `[[no_unique_address]]` for the following
-  // member, but adding it causes an internal compiler error in Clang 16.
-  Function function_{};
-  template <typename... Args>
-  Id operator()(Args&&... args) const {
-    return makeNumericId<nanToUndef>(function_(AD_FWD(args)...));
-  }
-};
-
-// Takes a `Function` that takes and returns numeric values (integral or
-// floating point) and converts it to a function, that takes the same
-// arguments and returns the same result, but the arguments and the return
-// type are the `NumericValue` variant.
-template <typename Function, bool NanOrInfToUndef = false>
-struct MakeNumericExpression {
-  template <typename... Args>
-  Id operator()(const Args&... args) const {
-    CPP_assert((concepts::same_as<std::decay_t<Args>, NumericValue> && ...));
-    auto visitor = [](const auto&... t) {
-      if constexpr ((... ||
-                     std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
-        return Id::makeUndefined();
-      } else {
-        return makeNumericId<NanOrInfToUndef>(Function{}(t...));
-      }
-    };
-    return std::visit(visitor, args...);
-  }
-};
 
 // Two short aliases to make the instantiations more readable.
 template <typename... T>

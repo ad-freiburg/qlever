@@ -19,7 +19,7 @@
 
 #include "backports/concepts.h"
 #include "engine/CallFixedSize.h"
-#include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/NumericExpressionWrappers.h"
 #include "engine/sparqlExpressions/NumericOperandClassification.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/ChunkedForLoop.h"
@@ -295,6 +295,66 @@ ExpressionResult evaluateSpeculativeNumericOperation(
                                                  RightValueGetter>(
                   leftValue, rightValue, context, fastFunction,
                   genericFunction);
+        }
+      },
+      [context]() { context->cancellationHandle_->throwIfCancelled(); });
+
+  return result;
+}
+
+// Evaluate an N-ary numeric operation speculatively using the majority
+// datatype of every operand. Rows whose datatypes all match the expected
+// majority types use the primitive numeric fast path. Rows with at least one
+// mismatch fall back to the regular value getters and generic function.
+template <typename Function, typename ValueGetters, typename... NumericTypes,
+          typename... Operands>
+ExpressionResult evaluateSpeculativeNaryNumericOperation(
+    std::tuple<Operands...> operands, EvaluationContext* context) {
+  static_assert(sizeof...(NumericTypes) == sizeof...(Operands));
+  static_assert(sizeof...(NumericTypes) == std::tuple_size_v<ValueGetters>);
+
+  checkNumericOperandSizes(operands, context);
+
+  using FastFunction = RawNumericFunctionT<Function>;
+  FastFunction fastFunction;
+  Function genericFunction;
+
+  constexpr std::array<Datatype, sizeof...(NumericTypes)> expectedTypes{
+      datatypeForNumericType<NumericTypes>()...};
+
+  VectorWithMemoryLimit<Id> result{context->_allocator};
+  result.resize(context->size());
+
+  ad_utility::chunkedForLoop<1000>(
+      0, context->size(),
+      [&](size_t i) {
+        const auto values = std::apply(
+            [i](const auto&... operand) {
+              return std::array<ValueId, sizeof...(Operands)>{
+                  getIdAt(operand, i)...};
+            },
+            operands);
+
+        bool allMatch = true;
+        for (size_t operandIndex = 0; operandIndex < values.size();
+             ++operandIndex) {
+          if (values[operandIndex].getDatatype() !=
+              expectedTypes[operandIndex]) {
+            allMatch = false;
+            break;
+          }
+        }
+
+        if (allMatch) {
+          result[i] = [&]<size_t... I>(std::index_sequence<I...>) {
+            return fastFunction(
+                getPrimitiveNumericValue<NumericTypes>(values[I])...);
+          }(std::index_sequence_for<NumericTypes...>{});
+        } else {
+          result[i] = [&]<size_t... I>(std::index_sequence<I...>) {
+            return genericFunction(
+                std::tuple_element_t<I, ValueGetters>{}(values[I], context)...);
+          }(std::index_sequence_for<Operands...>{});
         }
       },
       [context]() { context->cancellationHandle_->throwIfCancelled(); });
