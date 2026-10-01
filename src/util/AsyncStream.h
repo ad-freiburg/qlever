@@ -76,8 +76,9 @@ struct AsyncStreamGenerator
     // and callers rely on everything that the `range` owns being released once
     // that destructor has returned. A `JThread` (see above) guarantees this via
     // its `join()`, but a task that runs on an executor is destroyed only
-    // *after* it has returned, so that without the explicit `reset()` below the
-    // `range` may still be alive for a short while afterwards.
+    // *after* it has returned, so that without the explicit `reset()` in the
+    // cleanup below the `range` may still be alive for a short while
+    // afterwards.
     //
     // A concrete example is the sorted output of a
     // `CompressedExternalIdTableSorter`: the `range` holds a registration as an
@@ -90,9 +91,13 @@ struct AsyncStreamGenerator
     boost::asio::post(
         executor, [produceValues, promise = std::move(promise),
                    range = std::optional<Range>{std::move(range)}]() mutable {
-          absl::Cleanup fulfillPromise{[&promise]() { promise.set_value(); }};
+          // Destroy the `range` before fulfilling the `promise`, also if an
+          // exception is thrown (see above for why the order matters).
+          absl::Cleanup destroyRangeAndFulfillPromise{[&range, &promise]() {
+            range.reset();
+            promise.set_value();
+          }};
           produceValues(range.value());
-          range.reset();
         });
   }
 
