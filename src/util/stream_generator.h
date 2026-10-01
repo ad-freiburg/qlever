@@ -81,7 +81,13 @@ class stream_generator_promise {
   using value_type = std::string_view;
   using reference_type = std::string_view;
   using pointer_type = value_type*;
-  stream_generator_promise() = default;
+  // Explicit member initialization (equivalent to the default member
+  // initializers above): the coroutine machinery default-constructs the
+  // promise, and spelling the initialization out keeps static analyzers
+  // from reporting the members as uninitialized at their first use in
+  // `isBufferLargeEnough`.
+  stream_generator_promise()
+      : currentIndex_(0), capacity_(BUFFER_SIZE), nextCapacity_(BUFFER_SIZE) {}
 
   basic_stream_generator<BUFFER_SIZE> get_return_object() noexcept;
 
