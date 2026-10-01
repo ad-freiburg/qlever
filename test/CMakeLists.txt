@@ -340,6 +340,8 @@ addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
 
+addLinkAndDiscoverTestNoLibs(UniqueBlockViewTest qlever_util)
+
 addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
 addLinkAndDiscoverTestNoLibs(ChunkedIotaViewTest)
@@ -487,6 +489,8 @@ addLinkAndDiscoverTest(CtreHelpersTest)
 addLinkAndDiscoverTest(ComparisonWithNanTest)
 
 addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
+
+addLinkAndDiscoverTestNoLibs(RecyclingPoolTest)
 
 addLinkAndDiscoverTest(IdTableHelpersTest)
 
