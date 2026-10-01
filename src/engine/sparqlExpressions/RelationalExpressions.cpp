@@ -111,11 +111,11 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
   }();
 
   // Convert pairs of iterators to pairs of indexes.
-  ad_utility::SetOfIntervals s;
+  ad_utility::SetOfIntervals::Vec intervals;
   for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
-    s._intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
+    intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
   }
-  return s;
+  return {std::move(intervals), context->size()};
 }
 
 // The actual comparison function for the `SingleExpressionResult`'s which are
