@@ -8,10 +8,11 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 // Benchmarks for the new split-column `IdColumn`/`IdRef` storage machinery
-// (see `engine/idTable/IdColumnVector.h`, `IdRef.h`, `IdColumnByteIO.h`).
-// This machinery is not wired into the real `IdTable` yet, so these numbers
-// establish a baseline for the standalone types before that switch, and can
-// be re-run afterwards to check the switch didn't regress performance.
+// (see `engine/idTable/splitLayout/IdColumnVector.h`, `IdRef.h`,
+// `IdColumnByteIO.h`). This machinery is not wired into the real `IdTable` yet,
+// so these numbers establish a baseline for the standalone types before that
+// switch, and can be re-run afterwards to check the switch didn't regress
+// performance.
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../test/util/AllocatorTestHelpers.h"
