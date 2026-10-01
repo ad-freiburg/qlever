@@ -16,11 +16,6 @@
 #include "engine/Operation.h"
 #include "util/ContainersWithAllocator.h"
 
-// TODO itsAnnaKai: This class should only be used for operations like Distinct, or Sort,
-// where columns have to be kept just for the operation execution, but the parent
-// tree is actually not interested in these columns -> Therefore an additional
-// operation column Stripping has to be executed after the operation itself.
-
 // An Operation that returns the result of its only child operation when being
 // evaluated, with only a subset of the child's variables.
 class StripColumns : public Operation {
