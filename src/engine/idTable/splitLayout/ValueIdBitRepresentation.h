@@ -19,6 +19,7 @@
 
 #include "backports/three_way_comparison.h"
 
+namespace columnBasedIdTable::splitLayout {
 // The raw bit representation of a `ValueId` (see `ValueId.h`): a single
 // datatype byte and a full 64-bit word of payload. The comparison is
 // datatype-major (first by `datatype_`, then by `payload_`), which is
@@ -76,11 +77,14 @@ struct ValueIdBitRepresentation {
     return ostr << static_cast<int>(rep.datatype_) << ':' << rep.payload_;
   }
 };
+}  // namespace columnBasedIdTable::splitLayout
 
 // Make `ValueIdBitRepresentation` usable as a key of `std` hash containers.
 template <>
-struct std::hash<ValueIdBitRepresentation> {
-  size_t operator()(const ValueIdBitRepresentation& rep) const noexcept {
+struct std::hash<columnBasedIdTable::splitLayout::ValueIdBitRepresentation> {
+  size_t operator()(
+      const columnBasedIdTable::splitLayout::ValueIdBitRepresentation& rep)
+      const noexcept {
     return std::hash<uint64_t>{}(rep.payload_ ^
                                  (static_cast<uint64_t>(rep.datatype_) << 56));
   }
