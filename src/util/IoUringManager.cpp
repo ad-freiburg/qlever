@@ -135,14 +135,12 @@ std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
     const int64_t numBytesRead = detail::pageCacheRead()(
         fd, iovecs.data(), static_cast<int>(iovecs.size()),
         static_cast<int64_t>(offsets[runBegin]));
-    if (numBytesRead < 0 && errno == EOPNOTSUPP) {
-      if (pageCacheFastPathSupported.exchange(false,
-                                              std::memory_order_acq_rel)) {
-        AD_LOG_WARN << "preadv2 with RWF_NOWAIT is not supported for the "
-                       "vocabulary files; reading them without the "
-                       "page-cache fast path"
-                    << std::endl;
-      }
+    if (numBytesRead < 0 && errno == EOPNOTSUPP &&
+        pageCacheFastPathSupported.exchange(false, std::memory_order_acq_rel)) {
+      AD_LOG_WARN << "preadv2 with RWF_NOWAIT is not supported for the "
+                     "vocabulary files; reading them without the "
+                     "page-cache fast path"
+                  << std::endl;
     }
     // Reads that were read completely are served, the others (from the first
     // incomplete one on) are left to the caller.
