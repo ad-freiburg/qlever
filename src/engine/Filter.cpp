@@ -163,7 +163,9 @@ CPP_template_def(int WIDTH,
       requires sparqlExpression::SingleExpressionResult<T>) {
     if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
       AD_CONTRACT_CHECK(input.size() == evaluationContext.size());
-      AD_CONTRACT_CHECK(singleResult.size() == input.size());
+      AD_CONTRACT_CHECK(singleResult.size() == input.size(),
+                        "The size of a `SetOfIntervals` does not match the "
+                        "size of the evaluation context.");
       // If the expression result is given as a set of intervals, we copy
       // the corresponding parts of `input` to `resultTable`.
       auto totalSize = std::accumulate(
