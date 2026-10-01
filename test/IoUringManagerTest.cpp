@@ -11,6 +11,7 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <climits>
@@ -692,11 +693,38 @@ using pageCacheReadTestHelpers::ScopedPageCacheRead;
 // Number of calls of the injected page-cache reads below.
 size_t numPageCacheReads = 0;
 
-// The system call, counted.
-int64_t countedSystemRead(int fd, const ::iovec* iov, int iovcnt,
+// Fill `iov` with plain blocking `pread` calls (which work on any file
+// system, unlike `preadv2` with `RWF_NOWAIT`): the number of bytes read, a
+// short count at the end of the file, or -1 on a real I/O error. This lets the
+// tests below exercise the batching of `readPageCacheHits` without depending
+// on `RWF_NOWAIT` being supported for the test files (it is rejected with
+// `EOPNOTSUPP` in the docker builds, for example on overlayfs).
+int64_t blockingFill(int fd, const ::iovec* iov, int iovcnt, int64_t offset) {
+  int64_t total = 0;
+  for (int i = 0; i < iovcnt; ++i) {
+    auto* base = static_cast<char*>(iov[i].iov_base);
+    size_t remaining = iov[i].iov_len;
+    while (remaining > 0) {
+      ssize_t numBytesRead = ::pread(fd, base, remaining, offset + total);
+      if (numBytesRead < 0) {
+        return -1;
+      }
+      if (numBytesRead == 0) {
+        return total;
+      }
+      base += numBytesRead;
+      remaining -= static_cast<size_t>(numBytesRead);
+      total += numBytesRead;
+    }
+  }
+  return total;
+}
+
+// A fully cached run, counted.
+int64_t countedCachedRead(int fd, const ::iovec* iov, int iovcnt,
                           int64_t offset) {
   ++numPageCacheReads;
-  return ad_utility::detail::systemPageCacheRead(fd, iov, iovcnt, offset);
+  return blockingFill(fd, iov, iovcnt, offset);
 }
 
 // `EOPNOTSUPP`, counted.
@@ -708,8 +736,7 @@ int64_t countedNotSupported(int fd, const ::iovec* iov, int iovcnt,
 
 // Only the first 6 bytes of every run are "cached".
 int64_t sixBytesCached(int fd, const ::iovec* iov, int iovcnt, int64_t offset) {
-  int64_t numBytesRead =
-      ad_utility::detail::systemPageCacheRead(fd, iov, iovcnt, offset);
+  int64_t numBytesRead = blockingFill(fd, iov, iovcnt, offset);
   return numBytesRead < 0 ? numBytesRead : std::min<int64_t>(numBytesRead, 6);
 }
 
@@ -786,7 +813,7 @@ TEST(ReadPageCacheHits, runsAreSplitAtIovMax) {
     reads.emplace_back(i, 1);
   }
   numPageCacheReads = 0;
-  ScopedPageCacheRead inject{&countedSystemRead};
+  ScopedPageCacheRead inject{&countedCachedRead};
   auto [notServed, buffers] = readHits(fd, reads);
   EXPECT_TRUE(notServed.empty());
   EXPECT_EQ(numPageCacheReads, 2u);
