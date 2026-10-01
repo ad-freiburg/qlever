@@ -121,6 +121,25 @@ TEST(File, writeAtOffsetPastTheEndOfTheFile) {
 }
 
 // _____________________________________________________________________________
+// Test that writing 0 bytes is a no-op that does not throw, also when the
+// offset is past the end of the file.
+TEST(File, writeAtOffsetZeroBytes) {
+  std::string filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
+  ad_utility::File file{filename, "w+"};
+  file.write("abc", 3, 0);
+  EXPECT_NO_THROW(file.write("xyz", 0, 0));
+  EXPECT_NO_THROW(file.write("xyz", 0, 3));
+  EXPECT_NO_THROW(file.write("xyz", 0, 100));
+  EXPECT_NO_THROW(file.write(nullptr, 0, 1000));
+  EXPECT_EQ(file.tell(), 0);
+  EXPECT_EQ(file.sizeOfFile(), 3);
+  std::array<char, 3> buffer{};
+  ASSERT_EQ(file.read(buffer.data(), buffer.size(), 0), 3);
+  EXPECT_EQ(std::string(buffer.data(), 3), "abc");
+}
+
+// _____________________________________________________________________________
 // Test that a write which the operating system might not perform in a single
 // step is looped until all the bytes have been written.
 TEST(File, writeAtOffsetWritesEverything) {

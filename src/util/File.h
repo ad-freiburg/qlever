@@ -219,8 +219,10 @@ class File {
       const ssize_t ret = pwrite(fd, from + bytesWritten, toWrite,
                                  offset + static_cast<off_t>(bytesWritten));
 
-      // A return value of 0 is only possible for a write of 0 bytes, but we
-      // check for it anyway, to never loop forever.
+      // The loop only runs while there are bytes left to write, so `pwrite` is
+      // never called with a count of 0 (a write of 0 bytes is a no-op that
+      // never gets here). For a nonzero count, `pwrite` returns 0 only in
+      // exotic cases, which are treated as an error to never loop forever.
       if (ret <= 0) {
         throw std::runtime_error{absl::StrCat(
             "Writing ", numBytesToWrite, " bytes at offset ", offset,
