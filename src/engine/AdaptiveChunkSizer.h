@@ -123,7 +123,7 @@ class AdaptiveChunkSizer {
     AD_CORRECTNESS_CHECK(estimatedRowBytes_ > 0.0);
     const double rawTargetRows =
         static_cast<double>(currentChunkBytesTarget_) / estimatedRowBytes_;
-    const size_t rows = static_cast<size_t>(std::ceil(rawTargetRows));
+    const auto rows = static_cast<size_t>(std::ceil(rawTargetRows));
     return std::clamp(rows, config_.minChunkRows_, config_.maxChunkRows_);
   }
 
