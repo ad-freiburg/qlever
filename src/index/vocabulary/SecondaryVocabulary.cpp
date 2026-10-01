@@ -16,7 +16,6 @@
 #include "backports/functional.h"
 #include "backports/shift.h"
 #include "util/Exception.h"
-#include "util/TransparentFunctors.h"
 #include "util/Views.h"
 
 // _____________________________________________________________________________
@@ -35,8 +34,7 @@ void SecondaryVocabulary::appendSegment(CompactVectorOfStrings<char> segment) {
 
   // A vocabulary that was read via zero-copy deserialization is read-only.
   AD_CONTRACT_CHECK(
-      std::holds_alternative<std::vector<uint64_t>>(segmentOffsets_) &&
-          std::holds_alternative<std::vector<uint64_t>>(sortedIndices_),
+      segmentOffsets_.isOwned() && sortedIndices_.isOwned(),
       "A secondary vocabulary that was read via zero-copy deserialization "
       "cannot be extended, call `clone()` first");
 
@@ -58,9 +56,13 @@ void SecondaryVocabulary::appendSegment(CompactVectorOfStrings<char> segment) {
   std::vector<size_t> insertPositions = insertPositionsInSortedIndices(segment);
 
   uint64_t firstGlobalIndex = numWords();
-  std::get<std::vector<uint64_t>>(segmentOffsets_).push_back(firstGlobalIndex);
+  segmentOffsets_.modify([firstGlobalIndex](auto& segmentOffsets) {
+    segmentOffsets.push_back(firstGlobalIndex);
+  });
   segments_.push_back(std::move(segment));
-  mergeIntoSortedIndices(insertPositions, firstGlobalIndex);
+  sortedIndices_.modify([&insertPositions, firstGlobalIndex](auto& sorted) {
+    mergeIntoSortedIndices(sorted, insertPositions, firstGlobalIndex);
+  });
 }
 
 // _____________________________________________________________________________
@@ -68,7 +70,7 @@ size_t SecondaryVocabulary::numWords() const {
   if (segments_.empty()) {
     return 0;
   }
-  return view(segmentOffsets_).back() + segments_.back().size();
+  return segmentOffsets_.back() + segments_.back().size();
 }
 
 // _____________________________________________________________________________
@@ -82,7 +84,7 @@ std::string_view SecondaryVocabulary::operator[](
   // `segmentOffsets_[0] == 0 <= globalIndex`, so `it` is never `begin()`, and
   // the segment before `it` is the last one that starts at or before
   // `globalIndex`.
-  auto segmentOffsets = view(segmentOffsets_);
+  auto segmentOffsets = segmentOffsets_.view();
   auto it = ql::ranges::upper_bound(segmentOffsets, globalIndex);
   size_t segmentIdx = static_cast<size_t>(it - segmentOffsets.begin()) - 1;
   return segments_[segmentIdx][globalIndex - segmentOffsets[segmentIdx]];
@@ -95,7 +97,7 @@ std::optional<SecondaryVocabIndex> SecondaryVocabulary::getId(
   if (!found) {
     return std::nullopt;
   }
-  return SecondaryVocabIndex::make(view(sortedIndices_)[position]);
+  return SecondaryVocabIndex::make(sortedIndices_[position]);
 }
 
 // _____________________________________________________________________________
@@ -105,8 +107,7 @@ SecondaryVocabulary SecondaryVocabulary::clone() const {
     result.segments_.push_back(segment.cloneAndRemap(ql::identity{}));
   }
   auto copy = [](const IndexArray& array) {
-    auto arrayView = view(array);
-    return std::vector<uint64_t>(arrayView.begin(), arrayView.end());
+    return IndexArray{std::vector<uint64_t>(array.begin(), array.end())};
   };
   result.segmentOffsets_ = copy(segmentOffsets_);
   result.sortedIndices_ = copy(sortedIndices_);
@@ -135,8 +136,8 @@ std::vector<size_t> SecondaryVocabulary::insertPositionsInSortedIndices(
 
 // _____________________________________________________________________________
 void SecondaryVocabulary::mergeIntoSortedIndices(
+    std::vector<uint64_t>& sortedIndices,
     const std::vector<size_t>& insertPositions, uint64_t firstGlobalIndex) {
-  auto& sortedIndices = std::get<std::vector<uint64_t>>(sortedIndices_);
   size_t numOldWords = sortedIndices.size();
   size_t numNewWords = insertPositions.size();
   sortedIndices.resize(numOldWords + numNewWords);
@@ -164,7 +165,7 @@ void SecondaryVocabulary::mergeIntoSortedIndices(
 // _____________________________________________________________________________
 std::pair<size_t, bool> SecondaryVocabulary::lowerBoundInSortedIndices(
     std::string_view word, size_t first) const {
-  auto sortedIndices = view(sortedIndices_);
+  auto sortedIndices = sortedIndices_.view();
   auto project = [this](uint64_t globalIndex) { return wordAt(globalIndex); };
   auto it = ql::ranges::lower_bound(sortedIndices.begin() + first,
                                     sortedIndices.end(), word, {}, project);
@@ -175,9 +176,4 @@ std::pair<size_t, bool> SecondaryVocabulary::lowerBoundInSortedIndices(
 // _____________________________________________________________________________
 std::string_view SecondaryVocabulary::wordAt(uint64_t globalIndex) const {
   return (*this)[SecondaryVocabIndex::make(globalIndex)];
-}
-
-// _____________________________________________________________________________
-ql::span<const uint64_t> SecondaryVocabulary::view(const IndexArray& array) {
-  return std::visit(ad_utility::staticCast<ql::span<const uint64_t>>, array);
 }

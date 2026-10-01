@@ -7,7 +7,6 @@
 
 #include <string>
 #include <string_view>
-#include <variant>
 
 #include "backports/algorithm.h"
 #include "backports/span.h"
@@ -16,6 +15,7 @@
 #include "util/Algorithm.h"
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
+#include "util/OwnedOrViewedVector.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
@@ -52,7 +52,7 @@ class VocabularyInMemoryBinSearch
   // serializer), or as a non-owning view into externally-owned memory (after
   // `fromZeroCopyDeserializer`).
   Words words_;
-  std::variant<Indices, IndicesView> indices_;
+  ad_utility::OwnedOrViewedVector<uint64_t> indices_;
 
  public:
   // Construct an empty vocabulary
@@ -76,14 +76,14 @@ class VocabularyInMemoryBinSearch
     VocabularyInMemoryBinSearch result;
     result.words_ = Words::fromZeroCopyDeserializer(serializer);
     result.indices_ =
-        ad_utility::serialization::zeroCopyDeserializeToSpan<uint64_t>(
+        ad_utility::OwnedOrViewedVector<uint64_t>::fromZeroCopyDeserializer(
             serializer);
     return result;
   }
 
   // Const access to the indices, no matter whether they are currently owned or
   // only viewed.
-  IndicesView indices() const;
+  IndicesView indices() const { return indices_.view(); }
 
   // Read the vocabulary from a file. The file must have been created using a
   // `WordWriter`.
@@ -197,19 +197,8 @@ class VocabularyInMemoryBinSearch
   // a non-owning, zero-copy view.
   AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemoryBinSearch) {
     serializer | arg.words_;
-    if constexpr (ad_utility::serialization::WriteSerializer<S>) {
-      serializer << arg.indices();
-    } else {
-      auto& indices = arg.indices_.template emplace<Indices>();
-      serializer | indices;
-    }
+    serializer | arg.indices_;
   }
-
- private:
-  // Access the owned indices. Throws (via `std::get`) if this vocabulary
-  // currently only views its indices, which is a programming error (a
-  // zero-copy view is read-only).
-  Indices& ownedIndices() { return std::get<Indices>(indices_); }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
