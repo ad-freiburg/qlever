@@ -131,12 +131,14 @@ void testExternalSorterImpl(
   using namespace ad_utility::memory_literals;
 
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  // NOTE: The pool is only created if it is really needed, because a
+  // `parallelism` of one never touches the executor at all. It is declared
+  // before the `writer`, which holds a strand on the executor of the pool (see
+  // `setMergeExecutor`) and hence has to be destroyed first.
+  std::optional<net::thread_pool> pool;
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticColumns>
       writer{filename, numDynamicColumns, memoryToUse,
              ad_utility::testing::makeAllocator(), 5_kB};
-  // NOTE: The pool is only created if it is really needed, because a
-  // `parallelism` of one never touches the executor at all.
-  std::optional<net::thread_pool> pool;
   if (mergeParallelism.has_value()) {
     pool.emplace(mergeParallelism.value());
     writer.setMergeExecutor(pool->get_executor(), mergeParallelism.value());
@@ -1308,10 +1310,11 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   constexpr size_t numRows = 170'000;
 
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(false);
+  // The pool has to outlive the sorter, see `setMergeExecutor`.
+  net::thread_pool pool{8};
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
       filename, NUM_COLS, memory, ad_utility::testing::makeAllocator(),
       blocksizeCompression};
-  net::thread_pool pool{8};
   sorter.setMergeExecutor(pool.get_executor(), 8);
   // Merge twice (which requires that the result is not moved out), such that
   // we can check that the warning is logged only once per sorter.
@@ -1586,9 +1589,10 @@ void testAsyncPushBlock(const std::vector<IdTable>& tables, size_t blocksize,
   absl::Cleanup cleanup = [&filename] {
     ad_utility::deleteFile(filename, false);
   };
+  // The pool has to outlive the sorter, see `setMergeExecutor`.
+  net::thread_pool pool{4};
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> sorter{
       filename, NUM_COLS, memoryForBlocksize(blocksize, NUM_COLS), alloc};
-  net::thread_pool pool{4};
   sorter.setMergeExecutor(pool.get_executor(), 4);
 
   // All the rows that are pushed, which is what the sorted output has to

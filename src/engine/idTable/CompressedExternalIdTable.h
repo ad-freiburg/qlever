@@ -1051,7 +1051,10 @@ class CompressedExternalIdTableSorter
   // The `executor` is also the one on which `asyncPushBlock` runs its work.
   //
   // IMPORTANT: The `executor` must not be run by the thread that consumes the
-  // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`.
+  // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`. The
+  // execution context behind the `executor` (e.g. a `boost::asio::thread_pool`)
+  // has to outlive this sorter, because the sorter holds a strand on the
+  // `executor` (for `asyncPushBlock`), whose destructor accesses the context.
   //
   // PRECONDITION: No `asyncPushBlock` is in flight.
   void setMergeExecutor(ql::any_io_executor executor, size_t parallelism) {
