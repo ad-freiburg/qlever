@@ -383,7 +383,8 @@ RelationalExpression<comp>::getEstimatesForFilterExpression(
 ExpressionResult InExpression::evaluate(
     sparqlExpression::EvaluationContext* context) const {
   auto lhs = children_.at(0)->evaluate(context);
-  ExpressionResult result{ad_utility::SetOfIntervals{}};
+  // `IN ()` is always false.
+  ExpressionResult result{Id::makeFromBool(false)};
   bool firstChild = true;
   for (const auto& child : children_ | ql::views::drop(1)) {
     auto rhs = child->evaluate(context);

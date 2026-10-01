@@ -12,6 +12,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -908,6 +909,13 @@ TEST(RelationalExpression, InExpressionSimpleMemberVariables) {
   auto expression = InExpression(std::move(first), std::move(children));
 
   EXPECT_THAT(expression.getCacheKey({}), AllOfArray(matchers));
+}
+
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3559
+TEST(RelationalExpression, NotInEmptyList) {
+  auto notIn = makeUnaryNegateExpression(
+      std::make_unique<InExpression>(makeInExpression(IntId(1))));
+  EXPECT_EQ(std::get<Id>(evaluateOnTestContext(*notIn)), BoolId(true));
 }
 
 TEST(RelationalExpression, InExpressionFilterEstimates) {
