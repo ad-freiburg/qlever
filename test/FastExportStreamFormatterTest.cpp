@@ -129,7 +129,7 @@ TEST(FastExportStreamFormatterTest, WriteRowRejectsNonTabularFormat) {
   const std::array<std::string_view, 2> cells{"a,b", "c"};
   AD_EXPECT_THROW_WITH_MESSAGE(
       collector.formatter_.writeRow(ExportFormat::Turtle, cells),
-      ::testing::HasSubstr("format == ExportFormat::Csv"));
+      ::testing::HasSubstr("format == Csv"));
 }
 
 TEST(FastExportStreamFormatterTest, WriteRowCsvAndTsv) {
