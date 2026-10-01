@@ -31,10 +31,27 @@ namespace qlever::indexFormatConverter {
 // source format are therefore converted by rewriting their datatype bits, and
 // nothing else in the index changes.
 //
-// `convertIndexToCurrentFormat` checks that these two formats still are the
-// previous and the current index format (`qlever::previousIndexFormatVersion`
-// resp. `qlever::indexFormatVersion`), so that this converter cannot silently
-// be applied to a different change of the index format.
+// The target format is not the current index format, but the one that directly
+// precedes it (`qlever::indexFormatVersionWithLatMajorGeoPoints`), which the
+// current version of QLever loads without conversion: it differs from the
+// current format only in the encoding of geo points, and the source format
+// encodes geo points in the same way as the target format.
+//
+// NOTE: There is deliberately no conversion of the geo points to the current
+// `ZOrder` encoding. We did write a draft in #3432 and it worked fine, but it's
+// a lot of code that needs to be reviewed and maintained. Instead, we decided
+// to keep support for the `LatMajor` encoding of geo points, so that versions
+// of QLever with the new encoding can still load an index with the old
+// encoding (with a deprecation warning, and the index can be rebuilt with the
+// new one). When there are no geo points in the index, there is no friction at
+// all. The only drawback is that we have to support two different encodings of
+// geo points in the code base, at least for some time.
+//
+// `convertIndexToCurrentFormat` checks that the source format still is the
+// previous index format (`qlever::previousIndexFormatVersion`) and that the
+// target format still can be loaded by the current version of QLever (see
+// `qlever::isLoadableIndexFormatVersion`), so that this converter cannot
+// silently be applied to a different change of the index format.
 inline const IndexFormatVersion sourceVersion{
     1572, DateYearOrDuration{Date{2024, 10, 22}}};
 inline const IndexFormatVersion targetVersion{
