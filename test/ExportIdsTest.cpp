@@ -313,7 +313,9 @@ TEST(ExportIds, idsToStringAndTypeDepth2SpansMultipleSubBatches) {
   // vocabulary IDs, so the pipeline processes three sub-batches.
   std::string kg;
   for (size_t i = 0; i < 300; ++i) {
-    kg += "<s" + std::to_string(i) + "> <p> <o" + std::to_string(i) + "> . ";
+    // End each triple with dot-newline: the Turtle block splitter only ends
+    // blocks at a dot followed by a newline, and this graph spans blocks.
+    kg += "<s" + std::to_string(i) + "> <p> <o" + std::to_string(i) + "> .\n";
   }
   auto qec = ad_utility::testing::getQec(kg);
   const Index& index = qec->getIndex();
