@@ -175,7 +175,8 @@ class File {
 
   // Read `nofBytesToRead` bytes starting at the given `offset`, without using
   // or changing the file position (this uses `pread`). Return the number of
-  // bytes read, or the negative error value returned by `pread`.
+  // bytes read (fewer than `nofBytesToRead` if the end of the file is
+  // reached), or the negative error value returned by `pread`.
   ssize_t read(void* targetBuffer, size_t nofBytesToRead, off_t offset) const {
     AD_CONTRACT_CHECK(file_);
     const int fd = fileno(file_);
@@ -188,6 +189,11 @@ class File {
 
       if (ret < 0) {
         return ret;
+      }
+      // `pread` returns 0 at the end of the file. Without this check, the loop
+      // would never terminate for a read that extends past the end.
+      if (ret == 0) {
+        break;
       }
       bytesRead += ret;
     }

@@ -121,6 +121,24 @@ TEST(File, writeAtOffsetPastTheEndOfTheFile) {
 }
 
 // _____________________________________________________________________________
+// Test that a positioned read which extends past the end of the file returns
+// the number of bytes that were actually read (so far it never returned).
+TEST(File, readAtOffsetPastTheEndOfTheFile) {
+  std::string filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename]() { ad_utility::deleteFile(filename); };
+  ad_utility::File file{filename, "w+"};
+  file.write("abcde", 5, 0);
+
+  // A read that starts inside the file and ends behind it.
+  std::array<char, 10> buffer{};
+  EXPECT_EQ(file.read(buffer.data(), buffer.size(), 2), 3);
+  EXPECT_EQ(std::string(buffer.data(), 3), "cde");
+
+  // A read that starts behind the end of the file.
+  EXPECT_EQ(file.read(buffer.data(), buffer.size(), 7), 0);
+}
+
+// _____________________________________________________________________________
 // Test that writing 0 bytes is a no-op that does not throw, also when the
 // offset is past the end of the file.
 TEST(File, writeAtOffsetZeroBytes) {
