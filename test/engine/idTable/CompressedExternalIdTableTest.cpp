@@ -1395,17 +1395,27 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // `compressedExternalIdTable::computeMergePhaseParameters` ends up with a
   // single chunk in flight without throwing: the input blocks of a single
   // chunk cost `2 * 4 * 250'000 = 2 MB`, so two concurrent chunks leave
-  // `(8 - 4) MB / (12 + 3 * 2) = 222 kB` (that is `6944` rows) per output
-  // block, which is far below `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`, whereas a
-  // single chunk still leaves `(8 - 2) MB / (12 + 3) = 400 kB` (that is
-  // `12'500` rows), which is above the hard floor of
+  // `(16 - 4) MB / (12 + 3 * 2) = 666 kB` (that is `20'833` rows) per output
+  // block, which is below `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`, whereas a
+  // single chunk still leaves `(16 - 2) MB / (12 + 3) = 933 kB` (that is
+  // `29'166` rows), which is well above the hard floor of
   // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows. The `12` are the default
   // of `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`.
-  const auto memory = ad_utility::MemorySize::bytes(8'000'000);
+  //
+  // NOTE: The memory is deliberately larger than the minimum that reaches this
+  // code path, because the margin is what keeps the test meaningful. With
+  // these values the single-chunk path holds for every
+  // `numBufferedOutputBlocks_` from 1 to 40, so a future change to that
+  // default cannot silently turn this into a test that no longer reaches its
+  // warning. (With 8 MB the usable range was only 1 to 15, and the throw
+  // happens before the assertion, so the test would have stopped testing
+  // anything rather than failing.) Re-derive both numbers with
+  // `computeMergePhaseParameters` when the memory or the default changes.
+  const auto memory = ad_utility::MemorySize::bytes(16'000'000);
   const auto blocksizeCompression = ad_utility::MemorySize::bytes(250'000);
-  // One run holds `8'000'000 / (4 * 8 * 2) = 125'000` rows, so the following
+  // One run holds `16'000'000 / (4 * 8 * 2) = 250'000` rows, so the following
   // number of rows yields two runs.
-  constexpr size_t numRows = 170'000;
+  constexpr size_t numRows = 300'000;
 
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(false);
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
