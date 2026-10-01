@@ -53,7 +53,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
 std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   // Parse WKT and compute info
   using namespace detail;
-  auto [type, parsed] = parseWkt(wkt);
+  auto [parsed, wktType, crsType, sourceCrs] = parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
@@ -78,7 +78,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                  << std::endl;
   }
 
-  return GeometryInfo{type,      boundingBox.value(), centroid.value(),
+  return GeometryInfo{wktType,   boundingBox.value(), centroid.value(),
                       {numGeom}, metricLength,        MetricArea{area}};
 }
 
@@ -129,11 +129,11 @@ Centroid GeometryInfo::getCentroid() const {
 
 // ____________________________________________________________________________
 std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
-  if (!parsed.has_value()) {
+  auto parseResult = detail::parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
-  return detail::centroidAsGeoPoint(parsed.value());
+  return detail::centroidAsGeoPoint(parseResult.parsedWkt_.value());
 }
 
 // ____________________________________________________________________________
@@ -144,11 +144,11 @@ BoundingBox GeometryInfo::getBoundingBox() const {
 
 // ____________________________________________________________________________
 std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
-  if (!parsed.has_value()) {
+  auto parseResult = detail::parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
-  return detail::boundingBoxAsGeoPoints(parsed.value());
+  return detail::boundingBoxAsGeoPoints(parseResult.parsedWkt_.value());
 }
 
 // ____________________________________________________________________________
@@ -166,12 +166,13 @@ MetricArea GeometryInfo::getMetricArea() const { return metricArea_; }
 
 // ____________________________________________________________________________
 std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
-  if (!parsed.has_value()) {
+  auto parseResult = detail::parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
   try {
-    return MetricArea{detail::computeMetricArea(parsed.value())};
+    return MetricArea{
+        detail::computeMetricArea(parseResult.parsedWkt_.value())};
   } catch (const InvalidPolygonError&) {
     return std::nullopt;
   }
@@ -188,11 +189,11 @@ MetricLength GeometryInfo::getMetricLength() const { return metricLength_; }
 // ____________________________________________________________________________
 std::optional<MetricLength> GeometryInfo::getMetricLength(
     const std::string_view& wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
-  if (!parsed.has_value()) {
+  auto parseResult = detail::parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
-  return {detail::computeMetricLength(parsed.value())};
+  return {detail::computeMetricLength(parseResult.parsedWkt_.value())};
 }
 
 // ____________________________________________________________________________
@@ -238,11 +239,12 @@ NumGeometries GeometryInfo::getNumGeometries() const {
 // ____________________________________________________________________________
 std::optional<NumGeometries> GeometryInfo::getNumGeometries(
     std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
-  if (!parsed.has_value()) {
+  auto parseResult = detail::parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
-  return NumGeometries{detail::countChildGeometries(parsed.value())};
+  return NumGeometries{
+      detail::countChildGeometries(parseResult.parsedWkt_.value())};
 }
 
 // ____________________________________________________________________________

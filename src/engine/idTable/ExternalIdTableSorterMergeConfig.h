@@ -38,9 +38,6 @@
 // `util/parallelBlockMerge/ParallelBlockMerge.h`), and it lives in a header of
 // its own because it is a self-contained computation that can be tested
 // without running a single merge.
-//
-// NOTE: The sorter does not use this header yet; switching its merge phase over
-// to the parallel merge with this configuration is done in a follow-up.
 namespace ad_utility::compressedExternalIdTable {
 
 // The smallest number of finished output blocks that the merge phase keeps in
