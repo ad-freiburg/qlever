@@ -10,10 +10,10 @@
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNITERATOR_H
 #define QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNITERATOR_H
 
+#include "IdRef.h"
 #include "backports/three_way_comparison.h"
-#include "engine/idTable/IdRef.h"
 
-namespace columnBasedIdTable {
+namespace columnBasedIdTable::splitLayout {
 
 // A random-access iterator over a `BasicIdColumnView<IsConst>`. Dereferencing
 // yields a `BasicIdRef<IsConst>` proxy computed from the current pointer
@@ -122,6 +122,6 @@ class BasicIdColumnIterator {
 using IdColumnIterator = BasicIdColumnIterator<false>;
 using ConstIdColumnIterator = BasicIdColumnIterator<true>;
 
-}  // namespace columnBasedIdTable
+}  // namespace columnBasedIdTable::splitLayout
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNITERATOR_H

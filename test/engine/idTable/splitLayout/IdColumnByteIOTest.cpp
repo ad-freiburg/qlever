@@ -12,10 +12,10 @@
 #include <vector>
 
 #include "./IdColumnTestHelpers.h"
-#include "engine/idTable/IdColumnByteIO.h"
-#include "engine/idTable/IdColumnVector.h"
+#include "engine/idTable/splitLayout/IdColumnByteIO.h"
+#include "engine/idTable/splitLayout/IdColumnVector.h"
 
-using namespace columnBasedIdTable;
+using namespace columnBasedIdTable::splitLayout;
 using testHelpers::sampleIds;
 using testHelpers::testAllocator;
 

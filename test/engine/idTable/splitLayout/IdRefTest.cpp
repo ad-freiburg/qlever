@@ -11,10 +11,10 @@
 
 #include <sstream>
 
-#include "./IdColumnTestHelpers.h"
-#include "engine/idTable/IdRef.h"
+#include "IdColumnTestHelpers.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 
-using namespace columnBasedIdTable;
+using namespace columnBasedIdTable::splitLayout;
 using testHelpers::sampleIds;
 
 // _____________________________________________________________________________

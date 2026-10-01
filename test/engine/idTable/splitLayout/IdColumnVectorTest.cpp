@@ -11,11 +11,11 @@
 
 #include <vector>
 
-#include "./IdColumnTestHelpers.h"
-#include "engine/idTable/IdColumnVector.h"
-#include "engine/idTable/IdRef.h"
+#include "IdColumnTestHelpers.h"
+#include "engine/idTable/splitLayout/IdColumnVector.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 
-using namespace columnBasedIdTable;
+using namespace columnBasedIdTable::splitLayout;
 using testHelpers::sampleIds;
 using testHelpers::testAllocator;
 using testHelpers::TestAllocator;
@@ -117,12 +117,13 @@ TEST(IdColumnVectorTest, asViewAndImplicitConversion) {
   const auto constView = vec.asConstView();
   EXPECT_EQ(constView.size(), vec.size());
 
-  auto takesView = [](const columnBasedIdTable::IdColumnRef& v) {
+  auto takesView = [](const columnBasedIdTable::splitLayout::IdColumnRef& v) {
     return v.size();
   };
-  auto takesConstView = [](const columnBasedIdTable::ConstIdColumnRef& v) {
-    return v.size();
-  };
+  auto takesConstView =
+      [](const columnBasedIdTable::splitLayout::ConstIdColumnRef& v) {
+        return v.size();
+      };
   EXPECT_EQ(takesView(vec), vec.size());
   EXPECT_EQ(takesConstView(vec), vec.size());
 }

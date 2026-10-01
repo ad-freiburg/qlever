@@ -13,12 +13,12 @@
 #include <cstring>
 #include <vector>
 
-#include "engine/idTable/IdColumn.h"
-#include "engine/idTable/IdRef.h"
+#include "IdColumn.h"
+#include "IdRef.h"
 #include "global/Id.h"
 #include "util/Exception.h"
 
-namespace columnBasedIdTable {
+namespace columnBasedIdTable::splitLayout {
 
 // Bytes per packed `Id` (1 datatype byte + 8 payload bytes, no padding,
 // unlike `sizeof(Id) == 16`). Code computing rows-per-block from a packed
@@ -60,6 +60,6 @@ inline void unpackBytesToIdColumn(ql::span<const char> bytes,
   }
 }
 
-}  // namespace columnBasedIdTable
+}  // namespace columnBasedIdTable::splitLayout
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNBYTEIO_H

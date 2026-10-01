@@ -10,13 +10,12 @@
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_COLUMNSTORAGETRAITS_H
 #define QLEVER_SRC_ENGINE_IDTABLE_COLUMNSTORAGETRAITS_H
 
+#include "IdColumn.h"
+#include "IdColumnVector.h"
+#include "IdRef.h"
 #include "backports/span.h"
-#include "engine/idTable/IdColumn.h"
-#include "engine/idTable/IdColumnVector.h"
-#include "engine/idTable/IdRef.h"
 
-namespace columnBasedIdTable {
-
+namespace columnBasedIdTable::splitLayout {
 // A customization point `IdTable` (see `IdTable.h`) uses to determine the
 // reference/view types for one element resp. a whole column of its
 // `ColumnStorage`. The primary template is a plain `std::vector<T, ...>`,
@@ -38,7 +37,6 @@ struct ColumnStorageTraits<IdColumnVector<Allocator>, Id> {
   using Column = IdColumnRef;
   using ConstColumn = ConstIdColumnRef;
 };
-
-}  // namespace columnBasedIdTable
+}  // namespace columnBasedIdTable::splitLayout
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_COLUMNSTORAGETRAITS_H

@@ -16,7 +16,7 @@
 #include "global/Id.h"
 #include "util/Forward.h"
 
-namespace columnBasedIdTable {
+namespace columnBasedIdTable::splitLayout {
 
 // TEMPORARY: decodes/encodes the *current* packed single-word
 // `Id::getBits()`/`Id::fromBits(T)` into `Id::BitRepresentation`'s
@@ -235,6 +235,6 @@ class BasicIdRef {
 using IdRef = BasicIdRef<false>;
 using ConstIdRef = BasicIdRef<true>;
 
-}  // namespace columnBasedIdTable
+}  // namespace columnBasedIdTable::splitLayout
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDREF_H

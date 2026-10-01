@@ -13,11 +13,11 @@
 #include <memory>
 #include <vector>
 
-#include "engine/idTable/IdColumn.h"
-#include "engine/idTable/IdRef.h"
+#include "IdColumn.h"
+#include "IdRef.h"
 #include "global/Id.h"
 
-namespace columnBasedIdTable {
+namespace columnBasedIdTable::splitLayout {
 
 // An owning, growable column of `Id`s stored as two separate, contiguous
 // arrays (payload words, datatype bytes) instead of padded `Id` objects.
@@ -185,6 +185,6 @@ class IdColumnVector {
      // implicit conversion is needed for future IdProxy Conversion
 };
 
-}  // namespace columnBasedIdTable
+}  // namespace columnBasedIdTable::splitLayout
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNVECTOR_H

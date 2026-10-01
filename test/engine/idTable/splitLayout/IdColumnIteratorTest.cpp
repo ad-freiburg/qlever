@@ -12,14 +12,14 @@
 
 #include <vector>
 
-#include "./IdColumnTestHelpers.h"
+#include "IdColumnTestHelpers.h"
 #include "backports/algorithm.h"
-#include "engine/idTable/IdColumn.h"
-#include "engine/idTable/IdColumnIterator.h"
-#include "engine/idTable/IdColumnVector.h"
-#include "engine/idTable/IdRef.h"
+#include "engine/idTable/splitLayout/IdColumn.h"
+#include "engine/idTable/splitLayout/IdColumnIterator.h"
+#include "engine/idTable/splitLayout/IdColumnVector.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 
-using namespace columnBasedIdTable;
+using namespace columnBasedIdTable::splitLayout;
 using testHelpers::sampleIds;
 using testHelpers::testAllocator;
 using testHelpers::TestAllocator;

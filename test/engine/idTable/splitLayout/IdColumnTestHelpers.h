@@ -12,12 +12,12 @@
 
 #include <vector>
 
-#include "../../util/AllocatorTestHelpers.h"
+#include "../../../util/AllocatorTestHelpers.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/UninitializedAllocator.h"
 
-namespace columnBasedIdTable::testHelpers {
+namespace columnBasedIdTable::splitLayout::testHelpers {
 
 using TestAllocator =
     ad_utility::default_init_allocator<Id, ad_utility::AllocatorWithLimit<Id>>;
@@ -39,6 +39,6 @@ inline std::vector<Id> sampleIds() {
           Id::makeFromBlankNodeIndex(BlankNodeIndex::make(7))};
 }
 
-}  // namespace columnBasedIdTable::testHelpers
+}  // namespace columnBasedIdTable::splitLayout::testHelpers
 
 #endif  // QLEVER_TEST_ENGINE_IDTABLE_IDCOLUMNTESTHELPERS_H

@@ -13,14 +13,14 @@
 #include <cstddef>
 #include <limits>
 
+#include "IdColumnIterator.h"
+#include "IdRef.h"
 #include "backports/concepts.h"
 #include "backports/span.h"
-#include "engine/idTable/IdColumnIterator.h"
-#include "engine/idTable/IdRef.h"
 #include "global/Id.h"
 #include "util/Exception.h"
 
-namespace columnBasedIdTable {
+namespace columnBasedIdTable::splitLayout {
 
 // A view (non-owning, like `ql::span`) of an `Id` column stored in
 // split-column storage: a contiguous payload-word array and a contiguous
@@ -129,7 +129,7 @@ class BasicIdColumnView {
 using IdColumnRef = BasicIdColumnView<false>;
 using ConstIdColumnRef = BasicIdColumnView<true>;
 
-}  // namespace columnBasedIdTable
+}  // namespace columnBasedIdTable::splitLayout
 
 // `BasicIdColumnView` is a `borrowed_range` (like `ql::span`): a non-owning
 // view whose iterators outlive the view object itself, so passing a
@@ -138,11 +138,11 @@ using ConstIdColumnRef = BasicIdColumnView<true>;
 #ifdef QLEVER_CPP_17
 template <bool IsConst>
 inline constexpr bool ::ranges::enable_borrowed_range<
-    columnBasedIdTable::BasicIdColumnView<IsConst>> = true;
+    columnBasedIdTable::splitLayout::BasicIdColumnView<IsConst>> = true;
 #else
 template <bool IsConst>
 inline constexpr bool std::ranges::enable_borrowed_range<
-    columnBasedIdTable::BasicIdColumnView<IsConst>> = true;
+    columnBasedIdTable::splitLayout::BasicIdColumnView<IsConst>> = true;
 #endif
 
 // Also has to be recognized as a `view` (like `ql::span`), so
@@ -152,12 +152,11 @@ inline constexpr bool std::ranges::enable_borrowed_range<
 #ifdef QLEVER_CPP_17
 template <bool IsConst>
 inline constexpr bool ::ranges::enable_view<
-    columnBasedIdTable::BasicIdColumnView<IsConst>> = true;
+    columnBasedIdTable::splitLayout::BasicIdColumnView<IsConst>> = true;
 #else
 template <bool IsConst>
-inline constexpr bool
-    std::ranges::enable_view<columnBasedIdTable::BasicIdColumnView<IsConst>> =
-        true;
+inline constexpr bool std::ranges::enable_view<
+    columnBasedIdTable::splitLayout::BasicIdColumnView<IsConst>> = true;
 #endif
 
 // Type aliases for the columns of an `IdTable`. Currently just aliases for

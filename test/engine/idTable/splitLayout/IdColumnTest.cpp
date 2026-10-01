@@ -12,22 +12,22 @@
 #include <array>
 #include <vector>
 
-#include "./IdColumnTestHelpers.h"
-#include "engine/idTable/ColumnStorageTraits.h"
-#include "engine/idTable/IdColumn.h"
-#include "engine/idTable/IdColumnVector.h"
-#include "engine/idTable/IdRef.h"
+#include "IdColumnTestHelpers.h"
+#include "engine/idTable/splitLayout/ColumnStorageTraits.h"
+#include "engine/idTable/splitLayout/IdColumn.h"
+#include "engine/idTable/splitLayout/IdColumnVector.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 
-using namespace columnBasedIdTable;
+using namespace columnBasedIdTable::splitLayout;
 using testHelpers::sampleIds;
 using testHelpers::TestAllocator;
 
 // _____________________________________________________________________________
 TEST(IdColumnTest, viewConstructionAccessAndDefaultState) {
-  columnBasedIdTable::ConstIdColumnRef defaultView;
+  columnBasedIdTable::splitLayout::ConstIdColumnRef defaultView;
   EXPECT_EQ(defaultView.size(), 0u);
   EXPECT_TRUE(defaultView.empty());
-  std::array<columnBasedIdTable::ConstIdColumnRef, 3> arrayOfViews;
+  std::array<columnBasedIdTable::splitLayout::ConstIdColumnRef, 3> arrayOfViews;
   EXPECT_TRUE(arrayOfViews[1].empty());
 
   auto ids = sampleIds();
@@ -39,8 +39,8 @@ TEST(IdColumnTest, viewConstructionAccessAndDefaultState) {
     datatypes.push_back(datatype_);
   }
 
-  columnBasedIdTable::IdColumnRef view{payloads.data(), datatypes.data(),
-                                       payloads.size()};
+  columnBasedIdTable::splitLayout::IdColumnRef view{
+      payloads.data(), datatypes.data(), payloads.size()};
   ASSERT_EQ(view.size(), ids.size());
   for (size_t i = 0; i < ids.size(); ++i) {
     EXPECT_EQ(static_cast<Id>(view[i]), ids.at(i));
@@ -50,7 +50,7 @@ TEST(IdColumnTest, viewConstructionAccessAndDefaultState) {
   EXPECT_EQ(static_cast<Id>(view.back()), ids.back());
 
   // Implicit conversion to the const view.
-  columnBasedIdTable::ConstIdColumnRef constView = view;
+  columnBasedIdTable::splitLayout::ConstIdColumnRef constView = view;
   EXPECT_EQ(constView.size(), view.size());
 
   // Raw access to the two underlying arrays.
@@ -68,18 +68,20 @@ TEST(IdColumnTest, viewConstructionAccessAndDefaultState) {
 
 // _____________________________________________________________________________
 TEST(IdColumnTest, constructIdColumnView) {
-  constexpr columnBasedIdTable::ConstIdColumnRef defaultView;
+  constexpr columnBasedIdTable::splitLayout::ConstIdColumnRef defaultView;
   EXPECT_TRUE(defaultView.empty());
   EXPECT_EQ(defaultView.size(), 0u);
 
   auto [datatype_, payload_] = getBitsCompat(Id::makeFromInt(42));
-  const columnBasedIdTable::IdColumnRef mutableView{&payload_, &datatype_, 1};
+  const columnBasedIdTable::splitLayout::IdColumnRef mutableView{&payload_,
+                                                                 &datatype_, 1};
   EXPECT_FALSE(mutableView.empty());
   EXPECT_EQ(mutableView.size(), 1u);
   EXPECT_EQ(static_cast<Id>(mutableView[0]), Id::makeFromInt(42));
   static_assert(std::is_same_v<decltype(mutableView[0]), IdRef>);
 
-  const columnBasedIdTable::ConstIdColumnRef constConvertedView{mutableView};
+  const columnBasedIdTable::splitLayout::ConstIdColumnRef constConvertedView{
+      mutableView};
   EXPECT_FALSE(constConvertedView.empty());
   EXPECT_EQ(constConvertedView.size(), 1u);
   EXPECT_EQ(static_cast<Id>(constConvertedView[0]), Id::makeFromInt(42));
@@ -88,7 +90,7 @@ TEST(IdColumnTest, constructIdColumnView) {
 
 // _____________________________________________________________________________
 TEST(IdColumnTest, idColumnViewValueOperators) {
-  constexpr columnBasedIdTable::ConstIdColumnRef defaultView;
+  constexpr columnBasedIdTable::splitLayout::ConstIdColumnRef defaultView;
   EXPECT_TRUE(defaultView.empty());
   EXPECT_EQ(defaultView.size(), 0u);
 
@@ -101,7 +103,8 @@ TEST(IdColumnTest, idColumnViewValueOperators) {
   ASSERT_THROW((void)defaultView.back(), ad_utility::Exception);
 
   auto [datatype_, payload_] = getBitsCompat(Id::makeFromInt(42));
-  const columnBasedIdTable::IdColumnRef mutableView{&payload_, &datatype_, 1};
+  const columnBasedIdTable::splitLayout::IdColumnRef mutableView{&payload_,
+                                                                 &datatype_, 1};
   EXPECT_FALSE(mutableView.empty());
   EXPECT_EQ(mutableView.size(), 1u);
   EXPECT_EQ(static_cast<Id>(mutableView[0]), Id::makeFromInt(42));
@@ -116,7 +119,7 @@ TEST(IdColumnTest, idColumnViewValueOperators) {
   auto [datatype_2, payload_2] = getBitsCompat(Id::makeFromInt(13));
   std::vector payloads = {payload_, payload_2};
   std::vector datatypes = {datatype_, datatype_2};
-  const columnBasedIdTable::IdColumnRef mutableView2{
+  const columnBasedIdTable::splitLayout::IdColumnRef mutableView2{
       payloads.data(), datatypes.data(), payloads.size()};
 
   EXPECT_FALSE(mutableView2.empty());
@@ -140,8 +143,8 @@ TEST(IdColumnTest, subspanFirstLast) {
     payloads.push_back(payload_);
     datatypes.push_back(datatype_);
   }
-  columnBasedIdTable::ConstIdColumnRef view{payloads.data(), datatypes.data(),
-                                            payloads.size()};
+  columnBasedIdTable::splitLayout::ConstIdColumnRef view{
+      payloads.data(), datatypes.data(), payloads.size()};
 
   // 1. `subspan(offset, count)`: a slice `[offset, offset + count)`.
   auto middle = view.subspan(2, 3);
@@ -196,9 +199,9 @@ TEST(IdColumnTest, columnStorageTraitsResolvesGenericAndIdCase) {
           ConstIdRef>);
   static_assert(std::is_same_v<
                 ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::Column,
-                columnBasedIdTable::IdColumnRef>);
+                columnBasedIdTable::splitLayout::IdColumnRef>);
   static_assert(
       std::is_same_v<
           ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::ConstColumn,
-          columnBasedIdTable::ConstIdColumnRef>);
+          columnBasedIdTable::splitLayout::ConstIdColumnRef>);
 }

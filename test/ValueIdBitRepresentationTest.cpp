@@ -13,11 +13,11 @@
 #include <boost/iostreams/filter/zlib.hpp>
 
 #include "backports/algorithm.h"
-#include "engine/idTable/IdRef.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/json/Writer.h"
 
-using namespace columnBasedIdTable;
+using namespace columnBasedIdTable::splitLayout;
 // _____________________________________________________________________________
 TEST(ValueIdBitRepresentationTest, construction) {
   constexpr int idValue = 42;

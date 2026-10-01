@@ -15,16 +15,16 @@
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../test/util/AllocatorTestHelpers.h"
-#include "engine/idTable/ColumnStorageTraits.h"
-#include "engine/idTable/IdColumnByteIO.h"
-#include "engine/idTable/IdColumnVector.h"
-#include "engine/idTable/IdRef.h"
+#include "engine/idTable/splitLayout/ColumnStorageTraits.h"
+#include "engine/idTable/splitLayout/IdColumnByteIO.h"
+#include "engine/idTable/splitLayout/IdColumnVector.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 #include "global/Id.h"
 #include "util/Random.h"
 #include "util/UninitializedAllocator.h"
 
 namespace ad_benchmark {
-using namespace columnBasedIdTable;
+using namespace columnBasedIdTable::splitLayout;
 
 namespace {
 using TestAllocator =
