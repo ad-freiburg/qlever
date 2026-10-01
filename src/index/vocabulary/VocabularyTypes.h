@@ -757,9 +757,10 @@ template <size_t NumVocabs>
 VocabBatchLookupResult mergeMarkerBatchesInInputOrder(
     MarkerBatchLookups<NumVocabs> markerLookups,
     const IndicesAndPositionsByMarker<NumVocabs>& markerIndicesAndPositions) {
-  return mergeMarkerBatchesInInputOrder(
-      markerIndicesAndPositions,
-      [&](size_t marker) { return markerLookups.release(marker); });
+  return mergeMarkerBatchesInInputOrder(markerIndicesAndPositions,
+                                        [&markerLookups](size_t marker) {
+                                          return markerLookups.release(marker);
+                                        });
 }
 
 // _____________________________________________________________________________
