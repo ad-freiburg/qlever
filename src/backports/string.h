@@ -19,12 +19,10 @@
 
 namespace ql {
 
-// Provide a C++17-compatible backport of C++23's
-// `std::basic_string::resize_and_overwrite` as a free function that takes the
-// string as the first parameter. Deliberate deviation: the standard leaves a
-// returned size above `count` as undefined behavior, while this backport
-// enforces the same bound with `AD_CONTRACT_CHECK` on both branches, so a
-// violating operation fails loudly instead of corrupting the string.
+// C++17-compatible backport of C++23's
+// `std::basic_string::resize_and_overwrite` as a free function taking the
+// string first. Unlike the standard (oversize result is UB), both branches
+// enforce `newSize <= count` via `AD_CONTRACT_CHECK`.
 CPP_template(typename CharT, typename Traits, typename Allocator,
              typename Operation)(
     requires ql::concepts::invocable<Operation, CharT*, size_t>&&
@@ -35,25 +33,17 @@ CPP_template(typename CharT, typename Traits, typename Allocator,
                                                                  Allocator>&
                                                    str,
                                                size_t count, Operation&& op) {
-  // `__cpp_lib_string_resize_and_overwrite` is the standard feature-test
-  // macro for `std::basic_string::resize_and_overwrite` (C++23, P1072R10);
-  // `202110L` is the value of the adopted version. If the standard library
-  // provides the member, forward to it: it leaves the new characters
-  // uninitialized, so `op` writes each of them exactly once. Otherwise (the
-  // C++17 and C++20 standard libraries QLever builds with) fall back to
-  // `resize`, which zero-fills the new characters first, let `op` overwrite
-  // them, and shrink to the size it returns. Both paths leave `str` in the
-  // same state; only the fallback pays for the extra fill.
+  // Forward to the standard member when `__cpp_lib_string_resize_and_overwrite
+  // >= 202110L` (C++23, P1072R10); otherwise `resize` (zero-fills), overwrite,
+  // then shrink. Same end state; only the fallback pays for the fill.
   // P1072R10 (basic_string::resize_and_overwrite):
   // https://web.archive.org/web/20260102024635/https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2021/p1072r10.html
   // Feature-test macro value 202110L in [version.syn] of the C++ draft:
   // https://web.archive.org/web/20251223023007/http://eel.is/c++draft/version.syn
 #if defined(__cpp_lib_string_resize_and_overwrite) && \
     __cpp_lib_string_resize_and_overwrite >= 202110L
-  // Move `op` into the lambda like the standard, which takes its operation
-  // by value and invokes it as `std::move(op)(p, count)`. Capturing the
-  // forwarding reference by reference would dangle for move-only rvalue
-  // callables. The lambda is `mutable` so mutable callables keep working.
+  // Move `op` into the lambda (standard takes it by value as
+  // `std::move(op)(p, count)`); `mutable` keeps mutable callables working.
   str.resize_and_overwrite(count, [op = std::forward<Operation>(op), count](
                                       CharT* data, size_t n) mutable {
     const size_t newSize = std::move(op)(data, n);

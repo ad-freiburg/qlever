@@ -30,7 +30,6 @@ TEST(StringTest, ResizeAndOverwriteExactSize) {
 
 // _____________________________________________________________________________
 TEST(StringTest, ResizeAndOverwriteSmallerSize) {
-  // Start with enough capacity so that truncation must happen in place.
   std::string s(10, 'x');
   const char* dataBefore = s.data();
   const std::string full = "abcdefghij";
@@ -64,8 +63,7 @@ TEST(StringTest, ResizeAndOverwriteZeroCapacity) {
 }
 
 // _____________________________________________________________________________
-// Negative test: an operation returning more than the granted size violates
-// the contract on both the fallback and the C++23 branch.
+// Oversize results violate the contract on both branches.
 TEST(StringTest, ResizeAndOverwriteOversizedResultThrows) {
   std::string s;
   ASSERT_THROW(ql::resize_and_overwrite(s, 4, [](char*, size_t) { return 5u; }),
@@ -73,8 +71,7 @@ TEST(StringTest, ResizeAndOverwriteOversizedResultThrows) {
 }
 
 // _____________________________________________________________________________
-// A move-only operation passed as an rvalue must work: the backport moves it
-// into the C++23 branch lambda instead of capturing a reference to it.
+// Move-only rvalue operations work via the moved-into lambda.
 TEST(StringTest, ResizeAndOverwriteMoveOnlyOperation) {
   std::string s;
   const std::string text = "move-only";
