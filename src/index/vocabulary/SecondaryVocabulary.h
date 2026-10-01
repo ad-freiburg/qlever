@@ -16,12 +16,14 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "backports/span.h"
 #include "global/IndexTypes.h"
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
+#include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 
 // The secondary vocabulary of an index. It stores words that were added after
@@ -93,6 +95,14 @@ class SecondaryVocabulary {
   static constexpr uint16_t serializationFormatVersion = 1;
 
  private:
+  // An array of global indices (see `segmentOffsets_` and `sortedIndices_`
+  // below), which is either owned, or a non-owning, zero-copy view into the
+  // buffer of the serializer from which this vocabulary was read (see the
+  // serialization below), in which case that buffer has to outlive this
+  // vocabulary. Access it via `view` or `owned` below.
+  using IndexArray =
+      std::variant<std::vector<uint64_t>, ql::span<const uint64_t>>;
+
   // The words, stored as an append-only sequence of segments, each of which
   // holds its words in sorted order (see `appendSegment`).
   std::vector<CompactVectorOfStrings<char>> segments_;
@@ -102,7 +112,7 @@ class SecondaryVocabulary {
   // elements as `segments_` and is sorted, so that `operator[]` can map a
   // global index to the corresponding `[segmentIndex, indexWithinSegment]`
   // pair by binary search.
-  std::vector<uint64_t> segmentOffsets_;
+  IndexArray segmentOffsets_;
 
   // The global indices of all words, ordered by the word that each of them
   // refers to; that is, `sortedIndices_[rank]` is the global index of the word
@@ -113,7 +123,7 @@ class SecondaryVocabulary {
   // lexicographically smallest word `<a>` has global index 2. `getId` binary-
   // searches in this array, and `appendSegment` merges the global indices of
   // the newly added words into it.
-  std::vector<uint64_t> sortedIndices_;
+  IndexArray sortedIndices_;
 
  public:
   SecondaryVocabulary() = default;
@@ -143,6 +153,10 @@ class SecondaryVocabulary {
   //
   // NOTE 2: An empty `segment` is ignored, that is, it doesn't count as a
   // segment (see `numSegments`).
+  //
+  // NOTE 3: If this vocabulary was read via zero-copy deserialization (see the
+  // serialization below), then the first call copies the `segmentOffsets_`
+  // and the `sortedIndices_` into owned storage, as they have to be modified.
   void appendSegment(CompactVectorOfStrings<char> segment);
 
   // Return the number of words across all segments.
@@ -166,18 +180,24 @@ class SecondaryVocabulary {
   SecondaryVocabulary clone() const;
 
   // Serialize the vocabulary as the `serializationMagicBytes` and the
-  // `serializationFormatVersion`, followed by its number of segments and the
-  // segments, in the order in which they were appended, so that all words keep
-  // their global indices. The format version is stored explicitly, so that the
-  // format can be extended in the future without breaking the reading of
-  // previously serialized vocabularies (for example by also storing the
-  // `sortedIndices_`, which currently are recomputed when reading). When
-  // reading, `arg` has to be empty, the magic bytes and the version are
-  // checked, and the segments are appended via `appendSegment`, which checks
-  // them, so that a corrupted input is rejected. If the `serializer` supports
-  // zero-copy deserialization (see `ZeroCopyReadSerializer`), then the segments
-  // are zero-copy views into its buffer, which then has to outlive this
-  // vocabulary (see NOTE 1 at `appendSegment`).
+  // `serializationFormatVersion`, followed by its number of segments, the
+  // segments (in the order in which they were appended, so that all words keep
+  // their global indices), the `segmentOffsets_`, and the `sortedIndices_`.
+  // The format version is stored explicitly, so that the format can be
+  // changed in the future without breaking the reading of previously
+  // serialized vocabularies.
+  //
+  // Reading is designed to be as cheap as possible: If the `serializer`
+  // supports zero-copy deserialization (see `ZeroCopyReadSerializer`), then
+  // the segments, the `segmentOffsets_`, and the `sortedIndices_` are all
+  // zero-copy views into its buffer, which then has to outlive this
+  // vocabulary (see NOTE 1 at `appendSegment`). Otherwise, they are read into
+  // owned storage. In both cases, nothing is recomputed.
+  //
+  // NOTE: Apart from the magic bytes, the version, and some O(1) consistency
+  // checks of the sizes, the input is trusted and not checked (in particular,
+  // the checks of `appendSegment` are not run), because a check would have to
+  // look at all the words. When reading, `arg` has to be empty.
   AD_SERIALIZE_FRIEND_FUNCTION(SecondaryVocabulary) {
     using namespace ad_utility::serialization;
     if constexpr (WriteSerializer<S>) {
@@ -187,6 +207,8 @@ class SecondaryVocabulary {
       for (const auto& segment : arg.segments_) {
         serializer << segment;
       }
+      serializer << view(arg.segmentOffsets_);
+      serializer << view(arg.sortedIndices_);
     } else {
       AD_CONTRACT_CHECK(arg.numSegments() == 0,
                         "A secondary vocabulary can only be deserialized into "
@@ -205,17 +227,27 @@ class SecondaryVocabulary {
                         serializationFormatVersion);
       uint64_t numSegments = 0;
       serializer >> numSegments;
+      arg.segments_.reserve(numSegments);
       for (uint64_t i = 0; i < numSegments; ++i) {
         if constexpr (ZeroCopyReadSerializer<S>) {
-          arg.appendSegment(
+          arg.segments_.push_back(
               CompactVectorOfStrings<char>::fromZeroCopyDeserializer(
                   serializer));
         } else {
-          CompactVectorOfStrings<char> segment;
-          serializer >> segment;
-          arg.appendSegment(std::move(segment));
+          serializer >> arg.segments_.emplace_back();
         }
       }
+      auto readIndexArray = [&serializer](IndexArray& array) {
+        if constexpr (ZeroCopyReadSerializer<S>) {
+          array = zeroCopyDeserializeToSpan<uint64_t>(serializer);
+        } else {
+          serializer >> array.template emplace<std::vector<uint64_t>>();
+        }
+      };
+      readIndexArray(arg.segmentOffsets_);
+      readIndexArray(arg.sortedIndices_);
+      AD_CORRECTNESS_CHECK(view(arg.segmentOffsets_).size() == numSegments);
+      AD_CORRECTNESS_CHECK(view(arg.sortedIndices_).size() == arg.numWords());
     }
   }
 
@@ -239,17 +271,24 @@ class SecondaryVocabulary {
   void mergeIntoSortedIndices(const std::vector<size_t>& insertPositions,
                               uint64_t firstGlobalIndex);
 
-  // Return the first position in `[first, sortedIndices_.end())` whose word is
-  // not less than `word`, together with whether the word at that position is
-  // equal to `word` (that is, whether `word` is contained in that range).
-  std::pair<std::vector<uint64_t>::const_iterator, bool>
-  lowerBoundInSortedIndices(std::string_view word,
-                            std::vector<uint64_t>::const_iterator first) const;
+  // Return the first position in `[first, sortedIndices_.size())` whose word
+  // is not less than `word`, together with whether the word at that position
+  // is equal to `word` (that is, whether `word` is contained in that range).
+  std::pair<size_t, bool> lowerBoundInSortedIndices(std::string_view word,
+                                                    size_t first) const;
 
   // Return the word with the given global index. Used as the projection that
   // orders (and looks up) global indices by the word that each of them refers
   // to, in `lowerBoundInSortedIndices`.
   std::string_view wordAt(uint64_t globalIndex) const;
+
+  // Return a view of the given `array`, regardless of whether it is owned.
+  static ql::span<const uint64_t> view(const IndexArray& array);
+
+  // Return the owned vector of the given `array`. If `array` currently is a
+  // view, then replace it by an owned copy first (which is required before
+  // modifying a vocabulary that was read via zero-copy deserialization).
+  static std::vector<uint64_t>& owned(IndexArray& array);
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SECONDARYVOCABULARY_H

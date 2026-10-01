@@ -312,14 +312,26 @@ TEST(SecondaryVocabulary, serialization) {
                                                     "<a>", "<f>"};
 
   // Read back via a serializer that supports zero-copy deserialization, in
-  // which case the segments are views into its buffer, and via one that does
-  // not, in which case they own their words. The segments and hence the
-  // global indices of all words are the same in both cases.
+  // which case the segments and the index arrays are views into its buffer,
+  // and via one that does not, in which case they are owned. The segments and
+  // hence the global indices of all words are the same in both cases.
   auto check = [&wordsInGlobalOrder](auto& readSerializer) {
     SecondaryVocabulary readVocab;
     readSerializer >> readVocab;
     EXPECT_EQ(readVocab.numSegments(), 2);
     expectWordsAndIdsMatch(readVocab, wordsInGlobalOrder);
+
+    // A vocabulary that was read can be extended (for the zero-copy case,
+    // this first copies the index arrays), and the global indices of its
+    // previous words stay unchanged.
+    readVocab.appendSegment(makeSegment({"<0>", "<g>"}));
+    auto extendedWords = wordsInGlobalOrder;
+    extendedWords.push_back("<0>");
+    extendedWords.push_back("<g>");
+    EXPECT_EQ(readVocab.numSegments(), 3);
+    expectWordsAndIdsMatch(readVocab, extendedWords);
+    AD_EXPECT_THROW_WITH_MESSAGE(readVocab.appendSegment(makeSegment({"<b>"})),
+                                 HasSubstr("is already contained"));
 
     // Deserializing into a vocabulary that is not empty is not allowed.
     SecondaryVocabulary nonEmpty{secondaryVocabWords};
@@ -350,18 +362,34 @@ TEST(SecondaryVocabulary, serialization) {
   EXPECT_EQ(readEmpty.numSegments(), 0);
   EXPECT_EQ(readEmpty.numWords(), 0);
 
-  // A corrupted input, in which a word occurs in two segments, is rejected
-  // by the checks of `appendSegment`.
-  ByteBufferWriteSerializer corruptedWriter;
-  corruptedWriter << SecondaryVocabulary::serializationMagicBytes;
-  corruptedWriter << SecondaryVocabulary::serializationFormatVersion;
-  corruptedWriter << uint64_t{2};
-  corruptedWriter << makeSegment({"<a>"});
-  corruptedWriter << makeSegment({"<a>"});
-  ByteBufferReadSerializer corruptedReader{std::move(corruptedWriter).data()};
-  SecondaryVocabulary corrupted;
-  AD_EXPECT_THROW_WITH_MESSAGE(corruptedReader >> corrupted,
-                               HasSubstr("is already contained"));
+  // The contents of the input are not checked when reading, but an input in
+  // which the sizes of the index arrays don't match the segments is rejected.
+  auto writeVocabWithIndexArrays = [](ByteBufferWriteSerializer& writer,
+                                      const std::vector<uint64_t>& offsets,
+                                      const std::vector<uint64_t>& sorted) {
+    writer << SecondaryVocabulary::serializationMagicBytes;
+    writer << SecondaryVocabulary::serializationFormatVersion;
+    writer << uint64_t{1};
+    writer << makeSegment({"<a>", "<b>"});
+    writer << offsets;
+    writer << sorted;
+  };
+  for (const auto& [offsets, sorted] :
+       std::vector<std::pair<std::vector<uint64_t>, std::vector<uint64_t>>>{
+           {{}, {0, 1}}, {{0}, {0}}, {{0}, {0, 1, 2}}}) {
+    ByteBufferWriteSerializer corruptedWriter;
+    writeVocabWithIndexArrays(corruptedWriter, offsets, sorted);
+    ByteBufferReadSerializer corruptedReader{std::move(corruptedWriter).data()};
+    SecondaryVocabulary corrupted;
+    EXPECT_ANY_THROW(corruptedReader >> corrupted);
+  }
+  // The same input with matching sizes is read correctly.
+  ByteBufferWriteSerializer validWriter;
+  writeVocabWithIndexArrays(validWriter, {0}, {0, 1});
+  ByteBufferReadSerializer validReader{std::move(validWriter).data()};
+  SecondaryVocabulary valid;
+  validReader >> valid;
+  expectWordsAndIdsMatch(valid, {"<a>", "<b>"});
 
   // An input with wrong magic bytes or an unsupported format version is
   // rejected.

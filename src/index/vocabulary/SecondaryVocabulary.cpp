@@ -50,7 +50,7 @@ void SecondaryVocabulary::appendSegment(CompactVectorOfStrings<char> segment) {
   std::vector<size_t> insertPositions = insertPositionsInSortedIndices(segment);
 
   uint64_t firstGlobalIndex = numWords();
-  segmentOffsets_.push_back(firstGlobalIndex);
+  owned(segmentOffsets_).push_back(firstGlobalIndex);
   segments_.push_back(std::move(segment));
   mergeIntoSortedIndices(insertPositions, firstGlobalIndex);
 }
@@ -60,7 +60,7 @@ size_t SecondaryVocabulary::numWords() const {
   if (segments_.empty()) {
     return 0;
   }
-  return segmentOffsets_.back() + segments_.back().size();
+  return view(segmentOffsets_).back() + segments_.back().size();
 }
 
 // _____________________________________________________________________________
@@ -74,19 +74,20 @@ std::string_view SecondaryVocabulary::operator[](
   // `segmentOffsets_[0] == 0 <= globalIndex`, so `it` is never `begin()`, and
   // the segment before `it` is the last one that starts at or before
   // `globalIndex`.
-  auto it = ql::ranges::upper_bound(segmentOffsets_, globalIndex);
-  size_t segmentIdx = static_cast<size_t>(it - segmentOffsets_.begin()) - 1;
-  return segments_[segmentIdx][globalIndex - segmentOffsets_[segmentIdx]];
+  auto segmentOffsets = view(segmentOffsets_);
+  auto it = ql::ranges::upper_bound(segmentOffsets, globalIndex);
+  size_t segmentIdx = static_cast<size_t>(it - segmentOffsets.begin()) - 1;
+  return segments_[segmentIdx][globalIndex - segmentOffsets[segmentIdx]];
 }
 
 // _____________________________________________________________________________
 std::optional<SecondaryVocabIndex> SecondaryVocabulary::getId(
     std::string_view word) const {
-  auto [it, found] = lowerBoundInSortedIndices(word, sortedIndices_.begin());
+  auto [position, found] = lowerBoundInSortedIndices(word, 0);
   if (!found) {
     return std::nullopt;
   }
-  return SecondaryVocabIndex::make(*it);
+  return SecondaryVocabIndex::make(view(sortedIndices_)[position]);
 }
 
 // _____________________________________________________________________________
@@ -95,8 +96,12 @@ SecondaryVocabulary SecondaryVocabulary::clone() const {
   for (const auto& segment : segments_) {
     result.segments_.push_back(segment.cloneAndRemap(ql::identity{}));
   }
-  result.segmentOffsets_ = segmentOffsets_;
-  result.sortedIndices_ = sortedIndices_;
+  auto copy = [](const IndexArray& array) {
+    auto arrayView = view(array);
+    return std::vector<uint64_t>(arrayView.begin(), arrayView.end());
+  };
+  result.segmentOffsets_ = copy(segmentOffsets_);
+  result.sortedIndices_ = copy(sortedIndices_);
   return result;
 }
 
@@ -107,16 +112,15 @@ std::vector<size_t> SecondaryVocabulary::insertPositionsInSortedIndices(
   insertPositions.reserve(segment.size());
   // The words of `segment` are sorted, so their insert positions are
   // non-decreasing and the search range can be shrunk from the left as we go.
-  auto begin = sortedIndices_.cbegin();
+  size_t begin = 0;
   for (std::string_view word : segment) {
-    auto [it, found] = lowerBoundInSortedIndices(word, begin);
+    auto [position, found] = lowerBoundInSortedIndices(word, begin);
     AD_CONTRACT_CHECK(!found,
                       "The words of a secondary vocabulary have to be "
                       "distinct, but the word ",
                       word, " is already contained in a previous segment");
-    insertPositions.push_back(
-        static_cast<size_t>(it - sortedIndices_.cbegin()));
-    begin = it;
+    insertPositions.push_back(position);
+    begin = position;
   }
   return insertPositions;
 }
@@ -124,9 +128,10 @@ std::vector<size_t> SecondaryVocabulary::insertPositionsInSortedIndices(
 // _____________________________________________________________________________
 void SecondaryVocabulary::mergeIntoSortedIndices(
     const std::vector<size_t>& insertPositions, uint64_t firstGlobalIndex) {
-  size_t numOldWords = sortedIndices_.size();
+  auto& sortedIndices = owned(sortedIndices_);
+  size_t numOldWords = sortedIndices.size();
   size_t numNewWords = insertPositions.size();
-  sortedIndices_.resize(numOldWords + numNewWords);
+  sortedIndices.resize(numOldWords + numNewWords);
 
   // Fill `sortedIndices_` from the back. `previousInsertPos` is the position
   // at which the global index of the previously handled new word was written
@@ -137,10 +142,10 @@ void SecondaryVocabulary::mergeIntoSortedIndices(
   // index of word `i` directly in front of the shifted ones. The global
   // indices at the positions in front of `insertPositions.front()` stay where
   // they are, so each of them is moved at most once.
-  auto previousInsertPos = sortedIndices_.end();
+  auto previousInsertPos = sortedIndices.end();
   for (size_t i : ad_utility::integerRange(numNewWords) | ql::views::reverse) {
-    auto insertPos = sortedIndices_.begin() +
-                     static_cast<std::ptrdiff_t>(insertPositions[i]);
+    auto insertPos =
+        sortedIndices.begin() + static_cast<std::ptrdiff_t>(insertPositions[i]);
     ql::shift_right(insertPos, previousInsertPos,
                     static_cast<std::ptrdiff_t>(i + 1));
     previousInsertPos = insertPos + static_cast<std::ptrdiff_t>(i);
@@ -149,17 +154,35 @@ void SecondaryVocabulary::mergeIntoSortedIndices(
 }
 
 // _____________________________________________________________________________
-std::pair<std::vector<uint64_t>::const_iterator, bool>
-SecondaryVocabulary::lowerBoundInSortedIndices(
-    std::string_view word, std::vector<uint64_t>::const_iterator first) const {
+std::pair<size_t, bool> SecondaryVocabulary::lowerBoundInSortedIndices(
+    std::string_view word, size_t first) const {
+  auto sortedIndices = view(sortedIndices_);
   auto project = [this](uint64_t globalIndex) { return wordAt(globalIndex); };
-  auto it =
-      ql::ranges::lower_bound(first, sortedIndices_.cend(), word, {}, project);
-  bool found = it != sortedIndices_.cend() && project(*it) == word;
-  return {it, found};
+  auto it = ql::ranges::lower_bound(sortedIndices.begin() + first,
+                                    sortedIndices.end(), word, {}, project);
+  bool found = it != sortedIndices.end() && project(*it) == word;
+  return {static_cast<size_t>(it - sortedIndices.begin()), found};
 }
 
 // _____________________________________________________________________________
 std::string_view SecondaryVocabulary::wordAt(uint64_t globalIndex) const {
   return (*this)[SecondaryVocabIndex::make(globalIndex)];
+}
+
+// _____________________________________________________________________________
+ql::span<const uint64_t> SecondaryVocabulary::view(const IndexArray& array) {
+  return std::visit(
+      [](const auto& alternative) {
+        return ql::span<const uint64_t>{alternative};
+      },
+      array);
+}
+
+// _____________________________________________________________________________
+std::vector<uint64_t>& SecondaryVocabulary::owned(IndexArray& array) {
+  if (auto* arrayView = std::get_if<ql::span<const uint64_t>>(&array)) {
+    std::vector<uint64_t> copy(arrayView->begin(), arrayView->end());
+    array = std::move(copy);
+  }
+  return std::get<std::vector<uint64_t>>(array);
 }
