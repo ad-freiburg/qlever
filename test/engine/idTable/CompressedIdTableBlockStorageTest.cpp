@@ -626,18 +626,37 @@ TEST(CompressedIdTableBlockStorage, theReadAheadClaimsSeveralBlocksAtOnce) {
 
 // _____________________________________________________________________________
 TEST(CompressedIdTableBlockStorage, withoutReadAheadNothingIsClaimedInAdvance) {
-  // The read-ahead is off by default, in which case a spilled block is only
-  // read once the consumer asks for exactly that block.
+  // The read-ahead is off unless it is asked for: the `maxReadAheadBlocks`
+  // argument of the storage defaults to zero, in which case a spilled block is
+  // only read once the consumer asks for exactly that block. This pins that
+  // default, so that it cannot silently turn into an enabled read-ahead.
   net::io_context ioContext;
-  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 0);
+  // NOTE: `maxReadAheadBlocks` is deliberately *not* passed, so that this test
+  // sees whatever the default is.
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(),
+                                      /*maxBufferedBlocksPerChunk=*/0);
   absl::Cleanup cleanup = [&storage] {
     ad_utility::deleteFile(storage.spillFilename(0), false);
   };
   Producer<0> producer{storage, 0, makeValues<0>(1, {{0}, {1}, {2}}, true)};
   runAndPoll(ioContext, [&] { producer.storeAll(); });
+  // Nothing is buffered, so all three blocks really went to the file. Without
+  // that, the chunk would have nothing that a read-ahead *could* claim and the
+  // check below would hold for the wrong reason.
+  EXPECT_GT(ql::filesystem::file_size(storage.spillFilename(0)), 0u);
+
   GetOutcomes gets;
   runAndPoll(ioContext, [&] { get(storage, 0, gets, false); });
   EXPECT_THAT(gets.blocks_, ::testing::ElementsAre(makeRows(1, {0})));
+  // The consumer read its own block and claimed none of the two that are still
+  // in the file.
+  EXPECT_EQ(numPendingReads(ioContext, storage, 0), 0u);
+
+  // The remaining blocks still arrive, each read by the consumer itself.
+  runAndPoll(ioContext, [&] { get(storage, 0, gets, true); });
+  EXPECT_THAT(gets.blocks_,
+              ::testing::ElementsAre(makeRows(1, {0}), makeRows(1, {1}),
+                                     makeRows(1, {2})));
   EXPECT_EQ(numPendingReads(ioContext, storage, 0), 0u);
 }
 

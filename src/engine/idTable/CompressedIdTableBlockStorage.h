@@ -108,9 +108,15 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   // that are kept in memory per chunk before that chunk starts spilling, and
   // the number of spilled blocks that are read back concurrently (see the
   // READ-AHEAD note at `CompressedIdTableChunkQueue.h`). The former may be
-  // zero, in which case every block is spilled; the latter may be zero as
-  // well, in which case a spilled block is only read once the consumer asks for
-  // it. The `compressionLevel` decides how the spilled blocks are stored, see
+  // zero, in which case every block is spilled.
+  //
+  // IMPORTANT: `maxReadAheadBlocks` defaults to zero, which turns the
+  // read-ahead off entirely: a spilled block is then only read once the
+  // consumer asks for exactly that block. A caller that wants the read-ahead
+  // has to ask for it (the merge phase does, see
+  // `MERGE_PHASE_READ_AHEAD_BLOCKS`).
+  //
+  // The `compressionLevel` decides how the spilled blocks are stored, see
   // `CompressedBlockFile::CompressionLevel`.
   //
   // NOTE: The `filenamePrefix` is not a filename but the prefix of one per
@@ -287,6 +293,7 @@ template <size_t NumCols>
 auto makeCompressedIdTableStorageFactory(
     net::any_io_executor ioExecutor, std::string filenamePrefix,
     AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerChunk,
+    // NOTE: Zero turns the read-ahead off, see the constructor above.
     size_t maxReadAheadBlocks = 0,
     CompressedBlockFile::CompressionLevel compressionLevel =
         ZSTD_DEFAULT_LEVEL) {

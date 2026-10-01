@@ -178,8 +178,8 @@ class ChunkQueue : public NoCopyNoMove,
   // memory before this queue starts spilling, and the number of spilled blocks
   // that are read back concurrently (see the READ-AHEAD note above). The former
   // may be zero, in which case every block is spilled; the latter may be zero
-  // as well, in which case a spilled block is only read once the consumer asks
-  // for it.
+  // as well, which turns the read-ahead off entirely, so that a spilled block
+  // is only read once the consumer asks for exactly that block.
   ChunkQueue(net::any_io_executor ioExecutor, AllocatorWithLimit<Id> allocator,
              std::string filename,
              CompressedBlockFile::CompressionLevel compressionLevel,

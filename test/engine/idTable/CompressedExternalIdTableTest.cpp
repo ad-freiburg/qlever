@@ -1299,7 +1299,15 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // single chunk still leaves `(8 - 2) MB / (12 + 3) = 400 kB` (that is
   // `12'500` rows), which is above the hard floor of
   // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows. The `12` are the default
-  // of `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`.
+  // of `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`, and the
+  // `3` is `mergePhaseOutputBlocksPerChunk` of the minimal buffering.
+  //
+  // IMPORTANT: The single chunk clears the hard floor of `10'000` rows by only
+  // a factor of `1.25`. Raising `numBufferedOutputBlocks_` any further (or
+  // lowering the memory here) makes `computeMergePhaseParameters` throw instead
+  // of merging with a single chunk, and this test would then no longer reach
+  // the warning that it is named for. Re-derive the numbers above when either
+  // of them changes.
   const auto memory = ad_utility::MemorySize::bytes(8'000'000);
   const auto blocksizeCompression = ad_utility::MemorySize::bytes(250'000);
   // One run holds `8'000'000 / (4 * 8 * 2) = 125'000` rows, so the following
