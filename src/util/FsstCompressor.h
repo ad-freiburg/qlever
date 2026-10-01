@@ -113,7 +113,8 @@ class FsstDecoder {
   // ___________________________________________________________________________
   // Size of the stack buffer that `decompress` decodes into before it copies
   // the result into an owning string. Decoded strings of this size or longer
-  // take a slower path with a second decode.
+  // take a slower path with a second decode. 1024 bytes decode the typical
+  // short word in one pass while keeping per-call stack use negligible.
   static constexpr size_t decodeStackBufferSize = 1024;
 
   // ___________________________________________________________________________
