@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <utility>
+
 #include "util/stream_generator.h"
 
 using namespace ad_utility::streams;
@@ -121,10 +123,12 @@ TEST(StreamableGenerator, ChunkCapacityAppliesFromTheNextChunk) {
 }
 
 // _____________________________________________________________________________
-TEST(StreamableGenerator, ChunkCapacityOnDefaultConstructedGeneratorThrows) {
-  // A default-constructed generator owns no coroutine, so changing the chunk
-  // capacity must fail its contract check instead of dereferencing null.
+TEST(StreamableGenerator, ChunkCapacityOnMovedFromGeneratorThrows) {
+  // A default-constructed generator owns the no-op coroutine, so only a
+  // moved-from generator has a null handle: changing the chunk capacity on it
+  // must fail its contract check instead of dereferencing null.
   stream_generator generator;
+  stream_generator moved = std::move(generator);
   EXPECT_ANY_THROW(generator.setChunkCapacity(4));
 }
 
