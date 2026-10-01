@@ -180,28 +180,18 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
  * accessor is a prvalue, which can't bind to `std::swap`'s `T&` parameters.
  * `T` has to be given explicitly, since it can't be deduced from `A`/`B` when
  * those are a proxy type rather than `T` itself.
- *
- * Every assignment goes through an explicit `static_cast<T>` rather than a
- * bare implicit conversion: when `A`/`B` are the same proxy type (the usual
- * case -- both `a` and `b` come from the same kind of accessor), assigning
- * one proxy from the other directly would make that proxy's own, compiler-
- * generated copy/move assignment operator an exact-match candidate, which
- * standard overload resolution prefers over the proxy's `operator=(T)` that
- * requires a user-defined conversion. That would silently rebind the proxy's
- * internal pointer(s) instead of writing through it -- the cast forces the
- * intended read-then-write via `T` unconditionally.
  */
+// NOLINTBEGIN(bugprone-move-forwarding-reference,cppcoreguidelines-missing-std-forward)
+// -- `A`/`B` exist to accept a proxy prvalue, not to forward; must always
+// move, like `std::swap`, so `std::forward` would silently copy instead for
+// a real `T&` argument.
 template <typename T, typename A, typename B>
-void assignSwap(A&& a, B&& b) {  // NOSONAR
-  // NOLINTBEGIN(bugprone-move-forwarding-reference) -- `A`/`B` exist to
-  // accept a proxy prvalue, not to forward; must always move, like
-  // `std::swap`, so `std::forward` would silently copy instead for a
-  // real `T&` argument.
+void assignSwap(A&& a, B&& b) {             // NOSONAR
   auto tmp = static_cast<T>(std::move(a));  // NOSONAR
   a = static_cast<T>(std::move(b));         // NOSONAR
   b = static_cast<T>(std::move(tmp));       // NOSONAR
-  // NOLINTEND(bugprone-move-forwarding-reference)
 }
+// NOLINTEND(bugprone-move-forwarding-reference,cppcoreguidelines-missing-std-forward)
 
 // Remove duplicates in the given vector without changing the order. For
 // example: 4, 6, 6, 2, 2, 4, 2 becomes 4, 6, 2.
