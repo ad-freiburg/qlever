@@ -99,10 +99,14 @@ struct AsyncStreamGenerator
   // constructor for why the latter matters). The thread of the
   // `ownThreadPool_` (if any) is then joined by the destructor of that member.
   ~AsyncStreamGenerator() {
-    queue_.finish();
-    if (future_.valid()) {
-      future_.wait();
-    }
+    ad_utility::terminateIfThrows(
+        [this]() {
+          queue_.finish();
+          if (future_.valid()) {
+            future_.wait();
+          }
+        },
+        "The destructor of the generator of `runStreamAsync`");
   }
 
   std::optional<value_type> get() override {
