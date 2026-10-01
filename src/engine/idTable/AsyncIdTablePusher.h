@@ -26,7 +26,6 @@
 
 #include "backports/asio.h"
 #include "engine/idTable/IdTable.h"
-#include "engine/idTable/IdTableConcepts.h"
 #include "util/AsyncHandlerUtils.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
@@ -65,15 +64,19 @@ class AsyncIdTablePusher {
   using Sink = absl::AnyInvocable<void(Block)>;
   // The type-erased completion handler of `asyncPushBlock`, see there.
   using Handler = absl::AnyInvocable<void(std::exception_ptr)>;
+  // The type in which `asyncPushBlock` takes the table to push. A view can be
+  // cheaply created from any `IdTable` via `asStaticView<0>()`.
+  using TablePtr = std::shared_ptr<const IdTableView<0>>;
 
  private:
   using Allocator = typename Block::Allocator;
 
   // The state of a single `asyncPushBlock` that is in flight.
   struct PushOperation {
-    // The columns of the pushed table.
-    std::vector<ql::span<const Id>> sourceColumns_;
-    size_t numRows_ = 0;
+    // The pushed table. NOTE: The `shared_ptr` only keeps the view alive, the
+    // rows that it refers to have to be kept alive by the caller of
+    // `asyncPushBlock`.
+    TablePtr table_;
     // The number of rows that have already been copied into a block.
     size_t numPushed_ = 0;
     Handler handler_;
@@ -90,8 +93,10 @@ class AsyncIdTablePusher {
   // The number of `asyncPushBlock`s that have been started, but whose
   // completion handler has not yet been called. It is used to check that no
   // push is in flight when this is required (see `finish`, `numPendingRows`,
-  // and the destructor). It is the only member that may be accessed from any
-  // thread.
+  // and the destructor). The members above never change after construction,
+  // and `block_` is only written outside of `strand_` into disjoint ranges of
+  // rows (see `copyColumnsOnExecutor`). Apart from those, this counter is the
+  // only member that is accessed outside of `strand_`.
   std::atomic<size_t> numOperationsInFlight_ = 0;
 
   // All the following members are only accessed from within `strand_` (or by
@@ -154,23 +159,21 @@ class AsyncIdTablePusher {
   // class if it has none. Concurrent calls are allowed and are the intended
   // way of using this class.
   //
-  // IMPORTANT: The `table` must stay alive and unchanged until the operation
-  // has completed, because its rows are only copied while it is in flight.
-  CPP_template(typename Table, typename CompletionToken)(
-      requires IdTableLike<Table>) auto asyncPushBlock(const Table& table,
-                                                       CompletionToken&&
-                                                           completionToken) {
-    AD_CONTRACT_CHECK(table.numColumns() == numColumns_);
+  // IMPORTANT: The `table` is a non-owning view. The `shared_ptr` keeps the
+  // view itself alive, but the rows that it refers to must stay alive and
+  // unchanged until the operation has completed, because they are only copied
+  // while it is in flight.
+  template <typename CompletionToken>
+  auto asyncPushBlock(TablePtr table, CompletionToken&& completionToken) {
+    AD_CONTRACT_CHECK(table != nullptr);
+    AD_CONTRACT_CHECK(table->numColumns() == numColumns_);
     auto operation = std::make_shared<PushOperation>();
-    for (size_t col = 0; col < numColumns_; ++col) {
-      operation->sourceColumns_.push_back(table.getColumn(col));
-    }
-    operation->numRows_ = table.numRows();
+    operation->table_ = std::move(table);
     auto initiate = [this,
                      operation = std::move(operation)](auto handler) mutable {
       operation->handler_ =
           makeHandlerExecutorAware(std::move(handler), executor_);
-      numOperationsInFlight_.fetch_add(1, std::memory_order_relaxed);
+      numOperationsInFlight_.fetch_add(1);
       boost::asio::dispatch(strand_,
                             [this, operation = std::move(operation)]() mutable {
                               pushNextChunk(std::move(operation));
@@ -217,7 +220,7 @@ class AsyncIdTablePusher {
   // Throw if an `asyncPushBlock` is still in flight.
   void checkNoOperationInFlight() const {
     AD_CONTRACT_CHECK(
-        numOperationsInFlight_.load(std::memory_order_acquire) == 0,
+        numOperationsInFlight_.load() == 0,
         "An `asyncPushBlock` is still in flight, all of them have to be "
         "completed first.");
   }
@@ -225,15 +228,32 @@ class AsyncIdTablePusher {
   // Reserve the next range of rows of `block_` for the `operation` and copy
   // them outside of the strand, or complete the `operation` if all its rows
   // have been pushed (or an exception occurred). Must be called on the strand.
+  //
+  // Every call ends in exactly one of the following three ways:
+  // 1. The `operation` is completed by `completeIfDone`. This is the only
+  //    place where its `handler_` is called, and the call is immediately
+  //    followed by a `return`.
+  // 2. The `operation` is parked in `waitingForNextBlock_`. It is resumed (via
+  //    another call to `pushNextChunk`) by `handOverBlockIfComplete`, which
+  //    runs as soon as the last outstanding copy into the full `block_` has
+  //    finished.
+  // 3. A single copy is posted for the `operation`, which afterwards calls
+  //    `pushNextChunk` exactly once (via `onCopyFinished`).
+  // As every `operation` is at any time owned by exactly one pending call to
+  // `pushNextChunk`, one parked entry, or one posted copy, its `handler_` is
+  // called exactly once, also in the presence of an exception: Once
+  // `exception_` is set, no `operation` is parked anymore (the check at the
+  // beginning comes first), and the already parked ones are resumed by the
+  // hand-over after the last outstanding copy, and then complete in 1.
   void pushNextChunk(OperationPtr operation) {
     // Complete the `operation` and return `true` if there is nothing more to
     // do for it.
     auto completeIfDone = [this, &operation]() {
-      if (exception_ || operation->numPushed_ == operation->numRows_) {
+      if (exception_ || operation->numPushed_ == operation->table_->numRows()) {
         // NOTE: The decrement happens before the `handler_` is called (which
         // posts it), so that everyone who observes the completion also
         // observes the decremented counter.
-        numOperationsInFlight_.fetch_sub(1, std::memory_order_release);
+        numOperationsInFlight_.fetch_sub(1);
         std::move(operation->handler_)(exception_);
         return true;
       }
@@ -254,8 +274,9 @@ class AsyncIdTablePusher {
       return;
     }
     const size_t targetRow = numRowsReserved_;
-    const size_t numToPush = std::min(
-        blocksize_ - targetRow, operation->numRows_ - operation->numPushed_);
+    const size_t numToPush =
+        std::min(blocksize_ - targetRow,
+                 operation->table_->numRows() - operation->numPushed_);
     numRowsReserved_ += numToPush;
     ++numOutstandingCopies_;
     // NOTE: This is the expensive part, and it deliberately runs outside of
@@ -276,6 +297,10 @@ class AsyncIdTablePusher {
   void resizeBlockIfNecessary() {
     recordException([this]() {
       if (!blockIsResized_) {
+        // `blockIsResized_` is only `false` before the first push, after
+        // `finish`, and after a hand-over, so no copy into `block_` can be
+        // running, which would be invalidated by the `resize`.
+        AD_CORRECTNESS_CHECK(numOutstandingCopies_ == 0);
         block_.resize(blocksize_);
         blockIsResized_ = true;
         numRowsReserved_ = 0;
@@ -289,7 +314,8 @@ class AsyncIdTablePusher {
                              size_t numToPush) {
     const size_t beginRow = operation.numPushed_;
     for (size_t col = 0; col < numColumns_; ++col) {
-      auto source = operation.sourceColumns_[col].subspan(beginRow, numToPush);
+      auto source =
+          operation.table_->getColumn(col).subspan(beginRow, numToPush);
       // Neither `block_` nor its buffers change while copies are outstanding,
       // so it is safe to access them here.
       auto target = block_.getColumn(col).subspan(targetRow, numToPush);
@@ -333,6 +359,8 @@ class AsyncIdTablePusher {
         numOutstandingCopies_ > 0) {
       return;
     }
+    // The early return above guarantees that no copy into `block_` is running
+    // anymore, so it may be swapped out.
     Block complete{numColumns_, allocator_};
     std::swap(complete, block_);
     blockIsResized_ = false;

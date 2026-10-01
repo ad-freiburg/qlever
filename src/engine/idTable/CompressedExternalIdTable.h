@@ -1065,8 +1065,8 @@ class CompressedExternalIdTableSorter
   // threads may do at the same time. The work runs on the executor of
   // `setMergeExecutor`, and the completion signature is
   // `void(std::exception_ptr)`, see `AsyncIdTablePusher::asyncPushBlock` for
-  // the details (in particular, the `table` has to stay alive until the
-  // operation has completed).
+  // the details (in particular, the rows that the `table` view refers to have
+  // to stay alive until the operation has completed).
   //
   // NOTE: This function is the *only* one of this class that may be called
   // concurrently. While such pushes are in flight, no other member (not even
@@ -1074,11 +1074,11 @@ class CompressedExternalIdTableSorter
   // the pushes have to be completed first. Afterwards every other member may be
   // used again without further ado, because they all begin with
   // `finishConcurrentPushes`.
-  CPP_template(typename Table, typename CompletionToken)(
-      requires IdTableLike<Table>) auto asyncPushBlock(const Table& table,
-                                                       CompletionToken&&
-                                                           completionToken) {
-    return this->asyncPusher_->asyncPushBlock(table, AD_FWD(completionToken));
+  template <typename CompletionToken>
+  auto asyncPushBlock(std::shared_ptr<const IdTableView<0>> table,
+                      CompletionToken&& completionToken) {
+    return this->asyncPusher_->asyncPushBlock(std::move(table),
+                                              AD_FWD(completionToken));
   }
 
   // Set how the merge phase stores the output blocks that it spills (see

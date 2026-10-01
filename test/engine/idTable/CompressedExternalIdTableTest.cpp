@@ -12,13 +12,12 @@
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/thread_pool.hpp>
-#include <boost/asio/use_future.hpp>
-#include <future>
 
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
+#include "./AsyncPushTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -1599,16 +1598,7 @@ void testAsyncPushBlock(const std::vector<IdTable>& tables, size_t blocksize,
     expected.insertAtEnd(table);
   }
 
-  std::vector<std::future<void>> futures(tables.size());
-  {
-    std::vector<ad_utility::JThread> threads;
-    for (size_t i = 0; i < tables.size(); ++i) {
-      threads.emplace_back([&sorter, &tables, &futures, i]() {
-        futures[i] = sorter.asyncPushBlock(tables[i], net::use_future);
-      });
-    }
-  }
-  for (auto& future : futures) {
+  for (auto& future : asyncPushTestHelpers::pushConcurrently(sorter, tables)) {
     future.get();
   }
   EXPECT_EQ(sorter.size(), expected.numRows());

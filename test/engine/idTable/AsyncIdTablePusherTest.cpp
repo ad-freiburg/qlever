@@ -20,13 +20,15 @@
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
+#include "./AsyncPushTestHelpers.h"
 #include "engine/idTable/AsyncIdTablePusher.h"
-#include "util/jthread.h"
 
 namespace {
 namespace net = boost::asio;
 using ad_utility::AsyncIdTablePusher;
 using Pusher = AsyncIdTablePusher<0>;
+using asyncPushTestHelpers::pushConcurrently;
+using asyncPushTestHelpers::viewOf;
 
 // Return the rows of the `table` as vectors, sorted lexicographically, so that
 // tables can be compared independently of the order of their rows.
@@ -37,20 +39,6 @@ std::vector<std::vector<Id>> sortedRows(const IdTable& table) {
   }
   ql::ranges::sort(rows);
   return rows;
-}
-
-// Start an `asyncPushBlock` for each of the `tables` from a thread of its own,
-// and return the futures of these pushes.
-std::vector<std::future<void>> pushConcurrently(
-    Pusher& pusher, const std::vector<IdTable>& tables) {
-  std::vector<std::future<void>> futures(tables.size());
-  std::vector<ad_utility::JThread> threads;
-  for (size_t i = 0; i < tables.size(); ++i) {
-    threads.emplace_back([&pusher, &tables, &futures, i]() {
-      futures[i] = pusher.asyncPushBlock(tables[i], net::use_future);
-    });
-  }
-  return futures;
 }
 
 // Push the `tables` concurrently into a pusher with the given `blocksize`, and
@@ -132,14 +120,14 @@ TEST(AsyncIdTablePusher, emptyTableAndReuse) {
 
   // Pushing an empty table completes immediately and allocates nothing.
   IdTable empty{2, alloc};
-  pusher.asyncPushBlock(empty, net::use_future).get();
+  pusher.asyncPushBlock(viewOf(empty), net::use_future).get();
   EXPECT_EQ(pusher.numPendingRows(), 0);
   EXPECT_EQ(pusher.finish().numRows(), 0);
 
   // After `finish` the pusher can be used again.
   auto table = createRandomlyFilledIdTable(25, 2);
   for (size_t i = 0; i < 2; ++i) {
-    pusher.asyncPushBlock(table, net::use_future).get();
+    pusher.asyncPushBlock(viewOf(table), net::use_future).get();
     EXPECT_EQ(pusher.numPendingRows(), 5);
     auto remainder = pusher.finish();
     EXPECT_EQ(remainder.numRows(), 5);
@@ -148,7 +136,8 @@ TEST(AsyncIdTablePusher, emptyTableAndReuse) {
 
   // The number of columns has to match.
   IdTable wrongNumColumns{3, alloc};
-  EXPECT_ANY_THROW(pusher.asyncPushBlock(wrongNumColumns, net::use_future));
+  EXPECT_ANY_THROW(
+      pusher.asyncPushBlock(viewOf(wrongNumColumns), net::use_future));
 }
 
 // _____________________________________________________________________________
@@ -166,7 +155,7 @@ TEST(AsyncIdTablePusher, noAccessWhileInFlight) {
                   releaseFuture.wait();
                 }};
   auto table = createRandomlyFilledIdTable(10, 2);
-  auto future = pusher.asyncPushBlock(table, net::use_future);
+  auto future = pusher.asyncPushBlock(viewOf(table), net::use_future);
   sinkEntered.get_future().wait();
   AD_EXPECT_THROW_WITH_MESSAGE(pusher.numPendingRows(),
                                ::testing::HasSubstr("still in flight"));
@@ -201,14 +190,15 @@ TEST(AsyncIdTablePusher, exceptionInSink) {
     }
   }
   EXPECT_GE(numFailed, 1);
-  EXPECT_THROW(pusher.asyncPushBlock(tables.at(0), net::use_future).get(),
-               std::runtime_error);
+  EXPECT_THROW(
+      pusher.asyncPushBlock(viewOf(tables.at(0)), net::use_future).get(),
+      std::runtime_error);
 
   // `finish` resets the exception, so a push that doesn't fill a block
   // succeeds again.
   pusher.finish();
   auto small = createRandomlyFilledIdTable(5, 2);
-  pusher.asyncPushBlock(small, net::use_future).get();
+  pusher.asyncPushBlock(viewOf(small), net::use_future).get();
   EXPECT_EQ(pusher.finish().numRows(), 5);
 }
 
@@ -222,10 +212,11 @@ TEST(AsyncIdTablePusher, completionHandlerRunsOnItsExecutor) {
   std::promise<bool> promise;
   auto handlerExecutor = handlerPool.get_executor();
   pusher.asyncPushBlock(
-      table, net::bind_executor(handlerExecutor, [&promise, handlerExecutor](
-                                                     std::exception_ptr ex) {
-        promise.set_value(ex == nullptr &&
-                          handlerExecutor.running_in_this_thread());
-      }));
+      viewOf(table),
+      net::bind_executor(
+          handlerExecutor, [&promise, handlerExecutor](std::exception_ptr ex) {
+            promise.set_value(ex == nullptr &&
+                              handlerExecutor.running_in_this_thread());
+          }));
   EXPECT_TRUE(promise.get_future().get());
 }
