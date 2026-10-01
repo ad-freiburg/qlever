@@ -58,7 +58,8 @@ void ensureFiberAlgorithm() {
 #endif
 
 //______________________________________________________________________________
-void FiberIoScheduler::runAsFibers(std::vector<std::function<void()>> bodies) {
+void FiberIoScheduler::runAsFibers(
+    const std::vector<std::function<void()>>& bodies) {
 #if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
   if (bodies.empty()) {
     return;
@@ -135,7 +136,7 @@ void FiberIoScheduler::runAsFibers(std::vector<std::function<void()>> bodies) {
 #else
   // Without fiber support the bodies run sequentially in order, so callers
   // keep a single code path on every build configuration.
-  for (auto& body : bodies) {
+  for (const auto& body : bodies) {
     body();
   }
 #endif

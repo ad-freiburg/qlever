@@ -71,7 +71,7 @@ class FiberIoScheduler {
   // finished. Exceptions thrown by a body propagate to the caller after all
   // fibers have been joined; the first exception is rethrown. Without fiber
   // support the bodies run sequentially in order.
-  static void runAsFibers(std::vector<std::function<void()>> bodies);
+  static void runAsFibers(const std::vector<std::function<void()>>& bodies);
 
 #if defined(QLEVER_HAS_IO_URING) && defined(QLEVER_HAS_FIBER_IO)
   // Cooperatively wait until every read of `handle` has completed. To be
