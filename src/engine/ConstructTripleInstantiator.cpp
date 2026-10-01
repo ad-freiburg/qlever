@@ -148,6 +148,31 @@ size_t turtleTripleSizeUpperBound(const EvaluatedTriple& triple) {
          turtleTermSizeUpperBound(*object) + 5;
 }
 
+// Format the pending triple and as many following triples as fit into one
+// batch. `pending` holds a triple on entry; on exit it holds the first triple
+// that no longer fits, or nothing when `triples` is exhausted.
+std::string formatPendingBatch(
+    ad_utility::InputRangeTypeErased<EvaluatedTriple>& triples,
+    size_t targetBatchBytes, std::optional<EvaluatedTriple>& pending) {
+  // The first triple of a batch always fits, also if it is larger than
+  // `targetBatchBytes`.
+  std::string batch(
+      std::max(targetBatchBytes, turtleTripleSizeUpperBound(pending.value())),
+      '\0');
+  ql::export_formatting::FastExportStreamFormatter formatter(
+      ql::span<char>(batch.data(), batch.size()));
+  do {
+    formatter.writeTriple(ql::export_formatting::ExportFormat::Turtle,
+                          pending.value());
+    pending = triples.get();
+  } while (pending.has_value() &&
+           formatter.currentChunk().size() +
+                   turtleTripleSizeUpperBound(pending.value()) <=
+               batch.size());
+  batch.resize(formatter.currentChunk().size());
+  return batch;
+}
+
 }  // namespace
 
 // _____________________________________________________________________________
@@ -169,8 +194,6 @@ std::string formatTripleAsTurtleWithFastFormatter(
 ad_utility::InputRangeTypeErased<std::string> formatTriplesAsTurtleInBatches(
     ad_utility::InputRangeTypeErased<EvaluatedTriple> triples,
     size_t targetBatchBytes) {
-  using ql::export_formatting::ExportFormat;
-  using ql::export_formatting::FastExportStreamFormatter;
   AD_CONTRACT_CHECK(targetBatchBytes > 0);
   // `pending` is the next triple to be formatted. It is pulled from `triples`
   // before it is known whether it still fits into the current batch, so it has
@@ -184,22 +207,7 @@ ad_utility::InputRangeTypeErased<std::string> formatTriplesAsTurtleInBatches(
     if (!pending.has_value()) {
       return std::nullopt;
     }
-    // The first triple of a batch always fits, also if it is larger than
-    // `targetBatchBytes`.
-    std::string batch(
-        std::max(targetBatchBytes, turtleTripleSizeUpperBound(pending.value())),
-        '\0');
-    FastExportStreamFormatter formatter(
-        ql::span<char>(batch.data(), batch.size()));
-    do {
-      formatter.writeTriple(ExportFormat::Turtle, pending.value());
-      pending = triples.get();
-    } while (pending.has_value() &&
-             formatter.currentChunk().size() +
-                     turtleTripleSizeUpperBound(pending.value()) <=
-                 batch.size());
-    batch.resize(formatter.currentChunk().size());
-    return batch;
+    return formatPendingBatch(triples, targetBatchBytes, pending);
   };
   return ad_utility::InputRangeTypeErased<std::string>{
       ad_utility::InputRangeFromGetCallable{std::move(nextBatch)}};

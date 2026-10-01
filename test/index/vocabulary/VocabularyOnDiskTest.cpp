@@ -16,6 +16,7 @@
 
 #include "../../util/GTestHelpers.h"
 #include "../../util/MmapVectorLegacyFormat.h"
+#include "../../util/PageCacheReadTestHelpers.h"
 #include "../../util/RuntimeParametersTestHelpers.h"
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
@@ -368,6 +369,50 @@ TEST(VocabularyOnDisk, PageCacheFastPathMissesGoThroughTheManager) {
       *vocab, firstResult, indices);
   vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
       *vocab, secondResult, ql::span<const size_t>{indices}.subspan(3));
+}
+
+// _____________________________________________________________________________
+// Every other page-cache read finds nothing cached.
+int64_t everyOtherReadCached(int fd, const ::iovec* iov, int iovcnt,
+                             int64_t offset) {
+  static size_t numCalls = 0;
+  if (numCalls++ % 2 == 1) {
+    return pageCacheReadTestHelpers::nothingCached(fd, iov, iovcnt, offset);
+  }
+  return ad_utility::detail::systemPageCacheRead(fd, iov, iovcnt, offset);
+}
+
+// With the fast path on, reads that the page-cache read does not serve (none,
+// some or all of them, and after the fast path was found unsupported) go
+// through the batch manager; the result always matches `operator[]`.
+TEST(VocabularyOnDisk, LookupBatchPageCacheMissesGoThroughTheManager) {
+  if (!ad_utility::pageCacheFastPathIsSupported()) {
+    GTEST_SKIP() << "preadv2(RWF_NOWAIT) is not available";
+  }
+  using pageCacheReadTestHelpers::ScopedPageCacheRead;
+  auto vocab = createExampleVocabulary();
+  // Runs of consecutive indices, reordered and duplicated indices.
+  std::array<size_t, 13> indices{0, 1, 2, 3, 4, 2, 0, 3, 1, 1, 4, 0, 3};
+  auto check = [&]() {
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+        *vocab, vocab->lookupBatch(indices), indices);
+  };
+  {
+    ScopedPageCacheRead inject{&pageCacheReadTestHelpers::nothingCached};
+    check();
+  }
+  {
+    ScopedPageCacheRead inject{&everyOtherReadCached};
+    check();
+  }
+  {
+    ScopedPageCacheRead inject{&pageCacheReadTestHelpers::notSupported};
+    check();
+    EXPECT_FALSE(ad_utility::pageCacheFastPathIsSupported());
+    // The flag is still set, but the fast path is not used any more.
+    check();
+  }
+  EXPECT_TRUE(ad_utility::pageCacheFastPathIsSupported());
 }
 
 // An empty batch is an invalid request and must throw.

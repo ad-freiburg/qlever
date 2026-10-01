@@ -602,6 +602,34 @@ TEST(Vocabulary, SplitVocabularyLookupBatchAllCasesMatchItemAt) {
       absl::StrCat(gtestCurrentTestName(), ".compressed"));
 }
 
+// _____________________________________________________________________________
+// A mixed-marker `lookupBatch` that uses only a strict subset of the markers
+// must skip the unused marker groups (the empty-group `continue` in case 3 of
+// `SplitVocabulary::lookupBatch`).
+TEST(Vocabulary, SplitVocabularyLookupBatchSkipsUnusedMarker) {
+  const auto filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  auto cleanup = vocabulary_test::makeVocabFileCleanup(
+      filename, ThreeSplitCompressedVocabulary::fileSuffixes());
+  ThreeSplitCompressedVocabulary sv;
+  auto ww = sv.makeDiskWriterPtr(filename);
+  (*ww)("\"x\"", true);
+  (*ww)("\"y\"^^<http://example.com>", true);
+  (*ww)("\"z\"^^<blabliblu>", true);
+  ww->finish();
+  sv.readFromFile(filename);
+
+  auto marked = [](uint64_t index, uint8_t marker) {
+    return static_cast<size_t>(
+        ThreeSplitCompressedVocabulary::addMarker(index, marker));
+  };
+  // Markers 0 and 1 only; marker 2 has a word, but no index in this batch.
+  const std::array<size_t, 4> indices{marked(0, 0), marked(0, 1), marked(0, 0),
+                                      marked(0, 1)};
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+      sv, sv.lookupBatch(indices), indices);
+  sv.close();
+}
+
 using namespace splitVocabTestHelpers;
 
 // Share common SplitVocabulary setup across multiple tests. Every test gets a
