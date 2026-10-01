@@ -1,0 +1,1 @@
+addLinkAndDiscoverTestNoLibs(ParallelQuicksortTest qlever_util)
