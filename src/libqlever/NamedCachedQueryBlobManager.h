@@ -12,11 +12,13 @@
 
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "backports/memory_resource.h"
 #include "backports/span.h"
 #include "util/AlignedAllocator.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UninitializedAllocator.h"
 
@@ -59,6 +61,11 @@ class NamedCachedQueryBlobManager {
   using BlobAllocator = ad_utility::default_init_allocator<
       char,
       ad_utility::AlignedAllocator<char, ql::pmr::polymorphic_allocator<char>>>;
+
+  // The result of `tryToDecompressBlob` below: the decompressed blob on
+  // success, and the error reported by ZSTD otherwise.
+  using DecompressedBlobOrError =
+      std::variant<std::vector<char, BlobAllocator>, ZstdWrapper::Error>;
 
   // The result of loading a blob (see `tryToDeserialize` below). All of these
   // are detected before the vocabulary or the named result cache of the blob
@@ -120,6 +127,9 @@ class NamedCachedQueryBlobManager {
   // is left completely unchanged, so it can be used as if this function had
   // never been called, and another blob can be loaded afterwards.
   //
+  // For each of these failures, the details that the status cannot convey (for
+  // example the underlying ZSTD error) are written to the error log.
+  //
   // NOTE: This function is non-throwing only for the failures that are detected
   // before the vocabulary or the named result cache of the blob are read (see
   // `BlobStatus`). Contents that cannot be read behind a valid header still
@@ -148,16 +158,16 @@ class NamedCachedQueryBlobManager {
 
   // Inverse of `compressBlob`: decompress `compressedBlob` into a freshly
   // allocated buffer that uses `allocator` for its storage (see
-  // `BlobAllocator`). Return `nullopt` if `compressedBlob` was not written by
-  // `compressBlob`, or is corrupted. Exceptions that do not come from ZSTD (in
-  // particular `std::bad_alloc`, should the frame header state an uncompressed
-  // size that cannot be allocated) are still propagated.
-  static std::optional<std::vector<char, BlobAllocator>> tryToDecompressBlob(
+  // `BlobAllocator`). Return the `ZstdWrapper::Error` if `compressedBlob` was
+  // not written by `compressBlob`, or is corrupted. Errors that do not come
+  // from ZSTD (in particular a failed allocation, should the frame header state
+  // an uncompressed size that cannot be allocated) are not reported that way.
+  static DecompressedBlobOrError tryToDecompressBlob(
       ql::span<const char> compressedBlob,
       ql::pmr::polymorphic_allocator<char> allocator);
 
   // Same as `tryToDecompressBlob`, but throw with a descriptive message instead
-  // of returning `nullopt`.
+  // of returning an error.
   static std::vector<char, BlobAllocator> decompressBlob(
       ql::span<const char> compressedBlob,
       ql::pmr::polymorphic_allocator<char> allocator);

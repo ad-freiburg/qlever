@@ -8,9 +8,9 @@
 #include <absl/strings/str_cat.h>
 #include <zstd.h>
 
-#include <optional>
 #include <stdexcept>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include "util/Exception.h"
@@ -27,14 +27,15 @@ class ZstdWrapper {
     return result;
   }
 
-  // The result of the non-throwing functions below. On success, `size_`
-  // contains the requested size. On failure, `size_` is `nullopt`, and
-  // `errorMessage_` describes the error (it always refers to a string with
-  // static storage duration).
-  struct SizeOrError {
-    std::optional<size_t> size_;
-    std::string_view errorMessage_;
+  // The error that is reported by the non-throwing functions below. The
+  // `message_` always refers to a string with static storage duration.
+  struct Error {
+    std::string_view message_;
   };
+
+  // The result of the non-throwing functions below: the requested size on
+  // success, and the `Error` otherwise.
+  using SizeOrError = std::variant<size_t, Error>;
 
   // Return the size of the uncompressed data of the ZSTD frame that starts at
   // `src` and consists of `numBytes` bytes, as stored in the header of that
@@ -49,16 +50,16 @@ class ZstdWrapper {
                                               size_t numBytes) noexcept {
     auto uncompressedSize = ZSTD_getFrameContentSize(src, numBytes);
     if (uncompressedSize == ZSTD_CONTENTSIZE_ERROR) {
-      return {std::nullopt,
-              "Could not determine the size of the uncompressed data: the "
-              "given data does not start with a valid ZSTD frame header"};
+      return Error{
+          "Could not determine the size of the uncompressed data: the given "
+          "data does not start with a valid ZSTD frame header"};
     }
     if (uncompressedSize == ZSTD_CONTENTSIZE_UNKNOWN) {
-      return {std::nullopt,
-              "Could not determine the size of the uncompressed data: the "
-              "given ZSTD frame does not store that size in its header"};
+      return Error{
+          "Could not determine the size of the uncompressed data: the given "
+          "ZSTD frame does not store that size in its header"};
     }
-    return {static_cast<size_t>(uncompressedSize), {}};
+    return static_cast<size_t>(uncompressedSize);
   }
 
   // Same as `tryToGetUncompressedSize`, but throw a descriptive exception
@@ -92,9 +93,9 @@ class ZstdWrapper {
     auto decompressedSize =
         ZSTD_decompress(buffer, bufferCapacity, src, numBytes);
     if (ZSTD_isError(decompressedSize)) {
-      return {std::nullopt, ZSTD_getErrorName(decompressedSize)};
+      return Error{ZSTD_getErrorName(decompressedSize)};
     }
-    return {decompressedSize, {}};
+    return decompressedSize;
   }
 
   // Same as `tryToDecompressToBuffer`, but throw a descriptive exception
@@ -110,14 +111,13 @@ class ZstdWrapper {
 
  private:
   // Return the size of the `result`, or throw a `std::runtime_error` with the
-  // `messagePrefix` followed by the error message of the `result`.
+  // `messagePrefix` followed by the message of the error of the `result`.
   static size_t valueOrThrow(const SizeOrError& result,
                              std::string_view messagePrefix) {
-    if (!result.size_.has_value()) {
-      throw std::runtime_error{
-          absl::StrCat(messagePrefix, result.errorMessage_)};
+    if (const auto* error = std::get_if<Error>(&result)) {
+      throw std::runtime_error{absl::StrCat(messagePrefix, error->message_)};
     }
-    return result.size_.value();
+    return std::get<size_t>(result);
   }
 };
 

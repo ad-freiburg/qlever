@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "../util/GTestHelpers.h"
@@ -296,9 +297,11 @@ TEST(NamedCachedQueryBlobManager, compressAndDecompressBlob) {
     // The non-throwing variant yields the same result.
     auto roundTrippedWithoutThrowing =
         Manager::tryToDecompressBlob(compressed, {});
-    ASSERT_TRUE(roundTrippedWithoutThrowing.has_value());
-    EXPECT_THAT(roundTrippedWithoutThrowing.value(),
-                ::testing::ElementsAreArray(original));
+    const auto* roundTrippedBuffer =
+        std::get_if<std::vector<char, Manager::BlobAllocator>>(
+            &roundTrippedWithoutThrowing);
+    ASSERT_NE(roundTrippedBuffer, nullptr);
+    EXPECT_THAT(*roundTrippedBuffer, ::testing::ElementsAreArray(original));
   }
 }
 
@@ -420,9 +423,11 @@ TEST(NamedCachedQueryBlobManager, decompressBlobRejectsNonZstdInput) {
                                         HasSubstr("was not written by"),
                                         ad_utility::Exception);
 
-  // The non-throwing variant reports the same inputs as `nullopt`.
-  EXPECT_FALSE(Manager::tryToDecompressBlob(tooShort, {}).has_value());
-  EXPECT_FALSE(Manager::tryToDecompressBlob(garbage, {}).has_value());
+  // The non-throwing variant reports the same inputs as an error.
+  EXPECT_TRUE(std::holds_alternative<ZstdWrapper::Error>(
+      Manager::tryToDecompressBlob(tooShort, {})));
+  EXPECT_TRUE(std::holds_alternative<ZstdWrapper::Error>(
+      Manager::tryToDecompressBlob(garbage, {})));
 }
 
 // _____________________________________________________________________________
@@ -445,10 +450,11 @@ TEST(NamedCachedQueryBlobManager, decompressBlobRejectsTruncatedInput) {
                                         HasSubstr("was not written by"),
                                         ad_utility::Exception);
 
-  // The non-throwing variant reports the same input as `nullopt`. Note that the
+  // The non-throwing variant reports the same input as an error. Note that the
   // failure occurs during the decompression itself here, not while reading the
   // frame header.
-  EXPECT_FALSE(Manager::tryToDecompressBlob(compressed, {}).has_value());
+  EXPECT_TRUE(std::holds_alternative<ZstdWrapper::Error>(
+      Manager::tryToDecompressBlob(compressed, {})));
 }
 
 // _____________________________________________________________________________
@@ -636,6 +642,50 @@ TEST(NamedCachedQueryBlobManager, deserializeRejectsBlobWithInvalidContents) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
       HasSubstr("Error while reading the contents of a blob"));
+}
+
+// _____________________________________________________________________________
+// Test that `tryToDeserializeVocabAndNamedCacheFromCompressedBlob` writes the
+// details of a failure, which the returned status cannot convey, to the error
+// log.
+TEST(NamedCachedQueryBlobManager, tryToDeserializeLogsFailureDetails) {
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+  // Load the `compressedBlob`, expect the `expectedStatus`, and return the log
+  // output that was produced in the process.
+  auto loadAndGetLog = [&target](ql::span<const char> compressedBlob,
+                                 Manager::BlobStatus expectedStatus) {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    EXPECT_EQ(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
+                  compressedBlob),
+              expectedStatus);
+    return logStream.str();
+  };
+
+  // The underlying ZSTD error.
+  std::vector<char> garbage(1024, '\xFF');
+  EXPECT_THAT(loadAndGetLog(garbage, Manager::BlobStatus::notDecompressible),
+              AllOf(HasSubstr("was not written by"),
+                    HasSubstr("does not start with a valid ZSTD frame")));
+
+  // The invalid magic bytes.
+  std::vector<char> bogus(64, 'X');
+  EXPECT_THAT(loadAndGetLog(Manager::compressBlob(bogus),
+                            Manager::BlobStatus::invalidMagicBytes),
+              HasSubstr("was not written by"));
+
+  // The blob format version that was found.
+  EXPECT_THAT(loadAndGetLog(compressedBlobWithHeader(correctMagicBytes, 63999),
+                            Manager::BlobStatus::invalidVersion),
+              AllOf(HasSubstr("incompatible version"),
+                    HasSubstr("format version 63999")));
+
+  // The details of the incompatible index format.
+  EXPECT_THAT(loadAndGetLog(compressedBlobWithIncompatibleIndexFormat(),
+                            Manager::BlobStatus::incompatibleIndexFormat),
+              AllOf(HasSubstr("incompatible index format"),
+                    HasSubstr("The index is too old for this version of "
+                              "QLever"),
+                    HasSubstr("PR = 42")));
 }
 
 // _____________________________________________________________________________

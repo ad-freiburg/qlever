@@ -16,12 +16,14 @@
 #include <cstring>
 #include <string_view>
 #include <type_traits>
+#include <variant>
 
 #include "index/IndexImpl.h"
 #include "index/vocabulary/BuildFilteredVocabulary.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "libqlever/Qlever.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/Log.h"
 #include "util/Random.h"
 #include "util/json.h"
 
@@ -58,9 +60,9 @@ constexpr std::string_view blobContentsNotReadableMessage =
     "probably corrupted";
 
 // Read the format version from the blob header that starts at `headerStart` in
-// `data`. Only used to include the version in the error message of
-// `NamedCachedQueryBlobManager::skipAndVerifyBlobHeader`, after the header has
-// already been checked for completeness.
+// `data`. Only used to include the version in the error messages (see
+// `blobHeaderErrorMessage` below), after the header has already been checked
+// for completeness.
 uint16_t readFormatVersionFromHeader(ql::span<const char> data,
                                      size_t headerStart) {
   AD_CORRECTNESS_CHECK(data.size() >= headerStart + blobHeaderSize);
@@ -76,26 +78,41 @@ uint16_t readFormatVersionFromHeader(ql::span<const char> data,
 // already have been released when the message is built.
 std::string blobErrorMessage(NamedCachedQueryBlobManager::BlobStatus status,
                              std::optional<uint16_t> foundFormatVersion) {
-  using Status = NamedCachedQueryBlobManager::BlobStatus;
+  using enum NamedCachedQueryBlobManager::BlobStatus;
   switch (status) {
-    case Status::notDecompressible:
-    case Status::invalidMagicBytes:
+    case notDecompressible:
+    case invalidMagicBytes:
       return std::string{blobNotReadableMessage};
-    case Status::invalidVersion:
+    case invalidVersion:
       return absl::StrCat(
           "The given blob was written by an incompatible version of QLever (",
           foundFormatVersion.has_value()
               ? absl::StrCat("format version ", foundFormatVersion.value())
               : std::string{"incompatible blob format version"},
           ", expected ", blobFormatVersion, ")");
-    case Status::incompatibleIndexFormat:
+    case incompatibleIndexFormat:
       return std::string{
           "The given blob was written by a version of QLever with an "
           "incompatible index format"};
-    case Status::ok:
+    case ok:
       break;
   }
   AD_FAIL();
+}
+
+// Return the message for the non-`ok` `status` that
+// `NamedCachedQueryBlobManager::tryToSkipAndVerifyBlobHeader` reported for the
+// blob header that starts at `headerStart` in `data`. For an incompatible
+// format version, the message names the version that was found. It can still be
+// read from `data`, because in that case the header is complete.
+std::string blobHeaderErrorMessage(
+    NamedCachedQueryBlobManager::BlobStatus status, ql::span<const char> data,
+    size_t headerStart) {
+  std::optional<uint16_t> foundFormatVersion;
+  if (status == NamedCachedQueryBlobManager::BlobStatus::invalidVersion) {
+    foundFormatVersion = readFormatVersionFromHeader(data, headerStart);
+  }
+  return blobErrorMessage(status, foundFormatVersion);
 }
 
 // Run `function` and, if it throws, rethrow with `message` prepended. That way,
@@ -111,16 +128,12 @@ decltype(auto) rethrowWithContext(std::string_view message,
   }
 }
 
-// The common implementation of `NamedCachedQueryBlobManager::decompressBlob`
-// and `NamedCachedQueryBlobManager::tryToDecompressBlob`: decompress
-// `compressedBlob`, and return `nullopt` (with `errorDetails` set to the
-// message of the underlying ZSTD error) if that fails. Use only the
-// non-throwing functions of `ZstdWrapper`, so that a failure is detected
-// without any exception being thrown.
-std::optional<std::vector<char, NamedCachedQueryBlobManager::BlobAllocator>>
-decompressBlobOrErrorDetails(ql::span<const char> compressedBlob,
-                             ql::pmr::polymorphic_allocator<char> allocator,
-                             std::string_view& errorDetails) {
+// The implementation of `NamedCachedQueryBlobManager::tryToDecompressBlob`
+// (see there). Use only the non-throwing functions of `ZstdWrapper`, so that a
+// failure is detected without any exception being thrown.
+NamedCachedQueryBlobManager::DecompressedBlobOrError decompressBlobImpl(
+    ql::span<const char> compressedBlob,
+    ql::pmr::polymorphic_allocator<char> allocator) {
   using BlobAllocator = NamedCachedQueryBlobManager::BlobAllocator;
   // Read the size of the uncompressed data from the ZSTD frame header (which
   // always stores it, because `compressBlob` uses the one-shot
@@ -130,9 +143,8 @@ decompressBlobOrErrorDetails(ql::span<const char> compressedBlob,
   // allocation below.
   auto uncompressedSize = ZstdWrapper::tryToGetUncompressedSize(
       compressedBlob.data(), compressedBlob.size());
-  if (!uncompressedSize.size_.has_value()) {
-    errorDetails = uncompressedSize.errorMessage_;
-    return std::nullopt;
+  if (const auto* error = std::get_if<ZstdWrapper::Error>(&uncompressedSize)) {
+    return *error;
   }
 
   // Decompress into a buffer that is 1. allocated via the caller-provided
@@ -140,17 +152,18 @@ decompressBlobOrErrorDetails(ql::span<const char> compressedBlob,
   // zero-copy deserialization), and 3. not needlessly zero-initialized before
   // the decompression overwrites it (see `BlobAllocator`).
   std::vector<char, BlobAllocator> uncompressed(
-      uncompressedSize.size_.value(),
+      std::get<size_t>(uncompressedSize),
       BlobAllocator{ad_utility::AlignedAllocator<
           char, ql::pmr::polymorphic_allocator<char>>{allocator}});
   auto actualUncompressedSize = ZstdWrapper::tryToDecompressToBuffer(
       compressedBlob.data(), compressedBlob.size(), uncompressed.data(),
       uncompressed.size());
-  if (!actualUncompressedSize.size_.has_value()) {
-    errorDetails = actualUncompressedSize.errorMessage_;
-    return std::nullopt;
+  if (const auto* error =
+          std::get_if<ZstdWrapper::Error>(&actualUncompressedSize)) {
+    return *error;
   }
-  AD_CORRECTNESS_CHECK(actualUncompressedSize.size_ == uncompressedSize.size_);
+  AD_CORRECTNESS_CHECK(std::get<size_t>(actualUncompressedSize) ==
+                       uncompressed.size());
   return uncompressed;
 }
 
@@ -218,12 +231,12 @@ NamedCachedQueryBlobManager::BlobStatus
 NamedCachedQueryBlobManager::tryToSkipAndVerifyBlobHeader(
     ad_utility::serialization::ByteBufferReadSerializerT<
         true, ql::span<const char>>& serializer) noexcept {
-  using Status = BlobStatus;
+  using enum BlobStatus;
   // Explicitly check that the header is complete, so that a truncated blob is
   // reported as `invalidMagicBytes` instead of making the reads below fail.
   if (serializer.data().size() - serializer.getCurrentPosition() <
       blobHeaderSize) {
-    return Status::invalidMagicBytes;
+    return invalidMagicBytes;
   }
   // The reads below cannot throw, because the header is known to be complete
   // (see above) and no alignment padding is inserted inside the header (see
@@ -231,14 +244,14 @@ NamedCachedQueryBlobManager::tryToSkipAndVerifyBlobHeader(
   std::decay_t<decltype(blobMagicBytes)> magicBytes{};
   serializer >> magicBytes;
   if (magicBytes != blobMagicBytes) {
-    return Status::invalidMagicBytes;
+    return invalidMagicBytes;
   }
   uint16_t version;
   serializer >> version;
   if (version != blobFormatVersion) {
-    return Status::invalidVersion;
+    return invalidVersion;
   }
-  return Status::ok;
+  return ok;
 }
 
 // _____________________________________________________________________________
@@ -252,15 +265,7 @@ void NamedCachedQueryBlobManager::skipAndVerifyBlobHeader(
   if (status == BlobStatus::ok) {
     return;
   }
-  // For an incompatible format version, name the version that was found in the
-  // message. It can still be read from the buffer, because in that case the
-  // header is complete.
-  std::optional<uint16_t> foundFormatVersion;
-  if (status == BlobStatus::invalidVersion) {
-    foundFormatVersion =
-        readFormatVersionFromHeader(serializer.data(), headerStart);
-  }
-  AD_THROW(blobErrorMessage(status, foundFormatVersion));
+  AD_THROW(blobHeaderErrorMessage(status, serializer.data(), headerStart));
 }
 
 // _____________________________________________________________________________
@@ -271,13 +276,11 @@ std::vector<char> NamedCachedQueryBlobManager::compressBlob(
 }
 
 // _____________________________________________________________________________
-std::optional<std::vector<char, NamedCachedQueryBlobManager::BlobAllocator>>
+NamedCachedQueryBlobManager::DecompressedBlobOrError
 NamedCachedQueryBlobManager::tryToDecompressBlob(
     ql::span<const char> compressedBlob,
     ql::pmr::polymorphic_allocator<char> allocator) {
-  std::string_view ignoredErrorDetails;
-  return decompressBlobOrErrorDetails(compressedBlob, allocator,
-                                      ignoredErrorDetails);
+  return decompressBlobImpl(compressedBlob, allocator);
 }
 
 // _____________________________________________________________________________
@@ -285,13 +288,12 @@ std::vector<char, NamedCachedQueryBlobManager::BlobAllocator>
 NamedCachedQueryBlobManager::decompressBlob(
     ql::span<const char> compressedBlob,
     ql::pmr::polymorphic_allocator<char> allocator) {
-  std::string_view errorDetails;
-  auto uncompressed =
-      decompressBlobOrErrorDetails(compressedBlob, allocator, errorDetails);
-  if (!uncompressed.has_value()) {
-    AD_THROW(absl::StrCat(blobNotReadableMessage, ". Details: ", errorDetails));
+  auto uncompressed = tryToDecompressBlob(compressedBlob, allocator);
+  if (const auto* error = std::get_if<ZstdWrapper::Error>(&uncompressed)) {
+    AD_THROW(
+        absl::StrCat(blobNotReadableMessage, ". Details: ", error->message_));
   }
-  return std::move(uncompressed).value();
+  return std::get<std::vector<char, BlobAllocator>>(std::move(uncompressed));
 }
 
 // _____________________________________________________________________________
@@ -342,13 +344,19 @@ NamedCachedQueryBlobManager::tryToDeserialize(
   // cache entries loaded below are zero-copy views directly into it. Note that
   // moving the buffer into the member does not change the location of its
   // storage, so the views taken below stay valid.
+  //
+  // For each failure, the details (which are not part of the returned status)
+  // are written to the error log, so that they are not lost.
   auto uncompressed = tryToDecompressBlob(compressedBlob, allocator);
-  if (!uncompressed.has_value()) {
+  if (const auto* error = std::get_if<ZstdWrapper::Error>(&uncompressed)) {
     // Nothing of `qlever` has been touched yet, so it is left exactly as it
     // was.
+    AD_LOG_ERROR << blobNotReadableMessage << ". Details: " << error->message_
+                 << std::endl;
     return BlobStatus::notDecompressible;
   }
-  deserializedBlobLifetimeExtender_.emplace(std::move(uncompressed).value());
+  deserializedBlobLifetimeExtender_.emplace(
+      std::get<std::vector<char, BlobAllocator>>(std::move(uncompressed)));
 
   // Use a serializer that only borrows a view of
   // `deserializedBlobLifetimeExtender_`, rather than one that owns/moves it, so
@@ -360,6 +368,10 @@ NamedCachedQueryBlobManager::tryToDeserialize(
 
   auto headerStatus = tryToSkipAndVerifyBlobHeader(reader);
   if (headerStatus != BlobStatus::ok) {
+    AD_LOG_ERROR << blobHeaderErrorMessage(
+                        headerStatus, deserializedBlobLifetimeExtender_.value(),
+                        0)
+                 << std::endl;
     // Nothing of `qlever` has been touched yet either, so release the buffer
     // again. That way a rejected blob leaves this manager (and hence `qlever`)
     // exactly as it was, and another blob can be loaded afterwards.
@@ -384,7 +396,11 @@ NamedCachedQueryBlobManager::tryToDeserialize(
   // before anything of `qlever` is modified, so that a blob written by a
   // version of QLever with an incompatible index format is rejected like an
   // incompatible header above.
-  if (indexImpl.checkIndexFormatVersion(metadata).has_value()) {
+  if (auto error = indexImpl.checkIndexFormatVersion(metadata);
+      error.has_value()) {
+    AD_LOG_ERROR << blobErrorMessage(BlobStatus::incompatibleIndexFormat,
+                                     std::nullopt)
+                 << ". Details: " << error.value() << std::endl;
     deserializedBlobLifetimeExtender_.reset();
     return BlobStatus::incompatibleIndexFormat;
   }
@@ -410,11 +426,11 @@ void NamedCachedQueryBlobManager::deserialize(
     ql::pmr::polymorphic_allocator<char> allocator) {
   auto status = tryToDeserialize(qlever, compressedBlob, allocator);
   if (status != BlobStatus::ok) {
-    // NOTE: The message can only name the category of the failure, not its
-    // details (the underlying ZSTD error, or the format version that was
-    // found), because `tryToDeserialize` reports only a status and has already
-    // released the buffer that held the header. Use `decompressBlob` and
-    // `skipAndVerifyBlobHeader` directly to get those details.
+    // NOTE: The message can only name the category of the failure, because
+    // `tryToDeserialize` reports only a status. The details (the underlying
+    // ZSTD error, the format version that was found, or the incompatibility of
+    // the index format) have already been written to the error log by
+    // `tryToDeserialize`.
     AD_THROW(blobErrorMessage(status, std::nullopt));
   }
 }
