@@ -20,28 +20,26 @@
 #include "backports/three_way_comparison.h"
 
 namespace columnBasedIdTable::splitLayout {
-// The raw bit representation of a `ValueId` (see `ValueId.h`): a single
+
+// The raw bit representation of an SplitLayoutId: a single
 // datatype byte and a full 64-bit word of payload. The comparison is
 // datatype-major (first by `datatype_`, then by `payload_`), which is
-// consistent with the ordering of the corresponding `ValueId`s (as long as no
+// consistent with the ordering of the legacy `ValueId`s (as long as no
 // `LocalVocabIndex` is involved).
-// Note: This struct lives in its own header (and not inside the `ValueId`
-// class) because `LocalVocabEntry.h` needs it and must not include
-// `ValueId.h` (cyclic dependency).
-struct ValueIdBitRepresentation {
+struct SplitLayoutIdBitRepresentation {
   uint8_t datatype_;
   uint64_t payload_;
 
   // The default three-way comparison is datatype-major because `datatype_`
   // is declared before `payload_`.
   QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL_CONSTEXPR(
-      ValueIdBitRepresentation, datatype_, payload_)
+      SplitLayoutIdBitRepresentation, datatype_, payload_)
 
   // Return the bit representation of the smallest `ValueId` that is greater
   // than the `ValueId` of this bit representation. The overflow of the
   // payload carries into the datatype byte, analogously to the increment of
   // the single integer in the previous packed 64-bit representation.
-  [[nodiscard]] constexpr ValueIdBitRepresentation incremented() const {
+  [[nodiscard]] constexpr SplitLayoutIdBitRepresentation incremented() const {
     if (payload_ == std::numeric_limits<uint64_t>::max()) {
       return {static_cast<uint8_t>(datatype_ + 1), 0};
     }
@@ -51,7 +49,7 @@ struct ValueIdBitRepresentation {
   // Enable hashing in abseil (required by `ad_utility::HashSet` and
   // `ad_utility::HashMap`).
   template <typename H>
-  friend H AbslHashValue(H h, const ValueIdBitRepresentation& rep) {
+  friend H AbslHashValue(H h, const SplitLayoutIdBitRepresentation& rep) {
     return H::combine(std::move(h), rep.datatype_, rep.payload_);
   }
 
@@ -60,12 +58,14 @@ struct ValueIdBitRepresentation {
   // guaranteed to be zero, so the byte-level output is not deterministic,
   // but roundtripping works correctly.
   template <typename U>
-  friend std::true_type allowTrivialSerialization(ValueIdBitRepresentation, U);
+  friend std::true_type allowTrivialSerialization(
+      SplitLayoutIdBitRepresentation, U);
 
   // Support for `absl::StrCat` etc., analogous to the stringification of the
   // previous single-integer bit representation.
   template <typename Sink>
-  friend void AbslStringify(Sink& sink, const ValueIdBitRepresentation& rep) {
+  friend void AbslStringify(Sink& sink,
+                            const SplitLayoutIdBitRepresentation& rep) {
     sink.Append(std::to_string(rep.datatype_));
     sink.Append(":");
     sink.Append(std::to_string(rep.payload_));
@@ -73,7 +73,7 @@ struct ValueIdBitRepresentation {
 
   // This operator is only used for debugging and testing.
   friend std::ostream& operator<<(std::ostream& ostr,
-                                  const ValueIdBitRepresentation& rep) {
+                                  const SplitLayoutIdBitRepresentation& rep) {
     return ostr << static_cast<int>(rep.datatype_) << ':' << rep.payload_;
   }
 };
@@ -81,10 +81,11 @@ struct ValueIdBitRepresentation {
 
 // Make `ValueIdBitRepresentation` usable as a key of `std` hash containers.
 template <>
-struct std::hash<columnBasedIdTable::splitLayout::ValueIdBitRepresentation> {
+struct std::hash<
+    columnBasedIdTable::splitLayout::SplitLayoutIdBitRepresentation> {
   size_t operator()(
-      const columnBasedIdTable::splitLayout::ValueIdBitRepresentation& rep)
-      const noexcept {
+      const columnBasedIdTable::splitLayout::SplitLayoutIdBitRepresentation&
+          rep) const noexcept {
     return std::hash<uint64_t>{}(rep.payload_ ^
                                  (static_cast<uint64_t>(rep.datatype_) << 56));
   }

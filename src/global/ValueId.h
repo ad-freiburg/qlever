@@ -15,7 +15,6 @@
 #include "backports/functional.h"
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
-#include "engine/idTable/splitLayout/ValueIdBitRepresentation.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "rdfTypes/GeoPoint.h"
@@ -205,12 +204,6 @@ class ValueId {
   // A struct that represents the single undefined value. This is required for
   // generic code like in the `visit` method.
   struct UndefinedType {};
-
-  // The raw bit representation of a `ValueId`: a single datatype byte and a
-  // full 64-bit word of payload. See `ValueIdBitRepresentation.h` for
-  // details.
-  using BitRepresentation =
-      columnBasedIdTable::splitLayout::ValueIdBitRepresentation;
 
  private:
   // The actual bits.

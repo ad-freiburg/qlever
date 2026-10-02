@@ -13,22 +13,22 @@
 #include <ostream>
 #include <utility>
 
+#include "SplitLayoutIdBitRepresentation.h"
 #include "backports/concepts.h"
 #include "global/Id.h"
-#include "util/Forward.h"
 
 namespace columnBasedIdTable::splitLayout {
 
 // TEMPORARY: decodes/encodes the *current* packed single-word
-// `Id::getBits()`/`Id::fromBits(T)` into `Id::BitRepresentation`'s
+// `Id::getBits()`/`Id::fromBits(T)` into `ValueIdBitRepresentation`'s
 // (datatype, payload) shape, until the next commit switches
 // `Id::getBits()`/`fromBits()` themselves to operate on that struct.
-inline Id::BitRepresentation getBitsCompat(const Id id) {
+inline SplitLayoutIdBitRepresentation getBitsCompat(const Id id) {
   const auto bits = id.getBits();
   return {static_cast<uint8_t>(bits >> Id::numDataBits),
           bits & ((Id::T{1} << Id::numDataBits) - 1)};
 }
-inline Id idFromBitsCompat(const Id::BitRepresentation bits) {
+inline Id idFromBitsCompat(const SplitLayoutIdBitRepresentation bits) {
   return Id::fromBits((static_cast<Id::T>(bits.datatype_) << Id::numDataBits) |
                       bits.payload_);
 }
@@ -109,7 +109,7 @@ class BasicIdRef {
   [[nodiscard]] auto compareWithoutLocalVocab(const Id& other) const {
     return toId().compareWithoutLocalVocab(other);
   }
-  [[nodiscard]] Id::BitRepresentation getBits() const noexcept {
+  [[nodiscard]] SplitLayoutIdBitRepresentation getBits() const noexcept {
     return {*datatype_, *payload_};
   }
   [[nodiscard]] Id::T getPayloadBits() const noexcept { return *payload_; }

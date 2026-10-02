@@ -23,7 +23,7 @@ TEST(ValueIdBitRepresentationTest, construction) {
   constexpr int idValue = 42;
   constexpr ValueId id = Id::makeFromInt(idValue);
   auto [datatype, payload] = getBitsCompat(id);
-  const ValueIdBitRepresentation representation{datatype, payload};
+  const SplitLayoutIdBitRepresentation representation{datatype, payload};
 
   ASSERT_EQ(static_cast<Datatype>(representation.datatype_), Datatype::Int);
   ASSERT_EQ(representation.payload_, idValue);
@@ -34,12 +34,12 @@ TEST(ValueIdBitRepresentationTest, incremented) {
   constexpr int idValue = 42;
   constexpr ValueId id = Id::makeFromInt(idValue);
   auto [datatype, payload] = getBitsCompat(id);
-  const ValueIdBitRepresentation representation{datatype, payload};
+  const SplitLayoutIdBitRepresentation representation{datatype, payload};
 
   ASSERT_EQ(static_cast<Datatype>(representation.datatype_), Datatype::Int);
   ASSERT_EQ(representation.payload_, idValue);
 
-  const ValueIdBitRepresentation incrementedRepresentation =
+  const SplitLayoutIdBitRepresentation incrementedRepresentation =
       representation.incremented();
   const auto [inc_datatype, inc_payload] = incrementedRepresentation;
 
@@ -49,14 +49,14 @@ TEST(ValueIdBitRepresentationTest, incremented) {
 
 // _____________________________________________________________________________
 TEST(ValueIdBitRepresentationTest, incremented_maxValue) {
-  constexpr ValueIdBitRepresentation representation{
+  constexpr SplitLayoutIdBitRepresentation representation{
       static_cast<uint8_t>(Datatype::Int),
       std::numeric_limits<uint64_t>::max()};
 
   ASSERT_EQ(static_cast<Datatype>(representation.datatype_), Datatype::Int);
   ASSERT_EQ(representation.payload_, std::numeric_limits<uint64_t>::max());
 
-  constexpr ValueIdBitRepresentation incrementedRepresentation =
+  constexpr SplitLayoutIdBitRepresentation incrementedRepresentation =
       representation.incremented();
   const auto [inc_datatype, inc_payload] = incrementedRepresentation;
 
