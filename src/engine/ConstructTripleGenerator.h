@@ -54,8 +54,11 @@ class ConstructTripleGenerator {
   static constexpr size_t CACHE_ENTRIES_PER_VARIABLE = 2048;
 
   // Instantiates `templateTriples` for each row in `rowIndices` and returns a
-  // lazy range of triples serialized according to `mediaType`.
-  // Duplicate triples are handled according to `config.mode_`.
+  // lazy range of triples serialized according to `mediaType`: one string per
+  // triple, except for Turtle with the runtime parameter
+  // `use-fast-export-stream-formatter` (default), where each string holds as
+  // many triples as fit into about 64 KiB. Duplicate triples are handled
+  // according to `config.mode_`.
   static InputRangeTypeErased<std::string> generateFormattedTriples(
       const Triples& templateTriples,
       const VariableToColumnMap& variableColumns,

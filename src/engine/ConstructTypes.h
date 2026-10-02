@@ -39,7 +39,13 @@ namespace qlever::constructExport {
 // format. This is the legacy format returned by `ExportIds::idToStringAndType`.
 struct EvaluatedTermData {
   std::string rdfTermString_;
-  const char* rdfTermDataType_;  // non-null iff encoded literal (case 1 above)
+  // Non-null iff encoded literal (case 1 above). A non-null pointer always
+  // points to a null-terminated datatype URI constant: one of the `XSD_*_TYPE`
+  // arrays (`idToStringAndTypeForEncodedValue`, `Date::toStringAndType`) or
+  // the storage behind `GEO_WKT_LITERAL` (`GeoPoint::toStringAndType`).
+  // Pointer comparison against those constants and `strlen` are therefore
+  // safe. Any new producer must uphold this and extend this list.
+  const char* rdfTermDataType_;
 
   //____________________________________________________________________________
   EvaluatedTermData(std::string rdfTermString, const char* rdfTermDataType)
