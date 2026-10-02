@@ -14,6 +14,12 @@ endfunction()
 # "${basename}".cpp
 function(addTest basename)
     add_executable(${basename} "${basename}.cpp")
+    # Reuse the precompiled headers of `testUtil`. This requires compatible
+    # compiler flags, which is not the case for shared libraries (`-fPIC` for
+    # `testUtil` vs. `-fPIE` for the test executables).
+    if (USE_PRECOMPILED_HEADERS AND NOT BUILD_SHARED_LIBS)
+        target_precompile_headers(${basename} REUSE_FROM testUtil)
+    endif ()
 endfunction()
 
 # Usage: `linkAndDiscoverTest(basename, [additionalLibraries...]`
@@ -549,6 +555,12 @@ addLinkAndDiscoverTest(CopyableSynchronizationTest)
 addLinkAndDiscoverTest(LazyJsonParserTest)
 
 addLinkAndDiscoverTest(GeneratorsTest)
+# With the precompiled headers, GCC 13 produces a false-positive
+# `-Warray-bounds` warning for the message construction of an
+# `AD_CORRECTNESS_CHECK` that is inlined into this test.
+if (TARGET GeneratorsTest)
+    set_target_properties(GeneratorsTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+endif ()
 
 addLinkAndDiscoverTest(FilterTest engine)
 
