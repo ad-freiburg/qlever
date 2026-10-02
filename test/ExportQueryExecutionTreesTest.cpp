@@ -1533,6 +1533,28 @@ TEST(ExportQueryExecutionTrees, TrailingValuesBeforeDistinctAndOrderBy) {
 }
 
 // ____________________________________________________________________________
+// The trailing `VALUES` clause of a subquery belongs to the subquery, it is
+// joined before the subquery's DISTINCT, LIMIT and projection.
+TEST(ExportQueryExecutionTrees, TrailingValuesOfSubquery) {
+  std::string kg = "<a> <p> <c> . <b> <p> <d> .";
+  auto tsv = [&kg](const std::string& query) {
+    return runQueryStreamableResult(kg, query, ad_utility::MediaType::tsv);
+  };
+  EXPECT_EQ(tsv("SELECT * { { SELECT ?s { ?s <p> ?o } ORDER BY ?s LIMIT 1 "
+                "VALUES ?s { <b> } } }"),
+            "?s\n<b>\n");
+  EXPECT_EQ(tsv("SELECT * { { SELECT DISTINCT ?s { ?s <p> ?o } "
+                "VALUES ?s { <a> <a> } } }"),
+            "?s\n<a>\n");
+  EXPECT_EQ(tsv("SELECT * { { SELECT ?s { ?s <p> ?o } VALUES ?x { 1 } } }"),
+            "?s\n<a>\n<b>\n");
+  EXPECT_EQ(tsv("SELECT * { { SELECT * { ?s <p> ?o } VALUES ?x { 1 } } }"),
+            "?s\t?o\t?x\n<a>\t<c>\t1\n<b>\t<d>\t1\n");
+  EXPECT_EQ(tsv("SELECT * { { SELECT ?s { ?s <p> ?o } VALUES ?o { <c> } } }"),
+            "?s\n<a>\n");
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, BinaryExport) {
   std::string kg = "<s> <p> 31 . <s> <o> 42";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
