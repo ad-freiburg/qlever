@@ -46,7 +46,8 @@ constexpr inline int ZSTD_DEFAULT_LEVEL = 3;
 // and a read uses `pread` (see `File::read` with an explicit offset). Any
 // number of appends and reads therefore run at the same time (a block that
 // was appended before, and that the caller consequently holds the metadata
-// of, is not touched by later appends).
+// of, is not touched by later appends). Only `clear` takes an exclusive lock,
+// see there.
 //
 // NOTE: Neither an append nor a read goes through the buffer of the `FILE*`,
 // so a block is readable as soon as `appendBlock` has returned, and no flush
@@ -148,9 +149,12 @@ class CompressedBlockFile {
   // Truncate the file, such that it can be reused. All the metadata that were
   // returned by previous calls to `appendBlock` become invalid.
   //
-  // PRECONDITION: Unlike the other operations of this class, this must not run
-  // concurrently with an append or a read, because an append reserves its
-  // range of the file before it takes the lock.
+  // NOTE: This may run concurrently with the other operations of this class.
+  // It takes an exclusive lock, so it blocks until all the appends and reads
+  // that are currently running have finished, and the appends and reads that
+  // start afterwards see the empty file. An append holds its shared lock from
+  // the reservation of its range until the end of its write, so no append can
+  // reserve a range of the old file and then write it to the new one.
   void clear() {
     auto file = file_.wlock();
     file->close();
@@ -163,7 +167,9 @@ class CompressedBlockFile {
   // Append the `numBytes` bytes at `data` to the file and return the offset at
   // which they were written. The range is reserved with an atomic counter and
   // written with the positioned `File::write`, so this needs a shared lock
-  // only, see the note on the thread safety at the top of this class. Throw a
+  // only, see the note on the thread safety at the top of this class. The lock
+  // is taken before the reservation and held until the write has finished,
+  // which is what makes `clear` safe to call concurrently. Throw a
   // `std::runtime_error` if the write fails (for example because the disk is
   // full), so that this is noticed at the append and not only when the block
   // is read back.
@@ -174,8 +180,9 @@ class CompressedBlockFile {
   // written completely, so nobody ever holds metadata that point into such a
   // hole, and all the other blocks keep the ranges that they have reserved.
   size_t appendBytes(const void* data, size_t numBytes) {
+    auto file = file_.rlock();
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(numBytes));
-    file_.rlock()->write(data, numBytes, offset);
+    file->write(data, numBytes, offset);
     return static_cast<size_t>(offset);
   }
 

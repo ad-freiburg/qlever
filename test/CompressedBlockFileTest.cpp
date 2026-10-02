@@ -12,10 +12,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <cstdint>
 #include <fstream>
+#include <range/v3/view/cartesian_product.hpp>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "./util/GTestHelpers.h"
@@ -24,10 +25,14 @@
 #include "util/CompressedBlockFile.h"
 #include "util/File.h"
 #include "util/Random.h"
+#include "util/Views.h"
+#include "util/jthread.h"
 
 namespace {
 
 using ad_utility::CompressedBlockFile;
+using ad_utility::integerRange;
+using ::ranges::views::cartesian_product;
 
 // Create a deterministic but not trivially compressible sequence of
 // `numBytes` bytes, seeded by `seed`.
@@ -38,7 +43,7 @@ std::vector<char> makeBytes(size_t numBytes, uint64_t seed) {
   // Reserve one byte more than needed, such that `data()` is never `nullptr`,
   // also for the empty block.
   result.reserve(numBytes + 1);
-  for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, numBytes)) {
+  for ([[maybe_unused]] size_t i : integerRange(numBytes)) {
     result.push_back(generator());
   }
   return result;
@@ -82,7 +87,7 @@ RoundTrip checkRoundTrip(CompressedBlockFile& file) {
   // larger and much smaller than each other.
   std::vector<size_t> sizes{17, 0, 1, 100'000, 3, 0, 4096};
   RoundTrip roundTrip;
-  for (size_t i : ql::views::iota(size_t{0}, sizes.size())) {
+  for (size_t i : integerRange(sizes.size())) {
     size_t numBytes = sizes.at(i);
     roundTrip.expected_.push_back(makeBytes(numBytes, i + 1));
     roundTrip.metadata_.push_back(
@@ -100,12 +105,12 @@ RoundTrip checkRoundTrip(CompressedBlockFile& file) {
 
   // Read the blocks back, both in order and in reverse order, to make sure
   // that reading doesn't depend on the shared file offset.
-  for (size_t i : ql::views::iota(size_t{0}, sizes.size())) {
+  for (size_t i : integerRange(sizes.size())) {
     EXPECT_EQ(readBytes(file, roundTrip.metadata_.at(i)),
               roundTrip.expected_.at(i))
         << "block " << i;
   }
-  for (size_t i : ql::views::iota(size_t{0}, sizes.size())) {
+  for (size_t i : integerRange(sizes.size())) {
     size_t idx = sizes.size() - 1 - i;
     EXPECT_EQ(readBytes(file, roundTrip.metadata_.at(idx)),
               roundTrip.expected_.at(idx))
@@ -144,7 +149,7 @@ TEST(CompressedBlockFile, appendAndReadBlocks) {
 // The very same round trip, but with each of the compressions that a caller may
 // choose, including `NO_BLOCK_COMPRESSION`.
 TEST(CompressedBlockFile, appendAndReadBlocksWithExplicitCompression) {
-  for (size_t i : ql::views::iota(size_t{0}, compressionLevels().size())) {
+  for (size_t i : integerRange(compressionLevels().size())) {
     CompressedBlockFile::CompressionLevel compression =
         compressionLevels().at(i);
     std::string filename = absl::StrCat(gtestCurrentTestName(), ".", i);
@@ -168,7 +173,7 @@ TEST(CompressedBlockFile, uncompressedBlocksAreStoredVerbatim) {
     EXPECT_EQ(file.compressionLevel(), ad_utility::NO_BLOCK_COMPRESSION);
     RoundTrip roundTrip = checkRoundTrip(file);
     std::vector<char> contents = rawFileContents(filename);
-    for (size_t i : ql::views::iota(size_t{0}, roundTrip.metadata_.size())) {
+    for (size_t i : integerRange(roundTrip.metadata_.size())) {
       const auto& metadata = roundTrip.metadata_.at(i);
       const std::vector<char>& expected = roundTrip.expected_.at(i);
       EXPECT_EQ(metadata.compressedSize_, metadata.uncompressedSize_)
@@ -293,10 +298,10 @@ TEST(CompressedBlockFile, concurrentAppends) {
   std::vector<std::vector<std::vector<char>>> expected(numThreads);
   std::vector<std::vector<CompressedBlockFile::BlockMetadata>> metadata(
       numThreads);
-  std::vector<std::thread> threads;
-  for (size_t threadIdx : ql::views::iota(size_t{0}, numThreads)) {
+  std::vector<ad_utility::JThread> threads;
+  for (size_t threadIdx : integerRange(numThreads)) {
     threads.emplace_back([&file, &expected, &metadata, threadIdx]() {
-      for (size_t i : ql::views::iota(size_t{0}, numBlocksPerThread)) {
+      for (size_t i : integerRange(numBlocksPerThread)) {
         expected.at(threadIdx).push_back(
             makeBytes(500 + 13 * i, threadIdx * numBlocksPerThread + i + 1));
         metadata.at(threadIdx).push_back(
@@ -305,9 +310,7 @@ TEST(CompressedBlockFile, concurrentAppends) {
       }
     });
   }
-  for (auto& thread : threads) {
-    thread.join();
-  }
+  threads.clear();
 
   // The appends have reserved distinct ranges of the file: sorted by their
   // offset, the blocks tile the file from 0 up to its size, with neither gaps
@@ -329,12 +332,11 @@ TEST(CompressedBlockFile, concurrentAppends) {
   EXPECT_EQ(ql::filesystem::file_size(filename), expectedOffset);
 
   // Every block holds exactly the bytes that were appended for it.
-  for (size_t threadIdx : ql::views::iota(size_t{0}, numThreads)) {
-    for (size_t i : ql::views::iota(size_t{0}, numBlocksPerThread)) {
-      EXPECT_EQ(readBytes(file, metadata.at(threadIdx).at(i)),
-                expected.at(threadIdx).at(i))
-          << "thread " << threadIdx << ", block " << i;
-    }
+  for (auto [threadIdx, i] : cartesian_product(
+           integerRange(numThreads), integerRange(numBlocksPerThread))) {
+    EXPECT_EQ(readBytes(file, metadata.at(threadIdx).at(i)),
+              expected.at(threadIdx).at(i))
+        << "thread " << threadIdx << ", block " << i;
   }
 }
 
@@ -354,7 +356,7 @@ TEST(CompressedBlockFile, appendsConcurrentWithReads) {
   // The blocks that the reader threads below read over and over again.
   std::vector<std::vector<char>> initialBytes;
   std::vector<CompressedBlockFile::BlockMetadata> initialMetadata;
-  for (size_t i : ql::views::iota(size_t{0}, numInitialBlocks)) {
+  for (size_t i : integerRange(numInitialBlocks)) {
     initialBytes.push_back(makeBytes(1000 + 37 * i, i + 1));
     initialMetadata.push_back(file.appendBlock(initialBytes.back().data(),
                                                initialBytes.back().size()));
@@ -363,10 +365,10 @@ TEST(CompressedBlockFile, appendsConcurrentWithReads) {
   std::vector<std::vector<std::vector<char>>> appended(numWriterThreads);
   std::vector<std::vector<CompressedBlockFile::BlockMetadata>> appendedMetadata(
       numWriterThreads);
-  std::vector<std::thread> threads;
-  for (size_t threadIdx : ql::views::iota(size_t{0}, numWriterThreads)) {
+  std::vector<ad_utility::JThread> threads;
+  for (size_t threadIdx : integerRange(numWriterThreads)) {
     threads.emplace_back([&file, &appended, &appendedMetadata, threadIdx]() {
-      for (size_t i : ql::views::iota(size_t{0}, numBlocksPerWriter)) {
+      for (size_t i : integerRange(numBlocksPerWriter)) {
         appended.at(threadIdx).push_back(
             makeBytes(777 + 11 * i, 10'000 * (threadIdx + 1) + i));
         appendedMetadata.at(threadIdx).push_back(
@@ -375,30 +377,26 @@ TEST(CompressedBlockFile, appendsConcurrentWithReads) {
       }
     });
   }
-  for (size_t threadIdx : ql::views::iota(size_t{0}, numReaderThreads)) {
+  for (size_t threadIdx : integerRange(numReaderThreads)) {
     threads.emplace_back([&file, &initialBytes, &initialMetadata, threadIdx]() {
-      for (size_t round : ql::views::iota(size_t{0}, numReadRounds)) {
-        for (size_t i : ql::views::iota(size_t{0}, numInitialBlocks)) {
-          size_t idx = (i + threadIdx + round) % numInitialBlocks;
-          EXPECT_EQ(readBytes(file, initialMetadata.at(idx)),
-                    initialBytes.at(idx))
-              << "thread " << threadIdx << ", block " << idx;
-        }
+      for (auto [round, i] : cartesian_product(
+               integerRange(numReadRounds), integerRange(numInitialBlocks))) {
+        size_t idx = (i + threadIdx + round) % numInitialBlocks;
+        EXPECT_EQ(readBytes(file, initialMetadata.at(idx)),
+                  initialBytes.at(idx))
+            << "thread " << threadIdx << ", block " << idx;
       }
     });
   }
-  for (auto& thread : threads) {
-    thread.join();
-  }
+  threads.clear();
 
   // The blocks that were appended while the readers were running are readable,
   // too.
-  for (size_t threadIdx : ql::views::iota(size_t{0}, numWriterThreads)) {
-    for (size_t i : ql::views::iota(size_t{0}, numBlocksPerWriter)) {
-      EXPECT_EQ(readBytes(file, appendedMetadata.at(threadIdx).at(i)),
-                appended.at(threadIdx).at(i))
-          << "thread " << threadIdx << ", block " << i;
-    }
+  for (auto [threadIdx, i] : cartesian_product(
+           integerRange(numWriterThreads), integerRange(numBlocksPerWriter))) {
+    EXPECT_EQ(readBytes(file, appendedMetadata.at(threadIdx).at(i)),
+              appended.at(threadIdx).at(i))
+        << "thread " << threadIdx << ", block " << i;
   }
 }
 
@@ -409,7 +407,7 @@ TEST(CompressedBlockFile, concurrentReads) {
   static constexpr size_t numBlocks = 20;
   std::vector<std::vector<char>> expected;
   std::vector<CompressedBlockFile::BlockMetadata> metadata;
-  for (size_t i : ql::views::iota(size_t{0}, numBlocks)) {
+  for (size_t i : integerRange(numBlocks)) {
     expected.push_back(makeBytes(1000 + 37 * i, i + 1));
     metadata.push_back(
         file.appendBlock(expected.back().data(), expected.back().size()));
@@ -417,19 +415,17 @@ TEST(CompressedBlockFile, concurrentReads) {
 
   // Each of the threads reads all the blocks, in a different order.
   static constexpr size_t numThreads = 8;
-  std::vector<std::thread> threads;
-  for (size_t threadIdx : ql::views::iota(size_t{0}, numThreads)) {
+  std::vector<ad_utility::JThread> threads;
+  for (size_t threadIdx : integerRange(numThreads)) {
     threads.emplace_back([&file, &expected, &metadata, threadIdx]() {
-      for (size_t i : ql::views::iota(size_t{0}, numBlocks)) {
+      for (size_t i : integerRange(numBlocks)) {
         size_t idx = (i + threadIdx) % numBlocks;
         EXPECT_EQ(readBytes(file, metadata.at(idx)), expected.at(idx))
             << "thread " << threadIdx << ", block " << idx;
       }
     });
   }
-  for (auto& thread : threads) {
-    thread.join();
-  }
+  threads.clear();
 }
 
 // _____________________________________________________________________________
@@ -442,23 +438,63 @@ TEST(CompressedBlockFile, concurrentAppendsAndReads) {
   // Each thread appends its own blocks and immediately reads them back again.
   // Appending from one thread must not invalidate the blocks that another
   // thread has already appended.
-  std::vector<std::thread> threads;
-  for (size_t threadIdx : ql::views::iota(size_t{0}, numThreads)) {
+  std::vector<ad_utility::JThread> threads;
+  for (size_t threadIdx : integerRange(numThreads)) {
     threads.emplace_back([&file, threadIdx]() {
       std::vector<std::vector<char>> expected;
       std::vector<CompressedBlockFile::BlockMetadata> metadata;
-      for (size_t i : ql::views::iota(size_t{0}, numBlocksPerThread)) {
+      for (size_t i : integerRange(numBlocksPerThread)) {
         expected.push_back(makeBytes(500 + i, 1000 * (threadIdx + 1) + i));
         metadata.push_back(
             file.appendBlock(expected.back().data(), expected.back().size()));
       }
-      for (size_t i : ql::views::iota(size_t{0}, numBlocksPerThread)) {
+      for (size_t i : integerRange(numBlocksPerThread)) {
         EXPECT_EQ(readBytes(file, metadata.at(i)), expected.at(i))
             << "thread " << threadIdx << ", block " << i;
       }
     });
   }
-  for (auto& thread : threads) {
-    thread.join();
+  threads.clear();
+}
+
+// _____________________________________________________________________________
+// Test that `clear` may run while other threads append. Which blocks survive
+// depends on the timing, so the appended blocks are not read back. What is
+// checked instead is that the file stays consistent: an append that reserved
+// its range before a `clear` must not write it to the file after the `clear`.
+// If it did, then the file would be larger than the ranges that were reserved
+// since the last `clear`, and the next append would not start at its end.
+TEST(CompressedBlockFile, clearConcurrentWithAppends) {
+  std::string filename = gtestCurrentTestName();
+  CompressedBlockFile file{filename, ad_utility::NO_BLOCK_COMPRESSION};
+  static constexpr size_t numThreads = 8;
+  static constexpr size_t numBlocksPerThread = 50;
+  std::atomic<size_t> numAppends = 0;
+  {
+    std::vector<ad_utility::JThread> threads;
+    for (size_t threadIdx : integerRange(numThreads)) {
+      threads.emplace_back([&file, &numAppends, threadIdx]() {
+        for (size_t i : integerRange(numBlocksPerThread)) {
+          auto bytes = makeBytes(100 + 7 * i, 1000 * (threadIdx + 1) + i);
+          file.appendBlock(bytes.data(), bytes.size());
+          ++numAppends;
+        }
+      });
+    }
+    // Keep clearing the file until all the appends are done, such that the
+    // clears are interleaved with the appends.
+    do {
+      file.clear();
+    } while (numAppends.load() < numThreads * numBlocksPerThread);
   }
+
+  // All the appends have finished, so every range that was reserved since the
+  // last `clear` has been written, and the next block starts at the end of the
+  // file.
+  auto sizeBefore = ql::filesystem::file_size(filename);
+  auto bytes = makeBytes(1234, 42);
+  auto block = file.appendBlock(bytes.data(), bytes.size());
+  EXPECT_EQ(block.offsetInFile_, sizeBefore);
+  EXPECT_EQ(readBytes(file, block), bytes);
+  EXPECT_EQ(ql::filesystem::file_size(filename), sizeBefore + bytes.size());
 }
