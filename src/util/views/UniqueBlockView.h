@@ -11,17 +11,16 @@
 #ifndef QLEVER_SRC_UTIL_VIEWS_UNIQUEBLOCKVIEW_H
 #define QLEVER_SRC_UTIL_VIEWS_UNIQUEBLOCKVIEW_H
 
-#include <boost/asio/packaged_task.hpp>
-#include <boost/asio/post.hpp>
-#include <deque>
-#include <future>
+#include <algorithm>
 #include <memory>
 #include <optional>
+#include <utility>
 
 #include "backports/algorithm.h"
 #include "util/GlobalExecutor.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
+#include "util/views/AsyncTransformView.h"
 
 namespace ad_utility {
 
@@ -67,32 +66,51 @@ template <typename SortedBlockView,
 InputRangeTypeErased<BlockType> uniqueBlockView(
     SortedBlockView view,
     size_t numBlocksInFlight = DEFAULT_UNIQUE_BLOCK_VIEW_NUM_BLOCKS_IN_FLIGHT) {
-  struct UniqueBlockViewFromGet : InputRangeFromGet<BlockType> {
-    SortedBlockView view_;
+  // A block together with the last value of the block before it (if any).
+  using BlockAndLastOfPrevious = std::pair<BlockType, std::optional<ValueType>>;
 
-    decltype(ql::views::filter(view_,
-                               std::not_fn(ql::ranges::empty))) nonEmptyView_;
-    decltype(ql::ranges::begin(nonEmptyView_)) iter_;
+  // The sequential part, which runs on the consuming thread: yield the
+  // non-empty blocks of the `view` together with the last value of their
+  // respective previous block.
+  struct BlocksWithLastOfPrevious : InputRangeFromGet<BlockAndLastOfPrevious> {
+    // NOTE: The `view` and the counter are owned by the
+    // `UniqueBlockViewFromGet` below, which is never moved. This range itself
+    // is moved into its `AsyncTransformView` after its construction, which is
+    // also why the iterator is only obtained on the first call to `get()`.
+    SortedBlockView* view_;
+    size_t* numInputs_;
+    std::optional<ql::ranges::iterator_t<SortedBlockView>> iter_;
+    std::optional<ValueType> lastValueFromPreviousBlock_;
 
-    std::optional<ValueType> lastValueFromPreviousBlock_{std::nullopt};
-    size_t numInputs_{0};
-    size_t numUnique_{0};
-    size_t numBlocksInFlight_;
-    // The blocks that are currently being deduplicated, in their order.
-    std::deque<std::future<BlockType>> pending_;
+    BlocksWithLastOfPrevious(SortedBlockView* view, size_t* numInputs)
+        : view_{view}, numInputs_{numInputs} {}
 
-    explicit UniqueBlockViewFromGet(SortedBlockView view,
-                                    size_t numBlocksInFlight)
-        : view_{std::move(view)},
-          nonEmptyView_(
-              ql::views::filter(view_, std::not_fn(ql::ranges::empty))),
-          iter_{ql::ranges::begin(nonEmptyView_)},
-          numBlocksInFlight_{std::max<size_t>(1, numBlocksInFlight)} {}
+    std::optional<BlockAndLastOfPrevious> get() override {
+      if (!iter_.has_value()) {
+        iter_ = ql::ranges::begin(*view_);
+      }
+      auto& iter = iter_.value();
+      for (; iter != ql::ranges::end(*view_); ++iter) {
+        if (ql::ranges::empty(*iter)) {
+          continue;
+        }
+        BlockType block = std::move(*iter);
+        ++iter;
+        *numInputs_ += block.size();
+        auto lastOfPrevious =
+            std::exchange(lastValueFromPreviousBlock_, block.back());
+        return BlockAndLastOfPrevious{std::move(block),
+                                      std::move(lastOfPrevious)};
+      }
+      return std::nullopt;
+    }
+  };
 
-    // Remove the duplicates of a single `block`, given the last value of the
-    // block before it (if any). This is the part that runs on the pool.
-    static BlockType deduplicate(BlockType block,
-                                 std::optional<ValueType> lastOfPrevious) {
+  // The part that runs on the global thread pool: remove the duplicates of a
+  // single block, given the last value of the block before it (if any).
+  struct Deduplicate {
+    BlockType operator()(BlockAndLastOfPrevious blockAndLastOfPrevious) const {
+      auto& [block, lastOfPrevious] = blockAndLastOfPrevious;
       auto beg = lastOfPrevious.has_value()
                      ? ql::ranges::find_if(
                            block, [&p = lastOfPrevious.value()](
@@ -101,49 +119,39 @@ InputRangeTypeErased<BlockType> uniqueBlockView(
       auto it = std::unique(beg, block.end());
       block.erase(it, block.end());
       block.erase(block.begin(), beg);
-      return block;
+      return std::move(block);
     }
+  };
 
-    // Hand blocks to the pool until `numBlocksInFlight_` of them are pending
-    // or the input is exhausted.
-    void fillPipeline() {
-      while (pending_.size() < numBlocksInFlight_ &&
-             iter_ != ql::ranges::end(nonEmptyView_)) {
-        auto block = std::move(*iter_);
-        ++iter_;
-        numInputs_ += block.size();
-        auto lastOfPrevious = lastValueFromPreviousBlock_;
-        lastValueFromPreviousBlock_ = block.back();
-        pending_.push_back(boost::asio::post(
-            globalExecutor(),
-            std::packaged_task<BlockType()>{[block = std::move(block),
-                                             lastOfPrevious = std::move(
-                                                 lastOfPrevious)]() mutable {
-              return deduplicate(std::move(block), std::move(lastOfPrevious));
-            }}));
-      }
-    }
+  // NOTE: This object is never moved (it is only accessed through the
+  // `std::unique_ptr` below), so the `BlocksWithLastOfPrevious` can safely
+  // point to its `view_` and `numInputs_`.
+  struct UniqueBlockViewFromGet : InputRangeFromGet<BlockType> {
+    SortedBlockView view_;
+    size_t numInputs_{0};
+    size_t numUnique_{0};
+    AsyncTransformView<BlocksWithLastOfPrevious, Deduplicate> deduplicated_;
+
+    explicit UniqueBlockViewFromGet(SortedBlockView view,
+                                    size_t numBlocksInFlight)
+        : view_{std::move(view)},
+          deduplicated_{BlocksWithLastOfPrevious{&view_, &numInputs_},
+                        Deduplicate{}, std::max<size_t>(1, numBlocksInFlight),
+                        globalExecutor()} {}
 
     std::optional<BlockType> get() override {
-      for (;;) {
-        fillPipeline();
-        if (pending_.empty()) {
-          AD_LOG_INFO << "Number of inputs to `uniqueView`: " << numInputs_
-                      << '\n';
-          AD_LOG_INFO << "Number of unique elements: " << numUnique_
-                      << std::endl;
-          return std::nullopt;
-        }
-        auto block = pending_.front().get();
-        pending_.pop_front();
+      while (auto block = deduplicated_.get()) {
         // A block may become empty (all of its elements were equal to the last
         // one of the previous block); such a block is skipped.
-        if (block.empty()) {
+        if (block->empty()) {
           continue;
         }
-        numUnique_ += block.size();
+        numUnique_ += block->size();
         return block;
       }
+      AD_LOG_INFO << "Number of inputs to `uniqueView`: " << numInputs_ << '\n';
+      AD_LOG_INFO << "Number of unique elements: " << numUnique_ << std::endl;
+      return std::nullopt;
     }
   };
   return InputRangeTypeErased{std::make_unique<UniqueBlockViewFromGet>(
