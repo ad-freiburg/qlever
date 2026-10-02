@@ -14,6 +14,7 @@
 #include "backports/type_traits.h"
 #include "util/AlignedAllocator.h"
 #include "util/Exception.h"
+#include "util/NoCopyNoMove.h"
 #include "util/Serializer/Serializer.h"
 
 namespace ad_utility::serialization {
@@ -24,7 +25,7 @@ namespace ad_utility::serialization {
  * `Serializer.h`).
  */
 template <bool usesAlignedSerialization = false>
-class ByteBufferWriteSerializerT {
+class ByteBufferWriteSerializerT : public NoCopy {
  public:
   using SerializerType = WriteSerializerTag;
   using Storage =
@@ -34,11 +35,6 @@ class ByteBufferWriteSerializerT {
   static constexpr bool UsesAlignedSerialization = usesAlignedSerialization;
 
   ByteBufferWriteSerializerT() = default;
-  ByteBufferWriteSerializerT(const ByteBufferWriteSerializerT&) = delete;
-  ByteBufferWriteSerializerT& operator=(const ByteBufferWriteSerializerT&) =
-      delete;
-  ByteBufferWriteSerializerT(ByteBufferWriteSerializerT&&) = default;
-  ByteBufferWriteSerializerT& operator=(ByteBufferWriteSerializerT&&) = default;
 
   void serializeBytes(const char* bytePointer, size_t numBytes) {
     data_.insert(data_.end(), bytePointer, bytePointer + numBytes);
@@ -53,7 +49,52 @@ class ByteBufferWriteSerializerT {
   // Get the current write position (number of bytes written so far).
   size_t getCurrentPosition() const { return data_.size(); }
 
+  // Overload of `serializeAtPosition` (see `Serializer.h`) for a
+  // `ByteBufferWriteSerializerT`. Write the `element` over the bytes that
+  // start at `position` (which have to have been written before), without
+  // changing the current write position. Use this to fill in a placeholder
+  // (for example the size of a block of data, which is only known once that
+  // block has been written completely).
+  //
+  // NOTE: This is a hidden friend (and hence only found via ADL) because it
+  // needs access to the buffer, which is not part of the public interface of
+  // this class.
+  template <typename T>
+  friend void serializeAtPosition(ByteBufferWriteSerializerT& serializer,
+                                  uint64_t position, const T& element) {
+    OverwritingSerializer overwritingSerializer{serializer.data_, position};
+    overwritingSerializer << element;
+  }
+
  private:
+  // A `WriteSerializer` that does not append to the buffer, but overwrites the
+  // bytes that start at a given position (which have to have been written
+  // before). Used by `serializeAtPosition` above, so that the patching of a
+  // placeholder needs no temporary buffer.
+  class OverwritingSerializer {
+   public:
+    using SerializerType = WriteSerializerTag;
+    static constexpr bool UsesAlignedSerialization = usesAlignedSerialization;
+
+    OverwritingSerializer(Storage& data, size_t position)
+        : data_{data}, position_{position} {}
+
+    void serializeBytes(const char* bytePointer, size_t numBytes) {
+      AD_CONTRACT_CHECK(position_ + numBytes <= data_.size());
+      std::copy(bytePointer, bytePointer + numBytes, data_.begin() + position_);
+      position_ += numBytes;
+    }
+
+    // The position in the buffer at which the next byte will be written. This
+    // is required for the alignment handling, see `alignSerializerForType` in
+    // `Serializer.h`.
+    size_t getCurrentPosition() const { return position_; }
+
+   private:
+    Storage& data_;
+    size_t position_;
+  };
+
   Storage data_;
 };
 
@@ -66,7 +107,7 @@ class ByteBufferWriteSerializerT {
  */
 template <bool AlignedSerialization = false,
           typename Storage = std::vector<char>>
-class ByteBufferReadSerializerT {
+class ByteBufferReadSerializerT : public NoCopy {
  public:
   static_assert(ql::ranges::random_access_range<Storage>);
   static_assert(
@@ -94,13 +135,6 @@ class ByteBufferReadSerializerT {
     std::copy(iterator_, iterator_ + numBytes, bytePointer);
     iterator_ += numBytes;
   }
-
-  ByteBufferReadSerializerT(const ByteBufferReadSerializerT&) noexcept = delete;
-  ByteBufferReadSerializerT& operator=(const ByteBufferReadSerializerT&) =
-      delete;
-  ByteBufferReadSerializerT(ByteBufferReadSerializerT&&) noexcept = default;
-  ByteBufferReadSerializerT& operator=(ByteBufferReadSerializerT&&) noexcept =
-      default;
 
   const Storage& data() const noexcept { return data_; }
 

@@ -79,6 +79,6 @@ ExpressionResult DeviationExpression::evaluate(
 
   auto childRes = child_->evaluate(context);
   return std::visit(impl, std::move(childRes));
-};
+}
 
 }  // namespace sparqlExpression::detail

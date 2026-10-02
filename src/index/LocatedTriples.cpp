@@ -12,7 +12,7 @@
 
 #include "backports/algorithm.h"
 #include "global/RuntimeParameters.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationMetadata.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/GraphComputation.h"
 #include "index/Permutation.h"
@@ -89,7 +89,7 @@ namespace {
 template <typename Row, template <typename T, T...> typename Tp, size_t... I>
 auto tieHelper(Row& row, Tp<size_t, I...>) {
   return std::tie(row[I]...);
-};
+}
 }  // namespace
 
 // Return a `std::tie` of the relevant entries of a row, according to
@@ -424,6 +424,20 @@ size_t LocatedTriplesPerBlock::numTriplesForTesting() const {
       map_ | ql::views::values |
           ql::views::transform(&LocatedTriples::sizeForTesting),
       size_t{0});
+}
+
+// ____________________________________________________________________________
+bool LocatedTriplesPerBlock::containsLocatedTriplesInBlockRange(
+    size_t firstBlockIndex, size_t lastBlockIndex) const {
+  AD_CONTRACT_CHECK(firstBlockIndex <= lastBlockIndex);
+  if (map_.size() <= lastBlockIndex - firstBlockIndex) {
+    return ql::ranges::any_of(map_ | ql::views::keys, [&](size_t blockIndex) {
+      return blockIndex >= firstBlockIndex && blockIndex <= lastBlockIndex;
+    });
+  }
+  return ql::ranges::any_of(
+      ql::views::iota(firstBlockIndex, lastBlockIndex + 1),
+      [this](size_t blockIndex) { return map_.contains(blockIndex); });
 }
 
 // ____________________________________________________________________________

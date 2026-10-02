@@ -160,3 +160,32 @@ TEST(PatternCreator, writeAndReadWithFinish) {
                         getVectorFromSorter(std::move(*hashPatternAsPSOPtr)));
   ad_utility::deleteFile(filename);
 }
+
+// _____________________________________________________________________________
+// `printStatistics` (which is called by `finish`) prints the averages with a
+// reduced precision. Check that this is done without changing the state of the
+// global log stream, which would also affect everything that is logged later.
+TEST(PatternCreator, printStatisticsFloatFormat) {
+  std::string filename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+
+  PatternCreator creator{filename, idOfHasPattern, memForStxxl};
+  [[maybe_unused]] auto hasPatternAsPSOPtr = createExamplePatterns(creator);
+  creator.finish();
+
+  // The averages are `7 / 3` with one digit and `7 / 4` with no digit after
+  // the decimal point.
+  EXPECT_THAT(
+      logStream.str(),
+      ::testing::HasSubstr("Average number of predicates per subject: 2.3"));
+  EXPECT_THAT(
+      logStream.str(),
+      ::testing::HasSubstr("Average number of subjects per predicate: 2\n"));
+
+  // The float format of the log stream is untouched, so a number that is
+  // logged afterwards still has the default precision of six.
+  logStream.str("");
+  AD_LOG_INFO << 1.0 / 3.0 << std::endl;
+  EXPECT_THAT(logStream.str(), ::testing::HasSubstr("0.333333"));
+}

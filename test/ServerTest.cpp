@@ -10,9 +10,11 @@
 
 #include "./util/FileTestHelpers.h"
 #include "./util/MetricsTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "ServerTestHelpers.h"
 #include "backports/filesystem.h"
-#include "engine/HttpError.h"
+#include "engine/ExecuteUpdate.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Server.h"
 #include "engine/UpdateMetadata.h"
@@ -20,89 +22,13 @@
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"
-#include "util/RuntimeParametersTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 #include "util/json.h"
 #include "util/metrics/Metrics.h"
 
 using nlohmann::json;
-
-namespace {
-using namespace ad_utility::url_parser;
-using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
-
-constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-};
-auto parseQuery(std::string query,
-                const std::vector<DatasetClause>& datasets = {}) {
-  return SparqlParser::parseQuery(encodedIriManager(), std::move(query),
-                                  datasets);
-}
-
-}  // namespace
-TEST(ServerTest, determineResultPinning) {
-  EXPECT_THAT(Server::determineResultPinning(
-                  {{"pin-subresults", {"true"}}, {"pin-result", {"true"}}}),
-              testing::Pair(true, true));
-  EXPECT_THAT(Server::determineResultPinning({{"pin-result", {"true"}}}),
-              testing::Pair(false, true));
-  EXPECT_THAT(
-      Server::determineResultPinning({{"pin-subresults", {"otherValue"}}}),
-      testing::Pair(false, false));
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, determineMediaType) {
-  auto MakeRequest = [](const std::optional<std::string>& accept,
-                        const http::verb method = http::verb::get,
-                        const std::string& target = "/",
-                        const std::string& body = "") {
-    auto req = http::request<http::string_body>{method, target, 11};
-    if (accept.has_value()) {
-      req.set(http::field::accept, accept.value());
-    }
-    req.body() = body;
-    req.prepare_payload();
-    return req;
-  };
-  auto checkActionMediatype = [&](const std::string& actionName,
-                                  ad_utility::MediaType expectedMediaType) {
-    EXPECT_THAT(Server::determineMediaTypes({{"action", {actionName}}},
-                                            MakeRequest(std::nullopt)),
-                testing::ElementsAre(expectedMediaType));
-  };
-  // The media type associated with the action overrides the `Accept` header.
-  EXPECT_THAT(Server::determineMediaTypes(
-                  {{"action", {"csv_export"}}},
-                  MakeRequest("application/sparql-results+json")),
-              testing::ElementsAre(ad_utility::MediaType::csv));
-  checkActionMediatype("csv_export", ad_utility::MediaType::csv);
-  checkActionMediatype("tsv_export", ad_utility::MediaType::tsv);
-  checkActionMediatype("qlever_json_export", ad_utility::MediaType::qleverJson);
-  checkActionMediatype("sparql_json_export", ad_utility::MediaType::sparqlJson);
-  checkActionMediatype("turtle_export", ad_utility::MediaType::turtle);
-  checkActionMediatype("binary_export", ad_utility::MediaType::octetStream);
-  EXPECT_THAT(Server::determineMediaTypes(
-                  {}, MakeRequest("application/sparql-results+json")),
-              testing::ElementsAre(ad_utility::MediaType::sparqlJson));
-  // No supported media type in the `Accept` header. (Contrary to it's docstring
-  // and interface) `ad_utility::getMediaTypeFromAcceptHeader` throws an
-  // exception if no supported media type is found.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::determineMediaTypes({}, MakeRequest("text/css")),
-      testing::HasSubstr("Not a single media type known to this parser was "
-                         "detected in \"text/css\"."));
-  // No `Accept` header means that any content type is allowed.
-  EXPECT_THAT(Server::determineMediaTypes({}, MakeRequest(std::nullopt)),
-              testing::ElementsAre());
-  // No `Accept` header and an empty `Accept` header are not distinguished.
-  EXPECT_THAT(Server::determineMediaTypes({}, MakeRequest("")),
-              testing::ElementsAre());
-}
 
 // _____________________________________________________________________________
 TEST(ServerTest, chooseBestFittingMediaType) {
@@ -157,49 +83,31 @@ TEST(ServerTest, getQueryId) {
   const auto req = makeGetRequest("/");
   {
     // A request with a custom query id.
-    auto queryId1 = server.getQueryId(reqWithExplicitQueryId,
-                                      "SELECT * WHERE { ?a ?b ?c }");
+    auto queryId1 =
+        server.getQueryId(reqWithExplicitQueryId, "SELECT * WHERE { ?a ?b ?c }",
+                          QueryOperation::QUERY);
     // Another request with the same custom query id. This throws an error,
     // because query id cannot be used for multiple queries at the same time.
     AD_EXPECT_THROW_WITH_MESSAGE(
-        server.getQueryId(reqWithExplicitQueryId,
-                          "SELECT * WHERE { ?a ?b ?c }"),
+        server.getQueryId(reqWithExplicitQueryId, "SELECT * WHERE { ?a ?b ?c }",
+                          QueryOperation::QUERY),
         testing::HasSubstr("Query id '100' is already in use!"));
   }
   // The custom query id can be reused, once the query is finished.
   auto queryId1 =
-      server.getQueryId(reqWithExplicitQueryId, "SELECT * WHERE { ?a ?b ?c }");
+      server.getQueryId(reqWithExplicitQueryId, "SELECT * WHERE { ?a ?b ?c }",
+                        QueryOperation::QUERY);
   // Without custom query ids, unique ids are generated.
-  auto queryId2 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
-  auto queryId3 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, composeStatsJson) {
-  Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
-  json expectedJson{{"git-hash-index", "git short hash not set"},
-                    {"git-hash-server", "git short hash not set"},
-                    {"version-server", "project version not set"},
-                    {"name-index", ""},
-                    {"name-text-index", ""},
-                    {"num-entity-occurrences", 0},
-                    {"num-objects-internal", 0},
-                    {"num-objects-normal", 1},
-                    {"num-permutations", 6},
-                    {"num-predicates-internal", 1},
-                    {"num-predicates-normal", 1},
-                    {"num-subjects-internal", 0},
-                    {"num-subjects-normal", 1},
-                    {"num-text-records", 0},
-                    {"num-triples-internal", 1},
-                    {"num-triples-normal", 1},
-                    {"num-word-occurrences", 0}};
-  EXPECT_THAT(server.composeStatsJson(server.indexAndViewsSnapshot()->index_),
-              testing::Eq(expectedJson));
+  auto queryId2 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }",
+                                    QueryOperation::QUERY);
+  auto queryId3 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }",
+                                    QueryOperation::QUERY);
 }
 
 // _____________________________________________________________________________
 TEST(ServerTest, createMessageSender) {
+  using namespace ad_utility::websocket;
+
   Server server{9999, 1, "accessToken", serverTestHelpers::getDefaultConfig()};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   std::string customQueryId = "100";
@@ -208,7 +116,8 @@ TEST(ServerTest, createMessageSender) {
   // The query hub is only valid once, the server has been started.
   AD_EXPECT_THROW_WITH_MESSAGE(
       server.createMessageSender(server.queryHub_, req,
-                                 "SELECT * WHERE { ?a ?b ?c }"),
+                                 "SELECT * WHERE { ?a ?b ?c }",
+                                 QueryOperation::QUERY),
       testing::HasSubstr("Assertion `queryHubLock` failed."));
   {
     // Set a dummy query hub.
@@ -218,12 +127,15 @@ TEST(ServerTest, createMessageSender) {
     server.queryHub_ = queryHub;
     // MessageSenders are created normally.
     server.createMessageSender(server.queryHub_, req,
-                               "SELECT * WHERE { ?a ?b ?c }");
+                               "SELECT * WHERE { ?a ?b ?c }",
+                               QueryOperation::QUERY);
     server.createMessageSender(server.queryHub_, req,
-                               "INSERT DATA { <foo> <bar> <baz> }");
+                               "INSERT DATA { <foo> <bar> <baz> }",
+                               QueryOperation::UPDATE);
     EXPECT_THAT(
         server.createMessageSender(server.queryHub_, reqWithExplicitQueryId,
-                                   "INSERT DATA { <foo> <bar> <baz> }"),
+                                   "INSERT DATA { <foo> <bar> <baz> }",
+                                   QueryOperation::UPDATE),
         AD_PROPERTY(ad_utility::websocket::MessageSender, getQueryId,
                     testing::Eq(ad_utility::websocket::QueryId::idFromString(
                         customQueryId))));
@@ -232,7 +144,8 @@ TEST(ServerTest, createMessageSender) {
   // senders can no longer be created.
   AD_EXPECT_THROW_WITH_MESSAGE(
       server.createMessageSender(server.queryHub_, req,
-                                 "SELECT * WHERE { ?a ?b ?c }"),
+                                 "SELECT * WHERE { ?a ?b ?c }",
+                                 QueryOperation::QUERY),
       testing::HasSubstr("Assertion `queryHubLock` failed."));
 }
 
@@ -252,7 +165,7 @@ TEST(ServerTest, createResponseMetadata) {
   EXPECT_THAT(pqs, testing::SizeIs(1));
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  auto qet = qp.createExecutionTree(pq);
   const qlever::PlannedQuery plannedQuery{std::move(pq), std::move(qet), *qec};
 
   // Execute the update
@@ -269,13 +182,12 @@ TEST(ServerTest, createResponseMetadata) {
   tracer2.endTrace("ServerTest::createResponseMetadata tracer2");
   AD_EXPECT_THROW_WITH_MESSAGE(
       Server::createResponseMetadataForUpdate(
-          index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-          plannedQuery, plannedQuery.queryExecutionTree(), UpdateMetadata{},
-          tracer2),
+          *deltaTriples.getLocatedTriplesSharedStateReference(), plannedQuery,
+          UpdateMetadata{}, tracer2),
       testing::HasSubstr("updateMetadata.countBefore_.has_value()"));
   json metadata = Server::createResponseMetadataForUpdate(
-      index, *deltaTriples.getLocatedTriplesSharedStateReference(),
-      plannedQuery, plannedQuery.queryExecutionTree(), updateMetadata, tracer2);
+      *deltaTriples.getLocatedTriplesSharedStateReference(), plannedQuery,
+      updateMetadata, tracer2);
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
@@ -298,74 +210,16 @@ TEST(ServerTest, createResponseMetadata) {
 }
 
 // _____________________________________________________________________________
-TEST(ServerTest, adjustParsedQueryLimitOffset) {
-  using enum ad_utility::MediaType;
-  auto makePlannedQuery = [](std::string operation) -> qlever::PlannedQuery {
-    ParsedQuery parsed = parseQuery(std::move(operation));
-    auto* qec = ad_utility::testing::getQec();
-    QueryExecutionTree qet =
-        QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}
-            .createExecutionTree(parsed);
-    return {std::move(parsed), std::move(qet), *qec};
-  };
-  auto expectExportLimit =
-      [&makePlannedQuery](
-          ad_utility::MediaType mediaType, std::optional<uint64_t> limit,
-          std::string operation =
-              "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
-          const ad_utility::url_parser::ParamValueMap& parameters = {{"send",
-                                                                      {"12"}}},
-          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-        auto trace = generateLocationTrace(l);
-        auto pq = makePlannedQuery(std::move(operation));
-        Server::adjustParsedQueryLimitOffset(pq, mediaType, parameters);
-        EXPECT_THAT(pq.parsedQuery()._limitOffset.exportLimit_,
-                    testing::Eq(limit));
-      };
-
-  std::string complexQuery{
-      "SELECT * WHERE { ?a ?b ?c . FILTER(LANG(?a) = 'en') . "
-      "BIND(RAND() as ?r) . } OFFSET 5"};
-
-  // Check that the export limit is set for `qlever-results+json`.
-  expectExportLimit(qleverJson, 12);
-  expectExportLimit(qleverJson, 13, "SELECT * WHERE { <a> <b> ?c }",
-                    {{"send", {"13"}}});
-  expectExportLimit(qleverJson, 13, complexQuery, {{"send", {"13"}}});
-
-  // Check that the export limit is set for `sparql-results+json` if and
-  // only if the runtime parameter `sparql-results-json-with-time`  is set.
-  {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
-    expectExportLimit(sparqlJson, 12);
-  }
-  {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
-    expectExportLimit(sparqlJson, std::nullopt);
-  }
-
-  // Check that no export limit is set for other media types.
-  expectExportLimit(csv, std::nullopt);
-  expectExportLimit(csv, std::nullopt, complexQuery);
-  expectExportLimit(tsv, std::nullopt);
-}
-
-// _____________________________________________________________________________
 TEST(ServerTest, configurePinnedResultWithName) {
   auto qec = ad_utility::testing::getQec();
 
-  // Test with no pinNamed value - should not modify qec
-  std::optional<std::string> noPinNamed = std::nullopt;
-  Server::configurePinnedResultWithName(noPinNamed, std::nullopt, std::nullopt,
-                                        true, *qec);
+  // Test with no pin - should not modify qec
+  Server::configurePinnedResultWithName(std::nullopt, true, *qec);
   EXPECT_FALSE(qec->pinResultWithName().has_value());
 
-  // Test with pinNamed and valid access token - should set the pin name
-  std::optional<std::string> pinNamed = "test_query_name";
-  Server::configurePinnedResultWithName(pinNamed, std::nullopt, std::nullopt,
-                                        true, *qec);
+  // Test with a name and valid access token - should set the pin name
+  Server::configurePinnedResultWithName(
+      QueryExecutionContext::PinResultWithName{"test_query_name"}, true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
   EXPECT_EQ(qec->pinResultWithName().value().geoIndexSimplificationInMeters_,
@@ -373,9 +227,11 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
-  // Test with pinNamed AND pinned geo Var.
-  Server::configurePinnedResultWithName(pinNamed, "geom_var", std::nullopt,
-                                        true, *qec);
+  // Test with name AND pinned geo var.
+  Server::configurePinnedResultWithName(
+      QueryExecutionContext::PinResultWithName{"test_query_name",
+                                               Variable{"?geom_var"}},
+      true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
   EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
@@ -385,8 +241,11 @@ TEST(ServerTest, configurePinnedResultWithName) {
 
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
-  // Test with pinNamed, geo var, AND simplification.
-  Server::configurePinnedResultWithName(pinNamed, "geom_var", 10.0, true, *qec);
+  // Test with name, geo var, AND simplification.
+  Server::configurePinnedResultWithName(
+      QueryExecutionContext::PinResultWithName{"test_query_name",
+                                               Variable{"?geom_var"}, 10.0},
+      true, *qec);
   ASSERT_TRUE(qec->pinResultWithName().has_value());
   EXPECT_EQ(qec->pinResultWithName().value().name_, "test_query_name");
   EXPECT_THAT(qec->pinResultWithName().value().geoIndexVar_,
@@ -397,10 +256,14 @@ TEST(ServerTest, configurePinnedResultWithName) {
   // Reset for next test
   qec->pinResultWithName() = std::nullopt;
 
-  // Test with pinNamed but invalid access token - should throw exception
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::configurePinnedResultWithName(pinNamed, std::nullopt,
-                                            std::nullopt, false, *qec),
+  // Pinning without a valid access token is rejected with 403 Forbidden.
+  serverTestHelpers::expectHttpError(
+      [&] {
+        Server::configurePinnedResultWithName(
+            QueryExecutionContext::PinResultWithName{"test_query_name"}, false,
+            *qec);
+      },
+      boost::beast::http::status::forbidden,
       testing::HasSubstr(
           "Pinning a result with a name requires a valid access token"));
 
@@ -409,61 +272,28 @@ TEST(ServerTest, configurePinnedResultWithName) {
 }
 
 // _____________________________________________________________________________
-TEST(ServerTest, parsePinGeoIndexSimplification) {
-  // No value given - no simplification.
-  EXPECT_EQ(Server::parsePinGeoIndexSimplification(std::nullopt), std::nullopt);
-
-  // A valid positive number is parsed correctly.
-  EXPECT_THAT(Server::parsePinGeoIndexSimplification("10.5"),
-              ::testing::Optional(10.5));
-
-  // A non-numeric value throws.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::parsePinGeoIndexSimplification("not-a-number"),
-      testing::HasSubstr(
-          "Invalid value for `pin-geo-index-simplification`: must be a "
-          "floating-point number of meters."));
-
-  // Negative and zero values are not rejected by the parser itself (that is
-  // left to the downstream consumer, see `GeoConverters::simplifyPolyline`).
-  EXPECT_THAT(Server::parsePinGeoIndexSimplification("-5"),
-              ::testing::Optional(-5.0));
-  EXPECT_THAT(Server::parsePinGeoIndexSimplification("0"),
-              ::testing::Optional(0.0));
-}
-
-// _____________________________________________________________________________
-TEST(ServerTest, describePinResultWithNameForLog) {
-  // No pinned name - nothing to describe.
-  EXPECT_EQ(Server::describePinResultWithNameForLog(std::nullopt, std::nullopt,
-                                                    std::nullopt),
-            "");
-
-  // Pinned name only.
-  EXPECT_EQ(Server::describePinResultWithNameForLog("myPin", std::nullopt,
-                                                    std::nullopt),
-            " [pin result with name \"myPin\"]");
-
-  // Pinned name and geo index, but no simplification.
-  EXPECT_EQ(
-      Server::describePinResultWithNameForLog("myPin", "geom", std::nullopt),
-      " [pin result with name \"myPin\" with geo index on ?geom]");
-
-  // Pinned name, geo index, and simplification.
-  EXPECT_EQ(Server::describePinResultWithNameForLog("myPin", "geom", 5.0),
-            " [pin result with name \"myPin\" with geo index on ?geom, "
-            "simplification=5m]");
-}
-
-// _____________________________________________________________________________
 TEST(ServerTest, checkAccessToken) {
   auto config = serverTestHelpers::getDefaultConfig();
   Server server{4321, 1, "accessToken", config};
   EXPECT_TRUE(server.checkAccessToken("accessToken"));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      server.checkAccessToken("invalidAccessToken"),
+  // An invalid access token results in a 403 Forbidden response.
+  serverTestHelpers::expectHttpError(
+      [&] { server.checkAccessToken("invalidAccessToken"); },
+      boost::beast::http::status::forbidden,
       testing::HasSubstr("Access token was provided but it was invalid"));
+
+  // Same when the server was started without `--access-token` at all.
+  Server serverWithoutToken{4322, 1, "", config};
+  serverTestHelpers::expectHttpError(
+      [&] { serverWithoutToken.checkAccessToken("someToken"); },
+      boost::beast::http::status::forbidden,
+      testing::HasSubstr("Access token was provided but server was started "
+                         "without --access-token"));
+
+  // No access token provided at all is not an error here, it just means that
+  // operations requiring one are rejected later.
+  EXPECT_FALSE(serverWithoutToken.checkAccessToken(std::nullopt));
 
   config.persistUpdates_ = false;
 
@@ -541,22 +371,16 @@ TEST(ServerTest, metricsEndpoint) {
                           ad_utility::source_location l =
                               AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    auto request = makeGetRequest("/metrics");
-    if (accessToken.has_value()) {
-      request.set(http::field::authorization, "Bearer " + accessToken.value());
-    }
+    auto request = makeGetRequest("/metrics", accessToken);
     auto response = server.process(request);
 
     EXPECT_THAT(response, responseMatcher);
     EXPECT_THAT(responseBodyToString(std::move(response.body())), bodyMatcher);
   };
-  auto expectRequiresAccessToken = [&](auto& server,
-                                       ad_utility::source_location l =
-                                           AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(l);
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        expectMetrics(std::nullopt, server, testing::_, testing::_),
-        testing::HasSubstr("metrics requires a valid access token"));
+  auto expectMetricsRequiresAccessToken = [&](auto& server) {
+    expectRequiresValidAccessToken("metrics", [&] {
+      expectMetrics(std::nullopt, server, testing::_, testing::_);
+    });
   };
   auto UpdateRequest = [](std::string update) {
     return makeRequest(
@@ -586,19 +410,19 @@ TEST(ServerTest, metricsEndpoint) {
   };
   {
     auto server = makeServerWithMetrics(nullptr);
-    expectRequiresAccessToken(server);
+    expectMetricsRequiresAccessToken(server);
     expectMetrics("accessToken", server, StatusIs(http::status::not_found),
                   testing::StrEq("Metrics not enabled (use --enable-metrics)"));
   }
   {
     auto server = makeServerWithMetrics(std::make_shared<FakeMetricsReader>());
-    expectRequiresAccessToken(server);
+    expectMetricsRequiresAccessToken(server);
     expectMetrics("accessToken", server, StatusIs(http::status::ok),
                   testing::HasSubstr("fake_counter 42"));
   }
   {
     auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
-    expectRequiresAccessToken(server);
+    expectMetricsRequiresAccessToken(server);
   }
   {
     auto server = makeServerWithMetrics(ad_utility::metrics::initialize(true));
@@ -626,6 +450,9 @@ TEST(ServerTest, metricsEndpoint) {
       "qlever_sparql_operation_errors_total";
   std::string_view qleverIndexRebuildInProgress =
       "qlever_index_rebuild_in_progress";
+  std::string_view qleverIndexNumTriples = "qlever_index_num_triples";
+  Label inserted{"type", "inserted"};
+  Label deleted{"type", "deleted"};
   ExpectMetricsChange(
       testing::AllOf(IsZero(qleverDeltaTriples),
                      IsZero(qleverSparqlOperationStartedTotal, update),
@@ -638,6 +465,19 @@ TEST(ServerTest, metricsEndpoint) {
                      IsZero(qleverSparqlOperationStartedTotal, query),
                      IsZero(qleverSparqlOperationRunning, update),
                      IsZero(qleverSparqlOperationRunning, query)));
+  // The delta triples are also reported per type (inserted or deleted), and
+  // the number of triples in the index does not change with updates.
+  ExpectMetricsChange(
+      testing::AllOf(IsZero(qleverDeltaTriples),
+                     IsZero(qleverDeltaTriples, inserted),
+                     IsZero(qleverDeltaTriples, deleted),
+                     MetricIs(qleverIndexNumTriples, "1")),
+      UpdateRequest(
+          "INSERT DATA { <d> <e> <f> } ; DELETE DATA { <a> <b> <c> }"),
+      testing::AllOf(MetricIs(qleverDeltaTriples, "2"),
+                     MetricIs(qleverDeltaTriples, "1", inserted),
+                     MetricIs(qleverDeltaTriples, "1", deleted),
+                     MetricIs(qleverIndexNumTriples, "1")));
   ExpectMetricsChange(
       testing::AllOf(IsZero(qleverDeltaTriples),
                      IsZero(qleverSparqlOperationStartedTotal, update),
@@ -663,6 +503,247 @@ TEST(ServerTest, metricsEndpoint) {
       IsZero(qleverSparqlOperationErrorsTotal, syntaxError),
       UpdateRequest("SELECT * WHERE { ?s ?p ?o } Limit 10"),
       MetricIs(qleverSparqlOperationErrorsTotal, "1", syntaxError));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, pingEndpoint) {
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  // Without a `msg` parameter.
+  auto response = server.process(makeGetRequest("/ping"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("This QLever server is up and running\n"));
+  EXPECT_THAT(logStream.str(),
+              testing::HasSubstr("Alive check without message"));
+
+  // With a `msg` parameter; the response is the same regardless of the
+  // message, which is only used for logging.
+  logStream.str("");
+  response = server.process(makeGetRequest("/ping?msg=hello"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(responseBodyToString(std::move(response.body())),
+              testing::StrEq("This QLever server is up and running\n"));
+  EXPECT_THAT(logStream.str(),
+              testing::HasSubstr("Alive check with message \"hello\""));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, setRuntimeParameters) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(false);
+
+  // Setting a runtime parameter requires a valid access token.
+  expectRequiresValidAccessToken("setting runtime parameters", [&] {
+    server.process(makeGetRequest("/?strip-columns=true"));
+  });
+  EXPECT_FALSE(globalRuntimeParameters.rlock()->stripColumns_.get());
+
+  // With a valid access token, the parameter is set and the response reports
+  // the full, updated settings map.
+  auto response =
+      server.process(makeGetRequest("/?strip-columns=true", "accessToken"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_TRUE(globalRuntimeParameters.rlock()->stripColumns_.get());
+  auto body = responseBodyAsJson(std::move(response));
+  ASSERT_TRUE(body.has_value());
+  EXPECT_THAT(body.value().at("strip-columns"), testing::Eq("true"));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, setIndexAndTextDescription) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  auto expectDescriptionSettable = [&server](std::string_view paramName,
+                                             std::string_view newName,
+                                             std::string_view jsonKey) {
+    auto url = absl::StrCat("/?", paramName, "=", newName);
+
+    // Setting the description requires a valid access token.
+    expectRequiresValidAccessToken(
+        paramName, [&] { server.process(makeGetRequest(url)); });
+
+    // With a valid access token, the description is set and the response
+    // reports the updated index statistics.
+    auto response = server.process(makeGetRequest(url, "accessToken"));
+    EXPECT_THAT(response, StatusIs(http::status::ok));
+    auto body = responseBodyAsJson(std::move(response));
+    ASSERT_TRUE(body.has_value());
+    EXPECT_THAT(body.value().at(jsonKey), testing::Eq(newName));
+  };
+
+  expectDescriptionSettable("index-description", "new-kb-name", "name-index");
+  EXPECT_THAT(server.getIndex().getKbName(), testing::Eq("new-kb-name"));
+
+  expectDescriptionSettable("text-description", "new-text-name",
+                            "name-text-index");
+  EXPECT_THAT(server.getIndex().getTextName(), testing::Eq("new-text-name"));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, clearDeltaTriples) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  auto expectCounts = [&server](DeltaTriplesCount expected) {
+    EXPECT_THAT(server.deltaTriplesManager()
+                    .getCurrentLocatedTriplesSharedState()
+                    ->counts_,
+                testing::Optional(testing::Eq(expected)));
+  };
+
+  auto insertRequest =
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-update"},
+                   {http::field::authorization, "Bearer accessToken"}},
+                  "INSERT DATA { <d> <e> <f> }");
+  EXPECT_THAT(server.process(insertRequest), StatusIs(http::status::ok));
+  expectCounts(DeltaTriplesCount{1, 0});
+
+  // The command requires a valid access token.
+  expectRequiresValidAccessToken("clear-delta-triples", [&] {
+    server.process(makeGetRequest("/?cmd=clear-delta-triples"));
+  });
+  expectCounts(DeltaTriplesCount{1, 0});
+
+  // With a valid access token, the delta triples are cleared and the response
+  // reports the (now empty) resulting counts.
+  auto response = server.process(
+      makeGetRequest("/?cmd=clear-delta-triples", "accessToken"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(responseBodyAsJson(std::move(response)),
+              testing::Optional(testing::Eq(
+                  json{{"inserted", 0}, {"deleted", 0}, {"total", 0}})));
+  expectCounts(DeltaTriplesCount{0, 0});
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, vacuumDeltaTriples) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> ."});
+  auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+
+  auto expectCounts = [&server](DeltaTriplesCount expected) {
+    EXPECT_THAT(server.deltaTriplesManager()
+                    .getCurrentLocatedTriplesSharedState()
+                    ->counts_,
+                testing::Optional(testing::Eq(expected)));
+  };
+
+  // Without this, the single block of the (tiny) test index doesn't meet the
+  // minimum size for `vacuum` to process it.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::vacuumMinimumBlockSize_>(
+          size_t{0});
+
+  // Insert a triple that is already in the index; this is a redundant
+  // insertion that `vacuum` should remove.
+  auto insertRequest =
+      makeRequest(http::verb::post, "/",
+                  {{http::field::content_type, "application/sparql-update"},
+                   {http::field::authorization, "Bearer accessToken"}},
+                  "INSERT DATA { <a> <b> <c> }");
+  EXPECT_THAT(server.process(insertRequest), StatusIs(http::status::ok));
+  expectCounts(DeltaTriplesCount{1, 0});
+
+  // The command requires a valid access token.
+  expectRequiresValidAccessToken("vacuum-delta-triples", [&] {
+    server.process(makeGetRequest("/?cmd=vacuum-delta-triples"));
+  });
+  expectCounts(DeltaTriplesCount{1, 0});
+
+  // With a valid access token, the redundant insertion is vacuumed away and
+  // the response reports the resulting stats.
+  auto response = server.process(
+      makeGetRequest("/?cmd=vacuum-delta-triples", "accessToken"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  auto body = responseBodyAsJson(std::move(response));
+  ASSERT_TRUE(body.has_value());
+  EXPECT_EQ(body.value()["external"]["insertionsRemoved"], 1);
+  expectCounts(DeltaTriplesCount{0, 0});
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, processCommands) {
+  auto server = makeServerForTesting(getDefaultConfig().baseName_);
+
+  // An unknown `cmd=` value results in a 400 Bad Request response.
+  expectHttpError(
+      [&] { server.process(makeGetRequest("/?cmd=not-a-real-command")); },
+      boost::beast::http::status::bad_request,
+      testing::HasSubstr(
+          "Unknown value \"not-a-real-command\" for parameter \"cmd\""));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, handleHttpRequest) {
+  auto server = makeServerForTesting(getDefaultConfig().baseName_);
+  auto response = server.handleHttpRequest(makeRequest(http::verb::options));
+
+  // OPTIONS is answered directly with CORS headers, without dispatching.
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_origin,
+                                      testing::StrEq("*")));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_headers,
+                                      testing::StrEq("*")));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_methods,
+                                      testing::StrEq("GET, POST, OPTIONS")));
+
+  // A normal successful request also gets the CORS headers.
+  response = server.handleHttpRequest(makeGetRequest("/?default"));
+  EXPECT_THAT(response, StatusIs(http::status::ok));
+  EXPECT_THAT(response, HeaderFieldIs(http::field::access_control_allow_origin,
+                                      testing::StrEq("*")));
+
+  // Valid token format, wrong value: `HttpError` -> forbidden.
+  response = server.handleHttpRequest(makeRequest(
+      http::verb::get, "/",
+      {{http::field::authorization, "Bearer correct_format_wrong_token"}}));
+  EXPECT_THAT(response, StatusIs(http::status::forbidden));
+
+  // Missing "Bearer " prefix: generic exception -> bad_request.
+  response = server.handleHttpRequest(makeRequest(
+      http::verb::get, "/",
+      {{http::field::authorization, "correct_token_wrong_format"}}));
+  EXPECT_THAT(response, StatusIs(http::status::bad_request));
+
+  // A `timeout` above the server default without a valid access token is
+  // rejected before the query runs: `HttpError` -> forbidden.
+  response = server.handleHttpRequest(makePostRequest(
+      "/?timeout=60s", "application/sparql-query", "ASK { ?s ?p ?o }"));
+  EXPECT_THAT(response, StatusIs(http::status::forbidden));
+  EXPECT_THAT(
+      responseBodyToString(std::move(response.body())),
+      testing::HasSubstr("User submitted timeout was higher than what is "
+                         "currently allowed by this instance (30s)"));
+}
+
+// _____________________________________________________________________________
+TEST(ServerTest, makeWebSocketSessionSupplier) {
+  Server server{4511, 1, "accessToken", getDefaultConfig()};
+  boost::asio::any_io_executor ioExecutor;
+
+  ASSERT_TRUE(server.queryHub_.expired());
+  {
+    auto handler = server.makeWebSocketSessionSupplier(ioExecutor);
+    // `handler` owns the `QueryHub` via its captured `shared_ptr`, so the
+    // `weak_ptr` member is alive as long as `handler` is.
+    EXPECT_FALSE(server.queryHub_.expired());
+
+    // Calling it again while the first handler is still alive violates the
+    // "only once" contract.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        server.makeWebSocketSessionSupplier(ioExecutor),
+        testing::HasSubstr(
+            "`queryHub_` has already been initialized; "
+            "`makeWebSocketSessionSupplier` must only be called once."));
+  }  // Here is the local variable `handler` out of scope and destroyed.
+  EXPECT_TRUE(server.queryHub_.expired());
 }
 
 // _____________________________________________________________________________
@@ -895,11 +976,25 @@ TEST(ServerTest, gspPostCreateNewGraph) {
 }
 
 // _____________________________________________________________________________
-// Read a query-event-log file and parse each JSONL line.
 namespace {
-std::vector<json> parseEventLog(const ql::filesystem::path& path) {
+// Runs `runRequests` on a fresh server that writes its query event log to a
+// temporary file, and returns the lines that were logged.
+template <typename Func>
+std::vector<std::string> runWithEventLog(Func runRequests) {
+  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  {
+    auto serverForTesting =
+        makeServerForTesting(qec->getIndex().getOnDiskBase(), path);
+    runRequests(serverForTesting);
+  }  // server (hence log) destroyed - queue drained, file closed
+  return ad_utility::testing::readLines(path);
+}
+
+// Parse each JSONL line of a query event log.
+std::vector<json> parseEventLog(const std::vector<std::string>& lines) {
   std::vector<json> events;
-  for (const auto& line : ad_utility::testing::readLines(path)) {
+  for (const auto& line : lines) {
     events.push_back(json::parse(line));
   }
   return events;
@@ -910,26 +1005,21 @@ std::vector<json> parseEventLog(const ql::filesystem::path& path) {
 // A successful query writes a `start` event carrying the X-Real-IP client IP
 // and an `end` event with status "ok".
 TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
-  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
-  auto base = qec->getIndex().getOnDiskBase();
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  {
-    auto serverForTesting = makeServerForTesting(base, path);
-
+  auto lines = runWithEventLog([](auto& server) {
     auto request = makePostRequest("/", "application/sparql-query",
                                    "SELECT * WHERE { ?a ?b ?c }");
     request.set("X-Real-IP", "10.0.0.5");
     request.set(http::field::accept, "application/sparql-results+json");
-    EXPECT_THAT(serverForTesting.process(request), StatusIs(http::status::ok));
-  }  // server (hence log) destroyed → queue drained, file closed
+    EXPECT_THAT(server.process(request), StatusIs(http::status::ok));
+  });
 
   // The TUI byte-slices the timestamp, so every line must begin with
   // `{"ts-ms":`.
-  for (const auto& line : ad_utility::testing::readLines(path)) {
+  for (const auto& line : lines) {
     EXPECT_THAT(line, ::testing::StartsWith("{\"ts-ms\":"));
   }
 
-  auto events = parseEventLog(path);
+  auto events = parseEventLog(lines);
   ASSERT_EQ(events.size(), 2u);
   const auto& start = events.front();
   const auto& end = events.back();
@@ -938,6 +1028,7 @@ TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
   EXPECT_GT(start.at("ts-ms").get<int64_t>(), 0);
   EXPECT_FALSE(start.at("qid").get<std::string>().empty());
   EXPECT_EQ(start.at("client-ip").get<std::string>(), "10.0.0.5");
+  EXPECT_EQ(start.at("type").get<std::string>(), "query");
   EXPECT_EQ(start.at("query").get<std::string>(),
             "SELECT * WHERE { ?a ?b ?c }");
 
@@ -950,22 +1041,101 @@ TEST(ServerTest, queryEventLogRecordsOkAndClientIp) {
 }
 
 // _____________________________________________________________________________
+// An update is written as `"type":"update"` in its `start` event. The type
+// comes from the parsed operations, so it has to be known before the operation
+// is registered, because that is when the `start` event is written.
+TEST(ServerTest, queryEventLogRecordsUpdateOperation) {
+  auto events = parseEventLog(runWithEventLog([](auto& server) {
+    // Updates are only accepted with a valid access token.
+    auto request =
+        makeRequest(http::verb::post, "/",
+                    {{http::field::content_type, "application/sparql-update"},
+                     {http::field::authorization, "Bearer accessToken"}},
+                    "INSERT DATA { <a> <b> <e> }");
+    EXPECT_THAT(server.process(request), StatusIs(http::status::ok));
+  }));
+  ASSERT_EQ(events.size(), 2u);
+  const auto& start = events.front();
+  const auto& end = events.back();
+
+  EXPECT_EQ(start.at("event").get<std::string>(), "start");
+  EXPECT_EQ(start.at("type").get<std::string>(), "update");
+  EXPECT_EQ(start.at("query").get<std::string>(),
+            "INSERT DATA { <a> <b> <e> }");
+
+  EXPECT_EQ(end.at("event").get<std::string>(), "end");
+  EXPECT_EQ(end.at("status").get<std::string>(), "ok");
+  EXPECT_EQ(end.at("qid").get<std::string>(),
+            start.at("qid").get<std::string>());
+}
+
+// _____________________________________________________________________________
+// When the client sends its own `Query-Id`, `Server::getQueryId` takes a
+// different path. It has to report the operation type there as well, and it
+// has to use the id that the client sent.
+TEST(ServerTest, queryEventLogRecordsOperationForCustomQueryId) {
+  auto events = parseEventLog(runWithEventLog([](auto& server) {
+    auto request =
+        makeRequest(http::verb::post, "/",
+                    {{http::field::content_type, "application/sparql-update"},
+                     {http::field::authorization, "Bearer accessToken"}},
+                    "INSERT DATA { <a> <b> <e> }");
+    request.set("Query-Id", "100");
+    EXPECT_THAT(server.process(request), StatusIs(http::status::ok));
+  }));
+  ASSERT_EQ(events.size(), 2u);
+  EXPECT_EQ(events.front().at("qid").get<std::string>(), "100");
+  EXPECT_EQ(events.front().at("type").get<std::string>(), "update");
+  EXPECT_EQ(events.back().at("qid").get<std::string>(), "100");
+}
+
+// _____________________________________________________________________________
+// A graph store request is logged with the type of the SPARQL that it is
+// translated into. A `PUT` becomes two updates and is logged as
+// `"type":"update"`, a `GET` becomes a single `CONSTRUCT` and is logged as
+// `"type":"query"`. Both use a single query id, so each request writes exactly
+// one `start` and one `end` event.
+TEST(ServerTest, queryEventLogRecordsGraphStoreOperation) {
+  {
+    // A `PUT` needs an access token and becomes two update operations.
+    // Writing to a graph that did not exist before answers 201, not 200.
+    auto events = parseEventLog(runWithEventLog([](auto& server) {
+      auto put =
+          makeRequest(http::verb::put, "/?graph=foo",
+                      {{http::field::authorization, "Bearer accessToken"}},
+                      "<a> <b> <c> .");
+      put.set(http::field::content_type, "text/turtle");
+      EXPECT_THAT(server.process(put), StatusIs(http::status::created));
+    }));
+    ASSERT_EQ(events.size(), 2u);
+    EXPECT_EQ(events.front().at("type").get<std::string>(), "update");
+    // The logged operation is not SPARQL. Request bodies can be very large,
+    // so only a shortened description is logged.
+    EXPECT_THAT(events.front().at("query").get<std::string>(),
+                ::testing::StartsWith("Graph Store PUT Operation"));
+    // The event status is the query outcome, not the HTTP code.
+    EXPECT_EQ(events.back().at("status").get<std::string>(), "ok");
+  }
+  {
+    // A `GET` needs no access token and becomes a single `CONSTRUCT` query.
+    auto events = parseEventLog(runWithEventLog([](auto& server) {
+      EXPECT_THAT(server.process(makeGetRequest("/?default")),
+                  StatusIs(http::status::ok));
+    }));
+    ASSERT_EQ(events.size(), 2u);
+    EXPECT_EQ(events.front().at("type").get<std::string>(), "query");
+  }
+}
+
+// _____________________________________________________________________________
 // A query that fails during planning writes an `end` event with status
 // "failed". It parses (so `start` is written), then planning throws.
 TEST(ServerTest, queryEventLogRecordsFailedStatus) {
-  auto qec = getQec(TestIndexConfig{"<a> <b> <c> . <a> <b> <d> ."});
-  auto base = qec->getIndex().getOnDiskBase();
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  {
-    auto serverForTesting = makeServerForTesting(base, path);
-
-    auto request = makePostRequest(
+  auto events = parseEventLog(runWithEventLog([](auto& server) {
+    server.process(makePostRequest(
         "/", "application/sparql-query",
-        "SELECT * WHERE { ?text ql:contains-entity ?scientist }");
-    serverForTesting.process(request);
-  }
-
-  auto events = parseEventLog(path);
+        "SELECT * WHERE { ?text ql:contains-entity ?scientist }"));
+  }));
   ASSERT_EQ(events.size(), 2u);
   const auto& start = events.front();
   const auto& end = events.back();
@@ -979,4 +1149,24 @@ TEST(ServerTest, queryEventLogRecordsFailedStatus) {
   // One end per start: same qid.
   EXPECT_EQ(end.at("qid").get<std::string>(),
             start.at("qid").get<std::string>());
+}
+
+// _____________________________________________________________________________
+// An operation that cannot be parsed writes no events at all, not even a
+// `start`. Parsing happens before the operation is registered, so such an
+// operation never gets a query id. Operations that fail later, during
+// execution, do get one and are logged with status "failed".
+TEST(ServerTest, queryEventLogIgnoresUnparsableOperations) {
+  auto lines = runWithEventLog([](auto& server) {
+    // This is not a valid SPARQL query.
+    server.process(makePostRequest("/", "application/sparql-query", "Foo"));
+    // A query sent to the update endpoint fails while parsing as an update.
+    server.process(
+        makeRequest(http::verb::post, "/",
+                    {{http::field::content_type, "application/sparql-update"},
+                     {http::field::authorization, "Bearer accessToken"}},
+                    "SELECT * WHERE { ?s ?p ?o }"));
+  });
+
+  EXPECT_THAT(lines, testing::IsEmpty());
 }

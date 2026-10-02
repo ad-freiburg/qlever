@@ -487,7 +487,7 @@ struct CompareAllButLastImpl {
       return row | ql::views::take(numColumns_ - 1);
     };
     return comparisonImpl_(dropLast(a), dropLast(b));
-  };
+  }
 };
 
 using CompareAllButLast =

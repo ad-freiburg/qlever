@@ -6,6 +6,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/IdTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/ValueId.h"
 #include "index/TripleComponentConversions.h"
@@ -21,10 +22,6 @@ namespace {
 auto I = IntId;
 auto D = DoubleId;
 auto lit = tripleComponentLiteral;
-constexpr auto encodedIriManager = []() -> const EncodedIriManager* {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-};
 }  // namespace
 
 TEST(TripleComponent, setAndGetString) {
@@ -157,6 +154,39 @@ TEST(TripleComponent, toRdfLiteral) {
   // This function is just used for cache keys etc, so it is not an issue that
   // the result is not human readable
   EXPECT_THAT(result, ::testing::HasSubstr("encodedId: "));
+}
+
+// _____________________________________________________________________________
+TEST(TripleComponent, toRdfLiteralView) {
+  // For all `TripleComponent`s that store their string representation, the view
+  // is equal to the string that `toRdfLiteral` returns.
+  auto expectSameAsToRdfLiteral = [](const TripleComponent& tripleComponent) {
+    auto view = toRdfLiteralView(tripleComponent);
+    ASSERT_TRUE(view.has_value());
+    EXPECT_EQ(view.value(), toRdfLiteral(tripleComponent));
+  };
+  expectSameAsToRdfLiteral(lit("\"aTypedLiteral\"", "^^<someType>"));
+  expectSameAsToRdfLiteral(TripleComponent{"plainString"});
+  expectSameAsToRdfLiteral(iri("<someIri>"));
+  expectSameAsToRdfLiteral(TripleComponent{Variable{"?alpha"}});
+
+  // The view points into the `TripleComponent`, it is not a copy.
+  TripleComponent iriComponent = iri("<someIri>");
+  EXPECT_EQ(toRdfLiteralView(iriComponent).value().data(),
+            iriComponent.getIri().toStringRepresentation().data());
+
+  // `TripleComponent`s that store a directly encoded value have no string
+  // representation that could be borrowed, so only `toRdfLiteral` works for
+  // them.
+  std::vector<TripleComponent> encodedValues{
+      TripleComponent{42}, TripleComponent{-43.3}, TripleComponent{true},
+      TripleComponent{
+          DateYearOrDuration{123456, DateYearOrDuration::Type::Year}}};
+  for (const auto& tripleComponent : encodedValues) {
+    EXPECT_EQ(toRdfLiteralView(tripleComponent), std::nullopt);
+    // `toRdfLiteral` still builds a new string for them.
+    EXPECT_FALSE(toRdfLiteral(tripleComponent).empty());
+  }
 }
 
 TEST(TripleComponent, toValueIdIfNotString) {

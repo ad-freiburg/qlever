@@ -25,8 +25,8 @@ Describe::Describe(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> Describe::getChildren() {
-  return {subtree_.get()};
+qlm::vector<QueryExecutionTree*> Describe::getChildrenImpl() const {
+  return {{subtree_.get()}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -103,7 +103,8 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
 template <typename Allocator>
 static IdTable getNewBlankNodes(
     const Allocator& allocator,
-    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, ql::span<Id> input) {
+    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
+    ConstIdColumnRef input) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) resultColumn = result.getColumn(0);
@@ -163,7 +164,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   using V = Variable;
   auto subjectVar = V{"?subject"};
   auto valuesOp = ad_utility::makeExecutionTree<ExplicitIdTableOperation>(
-      getExecutionContext(), std::make_shared<IdTable>(std::move(input)),
+      getExecutionContext(), makeShared<IdTable>(std::move(input)),
       VariableToColumnMap{
           {subjectVar,
            ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},

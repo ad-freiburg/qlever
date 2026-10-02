@@ -137,7 +137,7 @@ struct SortedUnionImpl
     }
   }
 
-  // Always inline makes makes a huge difference on large datasets.
+  // Always inline makes a huge difference on large datasets.
   template <typename T1, typename T2>
   AD_ALWAYS_INLINE bool isSmaller(const T1& row1, const T2& row2) const {
     using StaticRange = ql::span<const std::array<size_t, 2>, SPAN_SIZE>;

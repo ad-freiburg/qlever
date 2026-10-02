@@ -389,7 +389,7 @@ class InputRangeFromGet
     getNextAndStore();
     return Iterator{this};
   }
-  Sentinel end() const { return {}; };
+  Sentinel end() const { return {}; }
 
   using DetailStorage =
       typename DetailsProvider<InputRangeFromGet<ValueType, DetailsType>,

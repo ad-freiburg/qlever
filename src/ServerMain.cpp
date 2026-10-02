@@ -23,6 +23,7 @@
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"
+#include "util/http/HttpProxyConfig.h"
 #include "util/metrics/Metrics.h"
 
 using std::size_t;
@@ -58,6 +59,7 @@ int main(int argc, char** argv) {
   bool noMetricsLog = false;
   bool noResourceUsageLog = false;
   uint32_t resourceUsageIntervalS = 2;
+  std::string rebuildIndexStrategy;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &globalRuntimeParameters};
@@ -119,15 +121,29 @@ int main(int argc, char** argv) {
       "start/end events is written next to the index files "
       "(`<index-basename>.metrics-log.jsonl`).");
   add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
-      "Disable the resource-usage log. By default a TSV log of the RSS and "
-      "CPU usage of the server is written next to the index files "
-      "(`<index-basename>.server.resource-usage-log.tsv`).");
+      "Disable the resource-usage log. By default a TSV log is written next to "
+      "the index files (`<index-basename>.server.resource-usage-log.tsv`). "
+      "Each row holds the RSS, CPU and disk I/O of the server, the "
+      "system-wide I/O stall (Linux only) and the ID of a running index "
+      "rebuild.");
   add("resource-usage-interval-s",
       po::value(&resourceUsageIntervalS)->default_value(2),
       "The sampling interval of the resource-usage log in seconds.");
   add("text,t", po::bool_switch(&config.loadTextIndex_),
       "Also load the text index. The text index must have been built before "
       "using `qlever-index` with options `-d` and `- w`.");
+  add("index-description",
+      po::value<std::string>()->notifier(
+          [&config](const std::string& d) { config.indexDescription_ = d; }),
+      "A description of the index (typically the dataset and its version). "
+      "It is returned by the API (`cmd=stats`, field `name-index`), which is "
+      "used, for example, by the QLever UI. Can also be changed while the "
+      "server is running, via the `index-description` API command.");
+  add("text-description",
+      po::value<std::string>()->notifier(
+          [&config](const std::string& d) { config.textDescription_ = d; }),
+      "A description of the text index, analogous to `--index-description` "
+      "(field `name-text-index`).");
   add("only-pso-and-pos-permutations,o",
       po::bool_switch(&config.onlyPsoAndPos_),
       "Only load the PSO and POS permutations. This disables queries with "
@@ -163,6 +179,28 @@ int main(int argc, char** argv) {
   add("persist-updates", po::bool_switch(&config.persistUpdates_),
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
+  add("rebuild-index-strategy",
+      po::value<std::string>(&rebuildIndexStrategy)->default_value("manual"),
+      "When to rebuild the index from the current data (including updates). "
+      "\"manual\" (the default): only when explicitly requested via the "
+      "`cmd=rebuild-index` HTTP request. \"automatic:min:max:fraction\": "
+      "additionally trigger a rebuild automatically in the background after "
+      "an update, once the number of delta triples (inserted plus deleted) "
+      "reaches the given `fraction` (a number greater than 0) of the number "
+      "of index triples, but never below `min` and always at `max` (e.g. "
+      "\"automatic:10000:1000000:0.1\").");
+  add("rebuild-keep-previous-index-dirs",
+      po::value(&config.keepPreviousIndexDirs_)
+          ->default_value(qlever::KeepPreviousIndexDirs::OriginalAndMostRecent),
+      "Which `previous.*` index directories to keep after a successful index "
+      "rebuild, manual or automatic (each rebuild moves the index that was "
+      "served so far into such a directory): \"all\" (keep all of them), "
+      "\"none\" (delete all of them), \"original-only\" (keep only the "
+      "oldest), \"most-recent-only\" (keep only the most recently created), "
+      "or \"original-and-most-recent\" (the default, keep both). The choices "
+      "and the default are the same as for the `--keep-previous-index-dirs` "
+      "option of the `qlever rebuild-index` command, which applies the same "
+      "policy on the client side.");
   add("syntax-test-mode",
       optionFactory.getProgramOption<&RuntimeParameters::syntaxTestMode_>(),
       "Make several query patterns that are syntactially valid, but otherwise "
@@ -214,7 +252,7 @@ int main(int argc, char** argv) {
   auto logLevelDescription = absl::StrCat(
       "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
       "Default is INFO. The compile-time level (",
-      LogLevel{LOGLEVEL}.toString(),
+      LogLevel{ad_utility::compileTimeLogLevel}.toString(),
       ") applies as an upper bound — messages above it are never emitted "
       "regardless of this setting.");
   add("log-level",
@@ -225,10 +263,10 @@ int main(int argc, char** argv) {
           .getProgramOption<&RuntimeParameters::constructDeduplication_>(),
       R"("Controls deduplication of triples in CONSTRUCT query results. "
       "\"none\" (default): no deduplication, every triple is emitted. "
-      "\"global\": a triple is emitted at most once across the entire result. "
-      "\"batchwise:N\" (positive integer N): deduplicate against the N most "
-      "recently seen unique triples per template triple (bounded memory, "
-      "partial deduplication).")");
+      "\"full\": a triple is emitted at most once across the entire result. "
+      "\"lru:N\" (positive integer N): deduplicate against the N most "
+      "recently used unique triples, with one cache shared across all "
+      "template triples (bounded memory, partial deduplication).")");
   add("enable-metrics", po::bool_switch(&metricsEnabled)->default_value(false),
       "Enable metrics collection and expose a Prometheus /metrics endpoint on "
       "the main server port. Accessing the endpoint requires a valid access "
@@ -296,6 +334,56 @@ int main(int argc, char** argv) {
                 << std::endl;
   }
 
+  // Read the proxy for outgoing requests (`SERVICE` and `LOAD`) from the
+  // environment. We do this eagerly so that a malformed proxy URL fails the
+  // startup with a readable message, instead of only surfacing on the first
+  // federated query. Only log if a proxy is actually configured, to not add
+  // noise for the common case.
+  try {
+    const auto& proxy = ad_utility::httpProxy::globalProxy();
+    if (proxy.has_value()) {
+      AD_LOG_INFO << "Proxy for outgoing HTTP requests: "
+                  << proxy->asStringForLogging() << std::endl;
+    }
+    // The uppercase `HTTP_PROXY` is deliberately ignored (following `curl`,
+    // see `HttpProxyConfig.h`), but silently doing so would be confusing, so
+    // leave a hint.
+    if (ad_utility::httpProxy::uppercaseHttpProxyIsSetButIgnored()) {
+      AD_LOG_INFO << "The environment variable `HTTP_PROXY` (uppercase) is "
+                     "set, but deliberately ignored; use the lowercase "
+                     "`http_proxy` to configure a proxy for outgoing requests"
+                  << std::endl;
+    }
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Invalid value of the `http_proxy` environment variable: "
+                 << e.what() << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  // Resolve the `--rebuild-index-strategy` option. A bad value fails the
+  // startup with a readable message, before the index is loaded.
+  try {
+    config.rebuildIndexStrategy_ =
+        qlever::RebuildIndexStrategy::parse(rebuildIndexStrategy);
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "Invalid argument to --rebuild-index-strategy: " << e.what()
+                 << std::endl;
+    return EXIT_FAILURE;
+  }
+  if (config.rebuildIndexStrategy_.has_value()) {
+    AD_LOG_INFO << "Automatic index rebuild enabled (--rebuild-index-strategy "
+                << rebuildIndexStrategy << ")" << std::endl;
+  }
+
+  // The `--rebuild-keep-previous-index-dirs` option is parsed directly into
+  // `config.keepPreviousIndexDirs_` (a bad value fails the startup with a
+  // readable message, via the `validate` hook in `EnumWithStrings.h`).
+  if (config.keepPreviousIndexDirs_ != qlever::KeepPreviousIndexDirs::All) {
+    AD_LOG_INFO << "Cleanup of previous index directories after each rebuild "
+                   "enabled (--rebuild-keep-previous-index-dirs "
+                << config.keepPreviousIndexDirs_ << ")" << std::endl;
+  }
+
   try {
     // Samples RSS and CPU usage, starting before the index is loaded.
     ad_utility::ResourceMonitor resourceMonitor;
@@ -306,7 +394,8 @@ int main(int argc, char** argv) {
     }
     auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
-                  noAccessCheck, std::move(metricsReader));
+                  noAccessCheck, std::move(metricsReader),
+                  resourceMonitor.indexRebuildIdTracker());
     // Per-query jsonl metrics log, written next to the index files. On by
     // default; `--no-metrics-log` opts out.
     if (!noMetricsLog) {

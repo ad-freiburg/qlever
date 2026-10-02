@@ -1,8 +1,13 @@
-// Copyright 2023 - 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchhold@gmail.com> [2014 - 2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2014 - 2026 The QLever Authors, in particular:
+//
+// 2014 - 2017 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+// 2014 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2018 - 2026 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_GLOBAL_CONSTANTS_H
 #define QLEVER_SRC_GLOBAL_CONSTANTS_H
@@ -89,6 +94,13 @@ constexpr inline std::string_view contains_word = "contains-word";
 constexpr inline std::string_view CONTAINS_WORD_PREDICATE =
     makeQleverInternalIriConst<string_constants::detail::contains_word>();
 
+// Whether `predicate` is one of the full-text pseudo-predicates, which are
+// rewritten into dedicated text operations rather than plain index scans.
+constexpr bool isFullTextPseudoPredicate(std::string_view predicate) {
+  return predicate == CONTAINS_ENTITY_PREDICATE ||
+         predicate == CONTAINS_WORD_PREDICATE;
+}
+
 namespace string_constants::detail {
 constexpr inline std::string_view text = "text";
 }  // namespace string_constants::detail
@@ -171,6 +183,9 @@ constexpr inline std::string_view hasWord{"has-word"};
 }  // namespace constants::details::strings
 constexpr inline std::string_view LANGUAGE_PREDICATE =
     makeQleverInternalIriConst<constants::details::strings::langtag>();
+// The prefix of QLever's internal representation of a language-tagged
+// predicate, which is the language tag enclosed in `@`, e.g. `@en@<...>`.
+constexpr inline std::string_view LANGUAGE_TAGGED_PREDICATE_PREFIX = "@";
 constexpr inline std::string_view HAS_WORD_PREDICATE =
     makeQleverInternalIriConst<constants::details::strings::hasWord>();
 
@@ -345,7 +360,6 @@ auto parallel_sort([[maybe_unused]] Args&&... args) {
 using parallel_tag = int;
 }  // namespace ad_utility
 #endif
-constexpr inline size_t NUM_SORT_THREADS = 4;
 /// ANSI escape sequence for bold text in the console
 constexpr inline std::string_view EMPH_ON = "\033[1m";
 /// ANSI escape sequence to print "normal" text again in the console.

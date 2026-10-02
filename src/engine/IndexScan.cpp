@@ -159,7 +159,7 @@ string IndexScan::getCacheKeyImpl() const {
 // _____________________________________________________________________________
 bool IndexScan::resultDoesMatchCacheKey() const {
   return !scanSpecAndBlocksIsPrefiltered_;
-};
+}
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
@@ -191,7 +191,7 @@ size_t IndexScan::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
+std::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
   std::vector<ColumnIndex> result;
   for (auto i : ad_utility::integerRange(ColumnIndex{numVariables_})) {
     result.push_back(i);
@@ -201,6 +201,12 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
       result.push_back(numVariables_ + i);
     }
   }
+  return result;
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
+  auto result = variableAndGraphColumns();
 
   if (varsToKeep_.has_value()) {
     auto permutation = getSubsetForStrippedColumns();
@@ -212,6 +218,52 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
     }
   }
   return result;
+}
+
+// _____________________________________________________________________________
+bool IndexScan::isDistinctByImpl(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  // Duplicate triples are removed during scanning, so the result contains every
+  // matching triple (or quad, if a graph column is present) exactly once. Its
+  // rows are therefore uniquely identified by the triple's variable columns
+  // plus the graph column; all other (payload) columns, e.g. the `pattern`
+  // column, are functionally determined by those. The scan is thus distinct wrt
+  // `distinctIndices` iff `distinctIndices` is a superset of the identifying
+  // columns. Note that it does not have to be equal to them: additional columns
+  // in `distinctIndices` can only make two rows differ in more places, so they
+  // never destroy distinctness. Conversely, a `distinctIndices` that misses
+  // even one identifying column (e.g. `DISTINCT ?s` for `?s ?p ?o`) makes this
+  // function return `false`, because the remaining columns may well repeat.
+  //
+  // Exception: For materialized views the deduplication during scanning is
+  // deliberately deactivated (see the `MaterializedView` constructor), so a
+  // view scan may well contain duplicate rows.
+  if (permutation().permutationType() == Permutation::Type::MATERIALIZED_VIEW) {
+    return false;
+  }
+
+  auto identifyingColumns = variableAndGraphColumns();
+
+  // The identifying columns above refer to the unstripped result, so translate
+  // them into the columns of the actual (possibly stripped) result. An
+  // identifying column that was stripped away is not part of the result at all,
+  // which makes the scan non-distinct: the columns that remain don't identify a
+  // row uniquely.
+  if (varsToKeep_.has_value()) {
+    auto subset = getSubsetForStrippedColumns();
+    for (ColumnIndex& col : identifyingColumns) {
+      auto it = ql::ranges::find(subset, col);
+      if (it == subset.end()) {
+        return false;
+      }
+      col = it - subset.begin();
+    }
+  }
+
+  return ql::ranges::all_of(identifyingColumns,
+                            [&distinctIndices](ColumnIndex col) {
+                              return ad_utility::contains(distinctIndices, col);
+                            });
 }
 
 // _____________________________________________________________________________
@@ -363,6 +415,36 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
     return {false, permutation().numTriples()};
   }
 
+  // For a scan with a fixed first column and two variables (think `?s <p> ?o`
+  // in the PSO permutation), the number of rows is stored in the per-relation
+  // metadata, if the relation is large enough to have such an entry. Use it,
+  // as summing up the block sizes below is linear in the number of blocks of
+  // the relation, which can be large. If a block of the relation has located
+  // triples, the estimate is the same, but marked as inexact. This is also
+  // what the general case below computes, because it counts the located
+  // triples of a block as inserted and as deleted at the same time (see
+  // `LocatedTriplesPerBlock::numTriples`). Prefiltered scans and small
+  // relations that share a block with other relations (and hence have no
+  // metadata entry) use the general case.
+  if (numVariables() == 2 && !scanSpecAndBlocksIsPrefiltered_) {
+    const auto& col0Id = scanSpecAndBlocks_.scanSpec_.col0Id();
+    AD_CORRECTNESS_CHECK(col0Id.has_value());
+    auto metadata = permutation().metaData().getMetaDataIfPresent(*col0Id);
+    if (metadata.has_value()) {
+      const auto& blocks = scanSpecAndBlocks_.getBlockMetadataView();
+      AD_CORRECTNESS_CHECK(ql::ranges::begin(blocks) !=
+                           ql::ranges::end(blocks));
+      size_t firstBlockIndex = ql::ranges::begin(blocks)->blockIndex_;
+      size_t lastBlockIndex = std::prev(ql::ranges::end(blocks))->blockIndex_;
+      bool hasLocatedTriples =
+          permutation()
+              .getLocatedTriplesForPermutation(locatedTriplesState())
+              .containsLocatedTriplesInBlockRange(firstBlockIndex,
+                                                  lastBlockIndex);
+      return {!hasLocatedTriples, metadata->numRows_};
+    }
+  }
+
   // For other scans, sum up the size estimates for each block.
   //
   // NOTE: Starting from C++20, we could use `std::midpoint` to compute the
@@ -474,14 +556,14 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
       ad_utility::CachingTransformInputRange{
           std::move(lazyScanAllCols), makeApplyColumnSubset(),
           ql::type_identity<LazyScanMetadata>{}}};
-};
+}
 
 // _____________________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
     const {
   return permutation().getMetadataAndBlocks(scanSpecAndBlocks_,
                                             locatedTriplesState());
-};
+}
 
 // _____________________________________________________________________________
 std::array<CompressedRelationReader::IdTableGeneratorInputRange, 2>
@@ -547,8 +629,7 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
 
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGeneratorInputRange
-IndexScan::lazyScanForJoinOfColumnWithScan(
-    ql::span<const Id> joinColumn) const {
+IndexScan::lazyScanForJoinOfColumnWithScan(ConstIdColumnRef joinColumn) const {
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(joinColumn));
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
 
@@ -828,9 +909,9 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
        metadata = LazyScanMetadata{}]() mutable {
         // Handle UNDEF case using LoopControl pattern
         if (state->hasUndef()) {
-          auto scan = std::make_shared<
-              CompressedRelationReader::IdTableGeneratorInputRange>(
-              getLazyScan());
+          auto scan =
+              makeShared<CompressedRelationReader::IdTableGeneratorInputRange>(
+                  getLazyScan());
           scan->details().numBlocksAll_ =
               getMetadataForScan().value().sizeBlockMetadata_;
           updateRuntimeInfoForLazyScan(scan->details(), Always);
@@ -893,7 +974,7 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
             Result::LazyResult{}};
   }
 
-  auto state = std::make_shared<SharedGeneratorState>(
+  auto state = makeShared<SharedGeneratorState>(
       SharedGeneratorState{std::move(input), joinColumn,
                            std::move(metaBlocks.value()), filterJoinSide});
   return {createPrefilteredJoinSide(state),

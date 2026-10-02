@@ -11,7 +11,9 @@
 
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
+#include "global/Id.h"
 #include "util/Exception.h"
+#include "util/VectorWithMemoryLimit.h"
 
 namespace ad_utility {
 
@@ -81,6 +83,32 @@ struct SetOfIntervals {
                                               size_t targetSize) {
     std::vector<bool> result(targetSize, false);
     toBitVector(a, targetSize, ql::ranges::begin(result));
+    return result;
+  }
+
+  // Transform a `SetOfIntervals` into a vector of boolean `Id`s of size
+  // `targetSize`. The i-th element is true iff i is contained in the set.
+  inline static VectorWithMemoryLimit<Id> toIdVector(
+      const SetOfIntervals& set, size_t targetSize,
+      const VectorWithMemoryLimit<Id>::Allocator& allocator) {
+    VectorWithMemoryLimit<Id> result{allocator};
+    result.reserve(targetSize);
+
+    size_t previousEnd = 0;
+    for (const auto& [begin, end] : set._intervals) {
+      AD_CONTRACT_CHECK(end <= targetSize,
+                        "The size of a `SetOfIntervals` exceeds the total size "
+                        "of the evaluation context.");
+
+      result.insert(result.end(), begin - previousEnd, Id::makeFromBool(false));
+      result.insert(result.end(), end - begin, Id::makeFromBool(true));
+
+      previousEnd = end;
+    }
+
+    result.insert(result.end(), targetSize - previousEnd,
+                  Id::makeFromBool(false));
+
     return result;
   }
 };

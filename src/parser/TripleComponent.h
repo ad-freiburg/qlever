@@ -46,7 +46,7 @@ class TripleComponent {
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
-    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(UNDEF)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(UNDEF, )
     // Hash to arbitrary (fixed) value. For example, needed in
     // `Values::computeMultiplicities`.
     template <typename H>

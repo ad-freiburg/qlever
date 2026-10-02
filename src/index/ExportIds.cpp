@@ -18,6 +18,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "index/vocabulary/EncodedIriManager.h"
+#include "parser/NormalizedString.h"
 #include "util/Exception.h"
 
 namespace ql::exportIds {
@@ -89,6 +90,7 @@ std::optional<Literal> idToLiteral(const IndexImpl& index, Id id,
                                 onlyReturnLiteralsWithXsdString);
     case VocabIndex:
     case LocalVocabIndex:
+    case SecondaryVocabIndex:
       return handleIriOrLiteral(
           getLiteralOrIriFromVocabIndex(index, id, localVocab),
           onlyReturnLiteralsWithXsdString);
@@ -106,7 +108,7 @@ std::optional<Literal> getLiteralOrNullopt(
     return std::move(litOrIri.value().getLiteral());
   }
   return std::nullopt;
-};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(Id id) {
@@ -135,15 +137,20 @@ LiteralOrIri getLiteralOrIriFromWordVocabIndex(const IndexImpl& index, Id id) {
   return LiteralOrIri{
       ad_utility::triple_component::Literal::literalWithoutQuotes(
           index.indexToString(id.getWordVocabIndex()))};
-};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
     const IndexImpl& index, Id id) {
+  // `TextIndexBuilder::buildDocsDB` stores the text of a docsfile line
+  // verbatim, so the excerpt is plain text and becomes the literal's content as
+  // it is. Unescaping it would reinterpret a backslash in the text, e.g. in a
+  // Windows path.
+  std::string excerpt = index.getTextExcerpt(id.getTextRecordIndex());
   return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithoutQuotes(
-          index.getTextExcerpt(id.getTextRecordIndex()))};
-};
+      ad_utility::triple_component::Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(excerpt))};
+}
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
@@ -155,6 +162,7 @@ std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
       return getLiteralOrIriFromWordVocabIndex(index, id);
     case VocabIndex:
     case LocalVocabIndex:
+    case SecondaryVocabIndex:
     case EncodedVal:
       return ql::exportIds::getLiteralOrIriFromVocabIndex(index, id,
                                                           localVocab);
@@ -203,6 +211,14 @@ LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
       static_assert(ad_utility::SameAsAny<decltype(getEntity()), std::string,
                                           std::string_view>);
       return LiteralOrIri::fromStringRepresentation(std::string(getEntity()));
+    }
+    case Datatype::SecondaryVocabIndex: {
+      const auto* secondaryVocab = index.secondaryVocab();
+      AD_CORRECTNESS_CHECK(secondaryVocab != nullptr,
+                           "Encountered an `Id` of a secondary vocabulary, but "
+                           "the index has no secondary vocabulary");
+      return LiteralOrIri::fromStringRepresentation(
+          std::string((*secondaryVocab)[id.getSecondaryVocabIndex()]));
     }
     case Datatype::EncodedVal:
       return encodedIdToLiteralOrIri(id, index);

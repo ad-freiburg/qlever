@@ -11,26 +11,40 @@
 
 #include "util/Exception.h"
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 int LocalVocabContextImpl::compareWords(std::string_view a,
                                         std::string_view b) const {
   return vocabulary_->getCaseComparator().compare(a, b,
                                                   LocaleManager::Level::TOTAL);
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 auto LocalVocabContextImpl::getPositionOfWord(std::string_view word) const
     -> VocabBounds {
   return vocabulary_->getPositionOfWord(word);
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
+bool LocalVocabContextImpl::hasSecondaryVocabulary() const {
+  return *secondaryVocab_ != nullptr;
+}
+
+// _____________________________________________________________________________
+std::optional<SecondaryVocabIndex>
+LocalVocabContextImpl::getSecondaryVocabIndex(std::string_view word) const {
+  if (!hasSecondaryVocabulary()) {
+    return std::nullopt;
+  }
+  return (*secondaryVocab_)->getId(word);
+}
+
+// _____________________________________________________________________________
 std::optional<Id> LocalVocabContextImpl::encodeAsId(
     std::string_view word) const {
   return encodedIriManager_->encode(word);
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 ad_utility::BlankNodeManager* LocalVocabContextImpl::getBlankNodeManager()
     const {
   AD_CONTRACT_CHECK(*blankNodeManager_);

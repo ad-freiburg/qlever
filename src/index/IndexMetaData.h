@@ -20,7 +20,7 @@
 
 #include "global/FileSuffixConstants.h"
 #include "global/Id.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationMetadata.h"
 #include "index/MetaDataHandler.h"
 #include "util/File.h"
 #include "util/Serializer/Serializer.h"

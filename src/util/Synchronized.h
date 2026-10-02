@@ -219,7 +219,7 @@ class Synchronized {
                    LockPtr<Synchronized, true, true>>
   rlock() const {
     return LockPtr<Synchronized, true, true>{this};
-  };
+  }
 
   // Return a `Synchronized` that uses a reference to this `Synchronized`'s
   // `_data` and `mutext_`. The reference is a reference of the Base class U.

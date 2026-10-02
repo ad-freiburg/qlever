@@ -7,6 +7,7 @@
 #include <absl/strings/str_cat.h>
 
 #include <array>
+#include <memory>
 
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
@@ -20,6 +21,7 @@
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "index/TripleComponentConversions.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/FilesystemHelpers.h"
 #include "util/ProgressBar.h"
@@ -34,7 +36,6 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
   // Decrease various default batch sizes such that there are multiple batches
   // also for the very small test indices (important for test coverage).
-  BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS() = 10;
   DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
   index.parserBufferSize() =
@@ -211,16 +212,18 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       settingsJson["prefixes-external"] = std::vector<std::string>{""};
       settingsJson["languages-internal"] = std::vector<std::string>{""};
     }
+    for (const auto& [key, value] : c.additionalSettings) {
+      settingsJson[key] = nlohmann::json::parse(value);
+    }
     settingsFile << settingsJson.dump();
   }
   {
     Index index = makeIndexWithTestSettings(c.parserBufferSize);
-    // This is enough for 2 triples per block. This is deliberately chosen as a
-    // small value, s.t. the tiny knowledge graphs from unit tests also contain
-    // multiple blocks. Should this value or the semantics of it (how many
-    // triples it may store) ever change, then some unit tests might have to be
-    // adapted.
-    index.blocksizePermutationsPerColumn() = c.blocksizePermutations;
+    // By default 2 triples per block. This is deliberately chosen as a small
+    // value, s.t. the tiny knowledge graphs from unit tests also contain
+    // multiple blocks. Should this value ever change, then some unit tests
+    // might have to be adapted.
+    index.rowsPerBlock() = c.rowsPerBlock;
     index.setOnDiskBase(indexBasename);
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
@@ -228,15 +231,24 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.addHasWordTriples() = c.addHasWordTriples;
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
-    // randomly choose one of the vocabulary implementations
-    index.getImpl().setVocabularyTypeForIndexBuilding(
-        c.vocabularyType.has_value() ? c.vocabularyType.value()
-                                     : VocabularyType::random());
-    if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
-      index.getImpl().setPrefixesForEncodedValues(
-          std::move(c.encodedPrefixesWithoutAngleBrackets.value()));
+    if (c.parseInParallel.has_value()) {
+      spec.parseInParallel_ = c.parseInParallel.value();
+      spec.parseInParallelSetExplicitly_ = true;
     }
-    index.createFromFiles({spec});
+    // Use the explicitly configured vocabulary type, or a random one
+    // otherwise.
+    index.getImpl().setVocabularyTypeForIndexBuilding(
+        c.vocabularyType.has_value()
+            ? c.vocabularyType.value()
+            : VocabularyType::randomForIndexBuilding());
+    if (c.encodedPrefixesWithoutAngleBrackets.has_value() ||
+        !c.encodedIriPatterns.empty()) {
+      index.getImpl().setPrefixesForEncodedValues(
+          std::move(c.encodedPrefixesWithoutAngleBrackets)
+              .value_or(std::vector<std::string>{}),
+          std::move(c.encodedIriPatterns));
+    }
+    index.createFromFiles({spec}, c.numThreads);
     if (c.createTextIndex) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
       throw std::runtime_error("The text index is not available in C++17 mode");
@@ -310,6 +322,12 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   index.createFromOnDiskIndex(indexBasename, false);
   if (c.createTextIndex) {
     index.addTextFromOnDiskIndex();
+  }
+
+  if (c.secondaryVocabWords.has_value()) {
+    index.getImpl().setSecondaryVocabForTesting(
+        std::make_shared<SecondaryVocabulary>(
+            std::move(c.secondaryVocabWords).value()));
   }
 
   if (c.usePatterns && c.loadAllPermutations) {

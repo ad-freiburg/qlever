@@ -126,7 +126,7 @@ struct GroupGraphPattern {
 struct Optional {
   Optional(GraphPattern child) : _child{std::move(child)} {
     _child._optional = true;
-  };
+  }
   GraphPattern _child;
 };
 

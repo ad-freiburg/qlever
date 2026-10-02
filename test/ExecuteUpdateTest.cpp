@@ -15,18 +15,15 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 
 namespace {
 using namespace deltaTriplesTestHelpers;
+using ad_utility::testing::encodedIriManager;
 
 auto V = [](const uint64_t index) {
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 };
-
-const EncodedIriManager* encodedIriManager() {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-}
 
 // `ExecuteUpdate::IdOrVariableIndex` extended by `LiteralOrIri` which denotes
 // an entry from the local vocab.
@@ -62,7 +59,7 @@ TEST(ExecuteUpdate, executeUpdate) {
                 deltaTriples.updateAugmentedMetadata();
                 QueryPlanner qp{&qec, sharedHandle};
                 const auto qet = qp.createExecutionTree(pq);
-                ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,
+                ExecuteUpdate::executeUpdate(index, pq, *qet, deltaTriples,
                                              sharedHandle);
               }
             });
@@ -247,11 +244,11 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       QueryPlanner qp{qec, sharedHandle};
       const auto qet = qp.createExecutionTree(pq);
       UpdateMetadata metadata;
-      auto result = qet.getResult(false);
+      auto result = qet->getResult(false);
       results.push_back(ExecuteUpdate::computeGraphUpdateQuads(
-          index, pq, *result, qet.getVariableColumns(), sharedHandle,
+          index, pq, *result, qet->getVariableColumns(), sharedHandle,
           metadata));
-      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
+      ExecuteUpdate::executeUpdate(index, pq, *qet, deltaTriples, sharedHandle);
     }
     return results;
   };

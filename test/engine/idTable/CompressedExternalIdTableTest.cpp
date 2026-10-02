@@ -4,6 +4,8 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -14,13 +16,31 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
 #include "util/ConstexprUtils.h"
+#include "util/jthread.h"
 
 using ad_utility::source_location;
+using ad_utility::compressedExternalIdTable::blocksizeForMemory;
+using ad_utility::compressedExternalIdTable::memoryForBlocksize;
 using namespace ad_utility::memory_literals;
 
 namespace {
 
 static constexpr size_t NUM_COLS = NumColumnsIndexBuilding;
+
+// Set the global `EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING`
+// flag to `value` and restore its previous value when the returned cleanup is
+// destroyed. Note: The flag is global, so setting it without such a cleanup
+// would make every test that runs afterwards silently depend on the value that
+// was set here.
+[[nodiscard]] auto setIgnoreMemoryLimit(bool value) {
+  bool previousValue =
+      ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING
+          .exchange(value);
+  return absl::Cleanup{[previousValue] {
+    ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
+        previousValue;
+  }};
+}
 
 // From a `generator` that yields  `IdTable`s, create a single `IdTable` that is
 // the concatenation of all the yielded tables.
@@ -104,7 +124,7 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
   std::string filename = "idTableCompressedSorter.testExternalSorter.dat";
   using namespace ad_utility::memory_literals;
 
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticColumns>
       writer{filename, numDynamicColumns, memoryToUse,
              ad_utility::testing::makeAllocator(), 5_kB};
@@ -203,7 +223,7 @@ TEST(CompressedExternalIdTable, stillSortingOnDestruction) {
       [[maybe_unused]] volatile auto x = other.data_[0];
     }
   };
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   ad_utility::CompressedExternalIdTableSorter<SlowDummySorter, 0> sorter{
       "stillSortingOnDestruction.dat", NUM_COLS, 10_kB,
       ad_utility::testing::makeAllocator()};
@@ -219,7 +239,7 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
   std::string filename = "idTableCompressedSorter.memoryLimit.dat";
 
   // only 100 bytes of memory, not sufficient for merging
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(false);
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> writer{
       filename, NUM_COLS, 100_B, ad_utility::testing::makeAllocator()};
 
@@ -241,10 +261,9 @@ TEST(CompressedExternalIdTable, cornerCasesEmptyBlocks) {
   // Create `CompressedExternalIdTable` with a block size of exactly 10 rows.
   size_t blockSize = 10;
   std::string filename = "idTableCompressedSorter.cornerCases.dat";
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  size_t blockMemory = blockSize * NUM_COLS * sizeof(Id) * 2;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   ad_utility::CompressedExternalIdTable<0> writer{
-      filename, NUM_COLS, ad_utility::MemorySize::bytes(blockMemory),
+      filename, NUM_COLS, memoryForBlocksize(blockSize, NUM_COLS),
       ad_utility::testing::makeAllocator()};
 
   // Push exactly 10 rows. After the 10th row, one full block is written and
@@ -270,7 +289,7 @@ void testExternalCompressor(size_t numDynamicColumns, size_t numRows,
   std::string filename = "idTableCompressedSorter.testExternalCompressor.dat";
   using namespace ad_utility::memory_literals;
 
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   ad_utility::CompressedExternalIdTable<NumStaticColumns> writer{
       filename, numDynamicColumns, memoryToUse,
       ad_utility::testing::makeAllocator(), 5_kB};
@@ -375,7 +394,7 @@ TEST(CompressedExternalIdTable, pushBlockProducesCorrectSortedOutput) {
   using namespace ad_utility::memory_literals;
   auto alloc = ad_utility::testing::makeAllocator();
 
-  ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> writer{
       filename, NUM_COLS, 1_MB, alloc};
   ad_utility::CompressedExternalIdTableSorterTypeErased& erased = writer;
@@ -405,4 +424,619 @@ TEST(CompressedExternalIdTable, pushBlockProducesCorrectSortedOutput) {
 
   using namespace ::testing;
   EXPECT_THAT(result, ElementsAreArray(expected));
+}
+
+// `memoryForBlocksize` and `blocksizeForMemory` are inverses of each other, so
+// the tests below can specify the number of rows per block instead of a memory
+// limit.
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, blocksizeAndMemoryAreInverses) {
+  for (size_t numColumns : {1u, 2u, 3u, 7u}) {
+    for (size_t blocksize : {1u, 2u, 6u, 1000u}) {
+      auto memory = memoryForBlocksize(blocksize, numColumns);
+      EXPECT_EQ(blocksizeForMemory(memory, numColumns), blocksize);
+    }
+  }
+}
+
+namespace {
+// The number of rows per block that results from the given uncompressed block
+// size. The blocks are formed per column, hence the size of a single `Id`.
+size_t rowsPerBlockFor(ad_utility::MemorySize blockSize) {
+  return blockSize.getBytes() / sizeof(Id);
+}
+
+// Write all the `tables` to the `writer` and then flush it, such that the
+// written blocks can be read again.
+void writeAndFlush(ad_utility::CompressedExternalIdTableWriter& writer,
+                   const std::vector<CopyableIdTable<0>>& tables) {
+  for (const auto& table : tables) {
+    writer.writeIdTable(table);
+  }
+  writer.flush();
+}
+
+// Check that the block boundary metadata of the `writer` exactly matches the
+// `tables` from which it was built.
+void checkBlockMetadata(
+    const ad_utility::CompressedExternalIdTableWriter& writer,
+    const std::vector<CopyableIdTable<0>>& tables, size_t rowsPerBlock,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  ASSERT_EQ(writer.numIdTables(), tables.size());
+  for (size_t i = 0; i < tables.size(); ++i) {
+    const auto& table = tables.at(i);
+    size_t expectedNumBlocks =
+        (table.numRows() + rowsPerBlock - 1) / rowsPerBlock;
+    ASSERT_EQ(writer.numBlocksOfIdTable(i), expectedNumBlocks);
+    for (size_t b = 0; b < expectedNumBlocks; ++b) {
+      size_t lower = b * rowsPerBlock;
+      size_t upper = std::min(lower + rowsPerBlock, table.numRows());
+      EXPECT_EQ(writer.numRowsInBlock(i, b), upper - lower);
+      EXPECT_EQ(writer.firstRowOfBlock(i, b), table.at(lower));
+      EXPECT_EQ(writer.lastRowOfBlock(i, b), table.at(upper - 1));
+    }
+  }
+}
+
+// Check that `readBlockOfIdTable` returns exactly the rows of the `tables` from
+// which the `writer` was built.
+void checkBlockContents(
+    const ad_utility::CompressedExternalIdTableWriter& writer,
+    const std::vector<CopyableIdTable<0>>& tables, size_t rowsPerBlock,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  ASSERT_EQ(writer.numIdTables(), tables.size());
+  for (size_t i = 0; i < tables.size(); ++i) {
+    const auto& table = tables.at(i);
+    for (size_t b = 0; b < writer.numBlocksOfIdTable(i); ++b) {
+      auto block = writer.readBlockOfIdTable(i, b);
+      size_t lower = b * rowsPerBlock;
+      size_t upper = std::min(lower + rowsPerBlock, table.numRows());
+      ASSERT_EQ(block.numRows(), upper - lower);
+      for (size_t row = 0; row < block.numRows(); ++row) {
+        EXPECT_EQ(block.at(row), table.at(lower + row));
+      }
+    }
+  }
+}
+
+// Three `IdTable`s with 3 columns each. The number of rows (6, 5, 1) is chosen
+// such that it is both divisible and not divisible by the block sizes used in
+// the tests below.
+std::vector<CopyableIdTable<0>> testTables() {
+  std::vector<CopyableIdTable<0>> tables;
+  tables.push_back(makeIdTableFromVector(
+      {{2, 4, 7}, {3, 6, 8}, {4, 3, 2}, {5, 1, 9}, {7, 0, 3}, {8, 8, 8}}));
+  tables.push_back(makeIdTableFromVector(
+      {{2, 3, 7}, {3, 6, 8}, {4, 2, 123}, {9, 9, 9}, {11, 0, 1}}));
+  tables.push_back(makeIdTableFromVector({{0, 4, 7}}));
+  return tables;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, blockBoundaryMetadata) {
+  auto tables = testTables();
+  // With 16 bytes per block we get 2 rows per block (divides the 6 rows of the
+  // first table, but not the 5 rows of the second one). With 24 bytes we get 3
+  // rows per block (divides the 6 rows, not the 5 rows). With 800 bytes each
+  // table fits into a single block.
+  for (auto blockSize : {16_B, 24_B, 800_B}) {
+    std::string filename =
+        gtestCurrentTestName() + std::to_string(blockSize.getBytes()) + ".dat";
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+    writeAndFlush(writer, tables);
+    checkBlockMetadata(writer, tables, rowsPerBlockFor(blockSize));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, readBlockOfIdTableMatchesSource) {
+  auto tables = testTables();
+  for (auto blockSize : {16_B, 24_B, 800_B}) {
+    std::string filename =
+        gtestCurrentTestName() + std::to_string(blockSize.getBytes()) + ".dat";
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+    writeAndFlush(writer, tables);
+    checkBlockContents(writer, tables, rowsPerBlockFor(blockSize));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, concurrentBlockReads) {
+  auto tables = testTables();
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+  writeAndFlush(writer, tables);
+
+  // Read all blocks concurrently from 8 threads. This only works if
+  // `readBlockOfIdTable` takes a shared lock on the underlying file.
+  writer.registerActiveReader();
+  std::vector<ad_utility::JThread> threads;
+  for ([[maybe_unused]] size_t i : ql::views::iota(0, 8)) {
+    threads.emplace_back([&writer, &tables, blockSize]() {
+      checkBlockContents(writer, tables, rowsPerBlockFor(blockSize));
+    });
+  }
+  threads.clear();
+  writer.unregisterActiveReader();
+
+  // After all readers are gone, the writer can be written to again.
+  EXPECT_NO_THROW(writer.writeIdTable(tables.at(0)));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, clearResetsBoundaryMetadata) {
+  auto tables = testTables();
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+  writeAndFlush(writer, tables);
+  writer.clear();
+
+  // After clearing, only the second batch is visible.
+  std::vector<CopyableIdTable<0>> secondBatch;
+  secondBatch.push_back(
+      makeIdTableFromVector({{1, 1, 1}, {2, 2, 2}, {3, 3, 3}}));
+  writeAndFlush(writer, secondBatch);
+  checkBlockMetadata(writer, secondBatch, rowsPerBlockFor(blockSize));
+  checkBlockContents(writer, secondBatch, rowsPerBlockFor(blockSize));
+}
+
+namespace {
+// Merge all the runs of the `writer` serially via a
+// `CompressedIdTableRunsInput` and return the merged rows.
+template <size_t NumStaticCols>
+std::vector<IdTable::row_type> mergeRunsSerially(
+    ad_utility::CompressedExternalIdTableWriter& writer) {
+  using namespace ad_utility::parallelBlockMerge;
+  MergeOptions options;
+  options.outputBlockSize = OutputBlockSize::numElements(2);
+  std::vector<IdTable::row_type> result;
+  for (auto& block : serialBlockMergeToRange<false>(
+           ad_utility::CompressedIdTableRunsInput<NumStaticCols>{writer},
+           SortTriple<0, 1, 2, false>{}, options)) {
+    EXPECT_LE(block.numRows(), 2u);
+    auto dynamicBlock = std::move(block).toDynamic();
+    for (const auto& row : dynamicBlock) {
+      result.emplace_back(row);
+    }
+  }
+  return result;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Merging the runs of a writer via a `CompressedIdTableRunsInput` yields all
+// the rows of all the runs in sorted order, for different block sizes and for
+// a dynamic and a static number of columns.
+TEST(CompressedExternalIdTable, runsInputMergedSerially) {
+  auto tables = testTables();
+  std::vector<IdTable::row_type> expected;
+  for (const auto& table : tables) {
+    for (const auto& row : table) {
+      expected.emplace_back(row);
+    }
+  }
+  ql::ranges::sort(expected, SortTriple<0, 1, 2, false>{});
+  for (auto blockSize : {16_B, 24_B, 800_B}) {
+    std::string filename =
+        gtestCurrentTestName() + std::to_string(blockSize.getBytes()) + ".dat";
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+    for (const auto& table : tables) {
+      writer.writeIdTable(table);
+    }
+    EXPECT_THAT(mergeRunsSerially<0>(writer),
+                ::testing::ElementsAreArray(expected));
+    EXPECT_THAT(mergeRunsSerially<3>(writer),
+                ::testing::ElementsAreArray(expected));
+  }
+}
+
+// _____________________________________________________________________________
+// A `CompressedIdTableRunsInput` forwards the block metadata of its writer.
+TEST(CompressedExternalIdTable, runsInputForwardsTheBlockMetadata) {
+  auto tables = testTables();
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+  for (const auto& table : tables) {
+    writer.writeIdTable(table);
+  }
+  ad_utility::CompressedIdTableRunsInput<0> input{writer};
+  ASSERT_EQ(input.numRuns(), tables.size());
+  for (size_t run = 0; run < input.numRuns(); ++run) {
+    ASSERT_EQ(input.numBlocks(run), writer.numBlocksOfIdTable(run));
+    for (size_t b = 0; b < input.numBlocks(run); ++b) {
+      EXPECT_EQ(input.numElementsInBlock(run, b),
+                writer.numRowsInBlock(run, b));
+      EXPECT_EQ(input.firstElement(run, b), writer.firstRowOfBlock(run, b));
+      EXPECT_EQ(input.lastElement(run, b), writer.lastRowOfBlock(run, b));
+      EXPECT_EQ(input.getBlock(run, b), writer.readBlockOfIdTable(run, b));
+    }
+  }
+  auto block = input.makeEmptyBlock();
+  EXPECT_EQ(block.numColumns(), 3u);
+  EXPECT_EQ(block.numRows(), 0u);
+  input.appendToBlock(block, writer.firstRowOfBlock(0, 0));
+  ASSERT_EQ(block.numRows(), 1u);
+  EXPECT_EQ(block.at(0), writer.firstRowOfBlock(0, 0));
+  EXPECT_EQ(input.memorySizeOfElement(block.at(0)), 3 * 8_B);
+}
+
+// _____________________________________________________________________________
+// A `CompressedIdTableRunsInput` registers itself as an active reader of its
+// writer for its whole lifetime (a move transfers the registration), so writing
+// to or clearing the writer throws while it is alive.
+TEST(CompressedExternalIdTable, runsInputIsAnActiveReader) {
+  auto tables = testTables();
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, 3, ad_utility::testing::makeAllocator(), 16_B};
+  writer.writeIdTable(tables.at(0));
+  auto expectWriterIsLocked = [&writer, &tables](bool isLocked) {
+    if (isLocked) {
+      AD_EXPECT_THROW_WITH_MESSAGE(writer.writeIdTable(tables.at(1)),
+                                   ::testing::HasSubstr("iterated over"));
+      AD_EXPECT_THROW_WITH_MESSAGE(writer.clear(),
+                                   ::testing::HasSubstr("iterated over"));
+    } else {
+      EXPECT_NO_THROW(writer.writeIdTable(tables.at(1)));
+    }
+  };
+  {
+    std::optional<ad_utility::CompressedIdTableRunsInput<0>> input{
+        std::in_place, writer};
+    expectWriterIsLocked(true);
+    // Moving transfers the registration, the moved-from object no longer holds
+    // it.
+    ad_utility::CompressedIdTableRunsInput<0> movedTo{std::move(input.value())};
+    input.reset();
+    expectWriterIsLocked(true);
+    // Move assignment unregisters the overwritten object and takes over the
+    // registration of the moved-from object, so exactly one remains.
+    ad_utility::CompressedIdTableRunsInput<0> other{writer};
+    other = std::move(movedTo);
+    expectWriterIsLocked(true);
+  }
+  expectWriterIsLocked(false);
+  EXPECT_NO_THROW(writer.clear());
+}
+
+namespace {
+
+// Collect the complete sorted output of the `sorter` into a single `IdTable`.
+CopyableIdTable<0> sortedOutput(
+    ad_utility::CompressedExternalIdTableSorterTypeErased& sorter) {
+  auto blocks = sorter.getSortedOutput();
+  return idTableFromBlockGenerator(blocks);
+}
+
+// Return a copy of the `table` that is sorted by `SortByOSP`.
+CopyableIdTable<0> sortedCopy(const IdTable& table) {
+  CopyableIdTable<0> result{table.clone()};
+  ql::ranges::sort(result, SortByOSP{});
+  return result;
+}
+
+// Push the rows of the `table` row by row via `push` into one sorter, and in a
+// single call to `pushBlock` into a second, identically configured sorter.
+// Then check that both sorters report the same `size()` and yield exactly the
+// same sorted output.
+template <size_t NumStaticCols>
+void testPushBlockEqualsRowWisePush(
+    const IdTable& table, ad_utility::MemorySize memoryToUse,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  auto alloc = ad_utility::testing::makeAllocator();
+  using Sorter =
+      ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticCols>;
+
+  std::string rowWiseFile =
+      absl::StrCat(gtestCurrentTestName(), ".rowWise.dat");
+  std::string blockWiseFile =
+      absl::StrCat(gtestCurrentTestName(), ".blockWise.dat");
+  // Note: The files are already deleted by the destructor of the underlying
+  // `CompressedExternalIdTableWriter`, so we don't warn if the deletion fails.
+  absl::Cleanup cleanup = [&rowWiseFile, &blockWiseFile] {
+    ad_utility::deleteFile(rowWiseFile, false);
+    ad_utility::deleteFile(blockWiseFile, false);
+  };
+
+  Sorter rowWise{rowWiseFile, table.numColumns(), memoryToUse, alloc};
+  Sorter blockWise{blockWiseFile, table.numColumns(), memoryToUse, alloc};
+
+  for (const auto& row : table) {
+    rowWise.push(row);
+  }
+  blockWise.pushBlock(table);
+
+  EXPECT_EQ(rowWise.size(), table.numRows());
+  EXPECT_EQ(blockWise.size(), rowWise.size());
+
+  auto rowWiseResult = sortedOutput(rowWise);
+  auto blockWiseResult = sortedOutput(blockWise);
+  EXPECT_EQ(blockWiseResult.numRows(), rowWiseResult.numRows());
+  EXPECT_THAT(blockWiseResult, ::testing::ElementsAreArray(rowWiseResult));
+  EXPECT_THAT(blockWiseResult, ::testing::ElementsAreArray(sortedCopy(table)));
+}
+
+// Push several blocks into a (non-sorting) `CompressedExternalIdTable` via
+// `pushBlock` and check that `getRows` yields the rows in exactly the order in
+// which they were pushed.
+template <size_t NumStaticCols>
+void testCompressedExternalIdTablePushBlock(
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  // Choose the memory limit such that exactly 6 rows fit into a single block.
+  constexpr size_t blocksize = 6;
+  auto memory = memoryForBlocksize(blocksize, NUM_COLS);
+
+  std::string filename =
+      absl::StrCat(gtestCurrentTestName(), ".", NumStaticCols, ".dat");
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTable<NumStaticCols> writer{
+      filename, NUM_COLS, memory, alloc};
+
+  // The concatenation of all pushed blocks, in the order in which they were
+  // pushed. The block sizes cover the corner cases of an empty block, blocks
+  // that are smaller and larger than the `blocksize`, and a block that exactly
+  // fills a single block.
+  CopyableIdTable<NumStaticCols> expected{NUM_COLS, alloc};
+  for (size_t numRows : {4UL, blocksize, 13UL, 1UL, 0UL, 20UL}) {
+    IdTable block = createRandomlyFilledIdTable(numRows, NUM_COLS);
+    writer.pushBlock(block);
+    expected.insertAtEnd(block);
+  }
+  EXPECT_EQ(writer.size(), expected.numRows());
+
+  auto generator = writer.getRows();
+  auto result = idTableFromRowGenerator<NumStaticCols>(generator, NUM_COLS);
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, pushBlockEqualsRowWisePush) {
+  // Test several memory limits that lead to small blocksizes, including the
+  // corner case of a single row per block.
+  for (const auto& [blocksize, numRows] :
+       std::vector<std::pair<size_t, size_t>>{
+           {1, 17}, {2, 17}, {3, 100}, {10, 100}, {64, 500}}) {
+    SCOPED_TRACE(
+        absl::StrCat("blocksize = ", blocksize, ", numRows = ", numRows));
+    auto memory = memoryForBlocksize(blocksize, NUM_COLS);
+    IdTable table = createRandomlyFilledIdTable(numRows, NUM_COLS);
+    // Test the static as well as the dynamic instantiation of the sorter.
+    testPushBlockEqualsRowWisePush<NUM_COLS>(table, memory);
+    testPushBlockEqualsRowWisePush<0>(table, memory);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, pushBlockBlockBoundaries) {
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  // Choose the memory limit such that exactly 8 rows fit into a single block.
+  constexpr size_t blocksize = 8;
+  auto memory = memoryForBlocksize(blocksize, NUM_COLS);
+
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+
+  auto runTestForNumRows = [&](size_t numRows,
+                               source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    SCOPED_TRACE(absl::StrCat("numRows = ", numRows));
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> sorter{
+        filename, NUM_COLS, memory, alloc};
+    IdTable table = createRandomlyFilledIdTable(numRows, NUM_COLS);
+    sorter.pushBlock(table);
+    EXPECT_EQ(sorter.size(), numRows);
+    auto result = sortedOutput(sorter);
+    EXPECT_EQ(result.numRows(), numRows);
+    EXPECT_THAT(result, ::testing::ElementsAreArray(sortedCopy(table)));
+  };
+
+  runTestForNumRows(0);
+  runTestForNumRows(1);
+  runTestForNumRows(blocksize - 1);
+  runTestForNumRows(blocksize);
+  runTestForNumRows(blocksize + 1);
+  runTestForNumRows(2 * blocksize);
+  runTestForNumRows(2 * blocksize + 1);
+  runTestForNumRows(5 * blocksize);
+  runTestForNumRows(7 * blocksize + 3);
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, pushBlockMixedWithSingleRowPushes) {
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  // Choose the memory limit such that exactly 5 rows fit into a single block.
+  constexpr size_t blocksize = 5;
+  auto memory = memoryForBlocksize(blocksize, NUM_COLS);
+
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> sorter{
+      filename, NUM_COLS, memory, alloc};
+
+  // All rows that have been pushed so far, in the order in which they were
+  // pushed.
+  CopyableIdTable<0> allRows{NUM_COLS, alloc};
+
+  // Push `numRows` random rows one by one via `push`.
+  auto pushRows = [&](size_t numRows) {
+    IdTable table = createRandomlyFilledIdTable(numRows, NUM_COLS);
+    for (const auto& row : table) {
+      sorter.push(row);
+    }
+    allRows.insertAtEnd(table);
+  };
+  // Push a random table with `numRows` rows in a single call to `pushBlock`.
+  auto pushTable = [&](size_t numRows) {
+    IdTable table = createRandomlyFilledIdTable(numRows, NUM_COLS);
+    sorter.pushBlock(table);
+    allRows.insertAtEnd(table);
+  };
+
+  pushRows(3);
+  pushTable(7);
+  pushRows(1);
+  pushTable(0);
+  pushTable(13);
+  pushRows(2);
+  pushTable(blocksize);
+  pushRows(blocksize);
+  pushTable(1);
+
+  EXPECT_EQ(sorter.size(), allRows.numRows());
+  ql::ranges::sort(allRows, SortByOSP{});
+  auto result = sortedOutput(sorter);
+  EXPECT_THAT(result, ::testing::ElementsAreArray(allRows));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, pushBlockPreservesOrderInCompressor) {
+  // Test the static as well as the dynamic instantiation.
+  testCompressedExternalIdTablePushBlock<NUM_COLS>();
+  testCompressedExternalIdTablePushBlock<0>();
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, pushEmptyBlockIsNoOp) {
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  // Choose the memory limit such that exactly 4 rows fit into a single block.
+  constexpr size_t blocksize = 4;
+  auto memory = memoryForBlocksize(blocksize, NUM_COLS);
+
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> sorter{
+      filename, NUM_COLS, memory, alloc};
+
+  // Pushing an empty table doesn't change the state of the sorter at all.
+  IdTable emptyTable{NUM_COLS, alloc};
+  sorter.pushBlock(emptyTable);
+  sorter.pushBlock(emptyTable);
+  EXPECT_EQ(sorter.size(), 0U);
+
+  // Pushing after the empty pushes still works. Note that in total fewer than
+  // `blocksize` rows are pushed, so no complete block is ever written to disk
+  // and the sorter takes its "everything fits into a single block" shortcut. If
+  // the empty pushes had created a spurious block, then an internal correctness
+  // check in `transformAndPushLastBlock` would fail here.
+  IdTable table = createRandomlyFilledIdTable(blocksize - 1, NUM_COLS);
+  sorter.pushBlock(table);
+  sorter.pushBlock(emptyTable);
+  EXPECT_EQ(sorter.size(), blocksize - 1);
+
+  auto result = sortedOutput(sorter);
+  EXPECT_EQ(result.numRows(), blocksize - 1);
+  EXPECT_THAT(result, ::testing::ElementsAreArray(sortedCopy(table)));
+}
+
+// _____________________________________________________________________________
+// The block boundaries that are used internally are not directly observable,
+// but the error message of the memory check in the merging phase contains the
+// number of blocks that have to be merged. Use this to verify that `pushBlock`
+// splits its input into exactly the same blocks as repeated calls to `push`.
+TEST(CompressedExternalIdTable, pushBlockCreatesSameBlocksAsRowWisePush) {
+  auto alloc = ad_utility::testing::makeAllocator();
+  // The memory limits below are deliberately too small for the merging phase,
+  // s.t. an exception that contains the number of blocks is thrown.
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(false);
+
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+
+  using Sorter =
+      ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS>;
+  auto consume = [](Sorter& sorter) {
+    auto blocks = sorter.getSortedOutput(std::nullopt);
+    return idTableFromBlockGenerator(blocks);
+  };
+
+  // Note: `numRows` has to be at least `blocksize`, because otherwise no block
+  // at all is written to disk and the merging phase (and with it the memory
+  // check) is skipped completely.
+  auto runTestForBlocksize = [&](size_t blocksize, size_t numRows,
+                                 source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    SCOPED_TRACE(
+        absl::StrCat("blocksize = ", blocksize, ", numRows = ", numRows));
+    auto memory = memoryForBlocksize(blocksize, NUM_COLS);
+    // Each time `blocksize` rows have accumulated, a block is written to disk.
+    // A possible remainder becomes one additional block.
+    size_t expectedNumBlocks = (numRows + blocksize - 1) / blocksize;
+    auto matcher = ::testing::ContainsRegex(
+        absl::StrCat("merging ", expectedNumBlocks, " blocks"));
+
+    IdTable table = createRandomlyFilledIdTable(numRows, NUM_COLS);
+    {
+      Sorter rowWise{filename, NUM_COLS, memory, alloc};
+      for (const auto& row : table) {
+        rowWise.push(row);
+      }
+      AD_EXPECT_THROW_WITH_MESSAGE(consume(rowWise), matcher);
+    }
+    {
+      Sorter blockWise{filename, NUM_COLS, memory, alloc};
+      blockWise.pushBlock(table);
+      AD_EXPECT_THROW_WITH_MESSAGE(consume(blockWise), matcher);
+    }
+  };
+
+  runTestForBlocksize(4, 4);
+  runTestForBlocksize(4, 8);
+  runTestForBlocksize(4, 9);
+  runTestForBlocksize(4, 40);
+  runTestForBlocksize(4, 43);
+  runTestForBlocksize(1, 20);
+  runTestForBlocksize(10, 100);
+  runTestForBlocksize(10, 101);
 }

@@ -34,61 +34,58 @@ namespace ad_utility {
 // `None` is the default: it preserves the original QLever behaviour (no
 // deduplication, constant-memory streaming) for users who need minimal memory
 // overhead and no deduplication cost.
-// `Global` is the strictly spec-compliant mode, but requires memory
+// `Full` is the strictly spec-compliant mode, but requires memory
 // proportional to the number of unique triples in the result, which can be
 // prohibitive for large result sets. Triples containing a blank node are
 // exempt from deduplication, which is not an approximation: every solution
 // instantiates a template blank node as a fresh blank node, so two such
 // triples are never duplicates of each other.
-// `BatchWise` keeps a single LRU cache of the `batchSize_` most recently seen
+// `Lru` keeps a single LRU cache of the `capacity_` most recently seen
 // unique triple keys (shared across all template triples and keyed on the full
 // instantiated triple), and suppresses a triple only if its key is still in
-// that cache. Memory is bounded (O(batchSize_)). Because the cache evicts its
+// that cache. Memory is bounded (O(capacity_)). Because the cache evicts its
 // least recently used key once full, a duplicate that recurs after more than
-// `batchSize_` other unique keys have been seen is no longer remembered and is
+// `capacity_` other unique keys have been seen is no longer remembered and is
 // emitted again.
 struct DeduplicationMode {
   static constexpr std::string_view none_ = "none";
-  static constexpr std::string_view global_ = "global";
-  static constexpr std::string_view batchwise_ = "batchwise";
+  static constexpr std::string_view full_ = "full";
+  static constexpr std::string_view lru_ = "lru";
 
   struct None {};  // Every triple is emitted, no duplicate tracking.
-  struct Global {
-  };  // A triple is emitted at most once across the entire result.
-  struct BatchWise {    // Deduplicates against the `batchSize_` most recently
-    size_t batchSize_;  // seen unique triples (one shared cache).
+  struct Full {};  // A triple is emitted at most once across the entire result.
+  struct Lru {     // Deduplicates against the `capacity_` most recently
+    size_t capacity_;  // seen unique triples (one shared cache).
   };
-  std::variant<None, Global, BatchWise> value_;
+  std::variant<None, Full, Lru> value_;
 
   static DeduplicationMode none() { return {None{}}; }
-  static DeduplicationMode global() { return {Global{}}; }
-  static DeduplicationMode batchWise(size_t batchSize) {
-    return {BatchWise{batchSize}};
-  }
+  static DeduplicationMode full() { return {Full{}}; }
+  static DeduplicationMode lru(size_t capacity) { return {Lru{capacity}}; }
 };
 
 // Serializers for use with ad_utility::Parameter<DeduplicationMode, ...>.
 struct DeduplicationModeFromString {
   DeduplicationMode operator()(const std::string& s) const {
     if (s == DeduplicationMode::none_) return {DeduplicationMode::None{}};
-    if (s == DeduplicationMode::global_) return {DeduplicationMode::Global{}};
+    if (s == DeduplicationMode::full_) return {DeduplicationMode::Full{}};
 
-    // `batchwise:<positive integer>`.
-    constexpr std::string_view prefix = "batchwise:";
+    // `lru:<positive integer>`.
+    constexpr std::string_view prefix = "lru:";
     if (ql::starts_with(s, prefix)) {
-      size_t batchSize = 0;
+      size_t capacity = 0;
       const char* begin = s.data() + prefix.size();
       const char* end = s.data() + s.size();
-      auto [ptr, ec] = std::from_chars(begin, end, batchSize);
+      auto [ptr, ec] = std::from_chars(begin, end, capacity);
       // require the suffix to be a valid, in-range, positive unsigned integer.
-      if (ec == std::errc{} && ptr == end && batchSize != 0) {
-        return {DeduplicationMode::BatchWise{batchSize}};
+      if (ec == std::errc{} && ptr == end && capacity != 0) {
+        return {DeduplicationMode::Lru{capacity}};
       }
     }
     throw std::runtime_error(absl::StrFormat(
         R"(Invalid value for construct-deduplication: "%s" Expected "%s", "%s", or "%s:<positive integer>".)",
-        s, DeduplicationMode::none_, DeduplicationMode::global_,
-        DeduplicationMode::batchwise_));
+        s, DeduplicationMode::none_, DeduplicationMode::full_,
+        DeduplicationMode::lru_));
   }
 };
 
@@ -98,12 +95,12 @@ struct DeduplicationModeToString {
                           [](const DeduplicationMode::None&) {
                             return std::string{DeduplicationMode::none_};
                           },
-                          [](const DeduplicationMode::Global&) {
-                            return std::string{DeduplicationMode::global_};
+                          [](const DeduplicationMode::Full&) {
+                            return std::string{DeduplicationMode::full_};
                           },
-                          [](const DeduplicationMode::BatchWise& bw) {
-                            return absl::StrCat(DeduplicationMode::batchwise_,
-                                                ":", bw.batchSize_);
+                          [](const DeduplicationMode::Lru& bw) {
+                            return absl::StrCat(DeduplicationMode::lru_, ":",
+                                                bw.capacity_);
                           }},
                       m.value_);
   }
