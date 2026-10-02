@@ -610,7 +610,7 @@ class Qlever {
   }
 
   // Load a blob previously written by
-  // `serializeVocabAndNamedCacheToCompressedBlob`, and return a status instead
+  // `serializeVocabAndNamedCacheToCompressedBlob`, and return an error instead
   // of throwing if the blob cannot be decompressed, or if its header or its
   // index format version is missing or incompatible. For details (in
   // particular which failures are still reported by an exception) see
@@ -619,8 +619,9 @@ class Qlever {
   // PRECONDITION: Must only be called while no other thread can concurrently
   // access this instance, e.g. right after construction and before the first
   // query is answered. Must not be called more than once on the same instance,
-  // except after a call that returned a status other than `ok`.
-  NamedCachedQueryBlobManager::BlobStatus
+  // except after a call that left this instance unchanged (see
+  // `NamedCachedQueryBlobManager::tryToDeserialize`).
+  std::optional<NamedCachedQueryBlobManager::BlobError>
   tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
       ql::span<const char> blob,
       ql::pmr::polymorphic_allocator<char> allocator = {}) {
@@ -630,7 +631,7 @@ class Qlever {
   }
 
   // Same as `tryToDeserializeVocabAndNamedCacheFromCompressedBlob`, but throw
-  // instead of returning a status. For details see
+  // instead of returning an error. For details see
   // `NamedCachedQueryBlobManager::deserialize`.
   void deserializeVocabAndNamedCacheFromCompressedBlob(
       ql::span<const char> blob,
