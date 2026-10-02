@@ -146,7 +146,7 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
-ad_utility::TaskQueueOnExecutor CompressedRelationWriter::makeBlockWriteQueue(
+size_t CompressedRelationWriter::getNumConcurrentBlocks(
     std::optional<size_t> numConcurrentBlocksOverride) {
   size_t requestedBlocks = numConcurrentBlocksOverride.value_or(
       getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
@@ -157,8 +157,13 @@ ad_utility::TaskQueueOnExecutor CompressedRelationWriter::makeBlockWriteQueue(
   size_t numThreads = ad_utility::globalExecutorNumThreads();
   // A value of 0 means "as many as the pool has threads", larger values are
   // capped at that number.
-  size_t numConcurrentBlocks =
-      requestedBlocks == 0 ? numThreads : std::min(requestedBlocks, numThreads);
+  return requestedBlocks == 0 ? numThreads
+                              : std::min(requestedBlocks, numThreads);
+}
+
+// _____________________________________________________________________________
+ad_utility::TaskQueueOnExecutor CompressedRelationWriter::makeBlockWriteQueue(
+    size_t numConcurrentBlocks) {
   // Allow at least 4 blocks to be in flight.
   size_t maxNumTasksInFlight = std::max<size_t>(4, numConcurrentBlocks * 2);
   return ad_utility::TaskQueueOnExecutor{ad_utility::globalExecutor(),
