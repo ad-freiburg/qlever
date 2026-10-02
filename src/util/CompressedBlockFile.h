@@ -81,6 +81,9 @@ class CompressedBlockFile {
  private:
   std::string filename_;
   CompressionLevel compressionLevel_;
+  // NOTE: The file must not be opened in append mode (`a+`), because on Linux
+  // `pwrite` then ignores the offset and appends at the end of the file, which
+  // would break the reservation of the ranges in `appendBytes`.
   Synchronized<File, std::shared_mutex> file_{filename_, "w+"};
   // The offset at which the next block is appended, see `appendBytes`.
   std::atomic<off_t> nextOffset_{0};
