@@ -232,11 +232,13 @@ struct RuntimeParameters {
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
 
-  // Configure the amount of threads to compress and write blocks per
-  // permutation. A value of 0 indicates that the number of threads should be
-  // determined automatically based on the number of available hardware threads.
-  // Even though this influences the logic of regular index building,
-  // `qlever-index`doesn't expose a CLI flag to set this parameter.
+  // Configure how many blocks are compressed and written concurrently per
+  // permutation. The blocks are compressed and written on the global thread
+  // pool, so this is not a number of threads of its own, and it is capped at
+  // the number of threads of that pool. A value of 0 means "as many as the
+  // global thread pool has threads". Even though this influences the logic of
+  // regular index building, `qlever-index` doesn't expose a CLI flag to set
+  // this parameter, but derives it from its `--num-threads` option.
   SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
 
   // Only blocks of this size or larger will be considered for vacuuming.

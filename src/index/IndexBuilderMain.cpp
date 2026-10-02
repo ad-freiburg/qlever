@@ -8,6 +8,7 @@
 
 #include <absl/functional/bind_front.h>
 
+#include <algorithm>
 #include <boost/program_options.hpp>
 #include <cstdint>
 #include <cstdlib>
@@ -358,10 +359,11 @@ int main(int argc, char** argv) {
   add("num-threads,j", po::value(&config.numThreads_),
       "The number of threads used during the index build. Must be at least 1. "
       "Default: the number of hardware threads of the machine. NOTE: Currently "
-      "only the first pass (parsing the input and creating the partial "
-      "vocabularies) and the conversion to global IDs use this number; the "
-      "other phases use their own parallelism (making all phases respect this "
-      "option is work in progress). The memory of the first pass grows "
+      "the first pass (parsing the input and creating the partial "
+      "vocabularies), the conversion to global IDs, and the shared thread pool "
+      "that the permutation writer runs on use this number; the other phases "
+      "use their own parallelism (making all phases respect this option is "
+      "work in progress). The memory of the first pass grows "
       "linearly with this number, since each thread holds one batch of "
       "`num-triples-per-batch` triples with its partial vocabulary in RAM.");
 
@@ -407,10 +409,16 @@ int main(int argc, char** argv) {
       config.indexRowsPerBlock_ = indexRowsPerBlock.value();
     }
     config.validate();
-    // For index building, use more threads for writing permutations than the
-    // default (which is optimized for `rebuild-index`, where six permutations
-    // are written simultaneously).
-    setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(5);
+    // For index building, let each permutation writer compress and write up to
+    // half as many blocks concurrently as the global thread pool has threads,
+    // because two permutations are always written at the same time. This is
+    // computed from `config.numThreads_` and not via
+    // `ad_utility::globalExecutorNumThreads()`, because the size of the pool is
+    // only set to `config.numThreads_` inside `Qlever::buildIndex`. The default
+    // of the runtime parameter is optimized for `rebuild-index`, where six
+    // permutations are written simultaneously.
+    setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(
+        std::max<size_t>(1, config.numThreads_ / 2));
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "
