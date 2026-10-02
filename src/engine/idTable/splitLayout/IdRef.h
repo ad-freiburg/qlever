@@ -39,6 +39,8 @@ inline Id idFromBitsCompat(const Id::BitRepresentation bits) {
 // Id&` to this proxy. `IdRef` additionally supports assigning a new `Id` to
 // the referenced slot. A thin, cheap-to-copy pair of pointers, not
 // polymorphic, like `Id` itself.
+// TODO<pas-kes>: A lot of read API functions are calling toId()
+// to convert type to an Id, check in the future if this code is necessary
 template <bool IsConst>
 class BasicIdRef {
  public:
