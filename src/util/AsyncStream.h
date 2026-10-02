@@ -5,7 +5,6 @@
 #ifndef QLEVER_SRC_UTIL_ASYNCSTREAM_H
 #define QLEVER_SRC_UTIL_ASYNCSTREAM_H
 
-#include <boost/asio/packaged_task.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <exception>
@@ -79,10 +78,17 @@ struct AsyncStreamGenerator
     // `clear()`ed as soon as its output has been destroyed (see
     // `CompressedRelationPermutationWriterImpl.h`, which does exactly that for
     // every large relation of a permutation pair).
-    future_ = boost::asio::post(
-        executor, std::packaged_task<void()>{[produceValues,
-                                              range = std::optional<Range>{
-                                                  std::move(range)}]() mutable {
+    //
+    // NOTE: The completion is tracked via an explicit `std::promise` instead
+    // of passing a `std::packaged_task<void()>` to `boost::asio::post`. The
+    // latter breaks the compilation of unrelated code that uses
+    // `std::packaged_task<void()>` later in the same translation unit (e.g.
+    // `IndexImpl.cpp`) with Boost 1.92 and libc++, i.e. in the macOS build.
+    std::promise<void> promise;
+    future_ = promise.get_future();
+    boost::asio::post(
+        executor, [promise = std::move(promise), produceValues,
+                   range = std::optional<Range>{std::move(range)}]() mutable {
           // `produceValues` passes all exceptions from the `range` on to
           // the consumer, so an exception here is a bug that would leave
           // the `range` alive and the consumer possibly waiting forever.
@@ -90,7 +96,8 @@ struct AsyncStreamGenerator
               [&produceValues, &range]() { produceValues(range.value()); },
               "Producing the values of `runStreamAsync`");
           range.reset();
-        }});
+          promise.set_value();
+        });
   }
 
   // Inform the producer that the queue has finished s.t. it can terminate, and
