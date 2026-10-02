@@ -84,6 +84,8 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   // handler that does it may well run once this storage is gone.
   struct State {
     HashMap<size_t, SharedChunkQueue> chunks_;
+    // The chunk that the consumer currently reads, see `storeBlock`.
+    size_t chunkOfConsumer_ = 0;
     // Set by `cancelAll`, only to check the PRECONDITION that no operation is
     // initiated afterwards, see the `BlockStorageConcept`.
     bool wasCancelled_ = false;
@@ -155,12 +157,21 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
            std::shared_ptr<State> state) -> net::awaitable<bool> {
           AD_CORRECTNESS_CHECK(!state->wasCancelled_);
           SharedChunkQueue chunk = self->getOrCreateChunk(*state, chunkIndex);
+          // Only the chunk that the consumer currently reads may keep blocks
+          // in memory, all chunks that are ahead of it spill every block. A
+          // chunk that has been merged completely leaves the chunks that are
+          // in flight, but its queue lives on until the consumer has read it,
+          // so the blocks that the chunks ahead of the consumer keep in memory
+          // would otherwise grow with the total number of chunks instead of
+          // the number of chunks in flight that the memory limit of the merge
+          // accounts for (see `computeMergePhaseParameters`).
+          bool mayKeepInMemory = chunkIndex <= state->chunkOfConsumer_;
           // NOTE: Awaiting the chunk releases `strand_`: the chunk runs on a
           // strand of its own and resumes this coroutine back on `strand_`, so
           // the compression and the I/O never occupy the strand of this
           // storage, which is hence no bottleneck.
-          bool wasStored =
-              co_await chunk->storeBlock(std::move(block), net::use_awaitable);
+          bool wasStored = co_await chunk->storeBlock(
+              std::move(block), mayKeepInMemory, net::use_awaitable);
           co_return wasStored;
         }(this, chunkIndex, std::move(block), state_),
         AD_FWD(completionToken));
@@ -175,6 +186,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
         [](CompressedIdTableBlockStorage* self, size_t chunkIndex,
            std::shared_ptr<State> state) -> net::awaitable<GetResult> {
           AD_CORRECTNESS_CHECK(!state->wasCancelled_);
+          state->chunkOfConsumer_ = chunkIndex;
           // NOTE: The queue of a chunk that does not exist yet is created,
           // because the consumer of a chunk may well be faster than its
           // producer, see `BlockStorageConcept::getBlock`.
