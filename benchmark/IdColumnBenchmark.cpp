@@ -17,7 +17,6 @@
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../test/util/AllocatorTestHelpers.h"
 #include "engine/idTable/splitLayout/ColumnStorageTraits.h"
-#include "engine/idTable/splitLayout/IdColumnByteIO.h"
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 #include "global/Id.h"
@@ -97,27 +96,6 @@ class IdColumnBenchmark : public BenchmarkInterface {
                            [](const Id id) { return getBitsCompat(id); });
           AD_LOG_INFO << "size " << vec.size() << std::endl;
         });
-
-    // Byte pack/unpack round-trip, e.g. as compression input/output.
-    {
-      IdColumnVector vec{ids.begin(), ids.end(), makeTestAllocator()};
-      auto view = vec.asConstView();
-      results.addMeasurement(
-          "packIdColumnToBytes " + std::to_string(numIds) + " Ids", [&view] {
-            const auto bytes = packIdColumnToBytes(view);
-            AD_LOG_INFO << "bytes " << bytes.size() << std::endl;
-          });
-
-      auto bytes = packIdColumnToBytes(view);
-      IdColumnVector target{numIds, makeTestAllocator()};
-      results.addMeasurement(
-          "unpackBytesToIdColumn " + std::to_string(numIds) + " Ids",
-          [&bytes, &target] {
-            unpackBytesToIdColumn(ql::span<const char>{bytes}, target.asView());
-            AD_LOG_INFO << "size " << target.size() << std::endl;
-          });
-    }
-
     return results;
   }
 };

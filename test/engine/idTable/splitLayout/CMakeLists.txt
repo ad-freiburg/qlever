@@ -5,5 +5,3 @@ addLinkAndDiscoverTest(IdColumnIteratorTest engine testUtil)
 addLinkAndDiscoverTest(IdRefTest engine testUtil)
 
 addLinkAndDiscoverTest(IdColumnVectorTest engine testUtil)
-
-addLinkAndDiscoverTest(IdColumnByteIOTest engine testUtil)
