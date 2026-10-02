@@ -17,7 +17,6 @@
 #include "backports/span.h"
 #include "engine/idTable/IdTableRow.h"
 #include "engine/idTable/VectorWithElementwiseMove.h"
-#include "engine/idTable/splitLayout/IdColumn.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"

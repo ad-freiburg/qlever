@@ -189,12 +189,13 @@ class IdColumnVector {
   [[nodiscard]] ConstIdColumnRef asConstView() const {
     return {payloads_.data(), datatypes_.data(), payloads_.size()};
   }
-  /*implicit*/ operator IdColumnRef() { return asView(); }  // NOSONAR,
-  // implicit conversion is needed for future IdProxy Conversion
+  // Implicit conversions to the views, like `std::vector<T>` -> `ql::span<T>`.
+  // Generic `IdTable` code relies on this to treat the legacy and the split
+  // layout alike
+  /*implicit*/ operator IdColumnRef() { return asView(); }  // NOSONAR
   /*implicit*/ operator ConstIdColumnRef() const {
     return asConstView();
-  }  // NOSONAR,
-     // implicit conversion is needed for future IdProxy Conversion
+  }  // NOSONAR
 };
 
 }  // namespace columnBasedIdTable::splitLayout
