@@ -96,9 +96,9 @@ class SecondaryVocabulary {
 
  private:
   // An array of global indices (see `segmentOffsets_` and `sortedIndices_`
-  // below), which is either owned, or a non-owning, zero-copy view into the
+  // below). It is either owned, or a non-owning, zero-copy view into the
   // buffer of the serializer from which this vocabulary was read (see the
-  // serialization below), in which case that buffer has to outlive this
+  // serialization below). In the latter case, that buffer has to outlive this
   // vocabulary.
   using IndexArray = ad_utility::OwnedOrViewedVector<uint64_t>;
 

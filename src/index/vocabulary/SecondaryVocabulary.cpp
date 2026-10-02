@@ -139,7 +139,7 @@ void SecondaryVocabulary::mergeIntoSortedIndices(
   size_t numNewWords = insertPositions.size();
   sortedIndices.resize(numOldWords + numNewWords);
 
-  // Fill `sortedIndices_` from the back. `previousInsertPos` is the position
+  // Fill `sortedIndices` from the back. `previousInsertPos` is the position
   // at which the global index of the previously handled new word was written
   // (initially the end). Going backwards through the new words, for the new
   // word `i`, first shift the previously contained global indices that have to
