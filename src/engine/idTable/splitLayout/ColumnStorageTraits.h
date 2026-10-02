@@ -16,10 +16,12 @@
 #include "engine/idTable/splitLayout/IdRef.h"
 
 namespace columnBasedIdTable::splitLayout {
-// A customization point `IdTable` (see `IdTable.h`) uses to determine the
+// A customization point for `IdTable` (see `IdTable.h`) to determine the
 // reference/view types for one element resp. a whole column of its
-// `ColumnStorage`. The primary template is a plain `std::vector<T, ...>`,
-// used for any column type other than `Id` (e.g. `T = int` in tests).
+// `ColumnStorage`. The primary template describes the legacy layout, a plain
+// `std::vector<T, ...>` (used for any column type other than `Id`, e.g.
+// `T = int` in tests); the specialization below describes the experimental
+// split layout for `Id` columns.
 template <typename ColumnStorage, typename T>
 struct ColumnStorageTraits {
   using Ref = T&;
@@ -28,8 +30,8 @@ struct ColumnStorageTraits {
   using ConstColumnRef = ql::span<const T>;
 };
 
-// Specialization for `Id` columns stored as an `IdColumnVector` (a structure
-// of arrays, see there).
+// Specialization for `Id` columns stored in the split layout as an
+// `IdColumnVector` (a structure of arrays, see there).
 template <typename Allocator>
 struct ColumnStorageTraits<IdColumnVector<Allocator>, Id> {
   using Ref = IdRef;

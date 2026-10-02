@@ -20,9 +20,10 @@
 
 namespace columnBasedIdTable::splitLayout {
 
-// An owning, growable column of `Id`s stored as two separate, contiguous
-// arrays (payload words, datatype bytes) instead of padded `Id` objects.
-// The `ColumnStorage` `IdTable` uses for `Id` columns (see
+// An owning, growable column of `Id`s in the experimental split layout: two
+// separate, contiguous arrays (payload words, datatype bytes) instead of one
+// array of packed legacy `Id` objects. The split-layout counterpart of the
+// `std::vector<Id>` that `IdTable` uses as `ColumnStorage` by default (see
 // `ColumnStorageTraits.h`); offers the subset of `std::vector`'s interface
 // `IdTable` needs.
 //
@@ -64,7 +65,7 @@ class IdColumnVector {
 
   // Construct from a range of elements that are convertible to `Id` (e.g.
   // `Id` itself, or `IdRef`/`ConstIdRef` as yielded by another column's
-  // iterators). Used e.g. by `IdTable::clone()`.
+  // iterators). Needed e.g. for `IdTable::clone()` on this storage.
   // TODO<pas-kes>: Check for performance of this inefficient interface
   template <typename InputIt>
   IdColumnVector(InputIt first, InputIt last, Allocator allocator)

@@ -22,15 +22,17 @@
 
 namespace columnBasedIdTable::splitLayout {
 
-// A view (non-owning, like `ql::span`) of an `Id` column stored in
-// split-column storage: a contiguous payload-word array and a contiguous
+// A view (non-owning, like `ql::span`) of an `Id` column stored in the
+// experimental split layout: a contiguous payload-word array and a contiguous
 // datatype-byte array. Mirrors `ql::span<[const] Id>`'s interface except for
 // `.data()` (the two arrays aren't one contiguous range of `Id`); use
-// `rawPayloads()`/`rawDatatypes()` instead, e.g. for `IdColumnByteIO.h`.
+// `rawPayloads()`/`rawDatatypes()` instead, e.g. for raw byte I/O.
 //
-// So far unused: the global `IdColumn`/`ConstIdColumn` aliases at the bottom
-// of this file still refer to `ql::span<Id>`/`ql::span<const Id>`; a later
-// commit switches them over and fixes every call site the switch breaks.
+// This is the split-layout counterpart of the legacy `ql::span<Id>` /
+// `ql::span<const Id>` column views (`IdColumnRef`/`ConstIdColumnRef` in
+// `IdTable.h`), which stay unchanged. The aliases `IdColumnRef`/
+// `ConstIdColumnRef` at the bottom of this file live in the `splitLayout`
+// namespace.
 template <bool IsConst>
 class BasicIdColumnView {
  public:
@@ -112,7 +114,7 @@ class BasicIdColumnView {
   }
 
   // Direct access to the two underlying arrays (`.data()` is intentionally
-  // not provided), e.g. for `IdColumnByteIO.h`.
+  // not provided), e.g. for raw byte I/O.
   [[nodiscard]] ql::span<std::conditional_t<IsConst, const uint64_t, uint64_t>>
   rawPayloads() const {
     return {payloads_, size_};

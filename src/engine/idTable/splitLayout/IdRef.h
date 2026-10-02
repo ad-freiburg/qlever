@@ -19,10 +19,10 @@
 
 namespace columnBasedIdTable::splitLayout {
 
-// TEMPORARY: decodes/encodes the *current* packed single-word
-// `Id::getBits()`/`Id::fromBits(T)` into `ValueIdBitRepresentation`'s
-// (datatype, payload) shape, until the next commit switches
-// `Id::getBits()`/`fromBits()` themselves to operate on that struct.
+// TEMPORARY bridge between the legacy packed `Id` (`ValueId`) and the split
+// layout: converts the single-word `Id::getBits()`/`Id::fromBits(T)` from/to
+// `SplitLayoutIdBitRepresentation`'s (datatype, payload) shape. Only needed
+// as long as the split layout's element type is the legacy `Id`.
 inline SplitLayoutIdBitRepresentation getBitsCompat(const Id id) {
   const auto bits = id.getBits();
   return {static_cast<uint8_t>(bits >> Id::numDataBits),
@@ -33,13 +33,13 @@ inline Id idFromBitsCompat(const SplitLayoutIdBitRepresentation bits) {
                       bits.payload_);
 }
 
-// A reference to a single `Id` stored in split-column storage (a payload
-// word + datatype byte in two separate arrays, not a contiguous `Id`).
-// `BasicIdRef<IsConst>` mirrors `Id`'s full read API, so `column[i].method()`
-// keeps compiling once a column's element type changes from `Id&`/`const
-// Id&` to this proxy. `IdRef` additionally supports assigning a new `Id` to
-// the referenced slot. A thin, cheap-to-copy pair of pointers, not
-// polymorphic, like `Id` itself.
+// A proxy reference to a single `Id` stored in the experimental split layout
+// (a payload word + datatype byte in two separate arrays, instead of one
+// contiguous legacy `Id`). `BasicIdRef<IsConst>` mirrors the legacy `Id`'s
+// full read API, so generic code written for `Id&`/`const Id&` (e.g.
+// `column[i].method()`) also compiles for this proxy. `IdRef` additionally
+// supports assigning a new `Id` to the referenced slot. A thin,
+// cheap-to-copy pair of pointers, not polymorphic, like `Id` itself.
 // TODO<pas-kes>: A lot of read API functions are calling toId()
 // to convert type to an Id, check in the future if this code is necessary
 template <bool IsConst>
@@ -63,8 +63,8 @@ class BasicIdRef {
   BasicIdRef(const BasicIdRef&) = default;
   BasicIdRef(BasicIdRef&&) noexcept = default;
 
-  // Implicit conversion to `Id`, e.g. to store the referenced value in a
-  // variable, or to pass it to a function that expects a real `Id`.
+  // Implicit conversion to the legacy `Id`, e.g. to store the referenced value
+  // in a variable, or to pass it to a function that expects a real `Id`.
   /*implicit*/ operator Id() const {
     return idFromBitsCompat({*datatype_, *payload_});
   }
@@ -97,7 +97,7 @@ class BasicIdRef {
   }
 
   // The following functions all just forward to the corresponding function
-  // of `Id`, see `global/ValueId.h` for their documentation.
+  // of the legacy `Id`, see `global/ValueId.h` for their documentation.
   [[nodiscard]] auto compareThreeWay(const Id& other) const {
     return toId().compareThreeWay(other);
   }
