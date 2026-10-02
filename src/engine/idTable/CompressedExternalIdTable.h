@@ -707,12 +707,20 @@ CPP_class_template(size_t NumStaticCols,
   // ordinary `pushBlock`. This is called by all the other functions of this
   // class, so that `asyncPushBlock` may be freely mixed with them.
   void finishConcurrentPushes() {
-    if (!asyncPusher_.has_value() || asyncPusher_->numPendingRows() == 0) {
+    // NOTE: This runs for every row of a row-wise `push`, so the common case
+    // (no `asyncPushBlock` since the last reset) is a single relaxed load.
+    if (!asyncPusher_.has_value() || !asyncPusher_->mayHavePendingRows()) {
       return;
     }
+    // Reset the `asyncPusher_` (which checks that no push is in flight) and
+    // push its pending rows, if any.
+    //
     // NOTE: `pushBlock` calls this function again, which then returns
-    // immediately, because the `asyncPusher_` has no pending rows anymore.
-    pushBlock(asyncPusher_->finish());
+    // immediately, because the `asyncPusher_` has been reset.
+    auto pendingRows = asyncPusher_->finish();
+    if (!pendingRows.empty()) {
+      pushBlock(pendingRows);
+    }
   }
 
   // The number of rows that have been pushed so far.
@@ -745,7 +753,13 @@ CPP_class_template(size_t NumStaticCols,
   // currently active, else an exception is thrown by the underlying
   // `CompressedExternalIdTableWriter`.
   void clear() {
-    finishConcurrentPushes();
+    // Discard the rows that the `asyncPusher_` has not yet handed over (this
+    // also checks that no `asyncPushBlock` is in flight). Pushing them via
+    // `finishConcurrentPushes` would possibly write a block to disk that is
+    // cleared right away.
+    if (asyncPusher_.has_value()) {
+      asyncPusher_->finish();
+    }
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
     waitForFuture();

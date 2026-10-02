@@ -98,9 +98,14 @@ class AsyncIdTablePusher {
   // push is in flight when this is required (see `finish`, `numPendingRows`,
   // and the destructor). The members above never change after construction,
   // and `block_` is only written outside of `strand_` into disjoint ranges of
-  // rows (see `copyColumnsOnExecutor`). Apart from those, this counter is the
-  // only member that is accessed outside of `strand_`.
+  // rows (see `copyColumnsOnExecutor`). Apart from those, this counter and
+  // `pushedSinceFinish_` below are the only members that are accessed outside
+  // of `strand_`.
   std::atomic<size_t> numOperationsInFlight_ = 0;
+  // `true` iff an `asyncPushBlock` has been started since the construction or
+  // the last `finish`. It is the cheap first check of `mayHavePendingRows`,
+  // which the sorter calls for every row-wise push.
+  std::atomic<bool> pushedSinceFinish_ = false;
 
   // All the following members are only accessed from within `strand_` (or by
   // `finish`, when no push is in flight), so no further synchronization is
@@ -181,6 +186,9 @@ class AsyncIdTablePusher {
                      operation = std::move(operation)](auto handler) mutable {
       operation->handler_ =
           makeHandlerExecutorAware(std::move(handler), executor_);
+      // NOTE: Set before the counter is incremented, so that whoever sees the
+      // counter also sees the flag (both are read by `mayHavePendingRows`).
+      pushedSinceFinish_.store(true, std::memory_order_relaxed);
       numOperationsInFlight_.fetch_add(1);
       boost::asio::dispatch(strand_,
                             [this, operation = std::move(operation)]() mutable {
@@ -201,6 +209,15 @@ class AsyncIdTablePusher {
     return blockIsResized_ ? numRowsReserved_ : 0;
   }
 
+  // Return `false` if no `asyncPushBlock` has been started since the
+  // construction or the last `finish`, in which case there are no pending rows
+  // and no push in flight. Otherwise return `true`, which does not mean that
+  // there are pending rows. This is a single relaxed load, so it can be called
+  // for every row of a row-wise push; the exact check is `numPendingRows`.
+  bool mayHavePendingRows() const {
+    return pushedSinceFinish_.load(std::memory_order_relaxed);
+  }
+
   // Return the rows that have been pushed but not yet handed to the `sink_`,
   // because they don't form a complete block, and reset this pusher, so that
   // it can be used again. After a push has completed with an exception, the
@@ -213,6 +230,7 @@ class AsyncIdTablePusher {
     checkNoOperationInFlight();
     AD_CORRECTNESS_CHECK(numOutstandingCopies_ == 0 &&
                          waitingForNextBlock_.empty());
+    pushedSinceFinish_.store(false, std::memory_order_relaxed);
     exception_ = nullptr;
     Block result{numColumns_, allocator_};
     if (blockIsResized_) {
@@ -260,9 +278,11 @@ class AsyncIdTablePusher {
       if (exception_ || operation->numPushed_ == operation->table_->numRows()) {
         // NOTE: The decrement happens before the `handler_` is called (which
         // posts it), so that everyone who observes the completion also
-        // observes the decremented counter.
+        // observes the decremented counter. The exception is copied before the
+        // decrement, so that nothing of `*this` is accessed afterwards.
+        auto exception = exception_;
         numOperationsInFlight_.fetch_sub(1);
-        std::move(operation->handler_)(exception_);
+        std::move(operation->handler_)(std::move(exception));
         return true;
       }
       return false;
