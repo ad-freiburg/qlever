@@ -63,45 +63,45 @@ template <typename Iterator, typename Compare>
   return it2;
 }
 
-// Choose a pivot for `[first, last)` (at least 16 elements) and swap it to
-// `first`: the median of nine roughly equidistant samples, computed as the
+// Choose a pivot for `[begin, end)` (at least 16 elements) and swap it to
+// `begin`: the median of nine roughly equidistant samples, computed as the
 // median of the medians of three triples (Boost's `pivot9`).
 template <typename Iterator, typename Compare>
-void computePivotAndMoveToFront(Iterator first, Iterator last,
+void computePivotAndMoveToFront(Iterator begin, Iterator end,
                                 const Compare& cmp) {
-  size_t step = static_cast<size_t>(last - first) / 8;
+  size_t step = static_cast<size_t>(end - begin) / 8;
   Iterator pivot = median3(
-      median3(first + 1, first + step, first + 2 * step, cmp),
-      median3(first + 3 * step, first + 4 * step, first + 5 * step, cmp),
-      median3(first + 6 * step, first + 7 * step, last - 1, cmp), cmp);
-  ql::ranges::iter_swap(first, pivot);
+      median3(begin + 1, begin + step, begin + 2 * step, cmp),
+      median3(begin + 3 * step, begin + 4 * step, begin + 5 * step, cmp),
+      median3(begin + 6 * step, begin + 7 * step, end - 1, cmp), cmp);
+  ql::ranges::iter_swap(begin, pivot);
 }
 
-// Partition `[first, last)` around the pivot at `*first` (a Hoare partition,
-// like Boost): afterwards, `[first, leftEnd)` holds elements that are at most
-// the pivot, the pivot is at `leftEnd`, and `[rightBegin, last)` holds elements
+// Partition `[begin, end)` around the pivot at `*begin` (a Hoare partition,
+// like Boost): afterwards, `[begin, leftEnd)` holds elements that are at most
+// the pivot, the pivot is at `leftEnd`, and `[rightBegin, end)` holds elements
 // that are at least the pivot. Elements equal to the pivot may end up on both
 // sides. `ql::ranges::partition` was measured to be a few percent slower for
 // distinct elements, so we implement this manually.
 //
-// NOTE: The scans need no bounds checks: the pivot at `first` stops the scan
+// NOTE: The scans need no bounds checks: the pivot at `begin` stops the scan
 // from the right, and the median of nine (see `computePivotAndMoveToFront`)
 // leaves another element that is at least the pivot, which stops the scan from
 // the left. After a swap, the swapped elements stop the scans.
 template <typename Iterator, typename Compare>
-[[nodiscard]] std::pair<Iterator, Iterator> hoarePartition(Iterator first,
-                                                           Iterator last,
+[[nodiscard]] std::pair<Iterator, Iterator> hoarePartition(Iterator begin,
+                                                           Iterator end,
                                                            const Compare& cmp) {
-  // The element at `first` isn't modified before the final swap.
-  const auto& pivot = *first;
-  Iterator rightBegin = first;
-  Iterator leftEnd = last;
+  // The element at `begin` isn't modified before the final swap.
+  const auto& pivot = *begin;
+  Iterator rightBegin = begin;
+  Iterator leftEnd = end;
   // NOTE: `ql::ranges::find_if_not` with `std::unreachable_sentinel` could
   // replace the forward scan, but the backward scan would then need a reverse
   // iterator and `.base() - 1`, which is harder to read than these loops.
   for (;;) {
-    // Here, `rightBegin` and `leftEnd` are either `first` (the pivot) and
-    // `last`, or two elements that were just swapped to their correct sides,
+    // Here, `rightBegin` and `leftEnd` are either `begin` (the pivot) and
+    // `end`, or two elements that were just swapped to their correct sides,
     // so it is safe to move both before the first comparison.
     do {
       ++rightBegin;
@@ -114,63 +114,63 @@ template <typename Iterator, typename Compare>
     }
     ql::ranges::iter_swap(rightBegin, leftEnd);
   }
-  ql::ranges::iter_swap(first, leftEnd);
+  ql::ranges::iter_swap(begin, leftEnd);
   return {leftEnd, rightBegin};
 }
 
-// Boost's `divide_sort`: partition `[first, last)` and sort the two parts
+// Boost's `divide_sort`: partition `[begin, end)` and sort the two parts
 // concurrently, until `numRecursionsLeft` reaches zero or a part has fewer than
 // `maxElementsPerTask_` elements, which is then sorted by a single task.
 template <typename State, typename Iterator>
-net::awaitable<void> parallelQuicksortImpl(State& state, Iterator first,
-                                           Iterator last,
+net::awaitable<void> parallelQuicksortImpl(State& state, Iterator begin,
+                                           Iterator end,
                                            uint32_t numRecursionsLeft) {
   const auto& cmp = state.cmp_;
-  if (ql::ranges::is_sorted(first, last, cmp)) {
+  if (ql::ranges::is_sorted(begin, end, cmp)) {
     co_return;
   }
-  size_t numElements = static_cast<size_t>(last - first);
+  size_t numElements = static_cast<size_t>(end - begin);
   if (numRecursionsLeft == 0 || numElements < state.maxElementsPerTask_) {
-    boost::sort::pdqsort(first, last, cmp);
+    boost::sort::pdqsort(begin, end, cmp);
     co_return;
   }
 
-  computePivotAndMoveToFront(first, last, cmp);
-  auto [leftEnd, rightBegin] = hoarePartition(first, last, cmp);
+  computePivotAndMoveToFront(begin, end, cmp);
+  auto [leftEnd, rightBegin] = hoarePartition(begin, end, cmp);
   co_await state.runConcurrently(
-      parallelQuicksortImpl(state, first, leftEnd, numRecursionsLeft - 1),
-      parallelQuicksortImpl(state, rightBegin, last, numRecursionsLeft - 1));
+      parallelQuicksortImpl(state, begin, leftEnd, numRecursionsLeft - 1),
+      parallelQuicksortImpl(state, rightBegin, end, numRecursionsLeft - 1));
 }
 
 }  // namespace quicksort
 
-// Whether reversing `[first, last)` would sort it.
+// Whether reversing `[begin, end)` would sort it.
 template <typename Iterator, typename Compare>
-[[nodiscard]] bool isDescending(Iterator first, Iterator last,
+[[nodiscard]] bool isDescending(Iterator begin, Iterator end,
                                 const Compare& cmp) {
   return ql::ranges::is_sorted(
-      first, last,
+      begin, end,
       [&cmp](const auto& a, const auto& b) -> bool { return cmp(b, a); });
 }
 
-// Sort `[first, last)` with a parallel quicksort, Boost's `parallel_sort`.
+// Sort `[begin, end)` with a parallel quicksort, Boost's `parallel_sort`.
 template <typename State, typename Iterator>
-net::awaitable<void> parallelQuicksort(State& state, Iterator first,
-                                       Iterator last) {
+net::awaitable<void> parallelQuicksort(State& state, Iterator begin,
+                                       Iterator end) {
   const auto& cmp = state.cmp_;
   // Cheap special cases: already sorted, or sorted in reverse.
-  if (ql::ranges::is_sorted(first, last, cmp)) {
+  if (ql::ranges::is_sorted(begin, end, cmp)) {
     co_return;
   }
-  if (isDescending(first, last, cmp)) {
-    ql::ranges::reverse(first, last);
+  if (isDescending(begin, end, cmp)) {
+    ql::ranges::reverse(begin, end);
     co_return;
   }
   // The maximal recursion depth, with some slack for uneven splits.
-  size_t numElements = static_cast<size_t>(last - first);
+  size_t numElements = static_cast<size_t>(end - begin);
   auto maxNumRecursions = static_cast<uint32_t>(
       (std::bit_width(numElements / state.maxElementsPerTask_) * 3) / 2);
-  co_await quicksort::parallelQuicksortImpl(state, first, last,
+  co_await quicksort::parallelQuicksortImpl(state, begin, end,
                                             maxNumRecursions);
 }
 
