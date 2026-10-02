@@ -1,11 +1,25 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
 
+#include <memory>
+#include <range/v3/view/zip.hpp>
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include "backports/algorithm.h"
+#include "backports/memory_resource.h"
+#include "backports/span.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/CompressionWrappers.h"
 #include "index/vocabulary/PrefixCompressor.h"
@@ -129,10 +143,17 @@ CPP_template(typename UnderlyingVocabulary,
     }
   }
 
-  // Wrap the underlying vocabulary's `scanAll` (which reads the compressed
-  // words in batches) and decompress each word. `scanAll()` is expected to
-  // yield `IndexAndWord` elements, so we have to apply a transformation at the
-  // end.
+  //____________________________________________________________________________
+  // Wrap the underlying `scanAll` and decompress each word. Decode into one
+  // reusable `buffer` owned by the transformation (plus `scratch` for the
+  // decoder). The buffer grows to the largest `maxDecompressedSize` bound
+  // seen so far. `IndexAndWord::word_` is a `string_view` into that buffer.
+  // It is valid only until the next element is pulled; copy the bytes if
+  // they must outlive the current iterator position. See `IndexAndWord`.
+  // `CachingTransformInputRange` caches the current `IndexAndWord` object, so
+  // repeated dereference of the same iterator is stable. It does not copy
+  // the decoded bytes. A view retained from a previous element is stale
+  // once the range advances (`ScanAllViewInvalidAfterNextPull`).
   auto scanAll() const {
     // NOTE: The correct decoder is selected by the position of the word, which
     // for a vocabulary with holes is different from its vocabulary index. As
@@ -141,19 +162,90 @@ CPP_template(typename UnderlyingVocabulary,
     // require a binary search per word).
     return ad_utility::CachingTransformInputRange(
         underlyingVocabulary_.scanAll(),
-        [this, buffer = std::string{},
+        [this, buffer = std::string{}, scratch = std::string{},
          position = size_t{0}](const IndexAndWord& compressed) mutable {
           const auto& [index, word] = compressed;
-          buffer = compressionWrapper_.decompress(
-              word, getDecoderIdxFromPosition(position));
+          const size_t decoderIdx = getDecoderIdxFromPosition(position);
           ++position;
-          return IndexAndWord{index, buffer};
+          AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders());
+          const size_t bound =
+              compressionWrapper_.maxDecompressedSize(word, decoderIdx);
+          if (buffer.size() < bound) {
+            buffer.resize(bound);
+          }
+          std::string_view decompressed = decompressIntoSpan(
+              ql::span<char>{buffer.data(), bound}, bound,
+              [this, &word, decoderIdx, &scratch](ql::span<char> span) {
+                return compressionWrapper_.decompressInto(word, decoderIdx,
+                                                          span, scratch);
+              });
+          return IndexAndWord{index, decompressed};
         });
   }
 
   //____________________________________________________________________________
+  // Look up the words for `indices` and append them to `builder` in the
+  // order of `indices`. `indices` must not be empty. The compressed words of
+  // the whole batch are fetched with one `lookupBatch` call on the underlying
+  // vocabulary; each word is then decoded by the decoder of its block
+  // directly into the arena of `builder` (no `std::string` per word).
+  //
+  // For an underlying vocabulary with holes, a hole index has no stored word:
+  // like `operator[]`, append the placeholder for it instead of feeding the
+  // plain-text placeholder to the decoder.
+  //
+  // Memory: each word is decoded into one reused buffer of its
+  // `maxDecompressedSize` bound and then copied into the arena with its
+  // decoded size, so the arena holds exactly the decoded bytes (for FSST the
+  // bound is several times the decoded size). When `builder` was constructed
+  // with the query's `AllocatorWithLimit`, these allocations are charged
+  // against the memory limit and throw `AllocationExceedsLimitException`
+  // instead of growing the process heap.
+  void lookupBatch(ql::span<const size_t> indices,
+                   ArenaVocabBatchBuilder& builder) const {
+    AD_CONTRACT_CHECK(!indices.empty());
+    appendDecodedWords(indices, underlyingVocabulary_.lookupBatch(indices),
+                       builder);
+  }
+
+  // Look up the words for `indices` and return them in the order of
+  // `indices`, decoded into a builder on the default (untracked) PMR
+  // resource. Callers that must charge the decoded bytes against a memory
+  // limit have to use the overload above with a builder that uses the query's
+  // `AllocatorWithLimit`. Implemented as `beginLookup` + `finishLookup`, so
+  // the synchronous and the split-phase lookup share one code path.
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    return finishLookup(beginLookup(indices));
+  }
+
+  // Split-phase variant of `lookupBatch`: `beginLookup` submits the reads of
+  // the compressed words in the underlying vocabulary (without blocking if the
+  // underlying vocabulary has a split-phase lookup itself), `finishLookup`
+  // waits for them and decodes the words.
+  std::unique_ptr<VocabLookupHandleBase> beginLookup(
+      ql::span<const size_t> indices) const {
+    AD_CONTRACT_CHECK(!indices.empty());
+    auto handle = std::make_unique<CompressedLookupHandle>();
+    handle->vocab_ = this;
+    handle->indices_.assign(indices.begin(), indices.end());
+    // Compile-time check: if the underlying vocabulary supports the
+    // split-phase interface itself, delegate the reads to it; otherwise fall
+    // back to an eager in-memory lookup.
+    if constexpr (ad_utility::vocabulary::HasBeginLookup<
+                      UnderlyingVocabulary>::value) {
+      handle->underlyingHandle_ = underlyingVocabulary_.beginLookup(indices);
+    } else {
+      auto eager = std::make_unique<EagerVocabLookupHandle>();
+      eager->result_ = underlyingVocabulary_.lookupBatch(indices);
+      handle->underlyingHandle_ = std::move(eager);
+    }
+    return handle;
+  }
+
+  VocabBatchLookupResult finishLookup(
+      std::unique_ptr<VocabLookupHandleBase> handle) const {
+    AD_CONTRACT_CHECK(handle != nullptr);
+    return handle->finish();
   }
 
   //____________________________________________________________________________
@@ -566,6 +658,65 @@ CPP_template(typename UnderlyingVocabulary,
   }
 
  private:
+  // Decode the `compressedWords` (one per index in `indices`, in the same
+  // order, as returned by a batch lookup in the underlying vocabulary) and
+  // append them to `builder`. Shared by the builder overload of `lookupBatch`
+  // and by `CompressedLookupHandle::finish`.
+  void appendDecodedWords(ql::span<const size_t> indices,
+                          const VocabBatchLookupResult& compressedWords,
+                          ArenaVocabBatchBuilder& builder) const {
+    AD_CORRECTNESS_CHECK(compressedWords.size() == indices.size());
+
+    std::string scratch;
+    std::string decoded;
+    for (const auto& [idx, compressedWord] :
+         ::ranges::views::zip(indices, compressedWords)) {
+      size_t decoderIdx;
+      if constexpr (underlyingHasHoles) {
+        const auto position = underlyingVocabulary_.positionOfIndex(idx);
+        if (!position.has_value()) {
+          builder.appendWord(
+              ad_utility::vocabulary::placeholderForMissingVocabIndex(idx));
+          continue;
+        }
+        decoderIdx = getDecoderIdxFromPosition(position.value());
+      } else {
+        decoderIdx = getDecoderIdx(idx);
+      }
+      AD_CORRECTNESS_CHECK(decoderIdx < compressionWrapper_.numDecoders());
+      const size_t bound =
+          compressionWrapper_.maxDecompressedSize(compressedWord, decoderIdx);
+      if (bound > decoded.size()) {
+        decoded.resize(bound);
+      }
+      builder.appendWord(decompressIntoSpan(
+          ql::span<char>{decoded.data(), decoded.size()}, bound,
+          [&](ql::span<char> outSpan) {
+            return compressionWrapper_.decompressInto(
+                compressedWord, decoderIdx, outSpan, scratch);
+          }));
+    }
+  }
+
+  // The state of a split-phase lookup: the requested indices and the handle
+  // of the (possibly still in-flight) lookup of the compressed words in the
+  // underlying vocabulary. `finish` waits for that lookup and decodes the
+  // words into an arena on the default PMR resource.
+  class CompressedLookupHandle : public VocabLookupHandleBase {
+   public:
+    const CompressedVocabulary* vocab_ = nullptr;
+    std::vector<size_t> indices_;
+    std::unique_ptr<VocabLookupHandleBase> underlyingHandle_;
+
+    VocabBatchLookupResult finish() override {
+      AD_CORRECTNESS_CHECK(underlyingHandle_ != nullptr);
+      auto compressed = underlyingHandle_->finish();
+      ArenaVocabBatchBuilder builder(indices_.size());
+      vocab_->appendDecodedWords(indices_, compressed, builder);
+      return std::move(builder).finalize();
+    }
+  };
+
   // Get the correct decoder for the word at the given position. One decoder is
   // created per `NumWordsPerBlock` words that are pushed to the `WordWriter`,
   // so `position` has to be the position of the word in exactly that sequence

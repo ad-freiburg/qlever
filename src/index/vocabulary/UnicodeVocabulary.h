@@ -1,12 +1,21 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2026, The QLever Authors, in particular:
+//
+// 2022 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
 
+#include <memory>
+
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/Exception.h"
 
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
@@ -37,6 +46,37 @@ class UnicodeVocabulary {
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
     return _underlyingVocabulary.lookupBatch(indices);
+  }
+
+  // Append the words for `indices` to `builder`. Delegate when the underlying
+  // vocabulary supports this protocol. Otherwise copy its owning result.
+  void lookupBatch(ql::span<const size_t> indices,
+                   ArenaVocabBatchBuilder& builder) const {
+    AD_CONTRACT_CHECK(!indices.empty());
+    if constexpr (SupportsBuilderLookupBatch<UnderlyingVocabulary>) {
+      _underlyingVocabulary.lookupBatch(indices, builder);
+    } else {
+      appendVocabBatchLookupResult(_underlyingVocabulary.lookupBatch(indices),
+                                   builder);
+    }
+  }
+
+  std::unique_ptr<VocabLookupHandleBase> beginLookup(
+      ql::span<const size_t> indices) const {
+    if constexpr (ad_utility::vocabulary::HasBeginLookup<
+                      UnderlyingVocabulary>::value) {
+      return _underlyingVocabulary.beginLookup(indices);
+    } else {
+      auto handle = std::make_unique<EagerVocabLookupHandle>();
+      handle->result_ = _underlyingVocabulary.lookupBatch(indices);
+      return handle;
+    }
+  }
+
+  VocabBatchLookupResult finishLookup(
+      std::unique_ptr<VocabLookupHandleBase> handle) const {
+    AD_CONTRACT_CHECK(handle != nullptr);
+    return handle->finish();
   }
 
   //____________________________________________________________________________
