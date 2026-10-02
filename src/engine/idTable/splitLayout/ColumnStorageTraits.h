@@ -24,8 +24,8 @@ template <typename ColumnStorage, typename T>
 struct ColumnStorageTraits {
   using Ref = T&;
   using ConstRef = const T&;
-  using Column = ql::span<T>;
-  using ConstColumn = ql::span<const T>;
+  using ColumnRef = ql::span<T>;
+  using ConstColumnRef = ql::span<const T>;
 };
 
 // Specialization for `Id` columns stored as an `IdColumnVector` (a structure
@@ -34,8 +34,8 @@ template <typename Allocator>
 struct ColumnStorageTraits<IdColumnVector<Allocator>, Id> {
   using Ref = IdRef;
   using ConstRef = ConstIdRef;
-  using Column = IdColumnRef;
-  using ConstColumn = ConstIdColumnRef;
+  using ColumnRef = IdColumnRef;
+  using ConstColumnRef = ConstIdColumnRef;
 };
 }  // namespace columnBasedIdTable::splitLayout
 

@@ -187,7 +187,7 @@ TEST(IdColumnTest, columnStorageTraitsResolvesGenericAndIdCase) {
   static_assert(
       std::is_same_v<ColumnStorageTraits<std::vector<int>, int>::Ref, int&>);
   static_assert(
-      std::is_same_v<ColumnStorageTraits<std::vector<int>, int>::Column,
+      std::is_same_v<ColumnStorageTraits<std::vector<int>, int>::ColumnRef,
                      ql::span<int>>);
 
   static_assert(
@@ -197,11 +197,12 @@ TEST(IdColumnTest, columnStorageTraitsResolvesGenericAndIdCase) {
       std::is_same_v<
           ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::ConstRef,
           ConstIdRef>);
-  static_assert(std::is_same_v<
-                ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::Column,
-                columnBasedIdTable::splitLayout::IdColumnRef>);
   static_assert(
       std::is_same_v<
-          ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::ConstColumn,
-          columnBasedIdTable::splitLayout::ConstIdColumnRef>);
+          ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::ColumnRef,
+          columnBasedIdTable::splitLayout::IdColumnRef>);
+  static_assert(
+      std::is_same_v<ColumnStorageTraits<IdColumnVector<TestAllocator>,
+                                         Id>::ConstColumnRef,
+                     columnBasedIdTable::splitLayout::ConstIdColumnRef>);
 }
