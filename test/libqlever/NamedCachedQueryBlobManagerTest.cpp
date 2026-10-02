@@ -97,12 +97,25 @@ std::vector<char> compressedBlobWithOnlyHeader() {
   return Manager::compressBlob(ql::span<const char>{data});
 }
 
+// Return a matcher for a `Manager::BlobError` of the given `type` whose message
+// contains the `messageSubstring`.
+auto blobErrorWith(ErrorType type, std::string_view messageSubstring = {}) {
+  return AllOf(Field(&Manager::BlobError::type_, type),
+               Field(&Manager::BlobError::message_,
+                     HasSubstr(std::string{messageSubstring})));
+}
+
 // Return a matcher for a `std::optional<Manager::BlobError>` that holds an
 // error of the given `type` whose message contains the `messageSubstring`.
 auto isBlobError(ErrorType type, std::string_view messageSubstring = {}) {
-  return Optional(AllOf(Field(&Manager::BlobError::type_, type),
-                        Field(&Manager::BlobError::message_,
-                              HasSubstr(std::string{messageSubstring}))));
+  return Optional(blobErrorWith(type, messageSubstring));
+}
+
+// Return a matcher for the result of `Manager::tryToDecompressBlob` that holds
+// an error of type `notDecompressible` with our own message.
+auto isNotDecompressible() {
+  return VariantWith<Manager::BlobError>(
+      blobErrorWith(ErrorType::notDecompressible, "was not written by"));
 }
 
 // Return the decompressed `compressedBlob`, and fail the test if it cannot be
@@ -116,19 +129,6 @@ std::vector<char, Manager::BlobAllocator> decompressOrFail(
     return std::vector<char, Manager::BlobAllocator>{};
   }
   return std::get<std::vector<char, Manager::BlobAllocator>>(std::move(result));
-}
-
-// Expect that the `compressedBlob` cannot be decompressed, and that this is
-// reported with our own message.
-void expectNotDecompressible(
-    ql::span<const char> compressedBlob,
-    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-  auto trace = generateLocationTrace(loc);
-  auto result = Manager::tryToDecompressBlob(compressedBlob, {});
-  const auto* error = std::get_if<Manager::BlobError>(&result);
-  ASSERT_NE(error, nullptr);
-  EXPECT_EQ(error->type_, ErrorType::notDecompressible);
-  EXPECT_THAT(error->message_, HasSubstr("was not written by"));
 }
 
 // Return a validly ZSTD-compressed blob with a valid header, followed by an
@@ -409,13 +409,14 @@ TEST(NamedCachedQueryBlobManager, verifyBlobHeaderAtNonZeroPosition) {
 TEST(NamedCachedQueryBlobManager, decompressBlobRejectsNonZstdInput) {
   // Input that is too short to even hold a ZSTD frame header.
   std::vector<char> tooShort(3, 'x');
-  expectNotDecompressible(tooShort);
+  EXPECT_THAT(Manager::tryToDecompressBlob(tooShort, {}),
+              isNotDecompressible());
 
   // Longer input that does not start with the ZSTD magic number. Note that
   // interpreting any eight of its bytes as the size of the uncompressed data
   // would yield about 18 exabytes.
   std::vector<char> garbage(1024, '\xFF');
-  expectNotDecompressible(garbage);
+  EXPECT_THAT(Manager::tryToDecompressBlob(garbage, {}), isNotDecompressible());
 }
 
 // _____________________________________________________________________________
@@ -436,7 +437,8 @@ TEST(NamedCachedQueryBlobManager, decompressBlobRejectsTruncatedInput) {
   compressed.pop_back();
   // Note that the failure occurs during the decompression itself here, not
   // while reading the frame header.
-  expectNotDecompressible(compressed);
+  EXPECT_THAT(Manager::tryToDecompressBlob(compressed, {}),
+              isNotDecompressible());
 }
 
 // _____________________________________________________________________________
@@ -542,74 +544,9 @@ TEST(NamedCachedQueryBlobManager, deserializeRejectsInvalidBlob) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
       HasSubstr("was not written by"));
-
-  // The non-throwing version reports the same rejection as an error.
-  EXPECT_THAT(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
-                  compressedBlob),
-              isBlobError(ErrorType::invalidMagicBytes, "was not written by"));
 }
 
 // _____________________________________________________________________________
-// Test that a blob that cannot be decompressed at all is rejected by both the
-// throwing and the non-throwing loading function. Note that this failure occurs
-// on the outermost level, before anything of the blob is interpreted.
-TEST(NamedCachedQueryBlobManager, deserializeRejectsBlobThatIsNotAZstdFrame) {
-  // Input that does not start with the ZSTD magic number, and a validly
-  // compressed but truncated blob.
-  std::vector<char> garbage(1024, '\xFF');
-  std::vector<char> truncated = Manager::compressBlob(garbage);
-  truncated.pop_back();
-
-  Qlever target{EngineConfig{}, /*skipLoading=*/true};
-  for (const std::vector<char>& blob : {garbage, truncated}) {
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        target.deserializeVocabAndNamedCacheFromCompressedBlob(blob),
-        HasSubstr("was not written by"));
-    EXPECT_THAT(
-        target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(blob),
-        isBlobError(ErrorType::notDecompressible, "was not written by"));
-  }
-}
-
-// _____________________________________________________________________________
-// Test that a blob with the correct magic bytes but an incompatible format
-// version is rejected by both the throwing and the non-throwing loading
-// function.
-TEST(NamedCachedQueryBlobManager,
-     deserializeRejectsBlobWithIncompatibleVersion) {
-  std::vector<char> compressedBlob =
-      compressedBlobWithHeader(correctMagicBytes, uint16_t{63999});
-
-  Qlever target{EngineConfig{}, /*skipLoading=*/true};
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
-      HasSubstr("incompatible version"));
-
-  EXPECT_THAT(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
-                  compressedBlob),
-              isBlobError(ErrorType::invalidVersion, "incompatible version"));
-}
-
-// _____________________________________________________________________________
-// Test that a blob with a valid header, but with an incompatible index format
-// version in its metadata, is rejected by both the throwing and the
-// non-throwing loading function.
-TEST(NamedCachedQueryBlobManager,
-     deserializeRejectsBlobWithIncompatibleIndexFormat) {
-  std::vector<char> compressedBlob =
-      compressedBlobWithIncompatibleIndexFormat();
-
-  Qlever target{EngineConfig{}, /*skipLoading=*/true};
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
-      HasSubstr("incompatible index format"));
-
-  EXPECT_THAT(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
-                  compressedBlob),
-              isBlobError(ErrorType::incompatibleIndexFormat,
-                          "incompatible index format"));
-}
-
 // Test that a blob with a valid header, but with contents that cannot be read,
 // is rejected with our own message, rather than with a cryptic message from
 // deep inside the deserialization.
@@ -627,11 +564,14 @@ TEST(NamedCachedQueryBlobManager, deserializeRejectsBlobWithInvalidContents) {
 // _____________________________________________________________________________
 // Test that `tryToDeserializeVocabAndNamedCacheFromCompressedBlob` reports the
 // details of a failure in the message of the returned error, and also writes
-// that message to the error log.
+// that message to the error log, and that
+// `deserializeVocabAndNamedCacheFromCompressedBlob` throws with the same
+// message.
 TEST(NamedCachedQueryBlobManager, tryToDeserializeReportsFailureDetails) {
   Qlever target{EngineConfig{}, /*skipLoading=*/true};
   // Load the `compressedBlob`, expect an error of the `expectedType`, and
-  // return its message. Also check that the message was written to the log.
+  // return its message. Also check that the message was written to the log,
+  // and that the throwing version throws with the same message.
   auto loadAndGetMessage = [&target](ql::span<const char> compressedBlob,
                                      ErrorType expectedType) {
     auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
@@ -640,14 +580,22 @@ TEST(NamedCachedQueryBlobManager, tryToDeserializeReportsFailureDetails) {
     EXPECT_THAT(error, isBlobError(expectedType));
     std::string message = error.has_value() ? error.value().message_ : "";
     EXPECT_THAT(logStream.str(), HasSubstr(message));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
+        HasSubstr(message));
     return message;
   };
 
-  // The underlying ZSTD error.
+  // The underlying ZSTD error, both for input that does not start with the
+  // ZSTD magic number, and for a validly compressed but truncated blob.
   std::vector<char> garbage(1024, '\xFF');
   EXPECT_THAT(loadAndGetMessage(garbage, ErrorType::notDecompressible),
               AllOf(HasSubstr("was not written by"),
                     HasSubstr("does not start with a valid ZSTD frame")));
+  std::vector<char> truncated = Manager::compressBlob(garbage);
+  truncated.pop_back();
+  EXPECT_THAT(loadAndGetMessage(truncated, ErrorType::notDecompressible),
+              HasSubstr("was not written by"));
 
   // The invalid magic bytes.
   std::vector<char> bogus(64, 'X');
@@ -669,12 +617,6 @@ TEST(NamedCachedQueryBlobManager, tryToDeserializeReportsFailureDetails) {
                     HasSubstr("The index is too old for this version of "
                               "QLever"),
                     HasSubstr("PR = 42")));
-
-  // The throwing version throws with the same message.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      target.deserializeVocabAndNamedCacheFromCompressedBlob(
-          compressedBlobWithHeader(correctMagicBytes, 63999)),
-      HasSubstr("format version 63999"));
 }
 
 // _____________________________________________________________________________
@@ -683,21 +625,8 @@ TEST(NamedCachedQueryBlobManager, tryToDeserializeReportsFailureDetails) {
 // completely unchanged, so that a valid blob can still be loaded afterwards,
 // and that a second valid blob is then rejected.
 TEST(NamedCachedQueryBlobManager, tryToDeserializeLeavesInstanceUsable) {
-  std::string basename = gtestCurrentTestName();
-  std::string sourceFilename = basename + ".ttl";
-  {
-    auto ofs = ad_utility::makeOfstream(sourceFilename);
-    ofs << "<retrySubject> <retryPredicate> \"retry literal\".";
-  }
-  absl::Cleanup cleanup = [&sourceFilename] {
-    ad_utility::deleteFile(sourceFilename);
-  };
-  IndexBuilderConfig sourceConfig;
-  sourceConfig.inputFiles_.push_back(
-      {sourceFilename, Filetype::Turtle, std::nullopt});
-  sourceConfig.baseName_ = basename;
-  sourceConfig.vocabType_ = ad_utility::VocabularyType::InMemoryUncompressed;
-  EXPECT_NO_THROW(Qlever::buildIndex(sourceConfig));
+  IndexBuilderConfig sourceConfig =
+      buildTestIndex("<retrySubject> <retryPredicate> \"retry literal\".");
 
   const std::vector<char> compressedBlob = [&sourceConfig]() {
     Qlever source{EngineConfig{sourceConfig}};

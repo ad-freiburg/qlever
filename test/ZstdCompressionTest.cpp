@@ -83,46 +83,47 @@ TEST(CompressionTest, GetUncompressedSizeOfFrameWithoutContentSize) {
 // Test that the non-throwing functions report the same errors as the throwing
 // ones, but via their return value.
 TEST(CompressionTest, NonThrowingFunctions) {
+  using ::testing::_;
+  using ::testing::Field;
+  using ::testing::VariantWith;
   using Error = ZstdWrapper::Error;
-  // Return the message of the `Error` in `result`, or fail if there is none.
-  auto errorMessage = [](const ZstdWrapper::SizeOrError& result) {
-    const auto* error = std::get_if<Error>(&result);
-    EXPECT_NE(error, nullptr);
-    return error != nullptr ? std::string{error->message_} : std::string{};
+  // Return a matcher for a `ZstdWrapper::SizeOrError` that holds an `Error`
+  // whose message matches the `messageMatcher`.
+  auto isError = [](auto messageMatcher) {
+    return VariantWith<Error>(Field(&Error::message_, messageMatcher));
   };
 
   std::vector<int> x{1, 2, 3, 4};
   constexpr size_t numBytes = 4 * sizeof(int);
   std::vector<char> comp = ZstdWrapper::compress(x.data(), numBytes);
 
-  EXPECT_EQ(std::get<size_t>(ZstdWrapper::tryToGetUncompressedSize(
-                comp.data(), comp.size())),
-            numBytes);
+  EXPECT_THAT(ZstdWrapper::tryToGetUncompressedSize(comp.data(), comp.size()),
+              VariantWith<size_t>(numBytes));
   std::vector<int> decomp(4);
-  EXPECT_EQ(std::get<size_t>(ZstdWrapper::tryToDecompressToBuffer(
-                comp.data(), comp.size(), decomp.data(), numBytes)),
-            numBytes);
+  EXPECT_THAT(ZstdWrapper::tryToDecompressToBuffer(comp.data(), comp.size(),
+                                                   decomp.data(), numBytes),
+              VariantWith<size_t>(numBytes));
   EXPECT_EQ(x, decomp);
 
   std::vector<char> garbage(64, 'x');
-  EXPECT_THAT(errorMessage(ZstdWrapper::tryToGetUncompressedSize(
-                  garbage.data(), garbage.size())),
-              HasSubstr("does not start with a valid ZSTD frame header"));
+  EXPECT_THAT(
+      ZstdWrapper::tryToGetUncompressedSize(garbage.data(), garbage.size()),
+      isError(HasSubstr("does not start with a valid ZSTD frame header")));
 
   // Decompressing into a buffer that is too small fails, and the throwing
   // version reports the same error.
-  auto tooSmall = errorMessage(ZstdWrapper::tryToDecompressToBuffer(
-      comp.data(), comp.size(), decomp.data(), numBytes - 1));
-  EXPECT_FALSE(tooSmall.empty());
+  auto tooSmall = ZstdWrapper::tryToDecompressToBuffer(
+      comp.data(), comp.size(), decomp.data(), numBytes - 1);
+  ASSERT_THAT(tooSmall, isError(::testing::Not(::testing::IsEmpty())));
   AD_EXPECT_THROW_WITH_MESSAGE(
       ZstdWrapper::decompressToBuffer(comp.data(), comp.size(), decomp.data(),
                                       numBytes - 1),
-      ::testing::AllOf(HasSubstr("error during decompression : "),
-                       HasSubstr(tooSmall)));
+      ::testing::AllOf(
+          HasSubstr("error during decompression : "),
+          HasSubstr(std::string{std::get<Error>(tooSmall).message_})));
 
   // Truncated compressed data cannot be decompressed either.
-  EXPECT_FALSE(
-      errorMessage(ZstdWrapper::tryToDecompressToBuffer(
-                       comp.data(), comp.size() - 1, decomp.data(), numBytes))
-          .empty());
+  EXPECT_THAT(ZstdWrapper::tryToDecompressToBuffer(comp.data(), comp.size() - 1,
+                                                   decomp.data(), numBytes),
+              VariantWith<Error>(_));
 }
