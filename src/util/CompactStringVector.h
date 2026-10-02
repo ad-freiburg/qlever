@@ -12,7 +12,6 @@
 
 #include <cstdint>
 #include <string>
-#include <variant>
 #include <vector>
 
 #include "backports/concepts.h"
@@ -21,6 +20,7 @@
 #include "util/File.h"
 #include "util/Iterators.h"
 #include "util/NoCopyNoMove.h"
+#include "util/OwnedOrViewedVector.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
@@ -54,13 +54,13 @@ class CompactVectorOfStrings {
   // owned vector (after `build()`, or after reading from a regular,
   // non-zero-copy serializer), or a non-owning view into externally-owned
   // memory (after `fromZeroCopyDeserializer`).
-  using DataStorage = std::vector<data_type>;
-  using OffsetStorage = std::vector<offset_type>;
-  using DataView = ql::span<const data_type>;
-  using OffsetView = ql::span<const offset_type>;
+  using DataStorage = ad_utility::OwnedOrViewedVector<data_type>;
+  using OffsetStorage = ad_utility::OwnedOrViewedVector<offset_type>;
+  using DataView = typename DataStorage::View;
+  using OffsetView = typename OffsetStorage::View;
 
-  std::variant<DataStorage, DataView> data_;
-  std::variant<OffsetStorage, OffsetView> offsets_;
+  DataStorage data_;
+  OffsetStorage offsets_;
 
  public:
   CompactVectorOfStrings() = default;
@@ -76,8 +76,8 @@ class CompactVectorOfStrings {
       fromZeroCopyDeserializer(S& serializer) {
     using namespace ad_utility::serialization;
     CompactVectorOfStrings result;
-    result.data_ = zeroCopyDeserializeToSpan<data_type>(serializer);
-    result.offsets_ = zeroCopyDeserializeToSpan<offset_type>(serializer);
+    result.data_ = DataStorage::fromZeroCopyDeserializer(serializer);
+    result.offsets_ = OffsetStorage::fromZeroCopyDeserializer(serializer);
     return result;
   }
 
@@ -98,23 +98,30 @@ class CompactVectorOfStrings {
           ql::ranges::sized_range<ql::ranges::range_value_t<T>>&& ad_utility::
               SimilarTo<ql::ranges::range_value_t<ql::ranges::range_value_t<T>>,
                         data_type>) void build(const T& input) {
-    auto& offsets = ownedOffsets();
-    auto& data = ownedData();
-    // Also make room for the end offset of the last element.
-    offsets.reserve(input.size() + 1);
+    // Check both before modifying either of them, so that a failed check
+    // leaves this object unchanged.
+    AD_CONTRACT_CHECK(data_.isOwned() && offsets_.isOwned(),
+                      "A `CompactVectorOfStrings` that is a zero-copy view "
+                      "cannot be built");
     size_t dataSize = 0;
-    for (const auto& element : input) {
+    offsets_.modify([&input, &dataSize](auto& offsets) {
+      // Also make room for the end offset of the last element.
+      offsets.reserve(input.size() + 1);
+      for (const auto& element : input) {
+        offsets.push_back(dataSize);
+        dataSize += element.size();
+      }
+      // The last offset is the offset right after the last element.
       offsets.push_back(dataSize);
-      dataSize += element.size();
-    }
-    // The last offset is the offset right after the last element.
-    offsets.push_back(dataSize);
+    });
 
-    data.reserve(dataSize);
+    data_.modify([&input, dataSize](auto& data) {
+      data.reserve(dataSize);
 
-    for (const auto& el : input) {
-      data.insert(data.end(), el.begin(), el.end());
-    }
+      for (const auto& el : input) {
+        data.insert(data.end(), el.begin(), el.end());
+      }
+    });
   }
 
   // This is a move-only type.
@@ -143,6 +150,15 @@ class CompactVectorOfStrings {
     return {ptr, size};
   }
 
+  // Return a copy of this class, which always owns its storage (even if this
+  // object is a non-owning, zero-copy view).
+  CompactVectorOfStrings clone() const {
+    CompactVectorOfStrings clone;
+    clone.offsets_ = offsets_.clone();
+    clone.data_ = data_.clone();
+    return clone;
+  }
+
   // Copy this class and apply the transformation `mappingFunction` to its
   // elements. The result always owns its storage.
   CPP_template(typename Func)(
@@ -150,9 +166,9 @@ class CompactVectorOfStrings {
                                                           data_type>)
       CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
     CompactVectorOfStrings clone;
-    clone.offsets_ = ::ranges::to_vector(offsetsSpan());
-    clone.data_ = ::ranges::to_vector(
-        dataSpan() | ql::views::transform(std::move(mappingFunction)));
+    clone.offsets_ = offsets_.clone();
+    clone.data_ = DataStorage{::ranges::to_vector(
+        dataSpan() | ql::views::transform(std::move(mappingFunction)))};
     return clone;
   }
 
@@ -170,37 +186,22 @@ class CompactVectorOfStrings {
   // `fromZeroCopyDeserializer` to obtain a non-owning, zero-copy view.
   AD_SERIALIZE_FRIEND_FUNCTION(CompactVectorOfStrings) {
     if constexpr (ad_utility::serialization::WriteSerializer<S>) {
-      serializer << arg.dataSpan();
-      serializer << arg.offsetsSpan();
+      serializer << arg.data_;
+      serializer << arg.offsets_;
     } else {
-      auto& data = arg.data_.template emplace<DataStorage>();
-      auto& offsets = arg.offsets_.template emplace<OffsetStorage>();
-      serializer | data;
-      serializer | offsets;
+      serializer >> arg.data_;
+      serializer >> arg.offsets_;
     }
   }
 
  private:
   // Return a read-only view of the data, regardless of whether the storage
   // currently owns its elements or is a non-owning view.
-  DataView dataSpan() const {
-    return std::visit(
-        [](const auto& x) -> DataView { return {x.data(), x.size()}; }, data_);
-  }
+  DataView dataSpan() const { return data_.view(); }
 
   // Return a read-only view of the offsets, regardless of whether the
   // storage currently owns its elements or is a non-owning view.
-  OffsetView offsetsSpan() const {
-    return std::visit(
-        [](const auto& x) -> OffsetView { return {x.data(), x.size()}; },
-        offsets_);
-  }
-
-  // Access the owned vector alternatives. Throws (via `std::get`) if this
-  // object is currently a non-owning view, which is a programming error (a
-  // zero-copy view is read-only, so `build()` must not be called on it).
-  DataStorage& ownedData() { return std::get<DataStorage>(data_); }
-  OffsetStorage& ownedOffsets() { return std::get<OffsetStorage>(offsets_); }
+  OffsetView offsetsSpan() const { return offsets_.view(); }
 };
 
 namespace detail {
