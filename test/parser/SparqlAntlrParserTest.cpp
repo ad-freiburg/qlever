@@ -1031,12 +1031,23 @@ TEST(SparqlParser, GroupGraphPattern) {
       m::GraphPattern(m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}}),
                       m::OptionalGraphPattern(m::Triples(
                           {{Var{"?x"}, iri("<foo>"), iri("<bar>")}}))));
+  // The trailing `VALUES` clause of a subquery belongs to the subquery, and its
+  // variables are selected by `SELECT *`.
   expectGraphPattern(
       "{ SELECT *  WHERE { ?x ?y ?z } VALUES ?a { <a> <b> } }",
-      m::GraphPattern(
+      m::GraphPattern(::testing::AllOf(
           m::SubSelect(m::AsteriskSelect(false, false),
                        m::GraphPattern(DummyTriplesMatcher)),
-          m::InlineData({Var{"?a"}}, {{iri("<a>")}, {iri("<b>")}})));
+          ::testing::VariantWith<parsedQuery::Subquery>(AD_PROPERTY(
+              parsedQuery::Subquery, get,
+              ::testing::AllOf(
+                  AD_FIELD(ParsedQuery, postQueryValuesClause_,
+                           ::testing::Optional(m::Values(
+                               {Var{"?a"}}, {{iri("<a>")}, {iri("<b>")}}))),
+                  AD_PROPERTY(
+                      ParsedQuery, getVisibleVariables,
+                      ::testing::ElementsAre(Var{"?x"}, Var{"?y"}, Var{"?z"},
+                                             Var{"?a"}))))))));
   expectGraphPattern("{ SERVICE <endpoint> { ?s ?p ?o } }",
                      m::GraphPattern(m::Service(
                          iri("<endpoint>"), {Var{"?s"}, Var{"?p"}, Var{"?o"}},

@@ -56,8 +56,6 @@ class SparqlQleverVisitor {
       std::pair<std::variant<GraphPatternOperation, SparqlFilter>,
                 std::optional<parsedQuery::BasicGraphPattern>>;
   using OperationOrFilter = std::variant<GraphPatternOperation, SparqlFilter>;
-  using SubQueryAndMaybeValues =
-      std::pair<parsedQuery::Subquery, std::optional<parsedQuery::Values>>;
   using PatternAndVisibleVariables =
       std::pair<ParsedQuery::GraphPattern, std::vector<Variable>>;
   using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
@@ -255,7 +253,7 @@ class SparqlQleverVisitor {
       Parser::IncludeClauseContext* includeCtx,
       Parser::GroupGraphPatternContext* ctx);
 
-  SubQueryAndMaybeValues visit(Parser::SubSelectContext* ctx);
+  parsedQuery::Subquery visit(Parser::SubSelectContext* ctx);
 
   parsedQuery::SelectClause visit(Parser::SelectClauseContext* ctx);
 

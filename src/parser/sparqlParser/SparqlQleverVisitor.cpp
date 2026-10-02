@@ -1161,11 +1161,7 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
           });
   if (ctx->subSelect()) {
     auto parsedQuerySoFar = std::exchange(parsedQuery_, ParsedQuery{});
-    auto [subquery, valuesOpt] = visit(ctx->subSelect());
-    pattern._graphPatterns.emplace_back(std::move(subquery));
-    if (valuesOpt.has_value()) {
-      pattern._graphPatterns.emplace_back(std::move(valuesOpt.value()));
-    }
+    pattern._graphPatterns.emplace_back(visit(ctx->subSelect()));
     parsedQuery_ = std::move(parsedQuerySoFar);
     return pattern;
   }
@@ -1765,18 +1761,25 @@ ParsedQuery::GraphPattern Visitor::visitSoleInclude(
 }
 
 // ____________________________________________________________________________________
-Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
+parsedQuery::Subquery Visitor::visit(Parser::SubSelectContext* ctx) {
   ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
   visitWhereClause(ctx->whereClause(), query);
   query.addSolutionModifiers(visit(ctx->solutionModifier()),
                              makeInternalVariableGenerator());
-  auto values = visit(ctx->valuesClause());
+  // The trailing `VALUES` clause belongs to the subquery, it is joined before
+  // the subquery's ORDER BY, DISTINCT, projection, and LIMIT/OFFSET (SPARQL
+  // 1.1, sec. 18.2.4.3). Its variables are thus also selected by `SELECT *`.
+  query.postQueryValuesClause_ = visit(ctx->valuesClause());
+  if (query.postQueryValuesClause_.has_value()) {
+    query.registerVariablesVisibleInQueryBody(
+        query.postQueryValuesClause_->_inlineValues._variables);
+  }
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
     addVisibleVariable(variable);
   }
-  return {parsedQuery::Subquery{std::move(query)}, std::move(values)};
+  return parsedQuery::Subquery{std::move(query)};
 }
 
 // ____________________________________________________________________________________
