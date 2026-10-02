@@ -106,6 +106,43 @@ TEST(IdColumnIteratorTest, comparisonOperators) {
 }
 
 // _____________________________________________________________________________
+TEST(IdColumnIteratorTest, comparisonDoesNotMisfireAcrossDifferentPositions) {
+  // `operator==`/`compareThreeWay` assert (via `AD_EXPENSIVE_CHECK`) that
+  // `payload_ == rhs.payload_` implies `datatype_ == rhs.datatype_` -- not
+  // that `datatype_` is unconditionally equal, which would wrongly fire for
+  // any two iterators at different positions (exactly what this test
+  // compares).
+  auto ids = sampleIds();
+  const IdColumnVector vec{ids.begin(), ids.end(), testAllocator()};
+  const auto view = vec.asConstView();
+
+  const auto begin = view.begin();
+  const auto third = begin + 2;
+  EXPECT_FALSE(begin == third);
+  EXPECT_TRUE(begin != third);
+  EXPECT_TRUE(begin.compareThreeWay(third) < 0);
+}
+
+// _____________________________________________________________________________
+TEST(IdColumnIteratorTest, comparisonHoldsForTheSamePositionReachedTwoWays) {
+  // The same logical position, reached via two independent iterators, must
+  // compare equal -- the case the `AD_EXPENSIVE_CHECK` is actually meant to
+  // guard (`payload_` equal implies `datatype_` equal too).
+  auto ids = sampleIds();
+  const IdColumnVector vec{ids.begin(), ids.end(), testAllocator()};
+  const auto view = vec.asConstView();
+
+  const auto viaArithmetic = view.begin() + 2;
+  auto viaIncrement = view.begin();
+  ++viaIncrement;
+  ++viaIncrement;
+
+  EXPECT_TRUE(viaArithmetic == viaIncrement);
+  EXPECT_FALSE(viaArithmetic != viaIncrement);
+  EXPECT_TRUE(viaArithmetic.compareThreeWay(viaIncrement) == 0);
+}
+
+// _____________________________________________________________________________
 TEST(IdColumnIteratorTest, iterSwapSwapsTheReferencedValues) {
   auto ids = sampleIds();
   IdColumnVector vec{ids.begin(), ids.end(), testAllocator()};

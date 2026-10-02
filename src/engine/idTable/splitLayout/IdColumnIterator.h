@@ -105,11 +105,13 @@ class BasicIdColumnIterator {
   }
 
   auto compareThreeWay(const BasicIdColumnIterator& rhs) const {
+    AD_EXPENSIVE_CHECK(payload_ != rhs.payload_ || datatype_ == rhs.datatype_);
     return ql::compareThreeWay(payload_, rhs.payload_);
   }
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(BasicIdColumnIterator)
 
   bool operator==(const BasicIdColumnIterator& rhs) const {
+    AD_EXPENSIVE_CHECK(payload_ != rhs.payload_ || datatype_ == rhs.datatype_);
     return payload_ == rhs.payload_;
   }
 #ifdef QLEVER_CPP_17

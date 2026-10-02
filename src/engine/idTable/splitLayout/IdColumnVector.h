@@ -65,6 +65,7 @@ class IdColumnVector {
   // Construct from a range of elements that are convertible to `Id` (e.g.
   // `Id` itself, or `IdRef`/`ConstIdRef` as yielded by another column's
   // iterators). Used e.g. by `IdTable::clone()`.
+  // TODO<pas-kes>: Check for performance of this inefficient interface
   template <typename InputIt>
   IdColumnVector(InputIt first, InputIt last, Allocator allocator)
       : IdColumnVector(allocator) {
