@@ -17,6 +17,7 @@
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
+#include "./AsyncPushTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -130,12 +131,14 @@ void testExternalSorterImpl(
   using namespace ad_utility::memory_literals;
 
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  // NOTE: The pool is only created if it is really needed, because a
+  // `parallelism` of one never touches the executor at all. It is declared
+  // before the `writer`, which holds a strand on the executor of the pool (see
+  // `setMergeExecutor`) and hence has to be destroyed first.
+  std::optional<net::thread_pool> pool;
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticColumns>
       writer{filename, numDynamicColumns, memoryToUse,
              ad_utility::testing::makeAllocator(), 5_kB};
-  // NOTE: The pool is only created if it is really needed, because a
-  // `parallelism` of one never touches the executor at all.
-  std::optional<net::thread_pool> pool;
   if (mergeParallelism.has_value()) {
     pool.emplace(mergeParallelism.value());
     writer.setMergeExecutor(pool->get_executor(), mergeParallelism.value());
@@ -1307,10 +1310,11 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   constexpr size_t numRows = 170'000;
 
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(false);
+  // The pool has to outlive the sorter, see `setMergeExecutor`.
+  net::thread_pool pool{8};
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
       filename, NUM_COLS, memory, ad_utility::testing::makeAllocator(),
       blocksizeCompression};
-  net::thread_pool pool{8};
   sorter.setMergeExecutor(pool.get_executor(), 8);
   // Merge twice (which requires that the result is not moved out), such that
   // we can check that the warning is logged only once per sorter.
@@ -1565,4 +1569,76 @@ TEST(CompressedExternalIdTable, pushBlockCreatesSameBlocksAsRowWisePush) {
   runTestForBlocksize(1, 20);
   runTestForBlocksize(10, 100);
   runTestForBlocksize(10, 101);
+}
+
+// _____________________________________________________________________________
+// Push the `tables` into a sorter with the given `blocksize`, using one thread
+// per table that starts an `asyncPushBlock`, and check that the sorted output
+// consists of exactly the rows of all the tables. The `numAdditionalRowWise`
+// last rows of the last table are afterwards pushed one by one via `push`, to
+// check that the concurrent pushing can be mixed with the sequential one.
+void testAsyncPushBlock(const std::vector<IdTable>& tables, size_t blocksize,
+                        size_t numAdditionalRowWise = 0,
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  SCOPED_TRACE(absl::StrCat("blocksize = ", blocksize));
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  // The pool has to outlive the sorter, see `setMergeExecutor`.
+  net::thread_pool pool{4};
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> sorter{
+      filename, NUM_COLS, memoryForBlocksize(blocksize, NUM_COLS), alloc};
+  sorter.setMergeExecutor(pool.get_executor(), 4);
+
+  // All the rows that are pushed, which is what the sorted output has to
+  // consist of.
+  IdTable expected{NUM_COLS, alloc};
+  for (const auto& table : tables) {
+    expected.insertAtEnd(table);
+  }
+
+  for (auto& future : asyncPushTestHelpers::pushConcurrently(sorter, tables)) {
+    future.get();
+  }
+  EXPECT_EQ(sorter.size(), expected.numRows());
+
+  const auto& lastTable = tables.back();
+  AD_CONTRACT_CHECK(numAdditionalRowWise <= lastTable.numRows());
+  for (size_t i = lastTable.numRows() - numAdditionalRowWise;
+       i < lastTable.numRows(); ++i) {
+    sorter.push(lastTable[i]);
+    expected.push_back(lastTable[i]);
+  }
+  EXPECT_EQ(sorter.size(), expected.numRows());
+
+  ql::ranges::sort(expected, SortByOSP{});
+  auto result = sortedOutput(sorter);
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+// `asyncPushBlock` may be called from several threads at the same time, and
+// the result is the same as if the rows had been pushed sequentially (the order
+// of the rows within a block is arbitrary, but the sorter sorts them anyway).
+TEST(CompressedExternalIdTable, asyncPushBlock) {
+  std::vector<IdTable> tables;
+  for (size_t i = 0; i < 8; ++i) {
+    tables.push_back(createRandomlyFilledIdTable(500 + 37 * i, NUM_COLS));
+  }
+  // A blocksize that is much larger than a single table, one that is much
+  // smaller, and the degenerate case of a single row per block.
+  testAsyncPushBlock(tables, 10'000);
+  testAsyncPushBlock(tables, 64);
+  testAsyncPushBlock(tables, 1);
+  // The pushes are so few that they never fill a single block, so the sorter
+  // takes its "everything fits into a single block" shortcut.
+  testAsyncPushBlock(tables, 100'000);
+  // Mixing the concurrent pushes with sequential ones.
+  testAsyncPushBlock(tables, 64, 20);
+  testAsyncPushBlock(tables, 100'000, 20);
 }
