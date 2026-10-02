@@ -126,6 +126,33 @@ TEST(StringUtils, getUTF8Prefix) {
 }
 
 // _____________________________________________________________________________
+// `removeTrailingIncompleteUtf8Character` cuts off a trailing character that is
+// not completely present, and leaves everything else unchanged.
+TEST(StringUtils, removeTrailingIncompleteUtf8Character) {
+  using ad_utility::removeTrailingIncompleteUtf8Character;
+  // Strings that already end at a character boundary are unchanged, no matter
+  // how many bytes their last character has.
+  for (std::string_view complete :
+       {"", "abc", "Flöhe", "日本", "\U0001F600", "ab\U0001F600"}) {
+    EXPECT_EQ(removeTrailingIncompleteUtf8Character(complete), complete)
+        << complete;
+  }
+  // 'ö' is `0xC3 0xB6`, '日' is `0xE6 0x97 0xA5`, and U+1F600 is
+  // `0xF0 0x9F 0x98 0x80`, so all the proper prefixes of those characters are
+  // removed.
+  EXPECT_EQ(removeTrailingIncompleteUtf8Character("Fl\xC3"), "Fl");
+  EXPECT_EQ(removeTrailingIncompleteUtf8Character("\xE6"), "");
+  EXPECT_EQ(removeTrailingIncompleteUtf8Character("ab\xE6\x97"), "ab");
+  EXPECT_EQ(removeTrailingIncompleteUtf8Character("ab\xF0\x9F\x98"), "ab");
+  // A byte that is not a valid lead byte is removed together with the
+  // continuation bytes that follow it.
+  EXPECT_EQ(removeTrailingIncompleteUtf8Character("ab\xF8\x80"), "ab");
+  // A string that consists of continuation bytes only has no lead byte at all,
+  // so there is nothing that could be removed.
+  EXPECT_EQ(removeTrailingIncompleteUtf8Character("\x80\x80"), "\x80\x80");
+}
+
+// _____________________________________________________________________________
 // Test the ICU-free `utf8EncodeCodepoint` for one-, two-, three- and four-byte
 // codepoints as well as the replacement of out-of-range codepoints.
 TEST(StringUtils, utf8EncodeCodepoint) {
