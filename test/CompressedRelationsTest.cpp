@@ -2613,3 +2613,78 @@ TEST(DistinctIdCounter, blocksAndReset) {
   addBlock({V(6)});
   EXPECT_EQ(counter.getAndReset(), 1);
 }
+
+// _____________________________________________________________________________
+TEST(AsyncDistinctIdCounter, orderCountsAndEmptyBlocks) {
+  using compressedRelationHelpers::AsyncDistinctIdCounter;
+  using compressedRelationHelpers::DistinctIdCounter;
+  auto makeBlocks = []() {
+    std::vector<IdTable> blocks;
+    blocks.push_back(makeIdTableFromVector({{1, 1}, {1, 1}, {1, 2}}));
+    blocks.emplace_back(2, ad_utility::testing::makeAllocator());
+    blocks.push_back(makeIdTableFromVector({{1, 2}, {1, 3}}));
+    blocks.emplace_back(2, ad_utility::testing::makeAllocator());
+    blocks.push_back(makeIdTableFromVector({{1, 4}}));
+    blocks.push_back(makeIdTableFromVector({{1, 4}, {1, 7}, {1, 7}}));
+    return blocks;
+  };
+
+  // Test with fewer, as many, and more blocks in flight than there are
+  // (non-empty) blocks.
+  for (size_t maxNumBlocksInFlight : {1, 2, 4, 10}) {
+    auto blocks = makeBlocks();
+    AsyncDistinctIdCounter<std::vector<IdTable>> asyncCounter{
+        blocks, 1, maxNumBlocksInFlight};
+    DistinctIdCounter counter;
+    std::vector<IdTable> yieldedBlocks;
+    std::vector<size_t> countsOfBlocks;
+    while (auto blockAndCount = asyncCounter.next()) {
+      auto& [block, countOfBlock] = blockAndCount.value();
+      // The count refers to column 1 of the block it is yielded with.
+      EXPECT_EQ(countOfBlock.first_, block(0, 1));
+      EXPECT_EQ(countOfBlock.last_, block(block.numRows() - 1, 1));
+      countsOfBlocks.push_back(countOfBlock.count_);
+      counter.addCountOfBlock(countOfBlock);
+      yieldedBlocks.push_back(std::move(block));
+    }
+    // An exhausted counter stays exhausted.
+    EXPECT_FALSE(asyncCounter.next().has_value());
+
+    // The empty blocks are skipped, the others are yielded in their original
+    // order.
+    ASSERT_EQ(yieldedBlocks.size(), 4);
+    EXPECT_THAT(yieldedBlocks[0],
+                matchesIdTableFromVector({{1, 1}, {1, 1}, {1, 2}}));
+    EXPECT_THAT(yieldedBlocks[1], matchesIdTableFromVector({{1, 2}, {1, 3}}));
+    EXPECT_THAT(yieldedBlocks[2], matchesIdTableFromVector({{1, 4}}));
+    EXPECT_THAT(yieldedBlocks[3],
+                matchesIdTableFromVector({{1, 4}, {1, 7}, {1, 7}}));
+    EXPECT_THAT(countsOfBlocks, ::testing::ElementsAre(2, 2, 1, 2));
+
+    // `addCountOfBlock` corrects the IDs at the block boundaries (`V(2)` and
+    // `V(4)`), which are counted only once.
+    EXPECT_EQ(counter.getAndReset(), 5);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(AsyncDistinctIdCounter, emptyInputAndInvalidArgument) {
+  using compressedRelationHelpers::AsyncDistinctIdCounter;
+  {
+    std::vector<IdTable> blocks;
+    AsyncDistinctIdCounter<std::vector<IdTable>> asyncCounter{blocks, 0, 3};
+    EXPECT_FALSE(asyncCounter.next().has_value());
+  }
+  {
+    std::vector<IdTable> blocks;
+    blocks.emplace_back(1, ad_utility::testing::makeAllocator());
+    blocks.emplace_back(1, ad_utility::testing::makeAllocator());
+    AsyncDistinctIdCounter<std::vector<IdTable>> asyncCounter{blocks, 0, 1};
+    EXPECT_FALSE(asyncCounter.next().has_value());
+  }
+  {
+    std::vector<IdTable> blocks;
+    using Counter = AsyncDistinctIdCounter<std::vector<IdTable>>;
+    EXPECT_ANY_THROW(Counter(blocks, 0, 0));
+  }
+}

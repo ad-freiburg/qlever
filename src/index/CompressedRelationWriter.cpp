@@ -174,6 +174,11 @@ void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
                         false);
 }
 
+// The number of blocks of a large relation for which the number of distinct
+// `col1` IDs is computed concurrently in `addCompleteLargeRelation` below. Each
+// of these blocks is held in memory, so this must not be too large.
+static constexpr size_t numBlocksInFlightForDistinctCol1Count = 3;
+
 // __________________________________________________________________________
 template <typename T>
 CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
@@ -181,13 +186,19 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
   using namespace compressedRelationHelpers;
   DistinctIdCounter distinctCol1Counter;
 
+  // Counting the distinct IDs of column 1 is expensive, so it is performed on
+  // the global thread pool. The blocks themselves are yielded in their original
+  // order, because the merging of the blocks below has to happen in order.
+  AsyncDistinctIdCounter<std::remove_reference_t<T>> blocks{
+      sortedBlocks, c1Idx, numBlocksInFlightForDistinctCol1Count};
+
   // Buffer used to ensure the invariant that equal triples (when disregarding
   // the graph) stay in the same block.
   std::optional<IdTable> bufferedBlock;
 
-  for (auto& block :
-       sortedBlocks | ql::views::filter(std::not_fn(&IdTable::empty))) {
-    distinctCol1Counter.addBlock(block.getColumn(c1Idx));
+  while (auto nextBlockAndCount = blocks.next()) {
+    auto& [block, countOfBlock] = nextBlockAndCount.value();
+    distinctCol1Counter.addCountOfBlock(countOfBlock);
 
     if (!bufferedBlock.has_value()) {
       // First non-empty block - initialize buffer.
