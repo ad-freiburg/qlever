@@ -21,7 +21,7 @@
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
-#include "util/NoCopyNoMove.h"
+#include "util/Views.h"
 #include "util/views/AsyncTransformView.h"
 
 namespace ad_utility {
@@ -34,89 +34,6 @@ namespace ad_utility {
 // consumer. Every block in flight costs memory that no memory limit accounts
 // for, see the NOTE at `uniqueBlockView`.
 constexpr inline size_t DEFAULT_UNIQUE_BLOCK_VIEW_NUM_BLOCKS_IN_FLIGHT = 4;
-
-namespace detail::uniqueBlockView {
-
-// Return an `AsyncTransformView` that yields the blocks of the `view` with all
-// their duplicates removed (see `uniqueBlockView` below for details). The
-// total number of elements of the input blocks is added to `*numInputs`.
-template <typename SortedBlockView>
-auto makeDeduplicatedBlocks(SortedBlockView view, size_t* numInputs,
-                            size_t numBlocksInFlight) {
-  using Block = ql::ranges::range_value_t<SortedBlockView>;
-  using Value = ql::ranges::range_value_t<Block>;
-
-  // The sequential part, which runs on the consuming thread: move each
-  // non-empty block out of the `view` and pair it with the last value of the
-  // block before it (if any).
-  auto withLastOfPrevious = [numInputs,
-                             lastOfPrevious =
-                                 std::optional<Value>{}](Block& block) mutable {
-    *numInputs += block.size();
-    auto last = std::exchange(lastOfPrevious, block.back());
-    return std::pair{std::move(block), std::move(last)};
-  };
-
-  // The part that runs on the global thread pool: remove the duplicates of a
-  // single block, given the last value of the block before it (if any).
-  auto deduplicate = [](std::pair<Block, std::optional<Value>> blockAndLast) {
-    auto& [block, lastOfPrevious] = blockAndLast;
-    auto beg = lastOfPrevious.has_value()
-                   ? ql::ranges::find_if(
-                         block, [&p = lastOfPrevious.value()](
-                                    const auto& el) { return el != p; })
-                   : block.begin();
-    block.erase(std::unique(beg, block.end()), block.end());
-    block.erase(block.begin(), beg);
-    return std::move(block);
-  };
-
-  return AsyncTransformView{
-      CachingTransformInputRange{
-          std::move(view) | ql::views::filter(std::not_fn(ql::ranges::empty)),
-          std::move(withLastOfPrevious)},
-      deduplicate, std::max<size_t>(1, numBlocksInFlight), globalExecutor()};
-}
-
-// The range that is returned by `uniqueBlockView` below. It skips the blocks
-// that became empty during the deduplication and logs some statistics at the
-// end.
-//
-// NOTE: This class is never moved (it is only accessed through a
-// `std::unique_ptr`), so its `deduplicated_` blocks can safely point to its
-// `numInputs_`.
-template <typename SortedBlockView>
-class UniqueBlockView
-    : public InputRangeFromGet<ql::ranges::range_value_t<SortedBlockView>>,
-      public NoCopyNoMove {
-  using Block = ql::ranges::range_value_t<SortedBlockView>;
-  size_t numInputs_ = 0;
-  size_t numUnique_ = 0;
-  decltype(makeDeduplicatedBlocks(std::declval<SortedBlockView>(), nullptr,
-                                  0)) deduplicated_;
-
- public:
-  UniqueBlockView(SortedBlockView view, size_t numBlocksInFlight)
-      : deduplicated_(makeDeduplicatedBlocks(std::move(view), &numInputs_,
-                                             numBlocksInFlight)) {}
-
-  std::optional<Block> get() override {
-    while (auto block = deduplicated_.get()) {
-      // A block may become empty (all of its elements were equal to the last
-      // one of the previous block); such a block is skipped.
-      if (block->empty()) {
-        continue;
-      }
-      numUnique_ += block->size();
-      return block;
-    }
-    AD_LOG_INFO << "Number of inputs to `uniqueView`: " << numInputs_ << '\n';
-    AD_LOG_INFO << "Number of unique elements: " << numUnique_ << std::endl;
-    return std::nullopt;
-  }
-};
-
-}  // namespace detail::uniqueBlockView
 
 // Takes a view of blocks and yields the elements of the same view, but removes
 // consecutive duplicates inside the blocks and across block boundaries.
@@ -150,9 +67,71 @@ InputRangeTypeErased<ql::ranges::range_value_t<SortedBlockView>>
 uniqueBlockView(
     SortedBlockView view,
     size_t numBlocksInFlight = DEFAULT_UNIQUE_BLOCK_VIEW_NUM_BLOCKS_IN_FLIGHT) {
-  return InputRangeTypeErased{std::make_unique<
-      detail::uniqueBlockView::UniqueBlockView<SortedBlockView>>(
-      std::move(view), numBlocksInFlight)};
+  using Block = ql::ranges::range_value_t<SortedBlockView>;
+  using Value = ql::ranges::range_value_t<Block>;
+  auto notEmpty = std::not_fn(ql::ranges::empty);
+
+  // The statistics that are logged at the end. They are shared by all the
+  // stages of the pipeline below.
+  struct Counts {
+    size_t numInputs_ = 0;
+    size_t numUnique_ = 0;
+  };
+  auto counts = std::make_shared<Counts>();
+
+  // The sequential part, which runs on the consuming thread: move each
+  // non-empty block out of the `view` and pair it with the last value of the
+  // block before it (if any).
+  auto withLastOfPrevious =
+      [counts, lastOfPrevious = std::optional<Value>{}](Block& block) mutable {
+        counts->numInputs_ += block.size();
+        auto last = std::exchange(lastOfPrevious, block.back());
+        return std::pair{std::move(block), std::move(last)};
+      };
+  auto blocksWithLastOfPrevious =
+      CachingTransformInputRange{std::move(view) | ql::views::filter(notEmpty),
+                                 std::move(withLastOfPrevious)};
+
+  // The part that runs on the global thread pool: remove the duplicates of a
+  // single block, given the last value of the block before it (if any).
+  auto deduplicate = [](std::pair<Block, std::optional<Value>> blockAndLast) {
+    auto& [block, lastOfPrevious] = blockAndLast;
+    auto beg = lastOfPrevious.has_value()
+                   ? ql::ranges::find_if(
+                         block, [&p = lastOfPrevious.value()](
+                                    const auto& el) { return el != p; })
+                   : block.begin();
+    block.erase(std::unique(beg, block.end()), block.end());
+    block.erase(block.begin(), beg);
+    return std::move(block);
+  };
+  // NOTE: The `AsyncTransformView` can't be moved, so it is stored on the heap.
+  InputRangeTypeErased<Block> deduplicated{
+      std::make_unique<AsyncTransformView<decltype(blocksWithLastOfPrevious),
+                                          decltype(deduplicate)>>(
+          std::move(blocksWithLastOfPrevious), deduplicate,
+          std::max<size_t>(1, numBlocksInFlight), globalExecutor())};
+
+  // Count the unique elements. A block may become empty (all of its elements
+  // were equal to the last one of the previous block); such a block is skipped
+  // by the `filter` below.
+  auto countUnique = [counts](Block& block) {
+    counts->numUnique_ += block.size();
+    return std::move(block);
+  };
+  // NOTE: The callback is `noexcept`, because it may be invoked from the
+  // destructor of the `CallbackOnEndView`, which is used via a virtual
+  // destructor that must not throw.
+  auto logCounts = [counts]() noexcept {
+    AD_LOG_INFO << "Number of inputs to `uniqueView`: " << counts->numInputs_
+                << '\n';
+    AD_LOG_INFO << "Number of unique elements: " << counts->numUnique_
+                << std::endl;
+  };
+  return InputRangeTypeErased{CallbackOnEndView{
+      CachingTransformInputRange{
+          std::move(deduplicated) | ql::views::filter(notEmpty), countUnique},
+      logCounts}};
 }
 
 }  // namespace ad_utility
