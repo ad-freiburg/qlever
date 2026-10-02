@@ -11,6 +11,7 @@
 #define QLEVER_SRC_ENGINE_IDTABLE_IDREF_H
 
 #include <ostream>
+#include <utility>
 
 #include "backports/concepts.h"
 #include "global/Id.h"
@@ -92,17 +93,12 @@ class BasicIdRef {
     return *this;
   }
 
-  // Swap the referenced `Id`s (not the proxy's own pointers). Needed because
-  // `std::iter_swap`/`ranges::iter_swap` (used e.g. by `ranges::sort` on an
-  // `IdColumn`'s iterators) call the unqualified `swap(*a, *b)`; `*a`/`*b`
-  // are prvalues of this proxy type, which the generic `std::swap(T&, T&)`
-  // can't bind to (it takes lvalue references), so this overload -- found
-  // via ADL -- is required instead.
-  friend void swap(const BasicIdRef a, const BasicIdRef b) {
+  // Swaps the referenced values, not the pointers. Takes `const&` so that it
+  // also binds to the prvalues `*it` that `ranges::iter_swap` passes.
+  friend void swap(const BasicIdRef& lhs, const BasicIdRef& rhs) noexcept {
     static_assert(!IsConst, "`ConstIdRef` is not swappable.");
-    const Id tmp = a;
-    a = b;
-    b = tmp;
+    std::swap(*lhs.payload_, *rhs.payload_);
+    std::swap(*lhs.datatype_, *rhs.datatype_);
   }
 
   // The following functions all just forward to the corresponding function
