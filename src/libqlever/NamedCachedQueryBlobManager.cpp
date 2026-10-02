@@ -145,7 +145,8 @@ NamedCachedQueryBlobManager::tryToSkipAndVerifyBlobHeader(
   }
   // The reads below cannot throw, because the header is known to be complete
   // (see above) and no alignment padding is inserted inside the header (see
-  // `blobHeaderSize`).
+  // `blobHeaderSize`) or before the format version (the position of the
+  // `serializer` is even, see the precondition in the header file).
   std::decay_t<decltype(blobMagicBytes)> magicBytes{};
   serializer >> magicBytes;
   if (magicBytes != blobMagicBytes) {

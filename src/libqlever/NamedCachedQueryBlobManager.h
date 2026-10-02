@@ -178,9 +178,10 @@ class NamedCachedQueryBlobManager {
   // Read and verify the magic header and format version at the start of a
   // decompressed blob, advancing `serializer` past them. Return `std::nullopt`
   // if the header is valid, and the `BlobError` otherwise. Do not throw for any
-  // input; in particular, a missing or truncated header is reported as
-  // `invalidMagicBytes`. In case of an error, the position of the `serializer`
-  // is unspecified afterwards. Mirrors `writeBlobHeader`.
+  // input, provided that the current position of the `serializer` is even (as
+  // it is at the start of a blob); in particular, a missing or truncated header
+  // is reported as `invalidMagicBytes`. In case of an error, the position of
+  // the `serializer` is unspecified afterwards. Mirrors `writeBlobHeader`.
   static std::optional<BlobError> tryToSkipAndVerifyBlobHeader(
       ad_utility::serialization::ByteBufferReadSerializerT<
           true, ql::span<const char>>& serializer);
