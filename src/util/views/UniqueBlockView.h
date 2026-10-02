@@ -18,6 +18,7 @@
 
 #include "backports/algorithm.h"
 #include "util/GlobalExecutor.h"
+#include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/views/AsyncTransformView.h"
@@ -71,40 +72,25 @@ InputRangeTypeErased<BlockType> uniqueBlockView(
 
   // The sequential part, which runs on the consuming thread: yield the
   // non-empty blocks of the `view` together with the last value of their
-  // respective previous block.
-  struct BlocksWithLastOfPrevious : InputRangeFromGet<BlockAndLastOfPrevious> {
-    // NOTE: The `view` and the counter are owned by the
-    // `UniqueBlockViewFromGet` below, which is never moved. This range itself
-    // is moved into its `AsyncTransformView` after its construction, which is
-    // also why the iterator is only obtained on the first call to `get()`.
-    SortedBlockView* view_;
+  // respective previous block. The blocks are moved out of the `view`.
+  struct AddLastOfPrevious {
+    // NOTE: The counter is owned by the `UniqueBlockViewFromGet` below, which
+    // is never moved.
     size_t* numInputs_;
-    std::optional<ql::ranges::iterator_t<SortedBlockView>> iter_;
     std::optional<ValueType> lastValueFromPreviousBlock_;
 
-    BlocksWithLastOfPrevious(SortedBlockView* view, size_t* numInputs)
-        : view_{view}, numInputs_{numInputs} {}
-
-    std::optional<BlockAndLastOfPrevious> get() override {
-      if (!iter_.has_value()) {
-        iter_ = ql::ranges::begin(*view_);
-      }
-      auto& iter = iter_.value();
-      for (; iter != ql::ranges::end(*view_); ++iter) {
-        if (ql::ranges::empty(*iter)) {
-          continue;
-        }
-        BlockType block = std::move(*iter);
-        ++iter;
-        *numInputs_ += block.size();
-        auto lastOfPrevious =
-            std::exchange(lastValueFromPreviousBlock_, block.back());
-        return BlockAndLastOfPrevious{std::move(block),
-                                      std::move(lastOfPrevious)};
-      }
-      return std::nullopt;
+    BlockAndLastOfPrevious operator()(BlockType& block) {
+      *numInputs_ += block.size();
+      auto lastOfPrevious =
+          std::exchange(lastValueFromPreviousBlock_, block.back());
+      return BlockAndLastOfPrevious{std::move(block),
+                                    std::move(lastOfPrevious)};
     }
   };
+  using BlocksWithLastOfPrevious = decltype(CachingTransformInputRange{
+      std::declval<SortedBlockView>() |
+          ql::views::filter(std::not_fn(ql::ranges::empty)),
+      std::declval<AddLastOfPrevious>()});
 
   // The part that runs on the global thread pool: remove the duplicates of a
   // single block, given the last value of the block before it (if any).
@@ -125,17 +111,18 @@ InputRangeTypeErased<BlockType> uniqueBlockView(
 
   // NOTE: This object is never moved (it is only accessed through the
   // `std::unique_ptr` below), so the `BlocksWithLastOfPrevious` can safely
-  // point to its `view_` and `numInputs_`.
+  // point to its `numInputs_`.
   struct UniqueBlockViewFromGet : InputRangeFromGet<BlockType> {
-    SortedBlockView view_;
     size_t numInputs_{0};
     size_t numUnique_{0};
     AsyncTransformView<BlocksWithLastOfPrevious, Deduplicate> deduplicated_;
 
     explicit UniqueBlockViewFromGet(SortedBlockView view,
                                     size_t numBlocksInFlight)
-        : view_{std::move(view)},
-          deduplicated_{BlocksWithLastOfPrevious{&view_, &numInputs_},
+        : deduplicated_{BlocksWithLastOfPrevious{
+                            std::move(view) | ql::views::filter(std::not_fn(
+                                                  ql::ranges::empty)),
+                            AddLastOfPrevious{&numInputs_, std::nullopt}},
                         Deduplicate{}, std::max<size_t>(1, numBlocksInFlight),
                         globalExecutor()} {}
 

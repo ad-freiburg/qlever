@@ -21,6 +21,7 @@
 #include "backports/asio.h"
 #include "util/Exception.h"
 #include "util/Iterators.h"
+#include "util/NoCopyNoMove.h"
 #include "util/TaskQueueOnExecutor.h"
 
 namespace ad_utility {
@@ -63,7 +64,8 @@ namespace ad_utility {
 template <typename Range, typename Transformation>
 class AsyncTransformView
     : public InputRangeFromGet<std::decay_t<std::invoke_result_t<
-          const Transformation&, ql::ranges::range_value_t<Range>>>> {
+          const Transformation&, ql::ranges::range_value_t<Range>>>>,
+      public NoCopyNoMove {
  public:
   using Element = ql::ranges::range_value_t<Range>;
   using Result =
@@ -74,7 +76,10 @@ class AsyncTransformView
 
  private:
   Range range_;
-  ql::ranges::iterator_t<Range> it_;
+  // The iterator into the `range_`, which is only obtained on the first call to
+  // `get()`, because for some ranges (e.g. an `InputRangeFromGet`) `begin()`
+  // already reads the first element.
+  std::optional<ql::ranges::iterator_t<Range>> it_;
   Transformation transformation_;
   size_t maxNumElementsInFlight_;
   // The results of the elements that have been read from the `range_`, but not
@@ -98,16 +103,10 @@ class AsyncTransformView
                      size_t maxNumElementsInFlight,
                      ql::any_io_executor executor)
       : range_{std::move(range)},
-        it_{ql::ranges::begin(range_)},
         transformation_{std::move(transformation)},
         maxNumElementsInFlight_{maxNumElementsInFlight},
         queue_{std::move(executor), maxNumElementsInFlight,
                "The tasks of an `AsyncTransformView`"} {}
-
-  AsyncTransformView(const AsyncTransformView&) = delete;
-  AsyncTransformView& operator=(const AsyncTransformView&) = delete;
-  AsyncTransformView(AsyncTransformView&&) = delete;
-  AsyncTransformView& operator=(AsyncTransformView&&) = delete;
 
   // Return the result for the next element, or `std::nullopt` once all the
   // elements have been yielded.
@@ -133,10 +132,14 @@ class AsyncTransformView
   // thread. As that thread currently does nothing else while it waits, this
   // is not a bottleneck, but it could be moved to the `executor` as well.
   void readAhead() {
+    if (!it_.has_value()) {
+      it_ = ql::ranges::begin(range_);
+    }
+    auto& it = it_.value();
     while (pending_.size() < maxNumElementsInFlight_ &&
-           it_ != ql::ranges::end(range_)) {
-      Element element = std::move(*it_);
-      ++it_;
+           it != ql::ranges::end(range_)) {
+      Element element = std::move(*it);
+      ++it;
       pending_.push_back(
           queue_.submit([&transformation = std::as_const(transformation_),
                          element = std::move(element)]() mutable -> Result {

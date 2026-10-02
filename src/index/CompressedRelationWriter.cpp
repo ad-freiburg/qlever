@@ -197,8 +197,7 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     return std::pair{std::move(block), countOfBlock};
   };
   ad_utility::AsyncTransformView blocksAndCounts{
-      ql::ranges::ref_view{sortedBlocks} |
-          ql::views::filter(std::not_fn(&IdTable::empty)),
+      sortedBlocks | ql::views::filter(std::not_fn(&IdTable::empty)),
       countDistinctCol1, numBlocksInFlightForDistinctCol1Count,
       ad_utility::globalExecutor()};
 
