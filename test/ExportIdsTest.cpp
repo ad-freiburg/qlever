@@ -287,15 +287,57 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
       Id::makeUndefined(),
   };
 
-  // `idsToStringAndType` requires the input to be sorted by `ValueId`.
-  ql::ranges::sort(ids);
-
+  // Unsorted input is fine: both helpers partition mixed datatypes.
   auto batchResults = ql::exportIds::idsToStringAndType(
       index, ql::span<const Id>{ids}, localVocab);
 
   ASSERT_EQ(batchResults.size(), ids.size());
   for (size_t i = 0; i < ids.size(); ++i) {
     EXPECT_EQ(batchResults[i],
+              ql::exportIds::idToStringAndType(index, ids[i], localVocab))
+        << "Mismatch at index " << i;
+  }
+
+  auto depth2 = ql::exportIds::idsToStringAndTypeDepth2(
+      index, ql::span<const Id>{ids}, localVocab);
+  EXPECT_EQ(depth2, batchResults);
+}
+
+// _____________________________________________________________________________
+// The depth-2 pipeline submits the next sub-batch while the current one is
+// consumed. With more than `maxVocabIndicesPerSubBatch` vocabulary IDs the
+// lookup spans several sub-batches and exercises the pipelined begin/finish
+// overlap; the results must still match the per-ID lookups.
+TEST(ExportIds, idsToStringAndTypeDepth2SpansMultipleSubBatches) {
+  // 300 subjects and 300 objects (plus the shared predicate) give 601
+  // vocabulary IDs, so the pipeline processes three sub-batches.
+  std::string kg;
+  for (size_t i = 0; i < 300; ++i) {
+    // End each triple with dot-newline: the Turtle block splitter only ends
+    // blocks at a dot followed by a newline, and this graph spans blocks.
+    kg += "<s" + std::to_string(i) + "> <p> <o" + std::to_string(i) + "> .\n";
+  }
+  auto qec = ad_utility::testing::getQec(kg);
+  const Index& index = qec->getIndex();
+  LocalVocab localVocab{};
+  auto getId = ad_utility::testing::makeGetId(index);
+
+  std::vector<Id> ids;
+  for (size_t i = 0; i < 300; ++i) {
+    ids.push_back(getId("<s" + std::to_string(i) + ">"));
+    ids.push_back(getId("<o" + std::to_string(i) + ">"));
+  }
+  ids.push_back(getId("<p>"));
+  ASSERT_GT(ids.size(), ql::exportIds::maxVocabIndicesPerSubBatch);
+
+  auto batchResults = ql::exportIds::idsToStringAndType(
+      index, ql::span<const Id>{ids}, localVocab);
+  auto depth2 = ql::exportIds::idsToStringAndTypeDepth2(
+      index, ql::span<const Id>{ids}, localVocab);
+  EXPECT_EQ(depth2, batchResults);
+  ASSERT_EQ(depth2.size(), ids.size());
+  for (size_t i = 0; i < ids.size(); ++i) {
+    EXPECT_EQ(depth2[i],
               ql::exportIds::idToStringAndType(index, ids[i], localVocab))
         << "Mismatch at index " << i;
   }
