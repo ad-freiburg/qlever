@@ -1511,6 +1511,28 @@ TEST(ExportQueryExecutionTrees, LimitOffset) {
 }
 
 // ____________________________________________________________________________
+// The trailing `VALUES` clause has to be joined before `DISTINCT` and
+// `ORDER BY` are applied (SPARQL 1.1, sec. 18.2.4.3).
+TEST(ExportQueryExecutionTrees, TrailingValuesBeforeDistinctAndOrderBy) {
+  std::string kg = "<a> <p> <c> . <a> <p> <f> . <b> <p> <z> . <d> <p> <y> .";
+  auto tsv = [&kg](const std::string& query) {
+    return runQueryStreamableResult(kg, query, ad_utility::MediaType::tsv);
+  };
+  EXPECT_EQ(tsv("SELECT DISTINCT ?s { ?s <p> ?o } VALUES ?o { <f> }"),
+            "?s\n<a>\n");
+  EXPECT_EQ(tsv("SELECT DISTINCT ?s { ?s <p> ?o } VALUES ?s { <a> <a> }"),
+            "?s\n<a>\n");
+  EXPECT_EQ(
+      tsv("SELECT ?s ?o { ?s <p> ?o } ORDER BY ?o VALUES ?s { <a> <b> <d> }"),
+      "?s\t?o\n<a>\t<c>\n<a>\t<f>\n<d>\t<y>\n<b>\t<z>\n");
+  EXPECT_EQ(tsv("SELECT ?s { ?s <p> ?o } ORDER BY DESC(?s) VALUES ?s { <a> <b> "
+                "<d> }"),
+            "?s\n<d>\n<b>\n<a>\n<a>\n");
+  EXPECT_EQ(tsv("SELECT ?x { ?s <p> ?o } ORDER BY ?x VALUES ?x { 2 1 }"),
+            "?x\n1\n1\n1\n1\n2\n2\n2\n2\n");
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, BinaryExport) {
   std::string kg = "<s> <p> 31 . <s> <o> 42";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
