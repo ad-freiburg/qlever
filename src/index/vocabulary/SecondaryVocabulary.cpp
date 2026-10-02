@@ -13,7 +13,6 @@
 #include <utility>
 
 #include "backports/algorithm.h"
-#include "backports/functional.h"
 #include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/Views.h"
@@ -103,8 +102,9 @@ std::optional<SecondaryVocabIndex> SecondaryVocabulary::getId(
 // _____________________________________________________________________________
 SecondaryVocabulary SecondaryVocabulary::clone() const {
   SecondaryVocabulary result;
+  result.segments_.reserve(segments_.size());
   for (const auto& segment : segments_) {
-    result.segments_.push_back(segment.cloneAndRemap(ql::identity{}));
+    result.segments_.push_back(segment.clone());
   }
   result.segmentOffsets_ = segmentOffsets_.clone();
   result.sortedIndices_ = sortedIndices_.clone();

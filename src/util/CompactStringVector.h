@@ -150,6 +150,15 @@ class CompactVectorOfStrings {
     return {ptr, size};
   }
 
+  // Return a copy of this class, which always owns its storage (even if this
+  // object is a non-owning, zero-copy view).
+  CompactVectorOfStrings clone() const {
+    CompactVectorOfStrings clone;
+    clone.offsets_ = offsets_.clone();
+    clone.data_ = data_.clone();
+    return clone;
+  }
+
   // Copy this class and apply the transformation `mappingFunction` to its
   // elements. The result always owns its storage.
   CPP_template(typename Func)(
