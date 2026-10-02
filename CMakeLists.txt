@@ -637,7 +637,9 @@ FetchContent_Declare(
         re2
         GIT_REPOSITORY https://github.com/google/re2.git
         GIT_TAG 972a15cedd008d846f1a39b2e88ce48d7f166cbd  # main branch from January 23 2026
-        GIT_SHALLOW TRUE
+        # NOTE: No `GIT_SHALLOW` here. A shallow clone fetches only the tips of
+        # the branches and the tags, and the commit above is neither (it was
+        # the tip of `main` when it was pinned, but `main` has moved on).
         OVERRIDE_FIND_PACKAGE
         SYSTEM
         EXCLUDE_FROM_ALL
