@@ -70,8 +70,8 @@ TEST(IdColumnVectorTest, atIsBoundsCheckedUnlikeOperatorBrackets) {
   IdColumnVector vec{testAllocator()};
   vec.push_back(Id::makeFromInt(1));
   EXPECT_EQ(static_cast<Id>(vec.at(0)), Id::makeFromInt(1));
-  EXPECT_THROW((void)vec.at(1), std::out_of_range);
-  EXPECT_THROW(vec.at(1) = Id::makeFromInt(2), std::out_of_range);
+  EXPECT_THROW((void)vec.at(1), ad_utility::Exception);
+  EXPECT_THROW(vec.at(1) = Id::makeFromInt(2), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
