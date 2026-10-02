@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <thread>
 
 #include "global/RuntimeParameters.h"
@@ -22,6 +23,8 @@
 #include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/GraphComputation.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/GlobalExecutor.h"
+#include "util/views/AsyncTransformView.h"
 
 // ____________________________________________________________________________
 float CompressedRelationWriter::computeMultiplicity(
@@ -189,15 +192,21 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
   // Counting the distinct IDs of column 1 is expensive, so it is performed on
   // the global thread pool. The blocks themselves are yielded in their original
   // order, because the merging of the blocks below has to happen in order.
-  AsyncDistinctIdCounter<std::remove_reference_t<T>> blocks{
-      sortedBlocks, c1Idx, numBlocksInFlightForDistinctCol1Count};
+  auto countDistinctCol1 = [](IdTable block) {
+    auto countOfBlock = countDistinctIds(std::as_const(block).getColumn(c1Idx));
+    return std::pair{std::move(block), countOfBlock};
+  };
+  ad_utility::AsyncTransformView blocksAndCounts{
+      ql::ranges::ref_view{sortedBlocks} |
+          ql::views::filter(std::not_fn(&IdTable::empty)),
+      countDistinctCol1, numBlocksInFlightForDistinctCol1Count,
+      ad_utility::globalExecutor()};
 
   // Buffer used to ensure the invariant that equal triples (when disregarding
   // the graph) stay in the same block.
   std::optional<IdTable> bufferedBlock;
 
-  while (auto nextBlockAndCount = blocks.next()) {
-    auto& [block, countOfBlock] = nextBlockAndCount.value();
+  for (auto& [block, countOfBlock] : blocksAndCounts) {
     distinctCol1Counter.addCountOfBlock(countOfBlock);
 
     if (!bufferedBlock.has_value()) {
