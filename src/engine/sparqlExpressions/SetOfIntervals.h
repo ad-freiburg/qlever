@@ -67,49 +67,25 @@ struct SetOfIntervals {
     SetOfIntervals operator()(SetOfIntervals s) const;
   };
 
-  // Write `targetSize` many bools to the iterator. The i-th bool is true if
-  // and only if `i` is contained in the set of intervals. `targetSize` has to
-  // be the size of the set.
-  template <typename OutputIterator>
-  static void toBitVector(const SetOfIntervals& s, size_t targetSize,
-                          OutputIterator it) {
-    AD_CONTRACT_CHECK(s.size() == targetSize);
-    size_t previousEnd = 0;
-    for (const auto& [begin, end] : s._intervals) {
-      auto spaceUntilInterval = begin - previousEnd;
-      std::fill(it, it + spaceUntilInterval, false);
-      it += spaceUntilInterval;
-
-      auto sizeOfInterval = end - begin;
-      std::fill(it, it + sizeOfInterval, true);
-      it += sizeOfInterval;
-
-      previousEnd = end;
-    }
-  }
-
-  // Transform a SetOfIntervals to a std::vector<bool> of size `targetSize`
+  // Transform a SetOfIntervals to a std::vector<bool> of size `s.size()`
   // where the element at index i is true if and only if i is contained in the
-  // set. `targetSize` has to be the size of the set.
+  // set.
   // __________________________________________________________________________
-  inline static std::vector<bool> toBitVector(const SetOfIntervals& a,
-                                              size_t targetSize) {
-    std::vector<bool> result(targetSize, false);
-    toBitVector(a, targetSize, ql::ranges::begin(result));
+  inline static std::vector<bool> toBitVector(const SetOfIntervals& s) {
+    std::vector<bool> result(s.size(), false);
+    for (const auto& [begin, end] : s._intervals) {
+      std::fill(result.begin() + begin, result.begin() + end, true);
+    }
     return result;
   }
 
   // Transform a `SetOfIntervals` into a vector of boolean `Id`s of size
-  // `targetSize`. The i-th element is true iff i is contained in the set.
-  // `targetSize` has to be the size of the set.
+  // `set.size()`. The i-th element is true iff i is contained in the set.
   inline static VectorWithMemoryLimit<Id> toIdVector(
-      const SetOfIntervals& set, size_t targetSize,
+      const SetOfIntervals& set,
       const VectorWithMemoryLimit<Id>::Allocator& allocator) {
-    AD_CONTRACT_CHECK(set.size() == targetSize,
-                      "The size of a `SetOfIntervals` does not match the size "
-                      "of the evaluation context.");
     VectorWithMemoryLimit<Id> result{allocator};
-    result.reserve(targetSize);
+    result.reserve(set.size());
 
     size_t previousEnd = 0;
     for (const auto& [begin, end] : set._intervals) {
@@ -119,7 +95,7 @@ struct SetOfIntervals {
       previousEnd = end;
     }
 
-    result.insert(result.end(), targetSize - previousEnd,
+    result.insert(result.end(), set.size() - previousEnd,
                   Id::makeFromBool(false));
 
     return result;

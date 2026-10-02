@@ -193,14 +193,11 @@ TEST(SetOfIntervals, Complement) {
 TEST(SetOfIntervals, toBitVector) {
   SetOfIntervals a{{{2, 3}, {4, 6}, {7, 10}}, 200};
   std::unordered_set<size_t> elements{2, 4, 5, 7, 8, 9};
-  auto expanded = SetOfIntervals::toBitVector(a, 200);
+  auto expanded = SetOfIntervals::toBitVector(a);
   ASSERT_EQ(200ul, expanded.size());
   for (size_t i = 0; i < expanded.size(); ++i) {
     ASSERT_EQ(elements.contains(i), expanded[i]);
   }
-
-  // The target size must be the size of the set.
-  ASSERT_THROW(SetOfIntervals::toBitVector(a, 201), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
@@ -209,7 +206,7 @@ TEST(SetOfIntervals, toIdVector) {
 
   SetOfIntervals intervals{{{1, 3}, {5, 6}}, 8};
 
-  auto result = SetOfIntervals::toIdVector(intervals, 8, allocator);
+  auto result = SetOfIntervals::toIdVector(intervals, allocator);
 
   VectorWithMemoryLimit<Id> expected{
       {Id::makeFromBool(false), Id::makeFromBool(true), Id::makeFromBool(true),
@@ -218,10 +215,4 @@ TEST(SetOfIntervals, toIdVector) {
       allocator};
 
   ASSERT_EQ(result, expected);
-
-  // The target size must be the size of the set.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      SetOfIntervals::toIdVector(intervals, 9, allocator),
-      ::testing::HasSubstr(
-          "does not match the size of the evaluation context"));
 }
