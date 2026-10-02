@@ -2560,3 +2560,35 @@ TEST(CountDistinctIds, countAndBoundaryIds) {
     EXPECT_EQ(result.last_, V(3));
   }
 }
+
+// _____________________________________________________________________________
+TEST(DistinctIdCounter, blocksAndReset) {
+  compressedRelationHelpers::DistinctIdCounter counter;
+  auto addBlock = [&counter](const std::vector<Id>& ids) {
+    counter.addBlock(ql::span<const Id>{ids});
+  };
+  // A fresh counter has counted nothing.
+  EXPECT_EQ(counter.getAndReset(), 0);
+
+  // An ID that ends one block and starts the next one is counted only once,
+  // and empty blocks are ignored.
+  addBlock({V(1), V(1), V(2)});
+  addBlock({});
+  addBlock({V(2), V(3)});
+  addBlock({V(4)});
+  EXPECT_EQ(counter.getAndReset(), 4);
+
+  // `getAndReset` also clears the last ID of the previous block, so feeding
+  // `V(4)` again counts it as distinct.
+  addBlock({V(4), V(4)});
+  EXPECT_EQ(counter.getAndReset(), 1);
+
+  // `reset` clears the count and the last ID of the previous block.
+  addBlock({V(5), V(6)});
+  counter.reset();
+  EXPECT_EQ(counter.getAndReset(), 0);
+  addBlock({V(6)});
+  counter.reset();
+  addBlock({V(6)});
+  EXPECT_EQ(counter.getAndReset(), 1);
+}
