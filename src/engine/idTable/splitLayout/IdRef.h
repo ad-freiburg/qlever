@@ -73,7 +73,7 @@ class BasicIdRef {
   // any proxy reference (e.g. `std::vector<bool>::reference`): it writes
   // through to the referenced slot, not to the proxy's own state, which is
   // also what `std::indirectly_writable` (and thus `ranges::sort`) requires.
-  CPP_template(typename = void)(requires(!IsConst)) const BasicIdRef& operator=(
+  CPP_template(typename = void)(requires(!IsConst)) BasicIdRef& operator=(
       const Id id) const {
     auto [data_type, pay_load] = getBitsCompat(id);
     *payload_ = pay_load;
@@ -87,7 +87,7 @@ class BasicIdRef {
   // beats our user-defined `BasicIdRef` -> `Id` conversion -- which would
   // just rebind `a`'s pointers instead of writing through them, silently
   // corrupting data.
-  const BasicIdRef& operator=(const BasicIdRef& other) const {
+  BasicIdRef& operator=(const BasicIdRef& other) {
     static_assert(!IsConst, "`ConstIdRef` is not assignable.");
     *this = static_cast<Id>(other);
     return *this;
