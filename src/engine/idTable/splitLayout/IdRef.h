@@ -73,7 +73,7 @@ class BasicIdRef {
   // any proxy reference (e.g. `std::vector<bool>::reference`): it writes
   // through to the referenced slot, not to the proxy's own state, which is
   // also what `std::indirectly_writable` (and thus `ranges::sort`) requires.
-  CPP_template(typename = void)(requires(!IsConst)) BasicIdRef& operator=(
+  CPP_template(typename = void)(requires(!IsConst)) const BasicIdRef& operator=(
       const Id id) const {
     auto [data_type, pay_load] = getBitsCompat(id);
     *payload_ = pay_load;
@@ -82,8 +82,6 @@ class BasicIdRef {
   }
 
   BasicIdRef& operator=(const BasicIdRef& other) {
-    if (this == &other) return *this;
-
     static_assert(!IsConst, "`ConstIdRef` is not assignable.");
     *payload_ = *other.payload_;
     *datatype_ = *other.datatype_;
@@ -93,8 +91,6 @@ class BasicIdRef {
   // Swaps the referenced values, not the pointers. Takes `const&` so that it
   // also binds to the prvalues `*it` that `ranges::iter_swap` passes.
   friend void swap(const BasicIdRef& lhs, const BasicIdRef& rhs) noexcept {
-    if (lhs == rhs) return;
-
     static_assert(!IsConst, "`ConstIdRef` is not swappable.");
     std::swap(*lhs.payload_, *rhs.payload_);
     std::swap(*lhs.datatype_, *rhs.datatype_);
