@@ -15,7 +15,9 @@
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
+#include <limits>
 #include <memory>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -315,6 +317,78 @@ TYPED_TEST(IoUringManagerTest, BatchLargerThanRing) {
               ::testing::ElementsAreArray(scenario.expected()));
 }
 
+// A batch much larger than a tiny ring (8 slots, one `REAP_WAVE`) completes.
+// `IoUringPolicy` refills the ring after reaping a whole wave of CQEs in one
+// call, so every refill starts from an empty or nearly empty ring.
+TYPED_TEST(IoUringManagerTest, BatchMuchLargerThanTinyRing) {
+  constexpr size_t N = 80;
+  SequentialReadScenarioForTesting scenario;
+  for (size_t i = 0; i < N; ++i) {
+    scenario.addRead(std::string(4, static_cast<char>('A' + (i % 26))));
+  }
+  auto [tmp, fd] = makeTempFile(scenario.content());
+  TypeParam manager(8);
+  manager.wait(scenario.submitTo(manager, fd));
+  EXPECT_THAT(scenario.results(),
+              ::testing::ElementsAreArray(scenario.expected()));
+}
+
+// Waiting on the last of many single-read batches reaps the CQEs of the other
+// batches in the same wave. The remaining waits then find their batches
+// already complete and must still see the correct bytes. Batch sizes that are
+// not multiples of the reap wave (1, 3, 5, ...) cover partial waves.
+TYPED_TEST(IoUringManagerTest, WaveReapCompletesOtherBatches) {
+  constexpr size_t M = 12;
+  std::string fileContent;
+  std::vector<std::vector<std::string>> expected(M);
+  std::vector<ReadBatchForTesting> batches(M);
+  for (size_t i = 0; i < M; ++i) {
+    const size_t numReads = 2 * (i % 3) + 1;
+    for (size_t j = 0; j < numReads; ++j) {
+      std::string chunk(3, static_cast<char>('a' + (fileContent.size() % 26)));
+      batches[i].add(fileContent.size(), chunk.size());
+      fileContent.append(chunk);
+      expected[i].push_back(std::move(chunk));
+    }
+  }
+  auto [tmp, fd] = makeTempFile(fileContent);
+
+  TypeParam manager(64);
+  std::vector<typename TypeParam::BatchHandle> handles;
+  for (auto& batch : batches) {
+    handles.push_back(batch.submitTo(manager, fd));
+  }
+  // Wait on the last batch first, then on the rest in submission order.
+  manager.wait(handles.back());
+  for (size_t i = 0; i + 1 < M; ++i) {
+    manager.wait(handles[i]);
+  }
+  for (size_t i = 0; i < M; ++i) {
+    EXPECT_THAT(batches[i].result(), ::testing::ElementsAreArray(expected[i]))
+        << "mismatch at batch " << i;
+  }
+}
+
+// A failed read in one batch must not lose the completions of another batch
+// reaped in the same wave: the error is thrown only after the whole wave is
+// applied to the bookkeeping, so the good batch still completes afterwards.
+TYPED_TEST(IoUringManagerTest, ErrorInWaveKeepsOtherBatchesConsistent) {
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCC");  // 12 bytes
+
+  TypeParam manager(64);
+  ReadBatchForTesting good;
+  good.add({{0, 4}, {4, 4}, {8, 4}});
+  ReadBatchForTesting bad;
+  bad.add(8, 16);  // past EOF: short read
+
+  // `SyncIoPolicy` reads in `addBatch`, so its throw happens on submission.
+  auto goodHandle = good.submitTo(manager, fd);
+  AD_EXPECT_THROW_WITH_MESSAGE(manager.wait(bad.submitTo(manager, fd)),
+                               HasSubstr("read fewer bytes than requested"));
+  manager.wait(goodHandle);
+  EXPECT_THAT(good.result(), ::testing::ElementsAre("AAAA", "BBBB", "CCCC"));
+}
+
 // Verify that many independent `addBatch` calls can be outstanding (submitted
 // to the kernel but not yet waited on) at once, and that the manager tracks
 // each batch's completion correctly. M batches of one read each are submitted
@@ -579,6 +653,262 @@ TEST(MakeBatchManager, syncBackendWhenIoUringNotPreferred) {
   expectManagerWorks(*manager);
 }
 
+// The ratio controller is a pure value type: no io_uring setup is needed to
+// test the flush/defer decision, so these tests run in every build.
+TEST(AdaptiveBatchController, flushesWhenNothingRemains) {
+  ad_utility::AdaptiveBatchController controller;
+  // Nothing left to batch: flush whatever is prepared, even with many reads
+  // outstanding.
+  EXPECT_TRUE(controller.shouldFlush(256, 0));
+  EXPECT_TRUE(controller.shouldFlush(0, 0));
+}
+
+TEST(AdaptiveBatchController, flushesWhenDeviceIsIdle) {
+  ad_utility::AdaptiveBatchController controller;
+  // Nothing outstanding: flush early to keep the device busy, independent of
+  // the number of pending reads.
+  EXPECT_TRUE(controller.shouldFlush(0, 200));
+  EXPECT_TRUE(controller.shouldFlush(0, 1));
+}
+
+TEST(AdaptiveBatchController, flushesSmallTail) {
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 16;
+  // At most `minBatchSize_` pending reads (a small tail): flush instead of
+  // deferring, even with many reads outstanding.
+  EXPECT_TRUE(controller.shouldFlush(256, 16));
+  EXPECT_TRUE(controller.shouldFlush(256, 1));
+  EXPECT_FALSE(controller.shouldFlush(256, 17));
+}
+
+TEST(AdaptiveBatchController, defersWhenManyIosInFlight) {
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 1;
+  // Default ratio 1/1: defer once the outstanding I/Os reach the
+  // still-pending reads, to increase amortization.
+  EXPECT_FALSE(controller.shouldFlush(100, 100));
+  EXPECT_FALSE(controller.shouldFlush(200, 100));
+  // Fewer outstanding than pending: flush early to keep the device busy.
+  EXPECT_TRUE(controller.shouldFlush(99, 100));
+  EXPECT_TRUE(controller.shouldFlush(1, 100));
+}
+
+TEST(AdaptiveBatchController, customDeferRatio) {
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 1;
+  controller.deferNumerator_ = 2;
+  controller.deferDenominator_ = 1;
+  // Defer only once outstanding / pending >= 2.
+  EXPECT_FALSE(controller.shouldFlush(200, 100));
+  EXPECT_TRUE(controller.shouldFlush(199, 100));
+}
+
+// The ratio comparison is exact even for the largest representable values.
+TEST(AdaptiveBatchController, extremeValuesDoNotOverflow) {
+  constexpr auto maxU64 = std::numeric_limits<uint64_t>::max();
+  constexpr auto maxSize = std::numeric_limits<size_t>::max();
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 1;
+  controller.deferNumerator_ = maxU64;
+  controller.deferDenominator_ = maxU64;
+  // Ratio 1: defer at equality, flush when fewer are outstanding.
+  EXPECT_FALSE(controller.shouldFlush(maxSize, maxSize));
+  EXPECT_TRUE(controller.shouldFlush(maxSize - 1, maxSize));
+  controller.deferDenominator_ = 1;
+  // Ratio `maxU64`: defer only once outstanding >= maxU64 * pending.
+  EXPECT_TRUE(controller.shouldFlush(maxSize, 2));
+}
+
+// `shouldFlush` requires a normalized controller and checks it.
+TEST(AdaptiveBatchController, shouldFlushChecksNormalizedBounds) {
+  ad_utility::AdaptiveBatchController controller;
+  controller.deferDenominator_ = 0;
+  EXPECT_ANY_THROW((void)controller.shouldFlush(100, 100));
+  controller = ad_utility::AdaptiveBatchController{};
+  controller.deferNumerator_ = 0;
+  EXPECT_ANY_THROW((void)controller.shouldFlush(100, 100));
+  controller = ad_utility::AdaptiveBatchController{};
+  controller.minBatchSize_ = 0;
+  EXPECT_ANY_THROW((void)controller.shouldFlush(100, 100));
+  EXPECT_NO_THROW((void)controller.normalized(256).shouldFlush(100, 100));
+}
+
+TEST(AdaptiveBatchController, normalizedClampsBounds) {
+  // Without normalization, a zero ratio part would be rejected by
+  // `shouldFlush`; both normalize to one.
+  ad_utility::AdaptiveBatchController controller;
+  controller.deferNumerator_ = 0;
+  controller.deferDenominator_ = 0;
+  auto normalized = controller.normalized(256);
+  EXPECT_EQ(normalized.deferNumerator_, 1);
+  EXPECT_EQ(normalized.deferDenominator_, 1);
+  // A ring smaller than the minimum clamps both the minimum and the maximum
+  // to the ring size, so a deferred group never exceeds the ring.
+  controller.minBatchSize_ = 16;
+  controller.maxBatchSize_ = 256;
+  normalized = controller.normalized(4);
+  EXPECT_EQ(normalized.minBatchSize_, 4);
+  EXPECT_EQ(normalized.maxBatchSize_, 4);
+  // A ring size of zero is treated as one.
+  normalized = controller.normalized(0);
+  EXPECT_EQ(normalized.minBatchSize_, 1);
+  EXPECT_EQ(normalized.maxBatchSize_, 1);
+}
+
+#ifdef QLEVER_HAS_IO_URING
+// Constructing an `IoUringPolicy` needs a working `io_uring_setup`, so the
+// controller plumbing tests below skip when io_uring is blocked at runtime
+// (e.g. by seccomp inside Docker), like the typed suite does.
+TEST(AdaptiveBatchControllerPolicy, disabledByDefault) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  ad_utility::IoUringPolicy policy(32);
+  EXPECT_FALSE(policy.adaptiveBatchController().has_value());
+}
+
+TEST(AdaptiveBatchControllerPolicy, normalizesBounds) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  ad_utility::IoUringPolicy policy(32);
+  // A minimum of zero is clamped to one: a nearly finished batch must
+  // always flush.
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 0;
+  controller.maxBatchSize_ = 32;
+  policy.setAdaptiveBatchController(controller);
+  ASSERT_TRUE(policy.adaptiveBatchController().has_value());
+  EXPECT_EQ(policy.adaptiveBatchController()->minBatchSize_, 1);
+  // A maximum above the ring size is clamped to the ring: a deferred group
+  // never exceeds the ring.
+  controller.minBatchSize_ = 4;
+  controller.maxBatchSize_ = 10'000;
+  policy.setAdaptiveBatchController(controller);
+  EXPECT_EQ(policy.adaptiveBatchController()->maxBatchSize_, 32);
+  // A maximum below the minimum is raised to the minimum.
+  controller.minBatchSize_ = 16;
+  controller.maxBatchSize_ = 4;
+  policy.setAdaptiveBatchController(controller);
+  EXPECT_EQ(policy.adaptiveBatchController()->maxBatchSize_, 16);
+}
+
+// A controller with min == max == ring size can never fire before the
+// ring-full safety bound (reaching that many prepared reads implies a full
+// ring, which is handled first), so the submission sequence is the
+// fixed-window sequence by construction. The results must therefore be
+// identical to the uncontrolled manager.
+TEST(AdaptiveBatchControllerPolicy, fullWindowControllerMatchesFixedWindow) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  constexpr size_t N = 100;
+  constexpr size_t CHUNKSIZE = 4;
+  SequentialReadScenarioForTesting scenarioPlain;
+  SequentialReadScenarioForTesting scenarioAdaptive;
+  for (size_t i = 0; i < N; ++i) {
+    std::string chunk(CHUNKSIZE, static_cast<char>('A' + (i % 26)));
+    scenarioPlain.addRead(chunk);
+    scenarioAdaptive.addRead(chunk);
+  }
+  auto [tmp, fd] = makeTempFile(scenarioPlain.content());
+
+  using Manager = ad_utility::BatchManager<ad_utility::IoUringPolicy>;
+  Manager plain(16);
+  Manager adaptive(16);
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 16;
+  controller.maxBatchSize_ = 16;
+  adaptive.setAdaptiveBatchController(controller);
+
+  plain.wait(scenarioPlain.submitTo(plain, fd));
+  adaptive.wait(scenarioAdaptive.submitTo(adaptive, fd));
+
+  EXPECT_THAT(scenarioAdaptive.results(),
+              ::testing::ElementsAreArray(scenarioPlain.results()));
+  EXPECT_THAT(scenarioAdaptive.results(),
+              ::testing::ElementsAreArray(scenarioAdaptive.expected()));
+}
+
+// An enabled controller with small bounds exercises early flushes, deferred
+// groups, and the maximum clamp within one batch larger than the ring. Every
+// read must still land in its own buffer.
+TEST(AdaptiveBatchControllerPolicy, enabledControllerReadsCorrectly) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  constexpr size_t N = 100;
+  constexpr size_t CHUNKSIZE = 4;
+  SequentialReadScenarioForTesting scenario;
+  for (size_t i = 0; i < N; ++i) {
+    scenario.addRead(std::string(CHUNKSIZE, static_cast<char>('A' + (i % 26))));
+  }
+  auto [tmp, fd] = makeTempFile(scenario.content());
+
+  using Manager = ad_utility::BatchManager<ad_utility::IoUringPolicy>;
+  Manager manager(16);
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 2;
+  controller.maxBatchSize_ = 64;  // Clamped to the ring size of 16.
+  manager.setAdaptiveBatchController(controller);
+  ASSERT_TRUE(manager.adaptiveBatchController().has_value());
+  EXPECT_EQ(manager.adaptiveBatchController()->maxBatchSize_, 16);
+
+  manager.wait(scenario.submitTo(manager, fd));
+  EXPECT_THAT(scenario.results(),
+              ::testing::ElementsAreArray(scenario.expected()));
+}
+
+// `makeBatchManager` forwards a passed controller to the io_uring backend,
+// and the resulting manager performs correct reads.
+TEST(MakeBatchManager, forwardsAdaptiveControllerToIoUringBackend) {
+  if (!ioUringAvailableAtRuntime()) {
+    GTEST_SKIP() << "io_uring is compiled in, but not available at runtime";
+  }
+  bool preferIoUring = true;
+  ad_utility::AdaptiveBatchController controller;
+  controller.minBatchSize_ = 4;
+  auto manager = ad_utility::makeBatchManager(preferIoUring, 64, controller);
+  ASSERT_NE(manager, nullptr);
+  ASSERT_TRUE(preferIoUring);
+  auto* ioManager =
+      dynamic_cast<ad_utility::BatchManager<ad_utility::IoUringPolicy>*>(
+          manager.get());
+  ASSERT_NE(ioManager, nullptr);
+  ASSERT_TRUE(ioManager->adaptiveBatchController().has_value());
+  EXPECT_EQ(ioManager->adaptiveBatchController()->minBatchSize_, 4);
+  expectManagerWorks(*manager);
+}
+#endif
+
+// The synchronous policy performs blocking reads, which have nothing to
+// pace, so enabling the controller on it must throw instead of silently
+// doing nothing.
+TEST(AdaptiveBatchControllerPolicy, syncPolicyRejectsController) {
+  using Manager = ad_utility::BatchManager<ad_utility::SyncIoPolicy>;
+  Manager manager(64);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      manager.setAdaptiveBatchController(ad_utility::AdaptiveBatchController{}),
+      HasSubstr("not supported by this read policy"));
+  EXPECT_FALSE(manager.adaptiveBatchController().has_value());
+}
+
+// A controller passed to `makeBatchManager` together with the synchronous
+// backend is ignored (with a warning) instead of throwing, and the manager
+// still performs correct reads.
+TEST(MakeBatchManager, syncBackendIgnoresAdaptiveController) {
+  bool preferIoUring = false;
+  auto manager = ad_utility::makeBatchManager(
+      preferIoUring, ad_utility::DEFAULT_IO_URING_RING_SIZE,
+      ad_utility::AdaptiveBatchController{});
+  ASSERT_NE(manager, nullptr);
+  EXPECT_FALSE(preferIoUring);
+  EXPECT_NE(dynamic_cast<ad_utility::BatchManager<ad_utility::SyncIoPolicy>*>(
+                manager.get()),
+            nullptr);
+  expectManagerWorks(*manager);
+}
+
 // With `preferIoUring == true`, the backend depends on the runtime
 // environment: if io_uring is compiled in and its setup succeeds, an
 // `IoUringPolicy`-backed manager is returned and the flag stays `true`.
@@ -608,5 +938,89 @@ TEST(MakeBatchManager, backendMatchesFlagWhenIoUringPreferred) {
             nullptr);
 #endif
   expectManagerWorks(*manager);
+}
+
+// Run `readPageCacheHits` on `reads` (pairs of file offset and size) of `fd`
+// and return the positions of the reads that were not served together with
+// the buffers (filled with '-' before the call).
+std::pair<std::vector<size_t>, std::vector<std::string>> readHits(
+    int fd, const std::vector<std::pair<uint64_t, size_t>>& reads) {
+  std::vector<size_t> numBytes;
+  std::vector<uint64_t> offsets;
+  std::vector<std::string> buffers;
+  for (const auto& [offset, size] : reads) {
+    offsets.push_back(offset);
+    numBytes.push_back(size);
+    buffers.emplace_back(size, '-');
+  }
+  std::vector<char*> targets;
+  for (auto& buffer : buffers) {
+    targets.push_back(buffer.data());
+  }
+  auto notServed =
+      ad_utility::readPageCacheHits(fd, numBytes, offsets, targets);
+  return {std::move(notServed), std::move(buffers)};
+}
+
+// All positions `0 .. n - 1`.
+std::vector<size_t> allPositions(size_t n) {
+  std::vector<size_t> positions(n);
+  std::iota(positions.begin(), positions.end(), size_t{0});
+  return positions;
+}
+
+// A batch whose file was just written is in the page cache and is served
+// completely; adjacent ranges (the first two reads) are read in one call.
+TEST(ReadPageCacheHits, hitOnlyBatch) {
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  auto [notServed, buffers] = readHits(fd, {{0, 4}, {4, 4}, {12, 4}, {4, 0}});
+  if (!ad_utility::pageCacheFastPathIsSupported()) {
+    EXPECT_EQ(notServed, allPositions(4));
+    return;
+  }
+  EXPECT_TRUE(notServed.empty());
+  EXPECT_EQ(buffers[0], "AAAA");
+  EXPECT_EQ(buffers[1], "BBBB");
+  EXPECT_EQ(buffers[2], "DDDD");
+  EXPECT_EQ(buffers[3], "");
+}
+
+// Reads that cannot be served completely (here: beyond the end of the file)
+// are all returned, whether or not `RWF_NOWAIT` is supported.
+TEST(ReadPageCacheHits, missOnlyBatch) {
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  auto [notServed, buffers] = readHits(fd, {{16, 4}, {40, 4}, {20, 4}});
+  EXPECT_EQ(notServed, allPositions(3));
+}
+
+// A mixed batch: a short read in the middle of a run of adjacent ranges
+// returns the incomplete read and the rest of its run, the complete reads of
+// the run and of other runs are served.
+TEST(ReadPageCacheHits, mixedBatchWithShortRead) {
+  auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
+  auto [notServed, buffers] =
+      readHits(fd, {{0, 4}, {8, 4}, {12, 2}, {14, 4}, {18, 4}, {4, 4}});
+  if (!ad_utility::pageCacheFastPathIsSupported()) {
+    EXPECT_EQ(notServed, allPositions(6));
+    return;
+  }
+  EXPECT_EQ(notServed, (std::vector<size_t>{3, 4}));
+  EXPECT_EQ(buffers[0], "AAAA");
+  EXPECT_EQ(buffers[1], "CCCC");
+  EXPECT_EQ(buffers[2], "DD");
+  EXPECT_EQ(buffers[5], "BBBB");
+}
+
+// An empty batch is trivially served, and spans of different lengths are
+// rejected.
+TEST(ReadPageCacheHits, emptyBatchAndContract) {
+  auto [tmp, fd] = makeTempFile("AAAA");
+  EXPECT_TRUE(ad_utility::readPageCacheHits(fd, {}, {}, {}).empty());
+  std::vector<size_t> numBytes{4, 4};
+  std::vector<uint64_t> offsets{0};
+  std::string buffer(8, '-');
+  std::vector<char*> targets{buffer.data(), buffer.data() + 4};
+  EXPECT_ANY_THROW(
+      ad_utility::readPageCacheHits(fd, numBytes, offsets, targets));
 }
 }  // namespace

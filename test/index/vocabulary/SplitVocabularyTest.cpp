@@ -1,13 +1,26 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026, The QLever Authors, in particular:
+//
+// 2025        Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures.
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include <array>
+#include <utility>
 #include <variant>
 
+#include "../../util/GTestHelpers.h"
 #include "VocabularyTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/filesystem.h"
+#include "backports/span.h"
+#include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -46,6 +59,17 @@ using ThreeSplitVocabulary =
     SplitVocabulary<decltype(testSplitThreeFunction), testThreeFilenameSuffixes,
                     VocabularyInMemory, VocabularyInMemory, VocabularyInMemory>;
 
+// The same splits over compressed vocabularies. Their `operator[]` returns a
+// `std::string`, so `SplitVocabulary::lookupBatch` forwards to or partitions
+// among their `lookupBatch` instead of copying from memory.
+using CompressedInMemory = CompressedVocabulary<VocabularyInMemory>;
+using TwoSplitCompressedVocabulary =
+    SplitVocabulary<decltype(testSplitTwoFunction), testTwoFilenameSuffixes,
+                    CompressedInMemory, CompressedInMemory>;
+using ThreeSplitCompressedVocabulary =
+    SplitVocabulary<decltype(testSplitThreeFunction), testThreeFilenameSuffixes,
+                    CompressedInMemory, CompressedInMemory, CompressedInMemory>;
+
 }  // namespace splitVocabTestHelpers
 
 namespace {
@@ -68,7 +92,7 @@ auto getFileCleanup(const std::string& filename) {
 
 // _____________________________________________________________________________
 TEST(Vocabulary, SplitGeoVocab) {
-  // Test check: Is a geo literal?
+  // Check: Is a geo literal?
   ASSERT_EQ(SGV::getMarkerForWord(
                 "\"POLYGON((1 2, 3 4))\""
                 "^^<http://www.opengis.net/ont/geosparql#wktLiteral>"),
@@ -159,7 +183,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   ASSERT_EQ(sv[1], "\"xyz\"");
   ASSERT_EQ(sv[(1ULL << 59) | 1], "\"axyz\"");
 
-  // Test access to and content of underlying vocabs
+  // Test access to and the content of the underlying vocabularies.
   std::visit(
       [](auto& vocab) {
         ASSERT_EQ(vocab.size(), 2);
@@ -284,6 +308,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   ASSERT_EQ(sv[2ULL << 58], "\"xyz\"^^<blabliblu>");
   ASSERT_EQ(sv[(2ULL << 58) | 1], "\"zzz\"^^<blabliblu>");
   ASSERT_EQ(sv[1ULL << 58], "\"xyz\"^^<http://example.com>");
+  sv.close();
 }
 
 // _____________________________________________________________________________
@@ -441,9 +466,9 @@ TEST(Vocabulary, SplitVocabularyScanAll) {
   // A `SplitVocabulary` distributes its words over multiple underlying
   // vocabularies (here: words starting with `"a` go into the second vocab).
   // `scanAll` must still enumerate all of them.
-  TwoSplitVocabulary sv;
-  const std::string filename = gtestCurrentTestName();
+  const auto filename = gtestCurrentTestName();
   auto cleanup = getFileCleanup(filename);
+  TwoSplitVocabulary sv;
   auto ww = sv.makeDiskWriterPtr(filename);
   (*ww)("\"\"", true);
   (*ww)("\"abc\"", true);
@@ -466,6 +491,225 @@ TEST(Vocabulary, SplitVocabularyScanAll) {
                                      P{sv.addMarker(1, 0), "\"xyz\""},
                                      P{sv.addMarker(0, 1), "\"abc\""},
                                      P{sv.addMarker(1, 1), "\"axyz\""}));
+  sv.close();
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyLookupBatchMatchesItemAt) {
+  // Mixed markers, reordered indices, and a duplicate must match `operator[]`.
+  const auto filename = gtestCurrentTestName();
+  auto cleanup = getFileCleanup(filename);
+  TwoSplitVocabulary sv;
+  auto ww = sv.makeDiskWriterPtr(filename);
+  (*ww)("\"\"", true);
+  (*ww)("\"abc\"", true);
+  (*ww)("\"axyz\"", true);
+  (*ww)("\"xyz\"", true);
+  ww->finish();
+  sv.readFromFile(filename);
+
+  const std::array<size_t, 6> indices{
+      static_cast<size_t>(sv.addMarker(1, 0)),
+      static_cast<size_t>(sv.addMarker(0, 1)),
+      static_cast<size_t>(sv.addMarker(1, 1)),
+      static_cast<size_t>(sv.addMarker(0, 0)),
+      static_cast<size_t>(sv.addMarker(1, 0)),
+      static_cast<size_t>(sv.addMarker(0, 1)),
+  };
+  auto result = sv.lookupBatch(indices);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(sv, result,
+                                                                indices);
+  AD_EXPECT_THROW_WITH_MESSAGE(sv.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
+
+  const std::array<size_t, 3> oneMarker{
+      static_cast<size_t>(sv.addMarker(0, 1)),
+      static_cast<size_t>(sv.addMarker(0, 0)),
+      static_cast<size_t>(sv.addMarker(0, 1)),
+  };
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+      sv, sv.lookupBatch(oneMarker), oneMarker);
+  sv.close();
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyLookupBatchRejectsOutOfRangeMarker) {
+  // Three vocabs use a 2-bit marker field, so raw value 3 is representable
+  // but illegal. `getMarker` / `lookupBatch` must reject it.
+  ThreeSplitVocabulary sv;
+  const std::array<size_t, 1> illegalMarker{
+      static_cast<size_t>(3ull << ThreeSplitVocabulary::markerShift)};
+  AD_EXPECT_THROW_WITH_MESSAGE(sv.lookupBatch(illegalMarker),
+                               ::testing::HasSubstr("marker < numberOfVocabs"));
+  // The same for underlying vocabularies that are not kept in memory, where
+  // `lookupBatch` counts the markers before it looks anything up.
+  ThreeSplitCompressedVocabulary compressed;
+  const std::array<size_t, 2> legalThenIllegal{
+      0,
+      static_cast<size_t>(3ull << ThreeSplitCompressedVocabulary::markerShift)};
+  AD_EXPECT_THROW_WITH_MESSAGE(compressed.lookupBatch(legalThenIllegal),
+                               ::testing::HasSubstr("marker < numberOfVocabs"));
+}
+
+// Write the words `""`, `"abc"`, `"axyz"`, and `"xyz"` to a `SplitVocab` with
+// the two-way test split function (`"abc"` and `"axyz"` get marker 1), and
+// check `lookupBatch` against `operator[]` for batches that reach all the
+// cases of `SplitVocabulary::lookupBatch`.
+template <typename SplitVocab>
+void checkLookupBatchMatchesItemAtForAllCases(const std::string& filename) {
+  auto cleanup = vocabulary_test::makeVocabFileCleanup(
+      filename, SplitVocab::fileSuffixes());
+  SplitVocab sv;
+  auto ww = sv.makeDiskWriterPtr(filename);
+  (*ww)("\"\"", true);
+  (*ww)("\"abc\"", true);
+  (*ww)("\"axyz\"", true);
+  (*ww)("\"xyz\"", true);
+  ww->finish();
+  sv.readFromFile(filename);
+
+  auto check = [&sv](const auto& indices) {
+    vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(
+        sv, sv.lookupBatch(indices), indices);
+  };
+  auto marked = [](uint64_t index, uint8_t marker) {
+    return static_cast<size_t>(SplitVocab::addMarker(index, marker));
+  };
+  // Mixed markers, reordered, with duplicates.
+  check(std::array{marked(1, 0), marked(0, 1), marked(1, 1), marked(0, 0),
+                   marked(1, 0), marked(0, 1)});
+  // Only marker 0 (forwarded without a copy), with a duplicate.
+  check(std::array{marked(1, 0), marked(0, 0), marked(1, 0)});
+  // Only marker 1 (forwarded after removing the marker bits).
+  check(std::array{marked(1, 1), marked(0, 1), marked(1, 1)});
+  // A single index of each marker.
+  check(std::array{marked(0, 0)});
+  check(std::array{marked(1, 1)});
+  AD_EXPECT_THROW_WITH_MESSAGE(sv.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
+  sv.close();
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyLookupBatchAllCasesMatchItemAt) {
+  // In-memory underlying vocabularies: one pass via `operator[]` into one
+  // arena.
+  checkLookupBatchMatchesItemAtForAllCases<TwoSplitVocabulary>(
+      absl::StrCat(gtestCurrentTestName(), ".inMemory"));
+  // Compressed underlying vocabularies: forwarding for a single marker,
+  // partitioning for mixed markers.
+  checkLookupBatchMatchesItemAtForAllCases<TwoSplitCompressedVocabulary>(
+      absl::StrCat(gtestCurrentTestName(), ".compressed"));
+}
+
+using namespace splitVocabTestHelpers;
+
+// Share common SplitVocabulary setup across multiple tests. Every test gets a
+// two-way split vocabulary with the words `""` and `"xyz"` (marker 0, indices
+// 0 and 1) and `"abc"` and `"axyz"` (marker 1, indices 0 and 1).
+class SplitVocabularyWithDataTest : public ::testing::Test {
+ protected:
+  std::string getFilename() const {
+    return absl::StrCat(gtestCurrentTestName(), ".dat");
+  }
+
+  void SetUp() override {
+    const auto filename = getFilename();
+    vocabulary_test::deleteVocabularyFiles<TwoSplitVocabulary>(filename);
+    auto ww = sv_.makeDiskWriterPtr(filename);
+    (*ww)("\"\"", true);
+    (*ww)("\"abc\"", true);
+    (*ww)("\"axyz\"", true);
+    (*ww)("\"xyz\"", true);
+    ww->finish();
+    sv_.readFromFile(filename);
+  }
+
+  void TearDown() override {
+    const auto filename = getFilename();
+    sv_.close();
+    vocabulary_test::deleteVocabularyFiles<TwoSplitVocabulary>(filename);
+  }
+
+  TwoSplitVocabulary sv_;
+};
+
+// _____________________________________________________________________________
+// Test `lookupBatch` partitioning and result merging directly.
+TEST_F(SplitVocabularyWithDataTest,
+       SplitVocabularyPartitionMarkerIndicesAndPositions) {
+  // Use marker `0` for plain words and marker `1` for words starting with `"a`.
+  const std::array<size_t, 5> indices{
+      static_cast<size_t>(TwoSplitVocabulary::addMarker(3, 0)),
+      static_cast<size_t>(TwoSplitVocabulary::addMarker(1, 1)),
+      static_cast<size_t>(TwoSplitVocabulary::addMarker(0, 0)),
+      static_cast<size_t>(TwoSplitVocabulary::addMarker(1, 1)),
+      static_cast<size_t>(TwoSplitVocabulary::addMarker(2, 0)),
+  };
+  auto partitions =
+      partitionMarkerIndicesAndPositions<2>(indices, [](uint64_t markedIndex) {
+        return std::pair{TwoSplitVocabulary::getMarker(markedIndex),
+                         TwoSplitVocabulary::getVocabIndex(markedIndex)};
+      });
+  EXPECT_THAT(partitions[0].getUnderlyingIndices(),
+              ::testing::ElementsAre(3u, 0u, 2u));
+  EXPECT_THAT(partitions[0].getResultPositions(),
+              ::testing::ElementsAre(0u, 2u, 4u));
+  EXPECT_THAT(partitions[1].getUnderlyingIndices(),
+              ::testing::ElementsAre(1u, 1u));
+  EXPECT_THAT(partitions[1].getResultPositions(),
+              ::testing::ElementsAre(1u, 3u));
+}
+
+// _____________________________________________________________________________
+TEST_F(SplitVocabularyWithDataTest,
+       SplitVocabularyMergeMarkerBatchesInInputOrder) {
+  const std::array<size_t, 4> indices{
+      static_cast<size_t>(sv_.addMarker(1, 0)),
+      static_cast<size_t>(sv_.addMarker(0, 1)),
+      static_cast<size_t>(sv_.addMarker(1, 1)),
+      static_cast<size_t>(sv_.addMarker(0, 0)),
+  };
+  auto partitions =
+      partitionMarkerIndicesAndPositions<2>(indices, [](uint64_t markedIndex) {
+        return std::pair{TwoSplitVocabulary::getMarker(markedIndex),
+                         TwoSplitVocabulary::getVocabIndex(markedIndex)};
+      });
+  MarkerBatchLookups<2> markerLookups;
+  const std::array<size_t, 2> markerZeroIndices{
+      static_cast<size_t>(sv_.addMarker(1, 0)),
+      static_cast<size_t>(sv_.addMarker(0, 0)),
+  };
+  const std::array<size_t, 2> markerOneIndices{
+      static_cast<size_t>(sv_.addMarker(0, 1)),
+      static_cast<size_t>(sv_.addMarker(1, 1)),
+  };
+  markerLookups[0] = sv_.lookupBatch(markerZeroIndices);
+  markerLookups[1] = sv_.lookupBatch(markerOneIndices);
+  auto merged =
+      mergeMarkerBatchesInInputOrder(std::move(markerLookups), partitions);
+  vocabulary_test::assertLookupResultMatchesVocabularyAtIndices(sv_, merged,
+                                                                indices);
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyTypes, MarkerBatchLookupsDoubleReleaseThrows) {
+  MarkerBatchLookups<2> lookups;
+  lookups[0] = StringVectorVocabBatchLookupData::fromWords({"a"});
+  auto first = lookups.release(0);
+  EXPECT_EQ(first[0], "a");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      lookups.release(0), ::testing::HasSubstr("results_[marker].has_value()"));
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyTypes, MarkerBatchLookupsReleaseUnsetThrows) {
+  // Releasing a marker slot that was never assigned must throw like a double
+  // release: the slot holds no lookup result.
+  MarkerBatchLookups<2> lookups;
+  lookups[0] = StringVectorVocabBatchLookupData::fromWords({"a"});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      lookups.release(1), ::testing::HasSubstr("results_[marker].has_value()"));
 }
 
 // _____________________________________________________________________________

@@ -1,7 +1,8 @@
 // Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
-// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -11,12 +12,16 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <range/v3/range/conversion.hpp>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
@@ -144,6 +149,14 @@ class SplitVocabulary {
   static constexpr uint64_t vocabIndexBitMask =
       ad_utility::bitMaskForLowerBits(markerShift);
 
+  // Enforce the layout that `addMarker`/`getMarker`/`getVocabIndex` rely on:
+  // the marker bits sit directly above the vocab-index bits and together they
+  // exactly fill the data bits, so the `ValueId` datatype bits stay zero.
+  static_assert(markerBitMaskSize <= ValueId::numDataBits);
+  static_assert(markerShift + markerBitMaskSize == ValueId::numDataBits);
+  static_assert((markerBitMask >> markerShift) ==
+                ad_utility::bitMaskForLowerBits(markerBitMaskSize));
+
   // Instance of the function used for implementing the specific split logic
   static constexpr SplitFunction splitFunction_{};
 
@@ -180,9 +193,11 @@ class SplitVocabulary {
   }
 
  public:
-  // Check validity of vocabIndex and marker, then return a new 64 bit index
-  // that contains the marker and vocabIndex. The result is guaranteed to be
-  // zero in all ValueId datatype bits.
+  // ___________________________________________________________________________
+  // Check validity of `vocabIndex` and `marker`, then return a new 64 bit index
+  // that contains the `marker` and the `vocabIndex`. The result is guaranteed
+  // to be zero in all `ValueId` datatype bits (enforced by the static_asserts
+  // on the bit masks above).
   static uint64_t addMarker(uint64_t vocabIndex, uint8_t marker) {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs &&
                          vocabIndex <= vocabIndexBitMask);
@@ -192,7 +207,10 @@ class SplitVocabulary {
   // Extract the marker from a full 64 bit index.
   static constexpr uint8_t getMarker(uint64_t indexWithMarker) {
     uint64_t marker = (indexWithMarker & markerBitMask) >> markerShift;
-    AD_CORRECTNESS_CHECK(marker < numberOfVocabs);
+    // Public `operator[]` / `lookupBatch` take caller indices; a marker bit
+    // pattern can exceed `numberOfVocabs` when that count is not a power of
+    // two (the bit-field is then wider than the legal range).
+    AD_CONTRACT_CHECK(marker < numberOfVocabs);
     return static_cast<uint8_t>(marker);
   }
 
@@ -254,10 +272,100 @@ class SplitVocabulary {
   }
 
   //____________________________________________________________________________
+  // Look up the words for the marker-encoded `indices` (any order, duplicates
+  // allowed) and return them in the order of `indices`. `indices` must not be
+  // empty. Three cases, from the cheapest to the most general one:
+  //
+  // 1. All underlying vocabularies keep their words in memory (see
+  //    `allUnderlyingKeepWordsInMemory`): batching cannot save any I/O, so each
+  //    word is looked up via `operator[]` and copied, in input order, into one
+  //    arena. No partitioning, no sub-batches, no `std::string` per word.
+  // 2. All `indices` have the same marker: they are forwarded to the
+  //    `lookupBatch` of that underlying vocabulary, whose result is returned
+  //    unchanged. For marker 0 the indices are forwarded without a copy.
+  // 3. Mixed markers: partition by marker, one `lookupBatch` per participating
+  //    underlying vocabulary, and scatter the sub-batches back into input
+  //    order (without copying the word bytes).
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
-    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+    AD_CONTRACT_CHECK(!indices.empty());
+    if constexpr (allUnderlyingKeepWordsInMemory) {
+      ArenaVocabBatchBuilder builder(indices.size());
+      for (size_t index : indices) {
+        builder.appendWord((*this)[index]);
+      }
+      return std::move(builder).finalize();
+    } else {
+      // One pass to find out whether the batch needs to be partitioned at all
+      // (`getMarker` also rejects illegal markers).
+      std::array<size_t, numberOfVocabs> numIndicesPerMarker{};
+      bool allIndicesAreUnmarked = true;
+      for (size_t index : indices) {
+        ++numIndicesPerMarker[getMarker(index)];
+        allIndicesAreUnmarked &= getVocabIndex(index) == index;
+      }
+      if (allIndicesAreUnmarked) {
+        return lookupBatchInUnderlying(0, indices);
+      }
+      for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
+        if (numIndicesPerMarker[marker] == indices.size()) {
+          auto unmarkedIndices = ::ranges::to_vector(
+              indices | ql::views::transform([](size_t index) {
+                return static_cast<size_t>(getVocabIndex(index));
+              }));
+          return lookupBatchInUnderlying(marker, unmarkedIndices);
+        }
+      }
+      return lookupBatchWithMixedMarkers(indices);
+    }
   }
 
+ private:
+  // True iff the `operator[]` of every underlying vocabulary returns a
+  // `std::string_view` into memory that the vocabulary owns (for example
+  // `VocabularyInMemory`). A batched lookup then has no I/O to save, see case
+  // 1 of `lookupBatch`.
+  static constexpr bool allUnderlyingKeepWordsInMemory =
+      (std::is_same_v<
+           decltype(std::declval<const UnderlyingVocabularies&>()[uint64_t{0}]),
+           std::string_view> &&
+       ...);
+
+  // The `lookupBatch` of the underlying vocabulary with the given `marker`,
+  // for unmarked `indices`.
+  VocabBatchLookupResult lookupBatchInUnderlying(
+      uint8_t marker, ql::span<const size_t> indices) const {
+    auto result = std::visit(
+        [&indices](const auto& vocab) { return vocab.lookupBatch(indices); },
+        underlying_[marker]);
+    AD_CORRECTNESS_CHECK(result.size() == indices.size());
+    return result;
+  }
+
+  // Case 3 of `lookupBatch`: `indices` has at least two different markers.
+  VocabBatchLookupResult lookupBatchWithMixedMarkers(
+      ql::span<const size_t> indices) const {
+    auto markerIndicesAndPositions =
+        partitionMarkerIndicesAndPositions<numberOfVocabs>(
+            indices, [](uint64_t markedIndex) {
+              return std::pair{getMarker(markedIndex),
+                               getVocabIndex(markedIndex)};
+            });
+
+    MarkerBatchLookups<numberOfVocabs> markerLookups;
+    for (uint8_t marker = 0; marker < numberOfVocabs; ++marker) {
+      const auto& markerIndices = markerIndicesAndPositions[marker];
+      if (markerIndices.empty()) {
+        continue;
+      }
+      markerLookups[marker] =
+          lookupBatchInUnderlying(marker, markerIndices.getUnderlyingIndices());
+    }
+
+    return mergeMarkerBatchesInInputOrder(std::move(markerLookups),
+                                          markerIndicesAndPositions);
+  }
+
+ public:
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
     return ad_utility::vocabulary::lookupBatchesStreamed(*this,

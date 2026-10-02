@@ -11,8 +11,13 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <algorithm>
+#include <cstring>
+#include <optional>
+
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/ConstructDeduplicator.h"
+#include "engine/FastExportStreamFormatter.h"
 #include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Exception.h"
@@ -116,6 +121,88 @@ std::string formatTerm(const EvaluatedTermData& term, bool includeDataType) {
   }
   return absl::StrCat("\"", term.rdfTermString_, "\"^^<", term.rdfTermDataType_,
                       ">");
+}
+
+namespace {
+// Upper bound on the number of bytes that `FastExportStreamFormatter` writes
+// for `term` in Turtle: escaping at most doubles the characters of the term
+// string, and a fully qualified literal adds its datatype and at most six
+// delimiter characters (`"`, `"^^<`, `>`).
+size_t turtleTermSizeUpperBound(const EvaluatedTermData& term) {
+  size_t bound = 2 * term.rdfTermString_.size() + 6;
+  if (term.rdfTermDataType_ != nullptr) {
+    bound += std::strlen(term.rdfTermDataType_);
+  }
+  return bound;
+}
+
+// Upper bound on the number of bytes that `FastExportStreamFormatter` writes
+// for `triple` in Turtle: the three terms, two separating spaces, and the
+// trailing " .\n".
+size_t turtleTripleSizeUpperBound(const EvaluatedTriple& triple) {
+  const auto& [subject, predicate, object] = triple;
+  AD_CONTRACT_CHECK(subject != nullptr && predicate != nullptr &&
+                    object != nullptr);
+  return turtleTermSizeUpperBound(*subject) +
+         turtleTermSizeUpperBound(*predicate) +
+         turtleTermSizeUpperBound(*object) + 5;
+}
+
+}  // namespace
+
+// _____________________________________________________________________________
+std::string formatTripleAsTurtleWithFastFormatter(
+    const EvaluatedTriple& evaluatedTriple) {
+  using ql::export_formatting::ExportFormat;
+  using ql::export_formatting::FastExportStreamFormatter;
+  // Sized to the upper bound, so the fixed-span formatter never runs out of
+  // space, and shrunk to the written size afterwards.
+  std::string result(turtleTripleSizeUpperBound(evaluatedTriple), '\0');
+  FastExportStreamFormatter formatter(
+      ql::span<char>(result.data(), result.size()));
+  formatter.writeTriple(ExportFormat::Turtle, evaluatedTriple);
+  result.resize(formatter.currentChunk().size());
+  return result;
+}
+
+// _____________________________________________________________________________
+ad_utility::InputRangeTypeErased<std::string> formatTriplesAsTurtleInBatches(
+    ad_utility::InputRangeTypeErased<EvaluatedTriple> triples,
+    size_t targetBatchBytes) {
+  using ql::export_formatting::ExportFormat;
+  using ql::export_formatting::FastExportStreamFormatter;
+  AD_CONTRACT_CHECK(targetBatchBytes > 0);
+  // `pending` is the next triple to be formatted. It is pulled from `triples`
+  // before it is known whether it still fits into the current batch, so it has
+  // to survive until the next call if it does not.
+  auto nextBatch = [triples = std::move(triples), targetBatchBytes,
+                    pending = std::optional<EvaluatedTriple>{}]() mutable
+      -> std::optional<std::string> {
+    if (!pending.has_value()) {
+      pending = triples.get();
+    }
+    if (!pending.has_value()) {
+      return std::nullopt;
+    }
+    // The first triple of a batch always fits, also if it is larger than
+    // `targetBatchBytes`.
+    std::string batch(
+        std::max(targetBatchBytes, turtleTripleSizeUpperBound(pending.value())),
+        '\0');
+    FastExportStreamFormatter formatter(
+        ql::span<char>(batch.data(), batch.size()));
+    do {
+      formatter.writeTriple(ExportFormat::Turtle, pending.value());
+      pending = triples.get();
+    } while (pending.has_value() &&
+             formatter.currentChunk().size() +
+                     turtleTripleSizeUpperBound(pending.value()) <=
+                 batch.size());
+    batch.resize(formatter.currentChunk().size());
+    return batch;
+  };
+  return ad_utility::InputRangeTypeErased<std::string>{
+      ad_utility::InputRangeFromGetCallable{std::move(nextBatch)}};
 }
 
 // _____________________________________________________________________________
