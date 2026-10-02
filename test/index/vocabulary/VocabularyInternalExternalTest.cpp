@@ -1,8 +1,18 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Copyright 2024 - 2026, The QLever Authors, in particular:
+//
+// 2024 - 2026 Johannes Kalmbach <johannes.kalmbach@gmail.com>, UFR
+// 2026        Marvin Stoetzel <stoetzem@email.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
+
+#include <array>
+#include <string>
+#include <vector>
 
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
@@ -113,6 +123,93 @@ TEST(VocabularyInternalExternal, AccessOperator) {
       createVocabularyFromDisk("AccessOperator2"));
 }
 
+// _____________________________________________________________________________
+TEST(VocabularyInternalExternal, LookupBatchMatchesAccessOperator) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
+                                       "epsilon"};
+  // The batch result must preserve request order across all-internal,
+  // all-external, and mixed-source requests, including duplicates.
+  auto vocab = createVocabulary("LookupBatch")(words);
+  const std::array<size_t, 7> indices{4, 1, 0, 3, 1, 2, 4};
+  auto result = vocab.lookupBatch(indices);
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
+
+  // The test writer marks even IDs as external; odd IDs and ID 0 (the first
+  // milestone) are also stored in the internal vocabulary.
+  const std::array<size_t, 3> ramOnly{0, 1, 3};
+  assertLookupResultMatchesVocabularyAtIndices(
+      vocab, vocab.lookupBatch(ramOnly), ramOnly);
+  const std::array<size_t, 3> diskOnly{2, 4, 2};
+  assertLookupResultMatchesVocabularyAtIndices(
+      vocab, vocab.lookupBatch(diskOnly), diskOnly);
+
+  // Keep a mixed result alive while another lookup is performed, exercising
+  // ownership of the backing storage returned by both vocabulary sources.
+  auto retainedMixedResult = vocab.lookupBatch(indices);
+  auto subsequentResult = vocab.lookupBatch(ramOnly);
+  assertLookupResultMatchesVocabularyAtIndices(vocab, retainedMixedResult,
+                                               indices);
+  assertLookupResultMatchesVocabularyAtIndices(vocab, subsequentResult,
+                                               ramOnly);
+}
+
+// _____________________________________________________________________________
+// The split-phase lookup must return the same words as `lookupBatch`, in
+// request order, for mixed, all-internal and all-external requests. Several
+// lookups may be in flight at the same time. `finishLookup` rejects a null
+// handle.
+TEST(VocabularyInternalExternal, BeginFinishLookupMatchesLookupBatch) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
+                                       "epsilon"};
+  auto vocab = createVocabulary("BeginFinishLookup")(words);
+  const std::array<size_t, 7> indices{4, 1, 0, 3, 1, 2, 4};
+  const std::array<size_t, 3> ramOnly{0, 1, 3};
+  const std::array<size_t, 3> diskOnly{2, 4, 2};
+  auto mixedHandle = vocab.beginLookup(indices);
+  auto ramOnlyHandle = vocab.beginLookup(ramOnly);
+  auto diskOnlyHandle = vocab.beginLookup(diskOnly);
+  assertLookupResultMatchesVocabularyAtIndices(
+      vocab, vocab.finishLookup(std::move(diskOnlyHandle)), diskOnly);
+  assertLookupResultMatchesVocabularyAtIndices(
+      vocab, vocab.finishLookup(std::move(ramOnlyHandle)), ramOnly);
+  assertLookupResultMatchesVocabularyAtIndices(
+      vocab, vocab.finishLookup(std::move(mixedHandle)), indices);
+  EXPECT_ANY_THROW(vocab.beginLookup(ql::span<const size_t>{}));
+  EXPECT_ANY_THROW(vocab.finishLookup(nullptr));
+}
+// _____________________________________________________________________________
+// Words of the internal vocabulary are returned as views into it (two lookups
+// of the same word see the same bytes); words of the external vocabulary are
+// read into a buffer that each result owns.
+TEST(VocabularyInternalExternal, LookupBatchDoesNotCopyInternalWords) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
+  auto vocab = createVocabulary("LookupBatchDoesNotCopyInternalWords")(words);
+  // ID 1 is in the internal vocabulary, ID 2 only in the external one (see
+  // `createVocabularyImpl`).
+  const std::array<size_t, 2> indices{1, 2};
+  auto first = vocab.lookupBatch(indices);
+  auto second = vocab.lookupBatch(indices);
+  assertLookupResultMatchesVocabularyAtIndices(vocab, first, indices);
+  EXPECT_EQ(first[0].data(), second[0].data());
+  EXPECT_NE(first[1].data(), second[1].data());
+}
+
+// _____________________________________________________________________________
+// The external words of a result are owned by the result, so a batch of only
+// external words stays valid after the vocabulary is closed.
+TEST(VocabularyInternalExternal, LookupBatchExternalWordsOutliveClose) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
+  auto vocab = createVocabulary("LookupBatchExternalWordsOutliveClose")(words);
+  const std::array<size_t, 2> diskOnly{2, 2};
+  auto result = vocab.lookupBatch(diskOnly);
+  vocab.close();
+
+  EXPECT_THAT(result, ::testing::ElementsAre("gamma", "gamma"));
+}
+
+// _____________________________________________________________________________
 TEST(VocabularyInternalExternal, EmptyVocabulary) {
   testEmptyVocabulary(createVocabulary("EmptyVocabulary"));
 }

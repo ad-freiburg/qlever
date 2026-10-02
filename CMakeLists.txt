@@ -392,6 +392,53 @@ else ()
     MESSAGE(STATUS "USE_IO_URING is OFF, building without io_uring support")
 endif ()
 
+### Cooperative fiber scheduling over io_uring (optional, requires
+### Boost.Fiber and Boost.Context from the conan Boost package). Without it,
+### `FiberIoScheduler` degrades gracefully: batch bodies run sequentially and
+### `IoUringPolicy::wait` keeps its blocking behavior.
+option(USE_FIBER_IO "Enable cooperative fiber scheduling for io_uring batch waits (requires Boost.Fiber and Boost.Context)" ON)
+if (USE_FIBER_IO)
+    # Per-package lookups (not another find_package(Boost ...)): the main
+    # Boost_DIR cache entry would pin a repeated Boost lookup to the system
+    # config and ignore HINTS, while the per-package DIR entries are
+    # re-searched while cached as NOTFOUND.
+    find_package(boost_fiber QUIET CONFIG)
+    find_package(boost_context QUIET CONFIG)
+    # Fallback for machines whose system Boost ships headers but no compiled
+    # fiber/context libraries: a self-built Boost 1.83.0 prefix given in the
+    # environment variable BOOST_FIBER_PREFIX, linked statically so binaries
+    # need no extra runtime loader path.
+    if ((NOT TARGET Boost::fiber OR NOT TARGET Boost::context)
+        AND DEFINED ENV{BOOST_FIBER_PREFIX}
+        AND EXISTS "$ENV{BOOST_FIBER_PREFIX}/lib/cmake")
+      set(_fiber_prefix_dir "$ENV{BOOST_FIBER_PREFIX}")
+    endif()
+    if (_fiber_prefix_dir)
+      set(_saved_Boost_USE_STATIC_LIBS ${Boost_USE_STATIC_LIBS})
+      set(Boost_USE_STATIC_LIBS ON)
+      set(boost_fiber_DIR "${_fiber_prefix_dir}/lib/cmake/boost_fiber-1.83.0" CACHE PATH "" FORCE)
+      set(boost_context_DIR "${_fiber_prefix_dir}/lib/cmake/boost_context-1.83.0" CACHE PATH "" FORCE)
+      # Drop stale dependency lists leaked by the system BoostConfig into our
+      # directory scope; the prefix configs resolve their own deps.
+      unset(_BOOST_FIBER_DEPS)
+      unset(_BOOST_CONTEXT_DEPS)
+      find_package(boost_fiber QUIET CONFIG)
+      find_package(boost_context QUIET CONFIG)
+      set(Boost_USE_STATIC_LIBS ${_saved_Boost_USE_STATIC_LIBS})
+      unset(_saved_Boost_USE_STATIC_LIBS)
+    endif()
+    unset(_fiber_prefix_dir)
+    if (TARGET Boost::fiber AND TARGET Boost::context)
+        MESSAGE(STATUS "Found Boost.Fiber and Boost.Context, enabling fiber cooperative scheduling")
+        add_compile_definitions(QLEVER_HAS_FIBER_IO)
+        link_libraries(Boost::fiber Boost::context)
+    else ()
+        MESSAGE(STATUS "USE_FIBER_IO is ON but Boost.Fiber/Context were not found, building without fiber scheduling support")
+    endif ()
+else ()
+    MESSAGE(STATUS "USE_FIBER_IO is OFF, building without fiber scheduling support")
+endif ()
+
 ### ZSTD
 find_package(ZSTD QUIET)
 if (TARGET zstd::libzstd_static)

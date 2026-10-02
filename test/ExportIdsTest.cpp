@@ -287,12 +287,41 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
       Id::makeUndefined(),
   };
 
-  // `idsToStringAndType` requires the input to be sorted by `ValueId`.
-  ql::ranges::sort(ids);
-
+  // Unsorted input is fine: both helpers partition mixed datatypes.
   auto batchResults = ql::exportIds::idsToStringAndType(
       index, ql::span<const Id>{ids}, localVocab);
 
+  ASSERT_EQ(batchResults.size(), ids.size());
+  for (size_t i = 0; i < ids.size(); ++i) {
+    EXPECT_EQ(batchResults[i],
+              ql::exportIds::idToStringAndType(index, ids[i], localVocab))
+        << "Mismatch at index " << i;
+  }
+
+  auto depth2 = ql::exportIds::idsToStringAndTypeDepth2(
+      index, ql::span<const Id>{ids}, localVocab);
+  EXPECT_EQ(depth2, batchResults);
+}
+
+// _____________________________________________________________________________
+// More vocabulary IDs than fit one sub-batch (256) resolve in multiple
+// sub-batches: the `nextHandle` loop in `idsToStringAndType` fetches the next
+// handle while earlier batches are consumed.
+TEST(ExportIds, idsToStringAndTypeSpansMultipleSubBatches) {
+  std::string kg;
+  for (size_t i = 0; i < 300; ++i) {
+    kg += "<s> <p> <o" + std::to_string(i) + "> . ";
+  }
+  auto qec = ad_utility::testing::getQec(kg);
+  const Index& index = qec->getIndex();
+  LocalVocab localVocab{};
+  auto getId = ad_utility::testing::makeGetId(index);
+  std::vector<Id> ids;
+  for (size_t i = 0; i < 300; ++i) {
+    ids.push_back(getId("<o" + std::to_string(i) + ">"));
+  }
+  auto batchResults = ql::exportIds::idsToStringAndType(
+      index, ql::span<const Id>{ids}, localVocab);
   ASSERT_EQ(batchResults.size(), ids.size());
   for (size_t i = 0; i < ids.size(); ++i) {
     EXPECT_EQ(batchResults[i],

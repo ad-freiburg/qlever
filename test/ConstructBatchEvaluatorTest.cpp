@@ -8,9 +8,13 @@
 
 #include <gmock/gmock.h>
 
+#include <array>
+#include <string>
+
 #include "./util/IdTableHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
+#include "global/Constants.h"
 
 namespace {
 
@@ -118,6 +122,39 @@ TEST_F(ConstructBatchEvaluatorTest, multipleVariablesMultipleRows) {
               ElementsAre(evalTerm("<s>"), evalTerm("<o>")));
   EXPECT_THAT(getColumn(result, 1),
               ElementsAre(evalTerm("<p>"), evalTerm("<q>")));
+}
+
+// More columns with cache misses than one fiber wave holds
+// (`NUM_VOCAB_BATCH_IO_MANAGERS / 2` = 4): phase B resolves the 11 columns in
+// waves of 4, 4 and 3. Every (column, row) must still be resolved to the right
+// term, in row order.
+TEST_F(ConstructBatchEvaluatorTest, moreColumnsThanOneFiberWave) {
+  const std::array<Id, 4> ids{idS_, idP_, idO_, idQ_};
+  const std::array<std::string, 4> terms{"<s>", "<p>", "<o>", "<q>"};
+  const size_t numColumns = NUM_VOCAB_BATCH_IO_MANAGERS + 3;
+  const size_t numRows = 3;
+  IdTable idTable{numColumns, ad_utility::testing::makeAllocator()};
+  idTable.resize(numRows);
+  std::vector<ColumnIndex> columns;
+  for (size_t col = 0; col < numColumns; ++col) {
+    columns.push_back(col);
+    for (size_t row = 0; row < numRows; ++row) {
+      idTable(row, col) = ids[(col + row) % ids.size()];
+    }
+  }
+  IdCache idCache{1024};
+
+  auto result = evaluateIdTable(columns, idTable, idCache);
+
+  ASSERT_EQ(result.numRows_, numRows);
+  ASSERT_EQ(result.variablesByColumn_.size(), numColumns);
+  for (size_t col = 0; col < numColumns; ++col) {
+    for (size_t row = 0; row < numRows; ++row) {
+      EXPECT_THAT(result.getVariable(col, row),
+                  evalTerm(terms[(col + row) % terms.size()]))
+          << "column " << col << ", row " << row;
+    }
+  }
 }
 
 // The IdTable has 3 columns, but only columns 0 and 2 are variables (column 1
