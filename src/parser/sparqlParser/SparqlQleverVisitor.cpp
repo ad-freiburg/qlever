@@ -396,8 +396,9 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
       visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
                                     ctx->describeQuery(), ctx->askQuery());
 
-  // The trailing `VALUES` clause is joined before the projection (SPARQL 1.1,
-  // sec. 18.2.4.3), so its variables are also selected by `SELECT *`.
+  // The trailing `VALUES` clause is joined before the projection, so its
+  // variables are also selected by `SELECT *`. The SPARQL 1.1 spec is vague
+  // here, see https://github.com/w3c/rdf-tests/issues/381 for details.
   query.postQueryValuesClause_ = visit(ctx->valuesClause());
   if (query.postQueryValuesClause_.has_value()) {
     query.registerVariablesVisibleInQueryBody(
