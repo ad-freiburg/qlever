@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNITERATOR_H
 #define QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNITERATOR_H
 
+#include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 
@@ -48,6 +49,17 @@ class BasicIdColumnIterator {
   BasicIdColumnIterator() = default;
   BasicIdColumnIterator(PayloadPointer payload, DatatypePointer datatype)
       : payload_{payload}, datatype_{datatype} {}
+
+  template <bool>
+  friend class BasicIdColumnIterator;
+
+  // Implicit conversion from the mutable to the const iterator, like
+  // `iterator` -> `const_iterator` of the standard containers.
+  CPP_template(typename = void)(requires IsConst)
+      /*implicit*/ BasicIdColumnIterator(
+          const BasicIdColumnIterator<false>& other)  // NOSONAR,
+      // implicit conversion is needed for future IdRefProxy
+      : payload_{other.payload_}, datatype_{other.datatype_} {}
 
   reference operator*() const { return {payload_, datatype_}; }
   reference operator[](difference_type n) const {

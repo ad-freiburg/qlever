@@ -39,11 +39,8 @@ class BasicIdColumnView {
   using DatatypePointer = std::conditional_t<IsConst, const uint8_t*, uint8_t*>;
   using Reference = BasicIdRef<IsConst>;
   using value_type = Id;
-  // Shallow constness, like `ql::span<T>`: `operator[]`/`begin()` stay
-  // `const` but yield a mutable `Reference` when `IsConst == false`, so
-  // there is only one `iterator` type, not a separate `const_iterator`.
   using iterator = BasicIdColumnIterator<IsConst>;
-  using const_iterator = iterator;
+  using const_iterator = BasicIdColumnIterator<true>;
 
   static constexpr size_t npos = std::numeric_limits<size_t>::max();
 

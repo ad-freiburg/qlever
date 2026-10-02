@@ -143,6 +143,23 @@ TEST(IdColumnIteratorTest, comparisonHoldsForTheSamePositionReachedTwoWays) {
 }
 
 // _____________________________________________________________________________
+TEST(IdColumnIteratorTest, mutableIteratorConvertsToConstIterator) {
+  static_assert(std::is_convertible_v<IdColumnIterator, ConstIdColumnIterator>);
+  static_assert(
+      !std::is_convertible_v<ConstIdColumnIterator, IdColumnIterator>);
+  static_assert(std::is_same_v<IdColumnRef::iterator, IdColumnIterator>);
+  static_assert(
+      std::is_same_v<IdColumnRef::const_iterator, ConstIdColumnIterator>);
+
+  auto ids = sampleIds();
+  IdColumnVector vec{ids.begin(), ids.end(), testAllocator()};
+  const auto view = vec.asView();
+  ConstIdColumnIterator it = view.begin() + 2;
+  EXPECT_EQ(static_cast<Id>(*it), ids.at(2));
+  EXPECT_TRUE(it == vec.asConstView().begin() + 2);
+}
+
+// _____________________________________________________________________________
 TEST(IdColumnIteratorTest, iterSwapSwapsTheReferencedValues) {
   auto ids = sampleIds();
   IdColumnVector vec{ids.begin(), ids.end(), testAllocator()};
