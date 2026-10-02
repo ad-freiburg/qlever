@@ -129,7 +129,7 @@ jobs:
         include:
           - compiler: clang
             compiler-version: 19
-            use-keep-going: false
+            use-keep-going: true
             use-ignore-errors: false
             additional-cmake-options: "-DREDUCED_FEATURE_SET_FOR_CPP17=ON -DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN=17 -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON -DQLEVER_NO_UNICODE=ON"
           - compiler: gcc
