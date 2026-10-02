@@ -127,6 +127,11 @@ class PolymorphicVocabulary {
   //____________________________________________________________________________
   VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const;
 
+  // Append the words for `indices` to `builder`. Compressed alternatives
+  // decode directly into the arena. Other alternatives copy their results.
+  void lookupBatch(ql::span<const size_t> indices,
+                   ArenaVocabBatchBuilder& builder) const;
+
   //____________________________________________________________________________
   VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const;
 
