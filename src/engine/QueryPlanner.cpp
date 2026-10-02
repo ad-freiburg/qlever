@@ -197,8 +197,7 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   // Apply trailing `VALUES` clause. As in the SPARQL 1.1 spec (sec. 18.2.4.3),
   // this happens after GROUP BY and HAVING, but before DISTINCT and ORDER BY.
   auto& postValues = pq.postQueryValuesClause_;
-  if (postValues.has_value() &&
-      !postValues.value()._inlineValues._variables.empty()) {
+  if (postValues.has_value()) {
     plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
     checkCancellation();
   }
