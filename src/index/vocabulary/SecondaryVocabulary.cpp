@@ -106,11 +106,8 @@ SecondaryVocabulary SecondaryVocabulary::clone() const {
   for (const auto& segment : segments_) {
     result.segments_.push_back(segment.cloneAndRemap(ql::identity{}));
   }
-  auto copy = [](const IndexArray& array) {
-    return IndexArray{std::vector<uint64_t>(array.begin(), array.end())};
-  };
-  result.segmentOffsets_ = copy(segmentOffsets_);
-  result.sortedIndices_ = copy(sortedIndices_);
+  result.segmentOffsets_ = segmentOffsets_.clone();
+  result.sortedIndices_ = sortedIndices_.clone();
   return result;
 }
 

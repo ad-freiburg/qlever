@@ -30,8 +30,8 @@ class VocabularyInMemoryBinSearch
   using StringView = std::basic_string_view<CharType>;
   using String = std::basic_string<CharType>;
   using Words = CompactVectorOfStrings<CharType>;
-  using Indices = std::vector<uint64_t>;
-  using IndicesView = ql::span<const uint64_t>;
+  using IndexStorage = ad_utility::OwnedOrViewedVector<uint64_t>;
+  using IndicesView = IndexStorage::View;
 
   // This suffix is appended to the base filename in order to get the name of
   // the file in which the (because of the holes, explicit) indices of the words
@@ -52,7 +52,7 @@ class VocabularyInMemoryBinSearch
   // serializer), or as a non-owning view into externally-owned memory (after
   // `fromZeroCopyDeserializer`).
   Words words_;
-  ad_utility::OwnedOrViewedVector<uint64_t> indices_;
+  IndexStorage indices_;
 
  public:
   // Construct an empty vocabulary
@@ -75,9 +75,7 @@ class VocabularyInMemoryBinSearch
       fromZeroCopyDeserializer(S& serializer) {
     VocabularyInMemoryBinSearch result;
     result.words_ = Words::fromZeroCopyDeserializer(serializer);
-    result.indices_ =
-        ad_utility::OwnedOrViewedVector<uint64_t>::fromZeroCopyDeserializer(
-            serializer);
+    result.indices_ = IndexStorage::fromZeroCopyDeserializer(serializer);
     return result;
   }
 

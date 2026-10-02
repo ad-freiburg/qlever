@@ -39,8 +39,7 @@ namespace ad_utility {
 // which keeps that span in sync.
 //
 // This type is move-only: A defaulted copy would make the span of the copy
-// point into the elements of the original. To copy, construct a new object
-// from a `std::vector` of the elements of `view()`.
+// point into the elements of the original. To copy, use `clone()`.
 //
 // NOTE: There deliberately is no variant of this class for
 // `std::string`/`std::string_view`: Because of the small string optimization,
@@ -90,6 +89,11 @@ class OwnedOrViewedVector {
   OwnedOrViewedVector(const OwnedOrViewedVector&) = delete;
   OwnedOrViewedVector& operator=(const OwnedOrViewedVector&) = delete;
 
+  // The move operations above are only user-defined to keep `view_` in sync,
+  // there is no resource to clean up: The owned `std::vector` frees its
+  // elements itself, and a view owns nothing.
+  ~OwnedOrViewedVector() = default;
+
   // Create an array that is a non-owning, zero-copy view directly into the
   // buffer of `serializer`, which must support zero-copy deserialization (see
   // `ZeroCopyReadSerializer` in `util/Serializer/Serializer.h`). The returned
@@ -112,6 +116,12 @@ class OwnedOrViewedVector {
   const T& back() const { return view_.back(); }
   auto begin() const { return view_.begin(); }
   auto end() const { return view_.end(); }
+
+  // Return a copy of this array that always owns its elements (even if this
+  // array is a non-owning view).
+  OwnedOrViewedVector clone() const {
+    return OwnedOrViewedVector{Vector(view_.begin(), view_.end())};
+  }
 
   // Return true iff the elements are owned (and can thus be changed via
   // `modify`).

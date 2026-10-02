@@ -123,6 +123,29 @@ TEST(OwnedOrViewedVector, Move) {
 }
 
 // _____________________________________________________________________________
+TEST(OwnedOrViewedVector, Clone) {
+  // A clone of an owning object owns a copy of the elements.
+  V owned{std::vector{1, 2, 3}};
+  V ownedClone = owned.clone();
+  EXPECT_TRUE(ownedClone.isOwned());
+  EXPECT_THAT(ownedClone, ElementsAre(1, 2, 3));
+  EXPECT_NE(ownedClone.view().data(), owned.view().data());
+
+  // A clone of a view owns its elements, which are independent of the viewed
+  // memory.
+  std::vector<int> external{4, 5};
+  V viewed{ql::span<const int>{external}};
+  V viewedClone = viewed.clone();
+  EXPECT_TRUE(viewedClone.isOwned());
+  EXPECT_FALSE(viewsInto(viewedClone, external));
+  external[0] = 42;
+  EXPECT_THAT(viewedClone, ElementsAre(4, 5));
+
+  // A clone of an empty object is empty.
+  EXPECT_THAT(V{}.clone(), IsEmpty());
+}
+
+// _____________________________________________________________________________
 TEST(OwnedOrViewedVector, Serialization) {
   using namespace ad_utility::serialization;
   // Regular serialization, the result owns its elements, also if a view was

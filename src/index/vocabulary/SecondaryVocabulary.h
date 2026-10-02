@@ -246,6 +246,7 @@ class SecondaryVocabulary {
       readIndexArray(arg.segmentOffsets_);
       readIndexArray(arg.sortedIndices_);
       AD_CORRECTNESS_CHECK(arg.segmentOffsets_.size() == numSegments);
+      AD_CORRECTNESS_CHECK(numSegments == 0 || arg.segmentOffsets_[0] == 0);
       AD_CORRECTNESS_CHECK(arg.sortedIndices_.size() == arg.numWords());
     }
   }

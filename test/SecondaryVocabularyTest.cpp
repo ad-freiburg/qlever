@@ -379,7 +379,8 @@ TEST(SecondaryVocabulary, serialization) {
   EXPECT_EQ(readEmpty.numWords(), 0);
 
   // The contents of the input are not checked when reading, but an input in
-  // which the sizes of the index arrays don't match the segments is rejected.
+  // which the sizes of the index arrays don't match the segments, or in which
+  // the first segment offset is not zero, is rejected.
   auto writeVocabWithIndexArrays = [](ByteBufferWriteSerializer& writer,
                                       const std::vector<uint64_t>& offsets,
                                       const std::vector<uint64_t>& sorted) {
@@ -392,7 +393,7 @@ TEST(SecondaryVocabulary, serialization) {
   };
   for (const auto& [offsets, sorted] :
        std::vector<std::pair<std::vector<uint64_t>, std::vector<uint64_t>>>{
-           {{}, {0, 1}}, {{0}, {0}}, {{0}, {0, 1, 2}}}) {
+           {{}, {0, 1}}, {{0}, {0}}, {{0}, {0, 1, 2}}, {{1}, {0, 1, 2}}}) {
     ByteBufferWriteSerializer corruptedWriter;
     writeVocabWithIndexArrays(corruptedWriter, offsets, sorted);
     ByteBufferReadSerializer corruptedReader{std::move(corruptedWriter).data()};
