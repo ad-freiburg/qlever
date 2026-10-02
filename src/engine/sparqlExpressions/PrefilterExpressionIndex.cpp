@@ -725,10 +725,11 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // `index/vocabulary/SecondaryVocabulary.h`). Those sort after all of the
   // ranges below, so neither the `> <>` prefilter nor the datatype range of
   // the encoded IRIs covers them, which means that blocks consisting entirely
-  // of such IRIs are incorrectly pruned. This is deliberate for now, because
-  // nothing but a unit test can currently create a secondary vocabulary, but
-  // it has to be fixed *before* anything else does, together with the semantic
-  // comparison of those `Id`s (see the detailed note at
+  // of such IRIs are incorrectly pruned. This is a known limitation for now,
+  // because apart from unit tests, a secondary vocabulary is only created when
+  // a blob of `NamedCachedQueryBlobManager` that contains new words is loaded,
+  // but it has to be fixed before it is used more widely, together with the
+  // semantic comparison of those `Id`s (see the detailed note at
   // `valueIdComparators::detail::compareIdsImpl`).
   //
   // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids

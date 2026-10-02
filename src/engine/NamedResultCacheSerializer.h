@@ -32,18 +32,24 @@ constexpr uint8_t magicByte = 0xC3;
 constexpr uint16_t formatVersion = 1;
 }  // namespace namedResultCacheSerializer::detail
 
-// _____________________________________________________________________________
-CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::WriteSerializer<
-        Serializer>) void NamedResultCache::writeToSerializer(Serializer&
-                                                                  serializer)
-    const {
+namespace namedResultCacheSerializer {
+// Write the `entries` (as returned by `getAllEntriesSortedByKey`) to the
+// `serializer`, in exactly the format that `readFromSerializer` reads. Each
+// value is written via `writeEntry(serializer, value)`, which has to write a
+// `NamedResultCache::Value`, but may write a modified version of it (see
+// `writeValue` below).
+template <typename Serializer, typename WriteEntry>
+void writeEntries(
+    Serializer& serializer,
+    const std::vector<std::pair<
+        NamedResultCache::Key, std::shared_ptr<const NamedResultCache::Value>>>&
+        entries,
+    const WriteEntry& writeEntry) {
+  static_assert(ad_utility::serialization::WriteSerializer<Serializer>);
   // Write the magic byte and format version first, s.t. `readFromSerializer`
   // can detect and reject incompatible or unrelated input.
-  serializer << namedResultCacheSerializer::detail::magicByte;
-  serializer << namedResultCacheSerializer::detail::formatVersion;
-
-  auto entries = getAllEntriesSortedByKey();
+  serializer << detail::magicByte;
+  serializer << detail::formatVersion;
 
   // Serialize the number of entries.
   serializer << entries.size();
@@ -51,8 +57,20 @@ CPP_template_def(typename Serializer)(
   // Serialize each entry.
   for (const auto& [key, value] : entries) {
     serializer << key;
-    serializer << *value;
+    writeEntry(serializer, *value);
   }
+}
+}  // namespace namedResultCacheSerializer
+
+// _____________________________________________________________________________
+CPP_template_def(typename Serializer)(
+    requires ad_utility::serialization::WriteSerializer<
+        Serializer>) void NamedResultCache::writeToSerializer(Serializer&
+                                                                  serializer)
+    const {
+  namedResultCacheSerializer::writeEntries(
+      serializer, getAllEntriesSortedByKey(),
+      [](Serializer& s, const Value& value) { s << value; });
 }
 
 // _____________________________________________________________________________
@@ -114,7 +132,7 @@ namespace namedResultCacheSerializer {
 // the `resultSortedOn` are passed separately, so that a caller can write a
 // *rewritten* version of the `value`: a caller may for example replace the
 // `Id`s that refer to local vocab entries by `Id`s of the main or of a
-// persistent vocabulary, which also invalidates a part of the sort order. The
+// secondary vocabulary, which may also change the sort order. The
 // `columns` therefore only have to agree with `value.result_` in their number
 // and in the number of rows, which is checked. If `writeLocalVocabWords` is
 // `false`, the words of the local vocab of the `value` are not written (only
@@ -152,6 +170,9 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
     // NOTE 2: Even though we disallow the local vocab, it is crucial to
     // serialize the local vocab because of possible added blank node indices,
     // which we do handle correctly, and which also rely on the local vocab.
+    // NOTE 3: The blobs of `NamedCachedQueryBlobManager` support local vocab
+    // entries by rewriting them first (see
+    // `NamedCacheSecondaryVocabRewriter.h`).
     // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
     // allow local vocab entries here.
     AD_CORRECTNESS_CHECK(
