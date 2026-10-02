@@ -81,21 +81,20 @@ class BasicIdRef {
     return *this;
   }
 
-  // NOT redundant with `operator=(Id)` above: without this, `a = b` (used
-  // internally by e.g. `ranges::sort` to swap elements) would resolve to the
-  // compiler-generated copy-assignment instead -- an identity match always
-  // beats our user-defined `BasicIdRef` -> `Id` conversion -- which would
-  // just rebind `a`'s pointers instead of writing through them, silently
-  // corrupting data.
   BasicIdRef& operator=(const BasicIdRef& other) {
+    if (this == &other) return *this;
+
     static_assert(!IsConst, "`ConstIdRef` is not assignable.");
-    *this = static_cast<Id>(other);
+    *payload_ = *other.payload_;
+    *datatype_ = *other.datatype_;
     return *this;
   }
 
   // Swaps the referenced values, not the pointers. Takes `const&` so that it
   // also binds to the prvalues `*it` that `ranges::iter_swap` passes.
   friend void swap(const BasicIdRef& lhs, const BasicIdRef& rhs) noexcept {
+    if (lhs == rhs) return;
+
     static_assert(!IsConst, "`ConstIdRef` is not swappable.");
     std::swap(*lhs.payload_, *rhs.payload_);
     std::swap(*lhs.datatype_, *rhs.datatype_);
