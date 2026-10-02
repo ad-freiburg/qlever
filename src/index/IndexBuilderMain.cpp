@@ -8,7 +8,6 @@
 
 #include <absl/functional/bind_front.h>
 
-#include <algorithm>
 #include <boost/program_options.hpp>
 #include <cstdint>
 #include <cstdlib>
@@ -409,16 +408,12 @@ int main(int argc, char** argv) {
       config.indexRowsPerBlock_ = indexRowsPerBlock.value();
     }
     config.validate();
-    // For index building, let each permutation writer compress and write up to
-    // half as many blocks concurrently as the global thread pool has threads,
-    // because two permutations are always written at the same time. This is
-    // computed from `config.numThreads_` and not via
-    // `ad_utility::globalExecutorNumThreads()`, because the size of the pool is
-    // only set to `config.numThreads_` inside `Qlever::buildIndex`. The default
-    // of the runtime parameter is optimized for `rebuild-index`, where six
-    // permutations are written simultaneously.
+    // For index building, let each permutation writer use all threads of the
+    // global thread pool (whose size is only set to `config.numThreads_` inside
+    // `Qlever::buildIndex`). The default is optimized for `rebuild-index`,
+    // where six permutations are written simultaneously.
     setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(
-        std::max<size_t>(1, config.numThreads_ / 2));
+        config.numThreads_);
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "
