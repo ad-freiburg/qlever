@@ -61,7 +61,8 @@ class NamedCachedQueryBlobManager {
       ad_utility::AlignedAllocator<char, ql::pmr::polymorphic_allocator<char>>>;
 
   // The result of loading a blob (see `tryToDeserialize` below). All of these
-  // are detected before any of the actual contents of the blob is read.
+  // are detected before the vocabulary or the named result cache of the blob
+  // are read, and before the `Qlever` instance is modified.
   enum class BlobStatus {
     // The blob was decompressed and its header is compatible with this version
     // of QLever.
@@ -74,7 +75,11 @@ class NamedCachedQueryBlobManager {
     invalidMagicBytes,
     // The magic bytes are correct, but the format version stored in the blob is
     // not the one that this version of QLever writes.
-    invalidVersion
+    invalidVersion,
+    // The header is valid, but the index format version that is stored in the
+    // index metadata of the blob is incompatible with this version of QLever
+    // (see `IndexImpl::checkIndexFormatVersion`).
+    incompatibleIndexFormat
   };
 
  private:
@@ -110,14 +115,15 @@ class NamedCachedQueryBlobManager {
   // `allocator` (see `BlobAllocator` above).
   //
   // Return `ok` on success, and the reason for the rejection if the blob cannot
-  // be decompressed, or if its header is missing or incompatible (see
-  // `BlobStatus`). In those cases, `qlever` is left completely unchanged, so it
-  // can be used as if this function had never been called, and another blob can
-  // be loaded afterwards.
+  // be decompressed, if its header is missing or incompatible, or if its index
+  // format version is incompatible (see `BlobStatus`). In those cases, `qlever`
+  // is left completely unchanged, so it can be used as if this function had
+  // never been called, and another blob can be loaded afterwards.
   //
   // NOTE: This function is non-throwing only for the failures that are detected
-  // before any of the actual contents of the blob is read (see `BlobStatus`).
-  // Contents that cannot be read behind a valid header still throw, as does a
+  // before the vocabulary or the named result cache of the blob are read (see
+  // `BlobStatus`). Contents that cannot be read behind a valid header still
+  // throw (in particular a metadata JSON that cannot be parsed), as does a
   // violation of the preconditions below.
   //
   // PRECONDITION: Must only be called while no other thread can concurrently

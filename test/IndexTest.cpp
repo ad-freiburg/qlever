@@ -1396,39 +1396,43 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
   // Apply the `minimalValidConfiguration()`, but with the
   // `index-format-version` replaced by `version` (or removed, if `version` is
   // `std::nullopt`), to a freshly created `IndexImpl`. Expect that this throws
-  // with a message that matches `messageMatcher`, and return the log output
-  // that was produced in the process.
-  auto applyVersionAndExpectThrow =
-      [](std::optional<qlever::IndexFormatVersion> version,
-         const auto& messageMatcher,
-         ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-        auto trace = generateLocationTrace(loc);
-        auto configuration = minimalValidConfiguration();
-        if (version.has_value()) {
-          configuration["index-format-version"] = version.value();
-        } else {
-          configuration.erase("index-format-version");
-        }
-        IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
-        auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
-        AD_EXPECT_THROW_WITH_MESSAGE(
-            indexImpl.applyConfiguration(configuration), messageMatcher);
-        return logStream.str();
-      };
-  auto genericThrowMessage = ::testing::HasSubstr(
-      "Incompatible index format, see log message for details");
+  // with a message that matches `messageMatcher`, and that the non-throwing
+  // `checkIndexFormatVersion` returns exactly the same message.
+  auto applyVersionAndExpectThrow = [](std::optional<nlohmann::json> version,
+                                       const auto& messageMatcher,
+                                       ad_utility::source_location loc =
+                                           AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    auto configuration = minimalValidConfiguration();
+    if (version.has_value()) {
+      configuration["index-format-version"] = version.value();
+    } else {
+      configuration.erase("index-format-version");
+    }
+    IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto error = indexImpl.checkIndexFormatVersion(configuration);
+    ASSERT_TRUE(error.has_value());
+    EXPECT_THAT(error.value(), messageMatcher);
+    AD_EXPECT_THROW_WITH_MESSAGE(indexImpl.applyConfiguration(configuration),
+                                 ::testing::Eq(error.value()));
+  };
+
+  // The current version is accepted.
+  {
+    IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+    EXPECT_EQ(indexImpl.checkIndexFormatVersion(minimalValidConfiguration()),
+              std::nullopt);
+  }
 
   // An index that was built before the index format was versioned at all.
-  EXPECT_THAT(applyVersionAndExpectThrow(std::nullopt, genericThrowMessage),
-              ::testing::HasSubstr("This index was built before versioning was "
-                                   "introduced for QLever's index format"));
+  applyVersionAndExpectThrow(
+      std::nullopt,
+      ::testing::HasSubstr("This index was built before versioning was "
+                           "introduced for QLever's index format"));
 
   // An index that is newer than the QLever binary that reads it.
-  EXPECT_THAT(
-      applyVersionAndExpectThrow(
-          qlever::IndexFormatVersion{4711,
-                                     DateYearOrDuration{Date{9999, 12, 31}}},
-          genericThrowMessage),
+  applyVersionAndExpectThrow(
+      qlever::IndexFormatVersion{4711, DateYearOrDuration{Date{9999, 12, 31}}},
       ::testing::AllOf(
           ::testing::HasSubstr("The version of QLever you are using is too old "
                                "for this index"),
@@ -1439,10 +1443,8 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
   // An index that is older than the QLever binary that reads it, but not in
   // exactly the format that the index upgrader upgrades from. Such an index
   // has to be rebuilt.
-  EXPECT_THAT(
-      applyVersionAndExpectThrow(
-          qlever::IndexFormatVersion{42, DateYearOrDuration{Date{1900, 1, 1}}},
-          genericThrowMessage),
+  applyVersionAndExpectThrow(
+      qlever::IndexFormatVersion{42, DateYearOrDuration{Date{1900, 1, 1}}},
       ::testing::AllOf(
           ::testing::HasSubstr("The index is too old for this version of "
                                "QLever"),
@@ -1450,21 +1452,35 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
           ::testing::Not(::testing::HasSubstr("qlever-upgrade-index"))));
 
   // An index in exactly the format that the `qlever-upgrade-index` binary
-  // upgrades from. Then the thrown exception is one dedicated message that
-  // mentions that binary, and the generic advice is not logged at all. Note
-  // that this requires the target format of the upgrader to be the current
-  // index format (which `convertIndexToCurrentFormat` also checks).
+  // upgrades from. Then the message is one dedicated message that mentions that
+  // binary, and not the generic advice. Note that this requires the target
+  // format of the upgrader to be the current index format (which
+  // `convertIndexToCurrentFormat` also checks).
   ASSERT_EQ(qlever::indexFormatConverter::targetVersion,
             qlever::indexFormatVersion);
-  EXPECT_THAT(
-      applyVersionAndExpectThrow(
-          qlever::indexFormatConverter::sourceVersion,
-          ::testing::AllOf(
-              ::testing::HasSubstr("but your index uses the previous format"),
-              ::testing::HasSubstr("sometimes they are unavoidable"),
-              ::testing::HasSubstr("the old index is preserved"),
-              ::testing::HasSubstr("qlever-upgrade-index "))),
-      ::testing::Not(::testing::HasSubstr("The index is too old")));
+  applyVersionAndExpectThrow(
+      qlever::indexFormatConverter::sourceVersion,
+      ::testing::AllOf(
+          ::testing::HasSubstr("but your index uses the previous format"),
+          ::testing::HasSubstr("sometimes they are unavoidable"),
+          ::testing::HasSubstr("the old index is preserved"),
+          ::testing::HasSubstr("qlever-upgrade-index "),
+          ::testing::Not(::testing::HasSubstr("The index is too old"))));
+
+  // Malformed versions are reported, but never make the check throw.
+  auto malformed = ::testing::HasSubstr(
+      "The index format version stored in the index metadata is malformed");
+  applyVersionAndExpectThrow(nlohmann::json(42), malformed);
+  applyVersionAndExpectThrow(nlohmann::json::array({1, 2}), malformed);
+  applyVersionAndExpectThrow(
+      nlohmann::json{{"pull-request-number", -3}, {"date", "2024-10-22"}},
+      malformed);
+  applyVersionAndExpectThrow(
+      nlohmann::json{{"pull-request-number", 3}, {"date", 17}}, malformed);
+  applyVersionAndExpectThrow(
+      nlohmann::json{{"pull-request-number", 3}, {"date", "noDate"}},
+      malformed);
+  applyVersionAndExpectThrow(nlohmann::json{{"date", "2024-10-22"}}, malformed);
 }
 
 // _____________________________________________________________________________

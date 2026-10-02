@@ -85,6 +85,20 @@ std::vector<char> compressedBlobWithHeader(std::array<char, 8> magicBytes,
   return Manager::compressBlob(ql::span<const char>{data});
 }
 
+// Return a validly ZSTD-compressed blob with a valid header, followed by an
+// index metadata JSON whose index format version is incompatible with the
+// current version of QLever, and nothing else.
+std::vector<char> compressedBlobWithIncompatibleIndexFormat() {
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
+  Manager::writeBlobHeader(writer);
+  nlohmann::json metadata;
+  metadata["index-format-version"] =
+      nlohmann::json{{"date", "1900-01-01"}, {"pull-request-number", 42}};
+  writer << metadata.dump();
+  auto data = std::move(writer).data();
+  return Manager::compressBlob(ql::span<const char>{data});
+}
+
 // Write the `turtleContents` to a turtle file, build an index from it with the
 // given vocabulary `type`, and return the corresponding `IndexBuilderConfig`.
 // The basename of the index is derived from the name of the currently running
@@ -588,6 +602,24 @@ TEST(NamedCachedQueryBlobManager,
 }
 
 // _____________________________________________________________________________
+// Test that a blob with a valid header, but with an incompatible index format
+// version in its metadata, is rejected by both the throwing and the
+// non-throwing loading function.
+TEST(NamedCachedQueryBlobManager,
+     deserializeRejectsBlobWithIncompatibleIndexFormat) {
+  std::vector<char> compressedBlob =
+      compressedBlobWithIncompatibleIndexFormat();
+
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
+      HasSubstr("incompatible index format"));
+
+  EXPECT_EQ(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
+                compressedBlob),
+            Manager::BlobStatus::incompatibleIndexFormat);
+}
+
 // Test that a blob with a valid header, but with contents that cannot be read,
 // is rejected with our own message, rather than with a cryptic message from
 // deep inside the deserialization.
@@ -637,8 +669,9 @@ TEST(NamedCachedQueryBlobManager, tryToDeserializeLeavesInstanceUsable) {
 
   Qlever target{EngineConfig{}, /*skipLoading=*/true};
 
-  // None of an undecompressible, an unrecognized or an incompatible blob
-  // throws, and none of them counts as the one allowed load.
+  // None of an undecompressible, an unrecognized, an incompatible blob, or a
+  // blob with an incompatible index format throws, and none of them counts as
+  // the one allowed load.
   std::vector<char> garbage(1024, '\xFF');
   EXPECT_EQ(
       target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(garbage),
@@ -650,6 +683,9 @@ TEST(NamedCachedQueryBlobManager, tryToDeserializeLeavesInstanceUsable) {
   EXPECT_EQ(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
                 compressedBlobWithHeader(correctMagicBytes, uint16_t{63999})),
             Manager::BlobStatus::invalidVersion);
+  EXPECT_EQ(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
+                compressedBlobWithIncompatibleIndexFormat()),
+            Manager::BlobStatus::incompatibleIndexFormat);
 
   // The valid blob can still be loaded, and the instance then answers the query
   // from the named result cache and the vocabulary in the blob.

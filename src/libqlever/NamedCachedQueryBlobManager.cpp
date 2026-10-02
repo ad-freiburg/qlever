@@ -88,6 +88,10 @@ std::string blobErrorMessage(NamedCachedQueryBlobManager::BlobStatus status,
               ? absl::StrCat("format version ", foundFormatVersion.value())
               : std::string{"incompatible blob format version"},
           ", expected ", blobFormatVersion, ")");
+    case Status::incompatibleIndexFormat:
+      return std::string{
+          "The given blob was written by a version of QLever with an "
+          "incompatible index format"};
     case Status::ok:
       break;
   }
@@ -107,31 +111,16 @@ decltype(auto) rethrowWithContext(std::string_view message,
   }
 }
 
-// Run `function`, which must be one of the ZSTD calls below, and return
-// `nullopt` if it reports an error. Only the `std::runtime_error`s that
-// `ZstdWrapper` throws are caught; all other exceptions (in particular
-// `std::bad_alloc`, and the `ad_utility::Exception`s of the `AD_..._CHECK`
-// macros) are propagated. `errorDetails` is set to the message of the ZSTD
-// error and is left untouched on success.
-template <typename Function>
-std::optional<std::invoke_result_t<const Function&>> runZstdCall(
-    const Function& function, std::string& errorDetails) {
-  try {
-    return function();
-  } catch (const std::runtime_error& e) {
-    errorDetails = e.what();
-    return std::nullopt;
-  }
-}
-
 // The common implementation of `NamedCachedQueryBlobManager::decompressBlob`
 // and `NamedCachedQueryBlobManager::tryToDecompressBlob`: decompress
 // `compressedBlob`, and return `nullopt` (with `errorDetails` set to the
-// message of the underlying ZSTD error) if that fails.
+// message of the underlying ZSTD error) if that fails. Use only the
+// non-throwing functions of `ZstdWrapper`, so that a failure is detected
+// without any exception being thrown.
 std::optional<std::vector<char, NamedCachedQueryBlobManager::BlobAllocator>>
 decompressBlobOrErrorDetails(ql::span<const char> compressedBlob,
                              ql::pmr::polymorphic_allocator<char> allocator,
-                             std::string& errorDetails) {
+                             std::string_view& errorDetails) {
   using BlobAllocator = NamedCachedQueryBlobManager::BlobAllocator;
   // Read the size of the uncompressed data from the ZSTD frame header (which
   // always stores it, because `compressBlob` uses the one-shot
@@ -139,13 +128,10 @@ decompressBlobOrErrorDetails(ql::span<const char> compressedBlob,
   // ZSTD frame at all, so that arbitrary garbage is rejected right here,
   // instead of being misinterpreted as an (arbitrarily large) size for the
   // allocation below.
-  auto uncompressedSize = runZstdCall(
-      [&compressedBlob]() {
-        return ZstdWrapper::getUncompressedSize(compressedBlob.data(),
-                                                compressedBlob.size());
-      },
-      errorDetails);
-  if (!uncompressedSize.has_value()) {
+  auto uncompressedSize = ZstdWrapper::tryToGetUncompressedSize(
+      compressedBlob.data(), compressedBlob.size());
+  if (!uncompressedSize.size_.has_value()) {
+    errorDetails = uncompressedSize.errorMessage_;
     return std::nullopt;
   }
 
@@ -154,21 +140,17 @@ decompressBlobOrErrorDetails(ql::span<const char> compressedBlob,
   // zero-copy deserialization), and 3. not needlessly zero-initialized before
   // the decompression overwrites it (see `BlobAllocator`).
   std::vector<char, BlobAllocator> uncompressed(
-      uncompressedSize.value(),
+      uncompressedSize.size_.value(),
       BlobAllocator{ad_utility::AlignedAllocator<
           char, ql::pmr::polymorphic_allocator<char>>{allocator}});
-  auto actualUncompressedSize = runZstdCall(
-      [&compressedBlob, &uncompressed]() {
-        return ZstdWrapper::decompressToBuffer(
-            compressedBlob.data(), compressedBlob.size(), uncompressed.data(),
-            uncompressed.size());
-      },
-      errorDetails);
-  if (!actualUncompressedSize.has_value()) {
+  auto actualUncompressedSize = ZstdWrapper::tryToDecompressToBuffer(
+      compressedBlob.data(), compressedBlob.size(), uncompressed.data(),
+      uncompressed.size());
+  if (!actualUncompressedSize.size_.has_value()) {
+    errorDetails = actualUncompressedSize.errorMessage_;
     return std::nullopt;
   }
-  AD_CORRECTNESS_CHECK(actualUncompressedSize.value() ==
-                       uncompressedSize.value());
+  AD_CORRECTNESS_CHECK(actualUncompressedSize.size_ == uncompressedSize.size_);
   return uncompressed;
 }
 
@@ -245,24 +227,18 @@ NamedCachedQueryBlobManager::tryToSkipAndVerifyBlobHeader(
   }
   // The reads below cannot throw, because the header is known to be complete
   // (see above) and no alignment padding is inserted inside the header (see
-  // `blobHeaderSize`). The `catch` is only there to make the guarantee that
-  // this function never throws independent of the implementation details of
-  // the serializer.
-  try {
-    std::decay_t<decltype(blobMagicBytes)> magicBytes{};
-    serializer >> magicBytes;
-    if (magicBytes != blobMagicBytes) {
-      return Status::invalidMagicBytes;
-    }
-    uint16_t version;
-    serializer >> version;
-    if (version != blobFormatVersion) {
-      return Status::invalidVersion;
-    }
-    return Status::ok;
-  } catch (...) {
+  // `blobHeaderSize`).
+  std::decay_t<decltype(blobMagicBytes)> magicBytes{};
+  serializer >> magicBytes;
+  if (magicBytes != blobMagicBytes) {
     return Status::invalidMagicBytes;
   }
+  uint16_t version;
+  serializer >> version;
+  if (version != blobFormatVersion) {
+    return Status::invalidVersion;
+  }
+  return Status::ok;
 }
 
 // _____________________________________________________________________________
@@ -299,7 +275,7 @@ std::optional<std::vector<char, NamedCachedQueryBlobManager::BlobAllocator>>
 NamedCachedQueryBlobManager::tryToDecompressBlob(
     ql::span<const char> compressedBlob,
     ql::pmr::polymorphic_allocator<char> allocator) {
-  std::string ignoredErrorDetails;
+  std::string_view ignoredErrorDetails;
   return decompressBlobOrErrorDetails(compressedBlob, allocator,
                                       ignoredErrorDetails);
 }
@@ -309,7 +285,7 @@ std::vector<char, NamedCachedQueryBlobManager::BlobAllocator>
 NamedCachedQueryBlobManager::decompressBlob(
     ql::span<const char> compressedBlob,
     ql::pmr::polymorphic_allocator<char> allocator) {
-  std::string errorDetails;
+  std::string_view errorDetails;
   auto uncompressed =
       decompressBlobOrErrorDetails(compressedBlob, allocator, errorDetails);
   if (!uncompressed.has_value()) {
@@ -397,15 +373,29 @@ NamedCachedQueryBlobManager::tryToDeserialize(
   // reading of the contents, so that the user gets a message that names the
   // expected input, instead of a low-level error from deep inside the
   // deserialization.
-  rethrowWithContext(
-      blobContentsNotReadableMessage,
-      [&indexImpl, &reader, &qlever, &indexAndViews]() {
-        // Read and apply the index metadata JSON before loading the vocabulary,
-        // so that the vocabulary is set up with the correct configuration
-        // (locale, comparator, etc.).
+  auto metadata =
+      rethrowWithContext(blobContentsNotReadableMessage, [&reader]() {
         std::string metadataJson;
         reader >> metadataJson;
-        indexImpl.applyConfiguration(nlohmann::json::parse(metadataJson));
+        return nlohmann::json::parse(metadataJson);
+      });
+
+  // Check the index format version of the metadata JSON (without throwing),
+  // before anything of `qlever` is modified, so that a blob written by a
+  // version of QLever with an incompatible index format is rejected like an
+  // incompatible header above.
+  if (indexImpl.checkIndexFormatVersion(metadata).has_value()) {
+    deserializedBlobLifetimeExtender_.reset();
+    return BlobStatus::incompatibleIndexFormat;
+  }
+
+  rethrowWithContext(
+      blobContentsNotReadableMessage,
+      [&indexImpl, &reader, &qlever, &indexAndViews, &metadata]() {
+        // Apply the index metadata JSON before loading the vocabulary, so that
+        // the vocabulary is set up with the correct configuration (locale,
+        // comparator, etc.).
+        indexImpl.applyConfiguration(metadata);
         indexImpl.loadVocabularyFromZeroCopyBlob(reader);
         qlever.namedResultCache_.readFromSerializer(
             reader, qlever.allocator_,

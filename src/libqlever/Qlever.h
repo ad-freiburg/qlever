@@ -605,9 +605,9 @@ class Qlever {
 
   // Load a blob previously written by
   // `serializeVocabAndNamedCacheToCompressedBlob`, and return a status instead
-  // of throwing if the blob cannot be decompressed, or if its header is missing
-  // or incompatible. For details (in particular which failures are still
-  // reported by an exception) see
+  // of throwing if the blob cannot be decompressed, or if its header or its
+  // index format version is missing or incompatible. For details (in
+  // particular which failures are still reported by an exception) see
   // `NamedCachedQueryBlobManager::tryToDeserialize`.
   //
   // PRECONDITION: Must only be called while no other thread can concurrently
