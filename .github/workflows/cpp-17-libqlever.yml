@@ -109,9 +109,8 @@ jobs:
     # Ubuntu 20.04 ships Boost 1.71, the oldest version that QLever supports, in
     # its standard repositories. Building inside a container of that release is
     # therefore the simplest way to test against that version: no Boost has to
-    # be built from source or cached. Both matrix entries use it, so the C++17
-    # mode (which is what our users on such old platforms actually compile) is
-    # covered as well.
+    # be built from source or cached. Both matrix entries use it, so GCC 8 and
+    # Clang 19 are tested in C++17 mode against the oldest supported Boost.
     container: ubuntu:20.04
     # Inside a `container`, the runner falls back to `sh` (which is `dash` on
     # Ubuntu) as the default shell for `run` steps, instead of the `bash` that
@@ -124,15 +123,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The two entries only differ in the compiler and in the C++ standard.
-        # `USE_CPP_17_BACKPORTS` (and with it `boost::filesystem` instead of
-        # `std::filesystem`, see `backports/filesystem.h`) is used in both.
+        # Both entries use C++17 and `USE_CPP_17_BACKPORTS` (and with it
+        # `boost::filesystem` instead of `std::filesystem`, see
+        # `backports/filesystem.h`).
         include:
-          - compiler-version: 11
+          - compiler: clang
+            compiler-version: 19
             use-keep-going: false
             use-ignore-errors: false
-            additional-cmake-options: "-DREDUCED_FEATURE_SET_FOR_CPP17=ON -DUSE_CPP_17_BACKPORTS=ON -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
-          - compiler-version: 8
+            additional-cmake-options: "-DREDUCED_FEATURE_SET_FOR_CPP17=ON -DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN=17 -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON -DQLEVER_NO_UNICODE=ON"
+          - compiler: gcc
+            compiler-version: 8
             expensive-tests: true
             use-keep-going: true
             use-ignore-errors: true
@@ -146,7 +147,6 @@ jobs:
       warnings:   ""
       build-type: Release
       expensive-tests: true
-      compiler: gcc
 
     # NOTE: The steps below deliberately use paths relative to the workspace
     # instead of `${{github.workspace}}`. In a container job that expression
@@ -194,7 +194,7 @@ jobs:
       - name: Install compiler
         uses: ./.github/workflows/install-compiler-ubuntu
         with:
-          compiler: ${{env.compiler}}
+          compiler: ${{matrix.compiler}}
           compiler-version: ${{matrix.compiler-version}}
           # Ubuntu 20.04 has no `mold` package, so the default linker is used.
           install-mold: false
@@ -202,7 +202,7 @@ jobs:
       - name: Configure CMake
         # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
         # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-        run: cmake -B build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=${{env.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true ${{matrix.additional-cmake-options}}
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=${{env.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true ${{matrix.additional-cmake-options}}
 
       - name: Build
         # Build your program with the given configuration
@@ -226,7 +226,7 @@ jobs:
         id: gcc8_log_analyzer
       - name: Test
         id: runTest
-        if: (matrix.compiler-version == 11)
+        if: matrix.compiler == 'clang'
         working-directory: build/test
         # Execute tests defined by the CMake configuration.
         # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
