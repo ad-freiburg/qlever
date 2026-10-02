@@ -396,7 +396,13 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
       visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
                                     ctx->describeQuery(), ctx->askQuery());
 
+  // The trailing `VALUES` clause is joined before the projection (SPARQL 1.1,
+  // sec. 18.2.4.3), so its variables are also selected by `SELECT *`.
   query.postQueryValuesClause_ = visit(ctx->valuesClause());
+  if (query.postQueryValuesClause_.has_value()) {
+    query.registerVariablesVisibleInQueryBody(
+        query.postQueryValuesClause_->_inlineValues._variables);
+  }
 
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
