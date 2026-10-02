@@ -10,12 +10,8 @@
 #ifndef QLEVER_SRC_UTIL_COMPRESSEDBLOCKFILE_H
 #define QLEVER_SRC_UTIL_COMPRESSEDBLOCKFILE_H
 
-#include <absl/strings/str_cat.h>
-
 #include <atomic>
-#include <cerrno>
 #include <cstddef>
-#include <cstring>
 #include <optional>
 #include <shared_mutex>
 #include <stdexcept>
@@ -179,12 +175,7 @@ class CompressedBlockFile {
   // hole, and all the other blocks keep the ranges that they have reserved.
   size_t appendBytes(const void* data, size_t numBytes) {
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(numBytes));
-    ssize_t numBytesWritten = file_.rlock()->write(data, numBytes, offset);
-    if (numBytesWritten != static_cast<ssize_t>(numBytes)) {
-      throw std::runtime_error{
-          absl::StrCat("Writing ", numBytes, " bytes to the temporary file \"",
-                       filename_, "\" failed (", std::strerror(errno), ")")};
-    }
+    file_.rlock()->write(data, numBytes, offset);
     return static_cast<size_t>(offset);
   }
 
