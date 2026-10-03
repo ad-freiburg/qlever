@@ -10,8 +10,12 @@
 
 #include "util/IoUringManager.h"
 
+#include <sys/uio.h>
 #include <unistd.h>
 
+#include <atomic>
+#include <cerrno>
+#include <climits>
 #include <stdexcept>
 
 #include "util/Exception.h"
@@ -38,6 +42,126 @@ void SyncIoPolicy::readFullyOrThrow(int fd, char* targetBuffer, size_t numBytes,
   if (static_cast<size_t>(numBytesRead) != numBytes) {
     AD_THROW("read fewer bytes than requested in readFullyOrThrow");
   }
+}
+
+// `preadv2` with `RWF_NOWAIT` exists on Linux only. Emscripten's headers
+// define `RWF_NOWAIT`, but its libc has no `preadv2`; there, and wherever
+// `RWF_NOWAIT` is missing, the fast path is compiled out.
+#if defined(__linux__) && defined(RWF_NOWAIT) && !defined(__EMSCRIPTEN__)
+#define QL_PAGE_CACHE_FAST_PATH
+#endif
+
+namespace {
+#ifdef QL_PAGE_CACHE_FAST_PATH
+// Cleared once a `preadv2(RWF_NOWAIT)` fails with `EOPNOTSUPP`. The flag is a
+// best-effort hint without associated data; the default sequential
+// consistency (Sonar cpp:S8417) keeps the publication of the disabled state
+// obvious.
+std::atomic<bool> pageCacheFastPathSupported{true};
+#endif
+}  // namespace
+
+namespace detail {
+//______________________________________________________________________________
+int64_t systemPageCacheRead(int fd, const ::iovec* iov, int iovcnt,
+                            int64_t offset) {
+#ifdef QL_PAGE_CACHE_FAST_PATH
+  return preadv2(fd, iov, iovcnt, static_cast<off_t>(offset), RWF_NOWAIT);
+#else
+  (void)fd;
+  (void)iov;
+  (void)iovcnt;
+  (void)offset;
+  errno = EOPNOTSUPP;
+  return -1;
+#endif
+}
+
+//______________________________________________________________________________
+PageCacheRead& pageCacheRead() {
+  static PageCacheRead function = &systemPageCacheRead;
+  return function;
+}
+
+//______________________________________________________________________________
+void resetPageCacheFastPathSupport() {
+#ifdef QL_PAGE_CACHE_FAST_PATH
+  pageCacheFastPathSupported.store(true);
+#endif
+}
+}  // namespace detail
+
+//______________________________________________________________________________
+bool pageCacheFastPathIsSupported() {
+#ifdef QL_PAGE_CACHE_FAST_PATH
+  return pageCacheFastPathSupported.load();
+#else
+  return false;
+#endif
+}
+
+//______________________________________________________________________________
+std::vector<size_t> readPageCacheHits(int fd, ql::span<const size_t> numBytes,
+                                      ql::span<const uint64_t> offsets,
+                                      ql::span<char*> buffers) {
+  AD_CONTRACT_CHECK(offsets.size() == numBytes.size() &&
+                    buffers.size() == numBytes.size());
+  std::vector<size_t> notServed;
+#ifdef QL_PAGE_CACHE_FAST_PATH
+  const size_t numReads = numBytes.size();
+  std::vector<iovec> iovecs;
+  size_t runBegin = 0;
+  while (runBegin < numReads) {
+    // The run `[runBegin, runEnd)` holds exactly adjacent file ranges, at most
+    // `IOV_MAX` of them (the limit of one `preadv2` call).
+    size_t runEnd = runBegin + 1;
+    while (runEnd < numReads &&
+           runEnd - runBegin < static_cast<size_t>(IOV_MAX) &&
+           offsets[runEnd - 1] + numBytes[runEnd - 1] == offsets[runEnd]) {
+      ++runEnd;
+    }
+    if (!pageCacheFastPathSupported.load()) {
+      for (size_t i = runBegin; i < numReads; ++i) {
+        notServed.push_back(i);
+      }
+      return notServed;
+    }
+    iovecs.clear();
+    for (size_t i = runBegin; i < runEnd; ++i) {
+      iovecs.push_back(iovec{buffers[i], numBytes[i]});
+    }
+    // See https://man7.org/linux/man-pages/man2/preadv2.2.html: with
+    // `RWF_NOWAIT`, the call fails with `EAGAIN` (or returns fewer bytes)
+    // instead of waiting for the storage device when data is not cached.
+    const int64_t numBytesRead = detail::pageCacheRead()(
+        fd, iovecs.data(), static_cast<int>(iovecs.size()),
+        static_cast<int64_t>(offsets[runBegin]));
+    if (numBytesRead < 0 && errno == EOPNOTSUPP &&
+        pageCacheFastPathSupported.exchange(false)) {
+      AD_LOG_WARN << "preadv2 with RWF_NOWAIT is not supported for the "
+                     "vocabulary files; reading them without the "
+                     "page-cache fast path"
+                  << std::endl;
+    }
+    // Reads that were read completely are served, the others (from the first
+    // incomplete one on) are left to the caller.
+    size_t remaining = numBytesRead < 0 ? 0 : static_cast<size_t>(numBytesRead);
+    size_t i = runBegin;
+    for (; i < runEnd && remaining >= numBytes[i]; ++i) {
+      remaining -= numBytes[i];
+    }
+    for (; i < runEnd; ++i) {
+      notServed.push_back(i);
+    }
+    runBegin = runEnd;
+  }
+#else
+  (void)fd;
+  for (size_t i = 0; i < numBytes.size(); ++i) {
+    notServed.push_back(i);
+  }
+#endif
+  return notServed;
 }
 
 //______________________________________________________________________________
