@@ -1012,8 +1012,9 @@ void CompressedRelationReader::decompressColumn(
   auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
       compressedBlock.data(), compressedBlock.size(), iterator,
       numRowsToRead * sizeof(*iterator));
-  static_assert(sizeof(Id) == sizeof(*iterator));
-  AD_CORRECTNESS_CHECK(numRowsToRead * sizeof(Id) == numBytesActuallyRead);
+  static_assert(BYTES_PER_ID_COLUMN_ENTRY == sizeof(*iterator));
+  AD_CORRECTNESS_CHECK(numRowsToRead * BYTES_PER_ID_COLUMN_ENTRY ==
+                       numBytesActuallyRead);
 }
 
 // ____________________________________________________________________________

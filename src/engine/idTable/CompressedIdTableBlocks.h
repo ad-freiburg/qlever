@@ -59,8 +59,9 @@ BlockMetadata writeBlock(CompressedBlockFile& file, const Table& table,
   metadata.numRows_ = endRow - beginRow;
   metadata.columns_.reserve(table.numColumns());
   for (const auto& column : table.getColumns()) {
-    metadata.columns_.push_back(file.appendBlock(
-        column.data() + beginRow, (endRow - beginRow) * sizeof(Id)));
+    metadata.columns_.push_back(
+        file.appendBlock(column.data() + beginRow,
+                         (endRow - beginRow) * BYTES_PER_ID_COLUMN_ENTRY));
   }
   return metadata;
 }

@@ -459,7 +459,7 @@ namespace {
 // The number of rows per block that results from the given uncompressed block
 // size. The blocks are formed per column, hence the size of a single `Id`.
 size_t rowsPerBlockFor(ad_utility::MemorySize blockSize) {
-  return blockSize.getBytes() / sizeof(Id);
+  return blockSize.getBytes() / BYTES_PER_ID_COLUMN_ENTRY;
 }
 
 // Write all the `tables` to the `writer` and then flush it, such that the

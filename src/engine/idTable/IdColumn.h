@@ -20,4 +20,7 @@
 using IdColumnRef = ql::span<Id>;
 using ConstIdColumnRef = ql::span<const Id>;
 
+// Bytes per `Id` in the packed on-disk/spill-file byte representation
+inline constexpr size_t BYTES_PER_ID_COLUMN_ENTRY = sizeof(Id);
+
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMN_H
