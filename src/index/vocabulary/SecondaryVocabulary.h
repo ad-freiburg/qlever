@@ -57,10 +57,10 @@
 //   corresponding global index, and `getId` binary-searches in that array. In
 //   the example above, `<a>` has lexicographic rank 0 but global index 2.
 //
-// The global index of a word never changes when further segments are appended,
-// which is what allows persisted data (in particular the blobs of
-// `NamedCachedQueryBlobManager`, in a follow-up change) to add words
-// incrementally, one segment at a time, without invalidating the `Id`s of the
+// The global index of a word never changes when further segments are appended.
+// That is what allows a blob (see `NamedCachedQueryBlobManager`) to add words
+// to the secondary vocabulary incrementally, one segment at a time, without
+// invalidating the `Id`s that were already handed out for the words of the
 // earlier segments. Lexicographic ranks, in contrast, do change when a segment
 // is appended.
 //
