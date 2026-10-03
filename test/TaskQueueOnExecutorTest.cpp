@@ -86,7 +86,7 @@ bool waitUntil(const Predicate& predicate) {
 TEST(TaskQueueOnExecutor, invalidArguments) {
   net::thread_pool pool{2};
   // The executor must not be empty.
-  EXPECT_ANY_THROW(TaskQueueOnExecutor(net::any_io_executor{}, 2));
+  EXPECT_ANY_THROW(TaskQueueOnExecutor(ql::any_io_executor{}, 2));
   // At least one task has to be allowed in flight.
   EXPECT_ANY_THROW(TaskQueueOnExecutor(pool.get_executor(), 0));
   // A valid combination.
