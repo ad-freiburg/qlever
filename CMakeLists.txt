@@ -308,10 +308,11 @@ FetchContent_Declare(
 FetchContent_Declare(
         range-v3
         #TODO<joka921> Merge this fork into the `qlever` GitHub organisation as soon as it exists.
-        GIT_REPOSITORY https://github.com/joka921/range-v3
+        # TEMPORARY: points to the branch of joka921/range-v3#9 (fix for GCC 16) until it is merged.
+        GIT_REPOSITORY https://github.com/hannahbast/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 0e2a41b61694e823df1b7d77174b139253c7ac39 # branch fork-for-qlever
+        GIT_TAG 3e14ab5072e2bba2fbf3551e6c641c4f09601f4d # branch fix-gcc16-borrowed-range-order
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -475,13 +476,13 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
-# GCC 11–15 emit spurious `-Wmaybe-uninitialized` for template instantiations
+# GCC 11–16 emit spurious `-Wmaybe-uninitialized` for template instantiations
 # that cross the system-header boundary (e.g. absl containers instantiated with
 # user types, std::variant). Suppress for the affected version range so the
 # flag can be re-enabled easily once GCC fixes the false-positive behavior.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11" AND
-    CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16")
+    CMAKE_CXX_COMPILER_VERSION VERSION_LESS "17")
     # False positives from template instantiation crossing system-header boundaries.
     add_compile_options(-Wno-maybe-uninitialized)
     # Unreliable on large translation units; formatting is enforced by clang-format anyway.
