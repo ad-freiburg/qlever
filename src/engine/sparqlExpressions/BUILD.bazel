@@ -1,0 +1,63 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `src/engine/sparqlExpressions/CMakeLists.txt`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of this directory, see `//src:qlever_hdrs`.
+cc_library(
+    name = "headers",
+    hdrs = glob(["**/*.h"]),
+    strip_include_prefix = "/src",
+)
+
+qlever_cc_library(
+    name = "sparqlExpressions",
+    srcs = [
+        "AggregateExpression.cpp",
+        "BlankNodeExpression.cpp",
+        "ConditionalExpressions.cpp",
+        "ConvertToDtypeConstructor.cpp",
+        "CountStarExpression.cpp",
+        "DateExpressions.cpp",
+        "GeoExpression.cpp",
+        "GroupConcatExpression.cpp",
+        "IsSomethingExpressions.cpp",
+        "LangExpression.cpp",
+        "NumericBinaryExpressions.cpp",
+        "NumericUnaryExpressions.cpp",
+        "PrefilterExpressionIndex.cpp",
+        "RdfTermExpressions.cpp",
+        "RegexExpression.cpp",
+        "RelationalExpressions.cpp",
+        "SampleExpression.cpp",
+        "SetOfIntervals.cpp",
+        "SparqlExpression.cpp",
+        "SparqlExpressionGenerators.cpp",
+        "SparqlExpressionPimpl.cpp",
+        "SparqlExpressionTypes.cpp",
+        "SparqlExpressionValueGetters.cpp",
+        "StdevExpression.cpp",
+        "StringExpressions.cpp",
+    ],
+    deps = [
+        "//src/engine:sortPerformanceEstimator",
+        "//src/index",
+        "//src/util:qlever_util",
+    ] + select({
+        # `Boost::url` is only available in Boost >= 1.81, which the reduced
+        # feature set does not require.
+        "//bazel:reduced_feature_set_for_cpp17_enabled": [],
+        "//conditions:default": ["@boost.url"],
+    }),
+)

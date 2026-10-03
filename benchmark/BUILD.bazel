@@ -1,0 +1,53 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The benchmark infrastructure of `benchmark/CMakeLists.txt`. Only the
+# infrastructure library is ported so far, because two unit tests
+# (`BenchmarkMeasurementContainerTest` and `ResultTableColumnOperationsTest`)
+# link against it. The `benchmarkWithMain` library and the four benchmark
+# executables (`BenchmarkExamples`, `JoinAlgorithmBenchmark`,
+# `ParallelMergeBenchmark`, `GroupByHashMapBenchmark`) are not defined here yet.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of the benchmark infrastructure. `includes` puts this directory on
+# the include path, which the infrastructure needs because it includes its own
+# headers as `../benchmark/infrastructure/Benchmark.h`. With CMake that spelling
+# resolves against `include_directories(src)`, since `src/../benchmark/...`
+# normalizes back to `benchmark/...`; here the same trick works with this
+# directory instead of `src`.
+cc_library(
+    name = "headers",
+    hdrs = glob(["**/*.h"]),
+    includes = ["."],
+)
+
+# Re-compiling all the infrastructure all the time is a waste of time, so we
+# pre-compile that part as a library. This part compiles 'just' the benchmark
+# infrastructure and doesn't provide a main function.
+qlever_cc_library(
+    name = "benchmark",
+    srcs = [
+        "infrastructure/Benchmark.cpp",
+        "infrastructure/BenchmarkMeasurementContainer.cpp",
+        "infrastructure/BenchmarkToJson.cpp",
+        "infrastructure/BenchmarkToString.cpp",
+    ],
+    deps = [
+        ":headers",
+        "//src/parser",
+        "//src/util:qlever_util",
+        "//src/util/ConfigManager:configManager",
+        "@boost.program_options",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)

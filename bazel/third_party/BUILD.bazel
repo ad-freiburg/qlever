@@ -1,0 +1,14 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# This package holds no targets of its own; it only makes the hand-written
+# `BUILD` files for the dependencies that are not in the Bazel Central Registry
+# available to the `http_archive` calls in `extensions.bzl`.
+
+exports_files(glob(["*.BUILD.bazel"]))

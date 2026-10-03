@@ -1,0 +1,53 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The root package of QLever's Bazel build. It contains no targets of its own;
+# the libraries and executables live in the package of the directory that holds
+# their sources, mirroring the `CMakeLists.txt` files. The aliases below exist so
+# that the executables can be built under the same names that the CMake build
+# uses, for example `bazel build //:qlever-server`.
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "LICENSE",
+    "NOTICE",
+])
+
+alias(
+    name = "qlever-server",
+    actual = "//src:qlever-server",
+)
+
+alias(
+    name = "qlever-index",
+    actual = "//src/index:qlever-index",
+)
+
+alias(
+    name = "VocabularyMergerMain",
+    actual = "//src:VocabularyMergerMain",
+)
+
+alias(
+    name = "PrintIndexVersionMain",
+    actual = "//src:PrintIndexVersionMain",
+)
+
+alias(
+    name = "LibQLeverExample",
+    actual = "//src/libqlever:LibQLeverExample",
+)
+
+# The library that `src/libqlever/CMakeLists.txt` calls `qlever`, for embedding
+# QLever into another application.
+alias(
+    name = "qlever",
+    actual = "//src/libqlever:qlever",
+)

@@ -1,0 +1,27 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# QLever's fork of `range-v3`, which is header-only. The CMake build makes this
+# available via `include_directories(SYSTEM ${range-v3_SOURCE_DIR}/include)`;
+# the `includes` attribute below is the equivalent and also marks the headers as
+# system headers, so that they do not produce warnings.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+licenses(["notice"])
+
+exports_files(["LICENSE.txt"])
+
+cc_library(
+    name = "range-v3",
+    hdrs = glob(["include/**/*.hpp"]),
+    includes = ["include"],
+)
