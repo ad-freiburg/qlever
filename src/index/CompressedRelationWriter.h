@@ -34,7 +34,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/RecyclingPool.h"
 #include "util/Synchronized.h"
-#include "util/TaskQueue.h"
+#include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
 
 // This type is used to buffer small relations that will be stored in the same
@@ -68,7 +68,7 @@ class CompressedRelationWriter {
   Id currentCol0Id_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
-  ad_utility::TaskQueue<false> blockWriteQueue_;
+  ad_utility::TaskQueueOnExecutor blockWriteQueue_;
   ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
 
   // This callback is invoked for each block of small relations (which share the
@@ -91,9 +91,10 @@ class CompressedRelationWriter {
 
  public:
   /// Create using a filename, to which the relation data will be written.
-  /// If `numWriterThreads` is set, it determines the number of threads that
-  /// compress and write blocks; otherwise the runtime parameter
-  /// `permutation-writer-num-threads` is used (see `makeBlockWriteQueue`).
+  /// If `numWriterThreads` is set, it determines how many blocks this writer
+  /// compresses and writes concurrently; otherwise the number of threads of
+  /// the global thread pool is used (see `makeBlockWriteQueue`, which also
+  /// explains why this is no longer a number of threads).
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f, size_t rowsPerBlock,
       std::optional<size_t> numWriterThreads = std::nullopt)
@@ -270,8 +271,23 @@ class CompressedRelationWriter {
   // the `smallBlocksCallback_` is not empty, then
   // `smallBlocksCallback_(std::move(block))` is called AFTER the block has
   // completely been dealt with.
+  //
+  // NOTE: The actual work is done asynchronously by the `blockWriteQueue_`, so
+  // it is only guaranteed to be finished after a call to `finish()`.
   void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id, BlockToWrite block,
                              bool invokeCallback);
+
+  // The actual work of `compressAndWriteBlock` (see there), performed in the
+  // calling thread. This is what the tasks of the `blockWriteQueue_` run.
+  //
+  // NOTE: This function has to be called directly (instead of going through
+  // the `blockWriteQueue_`) by code that already runs on a thread of the
+  // global executor, because a `push` to the queue may block, which would
+  // occupy that thread and can deadlock the executor, see
+  // `AddBlockOfSmallRelationsToSwitched`.
+  void compressAndWriteBlockInCallingThread(Id firstCol0Id, Id lastCol0Id,
+                                            BlockToWrite block,
+                                            bool invokeCallback);
 
   // Return the number of rows that a single block of small relations may hold
   // at most.
@@ -417,15 +433,25 @@ class CompressedRelationWriter {
                                                  size_t rowsPerBlock,
                                                  size_t inputBlockSize);
 
-  // Create a `TaskQueue` for the compression and writing of blocks. The number
-  // of threads is `numThreadsOverride` if set, and otherwise determined by the
-  // runtime parameter "permutation-writer-num-threads". In both cases, a value
-  // of 0 means "as many threads as the hardware has", and larger values are
-  // capped at that number.
-  static ad_utility::TaskQueue<false> makeBlockWriteQueue(
-      std::optional<size_t> numThreadsOverride);
+  // Create the queue for the compression and writing of blocks. The blocks are
+  // compressed and written on the global thread pool (see
+  // `util/GlobalExecutor.h`), so this queue owns no threads of its own; the
+  // number derived below therefore no longer is a number of threads, but the
+  // number of blocks that this writer keeps in flight (queued or currently
+  // being compressed and written).
+  //
+  // That number is `numTasksInFlightOverride` if set, and otherwise the number
+  // of threads of the global thread pool, which the `--num-threads / -j`
+  // option of the index builder configures. In both cases, a value of 0 means
+  // "as many as the pool has threads", and larger values are capped at that
+  // number. At least 4 blocks are always allowed to be in flight, and the
+  // blocks are allowed to pile up to twice the requested number, such that the
+  // writer can also make progress while all the requested blocks are being
+  // compressed.
+  static ad_utility::TaskQueueOnExecutor makeBlockWriteQueue(
+      std::optional<size_t> numTasksInFlightOverride);
   FRIEND_TEST(CompressedRelationWriter,
-              isInitializedWithCorrectNumberOfThreads);
+              isInitializedWithCorrectNumberOfTasksInFlight);
 };
 
 #endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_H

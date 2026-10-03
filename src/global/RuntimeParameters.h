@@ -81,10 +81,9 @@ struct RuntimeParameters {
   // exists so that a rebuild on a live server leaves as much CPU as possible
   // to concurrent queries: the default of 1 reduces the CPU work of the
   // permutation phase by ~20% at nearly no cost in wall time (same
-  // measurement setup as above). A value of 0 falls back to
-  // `permutation-writer-num-threads`, which is also used when building an
-  // index from scratch and when writing materialized views, and which this
-  // parameter deliberately leaves untouched.
+  // measurement setup as above). A value of 0 falls back to the number of
+  // threads of the global thread pool, which is what building an index from
+  // scratch and writing materialized views use.
   SizeT rebuildPermutationWriterNumThreads_{
       1, "rebuild-permutation-writer-num-threads"};
   // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
@@ -231,13 +230,6 @@ struct RuntimeParameters {
   // debug caching issues, and to get rid of the overhead of caching (in
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
-
-  // Configure the amount of threads to compress and write blocks per
-  // permutation. A value of 0 indicates that the number of threads should be
-  // determined automatically based on the number of available hardware threads.
-  // Even though this influences the logic of regular index building,
-  // `qlever-index`doesn't expose a CLI flag to set this parameter.
-  SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
 
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};

@@ -12,12 +12,17 @@
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
 
 #include <array>
+#include <deque>
 #include <functional>
+#include <future>
 #include <optional>
+#include <utility>
 
 #include "backports/numeric.h"
 #include "index/CompressedRelationWriter.h"
 #include "util/ExceptionHandling.h"
+#include "util/GlobalExecutor.h"
+#include "util/TaskQueueOnExecutor.h"
 
 namespace compressedRelationHelpers {
 
@@ -186,7 +191,12 @@ class DistinctIdCounter {
     if (column.empty()) {
       return;
     }
-    DistinctIdCountOfBlock countOfBlock = countDistinctIds(column);
+    addCountOfBlock(countDistinctIds(column));
+  }
+
+  // Like `addBlock`, but for a block whose `DistinctIdCountOfBlock` has
+  // already been computed (e.g. concurrently, see `AsyncDistinctIdCounter`).
+  void addCountOfBlock(const DistinctIdCountOfBlock& countOfBlock) {
     count_ += countOfBlock.count_;
     if (lastBitsOfPreviousBlock_ ==
         bitsOfIdWithoutLocalVocab(countOfBlock.first_)) {
@@ -208,6 +218,89 @@ class DistinctIdCounter {
     auto count = count_;
     reset();
     return count;
+  }
+};
+
+// Read the blocks of the `BlockRange` (skipping empty blocks) and compute the
+// `DistinctIdCountOfBlock` of one of their columns on the global thread pool,
+// while the caller is still processing the preceding blocks. The blocks are
+// yielded again in their original order, because the further processing of the
+// blocks (including the folding of the counts via
+// `DistinctIdCounter::addCountOfBlock`) has to happen in order.
+template <typename BlockRange>
+class AsyncDistinctIdCounter {
+ public:
+  using Block = std::decay_t<ql::ranges::range_value_t<BlockRange>>;
+
+ private:
+  // One block that has been read, together with the (possibly still running)
+  // computation of the number of distinct IDs in its column.
+  struct Entry {
+    Block block_;
+    std::future<DistinctIdCountOfBlock> count_;
+  };
+
+  size_t columnIdx_;
+  size_t maxNumBlocksInFlight_;
+  ql::ranges::iterator_t<BlockRange> it_;
+  ql::ranges::sentinel_t<BlockRange> end_;
+  std::deque<Entry> pending_;
+
+  // NOTE: This member is deliberately declared last, so that its destructor
+  // (which waits for all pending tasks) runs before the `pending_` blocks,
+  // into which those tasks point, are destroyed.
+  ad_utility::TaskQueueOnExecutor queue_;
+
+ public:
+  // Construct from the `blocks` (which have to outlive this object), the index
+  // of the column whose distinct IDs are counted, and the maximal number of
+  // blocks that are read ahead.
+  AsyncDistinctIdCounter(BlockRange& blocks, size_t columnIdx,
+                         size_t maxNumBlocksInFlight)
+      : columnIdx_{columnIdx},
+        maxNumBlocksInFlight_{maxNumBlocksInFlight},
+        it_{ql::ranges::begin(blocks)},
+        end_{ql::ranges::end(blocks)},
+        queue_{ad_utility::globalExecutor(), maxNumBlocksInFlight,
+               "Counting distinct IDs in the blocks of a large relation"} {
+    AD_CONTRACT_CHECK(maxNumBlocksInFlight_ > 0);
+  }
+
+  // Return the next non-empty block together with the `DistinctIdCountOfBlock`
+  // of its column. Return `std::nullopt` once all blocks have been yielded.
+  std::optional<std::pair<Block, DistinctIdCountOfBlock>> next() {
+    readAhead();
+    if (pending_.empty()) {
+      return std::nullopt;
+    }
+    // Note: `get()` rethrows an exception that the background task has thrown.
+    DistinctIdCountOfBlock countOfBlock = pending_.front().count_.get();
+    Block block = std::move(pending_.front().block_);
+    pending_.pop_front();
+    return std::pair<Block, DistinctIdCountOfBlock>{std::move(block),
+                                                    countOfBlock};
+  }
+
+ private:
+  // Read blocks and start the counting for them until `maxNumBlocksInFlight_`
+  // blocks are pending or the input is exhausted.
+  void readAhead() {
+    while (pending_.size() < maxNumBlocksInFlight_ && it_ != end_) {
+      Block block = std::move(*it_);
+      ++it_;
+      if (block.empty()) {
+        continue;
+      }
+      pending_.push_back(Entry{std::move(block), {}});
+      // Note: The `column` is a view into the memory of the block. That memory
+      // is stable, because `std::deque` never moves its elements, and because
+      // the entry is only popped after its task has completed (and moving the
+      // block then doesn't move the memory of its columns).
+      ql::span<const Id> column =
+          std::as_const(pending_.back().block_).getColumn(columnIdx_);
+      pending_.back().count_ =
+          queue_.submit([column]() { return countDistinctIds(column); });
+    }
   }
 };
 
