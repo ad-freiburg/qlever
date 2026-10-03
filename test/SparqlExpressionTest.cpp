@@ -295,6 +295,41 @@ struct TestNaryExpressionVec {
   }
 };
 
+struct TestTernaryAddImpl {
+  template <typename A, typename B, typename C>
+  auto operator()(A a, B b, C c) const {
+    if constexpr (ql::concepts::same_as<std::decay_t<A>, int64_t> &&
+                  ql::concepts::same_as<std::decay_t<B>, int64_t> &&
+                  ql::concepts::same_as<std::decay_t<C>, int64_t>) {
+      return a + b + c;
+    } else {
+      return static_cast<double>(a) + static_cast<double>(b) +
+             static_cast<double>(c);
+    }
+  }
+};
+
+using TestTernaryAdd =
+    sparqlExpression::detail::MakeNumericExpression<TestTernaryAddImpl>;
+
+using TestTernaryAddOperation = sparqlExpression::detail::Operation<
+    3, sparqlExpression::detail::FV<
+           TestTernaryAdd, sparqlExpression::detail::NumericValueGetter>>;
+
+class TestTernaryAddExpression
+    : public sparqlExpression::detail::NaryExpression<TestTernaryAddOperation> {
+ public:
+  using sparqlExpression::detail::NaryExpression<
+      TestTernaryAddOperation>::NaryExpression;
+};
+
+auto makeTestTernaryAddExpression = [](SparqlExpression::Ptr a,
+                                       SparqlExpression::Ptr b,
+                                       SparqlExpression::Ptr c) {
+  return std::make_unique<TestTernaryAddExpression>(std::move(a), std::move(b),
+                                                    std::move(c));
+};
+
 auto testOr = testBinaryExpressionCommutative<&makeOrExpression>;
 auto testAnd = testBinaryExpressionCommutative<&makeAndExpression>;
 auto testPlus = testBinaryExpressionCommutative<&makeAddExpression>;
@@ -530,6 +565,83 @@ TEST(SparqlExpression, speculativeNumericBinaryFastPath) {
   // generic path; the result must be the same either way.
   V<Id> tied{{I(1), D(2.0), U}, alloc};
   testPlus(V<Id>{{I(2), D(3.0), U}, alloc}, tied, I(1));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlExpression, naryNumericFastPaths) {
+  // 1. Homogeneous integer operands.
+  {
+    V<Id> left{{I(1), I(2), I(3), I(4)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), I(112), I(113), I(114)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // 2. Homogeneous operands with different numeric types.
+  {
+    V<Id> left{{I(1), I(2), I(3)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10)}, alloc};
+    V<Id> right{{D(0.5), D(1.5), D(2.5)}, alloc};
+
+    V<Id> expected{{D(11.5), D(13.5), D(15.5)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // 3. Mixed operand with an integer majority.
+  // The exceptional double row has to use the speculative slow row.
+  {
+    V<Id> left{{I(1), I(2), D(3.0), I(4), I(5)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), I(112), D(113.0), I(114), I(115)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // 4. No majority -> generic fallback.
+  {
+    V<Id> left{{I(1), D(2.0), I(3), D(4.0)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), D(112.0), I(113), D(114.0)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // 5. A boolean row reaches the generic slow path, where `true` is treated
+  // numerically as 1.
+  {
+    V<Id> left{{I(1), B(true), I(3)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), I(111), I(113)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // 6. An unsupported datatype reaches the generic slow path and yields UNDEF.
+  {
+    V<Id> left{{I(1), Voc(4), I(3)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), U, I(113)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
 }
 
 // _____________________________________________________________________________________
