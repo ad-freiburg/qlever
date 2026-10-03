@@ -1104,6 +1104,67 @@ TEST(JoinTest, lazyJoinIndexScanDetails) {
   EXPECT_EQ(details2["num-elements-read"].get<size_t>(), 10);
 }
 
+// Test that the cost estimate of a join charges an index scan child at most
+// one block per row of a small sibling (the join reads only the blocks that
+// contain a value of the sibling), and its full size otherwise.
+TEST(JoinTest, costEstimateOfJoinWithIndexScan) {
+  // Ten triples with the predicate `<p>`, two rows per block in the test index.
+  std::string kg;
+  for (size_t i = 0; i < 10; ++i) {
+    kg += absl::StrCat("<s", i, "> <p> <o", i, "> .\n");
+  }
+  auto qec = ad_utility::testing::getQec(kg);
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(1'000'000);
+  const size_t rowsPerBlock = qec->getIndex().rowsPerBlock();
+  using V = Variable;
+  auto scan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO, SparqlTripleSimple{V{"?s"}, iri("<p>"), V{"?o"}});
+  ASSERT_EQ(scan->getSizeEstimate(), 10u);
+
+  // The cost of a join with the given `sibling` of the scan, and what the
+  // formula of `JoinImpl::getCostEstimate` gives when the scan is charged
+  // `scanCost`.
+  // NOTE: The join sorts the `sibling` (a `Values`), so the sibling that the
+  // formula sees is the join's first child.
+  auto costs = [&](std::shared_ptr<QueryExecutionTree> sibling,
+                   size_t scanCost) {
+    Join join{qec, sibling, scan, 0, 0};
+    auto children = join.getChildren();
+    EXPECT_EQ(children.size(), 2u);
+    EXPECT_NE(std::dynamic_pointer_cast<IndexScan>(
+                  children.at(1)->getRootOperation()),
+              nullptr);
+    auto& sorted = *children.at(0);
+    size_t expected = join.getSizeEstimate() + sorted.getSizeEstimate() +
+                      scanCost + sorted.getCostEstimate() + scanCost;
+    return std::pair{join.getCostEstimate(), expected};
+  };
+
+  // One row on the other side: the scan is charged one block (two rows), not
+  // its ten rows.
+  ASSERT_LT(rowsPerBlock, 10u);
+  auto one = makeValuesForSingleVariable(qec, "?s", {iri("<s3>")});
+  auto [costOne, expectedOne] = costs(one, rowsPerBlock);
+  EXPECT_EQ(costOne, expectedOne);
+
+  // Ten rows on the other side: ten blocks would be more than the scan has,
+  // so it is charged its size.
+  std::vector<TripleComponent> ten;
+  for (size_t i = 0; i < 10; ++i) {
+    ten.push_back(iri(absl::StrCat("<s", i, ">")));
+  }
+  auto many = makeValuesForSingleVariable(qec, "?s", ten);
+  auto [costMany, expectedMany] = costs(many, 10);
+  EXPECT_EQ(costMany, expectedMany);
+
+  // A scan as the sibling: no bound, both scans are charged their size.
+  auto scan2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO, SparqlTripleSimple{V{"?s"}, iri("<p>"), V{"?o2"}});
+  Join twoScans{qec, scan2, scan, 0, 0};
+  EXPECT_EQ(twoScans.getCostEstimate(), twoScans.getSizeEstimate() + 40);
+}
+
 // _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(JoinTestWithAndWithoutKeptJoinColumn,
                          JoinTestParametrized, ::testing::Values(true, false));
