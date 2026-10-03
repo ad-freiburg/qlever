@@ -170,6 +170,29 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
   return out;
 }
 
+/**
+ * Swap the values referenced by `a` and `b` via read (implicit conversion to
+ * `T`) and write (`operator=(T)`) instead of via `std::swap`. Needed for
+ * proxy reference types -- e.g. a column element that only implicitly
+ * converts to/from its value type `T`, not a real `T&` (see
+ * `columnBasedIdTable::BasicIdRef` in `engine/idTable/IdRef.h`) -- where
+ * `std::swap<T>(T&, T&)` can't be used: a proxy returned by value from an
+ * accessor is a prvalue, which can't bind to `std::swap`'s `T&` parameters.
+ * `T` has to be given explicitly, since it can't be deduced from `A`/`B` when
+ * those are a proxy type rather than `T` itself.
+ */
+// NOLINTBEGIN(bugprone-move-forwarding-reference,cppcoreguidelines-missing-std-forward)
+// -- `A`/`B` exist to accept a proxy prvalue, not to forward; must always
+// move, like `std::swap`, so `std::forward` would silently copy instead for
+// a real `T&` argument.
+template <typename T, typename A, typename B>
+void assignSwap(A&& a, B&& b) {             // NOSONAR
+  auto tmp = static_cast<T>(std::move(a));  // NOSONAR
+  a = static_cast<T>(std::move(b));         // NOSONAR
+  b = static_cast<T>(std::move(tmp));       // NOSONAR
+}
+// NOLINTEND(bugprone-move-forwarding-reference,cppcoreguidelines-missing-std-forward)
+
 // Remove duplicates in the given vector without changing the order. For
 // example: 4, 6, 6, 2, 2, 4, 2 becomes 4, 6, 2.
 //
