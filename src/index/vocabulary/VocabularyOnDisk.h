@@ -180,6 +180,14 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   struct OffsetPair {
     uint64_t offset_;
     uint64_t nextOffset_;
+
+    [[nodiscard]] uint64_t offset() const noexcept { return offset_; }
+    // The word's size in bytes (`nextOffset_ - offset_`); the offsets must
+    // be well-formed, which is checked.
+    [[nodiscard]] size_t wordSize() const {
+      AD_CORRECTNESS_CHECK(nextOffset_ >= offset_);
+      return nextOffset_ - offset_;
+    }
   };
 
   // Phase 1 of `lookupBatch`: for each requested index, read its `OffsetPair`
@@ -190,6 +198,8 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // Phase 2 of `lookupBatch`: given the `offsetPairs` from phase 1, read the
   // string data from `file_` into one contiguous buffer in a single batched
   // read via `manager`, and return it as a `VocabBatchLookupResult`.
+  // `offsetPairs` must be non-empty (guaranteed by `lookupBatch`, which
+  // rejects empty input; the `ContiguousVocabBatchBuilder` requires it).
   VocabBatchLookupResult readStrings(
       ad_utility::BatchManagerBase& manager,
       ql::span<const OffsetPair> offsetPairs) const;
