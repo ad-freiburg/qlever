@@ -490,10 +490,9 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
          getRowIndices(limitAndOffset, *result, resultSize)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
+          Id id = pair.idTable()(i, columnIndex.value().columnIndex_);
           STREAMABLE_YIELD(
-              std::string_view{reinterpret_cast<const char*>(&pair.idTable()(
-                                   i, columnIndex.value().columnIndex_)),
-                               sizeof(Id)});
+              std::string_view{reinterpret_cast<const char*>(&id), sizeof(Id)});
         }
         cancellationHandle->throwIfCancelled();
       }

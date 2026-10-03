@@ -23,6 +23,7 @@
 #ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 #include "backports/functional.h"
 #endif
+#include "engine/idTable/IdColumn.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
@@ -30,9 +31,9 @@ namespace sparqlExpression::detail {
 
 /// Convert a variable to a vector of all the Ids it is bound to in the
 /// `context`.
-inline ql::span<const ValueId> getIdsFromVariable(
-    const ::Variable& variable, const EvaluationContext* context,
-    size_t beginIndex, size_t endIndex) {
+inline std::vector<Id> getIdsFromVariable(const ::Variable& variable,
+                                          const EvaluationContext* context,
+                                          size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
 
   const auto& varToColMap = context->_variableToColumnMap;
@@ -41,18 +42,18 @@ inline ql::span<const ValueId> getIdsFromVariable(
 
   const size_t columnIndex = it->second.columnIndex_;
 
-  ql::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
+  ConstIdColumnRef completeColumn = inputTable.getColumn(columnIndex);
 
   AD_CONTRACT_CHECK(beginIndex <= endIndex &&
                     endIndex <= completeColumn.size());
-  return {completeColumn.begin() + beginIndex,
-          completeColumn.begin() + endIndex};
+  auto sub = completeColumn.subspan(beginIndex, endIndex - beginIndex);
+  return {sub.begin(), sub.end()};
 }
 
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
 // `context
-inline ql::span<const ValueId> getIdsFromVariable(
-    const ::Variable& variable, const EvaluationContext* context) {
+inline std::vector<Id> getIdsFromVariable(const ::Variable& variable,
+                                          const EvaluationContext* context) {
   return getIdsFromVariable(variable, context, context->_beginIndex,
                             context->_endIndex);
 }
