@@ -295,6 +295,103 @@ inline auto visitWithVariantsAndParameters =
       return std::visit(f, liftToVariant(AD_FWD(parametersOrVariants))...);
     };
 
+namespace detail {
+// The decayed type of the first argument of the callable `T`. Works for
+// function pointers and for class types (in particular lambdas) with a single
+// `operator()` that is neither overloaded nor templated. For all other types
+// (in particular generic or constrained lambdas) the member `type` is absent,
+// so that this can be used in a SFINAE context.
+template <typename T, typename = void>
+struct FirstArgument {};
+
+template <typename R, typename First, typename... Rest>
+struct FirstArgument<R (*)(First, Rest...), void> {
+  using type = std::decay_t<First>;
+  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
+};
+
+template <typename C, typename R, typename First, typename... Rest>
+struct FirstArgument<R (C::*)(First, Rest...), void> {
+  using type = std::decay_t<First>;
+  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
+};
+
+template <typename C, typename R, typename First, typename... Rest>
+struct FirstArgument<R (C::*)(First, Rest...) const, void> {
+  using type = std::decay_t<First>;
+  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
+};
+
+// For a class type (in particular a lambda), look at its `operator()`.
+template <typename T>
+struct FirstArgument<T, std::void_t<decltype(&T::operator())>>
+    : FirstArgument<decltype(&T::operator()), void> {};
+
+template <typename T>
+using FirstArgumentT = typename FirstArgument<T>::type;
+
+// Default fallback for `visitIf` below: silently ignore alternatives that no
+// passed-in function handles.
+struct IgnoreUnmatchedAlternative {
+  template <typename T>
+  void operator()(T&&) const noexcept {}
+};
+
+// True iff `func` should handle `value` in `visitIf` below: `func` must be
+// invocable with `value`, and if `func`'s parameter type can be determined
+// (i.e. `func` is not generic/overloaded), that parameter type must, up to
+// cv/reference qualification, be the same as the type of `value` -- so that
+// an implicit conversion (e.g. a function taking `int` also being invocable
+// with a `double`) cannot cause a false match.
+template <typename Func, typename Value, typename = void>
+constexpr bool isMatchForVisitIf = std::is_invocable_v<Func&, Value>;
+
+template <typename Func, typename Value>
+constexpr bool isMatchForVisitIf<
+    Func, Value, std::void_t<FirstArgumentT<std::decay_t<Func>>>> =
+    std::is_invocable_v<Func&, Value> &&
+    isSimilar<FirstArgumentT<std::decay_t<Func>>, Value>;
+
+// Call the first of `funcs` that is a match (see `isMatchForVisitIf`) for
+// `value`.
+template <typename Value, typename Func, typename... Rest>
+decltype(auto) tryInvoke(Value&& value, Func&& func, Rest&&... rest) {
+  if constexpr (isMatchForVisitIf<Func, Value>) {
+    return func(AD_FWD(value));
+  } else {
+    static_assert(sizeof...(Rest) > 0,
+                  "None of the functions passed to `visitIf` is invocable "
+                  "with the active alternative");
+    return tryInvoke(AD_FWD(value), AD_FWD(rest)...);
+  }
+}
+}  // namespace detail
+
+/// A generic helper for the common `std::visit` idiom of checking (typically
+/// via `if constexpr (isSame<T, ...>)` / `isInstantiation<T, ...>`) which of
+/// several conditions the currently active alternative of `variant` matches,
+/// and running the corresponding function. `funcs` are tried in order, and
+/// the first one that matches (see `detail::isMatchForVisitIf`) the active
+/// alternative is called; if none does, the alternative is silently ignored.
+/// Which alternative(s) a given function applies to is determined simply by
+/// its parameter type, so each function in `funcs` is typically a
+/// non-generic lambda that takes the concrete, expected alternative type
+/// directly (no `decay_t`/`if constexpr` boilerplate needed at the call
+/// site); the last function may instead be a generic catch-all (`auto&&`)
+/// to act as an explicit "else" branch. A generic or constrained (e.g.
+/// `CPP_template_lambda`) function instead falls back to plain invocability
+/// for matching; since its parameter type is deduced from (rather than
+/// converted from) the alternative's type, this is exact as well.
+template <typename Variant, typename... Funcs>
+decltype(auto) visitIf(Variant&& variant, Funcs&&... funcs) {
+  return std::visit(
+      [&](auto&& value) -> decltype(auto) {
+        return detail::tryInvoke(AD_FWD(value), AD_FWD(funcs)...,
+                                 detail::IgnoreUnmatchedAlternative{});
+      },
+      AD_FWD(variant));
+}
+
 /// Apply `Function f` to each element of tuple. Returns a tuple of the results.
 /// Note: 1. The `Function` must not return void (otherwise this doesn't
 /// compile)
