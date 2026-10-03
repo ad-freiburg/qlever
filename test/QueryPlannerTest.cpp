@@ -3287,7 +3287,17 @@ TEST(QueryPlanner, postQueryValuesClause) {
   h::expect("SELECT ?s ?p1 ?o1 { ?s ?p1 ?o1 } VALUES ?p1 { <pred> }",
             h::Join(h::IndexScanFromStrings("?s", "?p1", "?o1"),
                     h::Sort(h::ValuesClause("VALUES (?p1) { (<pred>) }"))));
-  h::expect("SELECT * { } VALUES () { () }", h::NeutralElement());
+  h::expect("SELECT * { } VALUES () { () }",
+            h::CartesianProductJoin(h::NeutralElement(),
+                                    h::ValuesClause("VALUES () { () }")));
+  // Without variables, the trailing `VALUES` clause must not be ignored: zero
+  // rows make the result empty and multiple rows duplicate its rows.
+  h::expect("SELECT ?s { ?s ?p ?o } VALUES () { }",
+            h::CartesianProductJoin(h::IndexScanFromStrings("?s", "?p", "?o"),
+                                    h::ValuesClause("VALUES () {  }")));
+  h::expect("SELECT ?s { ?s ?p ?o } VALUES () { () () }",
+            h::CartesianProductJoin(h::IndexScanFromStrings("?s", "?p", "?o"),
+                                    h::ValuesClause("VALUES () { () () }")));
   h::expect(
       "SELECT * { } VALUES (?x ?y) { (1 2) }",
       h::CartesianProductJoin(h::NeutralElement(),
