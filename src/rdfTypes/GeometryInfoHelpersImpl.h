@@ -276,6 +276,29 @@ inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
   return std::nullopt;
 }
 
+namespace detail::crsStrings {
+constexpr inline std::string_view crs84 =
+    "<http://www.opengis.net/def/crs/OGC/1.3/CRS84>";
+constexpr inline std::string_view wgs84 =
+    "<http://www.opengis.net/def/crs/EPSG/0/4326>";
+constexpr inline std::string_view webMerc =
+    "<http://www.opengis.net/def/crs/EPSG/0/3857>";
+}  // namespace detail::crsStrings
+inline constexpr auto CRS_TYPE_IRI = []() {
+  using namespace detail::crsStrings;
+  return std::array<std::optional<std::string_view>, 8>{
+      std::nullopt,  // Invalid CRS
+      crs84, wgs84, webMerc};
+}();
+
+// Lookup the IRI for a given CRS type in the array of prepared IRIs.
+inline std::optional<std::string_view> crsTypeToIri(uint8_t type) {
+  if (type < 4) {
+    return CRS_TYPE_IRI.at(type);
+  }
+  return std::nullopt;
+}
+
 // Reverse projection applied by `sj::WKTParser`: convert coordinates from web
 // mercator int32 to normal lat-long double coordinates.
 inline DPoint projectInt32WebMercToDoubleLatLng(const I32Point& p) {
