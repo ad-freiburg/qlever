@@ -11,6 +11,7 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 
+#include <array>
 #include <memory>
 
 #include "engine/idTable/CompressedExternalIdTable.h"
