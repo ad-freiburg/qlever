@@ -183,27 +183,26 @@ class RowReferenceImpl {
     // The actual implementation of operator[].
     CPP_template(typename SelfType)(
         requires CPP_NOT(std::is_const_v<std::remove_reference_t<SelfType>>)
-            CPP_and CPP_NOT(
-                isConst)) static T& operatorBracketImpl(SelfType& self,
-                                                        size_t i) {
+            CPP_and CPP_NOT(isConst)) static decltype(auto)
+        operatorBracketImpl(SelfType& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
     template <typename Self>
-    static const T& operatorBracketImpl(const Self& self, size_t i) {
+    static decltype(auto) operatorBracketImpl(const Self& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
 
    public:
     // Access to the `i`-th columns of this row. Only allowed for const values
     // and for rvalues.
-    CPP_template_2(typename = void)(requires(!isConst)) T& operator[](
-        size_t i) && {
+    CPP_template_2(typename = void)(requires(!isConst)) decltype(auto)
+    operator[](size_t i) && {
       return operatorBracketImpl(*this, i);
     }
-    const T& operator[](size_t i) const& {
+    decltype(auto) operator[](size_t i) const& {
       return operatorBracketImpl(*this, i);
     }
-    const T& operator[](size_t i) const&& {
+    decltype(auto) operator[](size_t i) const&& {
       return operatorBracketImpl(*this, i);
     }
 
@@ -219,11 +218,11 @@ class RowReferenceImpl {
     using iterator = ad_utility::IteratorForAccessOperator<
         RowReferenceWithRestrictedAccess,
         IteratorHelper<RowReferenceWithRestrictedAccess>,
-        ad_utility::IsConst::False>;
+        ad_utility::IsConst::False, T>;
     using const_iterator = ad_utility::IteratorForAccessOperator<
         RowReferenceWithRestrictedAccess,
         IteratorHelper<RowReferenceWithRestrictedAccess>,
-        ad_utility::IsConst::True>;
+        ad_utility::IsConst::True, T>;
     // Non-const iterators allow non-const access and are therefore only allowed
     // on rvalues.
     iterator begin() && { return {this, 0}; }
@@ -391,10 +390,11 @@ class RowReference
   using Base::Base;
 
   // Access to the `i`-th column of this row.
-  CPP_template_2(typename = void)(requires(!isConst)) T& operator[](size_t i) {
+  CPP_template_2(typename = void)(requires(!isConst)) decltype(auto) operator[](
+      size_t i) {
     return Base::operatorBracketImpl(base(), i);
   }
-  const T& operator[](size_t i) const {
+  decltype(auto) operator[](size_t i) const {
     return Base::operatorBracketImpl(base(), i);
   }
 
