@@ -39,5 +39,14 @@ if (NOT _NO_BENCHMARK)
     addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)
 
     addAndLinkBenchmark(SparqlExpressionBenchmark engine testUtil gtest gmock)
+    addAndLinkBenchmark(FsstScratchBufferBenchmark fsst ${CMAKE_DL_LIBS})
+
+    addAndLinkBenchmark(PrefixCompressorBenchmark)
+
+    addAndLinkBenchmark(VocabBatchLookupBenchmark vocabulary)
+
+    addAndLinkBenchmark(VocabularyBatchLookupMicroBenchmark vocabulary)
+
+    addAndLinkBenchmark(VocabularyBatchLookupEndToEndBenchmark vocabulary)
 
 endif()

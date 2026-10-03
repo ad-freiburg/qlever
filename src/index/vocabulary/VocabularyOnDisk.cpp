@@ -182,31 +182,27 @@ VocabBatchLookupResult VocabularyOnDisk::readStrings(
     ad_utility::BatchManagerBase& manager,
     ql::span<const OffsetPair> offsetPairs) const {
   // Read the string data. String `i` starts at `offset_` with length
-  // `nextOffset_ - offset_`; the strings are packed contiguously into `buffer`.
+  // `nextOffset_ - offset_`; the strings are packed contiguously into the
+  // builder's buffer, with one precomputed view per word at its fixed offset.
   const size_t numIndices = offsetPairs.size();
   std::vector<size_t> sizes(numIndices);
   std::vector<uint64_t> fileOffsets(numIndices);
   for (auto&& [size, fileOffset, offsetPair] :
        ::ranges::views::zip(sizes, fileOffsets, offsetPairs)) {
-    size = offsetPair.nextOffset_ - offsetPair.offset_;
-    fileOffset = offsetPair.offset_;
+    size = offsetPair.wordSize();
+    fileOffset = offsetPair.offset();
   }
 
-  auto data = std::make_shared<VocabBatchLookupData>();
-  data->buffer().resize(::ranges::accumulate(sizes, size_t{0}));
-  data->views().resize(numIndices);
-
-  std::vector<char*> targets(numIndices);
-  size_t bufferOffset = 0;
-  for (auto&& [target, view, size] :
-       ::ranges::views::zip(targets, data->views(), sizes)) {
-    target = data->buffer().data() + bufferOffset;
-    view = std::string_view(target, size);
-    bufferOffset += size;
-  }
-
-  manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets, targets));
-  return VocabBatchLookupData::asResult(std::move(data));
+  // `lookupBatch` rejects empty input, so `sizes` is non-empty here, as the
+  // builder requires.
+  AD_CORRECTNESS_CHECK(!sizes.empty());
+  ContiguousVocabBatchBuilder builder(sizes);
+  // Bind the returned array: `addBatch` takes a span, and the pointers must
+  // stay alive until `wait` returns.
+  auto targets = builder.targets();
+  manager.wait(manager.addBatch(file_.fd(), sizes, fileOffsets,
+                                ql::span<char*>{targets}));
+  return std::move(builder).finalize();
 }
 
 // _____________________________________________________________________________
