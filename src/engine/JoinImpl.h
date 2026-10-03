@@ -48,11 +48,11 @@ class JoinImpl : public Operation {
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   uint64_t getSizeEstimateBeforeLimit() override {
     if (!sizeEstimateComputed_) {
@@ -122,7 +122,7 @@ class JoinImpl : public Operation {
   static void hashJoin(const IdTable& dynA, ColumnIndex jc1,
                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes);
 
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;

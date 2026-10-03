@@ -119,7 +119,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
 }
 
 // _____________________________________________________________________________
-string IndexScan::getCacheKeyImpl() const {
+qlm::string IndexScan::getCacheKeyImpl() const {
   std::ostringstream os;
   // This string only represents the type of permutation, like "SPO".
   auto permutationString = Permutation::toString(permutation().permutation());
@@ -153,7 +153,8 @@ string IndexScan::getCacheKeyImpl() const {
     os << " column subset "
        << absl::StrJoin(getSubsetForStrippedColumns(), ",");
   }
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
@@ -162,7 +163,7 @@ bool IndexScan::resultDoesMatchCacheKey() const {
 }
 
 // _____________________________________________________________________________
-string IndexScan::getDescriptor() const {
+qlm::string IndexScan::getDescriptor() const {
   auto isNotStripped = [this](const Variable& var) {
     return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
   };
@@ -178,8 +179,10 @@ string IndexScan::getDescriptor() const {
       additionalVariables_ | ql::views::filter(isNotStripped) |
           ql::views::transform(
               [](const auto& var) -> decltype(auto) { return var.name(); }));
-  return absl::StrCat("IndexScan ", permutation().readableName(), " ",
-                      absl::StrJoin(components.begin(), components.end(), " "));
+  return qlm::string{
+      absl::StrCat("IndexScan ", permutation().readableName(), " ",
+                   absl::StrJoin(components.begin(), components.end(), " ")),
+      allocator()};
 }
 
 // _____________________________________________________________________________
@@ -205,8 +208,9 @@ std::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
-  auto result = variableAndGraphColumns();
+qlm::vector<ColumnIndex> IndexScan::resultSortedOn() const {
+  const auto source = variableAndGraphColumns();
+  qlm::vector<ColumnIndex> result{source.begin(), source.end(), allocator()};
 
   if (varsToKeep_.has_value()) {
     auto permutation = getSubsetForStrippedColumns();

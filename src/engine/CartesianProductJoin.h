@@ -58,13 +58,13 @@ class CartesianProductJoin : public Operation {
 
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for
   // this Operation.  This string is used in the RuntimeInformation
-  std::string getDescriptor() const override {
-    return "Cartesian Product Join";
+  qlm::string getDescriptor() const override {
+    return qlm::string{"Cartesian Product Join", allocator()};
   }
   size_t getResultWidth() const override;
 
@@ -114,7 +114,9 @@ class CartesianProductJoin : public Operation {
   // result is already being computed, at which point an invalidated sort order
   // could no longer be repaired (see the caution note on
   // `Operation::applyLimitOffset`).
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

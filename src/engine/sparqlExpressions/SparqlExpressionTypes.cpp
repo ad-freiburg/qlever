@@ -32,6 +32,7 @@ EvaluationContext::EvaluationContext(
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},
       _inputTable{std::move(inputTable)},
+      _columnsByWhichResultIsSorted{allocator},
       _allocator{allocator},
       _localVocab{localVocab},
       cancellationHandle_{std::move(cancellationHandle)},

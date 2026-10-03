@@ -180,12 +180,16 @@ TEST(CartesianProductJoin, outOfMemoryException) {
   auto allocator = largeJoin.getExecutionContext()->getAllocator();
   // Manually deplete the allocator.
   auto left = allocator.amountMemoryLeft().getBytes() / sizeof(Id);
-  auto ptr = allocator.allocate(left);
+  // Leave enough room for the small intermediate containers. The result
+  // itself must still exceed the remaining memory and trigger the
+  // cross-product-specific error.
+  constexpr size_t safetyMargin = 16;
+  auto ptr = allocator.allocate(left - safetyMargin);
   AD_EXPECT_THROW_WITH_MESSAGE(largeJoin.computeResultOnlyForTesting(),
                                ::testing::HasSubstr("cross-product"));
   // Avoid memory leaks and failures of unit tests that reuse the (static)
   // allocator.
-  allocator.deallocate(ptr, left);
+  allocator.deallocate(ptr, left - safetyMargin);
 }
 
 // ______________________________________________________________

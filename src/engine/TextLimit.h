@@ -33,9 +33,9 @@ class TextLimit : public Operation {
 
   ~TextLimit() override = default;
 
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
@@ -59,7 +59,7 @@ class TextLimit : public Operation {
     return limit_ == 0 || child_->knownEmptyResult();
   }
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

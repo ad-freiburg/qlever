@@ -102,22 +102,24 @@ uint64_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
-  return {ColumnIndex(0)};
+qlm::vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{{ColumnIndex(0)}, allocator()};
 }
 
 // _____________________________________________________________________________
-std::string TextIndexScanForWord::getDescriptor() const {
-  return absl::StrCat("TextIndexScanForWord on ",
-                      config_.varToBindText_.name());
+qlm::string TextIndexScanForWord::getDescriptor() const {
+  return qlm::string{
+      absl::StrCat("TextIndexScanForWord on ", config_.varToBindText_.name()),
+      allocator()};
 }
 
 // _____________________________________________________________________________
-std::string TextIndexScanForWord::getCacheKeyImpl() const {
+qlm::string TextIndexScanForWord::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "WORD INDEX SCAN: " << " with word: \"" << config_.word_
      << "\", has variable: " << config_.scoreVar_.has_value();
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________

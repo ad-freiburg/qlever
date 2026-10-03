@@ -86,7 +86,7 @@ class Operation {
 
   // Holds a precomputed Result of this operation if it is the sibling of a
   // Service operation.
-  std::optional<std::shared_ptr<const Result>>
+  qlm::optional<qlm::shared_ptr<const Result>>
       precomputedResultBecauseSiblingOfService_;
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
@@ -133,7 +133,7 @@ class Operation {
   mutable ad_utility::CopyableMutex _resultSortedColumnsMutex;
 
   // Store the list of columns by which the result is sorted.
-  mutable std::optional<std::vector<ColumnIndex>> _resultSortedColumns =
+  mutable qlm::optional<qlm::vector<ColumnIndex>> _resultSortedColumns =
       std::nullopt;
 
   // True if this operation does not handle limits/offsets itself and the
@@ -197,7 +197,7 @@ class Operation {
   /**
    * @return A list of columns on which the result of this operation is sorted.
    */
-  const std::vector<ColumnIndex>& getResultSortedOn() const;
+  const qlm::vector<ColumnIndex>& getResultSortedOn() const;
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
@@ -209,7 +209,7 @@ class Operation {
   // `prefilters` as possible. If none of them applies, return `std::nullopt`,
   // signaling that the `QueryExecutionTree` will not be changed. This is the
   // default implementation.
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  virtual qlm::optional<qlm::shared_ptr<QueryExecutionTree>>
   getUpdatedQueryExecutionTreeWithPrefilterApplied(
       [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilters)
       const {
@@ -219,7 +219,7 @@ class Operation {
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
   // Calls  `getCacheKeyImpl` and adds the information about the `LIMIT` clause.
-  virtual std::string getCacheKey() const final;
+  virtual qlm::string getCacheKey() const final;
 
   // Return true iff this operation and all of its children are guaranteed to
   // produce the same result on every invocation, OR are explicitly configured
@@ -275,12 +275,12 @@ class Operation {
 
   // The individual implementation of `getCacheKey` (see above) that has to
   // be customized by every child class.
-  virtual std::string getCacheKeyImpl() const = 0;
+  virtual qlm::string getCacheKeyImpl() const = 0;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for
   // this Operation.  This string is used in the RuntimeInformation
-  virtual std::string getDescriptor() const = 0;
+  virtual qlm::string getDescriptor() const = 0;
   virtual size_t getResultWidth() const = 0;
 
   virtual size_t getCostEstimate() = 0;
@@ -326,7 +326,7 @@ class Operation {
       const std::vector<const Variable*>& variables) const;
 
   // See the member variable with the same name below for documentation.
-  std::optional<std::shared_ptr<const Result>>&
+  qlm::optional<qlm::shared_ptr<const Result>>&
   precomputedResultBecauseSiblingOfService() {
     return precomputedResultBecauseSiblingOfService_;
   }
@@ -512,7 +512,7 @@ class Operation {
   // most operations can't efficiently produce a sorted result. Subclasses may
   // override this function if they are able to provide more efficient
   // implementations.
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+  virtual qlm::optional<qlm::shared_ptr<QueryExecutionTree>> makeSortedTree(
       const std::vector<ColumnIndex>& sortColumns) const;
 
   // Return true iff the result of this operation is guaranteed to contain no
@@ -539,7 +539,7 @@ class Operation {
   // provide more optimal ways to ensure distinct values. This function must
   // only be called on operations that are not already distinct wrt
   // `distinctIndices`.
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeDistinctTree(
+  virtual qlm::optional<qlm::shared_ptr<QueryExecutionTree>> makeDistinctTree(
       const std::vector<ColumnIndex>& distinctIndices) const;
 
   // Try to create a version of this operation that only contains the given
@@ -548,7 +548,7 @@ class Operation {
   // TODO<joka921/RobinTF> Would it make the code simpler or be beneficial in
   // any other way, if the default implementation would add a `StripColumns`
   // operation? The the result wouldn't have to be `optional`.
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  virtual qlm::optional<qlm::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(const std::set<Variable>& variables) const;
 
   // Try to create a version of this operation with an additional column from a
@@ -557,7 +557,7 @@ class Operation {
   // override this method. Pushing a `BIND` down to a materialized view might
   // produce a cheaper query plan for example. This function is tested in the
   // `BindRewrite` test case in `MaterializedViewsTest`.
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  virtual qlm::optional<qlm::shared_ptr<QueryExecutionTree>>
   makeTreeWithBindColumn(const parsedQuery::Bind&) const {
     return std::nullopt;
   }
@@ -567,7 +567,7 @@ class Operation {
    * @brief Compute and return the columns on which the result will be sorted
    * @return The columns on which the result will be sorted.
    */
-  [[nodiscard]] virtual std::vector<ColumnIndex> resultSortedOn() const = 0;
+  [[nodiscard]] virtual qlm::vector<ColumnIndex> resultSortedOn() const = 0;
 
   // get access to the generated warnings of this operation.
   const ThreadsafeWarnings& getWarnings() const { return warnings_; }
@@ -578,8 +578,10 @@ class Operation {
   // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
       ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
-    cancellationHandle_->throwIfCancelled(location,
-                                          [this]() { return getDescriptor(); });
+    if (cancellationHandle_) {
+      cancellationHandle_->throwIfCancelled(
+          location, [this]() { return getDescriptor(); });
+    }
   }
 
   std::chrono::milliseconds remainingTime() const;
@@ -601,11 +603,11 @@ class Operation {
   // be instantiated in the code for operations that use it.
   CPP_template(typename MakeCloneWithNewChildren)(
       requires ad_utility::InvocableWithExactReturnType<
-          MakeCloneWithNewChildren, std::shared_ptr<QueryExecutionTree>,
-          std::vector<std::shared_ptr<QueryExecutionTree>>>)
-      std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
+          MakeCloneWithNewChildren, qlm::shared_ptr<QueryExecutionTree>,
+          qlm::vector<qlm::shared_ptr<QueryExecutionTree>>>)
+      qlm::optional<qlm::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
           const parsedQuery::Bind& bind,
-          std::vector<std::shared_ptr<QueryExecutionTree>> children,
+          qlm::vector<qlm::shared_ptr<QueryExecutionTree>> children,
           MakeCloneWithNewChildren makeCloneWithNewChildren) const;
 
  private:

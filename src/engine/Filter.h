@@ -30,13 +30,14 @@ class Filter : public Operation {
          sparqlExpression::SparqlExpressionPimpl expression);
 
  private:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
  public:
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override {
-    return _subtree->resultSortedOn();
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    const auto& sortedOn = _subtree->resultSortedOn();
+    return {sortedOn.begin(), sortedOn.end(), allocator()};
   }
 
  private:
@@ -83,12 +84,12 @@ class Filter : public Operation {
       requires IdTableLike<
           Table>) void computeFilterImpl(IdTable& dynamicResultTable,
                                          Table&& input,
-                                         std::vector<ColumnIndex> sortedBy)
+                                         qlm::vector<ColumnIndex> sortedBy)
       const;
 
   // Run `computeFilterImpl` on the provided IdTable.
   CPP_template(typename Table)(requires IdTableLike<Table>) IdTable
-      filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable) const;
+      filterIdTable(qlm::vector<ColumnIndex> sortedBy, Table&& idTable) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_FILTER_H

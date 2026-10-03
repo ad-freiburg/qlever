@@ -328,8 +328,10 @@ std::shared_ptr<const Result> Operation::getResult(
     signalQueryUpdate(RuntimeInformation::SendPriority::Always);
   }
   auto& cache = _executionContext->getQueryTreeCache();
+  auto cacheKeyString = getCacheKey();
   const QueryCacheKey cacheKey = {
-      getCacheKey(), _executionContext->locatedTriplesState().index_};
+      std::string{cacheKeyString.begin(), cacheKeyString.end()},
+      _executionContext->locatedTriplesState().index_};
   const bool pinFinalResultButNotSubtrees =
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
@@ -481,12 +483,14 @@ void Operation::storeToNamedResultCache(const Result& result) {
 
   // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
   // it would require a major refactoring of the `Result` class.
+  auto cacheKeyString = getCacheKey();
   auto valueForNamedResultCache = NamedResultCache::Value{
       std::make_shared<const IdTable>(result.cloneIdTable()),
       getExternallyVisibleVariableColumns(),
-      result.sortedBy(),
+      std::vector<ColumnIndex>{result.sortedBy().begin(),
+                               result.sortedBy().end()},
       result.localVocab().clone(),
-      getCacheKey(),
+      std::string{cacheKeyString.begin(), cacheKeyString.end()},
       geoIndex()};
   _executionContext->namedResultCache().store(
       name, std::move(valueForNamedResultCache));
@@ -643,8 +647,10 @@ void Operation::createRuntimeInfoFromEstimates(
   }
   _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
 
+  auto cacheKeyString = getCacheKey();
   auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
-      {getCacheKey(), locatedTriplesState().index_});
+      {std::string{cacheKeyString.begin(), cacheKeyString.end()},
+       locatedTriplesState().index_});
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
     _runtimeInfo->cacheStatus_ = cacheStatus;
@@ -716,7 +722,7 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
 }
 
 // ___________________________________________________________________________
-const std::vector<ColumnIndex>& Operation::getResultSortedOn() const {
+const qlm::vector<ColumnIndex>& Operation::getResultSortedOn() const {
   // TODO<joka921> refactor this without a mutex (for details see the
   // `getVariableColumns` method for details.
   std::lock_guard l{_resultSortedColumnsMutex};
@@ -736,19 +742,19 @@ void Operation::signalQueryUpdate(
 }
 
 // _____________________________________________________________________________
-std::string Operation::getCacheKey() const {
+qlm::string Operation::getCacheKey() const {
   AD_CORRECTNESS_CHECK(_executionContext);
   if (_executionContext->disableCaching()) {
     // Cache key computation is costly, so we can save it when caching is
     // disabled.
-    return "";
+    return qlm::string{allocator()};
   }
   auto result = getCacheKeyImpl();
   if (limitOffset_._limit.has_value()) {
-    absl::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());
+    result.append(absl::StrCat(" LIMIT ", limitOffset_._limit.value()));
   }
   if (limitOffset_._offset != 0) {
-    absl::StrAppend(&result, " OFFSET ", limitOffset_._offset);
+    result.append(absl::StrCat(" OFFSET ", limitOffset_._offset));
   }
   return result;
 }
@@ -832,7 +838,7 @@ bool Operation::isSortedBy(const std::vector<ColumnIndex>& sortColumns) const {
 }
 
 // _____________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
+qlm::optional<qlm::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
     const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return std::nullopt;
@@ -855,14 +861,14 @@ bool Operation::isDistinctByImpl(
 }
 
 // _____________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeDistinctTree(
+qlm::optional<qlm::shared_ptr<QueryExecutionTree>> Operation::makeDistinctTree(
     const std::vector<ColumnIndex>& distinctIndices) const {
   AD_CONTRACT_CHECK(!isDistinctBy(distinctIndices));
   return std::nullopt;
 }
 
 // _____________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>>
+qlm::optional<qlm::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithStrippedColumns(
     [[maybe_unused]] const std::set<Variable>& variables) const {
   return std::nullopt;

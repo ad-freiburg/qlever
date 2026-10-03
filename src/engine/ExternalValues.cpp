@@ -39,7 +39,7 @@ ExternalValues::ExternalValues(QueryExecutionContext* qec,
           query.name_) {}
 
 // ____________________________________________________________________________
-std::string ExternalValues::getCacheKeyImpl() const {
+qlm::string ExternalValues::getCacheKeyImpl() const {
   // ExternalValues must only be used with caching disabled.
   throw std::runtime_error(
       "ExternalValues does not support cache keys. "
@@ -55,8 +55,9 @@ Result ExternalValues::computeResult(bool requestLaziness) {
 }
 
 // ____________________________________________________________________________
-std::string ExternalValues::getDescriptor() const {
-  return absl::StrCat("EXTERNAL VALUES '", name_, "'");
+qlm::string ExternalValues::getDescriptor() const {
+  return qlm::string{absl::StrCat("EXTERNAL VALUES '", name_, "'"),
+                     allocator()};
 }
 
 // ____________________________________________________________________________

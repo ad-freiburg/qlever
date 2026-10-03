@@ -48,9 +48,12 @@ TEST(Distinct, CacheKey) {
               ad_utility::makeExecutionTree<NeutralElementOperation>(qec), {0});
   Distinct d3(ad_utility::testing::getQec(), d, {0});
 
-  EXPECT_NE(d->getCacheKey(), d2.getCacheKey());
-  EXPECT_NE(d->getCacheKey(), d3.getCacheKey());
-  EXPECT_NE(d2.getCacheKey(), d3.getCacheKey());
+  EXPECT_NE(std::string_view{d->getCacheKey()},
+            std::string_view{d2.getCacheKey()});
+  EXPECT_NE(std::string_view{d->getCacheKey()},
+            std::string_view{d3.getCacheKey()});
+  EXPECT_NE(std::string_view{d2.getCacheKey()},
+            std::string_view{d3.getCacheKey()});
 }
 
 // _____________________________________________________________________________

@@ -63,12 +63,14 @@ qlm::vector<QueryExecutionTree*> CartesianProductJoin::getChildrenImpl() const {
 }
 
 // ____________________________________________________________________________
-std::string CartesianProductJoin::getCacheKeyImpl() const {
-  return "CARTESIAN PRODUCT JOIN " +
-         ad_utility::lazyStrJoin(
-             ql::views::transform(
-                 childView(), [](auto& child) { return child.getCacheKey(); }),
-             " ");
+qlm::string CartesianProductJoin::getCacheKeyImpl() const {
+  return qlm::string{
+      "CARTESIAN PRODUCT JOIN " +
+          ad_utility::lazyStrJoin(
+              ql::views::transform(
+                  childView(), [](auto& child) { return child.getCacheKey(); }),
+              " "),
+      allocator()};
 }
 
 // ____________________________________________________________________________

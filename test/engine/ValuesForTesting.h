@@ -51,7 +51,8 @@ class ValuesForTesting : public Operation {
         handlesLimit_{handlesLimit},
         sizeEstimate_{table.numRows()},
         costEstimate_{table.numRows()},
-        resultSortedColumns_{std::move(sortedColumns)},
+        resultSortedColumns_{sortedColumns.begin(), sortedColumns.end(),
+                             ctx->getAllocator()},
         multiplicity_{multiplicity},
         forceFullyMaterialized_{forceFullyMaterialized} {
     AD_CONTRACT_CHECK(variables_.size() == table.numColumns());
@@ -77,7 +78,8 @@ class ValuesForTesting : public Operation {
         sizeEstimate_{0},
         costEstimate_{0},
         unlikelyToFitInCache_{unlikelyToFitInCache},
-        resultSortedColumns_{std::move(sortedColumns)},
+        resultSortedColumns_{sortedColumns.begin(), sortedColumns.end(),
+                             ctx->getAllocator()},
         multiplicity_{std::nullopt} {
     AD_CONTRACT_CHECK(
         ql::ranges::all_of(this->tables(), [this](const IdTable& table) {
@@ -154,7 +156,7 @@ class ValuesForTesting : public Operation {
 
  private:
   // ___________________________________________________________________________
-  std::string getCacheKeyImpl() const override {
+  qlm::string getCacheKeyImpl() const override {
     std::stringstream str;
     auto numRowsView = tables() | ql::views::transform(&IdTable::numRows);
     auto totalNumRows = ::ranges::accumulate(numRowsView, 0ULL);
@@ -173,12 +175,13 @@ class ValuesForTesting : public Operation {
       }
     }
     str << " Handles limit: " << handlesLimit_;
-    return std::move(str).str();
+    auto result = std::move(str).str();
+    return {result.begin(), result.end(), allocator()};
   }
 
  public:
-  std::string getDescriptor() const override {
-    return "explicit values for testing";
+  qlm::string getDescriptor() const override {
+    return {"explicit values for testing", allocator()};
   }
 
   size_t getResultWidth() const override {
@@ -187,7 +190,7 @@ class ValuesForTesting : public Operation {
     return tables_.empty() ? 1 : tables()[0].numColumns();
   }
 
-  std::vector<ColumnIndex> resultSortedOn() const override {
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
     return resultSortedColumns_;
   }
 
@@ -243,7 +246,8 @@ class ValuesForTesting : public Operation {
         sizeEstimate_{other.sizeEstimate_},
         costEstimate_{other.costEstimate_},
         unlikelyToFitInCache_{other.unlikelyToFitInCache_},
-        resultSortedColumns_{other.resultSortedColumns_},
+        resultSortedColumns_{other.resultSortedColumns_.begin(),
+                             other.resultSortedColumns_.end(), allocator()},
         multiplicity_{other.multiplicity_},
         forceFullyMaterialized_{other.forceFullyMaterialized_} {
     for (const auto& [idTable, localVocab] : other.tables_) {
@@ -259,7 +263,7 @@ class ValuesForTesting : public Operation {
     return std::make_unique<ValuesForTesting>(ValuesForTesting{*this});
   }
 
-  std::vector<ColumnIndex> resultSortedColumns_;
+  qlm::vector<ColumnIndex> resultSortedColumns_;
   std::optional<float> multiplicity_;
   bool forceFullyMaterialized_ = false;
 };

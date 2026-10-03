@@ -40,13 +40,16 @@ bool Distinct::isDistinctByImpl(
 }
 
 // _____________________________________________________________________________
-string Distinct::getCacheKeyImpl() const {
-  return absl::StrCat("DISTINCT (", subtree_->getCacheKey(), ") (",
-                      absl::StrJoin(keepIndices_, ","), ")");
+qlm::string Distinct::getCacheKeyImpl() const {
+  return qlm::string{absl::StrCat("DISTINCT (", subtree_->getCacheKey(), ") (",
+                                  absl::StrJoin(keepIndices_, ","), ")"),
+                     allocator()};
 }
 
 // _____________________________________________________________________________
-string Distinct::getDescriptor() const { return "Distinct"; }
+qlm::string Distinct::getDescriptor() const {
+  return qlm::string{"Distinct", allocator()};
+}
 
 // _____________________________________________________________________________
 VariableToColumnMap Distinct::computeVariableToColumnMap() const {

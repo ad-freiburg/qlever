@@ -380,7 +380,10 @@ PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
 // ___________________________________________________________________________
 template <typename Context>
 SparqlExpressionPimpl Visitor::visitExpressionPimpl(Context* ctx) {
-  return {visit(ctx), getOriginalInputForContext(ctx)};
+  auto expression = visit(ctx);
+  std::shared_ptr<sparqlExpression::SparqlExpression> sharedExpression{
+      std::move(expression)};
+  return {std::move(sharedExpression), getOriginalInputForContext(ctx)};
 }
 
 // ____________________________________________________________________________________

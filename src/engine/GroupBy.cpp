@@ -27,10 +27,10 @@ GroupBy::GroupBy(GroupBy&&) = default;
 GroupBy& GroupBy::operator=(GroupBy&&) = default;
 
 // _____________________________________________________________________________
-std::string GroupBy::getDescriptor() const { return _impl->getDescriptor(); }
+qlm::string GroupBy::getDescriptor() const { return _impl->getDescriptor(); }
 
 // _____________________________________________________________________________
-std::string GroupBy::getCacheKeyImpl() const {
+qlm::string GroupBy::getCacheKeyImpl() const {
   return _impl->getCacheKeyImpl();
 }
 
@@ -38,8 +38,9 @@ std::string GroupBy::getCacheKeyImpl() const {
 size_t GroupBy::getResultWidth() const { return _impl->getResultWidth(); }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> GroupBy::resultSortedOn() const {
-  return _impl->resultSortedOn();
+qlm::vector<ColumnIndex> GroupBy::resultSortedOn() const {
+  const auto& sortedOn = _impl->resultSortedOn();
+  return {sortedOn.begin(), sortedOn.end(), allocator()};
 }
 
 // _____________________________________________________________________________

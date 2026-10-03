@@ -39,7 +39,7 @@ class Service : public Operation {
   struct SiblingInfo {
     std::shared_ptr<const Result> precomputedResult_;
     VariableToColumnMap variables_;
-    std::string cacheKey_;
+    qlm::string cacheKey_;
   };
 
  private:
@@ -70,9 +70,11 @@ class Service : public Operation {
           SendRequestType getResultFunction = sendHttpOrHttpsRequest);
 
   // Methods inherited from base class `Operation`.
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
   size_t getResultWidth() const override;
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
   float getMultiplicity(size_t col) override;
 
  private:
@@ -126,7 +128,7 @@ class Service : public Operation {
   [[nodiscard]] bool isDeterministicImpl() const override;
 
   // The string returned by this function is used as cache key.
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
   // Push down a `VALUES` clause into the body of the SERVICE clause and return
   // it.
