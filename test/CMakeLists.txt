@@ -8,6 +8,15 @@ add_subdirectory(util EXCLUDE_FROM_ALL)
 # arguments.
 function(linkTest basename)
     qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main ${CMAKE_THREAD_LIBS_INIT} global)
+    # Reuse the precompiled headers of `testUtil`. This requires the same
+    # compiler flags and definitions as `testUtil`, so only tests that link
+    # against `testUtil` qualify (otherwise, e.g., the definitions of
+    # OpenTelemetry are missing, and GCC ignores the precompiled header, but
+    # still includes all its headers). Shared libraries are excluded because of
+    # `-fPIC` for `testUtil` vs. `-fPIE` for the test executables.
+    if (USE_PRECOMPILED_HEADERS AND NOT BUILD_SHARED_LIBS AND "testUtil" IN_LIST ARGN)
+        target_precompile_headers(${basename} REUSE_FROM testUtil)
+    endif ()
 endfunction()
 
 # Add the executable ${basename} that is compiled from the source file
@@ -509,7 +518,8 @@ addLinkAndDiscoverTest(AsioHelpersTest)
 # crashes on the coroutine `.resume` body in this file. Compiling just this
 # translation unit at -O1 avoids the crashing pass.
 if (EMSCRIPTEN)
-    set_source_files_properties(AsioHelpersTest.cpp PROPERTIES COMPILE_OPTIONS "-O1")
+    set_source_files_properties(AsioHelpersTest.cpp PROPERTIES
+            COMPILE_OPTIONS "-O1" SKIP_PRECOMPILE_HEADERS ON)
 endif ()
 
 addLinkAndDiscoverTest(AsyncResourcePoolTest)
@@ -551,6 +561,12 @@ addLinkAndDiscoverTest(CopyableSynchronizationTest)
 addLinkAndDiscoverTest(LazyJsonParserTest)
 
 addLinkAndDiscoverTest(GeneratorsTest)
+# With the precompiled headers, GCC 13 produces a false-positive
+# `-Warray-bounds` warning for the message construction of an
+# `AD_CORRECTNESS_CHECK` that is inlined into this test.
+if (TARGET GeneratorsTest)
+    set_target_properties(GeneratorsTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+endif ()
 
 addLinkAndDiscoverTest(FilterTest engine)
 
