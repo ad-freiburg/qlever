@@ -1009,30 +1009,44 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   tok_.skipWhitespaceAndComments();
   auto view = tok_.view();
   // Characters that can be part of neither the prefix nor the local name of a
-  // prefixed name, assuming that no escape sequences are used (which is
-  // exactly the assumption that makes this parsing "relaxed"). They are used
-  // below to determine where the prefix and the local name end. Note that the
-  // `:` (the last of the `prefixDelimiters`) terminates the prefix, but may
-  // legally occur inside a local name, hence it is not part of the
-  // `localNameDelimiters`.
+  // prefixed name, unless they are escaped. They are used below to determine
+  // where the prefix and the local name end. Note that the `:` (the last of
+  // the `prefixDelimiters`) terminates the prefix, but may legally occur
+  // inside a local name, hence it is not one of the delimiters of the local
+  // name. Instead, those include the `\` that starts an escape sequence.
   constexpr std::string_view prefixDelimiters = " \t\r\n,;[]():";
-  constexpr std::string_view localNameDelimiters =
-      prefixDelimiters.substr(0, prefixDelimiters.size() - 1);
+  constexpr std::string_view localNameDelimitersAndEscape = " \t\r\n,;[]()\\";
+  static_assert(prefixDelimiters.substr(0, prefixDelimiters.size() - 1) ==
+                localNameDelimitersAndEscape.substr(
+                    0, localNameDelimitersAndEscape.size() - 1));
   static constexpr ad_utility::CharLookupTable prefixDelimiterTable =
       ad_utility::makeCharLookupTable(prefixDelimiters);
-  static constexpr ad_utility::CharLookupTable localNameDelimiterTable =
-      ad_utility::makeCharLookupTable(localNameDelimiters);
+  static constexpr ad_utility::CharLookupTable localNameDelimiterOrEscapeTable =
+      ad_utility::makeCharLookupTable(localNameDelimitersAndEscape);
   // If anything but a `:` comes first, this is not a prefixed name, but for
   // example the `[` of a blank node property list.
   auto pos = ad_utility::findFirstOfWithLookupTable(view, prefixDelimiterTable);
   if (pos == std::string::npos || view[pos] != ':') {
     return false;
   }
-  auto posEnd = ad_utility::findFirstOfWithLookupTable(
-      view, localNameDelimiterTable, pos + 1);
-  if (posEnd == std::string::npos) {
-    // make tests work
-    posEnd = view.size();
+  // The local name ends at the first delimiter that is not escaped. An escape
+  // sequence like `\;` or `\,` (see `PN_LOCAL_ESC` in the Turtle grammar) is
+  // skipped as a whole, so that an escaped delimiter does not end the local
+  // name. The escape sequences are resolved later, when the local name is
+  // unescaped.
+  size_t posEnd = pos + 1;
+  while (true) {
+    posEnd = ad_utility::findFirstOfWithLookupTable(
+        view, localNameDelimiterOrEscapeTable, posEnd);
+    if (posEnd == std::string::npos) {
+      // make tests work
+      posEnd = view.size();
+      break;
+    }
+    if (view[posEnd] != '\\') {
+      break;
+    }
+    posEnd = std::min(posEnd + 2, view.size());
   }
   // TODO<joka921>: Is it allowed to have no space between triples and the
   // dots? In this case we have to check something here.
