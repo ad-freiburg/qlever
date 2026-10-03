@@ -8,18 +8,21 @@ add_subdirectory(util EXCLUDE_FROM_ALL)
 # arguments.
 function(linkTest basename)
     qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main ${CMAKE_THREAD_LIBS_INIT} global)
+    # Reuse the precompiled headers of `testUtil`. This requires the same
+    # compiler flags and definitions as `testUtil`, so only tests that link
+    # against `testUtil` qualify (otherwise, e.g., the definitions of
+    # OpenTelemetry are missing, and GCC ignores the precompiled header, but
+    # still includes all its headers). Shared libraries are excluded because of
+    # `-fPIC` for `testUtil` vs. `-fPIE` for the test executables.
+    if (USE_PRECOMPILED_HEADERS AND NOT BUILD_SHARED_LIBS AND "testUtil" IN_LIST ARGN)
+        target_precompile_headers(${basename} REUSE_FROM testUtil)
+    endif ()
 endfunction()
 
 # Add the executable ${basename} that is compiled from the source file
 # "${basename}".cpp
 function(addTest basename)
     add_executable(${basename} "${basename}.cpp")
-    # Reuse the precompiled headers of `testUtil`. This requires compatible
-    # compiler flags, which is not the case for shared libraries (`-fPIC` for
-    # `testUtil` vs. `-fPIE` for the test executables).
-    if (USE_PRECOMPILED_HEADERS AND NOT BUILD_SHARED_LIBS)
-        target_precompile_headers(${basename} REUSE_FROM testUtil)
-    endif ()
 endfunction()
 
 # Usage: `linkAndDiscoverTest(basename, [additionalLibraries...]`
