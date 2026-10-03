@@ -335,6 +335,32 @@ TYPED_TEST(CompactVectorOfStringsFixture, ZeroCopyViewCannotBeMutated) {
 }
 
 // _____________________________________________________________________________
+TYPED_TEST(CompactVectorOfStringsFixture, clone) {
+  const auto& input = TestFixture::input_;
+  using CompactVector = typename TestFixture::CompactVector;
+
+  // Clone an empty and a non-empty owning vector.
+  CompactVector original;
+  auto copy0 = original.clone();
+  EXPECT_EQ(copy0.size(), 0);
+  original.build(input);
+  auto copy1 = original.clone();
+  vectorsEqual(copy1, input);
+
+  // The clone of a zero-copy view owns its storage, so it stays valid after
+  // the buffer of the view is destroyed, and it can be mutated.
+  auto cloneOfView = [&original]() {
+    ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+    writeSerializer << original;
+    ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+        std::move(writeSerializer).data()};
+    return CompactVector::fromZeroCopyDeserializer(readSerializer).clone();
+  }();
+  vectorsEqual(cloneOfView, input);
+  EXPECT_NO_THROW(cloneOfView.build(input));
+}
+
+// _____________________________________________________________________________
 TYPED_TEST(CompactVectorOfStringsFixture, cloneAndRemap) {
   const auto& input = TestFixture::input_;
   using CompactVector = typename TestFixture::CompactVector;
