@@ -65,6 +65,20 @@ constexpr size_t mergePhaseOutputBlocksPerChunk(
   return numBufferedBlocksPerChunk + 2;
 }
 
+// The number of spilled output blocks that the merge phase reads back from disk
+// concurrently, see `CompressedIdTableBlockStorage`. The blocks of the merge
+// have to be *consumed* in a single global order, so without such a read-ahead
+// every one of them would be decompressed one after the other in a single
+// thread, which for a merge that spills most of its output is a hard ceiling on
+// the throughput of the whole merge phase (a single core decompresses roughly
+// 1.5 GB/s, while the producers of 16 chunks compress several times that).
+// Only the chunk that is currently being consumed ever reads ahead, so this is
+// a single count for the whole merge phase and not one per chunk, and these
+// blocks are part of the `MergePhaseConfig::numBufferedOutputBlocks_` that the
+// merge phase reserves on the consumer side: they are taken from the read-ahead
+// of the consumer itself, see `makeMergeOptions`.
+constexpr inline size_t MERGE_PHASE_READ_AHEAD_BLOCKS = 4;
+
 // The compression that the merge phase applies to the output blocks that it
 // spills, see `makeMergePhaseBlockStorageFactory`. A positive value is an
 // ordinary ZSTD level (higher compresses better, but costs more CPU), a
@@ -173,8 +187,9 @@ inline size_t numBufferedOutputBlocksPerChunk(const MergePhaseConfig& config,
     return MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK;
   }
   // The blocks that are not buffered by the chunks: those between the merge and
-  // the consumer, and the two per chunk that `mergePhaseOutputBlocksPerChunk`
-  // adds on top of the buffered ones.
+  // the consumer (which include the read-ahead of the spill files, see
+  // `MERGE_PHASE_READ_AHEAD_BLOCKS`), and the two per chunk that
+  // `mergePhaseOutputBlocksPerChunk` adds on top of the buffered ones.
   const size_t numUnbufferedBlocks =
       config.numBufferedOutputBlocks_ + 2 * numChunksInFlight;
   const size_t numAffordableBlocks =
@@ -307,6 +322,18 @@ inline parallelBlockMerge::MergeOptions makeMergeOptions(
       parameters.outputBlockSize_);
   options.parallelismHint = config.parallelism_;
   options.maxNumChunksInFlight = parameters.numChunksInFlight_;
+  // The output blocks that the merge phase reserves on the consumer side (see
+  // `MergePhaseConfig::numBufferedOutputBlocks_`) are the one that the consumer
+  // currently holds, the one that the merge is just finishing, the ones that
+  // the storage reads back from the spill files in advance (see
+  // `MERGE_PHASE_READ_AHEAD_BLOCKS`), and the rest, which the consumer reads
+  // ahead. The read-ahead is never zero, see
+  // `MergeOptions::numPrefetchedOutputBlocks`.
+  constexpr size_t numReservedBlocks = MERGE_PHASE_READ_AHEAD_BLOCKS + 2;
+  options.numPrefetchedOutputBlocks =
+      config.numBufferedOutputBlocks_ > numReservedBlocks
+          ? config.numBufferedOutputBlocks_ - numReservedBlocks
+          : 1;
   return options;
 }
 
@@ -356,7 +383,8 @@ auto makeMergePhaseBlockStorageFactory(
 #else
   return makeCompressedIdTableStorageFactory<NumCols>(
       std::move(ioExecutor), std::move(spillFilenamePrefix),
-      std::move(allocator), numBufferedBlocksPerChunk, compression);
+      std::move(allocator), numBufferedBlocksPerChunk,
+      MERGE_PHASE_READ_AHEAD_BLOCKS, compression);
 #endif
 }
 
