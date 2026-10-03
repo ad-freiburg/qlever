@@ -61,6 +61,7 @@ RuntimeParameters::RuntimeParameters() {
   add(defaultQueryTimeout_);
   add(sortInMemoryThreshold_);
   add(prefilteredOptionalJoin_);
+  add(enableJoinBitComparison_);
   add(enableMaterializedViewQueryRewrite_);
   add(materializedViewPatternMatchNumAssignments_);
   add(materializedViewPatternMatchNumReplacementPlans_);
