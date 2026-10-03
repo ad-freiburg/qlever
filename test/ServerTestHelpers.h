@@ -8,6 +8,7 @@
 #define QLEVER_TEST_SERVERTESTHELPERS_H_
 
 #include <absl/strings/str_cat.h>
+#include <opentelemetry/semconv/http_attributes.h>
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/beast/http.hpp>
@@ -23,6 +24,7 @@
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/metrics/Metrics.h"
+#include "util/metrics/Tracing.h"
 
 namespace serverTestHelpers {
 
@@ -121,7 +123,17 @@ class ServerForTesting {
   // in `IndexRebuilderTest.cpp` for why that is unsafe there).
   static boost::asio::awaitable<ResT> process(Server& server, ReqT& request) {
     Server::MockSend mockSend;
-    co_await server.process(request, mockSend);
+    // `Server::process` does not own the root span of the request's trace, so
+    // it has to be created here, exactly as `Server::handleHttpRequest` does
+    // around a real request.
+    ad_utility::tracing::SpanGuard rootSpan{
+        std::string_view{request.method_string()},
+        ad_utility::tracing::extractParentFromRequest(request)};
+    ad_utility::tracing::setRequestAttributes(rootSpan.span(), request);
+    co_await server.process(request, mockSend, rootSpan);
+    rootSpan.span().SetAttribute(
+        opentelemetry::semconv::http::kHttpResponseStatusCode,
+        static_cast<int64_t>(mockSend.response_.result_int()));
     co_return std::move(mockSend.response_);
   }
 

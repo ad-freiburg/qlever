@@ -25,6 +25,7 @@
 #include "util/ResourceMonitor.h"
 #include "util/http/HttpProxyConfig.h"
 #include "util/metrics/Metrics.h"
+#include "util/metrics/Tracing.h"
 
 using std::size_t;
 using std::string;
@@ -55,6 +56,7 @@ int main(int argc, char** argv) {
   bool noAccessCheck = false;
   unsigned short port;
   bool metricsEnabled = false;
+  bool tracingEnabled = false;
   NonNegative numSimultaneousQueries = 1;
   bool noMetricsLog = false;
   bool noResourceUsageLog = false;
@@ -271,6 +273,9 @@ int main(int argc, char** argv) {
       "Enable metrics collection and expose a Prometheus /metrics endpoint on "
       "the main server port. Accessing the endpoint requires a valid access "
       "token.");
+  add("enable-tracing", po::bool_switch(&tracingEnabled)->default_value(false),
+      "Enable OpenTelemetry tracing of HTTP requests. Note: use the standard "
+      "OTEL environment variables to configure the endpoint.");
   std::vector<std::string> runtimeParameterAssignments;
   add("set-runtime-parameter",
       po::value<std::vector<std::string>>(&runtimeParameterAssignments)
@@ -391,6 +396,12 @@ int main(int argc, char** argv) {
       resourceMonitor.start(config.baseName_ + ".server.resource-usage-log.tsv",
                             ad_utility::ResourceMonitor::Mode::Append,
                             std::chrono::seconds{resourceUsageIntervalS});
+    }
+    // Declared before the `Server`, so that it is destroyed after it: the
+    // handle uninstalls the tracer provider and flushes the buffered spans.
+    ad_utility::tracing::TracingHandle tracingHandle;
+    if (tracingEnabled) {
+      tracingHandle = ad_utility::tracing::initialize();
     }
     auto metricsReader = ad_utility::metrics::initialize(metricsEnabled);
     Server server(port, numSimultaneousQueries, std::move(accessToken), config,
