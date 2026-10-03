@@ -337,24 +337,6 @@ inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
   return els;
 }
 
-// _______________________________________________________________________________________________________________________
-template <class StringSortComparator>
-void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
-                     const bool doParallelSort) {
-  auto& els = *vecPtr;
-  if constexpr (USE_PARALLEL_SORT) {
-    if (doParallelSort) {
-      ad_utility::parallel_sort(ql::ranges::begin(els), ql::ranges::end(els),
-                                comp, ad_utility::parallel_tag(10));
-    } else {
-      ql::ranges::sort(els, comp);
-    }
-  } else {
-    ql::ranges::sort(els, comp);
-    (void)doParallelSort;  // avoid compiler warning for unused value.
-  }
-}
-
 // _____________________________________________________________________
 inline ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
     const std::string& filename) {

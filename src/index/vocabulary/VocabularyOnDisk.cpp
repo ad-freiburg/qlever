@@ -268,18 +268,11 @@ void VocabularyOnDisk::WordWriter::writeBlockAt(const WordBlock& block,
   for (size_t i = 0; i < numWords; ++i) {
     offsets[i] = dataOffset + block.offsets_[i];
   }
-  auto check = [](ssize_t numBytesWritten, size_t numBytes) {
-    AD_CORRECTNESS_CHECK(numBytesWritten == static_cast<ssize_t>(numBytes),
-                         "Writing a block of the vocabulary failed");
-  };
-  size_t numOffsetBytes = numWords * sizeof(uint64_t);
-  check(offsetsFile_.write(
-            offsets.data(), numOffsetBytes,
-            static_cast<off_t>(block.firstPosition_ * sizeof(uint64_t))),
-        numOffsetBytes);
-  check(file_.write(block.data_.data(), block.data_.size(),
-                    static_cast<off_t>(dataOffset)),
-        block.data_.size());
+  offsetsFile_.write(
+      offsets.data(), numWords * sizeof(uint64_t),
+      static_cast<off_t>(block.firstPosition_ * sizeof(uint64_t)));
+  file_.write(block.data_.data(), block.data_.size(),
+              static_cast<off_t>(dataOffset));
 }
 
 // _____________________________________________________________________________

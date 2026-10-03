@@ -23,6 +23,7 @@
 #include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
+#include "util/RangeThatReleasesOnEnd.h"
 #include "util/Views.h"
 #include "util/parallelBlockMerge/BlockSinkPolicy.h"
 #include "util/parallelBlockMerge/BlockStorage.h"
@@ -99,6 +100,10 @@ namespace ad_utility::parallelBlockMerge {
 // input block per run plus a single output block, no matter how many chunks
 // there are.
 //
+// The returned range releases the `input` (and everything else that the merge
+// owns) as soon as it is exhausted, and not only when it is destroyed, see
+// `ad_utility::RangeThatReleasesOnEnd`.
+//
 // If `moveElements` is `true`, then the elements are moved out of the input
 // blocks.
 CPP_template(bool moveElements, typename Input,
@@ -129,8 +134,17 @@ CPP_template(bool moveElements, typename Input,
   // their index, so the concatenation of their output blocks is exactly the
   // globally sorted output. A chunk that contains no element at all simply
   // contributes no block, which `join` handles for free.
+  //
+  // NOTE: The `RangeThatReleasesOnEnd` is what makes the merge release its
+  // input (which the `state` above owns) as soon as the result is exhausted,
+  // and not only when the returned range is destroyed. This is a correctness
+  // requirement and not merely tidy, see the IMPORTANT note at
+  // `detail::ParallelMergeRange::releaseEverything`, which does the same thing
+  // for the parallel merge (and additionally waits for its coroutines).
   return ad_utility::InputRangeTypeErased<Block>{
-      ql::views::join(std::move(chunks))};
+      std::make_unique<ad_utility::RangeThatReleasesOnEnd<Block>>(
+          ad_utility::InputRangeTypeErased<Block>{
+              ql::views::join(std::move(chunks))})};
 }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

@@ -134,19 +134,6 @@ void writePartialVocabularyToFile(const ItemVec& els,
  * size of the hash map
  */
 ItemVec vocabMapsToVector(const ItemMapAndBuffer& map);
-
-// _____________________________________________________________________________________________________________
-/**
- * @brief Sort the input in-place according to the strings as compared by the
- * StringComparator
- * @tparam A binary Function object to compare strings (e.g.
- * std::less<std::string>())
- * @param doParallelSort if true and USE_PARALLEL_SORT is true, use the gnu
- * parallel extension for sorting.
- */
-template <class StringSortComparator>
-void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
-                     bool doParallelSort);
 }  // namespace ad_utility::vocabulary_merger
 
 #include "index/VocabularyMergerImpl.h"

@@ -213,11 +213,7 @@ void GeoVocabulary<V>::WordWriter::flushBatch() {
     }
     auto offset =
         static_cast<off_t>(geoInfoHeader + firstPosition * geoInfoOffset);
-    auto numBytes = records.size() * geoInfoOffset;
-    auto numBytesWritten = geoInfoFile_.write(records.data(), numBytes, offset);
-    AD_CORRECTNESS_CHECK(numBytesWritten == static_cast<ssize_t>(numBytes),
-                         "Writing the geometry info of a batch of WKT "
-                         "literals failed");
+    geoInfoFile_.write(records.data(), records.size() * geoInfoOffset, offset);
   };
   pendingBatches_.push_back(ad_utility::postAndGetFuture(
       ad_utility::globalExecutor(), std::move(computeAndWrite)));
@@ -372,12 +368,8 @@ void GeoVocabulary<V>::BlockWriter::append(
   pendingWrites_.push_back(ad_utility::postAndGetFuture(
       ad_utility::globalExecutor(),
       [this, records = std::move(prepared.records_), offset]() {
-        auto numBytes = records.size() * geoInfoOffset;
-        auto numBytesWritten =
-            geoInfoFile_.write(records.data(), numBytes, offset);
-        AD_CORRECTNESS_CHECK(numBytesWritten == static_cast<ssize_t>(numBytes),
-                             "Writing the geometry info of a block of WKT "
-                             "literals failed");
+        geoInfoFile_.write(records.data(), records.size() * geoInfoOffset,
+                           offset);
       }));
 }
 
