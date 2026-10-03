@@ -14,6 +14,7 @@
 #include "index/CompressedRelationWriter.h"
 
 #include <algorithm>
+#include <boost/asio/strand.hpp>
 #include <cmath>
 
 #include "global/RuntimeParameters.h"
@@ -166,7 +167,17 @@ ad_utility::TaskQueueOnExecutor CompressedRelationWriter::makeBlockWriteQueue(
     size_t numConcurrentBlocks) {
   // Allow at least 4 blocks to be in flight.
   size_t maxNumTasksInFlight = std::max<size_t>(4, numConcurrentBlocks * 2);
-  return ad_utility::TaskQueueOnExecutor{ad_utility::globalExecutor(),
+  // The in-flight bound only limits how many blocks are queued or running, not
+  // how many of them run at the same time on a pool with idle threads. For a
+  // single concurrent block, run the tasks on a strand of the pool, so that
+  // the blocks are compressed and written one after the other (the runtime
+  // index rebuild relies on this to leave the CPU to concurrent queries, see
+  // `rebuild-permutation-writer-num-threads`).
+  ql::any_io_executor executor = ad_utility::globalExecutor();
+  if (numConcurrentBlocks == 1) {
+    executor = boost::asio::make_strand(executor);
+  }
+  return ad_utility::TaskQueueOnExecutor{std::move(executor),
                                          maxNumTasksInFlight,
                                          "Compressing and writing blocks"};
 }

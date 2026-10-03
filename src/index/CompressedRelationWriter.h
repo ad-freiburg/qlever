@@ -442,8 +442,11 @@ class CompressedRelationWriter {
   // The blocks are allowed to pile up to twice `numConcurrentBlocks` (but at
   // least 4 blocks are always allowed to be in flight), such that the writer
   // can also make progress while all the concurrent blocks are being
-  // compressed. `numConcurrentBlocks` is typically computed by
-  // `getNumConcurrentBlocks` below.
+  // compressed. All the blocks in flight may run at the same time if the pool
+  // has idle threads, except for `numConcurrentBlocks == 1`, where the blocks
+  // are compressed and written one after the other (on a strand of the pool).
+  // `numConcurrentBlocks` is typically computed by `getNumConcurrentBlocks`
+  // below.
   static ad_utility::TaskQueueOnExecutor makeBlockWriteQueue(
       size_t numConcurrentBlocks);
 
