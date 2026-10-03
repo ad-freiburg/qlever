@@ -2582,26 +2582,22 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   auto transitivePathIndex = static_cast<size_t>(!leftSideTransitivePath);
   auto otherIndex = static_cast<size_t>(leftSideTransitivePath);
 
-  SideTuple colsA;
-  SideTuple colsB;
-
+  SideTuple colsLeft;
+  SideTuple colsRight;
   for (const auto& jc : jcs) {
     size_t transCol = jc[transitivePathIndex];
     size_t otherCol = jc[otherIndex];
 
     if (transCol == 0) {
-      AD_CORRECTNESS_CHECK(!colsA.has_value());
-      colsA = std::make_tuple(transCol, otherCol);
+      AD_CORRECTNESS_CHECK(!colsLeft.has_value());
+      colsLeft = std::make_tuple(transCol, otherCol);
     } else if (transCol == 1) {
-      AD_CORRECTNESS_CHECK(!colsB.has_value());
-      colsB = std::make_tuple(transCol, otherCol);
+      AD_CORRECTNESS_CHECK(!colsRight.has_value());
+      colsRight = std::make_tuple(transCol, otherCol);
     }
   }
 
-  if (!colsA.has_value()) {
-    std::swap(colsA, colsB);
-  }
-  return TransitivePathJoinCols(colsA, colsB);
+  return TransitivePathJoinCols(colsLeft, colsRight);
 #endif
 }
 
@@ -2635,37 +2631,28 @@ auto QueryPlanner::createJoinWithTransitivePath(
   // Get all columns that can be joined with each other. May either be zero, one
   // or two pairs.
   auto joinCols = getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
-  if (!joinCols.startCols_.has_value()) {
-    // There were no columns found on which a transitive path can be bound to.
+
+  auto getColFromSideOrNullopt =
+      [](const auto& colsSide) -> std::optional<size_t> {
+    if (!colsSide.has_value()) {
+      return std::nullopt;
+    }
+    const auto& [colTransPath, colOther] = colsSide.value();
+    AD_CORRECTNESS_CHECK(colTransPath <= 1);
+    return colOther;
+  };
+  const auto& leftSideOther = getColFromSideOrNullopt(joinCols.first);
+  const auto& rightSideOther = getColFromSideOrNullopt(joinCols.second);
+
+  // If both sides are given, we need to ensure the join cols are not the same.
+  if (leftSideOther.has_value() && rightSideOther.has_value()) {
+    AD_CORRECTNESS_CHECK(std::get<0>(joinCols.first.value()) !=
+                         std::get<0>(joinCols.second.value()));
+  } else if (!leftSideOther.has_value() && !rightSideOther.has_value()) {
     return std::nullopt;
   }
-
-  // An unbound transitive path has at most two columns we can bind to.
-  const auto& [firstColTransPath, firstColOther] = joinCols.startCols_.value();
-  AD_CONTRACT_CHECK(firstColTransPath <= 1);
-
-  // The left or right side is a transitive path and its join column corresponds
-  // to the left side of its input.
-  SubtreePlan plan = [&]() {
-    auto firstSide = firstColOther;
-    auto secondSide = std::optional<decltype(firstSide)>();
-
-    // Assign the target side if given.
-    if (joinCols.targetCols_.has_value()) {
-      const auto& [secondColTransPath, secondColOther] =
-          joinCols.targetCols_.value();
-      AD_CONTRACT_CHECK(secondColTransPath <= 1 &&
-                        secondColTransPath != firstColTransPath);
-      secondSide = secondColOther;
-    }
-
-    if (firstColTransPath == 1) {
-      return makeSubtreePlan(
-          transPathOperation->bindSides(otherTree, secondSide, firstSide));
-    }
-    return makeSubtreePlan(
-        transPathOperation->bindSides(otherTree, firstSide, secondSide));
-  }();
+  SubtreePlan plan = makeSubtreePlan(
+      transPathOperation->bindSides(otherTree, leftSideOther, rightSideOther));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 #endif
