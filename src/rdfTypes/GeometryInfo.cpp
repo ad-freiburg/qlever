@@ -20,13 +20,12 @@ namespace ad_utility {
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                            Centroid centroid, NumGeometries numGeometries,
                            MetricLength metricLength, MetricArea metricArea,
-                           uint8_t actualCrs, uint8_t sourceCrs)
+                           uint8_t sourceCrs)
     : boundingBox_{boundingBox.lowerLeft().toBitRepresentation(),
                    boundingBox.upperRight().toBitRepresentation()},
       numGeometries_{numGeometries.numGeometries()},
       metricLength_{metricLength},
       metricArea_{metricArea},
-      actualCrs_{actualCrs},
       sourceCrs_{sourceCrs} {
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
@@ -42,9 +41,6 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                        "Centroid bit representation exceeds available bits.");
   geometryTypeAndCentroid_ = typeBits | centroidBits;
 
-  AD_CORRECTNESS_CHECK(actualCrs <= 3, "CRS Type out of range");
-  AD_CORRECTNESS_CHECK(actualCrs > 0,
-                       "CRS Type indicates invalid/unsupported geometry");
   AD_CORRECTNESS_CHECK(sourceCrs <= 3, "CRS Type out of range");
   AD_CORRECTNESS_CHECK(sourceCrs > 0,
                        "CRS Type indicates invalid/unsupported geometry");
@@ -88,22 +84,13 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                  << std::endl;
   }
 
-  // TODO<yarox-1> Adjust when parsing PR was merged. Placeholder default CRS
-  return GeometryInfo{type,
-                      boundingBox.value(),
-                      centroid.value(),
-                      {numGeom},
-                      metricLength,
-                      MetricArea{area},
-                      util::geo::CRSType::CRS84,
-                      util::geo::CRSType::CRS84};
+  return GeometryInfo{type,      boundingBox.value(), centroid.value(),
+                      {numGeom}, metricLength,        MetricArea{area},
+                      sourceCrs};
 }
 
 // ____________________________________________________________________________
 GeometryType::GeometryType(uint8_t type) : type_{type} {}
-
-// ____________________________________________________________________________
-ActualCrsType::ActualCrsType(uint8_t type) : type_{type} {};
 
 // ____________________________________________________________________________
 SourceCrsType::SourceCrsType(uint8_t type) : type_{type} {};
@@ -138,10 +125,9 @@ std::optional<SourceCrsType> GeometryInfo::getSourceCrsType(
 
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
-  return {util::geo::WKTType::POINT, {point, point},
-          Centroid{point},           {1},
-          MetricLength{0.0},         MetricArea{0.0},
-          util::geo::CRSType::CRS84, util::geo::CRSType::WGS84};
+  return {
+      util::geo::WKTType::POINT, {point, point},  Centroid{point},          {1},
+      MetricLength{0.0},         MetricArea{0.0}, util::geo::CRSType::WGS84};
 }
 
 // ____________________________________________________________________________
@@ -152,19 +138,11 @@ GeometryType GeometryInfo::getWktType() const {
 }
 
 // ____________________________________________________________________________
-ActualCrsType GeometryInfo::getCrsType() const { return actualCrs_; }
-
-// ____________________________________________________________________________
 SourceCrsType GeometryInfo::getSourceCrsType() const { return sourceCrs_; }
 
 // ____________________________________________________________________________
 std::optional<std::string_view> GeometryType::asIri() const {
   return detail::wktTypeToIri(type_);
-}
-
-// ____________________________________________________________________________
-std::optional<std::string_view> ActualCrsType::asIri() const {
-  return detail::crsTypeToIri(type_);
 }
 
 // ____________________________________________________________________________
@@ -309,8 +287,6 @@ CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
     return getBoundingBox();
   } else if constexpr (std::is_same_v<RequestedInfo, GeometryType>) {
     return getWktType();
-  } else if constexpr (std::is_same_v<RequestedInfo, ActualCrsType>) {
-    return getCrsType();
   } else if constexpr (std::is_same_v<RequestedInfo, SourceCrsType>) {
     return getSourceCrsType();
   } else if constexpr (std::is_same_v<RequestedInfo, NumGeometries>) {
@@ -329,7 +305,6 @@ template GeometryInfo GeometryInfo::getRequestedInfo<GeometryInfo>() const;
 template Centroid GeometryInfo::getRequestedInfo<Centroid>() const;
 template BoundingBox GeometryInfo::getRequestedInfo<BoundingBox>() const;
 template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
-template ActualCrsType GeometryInfo::getRequestedInfo<ActualCrsType>() const;
 template SourceCrsType GeometryInfo::getRequestedInfo<SourceCrsType>() const;
 template NumGeometries GeometryInfo::getRequestedInfo<NumGeometries>() const;
 template MetricLength GeometryInfo::getRequestedInfo<MetricLength>() const;
