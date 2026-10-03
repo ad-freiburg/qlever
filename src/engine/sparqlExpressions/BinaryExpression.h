@@ -37,8 +37,10 @@ decltype(auto) convertToVectorOrConstant(T&& value,
   using Type = std::decay_t<T>;
 
   if constexpr (ad_utility::isSimilar<Type, ad_utility::SetOfIntervals>) {
-    return ad_utility::SetOfIntervals::toIdVector(value, context->size(),
-                                                  context->_allocator);
+    AD_CORRECTNESS_CHECK(value.size() == context->size(),
+                         "The size of a `SetOfIntervals` does not match the "
+                         "size of the evaluation context.");
+    return ad_utility::SetOfIntervals::toIdVector(value, context->_allocator);
   } else if constexpr (ad_utility::isSimilar<Type, ::Variable>) {
     return getIdsFromVariable(value, context);
   } else {

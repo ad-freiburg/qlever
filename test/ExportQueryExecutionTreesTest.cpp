@@ -2267,6 +2267,21 @@ INSTANTIATE_TEST_SUITE_P(
         // window 10: all duplicates are caught, 5 unique triples remain.
         LruWindowParam{10, "abcde"}));
 
+// A trailing `VALUES` clause without variables is joined with the result of
+// the query like any other: zero rows make the result empty, one row is the
+// neutral element, and multiple rows duplicate each row of the result.
+TEST(ExportQueryExecutionTrees, PostQueryValuesWithoutVariables) {
+  const std::string kg = "<a> <b> <c> . <d> <e> <f> .";
+  auto run = [&kg](std::string_view values) {
+    return runQueryStreamableResult(
+        kg, absl::StrCat("SELECT ?s { ?s ?p ?o } VALUES () { ", values, " }"),
+        ad_utility::MediaType::tsv);
+  };
+  EXPECT_EQ(run(""), "?s\n");
+  EXPECT_EQ(run("()"), "?s\n<a>\n<d>\n");
+  EXPECT_EQ(run("() ()"), "?s\n<a>\n<d>\n<a>\n<d>\n");
+}
+
 // The trailing `VALUES` clause is joined before the projection, so `SELECT *`
 // also selects its variables.
 TEST(ExportQueryExecutionTrees, SelectStarWithTrailingValues) {
