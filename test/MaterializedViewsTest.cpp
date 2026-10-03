@@ -602,6 +602,50 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
 }
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ScansAllocateThroughTheGivenAllocator) {
+  qlv().writeMaterializedView("limitedView", simpleWriteQuery_);
+  auto scanAll = [](const MaterializedView& view) {
+    auto locatedTriples = view.locatedTriplesState();
+    const auto& permutation = *view.permutation();
+    return permutation.scan(
+        permutation.getScanSpecAndBlocks(
+            ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+            *locatedTriples),
+        {}, std::make_shared<ad_utility::CancellationHandle<>>(),
+        *locatedTriples);
+  };
+
+  // A view loaded with an allocator that has no memory left can be loaded,
+  // but every scan of it fails with the memory limit error.
+  MaterializedView limited{
+      testIndexBase_, "limitedView",
+      ad_utility::makeAllocatorWithLimit<Id>(ad_utility::MemorySize::bytes(0))};
+  EXPECT_THROW(scanAll(limited),
+               ad_utility::detail::AllocationExceedsLimitException);
+
+  // With enough memory, the same scan succeeds.
+  MaterializedView unlimited{testIndexBase_, "limitedView"};
+  EXPECT_GT(scanAll(unlimited).numRows(), 0u);
+
+  // A view loaded by an engine allocates through the engine's allocator, i.e.
+  // the query memory limit: with the default limit the scan succeeds, with a
+  // limit of zero bytes it fails.
+  auto viewFromEngine =
+      qlv().indexAndViewsSnapshot()->materializedViewsManager_.getView(
+          "limitedView", nullptr);
+  EXPECT_GT(scanAll(*viewFromEngine).numRows(), 0u);
+  qlever::EngineConfig config;
+  config.baseName_ = testIndexBase_;
+  config.memoryLimit_ = ad_utility::MemorySize::bytes(0);
+  qlever::Qlever engineWithoutMemory{config};
+  auto viewFromLimitedEngine =
+      engineWithoutMemory.indexAndViewsSnapshot()
+          ->materializedViewsManager_.getView("limitedView", nullptr);
+  EXPECT_THROW(scanAll(*viewFromLimitedEngine),
+               ad_utility::detail::AllocationExceedsLimitException);
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ManualConfigurations) {
   MaterializedViewsManager manager{testIndexBase_};
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
