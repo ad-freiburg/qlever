@@ -1,0 +1,52 @@
+# Build QLever with the newest GCC versions. These are not yet used by most of
+# our users, and (especially GCC 16, which the PPA below ships as a snapshot of
+# the not yet released version) they tend to add new warnings that are unrelated
+# to the change that happens to trigger them. Running them for every pull
+# request would therefore block unrelated work, so they only run on `master` and
+# on manual request.
+name: Native build with the newest compilers
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.ref }}'
+  cancel-in-progress: true
+
+# The default GITHUB_TOKEN only needs to read the repository here.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler-version: [15, 16]
+
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+      - name: Install dependencies
+        uses: ./.github/workflows/install-dependencies-ubuntu
+      - name: Install compiler
+        uses: ./.github/workflows/install-compiler-ubuntu
+        with:
+          compiler: gcc
+          compiler-version: ${{matrix.compiler-version}}
+      - name: Configure, build, and test
+        uses: ./.github/workflows/build-and-test
+        with:
+          cmake-args: >-
+            -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/gcc${{matrix.compiler-version}}.cmake"
+            -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror -Woverloaded-virtual"
+            -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"
+            -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true
+            -DENABLE_EXPENSIVE_CHECKS=true -DBUILD_SHARED_LIBS=ON
+            -DUSE_PRECOMPILED_HEADERS=OFF -DQLEVER_ONE_TEST_CASE_PER_FILE=ON
+          e2e-args: "-t"
