@@ -65,6 +65,11 @@ class StripColumns : public Operation {
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  FRIEND_TEST(Distinct, makeTreeWithStrippedColumns);
+  FRIEND_TEST(Sort, makeTreeWithStrippedColumns);
+  FRIEND_TEST(GroupBy, makeTreeWithStrippedColumns);
+  
 };
 
 #endif  // QLEVER_SRC_ENGINE_STRIPCOLUMNS_H
