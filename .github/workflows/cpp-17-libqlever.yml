@@ -125,7 +125,9 @@ jobs:
       matrix:
         # Both entries use C++17 and `USE_CPP_17_BACKPORTS` (and with it
         # `boost::filesystem` instead of `std::filesystem`, see
-        # `backports/filesystem.h`).
+        # `backports/filesystem.h`). Both also exercise the ICU-free
+        # (`NO_UNICODE`) mode, which targets constrained environments without
+        # ICU.
         include:
           - compiler: clang
             compiler-version: 19
@@ -137,9 +139,6 @@ jobs:
             expensive-tests: true
             use-keep-going: true
             use-ignore-errors: true
-            # Only the GCC 8 build actually lowers the C++ standard to 17, and it
-            # additionally exercises the ICU-free (`NO_UNICODE`) mode, which
-            # targets constrained environments without ICU.
             additional-cmake-options: "-DREDUCED_FEATURE_SET_FOR_CPP17=ON -DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN=17 -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON -DQLEVER_NO_UNICODE=ON"
 
 
