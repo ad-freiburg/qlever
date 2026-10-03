@@ -278,13 +278,13 @@ ExpressionResult PrefixRegexExpression::evaluate(
       // Return the empty result as an empty `SetOfIntervals` instead of as an
       // empty range.
       if (lower != upper) {
-        resultSetOfIntervals.push_back(
-            ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}});
+        resultSetOfIntervals.push_back(ad_utility::SetOfIntervals{
+            {{lower - beg, upper - beg}}, context->size()});
       }
       checkCancellation(context);
     }
     return ::ranges::accumulate(resultSetOfIntervals,
-                                ad_utility::SetOfIntervals{},
+                                ad_utility::SetOfIntervals{{}, context->size()},
                                 ad_utility::SetOfIntervals::Union{});
   }
 

@@ -108,11 +108,11 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
   };
   absl::InlinedVector<Bounds, 10> bounds;
   bounds.reserve(set._intervals.size() * 2 + 1);
+  AD_CONTRACT_CHECK(set.size() == targetSize,
+                    "The size of a `SetOfIntervals` does not match the size "
+                    "of the evaluation context.");
   size_t last = 0;
   for (const auto& [lower, upper] : set._intervals) {
-    AD_CONTRACT_CHECK(upper <= targetSize,
-                      "The size of a `SetOfIntervals` exceeds the total size "
-                      "of the evaluation context.");
     if (lower != last) {
       bounds.push_back(Bounds{lower - last, false});
     }
@@ -142,11 +142,9 @@ resultGeneratorImpl(ad_utility::SetOfIntervals set, size_t targetSize,
   size_t i = 0;
   const auto trueTransformed = transformation(Id::makeFromBool(true));
   const auto falseTransformed = transformation(Id::makeFromBool(false));
-  if (!set._intervals.empty()) {
-    AD_CONTRACT_CHECK(set._intervals.back().second <= targetSize,
-                      "The size of a `SetOfIntervals` exceeds the total size "
-                      "of the evaluation context.");
-  }
+  AD_CONTRACT_CHECK(set.size() == targetSize,
+                    "The size of a `SetOfIntervals` does not match the size "
+                    "of the evaluation context.");
   for (const auto& [begin, end] : set._intervals) {
     while (i < begin) {
       co_yield falseTransformed;

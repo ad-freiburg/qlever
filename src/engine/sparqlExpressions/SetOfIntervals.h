@@ -5,7 +5,6 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SETOFINTERVALS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SETOFINTERVALS_H
 
-#include <limits>
 #include <utility>
 #include <vector>
 
@@ -17,96 +16,86 @@
 
 namespace ad_utility {
 
-/// A vector of pairs of <size_t, size_t> with the following semantics: It
-/// represents the union of the intervals [first, second) of the individual
-/// pairs. The intervals have to be pairwise disjoint and nonempty. They
-/// also have to be sorted in ascending order.
+// A vector of pairs of <size_t, size_t> with the following semantics: It
+// represents the union of the intervals [first, second) of the individual
+// pairs. The intervals have to be pairwise disjoint and nonempty. They
+// also have to be sorted in ascending order. The set additionally stores the
+// `size` of the range [0, size) it refers to (typically the size of an
+// `EvaluationContext`), all the intervals lie within this range.
 struct SetOfIntervals {
   using Vec = std::vector<std::pair<size_t, size_t>>;
   Vec _intervals;
-  constexpr static size_t upperBound = std::numeric_limits<size_t>::max();
+
+ private:
+  size_t size_;
+
+ public:
+  // Construct from the `intervals` and the `size` of the range [0, size) the
+  // set refers to. Throw if one of the `intervals` ends after `size`.
+  SetOfIntervals(Vec intervals, size_t size);
+
+  // Return the `size` of the range [0, size) this set refers to.
+  size_t size() const { return size_; }
 
   // _________________________________________________________________________
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SetOfIntervals, _intervals)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SetOfIntervals, _intervals, size_)
 
-  /// Sort the intervals in ascending order and assert that they are indeed
-  /// disjoint and nonempty.
+  // Sort the intervals in ascending order and assert that they are indeed
+  // disjoint and nonempty.
   static SetOfIntervals SortAndCheckDisjointAndNonempty(SetOfIntervals input);
 
-  /// Assert that the set is sorted, and simplify it by merging adjacent
-  /// intervals.
+  // Assert that the set is sorted, and simplify it by merging adjacent
+  // intervals.
   static SetOfIntervals CheckSortedAndDisjointAndSimplify(
       const SetOfIntervals& input);
 
-  /// Compute the intersection of two sets of intervals;
+  // Compute the intersection of two sets of intervals, which must refer to
+  // the same range.
   struct Intersection {
     SetOfIntervals operator()(SetOfIntervals A, SetOfIntervals B) const;
   };
 
-  /// Compute the union of two sets of intervals.
+  // Compute the union of two sets of intervals, which must refer to the same
+  // range.
   struct Union {
     SetOfIntervals operator()(SetOfIntervals A, SetOfIntervals B) const;
   };
 
-  /// Compute the complement of a set of intervals.
+  // Compute the complement of a set of intervals within the range the set
+  // refers to.
   struct Complement {
     SetOfIntervals operator()(SetOfIntervals s) const;
   };
 
-  // Write `targetSize` many bools to the iterator. The i-th bool is true if
-  // and only if `i` is contained in the set of intervals. `targetSize` has to
-  // be >= the right end (not included) of the rightmost interval.
-  template <typename OutputIterator>
-  static void toBitVector(const SetOfIntervals& s, size_t targetSize,
-                          OutputIterator it) {
-    size_t previousEnd = 0;
-    for (const auto& [begin, end] : s._intervals) {
-      AD_CONTRACT_CHECK(end <= targetSize);
-      auto spaceUntilInterval = begin - previousEnd;
-      std::fill(it, it + spaceUntilInterval, false);
-      it += spaceUntilInterval;
-
-      auto sizeOfInterval = end - begin;
-      std::fill(it, it + sizeOfInterval, true);
-      it += sizeOfInterval;
-
-      previousEnd = end;
-    }
-  }
-
-  // Transform a SetOfIntervals to a std::vector<bool> of size `targetSize`
+  // Transform a SetOfIntervals to a std::vector<bool> of size `s.size()`
   // where the element at index i is true if and only if i is contained in the
-  // set. `targetSize` has to be >= the right end (not included) of the
-  // rightmost interval.
+  // set.
   // __________________________________________________________________________
-  inline static std::vector<bool> toBitVector(const SetOfIntervals& a,
-                                              size_t targetSize) {
-    std::vector<bool> result(targetSize, false);
-    toBitVector(a, targetSize, ql::ranges::begin(result));
+  inline static std::vector<bool> toBitVector(const SetOfIntervals& s) {
+    std::vector<bool> result(s.size(), false);
+    for (const auto& [begin, end] : s._intervals) {
+      std::fill(result.begin() + begin, result.begin() + end, true);
+    }
     return result;
   }
 
   // Transform a `SetOfIntervals` into a vector of boolean `Id`s of size
-  // `targetSize`. The i-th element is true iff i is contained in the set.
+  // `set.size()`. The i-th element is true iff i is contained in the set.
   inline static VectorWithMemoryLimit<Id> toIdVector(
-      const SetOfIntervals& set, size_t targetSize,
+      const SetOfIntervals& set,
       const VectorWithMemoryLimit<Id>::Allocator& allocator) {
     VectorWithMemoryLimit<Id> result{allocator};
-    result.reserve(targetSize);
+    result.reserve(set.size());
 
     size_t previousEnd = 0;
     for (const auto& [begin, end] : set._intervals) {
-      AD_CONTRACT_CHECK(end <= targetSize,
-                        "The size of a `SetOfIntervals` exceeds the total size "
-                        "of the evaluation context.");
-
       result.insert(result.end(), begin - previousEnd, Id::makeFromBool(false));
       result.insert(result.end(), end - begin, Id::makeFromBool(true));
 
       previousEnd = end;
     }
 
-    result.insert(result.end(), targetSize - previousEnd,
+    result.insert(result.end(), set.size() - previousEnd,
                   Id::makeFromBool(false));
 
     return result;

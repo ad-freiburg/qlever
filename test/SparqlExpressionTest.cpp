@@ -214,18 +214,13 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
   LocalVocab localVocab;
   IdTable table{alloc};
 
-  // Get the size of `operand`: size for a vector, 1 otherwise. For a
-  // `SetOfIntervals`, this actually returns the *minimal* size of an
-  // `EvaluationContext` that can expand the `SetOfIntervals`. This is used to
-  // implement test cases where all the inputs are `SetOfIntervals` or constant,
-  // and the result is NOT a `SetOfIntervals`.
+  // Get the size of `operand`: size for a vector or a `SetOfIntervals`, 1
+  // otherwise.
   auto getResultSize = [](const auto& operand) -> size_t {
     using T = std::decay_t<decltype(operand)>;
-    if constexpr (isVectorResult<T>) {
+    if constexpr (isVectorResult<T> ||
+                  std::is_same_v<T, ad_utility::SetOfIntervals>) {
       return operand.size();
-    } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
-      return operand._intervals.empty() ? size_t{0}
-                                        : operand._intervals.back().second;
     }
     return 1;
   };
@@ -357,15 +352,15 @@ TEST(SparqlExpression, logicalOperators) {
 
   using S = ad_utility::SetOfIntervals;
   {
-    auto s1 = S{{{0, 4}}};
-    auto s2 = S{{{3, 6}}};
+    auto s1 = S{{{0, 4}}, 6};
+    auto s2 = S{{{3, 6}}, 6};
     // The type erased expressions don't use the optimizations between
     // set-of-interval, but always return a fully materialized vector.
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
     V<Id> resultAsVec{{t, t, t, t, t, t}, alloc};
     testOr(resultAsVec, s1, s2);
 #else
-    S resultAsSet = S{{{0, 6}}};
+    S resultAsSet = S{{{0, 6}}, 6};
     testOr(resultAsSet, s1, s2);
 #endif
   }
@@ -382,15 +377,15 @@ TEST(SparqlExpression, logicalOperators) {
 
   using S = ad_utility::SetOfIntervals;
   {
-    auto s1 = S{{{0, 4}}};
-    auto s2 = S{{{3, 6}}};
+    auto s1 = S{{{0, 4}}, 6};
+    auto s2 = S{{{3, 6}}, 6};
     // The type erased expressions don't use the optimizations between
     // set-of-interval, but always return a fully materialized vector.
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
     V<Id> resultAsVec{{f, f, f, t, f, f}, alloc};
     testAnd(resultAsVec, s1, s2);
 #else
-    S resultAsSet = S{{{3, 4}}};
+    S resultAsSet = S{{{3, 4}}, 6};
     testAnd(resultAsSet, s1, s2);
 #endif
   }
@@ -611,7 +606,7 @@ TEST(SparqlExpression, arithmeticOperators) {
   testPlus(minus22, mixed, D(-2.2));
 
   using S = ad_utility::SetOfIntervals;
-  S alternating{{{0, 2}, {3, 4}}};
+  S alternating{{{0, 2}, {3, 4}}, 4};
   V<Id> alternatingTimes2{{I(2), I(2), I(0), I(2)}, alloc};
 
   testMultiply(times2, mixed, I(2));
@@ -1287,6 +1282,25 @@ TEST(SparqlExpression, unaryNegate) {
   // Empty strings are considered to be true.
   checkNegate(idOrLitOrStringVec({"true", "false", "", "blibb"}),
               Ids{B(false), B(false), B(true), B(false)});
+
+  // The negation of a `SetOfIntervals` lies within the range of the set, so it
+  // can also be used as the input of other expressions. This used to fail (see
+  // https://github.com/ad-freiburg/qlever/issues/3559).
+  using S = ad_utility::SetOfIntervals;
+  S set{{{0, 2}}, 4};
+  // The type erased expressions don't use the optimizations for
+  // `SetOfIntervals`, but always return a fully materialized vector.
+#ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
+  checkNegate(set, Ids{B(false), B(false), B(true), B(true)});
+#else
+  checkNegate(set, S{{{2, 4}}, 4});
+#endif
+  auto makeNegateOr = [](SparqlExpression::Ptr a, SparqlExpression::Ptr b) {
+    return makeOrExpression(makeUnaryNegateExpression(std::move(a)),
+                            std::move(b));
+  };
+  testNaryExpression(makeNegateOr, Ids{B(true), B(false), B(true), B(true)},
+                     set, Ids{B(true), B(false), B(false), B(true)});
 }
 
 // _____________________________________________________________________________________

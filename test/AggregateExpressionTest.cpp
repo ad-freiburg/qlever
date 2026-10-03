@@ -338,8 +338,9 @@ TEST(AggregateExpression, SampleExpression) {
   v.push_back(I(34));
   v.push_back(I(42));
   testSample(v.clone(), I(34));
-  testSample(ad_utility::SetOfIntervals{}, BoolId(false));
-  testSample(ad_utility::SetOfIntervals{{{3, 17}}}, BoolId(true));
+  // The `TestContext` has three rows.
+  testSample(ad_utility::SetOfIntervals{{}, 3}, BoolId(false));
+  testSample(ad_utility::SetOfIntervals{{{1, 3}}, 3}, BoolId(true));
   v.clear();
   testSample(v.clone(), U);
   // The first value of the ?ints variable inside the `TestContext` is `1`.
