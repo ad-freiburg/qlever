@@ -353,8 +353,10 @@ class QueryPlanner {
   // spatial join (a filter substitute) with a rectangle that is known for
   // that variable at planning time: the scan that is sorted by the variable
   // gets its blocks pruned, every scan that binds the variable gets a row
-  // filter with the same size estimate, and replacement plans (from
-  // materialized views) get the prefilter forwarded to their scans. A
+  // filter with the same size estimate (both as alternatives to the
+  // unprefiltered scans, the dynamic programming decides by cost), and
+  // replacement plans (from materialized views) get the prefilter forwarded
+  // to their scans. A
   // rectangle is known for the fixed side of a spatial join (a one-row
   // `VALUES` created by the rewriting of the filter, or a variable bound by a
   // `BIND` of a constant expression), and for a geometry variable that is

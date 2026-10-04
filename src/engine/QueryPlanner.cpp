@@ -2596,8 +2596,17 @@ void QueryPlanner::applyGeoRectanglePrefilters(
     // (the result also carries the row filter). Their estimate, the number
     // of remaining candidates, is then the estimate of every scan that binds
     // the variable, so that it does not depend on the permutation.
+    //
+    // NOTE: The prefiltered scans are added as alternatives to the seeds and
+    // do not replace the unprefiltered ones, so that the dynamic programming
+    // decides by cost whether the prefilter pays off. With a large rectangle
+    // it does not: the join of the unprefiltered scan with a small other
+    // side reads only the blocks of that side's values, whereas the
+    // prefiltered scan reads, filters, and re-sorts all candidates of the
+    // rectangle.
     std::optional<uint64_t> numCandidates;
-    for (auto& plan : seeds) {
+    std::vector<SubtreePlan> prefilteredSeeds;
+    for (const auto& plan : seeds) {
       if (scanBindsVariable(plan, geometryVariable) != std::optional{true}) {
         continue;
       }
@@ -2607,23 +2616,27 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       if (!prefiltered.has_value()) {
         continue;
       }
-      plan._qet = std::move(prefiltered.value());
-      numCandidates =
-          std::min(numCandidates.value_or(plan._qet->getSizeEstimate()),
-                   plan._qet->getSizeEstimate());
+      prefilteredSeeds.push_back(plan);
+      prefilteredSeeds.back()._qet = std::move(prefiltered.value());
+      numCandidates = std::min(
+          numCandidates.value_or(prefilteredSeeds.back().getSizeEstimate()),
+          prefilteredSeeds.back().getSizeEstimate());
     }
     if (!numCandidates.has_value()) {
       continue;
     }
     prefilteredVariables.insert(geometryVariable);
-    for (auto& plan : seeds) {
+    for (const auto& plan : seeds) {
       if (scanBindsVariable(plan, geometryVariable) != std::optional{false}) {
         continue;
       }
-      plan._qet = ad_utility::makeExecutionTree<GeoRectangleRowFilter>(
-          _qec, plan._qet, plan._qet->getVariableColumn(geometryVariable),
-          rectangle, numCandidates);
+      prefilteredSeeds.push_back(plan);
+      prefilteredSeeds.back()._qet =
+          ad_utility::makeExecutionTree<GeoRectangleRowFilter>(
+              _qec, plan._qet, plan._qet->getVariableColumn(geometryVariable),
+              rectangle, numCandidates);
     }
+    ql::ranges::move(prefilteredSeeds, std::back_inserter(seeds));
     for (auto& row : replacementPlans) {
       for (auto& plan : row) {
         if (auto prefiltered =
