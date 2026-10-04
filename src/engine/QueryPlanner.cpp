@@ -2327,7 +2327,7 @@ void QueryPlanner::applyConstantGeometryPrefilters(
                               const Variable& variable) -> std::optional<bool> {
     const auto* scan =
         dynamic_cast<const IndexScan*>(plan._qet->getRootOperation().get());
-    if (scan == nullptr || !plan._qet->isVariableCovered(variable)) {
+    if (scan == nullptr || !plan._qet->containsVariable(variable)) {
       return std::nullopt;
     }
     auto sortedVariable =
