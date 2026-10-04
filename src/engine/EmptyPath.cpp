@@ -55,7 +55,7 @@ ConstIdColumnRef graphsOf(const IdTable& matches, Id id) {
   auto matching = ql::ranges::equal_range(ids, id);
   size_t numMatches = ql::ranges::size(matching);
   if (matches.numColumns() == 1) {
-    static const std::vector undefinedColumn{Id::makeUndefined()};
+    static const IdColumn undefinedColumn{Id::makeUndefined()};
     return ConstIdColumnRef{undefinedColumn}.first(numMatches == 0u ? 0u : 1u);
   }
   return matches.getColumn(1).subspan(matching.begin() - ids.begin(),

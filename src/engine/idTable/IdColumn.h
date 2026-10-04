@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMN_H
 #define QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMN_H
 
+#include <vector>
+
 #include "backports/span.h"
 #include "global/Id.h"
 
@@ -19,5 +21,8 @@
 // datatype of each `Id` in separate arrays.
 using IdColumnRef = ql::span<Id>;
 using ConstIdColumnRef = ql::span<const Id>;
+
+// Owning column of Ids
+using IdColumn = std::vector<Id>;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMN_H

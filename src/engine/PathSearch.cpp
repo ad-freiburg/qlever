@@ -258,7 +258,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     timer.start();
 
     PathsLimited paths{allocator()};
-    std::vector<Id> allSources;
+    IdColumn allSources;
     if (sources.empty()) {
       allSources = binSearch.getSources();
       sources = allSources;
@@ -295,41 +295,37 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::pair<std::vector<Id>, std::vector<Id>> PathSearch::handleSearchSides()
+std::pair<ConstIdColumnRef, ConstIdColumnRef> PathSearch::handleSearchSides()
     const {
-  std::vector<Id> sourceIds;
-  std::vector<Id> targetIds;
+  ConstIdColumnRef sourceIds;
+  ConstIdColumnRef targetIds;
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();
-    auto sourceCol = resultTable->idTableView().getColumn(sourceCol_.value());
-    auto targetCol = resultTable->idTableView().getColumn(targetCol_.value());
-    sourceIds.assign(sourceCol.begin(), sourceCol.end());
-    targetIds.assign(targetCol.begin(), targetCol.end());
-    return {std::move(sourceIds), std::move(targetIds)};
+    sourceIds = resultTable->idTableView().getColumn(sourceCol_.value());
+    targetIds = resultTable->idTableView().getColumn(targetCol_.value());
+    return {sourceIds, targetIds};
   }
 
   if (sourceTree_.has_value()) {
-    auto sourceCol = sourceTree_.value()->getResult()->idTableView().getColumn(
+    sourceIds = sourceTree_.value()->getResult()->idTableView().getColumn(
         sourceCol_.value());
-    sourceIds.assign(sourceCol.begin(), sourceCol.end());
   } else if (config_.sourceIsVariable()) {
     sourceIds = {};
   } else {
-    sourceIds = std::get<std::vector<Id>>(config_.sources_);
+    sourceIds = std::get<IdColumn>(config_.sources_);
   }
 
   if (targetTree_.has_value()) {
-    auto targetCol = targetTree_.value()->getResult()->idTableView().getColumn(
+    targetIds = targetTree_.value()->getResult()->idTableView().getColumn(
         targetCol_.value());
-    targetIds.assign(targetCol.begin(), targetCol.end());
   } else if (config_.targetIsVariable()) {
     targetIds = {};
   } else {
-    targetIds = std::get<std::vector<Id>>(config_.targets_);
+    targetIds = std::get<IdColumn>(config_.targets_);
   }
 
-  return {std::move(sourceIds), std::move(targetIds)};
+  return {sourceIds, targetIds};
 }
 
 // _____________________________________________________________________________
