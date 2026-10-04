@@ -490,6 +490,9 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
          getRowIndices(limitAndOffset, *result, resultSize)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
+          // TODO<pas-kes>: Decide on the binary export format of the IDs.
+          // Sending `sizeof(Id)` bytes is wasteful with the new `Id` (128
+          // instead of 72 bits per ID, the rest is padding).
           Id id = pair.idTable()(i, columnIndex.value().columnIndex_);
           STREAMABLE_YIELD(
               std::string_view{reinterpret_cast<const char*>(&id), sizeof(Id)});
