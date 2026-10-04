@@ -1158,9 +1158,23 @@ TEST(JoinTest, costEstimateOfJoinWithIndexScan) {
   auto [costMany, expectedMany] = costs(many, 10);
   EXPECT_EQ(costMany, expectedMany);
 
-  // A scan as the sibling: no bound, both scans are charged their size.
+  // A small scan as the sibling (one row, because the object is fixed): the
+  // join materializes it, so the other scan is charged one block, like for the
+  // `Values` above. The small scan is charged its one row.
+  auto smallScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::POS,
+      SparqlTripleSimple{V{"?s"}, iri("<p>"), iri("<o3>")});
+  ASSERT_EQ(smallScan->getSizeEstimate(), 1u);
+  Join scanAndSmallScan{qec, smallScan, scan, 0, 0};
+  EXPECT_EQ(scanAndSmallScan.getCostEstimate(),
+            scanAndSmallScan.getSizeEstimate() + 2 * (1 + rowsPerBlock));
+
+  // Two scans that are both not small: no bound, both scans are charged their
+  // size.
   auto scan2 = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::PSO, SparqlTripleSimple{V{"?s"}, iri("<p>"), V{"?o2"}});
+  auto cleanupSmall = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(5);
   Join twoScans{qec, scan2, scan, 0, 0};
   EXPECT_EQ(twoScans.getCostEstimate(), twoScans.getSizeEstimate() + 40);
 }

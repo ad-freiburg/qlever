@@ -232,9 +232,14 @@ size_t JoinImpl::getCostEstimate() {
   // the join and are charged as such. So such a scan costs at most `rows of
   // the sibling * rows per block` (at least one block, a sibling that is
   // estimated to be empty does not make the scan free), and never more than
-  // its size. A scan whose sibling is a scan as well is prefiltered by block
-  // ranges only, which is not bounded this way, so it is charged its full size
-  // as before.
+  // its size.
+  //
+  // NOTE: This also holds when the small sibling is an index scan itself,
+  // because `computeResult` materializes every small child, also a scan, and
+  // then joins the other scan with the materialized result. Only two scans
+  // that are both not small are joined via `computeResultForTwoIndexScans`,
+  // which prefilters by block ranges only. That is not bounded this way, so
+  // such scans are charged their full size.
   // TODO<joka921> once the `getCostEstimate` functions are `const`,
   // the argument can also be `const auto`
   auto readCost = [this](auto& child, auto& sibling) -> size_t {
@@ -244,7 +249,7 @@ size_t JoinImpl::getCostEstimate() {
              nullptr;
     };
     size_t siblingSize = sibling->getSizeEstimate();
-    if (!isScan(child) || isScan(sibling) ||
+    if (!isScan(child) ||
         siblingSize >=
             getRuntimeParameter<
                 &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>()) {
