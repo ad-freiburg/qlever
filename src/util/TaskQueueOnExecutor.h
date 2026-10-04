@@ -13,7 +13,6 @@
 #include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 
-#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/post.hpp>
 #include <condition_variable>
 #include <cstddef>
@@ -23,6 +22,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "backports/asio.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Forward.h"
@@ -55,7 +55,7 @@ namespace ad_utility {
 //    guaranteed to deadlock (for example for a single-threaded executor).
 //    Unfortunately this precondition cannot be checked: the concrete asio
 //    executors have a `running_in_this_thread()`, but the type-erased
-//    `boost::asio::any_io_executor` that we store does not.
+//    `ql::any_io_executor` that we store does not.
 // 3. The execution context behind the executor has to outlive this queue,
 //    because the destructor waits for tasks that run on that context.
 // 4. Whether the tasks run concurrently, and in which order, is a property of
@@ -76,7 +76,7 @@ class TaskQueueOnExecutor {
   using Task = absl::AnyInvocable<void()>;
 
  private:
-  boost::asio::any_io_executor executor_;
+  ql::any_io_executor executor_;
   size_t maxNumTasksInFlight_;
   // The message that is logged if a task throws or cannot be scheduled. It is
   // the only thing that uses the `name` that is passed to the constructor, so
@@ -106,8 +106,8 @@ class TaskQueueOnExecutor {
   // and might not fit into memory. The queue works optimally when on the
   // average the executor is at least as fast as the "pusher", but the pusher
   // is faster sometimes (which the queue can then accommodate).
-  TaskQueueOnExecutor(boost::asio::any_io_executor executor,
-                      size_t maxNumTasksInFlight, std::string name = "")
+  TaskQueueOnExecutor(ql::any_io_executor executor, size_t maxNumTasksInFlight,
+                      std::string name = "")
       : executor_{std::move(executor)},
         maxNumTasksInFlight_{maxNumTasksInFlight},
         errorMessage_{

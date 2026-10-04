@@ -28,6 +28,7 @@
 #include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/GeoPointEncoding.h"
 #include "index/GraphNameManager.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
@@ -197,6 +198,17 @@ class IndexImpl {
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
+  // The encoding of the geo points of the index (only relevant during index
+  // building, see `ad_utility::GeoPointEncoding`). When an index is loaded, the
+  // encoding is taken from its configuration.
+  ad_utility::GeoPointEncoding geoPointEncodingForIndexBuilding_{
+      ad_utility::GeoPointEncoding::ZOrder};
+
+  // The encoding of the geo points of the loaded index (see
+  // `applyGeoPointEncoding`).
+  ad_utility::GeoPointEncoding geoPointEncodingOfLoadedIndex_{
+      ad_utility::GeoPointEncoding::ZOrder};
+
   // Compiled regexes for IRIs that should be treated as blank nodes during
   // index building (only relevant during index building). Set (and compiled
   // from their string representation) via `setBlankNodeIriRegexes`.
@@ -293,20 +305,24 @@ class IndexImpl {
   // the `Id`s of a secondary vocabulary are only valid for the very vocabulary
   // that they were created for.
   //
-  // TODO<joka921> Nothing sets this yet, except for unit tests. It will be set
-  // when the index is read from disk, together with the persisted data that
-  // the words belong to; until then the only way to obtain a secondary
-  // vocabulary is `setSecondaryVocabForTesting`.
+  // This is currently set only by tests (via
+  // `TestIndexConfig::secondaryVocabWords`, see
+  // `test/util/IndexTestHelpers.h`). It is meant to eventually be set by code
+  // that loads persisted data (e.g. the blobs of `NamedCachedQueryBlobManager`,
+  // in a follow-up change). It has to be set before the first query is
+  // answered (in particular, before any `LocalVocabEntry` computes its position
+  // in the vocabulary, see `positionInVocab()`), and is immutable afterwards.
   const SecondaryVocabulary* secondaryVocab() const {
     return secondaryVocab_.get();
   }
 
-  // Set the secondary vocabulary, see above. NOTE: Tests that need an index
-  // with a secondary vocabulary should not call this directly, but set
-  // `TestIndexConfig::secondaryVocabWords` (see
-  // `test/util/IndexTestHelpers.h`), such that the vocabulary is part of the
-  // index right from its creation.
-  void setSecondaryVocabForTesting(
+  // Set the secondary vocabulary, see above. PRECONDITION: Must only be called
+  // before the first query is answered (e.g. right after construction).
+  //
+  // NOTE: This setter is not named `setSecondaryVocabForTesting` even though
+  // only tests currently call it, because it is about to get a non-test caller
+  // (see above).
+  void setSecondaryVocab(
       std::shared_ptr<const SecondaryVocabulary> secondaryVocab) {
     secondaryVocab_ = std::move(secondaryVocab);
   }
@@ -343,6 +359,27 @@ class IndexImpl {
   // does not itself read from disk, factored out so that a configuration
   // obtained from elsewhere (e.g. a serialized blob) can be applied directly.
   void applyConfiguration(const nlohmann::json& configuration);
+
+  // Check whether the index format version that is stored in the
+  // `configuration` JSON (index metadata) is compatible with this version of
+  // QLever. Return `std::nullopt` if it is, and a message that describes the
+  // incompatibility otherwise. Throw no exception for any `configuration`
+  // (except for allocation failures), so that this check can also be used by
+  // code that must not throw. `applyConfiguration` throws an exception with the
+  // returned message.
+  std::optional<std::string> checkIndexFormatVersion(
+      const nlohmann::json& configuration) const;
+
+  // Set the encoding of the geo points of the process (see
+  // `GeoPoint::encoding`) to the encoding of the index that is being loaded,
+  // as recorded in its configuration. Part of `applyConfiguration`.
+  void applyGeoPointEncoding();
+
+  // Return false if the loaded index certainly contains no geo point (as an
+  // `Id` of type `GeoPoint` in its permutations), and true otherwise. Reads
+  // the metadata of the blocks and at most one block, see the implementation
+  // for details. Takes the updates into account.
+  bool mayContainGeoPoints() const;
 
   const ad_utility::AllocatorWithLimit<Id>& allocator() const {
     return allocator_;
@@ -391,6 +428,13 @@ class IndexImpl {
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
     vocabularyTypeForIndexBuilding_ = type;
     configurationJson_["vocabulary-type"] = type;
+  }
+
+  // Set the encoding of the geo points for the index build; see
+  // `ad_utility::GeoPointEncoding` for details.
+  void setGeoPointEncodingForIndexBuilding(
+      ad_utility::GeoPointEncoding encoding) {
+    geoPointEncodingForIndexBuilding_ = encoding;
   }
 
   // __________________________________________________________________________
