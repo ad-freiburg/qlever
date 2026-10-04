@@ -218,8 +218,7 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
 
   // Apply trailing `VALUES` clause
   auto& postValues = pq.postQueryValuesClause_;
-  if (postValues.has_value() &&
-      !postValues.value()._inlineValues._variables.empty()) {
+  if (postValues.has_value()) {
     plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
     checkCancellation();
   }
@@ -1392,28 +1391,23 @@ template <QueryPlanner::FilterMode mode>
 void QueryPlanner::applyFiltersIfPossible(
     vector<SubtreePlan>& row,
     const FiltersAndOptionalSubstitutes& filters) const {
-  // Apply every filter possible.
-  // It is possible when,
-  // 1) the filter has not already been applied
-  // 2) all variables in the filter are covered by the query so far
-  // New 06 May 2016:
-  // There is a problem with the so-called (name may be changed)
-  // TextOperationWithFilter ops: This method applies SPARQL filters
-  // to all the leaf TextOperations (when feasible) and thus
-  // prevents the special case from being applied when subtrees are merged.
-  // Fix: Also copy (CHANGE not all plans but TextOperation) without applying
-  // the filter. Problem: If the method gets called multiple times, plans with
-  // filters May be duplicated. To prevent this, calling code has to ensure
-  // That the method is only called once on each row. Similarly this affects
-  // the (albeit rare) fact that a filter is directly applicable after a scan
-  // of a huge relation where a subsequent join with a small result could be
-  // translated into one or more scans directly. This also helps with cases
-  // where applying the filter later is better. Finally, the replace flag can
-  // be set to enforce that all filters are applied. This should be done for
-  // the last row in the DPTab so that no filters are missed.
+  // For each plan in `row`, apply every filter that is not applied to it yet
+  // and whose variables are all always defined in the plan (not just present,
+  // see the NOTE at the check below). Whether the unfiltered plan is kept or
+  // replaced depends on `mode`, see `FilterMode`.
+  //
+  // NOTE 1: In the `KeepUnfiltered` mode, the filtered plan is added as a
+  // candidate next to the unfiltered one, because applying a filter later can
+  // be cheaper (for example, when a join with a small result makes the large
+  // side much smaller first). Each row must be passed to this function only
+  // once, otherwise such candidates are added twice.
+  //
+  // NOTE 2: The `ApplyAllFiltersAndReplaceUnfiltered` mode applies all
+  // remaining filters regardless of their variables. It is used for the final
+  // plans of a group graph pattern, so that no filter is missed.
 
-  // Note: we are first collecting the newly added plans and then adding them
-  // in one go. Changing `row` inside the loop would invalidate the iterators.
+  // The new plans are collected first and added to `row` in one go at the
+  // end, because adding them inside the loop would invalidate the iterators.
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
     for (const auto& [i, filterAndSubst] :
@@ -1438,7 +1432,8 @@ void QueryPlanner::applyFiltersIfPossible(
            ql::ranges::any_of(
                filterAndSubst.filter_.expression_.containedVariables(),
                [&plan](const auto& variable) {
-                 return plan._qet->isVariableCovered(*variable);
+                 return plan._qet->getRootOperation()->isVariableAlwaysDefined(
+                     *variable);
                }))) {
         // Apply filter substitution
         auto jcs = getJoinColumns(filterAndSubst.substitute_.value(), plan);
@@ -1478,12 +1473,19 @@ void QueryPlanner::applyFiltersIfPossible(
           continue;
         }
       }
+      // Apply the filter to `plan` only if all its variables are always
+      // defined there, not just present (see
+      // `Operation::areVariablesAlwaysDefined`).
+      //
+      // NOTE: A variable that might be UNDEF in `plan` (for example, from a
+      // `VALUES` clause with `UNDEF`, a `UNION`, or an `OPTIONAL` in a
+      // subquery) can still be bound by a later join. The filter has to see
+      // the bound value, so it may only be applied after that join. This
+      // happens at the latest at the end of the group graph pattern, in the
+      // `ApplyAllFiltersAndReplaceUnfiltered` mode.
       if (applyAll ||
-          ql::ranges::all_of(
-              filterAndSubst.filter_.expression_.containedVariables(),
-              [&plan](const auto& variable) {
-                return plan._qet->isVariableCovered(*variable);
-              })) {
+          plan._qet->getRootOperation()->areVariablesAlwaysDefined(
+              filterAndSubst.filter_.expression_.containedVariables())) {
         // Apply this filter regularly.
         SubtreePlan newPlan = makeSubtreePlan<Filter>(
             _qec, plan._qet, filterAndSubst.filter_.expression_);
@@ -2563,7 +2565,7 @@ void QueryPlanner::applyGeoRectanglePrefilters(
                               const Variable& variable) -> std::optional<bool> {
     const auto* scan =
         dynamic_cast<const IndexScan*>(plan._qet->getRootOperation().get());
-    if (scan == nullptr || !plan._qet->isVariableCovered(variable)) {
+    if (scan == nullptr || !plan._qet->containsVariable(variable)) {
       return std::nullopt;
     }
     auto sortedVariable =

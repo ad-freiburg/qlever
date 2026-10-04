@@ -24,6 +24,7 @@
 #include "backports/algorithm.h"
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/IdTableOrSharedIdTableView.h"
 #include "global/Id.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
@@ -31,8 +32,9 @@
 #include "util/File.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/RecyclingPool.h"
 #include "util/Synchronized.h"
-#include "util/TaskQueue.h"
+#include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
 
 // This type is used to buffer small relations that will be stored in the same
@@ -66,7 +68,7 @@ class CompressedRelationWriter {
   Id currentCol0Id_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
-  ad_utility::TaskQueue<false> blockWriteQueue_;
+  ad_utility::TaskQueueOnExecutor blockWriteQueue_;
   ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
 
   // This callback is invoked for each block of small relations (which share the
@@ -76,18 +78,30 @@ class CompressedRelationWriter {
   using SmallBlocksCallback = std::function<void(IdTable)>;
   SmallBlocksCallback smallBlocksCallback_;
 
+  // A pool of block buffers whose blocks have already been written and whose
+  // memory can therefore be reused for the following blocks (see
+  // `takeBlockBuffer`). All blocks (of small as well as of large relations)
+  // have a similar size, so a single pool can serve all of them. The pool is
+  // shared, so that the two writers of a permutation pair (see
+  // `PermutationWriter`) and the `PermutationWriter` itself can use the same
+  // buffers, see `shareBlockBufferPoolWith`.
+  using BlockBufferPool = ad_utility::RecyclingPool<IdTable>;
+  std::shared_ptr<BlockBufferPool> blockBufferPool_ =
+      std::make_shared<BlockBufferPool>();
+
  public:
-  /// Create using a filename, to which the relation data will be written.
-  /// If `numWriterThreads` is set, it determines the number of threads that
-  /// compress and write blocks; otherwise the runtime parameter
-  /// `permutation-writer-num-threads` is used (see `makeBlockWriteQueue`).
+  // Create using a filename, to which the relation data will be written.
+  // If `numWriterThreads` is set, it determines how many blocks are
+  // compressed and written concurrently; otherwise the runtime parameter
+  // `permutation-writer-num-threads` is used (see `getNumConcurrentBlocks`).
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f, size_t rowsPerBlock,
       std::optional<size_t> numWriterThreads = std::nullopt)
       : outfile_{std::move(f)},
         numColumns_{numColumns},
         rowsPerBlock_{rowsPerBlock},
-        blockWriteQueue_{makeBlockWriteQueue(numWriterThreads)} {
+        blockWriteQueue_{
+            makeBlockWriteQueue(getNumConcurrentBlocks(numWriterThreads))} {
     AD_CONTRACT_CHECK(rowsPerBlock_ > 0,
                       "A block must have room for at least one row");
   }
@@ -100,6 +114,15 @@ class CompressedRelationWriter {
     std::unique_ptr<CompressedRelationWriter> writer_;
     MetadataCallback callback_;
   };
+
+  // A block of rows that is to be compressed and written by this writer. It
+  // either owns its rows (as an `IdTable`, whose buffer is then given back to
+  // the `blockBufferPool_`), or it is a non-owning view of rows that are owned
+  // elsewhere. The latter allows writing a block of a large relation directly
+  // from the input block in which its rows reside, without copying them into
+  // an intermediate buffer first, see
+  // `PermutationWriter::addRowsOfCurrentRelation`.
+  using BlockToWrite = ad_utility::IdTableOrSharedIdTableView;
 
   // The `PermutationWriter` can be used to write single or pair permutations.
   // It is defined in `CompressedRelationPermutationWriterImpl.h`.
@@ -248,8 +271,23 @@ class CompressedRelationWriter {
   // the `smallBlocksCallback_` is not empty, then
   // `smallBlocksCallback_(std::move(block))` is called AFTER the block has
   // completely been dealt with.
-  void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id, IdTable block,
+  //
+  // NOTE: The actual work is done asynchronously by the `blockWriteQueue_`, so
+  // it is only guaranteed to be finished after a call to `finish()`.
+  void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id, BlockToWrite block,
                              bool invokeCallback);
+
+  // The actual work of `compressAndWriteBlock` (see there), performed in the
+  // calling thread. This is what the tasks of the `blockWriteQueue_` run.
+  //
+  // NOTE: This function has to be called directly (instead of going through
+  // the `blockWriteQueue_`) by code that already runs on a thread of the
+  // global executor, because a `push` to the queue may block, which would
+  // occupy that thread and can deadlock the executor, see
+  // `AddBlockOfSmallRelationsToSwitched`.
+  void compressAndWriteBlockInCallingThread(Id firstCol0Id, Id lastCol0Id,
+                                            BlockToWrite block,
+                                            bool invokeCallback);
 
   // Return the number of rows that a single block of small relations may hold
   // at most.
@@ -352,7 +390,23 @@ class CompressedRelationWriter {
   // `finishLargeRelation`.
   // * The previously called function was `addBlockForLargeRelation` with the
   // same `col0Id`.
-  void addBlockForLargeRelation(Id col0Id, IdTable relation);
+  void addBlockForLargeRelation(Id col0Id, BlockToWrite relation);
+
+  // Return an empty block buffer with room for at least `2 * blocksize()`
+  // rows, which is taken from the `blockBufferPool_` if possible (then its
+  // memory is typically already allocated). Thread-safe.
+  IdTable takeBlockBuffer();
+
+  // Use the same `blockBufferPool_` as the `other` writer.
+  void shareBlockBufferPoolWith(const CompressedRelationWriter& other) {
+    blockBufferPool_ = other.blockBufferPool_;
+  }
+
+  // Return the `blockBufferPool_`, e.g. to give buffers back to it via
+  // `BlockBufferPool::makeRecyclingOwner`.
+  const std::shared_ptr<BlockBufferPool>& blockBufferPool() const {
+    return blockBufferPool_;
+  }
 
   // This function must be called after all blocks of a large relation have been
   // added via `addBlockForLargeRelation` before any other function may be
@@ -379,15 +433,32 @@ class CompressedRelationWriter {
                                                  size_t rowsPerBlock,
                                                  size_t inputBlockSize);
 
-  // Create a `TaskQueue` for the compression and writing of blocks. The number
-  // of threads is `numThreadsOverride` if set, and otherwise determined by the
+  // Create the queue for the compression and writing of blocks. The blocks are
+  // compressed and written on the global thread pool (see
+  // `util/GlobalExecutor.h`), so this queue owns no threads of its own and
+  // only bounds the number of blocks that this writer keeps in flight (queued
+  // or currently being compressed and written).
+  //
+  // The blocks are allowed to pile up to twice `numConcurrentBlocks` (but at
+  // least 4 blocks are always allowed to be in flight), such that the writer
+  // can also make progress while all the concurrent blocks are being
+  // compressed. All the blocks in flight may run at the same time if the pool
+  // has idle threads, except for `numConcurrentBlocks == 1`, where the blocks
+  // are compressed and written one after the other (on a strand of the pool).
+  // `numConcurrentBlocks` is typically computed by `getNumConcurrentBlocks`
+  // below.
+  static ad_utility::TaskQueueOnExecutor makeBlockWriteQueue(
+      size_t numConcurrentBlocks);
+
+  // Return the number of blocks that are compressed and written concurrently.
+  // It is `numConcurrentBlocksOverride` if set, and otherwise determined by the
   // runtime parameter "permutation-writer-num-threads". In both cases, a value
-  // of 0 means "as many threads as the hardware has", and larger values are
-  // capped at that number.
-  static ad_utility::TaskQueue<false> makeBlockWriteQueue(
-      std::optional<size_t> numThreadsOverride);
+  // of 0 means "as many as the global thread pool has threads", and larger
+  // values are capped at that number.
+  static size_t getNumConcurrentBlocks(
+      std::optional<size_t> numConcurrentBlocksOverride);
   FRIEND_TEST(CompressedRelationWriter,
-              isInitializedWithCorrectNumberOfThreads);
+              isInitializedWithCorrectNumberOfTasksInFlight);
 };
 
 #endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_H
