@@ -96,8 +96,7 @@ constexpr static bool isConstantResult =
 template <typename T>
 constexpr static bool isVectorResult =
     ad_utility::SimilarToAnyTypeIn<T, detail::ConstantTypesAsVector> ||
-    ad_utility::isSimilar<T, std::vector<Id>> ||
-    ad_utility::isSimilar<T, ql::span<const ValueId>>;
+    ad_utility::isSimilar<T, ConstIdColumnRef>;
 
 /// All the additional information which is needed to evaluate a SPARQL
 /// expression.

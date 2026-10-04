@@ -31,9 +31,9 @@ namespace sparqlExpression::detail {
 
 /// Convert a variable to a vector of all the Ids it is bound to in the
 /// `context`.
-inline std::vector<Id> getIdsFromVariable(const ::Variable& variable,
-                                          const EvaluationContext* context,
-                                          size_t beginIndex, size_t endIndex) {
+inline ConstIdColumnRef getIdsFromVariable(const ::Variable& variable,
+                                           const EvaluationContext* context,
+                                           size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
 
   const auto& varToColMap = context->_variableToColumnMap;
@@ -52,8 +52,8 @@ inline std::vector<Id> getIdsFromVariable(const ::Variable& variable,
 
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
 // `context
-inline std::vector<Id> getIdsFromVariable(const ::Variable& variable,
-                                          const EvaluationContext* context) {
+inline ConstIdColumnRef getIdsFromVariable(const ::Variable& variable,
+                                           const EvaluationContext* context) {
   return getIdsFromVariable(variable, context, context->_beginIndex,
                             context->_endIndex);
 }
