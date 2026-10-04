@@ -114,12 +114,10 @@ class IdColumnVector {
   }
   [[nodiscard]] reference at(size_t i) {
     AD_CONTRACT_CHECK(i < size());
-    payloads_.at(i);
     return (*this)[i];
   }
   [[nodiscard]] const_reference at(size_t i) const {
     AD_CONTRACT_CHECK(i < size());
-    payloads_.at(i);
     return (*this)[i];
   }
 
