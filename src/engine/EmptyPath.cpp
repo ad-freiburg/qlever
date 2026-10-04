@@ -50,17 +50,16 @@ EntityAndGraph entityAndGraph(const Row& row, size_t numColumns) {
 // the graphs, such that the caller can treat both cases uniformly: The result
 // is a single undefined ID if `id` occurs in `matches` at all, and empty
 // otherwise.
-std::vector<Id> graphsOf(const IdTable& matches, Id id) {
+ConstIdColumnRef graphsOf(const IdTable& matches, Id id) {
   ConstIdColumnRef ids = matches.getColumn(0);
   auto matching = ql::ranges::equal_range(ids, id);
   size_t numMatches = ql::ranges::size(matching);
   if (matches.numColumns() == 1) {
-    return numMatches == 0 ? std::vector<Id>{}
-                           : std::vector{Id::makeUndefined()};
+    static const std::vector undefinedColumn{Id::makeUndefined()};
+    return ConstIdColumnRef{undefinedColumn}.first(numMatches == 0u ? 0u : 1u);
   }
-  auto graphColumn =
-      matches.getColumn(1).subspan(matching.begin() - ids.begin(), numMatches);
-  return {graphColumn.begin(), graphColumn.end()};
+  return matches.getColumn(1).subspan(matching.begin() - ids.begin(),
+                                      numMatches);
 }
 
 // The rows of a `table` from `EmptyPath::scanIndex` as a range of
