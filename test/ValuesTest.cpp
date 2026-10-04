@@ -64,6 +64,20 @@ TEST(Values, emptyValuesClause) {
   EXPECT_FLOAT_EQ(emptyValuesOp.getMultiplicity(32), 1.0);
 }
 
+// A VALUES clause without variables, but with rows (e.g. `VALUES () { () }`)
+// is not empty, its result consists of one empty solution per row.
+TEST(Values, emptyRowsWithoutVariables) {
+  auto testQec = ad_utility::testing::getQec();
+  for (size_t numRows : {1u, 2u}) {
+    Values valuesOp(testQec,
+                    {{}, std::vector<std::vector<TripleComponent>>(numRows)});
+    EXPECT_FALSE(valuesOp.knownEmptyResult());
+    auto result = valuesOp.getResult();
+    EXPECT_EQ(result->idTableView().numRows(), numRows);
+    EXPECT_EQ(result->idTableView().numColumns(), 0u);
+  }
+}
+
 // Check that `computeResult`, given a parsed VALUES clause, computes the
 // correct result table.
 TEST(Values, computeResult) {

@@ -143,6 +143,7 @@ add_subdirectory(rdfTypes)
 add_subdirectory(joinAlgorithms)
 add_subdirectory(libqlever)
 add_subdirectory(parallelBlockMerge)
+add_subdirectory(blockSort)
 
 OPTION(_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS "Disable some tests that cause undefined symbol errors when building with Emscripten." OFF)
 
@@ -329,6 +330,8 @@ addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
 addLinkAndDiscoverTestNoLibs(CompactStringVectorTest sparqlParser)
 
+addLinkAndDiscoverTestNoLibs(OwnedOrViewedVectorTest)
+
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
 addLinkAndDiscoverTest(ContentEncodingHelperTest http)
@@ -340,6 +343,8 @@ addLinkAndDiscoverTest(VocabularyTest vocabulary)
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
+
+addLinkAndDiscoverTestNoLibs(UniqueBlockViewTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
@@ -489,6 +494,8 @@ addLinkAndDiscoverTest(ComparisonWithNanTest)
 
 addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
 
+addLinkAndDiscoverTestNoLibs(RecyclingPoolTest)
+
 addLinkAndDiscoverTest(IdTableHelpersTest)
 
 addLinkAndDiscoverTest(GeneratorTest)
@@ -564,6 +571,8 @@ addLinkAndDiscoverTest(LruCacheTest)
 addLinkAndDiscoverTest(LruCacheWithStatisticsTest)
 
 addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
+
+addLinkAndDiscoverTestNoLibs(RangeThatReleasesOnEndTest)
 
 addLinkAndDiscoverTest(TripleSerializerTest)
 
