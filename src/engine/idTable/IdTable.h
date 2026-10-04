@@ -1019,4 +1019,7 @@ inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
 
+// Owning column of Ids
+using IdColumn = std::vector<Id>;
+
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

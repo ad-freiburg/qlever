@@ -46,8 +46,7 @@ inline ConstIdColumnRef getIdsFromVariable(const ::Variable& variable,
 
   AD_CONTRACT_CHECK(beginIndex <= endIndex &&
                     endIndex <= completeColumn.size());
-  auto sub = completeColumn.subspan(beginIndex, endIndex - beginIndex);
-  return {sub.begin(), sub.end()};
+  return completeColumn.subspan(beginIndex, endIndex - beginIndex);
 }
 
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
