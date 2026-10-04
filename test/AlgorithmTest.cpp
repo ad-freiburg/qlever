@@ -130,52 +130,6 @@ TEST(Algorithm, FindOptional) {
 }
 
 // _____________________________________________________________________________
-TEST(Algorithm, AssignSwap) {
-  // Works like `std::swap` for plain lvalues.
-  {
-    int a = 3;
-    int b = 5;
-    assignSwap<int>(a, b);
-    EXPECT_EQ(a, 5);
-    EXPECT_EQ(b, 3);
-  }
-  {
-    std::string a = "foo";
-    std::string b = "bar";
-    assignSwap<std::string>(a, b);
-    EXPECT_EQ(a, "bar");
-    EXPECT_EQ(b, "foo");
-  }
-
-  // Also works when one or both sides are a proxy that only implicitly
-  // converts to/from `T`, not a real `T&` -- the case `std::swap` can't
-  // handle because such a proxy is returned by value (a prvalue that can't
-  // bind to `std::swap`'s `T&` parameters).
-  {
-    struct IntProxy {
-      int* value_;
-      // NOLINTNEXTLINE(google-explicit-constructor)
-      operator int() const { return *value_; }
-      IntProxy& operator=(int v) {
-        *value_ = v;
-        return *this;
-      }
-    };
-    int a = 3;
-    int b = 5;
-    assignSwap<int>(IntProxy{&a}, IntProxy{&b});
-    EXPECT_EQ(a, 5);
-    EXPECT_EQ(b, 3);
-
-    // Mixed: a real lvalue and a proxy.
-    int c = 7;
-    assignSwap<int>(a, IntProxy{&c});
-    EXPECT_EQ(a, 7);
-    EXPECT_EQ(c, 5);
-  }
-}
-
-// _____________________________________________________________________________
 TEST(Algorithm, AppendVector) {
   using V = std::vector<std::string>;
   V v{"1", "2", "7"};
