@@ -16,7 +16,6 @@
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../test/util/AllocatorTestHelpers.h"
-#include "engine/idTable/splitLayout/ColumnStorageTraits.h"
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 #include "global/Id.h"

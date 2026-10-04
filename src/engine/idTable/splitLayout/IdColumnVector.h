@@ -23,9 +23,7 @@ namespace columnBasedIdTable::splitLayout {
 // An owning, growable column of `Id`s in the experimental split layout: two
 // separate, contiguous arrays (payload words, datatype bytes) instead of one
 // array of packed legacy `Id` objects. The split-layout counterpart of the
-// `std::vector<Id>` that `IdTable` uses as `ColumnStorage` by default (see
-// `ColumnStorageTraits.h`); offers the subset of `std::vector`'s interface
-// `IdTable` needs.
+// `std::vector<Id>` in `IdTable`.
 //
 // `Allocator` is `IdTable`'s own `Id` allocator; the two underlying arrays
 // use it rebound to `uint64_t`/`uint8_t`, so both count towards the same

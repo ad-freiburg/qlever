@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "IdColumnTestHelpers.h"
-#include "engine/idTable/splitLayout/ColumnStorageTraits.h"
 #include "engine/idTable/splitLayout/IdColumn.h"
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "engine/idTable/splitLayout/IdRef.h"
@@ -180,29 +179,4 @@ TEST(IdColumnTest, subspanFirstLast) {
   EXPECT_THROW((void)view.subspan(view.size() + 1), ad_utility::Exception);
   EXPECT_THROW((void)view.subspan(0, view.size() + 1), ad_utility::Exception);
   EXPECT_THROW((void)view.last(view.size() + 1), ad_utility::Exception);
-}
-
-// _____________________________________________________________________________
-TEST(IdColumnTest, columnStorageTraitsResolvesGenericAndIdCase) {
-  static_assert(
-      std::is_same_v<ColumnStorageTraits<std::vector<int>, int>::Ref, int&>);
-  static_assert(
-      std::is_same_v<ColumnStorageTraits<std::vector<int>, int>::ColumnRef,
-                     ql::span<int>>);
-
-  static_assert(
-      std::is_same_v<
-          ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::Ref, IdRef>);
-  static_assert(
-      std::is_same_v<
-          ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::ConstRef,
-          ConstIdRef>);
-  static_assert(
-      std::is_same_v<
-          ColumnStorageTraits<IdColumnVector<TestAllocator>, Id>::ColumnRef,
-          columnBasedIdTable::splitLayout::IdColumnRef>);
-  static_assert(
-      std::is_same_v<ColumnStorageTraits<IdColumnVector<TestAllocator>,
-                                         Id>::ConstColumnRef,
-                     columnBasedIdTable::splitLayout::ConstIdColumnRef>);
 }
