@@ -84,6 +84,51 @@ TEST(EngineTest, multiColumnJoinTest) {
 }
 
 // _____________________________________________________________________________
+// An UNDEF value in a join column matches every value. Such inputs make the
+// join take the generic path, because the cheap path (see `isCheap` in
+// `computeMultiColumnJoin`) requires that no join column contains UNDEF. The
+// join value of a result row is the one of the side that is not UNDEF.
+TEST(MultiColumnJoin, undefInJoinColumns) {
+  constexpr auto U = Id::makeUndefined();
+  auto* qec = ad_utility::testing::getQec();
+  std::vector<std::array<ColumnIndex, 2>> jcls;
+  jcls.push_back(std::array<ColumnIndex, 2>{{0, 0}});
+  jcls.push_back(std::array<ColumnIndex, 2>{{1, 1}});
+
+  auto join = [&](const IdTable& left, const IdTable& right) {
+    IdTable result(3, makeAllocator());
+    MultiColumnJoin{qec, idTableToExecutionTree(qec, left),
+                    idTableToExecutionTree(qec, right)}
+        .computeMultiColumnJoin(left.asStaticView<0>(), right.asStaticView<0>(),
+                                jcls, &result);
+    return result;
+  };
+
+  // UNDEF only in a join column of the right input.
+  {
+    auto left = makeIdTableFromVector({{1, 10}, {2, 20}});
+    auto right = makeIdTableFromVector({{U, 10, 100}, {2, 20, 200}});
+    auto expected = makeIdTableFromVector({{1, 10, 100}, {2, 20, 200}});
+    EXPECT_EQ(expected, join(left, right));
+  }
+  // UNDEF only in a join column of the left input.
+  {
+    auto left = makeIdTableFromVector({{U, 10}, {2, 20}});
+    auto right = makeIdTableFromVector({{1, 10, 100}, {2, 20, 200}});
+    auto expected = makeIdTableFromVector({{1, 10, 100}, {2, 20, 200}});
+    EXPECT_EQ(expected, join(left, right));
+  }
+  // UNDEF in a join column of both inputs.
+  {
+    auto left = makeIdTableFromVector({{U, 10}, {2, 20}});
+    auto right = makeIdTableFromVector({{1, 10, 100}, {2, U, 200}});
+    auto expected =
+        makeIdTableFromVector({{1, 10, 100}, {2, 10, 200}, {2, 20, 200}});
+    EXPECT_EQ(expected, join(left, right));
+  }
+}
+
+// _____________________________________________________________________________
 TEST(MultiColumnJoin, clone) {
   auto* qec = ad_utility::testing::getQec();
   IdTable a = makeIdTableFromVector({{4, 1, 2}});
