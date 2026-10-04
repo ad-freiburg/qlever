@@ -2431,7 +2431,7 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       // considered already.
       std::optional<size_t> componentIndex;
       for (size_t i = 0; i < seeds.size(); ++i) {
-        if (seeds[i]._qet->isVariableCovered(variable)) {
+        if (seeds[i]._qet->containsVariable(variable)) {
           componentIndex = componentOfSeed.at(i);
           break;
         }
@@ -2490,7 +2490,7 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       // values are known, so prefiltering its scans would be pointless),
       // and gets the bounding rectangle of its geometries, if it has any.
       for (const auto& boundVariable : edgeVariables) {
-        if (!cheapest._qet->isVariableCovered(boundVariable)) {
+        if (!cheapest._qet->containsVariable(boundVariable)) {
           continue;
         }
         fixedVariables.insert(boundVariable);
