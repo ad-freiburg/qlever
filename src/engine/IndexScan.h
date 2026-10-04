@@ -318,7 +318,10 @@ class IndexScan final : public Operation {
     bool hasSubset = varsToKeep_.has_value();
     auto cols =
         hasSubset ? std::optional{getSubsetForStrippedColumns()} : std::nullopt;
-    return [cols = std::move(cols)](auto&& table) {
+    // NOTE: The `table` is moved out of, the callers (the blocks of a lazy
+    // scan, see `getLazyScan`, and `materializedIndexScan`) do not use it
+    // afterwards. Taking it by value would copy each block of a lazy scan.
+    return [cols = std::move(cols)](auto& table) {
       if (cols.has_value()) {
         table.setColumnSubset(cols.value());
       }
