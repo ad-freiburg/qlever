@@ -1854,7 +1854,7 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
   // with the rectangles known for them once, here, and not once per
   // candidate plan.
   applyGeoRectanglePrefilters(initialPlans, filtersAndOptSubstitutes,
-                              replacementPlans);
+                              replacementPlans, tg);
 
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
@@ -2258,7 +2258,7 @@ void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
 // _____________________________________________________________________________
 void QueryPlanner::applyGeoRectanglePrefilters(
     std::vector<SubtreePlan>& seeds, FiltersAndOptionalSubstitutes& filters,
-    ReplacementPlans& replacementPlans) const {
+    ReplacementPlans& replacementPlans, const TripleGraph& tg) const {
   if (!getRuntimeParameter<
           &RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     return;
@@ -2386,6 +2386,122 @@ void QueryPlanner::applyGeoRectanglePrefilters(
     }
   }
 
+  // A geometry variable that is not fixed may still be bound by a small part
+  // of the query that is cheap to evaluate, for example the geometry of one
+  // fixed subject (`<region> geo:hasGeometry/geo:asWKT ?g`) or a subquery
+  // with a small `LIMIT`. Such a part is a connected component of the seeds
+  // (where the spatial joins do not count as connections). It is planned on
+  // its own and, if the size and the cost estimates of its cheapest plan are
+  // within the budgets, evaluated now. The bounding rectangle of its
+  // geometries then contains all of them, like the rectangle of a fixed side.
+  //
+  // NOTE: The result of the evaluation stays in the cache, so the work is not
+  // lost if the final plan computes the component in the same way. The
+  // spatial joins are left out of the filters here, because their other side
+  // may lie outside the component.
+  {
+    // Only components of at most this many triples are planned here (the
+    // dynamic programming is exponential in their number).
+    constexpr size_t maxNodes = 4;
+    size_t maxRows =
+        getRuntimeParameter<&RuntimeParameters::geoPrefilterPlanningMaxRows_>();
+    size_t maxCost =
+        getRuntimeParameter<&RuntimeParameters::geoPrefilterPlanningMaxCost_>();
+    auto componentOfSeed = QueryGraph::computeConnectedComponents(
+        seeds, FiltersAndOptionalSubstitutes{});
+    // The filters that a component is evaluated with: those without a
+    // substitute. A filter with a substitute is a spatial join, whose other
+    // side may lie outside the component, and which may not be evaluable as
+    // a plain filter at all. Leaving it out only makes the result larger,
+    // which keeps the rectangle valid.
+    FiltersAndOptionalSubstitutes filtersWithoutSubstitutes;
+    for (const auto& filterAndSubst : filters) {
+      if (!filterAndSubst.hasSubstitute()) {
+        filtersWithoutSubstitutes.push_back(filterAndSubst);
+      }
+    }
+    ad_utility::HashSet<size_t> consideredComponents;
+    for (const auto& variable : edgeVariables) {
+      if (fixedVariables.contains(variable)) {
+        continue;
+      }
+      // The component of the seeds that bind the variable, unless it was
+      // considered already.
+      std::optional<size_t> componentIndex;
+      for (size_t i = 0; i < seeds.size(); ++i) {
+        if (seeds[i]._qet->isVariableCovered(variable)) {
+          componentIndex = componentOfSeed.at(i);
+          break;
+        }
+      }
+      if (!componentIndex.has_value() ||
+          !consideredComponents.insert(componentIndex.value()).second) {
+        continue;
+      }
+      std::vector<SubtreePlan> component;
+      for (size_t i = 0; i < seeds.size(); ++i) {
+        if (componentOfSeed.at(i) == componentIndex.value()) {
+          component.push_back(seeds[i]);
+        }
+      }
+      if (ql::ranges::any_of(component,
+                             [](const SubtreePlan& plan) {
+                               return plan.type != SubtreePlan::Type::BASIC;
+                             }) ||
+          findUniqueNodeIds(component, false) > maxNodes) {
+        continue;
+      }
+      auto plans = runDynamicProgrammingOnConnectedComponent(
+          std::move(component), filtersWithoutSubstitutes, TextLimitVec{}, tg,
+          ReplacementPlans{});
+      applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
+          plans, filtersWithoutSubstitutes);
+      if (plans.empty()) {
+        continue;
+      }
+      const auto& cheapest = plans.at(findCheapestExecutionTree(plans));
+      if (cheapest.getSizeEstimate() > maxRows ||
+          cheapest.getCostEstimate() > maxCost) {
+        continue;
+      }
+      auto operation = cheapest._qet->getRootOperation();
+      operation->recursivelySetCancellationHandle(cancellationHandle_);
+      std::shared_ptr<const Result> result;
+      try {
+        result =
+            operation->getResult(false, ComputationMode::FULLY_MATERIALIZED);
+      } catch (const ad_utility::CancellationException&) {
+        throw;
+      } catch (const std::exception& e) {
+        // The component cannot be evaluated here (for example, because it
+        // exceeds the memory limit): plan without its rectangle.
+        AD_LOG_DEBUG << "Evaluating a part of the query at planning time "
+                        "failed: "
+                     << e.what() << std::endl;
+        continue;
+      }
+      if (result == nullptr || !result->isFullyMaterialized() ||
+          result->idTableView().numRows() > maxRows) {
+        continue;
+      }
+      // Every geometry variable that the component binds is fixed now (its
+      // values are known, so prefiltering its scans would be pointless),
+      // and gets the bounding rectangle of its geometries, if it has any.
+      for (const auto& boundVariable : edgeVariables) {
+        if (!cheapest._qet->isVariableCovered(boundVariable)) {
+          continue;
+        }
+        fixedVariables.insert(boundVariable);
+        if (auto rectangle = SpatialJoin::boundingRectangleOfColumn(
+                result->idTableView(),
+                cheapest._qet->getVariableColumn(boundVariable),
+                _qec->getIndex())) {
+          addRectangle(boundVariable, rectangle.value(), true);
+        }
+      }
+    }
+  }
+
   // What follows for the geometries of one side of a spatial join (the
   // target) from a rectangle that contains all geometries of its other side
   // (the source): they intersect that rectangle, padded by the maximal
@@ -2456,10 +2572,14 @@ void QueryPlanner::applyGeoRectanglePrefilters(
            sortedVariable.value().first == variable;
   };
 
-  // Prefilter the scans of every variable with a known rectangle (the fixed
-  // variables are bound by a `VALUES` or a `BIND`, so they have no scans).
+  // Prefilter the scans of every variable with a known rectangle, except the
+  // fixed variables: those are bound by a `VALUES`, a `BIND`, or a part of
+  // the query that was evaluated above, and their rectangle is their own.
   ad_utility::HashSet<Variable> prefilteredVariables;
   for (const auto& [geometryVariable, rectangles] : known) {
+    if (fixedVariables.contains(geometryVariable)) {
+      continue;
+    }
     const auto& rectangle = rectangles.any_.value();
     auto makePrefilter = [&rectangle, &geometryVariable]() {
       std::vector<Operation::PrefilterVariablePair> pairs;

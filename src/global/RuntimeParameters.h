@@ -158,6 +158,14 @@ struct RuntimeParameters {
   // prefilter-free baseline, or for debugging, as wrong results may be
   // related to the `PrefilterExpression`s.
   Bool enablePrefilterOnIndexScans_{true, "enable-prefilter-on-index-scans"};
+  // The query planner evaluates a small part of a query at planning time if
+  // that gives it the rectangle of a geometry variable of a spatial join
+  // (see `QueryPlanner::applyGeoRectanglePrefilters`), but only if the size
+  // and the cost estimates of the cheapest plan of that part are at most
+  // these values.
+  SizeT geoPrefilterPlanningMaxRows_{1'000, "geo-prefilter-planning-max-rows"};
+  SizeT geoPrefilterPlanningMaxCost_{10'000'000,
+                                     "geo-prefilter-planning-max-cost"};
   // The maximum number of threads to be used by the spatial join algorithms.
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
   // The maximum number of threads for the parallel counting loops of the
