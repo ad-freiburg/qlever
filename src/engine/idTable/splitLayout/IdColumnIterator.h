@@ -116,18 +116,15 @@ class BasicIdColumnIterator {
     return a.payload_ - b.payload_;
   }
 
-  // Only compares the payload because it only compares the pointers and so if
-  // the payload pointer points to the same rhs-pointer the datatype pointer
-  // can only be the same as rhs-datatype-pointer
+  // Compares only `payload_`: both pointers always advance together, so equal
+  // payload pointers imply equal datatype pointers (see the check below).
   auto compareThreeWay(const BasicIdColumnIterator& rhs) const {
     AD_EXPENSIVE_CHECK(payload_ != rhs.payload_ || datatype_ == rhs.datatype_);
     return ql::compareThreeWay(payload_, rhs.payload_);
   }
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(BasicIdColumnIterator)
 
-  // Only compares the payload because it only compares the pointers and so if
-  // the payload pointer points to the same rhs-pointer the datatype pointer
-  // can only be the same as rhs-datatype-pointer
+  // Compares only `payload_`, see `compareThreeWay`.
   bool operator==(const BasicIdColumnIterator& rhs) const {
     AD_EXPENSIVE_CHECK(payload_ != rhs.payload_ || datatype_ == rhs.datatype_);
     return payload_ == rhs.payload_;
