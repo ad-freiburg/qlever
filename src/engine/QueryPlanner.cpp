@@ -1850,10 +1850,11 @@ std::vector<std::vector<SubtreePlan>> QueryPlanner::fillDpTab(
   // add the respective query plans as filter substitutes.
   auto filtersAndOptSubstitutes = seedFilterSubstitutes(filters);
 
-  // A spatial join with a fixed geometry prefilters the scans of its other
-  // side once, here, and not once per candidate plan.
-  applyConstantGeometryPrefilters(initialPlans, filtersAndOptSubstitutes,
-                                  replacementPlans);
+  // The scans of the geometry variables of the spatial joins are prefiltered
+  // with the rectangles known for them once, here, and not once per
+  // candidate plan.
+  applyGeoRectanglePrefilters(initialPlans, filtersAndOptSubstitutes,
+                              replacementPlans);
 
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
@@ -2255,26 +2256,91 @@ void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
 }
 
 // _____________________________________________________________________________
-void QueryPlanner::applyConstantGeometryPrefilters(
+void QueryPlanner::applyGeoRectanglePrefilters(
     std::vector<SubtreePlan>& seeds, FiltersAndOptionalSubstitutes& filters,
     ReplacementPlans& replacementPlans) const {
   if (!getRuntimeParameter<
           &RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     return;
   }
+  using ad_utility::GeoRectangle;
 
-  // The rectangle of the fixed side of `spatialJoin` and the geometry
-  // variable of its other side, if one side is fixed: either a one-row
-  // `VALUES` that the rewriting of the filter attached as a child, or a
-  // variable bound by a `BIND` of a constant expression among the `seeds`
-  // (such a `BIND` is evaluated here, which is cheap: it has one row).
-  auto fixedSideRectangle = [this, &seeds](const SpatialJoin& spatialJoin)
-      -> std::optional<std::pair<ad_utility::GeoRectangle, Variable>> {
-    auto [leftVar, rightVar] = spatialJoin.getSpatialJoinVariables();
-    auto otherVariable = [&leftVar, &rightVar](const Variable& var) {
-      return var == leftVar ? rightVar : leftVar;
+  // The spatial joins among the filter substitutes, with their two geometry
+  // variables.
+  struct SpatialJoinEdge {
+    SpatialJoin* join_;
+    Variable left_;
+    Variable right_;
+  };
+  std::vector<SpatialJoinEdge> edges;
+  for (auto& filterAndSubst : filters) {
+    if (!filterAndSubst.hasSubstitute()) {
+      continue;
+    }
+    auto* spatialJoin = dynamic_cast<SpatialJoin*>(
+        filterAndSubst.substitute_->_qet->getRootOperation().get());
+    if (spatialJoin == nullptr) {
+      continue;
+    }
+    auto [left, right] = spatialJoin->getSpatialJoinVariables();
+    edges.push_back({spatialJoin, std::move(left), std::move(right)});
+  }
+  if (edges.empty()) {
+    return;
+  }
+  ad_utility::HashSet<Variable> edgeVariables;
+  for (const auto& edge : edges) {
+    edgeVariables.insert(edge.left_);
+    edgeVariables.insert(edge.right_);
+  }
+
+  // What is known about the geometries of a variable: a rectangle that every
+  // geometry intersects (`any_`, which is what the prefilters below need),
+  // and a rectangle that contains every geometry (`contained_`, which is
+  // what carries over to the other side of a spatial join, see
+  // `impliedRectangle` below). Each is the intersection of all rectangles of
+  // its kind known for the variable.
+  struct KnownRectangles {
+    std::optional<GeoRectangle> any_;
+    std::optional<GeoRectangle> contained_;
+  };
+  ad_utility::HashMap<Variable, KnownRectangles> known;
+  // Add `rectangle` to what is known about `variable`. Return true iff this
+  // changed something.
+  auto addRectangle = [&known](const Variable& variable,
+                               const GeoRectangle& rectangle, bool contained) {
+    auto intersectInto = [&rectangle](std::optional<GeoRectangle>& target) {
+      if (!target.has_value()) {
+        target = rectangle;
+        return true;
+      }
+      auto intersection =
+          ad_utility::intersectGeoRectangles(target.value(), rectangle);
+      // An empty intersection means that the query has no results; the
+      // previous rectangle is still valid, so keep it.
+      if (!intersection.has_value() || intersection.value() == target.value()) {
+        return false;
+      }
+      target = intersection.value();
+      return true;
     };
-    for (const auto* child : spatialJoin.getChildren()) {
+    auto& entry = known[variable];
+    bool changed = intersectInto(entry.any_);
+    if (contained) {
+      bool changedContained = intersectInto(entry.contained_);
+      changed = changed || changedContained;
+    }
+    return changed;
+  };
+
+  // The fixed sides of the spatial joins: a one-row `VALUES` that the
+  // rewriting of the filter attached as a child, or a variable bound by a
+  // `BIND` of a constant expression among the `seeds` (such a `BIND` is
+  // evaluated here, which is cheap: it has one row). The rectangle of a
+  // fixed side contains all of its geometries.
+  ad_utility::HashSet<Variable> fixedVariables;
+  for (const auto& edge : edges) {
+    for (const auto* child : edge.join_->getChildren()) {
       const auto* values =
           dynamic_cast<const Values*>(child->getRootOperation().get());
       if (values == nullptr) {
@@ -2286,38 +2352,94 @@ void QueryPlanner::applyConstantGeometryPrefilters(
         continue;
       }
       const auto& var = parsed._variables.at(0);
-      if (var != leftVar && var != rightVar) {
+      if (var != edge.left_ && var != edge.right_) {
         continue;
       }
       if (auto rectangle = sparqlExpression::geoRectangleOfConstantGeometry(
               parsed._values.at(0).at(0))) {
-        return std::pair{rectangle.value(), otherVariable(var)};
+        addRectangle(var, rectangle.value(), true);
+        fixedVariables.insert(var);
       }
     }
-    for (const auto& plan : seeds) {
-      const auto* bind =
-          dynamic_cast<const Bind*>(plan._qet->getRootOperation().get());
-      if (bind == nullptr) {
-        continue;
-      }
-      const auto& target = bind->bind()._target;
-      if ((target != leftVar && target != rightVar) ||
-          !bind->bind()._expression.getPimpl()->isConstantExpression()) {
-        continue;
-      }
-      auto result = plan._qet->getRootOperation()->getResult(
-          false, ComputationMode::FULLY_MATERIALIZED);
-      if (result == nullptr || !result->isFullyMaterialized()) {
-        continue;
-      }
-      if (auto rectangle = SpatialJoin::boundingRectangleOfColumn(
-              result->idTableView(), plan._qet->getVariableColumn(target),
-              _qec->getIndex())) {
-        return std::pair{rectangle.value(), otherVariable(target)};
-      }
+  }
+  for (const auto& plan : seeds) {
+    const auto* bind =
+        dynamic_cast<const Bind*>(plan._qet->getRootOperation().get());
+    if (bind == nullptr) {
+      continue;
     }
-    return std::nullopt;
+    const auto& target = bind->bind()._target;
+    if (!edgeVariables.contains(target) ||
+        !bind->bind()._expression.getPimpl()->isConstantExpression()) {
+      continue;
+    }
+    auto result = plan._qet->getRootOperation()->getResult(
+        false, ComputationMode::FULLY_MATERIALIZED);
+    if (result == nullptr || !result->isFullyMaterialized()) {
+      continue;
+    }
+    if (auto rectangle = SpatialJoin::boundingRectangleOfColumn(
+            result->idTableView(), plan._qet->getVariableColumn(target),
+            _qec->getIndex())) {
+      addRectangle(target, rectangle.value(), true);
+      fixedVariables.insert(target);
+    }
+  }
+
+  // What follows for the geometries of one side of a spatial join (the
+  // target) from a rectangle that contains all geometries of its other side
+  // (the source): they intersect that rectangle, padded by the maximal
+  // distance for a distance join. If the join requires the source to contain
+  // the target (`CONTAINS` or `COVERS` with the source on the left, `WITHIN`
+  // with the source on the right, or `EQUALS`), they even lie inside it, so
+  // that the rectangle carries over to further spatial joins of the target.
+  // Returns the rectangle and whether it contains the geometries of the
+  // target.
+  //
+  // NOTE: Every spatial join that substitutes a filter requires its two
+  // geometries to intersect, also a `DE9IM` one, because the rewriting of
+  // `geof:relate` only accepts patterns that imply an intersection (see
+  // `getDe9imRelationExpressionParameters`).
+  auto impliedRectangle =
+      [](const SpatialJoinEdge& edge, bool sourceIsLeft,
+         const GeoRectangle& sourceRectangle) -> std::pair<GeoRectangle, bool> {
+    const auto& join = *edge.join_;
+    auto type = join.getJoinType();
+    if (!type.has_value() || type.value() == SpatialJoinType::WITHIN_DIST) {
+      return {ad_utility::padGeoRectangle(sourceRectangle,
+                                          join.getMaxDist().value_or(0.0)),
+              false};
+    }
+    bool sourceContainsTarget =
+        type.value() == SpatialJoinType::EQUALS ||
+        ((type.value() == SpatialJoinType::CONTAINS ||
+          type.value() == SpatialJoinType::COVERS) &&
+         sourceIsLeft) ||
+        (type.value() == SpatialJoinType::WITHIN && !sourceIsLeft);
+    return {sourceRectangle, sourceContainsTarget};
   };
+
+  // Carry the rectangles over along the spatial joins until nothing changes
+  // (every round shrinks some rectangle, so this terminates; the bound on the
+  // rounds is only a safety net, stopping early is sound).
+  bool changed = true;
+  for (size_t round = 0; changed && round < 100; ++round) {
+    changed = false;
+    for (const auto& edge : edges) {
+      for (bool sourceIsLeft : {true, false}) {
+        const auto& source = sourceIsLeft ? edge.left_ : edge.right_;
+        const auto& target = sourceIsLeft ? edge.right_ : edge.left_;
+        auto it = known.find(source);
+        if (it == known.end() || !it->second.contained_.has_value()) {
+          continue;
+        }
+        auto [rectangle, contained] =
+            impliedRectangle(edge, sourceIsLeft, it->second.contained_.value());
+        bool changedTarget = addRectangle(target, rectangle, contained);
+        changed = changed || changedTarget;
+      }
+    }
+  }
 
   // The index scans among the `seeds` that bind `variable`, together with
   // whether the scan is sorted by it (then its blocks can be pruned).
@@ -2334,27 +2456,16 @@ void QueryPlanner::applyConstantGeometryPrefilters(
            sortedVariable.value().first == variable;
   };
 
-  for (auto& filterAndSubst : filters) {
-    if (!filterAndSubst.hasSubstitute()) {
-      continue;
-    }
-    auto* spatialJoin = dynamic_cast<SpatialJoin*>(
-        filterAndSubst.substitute_->_qet->getRootOperation().get());
-    if (spatialJoin == nullptr) {
-      continue;
-    }
-    auto rectangleAndVariable = fixedSideRectangle(*spatialJoin);
-    if (!rectangleAndVariable.has_value()) {
-      continue;
-    }
-    const auto& [rectangle, geometryVariable] = rectangleAndVariable.value();
-    auto paddedRectangle = ad_utility::padGeoRectangle(
-        rectangle, spatialJoin->getMaxDist().value_or(0.0));
-    auto makePrefilter = [&paddedRectangle, &geometryVariable]() {
+  // Prefilter the scans of every variable with a known rectangle (the fixed
+  // variables are bound by a `VALUES` or a `BIND`, so they have no scans).
+  ad_utility::HashSet<Variable> prefilteredVariables;
+  for (const auto& [geometryVariable, rectangles] : known) {
+    const auto& rectangle = rectangles.any_.value();
+    auto makePrefilter = [&rectangle, &geometryVariable]() {
       std::vector<Operation::PrefilterVariablePair> pairs;
       pairs.emplace_back(
           std::make_unique<prefilterExpressions::GeoRectangleExpression>(
-              paddedRectangle),
+              rectangle),
           geometryVariable);
       return pairs;
     };
@@ -2382,13 +2493,14 @@ void QueryPlanner::applyConstantGeometryPrefilters(
     if (!numCandidates.has_value()) {
       continue;
     }
+    prefilteredVariables.insert(geometryVariable);
     for (auto& plan : seeds) {
       if (scanBindsVariable(plan, geometryVariable) != std::optional{false}) {
         continue;
       }
       plan._qet = ad_utility::makeExecutionTree<GeoRectangleRowFilter>(
           _qec, plan._qet, plan._qet->getVariableColumn(geometryVariable),
-          paddedRectangle, numCandidates);
+          rectangle, numCandidates);
     }
     for (auto& row : replacementPlans) {
       for (auto& plan : row) {
@@ -2399,8 +2511,24 @@ void QueryPlanner::applyConstantGeometryPrefilters(
         }
       }
     }
-    spatialJoin->setGeometrySideSelectivity(
-        ad_utility::geoRectangleSelectivity(paddedRectangle));
+  }
+
+  // A spatial join between a fixed side and a prefiltered side is told the
+  // selectivity within the remaining rows of the prefiltered side. For a
+  // join between two prefiltered sides, the generic selectivity constant of
+  // the spatial join stays in place.
+  for (const auto& edge : edges) {
+    bool leftFixed = fixedVariables.contains(edge.left_);
+    bool rightFixed = fixedVariables.contains(edge.right_);
+    if (leftFixed == rightFixed) {
+      continue;
+    }
+    const auto& other = leftFixed ? edge.right_ : edge.left_;
+    if (!prefilteredVariables.contains(other)) {
+      continue;
+    }
+    edge.join_->setGeometrySideSelectivity(
+        ad_utility::geoRectangleSelectivity(known.at(other).any_.value()));
   }
 }
 

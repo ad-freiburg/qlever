@@ -285,7 +285,7 @@ class SpatialJoin : public Operation {
 
   // Set iff the rectangle of one side was known at planning time and the
   // scans of the other side were prefiltered with it (see
-  // `QueryPlanner::applyConstantGeometryPrefilters`): the estimated fraction
+  // `QueryPlanner::applyGeoRectanglePrefilters`): the estimated fraction
   // of the other side's remaining rows that lie in the rectangle. The size
   // estimate then uses it instead of the generic selectivity constant.
   std::optional<double> geometrySideSelectivity_;

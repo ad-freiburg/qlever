@@ -42,6 +42,8 @@ class GeoRectangleRowFilter : public Operation {
                         const ad_utility::GeoRectangle& rectangle,
                         std::optional<uint64_t> sizeEstimate = std::nullopt);
 
+  const ad_utility::GeoRectangle& rectangle() const { return rectangle_; }
+
   std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;

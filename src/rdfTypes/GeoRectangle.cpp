@@ -47,6 +47,18 @@ GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
 }
 
 // ____________________________________________________________________________
+std::optional<GeoRectangle> intersectGeoRectangles(const GeoRectangle& a,
+                                                   const GeoRectangle& b) {
+  GeoRectangle result{
+      std::max(a.minLng_, b.minLng_), std::max(a.minLat_, b.minLat_),
+      std::min(a.maxLng_, b.maxLng_), std::min(a.maxLat_, b.maxLat_)};
+  if (result.minLng_ > result.maxLng_ || result.minLat_ > result.maxLat_) {
+    return std::nullopt;
+  }
+  return result;
+}
+
+// ____________________________________________________________________________
 double geoRectangleSelectivity(const GeoRectangle& rectangle) {
   return std::clamp((rectangle.maxLng_ - rectangle.minLng_) / 360.0, 0.0, 1.0);
 }

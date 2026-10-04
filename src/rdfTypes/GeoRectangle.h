@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_RDFTYPES_GEORECTANGLE_H
 #define QLEVER_SRC_RDFTYPES_GEORECTANGLE_H
 
+#include <optional>
+
 #include "global/ValueId.h"
 
 namespace ad_utility {
@@ -32,6 +34,11 @@ struct GeoRectangle {
 // longitude range degrades to [-180, 180].
 GeoRectangle padGeoRectangle(const GeoRectangle& rectangle,
                              double distanceMeters);
+
+// The intersection of two rectangles, or `std::nullopt` if they do not
+// intersect.
+std::optional<GeoRectangle> intersectGeoRectangles(const GeoRectangle& a,
+                                                   const GeoRectangle& b);
 
 // The estimated fraction of the rows that the block prefilter
 // `GeoRectangleExpression` keeps for `rectangle` which actually lie inside

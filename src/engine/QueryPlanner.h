@@ -349,20 +349,23 @@ class QueryPlanner {
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 
-  // For each filter substitute that is a `SpatialJoin` with a fixed geometry
-  // on one side (a one-row `VALUES` created by the rewriting of the filter,
-  // or a variable bound by a `BIND` of a constant expression), prefilter the
-  // seeds of the triples that bind the geometry variable of the other side
-  // with the padded rectangle of that geometry: the scan that is sorted by
-  // the variable gets its blocks pruned, every scan that binds the variable
-  // gets a row filter with the same size estimate, and the spatial join is
-  // told the selectivity within the remaining rows (see
-  // `SpatialJoin::setGeometrySideSelectivity`). Replacement plans (from
-  // materialized views) get the prefilter forwarded to their scans. This is
-  // done once, before the dynamic programming, so that it costs one
-  // prefilter evaluation per permutation of the triple and not one per
-  // candidate plan; the DP then decides by cost where the spatial join goes.
-  void applyConstantGeometryPrefilters(
+  // Prefilter the seeds of the triples that bind a geometry variable of a
+  // spatial join (a filter substitute) with a rectangle that is known for
+  // that variable at planning time: the scan that is sorted by the variable
+  // gets its blocks pruned, every scan that binds the variable gets a row
+  // filter with the same size estimate, and replacement plans (from
+  // materialized views) get the prefilter forwarded to their scans. A
+  // rectangle is known for the fixed side of a spatial join (a one-row
+  // `VALUES` created by the rewriting of the filter, or a variable bound by a
+  // `BIND` of a constant expression), and it carries over to the other side
+  // of that join and from there along further spatial joins (see the
+  // implementation for the rules). A spatial join between a fixed side and a
+  // prefiltered side is told the selectivity within the remaining rows (see
+  // `SpatialJoin::setGeometrySideSelectivity`). This is done once, before the
+  // dynamic programming, so that it costs one prefilter evaluation per
+  // permutation of the triple and not one per candidate plan; the DP then
+  // decides by cost where the spatial joins go.
+  void applyGeoRectanglePrefilters(
       std::vector<SubtreePlan>& seeds, FiltersAndOptionalSubstitutes& filters,
       std::vector<std::vector<SubtreePlan>>& replacementPlans) const;
 
