@@ -69,6 +69,7 @@ LocatedTriplesPerBlock::getUpdatesIfPresent(size_t blockIndex) const {
 LocatedTriples& LocatedTriplesPerBlock::mutableBlock(size_t blockIndex,
                                                      size_t numNewTriples) {
   unconsolidatedBlocks_.insert(blockIndex);
+  blocksWithUpdatedTriples_.insert(blockIndex);
   auto& block = map_[blockIndex];
   // Clone a shared block with spare capacity for the new triples. The clone
   // made by `write()` would have no spare capacity, so that inserting the new
@@ -483,6 +484,13 @@ bool LocatedTriplesPerBlock::containsLocatedTriplesInBlockRange(
 void LocatedTriplesPerBlock::setOriginalMetadata(
     std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata) {
   originalMetadata_ = std::move(metadata);
+  // The augmented metadata was computed from the previous original metadata.
+  // Discard it and recompute the entries of all blocks that currently have
+  // located triples on the next update (normally there are none).
+  augmentedMetadata_.reset();
+  ql::ranges::copy(map_ | ql::views::keys,
+                   std::inserter(blocksWithUpdatedTriples_,
+                                 blocksWithUpdatedTriples_.end()));
 }
 
 // Update the `blockMetadata`, such that its graph info is consistent with the
@@ -517,34 +525,60 @@ void updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
 
 // ____________________________________________________________________________
 void LocatedTriplesPerBlock::updateAugmentedMetadata() {
-  // TODO<C++23> use view::enumerate
-  size_t blockIndex = 0;
-  // Copy to preserve originalMetadata_.
+  // Nothing to do if no block has changed since the last call.
+  if (blocksWithUpdatedTriples_.empty()) {
+    return;
+  }
   if (!originalMetadata_.has_value()) {
     AD_LOG_WARN << "The original metadata has not been set, but updates are "
                    "being performed. This should only happen in unit tests\n";
-    augmentedMetadata_.emplace();
-  } else {
-    augmentedMetadata_ = *originalMetadata_.value();
+    originalMetadata_ =
+        std::make_shared<const std::vector<CompressedBlockMetadata>>();
   }
-  for (auto& blockMetadata : augmentedMetadata_.value()) {
-    if (auto blockUpdates = getUpdatesIfPresent(blockIndex)) {
-      blockMetadata.firstTriple_ =
-          std::min(blockMetadata.firstTriple_,
-                   blockUpdates->front().triple_.toPermutedTriple());
-      blockMetadata.lastTriple_ =
-          std::max(blockMetadata.lastTriple_,
-                   blockUpdates->back().triple_.toPermutedTriple());
-      updateGraphMetadata(blockMetadata, *blockUpdates);
+  const auto& original = *originalMetadata_.value();
+  const size_t numOriginalBlocks = original.size();
+  if (!augmentedMetadata_.has_value()) {
+    augmentedMetadata_.emplace(original);
+  }
+  auto& augmented = augmentedMetadata_.value();
+
+  // Recompute the entry of each changed block from its original metadata and
+  // its current located triples (if any). Blocks with an index larger than
+  // `numOriginalBlocks` can only occur when the original metadata was not set
+  // (see the warning above); they cannot be represented in the augmented
+  // metadata and are ignored.
+  for (size_t blockIndex : blocksWithUpdatedTriples_) {
+    if (blockIndex > numOriginalBlocks) {
+      continue;
     }
-    blockIndex++;
-  }
-  // Also account for the last block that contains the triples that are larger
-  // than all the inserted triples.
-  if (auto blockUpdates = getUpdatesIfPresent(blockIndex)) {
+    auto blockUpdates = getUpdatesIfPresent(blockIndex);
+    if (blockIndex < numOriginalBlocks) {
+      auto& blockMetadata = augmented.mutableAt(blockIndex);
+      blockMetadata = original[blockIndex];
+      if (blockUpdates.has_value()) {
+        blockMetadata.firstTriple_ =
+            std::min(blockMetadata.firstTriple_,
+                     blockUpdates->front().triple_.toPermutedTriple());
+        blockMetadata.lastTriple_ =
+            std::max(blockMetadata.lastTriple_,
+                     blockUpdates->back().triple_.toPermutedTriple());
+        updateGraphMetadata(blockMetadata, *blockUpdates);
+      }
+      continue;
+    }
+
+    // The block after the last original block. It contains the triples that
+    // are larger than all triples of the original index and exists in the
+    // augmented metadata iff there currently are such triples.
+    bool hasBlockAfterLast = augmented.size() > numOriginalBlocks;
+    if (!blockUpdates.has_value()) {
+      if (hasBlockAfterLast) {
+        augmented.pop_back();
+      }
+      continue;
+    }
     auto firstTriple = blockUpdates->front().triple_.toPermutedTriple();
     auto lastTriple = blockUpdates->back().triple_.toPermutedTriple();
-
     // The first `std::nullopt` means that this block contains only
     // `LocatedTriple`s.
     CompressedBlockMetadataNoBlockIndex lastBlockN{
@@ -552,12 +586,36 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     lastBlockN.graphInfo_.emplace();
     CompressedBlockMetadata lastBlock{lastBlockN, blockIndex};
     updateGraphMetadata(lastBlock, *blockUpdates);
-    augmentedMetadata_->push_back(lastBlock);
-
-    AD_CORRECTNESS_CHECK(
-        CompressedBlockMetadata::checkInvariantsForSortedBlocks(
-            *augmentedMetadata_));
+    if (hasBlockAfterLast) {
+      augmented.mutableAt(blockIndex) = std::move(lastBlock);
+    } else {
+      augmented.push_back(std::move(lastBlock));
+    }
   }
+  blocksWithUpdatedTriples_.clear();
+
+  AD_EXPENSIVE_CHECK(CompressedBlockMetadata::checkInvariantsForSortedBlocks(
+      getAugmentedMetadataForTesting()));
+}
+
+// ____________________________________________________________________________
+std::vector<BlockMetadataSpan> LocatedTriplesPerBlock::getAugmentedMetadata()
+    const {
+  if (augmentedMetadata_.has_value()) {
+    return augmentedMetadata_->chunkSpans();
+  }
+  AD_CONTRACT_CHECK(originalMetadata_.has_value());
+  return {BlockMetadataSpan{*originalMetadata_.value()}};
+}
+
+// ____________________________________________________________________________
+std::vector<CompressedBlockMetadata>
+LocatedTriplesPerBlock::getAugmentedMetadataForTesting() const {
+  std::vector<CompressedBlockMetadata> result;
+  for (const auto& chunk : getAugmentedMetadata()) {
+    result.insert(result.end(), chunk.begin(), chunk.end());
+  }
+  return result;
 }
 
 // ____________________________________________________________________________

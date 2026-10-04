@@ -294,12 +294,49 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
   if (it != prefilterVariablePairs.end()) {
-    const auto& blockMetadataRanges =
-        prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
-            it->first->evaluate(getIndex(),
-                                getScanSpecAndBlocks().getBlockMetadataSpan(),
-                                colIndex),
-            scanSpecAndBlocks_.blockMetadata_);
+    // The freshly computed (not yet prefiltered) block metadata of this scan
+    // consists of one contiguous range per chunk of the augmented metadata
+    // (see `LocatedTriplesPerBlock::getAugmentedMetadata`). The current block
+    // metadata (possibly prefiltered before) consists of sub-ranges of these
+    // fresh ranges, in the same order.
+    const auto& currentRanges = scanSpecAndBlocks_.blockMetadata_;
+    auto currentIt = currentRanges.begin();
+    auto isSubrangeOf = [](const BlockMetadataRange& sub,
+                           const BlockMetadataRange& range) {
+      // `std::less` gives a total order also for iterators into different
+      // chunks, where the built-in `<` is unspecified.
+      return !std::less<>{}(sub.begin(), range.begin()) &&
+             !std::less<>{}(range.end(), sub.end());
+    };
+
+    // Evaluate the prefilter on each fresh range and intersect the result with
+    // the current ranges inside it. Evaluating per range is conservative (it
+    // yields a superset of the relevant blocks). Intersecting only ranges from
+    // the same chunk matters, because `getIntersectionOfBlockRanges` compares
+    // iterators, which is only meaningful within one contiguous chunk.
+    BlockMetadataRanges blockMetadataRanges;
+    for (const BlockMetadataRange& freshRange :
+         getScanSpecAndBlocks().blockMetadata_) {
+      BlockMetadataRanges currentRangesInFreshRange;
+      while (currentIt != currentRanges.end() &&
+             isSubrangeOf(*currentIt, freshRange)) {
+        currentRangesInFreshRange.push_back(*currentIt);
+        ++currentIt;
+      }
+      if (currentRangesInFreshRange.empty()) {
+        continue;
+      }
+      ql::ranges::move(
+          prefilterExpressions::detail::logicalOps::
+              getIntersectionOfBlockRanges(
+                  it->first->evaluate(
+                      getIndex(),
+                      BlockMetadataSpan{freshRange.begin(), freshRange.end()},
+                      colIndex),
+                  currentRangesInFreshRange),
+          std::back_inserter(blockMetadataRanges));
+    }
+    AD_CORRECTNESS_CHECK(currentIt == currentRanges.end());
 
     return makeCopyWithPrefilteredScanSpecAndBlocks(
         {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
