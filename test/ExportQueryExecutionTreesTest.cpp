@@ -2325,3 +2325,18 @@ TEST(ExportQueryExecutionTrees, PostQueryValuesWithoutVariables) {
   EXPECT_EQ(run("()"), "?s\n<a>\n<d>\n");
   EXPECT_EQ(run("() ()"), "?s\n<a>\n<d>\n<a>\n<d>\n");
 }
+
+// The trailing `VALUES` clause is joined before the projection, so `SELECT *`
+// also selects its variables.
+TEST(ExportQueryExecutionTrees, SelectStarWithTrailingValues) {
+  const std::string kg = "<a> <p> <c> . <b> <p> <d> .";
+  auto run = [&kg](std::string_view query) {
+    return runQueryStreamableResult(kg, std::string{query},
+                                    ad_utility::MediaType::tsv);
+  };
+  EXPECT_EQ(run("SELECT * { ?s <p> ?o } VALUES ?x { 1 }"),
+            "?s\t?o\t?x\n<a>\t<c>\t1\n<b>\t<d>\t1\n");
+  // A variable that also occurs in the query body is selected only once.
+  EXPECT_EQ(run("SELECT * { ?s <p> ?o } VALUES (?s ?x) { (<a> 1) }"),
+            "?s\t?o\t?x\n<a>\t<c>\t1\n");
+}
