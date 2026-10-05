@@ -515,6 +515,7 @@ class GroupByImpl : public Operation {
   // Check if hash map optimization is applicable. This is the case when
   // the following conditions hold true:
   // - Runtime parameter is set
+  // - There is at least one GROUP BY column
   // - Child operation is SORT
   std::optional<HashMapOptimizationData> checkIfHashMapOptimizationPossible(
       std::vector<Aggregate>& aggregates) const;

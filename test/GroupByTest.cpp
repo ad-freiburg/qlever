@@ -3584,7 +3584,6 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_NE(table(0, 1), table(1, 1));
 }
 
-// _____________________________________________________________________________
 // A `GROUP BY` on unbound variables has one group for a non-empty input, but,
 // unlike an implicit `GROUP BY`, none for an empty input.
 TEST(GroupBy, GroupByUnboundVariable) {
@@ -3687,4 +3686,44 @@ TEST(GroupBy, GroupByUnboundVariable) {
   EXPECT_THAT(groupByUnbound, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getCacheKey(), groupByUnbound.getCacheKey());
   EXPECT_TRUE(clone->knownEmptyResult());
+}
+
+// The hash map optimization doesn't support GROUP BYs without GROUP BY columns.
+// It used to be applied to them anyway (if the input is a `Sort`), which
+// crashed for a non-empty input and returned no row for an empty input with an
+// implicit `GROUP BY`.
+TEST(GroupBy, HashMapOptimizationWithoutGroupByColumns) {
+  auto* qec = getQec();
+  Variable x{"?x"};
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
+          true);
+
+  auto compute = [&](IdTable input, std::vector<Variable> groupByVariables) {
+    qec->getQueryTreeCache().clearAll();
+    auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(input), std::vector<std::optional<Variable>>{x});
+    auto sorted = ad_utility::makeExecutionTree<Sort>(
+        qec, std::move(values), std::vector<ColumnIndex>{0});
+    GroupByImpl groupBy{
+        qec,
+        std::move(groupByVariables),
+        {Alias{SparqlExpressionPimpl{
+                   std::make_unique<SumExpression>(
+                       false, std::make_unique<VariableExpression>(x)),
+                   "SUM(?x)"},
+               Variable{"?sum"}}},
+        std::move(sorted)};
+    return groupBy.computeResultOnlyForTesting(false).idTableView().clone();
+  };
+
+  auto emptyInput = [qec]() { return IdTable{1, qec->getAllocator()}; };
+  auto nonEmptyInput = []() { return makeIdTableFromVector({{I(1)}, {I(2)}}); };
+  Variable unbound{"?unbound"};
+
+  EXPECT_EQ(compute(emptyInput(), {}), makeIdTableFromVector({{I(0)}}));
+  EXPECT_EQ(compute(nonEmptyInput(), {}), makeIdTableFromVector({{I(3)}}));
+  EXPECT_EQ(compute(emptyInput(), {unbound}).numRows(), 0);
+  EXPECT_EQ(compute(nonEmptyInput(), {unbound}),
+            makeIdTableFromVector({{I(3)}}));
 }

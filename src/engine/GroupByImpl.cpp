@@ -1250,6 +1250,11 @@ GroupByImpl::checkIfHashMapOptimizationPossible(
     return std::nullopt;
   }
 
+  // The hash map needs at least one GROUP BY column.
+  if (_groupByVariables.empty()) {
+    return std::nullopt;
+  }
+
   if (!std::dynamic_pointer_cast<const Sort>(_subtree->getRootOperation())) {
     return std::nullopt;
   }
