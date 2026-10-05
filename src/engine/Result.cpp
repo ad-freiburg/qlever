@@ -20,9 +20,15 @@
 
 namespace {
 qlm::vector<ColumnIndex> toQlmSortedColumns(
-    std::vector<ColumnIndex> sortedColumns,
-    const qlever::Allocator<Id>& allocator) {
-  return {sortedColumns.begin(), sortedColumns.end(), allocator};
+    const std::vector<ColumnIndex>& sortedColumns) {
+  return {sortedColumns.begin(), sortedColumns.end(),
+          qlever::makeUnlimitedAllocator<ColumnIndex>()};
+}
+
+qlm::vector<ColumnIndex> toQlmSortedColumns(
+    std::initializer_list<ColumnIndex> sortedColumns) {
+  return {sortedColumns.begin(), sortedColumns.end(),
+          qlever::makeUnlimitedAllocator<ColumnIndex>()};
 }
 }  // namespace
 
@@ -91,15 +97,12 @@ Result::Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
 
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
-    : Result{std::move(idTable),
-             toQlmSortedColumns(std::move(sortedBy), idTable.getAllocator()),
+    : Result{std::move(idTable), toQlmSortedColumns(sortedBy),
              std::move(localVocab)} {}
 
 Result::Result(IdTable idTable, std::initializer_list<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
-    : Result{std::move(idTable),
-             qlm::vector<ColumnIndex>{sortedBy.begin(), sortedBy.end(),
-                                      idTable.getAllocator()},
+    : Result{std::move(idTable), toQlmSortedColumns(sortedBy),
              std::move(localVocab)} {}
 
 // _____________________________________________________________________________
@@ -125,15 +128,12 @@ Result::Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
 
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
-    : Result{std::move(idTable),
-             toQlmSortedColumns(std::move(sortedBy), idTable.getAllocator()),
+    : Result{std::move(idTable), toQlmSortedColumns(sortedBy),
              std::move(localVocab)} {}
 
 Result::Result(IdTable idTable, std::initializer_list<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
-    : Result{std::move(idTable),
-             qlm::vector<ColumnIndex>{sortedBy.begin(), sortedBy.end(),
-                                      idTable.getAllocator()},
+    : Result{std::move(idTable), toQlmSortedColumns(sortedBy),
              std::move(localVocab)} {}
 
 // _____________________________________________________________________________
@@ -148,15 +148,12 @@ Result::Result(IdTableView<0> view, qlm::vector<ColumnIndex> sortedBy,
 
 Result::Result(IdTableView<0> view, std::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
-    : Result{std::move(view),
-             toQlmSortedColumns(std::move(sortedBy), view.getAllocator()),
+    : Result{std::move(view), toQlmSortedColumns(sortedBy),
              std::move(localVocab)} {}
 
 Result::Result(IdTableView<0> view, std::initializer_list<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
-    : Result{std::move(view),
-             qlm::vector<ColumnIndex>{sortedBy.begin(), sortedBy.end(),
-                                      view.getAllocator()},
+    : Result{std::move(view), toQlmSortedColumns(sortedBy),
              std::move(localVocab)} {}
 
 // _____________________________________________________________________________
@@ -165,16 +162,12 @@ Result::Result(IdTableVocabPair pair, qlm::vector<ColumnIndex> sortedBy)
              std::move(pair.localVocab_)} {}
 
 Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
-    : Result{
-          std::move(pair.idTable_),
-          toQlmSortedColumns(std::move(sortedBy), pair.idTable_.getAllocator()),
-          std::move(pair.localVocab_)} {}
+    : Result{std::move(pair.idTable_), toQlmSortedColumns(sortedBy),
+             std::move(pair.localVocab_)} {}
 
 Result::Result(IdTableVocabPair pair,
                std::initializer_list<ColumnIndex> sortedBy)
-    : Result{std::move(pair.idTable_),
-             qlm::vector<ColumnIndex>{sortedBy.begin(), sortedBy.end(),
-                                      pair.idTable_.getAllocator()},
+    : Result{std::move(pair.idTable_), toQlmSortedColumns(sortedBy),
              std::move(pair.localVocab_)} {}
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -183,10 +176,7 @@ Result::Result(Generator idTables, qlm::vector<ColumnIndex> sortedBy)
     : Result{LazyResult{std::move(idTables)}, std::move(sortedBy)} {}
 
 Result::Result(Generator idTables, std::initializer_list<ColumnIndex> sortedBy)
-    : Result{LazyResult{std::move(idTables)},
-             qlm::vector<ColumnIndex>{
-                 sortedBy.begin(), sortedBy.end(),
-                 qlever::makeUnlimitedAllocator<ColumnIndex>()}} {}
+    : Result{LazyResult{std::move(idTables)}, toQlmSortedColumns(sortedBy)} {}
 #endif
 
 // _____________________________________________________________________________
@@ -209,10 +199,7 @@ Result::Result(LazyResult idTables, qlm::vector<ColumnIndex> sortedBy)
       sortedBy_{std::move(sortedBy)} {}
 
 Result::Result(LazyResult idTables, std::initializer_list<ColumnIndex> sortedBy)
-    : Result{std::move(idTables),
-             qlm::vector<ColumnIndex>{
-                 sortedBy.begin(), sortedBy.end(),
-                 qlever::makeUnlimitedAllocator<ColumnIndex>()}} {}
+    : Result{std::move(idTables), toQlmSortedColumns(sortedBy)} {}
 
 namespace {
 // _____________________________________________________________________________

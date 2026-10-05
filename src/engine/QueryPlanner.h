@@ -69,7 +69,7 @@ class QueryPlanner {
 
     TripleGraph& operator=(const TripleGraph& other);
 
-    TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
+    TripleGraph(const TripleGraph& other, const vector<size_t>& keepNodes);
 
     struct Node {
       Node(size_t id, SparqlTriple t,

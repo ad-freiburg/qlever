@@ -235,37 +235,42 @@ qlm::string SpatialJoin::getCacheKeyImpl() const {
 }
 
 // ____________________________________________________________________________
+namespace {
+std::string describeLibSpatialJoin(const std::string& left,
+                                   const std::string& right,
+                                   const LibSpatialJoinConfig& config) {
+  auto descriptor = absl::StrCat("Spatial Join of ", left, " and ", right,
+                                 " using ", config.joinType_);
+  if (config.de9imFilter_.has_value()) {
+    absl::StrAppend(&descriptor, " (",
+                    std::string_view{config.de9imFilter_->data(),
+                                     config.de9imFilter_->size()},
+                    ")");
+  }
+  return descriptor;
+}
+}  // namespace
+
+// ____________________________________________________________________________
 qlm::string SpatialJoin::getDescriptor() const {
   // Build different descriptors depending on the configuration
-  auto visitor = [this](const auto& config) -> qlm::string {
+  auto visitor = [this](const auto& config) {
     using T = std::decay_t<decltype(config)>;
-    // Joined Variables
-    auto left = config_.left_.name();
-    auto right = config_.right_.name();
-
-    // Config type
+    const auto& left = config_.left_.name();
+    const auto& right = config_.right_.name();
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
-      return qlm::string{absl::StrCat("MaxDistJoin ", left, " to ", right,
-                                      " of ", config.maxDist_, " meter(s)"),
-                         allocator()};
+      return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
+                          config.maxDist_, " meter(s)");
     } else if constexpr (std::is_same_v<T, LibSpatialJoinConfig>) {
-      auto descriptor = absl::StrCat("Spatial Join of ", left, " and ", right,
-                                     " using ", config.joinType_);
-      if (config.de9imFilter_.has_value()) {
-        absl::StrAppend(&descriptor, " (",
-                        std::string_view{config.de9imFilter_->data(),
-                                         config.de9imFilter_->size()},
-                        ")");
-      }
-      return qlm::string{descriptor, allocator()};
+      return describeLibSpatialJoin(left, right, config);
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
-      return qlm::string{absl::StrCat("NearestNeighborsJoin ", left, " to ",
-                                      right, " of max. ", config.maxResults_),
-                         allocator()};
+      return absl::StrCat("NearestNeighborsJoin ", left, " to ", right,
+                          " of max. ", config.maxResults_);
     }
   };
-  return std::visit(visitor, config_.task_);
+  const auto descriptor = std::visit(visitor, config_.task_);
+  return {descriptor.begin(), descriptor.end(), allocator()};
 }
 
 // ____________________________________________________________________________

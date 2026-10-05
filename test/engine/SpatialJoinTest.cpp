@@ -948,6 +948,20 @@ TEST(SpatialJoin, getDescriptorLibSJWithJoinType) {
 }
 
 // _____________________________________________________________________________
+TEST(SpatialJoin, getSpatialJoinVariables) {
+  Variable left{"?subject"};
+  Variable right{"?object"};
+  auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+      getQec(), SpatialJoinConfiguration{MaxDistanceConfig{1000}, left, right},
+      std::nullopt, std::nullopt);
+  auto* spatialJoin =
+      static_cast<SpatialJoin*>(spatialJoinOperation->getRootOperation().get());
+  auto [actualLeft, actualRight] = spatialJoin->getSpatialJoinVariables();
+  EXPECT_EQ(actualLeft, left);
+  EXPECT_EQ(actualRight, right);
+}
+
+// _____________________________________________________________________________
 TEST(SpatialJoin, getCacheKeyImpl) {
   auto qec = buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;

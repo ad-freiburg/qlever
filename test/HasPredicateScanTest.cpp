@@ -501,3 +501,33 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntitiesWithDeltaTriples) {
   EXPECT_EQ(indexScan->getRootOperation()->runtimeInfo().status_,
             RuntimeInformation::Status::lazilyMaterializedCompleted);
 }
+
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, descriptorAndSortOrderForAllScanTypes) {
+  auto hasPredicate = iri(HAS_PREDICATE_PREDICATE);
+
+  HasPredicateScan freeS{
+      qec, SparqlTriple{Variable{"?x"}, hasPredicate, iri("<p>")}};
+  EXPECT_THAT(freeS.getDescriptor(),
+              ::testing::StartsWith("HasPredicateScan free subject: "));
+  EXPECT_THAT(freeS.resultSortedOn(), ::testing::IsEmpty());
+
+  HasPredicateScan freeO{
+      qec, SparqlTriple{iri("<x>"), hasPredicate, Variable{"?p"}}};
+  EXPECT_THAT(freeO.getDescriptor(),
+              ::testing::StartsWith("HasPredicateScan free object: "));
+  EXPECT_THAT(freeO.resultSortedOn(), ::testing::ElementsAre(0));
+
+  HasPredicateScan fullScan{
+      qec, SparqlTriple{Variable{"?s"}, hasPredicate, Variable{"?p"}}};
+  EXPECT_EQ(fullScan.getDescriptor(), "HasPredicateScan full scan");
+  EXPECT_THAT(fullScan.resultSortedOn(), ::testing::ElementsAre(0));
+
+  HasPredicateScan subquery{qec,
+                            ad_utility::makeExecutionTree<ValuesForTesting>(
+                                qec, makeIdTableFromVector({{0}}),
+                                std::vector<std::optional<V>>{{V{"?p"}}}),
+                            0, V{"?x"}};
+  EXPECT_EQ(subquery.getDescriptor(), "HasPredicateScan with subquery");
+  EXPECT_NO_THROW(subquery.resultSortedOn());
+}

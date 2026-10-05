@@ -2117,9 +2117,7 @@ QueryPlanner::vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(
     const std::vector<std::pair<Node, std::vector<size_t>>>& init)
-    : _adjLists(qlever::makeUnlimitedAllocator<vector<size_t>>()),
-      _nodeMap(),
-      _nodeStorage() {
+    : _adjLists(qlever::makeUnlimitedAllocator<vector<size_t>>()) {
   for (const std::pair<Node, std::vector<size_t>>& p : init) {
     _nodeStorage.push_back(p.first);
     _nodeMap[p.first.id_] = &_nodeStorage.back();
@@ -2130,10 +2128,8 @@ QueryPlanner::TripleGraph::TripleGraph(
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
-                                       vector<size_t> keepNodes)
-    : _adjLists(qlever::makeUnlimitedAllocator<vector<size_t>>()),
-      _nodeMap(),
-      _nodeStorage() {
+                                       const vector<size_t>& keepNodes)
+    : _adjLists(qlever::makeUnlimitedAllocator<vector<size_t>>()) {
   ad_utility::HashSet<size_t> keep;
   for (auto v : keepNodes) {
     keep.insert(v);
@@ -2185,9 +2181,7 @@ QueryPlanner::TripleGraph& QueryPlanner::TripleGraph::operator=(
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph()
-    : _adjLists(qlever::makeUnlimitedAllocator<vector<size_t>>()),
-      _nodeMap(),
-      _nodeStorage() {}
+    : _adjLists(qlever::makeUnlimitedAllocator<vector<size_t>>()) {}
 
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isSimilar(
@@ -2751,7 +2745,7 @@ auto QueryPlanner::createMaterializedViewJoinReplacements(
     size_t numCoveredTriples = absl::popcount(coveredTriples);
     // Empty vectors of replacement plans for smaller numbers of triples.
     for (size_t i = plans.size(); i < numCoveredTriples; ++i) {
-      plans.push_back(PlanVec{allocatorForType<SubtreePlan>(_qec)});
+      plans.emplace_back(allocatorForType<SubtreePlan>(_qec));
     }
     plans.at(numCoveredTriples - 1).push_back(std::move(plan));
   }
