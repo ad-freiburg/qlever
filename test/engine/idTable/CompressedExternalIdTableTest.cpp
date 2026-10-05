@@ -1065,27 +1065,24 @@ TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
     // A spill file is created with the first block that its chunk spills, so
     // there is none before the merge has produced anything. The chunks that
     // this thread does not consume yet run ahead and spill, so files appear
-    // although nothing is consumed here. Poll for that, because it happens on
+    // although nothing is consumed here. Wait for that, because it happens on
     // the threads of the merge executor.
     SpillFiles spilled;
-    for (size_t i = 0; i < 1000 && spilled.totalSize_ == 0; ++i) {
+    ASSERT_TRUE(waitUntil([&spilled, &spillPrefix] {
       spilled = currentSpillFiles(spillPrefix);
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+      return spilled.totalSize_ > 0;
+    }));
     EXPECT_GT(spilled.numFiles_, 0u);
-    EXPECT_GT(spilled.totalSize_, 0u);
     table = idTableFromBlockGenerator(blocks);
     // Every chunk that was fully consumed has its file deleted, so nothing is
     // left over even though neither the merge nor the sorter is destroyed yet.
     // That deletion is only posted to the merge executor when the chunk is
     // finished, see `ChunkQueue::finish`, so the last file may still exist
-    // for a moment after its last block was consumed. Poll for that as well.
-    size_t numLeftoverFiles = currentSpillFiles(spillPrefix).numFiles_;
-    for (size_t i = 0; i < 1000 && numLeftoverFiles != 0; ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-      numLeftoverFiles = currentSpillFiles(spillPrefix).numFiles_;
-    }
-    EXPECT_EQ(numLeftoverFiles, 0u);
+    // for a moment after its last block was consumed. Wait for that as well.
+    waitUntil([&spillPrefix] {
+      return currentSpillFiles(spillPrefix).numFiles_ == 0;
+    });
+    EXPECT_EQ(currentSpillFiles(spillPrefix).numFiles_, 0u);
   }
   workGuard.reset();
   workers.clear();
