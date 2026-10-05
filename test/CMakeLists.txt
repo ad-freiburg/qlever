@@ -330,6 +330,8 @@ addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
 addLinkAndDiscoverTestNoLibs(CompactStringVectorTest sparqlParser)
 
+addLinkAndDiscoverTestNoLibs(OwnedOrViewedVectorTest)
+
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
 addLinkAndDiscoverTest(ContentEncodingHelperTest http)
@@ -341,6 +343,8 @@ addLinkAndDiscoverTest(VocabularyTest vocabulary)
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
+
+addLinkAndDiscoverTestNoLibs(UniqueBlockViewTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
