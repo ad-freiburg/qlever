@@ -506,9 +506,9 @@ class ChunkQueue : public NoCopyNoMove,
       // a chunk has a single producer). That is safe, because a
       // `CompressedBlockFile` synchronizes its operations internally. The
       // block becomes readable as soon as `writeBlock` has returned,
-      // because neither an append nor a read goes through the buffer of the
-      // `FILE*`, and its chunk may indeed be consumed while further blocks are
-      // still being written.
+      // because neither the appends nor the reads of that file go through
+      // the buffer of the `FILE*`, and its chunk may indeed be consumed
+      // while further blocks are still being written.
       return writeBlock(*file, block, 0, block.numRows());
     };
     BlockMetadata metadata = co_await runFunctionOnExecutor(

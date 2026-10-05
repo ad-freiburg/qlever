@@ -328,6 +328,8 @@ addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
 addLinkAndDiscoverTestNoLibs(CompactStringVectorTest sparqlParser)
 
+addLinkAndDiscoverTestNoLibs(OwnedOrViewedVectorTest)
+
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
 addLinkAndDiscoverTest(ContentEncodingHelperTest http)
@@ -339,6 +341,8 @@ addLinkAndDiscoverTest(VocabularyTest vocabulary)
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(UniqueBlockViewTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
@@ -487,6 +491,8 @@ addLinkAndDiscoverTest(CtreHelpersTest)
 addLinkAndDiscoverTest(ComparisonWithNanTest)
 
 addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
+
+addLinkAndDiscoverTestNoLibs(RecyclingPoolTest)
 
 addLinkAndDiscoverTest(IdTableHelpersTest)
 

@@ -25,6 +25,7 @@
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "engine/CallFixedSize.h"
+#include "engine/idTable/AsyncIdTablePusher.h"
 #include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
 #include "engine/idTable/ExternalSorterSettings.h"
 #include "engine/idTable/IdTable.h"
@@ -253,9 +254,8 @@ class CompressedExternalIdTableWriter {
       // lock that a write at the shared file position would need. Only the
       // positioned `read` and `write` are used on this file.
       auto offset = nextOffset_.fetch_add(static_cast<off_t>(numBytes));
-      auto numBytesWritten = file_.rlock()->write(data, numBytes, offset);
-      AD_CORRECTNESS_CHECK(numBytesWritten == static_cast<ssize_t>(numBytes),
-                           "Writing a block to a temporary file failed");
+      // NOTE: This throws if not all the bytes could be written.
+      file_.rlock()->write(data, numBytes, offset);
       return static_cast<size_t>(offset);
     };
     if (!compressionLevel_.has_value()) {
@@ -687,6 +687,14 @@ class SortBlockBuffer {
         numColumns_{numColumns},
         table_{numColumns_, allocator_} {}
 
+  // Construct a buffer that holds the rows of the `table`, which the
+  // `AsyncIdTablePusher` of a concurrent push hands over as a complete block,
+  // see `CompressedExternalIdTableBase::setAsyncPushExecutor`.
+  SortBlockBuffer(ColumnMajor table, AllocatorWithLimit<Id> allocator)
+      : allocator_{std::move(allocator)},
+        numColumns_{table.numColumns()},
+        table_{std::move(table)} {}
+
   // Simple getters.
   size_t numColumns() const { return numColumns_; }
   const AllocatorWithLimit<Id>& allocator() const { return allocator_; }
@@ -706,35 +714,6 @@ class SortBlockBuffer {
 
   // Make room for `numRows` rows.
   void reserve(size_t numRows) { table_.reserve(numRows); }
-
-  // Make this buffer hold exactly `numRows` rows. Rows that are added by this
-  // are not initialized (the underlying storage uses a
-  // `default_init_allocator`), and rows that are removed by it keep their
-  // memory, so that growing to the same size again is free. This is what makes
-  // the concurrent filling of a buffer possible, see
-  // `CompressedExternalIdTableBase::pushBlockConcurrently`.
-  void resize(size_t numRows) { table_.resize(numRows); }
-
-  // Copy the rows `[beginRow, endRow)` of the `table` into the already existing
-  // rows of this buffer that start at `targetRow`. In contrast to `insertAtEnd`
-  // below this doesn't change the size of this buffer, so several such copies
-  // into disjoint target ranges may run concurrently, see
-  // `CompressedExternalIdTableBase::pushBlockConcurrently`.
-  CPP_template(typename Table)(requires IdTableLike<Table>) void insertAt(
-      const Table& table, size_t beginRow, size_t endRow, size_t targetRow) {
-    AD_CONTRACT_CHECK(beginRow <= endRow && endRow <= table.numRows());
-    const size_t numNewRows = endRow - beginRow;
-    AD_CONTRACT_CHECK(targetRow + numNewRows <= numRows());
-    for (size_t col = 0; col < numColumns_; ++col) {
-      auto source = table.getColumn(col).subspan(beginRow, numNewRows);
-      auto destination = table_.getColumn(col).subspan(targetRow, numNewRows);
-      // NOTE: Deliberately use `std::copy` instead of `ql::ranges::copy`,
-      // because only the former is reliably turned into a `std::memmove` for
-      // trivially copyable value types like `Id`, see the NOTE in
-      // `IdTable::insertAtEnd`. This is the hot copy of a concurrent push.
-      std::copy(source.begin(), source.end(), destination.begin());
-    }
-  }
 
   // Append a single row, which may be anything that can be `push_back`ed to an
   // `IdTable` (in particular a row reference of one).
@@ -967,22 +946,11 @@ CPP_class_template(size_t NumStaticCols,
         .get();
   }
 
-  // The state of the concurrent pushing of blocks, see
-  // `pushBlockConcurrently`. While that mode is active, the `currentBlock_` is
-  // resized to a complete block up front, and `numRowsReserved_` (and not the
-  // size of the buffer) is the number of rows that have actually been pushed.
-  // All three members are protected by the `concurrentPushMutex_`, and the
-  // condition variable is notified whenever one of them changes.
-  std::mutex concurrentPushMutex_;
-  std::condition_variable concurrentPushCv_;
-  bool blockIsResizedForConcurrentPush_ = false;
-  // The number of rows of the `currentBlock_` that have been handed out to
-  // pushers, which is also the position at which the next pusher may copy.
-  size_t numRowsReserved_ = 0;
-  // The number of pushers that currently copy their rows into the
-  // `currentBlock_`. The block may only be written (and the mode may only be
-  // left) once this has dropped to zero.
-  size_t numOutstandingCopies_ = 0;
+  // The pusher that collects the rows of `asyncPushBlock` (see
+  // `CompressedExternalIdTableSorter`) and hands each complete block to
+  // `transformAndWriteBlock`. It only exists if the derived class has created
+  // it via `setAsyncPushExecutor`.
+  std::optional<AsyncIdTablePusher<NumStaticCols>> asyncPusher_;
 
   // Flag that is `true` if this is the first iteration over the table, and
   // `false` if there has already been a previous iteration.
@@ -1062,88 +1030,39 @@ CPP_class_template(size_t NumStaticCols,
     }
   }
 
-  // A variant of `pushBlock` above that may be called concurrently from
-  // several threads. Its purpose is that the copying of the rows (which for
-  // large blocks is by far the most expensive part of a push) happens in
-  // parallel instead of being serialized by a lock.
-  //
-  // This works as follows: The `currentBlock_` is resized to a complete block
-  // up front, so that a pusher only has to *reserve* the range of rows into
-  // which it then copies. The reserving is what the lock is held for; it is a
-  // handful of integer operations, so the next pusher can start its copy
-  // almost immediately. The only point at which the pushers have to be
-  // synchronized is when a block is full and has to be handed to the sorting
-  // machinery: the pusher that fills the block up waits for all the copies
-  // that are still outstanding before it writes it.
-  //
-  // NOTE: The rows of a single `table` are not necessarily contiguous in the
-  // resulting blocks, and the blocks contain the rows of the concurrent pushes
-  // in an arbitrary order. Only use this for inputs that are sorted (or
-  // otherwise reordered) afterwards anyway, which for the
-  // `CompressedExternalIdTableSorter` is always the case.
-  //
-  // NOTE: This function is the *only* one of this class that several threads
-  // may call at the same time. While such calls are in flight, no other member
-  // (not even the `const` `size()`) may be called concurrently with them; the
-  // pushing threads have to be joined first. Once they are, every other member
-  // may be used again without further ado, because they all begin with
-  // `finishConcurrentPushes` below.
-  CPP_template(typename Table)(
-      requires IdTableLike<Table>) void pushBlockConcurrently(const Table&
-                                                                  table) {
-    AD_CONTRACT_CHECK(table.numColumns() == numColumns_);
-    const size_t numRows = table.numRows();
-    size_t numPushed = 0;
-    while (numPushed < numRows) {
-      size_t targetRow = 0;
-      size_t numToPush = 0;
-      {
-        std::unique_lock lock{concurrentPushMutex_};
-        prepareBlockForConcurrentPush(lock);
-        targetRow = numRowsReserved_;
-        numToPush = std::min(concurrentPushBlocksize() - targetRow,
-                             numRows - numPushed);
-        numRowsReserved_ += numToPush;
-        numElementsPushed_ += numToPush;
-        ++numOutstandingCopies_;
-      }
-      // NOTE: This is the expensive part, and it deliberately runs without the
-      // lock being held, so that it runs concurrently with the copies of the
-      // other pushers.
-      currentBlock_.insertAt(table, numPushed, numPushed + numToPush,
-                             targetRow);
-      numPushed += numToPush;
-      {
-        std::lock_guard lock{concurrentPushMutex_};
-        AD_CORRECTNESS_CHECK(numOutstandingCopies_ > 0);
-        --numOutstandingCopies_;
-      }
-      concurrentPushCv_.notify_all();
-    }
-  }
-
-  // Leave the mode of `pushBlockConcurrently` above, if it is currently
-  // active: Wait for all outstanding copies and shrink the `currentBlock_`
-  // back to the rows that were actually pushed, so that all the other
-  // functions of this class see the buffer in its normal state again. This is
-  // called by all those functions, so that `pushBlockConcurrently` may be
-  // freely mixed with them.
+  // Leave the mode of `asyncPushBlock` (see `CompressedExternalIdTableSorter`),
+  // if it is currently active: Push the rows that the `asyncPusher_` has not
+  // yet handed over, because they don't form a complete block, via the
+  // ordinary `pushBlock`. This is called by all the other functions of this
+  // class, so that `asyncPushBlock` may be freely mixed with them.
   void finishConcurrentPushes() {
-    std::unique_lock lock{concurrentPushMutex_};
-    if (!blockIsResizedForConcurrentPush_) {
+    // NOTE: This runs for every row of a row-wise `push`, so the common case
+    // (no `asyncPushBlock` since the last reset) is a single relaxed load.
+    if (!asyncPusher_.has_value() || !asyncPusher_->mayHavePendingRows()) {
       return;
     }
-    concurrentPushCv_.wait(lock,
-                           [this]() { return numOutstandingCopies_ == 0; });
-    currentBlock_.resize(numRowsReserved_);
-    blockIsResizedForConcurrentPush_ = false;
-    numRowsReserved_ = 0;
+    // Reset the `asyncPusher_` (which checks that no push is in flight) and
+    // push its pending rows, if any.
+    //
+    // NOTE: `pushBlock` calls this function again, which then returns
+    // immediately, because the `asyncPusher_` has been reset.
+    auto pendingRows = asyncPusher_->finish();
+    if (!pendingRows.empty()) {
+      pushBlock(pendingRows);
+    }
   }
 
-  // The number of rows that have been pushed so far. Rows that are currently
-  // being pushed by a concurrent `pushBlockConcurrently` are already counted
-  // here, so this must not be called while such a push is in flight, see there.
-  size_t size() const { return numElementsPushed_; }
+  // The number of rows that have been pushed so far.
+  //
+  // NOTE: Must not be called while an `asyncPushBlock` is in flight (which is
+  // checked by the `asyncPusher_`). The rows of such pushes are only added to
+  // `numElementsPushed_` once they are handed over in complete blocks (or by
+  // `finishConcurrentPushes`), which is why the pending rows of the
+  // `asyncPusher_` are added here.
+  size_t size() const {
+    return numElementsPushed_ +
+           (asyncPusher_.has_value() ? asyncPusher_->numPendingRows() : 0);
+  }
 
   // Return a lambda that takes a `ValueType` and calls `push` for that value.
   auto makePushCallback() {
@@ -1163,7 +1082,13 @@ CPP_class_template(size_t NumStaticCols,
   // currently active, else an exception is thrown by the underlying
   // `CompressedExternalIdTableWriter`.
   void clear() {
-    finishConcurrentPushes();
+    // Discard the rows that the `asyncPusher_` has not yet handed over (this
+    // also checks that no `asyncPushBlock` is in flight). Pushing them via
+    // `finishConcurrentPushes` would possibly write a block to disk that is
+    // cleared right away.
+    if (asyncPusher_.has_value()) {
+      asyncPusher_->finish();
+    }
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
     waitForFuture();
@@ -1174,40 +1099,26 @@ CPP_class_template(size_t NumStaticCols,
   }
 
  protected:
-  // The number of rows of a complete block in the mode of
-  // `pushBlockConcurrently`. It is the `blocksize_`, except that a
-  // `blocksize_` of zero (which only happens for the very small memory limits
-  // of some unit tests) is rounded up to one, so that every push makes
-  // progress.
-  size_t concurrentPushBlocksize() const {
-    return std::max<size_t>(blocksize_, 1);
-  }
-
-  // Make sure that the `currentBlock_` is resized to a complete block and has
-  // room for at least one more row, writing it out if it is already full. The
-  // `lock` (which has to be held on the `concurrentPushMutex_`) is temporarily
-  // released while waiting for the outstanding copies of the other pushers.
-  // See `pushBlockConcurrently` above.
-  void prepareBlockForConcurrentPush(std::unique_lock<std::mutex>& lock) {
-    if (!blockIsResizedForConcurrentPush_) {
-      numRowsReserved_ = currentBlock_.numRows();
-      currentBlock_.resize(concurrentPushBlocksize());
-      blockIsResizedForConcurrentPush_ = true;
-    }
-    while (numRowsReserved_ >= concurrentPushBlocksize()) {
-      if (numOutstandingCopies_ > 0) {
-        // Note: The predicate of the enclosing loop is rechecked after the
-        // wait, because another pusher may have written the block in the
-        // meantime, in which case there is nothing left to do here.
-        concurrentPushCv_.wait(lock);
-        continue;
-      }
-      // The block is exactly full and nobody is copying into it anymore, so it
-      // can be written. The next block is then again resized up front.
-      writeCurrentBlockAndRecycleBuffer();
-      currentBlock_.resize(concurrentPushBlocksize());
-      numRowsReserved_ = 0;
-    }
+  // Create the `asyncPusher_`, which runs its work on the `executor`.
+  //
+  // PRECONDITION: No `asyncPushBlock` is in flight.
+  void setAsyncPushExecutor(ql::any_io_executor executor) {
+    finishConcurrentPushes();
+    // NOTE: A `blocksize_` of zero (which only happens for the very small
+    // memory limits of some unit tests) is rounded up to one, so that every
+    // push makes progress.
+    //
+    // NOTE: The sink runs on the strand of the `asyncPusher_`. The
+    // `transformAndWriteBlock` blocks while the previous block is still being
+    // written, which delays the pushes that wait for the next block, but that
+    // is also what the synchronous `pushBlock` does.
+    asyncPusher_.emplace(
+        std::move(executor), numColumns_, std::max<size_t>(blocksize_, 1),
+        currentBlock_.allocator(), [this](IdTableStatic<NumStaticCols> block) {
+          numElementsPushed_ += block.numRows();
+          transformAndWriteBlock(
+              Buffer{std::move(block), currentBlock_.allocator()});
+        });
   }
 
   // Clear the current block. If `reserve` is `true`, we subsequently also
@@ -1427,19 +1338,22 @@ class CompressedExternalIdTable
   }
 };
 
-// A virtual base class for the `CompressedExternalIdTableSorter` (see below)
-// that type-erases the used comparator as well as the statically known number
-// of columns. The interface only deals in blocks, so that the costs of the
-// virtual calls and the checking of the correct number of columns disappear.
+// The type-erased interface of a `CompressedExternalIdTableSorter` (see below),
+// which hides the comparator and the number of columns from its users.
 class CompressedExternalIdTableSorterTypeErased {
  public:
   // Push a complete block at once.
   virtual void pushBlock(const IdTableStatic<0>& block) = 0;
   // Push a complete block given as a non-owning view at once.
   virtual void pushBlock(const IdTableView<0>& block) = 0;
-  // Push a complete block given as a non-owning view, in a way that several
-  // threads may do at the same time, see
-  // `CompressedExternalIdTableBase::pushBlockConcurrently`.
+  // Set the executor on which a `pushBlockConcurrently` below runs its work.
+  // This has to be called before the first such push.
+  virtual void setAsyncPushExecutor(ql::any_io_executor executor) = 0;
+  // Push a complete block given as a non-owning view, concurrently with other
+  // such pushes, and return once its rows have been handed over to the sorter.
+  // The copying of the rows happens on the executor of
+  // `setAsyncPushExecutor`, so that the pushes of several threads overlap
+  // instead of being serialized, see `asyncPushBlock`.
   virtual void pushBlockConcurrently(const IdTableView<0>& block) = 0;
   // Get the sorted output after all blocks have been pushed. If `blocksize ==
   // nullopt`, the size of the returned blocks will be chosen automatically.
@@ -1578,7 +1492,9 @@ class CompressedExternalIdTableSorter
              std::move(allocator),
              blocksizeCompression,
              BlockSorter{comparator}},
-        comparator_{comparator} {}
+        comparator_{comparator} {
+    this->setAsyncPushExecutor(mergeExecutor_);
+  }
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
@@ -1594,22 +1510,48 @@ class CompressedExternalIdTableSorter
   // Explicitly inherit the `push` function, such that we can use it unqualified
   // within this class.
   using Base::push;
-  // The overrides of the type-erased interface below would otherwise hide the
-  // templates of the base class, which take any kind of `IdTable`.
-  using Base::pushBlockConcurrently;
 
   // Set the executor on which the merge phase runs, together with the number of
   // threads that run that executor. Use this to share a thread pool with other
   // tasks, or to pin the parallelism in tests and benchmarks. A `parallelism`
   // of one means "merge serially in the consuming thread", in which case the
-  // `executor` is never used at all.
+  // merge never uses the `executor`.
+  //
+  // The `executor` is also the one on which `asyncPushBlock` runs its work.
   //
   // IMPORTANT: The `executor` must not be run by the thread that consumes the
-  // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`.
+  // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`. The
+  // execution context behind the `executor` (e.g. a `boost::asio::thread_pool`)
+  // has to outlive this sorter, because the sorter holds a strand on the
+  // `executor` (for `asyncPushBlock`), whose destructor accesses the context.
+  //
+  // PRECONDITION: No `asyncPushBlock` is in flight.
   void setMergeExecutor(ql::any_io_executor executor, size_t parallelism) {
     AD_CONTRACT_CHECK(parallelism > 0);
     mergeExecutor_ = std::move(executor);
     mergeParallelism_ = parallelism;
+    this->setAsyncPushExecutor(mergeExecutor_);
+  }
+
+  // Asynchronously push all the rows of the `table`, in a way that several
+  // threads may do at the same time. The work runs on the executor of
+  // `setMergeExecutor`, and the completion signature is
+  // `void(std::exception_ptr)`, see `AsyncIdTablePusher::asyncPushBlock` for
+  // the details (in particular, the rows that the `table` view refers to have
+  // to stay alive until the operation has completed, which can be guaranteed
+  // via an aliasing `shared_ptr`).
+  //
+  // NOTE: This function is the *only* one of this class that may be called
+  // concurrently. While such pushes are in flight, no other member (not even
+  // the `const` `size()`) may be called (which is checked, they throw); all
+  // the pushes have to be completed first. Afterwards every other member may be
+  // used again without further ado, because they all begin with
+  // `finishConcurrentPushes`.
+  template <typename CompletionToken>
+  auto asyncPushBlock(std::shared_ptr<const IdTableView<0>> table,
+                      CompletionToken&& completionToken) {
+    return this->asyncPusher_->asyncPushBlock(std::move(table),
+                                              AD_FWD(completionToken));
   }
 
   // Set how the merge phase stores the output blocks that it spills (see
@@ -1674,10 +1616,22 @@ class CompressedExternalIdTableSorter
     Base::pushBlock(block);
   }
 
+  // The implementation of the type-erased interface. Make the concurrent
+  // pushes below run on the `executor`.
+  void setAsyncPushExecutor(ql::any_io_executor executor) override {
+    Base::setAsyncPushExecutor(std::move(executor));
+  }
+
   // The implementation of the type-erased interface. Push a complete block
-  // given as a non-owning view, concurrently with other pushes.
+  // given as a non-owning view, concurrently with other such pushes.
+  //
+  // NOTE: The `block` only has to stay alive for the duration of this call,
+  // because the `shared_ptr` below merely keeps the *view* alive and this
+  // function waits for the push to complete.
   void pushBlockConcurrently(const IdTableView<0>& block) override {
-    Base::pushBlockConcurrently(block);
+    this->asyncPushBlock(std::make_shared<const IdTableView<0>>(block),
+                         ad_utility::net::use_future)
+        .get();
   }
 
   // The implementation of the type-erased interface. Get the sorted blocks as

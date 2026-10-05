@@ -104,13 +104,13 @@ TEST(AsyncStream, RunOnExecutor) {
                                 generator2.begin(), generator2.end()));
 }
 
+// _____________________________________________________________________________
 // Regression test: when the range that `runStreamAsync` consumes is destroyed,
 // the resources that it owns have to be released before the destructor of the
 // returned range returns. Callers rely on this, for example the
 // `CompressedExternalIdTableSorter`, which may be `clear()`ed right after its
 // sorted output has been destroyed. A task on an executor is destroyed only
 // after it has returned, so `runStreamAsync` has to destroy the range itself.
-// _____________________________________________________________________________
 TEST(AsyncStream, RangeIsDestroyedBeforeTheStreamOnExecutor) {
   // A range of three strings that sets a flag when it is destroyed.
   struct RangeWithDestructor : public std::vector<std::string> {

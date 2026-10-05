@@ -2017,35 +2017,64 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfTasksInFlight) {
   }
   // The blocks are compressed and written on the global thread pool, so the
   // only thing that the writer controls is the number of blocks that it keeps
-  // in flight, see `CompressedRelationWriter::makeBlockWriteQueue`.
+  // in flight, which is twice the number of blocks that are compressed and
+  // written concurrently, see `CompressedRelationWriter::makeBlockWriteQueue`.
   auto maxNumTasksInFlight = [](const CompressedRelationWriter& writer) {
     return writer.blockWriteQueue_.maxNumTasksInFlight();
   };
   {
-    // Without an override, the number of concurrent blocks is the number of
-    // threads of the global thread pool (which the `--num-threads` option of
-    // the index builder configures).
+    // Check if it is limited to the threads of the global thread pool.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1337);
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
     EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
-    // An override of 0 (used by the runtime index rebuild via
-    // `rebuild-permutation-writer-num-threads`) means "as many as the pool has
-    // threads".
+    // Check if it is expanded to the threads of the global thread pool.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(0);
     auto [filename, cleanup] = testFilenameWithCleanup();
-    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2, 0};
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
     EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
     // Check if minimum of 4 tasks is honored.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1);
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
+    EXPECT_EQ(maxNumTasksInFlight(writer), 4);
+  }
+  if (threads >= 3) {
+    // A value between the minimum and the cap is used as is.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(3);
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
+    EXPECT_EQ(maxNumTasksInFlight(writer), 6);
+  }
+  {
+    // An explicit override (used by the runtime index rebuild via
+    // `rebuild-permutation-writer-num-threads`) wins over the runtime
+    // parameter.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(0);
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2, 1};
     EXPECT_EQ(maxNumTasksInFlight(writer), 4);
   }
   {
+    // An override of 0 means "as many as the global thread pool has threads".
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1);
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2, 0};
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
+  }
+  {
     // An override is capped at the number of threads of the global thread
-    // pool.
+    // pool, just like the runtime parameter.
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2,
                                     1337};
@@ -2493,12 +2522,12 @@ TEST(CompressedRelationWriter, directlyWrittenSmallRelationWithGraphs) {
   }
 }
 
-// The number of distinct `col1` IDs of a large relation is counted per block
-// (and in the background), so an ID that ends one block and also starts the
-// next block must not be counted twice.
+// The number of distinct `col1` IDs of a large relation is counted per block,
+// so an ID that ends one block and also starts the next block must not be
+// counted twice.
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
-  // Blocks of 10 rows.
+  // Blocks of 10 rows each.
   std::vector<RelationInput> inputs;
   // 30 rows with 10 distinct `col1` IDs, each of which occurs three times. The
   // blocks end after 10, 20, and 30 rows, so the `col1` IDs `3` and `6` each
@@ -2559,4 +2588,36 @@ TEST(CountDistinctIds, countAndBoundaryIds) {
     EXPECT_EQ(result.first_, V(3));
     EXPECT_EQ(result.last_, V(3));
   }
+}
+
+// _____________________________________________________________________________
+TEST(DistinctIdCounter, blocksAndReset) {
+  compressedRelationHelpers::DistinctIdCounter counter;
+  auto addBlock = [&counter](const std::vector<Id>& ids) {
+    counter.addBlock(ql::span<const Id>{ids});
+  };
+  // A fresh counter has counted nothing.
+  EXPECT_EQ(counter.getAndReset(), 0);
+
+  // An ID that ends one block and starts the next one is counted only once,
+  // and empty blocks are ignored.
+  addBlock({V(1), V(1), V(2)});
+  addBlock({});
+  addBlock({V(2), V(3)});
+  addBlock({V(4)});
+  EXPECT_EQ(counter.getAndReset(), 4);
+
+  // `getAndReset` also clears the last ID of the previous block, so feeding
+  // `V(4)` again counts it as distinct.
+  addBlock({V(4), V(4)});
+  EXPECT_EQ(counter.getAndReset(), 1);
+
+  // `reset` clears the count and the last ID of the previous block.
+  addBlock({V(5), V(6)});
+  counter.reset();
+  EXPECT_EQ(counter.getAndReset(), 0);
+  addBlock({V(6)});
+  counter.reset();
+  addBlock({V(6)});
+  EXPECT_EQ(counter.getAndReset(), 1);
 }

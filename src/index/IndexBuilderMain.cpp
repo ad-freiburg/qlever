@@ -434,6 +434,12 @@ int main(int argc, char** argv) {
       config.indexRowsPerBlock_ = indexRowsPerBlock.value();
     }
     config.validate();
+    // For index building, let each permutation writer use all threads of the
+    // global thread pool (whose size is only set to `config.numThreads_` inside
+    // `Qlever::buildIndex`). The default is optimized for `rebuild-index`,
+    // where six permutations are written simultaneously.
+    setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(
+        config.numThreads_);
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "

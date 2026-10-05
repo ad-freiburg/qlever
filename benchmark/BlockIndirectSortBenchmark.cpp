@@ -22,27 +22,20 @@
 #include "backports/span.h"
 #include "util/blockSort/BlockIndirectSort.h"
 
-// `ad_utility::blockSort::blockIndirectSort` against the two implementations
-// it has to beat to be worth having: the original
-// `boost::sort::block_indirect_sort` that it was ported from (same algorithm,
-// but with its own threads and a spinning work-stealing loop instead of
-// coroutines) and an ordinary single-threaded sort.
-//
-// NOTE: The numbers only mean something for an input that is big enough and a
-// machine with enough cores, see `blockIndirectSort`. On a machine whose memory
-// bandwidth is already saturated by a few threads, all parallel sorts of a big
-// input converge to the same time, which is the time it takes to move the data.
+// Compare `ad_utility::blockSort::blockIndirectSort` with the original
+// `boost::sort::block_indirect_sort` and a single-threaded sort. Only
+// meaningful on a machine with many cores.
 namespace ad_benchmark {
 
 namespace {
-// An element that is too big to be moved in a register, so that the cost of
-// moving the blocks around actually shows up.
+// A big element, so that the cost of moving blocks shows up.
 struct WideElement {
   uint64_t key_ = 0;
   std::array<char, 56> payload_{};
   bool operator<(const WideElement& other) const { return key_ < other.key_; }
 };
 
+// The element of type `T` that represents `value`.
 template <typename T>
 T makeElement(uint64_t value);
 
@@ -59,6 +52,7 @@ std::string makeElement<std::string>(uint64_t value) {
   return std::to_string(value) + "_with_some_padding_to_make_it_long";
 }
 
+// `numElements` random elements, the same ones in every run.
 template <typename T>
 std::vector<T> randomElements(size_t numElements) {
   std::mt19937_64 generator{0xC0FFEE};
@@ -72,8 +66,8 @@ std::vector<T> randomElements(size_t numElements) {
 }  // namespace
 
 class BlockIndirectSortBenchmark : public BenchmarkInterface {
-  // The elements are restored from this before every single measurement, so
-  // that all of them sort exactly the same input.
+  // Measure the three sorts on `numElements` random elements of type `T`. All
+  // measurements sort the same input.
   template <typename T>
   void addMeasurementsFor(BenchmarkResults& results, const std::string& name,
                           size_t numElements, uint32_t numThreads,
@@ -104,10 +98,12 @@ class BlockIndirectSortBenchmark : public BenchmarkInterface {
                            });
   }
 
+  // The name of this group of benchmarks.
   std::string name() const final {
     return "Benchmarks for the parallel block indirect sort";
   }
 
+  // Measure all element types with one thread per core.
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
     uint32_t numThreads = std::max(std::thread::hardware_concurrency(), 2u);

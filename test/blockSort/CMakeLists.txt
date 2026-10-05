@@ -1,1 +1,2 @@
-addLinkAndDiscoverTestNoLibs(BlockIndirectSortTest)
+addLinkAndDiscoverTestNoLibs(ParallelQuicksortTest qlever_util)
+addLinkAndDiscoverTestNoLibs(BlockIndirectSortTest qlever_util)

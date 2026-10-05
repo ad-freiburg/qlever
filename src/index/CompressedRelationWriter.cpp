@@ -14,8 +14,8 @@
 #include "index/CompressedRelationWriter.h"
 
 #include <algorithm>
+#include <boost/asio/strand.hpp>
 #include <cmath>
-#include <thread>
 
 #include "global/RuntimeParameters.h"
 #include "index/CompressedRelationHelpersImpl.h"
@@ -49,9 +49,8 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   // We write small relations to a single block, so we specify the last
   // argument to `true` to invoke the `smallBlocksCallback_`.
   compressAndWriteBlock(currentBlockFirstCol0_, currentBlockLastCol0_,
-                        std::move(smallRelationsBuffer_), true);
-  smallRelationsBuffer_.clear();
-  smallRelationsBuffer_.reserve(2 * blocksize());
+                        BlockToWrite{std::move(smallRelationsBuffer_)}, true);
+  smallRelationsBuffer_ = takeBlockBuffer();
 }
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
@@ -63,10 +62,8 @@ CompressedRelationWriter::compressAndWriteColumn(ConstIdColumnRef column) {
   // `File::write`, which needs a shared lock only. The compression above and
   // the write itself therefore run concurrently for any number of blocks.
   auto offsetInFile = nextOffset_.fetch_add(static_cast<off_t>(compressedSize));
-  auto numBytesWritten = outfile_.rlock()->write(compressedBlock.data(),
-                                                 compressedSize, offsetInFile);
-  AD_CORRECTNESS_CHECK(numBytesWritten == static_cast<ssize_t>(compressedSize),
-                       "Writing a block of a permutation failed");
+  // NOTE: This throws if not all the bytes could be written.
+  outfile_.rlock()->write(compressedBlock.data(), compressedSize, offsetInFile);
   return {offsetInFile, compressedSize};
 }
 
@@ -111,41 +108,30 @@ void CompressedRelationWriter::compressAndWriteBlockInCallingThread(
       std::move(graphInfo),
       hasDuplicates});
   if (invokeCallback && smallBlocksCallback_) {
-    // Only blocks of small relations invoke the callback, and those always own
-    // their rows, because they are assembled in the `smallRelationsBuffer_`.
+    // Only blocks of small relations invoke the callback, and those always
+    // own their rows, because they are assembled in the
+    // `smallRelationsBuffer_`.
     AD_CORRECTNESS_CHECK(block.ownsRows());
     std::invoke(smallBlocksCallback_, std::move(block).extractTable());
   } else if (block.ownsRows()) {
-    recycleBlock(std::move(block).extractTable());
+    blockBufferPool_->giveBack(std::move(block).extractTable());
   }
 }
 
 // _____________________________________________________________________________
-IdTable CompressedRelationWriter::takeRecycledBlock(
-    size_t numColumns, const ad_utility::AllocatorWithLimit<Id>& allocator) {
-  auto recycledBlocks = recycledBlocks_.wlock();
-  // Blocks with a different number of columns cannot be reused, but this
-  // should never happen for the current users.
-  if (!recycledBlocks->empty() &&
-      recycledBlocks->back().numColumns() == numColumns) {
-    IdTable result = std::move(recycledBlocks->back());
-    recycledBlocks->pop_back();
-    return result;
-  }
-  return IdTable{numColumns, allocator};
+IdTable CompressedRelationWriter::takeBlockBuffer() {
+  IdTable buffer = blockBufferPool_->take(
+      [this]() { return IdTable{numColumns(), allocator_}; });
+  // All users of the same pool write blocks with the same number of columns.
+  AD_CORRECTNESS_CHECK(buffer.numColumns() == numColumns());
+  buffer.clear();
+  // Note: A block may exceed the `blocksize()` (see
+  // `smallRelationBlockCapacity`), but the factor of 2 suffices in almost all
+  // cases. For a buffer that is reused, this `reserve` is typically a no-op.
+  buffer.reserve(2 * blocksize());
+  return buffer;
 }
 
-// _____________________________________________________________________________
-void CompressedRelationWriter::recycleBlock(IdTable block) {
-  if (!recycleBlocks_) {
-    return;
-  }
-  block.clear();
-  auto recycledBlocks = recycledBlocks_.wlock();
-  if (recycledBlocks->size() < maxNumRecycledBlocks_) {
-    recycledBlocks->push_back(std::move(block));
-  }
-}
 // _____________________________________________________________________________
 CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
     size_t numDistinctC1) {
@@ -164,21 +150,37 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
-ad_utility::TaskQueueOnExecutor CompressedRelationWriter::makeBlockWriteQueue(
-    std::optional<size_t> numTasksInFlightOverride) {
+size_t CompressedRelationWriter::getNumConcurrentBlocks(
+    std::optional<size_t> numConcurrentBlocksOverride) {
+  size_t requestedBlocks = numConcurrentBlocksOverride.value_or(
+      getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
   // The blocks are compressed and written on the global thread pool, so the
   // number of threads that is available for them is the size of that pool,
   // which the `--num-threads / -j` option of the index builder configures (see
   // `ad_utility::setGlobalExecutorNumThreads`).
   size_t numThreads = ad_utility::globalExecutorNumThreads();
-  size_t requestedTasks = numTasksInFlightOverride.value_or(numThreads);
   // A value of 0 means "as many as the pool has threads", larger values are
   // capped at that number.
-  size_t numConcurrentBlocks =
-      requestedTasks == 0 ? numThreads : std::min(requestedTasks, numThreads);
+  return requestedBlocks == 0 ? numThreads
+                              : std::min(requestedBlocks, numThreads);
+}
+
+// _____________________________________________________________________________
+ad_utility::TaskQueueOnExecutor CompressedRelationWriter::makeBlockWriteQueue(
+    size_t numConcurrentBlocks) {
   // Allow at least 4 blocks to be in flight.
   size_t maxNumTasksInFlight = std::max<size_t>(4, numConcurrentBlocks * 2);
-  return ad_utility::TaskQueueOnExecutor{ad_utility::globalExecutor(),
+  // The in-flight bound only limits how many blocks are queued or running, not
+  // how many of them run at the same time on a pool with idle threads. For a
+  // single concurrent block, run the tasks on a strand of the pool, so that
+  // the blocks are compressed and written one after the other (the runtime
+  // index rebuild relies on this to leave the CPU to concurrent queries, see
+  // `rebuild-permutation-writer-num-threads`).
+  ql::any_io_executor executor = ad_utility::globalExecutor();
+  if (numConcurrentBlocks == 1) {
+    executor = boost::asio::make_strand(executor);
+  }
+  return ad_utility::TaskQueueOnExecutor{std::move(executor),
                                          maxNumTasksInFlight,
                                          "Compressing and writing blocks"};
 }
@@ -283,7 +285,7 @@ void CompressedRelationWriter::writeLargeRelationBlockInSlices(Id col0Id,
   const size_t numRows = block.numRows();
   AD_CORRECTNESS_CHECK(numRows > 0);
   if (numRows <= blocksize()) {
-    addBlockForLargeRelation(col0Id, std::move(block));
+    addBlockForLargeRelation(col0Id, BlockToWrite{std::move(block)});
     return;
   }
   // The slices are views into the `block`, which is shared among them and
