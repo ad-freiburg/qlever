@@ -1529,6 +1529,8 @@ TEST(SparqlParser, Query) {
       m::WarningsOfParsedQuery({}));
   expectQuery("SELECT ?p { ?s ?p ?o } GROUP BY ?p ORDER BY ?v VALUES ?v { 1 }",
               m::WarningsOfParsedQuery({}));
+  expectQuery("SELECT ?p { ?s ?p ?o } GROUP BY ?p ORDER BY ?s VALUES ?v { 1 }",
+              m::WarningsOfParsedQuery({"?s was used in an ORDER BY clause"}));
   expectQuery("SELECT ?v { ?s ?p ?o } GROUP BY ?v VALUES ?v { 1 }",
               m::WarningsOfParsedQuery({"?v was used by GROUP BY"}));
   expectQueryFails("SELECT (1 AS ?x) {} VALUES ?x { 2 }",

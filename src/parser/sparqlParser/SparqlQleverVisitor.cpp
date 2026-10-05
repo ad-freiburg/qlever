@@ -399,7 +399,9 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   auto query =
       visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
                                     ctx->describeQuery(), ctx->askQuery());
-  AD_CORRECTNESS_CHECK(!postQueryValues_.has_value());
+  AD_CORRECTNESS_CHECK(!postQueryValues_.has_value(),
+                       "The trailing `VALUES` clause must be consumed by the "
+                       "visitor of the respective query type.");
 
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
