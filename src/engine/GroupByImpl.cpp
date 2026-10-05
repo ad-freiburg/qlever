@@ -197,7 +197,7 @@ class LazyGroupByRange
     // No need for final commit when loop was never entered.
     if (!groupSplitAcrossTables_) {
       // If we have an implicit group by we need to produce one result row
-      if (groupByCols_.empty()) {
+      if (parent_->isImplicitGroupBy_) {
         // If we have an implicit GROUP BY, where the entire input is a
         // single group, we need to produce one result row.
         IdTable resultTable = std::move(resultTable_).toDynamic();
@@ -267,10 +267,11 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
                          std::shared_ptr<QueryExecutionTree> subtree)
     : Operation{qec},
       _groupByVariables{std::move(groupByVariables)},
-      _aliases{std::move(aliases)} {
+      _aliases{std::move(aliases)},
+      isImplicitGroupBy_{_groupByVariables.empty()} {
   AD_CORRECTNESS_CHECK(subtree != nullptr);
-  // Remove all undefined GROUP BY variables (according to the SPARQL standard
-  // they are allowed, but have no effect on the result).
+  // Remove all undefined GROUP BY variables. They are constant, so they don't
+  // affect the grouping, except that an empty input has no group.
   ql::erase_if(_groupByVariables,
                [&map = subtree->getVariableColumns()](const auto& var) {
                  return !map.contains(var);
@@ -366,7 +367,7 @@ std::string GroupByImpl::getCacheKeyImpl() const {
   }
 
   std::ostringstream os;
-  os << "GROUP_BY ";
+  os << (isImplicitGroupBy_ ? "IMPLICIT_GROUP_BY " : "GROUP_BY ");
   for (const auto& var : _groupByVariables) {
     os << varMap.at(var).columnIndex_ << ", ";
   }
@@ -380,8 +381,11 @@ std::string GroupByImpl::getCacheKeyImpl() const {
 }
 
 std::string GroupByImpl::getDescriptor() const {
-  if (_groupByVariables.empty()) {
+  if (isImplicitGroupBy_) {
     return "GroupBy (implicit)";
+  }
+  if (_groupByVariables.empty()) {
+    return "GroupBy on unbound variables";
   }
   return "GroupBy on " +
          absl::StrJoin(_groupByVariables, " ", &Variable::AbslFormatter);
@@ -531,9 +535,9 @@ IdTable GroupByImpl::doGroupBy(const IdTableView<0>& inTable,
   IdTable dynResult{getResultWidth(), getExecutionContext()->getAllocator()};
 
   // If the input is empty, the result is also empty, except for an implicit
-  // GROUP BY (`groupByCols.empty()`), which always has to produce one result
-  // row (see the code further down).
-  if (inTable.empty() && !groupByCols.empty()) {
+  // GROUP BY, which always has to produce one result row (see the code further
+  // down).
+  if (inTable.empty() && !isImplicitGroupBy_) {
     return dynResult;
   }
 
@@ -550,7 +554,7 @@ IdTable GroupByImpl::doGroupBy(const IdTableView<0>& inTable,
                             blockEnd, outLocalVocab, groupByCols);
   };
 
-  // Handle the implicit GROUP BY, where the entire input is a single group.
+  // Without GROUP BY columns, the entire (non-empty) input is a single group.
   if (groupByCols.empty()) {
     processNextBlock(0, input.size());
     return std::move(result).toDynamic();
@@ -818,7 +822,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
 
   if (indexScan->numVariables() <= 1 ||
       !indexScan->graphsToFilter().areAllGraphsAllowed() ||
-      !_groupByVariables.empty()) {
+      !isImplicitGroupBy_) {
     return std::nullopt;
   }
 
@@ -1966,14 +1970,17 @@ bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
-  return std::make_unique<GroupByImpl>(_executionContext, _groupByVariables,
-                                       _aliases, _subtree->clone());
+  auto result = std::make_unique<GroupByImpl>(
+      _executionContext, _groupByVariables, _aliases, _subtree->clone());
+  // The flag can't be derived from the reduced `_groupByVariables`.
+  result->isImplicitGroupBy_ = isImplicitGroupBy_;
+  return result;
 }
 
 // _____________________________________________________________________________
 std::optional<IdTable> GroupByImpl::computeCountStar() const {
   bool isSingleGlobalAggregateFunction =
-      _groupByVariables.empty() && _aliases.size() == 1;
+      isImplicitGroupBy_ && _aliases.size() == 1;
   if (!isSingleGlobalAggregateFunction) {
     return std::nullopt;
   }
