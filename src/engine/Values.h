@@ -40,7 +40,7 @@ class Values : virtual public Operation {
   virtual std::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override {
-    return parsedValues_._variables.empty() || parsedValues_._values.empty();
+    return parsedValues_._values.empty();
   }
 
   virtual float getMultiplicity(size_t col) override;

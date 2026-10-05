@@ -18,6 +18,7 @@
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "engine/CallFixedSize.h"
+#include "engine/idTable/AsyncIdTablePusher.h"
 #include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
@@ -618,6 +619,12 @@ CPP_class_template(size_t NumStaticCols,
     compressAndWriteFuture_ = std::move(future);
   }
 
+  // The pusher that collects the rows of `asyncPushBlock` (see
+  // `CompressedExternalIdTableSorter`) and hands each complete block to
+  // `transformAndWriteBlock`. It only exists if the derived class has created
+  // it via `setAsyncPushExecutor`.
+  std::optional<AsyncIdTablePusher<NumStaticCols>> asyncPusher_;
+
   // Flag that is `true` if this is the first iteration over the table, and
   // `false` if there has already been a previous iteration.
   std::atomic<bool> isFirstIteration_ = true;
@@ -653,6 +660,7 @@ CPP_class_template(size_t NumStaticCols,
   CPP_template(typename R)(
       requires compressedExternalIdTable::detail::HasPushBack<
           decltype(currentBlock_), R>) void push(const R& row) {
+    finishConcurrentPushes();
     ++numElementsPushed_;
     currentBlock_.push_back(row);
     if (currentBlock_.size() >= blocksize_) {
@@ -671,6 +679,7 @@ CPP_class_template(size_t NumStaticCols,
   // been called for each row individually.
   CPP_template(typename Table)(requires IdTableLike<Table>) void pushBlock(
       const Table& table) {
+    finishConcurrentPushes();
     AD_CONTRACT_CHECK(table.numColumns() == numColumns_);
     const size_t numRows = table.numRows();
     numElementsPushed_ += numRows;
@@ -692,8 +701,39 @@ CPP_class_template(size_t NumStaticCols,
     }
   }
 
-  // ___________________________________________________________________
-  size_t size() const { return numElementsPushed_; }
+  // Leave the mode of `asyncPushBlock` (see `CompressedExternalIdTableSorter`),
+  // if it is currently active: Push the rows that the `asyncPusher_` has not
+  // yet handed over, because they don't form a complete block, via the
+  // ordinary `pushBlock`. This is called by all the other functions of this
+  // class, so that `asyncPushBlock` may be freely mixed with them.
+  void finishConcurrentPushes() {
+    // NOTE: This runs for every row of a row-wise `push`, so the common case
+    // (no `asyncPushBlock` since the last reset) is a single relaxed load.
+    if (!asyncPusher_.has_value() || !asyncPusher_->mayHavePendingRows()) {
+      return;
+    }
+    // Reset the `asyncPusher_` (which checks that no push is in flight) and
+    // push its pending rows, if any.
+    //
+    // NOTE: `pushBlock` calls this function again, which then returns
+    // immediately, because the `asyncPusher_` has been reset.
+    auto pendingRows = asyncPusher_->finish();
+    if (!pendingRows.empty()) {
+      pushBlock(pendingRows);
+    }
+  }
+
+  // The number of rows that have been pushed so far.
+  //
+  // NOTE: Must not be called while an `asyncPushBlock` is in flight (which is
+  // checked by the `asyncPusher_`). The rows of such pushes are only added to
+  // `numElementsPushed_` once they are handed over in complete blocks (or by
+  // `finishConcurrentPushes`), which is why the pending rows of the
+  // `asyncPusher_` are added here.
+  size_t size() const {
+    return numElementsPushed_ +
+           (asyncPusher_.has_value() ? asyncPusher_->numPendingRows() : 0);
+  }
 
   // Return a lambda that takes a `ValueType` and calls `push` for that value.
   auto makePushCallback() {
@@ -713,6 +753,13 @@ CPP_class_template(size_t NumStaticCols,
   // currently active, else an exception is thrown by the underlying
   // `CompressedExternalIdTableWriter`.
   void clear() {
+    // Discard the rows that the `asyncPusher_` has not yet handed over (this
+    // also checks that no `asyncPushBlock` is in flight). Pushing them via
+    // `finishConcurrentPushes` would possibly write a block to disk that is
+    // cleared right away.
+    if (asyncPusher_.has_value()) {
+      asyncPusher_->finish();
+    }
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
     waitForFuture();
@@ -723,6 +770,28 @@ CPP_class_template(size_t NumStaticCols,
   }
 
  protected:
+  // Create the `asyncPusher_`, which runs its work on the `executor`.
+  //
+  // PRECONDITION: No `asyncPushBlock` is in flight.
+  void setAsyncPushExecutor(ql::any_io_executor executor) {
+    finishConcurrentPushes();
+    // NOTE: A `blocksize_` of zero (which only happens for the very small
+    // memory limits of some unit tests) is rounded up to one, so that every
+    // push makes progress.
+    //
+    // NOTE: The sink runs on the strand of the `asyncPusher_`. The
+    // `transformAndWriteBlock` blocks while the previous block is still being
+    // written, which delays the pushes that wait for the next block, but that
+    // is also what the synchronous `pushBlock` does.
+    asyncPusher_.emplace(std::move(executor), numColumns_,
+                         std::max<size_t>(blocksize_, 1),
+                         currentBlock_.getAllocator(),
+                         [this](IdTableStatic<NumStaticCols> block) {
+                           numElementsPushed_ += block.numRows();
+                           transformAndWriteBlock(std::move(block));
+                         });
+  }
+
   // Clear the current block. If `reserve` is `true`, we subsequently also
   // reserve the `blocksize_`.
   void resetCurrentBlock(bool reserve) {
@@ -763,6 +832,7 @@ CPP_class_template(size_t NumStaticCols,
   // and return `true`. Using this function allows for an efficient usage of
   // this class for very small inputs.
   bool transformAndPushLastBlock() {
+    finishConcurrentPushes();
     if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
     }
@@ -971,7 +1041,9 @@ class CompressedExternalIdTableSorter
              std::move(allocator),
              blocksizeCompression,
              BlockSorter{comparator}},
-        comparator_{comparator} {}
+        comparator_{comparator} {
+    this->setAsyncPushExecutor(mergeExecutor_);
+  }
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
@@ -992,14 +1064,43 @@ class CompressedExternalIdTableSorter
   // threads that run that executor. Use this to share a thread pool with other
   // tasks, or to pin the parallelism in tests and benchmarks. A `parallelism`
   // of one means "merge serially in the consuming thread", in which case the
-  // `executor` is never used at all.
+  // merge never uses the `executor`.
+  //
+  // The `executor` is also the one on which `asyncPushBlock` runs its work.
   //
   // IMPORTANT: The `executor` must not be run by the thread that consumes the
-  // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`.
+  // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`. The
+  // execution context behind the `executor` (e.g. a `boost::asio::thread_pool`)
+  // has to outlive this sorter, because the sorter holds a strand on the
+  // `executor` (for `asyncPushBlock`), whose destructor accesses the context.
+  //
+  // PRECONDITION: No `asyncPushBlock` is in flight.
   void setMergeExecutor(ql::any_io_executor executor, size_t parallelism) {
     AD_CONTRACT_CHECK(parallelism > 0);
     mergeExecutor_ = std::move(executor);
     mergeParallelism_ = parallelism;
+    this->setAsyncPushExecutor(mergeExecutor_);
+  }
+
+  // Asynchronously push all the rows of the `table`, in a way that several
+  // threads may do at the same time. The work runs on the executor of
+  // `setMergeExecutor`, and the completion signature is
+  // `void(std::exception_ptr)`, see `AsyncIdTablePusher::asyncPushBlock` for
+  // the details (in particular, the rows that the `table` view refers to have
+  // to stay alive until the operation has completed, which can be guaranteed
+  // via an aliasing `shared_ptr`).
+  //
+  // NOTE: This function is the *only* one of this class that may be called
+  // concurrently. While such pushes are in flight, no other member (not even
+  // the `const` `size()`) may be called (which is checked, they throw); all
+  // the pushes have to be completed first. Afterwards every other member may be
+  // used again without further ado, because they all begin with
+  // `finishConcurrentPushes`.
+  template <typename CompletionToken>
+  auto asyncPushBlock(std::shared_ptr<const IdTableView<0>> table,
+                      CompletionToken&& completionToken) {
+    return this->asyncPusher_->asyncPushBlock(std::move(table),
+                                              AD_FWD(completionToken));
   }
 
   // Set how the merge phase stores the output blocks that it spills (see
