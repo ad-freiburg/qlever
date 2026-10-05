@@ -669,7 +669,8 @@ TEST_F(MaterializedViewsPatternMatchingTest, BookkeepingEdgeCases) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that for greedy planning, a replacement plan is only dropped if it
+// overlaps a kept plan, not if it only overlaps a dropped plan.
 TEST(MaterializedViewsGreedyPlanningTest,
      findApplicableReplacementPlansGreedyOverlap) {
   using SubtreePlan = QueryPlanner::SubtreePlan;
