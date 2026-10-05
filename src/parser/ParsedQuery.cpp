@@ -87,7 +87,8 @@ void ParsedQuery::addBind(sparqlExpression::SparqlExpressionPimpl expression,
 // ________________________________________________________________________
 void ParsedQuery::addSolutionModifiers(
     SolutionModifiers modifiers,
-    InternalVariableGenerator internalVariableGenerator) {
+    InternalVariableGenerator internalVariableGenerator,
+    std::optional<parsedQuery::Values> postQueryValues) {
   // Process groupClause
   addGroupByClause(std::move(modifiers.groupByVariables_),
                    internalVariableGenerator);
@@ -114,9 +115,36 @@ void ParsedQuery::addSolutionModifiers(
   addHavingClause(std::move(modifiers.havingClauses_), isGroupBy,
                   internalVariableGenerator);
 
+  // The trailing `VALUES` clause is joined after GROUP BY and HAVING, but
+  // before the SELECT expressions and ORDER BY (SPARQL 1.1, sec. 18.2.4.3).
+  // With GROUP BY, the `QueryPlanner` joins it after the `GroupBy`. Without, we
+  // join it with the WHERE clause here, before the BINDs for the ORDER BY
+  // expressions and the SELECT aliases are added below. The WHERE clause gets
+  // its own group, such that its FILTERs don't see the `VALUES` variables.
+  if (postQueryValues.has_value()) {
+    if (isGroupBy) {
+      postQueryValuesClause_ = std::move(postQueryValues);
+    } else {
+      registerVariablesVisibleInQueryBody(
+          postQueryValues->_inlineValues._variables);
+      auto where = std::exchange(_rootGraphPattern, GraphPattern{});
+      _rootGraphPattern._graphPatterns.emplace_back(
+          parsedQuery::GroupGraphPattern{std::move(where)});
+      _rootGraphPattern._graphPatterns.emplace_back(
+          std::move(postQueryValues.value()));
+    }
+  }
+
   // Process ORDER BY clause
   addOrderByClause(std::move(modifiers.orderBy_), isGroupBy,
                    noteForImplicitGroupBy, internalVariableGenerator);
+
+  // With GROUP BY, the `VALUES` variables are only visible after HAVING and
+  // the (internal) aliases from ORDER BY, which are computed by the `GroupBy`.
+  if (postQueryValuesClause_.has_value()) {
+    registerVariablesVisibleInQueryBody(
+        postQueryValuesClause_->_inlineValues._variables);
+  }
 
   // Process limitOffsetClause
   _limitOffset = modifiers.limitOffset_;
@@ -531,10 +559,14 @@ void ParsedQuery::addOrderByClause(
       checkVariableIsVisible(orderKey.variable_, "ORDER BY",
                              variablesFromAliases, additionalError);
     } else if (!ad_utility::contains(_groupByVariables, orderKey.variable_) &&
-               (!variablesFromAliases.contains(orderKey.variable_))) {
+               !variablesFromAliases.contains(orderKey.variable_) &&
+               !(postQueryValuesClause_.has_value() &&
+                 ad_utility::contains(
+                     postQueryValuesClause_->_inlineValues._variables,
+                     orderKey.variable_))) {
       // If the query (in addition to the ORDER BY) also contains a GROUP BY,
-      // the variables in the ORDER BY must be either grouped or the result
-      // of an alias in the SELECT clause.
+      // the variables in the ORDER BY must be either grouped, the result
+      // of an alias in the SELECT clause, or bound by the trailing `VALUES`.
       addWarningOrThrow(absl::StrCat(
           "Variable " + orderKey.variable_.name(),
           " was used in an ORDER BY clause, but is neither grouped nor "

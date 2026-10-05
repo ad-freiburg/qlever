@@ -366,8 +366,9 @@ getTriplesForPatternRewrite(const ParsedQuery& parsed) {
     return "The view's query has a top-level FILTER";
   }
 
-  // A trailing `VALUES` clause also restricts the on-disk rows and is stored
-  // separately from `_rootGraphPattern`, so it needs an explicit check too.
+  // A trailing `VALUES` clause also restricts the on-disk rows. With GROUP BY,
+  // it is stored separately from `_rootGraphPattern`, so it needs an explicit
+  // check too (without, it is part of `_rootGraphPattern`, see below).
   if (parsed.postQueryValuesClause_.has_value()) {
     return "The view's query has a trailing VALUES clause";
   }
