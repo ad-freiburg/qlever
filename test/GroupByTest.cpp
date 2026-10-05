@@ -2658,9 +2658,9 @@ TEST(GroupBy, knownEmptyResult) {
 namespace {
 class SetOfIntervalsExpression : public SparqlExpression {
  public:
-  ExpressionResult evaluate(EvaluationContext*) const override {
+  ExpressionResult evaluate(EvaluationContext* context) const override {
     using SOI = ad_utility::SetOfIntervals;
-    return SOI{SOI::Vec{}};
+    return SOI{SOI::Vec{}, context->size()};
   }
 
   std::string getCacheKey(const VariableToColumnMap&) const override {
