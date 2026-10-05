@@ -328,6 +328,8 @@ addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
 addLinkAndDiscoverTestNoLibs(CompactStringVectorTest sparqlParser)
 
+addLinkAndDiscoverTestNoLibs(OwnedOrViewedVectorTest)
+
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
 addLinkAndDiscoverTest(ContentEncodingHelperTest http)
