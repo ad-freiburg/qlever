@@ -238,6 +238,9 @@ class BlockPrefetcher : public ad_utility::NoCopyNoMove {
           },
           net::use_future);
     }
+    // NOTE: This is not strictly necessary (the `materialize` call above would
+    // also work for all the remaining cases), but it saves the trip to the
+    // `executor` for values that are already available.
     std::promise<std::optional<Block>> promise;
     if (exception != nullptr) {
       promise.set_exception(std::move(exception));

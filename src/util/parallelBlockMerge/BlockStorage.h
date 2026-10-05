@@ -24,7 +24,9 @@
 #include <boost/asio/strand.hpp>
 #include <cstddef>
 #include <exception>
+#include <functional>
 #include <optional>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -58,6 +60,11 @@ template <typename Block>
 class DeferredBlock {
  public:
   using Reader = absl::AnyInvocable<Block() &&>;
+  // The converting constructor of the `std::variant` below (see `fromBlock` and
+  // `fromReader`) relies on the two alternatives being clearly distinct.
+  static_assert(!std::is_same_v<Block, Reader> &&
+                !std::is_constructible_v<Block, Reader> &&
+                !std::is_constructible_v<Reader, Block>);
 
  private:
   std::variant<Block, Reader> value_;
@@ -68,21 +75,21 @@ class DeferredBlock {
  public:
   // Construct from a `block` that is already in memory.
   static DeferredBlock fromBlock(Block block) {
-    return DeferredBlock{
-        std::variant<Block, Reader>{std::in_place_index<0>, std::move(block)}};
+    return DeferredBlock{std::variant<Block, Reader>{std::move(block)}};
   }
 
   // Construct from a `reader` that produces the block when it is called. The
   // `reader` must not be null.
   static DeferredBlock fromReader(Reader reader) {
     AD_CONTRACT_CHECK(reader != nullptr);
-    return DeferredBlock{
-        std::variant<Block, Reader>{std::in_place_index<1>, std::move(reader)}};
+    return DeferredBlock{std::variant<Block, Reader>{std::move(reader)}};
   }
 
   // Return true if the block is already in memory, such that `materialize` is
   // cheap.
-  bool isInMemory() const noexcept { return value_.index() == 0; }
+  bool isInMemory() const noexcept {
+    return std::holds_alternative<Block>(value_);
+  }
 
   // Return the block, calling the reader if it is not in memory yet. Rethrow
   // whatever the reader throws.
@@ -92,9 +99,9 @@ class DeferredBlock {
   // where expensive destructors run should keep in mind.
   Block materialize() && {
     if (isInMemory()) {
-      return std::get<0>(std::move(value_));
+      return std::get<Block>(std::move(value_));
     }
-    return std::move(std::get<1>(value_))();
+    return std::invoke(std::move(std::get<Reader>(value_)));
   }
 };
 
