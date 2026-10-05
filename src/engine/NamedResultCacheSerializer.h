@@ -38,14 +38,18 @@ namespace namedResultCacheSerializer {
 // value is written via `writeEntry(serializer, value)`, which has to write a
 // `NamedResultCache::Value`, but may write a modified version of it (see
 // `writeValue` below).
-template <typename Serializer, typename WriteEntry>
-void writeEntries(
-    Serializer& serializer,
-    const std::vector<std::pair<
-        NamedResultCache::Key, std::shared_ptr<const NamedResultCache::Value>>>&
-        entries,
-    const WriteEntry& writeEntry) {
-  static_assert(ad_utility::serialization::WriteSerializer<Serializer>);
+CPP_template(typename Serializer, typename WriteEntry)(
+    requires ad_utility::serialization::WriteSerializer<Serializer> CPP_and
+        ql::concepts::invocable<
+            const WriteEntry&, Serializer&,
+            const NamedResultCache::
+                Value&>) void writeEntries(Serializer& serializer,
+                                           const std::vector<std::pair<
+                                               NamedResultCache::Key,
+                                               std::shared_ptr<
+                                                   const NamedResultCache::
+                                                       Value>>>& entries,
+                                           const WriteEntry& writeEntry) {
   // Write the magic byte and format version first, s.t. `readFromSerializer`
   // can detect and reject incompatible or unrelated input.
   serializer << detail::magicByte;
@@ -138,12 +142,14 @@ namespace namedResultCacheSerializer {
 // `false`, the words of the local vocab of the `value` are not written (only
 // its blank node blocks, see `serializeOnlyBlankNodeBlocksFromLocalVocab`),
 // because such a caller has stored them elsewhere.
-template <typename Serializer, typename Columns>
-void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
-                const Columns& columns,
-                const std::vector<ColumnIndex>& resultSortedOn,
-                bool writeLocalVocabWords) {
-  static_assert(ad_utility::serialization::WriteSerializer<Serializer>);
+CPP_template(typename Serializer, typename Columns)(
+    requires ad_utility::serialization::WriteSerializer<
+        Serializer>) void writeValue(Serializer& serializer,
+                                     const NamedResultCache::Value& value,
+                                     const Columns& columns,
+                                     const std::vector<ColumnIndex>&
+                                         resultSortedOn,
+                                     bool writeLocalVocabWords) {
   // Serialize the `LocalVocab` first (required for ID remapping).
   if (writeLocalVocabWords) {
     ad_utility::detail::serializeLocalVocab(serializer, value.localVocab_);

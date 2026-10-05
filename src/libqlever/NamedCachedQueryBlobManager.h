@@ -202,7 +202,7 @@ class NamedCachedQueryBlobManager {
   // below.
   static void writeBlobHeader(
       ad_utility::serialization::AlignedByteBufferWriteSerializer& serializer,
-      uint16_t formatVersion = formatVersionWithSecondaryVocab);
+      uint16_t formatVersion);
 
   // Read and verify the magic header and format version at the start of a
   // decompressed blob, advancing `serializer` past them. Return the format

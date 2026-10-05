@@ -95,7 +95,7 @@ std::vector<char> compressedBlobWithHeader(std::array<char, 8> magicBytes,
 // fails.
 std::vector<char> compressedBlobWithOnlyHeader() {
   ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
-  Manager::writeBlobHeader(writer);
+  Manager::writeBlobHeader(writer, Manager::formatVersionWithSecondaryVocab);
   auto data = std::move(writer).data();
   return Manager::compressBlob(ql::span<const char>{data});
 }
@@ -152,7 +152,7 @@ std::vector<char, Manager::BlobAllocator> decompressOrFail(
 // current version of QLever, and nothing else.
 std::vector<char> compressedBlobWithIncompatibleIndexFormat() {
   ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
-  Manager::writeBlobHeader(writer);
+  Manager::writeBlobHeader(writer, Manager::formatVersionWithSecondaryVocab);
   nlohmann::json metadata;
   metadata["index-format-version"] =
       nlohmann::json{{"date", "1900-01-01"}, {"pull-request-number", 42}};
@@ -431,7 +431,7 @@ TEST(NamedCachedQueryBlobManager, compressAndDecompressBlob) {
 // other, and that an invalid header is rejected.
 TEST(NamedCachedQueryBlobManager, writeAndVerifyBlobHeader) {
   ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
-  Manager::writeBlobHeader(writer);
+  Manager::writeBlobHeader(writer, Manager::formatVersionWithSecondaryVocab);
   // Append a payload so that we can check the reader is positioned correctly
   // after the header.
   writer << std::string_view{"payload"};
@@ -525,7 +525,7 @@ TEST(NamedCachedQueryBlobManager, skipAndVerifyBlobHeaderRejectsEmptyInput) {
 TEST(NamedCachedQueryBlobManager, verifyBlobHeaderAtNonZeroPosition) {
   ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
   writer << uint64_t{42};
-  Manager::writeBlobHeader(writer);
+  Manager::writeBlobHeader(writer, Manager::formatVersionWithSecondaryVocab);
   auto data = std::move(writer).data();
 
   BlobReader reader{ql::span<const char>{data}};
