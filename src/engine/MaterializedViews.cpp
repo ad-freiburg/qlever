@@ -370,10 +370,10 @@ IndexMetaData MaterializedViewWriter::writePermutation(
 
 // _____________________________________________________________________________
 void MaterializedViewWriter::writeViewMetadata(
-    const std::vector<float>& multiplicities) const {
-  // Export column names, undef status and multiplicities to view info JSON
-  // file.
-  AD_CORRECTNESS_CHECK(multiplicities.size() == columnNames_.size());
+    const std::vector<size_t>& numDistinct) const {
+  // Export column names, undef status and number of distinct values to view
+  // info JSON file.
+  AD_CORRECTNESS_CHECK(numDistinct.size() == columnNames_.size());
   const auto& varToCol = qet_->getVariableColumns();
   std::vector<nlohmann::json> columns;
   for (size_t col = 0; col < columnNames_.size(); ++col) {
@@ -382,7 +382,7 @@ void MaterializedViewWriter::writeViewMetadata(
                        {"always_defined",
                         varToCol.at(v).mightContainUndef_ ==
                             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined},
-                       {"multiplicity", multiplicities[col]}});
+                       {"num_distinct", numDistinct[col]}});
   }
   nlohmann::json viewInfo = {{"version", MATERIALIZED_VIEWS_VERSION},
                              {"columns", std::move(columns)},
@@ -409,13 +409,15 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
   // exactly would need memory linear in the number of distinct values (hash
   // sets) or an additional external sort per column, but views can have
   // billions of rows. The `HyperLogLog` sketch needs a single pass and constant
-  // memory per column, at the price of an error of less than 1%.
-  std::vector<ad_utility::HyperLogLog> distinctEstimators(columnNames_.size());
+  // memory per column, at the price of a typical error of about 1% (a few
+  // percent at most), which is sufficient for the query planner.
+  std::vector<ad_utility::HyperLogLog> distinctEstimators(columnNames_.size() -
+                                                          1);
   auto estimateDistinct =
       [&distinctEstimators](IdTableStatic<0>& block) -> IdTableStatic<0> {
-    for (size_t col = 1; col < distinctEstimators.size(); ++col) {
+    for (size_t col = 1; col <= distinctEstimators.size(); ++col) {
       for (Id id : block.getColumn(col)) {
-        distinctEstimators[col].add(id.getBits());
+        distinctEstimators[col - 1].add(id.getBits());
       }
     }
     return std::move(block);
@@ -428,21 +430,16 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
       writePermutation(RangeOfIdTables{ad_utility::CachingTransformInputRange(
           std::move(sortedBlocksSPO), std::move(estimateDistinct))});
 
-  // Compute the multiplicity of each selected column over the whole view.
+  // The number of distinct values of each selected column. An estimate can't
+  // be larger than the number of rows or zero for a non-empty view.
   const size_t numRows = spoMetaData.totalElements();
-  std::vector<float> multiplicities;
-  for (size_t col = 0; col < columnNames_.size(); ++col) {
-    if (numRows == 0) {
-      multiplicities.push_back(1.0f);
-      continue;
-    }
-    size_t numDistinct = col == 0 ? spoMetaData.numDistinctCol0()
-                                  : static_cast<size_t>(std::llround(
-                                        distinctEstimators[col].estimate()));
-    multiplicities.push_back(CompressedRelationWriter::computeMultiplicity(
-        numRows, std::clamp(numDistinct, size_t{1}, numRows)));
+  std::vector<size_t> numDistinct{spoMetaData.numDistinctCol0()};
+  for (const auto& estimator : distinctEstimators) {
+    numDistinct.push_back(
+        std::clamp(static_cast<size_t>(std::llround(estimator.estimate())),
+                   std::min(numRows, size_t{1}), numRows));
   }
-  writeViewMetadata(multiplicities);
+  writeViewMetadata(numDistinct);
 
   AD_LOG_INFO << "Statistics for view \"" << name_
               << "\": " << spoMetaData.statistics() << std::endl;
@@ -499,14 +496,14 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
         ". Please re-write the materialized view.")};
   }
 
-  // Make variable to column map and restore multiplicities.
+  // Make variable to column map and restore the number of distinct values.
   ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns;
   for (const auto& [index, columnEntry] :
        ::ranges::views::enumerate(viewInfoJson.at("columns"))) {
     std::string columnName;
     ColumnIndexAndTypeInfo::UndefStatus undefStatus =
         ColumnIndexAndTypeInfo::PossiblyUndefined;
-    float multiplicity = 1.0f;
+    std::optional<size_t> numDistinctOfColumn;
 
     // For backward compatibility, also accept columns as strings not
     // object.
@@ -519,10 +516,12 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
       undefStatus = columnEntry.at("always_defined").get<bool>()
                         ? ColumnIndexAndTypeInfo::AlwaysDefined
                         : ColumnIndexAndTypeInfo::PossiblyUndefined;
-      // Views written by older versions of QLever have no multiplicities.
-      multiplicity = columnEntry.value("multiplicity", 1.0f);
+      // Views written by older versions of QLever have no distinct counts.
+      if (columnEntry.contains("num_distinct")) {
+        numDistinctOfColumn = columnEntry.at("num_distinct").get<size_t>();
+      }
     }
-    multiplicities_.push_back(multiplicity);
+    numDistinct_.push_back(numDistinctOfColumn);
 
     varToColMap_.insert({Variable{std::move(columnName)},
                          {static_cast<ColumnIndex>(index), undefStatus}});

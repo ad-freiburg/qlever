@@ -116,7 +116,9 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
   AD_CONTRACT_CHECK(qec != nullptr);
   AD_CONTRACT_CHECK(permutation_ != nullptr);
   AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
-  determineMultiplicities();
+  // NOTE: The multiplicities are determined lazily (see `getMultiplicity`),
+  // because they may depend on the size estimate, which some callers only set
+  // after construction (see `makeCopyWithPrefilteredScanSpecAndBlocks`).
 }
 
 // _____________________________________________________________________________
@@ -471,44 +473,58 @@ size_t IndexScan::getCostEstimate() {
 
 // _____________________________________________________________________________
 void IndexScan::determineMultiplicities() {
-  multiplicity_ = [this]() -> std::vector<float> {
-    const auto& idx = getIndex();
-    if (numVariables_ == 0) {
-      return {};
-    } else if (numVariables_ == 1) {
-      // There are no duplicate triples in RDF and two elements are fixed.
-      return {1.0f};
-    } else if (numVariables_ == 2) {
-      return idx.getMultiplicities(*getPermutedTriple()[0], permutation(),
-                                   locatedTriplesState());
-    } else {
-      AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      return idx.getMultiplicities(permutation());
-    }
-  }();
-  multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
-
-  // The multiplicities above are wrong for a materialized view: its rows may
-  // contain duplicates, its additional columns are actual data and the
-  // statistics of the index are not the statistics of the view. Use the
-  // multiplicities stored with the view instead.
   if (auto view = permutation().materializedView()) {
-    // A multiplicity can't be larger than the number of rows.
-    float maxMultiplicity = std::max(1.0f, static_cast<float>(sizeEstimate_));
-    for (size_t i = 0; i < multiplicity_.size(); ++i) {
-      // With a fixed first column, the multiplicity of the second column from
-      // the metadata of the relation (see above) is exact, so keep it.
-      if (numVariables_ == 2 && i == 0) {
-        continue;
+    // A materialized view may contain duplicate rows, its additional columns
+    // are actual data and the statistics of the index are not the statistics
+    // of the view. Therefore estimate the multiplicity of a column as the
+    // number of rows of this scan divided by the number of distinct values of
+    // the column in the whole view. For a scan of the whole view, this is the
+    // multiplicity of the column. With fixed columns, this assumes that the
+    // values of the column are distributed uniformly over the view.
+    auto numRows = static_cast<float>(sizeEstimate_);
+    auto estimateMultiplicity = [&view, numRows](ColumnIndex col) {
+      auto numDistinct = view->numDistinct(col);
+      if (!numDistinct.has_value() || numDistinct.value() == 0) {
+        return 1.0f;
       }
-      // The (unstripped) result consists of the last `numVariables_` of the
-      // first three columns of the view, followed by the additional columns.
-      ColumnIndex viewColumn = i < numVariables_
-                                   ? 3 - numVariables_ + i
-                                   : additionalColumns_.at(i - numVariables_);
-      multiplicity_[i] =
-          std::min(view->multiplicity(viewColumn), maxMultiplicity);
+      return std::max(1.0f, numRows / static_cast<float>(numDistinct.value()));
+    };
+    // The (unstripped) result consists of the last `numVariables_` of the
+    // first three columns of the view, followed by the additional columns.
+    multiplicity_.clear();
+    for (ColumnIndex col = 3 - numVariables_; col < 3; ++col) {
+      multiplicity_.push_back(estimateMultiplicity(col));
     }
+    for (ColumnIndex col : additionalColumns_) {
+      multiplicity_.push_back(estimateMultiplicity(col));
+    }
+    // With a fixed first column, the multiplicity of the second column from
+    // the metadata of the relation is exact.
+    if (numVariables_ == 2) {
+      multiplicity_.at(0) =
+          getIndex()
+              .getMultiplicities(*getPermutedTriple()[0], permutation(),
+                                 locatedTriplesState())
+              .at(0);
+    }
+  } else {
+    multiplicity_ = [this]() -> std::vector<float> {
+      const auto& idx = getIndex();
+      if (numVariables_ == 0) {
+        return {};
+      } else if (numVariables_ == 1) {
+        // There are no duplicate triples in RDF and two elements are fixed.
+        return {1.0f};
+      } else if (numVariables_ == 2) {
+        return idx.getMultiplicities(*getPermutedTriple()[0], permutation(),
+                                     locatedTriplesState());
+      } else {
+        AD_CORRECTNESS_CHECK(numVariables_ == 3);
+        return idx.getMultiplicities(permutation());
+      }
+    }();
+    multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(),
+                         1.0f);
   }
 
   if (varsToKeep_.has_value()) {

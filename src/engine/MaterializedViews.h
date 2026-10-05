@@ -153,9 +153,9 @@ class MaterializedViewWriter {
   IndexMetaData writePermutation(RangeOfIdTables sortedBlocksSPO) const;
 
   // Helper for `computeResultAndWritePermutation`: Writes the metadata JSON
-  // files with column names, ordering and the given multiplicities (one per
-  // column in `columnNames_`) to disk.
-  void writeViewMetadata(const std::vector<float>& multiplicities) const;
+  // files with column names, ordering and the given number of distinct values
+  // (one per column in `columnNames_`) to disk.
+  void writeViewMetadata(const std::vector<size_t>& numDistinct) const;
 
   // Actually computes, permutes and if needed externally sorts the query result
   // and writes the view (SPO permutation and metadata) to disk.
@@ -173,9 +173,9 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
   std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
       Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>(), name_)};
   VariableToColumnMap varToColMap_;
-  // The multiplicity (number of rows / number of distinct values) of each
-  // column over the whole view.
-  std::vector<float> multiplicities_;
+  // The number of distinct values of each column over the whole view (if
+  // stored in the view's info JSON), see `numDistinct` below.
+  std::vector<std::optional<size_t>> numDistinct_;
   std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
   std::optional<std::string> originalQuery_;
   std::optional<ParsedQuery> parsedQuery_;
@@ -211,10 +211,12 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
     return varToColMap_;
   }
 
-  // Get the multiplicity of a column over the whole view, or `1.0` if it is
-  // unknown (e.g. for views written by older versions of QLever).
-  float multiplicity(ColumnIndex col) const {
-    return col < multiplicities_.size() ? multiplicities_[col] : 1.0f;
+  // Get the number of distinct values of a column over the whole view, or
+  // `std::nullopt` if it is unknown (e.g. for views written by older versions
+  // of QLever or for the empty columns added to views with fewer than four
+  // columns). It is used to estimate multiplicities (see `IndexScan`).
+  std::optional<size_t> numDistinct(ColumnIndex col) const {
+    return col < numDistinct_.size() ? numDistinct_[col] : std::nullopt;
   }
 
   // Get the original query string used for writing the view.

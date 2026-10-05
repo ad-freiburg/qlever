@@ -21,8 +21,12 @@ namespace ad_utility {
 // A HyperLogLog sketch (Flajolet et al., 2007) for estimating the number of
 // distinct values in a stream using constant memory (`2^14` bytes) and constant
 // time per value. The relative standard error is about `1.04 / sqrt(2^14)`,
-// which is less than 1%. Small cardinalities (up to tens of thousands) are
-// estimated almost exactly via linear counting.
+// which is less than 1%, but this is a standard deviation and not a bound.
+// Small cardinalities (up to tens of thousands) are estimated almost exactly
+// via linear counting. Just above the switch from linear counting to the raw
+// estimate (around `2.5 * 2^14` distinct values), the raw estimate is biased,
+// such that errors of a few percent can occur (HyperLogLog++ corrects this with
+// empirical bias tables, which are not needed for our purposes).
 class HyperLogLog {
   static constexpr size_t numBits_ = 14;
   static constexpr size_t numRegisters_ = size_t{1} << numBits_;
