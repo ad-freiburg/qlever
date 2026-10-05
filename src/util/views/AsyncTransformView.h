@@ -83,7 +83,7 @@ class AsyncTransformView
   // `get()`, because for some ranges (e.g. an `InputRangeFromGet`) `begin()`
   // already reads the first element.
   std::optional<ql::ranges::iterator_t<Range>> it_;
-  Transformation transformation_;
+  [[no_unique_address]] Transformation transformation_;
   size_t maxNumElementsInFlight_;
   // The results of the elements that have been read from the `range_`, but not
   // yet yielded, in the order of the elements. Some of them may still be in
