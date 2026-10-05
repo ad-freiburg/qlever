@@ -208,6 +208,10 @@ addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 
 addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
 
+addLinkAndDiscoverTestNoLibs(SortedSequenceTwoSortedRangesTest)
+
+addLinkAndDiscoverTestNoLibs(SortedSequenceManySortedBlocksTest)
+
 addLinkAndDiscoverTest(RebuildIndexStrategyTest qlever_util)
 
 addLinkAndDiscoverTest(KeepPreviousIndexDirsTest qlever)
