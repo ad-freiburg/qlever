@@ -12,10 +12,16 @@ function(linkTest basename)
     # compiler flags and definitions as `testUtil`, so only tests that link
     # against `testUtil` qualify (otherwise, e.g., the definitions of
     # OpenTelemetry are missing, and GCC ignores the precompiled header, but
-    # still includes all its headers). Shared libraries are excluded because of
-    # `-fPIC` for `testUtil` vs. `-fPIE` for the test executables.
-    if (USE_PRECOMPILED_HEADERS AND NOT BUILD_SHARED_LIBS AND "testUtil" IN_LIST ARGN)
+    # still includes all its headers).
+    if (USE_PRECOMPILED_HEADERS AND "testUtil" IN_LIST ARGN)
         target_precompile_headers(${basename} REUSE_FROM testUtil)
+        # With shared libraries, all code is compiled with `-fPIC` anyway (see the
+        # top-level `CMakeLists.txt`). The `-fPIE` that CMake would additionally
+        # add for the test executables makes the precompiled header of the shared
+        # `testUtil` unusable for them (Clang even fails with an error).
+        if (BUILD_SHARED_LIBS)
+            set_target_properties(${basename} PROPERTIES POSITION_INDEPENDENT_CODE OFF)
+        endif ()
     endif ()
 endfunction()
 
@@ -561,12 +567,6 @@ addLinkAndDiscoverTest(CopyableSynchronizationTest)
 addLinkAndDiscoverTest(LazyJsonParserTest)
 
 addLinkAndDiscoverTest(GeneratorsTest)
-# With the precompiled headers, GCC 13 produces a false-positive
-# `-Warray-bounds` warning for the message construction of an
-# `AD_CORRECTNESS_CHECK` that is inlined into this test.
-if (TARGET GeneratorsTest)
-    set_target_properties(GeneratorsTest PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
-endif ()
 
 addLinkAndDiscoverTest(FilterTest engine)
 
