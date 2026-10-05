@@ -421,6 +421,23 @@ TEST(QueryPlanner, filtersAreNotAppliedToPossiblyUndefinedVariables) {
       qec);
 }
 
+// Non-deterministic filters must not be applied before a join.
+TEST(QueryPlanner, nonDeterministicFiltersAreAppliedLast) {
+  auto scan = h::IndexScanFromStrings;
+  auto join = h::Join(scan("?s", "<p>", "?o"), scan("?s", "<q>", "?y"));
+  h::expectGreedy("SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(?o > 3) }",
+                  h::Join(h::Filter("?o > 3", scan("?s", "<p>", "?o")),
+                          scan("?s", "<q>", "?y")));
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(?o > 3 && RAND() < 0.5) }",
+      h::Filter("?o > 3 && RAND() < 0.5", join));
+  h::expectGreedy("SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(RAND() < 0.5) }",
+                  h::Filter("RAND() < 0.5", join));
+  h::expectDynamicProgramming(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(RAND() < 0.5) }",
+      h::Filter("RAND() < 0.5", join));
+}
+
 TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
