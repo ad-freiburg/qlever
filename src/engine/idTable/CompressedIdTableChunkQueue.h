@@ -121,13 +121,13 @@ class ChunkQueue : public NoCopyNoMove,
 
  public:
   // Construct from the `ioExecutor` on which the compression and the writes
-  // are run and from which the strand of this queue
-  // is derived, the `allocator` for the blocks that are read back, the name of
-  // the file to spill to (which is overwritten if it already exists and deleted
-  // again as soon as this queue is done with it), the `compressionLevel` that
-  // the spilled blocks are stored with, and the number of blocks that are kept
-  // in memory before this queue starts spilling. That number may be zero, in
-  // which case every block is spilled.
+  // are run and from which the strand of this queue is derived, the `allocator`
+  // for the blocks that are read back, the name of the file to spill to (which
+  // is overwritten if it already exists and deleted again as soon as this queue
+  // is done with it), the `compressionLevel` that the spilled blocks are stored
+  // with, and the number of blocks that are kept in memory before this queue
+  // starts spilling. That number may be zero, in which case every block is
+  // spilled.
   ChunkQueue(net::any_io_executor ioExecutor, AllocatorWithLimit<Id> allocator,
              std::string filename,
              CompressedBlockFile::CompressionLevel compressionLevel,

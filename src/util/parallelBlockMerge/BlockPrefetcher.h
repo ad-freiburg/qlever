@@ -43,10 +43,10 @@ namespace net = boost::asio;
 // The consuming side of a sink that a `BlockPrefetcher` reads from, see
 // `InOrderBlockSink`: `asyncGetNextBlock` completes with the next (possibly
 // deferred) block, or with `std::nullopt` at the end of the merge, or with an
-// exception, and
-// `asyncStop` stops the merge, such that a pending and every later
-// `asyncGetNextBlock` completes with `std::nullopt` promptly. (The producing
-// side is the `SinkConcept`, which the `BlockPrefetcher` does not need.)
+// exception, and `asyncStop` stops the merge, such that a pending and every
+// later `asyncGetNextBlock` completes with `std::nullopt` promptly. (The
+// producing side is the `SinkConcept`, which the `BlockPrefetcher` does not
+// need.)
 template <typename T, typename Block>
 concept PrefetchableSinkConcept = requires(T& sink) {
   sink.asyncGetNextBlock(

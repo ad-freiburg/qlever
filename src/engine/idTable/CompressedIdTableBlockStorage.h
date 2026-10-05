@@ -100,13 +100,12 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
 
  public:
   // Construct from the `ioExecutor` on which the compression and the writes
-  // are run and from which the strands of this
-  // storage and of its chunks are derived, the name of the file to spill to,
-  // the `allocator` for the blocks that are read back, and the number of blocks
-  // that are kept in memory per chunk before that chunk starts spilling. That
-  // number may be zero, in which case every block is spilled. The
-  // `compressionLevel` decides how the spilled blocks are stored, see
-  // `CompressedBlockFile::CompressionLevel`.
+  // are run and from which the strands of this storage and of its chunks are
+  // derived, the name of the file to spill to, the `allocator` for the blocks
+  // that are read back, and the number of blocks that are kept in memory per
+  // chunk before that chunk starts spilling. That number may be zero, in which
+  // case every block is spilled. The `compressionLevel` decides how the spilled
+  // blocks are stored, see `CompressedBlockFile::CompressionLevel`.
   //
   // NOTE: The `filenamePrefix` is not a filename but the prefix of one per
   // chunk, see `spillFilename`. It has to be unique among all the storages that

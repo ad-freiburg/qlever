@@ -281,8 +281,8 @@ TEST(ExternalIdTableSorterMergeConfig, mergeOptions) {
 
 // _____________________________________________________________________________
 // The read-ahead is never zero, no matter how small the number of buffered
-// output blocks is, because a merge without any read-ahead at all would never
-// make progress, see `MergeOptions::numPrefetchedOutputBlocks`.
+// output blocks is, because the `BlockPrefetcher` rejects a read-ahead of zero,
+// see `MergeOptions::numPrefetchedOutputBlocks`.
 TEST(ExternalIdTableSorterMergeConfig, mergeOptionsWithFewBufferedBlocks) {
   auto config = baseConfig();
   for (size_t numBufferedOutputBlocks : {size_t{1}, size_t{2}, size_t{3}}) {
