@@ -352,14 +352,11 @@ class SplitVocabulary {
   // one (see there for the effect). No-op otherwise.
   void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
     for (auto& vocab : underlying_) {
-      std::visit(
-          [&grid](auto& v) {
-            using T = std::decay_t<decltype(v)>;
-            if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
-              v.setGeoCellGrid(grid);
-            }
-          },
-          vocab);
+      ad_utility::visitIf(
+          vocab, CPP_template_lambda(&grid)(typename T)(T & v)(
+                     requires ad_utility::isInstantiation<T, GeoVocabulary>) {
+            v.setGeoCellGrid(grid);
+          });
     }
   }
 
@@ -369,14 +366,11 @@ class SplitVocabulary {
   std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
     std::optional<ad_utility::GeoCellGrid> result = std::nullopt;
     for (const auto& vocab : underlying_) {
-      std::visit(
-          [&result](const auto& v) {
-            using T = std::decay_t<decltype(v)>;
-            if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
-              result = v.getGeoCellGrid();
-            }
-          },
-          vocab);
+      ad_utility::visitIf(
+          vocab, CPP_template_lambda(&result)(typename T)(const T& v)(
+                     requires ad_utility::isInstantiation<T, GeoVocabulary>) {
+            result = v.getGeoCellGrid();
+          });
     }
     return result;
   }
