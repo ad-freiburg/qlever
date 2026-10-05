@@ -89,18 +89,20 @@ inline bool allVariablesAreRequired(
 
 // A helper for the column stripping of operations.
 // This function creates an execution tree with the given Operation as its root.
-// Some operations need certain variables to perform their operation, even
-// though these variables are not necessarily part of the result requested by
-// the parent. (For example, the operation Sort needs the variables it sorts by,
-// but the parent may request the sorted result without requesting those
-// variables themselves.) If such a variable is needed by the operation but not
-// requested by the parent, an additional StripColumns operation is inserted
-// above the given operation to remove it after the operation has been
-// executed. If all variables needed by the operation are also requested by
-// the parent, the tree with the given Operation as root is returned
-// unchanged and without an additional StripColumns operation.
+// Some operations produce certain variables or need certain variables to
+// perform their operation, even though these variables are not necessarily part
+// of the result requested by the parent. (For example, the operation Sort needs
+// the variables it sorts by, but the parent may request the sorted result
+// without requesting those variables themselves.) If such a variable is needed
+// by the operation but not requested by the parent, an additional StripColumns
+// operation is inserted above the given operation to remove it after the
+// operation has been executed. If all variables needed by the operation are
+// also requested by the parent, the tree with the given Operation as root is
+// returned unchanged and without an additional StripColumns operation.
 // TODO <joka921> It would be more efficient but more complicated to tell the
-// DISTINCT operation directly to not export some of its keepIndices_.
+// operation directly not to export some of its produced or needed variables.
+// (for example: The needed variables of the DISTINCT operation are contained in
+// its keepIndices_)
 template <typename Operation, typename... Args>
 std::optional<std::shared_ptr<QueryExecutionTree>>
 makeTreeWithOptionalStripOperation(
