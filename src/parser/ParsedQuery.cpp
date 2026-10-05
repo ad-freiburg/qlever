@@ -397,6 +397,64 @@ bool ParsedQuery::isAggregatingQuery() const {
 }
 
 // ____________________________________________________________________________
+bool ParsedQuery::isDeterministic() const {
+  // `ORDER BY` and `GROUP BY` expressions are `BIND`s in the root pattern.
+  auto isFilterDeterministic = [](const SparqlFilter& filter) {
+    return filter.expression_.isDeterministic();
+  };
+  return _rootGraphPattern.isDeterministic() &&
+         ql::ranges::all_of(_havingClauses, isFilterDeterministic) &&
+         ql::ranges::all_of(getAliases(), [](const Alias& alias) {
+           return alias._expression.isDeterministic();
+         });
+}
+
+// ____________________________________________________________________________
+bool ParsedQuery::GraphPattern::isDeterministic() const {
+  using namespace parsedQuery;
+  auto isOperationDeterministic = [](const auto& op) -> bool {
+    using T = std::decay_t<decltype(op)>;
+    if constexpr (ad_utility::SimilarToAny<T, Optional, Minus,
+                                           GroupGraphPattern>) {
+      return op._child.isDeterministic();
+    } else if constexpr (std::is_same_v<T, Union>) {
+      return op._child1.isDeterministic() && op._child2.isDeterministic();
+    } else if constexpr (std::is_same_v<T, Subquery>) {
+      return op.get().isDeterministic();
+    } else if constexpr (std::is_same_v<T, Describe>) {
+      return op.whereClause_.get().isDeterministic();
+    } else if constexpr (std::is_same_v<T, TransPath>) {
+      return op._childGraphPattern.isDeterministic();
+    } else if constexpr (std::is_same_v<T, Bind>) {
+      return op._expression.isDeterministic();
+    } else if constexpr (ad_utility::SimilarToAny<
+                             T, PathQuery, SpatialQuery, TextSearchQuery,
+                             NamedCachedResult, MaterializedViewQuery>) {
+      return !op.childGraphPattern_.has_value() ||
+             op.childGraphPattern_->isDeterministic();
+    } else if constexpr (std::is_same_v<T, Service>) {
+      // Mirror `isDeterministicImpl()` of the corresponding operations.
+      return getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>();
+    } else if constexpr (std::is_same_v<T, Load>) {
+      return getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>();
+    } else if constexpr (std::is_same_v<T, ExternalValuesQuery>) {
+      return false;
+    } else {
+      static_assert(ad_utility::SimilarToAny<T, BasicGraphPattern, Values>);
+      return true;
+    }
+  };
+  return ql::ranges::all_of(_filters,
+                            [](const SparqlFilter& filter) {
+                              return filter.expression_.isDeterministic();
+                            }) &&
+         ql::ranges::all_of(_graphPatterns,
+                            [&isOperationDeterministic](const auto& op) {
+                              return op.visit(isOperationDeterministic);
+                            });
+}
+
+// ____________________________________________________________________________
 void ParsedQuery::checkVariableIsVisible(
     const Variable& variable, const std::string& locationDescription,
     const ad_utility::HashSet<Variable>& additionalVisibleVariables,

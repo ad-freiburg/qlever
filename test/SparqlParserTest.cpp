@@ -14,6 +14,7 @@
 #include "parser/SparqlParser.h"
 #include "rdfTypes/Iri.h"
 #include "util/ParsedQueryTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace m = matchers;
@@ -1035,6 +1036,43 @@ TEST(ParserTest, isAggregatingQuery) {
   // Neither.
   EXPECT_FALSE(
       parseQuery("SELECT ?a ?b WHERE { ?a <rel> ?b }").isAggregatingQuery());
+}
+
+// _____________________________________________________________________________
+TEST(ParserTest, isDeterministic) {
+  auto isDeterministic = [](std::string query) {
+    return parseQuery(std::move(query)).isDeterministic();
+  };
+  EXPECT_TRUE(isDeterministic(
+      "SELECT * { ?a <rel> ?b FILTER(?b > 3) BIND(?b + 1 AS ?c) }"));
+  EXPECT_TRUE(
+      isDeterministic("SELECT * { ?a <rel> ?b FILTER EXISTS { ?b ?p ?o } }"));
+
+  // Non-deterministic expressions in all the places where they can occur.
+  EXPECT_FALSE(
+      isDeterministic("SELECT * { ?a <rel> ?b FILTER(RAND() < 0.5) }"));
+  EXPECT_FALSE(isDeterministic("SELECT * { ?a <rel> ?b BIND(UUID() AS ?c) }"));
+  EXPECT_FALSE(isDeterministic("SELECT ?a (RAND() AS ?c) { ?a <rel> ?b }"));
+  EXPECT_FALSE(isDeterministic("SELECT * { ?a <rel> ?b } ORDER BY RAND()"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT ?a { ?a <rel> ?b } GROUP BY ?a HAVING (SUM(RAND()) > 1)"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT * { ?a <rel> ?b OPTIONAL { BIND(BNODE() AS ?c) } }"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT * { { ?a <rel> ?b } UNION { BIND(STRUUID() AS ?c) } }"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT * { ?a <rel> ?b { SELECT ?c { BIND(RAND() AS ?c) } } }"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT * { ?a <rel> ?b FILTER EXISTS { BIND(RAND() AS ?c) } }"));
+
+  // A `SERVICE` is deterministic iff its results are cached.
+  std::string serviceQuery =
+      "SELECT * { SERVICE <http://example.org/sparql> { ?a <rel> ?b } }";
+  EXPECT_FALSE(isDeterministic(serviceQuery));
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheServiceResults_>(
+          true);
+  EXPECT_TRUE(isDeterministic(serviceQuery));
 }
 
 // _____________________________________________________________________________

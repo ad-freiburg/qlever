@@ -436,6 +436,12 @@ TEST(QueryPlanner, nonDeterministicFiltersAreAppliedLast) {
   h::expectDynamicProgramming(
       "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(RAND() < 0.5) }",
       h::Filter("RAND() < 0.5", join));
+  // The same holds for an `EXISTS` with a non-deterministic argument.
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y "
+      "FILTER EXISTS { ?s <r> ?b FILTER(RAND() < 0.5) } }",
+      h::Filter("EXISTS { ?s <r> ?b FILTER(RAND() < 0.5) }",
+                h::ExistsJoin(join, ::testing::_)));
 }
 
 TEST(QueryPlanner, threeVarTriples) {
