@@ -272,6 +272,6 @@ Distinct::makeTreeWithStrippedColumns(
   // Create query execution tree with Distinct-Operation as root-Operation and
   // add additional stripColumns-Operation if needed.
   return makeTreeWithOptionalStripOperation<Distinct>(
-      getExecutionContext(), variables, std::move(keepVars), std::move(subtree),
+      getExecutionContext(), variables, std::move(subtree),
       std::move(distinctKeepIndices));
 }

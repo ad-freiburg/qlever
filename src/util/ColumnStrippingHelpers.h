@@ -91,8 +91,7 @@ template <typename Operation, typename... Args>
 std::optional<std::shared_ptr<QueryExecutionTree>>
 makeTreeWithOptionalStripOperation(
     QueryExecutionContext* qec,
-    const std::set<Variable>& variablesRequestedFromParent,
-    std::vector<const Variable*> variablesNeededByOperation, Args&&... args) {
+    const std::set<Variable>& variablesRequestedFromParent, Args&&... args) {
   // Create query execution tree with the given operation as root.
   auto treeWithOperationAsRoot = ad_utility::makeExecutionTree<Operation>(
       qec, std::forward<Args>(args)...);
@@ -101,10 +100,10 @@ makeTreeWithOptionalStripOperation(
   // requested from the parent. And either return the QueryExecutionTree with or
   // without an additional StripColumns-Operation.
   if (ql::ranges::all_of(
-          variablesNeededByOperation,
-          [&variablesRequestedFromParent](const Variable* varNeeded) {
+          treeWithOperationAsRoot->getVariableColumns() | ql::views::keys,
+          [&variablesRequestedFromParent](const Variable& varNeeded) {
             return ad_utility::contains(variablesRequestedFromParent,
-                                        *varNeeded);
+                                        varNeeded);
           })) {
     return treeWithOperationAsRoot;
   }

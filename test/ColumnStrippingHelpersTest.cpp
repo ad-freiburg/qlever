@@ -93,7 +93,7 @@ TEST(makeTreeWithOptionalStripOperation, basic) {
 
     const Variable varB = Variable{"?b"};
     auto tree = makeTreeWithOptionalStripOperation<Distinct>(
-        qec, variablesRequestedFromParent, std::vector<const Variable*>{&varB},
+        qec, variablesRequestedFromParent,
         std::move(subtree_new), std::vector<ColumnIndex>{1});
     ASSERT_TRUE(tree.has_value());
     auto qet = *tree;
@@ -135,7 +135,7 @@ TEST(makeTreeWithOptionalStripOperation, basic) {
 
     const Variable varB = Variable{"?b"};
     auto tree = makeTreeWithOptionalStripOperation<Distinct>(
-        qec, variablesRequestedFromParent, std::vector<const Variable*>{&varB},
+        qec, variablesRequestedFromParent,
         std::move(subtree_new), std::vector<ColumnIndex>{1});
     ASSERT_TRUE(tree.has_value());
     auto qet = *tree;
