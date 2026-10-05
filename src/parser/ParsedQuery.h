@@ -79,6 +79,9 @@ class ParsedQuery {
   std::vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   std::string _originalString;
+  // The trailing `VALUES` clause of a query with GROUP BY, which is joined by
+  // the `QueryPlanner` after GROUP BY and HAVING. Without GROUP BY, it is part
+  // of `_rootGraphPattern`, see `addSolutionModifiers`.
   std::optional<parsedQuery::Values> postQueryValuesClause_ = std::nullopt;
 
   // Contains warnings about queries that are valid according to the SPARQL
@@ -246,10 +249,11 @@ class ParsedQuery {
   // grouped or aggregated in the presence of a GROUP BY clause.
   // `internalVariableGenerator` has to generate distinct internal variables so
   // they can be used by operations that might be added as a consequence of this
-  // function.
-  void addSolutionModifiers(
-      SolutionModifiers modifiers,
-      InternalVariableGenerator internalVariableGenerator);
+  // function. `postQueryValues` is the trailing `VALUES` clause of the query
+  // (if any), which is in scope for ORDER BY and the SELECT clause.
+  void addSolutionModifiers(SolutionModifiers modifiers,
+                            InternalVariableGenerator internalVariableGenerator,
+                            std::optional<parsedQuery::Values> postQueryValues);
 
   // If this is a SELECT query, return all the selected aliases. Return an empty
   // vector for construct clauses.

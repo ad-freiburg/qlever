@@ -129,6 +129,10 @@ class SparqlQleverVisitor {
   // about the number of internal variables that have already been assigned.
   ParsedQuery parsedQuery_;
 
+  // The trailing `VALUES` clause of the top-level query. It is visited before
+  // the query itself, because `ParsedQuery::addSolutionModifiers` needs it.
+  std::optional<parsedQuery::Values> postQueryValues_;
+
   // In most contexts, blank node labels in a SPARQL query are actually
   // variables. But sometimes they are in fact blank node labels (e.g. in
   // CONSTRUCT or UPDATE templates) and sometimes they are simply forbidden by

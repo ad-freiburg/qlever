@@ -317,15 +317,16 @@ TEST_F(MaterializedViewsPatternMatchingTest, restrictingModifiersNotRewritten) {
       "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o . FILTER(?s = <s1>) }",
       "top-level FILTER");
 
-  // Star / chain with a trailing VALUES clause.
+  // Star / chain with a trailing VALUES clause. Without GROUP BY, it is joined
+  // with the WHERE clause in the root graph pattern.
   expectNotSuitableForRewrite(
       qlv(), manager(), "valuesStarView",
       "SELECT ?s ?o1 ?o2 { ?s <p1> ?o1 . ?s <p2> ?o2 } VALUES ?s { <s1> }",
-      "trailing VALUES clause");
+      "more than one graph pattern");
   expectNotSuitableForRewrite(
       qlv(), manager(), "valuesChainView",
       "SELECT ?s ?m ?o { ?s <p1> ?m . ?m <p2> ?o } VALUES ?s { <s1> }",
-      "trailing VALUES clause");
+      "more than one graph pattern");
 
   // Star with DISTINCT, chain with REDUCED.
   expectNotSuitableForRewrite(

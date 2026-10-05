@@ -1032,22 +1032,32 @@ TEST(SparqlParser, GroupGraphPattern) {
                       m::OptionalGraphPattern(m::Triples(
                           {{Var{"?x"}, iri("<foo>"), iri("<bar>")}}))));
   // The trailing `VALUES` clause of a subquery belongs to the subquery, and its
-  // variables are selected by `SELECT *`.
+  // variables are selected by `SELECT *`. Without GROUP BY, it is joined with
+  // the (separately grouped) WHERE clause.
   expectGraphPattern(
       "{ SELECT *  WHERE { ?x ?y ?z } VALUES ?a { <a> <b> } }",
       m::GraphPattern(::testing::AllOf(
-          m::SubSelect(m::AsteriskSelect(false, false),
-                       m::GraphPattern(DummyTriplesMatcher)),
+          m::SubSelect(
+              m::AsteriskSelect(false, false),
+              m::GraphPattern(
+                  m::GroupGraphPattern(DummyTriplesMatcher),
+                  m::InlineData({Var{"?a"}}, {{iri("<a>")}, {iri("<b>")}}))),
           ::testing::VariantWith<parsedQuery::Subquery>(AD_PROPERTY(
               parsedQuery::Subquery, get,
-              ::testing::AllOf(
-                  AD_FIELD(ParsedQuery, postQueryValuesClause_,
-                           ::testing::Optional(m::Values(
-                               {Var{"?a"}}, {{iri("<a>")}, {iri("<b>")}}))),
-                  AD_PROPERTY(
-                      ParsedQuery, getVisibleVariables,
-                      ::testing::ElementsAre(Var{"?x"}, Var{"?y"}, Var{"?z"},
-                                             Var{"?a"}))))))));
+              ::testing::AllOf(AD_FIELD(ParsedQuery, postQueryValuesClause_,
+                                        ::testing::Eq(std::nullopt)),
+                               AD_PROPERTY(ParsedQuery, getVisibleVariables,
+                                           ::testing::ElementsAre(
+                                               Var{"?x"}, Var{"?y"}, Var{"?z"},
+                                               Var{"?a"}))))))));
+  // With GROUP BY, it is joined after the grouping by the `QueryPlanner`.
+  expectGraphPattern(
+      "{ SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x VALUES ?a { <a> } }",
+      m::GraphPattern(::testing::VariantWith<parsedQuery::Subquery>(AD_PROPERTY(
+          parsedQuery::Subquery, get,
+          AD_FIELD(
+              ParsedQuery, postQueryValuesClause_,
+              ::testing::Optional(m::Values({Var{"?a"}}, {{iri("<a>")}})))))));
   expectGraphPattern("{ SERVICE <endpoint> { ?s ?p ?o } }",
                      m::GraphPattern(m::Service(
                          iri("<endpoint>"), {Var{"?s"}, Var{"?p"}, Var{"?o"}},
@@ -1511,6 +1521,21 @@ TEST(SparqlParser, Query) {
                   {"?a was used in the expression of a BIND clause"}));
   expectQuery("SELECT * { } ORDER BY ?s",
               m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
+
+  // The variables of a trailing `VALUES` clause are visible in ORDER BY and the
+  // SELECT clause (also with GROUP BY), but not in GROUP BY itself.
+  expectQuery(
+      "SELECT ?x (STR(?x) AS ?y) {} ORDER BY ?x STR(?x) VALUES ?x { 1 }",
+      m::WarningsOfParsedQuery({}));
+  expectQuery("SELECT ?p { ?s ?p ?o } GROUP BY ?p ORDER BY ?v VALUES ?v { 1 }",
+              m::WarningsOfParsedQuery({}));
+  expectQuery("SELECT ?v { ?s ?p ?o } GROUP BY ?v VALUES ?v { 1 }",
+              m::WarningsOfParsedQuery({"?v was used by GROUP BY"}));
+  expectQueryFails("SELECT (1 AS ?x) {} VALUES ?x { 2 }",
+                   contains("?x of an AS clause was already used"));
+  expectQueryFails(
+      "SELECT (COUNT(?s) AS ?x) { ?s ?p ?o } GROUP BY ?p VALUES ?x { 2 }",
+      contains("?x of an AS clause was already used"));
 
   // An `EXISTS` introduces its own scope: variables that occur only inside its
   // body (here `?x`) must not trigger an "unbound variable" warning, neither in

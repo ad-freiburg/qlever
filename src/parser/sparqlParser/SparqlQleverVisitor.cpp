@@ -392,18 +392,14 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   // They are visited in the order in which they appear, so a definition can
   // `INCLUDE` previously defined named subqueries.
   visitVector(ctx->namedSubqueryDefinition());
-  auto query =
-      visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
-                                    ctx->describeQuery(), ctx->askQuery());
-
   // The trailing `VALUES` clause is joined before the projection, so its
   // variables are also selected by `SELECT *`. The SPARQL 1.1 spec is vague
   // here, see https://github.com/w3c/rdf-tests/issues/381 for details.
-  query.postQueryValuesClause_ = visit(ctx->valuesClause());
-  if (query.postQueryValuesClause_.has_value()) {
-    query.registerVariablesVisibleInQueryBody(
-        query.postQueryValuesClause_->_inlineValues._variables);
-  }
+  postQueryValues_ = visit(ctx->valuesClause());
+  auto query =
+      visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
+                                    ctx->describeQuery(), ctx->askQuery());
+  AD_CORRECTNESS_CHECK(!postQueryValues_.has_value());
 
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
@@ -544,7 +540,8 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
         toGraphPattern(query.constructClause().triples_));
   }
   query.addSolutionModifiers(visit(ctx->solutionModifier()),
-                             makeInternalVariableGenerator());
+                             makeInternalVariableGenerator(),
+                             std::exchange(postQueryValues_, std::nullopt));
 
   return query;
 }
@@ -599,8 +596,9 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // (which pertains to the SELECT query that computes the resources to be
   // described).
   parsedQuery_ = ParsedQuery{};
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
-                                    makeInternalVariableGenerator());
+  parsedQuery_.addSolutionModifiers(
+      visit(ctx->solutionModifier()), makeInternalVariableGenerator(),
+      std::exchange(postQueryValues_, std::nullopt));
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
       std::move(describeClause));
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
@@ -633,8 +631,9 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
     solutionModifiers.limitOffset_._limit = 1;
     return solutionModifiers;
   };
-  parsedQuery_.addSolutionModifiers(getSolutionModifiers(),
-                                    makeInternalVariableGenerator());
+  parsedQuery_.addSolutionModifiers(
+      getSolutionModifiers(), makeInternalVariableGenerator(),
+      std::exchange(postQueryValues_, std::nullopt));
   return parsedQuery_;
 }
 
@@ -1625,8 +1624,9 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
   visitWhereClause(ctx->whereClause(), parsedQuery_);
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
-                                    makeInternalVariableGenerator());
+  parsedQuery_.addSolutionModifiers(
+      visit(ctx->solutionModifier()), makeInternalVariableGenerator(),
+      std::exchange(postQueryValues_, std::nullopt));
   return parsedQuery_;
 }
 
@@ -1772,16 +1772,12 @@ parsedQuery::Subquery Visitor::visit(Parser::SubSelectContext* ctx) {
   ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
   visitWhereClause(ctx->whereClause(), query);
-  query.addSolutionModifiers(visit(ctx->solutionModifier()),
-                             makeInternalVariableGenerator());
   // The trailing `VALUES` clause belongs to the subquery, it is joined before
   // the subquery's ORDER BY, DISTINCT, projection, and LIMIT/OFFSET (SPARQL
   // 1.1, sec. 18.2.4.3). Its variables are thus also selected by `SELECT *`.
-  query.postQueryValuesClause_ = visit(ctx->valuesClause());
-  if (query.postQueryValuesClause_.has_value()) {
-    query.registerVariablesVisibleInQueryBody(
-        query.postQueryValuesClause_->_inlineValues._variables);
-  }
+  query.addSolutionModifiers(visit(ctx->solutionModifier()),
+                             makeInternalVariableGenerator(),
+                             visit(ctx->valuesClause()));
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
     addVisibleVariable(variable);

@@ -1530,6 +1530,19 @@ TEST(ExportQueryExecutionTrees, TrailingValuesBeforeDistinctAndOrderBy) {
             "?s\n<d>\n<b>\n<a>\n<a>\n");
   EXPECT_EQ(tsv("SELECT ?x { ?s <p> ?o } ORDER BY ?x VALUES ?x { 2 1 }"),
             "?x\n1\n1\n1\n1\n2\n2\n2\n2\n");
+  // ORDER BY expressions and SELECT expressions also see the `VALUES`.
+  EXPECT_EQ(tsv("SELECT ?x { <a> <p> ?o } ORDER BY STR(?x) VALUES ?x { 2 1 }"),
+            "?x\n1\n1\n2\n2\n");
+  EXPECT_EQ(tsv("SELECT ?x (STR(?x) AS ?y) { <b> <p> ?o } VALUES ?x { 1 }"),
+            "?x\t?y\n1\t\"1\"\n");
+  // The FILTERs of the WHERE clause don't see the `VALUES`.
+  EXPECT_EQ(tsv("SELECT ?s { ?s <p> <z> FILTER(!BOUND(?x)) } VALUES ?x { 1 }"),
+            "?s\n<b>\n");
+  // With GROUP BY, the `VALUES` is joined after the grouping.
+  EXPECT_EQ(tsv("SELECT ?s (COUNT(*) AS ?c) { ?s <p> ?o } GROUP BY ?s "
+                "ORDER BY ?v ?s VALUES ?v { 2 1 }"),
+            "?s\t?c\n<a>\t2\n<b>\t1\n<d>\t1\n"
+            "<a>\t2\n<b>\t1\n<d>\t1\n");
 }
 
 // ____________________________________________________________________________
@@ -2318,12 +2331,14 @@ TEST(ExportQueryExecutionTrees, PostQueryValuesWithoutVariables) {
   const std::string kg = "<a> <b> <c> . <d> <e> <f> .";
   auto run = [&kg](std::string_view values) {
     return runQueryStreamableResult(
-        kg, absl::StrCat("SELECT ?s { ?s ?p ?o } VALUES () { ", values, " }"),
+        kg,
+        absl::StrCat("SELECT ?s { ?s ?p ?o } ORDER BY ?s VALUES () { ", values,
+                     " }"),
         ad_utility::MediaType::tsv);
   };
   EXPECT_EQ(run(""), "?s\n");
   EXPECT_EQ(run("()"), "?s\n<a>\n<d>\n");
-  EXPECT_EQ(run("() ()"), "?s\n<a>\n<d>\n<a>\n<d>\n");
+  EXPECT_EQ(run("() ()"), "?s\n<a>\n<a>\n<d>\n<d>\n");
 }
 
 // The trailing `VALUES` clause is joined before the projection, so `SELECT *`
