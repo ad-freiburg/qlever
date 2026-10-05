@@ -828,9 +828,12 @@ TEST(GeoRectanglePrefilter, plannerPropagatesContainedRectangle) {
 // intersects the fixed polygon, or contains a fixed point) does not carry
 // over to `?g2`: only the scans of `?g1` are prefiltered.
 TEST(GeoRectanglePrefilter, plannerDoesNotPropagateIntersectedRectangle) {
+  // No evaluation at planning time (also not of `?g1` together with its
+  // spatial join with the fixed geometry), so that the rectangles are
+  // propagated.
   auto* qec = geoQec();
   auto budget = setRuntimeParameterForTest<
-      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(1);
+      &RuntimeParameters::geoPrefilterPlanningMaxCost_>(0);
   const std::string point = R"q("POINT(10.5 10.0)"^^geo:wktLiteral)q";
   for (const auto& [firstFilter, rectangle] :
        std::vector<std::pair<std::string, GeoRectangle>>{
@@ -851,9 +854,12 @@ TEST(GeoRectanglePrefilter, plannerDoesNotPropagateIntersectedRectangle) {
 // padded by the maximal distance, and that a rectangle that arrives at a
 // variable from two sides is the intersection of the two.
 TEST(GeoRectanglePrefilter, plannerPropagatesPaddedAndIntersectedRectangles) {
+  // No evaluation at planning time (also not of `?g1` together with its
+  // spatial join with the fixed geometry), so that the rectangles are
+  // propagated.
   auto* qec = geoQec();
   auto budget = setRuntimeParameterForTest<
-      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(1);
+      &RuntimeParameters::geoPrefilterPlanningMaxCost_>(0);
   // The geometries of `?g2` are within 1 km of those of `?g1`, which lie in
   // the fixed rectangle.
   std::string query =
@@ -957,6 +963,41 @@ std::vector<size_t> spatialJoinSideSizeEstimates(
     }
   }
   return result;
+}
+
+// Test that a part of the query is evaluated at planning time together with
+// its spatial join with a fixed geometry (here, the `BIND` of a point), so
+// that its rectangle is that of the geometries near the point only.
+TEST(GeoRectanglePrefilter, plannerEvaluatesComponentWithFixedSpatialJoin) {
+  // The geometries within 100 km of the point are `<lineA>` and `<pointNear>`
+  // (`<lineB>` is about 165 km away), and `?g2` intersects one of them. The
+  // budget of rows lets only the part with the spatial join be evaluated (two
+  // rows), not the scan of `?g2`.
+  auto* qec = geoQec();
+  auto budget = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(10);
+  std::string query = R"q(
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    PREFIX unit: <http://qudt.org/vocab/unit/>
+    SELECT * WHERE {
+      BIND ("POINT(10.5 10.0)"^^geo:wktLiteral AS ?c)
+      ?s1 <hasGeom> ?g1 . ?s2 <hasGeom> ?g2 .
+      FILTER (geof:distance(?c, ?g1, unit:M) <= 100000)
+      FILTER geof:sfIntersects(?g1, ?g2) })q";
+  auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+
+  // The scans of `?g2` are prefiltered with the rectangle of the two near
+  // geometries, those of `?g1` not at all (its values are known).
+  expectRowFilterRectangleNear(qet, Variable{"?g2"},
+                               GeoRectangle{10, 10, 11, 10.01}, query);
+  EXPECT_THAT(rowFilterRectangles(qet, Variable{"?g1"}), ::testing::IsEmpty());
+
+  // The result (`<lineA>` intersects itself) is the same as without the
+  // prefilters.
+  auto numRows = qet->getRootOperation()->getResult()->idTableView().size();
+  EXPECT_EQ(numRows, 1u);
+  EXPECT_EQ(numResultRowsWithoutPrefilter(qec, query), numRows);
 }
 
 // Test that a part of the query that was evaluated at planning time enters the

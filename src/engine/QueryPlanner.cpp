@@ -2400,10 +2400,15 @@ void QueryPlanner::applyGeoRectanglePrefilters(
   // within the budgets, evaluated now. The bounding rectangle of its
   // geometries then contains all of them, like the rectangle of a fixed side.
   //
+  // A spatial join whose one side lies in the component and whose other side
+  // is fixed (by a `VALUES` or the `BIND` of a constant) is evaluated together
+  // with the component, so that the rectangle is that of the geometries near
+  // the fixed side (for example, the lakes near a given point, not all lakes).
+  // The other spatial joins are left out, because their other side may lie
+  // outside the component.
+  //
   // NOTE: The result of the evaluation stays in the cache, so the work is not
-  // lost if the final plan computes the component in the same way. The
-  // spatial joins are left out of the filters here, because their other side
-  // may lie outside the component.
+  // lost if the final plan computes the component in the same way.
   {
     // Only components of at most this many triples are planned here (the
     // dynamic programming is exponential in their number).
@@ -2426,6 +2431,15 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       if (!filters[i].hasSubstitute()) {
         filtersWithoutSubstitutes.push_back(filters[i]);
         originalFilterIndex.push_back(i);
+      }
+    }
+    // The seeds that fix a variable by the `BIND` of a constant (see above).
+    ad_utility::HashMap<Variable, size_t> bindSeedOfFixedVariable;
+    for (size_t i = 0; i < seeds.size(); ++i) {
+      const auto* bind =
+          dynamic_cast<const Bind*>(seeds[i]._qet->getRootOperation().get());
+      if (bind != nullptr && fixedVariables.contains(bind->bind()._target)) {
+        bindSeedOfFixedVariable.emplace(bind->bind()._target, i);
       }
     }
     ad_utility::HashSet<size_t> consideredComponents;
@@ -2459,11 +2473,66 @@ void QueryPlanner::applyGeoRectanglePrefilters(
           findUniqueNodeIds(component, false) > maxNodes) {
         continue;
       }
+
+      // Add each spatial join between a variable of the component and a fixed
+      // variable to the filters of the component. If the fixed variable is
+      // bound by a `BIND`, also add the seed of that `BIND` to the component
+      // (a fixed `VALUES` is already a child of the spatial join).
+      auto componentFilters = filtersWithoutSubstitutes;
+      auto componentFilterIndex = originalFilterIndex;
+      for (size_t i = 0; i < filters.size(); ++i) {
+        if (!filters[i].hasSubstitute()) {
+          continue;
+        }
+        auto* spatialJoin = dynamic_cast<SpatialJoin*>(
+            filters[i].substitute_->_qet->getRootOperation().get());
+        if (spatialJoin == nullptr) {
+          continue;
+        }
+        auto [left, right] = spatialJoin->getSpatialJoinVariables();
+        auto inComponent = [&component](const Variable& var) {
+          return ql::ranges::any_of(component, [&var](const SubtreePlan& plan) {
+            return plan._qet->containsVariable(var);
+          });
+        };
+        bool leftInComponent = inComponent(left);
+        const auto& fixedVariable = leftInComponent ? right : left;
+        if ((!leftInComponent && !inComponent(right)) ||
+            !fixedVariables.contains(fixedVariable)) {
+          continue;
+        }
+        if (auto it = bindSeedOfFixedVariable.find(fixedVariable);
+            it != bindSeedOfFixedVariable.end()) {
+          if (!inComponent(fixedVariable)) {
+            component.push_back(seeds.at(it->second));
+          }
+        } else if (ql::ranges::none_of(
+                       spatialJoin->getChildren(), [&](const auto* child) {
+                         return child->containsVariable(fixedVariable);
+                       })) {
+          continue;
+        }
+        componentFilters.push_back(filters[i]);
+        componentFilterIndex.push_back(i);
+      }
+
+      // Plan the component with the replacement plans that lie within it (for
+      // example, the scan of a materialized view), from a copy, because
+      // `findApplicableReplacementPlans` moves them.
+      uint64_t componentNodes = 0;
+      for (const auto& plan : component) {
+        componentNodes |= plan._idsOfIncludedNodes;
+      }
+      auto replacementPlansCopy = replacementPlans;
+      auto componentReplacementPlans =
+          findApplicableReplacementPlans(replacementPlansCopy, componentNodes,
+                                         false)
+              .first;
       auto plans = runDynamicProgrammingOnConnectedComponent(
-          std::move(component), filtersWithoutSubstitutes, TextLimitVec{}, tg,
-          ReplacementPlans{});
+          std::move(component), componentFilters, TextLimitVec{}, tg,
+          std::move(componentReplacementPlans));
       applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
-          plans, filtersWithoutSubstitutes);
+          plans, componentFilters);
       if (plans.empty()) {
         continue;
       }
@@ -2513,14 +2582,14 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       // can be far off (437 rows for the one geometry of a fixed subject on
       // the OSM planet), and the cost of the spatial join above grows with
       // it, which can make the planner prefer a worse plan for the other
-      // side. The filter ids of the plan refer to `filtersWithoutSubstitutes`
-      // and are translated back.
+      // side. The filter ids of the plan refer to `componentFilters` and are
+      // translated back.
       SubtreePlan evaluated = cheapest;
       evaluated._qet->setSizeEstimate(result->idTableView().numRows());
       uint64_t filterIds = 0;
-      for (size_t j = 0; j < originalFilterIndex.size(); ++j) {
+      for (size_t j = 0; j < componentFilterIndex.size(); ++j) {
         if (evaluated._idsOfIncludedFilters & (uint64_t{1} << j)) {
-          filterIds |= uint64_t{1} << originalFilterIndex[j];
+          filterIds |= uint64_t{1} << componentFilterIndex[j];
         }
       }
       evaluated._idsOfIncludedFilters = filterIds;
