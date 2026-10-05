@@ -32,7 +32,10 @@ namespace ad_utility {
 // applied on an `executor`, concurrently for up to `maxNumElementsInFlight`
 // elements, and concurrently with the consumer of this range, which is still
 // processing the previously yielded elements. This pays off if the
-// `transformation` is expensive and independent for each element.
+// `transformation` is expensive and independent for each element. In contrast
+// to `streams::runStreamAsync`, which runs the whole range sequentially on a
+// single background thread, the `transformation` of different elements runs
+// in parallel.
 //
 // The elements of the `Range` are moved into the tasks that transform them,
 // and each result is moved out of its task when it is yielded, so both the

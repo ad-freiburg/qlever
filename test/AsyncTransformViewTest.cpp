@@ -16,6 +16,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <range/v3/range/conversion.hpp>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -35,25 +36,6 @@ using namespace std::chrono_literals;
 // deliberately generous, because it is only waited for in full if the awaited
 // event never happens, which is a test failure anyway.
 constexpr auto timeout = 10s;
-
-// Return the integers `0, ..., n - 1`.
-std::vector<int> iota(int n) {
-  std::vector<int> result;
-  for (int i = 0; i < n; ++i) {
-    result.push_back(i);
-  }
-  return result;
-}
-
-// Consume the `range` completely and return its elements.
-template <typename R>
-auto toVector(R& range) {
-  std::vector<std::decay_t<ql::ranges::range_value_t<R>>> result;
-  for (auto& element : range) {
-    result.push_back(std::move(element));
-  }
-  return result;
-}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -67,15 +49,15 @@ TEST(AsyncTransformView, resultsAreYieldedInOrder) {
     return std::to_string(2 * i);
   };
   std::vector<std::string> expected;
-  for (int i : iota(200)) {
+  for (int i : ql::views::iota(0, 200)) {
     expected.push_back(std::to_string(2 * i));
   }
   // Fewer, as many, and more elements in flight than there are threads, and
   // more elements in flight than there are elements.
   for (size_t maxNumElementsInFlight : {1, 2, 4, 7, 1000}) {
-    AsyncTransformView view{iota(200), transformation, maxNumElementsInFlight,
-                            pool.get_executor()};
-    EXPECT_THAT(toVector(view), ElementsAreArray(expected));
+    AsyncTransformView view{ql::views::iota(0, 200), transformation,
+                            maxNumElementsInFlight, pool.get_executor()};
+    EXPECT_THAT(::ranges::to_vector(view), ElementsAreArray(expected));
     // An exhausted view stays exhausted.
     EXPECT_FALSE(view.get().has_value());
   }
@@ -91,7 +73,7 @@ TEST(AsyncTransformView, emptyInput) {
                             return i;
                           },
                           3, pool.get_executor()};
-  EXPECT_TRUE(toVector(view).empty());
+  EXPECT_TRUE(::ranges::to_vector(view).empty());
   EXPECT_FALSE(view.get().has_value());
   EXPECT_EQ(numCalls, 0);
 }
@@ -99,31 +81,30 @@ TEST(AsyncTransformView, emptyInput) {
 // _____________________________________________________________________________
 TEST(AsyncTransformView, invalidNumberOfElementsInFlight) {
   boost::asio::thread_pool pool{1};
-  auto makeView = [&pool]() {
-    AsyncTransformView view{iota(3), std::identity{}, 0, pool.get_executor()};
-  };
-  EXPECT_ANY_THROW(makeView());
+  EXPECT_ANY_THROW((AsyncTransformView{ql::views::iota(0, 3), std::identity{},
+                                       0, pool.get_executor()}));
 }
 
 // _____________________________________________________________________________
 TEST(AsyncTransformView, inputIsNotOwnedWhenPassedAsRefView) {
   boost::asio::thread_pool pool{2};
-  std::vector<int> input = iota(10);
+  std::vector<int> input = ::ranges::to_vector(ql::views::iota(0, 10));
   // The view only skips the odd elements, the actual input stays untouched,
   // because the view only refers to it.
   auto even = ql::ranges::ref_view{input} |
               ql::views::filter([](int i) { return i % 2 == 0; });
   AsyncTransformView view{std::move(even), [](int i) { return i + 100; }, 2,
                           pool.get_executor()};
-  EXPECT_THAT(toVector(view), ElementsAre(100, 102, 104, 106, 108));
-  EXPECT_THAT(input, ElementsAreArray(iota(10)));
+  EXPECT_THAT(::ranges::to_vector(view), ElementsAre(100, 102, 104, 106, 108));
+  EXPECT_THAT(input,
+              ElementsAreArray(::ranges::to_vector(ql::views::iota(0, 10))));
 }
 
 // _____________________________________________________________________________
 TEST(AsyncTransformView, moveOnlyElementsAndResults) {
   boost::asio::thread_pool pool{3};
   std::vector<std::unique_ptr<int>> input;
-  for (int i : iota(20)) {
+  for (int i : ql::views::iota(0, 20)) {
     input.push_back(std::make_unique<int>(i));
   }
   // Both the element and the result are move-only, and the result takes over
@@ -162,8 +143,8 @@ TEST(AsyncTransformView, elementsAreTransformedConcurrently) {
         cv.wait_for(lock, timeout, [&]() { return numStarted >= numInFlight; });
     return std::pair{i, allStarted};
   };
-  AsyncTransformView view{iota(static_cast<int>(numInFlight)), transformation,
-                          numInFlight, pool.get_executor()};
+  AsyncTransformView view{ql::views::iota(0, static_cast<int>(numInFlight)),
+                          transformation, numInFlight, pool.get_executor()};
   int expected = 0;
   for (auto& [i, allStarted] : view) {
     EXPECT_EQ(i, expected);
@@ -181,7 +162,7 @@ TEST(AsyncTransformView, readsAheadLazilyAndBounded) {
   // Count how many elements have been read from the input so far.
   size_t numRead = 0;
   auto countedInput =
-      iota(numElements) | ql::views::transform([&numRead](int i) {
+      ql::views::iota(0, numElements) | ql::views::transform([&numRead](int i) {
         ++numRead;
         return i;
       });
@@ -213,10 +194,10 @@ TEST(AsyncTransformView, exceptionInTransformation) {
     return i;
   };
   for (size_t maxNumElementsInFlight : {1, 3, 10}) {
-    AsyncTransformView view{iota(10), transformation, maxNumElementsInFlight,
-                            pool.get_executor()};
+    AsyncTransformView view{ql::views::iota(0, 10), transformation,
+                            maxNumElementsInFlight, pool.get_executor()};
     // The results before the failing element are yielded normally.
-    for (int i : iota(5)) {
+    for (int i : ql::views::iota(0, 5)) {
       auto element = view.get();
       ASSERT_TRUE(element.has_value());
       EXPECT_EQ(element.value(), i);
@@ -229,7 +210,7 @@ TEST(AsyncTransformView, exceptionInTransformation) {
 TEST(AsyncTransformView, exceptionInInput) {
   boost::asio::thread_pool pool{2};
   auto throwingInput = []() {
-    return iota(10) | ql::views::transform([](int i) {
+    return ql::views::iota(0, 10) | ql::views::transform([](int i) {
              if (i == 4) {
                throw std::runtime_error{"input failed"};
              }
@@ -241,7 +222,7 @@ TEST(AsyncTransformView, exceptionInInput) {
   {
     AsyncTransformView view{throwingInput(), std::identity{}, 1,
                             pool.get_executor()};
-    for (int i : iota(4)) {
+    for (int i : ql::views::iota(0, 4)) {
       auto element = view.get();
       ASSERT_TRUE(element.has_value());
       EXPECT_EQ(element.value(), i);
@@ -275,7 +256,8 @@ TEST(AsyncTransformView, destructionWithPendingElements) {
     return result;
   };
   {
-    AsyncTransformView view{iota(100), transformation, 5, pool.get_executor()};
+    AsyncTransformView view{ql::views::iota(0, 100), transformation, 5,
+                            pool.get_executor()};
     auto element = view.get();
     ASSERT_TRUE(element.has_value());
     EXPECT_EQ(element.value(), 42);
@@ -290,13 +272,15 @@ TEST(AsyncTransformView, destructionWithPendingElements) {
 TEST(AsyncTransformView, globalExecutorAndTypeErasure) {
   // The view can be type-erased via `InputRangeTypeErased`, which makes it
   // movable, and it works with the global executor.
-  using View = AsyncTransformView<std::vector<int>, std::negate<>>;
-  ad_utility::InputRangeTypeErased<int> erased{std::make_unique<View>(
-      iota(50), std::negate<>{}, 4, ad_utility::globalExecutor())};
+  using View =
+      AsyncTransformView<decltype(ql::views::iota(0, 0)), std::negate<>>;
+  ad_utility::InputRangeTypeErased<int> erased{
+      std::make_unique<View>(ql::views::iota(0, 50), std::negate<>{}, 4,
+                             ad_utility::globalExecutor())};
   auto moved = std::move(erased);
   std::vector<int> expected;
-  for (int i : iota(50)) {
+  for (int i : ql::views::iota(0, 50)) {
     expected.push_back(-i);
   }
-  EXPECT_THAT(toVector(moved), ElementsAreArray(expected));
+  EXPECT_THAT(::ranges::to_vector(moved), ElementsAreArray(expected));
 }
