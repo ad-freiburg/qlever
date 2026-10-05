@@ -28,11 +28,14 @@
 #include "engine/MaterializedViews.h"
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
+#include "index/ExportIds.h"
 #include "index/Index.h"
+#include "index/IndexFormatConverter.h"
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
@@ -434,6 +437,98 @@ TEST(IndexTest, emptyIndex) {
   test(iri("<x>"), Permutation::PSO, {});
 }
 
+// Test the first pass of the index building (see
+// `IndexImpl::buildPartialVocabularies`) with the number of threads set to `1`
+// (a single task chain, i.e. no racing for batches from the parser) and to `3`
+// (several task chains racing for batches). Together with the
+// `numTriplesPerBatch_` of `2` that `IndexTestHelpers.cpp` sets for all test
+// indices, the 7 triples below already span several partial vocabularies for
+// both configurations.
+// _____________________________________________________________________________
+TEST(IndexTest, buildPartialVocabulariesFirstPassNumThreads) {
+  using enum Permutation::Enum;
+  std::string kb =
+      "<a>  <b>  <c>  . \n"
+      "<a>  <b>  <c2> . \n"
+      "<a>  <b2> <c>  . \n"
+      "<a2> <b2> <c2> . \n"
+      "<a3> <b3> <c3> . \n"
+      "<a4> <b3> <c4> . \n"
+      "<a5> <b5> <c5> .   ";
+
+  auto runWithNumThreads = [&kb](size_t numThreads,
+                                 ad_utility::source_location l =
+                                     AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    TestIndexConfig config{kb};
+    config.numThreads = numThreads;
+    auto* qec =
+        getQec(absl::StrCat(gtestCurrentTestName(), ".", numThreads, "."),
+               std::move(config));
+    const IndexImpl& index = qec->getIndex().getImpl();
+    EXPECT_EQ(index.numTriples().normal, 7u);
+
+    auto getId = makeGetId(qec->getIndex());
+    Id a = getId("<a>");
+    Id c = getId("<c>");
+    Id c2 = getId("<c2>");
+    auto testTwo = makeTestScanWidthTwo(index, *qec);
+    testTwo(iri("<b>"), PSO, {{a, c}, {a, c2}});
+  };
+
+  runWithNumThreads(1);
+  runWithNumThreads(3);
+}
+
+// Test that the `parser-integer-overflow-behavior` setting from the
+// `.settings.json` file reaches the parsers of the index build, for an input
+// that is parsed in parallel as well as for one that is parsed serially. With
+// the default behavior, an integer literal that overflows QLever's 64-bit
+// integers is an error and the index build fails. With
+// `overflowing-integers-become-doubles`, the literal is stored as a double, and
+// with `all-integers-become-doubles`, all integer literals are.
+// _____________________________________________________________________________
+TEST(IndexTest, parserIntegerOverflowBehaviorFromSettingsFile) {
+  using enum Permutation::Enum;
+  std::string kb = "<a> <b> 99999999999999999999999 .\n<a> <c> 42 .\n";
+  auto makeConfig = [&kb](bool parseInParallel, std::string_view behavior) {
+    TestIndexConfig config{kb};
+    config.parseInParallel = parseInParallel;
+    config.additionalSettings = {{"parser-integer-overflow-behavior",
+                                  absl::StrCat("\"", behavior, "\"")}};
+    return config;
+  };
+
+  for (bool parseInParallel : {true, false}) {
+    std::string basename =
+        absl::StrCat(gtestCurrentTestName(), ".", parseInParallel);
+    absl::Cleanup cleanup = [&basename] {
+      for (const auto& filename : getAllIndexFilenames(basename)) {
+        ad_utility::deleteFile(filename, false);
+      }
+    };
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        makeTestIndex(basename, makeConfig(parseInParallel,
+                                           "overflowing-integers-throw")),
+        ::testing::HasSubstr("cannot be represented as an integer"));
+
+    // Build the index with the given `behavior` and check the objects of `<b>`
+    // (the overflowing integer) and `<c>` (the integer `42`).
+    auto checkObjects = [&](std::string_view behavior, Id expectedObjectOfC) {
+      auto* qec = getQec(absl::StrCat(basename, "."),
+                         makeConfig(parseInParallel, behavior));
+      auto getId = makeGetId(qec->getIndex());
+      Id a = getId("<a>");
+      auto testTwo = makeTestScanWidthTwo(qec->getIndex().getImpl(), *qec);
+      testTwo(iri("<b>"), PSO,
+              {{a, Id::makeFromDouble(99999999999999999999999.0)}});
+      testTwo(iri("<c>"), PSO, {{a, expectedObjectOfC}});
+    };
+    checkObjects("overflowing-integers-become-doubles", Id::makeFromInt(42));
+    checkObjects("all-integers-become-doubles", Id::makeFromDouble(42.0));
+  }
+}
+
 // Regression test for https://github.com/ad-freiburg/qlever/issues/2768
 TEST(IndexTest, emptyTextIndex) {
   std::array<std::string, 2> inputs = {
@@ -451,6 +546,109 @@ TEST(IndexTest, emptyTextIndex) {
         qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
     EXPECT_EQ(result.size(), 0);
   }
+}
+
+// Test that the geo cell grid (see `GeoVocabulary`) is read from the index
+// configuration when an index is loaded, with `flat` as the default scheme.
+// NOTE: Building an index with a grid is a follow-up change, so the
+// configuration of an index built without a grid is edited by hand here.
+TEST(IndexTest, geoCellGridFromConfiguration) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <p> \"LINESTRING(7 48, 8 49)\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral> ."};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressedGeoSplit;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& base = qec->getIndex().getOnDiskBase();
+  EXPECT_FALSE(qec->getIndex().getVocab().getGeoCellGrid().has_value());
+
+  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
+  auto loadWithConfiguration = [&](const nlohmann::json& additionalKeys) {
+    nlohmann::json configuration;
+    {
+      std::ifstream in{configFilename};
+      in >> configuration;
+    }
+    configuration.update(additionalKeys);
+    {
+      auto out = ad_utility::makeOfstream(configFilename);
+      out << configuration;
+    }
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.createFromOnDiskIndex(base, false);
+    return index.getVocab().getGeoCellGrid();
+  };
+  EXPECT_EQ(loadWithConfiguration({{"geo-cell-grid-level", 2}}),
+            std::optional{ad_utility::GeoCellGrid{2}});
+  EXPECT_EQ(loadWithConfiguration(
+                {{"geo-cell-grid-level", 3}, {"geo-cell-grid-scheme", "flat"}}),
+            std::optional{ad_utility::GeoCellGrid{3}});
+
+  // A level that does not fit the grid is rejected.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration({{"geo-cell-grid-level", 300}}),
+      ::testing::HasSubstr("Invalid value 300"));
+}
+
+// _____________________________________________________________________________
+TEST(IndexTest, indexRowsPerBlockFromConfiguration) {
+  // The block size with which the permutations of an index were written is
+  // stored in its configuration, so that permutations of that index that are
+  // written later on (a materialized view, for example) get the same blocks.
+  ad_utility::testing::TestIndexConfig config{"<a> <p> <o> . <a> <p> <o2> ."};
+  config.rowsPerBlock = 4;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& base = qec->getIndex().getOnDiskBase();
+  EXPECT_EQ(qec->getIndex().rowsPerBlock(), 4);
+  {
+    nlohmann::json configuration;
+    std::ifstream in{absl::StrCat(base, CONFIGURATION_FILE)};
+    in >> configuration;
+    EXPECT_EQ(configuration.at(INDEX_ROWS_PER_BLOCK_KEY), 4);
+  }
+
+  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
+  auto loadWithConfiguration =
+      [&](const std::function<void(nlohmann::json&)>& modify) {
+        nlohmann::json configuration;
+        {
+          std::ifstream in{configFilename};
+          in >> configuration;
+        }
+        modify(configuration);
+        {
+          auto out = ad_utility::makeOfstream(configFilename);
+          out << configuration;
+        }
+        Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+        index.createFromOnDiskIndex(base, false);
+        return index.rowsPerBlock();
+      };
+
+  // The block size of the index build is read back.
+  EXPECT_EQ(loadWithConfiguration([](nlohmann::json&) {}), 4);
+  EXPECT_EQ(loadWithConfiguration([](nlohmann::json& configuration) {
+              configuration[INDEX_ROWS_PER_BLOCK_KEY] = 512;
+            }),
+            512);
+
+  // An index that was built before the block size was stored uses the default.
+  EXPECT_EQ(loadWithConfiguration([](nlohmann::json& configuration) {
+              configuration.erase(std::string{INDEX_ROWS_PER_BLOCK_KEY});
+            }),
+            DEFAULT_INDEX_ROWS_PER_BLOCK);
+
+  // A block size of zero is rejected, it would mean blocks without rows, and
+  // so is a block size that is too large to be held in RAM.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration([](nlohmann::json& configuration) {
+        configuration[INDEX_ROWS_PER_BLOCK_KEY] = 0;
+      }),
+      ::testing::HasSubstr("Invalid value 0"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadWithConfiguration([](nlohmann::json& configuration) {
+        configuration[INDEX_ROWS_PER_BLOCK_KEY] = MAX_INDEX_ROWS_PER_BLOCK + 1;
+      }),
+      ::testing::HasSubstr("must be between 1 and 3125000"));
 }
 
 // Regression test for #3191.
@@ -474,6 +672,28 @@ TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
       qec->getIndex().getWordPostingsForTerm("polygon", qec->getAllocator());
   ASSERT_EQ(polygonResult.size(), 1u);
   EXPECT_GT(polygonResult.at(0, 2).getDouble(), 0.0);
+}
+
+// The text of a docsfile line is stored verbatim, so exporting a text record
+// must not unescape it. A backslash in the text, e.g. in a Windows path, is an
+// ordinary character and not the start of an escape sequence.
+TEST(IndexTest, textRecordExportDoesNotUnescapeTheExcerpt) {
+  std::string docText = R"(The config lives in C:\temp\notes.txt)";
+  ad_utility::testing::TestIndexConfig config{"<a> <b> \"hello world\" ."};
+  config.createTextIndex = true;
+  config.contentsOfWordsFileAndDocsfile =
+      std::pair{createWordsFileLineAsString("config", false, 1, 1),
+                createDocsFileLineAsString(1, docText)};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  const IndexImpl& index = qec->getIndex().getImpl();
+
+  auto id = Id::makeFromTextRecordIndex(TextRecordIndex::make(1));
+  ASSERT_EQ(index.getTextExcerpt(id.getTextRecordIndex()), docText);
+
+  auto exported = ql::exportIds::getLiteralOrIriFromTextRecordIndex(index, id);
+  ASSERT_TRUE(exported.has_value());
+  EXPECT_EQ(asStringViewUnsafe(exported.value().getLiteral().getContent()),
+            docText);
 }
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
@@ -548,9 +768,10 @@ TEST(IndexTest, setBlankNodeIriRegexesRequiresValidIriPatterns) {
   // Valid IRI regexes are accepted, compiled, and stored (in order).
   index.setBlankNodeIriRegexes({"<http://ex/bn_.*>", "<http://ex/other>"});
   const auto& regexes = index.getBlankNodeIriRegexes();
-  ASSERT_EQ(regexes.size(), 2);
-  EXPECT_EQ(regexes.at(0)->pattern(), "<http://ex/bn_.*>");
-  EXPECT_EQ(regexes.at(1)->pattern(), "<http://ex/other>");
+  EXPECT_THAT(regexes.regexesAsStrings(),
+              ::testing::ElementsAre("<http://ex/bn_.*>", "<http://ex/other>"));
+  EXPECT_TRUE(regexes.matchesAny("<http://ex/bn_1>"));
+  EXPECT_FALSE(regexes.matchesAny("<http://ex/bn_1>suffix"));
 }
 
 // _____________________________________________________________________________
@@ -678,8 +899,22 @@ TEST(IndexTest, trivialGettersAndSetters) {
 
 // _____________________________________________________________________________
 TEST(IndexTest, destructorLogsUnloading) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
-  // An `Index` that still owns its `IndexImpl` logs on destruction.
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
+  // An `Index` that was loaded from disk logs on destruction.
+  std::string basename = gtestCurrentTestName();
+  ad_utility::testing::makeTestIndex(basename, "<a> <b> <c> .");
+  {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    std::optional<Index> index;
+    index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
+    index->createFromOnDiskIndex(basename, false);
+    index.reset();
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr(absl::StrCat(
+                    "Index with basename \"", basename, "\" was unloaded")));
+  }
+  // An `Index` that was never loaded from disk (for example, one that was
+  // merely built) stays silent on destruction.
   {
     auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
     std::optional<Index> index;
@@ -687,7 +922,7 @@ TEST(IndexTest, destructorLogsUnloading) {
     index->setOnDiskBase("someIndexBase");
     index.reset();
     EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr("Index at someIndexBase was unloaded"));
+                ::testing::Not(::testing::HasSubstr("was unloaded")));
   }
   // A moved-from `Index` no longer owns an `IndexImpl` and therefore stays
   // silent on destruction. We reset it while `movedInto` is still alive, so no
@@ -696,7 +931,7 @@ TEST(IndexTest, destructorLogsUnloading) {
     auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
     std::optional<Index> index;
     index.emplace(ad_utility::makeUnlimitedAllocator<Id>());
-    index->setOnDiskBase("someIndexBase");
+    index->createFromOnDiskIndex(basename, false);
     Index movedInto{std::move(index).value()};
     index.reset();
     EXPECT_THAT(logStream.str(),
@@ -705,7 +940,7 @@ TEST(IndexTest, destructorLogsUnloading) {
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(INFO);
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   using enum qlever::Filetype;
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
@@ -715,12 +950,13 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   using namespace ::testing;
 
   // Wrap a matcher for a substring that comes from an `AD_LOG_INFO` line so
-  // that the assertion is only active when `LOGLEVEL >= INFO`. At
-  // `LOGLEVEL=WARN` the INFO output is suppressed, but the test still runs to
-  // cover the WARN-level `"deprecated"` assertions; the wrapper degrades to
-  // `testing::_` (match anything) in that case.
+  // that the assertion is only active when the compile-time log level is at
+  // least `INFO`. At `LOGLEVEL=WARN` the INFO output is suppressed, but the
+  // test still runs to cover the WARN-level `"deprecated"` assertions; the
+  // wrapper degrades to `testing::_` (match anything) in that case.
   auto onlyAtInfoOrAbove = [](auto matcher) {
-    if constexpr (LOGLEVEL < INFO) {
+    if constexpr (ad_utility::compileTimeLogLevel <
+                  ad_utility::LogLevel::Enum::INFO) {
       return testing::_;
     } else {
       return matcher;
@@ -806,10 +1042,13 @@ TEST(IndexTest, getBlankNodeManager) {
   // uninitialized Index.
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   EXPECT_ANY_THROW(index.getBlankNodeManager());
+  // The same holds for the access via the `LocalVocabContext`.
+  EXPECT_ANY_THROW(index.getLocalVocabContext().getBlankNodeManager());
 
   // Index is initialized -> no throw
   const Index& index2 = getQec("")->getIndex();
   EXPECT_NO_THROW(index2.getBlankNodeManager());
+  EXPECT_NO_THROW(index2.getLocalVocabContext().getBlankNodeManager());
 
   // Given an Index, ensure that the BlankNodeManager's `minIndex_` is set to
   // the number of blank nodes the Index is initialized with.
@@ -1027,7 +1266,7 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   auto [directory, cleanup] = makeTemporaryDirectory("loadConfigFromOldIndex");
   auto onDiskBase = directory + "/index";
   IndexImpl other{ad_utility::makeUnlimitedAllocator<Id>()};
-  other.blocksizePermutationPerColumn() = 1337_B;
+  other.rowsPerBlock() = 1337;
   nlohmann::json stats;
 
   Index::NumNormalAndInternal numTriples{42, 1337};
@@ -1049,13 +1288,14 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   EXPECT_EQ(index.numDistinctPredicates(), numPredicates);
   EXPECT_EQ(index.numSubjects_, numSubjects);
   EXPECT_EQ(index.numObjects_, numObjects);
-  EXPECT_EQ(index.blocksizePermutationPerColumn(),
-            other.blocksizePermutationPerColumn());
+  EXPECT_EQ(index.rowsPerBlock(), other.rowsPerBlock());
   EXPECT_EQ(index.configurationJson_, stats);
 
   // The version written to disk will also have these fields.
   stats["git-hash"] = *qlever::version::gitShortHashWithoutLinking.wlock();
   stats["index-format-version"] = qlever::indexFormatVersion;
+  stats["geo-point-encoding"] =
+      ad_utility::GeoPointEncoding{GeoPoint::encoding()};
   stats["has-icu-support"] = ad_utility::useICUDefault;
 
   std::string jsonFile = onDiskBase + CONFIGURATION_FILE;
@@ -1100,6 +1340,370 @@ TEST(IndexImpl, icuSupportConfigurationMustMatch) {
   }
 }
 
+namespace {
+// Return a minimal configuration (index metadata) that
+// `IndexImpl::applyConfiguration` accepts. The tests below tamper with single
+// keys of this configuration to exercise the handling of metadata that stems
+// from an older or from an unsupported index format.
+nlohmann::json minimalValidConfiguration() {
+  nlohmann::json configuration;
+  configuration["git-hash"] = "f00ba4";
+  configuration["index-format-version"] = qlever::indexFormatVersion;
+  configuration["geo-point-encoding"] = "z-order";
+  configuration["has-icu-support"] = ad_utility::useICUDefault;
+  configuration["locale"]["language"] = "en";
+  configuration["locale"]["country"] = "US";
+  configuration["locale"]["ignore-punctuation"] = false;
+  configuration["num-predicates"] = Index::NumNormalAndInternal{2, 1};
+  // This is the key `BLANK_NODE_ALLOCATION_START` from `IndexImpl.cpp`.
+  configuration["num-blank-nodes-total"] = 0;
+  return configuration;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(IndexImpl, applyConfigurationGitHash) {
+  // The git hash of the QLever version that built the index is logged and
+  // stored in the `IndexImpl`.
+  {
+    IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    ASSERT_NO_THROW(indexImpl.applyConfiguration(minimalValidConfiguration()));
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr(
+                    "The git hash used to build this index was \"f00ba4\""));
+    EXPECT_EQ(indexImpl.getGitShortHash(), "f00ba4");
+  }
+
+  // For an index that was built before the git hash was stored in the metadata,
+  // this fact is logged. The hash is also a required key of the metadata, hence
+  // applying such a configuration ultimately throws.
+  {
+    auto configuration = minimalValidConfiguration();
+    configuration.erase("git-hash");
+    IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        indexImpl.applyConfiguration(configuration),
+        ::testing::HasSubstr("The required key \"git-hash\" was not found in "
+                             "the `meta-data.json`"));
+    EXPECT_THAT(logStream.str(),
+                ::testing::HasSubstr("The index was built before git commit "
+                                     "hashes were stored in the index meta "
+                                     "data"));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
+  // Apply the `minimalValidConfiguration()`, but with the
+  // `index-format-version` replaced by `version` (or removed, if `version` is
+  // `std::nullopt`), to a freshly created `IndexImpl`. Expect that this throws
+  // with a message that matches `messageMatcher`, and that the non-throwing
+  // `checkIndexFormatVersion` returns exactly the same message.
+  auto applyVersionAndExpectThrow = [](std::optional<nlohmann::json> version,
+                                       const auto& messageMatcher,
+                                       ad_utility::source_location loc =
+                                           AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    auto configuration = minimalValidConfiguration();
+    if (version.has_value()) {
+      configuration["index-format-version"] = version.value();
+    } else {
+      configuration.erase("index-format-version");
+    }
+    IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto error = indexImpl.checkIndexFormatVersion(configuration);
+    ASSERT_TRUE(error.has_value());
+    EXPECT_THAT(error.value(), messageMatcher);
+    AD_EXPECT_THROW_WITH_MESSAGE(indexImpl.applyConfiguration(configuration),
+                                 ::testing::Eq(error.value()));
+  };
+
+  // The current version is accepted.
+  {
+    IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+    EXPECT_EQ(indexImpl.checkIndexFormatVersion(minimalValidConfiguration()),
+              std::nullopt);
+    // The previous format with `LatMajor` geo points is accepted as well.
+    auto configuration = minimalValidConfiguration();
+    configuration["index-format-version"] =
+        qlever::indexFormatVersionWithLatMajorGeoPoints;
+    EXPECT_EQ(indexImpl.checkIndexFormatVersion(configuration), std::nullopt);
+  }
+
+  // An index that was built before the index format was versioned at all.
+  applyVersionAndExpectThrow(
+      std::nullopt,
+      ::testing::HasSubstr("This index was built before versioning was "
+                           "introduced for QLever's index format"));
+
+  // An index that is newer than the QLever binary that reads it.
+  applyVersionAndExpectThrow(
+      qlever::IndexFormatVersion{4711, DateYearOrDuration{Date{9999, 12, 31}}},
+      ::testing::AllOf(
+          ::testing::HasSubstr("The version of QLever you are using is too old "
+                               "for this index"),
+          ::testing::HasSubstr("PR = 4711"),
+          ::testing::HasSubstr("Date = 9999-12-31"),
+          ::testing::Not(::testing::HasSubstr("qlever-upgrade-index"))));
+
+  // An index that is older than the QLever binary that reads it, but not in
+  // exactly the format that the index upgrader upgrades from. Such an index
+  // has to be rebuilt.
+  applyVersionAndExpectThrow(
+      qlever::IndexFormatVersion{42, DateYearOrDuration{Date{1900, 1, 1}}},
+      ::testing::AllOf(
+          ::testing::HasSubstr("The index is too old for this version of "
+                               "QLever"),
+          ::testing::HasSubstr("PR = 42"),
+          ::testing::Not(::testing::HasSubstr("qlever-upgrade-index"))));
+
+  // An index in exactly the format that the `qlever-upgrade-index` binary
+  // upgrades from. Then the message is one dedicated message that mentions that
+  // binary, and not the generic advice. Note that this requires the target
+  // format of the upgrader to be a format that the current version of QLever
+  // loads (which `convertIndexToCurrentFormat` also checks).
+  ASSERT_TRUE(qlever::isLoadableIndexFormatVersion(
+      qlever::indexFormatConverter::targetVersion));
+  applyVersionAndExpectThrow(
+      qlever::indexFormatConverter::sourceVersion,
+      ::testing::AllOf(
+          ::testing::HasSubstr("but your index uses the previous format"),
+          ::testing::HasSubstr("sometimes they are unavoidable"),
+          ::testing::HasSubstr("the old index is preserved"),
+          ::testing::HasSubstr("qlever-upgrade-index "),
+          ::testing::Not(::testing::HasSubstr("The index is too old"))));
+
+  // Malformed versions are reported, but never make the check throw.
+  auto malformed = ::testing::HasSubstr(
+      "The index format version stored in the index metadata is malformed");
+  applyVersionAndExpectThrow(nlohmann::json(42), malformed);
+  applyVersionAndExpectThrow(nlohmann::json::array({1, 2}), malformed);
+  applyVersionAndExpectThrow(
+      nlohmann::json{{"pull-request-number", -3}, {"date", "2024-10-22"}},
+      malformed);
+  applyVersionAndExpectThrow(
+      nlohmann::json{{"pull-request-number", 3}, {"date", 17}}, malformed);
+  applyVersionAndExpectThrow(
+      nlohmann::json{{"pull-request-number", 3}, {"date", "noDate"}},
+      malformed);
+  applyVersionAndExpectThrow(nlohmann::json{{"date", "2024-10-22"}}, malformed);
+}
+
+// Test that the encoding of the geo points is taken from the configuration of
+// the index, and that an index in the format that predates the entry for the
+// encoding uses `LatMajor`.
+TEST(IndexImpl, applyConfigurationGeoPointEncoding) {
+  using ad_utility::GeoPointEncoding;
+  absl::Cleanup restoreEncoding{
+      [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
+
+  // Apply the given `configuration` to a fresh `IndexImpl` (without log
+  // output).
+  auto apply = [](const nlohmann::json& configuration) {
+    IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    indexImpl.applyConfiguration(configuration);
+  };
+
+  // An index in the current format with either encoding.
+  auto configuration = minimalValidConfiguration();
+  for (auto encoding : {GeoPointEncoding::LatMajor, GeoPointEncoding::ZOrder}) {
+    configuration["geo-point-encoding"] = encoding;
+    apply(configuration);
+    EXPECT_EQ(GeoPoint::encoding(), encoding);
+  }
+
+  // An index in the previous format has no entry, and uses `LatMajor`.
+  configuration.erase("geo-point-encoding");
+  configuration["index-format-version"] =
+      qlever::indexFormatVersionWithLatMajorGeoPoints;
+  apply(configuration);
+  EXPECT_EQ(GeoPoint::encoding(), GeoPointEncoding::LatMajor);
+
+  // An index in the current format without an entry, or with an unknown one,
+  // is rejected.
+  configuration["index-format-version"] = qlever::indexFormatVersion;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      apply(configuration),
+      ::testing::HasSubstr("has no entry \"geo-point-encoding\""));
+  configuration["geo-point-encoding"] = "lng-major";
+  AD_EXPECT_THROW_WITH_MESSAGE(apply(configuration),
+                               ::testing::HasSubstr("lng-major"));
+}
+
+// Test the encoding of the geo points of a built index and of a loaded index in
+// the previous format, and the warnings for the deprecated `LatMajor`.
+TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
+  using ad_utility::GeoPointEncoding;
+  absl::Cleanup restoreEncoding{
+      [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
+
+  // An input with a point and two without (with an object that is sorted
+  // before resp. after all points), a helper to read the configuration of an
+  // index, and the start of the warning for `LatMajor`. Together, the two
+  // inputs without a point give a block whose objects span the range of all
+  // points.
+  const std::string withPoint =
+      "<a> <b> \"POINT(7.8 48.0)\"^^"
+      "<http://www.opengis.net/ont/geosparql#wktLiteral> .";
+  const std::string withoutPoint = "<a> <b> <c> .";
+  const std::string withoutPointBlankNode = "<a> <b> _:c .";
+  auto readConfiguration = [](const std::string& basename) {
+    nlohmann::json configuration;
+    ad_utility::makeIfstream(basename + CONFIGURATION_FILE) >> configuration;
+    return configuration;
+  };
+  auto warning =
+      ::testing::HasSubstr("which is deprecated and will not be supported");
+
+  // Load the index with the given `basename` (without its permutations if
+  // `loadPermutations` is false, with its persisted updates if
+  // `persistUpdates` is true) and return the log output.
+  auto load = [](const std::string& basename, bool loadPermutations = true,
+                 bool persistUpdates = false) {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.doNotLoadPermutations() = !loadPermutations;
+    index.createFromOnDiskIndex(basename, persistUpdates);
+    return logStream.str();
+  };
+
+  // Build an index with a point in either encoding. The configuration records
+  // the encoding, the `Id` of the point uses it, and loading the index gives a
+  // warning only for `LatMajor`.
+  for (auto encoding : {GeoPointEncoding::LatMajor, GeoPointEncoding::ZOrder}) {
+    std::string basename = absl::StrCat("geoPointEncoding.", encoding);
+    TestIndexConfig config{withPoint};
+    config.geoPointEncoding = encoding;
+    auto index = makeTestIndex(basename, std::move(config));
+    EXPECT_EQ(readConfiguration(basename)["geo-point-encoding"],
+              std::string{encoding.toString()});
+    Id point = index.getImpl()
+                   .getPermutation(Permutation::OSP)
+                   .metaData()
+                   .blockData()
+                   .front()
+                   .firstTriple_.col0Id_;
+    ASSERT_EQ(point.getDatatype(), Datatype::GeoPoint);
+    EXPECT_EQ(point.getBits() &
+                  ad_utility::bitMaskForLowerBits(GeoPoint::numDataBits),
+              GeoPoint::combineCoordinates(
+                  GeoPoint::quantizeCoordinate(48.0, 90),
+                  GeoPoint::quantizeCoordinate(7.8, 180), encoding));
+    if (encoding == GeoPointEncoding::LatMajor) {
+      EXPECT_THAT(load(basename), warning);
+    } else {
+      EXPECT_THAT(load(basename), ::testing::Not(warning));
+    }
+  }
+
+  // Building an index with `LatMajor` gives the warning as well (built
+  // without `makeTestIndex`, which discards the log output).
+  {
+    std::string basename = "geoPointEncoding.buildWarning";
+    ad_utility::makeOfstream(basename + ".ttl") << withPoint;
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(basename);
+    index.getImpl().setGeoPointEncodingForIndexBuilding(
+        GeoPointEncoding::LatMajor);
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    index.createFromFiles(
+        {qlever::InputFileSpecification{
+            basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}},
+        1);
+    EXPECT_THAT(logStream.str(), warning);
+  }
+
+  // Load an index in the previous format (which has no entry for the
+  // encoding). It uses `LatMajor`, and there is a warning iff it has points,
+  // also when all objects are in a single block that spans the range of all
+  // points, with or without a point inside.
+  for (const auto& [name, turtle, hasPoint] :
+       {std::tuple{"point", withPoint, true},
+        std::tuple{"iri", withoutPoint, false},
+        std::tuple{"blankNode", withoutPointBlankNode, false},
+        std::tuple{"spanning", withoutPoint + withoutPointBlankNode, false},
+        std::tuple{"spanningWithPoint",
+                   withoutPoint + withPoint + withoutPointBlankNode, true}}) {
+    std::string basename = absl::StrCat("geoPointEncoding.previous.", name);
+    TestIndexConfig config{turtle};
+    config.geoPointEncoding = GeoPointEncoding::LatMajor;
+    config.rowsPerBlock = 3;
+    makeTestIndex(basename, std::move(config));
+    auto configuration = readConfiguration(basename);
+    configuration.erase("geo-point-encoding");
+    configuration["index-format-version"] =
+        qlever::indexFormatVersionWithLatMajorGeoPoints;
+    ad_utility::makeOfstream(basename + CONFIGURATION_FILE) << configuration;
+    GeoPoint::setEncoding(GeoPointEncoding::ZOrder);
+    std::string log = load(basename);
+    EXPECT_EQ(GeoPoint::encoding(), GeoPointEncoding::LatMajor);
+    if (hasPoint) {
+      EXPECT_THAT(log, warning);
+    } else {
+      EXPECT_THAT(log, ::testing::Not(warning));
+    }
+  }
+
+  // An index in the previous format without points gives the warning when a
+  // point was inserted by an update that was persisted.
+  {
+    std::string basename = "geoPointEncoding.previous.iri";
+    {
+      Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+      index.createFromOnDiskIndex(basename, true);
+      index.deltaTriplesManager().modify<void>([](DeltaTriples& deltaTriples) {
+        Id a = Id::makeFromVocabIndex(VocabIndex::make(0));
+        Id point = Id::makeFromGeoPoint(GeoPoint{48.0, 7.8});
+        deltaTriples.insertTriples(
+            std::make_shared<ad_utility::CancellationHandle<>>(),
+            {IdTriple{{a, a, point, a}}});
+      });
+    }
+    EXPECT_THAT(load(basename, true, true), warning);
+    ad_utility::deleteFile(basename + UPDATE_TRIPLES_SUFFIX);
+  }
+
+  // Without its permutations, it is unknown whether an index has points, so
+  // loading it gives the warning even if it has none.
+  EXPECT_THAT(load("geoPointEncoding.previous.iri", false), warning);
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, applyConfigurationDeprecatedIgnoreCaseKey) {
+  // The key `ignore-case` was used by very old index builds and is no longer
+  // supported.
+  auto configuration = minimalValidConfiguration();
+  configuration["ignore-case"] = false;
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      indexImpl.applyConfiguration(configuration),
+      ::testing::HasSubstr("Deprecated key \"ignore-case\" in index build"));
+  EXPECT_THAT(logStream.str(),
+              ::testing::HasSubstr(std::string{ERROR_IGNORE_CASE_UNSUPPORTED}));
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, applyConfigurationMissingLocaleKey) {
+  // The key `locale` is required; index builds that don't have it are no longer
+  // supported.
+  auto configuration = minimalValidConfiguration();
+  configuration.erase("locale");
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      indexImpl.applyConfiguration(configuration),
+      ::testing::HasSubstr(
+          "Missing required key \"locale\" in index build's metadata"));
+  EXPECT_THAT(logStream.str(),
+              ::testing::HasSubstr(
+                  "Key \"locale\" is missing in the metadata. This is probably "
+                  "an old index build that is no longer supported"));
+}
+
 // _____________________________________________________________________________
 TEST(IndexImpl, dateOfIndexBuild) {
   auto index = makeTestIndex("dateOfIndexBuild", "<a> <b> <c> .");
@@ -1113,6 +1717,13 @@ TEST(IndexImpl, dateOfIndexBuild) {
       indexImpl.configurationJson_[DATE_OF_INDEX_BUILD_KEY].get<std::string>();
   EXPECT_EQ(indexImpl.dateOfIndexBuild(), storedDate);
 
+  // The `static` overload, which works without a loaded index, returns the
+  // same value when it is given the configuration and the base name of that
+  // index.
+  EXPECT_EQ(IndexImpl::dateOfIndexBuild(indexImpl.configurationJson_,
+                                        indexImpl.onDiskBase_),
+            storedDate);
+
   // The stored value is a valid UTC timestamp in the expected format.
   absl::Time parsed;
   std::string error;
@@ -1120,21 +1731,55 @@ TEST(IndexImpl, dateOfIndexBuild) {
                               absl::UTCTimeZone(), &parsed, &error))
       << error;
 
-  // For indexes that were built before the build date was recorded in the
-  // configuration, `dateOfIndexBuild()` falls back to the last modification
-  // time of the configuration file, which was just written. Since the format
-  // only has second precision, we don't compare the timestamp exactly, but
-  // check that it lies within the last second + tolerance.
-  indexImpl.configurationJson_.erase(std::string{DATE_OF_INDEX_BUILD_KEY});
+  // The fallback to the modification time of the configuration file (for
+  // indexes that were built before the build date was recorded) is tested in
+  // `dateOfIndexBuildStatic` below.
+}
+
+// _____________________________________________________________________________
+TEST(IndexImpl, dateOfIndexBuildStatic) {
+  // The `static` overload of `dateOfIndexBuild` works on an index that is not
+  // loaded, so we can exercise it with an arbitrary configuration and base
+  // name.
+  auto onDiskBase = gtestCurrentTestName();
+  auto configFilename = absl::StrCat(onDiskBase, CONFIGURATION_FILE);
+
+  // If the configuration contains the build date, it is returned verbatim, and
+  // the configuration file doesn't even have to exist.
+  nlohmann::json configuration;
+  configuration[std::string{DATE_OF_INDEX_BUILD_KEY}] = "2026-07-12T14:03:52Z";
+  EXPECT_EQ(IndexImpl::dateOfIndexBuild(configuration, onDiskBase),
+            "2026-07-12T14:03:52Z");
+
+  // If the configuration doesn't contain the build date, the modification time
+  // of the configuration file is used instead. Since the format only has
+  // second precision, we don't compare the timestamp exactly, but check that
+  // it lies within the last second + tolerance.
+  configuration.erase(std::string{DATE_OF_INDEX_BUILD_KEY});
+  {
+    auto configFile = ad_utility::makeOfstream(configFilename);
+    configFile << configuration;
+  }
+  absl::Cleanup cleanup = [&configFilename]() {
+    ad_utility::deleteFile(configFilename);
+  };
   absl::Time fallbackTime;
   std::string parseError;
-  ASSERT_TRUE(absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT,
-                              indexImpl.dateOfIndexBuild(), absl::UTCTimeZone(),
-                              &fallbackTime, &parseError))
+  ASSERT_TRUE(
+      absl::ParseTime(DATE_OF_INDEX_BUILD_FORMAT,
+                      IndexImpl::dateOfIndexBuild(configuration, onDiskBase),
+                      absl::UTCTimeZone(), &fallbackTime, &parseError))
       << parseError;
   EXPECT_THAT(absl::Now() - fallbackTime,
               ::testing::AllOf(::testing::Ge(absl::ZeroDuration()),
                                ::testing::Lt(absl::Seconds(2))));
+
+  // If the configuration doesn't contain the build date and there also is no
+  // configuration file to fall back to, the contract check on `stat` fails.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IndexImpl::dateOfIndexBuild(configuration,
+                                  absl::StrCat(onDiskBase, ".does-not-exist")),
+      ::testing::HasSubstr("stat(configFilename.c_str(), &fileStat) == 0"));
 }
 
 // _____________________________________________________________________________
@@ -1149,6 +1794,37 @@ TEST(IndexImpl, graphNameManagerIntegration) {
   EXPECT_EQ(graphManager.nextUnallocatedGraph_.load(), 3);
   EXPECT_THAT(graphManager.prefixWithoutBraces_,
               testing::StrEq(QLEVER_NEW_GRAPH_PREFIX));
+}
+
+// _____________________________________________________________________________
+// Build an index for IRIs that match a general `encodedIri::Pattern` and check
+// that the pattern is correctly stored in the index and restored from it, and
+// that the matching IRIs are not stored in the vocabulary.
+TEST(IndexImpl, encodedIriPatterns) {
+  std::string encodedIri = "<http://example.org/range_545554944_3_4P>";
+  std::string plainIri = "<http://example.org/range_1_2_3P>";
+  TestIndexConfig c{
+      absl::StrCat("<a> <b> ", encodedIri, " . <a> <b> ", plainIri, " .")};
+  c.encodedIriPatterns = {encodedIri::Pattern{
+      "http://example.org/range_",
+      {encodedIri::Part{32, {{29, 32, 1}}, "_"}, encodedIri::Part{8, {}, "_"},
+       encodedIri::Part{8, {}, "P"}}}};
+  const auto& index = getQec(c)->getIndex();
+  const auto& manager = index.encodedIriManager();
+
+  // The IRI that matches the pattern is encoded in an `Id` and therefore not
+  // part of the vocabulary.
+  auto id = manager.encode(encodedIri);
+  ASSERT_TRUE(id.has_value());
+  EXPECT_EQ(manager.toString(id.value()), encodedIri);
+  auto [lower, upper] = index.getVocab().getPositionOfWord(encodedIri);
+  EXPECT_EQ(lower, upper);
+
+  // The first number of the other IRI doesn't have the required bits, so the
+  // IRI is stored in the vocabulary as usual.
+  EXPECT_FALSE(manager.encode(plainIri).has_value());
+  auto [lower2, upper2] = index.getVocab().getPositionOfWord(plainIri);
+  EXPECT_NE(lower2, upper2);
 }
 
 // _____________________________________________________________________________

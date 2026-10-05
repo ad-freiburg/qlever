@@ -32,9 +32,8 @@ using std::string;
 auto iri = ad_utility::testing::iri;
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
-PropertyPath PathIri(std::string_view iri) {
-  return PropertyPath::fromIri(
-      ad_utility::triple_component::Iri::fromIriref(iri));
+PropertyPath PathIri(std::string_view iriref) {
+  return PropertyPath::fromIri(ad_utility::testing::iri(iriref));
 }
 using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
 }  // namespace
@@ -61,6 +60,19 @@ TEST(SparqlParser, NumericLiterals) {
   expectNumericLiteralFails("-99999999999999999999");
   expectNumericLiteralFails("12E400");
   expectNumericLiteralFails("-4.2E550");
+}
+
+// _____________________________________________________________________________
+TEST(SparqlParser, BooleanLiterals) {
+  auto expectBooleanLiteral = ExpectCompleteParse<&Parser::booleanLiteral>{};
+  expectBooleanLiteral("true", true);
+  expectBooleanLiteral("TRUE", true);
+  expectBooleanLiteral("True", true);
+  expectBooleanLiteral("tRuE", true);
+  expectBooleanLiteral("false", false);
+  expectBooleanLiteral("FALSE", false);
+  expectBooleanLiteral("False", false);
+  expectBooleanLiteral("fAlSe", false);
 }
 
 TEST(SparqlParser, Prefix) {
@@ -453,6 +465,62 @@ TEST(SparqlParser, Bind) {
   expectBind("bInD (?age - 10 As ?s)", m::Bind(Var{"?s"}, "?age - 10"));
 }
 
+// Aggregate functions may only be used in SELECT, HAVING, and ORDER BY clauses
+// (see section 11.1 of the SPARQL 1.1 standard), in particular not in a BIND.
+// The same test for FILTER is `FilterWithAggregateIsRejected` below.
+TEST(SparqlParser, BindWithAggregateIsRejected) {
+  auto noChecks = SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::True;
+  auto expectBindFails = ExpectParseFails<&Parser::bind>{{}, noChecks};
+  auto messageMatcher = ::testing::HasSubstr(
+      "Aggregate functions are not allowed in a BIND clause");
+  expectBindFails("BIND(SAMPLE(?human) AS ?a)", messageMatcher);
+  expectBindFails("BIND(COUNT(?x) AS ?a)", messageMatcher);
+  // The aggregate is nested inside another expression.
+  expectBindFails("BIND(1 + SUM(?x) AS ?a)", messageMatcher);
+  // An aggregate inside the body of an `EXISTS` has its own scope and is
+  // therefore fine.
+  auto expectBind = ExpectCompleteParse<&Parser::bind>{{}, noChecks};
+  expectBind(
+      "BIND(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } } AS ?a)",
+      m::Bind(Var{"?a"},
+              "EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } }"));
+}
+
+// Same as `BindWithAggregateIsRejected` above, but for FILTER. Note that the
+// correct way to filter on the value of an aggregate is a HAVING clause.
+TEST(SparqlParser, FilterWithAggregateIsRejected) {
+  auto noChecks = SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::True;
+  auto expectFilterFails = ExpectParseFails<&Parser::filterR>{{}, noChecks};
+  auto messageMatcher = ::testing::HasSubstr(
+      "Aggregate functions are not allowed in a FILTER clause");
+  expectFilterFails("FILTER(COUNT(?x) > 1)", messageMatcher);
+  expectFilterFails("FILTER(SAMPLE(?human) = ?x)", messageMatcher);
+  // The aggregate is nested inside another expression.
+  expectFilterFails("FILTER(1 + SUM(?x) > 0)", messageMatcher);
+  // An aggregate inside the body of an `EXISTS` has its own scope and is
+  // therefore fine.
+  auto expectFilter = ExpectCompleteParse<&Parser::filterR>{{}, noChecks};
+  expectFilter("FILTER(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })",
+               m::stringMatchesFilter(
+                   "(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })"));
+}
+
+// Same as `BindWithAggregateIsRejected` above, but for the expressions of a
+// GROUP BY clause.
+TEST(SparqlParser, GroupByWithAggregateIsRejected) {
+  auto expectGroupConditionFails = ExpectParseFails<&Parser::groupCondition>{};
+  auto messageMatcher = ::testing::HasSubstr(
+      "Aggregate functions are not allowed in a GROUP BY clause");
+  expectGroupConditionFails("COUNT(?x)", messageMatcher);
+  expectGroupConditionFails("(SAMPLE(?x))", messageMatcher);
+  expectGroupConditionFails("(1 + SUM(?x) AS ?y)", messageMatcher);
+  auto expectGroupCondition = ExpectCompleteParse<&Parser::groupCondition>{};
+  expectGroupCondition(
+      "(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })",
+      m::ExpressionGroupKey(
+          "EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } }"));
+}
+
 TEST(SparqlParser, Integer) {
   auto expectInteger = ExpectCompleteParse<&Parser::integer>{};
   auto expectIntegerFails = ExpectParseFails<&Parser::integer>();
@@ -528,7 +596,7 @@ TEST(SparqlParser, GroupCondition) {
   expectGroupCondition("(?test AS ?mehr)",
                        m::AliasGroupKey("?test", Var{"?mehr"}));
   // builtInCall
-  expectGroupCondition("COUNT(?test)", m::ExpressionGroupKey("COUNT(?test)"));
+  expectGroupCondition("STR(?test)", m::ExpressionGroupKey("STR(?test)"));
   // functionCall
   expectGroupCondition(
       "<http://www.opengis.net/def/function/geosparql/latitude>(?test)",
@@ -539,9 +607,9 @@ TEST(SparqlParser, GroupCondition) {
 TEST(SparqlParser, GroupClause) {
   expectCompleteParse(
       parse<&Parser::groupClause>(
-          "GROUP BY ?test (?foo - 10 as ?bar) COUNT(?baz)"),
+          "GROUP BY ?test (?foo - 10 as ?bar) STR(?baz)"),
       m::GroupKeys(
-          {Var{"?test"}, std::pair{"?foo - 10", Var{"?bar"}}, "COUNT(?baz)"}));
+          {Var{"?test"}, std::pair{"?foo - 10", Var{"?bar"}}, "STR(?baz)"}));
 }
 
 TEST(SparqlParser, SolutionModifier) {
@@ -849,6 +917,9 @@ TEST(SparqlParser, HavingCondition) {
                         m::stringMatchesFilter("(?predicate < \"<Z\")"));
   expectHavingCondition("(LANG(?x) = \"en\")",
                         m::stringMatchesFilter("(LANG(?x) = \"en\")"));
+  // In contrast to BIND and FILTER, aggregates are allowed here.
+  expectHavingCondition("(COUNT(?x) > 1)",
+                        m::stringMatchesFilter("(COUNT(?x) > 1)"));
 }
 
 TEST(SparqlParser, GroupGraphPattern) {

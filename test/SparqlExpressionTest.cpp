@@ -29,11 +29,11 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "index/Index.h"
+#include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/AllocatorTestHelpers.h"
-#include "util/Conversions.h"
 #include "util/IdTestHelpers.h"
 
 namespace {
@@ -214,18 +214,13 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
   LocalVocab localVocab;
   IdTable table{alloc};
 
-  // Get the size of `operand`: size for a vector, 1 otherwise. For a
-  // `SetOfIntervals`, this actually returns the *minimal* size of an
-  // `EvaluationContext` that can expand the `SetOfIntervals`. This is used to
-  // implement test cases where all the inputs are `SetOfIntervals` or constant,
-  // and the result is NOT a `SetOfIntervals`.
+  // Get the size of `operand`: size for a vector or a `SetOfIntervals`, 1
+  // otherwise.
   auto getResultSize = [](const auto& operand) -> size_t {
     using T = std::decay_t<decltype(operand)>;
-    if constexpr (isVectorResult<T>) {
+    if constexpr (isVectorResult<T> ||
+                  std::is_same_v<T, ad_utility::SetOfIntervals>) {
       return operand.size();
-    } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
-      return operand._intervals.empty() ? size_t{0}
-                                        : operand._intervals.back().second;
     }
     return 1;
   };
@@ -357,15 +352,15 @@ TEST(SparqlExpression, logicalOperators) {
 
   using S = ad_utility::SetOfIntervals;
   {
-    auto s1 = S{{{0, 4}}};
-    auto s2 = S{{{3, 6}}};
+    auto s1 = S{{{0, 4}}, 6};
+    auto s2 = S{{{3, 6}}, 6};
     // The type erased expressions don't use the optimizations between
     // set-of-interval, but always return a fully materialized vector.
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
     V<Id> resultAsVec{{t, t, t, t, t, t}, alloc};
     testOr(resultAsVec, s1, s2);
 #else
-    S resultAsSet = S{{{0, 6}}};
+    S resultAsSet = S{{{0, 6}}, 6};
     testOr(resultAsSet, s1, s2);
 #endif
   }
@@ -382,15 +377,15 @@ TEST(SparqlExpression, logicalOperators) {
 
   using S = ad_utility::SetOfIntervals;
   {
-    auto s1 = S{{{0, 4}}};
-    auto s2 = S{{{3, 6}}};
+    auto s1 = S{{{0, 4}}, 6};
+    auto s2 = S{{{3, 6}}, 6};
     // The type erased expressions don't use the optimizations between
     // set-of-interval, but always return a fully materialized vector.
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
     V<Id> resultAsVec{{f, f, f, t, f, f}, alloc};
     testAnd(resultAsVec, s1, s2);
 #else
-    S resultAsSet = S{{{3, 4}}};
+    S resultAsSet = S{{{3, 4}}, 6};
     testAnd(resultAsSet, s1, s2);
 #endif
   }
@@ -466,6 +461,77 @@ TEST(SparqlExpression, logicalOperators) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(SparqlExpression, multiplyExpressionWithVariable) {
+  TestContext testContext;
+
+  auto expression = makeMultiplyExpression(
+      std::make_unique<VariableExpression>(Variable{"?ints"}),
+      std::make_unique<IdExpression>(I(2)));
+
+  V<Id> expected{{I(2), I(0), I(-2)}, testContext.qec->getAllocator()};
+
+  auto result = expression->evaluate(&testContext.context);
+
+  ASSERT_THAT(result, ::testing::VariantWith<V<Id>>(
+                          sparqlExpressionResultMatcher(expected)));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
+  V<Id> ints{{I(1), I(-2), I(3)}, alloc};
+  V<Id> doubles{{D(0.5), D(2.0), D(-1.5)}, alloc};
+
+  // Vector-vector: Int/Int, Int/Double, Double/Double.
+  testPlus(V<Id>{{I(2), I(-4), I(6)}, alloc}, ints, ints);
+  testPlus(V<Id>{{D(1.5), D(0.0), D(1.5)}, alloc}, ints, doubles);
+  testPlus(V<Id>{{D(1.0), D(4.0), D(-3.0)}, alloc}, doubles, doubles);
+
+  // Vector-constant and constant-vector. `testPlus` checks both operand orders.
+  testPlus(V<Id>{{I(3), I(0), I(5)}, alloc}, ints, I(2));
+  testPlus(V<Id>{{D(2.5), D(4.0), D(0.5)}, alloc}, doubles, D(2.0));
+
+  // Exercise the `MakeNumericExpression` -> `NumericIdWrapper` fast-path
+  // mapping.
+  testMultiply(V<Id>{{I(2), I(-4), I(6)}, alloc}, ints, I(2));
+  testMultiply(V<Id>{{D(0.5), D(-4.0), D(-4.5)}, alloc}, ints, doubles);
+
+  // Preserve `NanOrInfToUndef` in the homogeneous numeric fast path.
+  testDivide(V<Id>{{U, U, U}, alloc}, ints, I(0));
+
+  // Mixed numeric vectors must preserve the expected arithmetic semantics.
+  V<Id> mixed{{I(1), D(2.0), I(3)}, alloc};
+  testPlus(V<Id>{{I(2), D(3.0), I(4)}, alloc}, mixed, I(1));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlExpression, speculativeNumericBinaryFastPath) {
+  // Integers are the majority, so the speculative path is taken with `Int`
+  // as the expected datatype. The other rows must reach the generic fallback
+  // of the slow path: a `Bool` counts as `0` or `1` there, an `UNDEF`, a
+  // vocabulary entry, and (for `+`) a date all yield `UNDEF`.
+  V<Id> mostlyInts{{I(1), I(2), I(3), I(4), I(5), D(0.5), B(true), U, Voc(4),
+                    Dat(DateYearOrDuration::parseXsdDate, "2000-01-01")},
+                   alloc};
+  testPlus(V<Id>{{I(2), I(3), I(4), I(5), I(6), D(1.5), I(2), U, U, U}, alloc},
+           mostlyInts, I(1));
+  testMultiply(
+      V<Id>{{D(2.0), D(4.0), D(6.0), D(8.0), D(10.0), D(1.0), D(2.0), U, U, U},
+            alloc},
+      mostlyInts, D(2.0));
+
+  // Doubles are the majority and the constant is an integer, so the slow path
+  // sees the `Int`/`Int` and `Int`/`Double` combinations.
+  V<Id> mostlyDoubles{{D(0.5), D(1.5), D(2.5), I(3), B(false)}, alloc};
+  testPlus(V<Id>{{D(1.5), D(2.5), D(3.5), I(4), I(1)}, alloc}, mostlyDoubles,
+           I(1));
+
+  // A tie between integers and doubles has no majority type and takes the
+  // generic path; the result must be the same either way.
+  V<Id> tied{{I(1), D(2.0), U}, alloc};
+  testPlus(V<Id>{{I(2), D(3.0), U}, alloc}, tied, I(1));
+}
+
 // _____________________________________________________________________________________
 TEST(SparqlExpression, arithmeticOperators) {
   // Test `AddExpression`, `SubtractExpression`, `MultiplyExpression`, and
@@ -539,8 +605,14 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMinus(minus22, mixed, D(2.2));
   testPlus(minus22, mixed, D(-2.2));
 
+  using S = ad_utility::SetOfIntervals;
+  S alternating{{{0, 2}, {3, 4}}, 4};
+  V<Id> alternatingTimes2{{I(2), I(2), I(0), I(2)}, alloc};
+
   testMultiply(times2, mixed, I(2));
   testMultiply(times13, mixed, D(1.3));
+  testMultiply(I(6), I(2), I(3));
+  testMultiply(alternatingTimes2, alternating, I(2));
 
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
   // Test for `DateTime` - `DateTime`.
@@ -584,6 +656,15 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMultiply(by2, mixed, D(0.5));
   testDivide(times13, mixed, D(1.0 / 1.3));
 
+  V<Id> divisors{{I(2), I(4), D(0.5)}, alloc};
+  V<Id> eightDividedBy{{D(4), D(2), D(16)}, alloc};
+
+  // constant–vector
+  testDivide(eightDividedBy, I(8), divisors);
+
+  // constant–constant
+  testDivide(D(4), I(8), I(2));
+
   // Division by zero is either `UNDEF` or `NaN/infinity`, depending on a
   // runtime parameter.
   V<Id> undef{{U, U, U, U}, alloc};
@@ -595,6 +676,7 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(undef, divByZeroInputsInt, I(0));
   testDivide(undef, divByZeroInputsDouble, D(0));
   testDivide(undef, divByZeroInputsInt, D(0));
+  testDivide(U, I(1), I(0));
 
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::divisionByZeroIsUndef_>(
@@ -603,6 +685,7 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(nanAndInf, divByZeroInputsInt, I(0));
   testDivide(nanAndInf, divByZeroInputsDouble, D(0));
   testDivide(nanAndInf, divByZeroInputsInt, D(0));
+  testDivide(D(inf), I(1), I(0));
 }
 
 // Test that the unary expression that is specified by the `makeFunction` yields
@@ -880,6 +963,16 @@ TEST(SparqlExpression, stringOperators) {
                                  lit("https://www.bimbimbam/2001/bamString"),
                                  lit("/hello"), iriref("</hello>")},
           IdOrLocalVocabEntry{iriref("<http://example.com/hi/>")}});
+
+  // `IRI()` does not unescape its argument, so the content of the resulting IRI
+  // may contain a backslash. Resolving it against a base IRI must not read that
+  // backslash as an escape sequence: `a\\u0062c` must not silently become
+  // `abc`. A backslash is not a valid URI character, so this is reported as an
+  // error instead.
+  EXPECT_ANY_THROW(checkIriOrUri(
+      IdOrLocalVocabEntryVec{U},
+      std::tuple{IdOrLocalVocabEntryVec{lit(R"(a\\u0062c)")},
+                 IdOrLocalVocabEntry{iriref("<http://example.com/hi/>")}}));
 
   // The ParsedUriGetter::operator()(ValueId, ...) overload is required by the
   // Mixin interface but logically unreachable (the base IRI is always a
@@ -1189,6 +1282,25 @@ TEST(SparqlExpression, unaryNegate) {
   // Empty strings are considered to be true.
   checkNegate(idOrLitOrStringVec({"true", "false", "", "blibb"}),
               Ids{B(false), B(false), B(true), B(false)});
+
+  // The negation of a `SetOfIntervals` lies within the range of the set, so it
+  // can also be used as the input of other expressions. This used to fail (see
+  // https://github.com/ad-freiburg/qlever/issues/3559).
+  using S = ad_utility::SetOfIntervals;
+  S set{{{0, 2}}, 4};
+  // The type erased expressions don't use the optimizations for
+  // `SetOfIntervals`, but always return a fully materialized vector.
+#ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
+  checkNegate(set, Ids{B(false), B(false), B(true), B(true)});
+#else
+  checkNegate(set, S{{{2, 4}}, 4});
+#endif
+  auto makeNegateOr = [](SparqlExpression::Ptr a, SparqlExpression::Ptr b) {
+    return makeOrExpression(makeUnaryNegateExpression(std::move(a)),
+                            std::move(b));
+  };
+  testNaryExpression(makeNegateOr, Ids{B(true), B(false), B(true), B(true)},
+                     set, Ids{B(true), B(false), B(false), B(true)});
 }
 
 // _____________________________________________________________________________________
@@ -1255,6 +1367,9 @@ TEST(SparqlExpression, customNumericFunctions) {
   auto checkPow = std::bind_front(testNaryExpression, &makePowExpression);
   checkPow(Ids{D(1), D(32), U, U}, Ids{I(5), D(2), U, D(0)},
            IdOrLocalVocabEntryVec{I(0), D(5), I(0), lit("abc")});
+  checkPow(Ids{D(4), D(9), U}, Ids{I(2), I(3), U}, I(2));
+  checkPow(Ids{D(1), D(8), U}, I(2), Ids{I(0), I(3), U});
+  checkPow(D(8), I(2), I(3));
 }
 
 // ____________________________________________________________________________
@@ -1862,11 +1977,18 @@ TEST(SparqlExpression, ifAndCoalesce) {
   // If all children are unbound constants, the result is a single UNDEF.
   checkCoalesce(U, std::tuple{U, U});
 
-  // Check COALESCE with no arguments or empty arguments.
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}, Ids{}});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}, Ids{}, Ids{}});
+  // Check COALESCE with no arguments or empty arguments. The result is a single
+  // UNDEF and not an empty vector, by the same rule as in the case directly
+  // above: nothing is bound, and for an empty input nothing ever can be. Both
+  // representations are equivalent for an ordinary expression (the number of
+  // result rows is determined by the input, not by this result), but only a
+  // constant is accepted when the `COALESCE` is evaluated as part of an
+  // implicit `GROUP BY` over an empty input, see the
+  // `CoalesceWithAggregateOnEmptyImplicitGroup` test in `GroupByTest.cpp`.
+  checkCoalesce(U, std::tuple{});
+  checkCoalesce(U, std::tuple{Ids{}});
+  checkCoalesce(U, std::tuple{Ids{}, Ids{}});
+  checkCoalesce(U, std::tuple{Ids{}, Ids{}, Ids{}});
 
   auto coalesceExpr = makeCoalesceExpressionVariadic(
       std::make_unique<IriExpression>(iri("<bim>")),

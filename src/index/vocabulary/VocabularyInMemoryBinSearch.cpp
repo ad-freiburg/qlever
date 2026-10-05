@@ -4,17 +4,9 @@
 
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 
-using std::string;
+#include <absl/strings/str_cat.h>
 
-// _____________________________________________________________________________
-VocabularyInMemoryBinSearch::IndicesView VocabularyInMemoryBinSearch::indices()
-    const {
-  return std::visit(
-      [](const auto& indices) -> IndicesView {
-        return {indices.data(), indices.size()};
-      },
-      indices_);
-}
+using std::string;
 
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::open(const string& fileName) {
@@ -26,8 +18,9 @@ void VocabularyInMemoryBinSearch::open(const string& fileName) {
     file >> words_;
   }
   {
-    ad_utility::serialization::FileReadSerializer idFile(fileName + ".ids");
-    idFile >> ownedIndices();
+    ad_utility::serialization::FileReadSerializer idFile(
+        absl::StrCat(fileName, idsSuffix));
+    idFile >> indices_;
   }
 }
 
@@ -50,13 +43,26 @@ uint64_t VocabularyInMemoryBinSearch::indexAtPosition(size_t position) const {
 }
 
 // _____________________________________________________________________________
+uint64_t VocabularyInMemoryBinSearch::endIndex() const {
+  auto indices = this->indices();
+  return indices.empty() ? 0 : indices[indices.size() - 1] + 1;
+}
+
+// _____________________________________________________________________________
+std::string_view VocabularyInMemoryBinSearch::wordAtPosition(
+    size_t position) const {
+  AD_CORRECTNESS_CHECK(position < words_.size());
+  return words_[position];
+}
+
+// _____________________________________________________________________________
 std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
     uint64_t index) const {
   auto position = positionOfIndex(index);
   if (!position.has_value()) {
     return std::nullopt;
   }
-  return words_[position.value()];
+  return wordAtPosition(position.value());
 }
 
 // _____________________________________________________________________________
@@ -87,12 +93,12 @@ VocabularyInMemoryBinSearch::makeDiskWriterPtr(
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::close() {
   words_.clear();
-  indices_.emplace<Indices>();
+  indices_ = {};
 }
 
 // _____________________________________________________________________________
 VocabularyInMemoryBinSearch::WordWriter::WordWriter(const std::string& filename)
-    : writer_{filename}, offsetWriter_{filename + ".ids"} {}
+    : writer_{filename}, offsetWriter_{absl::StrCat(filename, idsSuffix)} {}
 
 // _____________________________________________________________________________
 uint64_t VocabularyInMemoryBinSearch::WordWriter::operator()(

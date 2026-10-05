@@ -2,10 +2,14 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
 
+#include <clocale>
 #include <cstdio>
 #include <fstream>
+#include <iostream>
+#include <string>
 
 #include "./WordsAndDocsFileLineCreator.h"
 #include "./util/GTestHelpers.h"
@@ -102,11 +106,21 @@ auto testTokenizeAndNormalizeText =
       ASSERT_EQ(i, normalizedTextAsVec.size());
     };
 
+// Set the `LC_CTYPE` locale to the locale from the environment and restore the
+// previous locale when the returned cleanup is destroyed.
+[[nodiscard]] auto setLocaleFromEnvironment() {
+  std::string previousLocale = setlocale(LC_CTYPE, nullptr);
+  std::cout << "Set locale LC_CTYPE to: " << setlocale(LC_CTYPE, "")
+            << std::endl;
+  return absl::Cleanup{[previousLocale = std::move(previousLocale)] {
+    setlocale(LC_CTYPE, previousLocale.c_str());
+  }};
+}
+
 }  // namespace
 
 TEST(WordsAndDocsFileParserTest, wordsFileParserTest) {
-  char* locale = setlocale(LC_CTYPE, "");
-  std::cout << "Set locale LC_CTYPE to: " << locale << std::endl;
+  auto localeCleanup = setLocaleFromEnvironment();
 
   std::fstream f("_testtmp.contexts.tsv", std::ios_base::out);
   f << createWordsFileLineAsString("Foo", false, 0, 2)
@@ -127,8 +141,7 @@ TEST(WordsAndDocsFileParserTest, wordsFileParserTest) {
 };
 
 TEST(WordsAndDocsFileParser, docsFileParserTest) {
-  char* locale = setlocale(LC_CTYPE, "");
-  std::cout << "Set locale LC_CTYPE to: " << locale << std::endl;
+  auto localeCleanup = setLocaleFromEnvironment();
 
   std::fstream f("_testtmp.documents.tsv", std::ios_base::out);
   f << createDocsFileLineAsString(4, "This TeSt is OnlyCharcters")
@@ -147,8 +160,7 @@ TEST(WordsAndDocsFileParser, docsFileParserTest) {
 }
 
 TEST(TokenizeAndNormalizeText, tokenizeAndNormalizeTextTest) {
-  char* locale = setlocale(LC_CTYPE, "");
-  std::cout << "Set locale LC_CTYPE to: " << locale << std::endl;
+  auto localeCleanup = setLocaleFromEnvironment();
 
   // Test 1
   testTokenizeAndNormalizeText("already normalized text",

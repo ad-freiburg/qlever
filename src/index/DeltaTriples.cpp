@@ -230,7 +230,7 @@ DeltaTriplesCount DeltaTriples::getCounts() const {
 DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
                                                         bool insertion) {
   // NOTE: If this logic is ever changed, you need to also change the code
-  // in `IndexBuilderTypes.h`, the function `getIdMapLambdas` specifically,
+  // in `IndexBuilderTypes.h`, the function `mapTripleToIds` specifically,
   // which adds the same extra triples for language tags to the internal triples
   // on the initial index build.
   Triples internalTriples;
@@ -262,8 +262,7 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
         });
     auto langtag =
         asStringViewUnsafe(optionalLiteralOrIri.value().getLanguageTag());
-    auto specialPredicate =
-        ad_utility::convertToLanguageTaggedPredicate(predicate, langtag);
+    auto specialPredicate = predicate.withLanguageTag(langtag);
     Id specialId = toValueId(TripleComponent{std::move(specialPredicate)},
                              index_, localVocab_);
     // Extra triple `<subject> @language@<predicate> "object"@language`.
@@ -277,7 +276,8 @@ DeltaTriples::Triples DeltaTriples::makeInternalTriples(const Triples& triples,
     Id langtagId =
         languageTagCache_.getOrCompute(langtag, [this](const std::string& tag) {
           return toValueId(
-              TripleComponent{ad_utility::convertLangtagToEntityUri(tag)},
+              TripleComponent{
+                  ad_utility::triple_component::Iri::fromLangtag(tag)},
               index_, localVocab_);
         });
 

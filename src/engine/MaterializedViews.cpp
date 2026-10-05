@@ -13,6 +13,7 @@
 
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <stdexcept>
 
 #include "backports/filesystem.h"
@@ -26,6 +27,7 @@
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
+#include "index/CompressedRelationWriter.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
 #include "libqlever/Qlever.h"
@@ -218,13 +220,14 @@ std::vector<std::string> MaterializedViewsManager::writeViewToDisk(
   MaterializedViewWriter writer{onDiskBase_, std::move(name), plannedQuery,
                                 std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
+  loadView(writer.name_, writer.qec_.get());
   return writer.warnings();
 }
 
 // _____________________________________________________________________________
 std::string MaterializedView::getFilenameBase(std::string_view onDiskBase,
                                               std::string_view name) {
-  return absl::StrCat(onDiskBase, ".view.", name);
+  return materializedViewFilenameBase(onDiskBase, name);
 }
 
 // _____________________________________________________________________________
@@ -407,9 +410,11 @@ MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
 IndexMetaData MaterializedViewWriter::writePermutation(
     RangeOfIdTables sortedBlocksSPO) const {
   std::string spoFilename = absl::StrCat(getFilenameBase(), VIEW_SPO_SUFFIX);
+  // NOTE: The block size of an index is not necessarily the default, see
+  // `INDEX_ROWS_PER_BLOCK_KEY`.
   auto spoWriter = std::make_unique<CompressedRelationWriter>(
       numCols(), ad_utility::File{spoFilename, "w"},
-      UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN);
+      qec_->getIndex().rowsPerBlock());
 
   qlever::KeyOrder spoKeyOrder{0, 1, 2, 3};
   IndexMetaData spoMetaData;
@@ -603,7 +608,7 @@ void MaterializedView::connectPermutationBackReference() {
 std::shared_ptr<MaterializedView>
 MaterializedViewsManager::loadViewIntoLockedState(
     const std::string& name, LoadedViews& state,
-    QueryExecutionContext* qec) const {
+    const QueryExecutionContext* qec) const {
   if (auto it = state.views_.find(name); it != state.views_.end()) {
     return it->second;
   }
@@ -621,21 +626,24 @@ MaterializedViewsManager::loadViewIntoLockedState(
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::loadView(const std::string& name,
-                                        QueryExecutionContext* qec) const {
+void MaterializedViewsManager::loadView(
+    const std::string& name, const QueryExecutionContext* qec) const {
   auto lock = loadedViews_.wlock();
   loadViewIntoLockedState(name, *lock, qec);
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::unloadViewIfLoaded(
+bool MaterializedViewsManager::unloadViewIfLoaded(
     const std::string& name) const {
   auto lock = loadedViews_.wlock();
-  if (!lock->views_.contains(name)) {
-    return;
+  auto view = ad_utility::findOptional(lock->views_, name);
+  if (!view.has_value()) {
+    return false;
   }
-  lock->queryPatternCache_.removeView(lock->views_.at(name));
+  lock->queryPatternCache_.removeView(view.value());
   lock->views_.erase(name);
+  AD_LOG_INFO << "Materialized view \"" << name << "\" unloaded" << std::endl;
+  return true;
 }
 
 // _____________________________________________________________________________
@@ -683,7 +691,7 @@ void MaterializedViewsManager::deleteView(const std::string& name) const {
 
 // _____________________________________________________________________________
 std::shared_ptr<const MaterializedView> MaterializedViewsManager::getView(
-    const std::string& name, QueryExecutionContext* qec) const {
+    const std::string& name, const QueryExecutionContext* qec) const {
   auto lock = loadedViews_.wlock();
   return loadViewIntoLockedState(name, *lock, qec);
 }
@@ -701,11 +709,9 @@ bool MaterializedViewsManager::hasLoadedViews() const {
 // _____________________________________________________________________________
 std::vector<ql::filesystem::path> MaterializedViewsManager::viewFilesOnDisk(
     const ql::filesystem::path& onDiskBase) {
-  // View files are named `<base>.view.<name>...`. Reuse the canonical filename
-  // builder so the `.view.` infix is not duplicated here, and let the shared
-  // helper enumerate the matching files in the directory of `onDiskBase`.
-  std::string suffix = MaterializedView::getFilenameBase("", "");
-  return qlever::util::filesWithBaseNameAndSuffix(onDiskBase, suffix);
+  // View files are named `<base>.view.<name>...`, so let the shared helper
+  // enumerate the files with that infix in the directory of `onDiskBase`.
+  return qlever::util::filesWithBaseNameAndSuffix(onDiskBase, VIEW_FILE_INFIX);
 }
 
 // _____________________________________________________________________________
@@ -899,7 +905,7 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
   // no join occurs if multiple materialized views are requested in a single
   // query.
   auto scanTriple = makeScanConfig(viewQuery);
-  return std::make_shared<IndexScan>(
+  return qec->makeShared<IndexScan>(
       qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
       std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
       viewQuery.getVarsToKeep());
@@ -936,7 +942,7 @@ std::shared_ptr<IndexScan> MaterializedView::makeIndexScan(
                                 std::move(additionalCols)};
   auto v = varToCol | ql::ranges::views::keys;
   ad_utility::HashSet<Variable> varsToKeep{v.begin(), v.end()};
-  return std::make_shared<IndexScan>(
+  return qec->makeShared<IndexScan>(
       qec, permutation_, LocatedTriplesSharedState{locatedTriplesState_},
       std::move(scanTriple), IndexScan::Graphs::All(), std::nullopt,
       std::move(varsToKeep));
@@ -1002,7 +1008,8 @@ std::optional<size_t> MaterializedView::lookupBindTargetColumn(
 
 // _____________________________________________________________________________
 MaterializedView::CacheKeyWithAndWithoutInvariantPatterns
-MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
+MaterializedView::computeCacheKey(
+    const QueryExecutionContext* qecOriginal) const {
   if (qecOriginal == nullptr || !originalQuery_.has_value()) {
     return {std::nullopt, std::nullopt};
   }
@@ -1024,7 +1031,7 @@ MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     QueryPlanner qp{&qec, handle};
 
-    QueryExecutionTree executionTree{&qec};
+    std::shared_ptr<QueryExecutionTree> executionTree;
     try {
       executionTree = qp.createExecutionTree(parsed);
     } catch (const MaterializedViewConfigException&) {
@@ -1037,7 +1044,7 @@ MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
     }
 
     ColumnMapping mapping;
-    for (const auto& [var, col] : executionTree.getVariableColumns()) {
+    for (const auto& [var, col] : executionTree->getVariableColumns()) {
       auto it = viewCols.find(var);
       // Internal variables and variables that are not selected by the
       // materialized view query are not present in the view. Therefore this
@@ -1047,7 +1054,7 @@ MaterializedView::computeCacheKey(QueryExecutionContext* qecOriginal) const {
       }
       mapping.insert({col.columnIndex_, it->second.columnIndex_});
     }
-    return CacheKeyAndColumnMapping{executionTree.getCacheKey(),
+    return CacheKeyAndColumnMapping{executionTree->getCacheKey(),
                                     std::move(mapping)};
   };
 

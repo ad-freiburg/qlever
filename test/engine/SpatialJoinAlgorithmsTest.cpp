@@ -1753,7 +1753,7 @@ TEST(SpatialJoin, LibspatialJoinWithPlainOnDiskBase) {
   ad_utility::testing::TestIndexConfig idxConfig{kg};
   std::optional<ad_utility::VocabularyType> vocabType = std::nullopt;
   idxConfig.vocabularyType = vocabType;
-  idxConfig.blocksizePermutations = 16_MB;
+  idxConfig.rowsPerBlock = 2'000'000;
   idxConfig.parserBufferSize = 10_kB;
 
   // A plain base (no full path) is the default.
@@ -1832,7 +1832,7 @@ TEST(SpatialJoin, LibspatialJoinDe9imFilter) {
   addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
 
   ad_utility::testing::TestIndexConfig idxConfig{kg};
-  idxConfig.blocksizePermutations = 16_MB;
+  idxConfig.rowsPerBlock = 2'000'000;
   idxConfig.parserBufferSize = 10_kB;
   auto qec = ad_utility::testing::getQec(std::move(idxConfig));
 
@@ -1848,8 +1848,7 @@ TEST(SpatialJoin, LibspatialJoinDe9imFilter) {
         Variable{"?area2"},
         std::nullopt,
         PayloadVariables::all(),
-        SpatialJoinAlgorithm::LIBSPATIALJOIN,
-        SpatialJoinType::DE9IM};
+        SpatialJoinAlgorithm::LIBSPATIALJOIN};
     auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
         qec, config, leftChild, rightChild);
     auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
@@ -1885,7 +1884,7 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
   ad_utility::testing::TestIndexConfig idxConfig{kg};
   std::optional<ad_utility::VocabularyType> vocabType = std::nullopt;
   idxConfig.vocabularyType = vocabType;
-  idxConfig.blocksizePermutations = 16_MB;
+  idxConfig.rowsPerBlock = 2'000'000;
   idxConfig.parserBufferSize = 10_kB;
 
   auto qec = ad_utility::testing::getQec(base.string(), std::move(idxConfig));

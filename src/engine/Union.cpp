@@ -62,21 +62,10 @@ Union::Union(QueryExecutionContext* qec,
       }));
 
   if (!targetOrder_.empty()) {
-    auto computeSortOrder = [this](bool left) {
-      std::vector<ColumnIndex> specificSortOrder;
-      for (ColumnIndex index : targetOrder_) {
-        ColumnIndex realIndex = _columnOrigins.at(index).at(!left);
-        if (realIndex != NO_COLUMN) {
-          specificSortOrder.push_back(realIndex);
-        }
-      }
-      return specificSortOrder;
-    };
-
     _subtrees[0] = QueryExecutionTree::createSortedTree(std::move(_subtrees[0]),
-                                                        computeSortOrder(true));
-    _subtrees[1] = QueryExecutionTree::createSortedTree(
-        std::move(_subtrees[1]), computeSortOrder(false));
+                                                        sortOrderForSubtree(0));
+    _subtrees[1] = QueryExecutionTree::createSortedTree(std::move(_subtrees[1]),
+                                                        sortOrderForSubtree(1));
 
     // Swap children to get cheaper computation
     if (_columnOrigins.at(targetOrder_.at(0)).at(1) == NO_COLUMN) {
@@ -87,6 +76,18 @@ Union::Union(QueryExecutionContext* qec,
                            [](auto& el) { std::swap(el[0], el[1]); });
     }
   }
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> Union::sortOrderForSubtree(size_t subtreeIndex) const {
+  std::vector<ColumnIndex> specificSortOrder;
+  for (ColumnIndex index : targetOrder_) {
+    ColumnIndex realIndex = _columnOrigins.at(index).at(subtreeIndex);
+    if (realIndex != NO_COLUMN) {
+      specificSortOrder.push_back(realIndex);
+    }
+  }
+  return specificSortOrder;
 }
 
 std::string Union::getCacheKeyImpl() const {
@@ -409,9 +410,19 @@ void Union::onLimitOffsetChanged(const LimitOffsetClause&) {
   // Both children only have to supply their first `limit + offset` rows: Each
   // row of the result consumes exactly one row of one of the children, no
   // matter whether they are concatenated or merged according to `targetOrder_`.
-  for (auto& subtree : _subtrees) {
+  for (size_t i = 0; i < _subtrees.size(); ++i) {
+    auto& subtree = _subtrees.at(i);
     subtree = subtree->clone();
     subtree->applyLimitOffset(LimitOffsetClause{limit + offset});
+
+    // The pushdown may have un-sorted `subtree`, while both the merging
+    // implementation and our `resultSortedOn()` require the subtrees to be
+    // sorted, so restore that order (see the caution note on
+    // `Operation::applyLimitOffset`).
+    if (!targetOrder_.empty()) {
+      subtree = QueryExecutionTree::createSortedTree(std::move(subtree),
+                                                     sortOrderForSubtree(i));
+    }
   }
 }
 

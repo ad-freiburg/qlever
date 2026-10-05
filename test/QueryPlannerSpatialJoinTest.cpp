@@ -911,6 +911,22 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
           "The algorithm `<libspatialjoin>` supports the "
           "`<maxDistance>` option only if `<joinType>` is set to "
           "`<within-dist>`"));
+  // `<within-dist>` join type requires the `<maxDistance>` parameter.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+                "spatialSearch:joinType <within-dist> ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr("`<within-dist>` requires the `<maxDistance>` "
+                           "parameter"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1111,7 +1127,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
     auto qec = ad_utility::testing::getQec(kb);
     qec->pinResultWithName() = {"dummy", std::nullopt};
     auto plan = h::parseAndPlan(pinned, qec);
-    [[maybe_unused]] auto pinResult = plan.getResult();
+    [[maybe_unused]] auto pinResult = plan->getResult();
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         h::expect(testQuery, ::testing::_, qec),
@@ -1123,7 +1139,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
     auto qec = ad_utility::testing::getQec(kb);
     qec->pinResultWithName() = {"dummy", V{"?o"}};
     auto plan = h::parseAndPlan(pinned, qec);
-    [[maybe_unused]] auto pinResult = plan.getResult();
+    [[maybe_unused]] auto pinResult = plan->getResult();
 
     h::expect(
         "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1168,7 +1184,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
     auto qec = ad_utility::testing::getQec(kb);
     qec->pinResultWithName() = {"dummy", V{"?o"}};
     auto plan = h::parseAndPlan(pinned, qec);
-    [[maybe_unused]] auto pinResult = plan.getResult();
+    [[maybe_unused]] auto pinResult = plan->getResult();
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         h::expect(
