@@ -1075,9 +1075,17 @@ TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
     EXPECT_GT(spilled.numFiles_, 0u);
     EXPECT_GT(spilled.totalSize_, 0u);
     table = idTableFromBlockGenerator(blocks);
-    // Every chunk that was fully consumed had its file deleted, so nothing is
+    // Every chunk that was fully consumed has its file deleted, so nothing is
     // left over even though neither the merge nor the sorter is destroyed yet.
-    EXPECT_EQ(currentSpillFiles(spillPrefix).numFiles_, 0u);
+    // That deletion is only posted to the merge executor when the chunk is
+    // finished, see `ChunkQueue::finish`, so the last file may still exist
+    // for a moment after its last block was consumed. Poll for that as well.
+    size_t numLeftoverFiles = currentSpillFiles(spillPrefix).numFiles_;
+    for (size_t i = 0; i < 1000 && numLeftoverFiles != 0; ++i) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      numLeftoverFiles = currentSpillFiles(spillPrefix).numFiles_;
+    }
+    EXPECT_EQ(numLeftoverFiles, 0u);
   }
   workGuard.reset();
   workers.clear();
