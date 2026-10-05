@@ -482,6 +482,22 @@ void IndexScan::determineMultiplicities() {
     // multiplicity of the column. With fixed columns, this assumes that the
     // values of the column are distributed uniformly over the view.
     auto numRows = static_cast<float>(sizeEstimate_);
+    // With a fixed first column, the metadata of the relation contains its
+    // exact number of rows and the exact multiplicity of the second column.
+    // For a small relation, which shares its block with other relations, the
+    // size estimate of the scan is only a rough guess based on the size of the
+    // block, so use the exact number of rows instead. The `min` is for
+    // prefiltered scans, which can be smaller than the relation.
+    std::optional<CompressedRelationMetadata> relationMetadata;
+    const auto& col0Id = scanSpecAndBlocks_.scanSpec_.col0Id();
+    if (numVariables_ == 2 && col0Id.has_value()) {
+      relationMetadata =
+          permutation().getMetadata(col0Id.value(), locatedTriplesState());
+      if (relationMetadata.has_value()) {
+        numRows =
+            std::min(numRows, static_cast<float>(relationMetadata->numRows_));
+      }
+    }
     auto estimateMultiplicity = [&view, numRows](ColumnIndex col) {
       auto numDistinct = view->numDistinct(col);
       if (!numDistinct.has_value() || numDistinct.value() == 0) {
@@ -498,14 +514,10 @@ void IndexScan::determineMultiplicities() {
     for (ColumnIndex col : additionalColumns_) {
       multiplicity_.push_back(estimateMultiplicity(col));
     }
-    // With a fixed first column, the multiplicity of the second column from
-    // the metadata of the relation is exact.
     if (numVariables_ == 2) {
-      multiplicity_.at(0) =
-          getIndex()
-              .getMultiplicities(*getPermutedTriple()[0], permutation(),
-                                 locatedTriplesState())
-              .at(0);
+      multiplicity_.at(0) = relationMetadata.has_value()
+                                ? relationMetadata->getCol1Multiplicity()
+                                : 1.0f;
     }
   } else {
     multiplicity_ = [this]() -> std::vector<float> {

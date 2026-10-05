@@ -1445,6 +1445,19 @@ TEST_F(MaterializedViewsTestLarge, Multiplicities) {
     EXPECT_GT(prefilteredScan.getSizeEstimate(), 10'000);
     EXPECT_FLOAT_EQ(multiplicity(prefilteredScan, V{"?G"}),
                     prefilteredScan.getSizeEstimate() / 10.0f);
+
+    // Fixed first column with a small relation (10 rows: one subject, 10
+    // values of `?g`), which shares its block with other relations: The size
+    // estimate of the scan is only a rough guess, but the multiplicities are
+    // computed using the exact number of rows of the relation.
+    auto smallScan = manager.makeIndexScan(
+        qec.get(), ViewQuery{"multViewNum",
+                             {{V{"?o"}, TripleComponent{int64_t{2}}},
+                              {V{"?s"}, V{"?S"}},
+                              {V{"?g"}, V{"?G"}}}});
+    EXPECT_GT(smallScan->getSizeEstimate(), 10);
+    EXPECT_FLOAT_EQ(multiplicity(*smallScan, V{"?S"}), 10);
+    EXPECT_FLOAT_EQ(multiplicity(*smallScan, V{"?G"}), 1);
   }
 
   // Fixed first column: the second column is exact (from the metadata of the
