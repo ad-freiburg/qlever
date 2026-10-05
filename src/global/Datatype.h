@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_DATATYPE_H
-#define QLEVER_DATATYPE_H
+#ifndef QLEVER_SRC_GLOBAL_GLOBAL_DATATYPE_H
+#define QLEVER_SRC_GLOBAL_GLOBAL_DATATYPE_H
 
 #include "util/Algorithm.h"
 
@@ -93,4 +93,4 @@ inline QL_CONSTEXPR std::string_view toString(Datatype type) {
   AD_FAIL();
 }
 
-#endif  // QLEVER_DATATYPE_H
+#endif  // QLEVER_SRC_GLOBAL_GLOBAL_DATATYPE_H

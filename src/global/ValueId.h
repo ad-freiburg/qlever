@@ -16,7 +16,7 @@
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
-#include "global/DataType.h"
+#include "global/Datatype.h"
 #include "global/IndexTypes.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/Algorithm.h"

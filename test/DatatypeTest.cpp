@@ -7,7 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "global/DataType.h"
+#include "global/Datatype.h"
 #include "gtest/gtest.h"
 
 TEST(DatatypeTest, isDatatypeTrivial) {
