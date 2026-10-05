@@ -247,7 +247,7 @@ TEST_F(MaterializedViewsTest, ParserConfigChecks) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, PatternRewriteWarnings) {
-  SKIP_IF_LOGLEVEL_IS_LOWER(WARN);
+  ENFORCE_LOG_LEVEL_OR_SKIP(WARN);
   MaterializedViewsManager manager{testIndexBase_};
 
   // Write a view for `query` and return the warnings collected while doing
