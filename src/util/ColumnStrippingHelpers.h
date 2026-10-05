@@ -34,40 +34,28 @@ class VarsRequiredFromSubtree {
   }
 
  private:
-  // Buffer variable
-  std::set<Variable> newVariables_;
-  // The resulting variables that are required from the subtree.
-  const std::set<Variable>* varsRequiredFromSubtree_;
-  // Store the variables that are requested by the Parenttree.
-  const std::set<Variable> varsRequestedFromParentTree_;
+  std::set<Variable> varsRequiredFromSubtree_;
 
  public:
-  // `varsRequestedFromParentTree` must outlive this object, as its address
-  // is stored in `varsRequiredFromSubtree_`.
   explicit VarsRequiredFromSubtree(
       const std::set<Variable>* varsRequestedFromParentTree)
-      : varsRequiredFromSubtree_{varsRequestedFromParentTree},
-        varsRequestedFromParentTree_{
+      : varsRequiredFromSubtree_{
             checkAndDereference(varsRequestedFromParentTree)} {}
 
   // The function add() has to be called whenever there are variables that are
   // needed by the operation itself to be executed. This function adds all these
   // variables to varsRequiredFromSubtree_ in case they are not already part of
-  // varsRequiredFromSubtree_.
+  // it.
   void add(const Variable& varForOperation) {
-    if (ad_utility::contains(*varsRequiredFromSubtree_, varForOperation)) {
+    if (ad_utility::contains(varsRequiredFromSubtree_, varForOperation)) {
       return;
     }
-    if (varsRequiredFromSubtree_ != &newVariables_) {
-      newVariables_ = varsRequestedFromParentTree_;
-      varsRequiredFromSubtree_ = &newVariables_;
-    }
-    newVariables_.insert(varForOperation);
+    varsRequiredFromSubtree_.insert(varForOperation);
   }
 
   // Return all variables that are required form the subtree after having added
   // all relevant variables via add().
-  const std::set<Variable>& get() const { return *varsRequiredFromSubtree_; }
+  const std::set<Variable>& get() const { return varsRequiredFromSubtree_; }
 
   // FRIEND_TESTs
   FRIEND_TEST(VarsRequiredFromSubtree, add);

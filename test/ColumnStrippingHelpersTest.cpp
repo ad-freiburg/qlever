@@ -27,17 +27,17 @@ TEST(VarsRequiredFromSubtree, add) {
   // constructor
   helper.add(nameVar);
   EXPECT_TRUE(
-      ad_utility::contains(*(helper.varsRequiredFromSubtree_), nameVar));
-  EXPECT_EQ((*(helper.varsRequiredFromSubtree_)).size(), 3);
+      ad_utility::contains((helper.varsRequiredFromSubtree_), nameVar));
+  EXPECT_EQ(((helper.varsRequiredFromSubtree_)).size(), 3);
 
-  // Add another Variable that is not yet part of the helper
+  // Add another variable that is not yet part of the helper
   Variable cityVar("?city");
   EXPECT_FALSE(
-      ad_utility::contains(*(helper.varsRequiredFromSubtree_), cityVar));
+      ad_utility::contains((helper.varsRequiredFromSubtree_), cityVar));
   helper.add(cityVar);
   EXPECT_TRUE(
-      ad_utility::contains(*(helper.varsRequiredFromSubtree_), cityVar));
-  EXPECT_EQ((*(helper.varsRequiredFromSubtree_)).size(), 4);
+      ad_utility::contains((helper.varsRequiredFromSubtree_), cityVar));
+  EXPECT_EQ(((helper.varsRequiredFromSubtree_)).size(), 4);
 }
 
 TEST(VarsRequiredFromSubtree, get) {
