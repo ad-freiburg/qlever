@@ -38,9 +38,12 @@
 #include "../../util/AsioTestHelpers.h"
 #include "../../util/AsyncTestHelpers.h"
 #include "../../util/GTestHelpers.h"
+#include "../../util/ParallelBlockMergeTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedIdTableBlockStorage.h"
 #include "util/parallelBlockMerge/InOrderBlockSink.h"
+
+using parallelBlockMergeTestHelpers::asyncGetNextBlock;
 
 namespace {
 // The storage under test, whose operations may be initiated from anywhere,
@@ -174,21 +177,17 @@ MergePlan<NumCols> makePlan(size_t numChunks, size_t numBlocksPerChunk,
 
 // Create a storage that spills to the file with the given `filename`, that runs
 // its compression and its I/O on `ioContext`, that keeps
-// `maxBufferedBlocksPerChunk` blocks per chunk in memory, that reads
-// `maxReadAheadBlocks` spilled blocks back concurrently, and that stores the
+// `maxBufferedBlocksPerChunk` blocks per chunk in memory, and that stores the
 // spilled blocks with the given `compressionLevel`.
 template <size_t NumCols>
 Storage<NumCols> makeStorage(
     net::io_context& ioContext, std::string filename,
-    size_t maxBufferedBlocksPerChunk, size_t maxReadAheadBlocks = 0,
+    size_t maxBufferedBlocksPerChunk,
     ad_utility::CompressedBlockFile::CompressionLevel compressionLevel =
         ad_utility::ZSTD_DEFAULT_LEVEL) {
-  return Storage<NumCols>{ioContext.get_executor(),
-                          std::move(filename),
+  return Storage<NumCols>{ioContext.get_executor(), std::move(filename),
                           ad_utility::testing::makeAllocator(),
-                          maxBufferedBlocksPerChunk,
-                          maxReadAheadBlocks,
-                          compressionLevel};
+                          maxBufferedBlocksPerChunk, compressionLevel};
 }
 
 // The compression levels that the round trips below are run with: the default
@@ -249,24 +248,6 @@ size_t numLiveChunks(net::io_context& ioContext, Storage<NumCols>& storage) {
   return result.value_or(0);
 }
 
-// The number of blocks of the chunk with the given `chunkIndex` that the
-// read-ahead of the `storage` has claimed and that have not been consumed yet.
-// That number lives on the strand of that chunk, so obtaining it is an
-// asynchronous operation, see `Storage::asyncNumPendingReadsForTesting`.
-template <size_t NumCols>
-size_t numPendingReads(net::io_context& ioContext, Storage<NumCols>& storage,
-                       size_t chunkIndex) {
-  std::optional<size_t> result;
-  storage.asyncNumPendingReadsForTesting(
-      chunkIndex, [&result](std::exception_ptr exception, size_t numReads) {
-        EXPECT_EQ(exception, nullptr);
-        result = numReads;
-      });
-  pollUntilQuiescent(ioContext);
-  EXPECT_TRUE(result.has_value());
-  return result.value_or(0);
-}
-
 // The outcome of the `storeBlock` operations of a single producer, which is
 // recorded instead of being asserted right away, so that a test can also check
 // that an operation has *not* completed yet.
@@ -300,7 +281,8 @@ void get(Storage<NumCols>& storage, size_t chunkIndex, GetOutcomes& outcomes,
           outcomes.sawSentinel_ = true;
           return;
         }
-        outcomes.blocks_.push_back(blockRows<NumCols>(std::move(result).get()));
+        outcomes.blocks_.push_back(
+            blockRows<NumCols>(std::move(result).get().materialize()));
         if (keepGoing) {
           get(storage, chunkIndex, outcomes, keepGoing);
         }
@@ -362,7 +344,7 @@ TEST(CompressedIdTableBlockStorage, directRoundTripWithoutAnyBuffering) {
     net::io_context ioContext;
     // Buffer nothing, such that every single block is spilled.
     Storage<0> storage = makeStorage<0>(
-        ioContext, gtestCurrentTestName() + "." + std::to_string(i), 0, 0,
+        ioContext, gtestCurrentTestName() + "." + std::to_string(i), 0,
         compressionLevels.at(i));
     Producer<0> producer{storage, 0, makeValues<0>(2, {{0, 1}, {}, {2}}, true)};
     GetOutcomes gets;
@@ -578,134 +560,57 @@ TEST(CompressedIdTableBlockStorage, aSpillThatOutlivesItsChunkIsDropped) {
 }
 
 // _____________________________________________________________________________
-TEST(CompressedIdTableBlockStorage, theReadAheadClaimsSeveralBlocksAtOnce) {
-  // The consumer asks for one block at a time, so without a read-ahead every
-  // spilled block would be decompressed only once it is asked for, and all
-  // those decompressions would happen one after the other. Every `getBlock`
-  // therefore also claims the next spilled blocks of the same chunk and reads
-  // them back concurrently, see the READ-AHEAD note at the class comment of
-  // `compressedIdTable::ChunkQueue`.
-  constexpr size_t numBlocks = 5;
-  constexpr size_t maxReadAheadBlocks = 3;
+TEST(CompressedIdTableBlockStorage, aSpilledBlockIsHandedOutUnread) {
+  // A block that is still in memory is handed out as it is, whereas a spilled
+  // block is handed out as a `DeferredBlock` that is only read back from the
+  // file when it is materialized, so that the consumer can read several such
+  // blocks concurrently, see `ChunkQueue::deferSpilledBlock`.
   net::io_context ioContext;
-  // Buffer nothing, such that every single block is spilled and hence a
-  // candidate for the read-ahead.
-  Storage<0> storage =
-      makeStorage<0>(ioContext, gtestCurrentTestName(), 0, maxReadAheadBlocks);
-  std::vector<std::vector<int64_t>> blocks;
-  for (size_t i = 0; i < numBlocks; ++i) {
-    blocks.push_back({static_cast<int64_t>(i)});
-  }
-  Producer<0> producer{storage, 0, makeValues<0>(1, blocks, true)};
-  runAndPoll(ioContext, [&] { producer.storeAll(); });
-  // Nothing is read back before the consumer has asked for anything at all.
-  EXPECT_EQ(numPendingReads(ioContext, storage, 0), 0u);
-
-  // The first `getBlock` claims `maxReadAheadBlocks` blocks and consumes the
-  // first of them, so that many minus one are left over for the next calls.
-  GetOutcomes gets;
-  runAndPoll(ioContext, [&] { get(storage, 0, gets, false); });
-  EXPECT_THAT(gets.blocks_, ::testing::ElementsAre(makeRows(1, {0})));
-  EXPECT_EQ(numPendingReads(ioContext, storage, 0), maxReadAheadBlocks - 1);
-
-  // Every further call tops the read-ahead up again, until the chunk runs out
-  // of spilled blocks.
-  runAndPoll(ioContext, [&] { get(storage, 0, gets, false); });
-  EXPECT_EQ(numPendingReads(ioContext, storage, 0), maxReadAheadBlocks - 1);
-
-  // The blocks arrive in exactly the order in which they were stored, no matter
-  // whether the read-ahead or the consumer itself has read them.
-  runAndPoll(ioContext, [&] { get(storage, 0, gets, true); });
-  EXPECT_THAT(gets.blocks_,
-              ::testing::ElementsAre(makeRows(1, {0}), makeRows(1, {1}),
-                                     makeRows(1, {2}), makeRows(1, {3}),
-                                     makeRows(1, {4})));
-  EXPECT_TRUE(gets.sawSentinel_);
-  EXPECT_EQ(numLiveChunks(ioContext, storage), 0u);
-}
-
-// _____________________________________________________________________________
-TEST(CompressedIdTableBlockStorage, withoutReadAheadNothingIsClaimedInAdvance) {
-  // The read-ahead is off unless it is asked for: the `maxReadAheadBlocks`
-  // argument of the storage defaults to zero, in which case a spilled block is
-  // only read once the consumer asks for exactly that block. This pins that
-  // default, so that it cannot silently turn into an enabled read-ahead.
-  net::io_context ioContext;
-  // NOTE: `maxReadAheadBlocks` is deliberately *not* passed, so that this test
-  // sees whatever the default is.
-  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(),
-                                      /*maxBufferedBlocksPerChunk=*/0);
+  // Buffer a single block, such that the first block stays in memory and the
+  // second one is spilled.
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 1);
   absl::Cleanup cleanup = [&storage] {
     ad_utility::deleteFile(storage.spillFilename(0), false);
   };
-  Producer<0> producer{storage, 0, makeValues<0>(1, {{0}, {1}, {2}}, true)};
-  runAndPoll(ioContext, [&] { producer.storeAll(); });
-  // Nothing is buffered, so all three blocks really went to the file. Without
-  // that, the chunk would have nothing that a read-ahead *could* claim and the
-  // check below would hold for the wrong reason.
-  EXPECT_GT(ql::filesystem::file_size(storage.spillFilename(0)), 0u);
-
-  GetOutcomes gets;
-  runAndPoll(ioContext, [&] { get(storage, 0, gets, false); });
-  EXPECT_THAT(gets.blocks_, ::testing::ElementsAre(makeRows(1, {0})));
-  // The consumer read its own block and claimed none of the two that are still
-  // in the file.
-  EXPECT_EQ(numPendingReads(ioContext, storage, 0), 0u);
-
-  // The remaining blocks still arrive, each read by the consumer itself.
-  runAndPoll(ioContext, [&] { get(storage, 0, gets, true); });
-  EXPECT_THAT(gets.blocks_,
-              ::testing::ElementsAre(makeRows(1, {0}), makeRows(1, {1}),
-                                     makeRows(1, {2})));
-  EXPECT_EQ(numPendingReads(ioContext, storage, 0), 0u);
-}
-
-// _____________________________________________________________________________
-TEST(CompressedIdTableBlockStorage, aChunkThatSpillsNothingReadsNothing) {
-  // The read-ahead only ever claims blocks that were spilled, so a chunk that
-  // buffers all of its blocks in memory never reads anything back, no matter
-  // how large the read-ahead is.
-  net::io_context ioContext;
-  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(),
-                                      /*maxBufferedBlocksPerChunk=*/100,
-                                      /*maxReadAheadBlocks=*/4);
-  Producer<0> producer{storage, 0, makeValues<0>(1, {{0}, {1}, {2}}, true)};
-  runAndPoll(ioContext, [&] { producer.storeAll(); });
-  EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(0)));
-
-  GetOutcomes gets;
-  runAndPoll(ioContext, [&] { get(storage, 0, gets, true); });
-  EXPECT_THAT(gets.blocks_,
-              ::testing::ElementsAre(makeRows(1, {0}), makeRows(1, {1}),
-                                     makeRows(1, {2})));
-  EXPECT_TRUE(gets.sawSentinel_);
-  EXPECT_EQ(numPendingReads(ioContext, storage, 0), 0u);
-}
-
-// _____________________________________________________________________________
-TEST(CompressedIdTableBlockStorage, aConsumerWaitsForAReadThatIsInFlight) {
-  // The consumer may reach a block whose read-ahead read is still running, in
-  // which case it waits for exactly that read and is completed by it. That is
-  // in fact what happens here for *every* block: a `getBlock` first starts the
-  // reads of the blocks that it claims, which are handlers that the
-  // single-threaded harness has not run yet, and only then takes the first of
-  // them out of the queue.
-  net::io_context ioContext;
-  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 0, 2);
   Producer<0> producer{storage, 0, makeValues<0>(1, {{0}, {1}}, true)};
   runAndPoll(ioContext, [&] { producer.storeAll(); });
   EXPECT_THAT(producer.outcomes_.wasStored_,
               ::testing::ElementsAre(true, true, true));
+  EXPECT_TRUE(ql::filesystem::exists(storage.spillFilename(0)));
 
-  // Initiating the consumer runs nothing at all, so the blocks only arrive once
-  // the reads that it starts have made progress.
-  GetOutcomes gets;
-  get(storage, 0, gets, true);
-  EXPECT_THAT(gets.blocks_, ::testing::IsEmpty());
-  pollUntilQuiescent(ioContext);
-  EXPECT_THAT(gets.blocks_,
-              ::testing::ElementsAre(makeRows(1, {0}), makeRows(1, {1})));
-  EXPECT_TRUE(gets.sawSentinel_);
+  std::vector<Storage<0>::DeferredBlock> blocks;
+  bool sawSentinel = false;
+  auto getOne = [&] {
+    storage.getBlock(
+        0, [&](std::exception_ptr exception, Storage<0>::GetResult result) {
+          ASSERT_EQ(exception, nullptr);
+          if (result.isEndOfChunk()) {
+            sawSentinel = true;
+            return;
+          }
+          blocks.push_back(std::move(result).get());
+        });
+  };
+  for (size_t i = 0; i < 3; ++i) {
+    runAndPoll(ioContext, getOne);
+  }
+  ASSERT_EQ(blocks.size(), 2u);
+  EXPECT_TRUE(sawSentinel);
+  EXPECT_TRUE(blocks.at(0).isInMemory());
+  EXPECT_FALSE(blocks.at(1).isInMemory());
+  // The chunk is done, but the unread block still holds its file.
+  EXPECT_EQ(numLiveChunks(ioContext, storage), 0u);
+  EXPECT_TRUE(ql::filesystem::exists(storage.spillFilename(0)));
+
+  // The blocks may be read in any order and on any thread, here in the reverse
+  // order and in the test thread.
+  EXPECT_EQ(blockRows<0>(std::move(blocks.at(1)).materialize()),
+            makeRows(1, {1}));
+  EXPECT_EQ(blockRows<0>(std::move(blocks.at(0)).materialize()),
+            makeRows(1, {0}));
+  // The file is deleted together with the last block that could read from it.
+  blocks.clear();
+  EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(0)));
 }
 
 // _____________________________________________________________________________
@@ -825,7 +730,7 @@ TEST(CompressedIdTableBlockStorage, theUncompressedSpillFileHasTheExactSize) {
   static constexpr size_t numColumns = 2;
   // Buffer nothing, such that every single block is spilled.
   Storage<0> storage =
-      makeStorage<0>(ioContext, prefix, 0, 0, ad_utility::NO_BLOCK_COMPRESSION);
+      makeStorage<0>(ioContext, prefix, 0, ad_utility::NO_BLOCK_COMPRESSION);
   std::string filename = storage.spillFilename(0);
   absl::Cleanup cleanup = [&filename] {
     ad_utility::deleteFile(filename, false);
@@ -867,14 +772,12 @@ template <size_t NumCols>
 Sink<NumCols> makeSink(net::io_context& ioContext, size_t numChunks,
                        std::string filename, size_t maxBufferedBlocksPerChunk,
                        ad_utility::CompressedBlockFile::CompressionLevel
-                           compressionLevel = ad_utility::ZSTD_DEFAULT_LEVEL,
-                       size_t maxReadAheadBlocks = 0) {
-  return Sink<NumCols>{
-      ioContext.get_executor(), numChunks,
-      ad_utility::makeCompressedIdTableStorageFactory<NumCols>(
-          ioContext.get_executor(), std::move(filename),
-          ad_utility::testing::makeAllocator(), maxBufferedBlocksPerChunk,
-          maxReadAheadBlocks, compressionLevel)};
+                           compressionLevel = ad_utility::ZSTD_DEFAULT_LEVEL) {
+  return Sink<NumCols>{ioContext.get_executor(), numChunks,
+                       ad_utility::makeCompressedIdTableStorageFactory<NumCols>(
+                           ioContext.get_executor(), std::move(filename),
+                           ad_utility::testing::makeAllocator(),
+                           maxBufferedBlocksPerChunk, compressionLevel)};
 }
 
 // Push all `blocks` to the `sink` as the chunk with the given `chunkIndex`,
@@ -903,7 +806,7 @@ net::awaitable<void> pushBlocks(Sink<NumCols>& sink, size_t chunkIndex,
 template <size_t NumCols>
 net::awaitable<std::vector<Row>> collectRows(Sink<NumCols>& sink) {
   std::vector<Row> rows;
-  while (auto block = co_await sink.asyncGetNextBlock(net::use_awaitable)) {
+  while (auto block = co_await asyncGetNextBlock(sink)) {
     for (Row& row : blockRows<NumCols>(block.value())) {
       rows.push_back(std::move(row));
     }
@@ -952,13 +855,12 @@ net::awaitable<void> checkRoundTrip(
     size_t numBlocksPerChunk, size_t maxBufferedBlocksPerChunk,
     std::string filename,
     ad_utility::CompressedBlockFile::CompressionLevel compressionLevel =
-        ad_utility::ZSTD_DEFAULT_LEVEL,
-    size_t maxReadAheadBlocks = 0) {
+        ad_utility::ZSTD_DEFAULT_LEVEL) {
   MergePlan<NumCols> plan =
       makePlan<NumCols>(numChunks, numBlocksPerChunk, numColumns);
-  Sink<NumCols> sink = makeSink<NumCols>(
-      ioContext, numChunks, std::move(filename), maxBufferedBlocksPerChunk,
-      compressionLevel, maxReadAheadBlocks);
+  Sink<NumCols> sink =
+      makeSink<NumCols>(ioContext, numChunks, std::move(filename),
+                        maxBufferedBlocksPerChunk, compressionLevel);
   Latch latch{ioContext.get_executor(), numChunks};
   // Spawn the producers in reverse order, such that the blocks of the later
   // chunks tend to be produced first.
@@ -996,8 +898,7 @@ ASYNC_TEST(CompressedIdTableBlockStorage, roundTripWithDynamicNumberOfColumns) {
                                  gtestCurrentTestName() + "." +
                                      std::to_string(i) + "." +
                                      std::to_string(maxBufferedBlocksPerChunk),
-                                 compressionLevels.at(i),
-                                 /*maxReadAheadBlocks=*/2);
+                                 compressionLevels.at(i));
     }
   }
 }
@@ -1060,7 +961,7 @@ ASYNC_TEST(CompressedIdTableBlockStorage, pushExceptionSurfaces) {
   EXPECT_TRUE(sink.stopRequested());
   bool didThrow = false;
   try {
-    co_await sink.asyncGetNextBlock(net::use_awaitable);
+    co_await asyncGetNextBlock(sink);
   } catch (const std::runtime_error& exception) {
     didThrow = true;
     EXPECT_STREQ(exception.what(), "kaboom");
@@ -1082,8 +983,7 @@ ASYNC_TEST(CompressedIdTableBlockStorage, abortWhileTheConsumerWaits) {
   Latch latch{ioContext.get_executor(), 1};
   net::co_spawn(ioContext, abortAfterYielding(sink, ioContext, latch),
                 net::detached);
-  std::optional<IdTableStatic<0>> block =
-      co_await sink.asyncGetNextBlock(net::use_awaitable);
+  std::optional<IdTableStatic<0>> block = co_await asyncGetNextBlock(sink);
   EXPECT_FALSE(block.has_value());
   EXPECT_TRUE(sink.stopRequested());
   co_await waitForLatch(latch);
@@ -1110,7 +1010,7 @@ ASYNC_TEST_N(CompressedIdTableBlockStorage, abortWhileProducersRun, 4) {
   // Consume a little, such that the producers really are in flight, and then
   // abort in the middle of everything.
   for (size_t i = 0; i < 3; ++i) {
-    co_await sink.asyncGetNextBlock(net::use_awaitable);
+    co_await asyncGetNextBlock(sink);
   }
   co_await sink.asyncStop(net::use_awaitable);
   EXPECT_TRUE(sink.stopRequested());
@@ -1119,8 +1019,7 @@ ASYNC_TEST_N(CompressedIdTableBlockStorage, abortWhileProducersRun, 4) {
   // The producers are told to stop: a push that is initiated now is dropped.
   EXPECT_FALSE(
       co_await sink.asyncPush(0, makeBlock<0>(2, {0}), net::use_awaitable));
-  std::optional<IdTableStatic<0>> block =
-      co_await sink.asyncGetNextBlock(net::use_awaitable);
+  std::optional<IdTableStatic<0>> block = co_await asyncGetNextBlock(sink);
   EXPECT_FALSE(block.has_value());
 }
 

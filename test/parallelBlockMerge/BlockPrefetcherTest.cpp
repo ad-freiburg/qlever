@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <deque>
@@ -45,19 +46,26 @@ namespace {
 namespace net = boost::asio;
 using ad_utility::parallelBlockMerge::detail::BlockPrefetcher;
 using Block = size_t;
+using DeferredBlock = ad_utility::parallelBlockMerge::DeferredBlock<Block>;
 
 // A fake sink whose `asyncGetNextBlock` completes with the given script of
-// outcomes, one after the other, and then hangs (just like a sink whose merge
-// has not produced the next block yet) until `stop()` is called. Once stopped,
-// it completes every operation with `std::nullopt`, no matter what is left of
-// the script, just like `InOrderBlockSink`. It records how often it was called
-// and how many of its operations were in flight at the same time.
+// outcomes (blocks in memory, blocks that still have to be read by a `Reader`,
+// exceptions, or the end of the merge), one after the other, and then hangs
+// (just like a sink whose merge has not produced the next block yet) until
+// `stop()` is called. Once stopped, it completes every operation with
+// `std::nullopt`, no matter what is left of the script, just like
+// `InOrderBlockSink`. It records how often it was called and how many of its
+// operations were in flight at the same time.
 class FakeSink {
  public:
   // The end of the merge, that is a completion with `std::nullopt`.
   struct EndOfMerge {};
-  using Outcome = std::variant<Block, std::exception_ptr, EndOfMerge>;
-  using Handler = std::function<void(std::exception_ptr, std::optional<Block>)>;
+  // A block that is handed out as a `DeferredBlock`, which calls this reader
+  // when it is materialized.
+  using Reader = std::function<Block()>;
+  using Outcome = std::variant<Block, Reader, std::exception_ptr, EndOfMerge>;
+  using Handler =
+      std::function<void(std::exception_ptr, std::optional<DeferredBlock>)>;
 
  private:
   net::any_io_executor executor_;
@@ -79,7 +87,8 @@ class FakeSink {
   template <typename CompletionToken>
   auto asyncGetNextBlock(CompletionToken&& completionToken) {
     return net::async_initiate<CompletionToken,
-                               void(std::exception_ptr, std::optional<Block>)>(
+                               void(std::exception_ptr,
+                                    std::optional<DeferredBlock>)>(
         [this](auto handler) { this->initiate(std::move(handler)); },
         completionToken);
   }
@@ -136,7 +145,7 @@ class FakeSink {
     auto executor = net::get_associated_executor(handler, executor_);
     Handler erased = [executor, h = std::make_shared<H>(std::move(handler))](
                          std::exception_ptr exception,
-                         std::optional<Block> block) {
+                         std::optional<DeferredBlock> block) {
       net::post(executor, [h, exception = std::move(exception),
                            block = std::move(block)]() mutable {
         std::move (*h)(std::move(exception), std::move(block));
@@ -153,7 +162,11 @@ class FakeSink {
     Outcome outcome = std::move(script_.front());
     script_.pop_front();
     if (auto* block = std::get_if<Block>(&outcome)) {
-      completeLater(std::move(erased), nullptr, *block);
+      completeLater(std::move(erased), nullptr,
+                    DeferredBlock::fromBlock(*block));
+    } else if (auto* reader = std::get_if<Reader>(&outcome)) {
+      completeLater(std::move(erased), nullptr,
+                    DeferredBlock::fromReader(std::move(*reader)));
     } else if (auto* exception = std::get_if<std::exception_ptr>(&outcome)) {
       completeLater(std::move(erased), *exception, std::nullopt);
     } else {
@@ -166,7 +179,7 @@ class FakeSink {
   //
   // PRECONDITION: `mutex_` is held.
   void completeLater(Handler handler, std::exception_ptr exception,
-                     std::optional<Block> block) {
+                     std::optional<DeferredBlock> block) {
     --numInFlight_;
     handler(std::move(exception), std::move(block));
   }
@@ -207,7 +220,8 @@ class ThrowingSink {
   auto asyncGetNextBlock(CompletionToken&& completionToken) {
     throw std::runtime_error{"sink threw"};
     return net::async_initiate<CompletionToken,
-                               void(std::exception_ptr, std::optional<Block>)>(
+                               void(std::exception_ptr,
+                                    std::optional<DeferredBlock>)>(
         [](auto) {}, completionToken);
   }
 
@@ -487,6 +501,118 @@ TEST(BlockPrefetcher, sinkThatThrowsDirectly) {
     }
     EXPECT_EQ(sink.use_count(), 1);
   }
+}
+
+// _____________________________________________________________________________
+// The deferred blocks are read concurrently, although the sink is read strictly
+// sequentially, and still arrive in order. Each reader blocks until at least
+// two reads have started, which would never happen if they were read one after
+// the other. The later readers finish first, which must not change the order.
+TEST(BlockPrefetcher, deferredBlocksAreReadConcurrentlyAndInOrder) {
+  constexpr size_t numPrefetched = 4;
+  constexpr size_t numBlocks = 20;
+  // The readers block their thread, so leave enough threads for the filler.
+  net::thread_pool pool{numPrefetched + 2};
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+  std::atomic<size_t> numStarted = 0;
+  std::atomic<size_t> numActive = 0;
+  std::atomic<size_t> maxNumActive = 0;
+  std::vector<FakeSink::Outcome> script;
+  for (size_t i = 0; i < numBlocks; ++i) {
+    // Every third block is in memory, the others have to be read.
+    if (i % 3 == 0) {
+      script.emplace_back(Block{i});
+      continue;
+    }
+    script.emplace_back(FakeSink::Reader{[&, i]() -> Block {
+      ++numStarted;
+      size_t active = ++numActive;
+      size_t previous = maxNumActive.load();
+      while (previous < active &&
+             !maxNumActive.compare_exchange_weak(previous, active)) {
+      }
+      waitUntil([&] { return numStarted.load() >= 2; });
+      std::this_thread::sleep_for(std::chrono::milliseconds{(numBlocks - i)});
+      --numActive;
+      return Block{i};
+    }});
+  }
+  script.emplace_back(FakeSink::EndOfMerge{});
+  auto sink = std::make_shared<FakeSink>(pool.get_executor(), script);
+  Prefetcher prefetcher{pool.get_executor(), sink, numPrefetched};
+  // Wait until the read-ahead is full, before the consumer takes anything.
+  waitUntil([&] { return sink->numCalls() == numPrefetched + 1; });
+  std::vector<Block> result;
+  while (auto block = prefetcher.getNextBlock()) {
+    result.push_back(block.value());
+  }
+  std::vector<Block> expected(numBlocks);
+  std::iota(expected.begin(), expected.end(), Block{0});
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  EXPECT_GT(maxNumActive.load(), 1u);
+  EXPECT_EQ(sink->maxNumInFlight(), 1u);
+}
+
+// _____________________________________________________________________________
+// An exception of a read is rethrown exactly in the place of its block, and
+// then on every further call, while the blocks before it are returned as
+// usual. The shutdown neither stalls nor leaks the sink, no matter whether the
+// sink still has an end of its own.
+TEST(BlockPrefetcher, exceptionOfARead) {
+  for (bool withEnd : {true, false}) {
+    net::thread_pool pool{2};
+    absl::Cleanup joinPool = [&pool] { pool.join(); };
+    std::vector<FakeSink::Outcome> script{
+        Block{0}, FakeSink::Reader{[]() -> Block { return 1; }},
+        FakeSink::Reader{
+            []() -> Block { throw std::runtime_error{"read failed"}; }},
+        Block{3}};
+    if (withEnd) {
+      script.emplace_back(FakeSink::EndOfMerge{});
+    }
+    auto sink = std::make_shared<FakeSink>(pool.get_executor(), script);
+    {
+      Prefetcher prefetcher{pool.get_executor(), sink, 10};
+      EXPECT_EQ(prefetcher.getNextBlock(), Block{0});
+      EXPECT_EQ(prefetcher.getNextBlock(), Block{1});
+      AD_EXPECT_THROW_WITH_MESSAGE(prefetcher.getNextBlock(),
+                                   ::testing::StrEq("read failed"));
+      AD_EXPECT_THROW_WITH_MESSAGE(prefetcher.getNextBlock(),
+                                   ::testing::StrEq("read failed"));
+    }
+    EXPECT_EQ(sink.use_count(), 1);
+  }
+}
+
+// _____________________________________________________________________________
+// The shutdown waits for every read that the read-ahead has started, also for
+// those of blocks that the consumer never takes, and the readers (and
+// everything that they hold) are released afterwards.
+TEST(BlockPrefetcher, shutDownWaitsForTheReads) {
+  net::thread_pool pool{4};
+  absl::Cleanup joinPool = [&pool] { pool.join(); };
+  std::atomic<size_t> numFinished = 0;
+  auto resource = std::make_shared<int>(42);
+  std::vector<FakeSink::Outcome> script;
+  for (size_t i = 0; i < 3; ++i) {
+    script.emplace_back(FakeSink::Reader{[&numFinished, resource, i]() {
+      std::this_thread::sleep_for(std::chrono::milliseconds{50});
+      ++numFinished;
+      return Block{i};
+    }});
+  }
+  auto sink = std::make_shared<FakeSink>(pool.get_executor(), script);
+  // From now on, only the sink and the read-ahead hold the readers.
+  script.clear();
+  {
+    Prefetcher prefetcher{pool.get_executor(), sink, 10};
+    // The fourth operation hangs, because the script is exhausted.
+    waitUntil([&] { return sink->numCalls() == 4; });
+    prefetcher.shutDown();
+    EXPECT_EQ(numFinished.load(), 3u);
+  }
+  EXPECT_EQ(sink.use_count(), 1);
+  EXPECT_EQ(resource.use_count(), 1);
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

@@ -926,9 +926,10 @@ class CompressedExternalIdTableSorter
   // is the number of output blocks that the memory accounting of the merge
   // phase reserves memory for on the consumer side (see
   // `compressedExternalIdTable::computeMergePhaseParameters`), and how it is
-  // split between the read-ahead of the consumer, the read-ahead of the spill
-  // files and the two blocks that are always in the consumer's hands is decided
-  // by `compressedExternalIdTable::makeMergeOptions`, see there.
+  // split between the read-ahead of the consumer (which also reads the spill
+  // files back concurrently) and the two blocks that are always in the
+  // consumer's hands is decided by
+  // `compressedExternalIdTable::makeMergeOptions`, see there.
   int numBufferedOutputBlocks_ = 12;
 
   // See the `moveResultOnMerge()` getter function for documentation.
