@@ -290,7 +290,7 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   // Add variables and the variables corresponding to the sortColumnIndices_ to
   // the variables that are required from the subtree.
   std::vector<const Variable*> sortVars;
-  VarsRequiredFromSubtree helper(variables);
+  VarsRequiredFromSubtree helper(&variables);
   for (const auto& jcl : sortColumnIndices_) {
     const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
     sortVars.push_back(&var);
@@ -311,8 +311,8 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
 
   // Create query execution tree with Sort-Operation as root-Operation and add
   // additional stripColumns-Operation if needed.
-  return makeTreeWithOptionalStripOperation<Sort>(
-      getExecutionContext(), variables, std::move(sortVars),
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Sort>(
+      getExecutionContext(), variables,
       std::move(subtree), std::move(sortColumnIndices),
       explicitSort_);
 }

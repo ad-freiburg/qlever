@@ -473,7 +473,7 @@ GroupByImpl::makeTreeWithStrippedColumns(
   // the subtree. Keep in mind, that variables, which are not part of
   // _groupByVariables or aliases, dont have any consequences here, as the
   // columns have been already stripped in the constructor.
-  VarsRequiredFromSubtree helper(variables);
+  VarsRequiredFromSubtree helper(&variables);
   std::vector<const Variable*> groupByVarsPtr;
   for (const Variable& groupByVar : _groupByVariables) {
     groupByVarsPtr.push_back(&groupByVar);
@@ -516,8 +516,8 @@ GroupByImpl::makeTreeWithStrippedColumns(
 
   // Create query execution tree with GroupBy-Operation as root-Operation and
   // add additional stripColumns-Operation if needed.
-  return makeTreeWithOptionalStripOperation<GroupBy>(
-      getExecutionContext(), variables, std::move(groupByVarsPtr), _groupByVariables, std::move(*resultingAliases),
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<GroupBy>(
+      getExecutionContext(), variables, _groupByVariables, std::move(*resultingAliases),
       std::move(subtree));
 }
 

@@ -3706,7 +3706,7 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     EXPECT_TRUE(strColMap.contains(Variable{"?d"}));
 
     // Check whether the GroupBy-Operation has still the same groupByVariables_
-    std::vector<QueryExecutionTree*> subtree =
+    qlm::vector<QueryExecutionTree*> subtree =
         stripColumnsOperation->getChildren();
     ASSERT_TRUE(subtree.at(0) != nullptr);
     auto groupByOp = subtree.at(0)->getRootOperation();

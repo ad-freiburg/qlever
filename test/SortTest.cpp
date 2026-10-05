@@ -702,7 +702,7 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     EXPECT_TRUE(strColMap.contains(Variable{"?d"}));
 
     // Check whether the Sort-Operation has updated its sortColumnIndices_.
-    std::vector<QueryExecutionTree*> subtree =
+    qlm::vector<QueryExecutionTree*> subtree =
         stripColumnsOperation->getChildren();
     ASSERT_TRUE(subtree.at(0) != nullptr);
     auto sortOp = subtree.at(0)->getRootOperation();
