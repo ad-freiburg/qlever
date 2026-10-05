@@ -91,7 +91,7 @@ ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // `right_`'s variables are not visible outside the `EXISTS`, so this is
   // legal SPARQL, but after the push down `ExistsJoin` would treat it as a
   // join column shared with `left_`, which can change the Boolean result.
-  if (right_->isVariableCovered(bind._target)) {
+  if (right_->containsVariable(bind._target)) {
     return std::nullopt;
   }
   auto newLeft = QueryExecutionTree::makeTreeWithBindColumn(left_, bind);

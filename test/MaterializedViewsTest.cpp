@@ -1542,6 +1542,14 @@ constexpr std::string_view bindWriteQuery =
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, BindRewrite) {
   qlv().writeMaterializedView("bindView", std::string{bindWriteQuery});
+  // Like `bindView`, but `?o` might be `UNDEF`.
+  qlv().writeMaterializedView("undefBindView", R"(
+    SELECT ?s ?o ?b2 {
+      ?s <p1> ?x .
+      OPTIONAL { ?s <p2> ?o }
+      BIND(2 * ?o + 1 AS ?b2)
+    }
+  )");
 
   // We fix the first columns of the `IndexScan` matcher because we are only
   // interested in the additional columns. The number of columns after stripping
@@ -1828,13 +1836,12 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     // of trees can be used to force a `MultiColumnJoin` (shares `?s` and
     // `?o`), test that a scan not covering `?o` never accepts the push down
     // (shares only `?s`), or force a `CartesianProductJoin` (shares nothing).
-    auto makeViewAndOtherTree = [this](SparqlTripleSimple otherTriple) {
-      auto plannedQuery = qlv().parseAndPlanQuery(R"(
-        PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
-        SELECT * {
-          ?s view:bindView-o ?o .
-        }
-      )");
+    auto makeViewAndOtherTree = [this](SparqlTripleSimple otherTriple,
+                                       std::string_view viewName = "bindView") {
+      auto plannedQuery = qlv().parseAndPlanQuery(absl::StrCat(
+          "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/> "
+          "SELECT * { ?s view:",
+          viewName, "-o ?o . }"));
       auto* qec = &plannedQuery.queryExecutionContext();
       auto viewTree = std::make_shared<QueryExecutionTree>(
           plannedQuery.queryExecutionTree());
@@ -2132,6 +2139,59 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
       auto filterOpOnOther = ad_utility::makeExecutionTree<Filter>(
           &pq.queryExecutionContext(), otherTree, filterExpr);
       EXPECT_FALSE(pushBind(filterOpOnOther).has_value());
+    }
+
+    // `?o` might be `UNDEF` in the view. A join with another child that also
+    // contains `?o` could fill in that child's value for an `UNDEF`, which the
+    // original `BIND` would see, but the pushed-down `BIND` wouldn't. Without
+    // such a join, `UNDEF`s are passed through unchanged and the push down is
+    // fine.
+    {
+      // Push the `BIND` into `makeOp(qec, viewTree, otherTree)` and check that
+      // the result matches `expected` (`std::nullopt` means refused).
+      auto expectPush = [&](auto makeOp, SparqlTripleSimple otherTriple,
+                            std::optional<h::QetMatcher> expected) {
+        auto [pq, viewTree, otherTree] =
+            makeViewAndOtherTree(std::move(otherTriple), "undefBindView");
+        auto pushed =
+            pushBind(makeOp(&pq.queryExecutionContext(), viewTree, otherTree));
+        ASSERT_EQ(pushed.has_value(), expected.has_value());
+        if (expected.has_value()) {
+          EXPECT_THAT(*pushed.value(), expected.value());
+        }
+      };
+      auto optionalJoin = [](auto* qec, auto left, auto right) {
+        return ad_utility::makeExecutionTree<OptionalJoin>(qec, left, right);
+      };
+      auto multiColumnJoin = [](auto* qec, auto left, auto right) {
+        return ad_utility::makeExecutionTree<MultiColumnJoin>(qec, left, right);
+      };
+      auto cartesianProductJoin = [](auto* qec, auto left, auto right) {
+        return ad_utility::makeExecutionTree<CartesianProductJoin>(
+            qec, std::vector{left, right});
+      };
+      auto unionWithItself = [](auto* qec, auto left, auto) {
+        return ad_utility::makeExecutionTree<Union>(
+            qec, left, std::make_shared<QueryExecutionTree>(*left));
+      };
+      // The view only has three columns, so `?bind` becomes the object.
+      auto pushedView = viewScan("undefBindView", "?s", "?o", "?bind", 3);
+
+      // Regression test: `?o` is a join column, the push down is refused. (The
+      // join is on `?s` and `?o` because the view is sorted by them, such that
+      // no `Sort` is added, which would refuse the push down on its own.)
+      expectPush(optionalJoin, sharesSAndO, std::nullopt);
+      expectPush(multiColumnJoin, sharesSAndO, std::nullopt);
+
+      // `?o` is not a join column.
+      expectPush(optionalJoin, sharesOnlyS,
+                 h::OptionalJoin(pushedView,
+                                 h::IndexScanFromStrings("?s", "<p1>", "?x")));
+      expectPush(cartesianProductJoin, sharesNothing,
+                 h::CartesianProductJoin(
+                     pushedView, h::IndexScanFromStrings("?y", "<p1>", "?z")));
+      expectPush(unionWithItself, sharesNothing,
+                 h::Union(pushedView, pushedView));
     }
 
     // Regression test: `QueryExecutionTree::makeTreeWithBindColumn` (the

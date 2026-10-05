@@ -10,6 +10,7 @@
 #include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/JoinWithIndexScanHelpers.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "global/RuntimeParameters.h"
@@ -721,6 +722,9 @@ OptionalJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // evaluating the `BIND` expression on the (genuinely) unbound input. This
   // silently changes the result for any expression that isn't `UNDEF` itself
   // on `UNDEF` input, e.g. `COALESCE`.
+  if (!canPushBindIntoChild(bind, *_left, {_left, _right})) {
+    return std::nullopt;
+  }
   auto newLeft = QueryExecutionTree::makeTreeWithBindColumn(_left, bind);
   if (!newLeft.has_value()) {
     return std::nullopt;

@@ -424,7 +424,11 @@ Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   static_assert(std::is_same_v<decltype(_subtrees), decltype(results)>);
 
   for (const auto& [i, subtree] : ::ranges::views::enumerate(_subtrees)) {
-    if (!subtree->getRootOperation()->coversVariables(bindExpressionVars)) {
+    // `UNION` doesn't change any values, so (unlike for joins) it doesn't
+    // matter whether the variables might be `UNDEF` in `subtree`.
+    if (!ql::ranges::all_of(bindExpressionVars, [&](const Variable* var) {
+          return subtree->containsVariable(*var);
+        })) {
       return std::nullopt;
     }
     auto result = QueryExecutionTree::makeTreeWithBindColumn(subtree, bind);

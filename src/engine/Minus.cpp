@@ -106,7 +106,7 @@ Minus::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // `MINUS`, so this is legal SPARQL, but after the push down `Minus` would
   // treat it as a join column shared with `_left`, which can change which
   // rows get excluded.
-  if (_right->isVariableCovered(bind._target)) {
+  if (_right->containsVariable(bind._target)) {
     return std::nullopt;
   }
   auto newLeft = QueryExecutionTree::makeTreeWithBindColumn(_left, bind);
