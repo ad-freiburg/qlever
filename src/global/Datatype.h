@@ -10,7 +10,12 @@
 #ifndef QLEVER_SRC_GLOBAL_GLOBAL_DATATYPE_H
 #define QLEVER_SRC_GLOBAL_GLOBAL_DATATYPE_H
 
+#include <array>
+#include <string_view>
+
+#include "backports/keywords.h"
 #include "util/Algorithm.h"
+#include "util/Exception.h"
 
 // The different Datatypes that a `Id` (see below) can encode.
 // Note: If you add a datatype, make sure to update the `MaxValue` if necessary,
