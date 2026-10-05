@@ -7,6 +7,7 @@
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_join.h>
 
+#include <algorithm>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -486,6 +487,29 @@ void IndexScan::determineMultiplicities() {
     }
   }();
   multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
+
+  // The multiplicities above are wrong for a materialized view: its rows may
+  // contain duplicates, its additional columns are actual data and the
+  // statistics of the index are not the statistics of the view. Use the
+  // multiplicities stored with the view instead.
+  if (auto view = permutation().materializedView()) {
+    // A multiplicity can't be larger than the number of rows.
+    float maxMultiplicity = std::max(1.0f, static_cast<float>(sizeEstimate_));
+    for (size_t i = 0; i < multiplicity_.size(); ++i) {
+      // With a fixed first column, the multiplicity of the second column from
+      // the metadata of the relation (see above) is exact, so keep it.
+      if (numVariables_ == 2 && i == 0) {
+        continue;
+      }
+      // The (unstripped) result consists of the last `numVariables_` of the
+      // first three columns of the view, followed by the additional columns.
+      ColumnIndex viewColumn = i < numVariables_
+                                   ? 3 - numVariables_ + i
+                                   : additionalColumns_.at(i - numVariables_);
+      multiplicity_[i] =
+          std::min(view->multiplicity(viewColumn), maxMultiplicity);
+    }
+  }
 
   if (varsToKeep_.has_value()) {
     std::vector<float> actualMultiplicites;

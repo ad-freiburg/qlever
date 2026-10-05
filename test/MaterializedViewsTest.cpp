@@ -1362,6 +1362,96 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
 }
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTestLarge, Multiplicities) {
+  // The view has 200'000 rows: 2 distinct predicates, 10'000 distinct
+  // subjects, 10'001 distinct objects and 10 distinct values of `?g`.
+  MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk(
+      "multView",
+      qlv().parseAndPlanQuery("SELECT ?p ?s ?o ?g { ?s ?p ?o . "
+                              "VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }"));
+  auto qec = getQec();
+  using ViewQuery = parsedQuery::MaterializedViewQuery;
+  using V = Variable;
+  auto iri = [](std::string_view s) {
+    return TripleComponent{ad_utility::triple_component::Iri::fromIriref(s)};
+  };
+
+  // Return the multiplicity of the given variable in the result of `scan`.
+  auto multiplicity = [](IndexScan& scan, const V& var) {
+    return scan.getMultiplicity(
+        scan.getExternallyVisibleVariableColumns().at(var).columnIndex_);
+  };
+
+  // The multiplicities over the whole view are stored and loaded. The first
+  // column is exact, the others are estimated.
+  auto view = manager.getView("multView", nullptr);
+  EXPECT_FLOAT_EQ(view->multiplicity(0), 100'000);
+  EXPECT_NEAR(view->multiplicity(1), 20, 0.2);
+  EXPECT_NEAR(view->multiplicity(2), 20, 0.2);
+  EXPECT_NEAR(view->multiplicity(3), 20'000, 200);
+  EXPECT_FLOAT_EQ(view->multiplicity(4), 1.0f);
+
+  // All columns variable: the multiplicities of the view are used.
+  {
+    auto scan =
+        manager.makeIndexScan(qec.get(), ViewQuery{"multView",
+                                                   {{V{"?p"}, V{"?P"}},
+                                                    {V{"?s"}, V{"?S"}},
+                                                    {V{"?o"}, V{"?O"}},
+                                                    {V{"?g"}, V{"?G"}}}});
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?P"}), 100'000);
+    EXPECT_NEAR(multiplicity(*scan, V{"?S"}), 20, 0.2);
+    EXPECT_NEAR(multiplicity(*scan, V{"?O"}), 20, 0.2);
+    EXPECT_NEAR(multiplicity(*scan, V{"?G"}), 20'000, 200);
+  }
+
+  // Fixed first column: the second column is exact (from the metadata of the
+  // relation), the others are taken from the view.
+  {
+    auto scan =
+        manager.makeIndexScan(qec.get(), ViewQuery{"multView",
+                                                   {{V{"?p"}, iri("<p1>")},
+                                                    {V{"?s"}, V{"?S"}},
+                                                    {V{"?o"}, V{"?O"}},
+                                                    {V{"?g"}, V{"?G"}}}});
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?S"}), 10);
+    EXPECT_NEAR(multiplicity(*scan, V{"?O"}), 20, 0.2);
+    EXPECT_NEAR(multiplicity(*scan, V{"?G"}), 20'000, 200);
+  }
+
+  // Fixed first and second column: the multiplicity is bounded by the
+  // (estimated) size of the result.
+  {
+    auto scan =
+        manager.makeIndexScan(qec.get(), ViewQuery{"multView",
+                                                   {{V{"?p"}, iri("<p1>")},
+                                                    {V{"?s"}, iri("<s1>")},
+                                                    {V{"?g"}, V{"?G"}}}});
+    EXPECT_LT(scan->getSizeEstimate(), 20'000);
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?G"}),
+                    static_cast<float>(scan->getSizeEstimate()));
+  }
+
+  // Views written without multiplicities (by older versions of QLever) have
+  // multiplicity `1.0` for all columns.
+  {
+    auto filename =
+        absl::StrCat(testIndexBase_, ".view.multView", VIEW_INFO_SUFFIX);
+    nlohmann::json viewInfo;
+    ad_utility::makeIfstream(filename) >> viewInfo;
+    for (auto& column : viewInfo.at("columns")) {
+      column.erase("multiplicity");
+    }
+    ad_utility::makeOfstream(filename) << viewInfo.dump();
+    MaterializedView oldView{testIndexBase_, "multView"};
+    for (ColumnIndex col = 0; col < 4; ++col) {
+      EXPECT_FLOAT_EQ(oldView.multiplicity(col), 1.0f);
+    }
+  }
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, BindToColumnMap) {
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
   MaterializedViewsManager manager{testIndexBase_};
