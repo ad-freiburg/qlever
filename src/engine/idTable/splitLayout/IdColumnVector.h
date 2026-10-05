@@ -150,7 +150,7 @@ class IdColumnVector {
   }
 
  private:
-  void eraseImpl(ptrdiff_t beginOffset, ptrdiff_t endOffset) noexcept {
+  void eraseImpl(ptrdiff_t beginOffset, ptrdiff_t endOffset) {
     payloads_.erase(payloads_.begin() + beginOffset,
                     payloads_.begin() + endOffset);
     datatypes_.erase(datatypes_.begin() + beginOffset,
