@@ -13,6 +13,8 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYPLANNER_H
 #define QLEVER_SRC_ENGINE_QUERYPLANNER_H
 
+#include <gtest/gtest_prod.h>
+
 #include <boost/optional.hpp>
 #include <vector>
 
@@ -800,6 +802,8 @@ class QueryPlanner {
   static std::pair<ReplacementPlans, bool> findApplicableReplacementPlans(
       ReplacementPlans& allReplacementPlans, uint64_t coveredNodeIds,
       bool useGreedyPlanning);
+  FRIEND_TEST(MaterializedViewsGreedyPlanningTest,
+              findApplicableReplacementPlansGreedyOverlap);
 
   // Helper for `fillDpTab` that inserts replacement plans into a connected
   // component for greedy query planning. The `IndexScan` plans for triples
