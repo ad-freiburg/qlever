@@ -1460,6 +1460,24 @@ TEST_F(MaterializedViewsTestLarge, Multiplicities) {
     EXPECT_FLOAT_EQ(multiplicity(*smallScan, V{"?G"}), 1);
   }
 
+  // Fixed first column with a small relation: the multiplicity of the third
+  // column is exact, even if the column is not distributed uniformly over the
+  // view (here `?o` is constant within each of the relations of 10 rows, but
+  // has 10'000 distinct values in the whole view).
+  {
+    manager.writeViewToDisk(
+        "multViewSmall",
+        qlv().parseAndPlanQuery("SELECT ?s ?g ?o { ?s <p2> ?o . "
+                                "VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }"));
+    auto scan = manager.makeIndexScan(
+        qec.get(),
+        ViewQuery{
+            "multViewSmall",
+            {{V{"?s"}, iri("<s1>")}, {V{"?g"}, V{"?G"}}, {V{"?o"}, V{"?O"}}}});
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?G"}), 1);
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?O"}), 10);
+  }
+
   // Fixed first column: the second column is exact (from the metadata of the
   // relation), the others are estimated from the size of the relation and the
   // number of distinct values in the whole view. The latter is exact for `?G`,

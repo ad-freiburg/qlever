@@ -518,6 +518,17 @@ void IndexScan::determineMultiplicities() {
       multiplicity_.at(0) = relationMetadata.has_value()
                                 ? relationMetadata->getCol1Multiplicity()
                                 : 1.0f;
+      // For a small relation, the metadata is computed when needed, which
+      // includes the exact multiplicity of the third column. A large relation
+      // has stored metadata, but there the multiplicity of the third column is
+      // only a copy of the one of the second column (because the twin
+      // permutation, from which it is usually taken, doesn't exist for views),
+      // so keep the estimate from above.
+      bool isSmallRelation =
+          !permutation().metaData().getMetaDataIfPresent(col0Id.value());
+      if (relationMetadata.has_value() && isSmallRelation) {
+        multiplicity_.at(1) = relationMetadata->getCol2Multiplicity();
+      }
     }
   } else {
     multiplicity_ = [this]() -> std::vector<float> {
