@@ -145,7 +145,6 @@ TEST(Views, CallbackOnEndView) {
   EXPECT_EQ(numCalls, 3);
 }
 
-// _____________________________________________________________________________
 // For an empty range, the callback is invoked as soon as the iteration starts
 // (and ends), not only during the destruction of the view.
 TEST(Views, CallbackOnEndViewEmptyRange) {

@@ -43,10 +43,11 @@ namespace ad_utility {
 // invoked as a `const` callable from several threads at the same time, so it
 // has to be thread-safe in that sense.
 //
-// NOTE: Up to `maxNumElementsInFlight` elements (or their results) are held in
-// memory at the same time, in addition to the result that the consumer holds.
+// NOTE 1: Up to `maxNumElementsInFlight` elements (or their results) are held
+// in memory at the same time, in addition to the result that the consumer
+// holds.
 //
-// NOTE: An exception that is thrown by the `transformation` is rethrown when
+// NOTE 2: An exception that is thrown by the `transformation` is rethrown when
 // the consumer reaches the result of the respective element. An exception
 // that is thrown by the `Range` itself is thrown directly to the consumer.
 //
@@ -56,11 +57,11 @@ namespace ad_utility {
 // details). The execution context behind the `executor` has to outlive this
 // range.
 //
-// NOTE: This range is neither copyable nor movable, because the running tasks
+// NOTE 3: This range is neither copyable nor movable, because the running tasks
 // refer to its `transformation_`. Wrap it into an `InputRangeTypeErased` (via
 // `std::make_unique`) if it has to be passed around.
 //
-// NOTE: The results are stored and yielded by value (`std::decay_t` of the
+// NOTE 4: The results are stored and yielded by value (`std::decay_t` of the
 // return type of the `transformation`). In particular, a `transformation` that
 // returns a reference to its argument (like `std::identity`) is fine, because
 // the result is moved out of the element before the element is destroyed.

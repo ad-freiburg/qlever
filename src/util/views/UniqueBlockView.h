@@ -46,11 +46,11 @@ constexpr inline size_t DEFAULT_UNIQUE_BLOCK_VIEW_NUM_BLOCKS_IN_FLIGHT = 4;
 // sorted block) is recorded before the block is handed to the pool. The blocks
 // are yielded in their original order.
 //
-// NOTE: A block that becomes completely empty (all of its elements were
+// NOTE 1: A block that becomes completely empty (all of its elements were
 // duplicates of the last element of the previous block) is skipped, so the
 // number of yielded blocks may be smaller than the number of input blocks.
 //
-// NOTE: Up to `numBlocksInFlight` input blocks are held in memory at the same
+// NOTE 2: Up to `numBlocksInFlight` input blocks are held in memory at the same
 // time (the ones that are being deduplicated and the finished ones that the
 // consumer has not pulled yet), in addition to the block that the consumer
 // holds. This memory is not covered by the memory limit of the producer of the
