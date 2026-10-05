@@ -50,6 +50,8 @@ class BasicIdColumnIterator {
   BasicIdColumnIterator(PayloadPointer payload, DatatypePointer datatype)
       : payload_{payload}, datatype_{datatype} {}
 
+  // The const and the mutable iterator are friends of each other, needed for
+  // the conversion constructor below.
   template <bool>
   friend class BasicIdColumnIterator;
 
@@ -119,7 +121,8 @@ class BasicIdColumnIterator {
   // Compares only `payload_`: both pointers always advance together, so equal
   // payload pointers imply equal datatype pointers (see the check below).
   auto compareThreeWay(const BasicIdColumnIterator& rhs) const {
-    AD_EXPENSIVE_CHECK(payload_ != rhs.payload_ || datatype_ == rhs.datatype_);
+    AD_EXPENSIVE_CHECK(ql::compareThreeWay(payload_, rhs.payload_) ==
+                       ql::compareThreeWay(datatype_, rhs.datatype_));
     return ql::compareThreeWay(payload_, rhs.payload_);
   }
   QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(BasicIdColumnIterator)
