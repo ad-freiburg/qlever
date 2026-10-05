@@ -1301,6 +1301,47 @@ INSTANTIATE_TEST_SUITE_P(
                           materializeLeft ? "MaterializedLeft" : "LazyLeft");
     }));
 
+// _____________________________________________________________________________
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3574:
+// Optional join with an `IndexScan` without variables on the right.
+TEST(OptionalJoin, rightIsScanWithoutVariables) {
+  TestIndexConfig config{"<a> <b> <c> <g1> . <a> <b> <c> <g2> ."};
+  config.indexType = qlever::Filetype::NQuad;
+  auto* qec = getQec(config);
+  auto getId = makeGetId(qec->getIndex());
+  // `<g1>` is matched by the right side, `<c>` is not.
+  auto [first, second] = std::minmax(getId("<g1>"), getId("<c>"));
+  auto leftTable = makeIdTableFromVector({{first}, {second}});
+
+  for (bool materializeLeft : {false, true}) {
+    for (bool requestLaziness : {false, true}) {
+      auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, leftTable.clone(),
+          std::vector<std::optional<Variable>>{Variable{"?g"}}, false,
+          std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt,
+          materializeLeft);
+      // `GRAPH ?g { <a> <b> <c> }`
+      auto right = ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::PSO,
+          SparqlTripleSimple{
+              iri("<a>"),
+              iri("<b>"),
+              iri("<c>"),
+              {std::pair{ADDITIONAL_COLUMN_GRAPH_ID, Variable{"?g"}}}});
+      OptionalJoin optJoin{qec, std::move(left), std::move(right)};
+      qec->getQueryTreeCache().clearAll();
+      auto result = optJoin.computeResultOnlyForTesting(requestLaziness);
+      IdTable actual =
+          result.isFullyMaterialized()
+              ? result.cloneIdTable()
+              : aggregateTables(result.idTables(), optJoin.getResultWidth())
+                    .first;
+      EXPECT_EQ(actual, leftTable) << "materializeLeft: " << materializeLeft
+                                   << ", requestLaziness: " << requestLaziness;
+    }
+  }
+}
+
 namespace {
 // _____________________________________________________________________________
 // Build an `OptionalJoin` on `?a` that reports being sorted on `?a`, but
