@@ -19,7 +19,7 @@
 
 using namespace columnBasedIdTable::splitLayout;
 // _____________________________________________________________________________
-TEST(ValueIdBitRepresentationTest, construction) {
+TEST(SplitLayoutIdBitRepresentationTest, construction) {
   constexpr int idValue = 42;
   constexpr ValueId id = Id::makeFromInt(idValue);
   auto [datatype, payload] = getBitsCompat(id);
@@ -30,7 +30,7 @@ TEST(ValueIdBitRepresentationTest, construction) {
 }
 
 // _____________________________________________________________________________
-TEST(ValueIdBitRepresentationTest, incremented) {
+TEST(SplitLayoutIdBitRepresentationTest, incremented) {
   constexpr int idValue = 42;
   constexpr ValueId id = Id::makeFromInt(idValue);
   auto [datatype, payload] = getBitsCompat(id);
@@ -48,7 +48,7 @@ TEST(ValueIdBitRepresentationTest, incremented) {
 }
 
 // _____________________________________________________________________________
-TEST(ValueIdBitRepresentationTest, incremented_maxValue) {
+TEST(SplitLayoutIdBitRepresentationTest, incremented_maxValue) {
   constexpr SplitLayoutIdBitRepresentation representation{
       static_cast<uint8_t>(Datatype::Int),
       std::numeric_limits<uint64_t>::max()};
