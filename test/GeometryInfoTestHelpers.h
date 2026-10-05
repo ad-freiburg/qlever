@@ -93,7 +93,9 @@ inline auto geoInfoMatcher = liftOptionalMatcher<GeometryInfo>(
           Property(&GeometryInfo::getMetricLength,
                    metricLengthNear(expected.getMetricLength())),
           Property(&GeometryInfo::getMetricArea,
-                   metricAreaNear(expected.getMetricArea())));
+                   metricAreaNear(expected.getMetricArea())),
+          Property(&GeometryInfo::getSourceCrsType,
+                   Eq(expected.getSourceCrsType())));
     });
 #define EXPECT_GEOMETRYINFO(a, b) EXPECT_THAT(a, geoInfoMatcher(b))
 

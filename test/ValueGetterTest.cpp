@@ -223,7 +223,8 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                               {3, 3},
                                               {1},
                                               getLengthForTesting(line),
-                                              MetricArea{0}}));
+                                              MetricArea{0},
+                                              util::geo::CRSType::CRS84}));
   static constexpr std::string_view polygon =
       "\"POLYGON((2 4, 4 4, 4 2, 2 2))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -234,7 +235,20 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                               {3, 3},
                                               {1},
                                               getLengthForTesting(polygon),
-                                              getAreaForTesting(polygon)}));
+                                              getAreaForTesting(polygon),
+                                              util::geo::CRSType::CRS84}));
+  static constexpr std::string_view lineWGS84 =
+      "\"<http://www.opengis.net/def/crs/EPSG/0/4326> LINESTRING(2 2, 4 4)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  t.checkFromLocalAndNormalVocabAndLiteral(
+      std::string{line},
+      geoInfoMatcher(ad_utility::GeometryInfo{2,
+                                              {{2, 2}, {4, 4}},
+                                              {3, 3},
+                                              {1},
+                                              getLengthForTesting(lineWGS84),
+                                              MetricArea{0},
+                                              util::geo::CRSType::WGS84}));
   t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                            noGeoInfo);
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfo);
@@ -252,7 +266,8 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                 {7, 7},
                                 {1},
                                 getLengthForTesting(secondaryWktLiteral),
-                                MetricArea{0}}));
+                                MetricArea{0},
+                                util::geo::CRSType::CRS84}));
   t.checkFromSecondaryVocab(secondaryPlainLiteral, noGeoInfo);
   t.checkFromSecondaryVocab(secondaryIri, noGeoInfo);
 }
@@ -267,7 +282,8 @@ TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
                                                  {3, 2},
                                                  {1},
                                                  ad_utility::MetricLength{0},
-                                                 MetricArea{0}}));
+                                                 MetricArea{0},
+                                                 util::geo::CRSType::WGS84}));
   t.checkFromValueId(ValueId::makeUndefined(), noGeoInfo);
   t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfo);
   t.checkFromValueId(ValueId::makeFromInt(42), noGeoInfo);

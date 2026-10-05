@@ -196,10 +196,10 @@ class GeometryInfo {
   // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
-  SourceCrsType sourceCrs_;
   uint32_t numGeometries_;
   MetricLength metricLength_;
   MetricArea metricArea_;
+  SourceCrsType sourceCrs_;
 
   // TODO<ullingerc>: Implement the behavior for the following two
   // attributes
