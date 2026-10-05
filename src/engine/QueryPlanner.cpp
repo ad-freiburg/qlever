@@ -214,8 +214,7 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
 
   // Apply trailing `VALUES` clause
   auto& postValues = pq.postQueryValuesClause_;
-  if (postValues.has_value() &&
-      !postValues.value()._inlineValues._variables.empty()) {
+  if (postValues.has_value()) {
     plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
     checkCancellation();
   }

@@ -17,6 +17,7 @@
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationWriter.h"
 #include "util/ProgressBar.h"
+#include "util/TaskQueue.h"
 
 // Set up the handling of small relations for the twin permutation.
 // `AddBlockOfSmallRelationsToSwitched` receives a block of small relations from
@@ -48,7 +49,14 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
     auto firstCol0 = blockOfSmallRelations.at(0, 0);
     auto lastCol0 =
         blockOfSmallRelations.at(blockOfSmallRelations.numRows() - 1, 0);
-    writer_.compressAndWriteBlock(
+    // NOTE: This function is called from within a task of the block write
+    // queue of the other writer, which runs on the global thread pool. We
+    // therefore must not `push` to the (bounded) block write queue of
+    // `writer_`, because that push might block and thus occupy a thread of
+    // that pool, which could deadlock the pool. Doing the work directly
+    // instead is cheap, because we already are on a thread of the pool, and it
+    // even saves the hop to another thread.
+    writer_.compressAndWriteBlockInCallingThread(
         firstCol0, lastCol0, BlockToWrite{std::move(blockOfSmallRelations)},
         false);
   }
