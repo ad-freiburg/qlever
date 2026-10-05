@@ -938,6 +938,71 @@ TEST(GeoRectanglePrefilter, plannerEvaluatesSmallComponent) {
   }
 }
 
+// The size estimates of the children of the spatial joins in the plan `qet`
+// that bind `variable` but not `otherVariable` (the other side of the join).
+std::vector<size_t> spatialJoinSideSizeEstimates(
+    const std::shared_ptr<QueryExecutionTree>& qet, const Variable& variable,
+    const Variable& otherVariable) {
+  std::vector<const SpatialJoin*> joins;
+  collectOperations(*qet, joins);
+  std::vector<size_t> result;
+  for (const auto* join : joins) {
+    for (const auto* child : std::as_const(*join).getChildren()) {
+      if (child->containsVariable(variable) &&
+          !child->containsVariable(otherVariable)) {
+        // `getSizeEstimate` caches its result and is therefore not `const`.
+        result.push_back(
+            const_cast<QueryExecutionTree*>(child)->getSizeEstimate());
+      }
+    }
+  }
+  return result;
+}
+
+// Test that a part of the query that was evaluated at planning time enters the
+// plan with its exact size as its size estimate. Here, the part is a join
+// whose estimate from the multiplicities is larger than its one actual row.
+TEST(GeoRectanglePrefilter, plannerUsesExactSizeOfEvaluatedPart) {
+  // `<polyNear>` has three nodes, of which only one has a geometry.
+  auto* qec = geoQec(
+      64, absl::StrCat("<polyNear> <hasNode> <pn1> . <polyNear> <hasNode> "
+                       "<pn2> . <polyNear> <hasNode> <pn3> . <pn1> <hasGeom> "
+                       "\"POLYGON((9 9, 14 9, 14 11, 9 11, 9 9))\"",
+                       wktDatatype, " . \n"));
+  std::string query = absl::StrCat(
+      queryHead,
+      " <polyNear> <hasNode>/<hasGeom> ?r . FILTER geof:sfContains(?r, ?g1)"
+      " FILTER geof:sfIntersects(?g1, ?g2) }");
+
+  // Without the evaluation, the join of the two triples is estimated to have
+  // more than one row.
+  size_t estimateWithoutEvaluation = 0;
+  {
+    auto noBudget = setRuntimeParameterForTest<
+        &RuntimeParameters::geoPrefilterPlanningMaxRows_>(0);
+    auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+    auto estimates =
+        spatialJoinSideSizeEstimates(qet, Variable{"?r"}, Variable{"?g1"});
+    ASSERT_THAT(estimates, ::testing::SizeIs(1));
+    estimateWithoutEvaluation = estimates.at(0);
+    EXPECT_GT(estimateWithoutEvaluation, 1u);
+  }
+
+  // With the evaluation, the estimate is the one actual row, and the result
+  // is the same as without the prefilters.
+  auto budget = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(
+      estimateWithoutEvaluation);
+  auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
+  EXPECT_THAT(
+      spatialJoinSideSizeEstimates(qet, Variable{"?r"}, Variable{"?g1"}),
+      ::testing::ElementsAre(1u));
+  expectRowFilterRectangleNear(qet, Variable{"?g1"}, fixedRectangle, query);
+  auto numRows = qet->getRootOperation()->getResult()->idTableView().size();
+  EXPECT_GE(numRows, 2u);
+  EXPECT_EQ(numResultRowsWithoutPrefilter(qec, query), numRows);
+}
+
 // Test that a subquery with a small `LIMIT` counts as a small part of the
 // query (its size estimate is the limit), and that a part whose size estimate
 // exceeds the budget is not evaluated.

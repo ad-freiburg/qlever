@@ -2388,6 +2388,9 @@ void QueryPlanner::applyGeoRectanglePrefilters(
     }
   }
 
+  // The plans of the parts of the query that are evaluated below, see there.
+  std::vector<SubtreePlan> evaluatedComponentPlans;
+
   // A geometry variable that is not fixed may still be bound by a small part
   // of the query that is cheap to evaluate, for example the geometry of one
   // fixed subject (`<region> geo:hasGeometry/geo:asWKT ?g`) or a subquery
@@ -2417,9 +2420,12 @@ void QueryPlanner::applyGeoRectanglePrefilters(
     // a plain filter at all. Leaving it out only makes the result larger,
     // which keeps the rectangle valid.
     FiltersAndOptionalSubstitutes filtersWithoutSubstitutes;
-    for (const auto& filterAndSubst : filters) {
-      if (!filterAndSubst.hasSubstitute()) {
-        filtersWithoutSubstitutes.push_back(filterAndSubst);
+    // The index in `filters` of each filter in `filtersWithoutSubstitutes`.
+    std::vector<size_t> originalFilterIndex;
+    for (size_t i = 0; i < filters.size(); ++i) {
+      if (!filters[i].hasSubstitute()) {
+        filtersWithoutSubstitutes.push_back(filters[i]);
+        originalFilterIndex.push_back(i);
       }
     }
     ad_utility::HashSet<size_t> consideredComponents;
@@ -2501,6 +2507,24 @@ void QueryPlanner::applyGeoRectanglePrefilters(
           addRectangle(boundVariable, rectangle.value(), true);
         }
       }
+      // The evaluated plan becomes a candidate for the whole component in
+      // the main planning, with its exact size as its size estimate. The
+      // estimate of the plan that the main planning builds from the seeds
+      // can be far off (437 rows for the one geometry of a fixed subject on
+      // the OSM planet), and the cost of the spatial join above grows with
+      // it, which can make the planner prefer a worse plan for the other
+      // side. The filter ids of the plan refer to `filtersWithoutSubstitutes`
+      // and are translated back.
+      SubtreePlan evaluated = cheapest;
+      evaluated._qet->setSizeEstimate(result->idTableView().numRows());
+      uint64_t filterIds = 0;
+      for (size_t j = 0; j < originalFilterIndex.size(); ++j) {
+        if (evaluated._idsOfIncludedFilters & (uint64_t{1} << j)) {
+          filterIds |= uint64_t{1} << originalFilterIndex[j];
+        }
+      }
+      evaluated._idsOfIncludedFilters = filterIds;
+      evaluatedComponentPlans.push_back(std::move(evaluated));
     }
   }
 
@@ -2664,6 +2688,19 @@ void QueryPlanner::applyGeoRectanglePrefilters(
     }
     edge.join_->setGeometrySideSelectivity(
         ad_utility::geoRectangleSelectivity(known.at(other).any_.value()));
+  }
+
+  // The evaluated parts of the query join the replacement plans (like the
+  // scans of a materialized view, they cover several triples at once), in the
+  // row of the number of triples they cover. This happens after the prefilters
+  // above, which do not concern them: their variables are fixed.
+  for (auto& plan : evaluatedComponentPlans) {
+    size_t numNodes = absl::popcount(plan._idsOfIncludedNodes);
+    AD_CORRECTNESS_CHECK(numNodes > 0);
+    if (replacementPlans.size() < numNodes) {
+      replacementPlans.resize(numNodes);
+    }
+    replacementPlans[numNodes - 1].push_back(std::move(plan));
   }
 }
 

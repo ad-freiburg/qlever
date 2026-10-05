@@ -2044,6 +2044,71 @@ TEST(MaterializedViewsSpatialJoinTest, FixedValueFilterOnFullyCoveredView) {
                viewScan(viewName, "?osm_id", "?intermediate", "?geometry", 3)));
 }
 
+// Whether the plan `tree` contains a scan of a materialized view.
+bool containsViewScan(const QueryExecutionTree& tree) {
+  if (const auto* scan =
+          dynamic_cast<const IndexScan*>(tree.getRootOperation().get());
+      scan != nullptr && scan->permutation().materializedView() != nullptr) {
+    return true;
+  }
+  return ql::ranges::any_of(
+      std::as_const(*tree.getRootOperation()).getChildren(),
+      [](const auto* child) { return containsViewScan(*child); });
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsSpatialJoinTest, EvaluatedPartFilterOnViewCoveredSide) {
+  // A spatial `FILTER` whose one side is the geometry of a fixed subject,
+  // obtained via `geo:hasGeometry/geo:asWKT`, and whose other side is fully
+  // covered by a materialized view. The planner evaluates the fixed side at
+  // planning time and prefilters the other side with its rectangle; the
+  // prefiltered scan of the view must then be the plan for the other side.
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string viewName = "geoms";
+  std::string ttl{geoTtl};
+  absl::StrAppend(&ttl,
+                  "<region> geo:hasGeometry <rm> .\n<rm> geo:asWKT "
+                  "\"POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))\"^^geo:wktLiteral "
+                  ".\n");
+  for (size_t i = 0; i < 500; ++i) {
+    absl::StrAppend(&ttl, "<pad", i, "> geo:hasGeometry <nowkt", i, "> .\n");
+    absl::StrAppend(&ttl, "<nogeom", i, "> geo:asWKT \"POINT(", i % 10, " ",
+                    i / 10, ")\"^^geo:wktLiteral .\n");
+  }
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, ttl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  qlv.writeMaterializedView(
+      viewName,
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/>\n"
+      "PREFIX ql: <http://qlever.cs.uni-freiburg.de/builtin-functions/>\n"
+      "SELECT ?g ?o ?m ?ll ?ur ?c {\n"
+      "  ?o geo:hasGeometry ?m .\n"
+      "  ?m geo:asWKT ?g .\n"
+      "  BIND (ql:envelopeLowerLeft(?g) AS ?ll)\n"
+      "  BIND (ql:envelopeUpperRight(?g) AS ?ur)\n"
+      "  BIND (geof:centroid(?g) AS ?c)\n"
+      "}");
+
+  const std::string query = R"qy(
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    SELECT * {
+      <region> geo:hasGeometry ?rm . ?rm geo:asWKT ?r .
+      ?o geo:hasGeometry ?m . ?m geo:asWKT ?g .
+      FILTER geof:sfContains(?r, ?g)
+    }
+  )qy";
+  qlv.clearQueryResultCache();
+  auto plannedQuery = qlv.parseAndPlanQuery(query);
+  const auto& tree = plannedQuery.queryExecutionTree();
+  EXPECT_TRUE(containsViewScan(tree)) << tree.getCacheKey();
+}
+
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, JoinBetweenLazyScansWithPlaceholderVars) {
   // Regression test for #2866.
