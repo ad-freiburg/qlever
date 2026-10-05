@@ -27,8 +27,7 @@ template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
   using T = std::array<Id, 3>;
 
-  static constexpr auto compare = [](const ValueId& a,
-                                     const ValueId& b) constexpr {
+  static constexpr auto compare = [](const Id& a, const Id& b) constexpr {
     return a.compareWithoutLocalVocab(b);
   };
 
