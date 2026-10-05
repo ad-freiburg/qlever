@@ -23,7 +23,8 @@ CPP_template(uint8_t N)(requires(N <= 64) CPP_and(N >= 1))  //
 
   static constexpr int64_t fromNBit(T t) {
     // The right shift is arithmetic, so a sign bit will be propagated.
-    return (static_cast<int64_t>(t) << UNUSED_BITS) >> UNUSED_BITS;
+    return static_cast<int64_t>(static_cast<int64_t>(t) << UNUSED_BITS) >>
+           UNUSED_BITS;
   }
 
   static constexpr int64_t max() {
