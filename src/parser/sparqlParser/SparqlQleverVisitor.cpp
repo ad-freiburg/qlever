@@ -399,10 +399,24 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   // The trailing `VALUES` clause is joined before the projection, so its
   // variables are also selected by `SELECT *`. The SPARQL 1.1 spec is vague
   // here, see https://github.com/w3c/rdf-tests/issues/381 for details.
-  query.postQueryValuesClause_ = visit(ctx->valuesClause());
-  if (query.postQueryValuesClause_.has_value()) {
-    query.registerVariablesVisibleInQueryBody(
-        query.postQueryValuesClause_->_inlineValues._variables);
+  //
+  // For a DESCRIBE query, the clause belongs to the WHERE clause (which
+  // computes the resources to describe), not to the outer CONSTRUCT query.
+  auto* describe = ctx->describeQuery()
+                       ? &std::get<parsedQuery::Describe>(
+                             query._rootGraphPattern._graphPatterns.at(0))
+                       : nullptr;
+  ParsedQuery& target = describe ? describe->whereClause_.get() : query;
+  target.postQueryValuesClause_ = visit(ctx->valuesClause());
+  if (target.postQueryValuesClause_.has_value()) {
+    target.registerVariablesVisibleInQueryBody(
+        target.postQueryValuesClause_->_inlineValues._variables);
+    // `DESCRIBE *` also describes the variables of the `VALUES` clause.
+    if (describe && ctx->describeQuery()->varOrIri().empty()) {
+      const auto& visible = target.selectClause().getVisibleVariables();
+      describe->resources_.assign(visible.begin(), visible.end());
+      target.selectClause().setSelected(visible);
+    }
   }
 
   query._originalString = ctx->getStart()->getInputStream()->toString();

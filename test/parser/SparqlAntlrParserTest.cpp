@@ -1474,6 +1474,21 @@ TEST(SparqlParser, Query) {
     expectQuery("DESCRIBE * { ?y <is-a> ?v }",
                 m::DescribeQuery(m::Describe(yv, {}, selectQueryMatcher2)));
 
+    // A trailing `VALUES` clause belongs to the WHERE clause of the DESCRIBE,
+    // and for `DESCRIBE *` its variables are also described.
+    auto hasValues = AD_FIELD(ParsedQuery, postQueryValuesClause_,
+                              ::testing::Optional(::testing::_));
+    expectQuery(
+        "DESCRIBE * { ?y <is-a> ?v } VALUES ?w { <a> }",
+        ::testing::AllOf(
+            m::DescribeQuery(m::Describe(
+                Resources{Var{"?y"}, Var{"?v"}, Var{"?w"}}, {},
+                ::testing::AllOf(
+                    m::SelectQuery(m::Select({Var{"?y"}, Var{"?v"}, Var{"?w"}}),
+                                   graphPatternMatcher),
+                    hasValues))),
+            ::testing::Not(hasValues)));
+
     // DESCRIBE with FROM and FROM NAMED clauses.
     //
     // NOTE: The clauses are relevant *both* for the retrieval of the resources
