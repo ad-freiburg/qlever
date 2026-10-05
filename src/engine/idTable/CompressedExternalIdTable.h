@@ -12,16 +12,22 @@
 
 #include <atomic>
 #include <future>
+#include <optional>
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/asio.h"
 #include "engine/CallFixedSize.h"
+#include "engine/idTable/AsyncIdTablePusher.h"
+#include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
+#include "util/CancellationHandle.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/File.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
+#include "util/Log.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
 #include "util/TransparentFunctors.h"
@@ -123,6 +129,9 @@ class CompressedExternalIdTableWriter {
   // Simple getters for the stored allocator and the number of columns;
   const auto& allocator() const { return allocator_; }
   size_t numColumns() const { return blocksPerColumn_.size(); }
+  // The name of the file that the `IdTable`s are written to. Other temporary
+  // files of the same sorter derive their names from it.
+  const std::string& filename() const { return filename_; }
   const MemorySize& blockSizeUncompressed() const {
     return blockSizeUncompressed_;
   }
@@ -194,19 +203,6 @@ class CompressedExternalIdTableWriter {
     return result;
   }
 
-  // Return a vector of generators where the `i-th` generator generates the
-  // `i-th` IdTable that was stored. The IdTables are yielded row by row.
-  template <size_t N = 0>
-  auto getAllRowGenerators() {
-    file_.wlock()->flush();
-    std::vector<decltype(makeGeneratorForRows<N>(0))> result;
-    result.reserve(startOfSingleIdTables_.size());
-    for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
-      result.push_back(makeGeneratorForRows<N>(i));
-    }
-    return result;
-  }
-
   // The number of `IdTable`s (= presorted runs) that have been written.
   size_t numIdTables() const { return startOfSingleIdTables_.size(); }
 
@@ -274,12 +270,6 @@ class CompressedExternalIdTableWriter {
   }
 
  private:
-  // Get the row generator for a single IdTable, specified by the `index`.
-  template <size_t N = 0>
-  auto makeGeneratorForRows(size_t index) {
-    return ql::views::join(makeGeneratorForIdTable<N>(index));
-  }
-
   // The total number of blocks that were written so far. All the columns are
   // split into blocks at exactly the same row boundaries, so the number of
   // blocks of the first column is the number of blocks of the whole writer.
@@ -629,6 +619,12 @@ CPP_class_template(size_t NumStaticCols,
     compressAndWriteFuture_ = std::move(future);
   }
 
+  // The pusher that collects the rows of `asyncPushBlock` (see
+  // `CompressedExternalIdTableSorter`) and hands each complete block to
+  // `transformAndWriteBlock`. It only exists if the derived class has created
+  // it via `setAsyncPushExecutor`.
+  std::optional<AsyncIdTablePusher<NumStaticCols>> asyncPusher_;
+
   // Flag that is `true` if this is the first iteration over the table, and
   // `false` if there has already been a previous iteration.
   std::atomic<bool> isFirstIteration_ = true;
@@ -664,6 +660,7 @@ CPP_class_template(size_t NumStaticCols,
   CPP_template(typename R)(
       requires compressedExternalIdTable::detail::HasPushBack<
           decltype(currentBlock_), R>) void push(const R& row) {
+    finishConcurrentPushes();
     ++numElementsPushed_;
     currentBlock_.push_back(row);
     if (currentBlock_.size() >= blocksize_) {
@@ -682,6 +679,7 @@ CPP_class_template(size_t NumStaticCols,
   // been called for each row individually.
   CPP_template(typename Table)(requires IdTableLike<Table>) void pushBlock(
       const Table& table) {
+    finishConcurrentPushes();
     AD_CONTRACT_CHECK(table.numColumns() == numColumns_);
     const size_t numRows = table.numRows();
     numElementsPushed_ += numRows;
@@ -703,8 +701,39 @@ CPP_class_template(size_t NumStaticCols,
     }
   }
 
-  // ___________________________________________________________________
-  size_t size() const { return numElementsPushed_; }
+  // Leave the mode of `asyncPushBlock` (see `CompressedExternalIdTableSorter`),
+  // if it is currently active: Push the rows that the `asyncPusher_` has not
+  // yet handed over, because they don't form a complete block, via the
+  // ordinary `pushBlock`. This is called by all the other functions of this
+  // class, so that `asyncPushBlock` may be freely mixed with them.
+  void finishConcurrentPushes() {
+    // NOTE: This runs for every row of a row-wise `push`, so the common case
+    // (no `asyncPushBlock` since the last reset) is a single relaxed load.
+    if (!asyncPusher_.has_value() || !asyncPusher_->mayHavePendingRows()) {
+      return;
+    }
+    // Reset the `asyncPusher_` (which checks that no push is in flight) and
+    // push its pending rows, if any.
+    //
+    // NOTE: `pushBlock` calls this function again, which then returns
+    // immediately, because the `asyncPusher_` has been reset.
+    auto pendingRows = asyncPusher_->finish();
+    if (!pendingRows.empty()) {
+      pushBlock(pendingRows);
+    }
+  }
+
+  // The number of rows that have been pushed so far.
+  //
+  // NOTE: Must not be called while an `asyncPushBlock` is in flight (which is
+  // checked by the `asyncPusher_`). The rows of such pushes are only added to
+  // `numElementsPushed_` once they are handed over in complete blocks (or by
+  // `finishConcurrentPushes`), which is why the pending rows of the
+  // `asyncPusher_` are added here.
+  size_t size() const {
+    return numElementsPushed_ +
+           (asyncPusher_.has_value() ? asyncPusher_->numPendingRows() : 0);
+  }
 
   // Return a lambda that takes a `ValueType` and calls `push` for that value.
   auto makePushCallback() {
@@ -724,6 +753,13 @@ CPP_class_template(size_t NumStaticCols,
   // currently active, else an exception is thrown by the underlying
   // `CompressedExternalIdTableWriter`.
   void clear() {
+    // Discard the rows that the `asyncPusher_` has not yet handed over (this
+    // also checks that no `asyncPushBlock` is in flight). Pushing them via
+    // `finishConcurrentPushes` would possibly write a block to disk that is
+    // cleared right away.
+    if (asyncPusher_.has_value()) {
+      asyncPusher_->finish();
+    }
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
     waitForFuture();
@@ -734,6 +770,28 @@ CPP_class_template(size_t NumStaticCols,
   }
 
  protected:
+  // Create the `asyncPusher_`, which runs its work on the `executor`.
+  //
+  // PRECONDITION: No `asyncPushBlock` is in flight.
+  void setAsyncPushExecutor(ql::any_io_executor executor) {
+    finishConcurrentPushes();
+    // NOTE: A `blocksize_` of zero (which only happens for the very small
+    // memory limits of some unit tests) is rounded up to one, so that every
+    // push makes progress.
+    //
+    // NOTE: The sink runs on the strand of the `asyncPusher_`. The
+    // `transformAndWriteBlock` blocks while the previous block is still being
+    // written, which delays the pushes that wait for the next block, but that
+    // is also what the synchronous `pushBlock` does.
+    asyncPusher_.emplace(std::move(executor), numColumns_,
+                         std::max<size_t>(blocksize_, 1),
+                         currentBlock_.getAllocator(),
+                         [this](IdTableStatic<NumStaticCols> block) {
+                           numElementsPushed_ += block.numRows();
+                           transformAndWriteBlock(std::move(block));
+                         });
+  }
+
   // Clear the current block. If `reserve` is `true`, we subsequently also
   // reserve the `blocksize_`.
   void resetCurrentBlock(bool reserve) {
@@ -774,6 +832,7 @@ CPP_class_template(size_t NumStaticCols,
   // and return `true`. Using this function allows for an efficient usage of
   // this class for very small inputs.
   bool transformAndPushLastBlock() {
+    finishConcurrentPushes();
     if (!isFirstIteration_) {
       return numBlocksPushed_ != 0;
     }
@@ -933,12 +992,37 @@ class CompressedExternalIdTableSorter
 
   // The maximal blocksize in the output phase.
   MemorySize maxOutputBlocksize_ = 1_GB;
-  // The number of merged blocks that are buffered during the
-  //  output phase.
+  // The number of merged blocks that are buffered during the output phase. It
+  // is the number of output blocks that the memory accounting of the merge
+  // phase reserves memory for on the consumer side, see
+  // `compressedExternalIdTable::computeMergePhaseParameters`.
   int numBufferedOutputBlocks_ = 4;
 
   // See the `moveResultOnMerge()` getter function for documentation.
   bool moveResultOnMerge_ = true;
+
+  // The executor on which the merge phase runs, and the number of chunks that
+  // are merged concurrently on it. The parallelism is only a performance hint
+  // and doesn't have to equal the number of threads of the executor: A smaller
+  // value leaves part of a (possibly much larger) executor to other work, a
+  // larger one merely oversubscribes it.
+  ql::any_io_executor mergeExecutor_ =
+      compressedExternalIdTable::defaultSorterMergeExecutor();
+  size_t mergeParallelism_ = ad_utility::globalExecutorNumThreads();
+
+  // Set as soon as the warning about a reduced parallelism (see
+  // `warnIfParallelismIsReduced`) was logged, such that it is logged at most
+  // once per sorter.
+  std::atomic<bool> reducedParallelismWasLogged_ = false;
+
+  // The number of merge phases that were started so far, which is what makes
+  // the names of the spill files of a merge phase unique, see
+  // `compressedExternalIdTable::makeSpillFilename`.
+  std::atomic<size_t> numMergePhases_ = 0;
+
+  // See `setMergeSpillCompression`.
+  CompressedBlockFile::CompressionLevel mergeSpillCompression_ =
+      compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION;
 
  public:
   // Constructor.
@@ -953,7 +1037,9 @@ class CompressedExternalIdTableSorter
              std::move(allocator),
              blocksizeCompression,
              BlockSorter{comparator}},
-        comparator_{comparator} {}
+        comparator_{comparator} {
+    this->setAsyncPushExecutor(mergeExecutor_);
+  }
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
@@ -969,6 +1055,60 @@ class CompressedExternalIdTableSorter
   // Explicitly inherit the `push` function, such that we can use it unqualified
   // within this class.
   using Base::push;
+
+  // Set the executor on which the merge phase runs, together with the number of
+  // threads that run that executor. Use this to share a thread pool with other
+  // tasks, or to pin the parallelism in tests and benchmarks. A `parallelism`
+  // of one means "merge serially in the consuming thread", in which case the
+  // merge never uses the `executor`.
+  //
+  // The `executor` is also the one on which `asyncPushBlock` runs its work.
+  //
+  // IMPORTANT: The `executor` must not be run by the thread that consumes the
+  // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`. The
+  // execution context behind the `executor` (e.g. a `boost::asio::thread_pool`)
+  // has to outlive this sorter, because the sorter holds a strand on the
+  // `executor` (for `asyncPushBlock`), whose destructor accesses the context.
+  //
+  // PRECONDITION: No `asyncPushBlock` is in flight.
+  void setMergeExecutor(ql::any_io_executor executor, size_t parallelism) {
+    AD_CONTRACT_CHECK(parallelism > 0);
+    mergeExecutor_ = std::move(executor);
+    mergeParallelism_ = parallelism;
+    this->setAsyncPushExecutor(mergeExecutor_);
+  }
+
+  // Asynchronously push all the rows of the `table`, in a way that several
+  // threads may do at the same time. The work runs on the executor of
+  // `setMergeExecutor`, and the completion signature is
+  // `void(std::exception_ptr)`, see `AsyncIdTablePusher::asyncPushBlock` for
+  // the details (in particular, the rows that the `table` view refers to have
+  // to stay alive until the operation has completed, which can be guaranteed
+  // via an aliasing `shared_ptr`).
+  //
+  // NOTE: This function is the *only* one of this class that may be called
+  // concurrently. While such pushes are in flight, no other member (not even
+  // the `const` `size()`) may be called (which is checked, they throw); all
+  // the pushes have to be completed first. Afterwards every other member may be
+  // used again without further ado, because they all begin with
+  // `finishConcurrentPushes`.
+  template <typename CompletionToken>
+  auto asyncPushBlock(std::shared_ptr<const IdTableView<0>> table,
+                      CompletionToken&& completionToken) {
+    return this->asyncPusher_->asyncPushBlock(std::move(table),
+                                              AD_FWD(completionToken));
+  }
+
+  // Set how the merge phase stores the output blocks that it spills (see
+  // `makeBlockStorageFactory`): a ZSTD compression level, or
+  // `NO_BLOCK_COMPRESSION` to store them uncompressed. Use this to trade the
+  // CPU that the compression costs against the bytes that the spill file
+  // occupies, see `compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION`
+  // for the reasoning behind the default.
+  void setMergeSpillCompression(
+      CompressedBlockFile::CompressionLevel compression) {
+    mergeSpillCompression_ = compression;
+  }
 
   // If set to `false` then the sorted result can be extracted multiple times.
   // If set to `true` then the result is moved out and unusable after the first
@@ -999,16 +1139,9 @@ class CompressedExternalIdTableSorter
     AD_CONTRACT_CHECK(!mergeIsActive_.load());
     mergeIsActive_.store(true);
 
-    // Explanation for the second argument of `runStreamAsync`: One block is
-    // buffered by this generator, one block is buffered inside the
-    // `sortedBlocks` generator, so `numBufferedOutputBlocks_ - 2` blocks may be
-    // buffered by the async stream.
     using namespace ad_utility;
     return InputRangeTypeErased{
-        CallbackOnEndView{ad_utility::streams::runStreamAsync(
-                              sortedBlocks<N>(blocksize),
-                              std::max(1, numBufferedOutputBlocks_ - 2)),
-                          [&, this]() noexcept {
+        CallbackOnEndView{sortedBlocks<N>(blocksize), [&, this]() noexcept {
                             this->isFirstIteration_ = false;
                             mergeIsActive_.store(false);
                           }}};
@@ -1034,77 +1167,31 @@ class CompressedExternalIdTableSorter
   }
 
  private:
-  template <typename RowGenVectorType, typename CompType>
-  struct SortState
-      : ad_utility::InputRangeMixin<SortState<RowGenVectorType, CompType>> {
-    using RowGenType = ql::ranges::range_value_t<RowGenVectorType>;
-    using RowIteratorPair = std::pair<ql::ranges::iterator_t<RowGenType>,
-                                      ql::ranges::sentinel_t<RowGenType>>;
-
-    std::vector<RowIteratorPair> priorityQueue_;
-    bool isFinished_ = false;
-    IdTableStatic<NumStaticCols> result_;
-    CompressedExternalIdTableSorter* sorter_;
-    CompType comp_;
-    RowGenVectorType rowGenerators_;
-    size_t numPopped_{0};
-    bool initialized_{false};
-    size_t blockSizeOutput_;
-
-    SortState(size_t numCols,
-              const ad_utility::AllocatorWithLimit<Id>& allocator,
-              CompType comp, RowGenVectorType rowGenerators, size_t blockSize,
-              CompressedExternalIdTableSorter* sorter)
-        : result_{numCols, allocator},
-          sorter_{sorter},
-          comp_{std::move(comp)},
-          rowGenerators_{std::move(rowGenerators)},
-          blockSizeOutput_{blockSize} {}
-
-    void start() {
-      for (auto& gen : rowGenerators_) {
-        priorityQueue_.emplace_back(gen.begin(), gen.end());
-        const auto& b = priorityQueue_.back();
-        AD_CORRECTNESS_CHECK(b.first != b.second);
-      }
-      ql::ranges::make_heap(priorityQueue_, comp_);
-      // Without that call, `begin() != end()` would always hold (even for empty
-      // sorters), and `*begin()` would always yield an empty block (even for
-      // non-empty sorters).
-      next();
-    }
-
-    bool isFinished() {
-      if (isFinished_) {
-        AD_CORRECTNESS_CHECK(numPopped_ == sorter_->numElementsPushed_, [this] {
-          return absl::StrCat("numPopped: ", numPopped_, "num elements pushed:",
-                              sorter_->numElementsPushed_);
-        });
-        return true;
-      } else {
-        return false;
-      }
-    }
-    auto& get() { return result_; }
-
-    void next() {
-      result_.clear();
-      result_.reserve(blockSizeOutput_);
-      while (!priorityQueue_.empty() && result_.size() < blockSizeOutput_) {
-        ql::ranges::pop_heap(priorityQueue_, comp_);
-        auto& min = priorityQueue_.back();
-        result_.push_back(*min.first);
-        ++(min.first);
-        if (min.first == min.second) {
-          priorityQueue_.pop_back();
-        } else {
-          ql::ranges::push_heap(priorityQueue_, comp_);
-        }
-      }
-      numPopped_ += result_.numRows();
-      isFinished_ = result_.empty();
-    }
-  };
+  // Return a lazy range that yields the blocks of the `merged` range and, on
+  // natural exhaustion, checks that the total number of yielded rows is exactly
+  // the number of rows that were pushed. The check deliberately happens while
+  // pulling the blocks and not in a destructor or a `CallbackOnEndView`,
+  // because several callers (for example `Sort` with `requestLaziness`) abandon
+  // the range early, and the check must not fire in that case.
+  template <size_t N>
+  auto checkedMergeResult(
+      ad_utility::InputRangeTypeErased<IdTableStatic<N>> merged) const {
+    using LoopControl = ad_utility::LoopControl<IdTableStatic<N>>;
+    return ad_utility::InputRangeFromLoopControlGet{
+        [blocks = std::move(merged), sorter = this,
+         numPopped = size_t{0}]() mutable {
+          auto block = blocks.get();
+          if (!block.has_value()) {
+            AD_CORRECTNESS_CHECK(
+                numPopped == sorter->numElementsPushed_,
+                "numPopped: ", numPopped,
+                ", num elements pushed: ", sorter->numElementsPushed_);
+            return LoopControl::makeBreak();
+          }
+          numPopped += block.value().numRows();
+          return LoopControl::yieldValue(std::move(block.value()));
+        }};
+  }
 
   void clearUnderlying() override { this->clear(); }
   // Transition from the input phase, where `push()` may be called, to the
@@ -1146,31 +1233,93 @@ class CompressedExternalIdTableSorter
       return ad_utility::InputRangeTypeErased(std::move(chunked));
     }
 
-    auto rowGenerators =
-        this->writer_.template getAllRowGenerators<NumStaticCols>();
+    // Merge the presorted runs (which live compressed in the `writer_`) in
+    // parallel, see `util/parallelBlockMerge/ParallelBlockMerge.h`.
+    const auto config = makeMergePhaseConfig(blocksize);
+    const auto parameters =
+        compressedExternalIdTable::computeMergePhaseParameters(config);
+    warnIfParallelismIsReduced(parameters);
+    return mergeRuns<N>(config, parameters);
+  }
 
-    const size_t blockSizeOutput =
-        blocksize.value_or(computeBlockSizeForMergePhase(rowGenerators.size()));
+  // Merge the presorted runs and yield the result as blocks with `N` statically
+  // known columns.
+  template <size_t N>
+  ad_utility::InputRangeTypeErased<IdTableStatic<N>> mergeRuns(
+      const compressedExternalIdTable::MergePhaseConfig& config,
+      const compressedExternalIdTable::MergePhaseParameters& parameters) {
+    auto options =
+        compressedExternalIdTable::makeMergeOptions(config, parameters);
+    // The read-ahead of the merged range has to fit into the
+    // `numBufferedOutputBlocks_` that the memory accounting reserves on the
+    // consumer side: it holds `numPrefetchedOutputBlocks + 1` blocks, and the
+    // consumer holds one more, see `MergeOptions::numPrefetchedOutputBlocks`.
+    options.numPrefetchedOutputBlocks =
+        static_cast<size_t>(std::max(1, numBufferedOutputBlocks_ - 2));
+    auto merged =
+        parallelBlockMerge::parallelBlockMergeToRange</*moveElements=*/true>(
+            mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
+            this->comparator_, makeBlockStorageFactory<N>(parameters),
+            std::move(options),
+            // NOTE: The sorter has no cancellation handle of its own, and the
+            // merge requires one that is not `nullptr`, so this is a fresh
+            // handle that is never cancelled.
+            std::make_shared<ad_utility::CancellationHandle<>>());
+    return ad_utility::InputRangeTypeErased{
+        checkedMergeResult<N>(std::move(merged))};
+  }
 
-    auto projection = [](const auto& el) -> decltype(auto) {
-      return *el.first;
-    };
-    auto directComp = ad_utility::makeAssignableLambda(
-        [projection, comparator = this->comparator_](const auto& a,
-                                                     const auto& b) {
-          return comparator(projection(b), projection(a));
-        });
+  // The factory for the intermediate storage of the output blocks of the merge
+  // phase, see `compressedExternalIdTable::makeMergePhaseBlockStorageFactory`.
+  // How many of those blocks a chunk may buffer before it starts spilling is
+  // part of the `parameters` that the memory limit was split into, see
+  // `compressedExternalIdTable::numBufferedOutputBlocksPerChunk`.
+  template <size_t N>
+  auto makeBlockStorageFactory(
+      const compressedExternalIdTable::MergePhaseParameters& parameters) {
+    return compressedExternalIdTable::makeMergePhaseBlockStorageFactory<N>(
+        mergeExecutor_,
+        compressedExternalIdTable::makeSpillFilename(
+            this->writer_.filename(), numMergePhases_.fetch_add(1)),
+        this->writer_.allocator(), parameters.numBufferedBlocksPerChunk_,
+        mergeSpillCompression_);
+  }
 
-    auto toStatic = [](auto& table) -> IdTableStatic<N> {
-      return std::move(table).template toStatic<N>();
-    };
-    using namespace ad_utility;
-    return InputRangeTypeErased{CachingTransformInputRange{
-        SortState<decltype(rowGenerators), decltype(directComp)>{
-            this->writer_.numColumns(), this->writer_.allocator(),
-            std::move(directComp), std::move(rowGenerators), blockSizeOutput,
-            this},
-        toStatic}};
+  // The configuration from which the parameters of the merge phase are derived,
+  // see `compressedExternalIdTable::computeMergePhaseParameters`.
+  compressedExternalIdTable::MergePhaseConfig makeMergePhaseConfig(
+      std::optional<size_t> blocksize) const {
+    compressedExternalIdTable::MergePhaseConfig config;
+    config.numRuns_ = this->writer_.numIdTables();
+    config.numColumns_ = this->numColumns_;
+    config.memoryLimit_ = this->memory_;
+    config.inputBlockSizePerColumn_ = this->writer_.blockSizeUncompressed();
+    config.numBufferedOutputBlocks_ =
+        static_cast<size_t>(numBufferedOutputBlocks_);
+    config.maxOutputBlockSize_ = maxOutputBlocksize_;
+    config.parallelism_ = mergeParallelism_;
+    config.outputBlockSizeOverride_ = blocksize;
+    config.ignoreMemoryLimit_ =
+        EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING;
+    return config;
+  }
+
+  // Warn (once per sorter) if the memory limit forces the merge phase to use
+  // less parallelism than the merge executor offers.
+  void warnIfParallelismIsReduced(
+      const compressedExternalIdTable::MergePhaseParameters& parameters) {
+    if (parameters.numChunksInFlight_ >= mergeParallelism_ ||
+        reducedParallelismWasLogged_.exchange(true)) {
+      return;
+    }
+    AD_LOG_WARN << "The merge phase of the external sorter can only merge "
+                << parameters.numChunksInFlight_
+                << " chunks concurrently instead of the " << mergeParallelism_
+                << " chunks that the available parallelism offers, because "
+                   "of the memory limit of "
+                << this->memory_.asString()
+                << ". Increasing the memory limit will speed up the merge."
+                << std::endl;
   }
 
   // _____________________________________________________________
@@ -1185,43 +1334,6 @@ class CompressedExternalIdTableSorter
   // A function with this name is needed by the mixin base class.
   void transformBlock(IdTableStatic<NumStaticCols>& block) const {
     sortBlockInPlace(block);
-  }
-
-  // Compute the size of the blocks that are yielded in the output phase. It is
-  // computed from the total memory limit and the amount of memory required to
-  // store one decompressed block from each presorted input.
-  size_t computeBlockSizeForMergePhase(size_t numBlocksToMerge) {
-    const size_t numColumns = this->numColumns_;
-    MemorySize requiredMemoryForInputBlocks =
-        numBlocksToMerge * numColumns * this->writer_.blockSizeUncompressed();
-    if (EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING) {
-      // For unit tests, always yield 5 outputs at once.
-      return 5;
-    } else {
-      auto throwInsufficientMemory = [numBlocksToMerge]() {
-        throw std::runtime_error{
-            absl::StrCat("Insufficient memory for merging ", numBlocksToMerge,
-                         " blocks. Please increase the memory settings")};
-      };
-      if (requiredMemoryForInputBlocks >= this->memory_) {
-        throwInsufficientMemory();
-      }
-      using namespace ad_utility::memory_literals;
-      // Don't use a too large output size.
-      auto blockSizeOutputMemory =
-          std::min((this->memory_ - requiredMemoryForInputBlocks) /
-                       numBufferedOutputBlocks_,
-                   maxOutputBlocksize_);
-
-      size_t blockSizeForOutput =
-          blockSizeOutputMemory.getBytes() / (sizeof(Id) * numColumns);
-      // If blocks are smaller than this, the performance will probably be poor
-      // because of the coroutine and vector resetting overhead.
-      if (blockSizeForOutput <= 10'000) {
-        throwInsufficientMemory();
-      }
-      return blockSizeForOutput;
-    }
   }
 };
 }  // namespace ad_utility

@@ -57,9 +57,11 @@ inline bool hasOnlyOneGraph(const std::optional<std::vector<Id>>& graphs) {
 
 // Find out whether the sorted `block` contains duplicates and whether it
 // contains only a few distinct graphs such that we can store this information
-// in the block metadata.
-inline std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
-    const IdTable& block) {
+// in the block metadata. The `block` may be an owning `IdTable` or a (possibly
+// column-permuted) view of one.
+CPP_template(typename Block)(requires IdTableLike<Block>)
+    std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
+        const Block& block) {
   AD_CORRECTNESS_CHECK(block.numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
   // Return true iff the block contains duplicates when only considering the
   // actual triple of S, P, and O.
@@ -67,7 +69,7 @@ inline std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
     using C = ColumnIndex;
     auto withoutGraphAndAdditionalPayload =
         block.asColumnSubsetView(std::array{C{0}, C{1}, C{2}})
-            .asStaticView<3>();
+            .template asStaticView<3>();
     return ql::ranges::adjacent_find(withoutGraphAndAdditionalPayload) !=
            ql::ranges::end(withoutGraphAndAdditionalPayload);
   };
