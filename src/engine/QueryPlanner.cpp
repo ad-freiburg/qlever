@@ -3014,9 +3014,7 @@ QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
   // The triples have not been turned into plans yet.
   candidateTriples_.collectAllContainedVariables(variables);
   for (const auto& row : candidatePlans_) {
-    if (row.empty()) {
-      continue;
-    }
+    AD_CORRECTNESS_CHECK(!row.empty());
     for (const auto& variable :
          row.front()._qet->getVariableColumns() | ql::views::keys) {
       variables.insert(variable);
