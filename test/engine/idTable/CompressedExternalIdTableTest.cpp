@@ -1310,8 +1310,8 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // warning. (With the 8 MB that this test used before the default was raised
   // to 12, the usable range was only 1 to 15.) Re-derive both numbers with
   // `computeMergePhaseParameters` when the memory or the default changes.
-  const auto memory = ad_utility::MemorySize::bytes(16'000'000);
-  const auto blocksizeCompression = ad_utility::MemorySize::bytes(250'000);
+  const auto memory = 16_MB;
+  const auto blocksizeCompression = 250_kB;
   // One run holds `16'000'000 / (4 * 8 * 2) = 250'000` rows, so the following
   // number of rows yields two runs.
   constexpr size_t numRows = 300'000;

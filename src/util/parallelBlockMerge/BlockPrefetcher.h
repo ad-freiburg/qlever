@@ -284,6 +284,11 @@ class BlockPrefetcher : public ad_utility::NoCopyNoMove {
       failure = std::current_exception();
     }
     if (failure != nullptr) {
+      // The channel only carries futures, so the `failure` is sent as a future
+      // that rethrows it on `get()`, which delivers it to the consumer exactly
+      // like an exception of a read, see `getNextBlock()`. The `true` marks it
+      // as the last value, such that neither `getNextBlock()` nor `shutDown()`
+      // waits for another one.
       std::promise<std::optional<Block>> promise;
       promise.set_exception(std::move(failure));
       co_await channel->async_send(boost::system::error_code{}, true,
