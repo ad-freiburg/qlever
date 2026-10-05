@@ -1001,6 +1001,23 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
             "Loading materialized view \"testViewFromHTTP2\" from disk"));
   }
 
+  // `load-materialized-view` doesn't take a query, so combining it with one
+  // is rejected instead of silently ignoring the query.
+  {
+    auto request = makeGetRequest(
+        "/?cmd=load-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken"
+        "&query=SELECT%20*%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
+    expectHttpError(
+        [&] {
+          responseBodyAsJson(
+              makeServerForTesting(testIndexBase_).process(request));
+        },
+        http::status::bad_request,
+        ::testing::HasSubstr("cmd=load-materialized-view does not accept an "
+                             "additional query or update"));
+  }
+
   // Unload a materialized view through a simulated HTTP GET request. Reuse
   // one server instance so the unload actually observes a loaded view.
   {
@@ -1042,6 +1059,23 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     expectRequiresValidAccessToken("unload-materialized-view", [&] {
       makeServerForTesting(testIndexBase_).process(request);
     });
+  }
+
+  // `unload-materialized-view` doesn't take a query, so combining it with one
+  // is rejected instead of silently ignoring the query.
+  {
+    auto request = makeGetRequest(
+        "/?cmd=unload-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken"
+        "&query=SELECT%20*%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
+    expectHttpError(
+        [&] {
+          responseBodyAsJson(
+              makeServerForTesting(testIndexBase_).process(request));
+        },
+        http::status::bad_request,
+        ::testing::HasSubstr("cmd=unload-materialized-view does not accept "
+                             "an additional query or update"));
   }
 
   // Test error message for wrong query type.
@@ -1114,6 +1148,23 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr(
                     "Materialized view \"testViewFromHTTP2\" deleted"));
+  }
+
+  // `delete-materialized-view` doesn't take a query, so combining it with one
+  // is rejected instead of silently ignoring the query.
+  {
+    auto request = makeGetRequest(
+        "/?cmd=delete-materialized-view&view-name=testViewFromHTTP"
+        "&access-token=accessToken"
+        "&query=SELECT%20*%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
+    expectHttpError(
+        [&] {
+          responseBodyAsJson(
+              makeServerForTesting(testIndexBase_).process(request));
+        },
+        http::status::bad_request,
+        ::testing::HasSubstr("cmd=delete-materialized-view does not accept "
+                             "an additional query or update"));
   }
 
   // Test access token check for deletion.

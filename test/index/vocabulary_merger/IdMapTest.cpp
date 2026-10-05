@@ -14,18 +14,13 @@
 #include <string>
 
 #include "../../util/GTestHelpers.h"
-#include "../../util/IdTestHelpers.h"
+#include "VocabularyMergerTestHelpers.h"
 #include "backports/filesystem.h"
 #include "index/vocabulary_merger/IdMap.h"
 #include "util/File.h"
 
 using namespace ad_utility::vocabulary_merger;
-
-namespace {
-auto V = ad_utility::testing::VocabId;
-// Shorthand for the local index that a word has inside a partial vocabulary.
-auto L = &VocabIndex::make;
-}  // namespace
+using namespace vocabularyMergerTestHelpers;
 
 // _____________________________________________________________________________
 // Two `IdMapEntry`s are equal if and only if both of their members are equal.

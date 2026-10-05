@@ -9,6 +9,7 @@
 
 #include "engine/Operation.h"
 #include "parser/TextSearchQuery.h"
+#include "util/ContainersWithAllocator.h"
 
 // This operation retrieves all text records and their corresponding
 // entities from the fulltext index that contain a certain word or prefix.
@@ -82,7 +83,9 @@ class TextIndexScanForEntity : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
+  }
 
   void setVariableToColumnMap();
 };

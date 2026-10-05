@@ -17,6 +17,7 @@
 #include <ctre-unicode.hpp>
 #include <utility>
 
+#include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Log.h"
 
@@ -62,13 +63,36 @@ Iri Iri::fromStringRepresentation(std::string s) {
 
 // ____________________________________________________________________________
 Iri Iri::fromIriref(std::string_view stringWithBrackets) {
-  auto first = stringWithBrackets.find('<');
-  AD_CORRECTNESS_CHECK(first != std::string_view::npos);
+  return Iri{RdfEscaping::unescapeIriref(stringWithBrackets)};
+}
+
+// ____________________________________________________________________________
+Iri Iri::fromOwnedIriref(std::string stringWithBrackets) {
+  std::string unescaped;
+  RdfEscaping::unescapeIriref(stringWithBrackets, unescaped);
+  // If there was nothing to unescape, `unescaped` is still empty and the input
+  // string can simply be reused instead of being copied.
+  return Iri{unescaped.empty() ? std::move(stringWithBrackets)
+                               : std::move(unescaped)};
+}
+
+// ____________________________________________________________________________
+Iri Iri::fromLangtagAndIriref(std::string_view langtag,
+                              std::string_view stringWithBrackets) {
+  AD_CORRECTNESS_CHECK(!langtag.empty());
+  AD_CORRECTNESS_CHECK(!ql::starts_with(langtag, '@'));
+  // The unescaped IRI is only an intermediate result that is copied into the
+  // final string anyway, so it doesn't have to be materialized separately if
+  // there is nothing to unescape.
+  std::string buffer;
   return Iri{
-      absl::StrCat(stringWithBrackets.substr(0, first + 1),
-                   asStringViewUnsafe(RdfEscaping::normalizeIriWithBrackets(
-                       stringWithBrackets.substr(first))),
-                   ">")};
+      absl::StrCat("@", langtag, "@",
+                   RdfEscaping::unescapeIriref(stringWithBrackets, buffer))};
+}
+
+// ____________________________________________________________________________
+Iri Iri::fromLangtag(std::string_view langtag) {
+  return fromIriref(makeQleverInternalIri("@", langtag));
 }
 
 // ____________________________________________________________________________
@@ -90,21 +114,50 @@ Iri Iri::fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets) {
 
 // ____________________________________________________________________________
 Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
+  auto prefixContent = asStringViewUnsafe(prefix.getContent());
+  // Fast path: if the suffix contains no escape sequences (by far the most
+  // common case), it can be concatenated directly, without materializing the
+  // unescaped suffix in a separate string first.
+  if (suffix.find('\\') == std::string_view::npos) {
+    return Iri{absl::StrCat("<", prefixContent, suffix, ">")};
+  }
   auto suffixNormalized = RdfEscaping::unescapePrefixedIri(suffix);
-  return Iri{absl::StrCat(
-      "<", asStringViewUnsafe(prefix.getContent()),
-      asStringViewUnsafe(asNormalizedStringViewUnsafe(suffixNormalized)), ">")};
+  return Iri{absl::StrCat("<", prefixContent, suffixNormalized, ">")};
+}
+
+// ____________________________________________________________________________
+// Resolve `iriSv`, an IRI reference in QLever's internal representation
+// (including the angle brackets), against `baseUri`.
+static Iri resolveNormalizedIri(std::string_view iriSv,
+                                const qlever::util::ParsedUri& baseUri) {
+  AD_CORRECTNESS_CHECK(iriSv.size() >= 2);
+  AD_CORRECTNESS_CHECK(iriSv[0] == '<' && iriSv[iriSv.size() - 1] == '>');
+  iriSv.remove_prefix(1);
+  iriSv.remove_suffix(1);
+  return Iri::fromUri(baseUri.resolveUri(iriSv));
 }
 
 // ____________________________________________________________________________
 Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
                                 const qlever::util::ParsedUri& baseUri) {
-  auto iriSv = iriStringWithBrackets;
-  AD_CORRECTNESS_CHECK(iriSv.size() >= 2);
-  AD_CORRECTNESS_CHECK(iriSv[0] == '<' && iriSv[iriSv.size() - 1] == '>');
-  iriSv.remove_prefix(1);
-  iriSv.remove_suffix(1);
-  return fromUri(baseUri.resolveUri(iriSv));
+  // The numeric escapes of an IRI reference are part of its lexical form, so
+  // they have to be resolved before the IRI is resolved against the base IRI
+  // (this is the same normalization that `fromIriref` applies).
+  std::string buffer;
+  return resolveNormalizedIri(
+      RdfEscaping::unescapeIriref(iriStringWithBrackets, buffer), baseUri);
+}
+
+// ____________________________________________________________________________
+Iri Iri::resolveAgainstBase(const qlever::util::ParsedUri& baseUri) const {
+  return resolveNormalizedIri(toStringRepresentation(), baseUri);
+}
+
+// ____________________________________________________________________________
+Iri Iri::withLanguageTag(std::string_view langtag) const {
+  AD_CORRECTNESS_CHECK(!langtag.empty());
+  AD_CORRECTNESS_CHECK(!ql::starts_with(langtag, '@'));
+  return Iri{absl::StrCat("@", langtag, "@", toStringRepresentation())};
 }
 
 // ____________________________________________________________________________

@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 
 #include <atomic>
+#include <boost/sort/pdqsort/pdqsort.hpp>
 #include <cstdio>
 #include <functional>
 #include <future>
@@ -31,10 +32,15 @@
 #include "index/Index.h"
 #include "index/IndexFormatConverter.h"
 #include "index/IndexFormatVersion.h"
+#include "index/PartialVocabularyBuilder.h"
 #include "index/TripleComponentConversions.h"
 #include "index/VocabularyMerger.h"
+#include "parser/AsyncRdfParserBase.h"
+#include "parser/AsyncSerialParserAdapter.h"
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include "parser/RdfAsyncMultifileParser.h"
+#endif
 #include "parser/WordsAndDocsFileParser.h"
-#include "util/CachingMemoryResource.h"
 #include "util/CancellationHandle.h"
 #include "util/FilesystemHelpers.h"
 #include "util/HashMap.h"
@@ -43,13 +49,14 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ParallelExecutor.h"
 #include "util/ProgressBar.h"
-#include "util/TaskQueue.h"
+#include "util/Synchronized.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
 #include "util/UnicodeSupport.h"
 #include "util/Views.h"
 #include "util/json.h"
+#include "util/views/UniqueBlockView.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
@@ -73,9 +80,10 @@ IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
-    std::shared_ptr<RdfParserBase> parser) {
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    size_t numThreads) {
   auto indexBuilderData =
-      passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
+      passFileForVocabulary(std::move(files), numTriplesPerBatch_, numThreads);
 
   auto isQleverInternalTriple = [&indexBuilderData](const auto& triple) {
     auto internal = [&indexBuilderData](Id id) {
@@ -84,15 +92,16 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
     return internal(triple[0]) || internal(triple[1]) || internal(triple[2]);
   };
 
-  auto firstSorter = convertPartialToGlobalIds(indexBuilderData.parsedTriples_,
-                                               isQleverInternalTriple);
+  auto firstSorter = convertPartialToGlobalIds(
+      indexBuilderData.parsedTriples_, isQleverInternalTriple, numThreads);
 
   return {std::move(indexBuilderData.vocabularyMetaData_),
           std::move(firstSorter)};
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
+std::unique_ptr<AsyncRdfParserBase> IndexImpl::makeRdfParser(
+    const ql::any_io_executor& executor,
     ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files)
     const {
   AD_CONTRACT_CHECK(
@@ -101,9 +110,33 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
   AD_CONTRACT_CHECK(
       memoryLimitIndexBuilding().getBytes() > 0,
       " memory limit for index building must be greater than zero");
-  return std::make_unique<RdfMultifileParser>(
-      std::move(files), &encodedIriManager(), parserBufferSize(),
-      onlyAsciiTurtlePrefixes_);
+  // NOTE: The settings have to be passed to the constructor, because the
+  // parsers start parsing immediately when they are constructed.
+  RdfParserSettings parserSettings{turtleParserIntegerOverflowBehavior_,
+                                   turtleParserSkipIllegalLiterals_,
+                                   onlyAsciiTurtlePrefixes_};
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // The reduced feature set has no coroutines (and only Boost 1.71), so the
+  // asynchronous multifile parser is not available. Fall back to the
+  // synchronous `RdfMultifileParser` behind an `AsyncSerialParserAdapter`. That
+  // parser has no parallel parser for a single file and therefore ignores
+  // `parseInParallel_` (with a warning, see the comment on that class). The
+  // files are still produced lazily.
+  // NOTE: The adapter creates the parser lazily on the first `asyncGetBatch()`
+  // call, see the constructor of `AsyncSerialParserAdapter`.
+  return std::make_unique<AsyncSerialParserAdapter>(
+      executor,
+      [files = std::move(files), encodedIriManager = &encodedIriManager(),
+       bufferSize = parserBufferSize(),
+       parserSettings]() mutable -> std::unique_ptr<RdfParserBase> {
+        return std::make_unique<RdfMultifileParser>(
+            std::move(files), encodedIriManager, bufferSize, parserSettings);
+      });
+#else
+  return std::make_unique<RdfAsyncMultifileParser>(
+      executor, std::move(files), &encodedIriManager(), parserBufferSize(),
+      parserSettings);
+#endif
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -389,14 +422,16 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
-    std::vector<Index::InputFileSpecification> files) {
+    std::vector<Index::InputFileSpecification> files, size_t numThreads) {
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
-  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)});
+  createFromFiles(ad_utility::InputRangeTypeErased{std::move(files)},
+                  numThreads);
 }
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
-    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files) {
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    size_t numThreads) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -405,13 +440,27 @@ void IndexImpl::createFromFiles(
   configurationJson_["encoded-iri-prefixes"] = encodedIriManager();
   configurationJson_[DATE_OF_INDEX_BUILD_KEY] =
       formatIndexBuildTime(absl::Now());
+  // The block size is stored so that everything that writes sorted lists of
+  // this index later on (the server for a materialized view, the index format
+  // converter) uses the same block size as this build.
+  configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = rowsPerBlock_;
+
+  // Use the encoding of the index for all points that the index build creates
+  // (`writeConfiguration` records it), and warn if it is the deprecated
+  // `LatMajor`.
+  GeoPoint::setEncoding(geoPointEncodingForIndexBuilding_);
+  if (geoPointEncodingForIndexBuilding_ ==
+      ad_utility::GeoPointEncoding::LatMajor) {
+    AD_LOG_WARN << ad_utility::LAT_MAJOR_GEO_POINT_ENCODING_WARNING
+                << std::endl;
+  }
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeRdfParser(std::move(files)));
+      createIdTriplesAndVocab(std::move(files), numThreads);
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
@@ -498,147 +547,62 @@ void IndexImpl::addInternalStatisticsToConfiguration(
   writeConfiguration();
 }
 
-namespace {
-// A row with the components already mapped to IDs. NOTE: Deliberately not
-// named `IdTriple`, which is a class with a similar purpose defined in
-// `index/IdTriple.h`.
-using IdRow = std::array<Id, NumColumnsIndexBuilding>;
-}  // namespace
-
-// _____________________________________________________________________________
-BuildPartialVocabulariesResult::WorkerResult
-IndexImpl::runPartialVocabularyWorker(
-    size_t linesPerPartial, RdfParserBase& parser, ItemAlloc itemAlloc,
-    std::atomic<size_t>* numHasWordTriples,
-    ad_utility::ConcurrentProgressBar& progressBar, size_t workerIdx) {
-  using WorkerResult = BuildPartialVocabulariesResult::WorkerResult;
-  WorkerResult workerResult{
-      {},
-      std::make_unique<TripleVec>(
-          absl::StrCat(onDiskBase_, ".unsorted-triples.", workerIdx, ".dat"),
-          2_MB * NumColumnsIndexBuilding, allocator_)};
-  bool parserExhausted = false;
-  while (!parserExhausted) {
-    // Each worker builds its own partial vocabulary, so all the IDs may start
-    // at zero.
-    ItemMapManager itemMap{0, &vocab_.getCaseComparator(), itemAlloc};
-    // This `reserve` is an initial size that stays the same during the whole
-    // index building (the map grows if a batch contains more distinct words).
-    // That's why we use the `CachingMemoryResource` as an underlying memory
-    // pool for the allocator of the hash map to make the allocation and
-    // deallocation of these hash maps (that are newly created for each batch)
-    // much cheaper (see `CachingMemoryResource.h`). Note: The division is
-    // deliberate. Reserving space for all the words that a batch could
-    // possibly contain would mean that the memory reserved upfront grows with
-    // the number of workers.
-    itemMap.map_.map_.reserve(5 * linesPerPartial / NUM_PARALLEL_ITEM_MAPS);
-    std::vector<IdRow> localWriter;
-    size_t numInputTriples = 0;
-    while (numInputTriples < linesPerPartial) {
-      auto batch = parser.getBatch();
-      if (!batch.has_value()) {
-        parserExhausted = true;
-        break;
-      }
-      for (auto& triple : batch.value()) {
-        auto ids =
-            mapTripleToIds(std::move(triple), itemMap, this, numHasWordTriples);
-        localWriter.insert(localWriter.end(), ids.begin(), ids.end());
-      }
-      numInputTriples += batch->size();
-      progressBar.add(batch->size());
-      if (auto update = progressBar.update()) {
-        AD_LOG_INFO << update->getProgressString() << std::flush;
-      }
-    }
-    if (localWriter.empty()) {
-      // The parser is exhausted and this worker didn't get any triples for
-      // this partial vocabulary, so there is nothing to write.
-      continue;
-    }
-    auto filenameSuffix =
-        BuildPartialVocabulariesResult::partialVocabularySuffix(
-            workerIdx, workerResult.numTriplesPerBatch_.size());
-    workerResult.numTriplesPerBatch_.push_back(localWriter.size());
-    writePartialVocabulary(filenameSuffix, std::move(itemMap).moveMap(),
-                           std::move(localWriter), *workerResult.idTriples_);
-  }
-  return workerResult;
-}
-
 // _____________________________________________________________________________
 BuildPartialVocabulariesResult IndexImpl::buildPartialVocabularies(
-    std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
-  parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
-  parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    size_t linesPerPartial, size_t numThreads) {
+  AD_CONTRACT_CHECK(numThreads > 0,
+                    "The number of threads for the index build must be at "
+                    "least 1");
+
   AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
-                 "per batch ..."
-              << std::endl;
+                 "per batch, using "
+              << numThreads << " threads ..." << std::endl;
 
-  // Show progress and statistics for the number of triples parsed. The total
-  // number of triples is not known in advance, and the workers report their
-  // progress concurrently.
-  ad_utility::ConcurrentProgressBar progressBar{"Triples parsed: ",
-                                                std::nullopt};
-
-  ad_utility::CachingMemoryResource cachingMemoryResource;
-  ItemAlloc itemAlloc(&cachingMemoryResource);
-  // Counter for the number of ql:has-word triples created.
-  std::atomic<size_t> numHasWordTriples = 0;
-
-  using WorkerResult = BuildPartialVocabulariesResult::WorkerResult;
-  auto tasks = ad_utility::integerRange(NUM_PARALLEL_ITEM_MAPS) |
-               ql::views::transform([this, linesPerPartial, &parser, itemAlloc,
-                                     &numHasWordTriples,
-                                     &progressBar](size_t workerIdx) {
-                 return std::packaged_task<WorkerResult()>(
-                     [this, linesPerPartial, &parser, itemAlloc,
-                      &numHasWordTriples, &progressBar, workerIdx]() {
-                       return runPartialVocabularyWorker(
-                           linesPerPartial, *parser, itemAlloc,
-                           addHasWordTriples_ ? &numHasWordTriples : nullptr,
-                           progressBar, workerIdx);
-                     });
-               }) |
-               ::ranges::to<std::vector>();
-  // Waits for all the workers to finish, and rethrows an exception if one of
-  // them has thrown.
-  BuildPartialVocabulariesResult result{
-      ad_utility::runTasksInParallel(std::move(tasks))};
-  parser->printAndResetQueueStatistics();
+  using namespace qlever::partialVocabularyBuilder;
+  FirstPassSharedState<IndexImpl> shared{this, &vocab_.getCaseComparator(),
+                                         linesPerPartial};
+  // The thread pool and the parser are owned by `runTaskChains`, which only
+  // returns once no asynchronous operation is left.
+  runTaskChains(shared, numThreads,
+                [this, &files](const ql::any_io_executor& executor) {
+                  return makeRdfParser(executor, std::move(files));
+                });
 
   // If the input didn't contain a single triple, we still have to write one
   // partial vocabulary, because the vocabulary has to contain the special IDs
   // (which every `ItemMapManager` adds to its map).
-  if (result.partialVocabularySuffixes().empty()) {
-    auto& workerResult = result.workerResults_.at(0);
-    workerResult.numTriplesPerBatch_.push_back(0);
-    writePartialVocabulary(
-        BuildPartialVocabulariesResult::partialVocabularySuffix(0, 0),
-        ItemMapManager{0, &vocab_.getCaseComparator(), itemAlloc}.moveMap(), {},
-        *workerResult.idTriples_);
+  if (shared.nextPartialVocabIdx_ == 0) {
+    ItemMapManager itemMap{0, &vocab_.getCaseComparator()};
+    std::vector<IdRow> noTriples;
+    writePartialVocabulary(shared.nextPartialVocabIdx_++, itemMap.map_,
+                           noTriples);
   }
 
-  progressBar.logFinalProgressString();
-  size_t numTriplesTotal = ::ranges::accumulate(
-      result.workerResults_, size_t{0}, {},
-      [](const auto& workerResult) { return workerResult.idTriples_->size(); });
+  // The task chains have claimed all the indices below the counter, and each
+  // of them exactly once (see `BuildPartialVocabulariesResult`).
+  BuildPartialVocabulariesResult result{shared.nextPartialVocabIdx_.load(),
+                                        shared.numTriples_.load()};
+
+  shared.progressBar_.logFinalProgressString();
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
-              << numTriplesTotal << " [may contain duplicates]" << std::endl;
+              << result.numTriples_ << " [may contain duplicates]" << std::endl;
   if (addHasWordTriples_) {
     AD_LOG_INFO << "Number of `ql:has-word` triples created: "
-                << numHasWordTriples.load() << std::endl;
+                << shared.numHasWordTriples_.load() << std::endl;
   }
   AD_LOG_INFO << "Number of partial vocabularies created: "
-              << result.partialVocabularySuffixes().size() << std::endl;
+              << result.numPartialVocabularies_ << std::endl;
   return result;
 }
 
 // _____________________________________________________________________________
 IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
-    std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
-  auto parsedTriples = buildPartialVocabularies(parser, linesPerPartial);
-  const auto partialVocabSuffixes = parsedTriples.partialVocabularySuffixes();
+    ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
+    size_t linesPerPartial, size_t numThreads) {
+  auto parsedTriples =
+      buildPartialVocabularies(std::move(files), linesPerPartial, numThreads);
+  size_t numPartialVocabularies = parsedTriples.numPartialVocabularies_;
 
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
@@ -653,7 +617,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, partialVocabSuffixes, sortPred, wordCallback,
+        onDiskBase_, numPartialVocabularies, sortPred, wordCallback,
         memoryLimitIndexBuilding(), blankNodeIriRegexes_);
     wordCallback.finish();
     return mergedVocabMeta;
@@ -666,11 +630,9 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   AD_LOG_INFO << "Number of words in external vocabulary: "
               << mergeRes.numWordsTotal() - sizeInternalVocabulary << std::endl;
 
-  AD_LOG_DEBUG << "Removing temporary files ..." << std::endl;
-  for (const auto& suffix : partialVocabSuffixes) {
-    deleteTemporaryFile(
-        absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, suffix));
-  }
+  deletePartialVocabularyWordsFiles(
+      onDiskBase_, numPartialVocabularies,
+      [this](const std::string& filename) { deleteTemporaryFile(filename); });
 
   AD_LOG_DEBUG << "Triples per partial vocabulary: " << linesPerPartial
                << std::endl;
@@ -678,50 +640,18 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   return {std::move(mergeRes), std::move(parsedTriples)};
 }
 
-// _____________________________________________________________________________
-template <typename Func>
-auto IndexImpl::convertPartialToGlobalIds(BuildPartialVocabulariesResult& data,
-                                          Func isQLeverInternalTriple)
-    -> FirstPermutationSorterAndInternalTriplesAsPso {
-  AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
-              << std::endl;
+namespace {
+// A block of triples as `IndexImpl::convertPartialToGlobalIds` handles it, and
+// a non-owning view of a part of such a block.
+using Buffer = IdTableStatic<NumColumnsIndexBuilding>;
+using BufferView = IdTableView<NumColumnsIndexBuilding>;
 
-  // The filename suffixes of the partial vocabularies, in the order in which
-  // the corresponding triples are stored.
-  const auto partialVocabSuffixes = data.partialVocabularySuffixes();
-
-  // Iterate over all partial vocabularies.
-  auto resultPtr =
-      [&]() -> std::unique_ptr<
-                ad_utility::CompressedExternalIdTableSorterTypeErased> {
-    if (loadAllPermutations()) {
-      return makeSorterPtr<FirstPermutation>("first");
-    } else {
-      return makeSorterPtr<SortByPSO>("first");
-    }
-  }();
-  auto internalTriplesPtr =
-      makeSorterPtr<SortByPSO, NumColumnsIndexBuilding>("internalTriples");
-  auto& result = *resultPtr;
-  auto& internalResult = *internalTriplesPtr;
-  using Buffer = IdTableStatic<NumColumnsIndexBuilding>;
-  struct Buffers {
-    IdTableStatic<NumColumnsIndexBuilding> triples_;
-    IdTableStatic<NumColumnsIndexBuilding> internalTriples_;
-  };
-  using Map = ad_utility::HashMap<VocabIndex, Id>;
-
-  ad_utility::TaskQueue<true> lookupQueue(30, 10,
-                                          "looking up local to global IDs");
-  // This queue will be used to push the converted triples to the sorter. It is
-  // important that it has only one thread because it will not be used in a
-  // thread-safe way.
-  ad_utility::TaskQueue<true> writeQueue(30, 1, "Writing global Ids to file");
-
-  // For all triple elements find their mapping from partial to global ids.
-  auto transformTriple = [](Buffer::row_reference& curTriple,
-                            const auto& idMap) {
-    for (auto& id : curTriple) {
+// Replace the local IDs in all the columns of the `triples` by the global IDs
+// from the `idMap` (see `IdMapFromPartialIdMapFile`).
+void transformTriples(Buffer& triples,
+                      const ad_utility::HashMap<VocabIndex, Id>& idMap) {
+  for (IdColumnRef column : triples.getColumns()) {
+    for (Id& id : column) {
       if (id.getDatatype() != Datatype::VocabIndex) {
         // Check that all the internal, special IDs which we have introduced
         // for performance reasons are eliminated.
@@ -732,127 +662,149 @@ auto IndexImpl::convertPartialToGlobalIds(BuildPartialVocabulariesResult& data,
       AD_CORRECTNESS_CHECK(iterator != idMap.end());
       id = iterator->second;
     }
-  };
+  }
+}
 
-  // Return a lambda that pushes all the triples to the sorter. Must only be
-  // called single-threaded.
-  size_t numTriplesConverted = 0;
-  ad_utility::ProgressBar progressBar{numTriplesConverted,
-                                      "Triples converted: "};
-  auto getWriteTask = [&result, &internalResult, &numTriplesConverted,
-                       &progressBar](Buffers buffers) {
-    return [&result, &internalResult, &numTriplesConverted, &progressBar,
-            triples = std::make_shared<IdTableStatic<0>>(
-                std::move(buffers.triples_).toDynamic()),
-            internalTriples = std::make_shared<IdTableStatic<0>>(
-                std::move(buffers.internalTriples_).toDynamic())] {
-      result.pushBlock(*triples);
-      internalResult.pushBlock(*internalTriples);
+// The output of `IndexImpl::convertPartialToGlobalIds`: the sorter for the
+// normal triples, the sorter for the QLever-internal triples, and the progress
+// bar. None of them is thread-safe, and they always have to be updated
+// together, so the workers access them exclusively via a single
+// `ad_utility::Synchronized` object.
+class ConversionOutput {
+ private:
+  using Sorters = FirstPermutationSorterAndInternalTriplesAsPso;
+  Sorters sorters_;
+  size_t numTriplesConverted_ = 0;
+  ad_utility::ProgressBar progressBar_{numTriplesConverted_,
+                                       "Triples converted: "};
 
-      numTriplesConverted += triples->size();
-      numTriplesConverted += internalTriples->size();
-      if (progressBar.update()) {
-        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
-      }
-    };
-  };
-
-  // Return a lambda that for each of the `triples` transforms its partial to
-  // global IDs using the `idMap`. The map is passed as a `shared_ptr` because
-  // multiple batches need access to the same map.
-  auto getLookupTask = [&isQLeverInternalTriple, &writeQueue, &transformTriple,
-                        &getWriteTask](Buffer triples,
-                                       std::shared_ptr<Map> idMap) {
-    return [&isQLeverInternalTriple, &writeQueue,
-            triples = std::make_shared<Buffer>(std::move(triples)),
-            idMap = std::move(idMap), &getWriteTask,
-            &transformTriple]() mutable {
-      for (Buffer::row_reference triple : *triples) {
-        transformTriple(triple, *idMap);
-      }
-      auto beginInternal =
-          std::partition(triples->begin(), triples->end(),
-                         [&isQLeverInternalTriple](const auto& row) {
-                           return !isQLeverInternalTriple(row);
-                         });
-      IdTableStatic<NumColumnsIndexBuilding> internalTriples(
-          triples->getAllocator());
-      // TODO<joka921> We could leave the partitioned complete block as is,
-      // and change the interface of the compressed sorters s.t. we can
-      // push only a part of a block. We then would safe the copy of the
-      // internal triples here, but I am not sure whether this is worth it.
-      internalTriples.insertAtEnd(*triples, beginInternal - triples->begin(),
-                                  triples->end() - triples->begin());
-      triples->resize(beginInternal - triples->begin());
-
-      Buffers buffers{std::move(*triples), std::move(internalTriples)};
-
-      writeQueue.push(getWriteTask(std::move(buffers)));
-    };
-  };
-
-  std::atomic<size_t> nextPartialVocabulary = 0;
-  // Return the mapping from partial to global Ids for the batch with idx
-  // `nextPartialVocabulary` and increase that counter by one. Return `nullopt`
-  // if there are no more partial vocabularies to read.
-  auto createNextVocab = [&nextPartialVocabulary, &partialVocabSuffixes,
-                          this]() -> std::optional<std::pair<size_t, Map>> {
-    auto idx = nextPartialVocabulary.fetch_add(1, std::memory_order_relaxed);
-    if (idx >= partialVocabSuffixes.size()) {
-      return std::nullopt;
+  // The sorter for the first permutation. Its type is erased, because its
+  // comparator depends on `loadAllPermutations()` and hence is only known at
+  // runtime.
+  static Sorters::SorterPtr makeFirstPermutationSorter(
+      IndexImpl& index, std::string_view permutationName) {
+    if (index.loadAllPermutations()) {
+      return index.makeSorterPtr<FirstPermutation>(permutationName);
     }
-    std::string filename = absl::StrCat(onDiskBase_, PARTIAL_VOCAB_IDMAP_INFIX,
-                                        partialVocabSuffixes.at(idx));
-    auto map =
-        ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(filename);
-    // Delete the temporary file in which we stored this map
-    deleteTemporaryFile(filename);
-    return std::pair{idx, std::move(map)};
-  };
+    return index.makeSorterPtr<SortByPSO>(permutationName);
+  }
 
-  // Set up a generator that yields all the mappings in order, but reads them in
-  // parallel.
-  auto mappings = ad_utility::data_structures::queueManager<
-      ad_utility::data_structures::OrderedThreadSafeQueue<Map>>(
-      10, 5, createNextVocab);
+ public:
+  // Create the two sorters. The names have to be unique for one index build
+  // (see `IndexImpl::makeSorter`).
+  ConversionOutput(IndexImpl& index, std::string_view firstPermutationName,
+                   std::string_view internalTriplesName)
+      : sorters_{makeFirstPermutationSorter(index, firstPermutationName),
+                 index.makeSorterPtr<SortByPSO, NumColumnsIndexBuilding>(
+                     internalTriplesName)} {}
 
-  // The mappings are yielded in the same order as `partialVocabSuffixes`, that
-  // is, in the order in which the triples of the individual workers are stored.
-  auto mappingIt = mappings.begin();
-  for (auto& workerResult : data.workerResults_) {
-    auto triplesGenerator = workerResult.idTriples_->getRows();
-    auto it = triplesGenerator.begin();
-    for (size_t numTriples : workerResult.numTriplesPerBatch_) {
-      AD_CORRECTNESS_CHECK(mappingIt != mappings.end());
-      auto idMap = std::make_shared<Map>(std::move(*mappingIt));
-
-      const size_t bufferSize = BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS();
-      Buffer buffer{ad_utility::makeUnlimitedAllocator<Id>()};
-      buffer.reserve(bufferSize);
-      auto pushBatch = [&buffer, &idMap, &lookupQueue, &getLookupTask,
-                        bufferSize]() {
-        lookupQueue.push(getLookupTask(std::move(buffer), idMap));
-        buffer.clear();
-        buffer.reserve(bufferSize);
-      };
-      // Update the triples that belong to this partial vocabulary.
-      for ([[maybe_unused]] auto idx : ad_utility::integerRange(numTriples)) {
-        buffer.push_back(*it);
-        if (buffer.size() >= bufferSize) {
-          pushBatch();
-        }
-        ++it;
-      }
-      if (!buffer.empty()) {
-        pushBatch();
-      }
-      ++mappingIt;
+  // Push a block of normal `triples` and a block of `internalTriples` to their
+  // respective sorters and report the progress. Both blocks are views, because
+  // the caller obtains them by partitioning a single block (see
+  // `convertPartialToGlobalIds`); the sorters copy the rows they are given.
+  void push(const BufferView& triples, const BufferView& internalTriples) {
+    sorters_.firstPermutationSorter_->pushBlock(triples.asStaticView<0>());
+    sorters_.internalTriplesPso_->pushBlock(internalTriples.asStaticView<0>());
+    numTriplesConverted_ += triples.numRows() + internalTriples.numRows();
+    if (progressBar_.update()) {
+      AD_LOG_INFO << progressBar_.getProgressString() << std::flush;
     }
   }
-  lookupQueue.finish();
-  writeQueue.finish();
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
-  return {std::move(resultPtr), std::move(internalTriplesPtr)};
+
+  // Log the final progress and hand out the sorters with all the blocks that
+  // were pushed. After this, no more blocks may be pushed.
+  Sorters finish() {
+    AD_LOG_INFO << progressBar_.getFinalProgressString() << std::flush;
+    return std::move(sorters_);
+  }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+template <typename Func>
+auto IndexImpl::convertPartialToGlobalIds(
+    const BuildPartialVocabulariesResult& data, Func isQLeverInternalTriple,
+    size_t numThreads) -> FirstPermutationSorterAndInternalTriplesAsPso {
+  AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
+              << std::endl;
+
+  ad_utility::Synchronized<ConversionOutput> output{*this, "first",
+                                                    "internalTriples"};
+
+  // Convert the triples that were mapped using the partial vocabulary with
+  // index `partialVocabIdx` and push them to the sorters. The partial
+  // vocabulary and its triples were written as a pair by a single worker in
+  // `buildPartialVocabularies`, so this function needs nothing but the
+  // `partialVocabIdx`.
+  auto convertTriplesOfPartialVocabulary = [this, &output,
+                                            &isQLeverInternalTriple](
+                                               size_t partialVocabIdx) {
+    // The mapping from the partial IDs of this partial vocabulary to the global
+    // IDs. Its file is not needed anymore once the mapping has been read.
+    std::string idMapFilename =
+        partialVocabularyIdMapFilename(onDiskBase_, partialVocabIdx);
+    auto idMap =
+        ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(idMapFilename);
+    deleteTemporaryFile(idMapFilename);
+
+    // The triples are only needed for this conversion step.
+    std::string triplesFilename =
+        unsortedTriplesFilename(onDiskBase_, partialVocabIdx);
+    Buffer triples =
+        ad_utility::vocabulary_merger::readMappedIdsFromFile(triplesFilename);
+    deleteTemporaryFile(triplesFilename);
+
+    transformTriples(triples, idMap);
+
+    // Partitioning makes each of the two kinds of triples contiguous, so that
+    // each of them can be copied to its sorter in one go. The QLever-internal
+    // triples come first.
+    auto normalTriples =
+        std::partition(triples.begin(), triples.end(), isQLeverInternalTriple);
+    size_t numInternalTriples = normalTriples - triples.begin();
+    size_t numNormalTriples = triples.size() - numInternalTriples;
+    output.wlock()->push(triples.subView(numInternalTriples, numNormalTriples),
+                         triples.subView(0, numInternalTriples));
+  };
+
+  // Each worker repeatedly claims the next partial vocabulary from a shared
+  // counter and holds the ID map and all the triples of that partial
+  // vocabulary in RAM. Their number is therefore bounded by `numThreads`, and
+  // additionally such that the triples of all the workers together fit into
+  // the memory limit of the index build (the ID maps are much smaller than the
+  // triples and are not accounted for). There is always at least one worker.
+  // NOTE: For the usual batch sizes (5 to 10 million triples) and the default
+  // memory limit, the memory bound is far above the usual number of threads
+  // and hence irrelevant.
+  std::atomic<size_t> nextPartialVocabIdx = 0;
+  size_t triplesBytesPerWorker =
+      numTriplesPerBatch_ * NumColumnsIndexBuilding * sizeof(Id);
+  size_t numWorkersThatFitInMemory =
+      std::max<size_t>(1, memoryLimitIndexBuilding().getBytes() /
+                              std::max<size_t>(1, triplesBytesPerWorker));
+  size_t numWorkers = std::min(
+      {data.numPartialVocabularies_, numThreads, numWorkersThatFitInMemory});
+  auto tasks =
+      ad_utility::integerRange(numWorkers) |
+      ql::views::transform([&convertTriplesOfPartialVocabulary,
+                            &nextPartialVocabIdx, &data](size_t) {
+        return std::packaged_task<void()>([&convertTriplesOfPartialVocabulary,
+                                           &nextPartialVocabIdx, &data]() {
+          for (;;) {
+            size_t partialVocabIdx = nextPartialVocabIdx.fetch_add(1);
+            if (partialVocabIdx >= data.numPartialVocabularies_) {
+              return;
+            }
+            convertTriplesOfPartialVocabulary(partialVocabIdx);
+          }
+        });
+      }) |
+      ::ranges::to<std::vector>();
+  // Waits for all the workers to finish, and rethrows an exception if one of
+  // them has thrown.
+  ad_utility::runTasksInParallel(std::move(tasks));
+
+  return output.wlock()->finish();
 }
 
 // _____________________________________________________________________________
@@ -888,8 +840,8 @@ CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
     IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
     std::optional<size_t> numWriterThreads) const {
   auto writer = std::make_unique<CompressedRelationWriter>(
-      numColumns, ad_utility::File(fileName, "w"),
-      blocksizePermutationPerColumn_, numWriterThreads);
+      numColumns, ad_utility::File(fileName, "w"), rowsPerBlock_,
+      numWriterThreads);
 
   auto callback =
       liftCallback([&metaData](const auto& md) { metaData.add(md); });
@@ -1110,10 +1062,67 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     setFilenamesForPersistentUpdates(true);
   }
 
+  // Warn if the index uses the deprecated `LatMajor` encoding and may contain
+  // points (an index without points does not depend on the encoding). This is
+  // done after reading the updates, which may contain points as well.
+  if (geoPointEncodingOfLoadedIndex_ ==
+          ad_utility::GeoPointEncoding::LatMajor &&
+      mayContainGeoPoints()) {
+    AD_LOG_WARN << ad_utility::LAT_MAJOR_GEO_POINT_ENCODING_WARNING
+                << std::endl;
+  }
+
   // Only set at the very end, so that an index that failed to load (for
   // example, because it has an incompatible format) does not count as loaded
   // and the destructor does not log that it was unloaded.
   wasLoadedFromDisk_ = true;
+}
+
+// _____________________________________________________________________________
+bool IndexImpl::mayContainGeoPoints() const {
+  // Return true if the `OSP` permutation is not loaded (without it, there is
+  // no cheap way to tell).
+  if (doNotLoadPermutations_ || !loadAllPermutations_) {
+    return true;
+  }
+
+  // Get the blocks of the `OSP` permutation, which is sorted by the object, so
+  // that the points (the objects of type `GeoPoint`) form one contiguous range
+  // of it. The first and last object of each block include the updates.
+  auto locatedTriplesState =
+      deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  BlockMetadataSpan blocks =
+      osp_->getLocatedTriplesForPermutation(*locatedTriplesState)
+          .getAugmentedMetadata();
+
+  // Find the first block whose last object is not of a datatype before
+  // `GeoPoint`. Return false if there is none or if its first object is of a
+  // datatype after `GeoPoint`.
+  auto block = ql::ranges::find_if(blocks, [](const auto& block) {
+    return block.lastTriple_.col0Id_.getDatatype() >= Datatype::GeoPoint;
+  });
+  if (block == blocks.end() ||
+      block->firstTriple_.col0Id_.getDatatype() > Datatype::GeoPoint) {
+    return false;
+  }
+
+  // Otherwise, read the objects of that block and check whether one of them is
+  // a point. This block contains a point if there is any: either its last
+  // object is a point, or it ends after the points.
+  //
+  // NOTE: The metadata alone cannot decide this, because in most indexes
+  // without points, some block starts before and ends after the points (the
+  // datatypes before, e.g. `VocabIndex`, and after, e.g. `BlankNodeIndex`, are
+  // common).
+  CompressedRelationReader::ScanSpecAndBlocks blockOnly{
+      {std::nullopt, std::nullopt, std::nullopt},
+      {BlockMetadataRange{block, block + 1}}};
+  auto objects = osp_->scan(
+      blockOnly, {}, std::make_shared<ad_utility::CancellationHandle<>>(),
+      *locatedTriplesState);
+  return ql::ranges::any_of(objects.getColumn(0), [](Id id) {
+    return id.getDatatype() == Datatype::GeoPoint;
+  });
 }
 
 // _____________________________________________________________________________
@@ -1271,6 +1280,13 @@ void IndexImpl::writeConfiguration() const {
   configuration["git-hash"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
   configuration["index-format-version"] = qlever::indexFormatVersion;
+  // Record the encoding of the geo points, which is the encoding of the index
+  // that this process builds or has loaded (see `GeoPoint::encoding`). This
+  // also adds the entry when the configuration of an index in the previous
+  // format is written in the current format (for example, when the index is
+  // rebuilt or a text index is added to it).
+  configuration[std::string{ad_utility::GEO_POINT_ENCODING_KEY}] =
+      ad_utility::GeoPointEncoding{GeoPoint::encoding()};
   // Record whether the index was built with ICU (Unicode) support. Indexes
   // built with and without ICU use different collations and are hence not
   // interchangeable; `readConfiguration` throws if the configuration of the
@@ -1306,6 +1322,20 @@ std::string IndexImpl::dateOfIndexBuild(const nlohmann::json& configurationJson,
 }
 
 // ____________________________________________________________________________
+size_t IndexImpl::rowsPerBlock(const nlohmann::json& configurationJson) {
+  size_t rowsPerBlock = configurationJson.value(INDEX_ROWS_PER_BLOCK_KEY,
+                                                DEFAULT_INDEX_ROWS_PER_BLOCK);
+  if (rowsPerBlock == 0 || rowsPerBlock > MAX_INDEX_ROWS_PER_BLOCK) {
+    throw std::runtime_error{
+        absl::StrCat("Invalid value ", rowsPerBlock, " for the key \"",
+                     INDEX_ROWS_PER_BLOCK_KEY,
+                     "\" in the `meta-data.json`, it must be between 1 and ",
+                     MAX_INDEX_ROWS_PER_BLOCK)};
+  }
+  return rowsPerBlock;
+}
+
+// ____________________________________________________________________________
 std::string IndexImpl::formatIndexBuildTime(absl::Time time) {
   return absl::FormatTime(DATE_OF_INDEX_BUILD_FORMAT, time,
                           absl::UTCTimeZone());
@@ -1331,6 +1361,113 @@ void IndexImpl::readConfiguration() {
 }
 
 // ___________________________________________________________________________
+std::optional<std::string> IndexImpl::checkIndexFormatVersion(
+    const nlohmann::json& configuration) const {
+  // NOTE: Only non-throwing accessors of `nlohmann::json` are used below (in
+  // particular, `find` simply returns `end()` if `configuration` is not an
+  // object).
+  auto versionIt = configuration.find("index-format-version");
+  if (versionIt == configuration.end()) {
+    return std::string{
+        "This index was built before versioning was introduced for QLever's "
+        "index format. Please rebuild your index using the current version of "
+        "QLever."};
+  }
+  const auto& currentVersion = qlever::indexFormatVersion;
+  if (*versionIt == nlohmann::json(currentVersion)) {
+    return std::nullopt;
+  }
+
+  // The version is not the current one. Parse it (without throwing) to check
+  // whether it is one of the other loadable versions, or to give a more
+  // specific message otherwise.
+  auto prNumberIt = versionIt->find("pull-request-number");
+  auto dateIt = versionIt->find("date");
+  std::optional<DateYearOrDuration> date;
+  if (prNumberIt != versionIt->end() && prNumberIt->is_number_unsigned() &&
+      dateIt != versionIt->end() && dateIt->is_string()) {
+    date = DateYearOrDuration::parseXsdDateGetOptDate(
+        dateIt->get_ref<const std::string&>());
+  }
+  if (!date.has_value()) {
+    return absl::StrCat(
+        "The index format version stored in the index metadata is malformed: ",
+        versionIt->dump(),
+        ". Please rebuild your index using the current "
+        "version of QLever.");
+  }
+  qlever::IndexFormatVersion indexFormatVersion{prNumberIt->get<uint64_t>(),
+                                                date.value()};
+  if (qlever::isLoadableIndexFormatVersion(indexFormatVersion)) {
+    return std::nullopt;
+  }
+  auto versionDescription = absl::StrCat(
+      "(PR = ", indexFormatVersion.prNumber_,
+      ", Date = ", indexFormatVersion.date_.toStringAndType().first, ").");
+  if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
+    return absl::StrCat(
+        "The version of QLever you are using is too old for this index. Please "
+        "use a version of QLever that is compatible with this index ",
+        versionDescription);
+  }
+  // If the index is in exactly the format that the `qlever-upgrade-index`
+  // binary upgrades from, return one dedicated message instead of the generic
+  // advice below, so that the upgrade option is not buried among the generic
+  // alternatives. That the current version of QLever can load the upgraded
+  // index is checked by `convertIndexToCurrentFormat` (and by a unit test).
+  using namespace qlever::indexFormatConverter;
+  if (indexFormatVersion == sourceVersion) {
+    return absl::StrCat(
+        "The index format changed on ",
+        targetVersion.date_.toStringAndType().first,
+        " (PR = ", targetVersion.prNumber_,
+        "), but your index uses the previous format\n\nWe do our best "
+        "to keep index format changes rare, but sometimes they are "
+        "unavoidable. Either use an older version of QLever, or rebuild "
+        "the index from scratch with the version of QLever you are "
+        "currently using, or upgrade your index with the following "
+        "command. Upgrading your index is more than 10 times faster "
+        "than rebuilding it from scratch, and the old index is "
+        "preserved in a subdirectory of your index directory in case "
+        "something goes wrong.\n\nqlever upgrade-index ",
+        std::string(onDiskBase_.size(), ' '),
+        "   (if you use the qlever CLI)\n", "qlever-upgrade-index ",
+        onDiskBase_, "   (if the qlever-* binaries are in your PATH)\n");
+  }
+  return absl::StrCat(
+      "The index is too old for this version of QLever. Either rebuild the "
+      "index from scratch with the version of QLever you are currently using, "
+      "or use an older version of QLever that is compatible with this index ",
+      versionDescription);
+}
+
+// ___________________________________________________________________________
+void IndexImpl::applyGeoPointEncoding() {
+  // Determine the encoding of the index. An index in the format that predates
+  // the entry for the encoding always uses `LatMajor`. Throw if an index in
+  // the current format has no entry (its points could then not be decoded
+  // reliably).
+  const std::string key{ad_utility::GEO_POINT_ENCODING_KEY};
+  auto version = static_cast<qlever::IndexFormatVersion>(
+      configurationJson_["index-format-version"]);
+  auto encoding = ad_utility::GeoPointEncoding::LatMajor;
+  if (version != qlever::indexFormatVersionWithLatMajorGeoPoints) {
+    if (!configurationJson_.contains(key)) {
+      throw std::runtime_error{absl::StrCat(
+          "The configuration of the index (\"", onDiskBase_, CONFIGURATION_FILE,
+          "\") has no entry \"", key,
+          "\", which every index in the current format has; please rebuild "
+          "the index")};
+    }
+    encoding = configurationJson_[key].get<ad_utility::GeoPointEncoding>();
+  }
+
+  // Use that encoding for all points of this process.
+  GeoPoint::setEncoding(encoding);
+  geoPointEncodingOfLoadedIndex_ = encoding;
+}
+
+// _____________________________________________________________________________
 void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   configurationJson_ = configuration;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
@@ -1343,67 +1480,12 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
         << std::endl;
   }
 
-  if (configurationJson_.find("index-format-version") !=
-      configurationJson_.end()) {
-    auto indexFormatVersion = static_cast<qlever::IndexFormatVersion>(
-        configurationJson_["index-format-version"]);
-    const auto& currentVersion = qlever::indexFormatVersion;
-    if (indexFormatVersion != currentVersion) {
-      if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
-        AD_LOG_ERROR
-            << "The version of QLever you are using is too old for this "
-               "index. Please use a version of QLever that is "
-               "compatible with this index"
-               " (PR = "
-            << indexFormatVersion.prNumber_
-            << ", Date = " << indexFormatVersion.date_.toStringAndType().first
-            << ")." << std::endl;
-      } else {
-        // If the index is in exactly the format that the
-        // `qlever-upgrade-index` binary upgrades from, throw one dedicated
-        // message instead of logging the generic advice below, so that the
-        // upgrade option is not buried among the generic alternatives.
-        using namespace qlever::indexFormatConverter;
-        if (indexFormatVersion == sourceVersion &&
-            currentVersion == targetVersion) {
-          throw std::runtime_error{absl::StrCat(
-              "The index format changed on ",
-              targetVersion.date_.toStringAndType().first,
-              " (PR = ", targetVersion.prNumber_,
-              "), but your index uses the previous format\n\nWe do our best "
-              "to keep index format changes rare, but sometimes they are "
-              "unavoidable. Either use an older version of QLever, or rebuild "
-              "the index from scratch with the version of QLever you are "
-              "currently using, or upgrade your index with the following "
-              "command. Upgrading your index is more than 10 times faster "
-              "than rebuilding it from scratch, and the old index is "
-              "preserved in a subdirectory of your index directory in case "
-              "something goes wrong.\n\nqlever upgrade-index ",
-              std::string(onDiskBase_.size(), ' '),
-              "   (if you use the qlever CLI)\n", "qlever-upgrade-index ",
-              onDiskBase_, "   (if the qlever-* binaries are in your PATH)\n")};
-        }
-        AD_LOG_ERROR
-            << "The index is too old for this version of QLever. "
-               "Either rebuild the index from scratch with the version of "
-               "QLever you are currently using, or use an older version of "
-               "QLever that is compatible with this index (PR = "
-            << indexFormatVersion.prNumber_
-            << ", Date = " << indexFormatVersion.date_.toStringAndType().first
-            << ")." << std::endl;
-      }
-      throw std::runtime_error{
-          "Incompatible index format, see log message for details"};
-    }
-  } else {
-    AD_LOG_ERROR
-        << "This index was built before versioning was introduced for "
-           "QLever's index format. Please rebuild your index using the "
-           "current version of QLever."
-        << std::endl;
-    throw std::runtime_error{
-        "Incompatible index format, see log message for details"};
+  if (auto error = checkIndexFormatVersion(configurationJson_);
+      error.has_value()) {
+    throw std::runtime_error{std::move(error).value()};
   }
+
+  applyGeoPointEncoding();
 
   // The index and the current binary must agree on whether ICU (Unicode)
   // support is available: the two use different string collations, so mixing
@@ -1491,6 +1573,32 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 
+  // The block size with which the permutations of this index were written. It
+  // is needed when further permutations of this index are written later on (a
+  // materialized view, for example), so that all permutations of an index have
+  // the same block size. Indexes that were built before this key existed were
+  // built with the default.
+  rowsPerBlock_ = rowsPerBlock(configurationJson_);
+
+  // The geo cell grid of the geo vocabulary, if the index was built with one
+  // (see `GeoCellGrid`). The vocabulary needs it before it is opened, because
+  // the grid determines how its indices are composed.
+  uint64_t geoCellGridLevel = 0;
+  loadDataMember("geo-cell-grid-level", geoCellGridLevel, geoCellGridLevel);
+  if (geoCellGridLevel > 0) {
+    if (geoCellGridLevel > std::numeric_limits<uint8_t>::max()) {
+      throw std::runtime_error{absl::StrCat(
+          "Invalid value ", geoCellGridLevel,
+          " for the key \"geo-cell-grid-level\" in the `meta-data.json`")};
+    }
+    ad_utility::GeoCellGridScheme geoCellGridScheme =
+        ad_utility::GeoCellGridScheme::Flat;
+    loadDataMember("geo-cell-grid-scheme", geoCellGridScheme,
+                   geoCellGridScheme);
+    vocab_.setGeoCellGrid(ad_utility::GeoCellGrid{
+        static_cast<uint8_t>(geoCellGridLevel), geoCellGridScheme});
+  }
+
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;
   loadDataMember(BLANK_NODE_ALLOCATION_START, numBlankNodesTotal);
@@ -1563,7 +1671,10 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
-    if (vocab_.shouldBeExternalized(toRdfLiteral(iriOrLiteral))) {
+    // The view always exists here: `handleStringOrId` above has turned all
+    // values that can be directly encoded into an `Id` into one, so what is
+    // left is a literal, an IRI, or a blank node string.
+    if (vocab_.shouldBeExternalized(toRdfLiteralView(iriOrLiteral).value())) {
       component.isExternal_ = true;
     }
   }
@@ -1610,9 +1721,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" "
-                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-                << std::endl;
+                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
+                << "\"" << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN
@@ -1657,14 +1767,6 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
         << std::endl;
   }
 
-  if (j.count("parser-batch-size")) {
-    parserBatchSize_ = size_t{j["parser-batch-size"]};
-    AD_LOG_INFO << "Overriding setting parser-batch-size to "
-                << parserBatchSize_
-                << " This might influence performance during index build."
-                << std::endl;
-  }
-
   std::string overflowingIntegersThrow = "overflowing-integers-throw";
   std::string overflowingIntegersBecomeDoubles =
       "overflowing-integers-become-doubles";
@@ -1690,7 +1792,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     } else if (value == allIntegersBecomeDoubles) {
       AD_LOG_INFO << "All integers will be converted to doubles" << std::endl;
       turtleParserIntegerOverflowBehavior_ =
-          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+          TurtleParserIntegerOverflowBehavior::AllToDouble;
     } else {
       AD_CONTRACT_CHECK(ql::ranges::find(allModes, value) == allModes.end());
       AD_LOG_ERROR << "Invalid value for " << key << std::endl;
@@ -1709,15 +1811,14 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 
 // ___________________________________________________________________________
 void IndexImpl::writePartialVocabulary(
-    const std::string& filenameSuffix, ItemMapAndBuffer items,
-    std::vector<std::array<Id, NumColumnsIndexBuilding>> localIds,
-    TripleVec& idTriples) const {
+    size_t partialVocabIdx, const ItemMapAndBuffer& items,
+    std::vector<std::array<Id, NumColumnsIndexBuilding>>& localIds) const {
   using namespace ad_utility::vocabulary_merger;
   AD_LOG_DEBUG
       << "Triples processed, also counting internal triples added by QLever: "
       << localIds.size() << std::endl;
   std::string partialFilename =
-      absl::StrCat(onDiskBase_, PARTIAL_VOCAB_WORDS_INFIX, filenameSuffix);
+      partialVocabularyWordsFilename(onDiskBase_, partialVocabIdx);
 
   auto vec = [&]() {
     ad_utility::TimeBlockAndLog l{"vocab map to vector"};
@@ -1725,13 +1826,16 @@ void IndexImpl::writePartialVocabulary(
   }();
   {
     ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
-    sortVocabVector(
-        &vec,
+    // This sort is single-threaded because this function runs on the shared
+    // thread pool of `buildPartialVocabularies`, which already keeps all cores
+    // busy. The sort uses `pdqsort` because it is about 10% faster than
+    // `ql::ranges::sort` here (measured on DBLP).
+    boost::sort::pdqsort(
+        vec.begin(), vec.end(),
         [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
           return c.isLessInTotalWithExternalFlag(
               a.first, a.second.isExternal(), b.first, b.second.isExternal());
-        },
-        true);
+        });
   }
   auto mapping = [&]() {
     ad_utility::TimeBlockAndLog l{"creating internal mapping"};
@@ -1748,20 +1852,16 @@ void IndexImpl::writePartialVocabulary(
                           }),
               vec.end());
   }
-  auto writeTriplesFuture =
-      std::async(std::launch::async, [&idTriples, &localIds, &mapping]() {
-        writeMappedIdsToExtVec(localIds, mapping, idTriples);
-      });
+  {
+    ad_utility::TimeBlockAndLog l{"writing to file"};
+    writeMappedIdsToFile(localIds, mapping,
+                         unsortedTriplesFilename(onDiskBase_, partialVocabIdx));
+  }
   {
     ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
     writePartialVocabularyToFile(vec, partialFilename);
   }
   AD_LOG_TRACE << "Finished writing the partial vocabulary" << std::endl;
-  vec.clear();
-  {
-    ad_utility::TimeBlockAndLog l{"writing to file"};
-    writeTriplesFuture.get();
-  }
 }
 
 // ____________________________________________________________________________
@@ -1938,12 +2038,17 @@ CPP_template_def(typename... NextSorter)(requires(
         if (graph.getDatatype() != Datatype::EncodedVal) {
           return;
         }
+        // NOTE: The payload may only be decoded after the prefix has been
+        // checked, because the payload of a general pattern is not a single
+        // decimal number (see `EncodedIriManager`).
         auto [prefix, payload] =
-            EncodedIriManager::splitIntoPrefixIdxAndDecodedPayload(graph);
+            EncodedIriManager::splitIntoPrefixIdxAndPayload(graph);
         if (prefix != newGraphPrefixIdx) {
           return;
         }
-        nextAvailableIndex = std::max(nextAvailableIndex, payload + 1);
+        nextAvailableIndex =
+            std::max(nextAvailableIndex,
+                     EncodedIriManager::decodeDecimalFrom64Bit(payload) + 1);
       };
   size_t numPredicates =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
@@ -2066,9 +2171,10 @@ ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
 
 // _____________________________________________________________________________
 void IndexImpl::setPrefixesForEncodedValues(
-    std::vector<std::string> prefixesWithoutAngleBrackets) {
-  encodedIriManager_ =
-      EncodedIriManager{std::move(prefixesWithoutAngleBrackets)};
+    std::vector<std::string> prefixesWithoutAngleBrackets,
+    std::vector<encodedIri::Pattern> patterns) {
+  encodedIriManager_ = EncodedIriManager{
+      std::move(prefixesWithoutAngleBrackets), std::move(patterns)};
 }
 
 // _____________________________________________________________________________
@@ -2113,7 +2219,7 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
   // index and write a fresh configuration file for a new index.
   setOnDiskBase(newName);
   setKbName(other.getKbName());
-  blocksizePermutationPerColumn() = other.blocksizePermutationPerColumn();
+  rowsPerBlock() = other.rowsPerBlock();
   configurationJson_ = newStats;
   numTriples_ = static_cast<NumNormalAndInternal>(newStats.at("num-triples"));
   numPredicates_ =
