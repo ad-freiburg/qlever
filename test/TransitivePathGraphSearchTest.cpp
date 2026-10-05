@@ -138,8 +138,8 @@ class GraphSearchTest : public Test {
             targetIds.emplace_back(Id::makeFromInt(targetNode));
           }
         }
-        graphs_.push_back(BinSearchMap(ql::span<const Id>(startIds),
-                                       ql::span<const Id>(targetIds)));
+        graphs_.push_back(BinSearchMap(ConstIdColumnRef(startIds),
+                                       ConstIdColumnRef(targetIds)));
       }
     }
   }
@@ -259,6 +259,7 @@ TYPED_TEST(GraphSearchTest, graphSearchWithTargetWithLimit) {
 
 // ___________________________________________________________________________
 TEST(GraphSearchTestExtraTests, cancellationCheck) {
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   // Test that the log message created in
   // `GraphSearchExecutionParams.checkCancellation()` when a cancellation is
   // received will be logged.

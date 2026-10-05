@@ -269,7 +269,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // variable), skip it. This can happen because some `FILTER`s (which may
     // contain `EXISTS` functions) are applied multiple times (for example,
     // when there are OPTIONAL joins in the query).
-    if (subtree->isVariableCovered(exists.variable())) {
+    if (subtree->containsVariable(exists.variable())) {
       continue;
     }
 
@@ -295,8 +295,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
                          const VariableOrderKey& key) {
                        return columns.at(key.variable_).columnIndex_;
                      });
-    auto tree =
-        std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pq));
+    auto tree = qp.createExecutionTree(pq);
     // Hide non-visible variables in the subtree, so that they are not
     // accidentally joined, ideally collisions wouldn't happen in the first
     // place, but since we're creating our own instance of `QueryPlanner` we

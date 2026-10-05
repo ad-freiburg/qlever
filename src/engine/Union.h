@@ -13,6 +13,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashMap.h"
 
 class Union : public Operation {
@@ -64,10 +65,12 @@ class Union : public Operation {
       const IdTableView<0>& left, const IdTableView<0>& right,
       const std::vector<std::array<size_t, 2>>& columnOrigins) const;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
-    return {_subtrees[0].get(), _subtrees[1].get()};
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{_subtrees[0].get(), _subtrees[1].get()}, allocator()};
   }
 
+ public:
   // Create a sorted variant of this operation. This can be more efficient than
   // stacking a `Sort` operation on top of this one because Union can simply
   // push the sort down to its children. If one of the children is already
@@ -112,6 +115,11 @@ class Union : public Operation {
 
  private:
   void onLimitOffsetChanged(const LimitOffsetClause&) override;
+
+  // The columns that the subtree with index `subtreeIndex` has to be sorted on,
+  // such that merging the two subtrees yields a result that is sorted according
+  // to `targetOrder_`. Only meaningful if `targetOrder_` is not empty.
+  std::vector<ColumnIndex> sortOrderForSubtree(size_t subtreeIndex) const;
 
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 

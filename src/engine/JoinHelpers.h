@@ -20,7 +20,7 @@
 #include "engine/Result.h"
 #include "engine/Sort.h"
 #include "engine/idTable/IdTable.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/Permutation.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
@@ -84,7 +84,7 @@ IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
     CompressedRelationReader::IdTableGeneratorInputRange gen, IndexScan& scan) {
   // Store the generator in a wrapper so we can access its details after moving
   auto generatorStorage =
-      std::make_shared<CompressedRelationReader::IdTableGeneratorInputRange>(
+      scan.makeShared<CompressedRelationReader::IdTableGeneratorInputRange>(
           std::move(gen));
 
   using SendPriority = RuntimeInformation::SendPriority;

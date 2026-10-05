@@ -164,17 +164,15 @@ CPP_template_def(int WIDTH,
       requires sparqlExpression::SingleExpressionResult<T>) {
     if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
       AD_CONTRACT_CHECK(input.size() == evaluationContext.size());
+      AD_CONTRACT_CHECK(singleResult.size() == input.size(),
+                        "The size of a `SetOfIntervals` does not match the "
+                        "size of the evaluation context.");
       // If the expression result is given as a set of intervals, we copy
       // the corresponding parts of `input` to `resultTable`.
-      //
-      // NOTE: One of the interval ends may be larger than `input.size()`
-      // (as the result of a negation).
       auto totalSize = std::accumulate(
           singleResult._intervals.begin(), singleResult._intervals.end(),
-          resultTable.size(), [&input](const auto& sum, const auto& interval) {
-            size_t intervalBegin = interval.first;
-            size_t intervalEnd = std::min(interval.second, input.size());
-            return sum + (intervalEnd - intervalBegin);
+          resultTable.size(), [](const auto& sum, const auto& interval) {
+            return sum + (interval.second - interval.first);
           });
       if (resultTable.empty() && totalSize == inputTable.size()) {
         // The binary filter contains all elements of the input, and we have
@@ -185,7 +183,6 @@ CPP_template_def(int WIDTH,
       }
       checkCancellation();
       for (auto [intervalBegin, intervalEnd] : singleResult._intervals) {
-        intervalEnd = std::min(intervalEnd, input.size());
         resultTable.insertAtEnd(inputTable, intervalBegin, intervalEnd);
         checkCancellation();
       }

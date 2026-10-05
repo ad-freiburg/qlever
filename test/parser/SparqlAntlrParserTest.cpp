@@ -32,9 +32,8 @@ using std::string;
 auto iri = ad_utility::testing::iri;
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
-PropertyPath PathIri(std::string_view iri) {
-  return PropertyPath::fromIri(
-      ad_utility::triple_component::Iri::fromIriref(iri));
+PropertyPath PathIri(std::string_view iriref) {
+  return PropertyPath::fromIri(ad_utility::testing::iri(iriref));
 }
 using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
 }  // namespace
@@ -61,6 +60,19 @@ TEST(SparqlParser, NumericLiterals) {
   expectNumericLiteralFails("-99999999999999999999");
   expectNumericLiteralFails("12E400");
   expectNumericLiteralFails("-4.2E550");
+}
+
+// _____________________________________________________________________________
+TEST(SparqlParser, BooleanLiterals) {
+  auto expectBooleanLiteral = ExpectCompleteParse<&Parser::booleanLiteral>{};
+  expectBooleanLiteral("true", true);
+  expectBooleanLiteral("TRUE", true);
+  expectBooleanLiteral("True", true);
+  expectBooleanLiteral("tRuE", true);
+  expectBooleanLiteral("false", false);
+  expectBooleanLiteral("FALSE", false);
+  expectBooleanLiteral("False", false);
+  expectBooleanLiteral("fAlSe", false);
 }
 
 TEST(SparqlParser, Prefix) {

@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "../util/GTestHelpers.h"
+#include "../util/TripleComponentTestHelpers.h"
 #include "./SparqlAntlrParserTestHelpers.h"
 #include "parser/Quads.h"
 
@@ -20,7 +21,7 @@ TEST(QuadTest, getQuads) {
         // For this test, there are no blank nodes. Below you find a dedicated
         // test with blank nodes.
         ad_utility::BlankNodeManager manager;
-        Quads::BlankNodeAdder bn{{}, {}, &manager};
+        BlankNodeAdder bn{&manager};
         const Quads quads{std::move(triples), std::move(graphs)};
         auto res = quads.toTriplesWithGraph(std::monostate{}, bn);
         EXPECT_THAT(res.triples_, testing::UnorderedElementsAreArray(expected));
@@ -56,7 +57,7 @@ TEST(QuadTest, getQuadsWithBlankNodes) {
 
   std::array tr{bn("a"), bn("b"), bn("a")};
   ad_utility::BlankNodeManager manager;
-  Quads::BlankNodeAdder adder{{}, {}, &manager};
+  BlankNodeAdder adder{&manager};
   const Quads quads{{tr}, {}};
   auto res = quads.toTriplesWithGraph(std::monostate{}, adder);
   EXPECT_EQ(res.triples_.size(), 1ul);
@@ -129,7 +130,7 @@ TEST(QuadTest, forAllVariables) {
         });
         EXPECT_THAT(calledVariables, testing::Eq(expectVariables));
       };
-  auto TCIri = ad_utility::triple_component::Iri::fromIriref;
+  auto TCIri = ad_utility::testing::iri;
   using Var = Variable;
 
   using Triple = std::array<GraphTerm, 3>;

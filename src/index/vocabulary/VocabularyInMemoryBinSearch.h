@@ -7,7 +7,6 @@
 
 #include <string>
 #include <string_view>
-#include <variant>
 
 #include "backports/algorithm.h"
 #include "backports/span.h"
@@ -16,6 +15,7 @@
 #include "util/Algorithm.h"
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
+#include "util/OwnedOrViewedVector.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
@@ -30,8 +30,13 @@ class VocabularyInMemoryBinSearch
   using StringView = std::basic_string_view<CharType>;
   using String = std::basic_string<CharType>;
   using Words = CompactVectorOfStrings<CharType>;
-  using Indices = std::vector<uint64_t>;
-  using IndicesView = ql::span<const uint64_t>;
+  using IndexStorage = ad_utility::OwnedOrViewedVector<uint64_t>;
+  using IndicesView = IndexStorage::View;
+
+  // This suffix is appended to the base filename in order to get the name of
+  // the file in which the (because of the holes, explicit) indices of the words
+  // are stored. The words themselves are stored under the base filename itself.
+  static constexpr std::string_view idsSuffix = ".ids";
 
   // The holes of this vocabulary are deliberate: such a vocabulary is created
   // by excluding some of the entries of a larger vocabulary, and is used in
@@ -47,7 +52,7 @@ class VocabularyInMemoryBinSearch
   // serializer), or as a non-owning view into externally-owned memory (after
   // `fromZeroCopyDeserializer`).
   Words words_;
-  std::variant<Indices, IndicesView> indices_;
+  IndexStorage indices_;
 
  public:
   // Construct an empty vocabulary
@@ -70,15 +75,13 @@ class VocabularyInMemoryBinSearch
       fromZeroCopyDeserializer(S& serializer) {
     VocabularyInMemoryBinSearch result;
     result.words_ = Words::fromZeroCopyDeserializer(serializer);
-    result.indices_ =
-        ad_utility::serialization::zeroCopyDeserializeToSpan<uint64_t>(
-            serializer);
+    result.indices_ = IndexStorage::fromZeroCopyDeserializer(serializer);
     return result;
   }
 
   // Const access to the indices, no matter whether they are currently owned or
   // only viewed.
-  IndicesView indices() const;
+  IndicesView indices() const { return indices_.view(); }
 
   // Read the vocabulary from a file. The file must have been created using a
   // `WordWriter`.
@@ -170,6 +173,10 @@ class VocabularyInMemoryBinSearch
     void finish();
   };
 
+  // The words are stored under the base filename itself, their explicit
+  // indices in an additional file (see `idsSuffix`).
+  static FileSuffixes fileSuffixes() { return {"", std::string{idsSuffix}}; }
+
   // A vocabulary with holes cannot be written via the `WordWriterBase`
   // interface (which cannot express the explicit indices), so this function
   // always throws. Use the nested `WordWriter` above instead.
@@ -188,19 +195,8 @@ class VocabularyInMemoryBinSearch
   // a non-owning, zero-copy view.
   AD_SERIALIZE_FRIEND_FUNCTION(VocabularyInMemoryBinSearch) {
     serializer | arg.words_;
-    if constexpr (ad_utility::serialization::WriteSerializer<S>) {
-      serializer << arg.indices();
-    } else {
-      auto& indices = arg.indices_.template emplace<Indices>();
-      serializer | indices;
-    }
+    serializer | arg.indices_;
   }
-
- private:
-  // Access the owned indices. Throws (via `std::get`) if this vocabulary
-  // currently only views its indices, which is a programming error (a
-  // zero-copy view is read-only).
-  Indices& ownedIndices() { return std::get<Indices>(indices_); }
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H

@@ -8,6 +8,7 @@
 #include "engine/Operation.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
 
 // BIND operation.
 class Bind : public Operation {
@@ -29,7 +30,11 @@ class Bind : public Operation {
   const parsedQuery::Bind& bind() const { return _bind; }
   [[nodiscard]] std::string getDescriptor() const override;
   [[nodiscard]] size_t getResultWidth() const override;
-  std::vector<QueryExecutionTree*> getChildren() override;
+
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
+ public:
   size_t getCostEstimate() override;
   LimitOffsetHandling handlesLimitOffset() const override;
   void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;

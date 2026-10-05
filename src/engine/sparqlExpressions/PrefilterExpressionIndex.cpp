@@ -17,6 +17,7 @@
 #include "global/ValueIdComparators.h"
 #include "index/IndexImpl.h"
 #include "util/ConstexprMap.h"
+#include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
 
 namespace prefilterExpressions {
@@ -53,10 +54,19 @@ static Id getIdFromColumnIndex(
 // order.
 // (3) Columns with `column index < evaluationColumn` must contain equal
 // values (`ValueId`s).
+//
+// NOTE: These are invariants of the block metadata of an index, which no query
+// can violate, and the check is linear in the number of blocks. It is run at
+// query planning time, once per prefilter evaluation, so it is only enabled
+// together with the other expensive checks (like the same check in the
+// constructor of `ScanSpecAndBlocks`).
 static void checkRequirementsBlockMetadata(
-    ql::span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
-  CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
-      input, evaluationColumn);
+    [[maybe_unused]] ql::span<const CompressedBlockMetadata> input,
+    [[maybe_unused]] size_t evaluationColumn) {
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
+        input, evaluationColumn);
+  }
 }
 
 namespace detail {
@@ -554,17 +564,22 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
   LocalVocab localVocab{};
   auto referenceId =
       getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, localVocab);
-  // Use getRangesForId (from valueIdComparators) to extract the ranges
-  // containing the relevant ValueIds.
-  // For pre-filtering with CompOp::EQ, we have to consider empty ranges.
-  // Reason: The referenceId could be contained within the bounds formed by
-  // the IDs of firstTriple_ and lastTriple_ (set false flag to keep
-  // empty ranges).
-  auto relevantIdRanges = Comparison != CompOp::EQ
-                              ? getRangesForId(idRange.begin(), idRange.end(),
-                                               referenceId, Comparison)
-                              : getRangesForId(idRange.begin(), idRange.end(),
-                                               referenceId, Comparison, false);
+  // Compute the ranges of the block boundary IDs (`idRange` holds the first
+  // and the last ID of each block) that satisfy the comparison, and map them
+  // to blocks.
+  //
+  // NOTE: A range is empty if the reference value lies between two
+  // consecutive boundary IDs, neither of which satisfies the comparison. If
+  // these are the first and the last ID of the same block, that block can
+  // still contain matching values, so empty ranges must be kept (last
+  // argument `false`). Besides `=`, this happens for a block that spans the
+  // boundary between non-negative and negative numbers, which are sorted after
+  // the non-negative ones: for `> 63000`, a block with the first ID 62950 and
+  // the last ID -10 yields an empty range but may contain 70000.
+  // `mapValueIdItPairToBlockRange` maps an empty range at a block's last ID to
+  // that block, and one at a block's first ID to no block.
+  auto relevantIdRanges = getRangesForId(idRange.begin(), idRange.end(),
+                                         referenceId, Comparison, false);
   return getTotalComplement
              ? detail::mapping::mapValueIdItRangesToBlockItRangesComplemented(
                    relevantIdRanges, idRange, blockRange)

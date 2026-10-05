@@ -1,0 +1,211 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#ifndef QLEVER_SRC_UTIL_COMPRESSEDBLOCKFILE_H
+#define QLEVER_SRC_UTIL_COMPRESSEDBLOCKFILE_H
+
+#include <atomic>
+#include <cstddef>
+#include <optional>
+#include <shared_mutex>
+#include <stdexcept>
+#include <string>
+#include <utility>
+
+#include "backports/memory.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/Exception.h"
+#include "util/File.h"
+#include "util/Log.h"
+#include "util/Synchronized.h"
+
+namespace ad_utility {
+
+// The default compression level of `ZstdWrapper::compress`, which is what a
+// `CompressedBlockFile` uses unless the caller says otherwise.
+constexpr inline int ZSTD_DEFAULT_LEVEL = 3;
+
+// A temporary file that stores an append-only sequence of independently
+// compressed blocks of bytes. A block is written via `appendBlock`, which
+// returns the `BlockMetadata` that is required to read that block back via
+// `readBlock`; the file itself stores no index of its own, so it is up to the
+// caller to keep those metadata around and to organize them (for example one
+// block per column of an `IdTable`, see the `compressedIdTable` namespace in
+// `engine/idTable/CompressedIdTableBlocks.h`).
+//
+// THREAD SAFETY: All the operations of this class may be called concurrently
+// from any number of threads. Both appending and reading take a shared lock
+// only: an append reserves its range of the file with an atomic counter and
+// then writes it with `pwrite` (see `File::write` with an explicit offset),
+// and a read uses `pread` (see `File::read` with an explicit offset). Any
+// number of appends and reads therefore run at the same time (a block that
+// was appended before, and that the caller consequently holds the metadata
+// of, is not touched by later appends). Only `clear` takes an exclusive lock,
+// see there.
+//
+// NOTE: Neither an append nor a read goes through the buffer of the `FILE*`,
+// so a block is readable as soon as `appendBlock` has returned, and no flush
+// is needed in between.
+//
+// NOTE: The file is deleted in the destructor, so this class is only suitable
+// for temporary data.
+class CompressedBlockFile {
+ public:
+  // How the blocks of a file are stored: a ZSTD compression level, or
+  // `std::nullopt` (see `NO_BLOCK_COMPRESSION` below) to store the bytes as
+  // they are. Which of the two is faster depends entirely on the caller.
+  // Compressing pays off for data that has to fit on disk, or that is written
+  // once and read often. For a short-lived file whose blocks are read back
+  // almost immediately it is often a pure loss, because the compression is CPU
+  // work that competes with the actual computation.
+  //
+  // NOTE: The setting applies to the whole file, so `readBlock` does not have
+  // to (and cannot) derive it from the metadata of a single block.
+  using CompressionLevel = std::optional<int>;
+
+  // Everything that is needed to read a single block back. The sizes are in
+  // bytes, and `compressedSize_ == uncompressedSize_` for a file that is
+  // stored uncompressed.
+  struct BlockMetadata {
+    size_t compressedSize_;
+    size_t uncompressedSize_;
+    size_t offsetInFile_;
+  };
+
+ private:
+  std::string filename_;
+  CompressionLevel compressionLevel_;
+  // NOTE: The file must not be opened in append mode (`a+`), because on Linux
+  // `pwrite` then ignores the offset and appends at the end of the file, which
+  // would break the reservation of the ranges in `appendBytes`.
+  Synchronized<File, std::shared_mutex> file_{filename_, "w+"};
+  // The offset at which the next block is appended, see `appendBytes`.
+  std::atomic<off_t> nextOffset_{0};
+
+ public:
+  // Create the file at `filename`, overwriting it if it already exists, and
+  // store its blocks with the given `compressionLevel`.
+  explicit CompressedBlockFile(
+      std::string filename,
+      CompressionLevel compressionLevel = ZSTD_DEFAULT_LEVEL)
+      : filename_{std::move(filename)}, compressionLevel_{compressionLevel} {}
+
+  // Close and delete the file. If the deletion fails, only warn, because a
+  // destructor must not throw.
+  ~CompressedBlockFile() {
+    file_.wlock()->close();
+    try {
+      ad_utility::deleteFile(filename_);
+    } catch (const std::exception& e) {
+      AD_LOG_WARN << "Deleting the temporary file \"" << filename_
+                  << "\" failed: " << e.what() << std::endl;
+    }
+  }
+
+  // The name of the underlying file.
+  const std::string& filename() const { return filename_; }
+
+  // The compression level that this file stores its blocks with.
+  CompressionLevel compressionLevel() const { return compressionLevel_; }
+
+  // Append the `numBytes` bytes at `data` to the file, compressing them unless
+  // this file was created with `NO_BLOCK_COMPRESSION`. Return the metadata that
+  // `readBlock` needs to read them back.
+  BlockMetadata appendBlock(const void* data, size_t numBytes) {
+    if (!compressionLevel_.has_value()) {
+      return {numBytes, numBytes, appendBytes(data, numBytes)};
+    }
+    auto compressed =
+        ZstdWrapper::compress(data, numBytes, compressionLevel_.value());
+    return {compressed.size(), numBytes,
+            appendBytes(compressed.data(), compressed.size())};
+  }
+
+  // Read the block that is described by `metadata` and decompress it into
+  // `target`, which has to have room for `metadata.uncompressedSize_` bytes.
+  void readBlock(const BlockMetadata& metadata, void* target) const {
+    if (!compressionLevel_.has_value()) {
+      // NOTE: An uncompressed block is read straight into the `target`, so this
+      // path needs neither an intermediate buffer nor a copy.
+      AD_CORRECTNESS_CHECK(metadata.compressedSize_ ==
+                           metadata.uncompressedSize_);
+      readBytes(metadata, target);
+      return;
+    }
+    // NOTE: The buffer is deliberately not zero-initialized, it is completely
+    // overwritten by `readBytes`.
+    auto compressed =
+        ql::make_unique_for_overwrite<char[]>(metadata.compressedSize_);
+    readBytes(metadata, compressed.get());
+    auto numBytesDecompressed = ZstdWrapper::decompressToBuffer(
+        compressed.get(), metadata.compressedSize_, static_cast<char*>(target),
+        metadata.uncompressedSize_);
+    AD_CORRECTNESS_CHECK(numBytesDecompressed == metadata.uncompressedSize_);
+  }
+
+  // Truncate the file, such that it can be reused. All the metadata that were
+  // returned by previous calls to `appendBlock` become invalid.
+  //
+  // NOTE: This may run concurrently with the other operations of this class.
+  // It takes an exclusive lock, so it blocks until all the appends and reads
+  // that are currently running have finished, and the appends and reads that
+  // start afterwards see the empty file. An append holds its shared lock from
+  // the reservation of its range until the end of its write, so no append can
+  // reserve a range of the old file and then write it to the new one.
+  void clear() {
+    auto file = file_.wlock();
+    file->close();
+    ad_utility::deleteFile(filename_);
+    file->open(filename_, "w+");
+    nextOffset_.store(0);
+  }
+
+ private:
+  // Append the `numBytes` bytes at `data` to the file and return the offset at
+  // which they were written. The range is reserved with an atomic counter and
+  // written with the positioned `File::write`, so this needs a shared lock
+  // only, see the note on the thread safety at the top of this class. The lock
+  // is taken before the reservation and held until the write has finished,
+  // which is what makes `clear` safe to call concurrently. Throw a
+  // `std::runtime_error` if the write fails (for example because the disk is
+  // full), so that this is noticed at the append and not only when the block
+  // is read back.
+  //
+  // NOTE: A reservation whose write then fails leaves a hole in the file,
+  // because the concurrent appends are already positioned past it. That is
+  // harmless: `appendBlock` returns the metadata of a block only if it was
+  // written completely, so nobody ever holds metadata that point into such a
+  // hole, and all the other blocks keep the ranges that they have reserved.
+  size_t appendBytes(const void* data, size_t numBytes) {
+    auto file = file_.rlock();
+    auto offset = nextOffset_.fetch_add(static_cast<off_t>(numBytes));
+    file->write(data, numBytes, offset);
+    return static_cast<size_t>(offset);
+  }
+
+  // Read the `compressedSize_` bytes of the block that is described by
+  // `metadata` into `target`.
+  void readBytes(const BlockMetadata& metadata, void* target) const {
+    auto numBytesRead =
+        file_.rlock()->read(target, metadata.compressedSize_,
+                            static_cast<off_t>(metadata.offsetInFile_));
+    AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
+                         static_cast<size_t>(numBytesRead) ==
+                             metadata.compressedSize_);
+  }
+};
+
+// Pass this as the compression level of a `CompressedBlockFile` to store its
+// blocks uncompressed, see `CompressedBlockFile::CompressionLevel`.
+constexpr inline CompressedBlockFile::CompressionLevel NO_BLOCK_COMPRESSION =
+    std::nullopt;
+
+}  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_COMPRESSEDBLOCKFILE_H

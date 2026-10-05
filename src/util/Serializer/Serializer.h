@@ -10,6 +10,7 @@
 #include <array>
 #include <stdexcept>
 
+#include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
@@ -339,7 +340,7 @@ CPP_template(typename T, typename S)(
   if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
     static constexpr size_t alignment = alignof(T);
-    size_t padding = (alignment - (currentPos % alignment)) % alignment;
+    size_t padding = ad_utility::alignUp(currentPos, alignment) - currentPos;
     if (padding > 0) {
       static constexpr std::array<char, alignment> zeros = {0};
       serializer.serializeBytes(zeros.data(), padding);
@@ -355,11 +356,32 @@ CPP_template(typename T, typename S)(
   if constexpr (usesAlignedSerialization<S>) {
     size_t currentPos = serializer.getCurrentPosition();
     static constexpr size_t alignment = alignof(T);
-    size_t padding = (alignment - (currentPos % alignment)) % alignment;
+    size_t padding = ad_utility::alignUp(currentPos, alignment) - currentPos;
     if (padding > 0) {
       serializer.skip(padding);
     }
   }
+}
+
+// Serialize the `element` at the given `position` of the `serializer` and
+// restore the serialization position that the `serializer` had before. Use
+// this to fill in a placeholder (for example a size that is only known at the
+// end) that has been written to a fixed position earlier.
+//
+// NOTE: The `serializer` has to support `get/setSerializationPosition`, which
+// not all `WriteSerializer`s do. For a `BufferedWriteSerializer` (which cannot
+// simply seek, because a part of the data might still be sitting in its
+// buffer) there is a dedicated overload in `BufferedSerializer.h`, and for a
+// `ByteBufferWriteSerializer` (which has no seekable position, but a buffer
+// that can be patched in place) in `ByteBufferSerializer.h`.
+CPP_template(typename S, typename T)(
+    requires WriteSerializer<S>) void serializeAtPosition(S& serializer,
+                                                          uint64_t position,
+                                                          const T& element) {
+  auto previousPosition = serializer.getSerializationPosition();
+  serializer.setSerializationPosition(position);
+  serializer << element;
+  serializer.setSerializationPosition(previousPosition);
 }
 
 }  // namespace ad_utility::serialization

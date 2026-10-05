@@ -55,8 +55,8 @@ CartesianProductJoin::CartesianProductJoin(
 }
 
 // ____________________________________________________________________________
-std::vector<QueryExecutionTree*> CartesianProductJoin::getChildren() {
-  std::vector<QueryExecutionTree*> result;
+qlm::vector<QueryExecutionTree*> CartesianProductJoin::getChildrenImpl() const {
+  qlm::vector<QueryExecutionTree*> result{allocator()};
   ql::ranges::copy(
       children_ | ql::views::transform([](auto& ptr) { return ptr.get(); }),
       std::back_inserter(result));
@@ -107,8 +107,8 @@ bool CartesianProductJoin::knownEmptyResult() {
 }
 
 // ____________________________________________________________________________
-void CartesianProductJoin::writeResultColumn(ql::span<Id> targetColumn,
-                                             ql::span<const Id> inputColumn,
+void CartesianProductJoin::writeResultColumn(IdColumnRef targetColumn,
+                                             ConstIdColumnRef inputColumn,
                                              size_t groupSize,
                                              size_t offset) const {
   // Copy each element from the `inputColumn` `groupSize` times to
@@ -389,9 +389,9 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
   // kept as a non-const `shared_ptr` so it can be updated in-place on each
   // iteration without a new allocation; the implicit conversion to
   // `shared_ptr<const IdTableView<0>>` makes it compatible with `idTables`.
-  auto placeholder = std::make_shared<IdTable>(0, allocator());
+  auto placeholder = makeShared<IdTable>(0, allocator());
   auto placeholderView =
-      std::make_shared<IdTableView<0>>(placeholder->asStaticView<0>());
+      makeShared<IdTableView<0>>(placeholder->asStaticView<0>());
   idTables.push_back(placeholderView);
 
   auto generatedTables = lazyResult->idTables();
