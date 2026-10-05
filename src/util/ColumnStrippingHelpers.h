@@ -12,10 +12,10 @@
 
 #include <set>
 
+#include "engine/QueryExecutionTree.h"
 #include "engine/StripColumns.h"
 #include "rdfTypes/Variable.h"
 #include "util/Algorithm.h"
-#include "engine/QueryExecutionTree.h"
 
 // A helper for the column stripping of operations.
 // It collects a set of variables (specified in the constructor and via the
@@ -26,7 +26,7 @@
 // children.
 class VarsRequiredFromSubtree {
  private:
- // Is used so that assert is executed before dereferencation of pointer.
+  // Is used so that assert is executed before dereferencation of pointer.
   static const std::set<Variable>& checkAndDereference(
       const std::set<Variable>* ptr) {
     AD_CORRECTNESS_CHECK(ptr != nullptr);
@@ -73,6 +73,20 @@ class VarsRequiredFromSubtree {
   FRIEND_TEST(VarsRequiredFromSubtree, add);
 };
 
+namespace columnStrippingHelpers {
+// A helper for the column stripping of operations.
+// It returns true when all the variables provided by the qet are requested from
+// the parent-operation. Otherwise it returns false.
+inline bool allVariablesAreRequired(
+    std::shared_ptr<QueryExecutionTree> qet,
+    const std::set<Variable>& variablesRequestedFromParent) {
+  return ql::ranges::all_of(
+      qet->getVariableColumns() | ql::views::keys,
+      [&variablesRequestedFromParent](const Variable& varNeeded) {
+        return ad_utility::contains(variablesRequestedFromParent, varNeeded);
+      });
+}
+
 // A helper for the column stripping of operations.
 // This function creates an execution tree with the given Operation as its root.
 // Some operations need certain variables to perform their operation, even
@@ -85,8 +99,8 @@ class VarsRequiredFromSubtree {
 // executed. If all variables needed by the operation are also requested by
 // the parent, the tree with the given Operation as root is returned
 // unchanged and without an additional StripColumns operation.
-  // TODO <joka921> It would be more efficient but more complicated to tell the
-  // DISTINCT operation directly to not export some of its keepIndices_.
+// TODO <joka921> It would be more efficient but more complicated to tell the
+// DISTINCT operation directly to not export some of its keepIndices_.
 template <typename Operation, typename... Args>
 std::optional<std::shared_ptr<QueryExecutionTree>>
 makeTreeWithOptionalStripOperation(
@@ -99,16 +113,14 @@ makeTreeWithOptionalStripOperation(
   // check whether all variables needed for the given operation are also
   // requested from the parent. And either return the QueryExecutionTree with or
   // without an additional StripColumns-Operation.
-  if (ql::ranges::all_of(
-          treeWithOperationAsRoot->getVariableColumns() | ql::views::keys,
-          [&variablesRequestedFromParent](const Variable& varNeeded) {
-            return ad_utility::contains(variablesRequestedFromParent,
-                                        varNeeded);
-          })) {
+  if (allVariablesAreRequired(treeWithOperationAsRoot,
+                              variablesRequestedFromParent)) {
     return treeWithOperationAsRoot;
   }
+
   return ad_utility::makeExecutionTree<StripColumns>(
       qec, std::move(treeWithOperationAsRoot), variablesRequestedFromParent);
 }
+}  // namespace columnStrippingHelpers
 
 #endif  // COLUMN_STRIPPING_HELPERS_H
