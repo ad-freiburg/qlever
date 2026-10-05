@@ -2017,35 +2017,64 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfTasksInFlight) {
   }
   // The blocks are compressed and written on the global thread pool, so the
   // only thing that the writer controls is the number of blocks that it keeps
-  // in flight, see `CompressedRelationWriter::makeBlockWriteQueue`.
+  // in flight, which is twice the number of blocks that are compressed and
+  // written concurrently, see `CompressedRelationWriter::makeBlockWriteQueue`.
   auto maxNumTasksInFlight = [](const CompressedRelationWriter& writer) {
     return writer.blockWriteQueue_.maxNumTasksInFlight();
   };
   {
-    // Without an override, the number of concurrent blocks is the number of
-    // threads of the global thread pool (which the `--num-threads` option of
-    // the index builder configures).
+    // Check if it is limited to the threads of the global thread pool.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1337);
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
     EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
-    // An override of 0 (used by the runtime index rebuild via
-    // `rebuild-permutation-writer-num-threads`) means "as many as the pool has
-    // threads".
+    // Check if it is expanded to the threads of the global thread pool.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(0);
     auto [filename, cleanup] = testFilenameWithCleanup();
-    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2, 0};
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
     EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
     // Check if minimum of 4 tasks is honored.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1);
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
+    EXPECT_EQ(maxNumTasksInFlight(writer), 4);
+  }
+  if (threads >= 3) {
+    // A value between the minimum and the cap is used as is.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(3);
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
+    EXPECT_EQ(maxNumTasksInFlight(writer), 6);
+  }
+  {
+    // An explicit override (used by the runtime index rebuild via
+    // `rebuild-permutation-writer-num-threads`) wins over the runtime
+    // parameter.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(0);
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2, 1};
     EXPECT_EQ(maxNumTasksInFlight(writer), 4);
   }
   {
+    // An override of 0 means "as many as the global thread pool has threads".
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1);
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2, 0};
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
+  }
+  {
     // An override is capped at the number of threads of the global thread
-    // pool.
+    // pool, just like the runtime parameter.
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2,
                                     1337};

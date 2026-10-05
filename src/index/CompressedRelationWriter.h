@@ -90,18 +90,18 @@ class CompressedRelationWriter {
       std::make_shared<BlockBufferPool>();
 
  public:
-  /// Create using a filename, to which the relation data will be written.
-  /// If `numWriterThreads` is set, it determines how many blocks this writer
-  /// compresses and writes concurrently; otherwise the number of threads of
-  /// the global thread pool is used (see `makeBlockWriteQueue`, which also
-  /// explains why this is no longer a number of threads).
+  // Create using a filename, to which the relation data will be written.
+  // If `numWriterThreads` is set, it determines how many blocks are
+  // compressed and written concurrently; otherwise the runtime parameter
+  // `permutation-writer-num-threads` is used (see `getNumConcurrentBlocks`).
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f, size_t rowsPerBlock,
       std::optional<size_t> numWriterThreads = std::nullopt)
       : outfile_{std::move(f)},
         numColumns_{numColumns},
         rowsPerBlock_{rowsPerBlock},
-        blockWriteQueue_{makeBlockWriteQueue(numWriterThreads)} {
+        blockWriteQueue_{
+            makeBlockWriteQueue(getNumConcurrentBlocks(numWriterThreads))} {
     AD_CONTRACT_CHECK(rowsPerBlock_ > 0,
                       "A block must have room for at least one row");
   }
@@ -435,21 +435,28 @@ class CompressedRelationWriter {
 
   // Create the queue for the compression and writing of blocks. The blocks are
   // compressed and written on the global thread pool (see
-  // `util/GlobalExecutor.h`), so this queue owns no threads of its own; the
-  // number derived below therefore no longer is a number of threads, but the
-  // number of blocks that this writer keeps in flight (queued or currently
-  // being compressed and written).
+  // `util/GlobalExecutor.h`), so this queue owns no threads of its own and
+  // only bounds the number of blocks that this writer keeps in flight (queued
+  // or currently being compressed and written).
   //
-  // That number is `numTasksInFlightOverride` if set, and otherwise the number
-  // of threads of the global thread pool, which the `--num-threads / -j`
-  // option of the index builder configures. In both cases, a value of 0 means
-  // "as many as the pool has threads", and larger values are capped at that
-  // number. At least 4 blocks are always allowed to be in flight, and the
-  // blocks are allowed to pile up to twice the requested number, such that the
-  // writer can also make progress while all the requested blocks are being
-  // compressed.
+  // The blocks are allowed to pile up to twice `numConcurrentBlocks` (but at
+  // least 4 blocks are always allowed to be in flight), such that the writer
+  // can also make progress while all the concurrent blocks are being
+  // compressed. All the blocks in flight may run at the same time if the pool
+  // has idle threads, except for `numConcurrentBlocks == 1`, where the blocks
+  // are compressed and written one after the other (on a strand of the pool).
+  // `numConcurrentBlocks` is typically computed by `getNumConcurrentBlocks`
+  // below.
   static ad_utility::TaskQueueOnExecutor makeBlockWriteQueue(
-      std::optional<size_t> numTasksInFlightOverride);
+      size_t numConcurrentBlocks);
+
+  // Return the number of blocks that are compressed and written concurrently.
+  // It is `numConcurrentBlocksOverride` if set, and otherwise determined by the
+  // runtime parameter "permutation-writer-num-threads". In both cases, a value
+  // of 0 means "as many as the global thread pool has threads", and larger
+  // values are capped at that number.
+  static size_t getNumConcurrentBlocks(
+      std::optional<size_t> numConcurrentBlocksOverride);
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfTasksInFlight);
 };

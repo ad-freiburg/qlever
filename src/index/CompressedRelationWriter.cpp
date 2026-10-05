@@ -14,8 +14,8 @@
 #include "index/CompressedRelationWriter.h"
 
 #include <algorithm>
+#include <boost/asio/strand.hpp>
 #include <cmath>
-#include <thread>
 
 #include "global/RuntimeParameters.h"
 #include "index/CompressedRelationHelpersImpl.h"
@@ -147,21 +147,37 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
-ad_utility::TaskQueueOnExecutor CompressedRelationWriter::makeBlockWriteQueue(
-    std::optional<size_t> numTasksInFlightOverride) {
+size_t CompressedRelationWriter::getNumConcurrentBlocks(
+    std::optional<size_t> numConcurrentBlocksOverride) {
+  size_t requestedBlocks = numConcurrentBlocksOverride.value_or(
+      getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
   // The blocks are compressed and written on the global thread pool, so the
   // number of threads that is available for them is the size of that pool,
   // which the `--num-threads / -j` option of the index builder configures (see
   // `ad_utility::setGlobalExecutorNumThreads`).
   size_t numThreads = ad_utility::globalExecutorNumThreads();
-  size_t requestedTasks = numTasksInFlightOverride.value_or(numThreads);
   // A value of 0 means "as many as the pool has threads", larger values are
   // capped at that number.
-  size_t numConcurrentBlocks =
-      requestedTasks == 0 ? numThreads : std::min(requestedTasks, numThreads);
+  return requestedBlocks == 0 ? numThreads
+                              : std::min(requestedBlocks, numThreads);
+}
+
+// _____________________________________________________________________________
+ad_utility::TaskQueueOnExecutor CompressedRelationWriter::makeBlockWriteQueue(
+    size_t numConcurrentBlocks) {
   // Allow at least 4 blocks to be in flight.
   size_t maxNumTasksInFlight = std::max<size_t>(4, numConcurrentBlocks * 2);
-  return ad_utility::TaskQueueOnExecutor{ad_utility::globalExecutor(),
+  // The in-flight bound only limits how many blocks are queued or running, not
+  // how many of them run at the same time on a pool with idle threads. For a
+  // single concurrent block, run the tasks on a strand of the pool, so that
+  // the blocks are compressed and written one after the other (the runtime
+  // index rebuild relies on this to leave the CPU to concurrent queries, see
+  // `rebuild-permutation-writer-num-threads`).
+  ql::any_io_executor executor = ad_utility::globalExecutor();
+  if (numConcurrentBlocks == 1) {
+    executor = boost::asio::make_strand(executor);
+  }
+  return ad_utility::TaskQueueOnExecutor{std::move(executor),
                                          maxNumTasksInFlight,
                                          "Compressing and writing blocks"};
 }
