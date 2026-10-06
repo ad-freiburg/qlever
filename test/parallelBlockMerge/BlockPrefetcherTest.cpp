@@ -22,7 +22,6 @@
 #include <mutex>
 #include <numeric>
 #include <optional>
-#include <stdexcept>
 #include <thread>
 #include <utility>
 #include <variant>
@@ -47,6 +46,19 @@ namespace net = boost::asio;
 using ad_utility::parallelBlockMerge::detail::BlockPrefetcher;
 using Block = size_t;
 using DeferredBlock = ad_utility::parallelBlockMerge::DeferredBlock<Block>;
+
+// The exception that the tests throw. Its message is a string literal, so that
+// it owns no memory besides the exception object itself. The freeing of a
+// message that is owned by the exception (e.g. by a `std::runtime_error`) would
+// be reported as a false positive by TSAN, see `misc/tsan-suppressions.txt`.
+class TestException : public std::exception {
+ private:
+  const char* message_;
+
+ public:
+  explicit TestException(const char* message) : message_{message} {}
+  const char* what() const noexcept override { return message_; }
+};
 
 // A fake sink whose `asyncGetNextBlock` completes with the given script of
 // outcomes (blocks in memory, blocks that still have to be read by a `Reader`,
@@ -217,7 +229,7 @@ class ThrowingSink {
   // it only determines the return type.
   template <typename CompletionToken>
   auto asyncGetNextBlock(CompletionToken&& completionToken) {
-    throw std::runtime_error{"sink threw"};
+    throw TestException{"sink threw"};
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr,
                                     std::optional<DeferredBlock>)>(
@@ -353,7 +365,7 @@ TEST(BlockPrefetcher, shutDownAfterLastValueOrRightAway) {
   absl::Cleanup joinPool = [&pool] { pool.join(); };
   std::vector<std::vector<FakeSink::Outcome>> scripts;
   scripts.push_back({FakeSink::EndOfMerge{}});
-  scripts.push_back({std::make_exception_ptr(std::runtime_error{"failed"})});
+  scripts.push_back({std::make_exception_ptr(TestException{"failed"})});
   scripts.push_back({Block{0}, FakeSink::EndOfMerge{}});
   for (const auto& script : scripts) {
     for (bool consumeLastValue : {true, false}) {
@@ -364,7 +376,7 @@ TEST(BlockPrefetcher, shutDownAfterLastValueOrRightAway) {
           try {
             while (prefetcher.getNextBlock().has_value()) {
             }
-          } catch (const std::runtime_error& error) {
+          } catch (const TestException& error) {
             EXPECT_STREQ(error.what(), "failed");
           }
         }
@@ -421,8 +433,7 @@ TEST(BlockPrefetcher, exceptionAfterBufferedBlocks) {
   net::thread_pool pool{2};
   absl::Cleanup joinPool = [&pool] { pool.join(); };
   auto script = blocksScript(5);
-  script.emplace_back(
-      std::make_exception_ptr(std::runtime_error{"merge failed"}));
+  script.emplace_back(std::make_exception_ptr(TestException{"merge failed"}));
   auto sink = std::make_shared<FakeSink>(pool.get_executor(), script);
   Prefetcher prefetcher{pool.get_executor(), sink, 10};
   // Let the read-ahead buffer everything before the consumer starts.
@@ -470,7 +481,7 @@ TEST(BlockPrefetcher, shutDownDropsBufferedException) {
   net::thread_pool pool{2};
   absl::Cleanup joinPool = [&pool] { pool.join(); };
   std::vector<FakeSink::Outcome> script{
-      Block{0}, std::make_exception_ptr(std::runtime_error{"merge failed"})};
+      Block{0}, std::make_exception_ptr(TestException{"merge failed"})};
   auto sink = std::make_shared<FakeSink>(pool.get_executor(), script);
   Prefetcher prefetcher{pool.get_executor(), sink, 10};
   // Let the read-ahead buffer the block and the exception before the shutdown.
@@ -565,8 +576,7 @@ TEST(BlockPrefetcher, exceptionOfARead) {
     absl::Cleanup joinPool = [&pool] { pool.join(); };
     std::vector<FakeSink::Outcome> script{
         Block{0}, FakeSink::Reader{[]() -> Block { return 1; }},
-        FakeSink::Reader{
-            []() -> Block { throw std::runtime_error{"read failed"}; }},
+        FakeSink::Reader{[]() -> Block { throw TestException{"read failed"}; }},
         Block{3}};
     if (withEnd) {
       script.emplace_back(FakeSink::EndOfMerge{});
