@@ -35,7 +35,7 @@ using PmrSsoProbeString =
 // capacity of `std::basic_string` is implementation-defined (e.g. 15 characters
 // for libstdc++ and 22 for libc++), so it is determined here by probing rather
 // than hardcoded.
-inline size_t pmrStringSsoCapacity() {
+inline size_t SsoCapacityOfPmrString() {
   // A counting memory resource lets us detect an allocation directly instead of
   // guessing from pointer addresses: a string uses SSO exactly when
   // constructing it performs no allocation through its allocator.
@@ -72,26 +72,26 @@ inline size_t pmrStringSsoCapacity() {
 
 // _____________________________________________________________________________
 // Check the explicit platform premise that `PmrSsoProbeString` stores strings
-// of up to `maxSize` characters inside its own object storage (Small String
+// of up to `minCapacity` characters inside its own object storage (Small String
 // Optimization), i.e. that constructing such a string performs no allocation
 // through its allocator. Tests whose logic depends on short strings keeping
 // their content inline (e.g. dangling-view regression tests) should state
-// exactly the sizes they rely on by passing `maxSize`; the failure message
+// exactly the sizes they rely on by passing `minCapacity`; the failure message
 // then points at the platform premise rather than at the test's own logic.
 // Preconditions:
-// - `maxSize > 0`: there are callers only for non-empty test words.
-// NOTE: There is deliberately no default for `maxSize`: the SSO capacity of
+// - `minCapacity > 0`: there are callers only for non-empty test words.
+// NOTE: There is deliberately no default for `minCapacity`: the SSO capacity of
 // `std::pmr::string` is implementation-defined (e.g. 15 characters for
 // libstdc++ and 22 for libc++), so every caller must state exactly the size
 // it relies on instead of silently depending on one STL's limit.
-inline void requirePmrStringInlineStorage(size_t maxSize) {
-  AD_CONTRACT_CHECK(maxSize > 0);
-  const size_t capacity = pmrStringSsoCapacity();
+inline void requireSsoCapacityOfPmrStringAtLeast(size_t minCapacity) {
+  AD_CONTRACT_CHECK(minCapacity > 0);
+  const size_t capacity = SsoCapacityOfPmrString();
   AD_CORRECTNESS_CHECK(
-      capacity >= maxSize,
+      capacity >= minCapacity,
       absl::StrCat("Platform premise violated: PmrSsoProbeString does not "
                    "store ",
-                   maxSize,
+                   minCapacity,
                    " characters on this platform (capacity: ", capacity, ")"));
 }
 
