@@ -452,6 +452,46 @@ TEST(CompressedIdTableBlockStorage, laterBlocksMayLandInMemory) {
 }
 
 // _____________________________________________________________________________
+TEST(CompressedIdTableBlockStorage,
+     onlyTheChunkOfTheConsumerKeepsBlocksInMemory) {
+  // A chunk that is ahead of the consumer spills all its blocks, although it
+  // has a free in-memory slot. Otherwise every chunk that has been merged
+  // completely, but not yet consumed, would keep blocks in memory, and the
+  // memory of the merge would grow with the total number of chunks.
+  net::io_context ioContext;
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 1);
+  Producer<0> producerOfChunkZero{storage, 0, makeValues<0>(1, {{0}}, true)};
+  Producer<0> producerOfChunkOne{storage, 1, makeValues<0>(1, {{10}}, false)};
+  runAndPoll(ioContext, [&] {
+    producerOfChunkZero.storeAll();
+    producerOfChunkOne.storeAll();
+  });
+  // The consumer starts with chunk zero, whose block therefore stays in memory,
+  // whereas the block of chunk one is spilled.
+  EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(0)));
+  auto sizeAfterTheSpill = ql::filesystem::file_size(storage.spillFilename(1));
+  EXPECT_GT(sizeAfterTheSpill, 0u);
+  GetOutcomes getsOfChunkZero;
+  runAndPoll(ioContext, [&] { get(storage, 0, getsOfChunkZero, true); });
+  EXPECT_THAT(getsOfChunkZero.blocks_,
+              ::testing::ElementsAre(makeRows(1, {0})));
+  EXPECT_TRUE(getsOfChunkZero.sawSentinel_);
+  // Once the consumer has moved on to chunk one, the blocks of that chunk stay
+  // in memory again, so the file does not grow anymore.
+  GetOutcomes getsOfChunkOne;
+  runAndPoll(ioContext, [&] { get(storage, 1, getsOfChunkOne, false); });
+  Producer<0> secondProducerOfChunkOne{storage, 1,
+                                       makeValues<0>(1, {{11}}, true)};
+  runAndPoll(ioContext, [&] { secondProducerOfChunkOne.storeAll(); });
+  EXPECT_EQ(ql::filesystem::file_size(storage.spillFilename(1)),
+            sizeAfterTheSpill);
+  runAndPoll(ioContext, [&] { get(storage, 1, getsOfChunkOne, true); });
+  EXPECT_THAT(getsOfChunkOne.blocks_,
+              ::testing::ElementsAre(makeRows(1, {10}), makeRows(1, {11})));
+  EXPECT_TRUE(getsOfChunkOne.sawSentinel_);
+}
+
+// _____________________________________________________________________________
 TEST(CompressedIdTableBlockStorage, theProducerIsNotBlockedByALaggingConsumer) {
   // The whole point of this storage: a producer runs ahead no matter how far
   // the consumer lags behind, in contrast to a storage that keeps its blocks in
