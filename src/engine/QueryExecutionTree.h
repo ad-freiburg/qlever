@@ -106,6 +106,13 @@ class QueryExecutionTree {
   getUpdatedQueryExecutionTreeWithPrefilterApplied(
       std::vector<Operation::PrefilterVariablePair> prefilterPairs) const;
 
+  // Call `Operation::makeTreeWithBindColumn` for the root operation, but only
+  // if all the variables of the `BIND` expression are visible in this tree.
+  // The variables that are hidden in this tree (see
+  // `Operation::setSelectedVariablesForSubquery`) remain hidden in the result.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const;
+
   size_t getDistinctEstimate(size_t col) const {
     return static_cast<size_t>(rootOperation_->getSizeEstimate() /
                                rootOperation_->getMultiplicity(col));

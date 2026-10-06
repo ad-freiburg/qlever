@@ -693,19 +693,18 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
   auto makeVariableExpr = [](const Variable& var) {
     return std::make_unique<sparqlExpression::VariableExpression>(var);
   };
-  auto singleBindPushDown = [&makeVariableExpr](
-                                auto factory,
-                                std::shared_ptr<QueryExecutionTree> child,
-                                const Variable& geomVar,
-                                const Variable& targetVar) {
-    return child->getRootOperation()->makeTreeWithBindColumn(parsedQuery::Bind{
-        sparqlExpression::SparqlExpressionPimpl{
-            factory(makeVariableExpr(geomVar)),
-            // The expression descriptor is not important as this
-            // `SparqlExpressionPimpl` is only used for `BIND` push down.
-            "Dummy descriptor for BIND push-down"},
-        targetVar});
-  };
+  auto singleBindPushDown =
+      [&makeVariableExpr](auto factory,
+                          std::shared_ptr<QueryExecutionTree> child,
+                          const Variable& geomVar, const Variable& targetVar) {
+        return child->makeTreeWithBindColumn(parsedQuery::Bind{
+            sparqlExpression::SparqlExpressionPimpl{
+                factory(makeVariableExpr(geomVar)),
+                // The expression descriptor is not important as this
+                // `SparqlExpressionPimpl` is only used for `BIND` push down.
+                "Dummy descriptor for BIND push-down"},
+            targetVar});
+      };
 
   // Factory functions to construct `BIND` instances for the bounding box
   // functions.

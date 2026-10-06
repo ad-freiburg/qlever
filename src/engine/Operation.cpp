@@ -698,6 +698,23 @@ void Operation::setSelectedVariablesForSubquery(
 }
 
 // ___________________________________________________________________________
+void Operation::hideVariablesHiddenIn(
+    const Operation& original,
+    const std::vector<Variable>& additionalVisibleVariables) {
+  // Variables can only be hidden by `setSelectedVariablesForSubquery`, which
+  // computes both maps. If one of them is missing, nothing is hidden.
+  if (!original.variableToColumnMap_ ||
+      !original.externallyVisibleVariableToColumnMap_) {
+    return;
+  }
+  std::vector<Variable> visibleVariables = additionalVisibleVariables;
+  ql::ranges::copy(
+      original.getExternallyVisibleVariableColumns() | ql::views::keys,
+      std::back_inserter(visibleVariables));
+  setSelectedVariablesForSubquery(visibleVariables);
+}
+
+// ___________________________________________________________________________
 std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
   const auto& varToColMap = getExternallyVisibleVariableColumns();
   const auto& sortedIndices = getResultSortedOn();
@@ -765,14 +782,7 @@ uint64_t Operation::getSizeEstimate() {
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Operation::clone() const {
   auto result = cloneImpl();
-
-  if (variableToColumnMap_ && externallyVisibleVariableToColumnMap_) {
-    // Make sure previously hidden variables remain hidden.
-    std::vector<Variable> visibleVariables;
-    ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
-                     std::back_inserter(visibleVariables));
-    result->setSelectedVariablesForSubquery(visibleVariables);
-  }
+  result->hideVariablesHiddenIn(*this);
   result->limitOffset_ = limitOffset_;
 
   auto compareTypes = [this, &result]() {

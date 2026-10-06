@@ -25,22 +25,6 @@ using std::string;
 
 using parsedQuery::SelectClause;
 
-namespace {
-// `Operation::makeSortedTree` and `Operation::makeDistinctTree` build a new
-// root operation from the children of the root operation of `original`.
-// Variables that were hidden in `original` (by a subquery when the columns are
-// not stripped, see `Operation::setSelectedVariablesForSubquery`) would
-// therefore become visible again in `rewritten`. Hide them again.
-void hideVariablesHiddenInOriginal(const QueryExecutionTree& original,
-                                   const QueryExecutionTree& rewritten) {
-  std::vector<Variable> visibleVariables;
-  ql::ranges::copy(original.getVariableColumns() | ql::views::keys,
-                   std::back_inserter(visibleVariables));
-  rewritten.getRootOperation()->setSelectedVariablesForSubquery(
-      visibleVariables);
-}
-}  // namespace
-
 // _____________________________________________________________________________
 QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec,
                                        std::shared_ptr<Operation> operation)
@@ -154,10 +138,43 @@ QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied(
 
   if (prefilterPairs.empty()) {
     return std::nullopt;
-  } else {
-    return rootOperation_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
-        prefilterPairs);
   }
+  auto result =
+      rootOperation_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+          prefilterPairs);
+  if (result.has_value()) {
+    AD_CORRECTNESS_CHECK(result.value() != nullptr);
+    // The prefiltered tree has a new root operation, on which the variables
+    // that are hidden in this tree would be visible again.
+    result.value()->getRootOperation()->hideVariablesHiddenIn(*rootOperation_);
+    AD_CORRECTNESS_CHECK(result.value()->getVariableColumns() ==
+                         getVariableColumns());
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+QueryExecutionTree::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  // The root operation also sees the variables that are hidden in this tree,
+  // so a `BIND` that uses a variable that is not visible must not be pushed
+  // down, because it would read the values of the hidden variable instead of
+  // an unbound one.
+  if (!ql::ranges::all_of(bind._expression.containedVariables(),
+                          [this](const Variable* variable) {
+                            return containsVariable(*variable);
+                          })) {
+    return std::nullopt;
+  }
+  auto result = rootOperation_->makeTreeWithBindColumn(bind);
+  if (result.has_value()) {
+    AD_CORRECTNESS_CHECK(result.value() != nullptr);
+    // Same as for the prefiltered tree above, but the `BIND` target is new.
+    result.value()->getRootOperation()->hideVariablesHiddenIn(*rootOperation_,
+                                                              {bind._target});
+  }
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -236,7 +253,10 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 
   if (sortedQet.has_value()) {
     AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
-    hideVariablesHiddenInOriginal(*qet, *sortedQet.value());
+    // The new root operation is built from the children of `rootOperation`, so
+    // the variables hidden in the latter would become visible again.
+    sortedQet.value()->getRootOperation()->hideVariablesHiddenIn(
+        *rootOperation);
     AD_CORRECTNESS_CHECK(qet->getVariableColumns() ==
                          sortedQet.value()->getVariableColumns());
     const auto& sortedRootOperation = sortedQet.value()->getRootOperation();
@@ -293,7 +313,9 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
   auto distinctQet = rootOperation->makeDistinctTree(distinctIndices);
   if (distinctQet.has_value()) {
     AD_CORRECTNESS_CHECK(distinctQet.value() != nullptr);
-    hideVariablesHiddenInOriginal(*qet, *distinctQet.value());
+    // See the comment in `createSortedTree` above.
+    distinctQet.value()->getRootOperation()->hideVariablesHiddenIn(
+        *rootOperation);
     // Pushing the `DISTINCT` down must preserve the set of visible variables,
     // but the exact column layout may change: e.g. pushing into a
     // `CartesianProductJoin` can collapse a child to a single row, which

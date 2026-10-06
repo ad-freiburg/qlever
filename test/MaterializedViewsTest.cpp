@@ -1671,6 +1671,34 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                     h::children(bindView(AC{{3, V{"?bind"}}})))));
   }
 
+  // A `BIND` that is pushed down keeps the variables that are hidden by a
+  // subquery (with `strip-columns` disabled) hidden, and a `BIND` that uses a
+  // hidden variable is not pushed down.
+  {
+    auto plannedQuery = qlv().parseAndPlanQuery(R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT * {
+        ?s view:bindView-o ?o .
+      }
+    )");
+    auto qet =
+        std::make_shared<QueryExecutionTree>(plannedQuery.queryExecutionTree());
+    qet->getRootOperation()->setSelectedVariablesForSubquery({V{"?o"}});
+    auto withBind = qet->makeTreeWithBindColumn(bind);
+    ASSERT_TRUE(withBind.has_value());
+    EXPECT_THAT(*withBind.value(), bindView(AC{{3, V{"?bind"}}}));
+    EXPECT_THAT(withBind.value()->getVariableColumns(),
+                ::testing::UnorderedElementsAre(::testing::Key(V{"?o"}),
+                                                ::testing::Key(V{"?bind"})));
+
+    // Now `?o` is hidden. The root operation itself still sees it, but the
+    // `BIND` must not read its values.
+    qet->getRootOperation()->setSelectedVariablesForSubquery({V{"?s"}});
+    EXPECT_TRUE(
+        qet->getRootOperation()->makeTreeWithBindColumn(bind).has_value());
+    EXPECT_FALSE(qet->makeTreeWithBindColumn(bind).has_value());
+  }
+
   // A `BIND` cannot be pushed into a regular `IndexScan` (not a materialized
   // view) or a `StripColumns` operation containing a regular `IndexScan`.
   {

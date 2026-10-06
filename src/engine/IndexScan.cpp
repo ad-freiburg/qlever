@@ -1137,7 +1137,8 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computePermutationColumnIndices() const {
   VariableToColumnMap map;
-  const auto& varToColInResult = getExternallyVisibleVariableColumns();
+  // Use the internal map, because a subquery might hide some of the variables.
+  const auto& varToColInResult = getInternallyVisibleVariableColumns();
 
   auto addVar = [this, &varToColInResult, &map](const Variable& var,
                                                 ColumnIndex col) {

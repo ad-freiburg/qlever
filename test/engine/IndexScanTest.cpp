@@ -892,6 +892,28 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
 }
 
 // _____________________________________________________________________________
+TEST(IndexScan, prefilteringKeepsHiddenVariablesHidden) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  using V = Variable;
+  auto qec = getQec("<x> <y> <z>.");
+  SparqlTripleSimple triple{V{"?x"}, iri("<y>"), V{"?z"}};
+  auto qet =
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
+  // `?z` is hidden by a subquery (with `strip-columns` disabled).
+  qet->getRootOperation()->setSelectedVariablesForSubquery({V{"?x"}});
+
+  // The prefiltered `IndexScan` is a new operation, but `?z` must still be
+  // hidden.
+  auto updatedQet = qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      makePrefilterVec(pr(lt(IntId(5)), V{"?x"})));
+  ASSERT_TRUE(updatedQet.has_value());
+  EXPECT_FALSE(updatedQet.value()->getRootOperation()->canResultBeCached());
+  EXPECT_THAT(updatedQet.value()->getVariableColumns(),
+              ::testing::UnorderedElementsAre(::testing::Key(V{"?x"})));
+}
+
+// _____________________________________________________________________________
 TEST(IndexScan, checkEvaluationWithPrefiltering) {
   using namespace makeFilterExpression;
   using namespace filterHelper;
