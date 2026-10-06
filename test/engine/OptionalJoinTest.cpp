@@ -1310,7 +1310,7 @@ TEST(OptionalJoin, rightIsScanWithoutVariables) {
   auto* qec = getQec(config);
   auto getId = makeGetId(qec->getIndex());
   // `<g1>` is matched by the right side, `<c>` is not.
-  auto [first, second] = std::minmax(getId("<g1>"), getId("<c>"));
+  auto [first, second] = std::minmax({getId("<g1>"), getId("<c>")});
   auto leftTable = makeIdTableFromVector({{first}, {second}});
 
   for (bool materializeLeft : {false, true}) {
