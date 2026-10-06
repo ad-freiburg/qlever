@@ -438,44 +438,34 @@ TEST(MergeHelpers, chunkBoundariesWithRampedUpLeadingChunks) {
   ql::ranges::generate(run, [i = size_t{0}]() mutable { return i++; });
   std::vector<SizeVec> runs{run};
   auto input = makeVectorInput(runs, 1);
-  auto splitPointsFor = [&input](size_t numChunks,
-                                 const SizeVec& firstChunkSizes) {
+  auto splitPointsFor = [&input](size_t numChunks, size_t firstChunkSize) {
     return chunkSplitPoints(computeChunkBoundaries(input, std::less<>{},
-                                                   numChunks, firstChunkSizes));
+                                                   numChunks, firstChunkSize));
   };
 
-  // No leading sizes at all is exactly the uniform overload: four chunks of 25
-  // elements each.
-  EXPECT_THAT(splitPointsFor(4, {}), ::testing::ElementsAre(24u, 49u, 74u));
-  // Two small leading chunks, then uniform chunks of `100 / 4 == 25` elements,
-  // so the chunks start after `5`, `15`, `40`, `65` and `90` elements.
-  EXPECT_THAT(splitPointsFor(4, {5, 10}),
-              ::testing::ElementsAre(4u, 14u, 39u, 64u, 89u));
-  // A leading size that is not smaller than a uniform chunk is ignored,
-  // together with all the sizes after it. Here only the `5` is a ramp-up, so
-  // the `25` and the `10` are both dropped and the chunks start after `5`,
-  // `30`, `55` and `80` elements.
-  EXPECT_THAT(splitPointsFor(4, {5, 25, 10}),
-              ::testing::ElementsAre(4u, 29u, 54u, 79u));
-  // The uniform chunks are already smaller than every leading size, so the
-  // ramp-up is skipped completely and the parallelism is unaffected.
-  EXPECT_THAT(splitPointsFor(4, {40, 50}),
-              ::testing::ElementsAre(24u, 49u, 74u));
+  // A first chunk size of `0` is exactly the uniform overload: four chunks of
+  // 25 elements each.
+  EXPECT_THAT(splitPointsFor(4, 0), ::testing::ElementsAre(24u, 49u, 74u));
+  // The leading chunks have `5`, `10` and `20` elements, the next doubling
+  // would reach the uniform size of `100 / 4 == 25`, so the chunks start after
+  // `5`, `15`, `35`, `60` and `85` elements.
+  EXPECT_THAT(splitPointsFor(4, 5),
+              ::testing::ElementsAre(4u, 14u, 34u, 59u, 84u));
+  // The leading chunks have `12` and `24` elements.
+  EXPECT_THAT(splitPointsFor(4, 12),
+              ::testing::ElementsAre(11u, 35u, 60u, 85u));
+  // A first chunk that is not smaller than a uniform chunk disables the
+  // ramp-up completely, so the parallelism is unaffected.
+  EXPECT_THAT(splitPointsFor(4, 25), ::testing::ElementsAre(24u, 49u, 74u));
+  EXPECT_THAT(splitPointsFor(4, 40), ::testing::ElementsAre(24u, 49u, 74u));
   // The property that the cases above exercise one by one: the ramp-up never
   // *reduces* the number of chunks, so it can never cost parallelism.
-  for (const SizeVec& firstChunkSizes :
-       {SizeVec{}, SizeVec{5, 10}, SizeVec{5, 25, 10}, SizeVec{40, 50},
-        SizeVec{1}, SizeVec{99}, SizeVec{100, 1}}) {
-    SCOPED_TRACE(::testing::PrintToString(firstChunkSizes));
-    EXPECT_GE(splitPointsFor(4, firstChunkSizes).size() + 1, 4u);
+  for (size_t firstChunkSize : {0, 1, 5, 12, 24, 25, 99, 100, 1000}) {
+    SCOPED_TRACE(firstChunkSize);
+    EXPECT_GE(splitPointsFor(4, firstChunkSize).size() + 1, 4u);
   }
   // A single chunk needs no split points at all.
-  EXPECT_THAT(splitPointsFor(1, {5, 10}), ::testing::IsEmpty());
-  // A leading size of zero is illegal, because it would describe an empty
-  // chunk.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      computeChunkBoundaries(input, std::less<>{}, 4, SizeVec{5, 0}),
-      ::testing::HasSubstr("size > 0"));
+  EXPECT_THAT(splitPointsFor(1, 5), ::testing::IsEmpty());
 }
 
 // _____________________________________________________________________________

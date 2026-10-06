@@ -225,47 +225,43 @@ CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
       });
 }
 
-// The same as the `numChunks` overload above, but with additional explicit
-// sizes for the leading chunks, which reduces the latency at the start of the
-// merge (the consumer has to drain the chunks in the order of their index, so
-// it reaches the output blocks that the later chunks have already buffered
-// sooner). The `i`-th chunk gets the size `firstChunkSizes[i]`, and all the
-// remaining chunks get the size that `numChunks` implies for the given input.
+// The same as the `numChunks` overload above, but with a ramp-up of the
+// leading chunks, which reduces the latency at the start of the merge (the
+// consumer has to drain the chunks in the order of their index, so it reaches
+// the output blocks that the later chunks have already buffered sooner). The
+// first chunk gets the size `firstChunkSize`, and each following chunk doubles
+// the size of its predecessor until that size reaches the size of a uniform
+// chunk (the size that `numChunks` implies for the given input). All the
+// remaining chunks get that uniform size.
 //
-// A leading size that is not smaller than the size of a uniform chunk is
-// ignored, together with all the sizes after it. The ramp-up can therefore
-// never *reduce* the number of chunks and hence never cost parallelism: an
-// input that is so small that even a uniform chunk is smaller than the leading
-// sizes is split uniformly, exactly as it would be without them.
+// The ramp-up therefore never *reduces* the number of chunks and hence never
+// costs parallelism: if even the first chunk is not smaller than a uniform
+// chunk, then the input is split uniformly, exactly as it would be without the
+// ramp-up. As the leading chunks are together smaller than two uniform chunks,
+// the ramp-up is over after a small fraction of the input.
 //
-// NOTE: An empty `firstChunkSizes` is exactly the overload above.
+// NOTE: A `firstChunkSize` of `0` is exactly the overload above.
 CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
     std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
         const Input& input, const Comparator& comparator, size_t numChunks,
-        const std::vector<size_t>& firstChunkSizes) {
+        size_t firstChunkSize) {
   using Element = typename Input::Element;
-  AD_CONTRACT_CHECK(ql::ranges::all_of(firstChunkSizes,
-                                       [](size_t size) { return size > 0; }));
-  if (firstChunkSizes.empty()) {
+  if (firstChunkSize == 0) {
     return computeChunkBoundaries(input, comparator, numChunks);
   }
   if (numChunks <= 1) {
     return singleChunk<Element>();
   }
   return detail::chunkBoundariesImpl(
-      input, comparator,
-      [numChunks, &firstChunkSizes](size_t totalNumElements) {
+      input, comparator, [numChunks, firstChunkSize](size_t totalNumElements) {
         const size_t uniformChunkSize =
             std::max<size_t>(1, totalNumElements / numChunks);
-        auto isSmallerThanUniform = [uniformChunkSize](size_t size) {
-          return size < uniformChunkSize;
-        };
-        auto leadingSizes =
-            ql::ranges::find_if_not(firstChunkSizes, isSmallerThanUniform);
-        return detail::targetsFromChunkSizes(
-            totalNumElements,
-            std::vector<size_t>(firstChunkSizes.begin(), leadingSizes),
-            uniformChunkSize);
+        std::vector<size_t> leadingSizes;
+        for (size_t size = firstChunkSize; size < uniformChunkSize; size *= 2) {
+          leadingSizes.push_back(size);
+        }
+        return detail::targetsFromChunkSizes(totalNumElements, leadingSizes,
+                                             uniformChunkSize);
       });
 }
 
