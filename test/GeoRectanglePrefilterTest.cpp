@@ -287,6 +287,7 @@ TEST_F(GeoRectangleExpressionTest, evaluate) {
   EXPECT_TRUE(*clone == expr);
   GeoRectangleExpression otherExpr{GeoRectangle{0, 0, 1, 1}};
   EXPECT_FALSE(*otherExpr.clone() == expr);
+  EXPECT_FALSE(expr == *expr.logicalComplement());
   EXPECT_THAT(expr.asString(0), ::testing::HasSubstr("GeoRectangleExpression"));
 
   // The logical complement keeps all blocks.
@@ -469,6 +470,18 @@ TEST(GeoRectanglePrefilter, rowFilterOnPrefilteredScan) {
   // (measured on the prefiltered scan's own computation, before the full
   // scan's result, which shares the cache key, is in the cache).
   EXPECT_LT(prefilteredRows, fullScanRows);
+
+  // A clone of the row filter drops the same rows, also from the lazy result
+  // of the scan.
+  auto clone = rowFilter->clone();
+  qec->clearCacheUnpinnedOnly();
+  auto lazyResult = clone->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
+  ASSERT_FALSE(lazyResult->isFullyMaterialized());
+  size_t numLazyRows = 0;
+  for (const auto& pair : lazyResult->idTables()) {
+    numLazyRows += pair.idTable_.numRows();
+  }
+  EXPECT_EQ(numLazyRows, 4u);
 }
 
 // The runtime block prefilter: with a non-constant (here: two-row) small
@@ -943,6 +956,16 @@ TEST(GeoRectanglePrefilter, plannerEvaluatesSmallComponent) {
     EXPECT_THAT(rowFilterRectangles(qetNoBudget, Variable{"?g1"}),
                 ::testing::IsEmpty());
   }
+
+  // A part with more than four triples is not evaluated.
+  std::string queryLarge = absl::StrCat(
+      queryHead,
+      " ?p <hasGeom> ?r . ?p <hasType> ?t . ?p <hasNode> ?n . ?p <a> ?x .",
+      " ?p <b> ?y . FILTER geof:sfIntersects(?r, ?g1)",
+      " FILTER geof:sfIntersects(?g1, ?g2) }");
+  auto qetLarge = queryPlannerTestHelpers::parseAndPlan(queryLarge, qec);
+  EXPECT_THAT(rowFilterRectangles(qetLarge, Variable{"?g1"}),
+              ::testing::IsEmpty());
 }
 
 // The size estimates of the children of the spatial joins in the plan `qet`
@@ -971,7 +994,8 @@ std::vector<size_t> spatialJoinSideSizeEstimates(
 // that its rectangle is that of the geometries near the point only.
 TEST(GeoRectanglePrefilter, plannerEvaluatesComponentWithFixedSpatialJoin) {
   // The geometries within 100 km of the point are `<lineA>` and `<pointNear>`
-  // (`<lineB>` is about 165 km away), and `?g2` intersects one of them. The
+  // (`<lineB>` is about 165 km away, and excluded by a plain `FILTER` as
+  // well), and `?g2` intersects one of them. The
   // budget of rows lets only the part with the spatial join be evaluated (two
   // rows), not the scan of `?g2`.
   auto* qec = geoQec();
@@ -985,7 +1009,8 @@ TEST(GeoRectanglePrefilter, plannerEvaluatesComponentWithFixedSpatialJoin) {
       BIND ("POINT(10.5 10.0)"^^geo:wktLiteral AS ?c)
       ?s1 <hasGeom> ?g1 . ?s2 <hasGeom> ?g2 .
       FILTER (geof:distance(?c, ?g1, unit:M) <= 100000)
-      FILTER geof:sfIntersects(?g1, ?g2) })q";
+      FILTER geof:sfIntersects(?g1, ?g2)
+      FILTER (?s1 != <lineB>) })q";
   auto qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
 
   // The scans of `?g2` are prefiltered with the rectangle of the two near

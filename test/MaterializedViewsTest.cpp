@@ -2107,6 +2107,32 @@ TEST(MaterializedViewsSpatialJoinTest, EvaluatedPartFilterOnViewCoveredSide) {
   auto plannedQuery = qlv.parseAndPlanQuery(query);
   const auto& tree = plannedQuery.queryExecutionTree();
   EXPECT_TRUE(containsViewScan(tree)) << tree.getCacheKey();
+
+  // With a fixed polygon instead of the fixed subject, and without any
+  // evaluation at planning time, the scans of the side that the view covers,
+  // also the scan of the view, are prefiltered with the rectangle of the
+  // polygon. The plan uses the view, and its result is the same as without
+  // the prefilter.
+  auto noEvaluation = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(0);
+  const std::string queryFixedPolygon = R"qy(
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    SELECT * {
+      ?o geo:hasGeometry ?m . ?m geo:asWKT ?g .
+      FILTER geof:sfContains("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))"^^geo:wktLiteral, ?g)
+    }
+  )qy";
+  auto numRows = [&qlv](const std::string& q) {
+    qlv.clearQueryResultCache();
+    auto planned = qlv.parseAndPlanQuery(q);
+    EXPECT_TRUE(containsViewScan(planned.queryExecutionTree()));
+    return planned.queryExecutionTree().getResult()->idTableView().numRows();
+  };
+  auto numRowsWithPrefilter = numRows(queryFixedPolygon);
+  auto noPrefilter = setRuntimeParameterForTest<
+      &RuntimeParameters::enablePrefilterOnIndexScans_>(false);
+  EXPECT_EQ(numRows(queryFixedPolygon), numRowsWithPrefilter);
 }
 
 // _____________________________________________________________________________

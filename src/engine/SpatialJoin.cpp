@@ -521,38 +521,30 @@ std::optional<ad_utility::GeoRectangle> SpatialJoin::boundingRectangleOfColumn(
       result->maxLat_ = std::max(result->maxLat_, lat);
     }
   };
+  auto extendByBox = [&extend](const auto& box) {
+    extend(box.lowerLeft().getLng(), box.lowerLeft().getLat());
+    extend(box.upperRight().getLng(), box.upperRight().getLat());
+  };
   for (Id id : table.getColumn(column)) {
-    switch (id.getDatatype()) {
-      case Datatype::GeoPoint: {
-        auto point = id.getGeoPoint();
-        extend(point.getLng(), point.getLat());
-        break;
+    auto datatype = id.getDatatype();
+    if (datatype == Datatype::GeoPoint) {
+      // A point, whose coordinates are encoded in the `Id`.
+      auto point = id.getGeoPoint();
+      extend(point.getLng(), point.getLat());
+    } else if (datatype == Datatype::VocabIndex) {
+      // A literal of the vocabulary, with its precomputed geometry info.
+      if (auto geoInfo = index.getVocab().getGeoInfo(id.getVocabIndex())) {
+        extendByBox(geoInfo.value().getBoundingBox());
       }
-      case Datatype::VocabIndex: {
-        auto geoInfo = index.getVocab().getGeoInfo(id.getVocabIndex());
-        if (geoInfo.has_value()) {
-          auto box = geoInfo.value().getBoundingBox();
-          extend(box.lowerLeft().getLng(), box.lowerLeft().getLat());
-          extend(box.upperRight().getLng(), box.upperRight().getLat());
+    } else if (datatype == Datatype::LocalVocabIndex) {
+      // A literal of the local vocabulary, whose bounding box is computed.
+      const auto& literalOrIri = *id.getLocalVocabIndex();
+      if (literalOrIri.isLiteral()) {
+        if (auto box = ad_utility::GeometryInfo::getBoundingBox(
+                literalOrIri.toStringRepresentation())) {
+          extendByBox(box.value());
         }
-        break;
       }
-      case Datatype::LocalVocabIndex: {
-        const auto& literalOrIri = *id.getLocalVocabIndex();
-        if (literalOrIri.isLiteral()) {
-          auto box = ad_utility::GeometryInfo::getBoundingBox(
-              literalOrIri.toStringRepresentation());
-          if (box.has_value()) {
-            extend(box.value().lowerLeft().getLng(),
-                   box.value().lowerLeft().getLat());
-            extend(box.value().upperRight().getLng(),
-                   box.value().upperRight().getLat());
-          }
-        }
-        break;
-      }
-      default:
-        break;
     }
   }
   return result;
@@ -579,9 +571,11 @@ SpatialJoin::applyRuntimeGeoBlockPrefilter(
 
   // The (estimated) smaller side gets materialized (its result is returned,
   // so that `prepareJoin` reuses it) and provides the bounding rectangle; the
-  // other side's scan gets its blocks pruned. Avoid computing the rectangle
-  // over very large sides.
-  constexpr uint64_t maxSmallSideRows = 16'000'000;
+  // other side's scan gets its blocks pruned.
+  //
+  // NOTE: The rectangle is computed from the precomputed geometry info, which
+  // is cheap compared to the join, which reads and tests all geometries of
+  // the smaller side anyway.
   std::shared_ptr<const Result> smallResult;
   auto tryPrefilter = [&](const std::shared_ptr<QueryExecutionTree>& smallChild,
                           const Variable& smallVar,
@@ -590,9 +584,6 @@ SpatialJoin::applyRuntimeGeoBlockPrefilter(
       -> std::optional<std::shared_ptr<QueryExecutionTree>> {
     smallResult = smallChild->getResult();
     const auto& smallTable = smallResult->idTableView();
-    if (smallTable.size() > maxSmallSideRows) {
-      return std::nullopt;
-    }
     ad_utility::Timer timer{ad_utility::Timer::Started};
     auto rectangle = boundingRectangleOfColumn(
         smallTable, smallChild->getVariableColumn(smallVar),

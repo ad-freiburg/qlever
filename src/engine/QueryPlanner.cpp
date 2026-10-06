@@ -2268,24 +2268,25 @@ void QueryPlanner::applyGeoRectanglePrefilters(
   using ad_utility::GeoRectangle;
 
   // The spatial joins among the filter substitutes, with their two geometry
-  // variables.
+  // variables and the index of their filter in `filters`.
   struct SpatialJoinEdge {
     SpatialJoin* join_;
     Variable left_;
     Variable right_;
+    size_t filterIndex_;
   };
   std::vector<SpatialJoinEdge> edges;
-  for (auto& filterAndSubst : filters) {
-    if (!filterAndSubst.hasSubstitute()) {
+  for (size_t i = 0; i < filters.size(); ++i) {
+    if (!filters[i].hasSubstitute()) {
       continue;
     }
     auto* spatialJoin = dynamic_cast<SpatialJoin*>(
-        filterAndSubst.substitute_->_qet->getRootOperation().get());
+        filters[i].substitute_->_qet->getRootOperation().get());
     if (spatialJoin == nullptr) {
       continue;
     }
     auto [left, right] = spatialJoin->getSpatialJoinVariables();
-    edges.push_back({spatialJoin, std::move(left), std::move(right)});
+    edges.push_back({spatialJoin, std::move(left), std::move(right), i});
   }
   if (edges.empty()) {
     return;
@@ -2336,27 +2337,23 @@ void QueryPlanner::applyGeoRectanglePrefilters(
   };
 
   // The fixed sides of the spatial joins: a one-row `VALUES` that the
-  // rewriting of the filter attached as a child, or a variable bound by a
-  // `BIND` of a constant expression among the `seeds` (such a `BIND` is
-  // evaluated here, which is cheap: it has one row). The rectangle of a
-  // fixed side contains all of its geometries.
+  // rewriting of the filter attached as a child (the only kind of child a
+  // substitute has, see `resolveGeoOperand`), or a variable bound by a `BIND`
+  // of a constant expression among the `seeds` (such a `BIND` is evaluated
+  // here, which is cheap: it has one row). The rectangle of a fixed side
+  // contains all of its geometries.
   ad_utility::HashSet<Variable> fixedVariables;
   for (const auto& edge : edges) {
     for (const auto* child : edge.join_->getChildren()) {
       const auto* values =
           dynamic_cast<const Values*>(child->getRootOperation().get());
-      if (values == nullptr) {
-        continue;
-      }
+      AD_CORRECTNESS_CHECK(values != nullptr);
       const auto& parsed = values->parsedValues();
-      if (parsed._variables.size() != 1 || parsed._values.size() != 1 ||
-          parsed._values.at(0).size() != 1) {
-        continue;
-      }
+      AD_CORRECTNESS_CHECK(parsed._variables.size() == 1 &&
+                           parsed._values.size() == 1 &&
+                           parsed._values.at(0).size() == 1);
       const auto& var = parsed._variables.at(0);
-      if (var != edge.left_ && var != edge.right_) {
-        continue;
-      }
+      AD_CORRECTNESS_CHECK(var == edge.left_ || var == edge.right_);
       if (auto rectangle = sparqlExpression::geoRectangleOfConstantGeometry(
               parsed._values.at(0).at(0))) {
         addRectangle(var, rectangle.value(), true);
@@ -2377,9 +2374,6 @@ void QueryPlanner::applyGeoRectanglePrefilters(
     }
     auto result = plan._qet->getRootOperation()->getResult(
         false, ComputationMode::FULLY_MATERIALIZED);
-    if (result == nullptr || !result->isFullyMaterialized()) {
-      continue;
-    }
     if (auto rectangle = SpatialJoin::boundingRectangleOfColumn(
             result->idTableView(), plan._qet->getVariableColumn(target),
             _qec->getIndex())) {
@@ -2480,16 +2474,8 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       // (a fixed `VALUES` is already a child of the spatial join).
       auto componentFilters = filtersWithoutSubstitutes;
       auto componentFilterIndex = originalFilterIndex;
-      for (size_t i = 0; i < filters.size(); ++i) {
-        if (!filters[i].hasSubstitute()) {
-          continue;
-        }
-        auto* spatialJoin = dynamic_cast<SpatialJoin*>(
-            filters[i].substitute_->_qet->getRootOperation().get());
-        if (spatialJoin == nullptr) {
-          continue;
-        }
-        auto [left, right] = spatialJoin->getSpatialJoinVariables();
+      for (const auto& edge : edges) {
+        const auto& [spatialJoin, left, right, filterIndex] = edge;
         auto inComponent = [&component](const Variable& var) {
           return ql::ranges::any_of(component, [&var](const SubtreePlan& plan) {
             return plan._qet->containsVariable(var);
@@ -2512,8 +2498,8 @@ void QueryPlanner::applyGeoRectanglePrefilters(
                        })) {
           continue;
         }
-        componentFilters.push_back(filters[i]);
-        componentFilterIndex.push_back(i);
+        componentFilters.push_back(filters[filterIndex]);
+        componentFilterIndex.push_back(filterIndex);
       }
 
       // Plan the component with the replacement plans that lie within it (for
@@ -2533,9 +2519,6 @@ void QueryPlanner::applyGeoRectanglePrefilters(
           std::move(componentReplacementPlans));
       applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
           plans, componentFilters);
-      if (plans.empty()) {
-        continue;
-      }
       const auto& cheapest = plans.at(findCheapestExecutionTree(plans));
       if (cheapest.getSizeEstimate() > maxRows ||
           cheapest.getCostEstimate() > maxCost) {
@@ -2547,11 +2530,12 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       try {
         result =
             operation->getResult(false, ComputationMode::FULLY_MATERIALIZED);
-      } catch (const ad_utility::CancellationException&) {
-        throw;
       } catch (const std::exception& e) {
         // The component cannot be evaluated here (for example, because it
         // exceeds the memory limit): plan without its rectangle.
+        //
+        // NOTE: A cancellation of the query is caught here as well, but the
+        // next `checkCancellation` of the planning throws it again.
         AD_LOG_DEBUG << "Evaluating a part of the query at planning time "
                         "failed: "
                      << e.what() << std::endl;
@@ -2703,17 +2687,16 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       if (scanBindsVariable(plan, geometryVariable) != std::optional{true}) {
         continue;
       }
-      auto prefiltered = plan._qet->getRootOperation()
-                             ->getUpdatedQueryExecutionTreeWithPrefilterApplied(
-                                 makePrefilter());
-      if (!prefiltered.has_value()) {
-        continue;
+      if (auto prefiltered =
+              plan._qet->getRootOperation()
+                  ->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                      makePrefilter())) {
+        prefilteredSeeds.push_back(plan);
+        prefilteredSeeds.back()._qet = std::move(prefiltered.value());
+        numCandidates = std::min<uint64_t>(
+            numCandidates.value_or(prefilteredSeeds.back().getSizeEstimate()),
+            prefilteredSeeds.back().getSizeEstimate());
       }
-      prefilteredSeeds.push_back(plan);
-      prefilteredSeeds.back()._qet = std::move(prefiltered.value());
-      numCandidates = std::min<uint64_t>(
-          numCandidates.value_or(prefilteredSeeds.back().getSizeEstimate()),
-          prefilteredSeeds.back().getSizeEstimate());
     }
     if (!numCandidates.has_value()) {
       continue;

@@ -828,10 +828,8 @@ std::string GeoRectangleExpression::asString(
 BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
     const IndexImpl& index, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange, bool getTotalComplement) const {
-  if (getTotalComplement) {
-    // See `logicalComplement`: stay conservative under negation.
-    return {{blockRange.begin(), blockRange.end()}};
-  }
+  // A negation is evaluated via `logicalComplement`, which keeps all blocks.
+  AD_CORRECTNESS_CHECK(!getTotalComplement);
 
   // Compute the closed intervals `[lowerId, upperId]` of `ValueId`s that may
   // belong to geometries whose bounding box intersects the rectangle. The
