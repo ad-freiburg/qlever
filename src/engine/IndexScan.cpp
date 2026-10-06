@@ -552,8 +552,8 @@ std::vector<float> IndexScan::computeMultiplicitiesForView(
 // _____________________________________________________________________________
 void IndexScan::determineMultiplicities() {
   auto view = permutation().materializedView();
-  multiplicity_ = view ? computeMultiplicitiesForView(*view)
-                       : computeMultiplicitiesForIndex();
+  multiplicity_ = view != nullptr ? computeMultiplicitiesForView(*view)
+                                  : computeMultiplicitiesForIndex();
 
   if (varsToKeep_.has_value()) {
     std::vector<float> actualMultiplicites;
