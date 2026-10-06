@@ -181,15 +181,6 @@ std::vector<FakeSink::Outcome> blocksScript(size_t numBlocks) {
   return script;
 }
 
-// Wait (for at most a few seconds) until `condition` holds.
-void waitUntil(const std::function<bool()>& condition) {
-  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
-  while (!condition() && std::chrono::steady_clock::now() < deadline) {
-    std::this_thread::sleep_for(std::chrono::milliseconds{1});
-  }
-  ASSERT_TRUE(condition());
-}
-
 // A sink whose `asyncGetNextBlock` throws right away instead of reporting the
 // exception as a value, which violates the contract of the
 // `PrefetchableSinkConcept`, but must still not leave the consumer hanging.
@@ -284,11 +275,13 @@ TEST(BlockPrefetcher, readAheadIsBounded) {
     auto sink =
         std::make_shared<FakeSink>(pool.get_executor(), blocksScript(100));
     Prefetcher prefetcher{pool.get_executor(), sink, numPrefetched};
-    waitUntil([&] { return sink->numCalls() == numPrefetched + 1; });
+    ASSERT_TRUE(
+        waitUntil([&] { return sink->numCalls() == numPrefetched + 1; }));
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     EXPECT_EQ(sink->numCalls(), numPrefetched + 1);
     EXPECT_EQ(prefetcher.getNextBlock(), Block{0});
-    waitUntil([&] { return sink->numCalls() == numPrefetched + 2; });
+    ASSERT_TRUE(
+        waitUntil([&] { return sink->numCalls() == numPrefetched + 2; }));
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     EXPECT_EQ(sink->numCalls(), numPrefetched + 2);
     // The shutdown wakes up the filler, which is suspended because the buffer
@@ -318,9 +311,9 @@ TEST(BlockPrefetcher, shutDownWhileFillerWaitsForRoom) {
           EXPECT_EQ(prefetcher.getNextBlock(), Block{i});
         }
         // The buffered blocks plus the one in the suspended `async_send`.
-        waitUntil([&] {
+        ASSERT_TRUE(waitUntil([&] {
           return sink->numCalls() == numConsumed + numPrefetched + 1;
-        });
+        }));
       }
       EXPECT_TRUE(sink->wasStopped());
       EXPECT_EQ(sink.use_count(), 1);
@@ -411,7 +404,7 @@ TEST(BlockPrefetcher, exceptionAfterBufferedBlocks) {
   auto sink = std::make_shared<FakeSink>(pool.get_executor(), script);
   Prefetcher prefetcher{pool.get_executor(), sink, 10};
   // Let the read-ahead buffer everything before the consumer starts.
-  waitUntil([&] { return sink->numCalls() == 6; });
+  ASSERT_TRUE(waitUntil([&] { return sink->numCalls() == 6; }));
   for (size_t i = 0; i < 5; ++i) {
     EXPECT_EQ(prefetcher.getNextBlock(), Block{i});
   }
@@ -437,7 +430,7 @@ TEST(BlockPrefetcher, shutDownWhileOperationIsInFlight) {
       Prefetcher prefetcher{pool.get_executor(), sink, 10};
       EXPECT_EQ(prefetcher.getNextBlock(), Block{0});
       // The third operation hangs, because the script is exhausted.
-      waitUntil([&] { return sink->numCalls() == 3; });
+      ASSERT_TRUE(waitUntil([&] { return sink->numCalls() == 3; }));
       if (explicitShutDown) {
         prefetcher.shutDown();
         EXPECT_EQ(sink.use_count(), 1);
@@ -459,7 +452,7 @@ TEST(BlockPrefetcher, shutDownDropsBufferedException) {
   auto sink = std::make_shared<FakeSink>(pool.get_executor(), script);
   Prefetcher prefetcher{pool.get_executor(), sink, 10};
   // Let the read-ahead buffer the block and the exception before the shutdown.
-  waitUntil([&] { return sink->numCalls() == 2; });
+  ASSERT_TRUE(waitUntil([&] { return sink->numCalls() == 2; }));
   EXPECT_NO_THROW(prefetcher.shutDown());
   EXPECT_EQ(sink.use_count(), 1);
   EXPECT_EQ(prefetcher.getNextBlock(), std::nullopt);
