@@ -302,6 +302,10 @@ ExpressionResult evaluateSpeculativeNumericOperation(
   return result;
 }
 
+// Evaluate a single row of an N-ary numeric expression using the speculative
+// majority-type fast path. If all operand datatypes match the expected numeric
+// types, evaluate using primitive numeric values. Otherwise, fall back to the
+// generic value getters for this row.
 template <typename Function, typename ValueGetters, typename... NumericTypes,
           typename... Operands>
 Id evaluateSpeculativeNaryRow(
