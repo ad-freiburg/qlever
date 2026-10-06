@@ -15,9 +15,11 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -45,7 +47,13 @@ using SmallRelationsBuffer = IdTable;
 /// build.
 class CompressedRelationWriter {
  private:
-  ad_utility::Synchronized<ad_utility::File> outfile_;
+  // The file that the blocks of the permutation are written to. A shared
+  // mutex suffices, because the blocks are written with the positioned
+  // `File::write` at a range that `nextOffset_` hands out, see
+  // `compressAndWriteColumn`.
+  ad_utility::Synchronized<ad_utility::File, std::shared_mutex> outfile_;
+  // The offset at which the next block is written.
+  std::atomic<off_t> nextOffset_{0};
   ad_utility::Synchronized<std::vector<CompressedBlockMetadataNoBlockIndex>>
       blockBuffer_;
   // If multiple small relations are stored in the same block, keep track of the
@@ -392,6 +400,19 @@ class CompressedRelationWriter {
   // same `col0Id`.
   void addBlockForLargeRelation(Id col0Id, BlockToWrite relation);
 
+  // Write the `block` of a large relation as blocks of about `blocksize()`
+  // rows each (see `addBlockForLargeRelation`). Rows that agree in their first
+  // three columns are never split across two of those blocks, exactly like at
+  // the boundaries of the input blocks in `addCompleteLargeRelation`. This
+  // lets the source of the blocks (the twin sorter of a large relation, see
+  // `addCompleteLargeRelation`) work with much larger blocks than the ones
+  // that end up in the permutation, which has a per-block cost.
+  //
+  // NOTE: That source currently yields blocks of exactly `blocksize()` rows,
+  // so the splitting only becomes effective with a follow-up that lets it
+  // yield larger ones.
+  void writeLargeRelationBlockInSlices(Id col0Id, IdTable block);
+
   // Return an empty block buffer with room for at least `2 * blocksize()`
   // rows, which is taken from the `blockBufferPool_` if possible (then its
   // memory is typically already allocated). Thread-safe.
@@ -459,6 +480,7 @@ class CompressedRelationWriter {
       std::optional<size_t> numConcurrentBlocksOverride);
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfTasksInFlight);
+  FRIEND_TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices);
 };
 
 #endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_H

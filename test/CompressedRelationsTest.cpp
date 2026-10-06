@@ -2621,3 +2621,179 @@ TEST(DistinctIdCounter, blocksAndReset) {
   addBlock({V(6)});
   EXPECT_EQ(counter.getAndReset(), 1);
 }
+
+namespace {
+// Build a block of a large relation with the constant `col0` ID, `numRows`
+// rows, and four columns (`col0`, `col1`, `col2`, and the graph). The rows
+// `[runBegin, runEnd)` are the same triple in different graphs, all the other
+// rows are pairwise distinct triples in the graph `0`. The rows are sorted by
+// (`col1`, `col2`, graph), as the writer requires.
+IdTable makeBlockOfLargeRelation(int col0, size_t numRows, size_t runBegin,
+                                 size_t runEnd) {
+  AD_CONTRACT_CHECK(runBegin <= runEnd && runEnd <= numRows);
+  IdTable block{4, ad_utility::makeUnlimitedAllocator<Id>()};
+  block.resize(numRows);
+  for (size_t i = 0; i < numRows; ++i) {
+    bool insideRun = i >= runBegin && i < runEnd;
+    // Inside the run, `col1` and `col2` stay at the values of its first row,
+    // and only the graph changes.
+    auto col1 = static_cast<int64_t>(insideRun ? runBegin : i);
+    auto graph = static_cast<int64_t>(insideRun ? i - runBegin : 0);
+    block(i, 0) = V(col0);
+    block(i, 1) = V(col1);
+    block(i, 2) = V(2 * col1);
+    block(i, ADDITIONAL_COLUMN_GRAPH_ID) = V(graph);
+  }
+  return block;
+}
+
+// Scan the complete relation with the given `col0Id` from the permutation that
+// consists of the given `blocks` and lives at `filename`. The result has the
+// columns `col1`, `col2`, and the graph.
+IdTable scanLargeRelation(const std::string& filename,
+                          const std::vector<CompressedBlockMetadata>& blocks,
+                          Id col0Id) {
+  CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
+                                  ad_utility::File{filename, "r"}};
+  BlockMetadataSpan blockSpan{blocks};
+  BlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
+  ScanSpecification scanSpec{col0Id, std::nullopt, std::nullopt};
+  std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+  return reader.scan(
+      CompressedRelationReader::ScanSpecAndBlocks{scanSpec, blockRanges},
+      additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
+      emptyLocatedTriples);
+}
+}  // namespace
+
+// A block of a large relation that is larger than the `blocksize()` is written
+// as several blocks of about that size, and rows that agree in their first
+// three columns are never split across two of them.
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices) {
+  using namespace ::testing;
+  constexpr int col0 = 42;
+  // NOTE: The name and the cleanup are deliberately not bound structurally,
+  // because a structured binding may not be captured by the lambdas below in
+  // C++17.
+  auto filenameAndCleanup = testFilenameWithCleanup();
+  const std::string& filename = filenameAndCleanup.first;
+
+  // Write the `block` as the complete large relation with the `col0` ID above,
+  // using `blocksize` rows per block, and return the metadata of the written
+  // blocks together with the result of a full scan of the relation. The
+  // `filename` is reused, because the writer closes the file before the
+  // reading starts.
+  auto writeAndScan = [&filename, col0](const IdTable& block,
+                                        size_t blocksize) {
+    std::vector<CompressedBlockMetadata> blocks;
+    {
+      CompressedRelationWriter writer{
+          block.numColumns(), ad_utility::File{filename, "w"}, blocksize};
+      writer.writeLargeRelationBlockInSlices(V(col0), block.clone());
+      // The exact number of distinct `col1` IDs is irrelevant here, it only
+      // goes into the multiplicities of the metadata.
+      writer.finishLargeRelation(block.numRows());
+      blocks = std::move(writer).getFinishedBlocks();
+    }
+    auto scanResult = scanLargeRelation(filename, blocks, V(col0));
+    return std::pair{std::move(blocks), std::move(scanResult)};
+  };
+
+  // Check that the `scanResult` consists of the columns `col1`, `col2`, and
+  // the graph of the `block`.
+  auto checkScanResult = [](const IdTable& block, const IdTable& scanResult) {
+    ASSERT_EQ(scanResult.numRows(), block.numRows());
+    ASSERT_EQ(scanResult.numColumns(), 3);
+    for (size_t i = 0; i < block.numRows(); ++i) {
+      SCOPED_TRACE(absl::StrCat("row ", i));
+      EXPECT_EQ(scanResult(i, 0), block(i, 1));
+      EXPECT_EQ(scanResult(i, 1), block(i, 2));
+      EXPECT_EQ(scanResult(i, 2), block(i, ADDITIONAL_COLUMN_GRAPH_ID));
+    }
+  };
+
+  // Return the number of rows of each of the written `blocks`.
+  auto blockSizes = [](const std::vector<CompressedBlockMetadata>& blocks) {
+    std::vector<size_t> result;
+    for (const auto& block : blocks) {
+      result.push_back(block.numRows_);
+    }
+    return result;
+  };
+
+  {
+    // A block with at most `blocksize()` rows is written as a single block,
+    // also when it consists of a single triple in many graphs.
+    for (size_t numRows : {size_t{1}, size_t{9}, size_t{10}}) {
+      SCOPED_TRACE(absl::StrCat("number of rows ", numRows));
+      auto block = makeBlockOfLargeRelation(col0, numRows, 0, numRows);
+      auto [blocks, scanResult] = writeAndScan(block, 10);
+      EXPECT_THAT(blockSizes(blocks), ElementsAre(numRows));
+      checkScanResult(block, scanResult);
+    }
+  }
+  {
+    // 35 rows with 10 rows per block, where the rows `[8, 13)` are the same
+    // triple in five different graphs. The first block therefore has to be
+    // extended from 10 to 13 rows, and the remaining rows are then split
+    // evenly.
+    auto block = makeBlockOfLargeRelation(col0, 35, 8, 13);
+    auto [blocks, scanResult] = writeAndScan(block, 10);
+    EXPECT_THAT(blockSizes(blocks), ElementsAre(13, 10, 10, 2));
+    ASSERT_EQ(blocks.size(), 4);
+    EXPECT_THAT(blocks.at(0).firstTriple_, matchPermutedTriple(col0, 0, 0));
+    EXPECT_THAT(blocks.at(0).lastTriple_, matchPermutedTriple(col0, 8, 16));
+    EXPECT_THAT(blocks.at(1).firstTriple_, matchPermutedTriple(col0, 13, 26));
+    EXPECT_THAT(blocks.at(1).lastTriple_, matchPermutedTriple(col0, 22, 44));
+    EXPECT_THAT(blocks.at(2).firstTriple_, matchPermutedTriple(col0, 23, 46));
+    EXPECT_THAT(blocks.at(2).lastTriple_, matchPermutedTriple(col0, 32, 64));
+    EXPECT_THAT(blocks.at(3).firstTriple_, matchPermutedTriple(col0, 33, 66));
+    EXPECT_THAT(blocks.at(3).lastTriple_, matchPermutedTriple(col0, 34, 68));
+    checkScanResult(block, scanResult);
+  }
+  {
+    // A run of equal triples that is longer than the `blocksize()` always
+    // stays in a single block, no matter where it starts.
+    auto block = makeBlockOfLargeRelation(col0, 30, 5, 25);
+    auto [blocks, scanResult] = writeAndScan(block, 10);
+    EXPECT_THAT(blockSizes(blocks), ElementsAre(25, 5));
+    checkScanResult(block, scanResult);
+  }
+}
+
+// The compressed columns of the blocks are written concurrently, each of them
+// at a range of the file that it reserves beforehand, see
+// `CompressedRelationWriter::compressAndWriteColumn`. Those ranges have to
+// tile the file exactly, with no gaps and no overlaps.
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, writtenColumnsExactlyTileTheFile) {
+  // Compress and write as many blocks concurrently as the global thread pool
+  // allows.
+  auto reset = setRuntimeParameterForTest<
+      &RuntimeParameters::permutationWriterNumThreads_>(0);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  // A block size of three triples, so that the input (which has relations with
+  // up to 50 rows) is written as many small blocks.
+  auto result = buildPermutation(makeInputsWithMixedSizes(), 3, 7, filename);
+
+  // Collect the ranges of the file that the compressed columns occupy.
+  std::vector<std::pair<off_t, size_t>> ranges;
+  for (const auto& block : result.blocks_) {
+    ASSERT_TRUE(block.offsetsAndCompressedSize_.has_value());
+    for (const auto& offsetAndSize : block.offsetsAndCompressedSize_.value()) {
+      ranges.emplace_back(offsetAndSize.offsetInFile_,
+                          offsetAndSize.compressedSize_);
+    }
+  }
+  ASSERT_FALSE(ranges.empty());
+  ql::ranges::sort(ranges);
+
+  off_t expectedOffset = 0;
+  for (const auto& [offset, size] : ranges) {
+    EXPECT_EQ(offset, expectedOffset);
+    EXPECT_GT(size, 0);
+    expectedOffset += static_cast<off_t>(size);
+  }
+  EXPECT_EQ(expectedOffset, ad_utility::File(filename, "r").sizeOfFile());
+}
