@@ -115,7 +115,7 @@ class FakeSink {
     if (hangingHandler_.has_value()) {
       auto handler = std::move(hangingHandler_).value();
       hangingHandler_.reset();
-      completeLater(std::move(handler), nullptr, std::nullopt);
+      completeLater(lock, std::move(handler), nullptr, std::nullopt);
     }
   }
 
@@ -152,7 +152,7 @@ class FakeSink {
       });
     };
     if (wasStopped_) {
-      completeLater(std::move(erased), nullptr, std::nullopt);
+      completeLater(lock, std::move(erased), nullptr, std::nullopt);
       return;
     }
     if (script_.empty()) {
@@ -162,25 +162,34 @@ class FakeSink {
     Outcome outcome = std::move(script_.front());
     script_.pop_front();
     if (auto* block = std::get_if<Block>(&outcome)) {
-      completeLater(std::move(erased), nullptr,
+      completeLater(lock, std::move(erased), nullptr,
                     DeferredBlock::fromBlock(*block));
     } else if (auto* reader = std::get_if<Reader>(&outcome)) {
-      completeLater(std::move(erased), nullptr,
+      completeLater(lock, std::move(erased), nullptr,
                     DeferredBlock::fromReader(std::move(*reader)));
     } else if (auto* exception = std::get_if<std::exception_ptr>(&outcome)) {
-      completeLater(std::move(erased), *exception, std::nullopt);
+      completeLater(lock, std::move(erased), *exception, std::nullopt);
     } else {
-      completeLater(std::move(erased), nullptr, std::nullopt);
+      completeLater(lock, std::move(erased), nullptr, std::nullopt);
     }
   }
 
   // Complete the `handler` (which posts itself to its executor) with the given
   // arguments. The operation is no longer in flight from now on.
   //
-  // PRECONDITION: `mutex_` is held.
-  void completeLater(Handler handler, std::exception_ptr exception,
+  // IMPORTANT: The `lock` is released before the `handler` is invoked, and this
+  // sink must not be touched afterwards. The posted handler may run on another
+  // thread right away and resume the filler of the `BlockPrefetcher`, which
+  // then releases its reference to this sink, such that the test may already
+  // have destroyed it (together with `mutex_`) when this function returns.
+  //
+  // PRECONDITION: The `lock` holds `mutex_`.
+  void completeLater(std::unique_lock<std::mutex>& lock, Handler handler,
+                     std::exception_ptr exception,
                      std::optional<DeferredBlock> block) {
+    AD_CORRECTNESS_CHECK(lock.owns_lock());
     --numInFlight_;
+    lock.unlock();
     handler(std::move(exception), std::move(block));
   }
 };
