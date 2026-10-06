@@ -24,43 +24,43 @@ TEST(VarsRequiredFromSubtree, add) {
   std::set<Variable> varSet = {nameVar, ageVar, streetVar};
   VarsRequiredFromSubtree helper(&varSet);
 
-  // Add another Variable that has already been added to the helper via
+  // Add another variable that has already been added to the helper via the
   // constructor
   helper.add(nameVar);
   EXPECT_TRUE(
-      ad_utility::contains((helper.varsRequiredFromSubtree_), nameVar));
-  EXPECT_EQ(((helper.varsRequiredFromSubtree_)).size(), 3);
+      ad_utility::contains(*(helper.varsRequiredFromSubtree_), nameVar));
+  EXPECT_EQ((helper.varsRequiredFromSubtree_)->size(), 3);
 
-  // Add another variable that is not yet part of the helper
+  // Add another variable that is not yet part of the helper.
   Variable cityVar("?city");
   EXPECT_FALSE(
-      ad_utility::contains((helper.varsRequiredFromSubtree_), cityVar));
+      ad_utility::contains(*(helper.varsRequiredFromSubtree_), cityVar));
   helper.add(cityVar);
   EXPECT_TRUE(
-      ad_utility::contains((helper.varsRequiredFromSubtree_), cityVar));
-  EXPECT_EQ(((helper.varsRequiredFromSubtree_)).size(), 4);
+      ad_utility::contains(*(helper.varsRequiredFromSubtree_), cityVar));
+  EXPECT_EQ((helper.varsRequiredFromSubtree_)->size(), 4);
 }
 
 // _______________________________________________________________________________________
 TEST(VarsRequiredFromSubtree, get) {
-  // check return value if constructor received empty set
-  std::set<Variable> varSet = {};
+  // Check the return value if the constructor received an empty set.
+  std::set<Variable> varSet;
   VarsRequiredFromSubtree helper(&varSet);
   EXPECT_EQ(varSet, helper.get());
 
-  // check return value if add() is never called
+  // Check return value if `add` function is never called.
   std::set<Variable> varSet_1 = {Variable("?city")};
   VarsRequiredFromSubtree helper_1(&varSet_1);
   EXPECT_EQ(varSet_1, helper_1.get());
 
-  // check return value after add() has been called
+  // Check return value after `add` function has been called.
   helper_1.add(Variable("?age"));
   auto returnSet = helper_1.get();
   EXPECT_EQ(returnSet.size(), 2);
   EXPECT_TRUE(ad_utility::contains(returnSet, Variable("?age")));
   EXPECT_TRUE(ad_utility::contains(returnSet, Variable("?city")));
 
-  // check return value after add() has been called twice
+  // Check return value after `add` function has been called twice.
   helper_1.add(Variable("?person"));
   returnSet = helper_1.get();
   EXPECT_EQ(returnSet.size(), 3);
@@ -68,7 +68,7 @@ TEST(VarsRequiredFromSubtree, get) {
 
 // _______________________________________________________________________________________
 TEST(makeTreeWithOptionalStripOperation, basic) {
-  // Create an operation (in this test case the operation Distinct)
+  // Create an operation (in this test case the `Distinct` operation).
   IdTable input{makeIdTableFromVector(
       {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
   auto qec = ad_utility::testing::getQec();
@@ -80,9 +80,9 @@ TEST(makeTreeWithOptionalStripOperation, basic) {
                                            Variable{"?c"}, Variable{"?d"}});
   Distinct distinct(qec, values, {1});
 
-  // Check the case in which an additional StripColumns-operation is added
+  // Check the case in which an additional `StripColumns` operation is added.
   {
-    // Use helper and create subtree of the distinct operation.
+    // Use helper and create subtree of the `Distinct` operation.
     std::set<Variable> variablesRequestedFromParent = {Variable{"?a"}};
     VarsRequiredFromSubtree helper(&variablesRequestedFromParent);
     helper.add(Variable{"?b"});
@@ -90,28 +90,30 @@ TEST(makeTreeWithOptionalStripOperation, basic) {
     QueryExecutionTree subtreeWithDistinctRoot(
         qec, std::make_shared<Distinct>(distinct));
 
-    auto subtree_new = QueryExecutionTree::makeTreeWithStrippedColumns(
-        std::make_shared<QueryExecutionTree>(subtreeWithDistinctRoot),
-        varsRequiredFromSubtree);
+    auto subtreeWithStrippedColumns =
+        QueryExecutionTree::makeTreeWithStrippedColumns(
+            std::make_shared<QueryExecutionTree>(subtreeWithDistinctRoot),
+            varsRequiredFromSubtree);
 
-    const Variable varB = Variable{"?b"};
-    auto tree = columnStrippingHelpers::makeTreeWithOptionalStripOperation<Distinct>(
-        qec, variablesRequestedFromParent,
-        std::move(subtree_new), std::vector<ColumnIndex>{1});
+    auto tree =
+        columnStrippingHelpers::makeTreeWithOptionalStripOperation<Distinct>(
+            qec, variablesRequestedFromParent,
+            std::move(subtreeWithStrippedColumns), std::vector<ColumnIndex>{1});
     ASSERT_TRUE(tree.has_value());
     auto qet = *tree;
 
-    // Check whether root-operation is a StripColumns-operation with the expected
-    // variables.
-    auto stripColumnsOperation = dynamic_cast<StripColumns*>(qet->getRootOperation().get());
+    // Check whether root operation is a `StripColumns` operation with the
+    // expected variables.
+    auto stripColumnsOperation =
+        dynamic_cast<StripColumns*>(qet->getRootOperation().get());
     EXPECT_NE(stripColumnsOperation, nullptr);
     auto var2colMapStripCols = qet->getVariableColumns();
     EXPECT_EQ(var2colMapStripCols.size(), 1);
     EXPECT_TRUE(var2colMapStripCols.contains(Variable{"?a"}));
 
-    // Check whether child of StripColumns-operation is Distinct-operation.
+    // Check whether child of `StripColumns` operation is `Distinct` operation.
     auto strColSubtree = stripColumnsOperation->getChildren();
-    ASSERT_TRUE(strColSubtree.at(0) != nullptr);
+    ASSERT_NE(strColSubtree.at(0), nullptr);
     auto distinctOp = strColSubtree.at(0)->getRootOperation();
     Distinct* distinctOperation = dynamic_cast<Distinct*>(distinctOp.get());
     EXPECT_NE(distinctOperation, nullptr);
@@ -121,9 +123,9 @@ TEST(makeTreeWithOptionalStripOperation, basic) {
     EXPECT_TRUE(var2colMapDistinct.contains(Variable{"?b"}));
   }
 
-  // Check the case in which no additional StripColumns-operation is added
+  // Check the case in which no additional `StripColumns` operation is added.
   {
-    // Use helper and create subtree of the distinct operation.
+    // Use helper and create subtree of the `Distinct` operation.
     std::set<Variable> variablesRequestedFromParent = {Variable{"?a"},
                                                        Variable{"?b"}};
     VarsRequiredFromSubtree helper(&variablesRequestedFromParent);
@@ -132,18 +134,19 @@ TEST(makeTreeWithOptionalStripOperation, basic) {
     QueryExecutionTree subtreeWithDistinctRoot(
         qec, std::make_shared<Distinct>(distinct));
 
-    auto subtree_new = QueryExecutionTree::makeTreeWithStrippedColumns(
-        std::make_shared<QueryExecutionTree>(subtreeWithDistinctRoot),
-        varsRequiredFromSubtree);
+    auto subtreeWithStrippedColumns =
+        QueryExecutionTree::makeTreeWithStrippedColumns(
+            std::make_shared<QueryExecutionTree>(subtreeWithDistinctRoot),
+            varsRequiredFromSubtree);
 
-    const Variable varB = Variable{"?b"};
-    auto tree = columnStrippingHelpers::makeTreeWithOptionalStripOperation<Distinct>(
-        qec, variablesRequestedFromParent,
-        std::move(subtree_new), std::vector<ColumnIndex>{1});
+    auto tree =
+        columnStrippingHelpers::makeTreeWithOptionalStripOperation<Distinct>(
+            qec, variablesRequestedFromParent,
+            std::move(subtreeWithStrippedColumns), std::vector<ColumnIndex>{1});
     ASSERT_TRUE(tree.has_value());
     auto qet = *tree;
 
-    // Check whether root-operation is a Distinct-operation with the expected
+    // Check whether root operation is a `Distinct` operation with the expected
     // variables.
     EXPECT_NE(dynamic_cast<Distinct*>(qet->getRootOperation().get()), nullptr);
     auto var2colMap = qet->getVariableColumns();

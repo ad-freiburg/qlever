@@ -35,7 +35,6 @@ class VarsRequiredFromSubtree {
   // Important: Do not modify the pointed-to set `varsRequestedFromParentTree`
   // while this object is in use. Modifying it externally while this object is
   // in use will affect the behavior of the `add` function.
-
   explicit VarsRequiredFromSubtree(
       const std::set<Variable>* varsRequestedFromParentTree)
       : varsRequiredFromSubtree_{varsRequestedFromParentTree} {
