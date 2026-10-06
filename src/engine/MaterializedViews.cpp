@@ -36,7 +36,6 @@
 #include "parser/PropertyPath.h"
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
-#include "parser/VariableCounter.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/FilesystemHelpers.h"
@@ -46,18 +45,32 @@
 
 namespace {
 
-// True if `path` is built only from `SEQUENCE`/`INVERSE` over plain IRIs,
-// i.e. equivalent to a chain of simple triples.
-bool isSimpleSequenceOrInversePath(const PropertyPath& path) {
-  return path.handlePath<bool>(
-      [](const ad_utility::triple_component::Iri&) { return true; },
-      [](const std::vector<PropertyPath>& children,
-         PropertyPath::Modifier modifier) {
-        return (modifier == PropertyPath::Modifier::SEQUENCE ||
-                modifier == PropertyPath::Modifier::INVERSE) &&
-               ql::ranges::all_of(children, &isSimpleSequenceOrInversePath);
+// If `path` is built only from `SEQUENCE`/`INVERSE` over plain IRIs, return
+// the number of simple triples it is equivalent to, else `std::nullopt`.
+std::optional<size_t> numTriplesOfSimplePath(const PropertyPath& path) {
+  return path.handlePath<std::optional<size_t>>(
+      [](const ad_utility::triple_component::Iri&) {
+        return std::optional<size_t>{1};
       },
-      [](const PropertyPath&, size_t, size_t) { return false; });
+      [](const std::vector<PropertyPath>& children,
+         PropertyPath::Modifier modifier) -> std::optional<size_t> {
+        if (modifier != PropertyPath::Modifier::SEQUENCE &&
+            modifier != PropertyPath::Modifier::INVERSE) {
+          return std::nullopt;
+        }
+        size_t sum = 0;
+        for (const auto& child : children) {
+          auto n = numTriplesOfSimplePath(child);
+          if (!n.has_value()) {
+            return std::nullopt;
+          }
+          sum += n.value();
+        }
+        return sum;
+      },
+      [](const PropertyPath&, size_t, size_t) -> std::optional<size_t> {
+        return std::nullopt;
+      });
 }
 
 }  // namespace
@@ -111,6 +124,37 @@ void MaterializedViewWriter::warnAboutPatternRewriteObstacles() {
   auto reparsed = SparqlParser::parseQuery(&encodedIriManager,
                                            parsedQuery_._originalString, {});
 
+  // Only warn if the blank nodes and paths are the sole obstacles, i.e. the
+  // query otherwise has the shape required by pattern-based rewriting. If it
+  // does not, `QueryPatternCache::analyzeView` logs the reason when the view
+  // is loaded.
+  auto triplesOrReason =
+      materializedViewsQueryAnalysis::getTriplesForPatternRewrite(reparsed);
+  if (!std::holds_alternative<std::vector<SparqlTriple>>(triplesOrReason)) {
+    return;
+  }
+  const auto& triples = std::get<std::vector<SparqlTriple>>(triplesOrReason);
+
+  // Number of simple triples after expanding `/`/`^`-only property paths.
+  size_t numExpandedTriples = 0;
+  bool hasSimplePropertyPath = false;
+  for (const auto& triple : triples) {
+    // Variable predicates and other property paths can not be rewritten.
+    if (!std::holds_alternative<PropertyPath>(triple.p_)) {
+      return;
+    }
+    auto n = numTriplesOfSimplePath(std::get<PropertyPath>(triple.p_));
+    if (!n.has_value()) {
+      return;
+    }
+    hasSimplePropertyPath |= !triple.getSimplePredicate().has_value();
+    numExpandedTriples += n.value();
+  }
+  // A single triple has no join to eliminate, so rewriting needs at least two.
+  if (numExpandedTriples < 2) {
+    return;
+  }
+
   auto addWarning = [this](std::string warning) {
     AD_LOG_WARN << warning << std::endl;
     parsedQuery_.addWarning(std::move(warning));
@@ -118,39 +162,19 @@ void MaterializedViewWriter::warnAboutPatternRewriteObstacles() {
 
   // Blank nodes and `[ ... ]` become unnamed internal variables, which can
   // never be selected as a view column.
-  parsedQuery::VariableCounter variableCounter;
-  variableCounter(reparsed._rootGraphPattern);
-  bool hasBlankNodeOrShorthand =
-      ql::ranges::any_of(variableCounter.counts(), [](const auto& varAndCount) {
-        return ql::starts_with(varAndCount.first.name(),
-                               QLEVER_INTERNAL_VARIABLE_PREFIX);
-      });
-  if (hasBlankNodeOrShorthand) {
+  auto isInternalVariable = [](const TripleComponent& tc) {
+    return tc.isVariable() && ql::starts_with(tc.getVariable().name(),
+                                              QLEVER_INTERNAL_VARIABLE_PREFIX);
+  };
+  if (ql::ranges::any_of(triples, [&](const SparqlTriple& triple) {
+        return isInternalVariable(triple.s_) || isInternalVariable(triple.o_);
+      })) {
     addWarning(
         "The query to write the materialized view contains blank nodes "
         "(`_:label`) or the `[ ... ]` shorthand. Use an explicitly named and "
         "selected variable instead for query rewriting to work.");
   }
 
-  // Pattern-based rewriting (see `getTriplesForPatternRewrite`) only looks at
-  // the top-level triples, so checking those suffices.
-  bool hasSimplePropertyPath = ql::ranges::any_of(
-      reparsed._rootGraphPattern._graphPatterns,
-      [](const parsedQuery::GraphPatternOperation& op) {
-        if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
-          return false;
-        }
-        return ql::ranges::any_of(
-            std::get<parsedQuery::BasicGraphPattern>(op)._triples,
-            [](const SparqlTriple& triple) {
-              // Exclude plain IRI predicates, for which `getSimplePredicate()`
-              // returns a value.
-              return std::holds_alternative<PropertyPath>(triple.p_) &&
-                     !triple.getSimplePredicate().has_value() &&
-                     isSimpleSequenceOrInversePath(
-                         std::get<PropertyPath>(triple.p_));
-            });
-      });
   if (hasSimplePropertyPath) {
     addWarning(
         "The query to write the materialized view contains a property path "

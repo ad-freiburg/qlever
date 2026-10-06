@@ -267,12 +267,12 @@ TEST_F(MaterializedViewsTest, PatternRewriteWarnings) {
 
   // Blank node label.
   EXPECT_THAT(writeAndGetWarnings("blankNodeView",
-                                  "SELECT * { ?s ?p _:b1 . _:b1 <p2> ?o }"),
+                                  "SELECT * { ?s <p1> _:b1 . _:b1 <p2> ?o }"),
               ::testing::ElementsAre(::testing::HasSubstr("blank nodes")));
 
   // `[ ... ]` shorthand.
   EXPECT_THAT(
-      writeAndGetWarnings("shorthandView", "SELECT * { ?s ?p [ <p2> ?o ] }"),
+      writeAndGetWarnings("shorthandView", "SELECT * { ?s <p1> [ <p2> ?o ] }"),
       ::testing::ElementsAre(::testing::HasSubstr("shorthand")));
 
   // Simple sequence property path (`/`).
@@ -281,14 +281,34 @@ TEST_F(MaterializedViewsTest, PatternRewriteWarnings) {
       ::testing::ElementsAre(::testing::HasSubstr("property path")));
 
   // Simple inverse property path (`^`).
-  EXPECT_THAT(writeAndGetWarnings("invPathView", "SELECT * { ?s ^<p1> ?o }"),
+  EXPECT_THAT(writeAndGetWarnings("invPathView",
+                                  "SELECT * { ?s ^<p1> ?m . ?m <p2> ?o }"),
               ::testing::ElementsAre(::testing::HasSubstr("property path")));
 
-  // Alternative paths (`|`) cannot be rewritten as a chain of simple triples,
-  // so no warning fires for them.
+  // Both obstacles at once.
   EXPECT_THAT(
-      writeAndGetWarnings("altPathView", "SELECT * { ?s <p1>|<p2> ?o }"),
-      ::testing::IsEmpty());
+      writeAndGetWarnings("bothView", "SELECT * { ?s <p1>/<p2> [ <p3> ?o ] }"),
+      ::testing::UnorderedElementsAre(::testing::HasSubstr("blank nodes"),
+                                      ::testing::HasSubstr("property path")));
+
+  // No warnings if the query could not be rewritten anyway: a single triple
+  // (even after expanding the path), an alternative path (`|`), a variable
+  // predicate, an aggregating query (whose internal `GROUP BY` variable must
+  // not count as a blank node) or a subquery.
+  for (auto [viewName, query] :
+       std::vector<std::pair<std::string, std::string>>{
+           {"singleInvView", "SELECT * { ?s ^<p1> ?o }"},
+           {"altPathView", "SELECT * { ?s <p1>|<p2> ?o . ?o <p3> ?x }"},
+           {"varPredView", "SELECT * { ?s ?p _:b1 . _:b1 <p2> ?o }"},
+           {"groupByView",
+            "SELECT (SAMPLE(?s) AS ?x) (COUNT(?o) AS ?c) "
+            "{ ?s <p1> [ <p2> ?o ] } GROUP BY (STR(?s))"},
+           {"subqueryView",
+            "SELECT ?s ?o { { SELECT ?s ?o { ?s <p1>/<p2> ?o } "
+            "ORDER BY (STR(?o)) } }"}}) {
+    EXPECT_THAT(writeAndGetWarnings(viewName, query), ::testing::IsEmpty())
+        << query;
+  }
 
   // A plain query without any of the above gets no warnings.
   EXPECT_THAT(writeAndGetWarnings("plainView", simpleWriteQuery_),

@@ -108,7 +108,8 @@ class MaterializedViewWriter {
   // Called from the constructor. Warns (via `AD_LOG_WARN` and
   // `parsedQuery_.warnings()`) if the query uses blank nodes/`[ ... ]` or a
   // `/`/`^`-only property path, both of which block pattern-based query
-  // rewriting even though avoiding them is easy.
+  // rewriting even though avoiding them is easy. Only warns if these are the
+  // sole obstacles, i.e. the query otherwise qualifies for this rewriting.
   void warnAboutPatternRewriteObstacles();
 
   // Get the base filename for the view's permutation and metadata files. This
