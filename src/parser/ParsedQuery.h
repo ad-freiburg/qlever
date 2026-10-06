@@ -79,7 +79,14 @@ class ParsedQuery {
   std::vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   std::string _originalString;
+  // The trailing `VALUES` clause of a query with `GROUP BY`, which is joined by
+  // the `QueryPlanner` after `GROUP BY` and `HAVING`. Without `GROUP BY`, it is
+  // part of `_rootGraphPattern`, see `addSolutionModifiers`.
   std::optional<parsedQuery::Values> postQueryValuesClause_ = std::nullopt;
+  // The aliases of a query with `GROUP BY` that use a variable of the
+  // `postQueryValuesClause_` and are thus computed by the `QueryPlanner` after
+  // joining it, see `moveAliasesAfterPostQueryValues`.
+  std::vector<parsedQuery::Bind> postQueryValuesBinds_;
 
   // Contains warnings about queries that are valid according to the SPARQL
   // standard, but are probably semantically wrong.
@@ -238,18 +245,28 @@ class ParsedQuery {
                         std::string_view noteForImplicitGroupBy,
                         InternalVariableGenerator internalVariableGenerator);
 
+  // For a query with `GROUP BY` and `postQueryValuesClause_`: Move the aliases
+  // that use a variable of the `VALUES` clause (outside of an aggregate, also
+  // indirectly via a previous alias) to `postQueryValuesBinds_`. Their
+  // aggregates are replaced by new internal aliases, which are still computed
+  // by the `GroupBy`. For example, `(COUNT(?x) + ?v AS ?y)` becomes the alias
+  // `(COUNT(?x) AS ?internal)` and the bind `(?internal + ?v AS ?y)`.
+  void moveAliasesAfterPostQueryValues(
+      InternalVariableGenerator internalVariableGenerator);
+
  public:
-  // Add the `modifiers` (like GROUP BY, HAVING, ORDER BY) to the query. Throw
-  // an `InvalidQueryException` if the modifiers are invalid. This might happen
-  // if one of the modifiers uses a variable that is either not visible in the
-  // query before it is used, or if it uses a variable that is not properly
-  // grouped or aggregated in the presence of a GROUP BY clause.
+  // Add the `modifiers` (like `GROUP BY`, `HAVING`, `ORDER BY`) to the query.
+  // Throw an `InvalidQueryException` if the modifiers are invalid. This might
+  // happen if one of the modifiers uses a variable that is either not visible
+  // in the query before it is used, or if it uses a variable that is not
+  // properly grouped or aggregated in the presence of a `GROUP BY` clause.
   // `internalVariableGenerator` has to generate distinct internal variables so
   // they can be used by operations that might be added as a consequence of this
-  // function.
-  void addSolutionModifiers(
-      SolutionModifiers modifiers,
-      InternalVariableGenerator internalVariableGenerator);
+  // function. `postQueryValues` is the trailing `VALUES` clause of the query
+  // (if any), which is in scope for `ORDER BY` and the `SELECT` clause.
+  void addSolutionModifiers(SolutionModifiers modifiers,
+                            InternalVariableGenerator internalVariableGenerator,
+                            std::optional<parsedQuery::Values> postQueryValues);
 
   // If this is a SELECT query, return all the selected aliases. Return an empty
   // vector for construct clauses.

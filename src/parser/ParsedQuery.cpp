@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
@@ -87,7 +88,8 @@ void ParsedQuery::addBind(sparqlExpression::SparqlExpressionPimpl expression,
 // ________________________________________________________________________
 void ParsedQuery::addSolutionModifiers(
     SolutionModifiers modifiers,
-    InternalVariableGenerator internalVariableGenerator) {
+    InternalVariableGenerator internalVariableGenerator,
+    std::optional<parsedQuery::Values> postQueryValues) {
   // Process groupClause
   addGroupByClause(std::move(modifiers.groupByVariables_),
                    internalVariableGenerator);
@@ -113,6 +115,30 @@ void ParsedQuery::addSolutionModifiers(
   // Process HAVING clause
   addHavingClause(std::move(modifiers.havingClauses_), isGroupBy,
                   internalVariableGenerator);
+
+  // The trailing `VALUES` clause is joined after `GROUP BY` and `HAVING`, but
+  // before the `SELECT` expressions and `ORDER BY` (SPARQL 1.1, sec. 18.2.4.3).
+  // Without `GROUP BY`, we join it with the `WHERE` clause here, before the
+  // `BIND`s for the `ORDER BY` expressions and the `SELECT` aliases are added
+  // below. With `GROUP BY`, the `QueryPlanner` joins it after the `GroupBy`,
+  // and the aliases that use its variables are computed after that join, see
+  // `moveAliasesAfterPostQueryValues`.
+  //
+  // NOTE: Without `GROUP BY`, the `WHERE` clause gets its own group, such that
+  // its `FILTER`s don't see the `VALUES` variables.
+  if (postQueryValues.has_value()) {
+    registerVariablesVisibleInQueryBody(
+        postQueryValues->_inlineValues._variables);
+    if (isGroupBy) {
+      postQueryValuesClause_ = std::move(postQueryValues);
+    } else {
+      auto where = std::exchange(_rootGraphPattern, GraphPattern{});
+      _rootGraphPattern._graphPatterns.emplace_back(
+          parsedQuery::GroupGraphPattern{std::move(where)});
+      _rootGraphPattern._graphPatterns.emplace_back(
+          std::move(postQueryValues.value()));
+    }
+  }
 
   // Process ORDER BY clause
   addOrderByClause(std::move(modifiers.orderBy_), isGroupBy,
@@ -160,9 +186,16 @@ void ParsedQuery::addSolutionModifiers(
     }
 
     if (isGroupBy) {
+      // The variables of the trailing `VALUES` clause are bound after the
+      // grouping, so they can be used like the grouped variables.
       ad_utility::HashSet<Variable> groupVariables{};
       for (const auto& variable : _groupByVariables) {
         groupVariables.emplace(variable);
+      }
+      if (postQueryValuesClause_.has_value()) {
+        groupVariables.insert(
+            postQueryValuesClause_->_inlineValues._variables.begin(),
+            postQueryValuesClause_->_inlineValues._variables.end());
       }
 
       if (selectClause().isAsterisk()) {
@@ -194,11 +227,14 @@ void ParsedQuery::addSolutionModifiers(
                 "." + noteForGroupByError));
           }
         }
-        if (!ad_utility::contains(_groupByVariables, var)) {
+        if (!groupVariables.contains(var)) {
           throw InvalidSparqlQueryException(absl::StrCat(
               "Variable ", var.name(), " is selected but not aggregated.",
               noteForGroupByError));
         }
+      }
+      if (postQueryValuesClause_.has_value()) {
+        moveAliasesAfterPostQueryValues(internalVariableGenerator);
       }
     } else {
       // If there is no GROUP BY clause and there is a SELECT clause, then the
@@ -225,7 +261,10 @@ void ParsedQuery::addSolutionModifiers(
     }
 
     for (const auto& variable : constructClause().containedVariables()) {
-      if (!ad_utility::contains(_groupByVariables, variable)) {
+      if (!ad_utility::contains(_groupByVariables, variable) &&
+          !(postQueryValuesClause_.has_value() &&
+            ad_utility::contains(
+                postQueryValuesClause_->_inlineValues._variables, variable))) {
         throw InvalidSparqlQueryException("Variable " + variable.name() +
                                           " is used but not aggregated." +
                                           noteForGroupByError);
@@ -531,10 +570,15 @@ void ParsedQuery::addOrderByClause(
       checkVariableIsVisible(orderKey.variable_, "ORDER BY",
                              variablesFromAliases, additionalError);
     } else if (!ad_utility::contains(_groupByVariables, orderKey.variable_) &&
-               (!variablesFromAliases.contains(orderKey.variable_))) {
-      // If the query (in addition to the ORDER BY) also contains a GROUP BY,
-      // the variables in the ORDER BY must be either grouped or the result
-      // of an alias in the SELECT clause.
+               !variablesFromAliases.contains(orderKey.variable_) &&
+               !(postQueryValuesClause_.has_value() &&
+                 ad_utility::contains(
+                     postQueryValuesClause_->_inlineValues._variables,
+                     orderKey.variable_))) {
+      // If the query (in addition to the `ORDER BY`) also contains a
+      // `GROUP BY`, the variables in the `ORDER BY` must be either grouped,
+      // the result of an alias in the `SELECT` clause, or bound by the
+      // trailing `VALUES`.
       addWarningOrThrow(absl::StrCat(
           "Variable " + orderKey.variable_.name(),
           " was used in an ORDER BY clause, but is neither grouped nor "
@@ -569,6 +613,64 @@ void ParsedQuery::addOrderByClause(
                std::move(orderKey));
   }
   _isInternalSort = orderClause.isInternalSort;
+}
+
+// _____________________________________________________________________________
+void ParsedQuery::moveAliasesAfterPostQueryValues(
+    InternalVariableGenerator internalVariableGenerator) {
+  using namespace sparqlExpression;
+  // Replace the aggregates in the subtree of `expression` by new internal
+  // variables, which are computed by the `GroupBy`.
+  auto replaceAggregates = [this, &internalVariableGenerator](
+                               auto& self,
+                               SparqlExpression& expression) -> void {
+    for (size_t i = 0; i < expression.children().size(); ++i) {
+      SparqlExpression& child = *expression.children()[i];
+      if (child.isAggregate() ==
+          SparqlExpression::AggregateStatus::NoAggregate) {
+        self(self, child);
+        continue;
+      }
+      auto variable = internalVariableGenerator();
+      auto aggregate = expression.replaceChild(
+          i, std::make_unique<VariableExpression>(variable));
+      auto descriptor = aggregate->descriptor();
+      selectClause().addAlias(
+          Alias{SparqlExpressionPimpl{std::move(aggregate),
+                                      std::move(descriptor)},
+                variable},
+          true);
+    }
+  };
+
+  const auto& valuesVariables =
+      postQueryValuesClause_->_inlineValues._variables;
+  ad_utility::HashSet<Variable> lateVariables{valuesVariables.begin(),
+                                              valuesVariables.end()};
+  // `HAVING` is applied before the join, so its (internal) aliases are always
+  // computed by the `GroupBy`, where the `VALUES` variables are unbound.
+  ad_utility::HashSet<Variable> havingVariables;
+  for (const auto& having : _havingClauses) {
+    havingVariables.insert(having.expression_.getVariableOrNullopt().value());
+  }
+  for (auto& alias : selectClause().deleteAliasesButKeepVariables()) {
+    if (havingVariables.contains(alias._target) ||
+        ql::ranges::none_of(alias._expression.getUnaggregatedVariables({}),
+                            [&lateVariables](const Variable& variable) {
+                              return lateVariables.contains(variable);
+                            })) {
+      // The target is already selected (if it is not internal), so we add the
+      // alias back as internal, such that the target is not selected twice.
+      selectClause().addAlias(std::move(alias), true);
+      continue;
+    }
+    lateVariables.insert(alias._target);
+    // An aggregate never has unaggregated variables, so the root of the
+    // expression is not an aggregate itself.
+    replaceAggregates(replaceAggregates, *alias._expression.getPimpl());
+    postQueryValuesBinds_.push_back(
+        {std::move(alias._expression), std::move(alias._target)});
+  }
 }
 
 // _____________________________________________________________________________
