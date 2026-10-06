@@ -251,12 +251,16 @@ class IdTable {
   // TODO<joka921> implement a facility (probably via inheritance) where we can
   // also implement the deleted copy operations for C++17
 #ifndef QLEVER_CPP_17
+  // The `RequiresClausePosition` of our `.clang-format` would put the
+  // `= delete` and `= default` on separate lines.
+  // clang-format off
   IdTable(const IdTable&) requires(!isView) = delete;
   IdTable& operator=(const IdTable&) requires(!isView) = delete;
 
   //  Views are copyable, as they are cheap to copy.
   IdTable(const IdTable&) requires isView = default;
   IdTable& operator=(const IdTable&) requires isView = default;
+  // clang-format on
 
 #else
   IdTable(const IdTable&) = default;
