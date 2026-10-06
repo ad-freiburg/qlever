@@ -56,15 +56,15 @@ TEST(GTestHelpersTest, PmrStringSsoCapacity) {
   // Ensure that the discovered capacity is usable: strings up to that size are
   // stored inside the object, and a string with one additional character is
   // not.
-  size_t capacity = pmrStringSsoCapacity();
+  size_t capacity = SsoCapacityOfPmrString();
   // A zero capacity means this platform offers no inline string storage at
   // all, so every SSO-dependent assertion below would be meaningless there.
   // All supported STLs provide SSO; this states the premise explicitly
   // instead of tripping the `maxSize > 0` contract inside
-  // `requirePmrStringInlineStorage` with a confusing message.
+  // `requireSsoCapacityOfPmrStringAtLeast` with a confusing message.
   ASSERT_GT(capacity, 0u) << "This platform offers no inline string storage, "
                              "so the SSO assertions below are meaningless";
-  requirePmrStringInlineStorage(capacity);
+  requireSsoCapacityOfPmrStringAtLeast(capacity);
   PmrSsoProbeString atCapacity(capacity, 'x');
   EXPECT_TRUE(pointsIntoObject(atCapacity.data(), atCapacity));
   PmrSsoProbeString aboveCapacity(capacity + 1, 'y');
@@ -75,10 +75,10 @@ TEST(GTestHelpersTest, PmrStringSsoCapacity) {
 TEST(GTestHelpersTest, RequirePmrStringInlineStorageRejectsInvalidSizes) {
   // `maxSize == 0` violates the precondition, and a size above the probed
   // capacity violates the platform premise; both must throw.
-  AD_EXPECT_THROW_WITH_MESSAGE(requirePmrStringInlineStorage(0),
+  AD_EXPECT_THROW_WITH_MESSAGE(requireSsoCapacityOfPmrStringAtLeast(0),
                                ::testing::HasSubstr("maxSize > 0"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      requirePmrStringInlineStorage(pmrStringSsoCapacity() + 1),
+      requireSsoCapacityOfPmrStringAtLeast(SsoCapacityOfPmrString() + 1),
       ::testing::HasSubstr("Platform premise violated"));
 }
 
@@ -89,7 +89,7 @@ TEST(GTestHelpersTest, AssertPmrStringUsesSso) {
   for (size_t size : {size_t{0}, size_t{7}, size_t{15}}) {
     // `maxSize == 0` is a rejected precondition, so probe from 1 on.
     if (size > 0) {
-      requirePmrStringInlineStorage(size);
+      requireSsoCapacityOfPmrStringAtLeast(size);
     }
     PmrSsoProbeString shortString(size, 'x');
     EXPECT_TRUE(pointsIntoObject(shortString.data(), shortString));
@@ -103,8 +103,11 @@ TEST(GTestHelpersTest, AssertPmrStringUsesSso) {
 
 // _____________________________________________________________________________
 TEST(GTestHelpersTest, ClobberStack) {
-  // Verify that the helper writes the given sentinel to the stack and reads it
-  // back through a volatile access.
+  // Only the value that `clobberStack` reads back through its own `volatile`
+  // buffer before returning can be checked: there is no legal way to read the
+  // clobbered stack memory after the function has returned (that would be
+  // undefined behavior), so whether the stack really stays overwritten is not
+  // tested here.
   EXPECT_EQ(clobberStack<512>('X'), 'X');
   EXPECT_EQ(clobberStack<4096>('#'), '#');
 }
