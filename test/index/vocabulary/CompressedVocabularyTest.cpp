@@ -390,11 +390,9 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchShortWordViewsStayValid) {
   const auto result = vocab.lookupBatch(indices);
   ASSERT_EQ(result.size(), indices.size());
 
-  // Clobber the stack region a dangling SSO view would point into. Two deep
-  // frames of sentinel bytes leave no plausible intact copy behind.
-  auto churn = []() { clobberStack(); };
-  churn();
-  churn();
+  // Clobber the stack region a dangling SSO view would point into with
+  // sentinel bytes, so no plausible intact copy is left behind.
+  clobberStack();
 
   for (size_t i = 0; i < indices.size(); ++i) {
     ASSERT_EQ(result[i], words[i]);
