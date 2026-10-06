@@ -116,16 +116,16 @@ void ParsedQuery::addSolutionModifiers(
   addHavingClause(std::move(modifiers.havingClauses_), isGroupBy,
                   internalVariableGenerator);
 
-  // The trailing `VALUES` clause is joined after GROUP BY and HAVING, but
-  // before the SELECT expressions and ORDER BY (SPARQL 1.1, sec. 18.2.4.3).
-  // Without GROUP BY, we join it with the WHERE clause here, before the BINDs
-  // for the ORDER BY expressions and the SELECT aliases are added below. With
-  // GROUP BY, the `QueryPlanner` joins it after the `GroupBy`, and the aliases
-  // that use its variables are computed after that join, see
+  // The trailing `VALUES` clause is joined after `GROUP BY` and `HAVING`, but
+  // before the `SELECT` expressions and `ORDER BY` (SPARQL 1.1, sec. 18.2.4.3).
+  // Without `GROUP BY`, we join it with the `WHERE` clause here, before the
+  // `BIND`s for the `ORDER BY` expressions and the `SELECT` aliases are added
+  // below. With `GROUP BY`, the `QueryPlanner` joins it after the `GroupBy`,
+  // and the aliases that use its variables are computed after that join, see
   // `moveAliasesAfterPostQueryValues`.
   //
-  // NOTE: Without GROUP BY, the WHERE clause gets its own group, such that its
-  // FILTERs don't see the `VALUES` variables.
+  // NOTE: Without `GROUP BY`, the `WHERE` clause gets its own group, such that
+  // its `FILTER`s don't see the `VALUES` variables.
   if (postQueryValues.has_value()) {
     registerVariablesVisibleInQueryBody(
         postQueryValues->_inlineValues._variables);
@@ -575,9 +575,10 @@ void ParsedQuery::addOrderByClause(
                  ad_utility::contains(
                      postQueryValuesClause_->_inlineValues._variables,
                      orderKey.variable_))) {
-      // If the query (in addition to the ORDER BY) also contains a GROUP BY,
-      // the variables in the ORDER BY must be either grouped, the result
-      // of an alias in the SELECT clause, or bound by the trailing `VALUES`.
+      // If the query (in addition to the `ORDER BY`) also contains a
+      // `GROUP BY`, the variables in the `ORDER BY` must be either grouped,
+      // the result of an alias in the `SELECT` clause, or bound by the
+      // trailing `VALUES`.
       addWarningOrThrow(absl::StrCat(
           "Variable " + orderKey.variable_.name(),
           " was used in an ORDER BY clause, but is neither grouped nor "

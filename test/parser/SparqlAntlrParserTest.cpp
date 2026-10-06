@@ -1032,8 +1032,8 @@ TEST(SparqlParser, GroupGraphPattern) {
                       m::OptionalGraphPattern(m::Triples(
                           {{Var{"?x"}, iri("<foo>"), iri("<bar>")}}))));
   // The trailing `VALUES` clause of a subquery belongs to the subquery, and its
-  // variables are selected by `SELECT *`. Without GROUP BY, it is joined with
-  // the (separately grouped) WHERE clause.
+  // variables are selected by `SELECT *`. Without `GROUP BY`, it is joined with
+  // the (separately grouped) `WHERE` clause.
   expectGraphPattern(
       "{ SELECT *  WHERE { ?x ?y ?z } VALUES ?a { <a> <b> } }",
       m::GraphPattern(::testing::AllOf(
@@ -1050,7 +1050,7 @@ TEST(SparqlParser, GroupGraphPattern) {
                                            ::testing::ElementsAre(
                                                Var{"?x"}, Var{"?y"}, Var{"?z"},
                                                Var{"?a"}))))))));
-  // With GROUP BY, it is joined after the grouping by the `QueryPlanner`.
+  // With `GROUP BY`, it is joined after the grouping by the `QueryPlanner`.
   expectGraphPattern(
       "{ SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x VALUES ?a { <a> } }",
       m::GraphPattern(::testing::VariantWith<parsedQuery::Subquery>(AD_PROPERTY(
@@ -1522,8 +1522,8 @@ TEST(SparqlParser, Query) {
   expectQuery("SELECT * { } ORDER BY ?s",
               m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
 
-  // The variables of a trailing `VALUES` clause are visible in ORDER BY and the
-  // SELECT clause (also with GROUP BY), but not in GROUP BY itself.
+  // The variables of a trailing `VALUES` clause are visible in `ORDER BY` and
+  // the `SELECT` clause (also with `GROUP BY`), but not in `GROUP BY` itself.
   expectQuery(
       "SELECT ?x (STR(?x) AS ?y) {} ORDER BY ?x STR(?x) VALUES ?x { 1 }",
       m::WarningsOfParsedQuery({}));

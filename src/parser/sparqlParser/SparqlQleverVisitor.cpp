@@ -1775,8 +1775,9 @@ parsedQuery::Subquery Visitor::visit(Parser::SubSelectContext* ctx) {
   query._clause = visit(ctx->selectClause());
   visitWhereClause(ctx->whereClause(), query);
   // The trailing `VALUES` clause belongs to the subquery, it is joined before
-  // the subquery's ORDER BY, DISTINCT, projection, and LIMIT/OFFSET (SPARQL
-  // 1.1, sec. 18.2.4.3). Its variables are thus also selected by `SELECT *`.
+  // the subquery's `ORDER BY`, `DISTINCT`, projection, and `LIMIT`/`OFFSET`
+  // (SPARQL 1.1, sec. 18.2.4.3). Its variables are thus also selected by
+  // `SELECT *`.
   query.addSolutionModifiers(visit(ctx->solutionModifier()),
                              makeInternalVariableGenerator(),
                              visit(ctx->valuesClause()));

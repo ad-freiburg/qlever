@@ -1529,21 +1529,21 @@ TEST(ExportQueryExecutionTrees, TrailingValuesBeforeDistinctAndOrderBy) {
             "?s\n<d>\n<b>\n<a>\n<a>\n");
   EXPECT_EQ(tsv("SELECT ?x { ?s <p> ?o } ORDER BY ?x VALUES ?x { 2 1 }"),
             "?x\n1\n1\n1\n1\n2\n2\n2\n2\n");
-  // ORDER BY expressions and SELECT expressions also see the `VALUES`.
+  // `ORDER BY` expressions and `SELECT` expressions also see the `VALUES`.
   EXPECT_EQ(tsv("SELECT ?x { <a> <p> ?o } ORDER BY STR(?x) VALUES ?x { 2 1 }"),
             "?x\n1\n1\n2\n2\n");
   EXPECT_EQ(tsv("SELECT ?x (STR(?x) AS ?y) { <b> <p> ?o } VALUES ?x { 1 }"),
             "?x\t?y\n1\t\"1\"\n");
-  // The FILTERs of the WHERE clause don't see the `VALUES`.
+  // The `FILTER`s of the `WHERE` clause don't see the `VALUES`.
   EXPECT_EQ(tsv("SELECT ?s { ?s <p> <z> FILTER(!BOUND(?x)) } VALUES ?x { 1 }"),
             "?s\n<b>\n");
-  // With GROUP BY, the `VALUES` is joined after the grouping.
+  // With `GROUP BY`, the `VALUES` is joined after the grouping.
   EXPECT_EQ(tsv("SELECT ?s (COUNT(*) AS ?c) { ?s <p> ?o } GROUP BY ?s "
                 "ORDER BY ?v ?s VALUES ?v { 2 1 }"),
             "?s\t?c\n<a>\t2\n<b>\t1\n<d>\t1\n"
             "<a>\t2\n<b>\t1\n<d>\t1\n");
-  // With GROUP BY, ORDER BY expressions and SELECT expressions that use the
-  // `VALUES` variables are computed after the join, the aggregates in these
+  // With `GROUP BY`, `ORDER BY` expressions and `SELECT` expressions that use
+  // the `VALUES` variables are computed after the join, the aggregates in these
   // expressions are still computed by the grouping.
   EXPECT_EQ(tsv("SELECT ?s (COUNT(*) AS ?c) { ?s <p> ?o } GROUP BY ?s "
                 "ORDER BY LCASE(?n) "
@@ -1559,14 +1559,14 @@ TEST(ExportQueryExecutionTrees, TrailingValuesBeforeDistinctAndOrderBy) {
   EXPECT_EQ(tsv("SELECT (COUNT(*) + ?v AS ?x) { ?s <p> ?o } ORDER BY ?x "
                 "VALUES ?v { 1 2 }"),
             "?x\n5\n6\n");
-  // HAVING is applied before the join.
+  // `HAVING` is applied before the join.
   EXPECT_EQ(tsv("SELECT ?s ?v { ?s <p> ?o } GROUP BY ?s "
                 "HAVING (COUNT(*) > 1) VALUES ?v { 1 }"),
             "?s\t?v\n<a>\t1\n");
   EXPECT_EQ(tsv("SELECT ?s (?v AS ?w) { ?s <p> ?o } GROUP BY ?s "
                 "HAVING (BOUND(?w)) VALUES ?v { 1 }"),
             "?s\t?w\n");
-  // The CONSTRUCT template can also use the `VALUES` variables.
+  // The `CONSTRUCT` template can also use the `VALUES` variables.
   EXPECT_EQ(runQueryStreamableResult(
                 kg,
                 "CONSTRUCT { ?s <r> ?r } { ?s <p> ?o } GROUP BY ?s "
@@ -1576,7 +1576,7 @@ TEST(ExportQueryExecutionTrees, TrailingValuesBeforeDistinctAndOrderBy) {
 }
 
 // The trailing `VALUES` clause of a subquery belongs to the subquery, it is
-// joined before the subquery's DISTINCT, LIMIT and projection.
+// joined before the subquery's `DISTINCT`, `LIMIT` and projection.
 TEST(ExportQueryExecutionTrees, TrailingValuesOfSubquery) {
   std::string kg = "<a> <p> <c> . <b> <p> <d> .";
   auto tsv = [&kg](const std::string& query) {
