@@ -51,9 +51,6 @@ static bool pointsIntoObject(const void* pointer, const T& object) {
   return address >= start && address - start < sizeof(object);
 }
 
-// The probe string type of the SSO helpers.
-using detail::PmrSsoProbeString;
-
 // _____________________________________________________________________________
 TEST(GTestHelpersTest, PmrStringSsoCapacity) {
   // Ensure that the discovered capacity is usable: strings up to that size are
@@ -68,9 +65,9 @@ TEST(GTestHelpersTest, PmrStringSsoCapacity) {
   ASSERT_GT(capacity, 0u) << "This platform offers no inline string storage, "
                              "so the SSO assertions below are meaningless";
   requireSsoCapacityOfPmrStringAtLeast(capacity);
-  PmrSsoProbeString atCapacity(capacity, 'x');
+  detail::PmrSsoProbeString atCapacity(capacity, 'x');
   EXPECT_TRUE(pointsIntoObject(atCapacity.data(), atCapacity));
-  PmrSsoProbeString aboveCapacity(capacity + 1, 'y');
+  detail::PmrSsoProbeString aboveCapacity(capacity + 1, 'y');
   EXPECT_FALSE(pointsIntoObject(aboveCapacity.data(), aboveCapacity));
 }
 
@@ -94,13 +91,13 @@ TEST(GTestHelpersTest, AssertPmrStringUsesSso) {
     if (size > 0) {
       requireSsoCapacityOfPmrStringAtLeast(size);
     }
-    PmrSsoProbeString shortString(size, 'x');
+    detail::PmrSsoProbeString shortString(size, 'x');
     EXPECT_TRUE(pointsIntoObject(shortString.data(), shortString));
     EXPECT_EQ(shortString.size(), size);
   }
   // Verify that a string above the SSO threshold is not stored inside the
   // object.
-  PmrSsoProbeString longString(64, 'y');
+  detail::PmrSsoProbeString longString(64, 'y');
   EXPECT_FALSE(pointsIntoObject(longString.data(), longString));
 }
 
