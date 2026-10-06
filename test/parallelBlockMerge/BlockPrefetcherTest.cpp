@@ -175,15 +175,14 @@ class FakeSink {
   }
 
   // Complete the `handler` (which posts itself to its executor) with the given
-  // arguments. The operation is no longer in flight from now on.
+  // arguments. The operation is no longer in flight from now on. The `lock`
+  // (which must hold `mutex_`) is released before the `handler` is invoked,
+  // and the caller must not touch this sink afterwards.
   //
-  // IMPORTANT: The `lock` is released before the `handler` is invoked, and this
-  // sink must not be touched afterwards. The posted handler may run on another
-  // thread right away and resume the filler of the `BlockPrefetcher`, which
-  // then releases its reference to this sink, such that the test may already
-  // have destroyed it (together with `mutex_`) when this function returns.
-  //
-  // PRECONDITION: The `lock` holds `mutex_`.
+  // NOTE: The posted handler may run on another thread right away and resume
+  // the filler of the `BlockPrefetcher`, which then releases its reference to
+  // this sink. So the test may already have destroyed the sink (together with
+  // `mutex_`) when this function returns.
   void completeLater(std::unique_lock<std::mutex>& lock, Handler handler,
                      std::exception_ptr exception,
                      std::optional<DeferredBlock> block) {
