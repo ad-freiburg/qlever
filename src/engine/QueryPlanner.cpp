@@ -2711,7 +2711,7 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       }
       prefilteredSeeds.push_back(plan);
       prefilteredSeeds.back()._qet = std::move(prefiltered.value());
-      numCandidates = std::min(
+      numCandidates = std::min<uint64_t>(
           numCandidates.value_or(prefilteredSeeds.back().getSizeEstimate()),
           prefilteredSeeds.back().getSizeEstimate());
     }

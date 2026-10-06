@@ -12,6 +12,7 @@
 
 #include <optional>
 
+#include "backports/three_way_comparison.h"
 #include "global/ValueId.h"
 
 namespace ad_utility {
@@ -24,7 +25,8 @@ struct GeoRectangle {
   double minLat_;
   double maxLng_;
   double maxLat_;
-  bool operator==(const GeoRectangle&) const = default;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GeoRectangle, minLng_, minLat_,
+                                              maxLng_, maxLat_)
 };
 
 // Grow `rectangle` on all sides by at least `distanceMeters` (measured on the
