@@ -22,6 +22,12 @@
 namespace ad_benchmark {
 namespace {
 
+// `measureTimeOfFunction` discards the return value of a measurement, so every
+// measurement stores its result here. The in-place measurements also fold the
+// last decoded byte of every word into their result, so the compiler cannot
+// drop writes to buffers that are otherwise never read.
+volatile size_t benchmarkSink = 0;
+
 // Benchmark the in-place `PrefixCompressor::decompressInto` API against the
 // allocating `PrefixCompressor::decompress` API. The micro group measures
 // per-word decode latency; the end-to-end group measures batch vocabulary
@@ -107,6 +113,7 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
           totalBytes += compressor_.decompress(compressed).size();
         }
       }
+      benchmarkSink = totalBytes;
       return totalBytes;
     });
     micro.addMeasurement("decompressInto (reused buffer)", [&] {
@@ -114,10 +121,15 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
       std::string output(outputCapacity_, '\0');
       for (size_t repetition = 0; repetition < repetitions; ++repetition) {
         for (const auto& compressed : compressed_) {
-          totalBytes += compressor_.decompressInto(
+          const size_t written = compressor_.decompressInto(
               compressed, ql::span<char>{output.data(), output.size()});
+          totalBytes +=
+              written + (written > 0
+                             ? static_cast<unsigned char>(output[written - 1])
+                             : 0);
         }
       }
+      benchmarkSink = totalBytes;
       return totalBytes;
     });
 
@@ -135,6 +147,7 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
           totalBytes += decoded.back().size();
         }
       }
+      benchmarkSink = totalBytes;
       return totalBytes;
     });
     endToEnd.addMeasurement("batch decodeInto contiguous arena", [&] {
@@ -148,11 +161,16 @@ class PrefixCompressorBenchmark : public BenchmarkInterface {
               compressed, ql::span<char>{arena.get() + offset,
                                          totalDecompressedSize_ - offset});
           AD_CORRECTNESS_CHECK(written == size);
+          totalBytes +=
+              written +
+              (written > 0
+                   ? static_cast<unsigned char>(arena[offset + written - 1])
+                   : 0);
           offset += written;
-          totalBytes += written;
         }
         AD_CORRECTNESS_CHECK(offset == totalDecompressedSize_);
       }
+      benchmarkSink = totalBytes;
       return totalBytes;
     });
 
