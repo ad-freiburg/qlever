@@ -69,6 +69,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   using Block = IdTableStatic<NumCols>;
   using OptionalBlock = parallelBlockMerge::OptionalBlock<Block>;
   using GetResult = parallelBlockMerge::GetResult<Block>;
+  using DeferredBlock = parallelBlockMerge::DeferredBlock<Block>;
   using Strand = parallelBlockMerge::Strand;
 
  private:
@@ -115,15 +116,15 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   std::shared_ptr<State> state_ = std::make_shared<State>();
 
  public:
-  // Construct from the `ioExecutor` on which the compression, the
-  // decompression and the I/O are run and from which the strands of this
-  // storage and of its chunks are derived, the name of the file to spill to,
-  // the `allocator` for the blocks that are read back, and the number of blocks
-  // that the chunk which the consumer currently reads keeps in memory before it
-  // starts spilling (every other chunk spills all of its blocks, see
-  // `State::mayChunkKeepBlocks`). That number may be zero, in which case every
-  // block is spilled. The `compressionLevel` decides how the spilled blocks are
-  // stored, see `CompressedBlockFile::CompressionLevel`.
+  // Construct from the `ioExecutor` on which the compression and the writes
+  // are run and from which the strands of this storage and of its chunks are
+  // derived, the name of the file to spill to, the `allocator` for the blocks
+  // that are read back, and the number of blocks that the chunk which the
+  // consumer currently reads keeps in memory before it starts spilling (every
+  // other chunk spills all of its blocks, see `State::mayChunkKeepBlocks`).
+  // That number may be zero, in which case every block is spilled. The
+  // `compressionLevel` decides how the spilled blocks are stored, see
+  // `CompressedBlockFile::CompressionLevel`.
   //
   // NOTE: The `filenamePrefix` is not a filename but the prefix of one per
   // chunk, see `spillFilename`. It has to be unique among all the storages that
@@ -186,8 +187,10 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
         AD_FWD(completionToken));
   }
 
-  // Remove the front of the queue of the chunk, reading it back from the file
-  // if it was spilled, see `BlockStorageConcept::getBlock`.
+  // Remove the front of the queue of the chunk, see
+  // `BlockStorageConcept::getBlock`. A block that was spilled is handed out as
+  // a `DeferredBlock` that reads it back from the file, see
+  // `ChunkQueue::deferSpilledBlock`.
   template <typename CompletionToken>
   auto getBlock(size_t chunkIndex, CompletionToken&& completionToken) {
     return net::co_spawn(
