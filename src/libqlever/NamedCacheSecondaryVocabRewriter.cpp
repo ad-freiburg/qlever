@@ -29,11 +29,12 @@ namespace qlever::namedCacheSecondaryVocab {
 namespace {
 // If the word of `entry` is contained in the vocabulary of the main index, or
 // can be encoded directly in an `Id` (see `EncodedIriManager`), then return
-// the `Id` of that word, else return `std::nullopt`. Note that the position of
-// an `entry` that is contained in the secondary vocabulary of its own index is
-// the `Id` in that vocabulary, for which `std::nullopt` is returned as well,
-// because such a word is looked up in the secondary vocabulary that is passed
-// to the functions of this file.
+// the `Id` of that word, else return `std::nullopt`.
+//
+// NOTE: The position of an `entry` whose word is contained in the secondary
+// vocabulary of its own index is the `Id` in that vocabulary. For such an
+// entry, `std::nullopt` is returned as well, because its word is looked up in
+// the secondary vocabulary that is passed to the functions of this file.
 std::optional<Id> idInMainVocab(const LocalVocabEntry& entry) {
   auto [lowerBound, upperBound] = entry.positionInVocab();
   if (lowerBound == upperBound) {

@@ -163,20 +163,22 @@ CPP_template(typename Serializer, typename Columns)(
   serializer << resultView.numColumns();
   AD_CORRECTNESS_CHECK(ql::ranges::size(columns) == resultView.numColumns());
   for (const auto& col : columns) {
-    // NOTE: Although the code for serialization of a local vocab above is
+    // NOTE 1: Although the code for serialization of a local vocab above is
     // already incorporated, we currently still let local vocab entries throw
     // an exception, because there are some caveats in the serialization that
-    // don't work yet, and will only be mitigated in the future. Note that a
-    // caller that has rewritten the `columns` (see above) has already replaced
-    // all such `Id`s, so this check only applies to the `Id`s that are
-    // actually written.
+    // don't work yet, and will only be mitigated in the future. A caller that
+    // has rewritten the `columns` (see above) has already replaced all such
+    // `Id`s, so this check only applies to the `Id`s that are actually
+    // written.
     //
     // NOTE 2: Even though we disallow the local vocab, it is crucial to
     // serialize the local vocab because of possible added blank node indices,
     // which we do handle correctly, and which also rely on the local vocab.
+    //
     // NOTE 3: The blobs of `NamedCachedQueryBlobManager` support local vocab
     // entries by rewriting them first (see
     // `NamedCacheSecondaryVocabRewriter.h`).
+    //
     // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
     // allow local vocab entries here.
     AD_CORRECTNESS_CHECK(

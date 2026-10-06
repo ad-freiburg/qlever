@@ -89,7 +89,8 @@ Value addAndRewrite(const std::shared_ptr<const Value>& value,
 constexpr std::string_view kb = "<m> <p> <o> . <m> <p> \"lit\" .";
 }  // namespace
 
-// _____________________________________________________________________________
+// Test `containsLocalVocabIds` on an entry with and without local vocab
+// entries.
 TEST(NamedCacheSecondaryVocabRewriter, containsLocalVocabIds) {
   auto qec = ad_utility::testing::getQec(std::string{kb});
   EXPECT_FALSE(containsLocalVocabIds(
@@ -98,7 +99,9 @@ TEST(NamedCacheSecondaryVocabRewriter, containsLocalVocabIds) {
       qec, "withLocalVocab", "SELECT ?x { VALUES ?x { <m> <newWord> } }")));
 }
 
-// _____________________________________________________________________________
+// Test that `addNewWordsToSecondaryVocab` adds exactly the new words of
+// several entries to a preexisting secondary vocabulary, and that
+// `rewriteId` then rewrites the `Id`s of all words.
 TEST(NamedCacheSecondaryVocabRewriter, addNewWordsAndRewriteIds) {
   auto qec = ad_utility::testing::getQec(std::string{kb});
   // `<y>` occurs twice, and in two different entries.
@@ -147,7 +150,8 @@ TEST(NamedCacheSecondaryVocabRewriter, addNewWordsAndRewriteIds) {
       HasSubstr("call `addNewWordsToSecondaryVocab` first"));
 }
 
-// _____________________________________________________________________________
+// Test that `rewriteToSecondaryVocab` sorts the rewritten copy again by the
+// columns that the entry is sorted on, and leaves the entry unchanged.
 TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabSortsAgain) {
   auto qec = ad_utility::testing::getQec(std::string{kb});
   // The `DISTINCT` sorts the result by `?x` in the internal order, in which a
@@ -187,7 +191,8 @@ TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabSortsAgain) {
               ElementsAre(secondaryId(1), getId("<m>")));
 }
 
-// _____________________________________________________________________________
+// Test that the mapping from shapes to rows of a cached geo index is
+// permuted together with the rows of the rewritten copy.
 TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabWithGeoIndex) {
   auto qec = ad_utility::testing::getQec(
       "<s1> <asWKT> \"LINESTRING(1 1, 2 2)\""
@@ -230,7 +235,6 @@ TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabWithGeoIndex) {
   }
 }
 
-// _____________________________________________________________________________
 // Test local vocab entries whose words are already contained in the vocabulary
 // of the main index or in the secondary vocabulary of the index itself (for
 // example because it was loaded from a blob). No query produces such entries,

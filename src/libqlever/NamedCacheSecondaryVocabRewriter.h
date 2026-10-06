@@ -44,9 +44,9 @@
 // PRECONDITION for all functions below: If the index of the entries has a
 // secondary vocabulary itself (for example because it was loaded from a blob),
 // then the secondary vocabulary that is passed in has to be an extension of
-// that one, that is, it has to contain all of its words at the same global
-// indices (for example because it was obtained via
-// `SecondaryVocabulary::clone`), because the `Id`s of type
+// that one. That is, it has to contain all of its words at the same global
+// indices, for example because it was obtained via
+// `SecondaryVocabulary::clone`. This is because the `Id`s of type
 // `Datatype::SecondaryVocabIndex` of the entries are kept as they are.
 namespace qlever::namedCacheSecondaryVocab {
 
