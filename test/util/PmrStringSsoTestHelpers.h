@@ -24,9 +24,11 @@
 // type via `ql::pmr::polymorphic_allocator` (which exists in both modes) keeps
 // this helper compilable with and without the backports. The SSO behavior is
 // the STL's in both modes, only the allocator type differs.
+namespace detail {
 using PmrSsoProbeString =
     std::basic_string<char, std::char_traits<char>,
                       ql::pmr::polymorphic_allocator<char>>;
+}  // namespace detail
 
 // _____________________________________________________________________________
 // Return the largest number of characters that a `PmrSsoProbeString` is
@@ -59,10 +61,10 @@ inline size_t SsoCapacityOfPmrString() {
    public:
     size_t numAllocations() const { return numAllocations_; }
   };
-  const std::string sample(sizeof(PmrSsoProbeString), 's');
+  const std::string sample(sizeof(detail::PmrSsoProbeString), 's');
   for (size_t size = sample.size(); size > 0; --size) {
     CountingMemoryResource resource;
-    PmrSsoProbeString pmrSample{sample.data(), size, &resource};
+    detail::PmrSsoProbeString pmrSample{sample.data(), size, &resource};
     if (resource.numAllocations() == 0) {
       return size;
     }
