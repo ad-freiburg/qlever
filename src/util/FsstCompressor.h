@@ -52,9 +52,11 @@ constexpr CastToUnsignedPtr castToUnsignedPtr{};
 // Allocate `bound` bytes, decode directly into the string buffer, and shrink
 // to the decoded size. The bytes are left uninitialized where the standard
 // library provides `resize_and_overwrite` (see `ql::resize_and_overwrite`),
-// which also checks that `decode` returns at most `bound`.
+// which also checks that `decode` returns at most `bound`. `decode` writes
+// into the span and returns the number of bytes written.
 CPP_template(typename Decode)(
-    requires ql::concepts::invocable<Decode, ql::span<char>>) std::string
+    requires ad_utility::InvocableWithConvertibleReturnType<
+        Decode&, size_t, ql::span<char>>) std::string
     decompressToOwnedString(size_t bound, Decode decode) {
   std::string result;
   ql::resize_and_overwrite(result, bound, [&decode](char* buf, size_t count) {
