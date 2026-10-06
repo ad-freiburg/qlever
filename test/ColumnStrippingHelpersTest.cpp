@@ -10,12 +10,13 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "../src/engine/Distinct.h"
-#include "../src/engine/QueryExecutionTree.h"
-#include "../src/util/ColumnStrippingHelpers.h"
+#include "engine/Distinct.h"
+#include "engine/QueryExecutionTree.h"
+#include "util/ColumnStrippingHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
+// _______________________________________________________________________________________
 TEST(VarsRequiredFromSubtree, add) {
   Variable nameVar("?name");
   Variable ageVar("?age");
@@ -40,6 +41,7 @@ TEST(VarsRequiredFromSubtree, add) {
   EXPECT_EQ(((helper.varsRequiredFromSubtree_)).size(), 4);
 }
 
+// _______________________________________________________________________________________
 TEST(VarsRequiredFromSubtree, get) {
   // check return value if constructor received empty set
   std::set<Variable> varSet = {};
@@ -64,6 +66,7 @@ TEST(VarsRequiredFromSubtree, get) {
   EXPECT_EQ(returnSet.size(), 3);
 }
 
+// _______________________________________________________________________________________
 TEST(makeTreeWithOptionalStripOperation, basic) {
   // Create an operation (in this test case the operation Distinct)
   IdTable input{makeIdTableFromVector(
