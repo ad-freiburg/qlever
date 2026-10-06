@@ -197,10 +197,18 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   // Apply trailing `VALUES` clause of a query with GROUP BY (without GROUP BY,
   // it is part of the root graph pattern). As in the SPARQL 1.1 spec (sec.
   // 18.2.4.3), this happens after GROUP BY and HAVING, but before DISTINCT and
-  // ORDER BY.
+  // ORDER BY. Then compute the aliases that use its variables.
   auto& postValues = pq.postQueryValuesClause_;
   if (postValues.has_value()) {
     plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
+    checkCancellation();
+  }
+  for (const auto& bind : pq.postQueryValuesBinds_) {
+    std::vector<SubtreePlan> row;
+    for (const auto& plan : plans.back()) {
+      row.push_back(makeSubtreePlan<Bind>(_qec, plan._qet, bind));
+    }
+    plans.push_back(std::move(row));
     checkCancellation();
   }
 

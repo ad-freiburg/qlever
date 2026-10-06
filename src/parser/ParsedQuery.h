@@ -83,6 +83,10 @@ class ParsedQuery {
   // the `QueryPlanner` after GROUP BY and HAVING. Without GROUP BY, it is part
   // of `_rootGraphPattern`, see `addSolutionModifiers`.
   std::optional<parsedQuery::Values> postQueryValuesClause_ = std::nullopt;
+  // The aliases of a query with GROUP BY that use a variable of the
+  // `postQueryValuesClause_` and are thus computed by the `QueryPlanner` after
+  // joining it, see `moveAliasesAfterPostQueryValues`.
+  std::vector<parsedQuery::Bind> postQueryValuesBinds_;
 
   // Contains warnings about queries that are valid according to the SPARQL
   // standard, but are probably semantically wrong.
@@ -240,6 +244,15 @@ class ParsedQuery {
   void addOrderByClause(OrderClause orderClause, bool isGroupBy,
                         std::string_view noteForImplicitGroupBy,
                         InternalVariableGenerator internalVariableGenerator);
+
+  // For a query with GROUP BY and `postQueryValuesClause_`: Move the aliases
+  // that use a variable of the `VALUES` clause (outside of an aggregate, also
+  // indirectly via a previous alias) to `postQueryValuesBinds_`. Their
+  // aggregates are replaced by new internal aliases, which are still computed
+  // by the `GroupBy`. For example, `(COUNT(?x) + ?v AS ?y)` becomes the alias
+  // `(COUNT(?x) AS ?internal)` and the bind `(?internal + ?v AS ?y)`.
+  void moveAliasesAfterPostQueryValues(
+      InternalVariableGenerator internalVariableGenerator);
 
  public:
   // Add the `modifiers` (like GROUP BY, HAVING, ORDER BY) to the query. Throw

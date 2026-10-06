@@ -85,8 +85,8 @@ struct SelectClause : ClauseBase {
   /// Delete all the aliases, but keep the variables that they are bound to as
   /// selected. This is used in the case of queries that have aliases, but no
   /// GROUP BY clause. There these aliases become ordinary BIND clauses and are
-  /// then deleted from the SELECT clause
-  void deleteAliasesButKeepVariables();
+  /// then deleted from the SELECT clause. Return the deleted aliases.
+  std::vector<Alias> deleteAliasesButKeepVariables();
 };
 }  // namespace parsedQuery
 
