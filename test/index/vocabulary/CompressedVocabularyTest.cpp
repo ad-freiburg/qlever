@@ -369,7 +369,7 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchShortWordViewsStayValid) {
   // Verify that this platform uses inline storage for `std::pmr::string`;
   // short words therefore use the Small String Optimization (SSO) and would
   // otherwise end up inside a destroyed stack object rather than the arena.
-  requirePmrStringInlineStorage(15);
+  requireSsoCapacityOfPmrStringAtLeast(15);
 
   // All words deliberately short (<= 15 chars): every one takes the SSO
   // path in a `pmr::string`-based implementation, and none would end up in
