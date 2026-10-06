@@ -78,6 +78,39 @@ auto testAggregateWithVariable =
       EXPECT_EQ(res, expectedResult);
     };
 
+// Same as `testAggregate` above, but the input is the `constant`, evaluated on
+// the first `numRows` rows of the `TestContext`.
+template <typename AggregateExpressionT>
+void testAggregateWithConstant(Id constant, size_t numRows, Id expectedResult,
+                               bool distinct = false,
+                               source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  auto child = std::make_unique<SingleUseExpression>(constant);
+  TestContext testContext;
+  testContext.context._endIndex = numRows;
+  AggregateExpressionT aggregate{distinct, std::move(child)};
+  auto resAsVariant = aggregate.evaluate(&testContext.context);
+  EXPECT_EQ(std::get<Id>(resAsVariant), expectedResult);
+}
+
+// Test that aggregates of a constant aggregate one copy of the constant per
+// row (see https://github.com/ad-freiburg/qlever/issues/3572).
+TEST(AggregateExpression, constantInput) {
+  testAggregateWithConstant<CountExpression>(I(5), 3, I(3));
+  testAggregateWithConstant<CountExpression>(I(5), 3, I(1), true);
+  testAggregateWithConstant<CountExpression>(I(5), 0, I(0));
+  testAggregateWithConstant<SumExpression>(I(5), 3, I(15));
+  testAggregateWithConstant<SumExpression>(I(5), 0, I(0));
+  testAggregateWithConstant<AvgExpression>(I(5), 3, D(5));
+  testAggregateWithConstant<AvgExpression>(I(5), 0, I(0));
+  testAggregateWithConstant<MinExpression>(I(5), 3, I(5));
+  testAggregateWithConstant<MinExpression>(I(5), 0, U);
+  testAggregateWithConstant<MaxExpression>(I(5), 3, I(5));
+  testAggregateWithConstant<MaxExpression>(I(5), 0, U);
+  testAggregateWithConstant<SampleExpression>(I(5), 3, I(5));
+  testAggregateWithConstant<SampleExpression>(I(5), 0, U);
+}
+
 // Test `CountExpression`.
 TEST(AggregateExpression, count) {
   auto testCountId = testAggregate<CountExpression, Id>;
