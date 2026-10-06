@@ -336,7 +336,9 @@ MATCHER_P(AllUniqueBy, func, "has all unique values under projection") {
 
 // _____________________________________________________________________________
 // Sanitizes the given raw gtest name by replacing every '/' with '_'.
-// (parameterized tests embed '/' in their names). Shared implementation of
+// Parameterized tests embed '/' in their names (e.g. "Suite/Test/0"), and
+// tests use these names as names of temporary files; a '/' would turn them
+// into paths into (non-existent) subdirectories. Shared implementation of
 // `gtestCurrentTestName` and `gtestCurrentTestSuiteName`.
 inline std::string sanitizeGtestName(const std::string& name) {
   return absl::StrReplaceAll(name, {{"/", "_"}});
