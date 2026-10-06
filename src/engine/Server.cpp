@@ -408,7 +408,9 @@ Awaitable<nlohmann::json> Server::processWriteMaterializedView(
   // Extract query body.
   auto query = ad_utility::visitIf(
       operation, [](const Query& op) -> Query { return op; },
-      [](const auto&) -> Query {
+      [](const auto& op) -> Query {
+        static_assert(ad_utility::SameAsAny<std::decay_t<decltype(op)>, Update,
+                                            GraphStoreOperation, None>);
         throw std::runtime_error(
             "Action 'write-materialized-view' requires a 'SELECT' query.");
       });

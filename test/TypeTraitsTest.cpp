@@ -445,16 +445,25 @@ TEST(TypeTraits, visitIf) {
                 [](const std::string&) { return -1; }),
             -1);
 
-  // `elseFunc` defaults to a no-op.
+  // Unmatched alternatives have to be ignored explicitly via a catch-all.
   int numCalls = 0;
-  ad_utility::visitIf(v, [&numCalls](const std::string&) { ++numCalls; });
-  ad_utility::visitIf(v, [&numCalls](int) { ++numCalls; });
+  auto ignore = [](const auto&) {
+    // Explicitly ignore all other alternatives.
+  };
+  ad_utility::visitIf(
+      v, [&numCalls](const std::string&) { ++numCalls; }, ignore);
+  ad_utility::visitIf(v, [&numCalls](int) { ++numCalls; }, ignore);
   EXPECT_EQ(numCalls, 1);
 
-  // More than two functions: tried in order, first invocable one wins. Note
-  // that this relies on the parameter types not being implicitly convertible
-  // to each other (e.g. `int` and `double` would not work: a `double`
-  // alternative is also invocable via an `int` parameter).
+  // A function whose parameter type is implicitly convertible from (but not
+  // the same as) the active alternative does not match.
+  std::variant<int, double> vNum{1.5};
+  EXPECT_STREQ(
+      ad_utility::visitIf(
+          vNum, [](int) { return "int"; }, [](double) { return "double"; }),
+      "double");
+
+  // More than two functions: tried in order, first matching one wins.
   auto describe = [](const auto& variant) {
     return ad_utility::visitIf(
         variant, [](int) { return "int"; },

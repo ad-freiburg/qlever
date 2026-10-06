@@ -330,39 +330,40 @@ struct FirstArgument<T, std::void_t<decltype(&T::operator())>>
 template <typename T>
 using FirstArgumentT = typename FirstArgument<T>::type;
 
-// Default fallback for `visitIf` below: silently ignore alternatives that no
-// passed-in function handles.
-struct IgnoreUnmatchedAlternative {
-  template <typename T>
-  void operator()(T&&) const noexcept {}
-};
-
-// True iff `func` should handle `value` in `visitIf` below: `func` must be
-// invocable with `value`, and if `func`'s parameter type can be determined
-// (i.e. `func` is not generic/overloaded), that parameter type must, up to
-// cv/reference qualification, be the same as the type of `value` -- so that
-// an implicit conversion (e.g. a function taking `int` also being invocable
-// with a `double`) cannot cause a false match.
+// True iff `func` should handle `value` in `visitIf` below. If `func`'s
+// parameter type can be determined (i.e. `func` is not generic/overloaded),
+// that parameter type must, up to cv/reference qualification, be the same as
+// the type of `value` -- so that an implicit conversion (e.g. a function taking
+// `int` also being invocable with a `double`) cannot cause a false match.
+// Invocability is deliberately not checked in this case: it is expensive to
+// compile, and a function that has the right type but e.g. the wrong
+// constness is a bug that should fail loudly instead of being silently
+// skipped. A generic or constrained function falls back to invocability.
 template <typename Func, typename Value, typename = void>
 constexpr bool isMatchForVisitIf = std::is_invocable_v<Func&, Value>;
 
 template <typename Func, typename Value>
 constexpr bool isMatchForVisitIf<
     Func, Value, std::void_t<FirstArgumentT<std::decay_t<Func>>>> =
-    std::is_invocable_v<Func&, Value> &&
     isSimilar<FirstArgumentT<std::decay_t<Func>>, Value>;
 
 // Call the first of `funcs` that is a match (see `isMatchForVisitIf`) for
-// `value`.
+// `value`. Note: The recursion is cheaper to compile than computing the index
+// of the match via a fold over all `funcs` and then dispatching via
+// `std::get<i>(std::tie(funcs...))`, because the recursion stops at the first
+// match.
 template <typename Value, typename Func, typename... Rest>
 decltype(auto) tryInvoke(Value&& value, Func&& func, Rest&&... rest) {
   if constexpr (isMatchForVisitIf<Func, Value>) {
     return func(AD_FWD(value));
-  } else {
-    static_assert(sizeof...(Rest) > 0,
-                  "None of the functions passed to `visitIf` is invocable "
-                  "with the active alternative");
+  } else if constexpr (sizeof...(Rest) > 0) {
     return tryInvoke(AD_FWD(value), AD_FWD(rest)...);
+  } else {
+    static_assert(alwaysFalse<Value>,
+                  "None of the functions passed to `visitIf` matches the "
+                  "active alternative. Pass a generic catch-all function "
+                  "(e.g. `[](const auto&) {}`) as the last argument to "
+                  "explicitly ignore the remaining alternatives.");
   }
 }
 }  // namespace detail
@@ -372,22 +373,21 @@ decltype(auto) tryInvoke(Value&& value, Func&& func, Rest&&... rest) {
 /// several conditions the currently active alternative of `variant` matches,
 /// and running the corresponding function. `funcs` are tried in order, and
 /// the first one that matches (see `detail::isMatchForVisitIf`) the active
-/// alternative is called; if none does, the alternative is silently ignored.
-/// Which alternative(s) a given function applies to is determined simply by
-/// its parameter type, so each function in `funcs` is typically a
-/// non-generic lambda that takes the concrete, expected alternative type
-/// directly (no `decay_t`/`if constexpr` boilerplate needed at the call
-/// site); the last function may instead be a generic catch-all (`auto&&`)
-/// to act as an explicit "else" branch. A generic or constrained (e.g.
-/// `CPP_template_lambda`) function instead falls back to plain invocability
-/// for matching; since its parameter type is deduced from (rather than
+/// alternative is called. Every alternative must be matched by some function
+/// (this is checked at compile time). Which alternative(s) a given function
+/// applies to is determined simply by its parameter type, so each function in
+/// `funcs` is typically a non-generic lambda that takes the concrete, expected
+/// alternative type directly (no `decay_t`/`if constexpr` boilerplate needed
+/// at the call site); the last function may instead be a generic catch-all
+/// (`auto&&`) to act as an explicit "else" branch. A generic or constrained
+/// (e.g. `CPP_template_lambda`) function instead matches all alternatives it
+/// is invocable with; since its parameter type is deduced from (rather than
 /// converted from) the alternative's type, this is exact as well.
 template <typename Variant, typename... Funcs>
 decltype(auto) visitIf(Variant&& variant, Funcs&&... funcs) {
   return std::visit(
       [&](auto&& value) -> decltype(auto) {
-        return detail::tryInvoke(AD_FWD(value), AD_FWD(funcs)...,
-                                 detail::IgnoreUnmatchedAlternative{});
+        return detail::tryInvoke(AD_FWD(value), AD_FWD(funcs)...);
       },
       AD_FWD(variant));
 }

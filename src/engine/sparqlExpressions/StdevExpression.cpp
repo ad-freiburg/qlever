@@ -14,7 +14,7 @@ namespace sparqlExpression::detail {
 ExpressionResult DeviationExpression::evaluate(
     EvaluationContext* context) const {
   // Helper: Extracts a double or int (as double) from a `NumericValue`.
-  auto numValVisitor = [](const NumericValue& value) -> std::optional<double> {
+  auto numValToDouble = [](const NumericValue& value) -> std::optional<double> {
     return ad_utility::visitIf(
         value, [](double v) { return std::optional{v}; },
         [](int64_t v) { return std::optional{static_cast<double>(v)}; },
@@ -22,7 +22,7 @@ ExpressionResult DeviationExpression::evaluate(
   };
 
   // Helper to replace child expression results with their squared deviation
-  auto devImpl = [context, numValVisitor](
+  auto devImpl = [context, numValToDouble](
                      bool& undef,
                      VectorWithMemoryLimit<IdOrLocalVocabEntry>& exprResult,
                      auto generator) {
@@ -34,7 +34,7 @@ ExpressionResult DeviationExpression::evaluate(
     // Collect values as doubles
     for (auto& inp : generator) {
       const auto& n = detail::NumericValueGetter{}(std::move(inp), context);
-      auto v = numValVisitor(n);
+      auto v = numValToDouble(n);
       if (v.has_value()) {
         childResults.push_back(v.value());
         sum += v.value();

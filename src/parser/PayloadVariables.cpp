@@ -23,9 +23,12 @@ PayloadVariables PayloadVariables::all() {
 // ____________________________________________________________________________
 void PayloadVariables::addVariable(const Variable& variable) {
   // If the payload variables has not been set to all, add the variable.
-  ad_utility::visitIf(variables_, [&variable](std::vector<Variable>& value) {
-    value.push_back(variable);
-  });
+  ad_utility::visitIf(
+      variables_,
+      [&variable](std::vector<Variable>& value) { value.push_back(variable); },
+      [](const detail::PayloadAllVariables&) {
+        // All variables are already included.
+      });
 }
 
 // ____________________________________________________________________________

@@ -84,9 +84,14 @@ class PolymorphicVocabulary {
   // otherwise.
   void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
     ad_utility::visitIf(
-        vocab_, CPP_template_lambda(&grid)(typename T)(T & vocab)(
-                    requires MaybeProvidesGeoCellGrid<T>) {
+        vocab_,
+        CPP_template_lambda(&grid)(typename T)(T & vocab)(
+            requires MaybeProvidesGeoCellGrid<T>) {
           vocab.setGeoCellGrid(grid);
+        },
+        [](const auto& vocab) {
+          static_assert(
+              NeverProvidesGeometryInfo<std::decay_t<decltype(vocab)>>);
         });
   }
 
