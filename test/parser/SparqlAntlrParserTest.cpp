@@ -1032,8 +1032,8 @@ TEST(SparqlParser, GroupGraphPattern) {
                       m::OptionalGraphPattern(m::Triples(
                           {{Var{"?x"}, iri("<foo>"), iri("<bar>")}}))));
   // The trailing `VALUES` clause of a subquery belongs to the subquery, and its
-  // variables are selected by `SELECT *`. Without GROUP BY, it is joined with
-  // the (separately grouped) WHERE clause.
+  // variables are selected by `SELECT *`. Without `GROUP BY`, it is joined with
+  // the (separately grouped) `WHERE` clause.
   expectGraphPattern(
       "{ SELECT *  WHERE { ?x ?y ?z } VALUES ?a { <a> <b> } }",
       m::GraphPattern(::testing::AllOf(
@@ -1050,7 +1050,7 @@ TEST(SparqlParser, GroupGraphPattern) {
                                            ::testing::ElementsAre(
                                                Var{"?x"}, Var{"?y"}, Var{"?z"},
                                                Var{"?a"}))))))));
-  // With GROUP BY, it is joined after the grouping by the `QueryPlanner`.
+  // With `GROUP BY`, it is joined after the grouping by the `QueryPlanner`.
   expectGraphPattern(
       "{ SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x VALUES ?a { <a> } }",
       m::GraphPattern(::testing::VariantWith<parsedQuery::Subquery>(AD_PROPERTY(
@@ -1534,13 +1534,26 @@ TEST(SparqlParser, Query) {
   expectQuery("SELECT * { } ORDER BY ?s",
               m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
 
-  // The variables of a trailing `VALUES` clause are visible in ORDER BY and the
-  // SELECT clause (also with GROUP BY), but not in GROUP BY itself.
+  // The variables of a trailing `VALUES` clause are visible in `ORDER BY` and
+  // the `SELECT` clause (also with `GROUP BY`), but not in `GROUP BY` itself.
   expectQuery(
       "SELECT ?x (STR(?x) AS ?y) {} ORDER BY ?x STR(?x) VALUES ?x { 1 }",
       m::WarningsOfParsedQuery({}));
   expectQuery("SELECT ?p { ?s ?p ?o } GROUP BY ?p ORDER BY ?v VALUES ?v { 1 }",
               m::WarningsOfParsedQuery({}));
+  expectQuery("SELECT ?p { ?s ?p ?o } GROUP BY ?p ORDER BY ?s VALUES ?v { 1 }",
+              m::WarningsOfParsedQuery({"?s was used in an ORDER BY clause"}));
+  expectQuery(
+      "SELECT ?p ?v (STR(?v) AS ?w) { ?s ?p ?o } GROUP BY ?p "
+      "VALUES ?v { 1 }",
+      m::WarningsOfParsedQuery({}));
+  expectQuery("CONSTRUCT { ?p ?p ?v } { ?s ?p ?o } GROUP BY ?p VALUES ?v { 1 }",
+              m::WarningsOfParsedQuery({}));
+  expectQueryFails(
+      "SELECT ?p (?o + ?v AS ?x) { ?s ?p ?o } GROUP BY ?p VALUES ?v { 1 }",
+      contains("does not aggregate ?o"));
+  expectQueryFails("SELECT ?o { ?s ?p ?o } GROUP BY ?p VALUES ?v { 1 }",
+                   contains("?o is selected but not aggregated"));
   expectQuery("SELECT ?v { ?s ?p ?o } GROUP BY ?v VALUES ?v { 1 }",
               m::WarningsOfParsedQuery({"?v was used by GROUP BY"}));
   expectQueryFails("SELECT (1 AS ?x) {} VALUES ?x { 2 }",

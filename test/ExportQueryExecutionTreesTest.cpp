@@ -1510,7 +1510,6 @@ TEST(ExportQueryExecutionTrees, LimitOffset) {
   }
 }
 
-// ____________________________________________________________________________
 // The trailing `VALUES` clause has to be joined before `DISTINCT` and
 // `ORDER BY` are applied (SPARQL 1.1, sec. 18.2.4.3).
 TEST(ExportQueryExecutionTrees, TrailingValuesBeforeDistinctAndOrderBy) {
@@ -1530,24 +1529,61 @@ TEST(ExportQueryExecutionTrees, TrailingValuesBeforeDistinctAndOrderBy) {
             "?s\n<d>\n<b>\n<a>\n<a>\n");
   EXPECT_EQ(tsv("SELECT ?x { ?s <p> ?o } ORDER BY ?x VALUES ?x { 2 1 }"),
             "?x\n1\n1\n1\n1\n2\n2\n2\n2\n");
-  // ORDER BY expressions and SELECT expressions also see the `VALUES`.
+  // `ORDER BY` expressions and `SELECT` expressions also see the `VALUES`.
   EXPECT_EQ(tsv("SELECT ?x { <a> <p> ?o } ORDER BY STR(?x) VALUES ?x { 2 1 }"),
             "?x\n1\n1\n2\n2\n");
   EXPECT_EQ(tsv("SELECT ?x (STR(?x) AS ?y) { <b> <p> ?o } VALUES ?x { 1 }"),
             "?x\t?y\n1\t\"1\"\n");
-  // The FILTERs of the WHERE clause don't see the `VALUES`.
+  // The `FILTER`s of the `WHERE` clause don't see the `VALUES`.
   EXPECT_EQ(tsv("SELECT ?s { ?s <p> <z> FILTER(!BOUND(?x)) } VALUES ?x { 1 }"),
             "?s\n<b>\n");
-  // With GROUP BY, the `VALUES` is joined after the grouping.
+  // With `GROUP BY`, the `VALUES` is joined after the grouping.
   EXPECT_EQ(tsv("SELECT ?s (COUNT(*) AS ?c) { ?s <p> ?o } GROUP BY ?s "
                 "ORDER BY ?v ?s VALUES ?v { 2 1 }"),
             "?s\t?c\n<a>\t2\n<b>\t1\n<d>\t1\n"
             "<a>\t2\n<b>\t1\n<d>\t1\n");
+  // With `GROUP BY`, `ORDER BY` expressions and `SELECT` expressions that use
+  // the `VALUES` variables are computed after the join, the aggregates in these
+  // expressions are still computed by the grouping.
+  EXPECT_EQ(tsv("SELECT ?s (COUNT(*) AS ?c) { ?s <p> ?o } GROUP BY ?s "
+                "ORDER BY LCASE(?n) "
+                "VALUES (?s ?n) { (<a> \"b\") (<b> \"C\") (<d> \"a\") }"),
+            "?s\t?c\n<d>\t1\n<a>\t2\n<b>\t1\n");
+  EXPECT_EQ(tsv("SELECT ?s ?v (STR(?v) AS ?w) { ?s <p> ?o } GROUP BY ?s "
+                "ORDER BY ?s VALUES ?v { 1 }"),
+            "?s\t?v\t?w\n<a>\t1\t\"1\"\n<b>\t1\t\"1\"\n<d>\t1\t\"1\"\n");
+  EXPECT_EQ(tsv("SELECT ?s ((COUNT(*) + ?v) AS ?x) (?x * 2 AS ?y) "
+                "{ ?s <p> ?o } GROUP BY ?s ORDER BY DESC(COUNT(*) * ?v) ?s "
+                "VALUES ?v { 10 }"),
+            "?s\t?x\t?y\n<a>\t12\t24\n<b>\t11\t22\n<d>\t11\t22\n");
+  EXPECT_EQ(tsv("SELECT (COUNT(*) + ?v AS ?x) { ?s <p> ?o } ORDER BY ?x "
+                "VALUES ?v { 1 2 }"),
+            "?x\n5\n6\n");
+  // `HAVING` is applied before the join.
+  EXPECT_EQ(tsv("SELECT ?s ?v { ?s <p> ?o } GROUP BY ?s "
+                "HAVING (COUNT(*) > 1) VALUES ?v { 1 }"),
+            "?s\t?v\n<a>\t1\n");
+  EXPECT_EQ(tsv("SELECT ?s (?v AS ?w) { ?s <p> ?o } GROUP BY ?s "
+                "HAVING (BOUND(?w)) VALUES ?v { 1 }"),
+            "?s\t?w\n");
+  EXPECT_EQ(tsv("SELECT ?s (?v AS ?w) { ?s <p> ?o } GROUP BY ?s "
+                "HAVING (!BOUND(?w) && !BOUND(?v)) VALUES ?v { 1 }"),
+            "?s\t?w\n<a>\t1\n<b>\t1\n<d>\t1\n");
+  EXPECT_EQ(tsv("SELECT ?s { ?s <p> ?o } GROUP BY ?s "
+                "HAVING (COUNT(*) > 1 || ?v = 1) VALUES ?v { 1 }"),
+            "?s\n<a>\n");
+  // The `CONSTRUCT` template can also use the `VALUES` variables, and the
+  // `VALUES` can restrict a grouped variable.
+  EXPECT_EQ(runQueryStreamableResult(
+                kg,
+                "CONSTRUCT { ?s <r> ?r } { ?s <p> ?o } GROUP BY ?s "
+                "VALUES (?s ?r) { (<a> 1) (<b> 2) (<e> 4) }",
+                ad_utility::MediaType::turtle),
+            "<a> <r> 1 .\n<b> <r> 2 .\n");
 }
 
-// ____________________________________________________________________________
 // The trailing `VALUES` clause of a subquery belongs to the subquery, it is
-// joined before the subquery's DISTINCT, LIMIT and projection.
+// joined before the subquery's `DISTINCT`, `LIMIT` and projection.
 TEST(ExportQueryExecutionTrees, TrailingValuesOfSubquery) {
   std::string kg = "<a> <p> <c> . <b> <p> <d> .";
   auto tsv = [&kg](const std::string& query) {
@@ -1565,6 +1601,9 @@ TEST(ExportQueryExecutionTrees, TrailingValuesOfSubquery) {
             "?s\t?o\t?x\n<a>\t<c>\t1\n<b>\t<d>\t1\n");
   EXPECT_EQ(tsv("SELECT * { { SELECT ?s { ?s <p> ?o } VALUES ?o { <c> } } }"),
             "?s\n<a>\n");
+  EXPECT_EQ(tsv("SELECT * { { SELECT ?s (COUNT(*) + ?v AS ?x) { ?s <p> ?o } "
+                "GROUP BY ?s VALUES ?v { 10 } } } ORDER BY ?s"),
+            "?s\t?x\n<a>\t11\n<b>\t11\n");
 }
 
 // ____________________________________________________________________________

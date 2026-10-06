@@ -19,7 +19,9 @@
 #include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
 #include "util/CancellationHandle.h"
+#include "util/CopyOnWritePtr.h"
 #include "util/HashMap.h"
+#include "util/HashSet.h"
 #include "util/SortedSequence.h"
 #include "util/TimeTracer.h"
 #include "util/TransparentFunctors.h"
@@ -118,10 +120,24 @@ using LocatedTriples = SortedLocatedTriplesVector;
 class LocatedTriplesPerBlock {
  private:
   // For each block with a non-empty set of located triples, the located triples
-  // in that block.
-  ad_utility::HashMap<size_t, LocatedTriples> map_;
+  // in that block. The blocks are held via `CopyOnWritePtr`, so that copying
+  // this class (which happens for every snapshot of the delta triples) only
+  // copies pointers. All modifications go through `mutableBlock`, which clones
+  // a block that is shared with a copy before modifying it.
+  ad_utility::HashMap<size_t, ad_utility::CopyOnWritePtr<LocatedTriples>> map_;
+
+  // The blocks that were modified since the last call to
+  // `consolidateAllBlocks`, which then only has to consolidate these blocks.
+  ad_utility::HashSet<size_t> unconsolidatedBlocks_;
 
   FRIEND_TEST(LocatedTriplesTest, numTriplesInBlock);
+  FRIEND_TEST(LocatedTriplesTest, copyOnWrite);
+
+  // Return the located triples of the block with the given index for
+  // modification. Create the block if it does not exist and clone it if it is
+  // shared with a copy of this class (see `map_`), and remember it as
+  // unconsolidated. A clone gets spare capacity for `numNewTriples` triples.
+  LocatedTriples& mutableBlock(size_t blockIndex, size_t numNewTriples = 0);
 
   // Implementation of the `mergeTriples` function (which has `numIndexColumns`
   // as a normal argument, and translates it into a template argument).
@@ -225,8 +241,9 @@ class LocatedTriplesPerBlock {
   // Return whether there are any updates at all.
   bool isEmpty() const { return map_.empty(); }
 
-  // Consolidate the located triples in all blocks. Forwards to
-  // `SortedSequence`. Must be called before any sorted access
+  // Consolidate the located triples in all blocks that were modified since
+  // the last call to this function. Forwards to `SortedSequence`. Must be
+  // called before any sorted access
   // (begin/end/size/mergeTriples/updateAugmentedMetadata) if the
   // `LocatedTriples` were modified since the last call to this function.
   void consolidateAllBlocks();
@@ -256,6 +273,7 @@ class LocatedTriplesPerBlock {
   // Remove all located triples.
   void clear() {
     map_.clear();
+    unconsolidatedBlocks_.clear();
     augmentedMetadata_.reset();
   }
 
@@ -291,7 +309,7 @@ class LocatedTriplesPerBlock {
                      std::back_inserter(blockIndices));
     ql::ranges::sort(blockIndices);
     for (auto blockIndex : blockIndices) {
-      os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
+      os << "LTs in Block #" << blockIndex << ": " << *ltpb.map_.at(blockIndex)
          << std::endl;
     }
     return os;
