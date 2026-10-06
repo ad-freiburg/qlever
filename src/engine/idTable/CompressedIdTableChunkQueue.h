@@ -144,16 +144,22 @@ class ChunkQueue : public NoCopyNoMove,
   // it if this queue already buffers `maxBufferedBlocks` blocks. Complete with
   // whether the block was stored at all, see
   // `BlockStorageConcept::storeBlock`.
+  //
+  // If `mayKeepInMemory` is `false`, then the `block` is spilled even if this
+  // queue has room for it.
   template <typename CompletionToken>
-  auto storeBlock(OptionalBlock block, CompletionToken&& completionToken) {
+  auto storeBlock(OptionalBlock block, bool mayKeepInMemory,
+                  CompletionToken&& completionToken) {
     return net::co_spawn(
         strand_,
-        [](ChunkQueue* self, OptionalBlock block) -> net::awaitable<bool> {
+        [](ChunkQueue* self, OptionalBlock block,
+           bool mayKeepInMemory) -> net::awaitable<bool> {
           AD_CORRECTNESS_CHECK(self->strand_.running_in_this_thread());
           // The end-of-chunk sentinel is never spilled, because it occupies no
           // memory and the consumer needs it to make progress.
           if (!block.has_value() ||
-              self->numBlocksInMemory_ < self->maxBufferedBlocks_) {
+              (mayKeepInMemory &&
+               self->numBlocksInMemory_ < self->maxBufferedBlocks_)) {
             self->enqueueBlockWithoutSpilling(std::move(block));
             co_return true;
           }
@@ -162,7 +168,7 @@ class ChunkQueue : public NoCopyNoMove,
           // co_await`.
           bool wasStored = co_await self->spillBlock(std::move(block).value());
           co_return wasStored;
-        }(this, std::move(block)),
+        }(this, std::move(block), mayKeepInMemory),
         AD_FWD(completionToken));
   }
 
