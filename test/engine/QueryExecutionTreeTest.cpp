@@ -8,6 +8,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./ValuesForTesting.h"
+#include "engine/CartesianProductJoin.h"
 #include "engine/Distinct.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
@@ -152,6 +153,41 @@ TEST(QueryExecutionTree, createDistinctTreeEmptyIndicesUsesLimitOne) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryExecutionTree, createDistinctTreeKeepsHiddenVariablesHidden) {
+  using Var = Variable;
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+  Var a{"?a"};
+
+  // Regression test for #3563: The `DISTINCT` is pushed into the
+  // `CartesianProductJoin`, but the variables that were hidden by a subquery
+  // must remain hidden.
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}, {0, 2}, {1, 3}}),
+      Vars{a, Var{"?hidden"}});
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{5}, {6}}), Vars{Var{"?b"}});
+  auto cartesian = ad_utility::makeExecutionTree<CartesianProductJoin>(
+      qec, CartesianProductJoin::Children{left, right});
+  cartesian->getRootOperation()->setSelectedVariablesForSubquery({a});
+
+  auto tree = QueryExecutionTree::createDistinctTree(
+      cartesian, SC{cartesian->getVariableColumn(a)});
+  ASSERT_TRUE(std::dynamic_pointer_cast<CartesianProductJoin>(
+      tree->getRootOperation()));
+  EXPECT_THAT(tree->getVariableColumns(),
+              ::testing::UnorderedElementsAre(::testing::Key(a)));
+
+  // `?a` is deduplicated to `{0, 1}`, the hidden columns don't matter.
+  auto result = tree->getResult(false);
+  auto column = result->idTableView().getColumn(tree->getVariableColumn(a));
+  auto expected = makeIdTableFromVector({{0}, {1}});
+  EXPECT_THAT(std::vector<Id>(column.begin(), column.end()),
+              ::testing::UnorderedElementsAre(expected(0, 0), expected(1, 0)));
+}
+
+// _____________________________________________________________________________
 TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenStrippingColumns) {
   using Vars = std::vector<std::optional<Variable>>;
   Vars vars{std::nullopt, std::nullopt, std::nullopt};
@@ -229,6 +265,44 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
       sortedValues->getRootOperation()->getLimitOffset().isUnconstrained());
   EXPECT_EQ(valuesForTesting->getRootOperation()->getLimitOffset(),
             limitOffset);
+}
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
+  using Var = Variable;
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+  VariableToColumnMap expectedVariables{
+      {Var{"?a"}, makeAlwaysDefinedColumn(0)}};
+
+  // Regression test for #3569: The root operation re-sorts itself, but the
+  // variables that were hidden by a subquery must remain hidden.
+  auto makeValues = [qec](IdTable table) {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(table), Vars{Var{"?a"}, Var{"?b"}});
+  };
+  auto unionTree = ad_utility::makeExecutionTree<Union>(
+      qec, makeValues(makeIdTableFromVector({{1, 2}})),
+      makeValues(makeIdTableFromVector({{0, 3}})), SC{1});
+  unionTree->getRootOperation()->setSelectedVariablesForSubquery({Var{"?a"}});
+
+  auto sortedUnion = QueryExecutionTree::createSortedTree(unionTree, {0});
+  ASSERT_TRUE(
+      std::dynamic_pointer_cast<Union>(sortedUnion->getRootOperation()));
+  EXPECT_EQ(sortedUnion->getVariableColumns(), expectedVariables);
+  qec->getQueryTreeCache().clearAll();
+  EXPECT_EQ(sortedUnion->getResult(false)->idTableView(),
+            makeIdTableFromVector({{0, 3}, {1, 2}}));
+
+  // The same holds for `Sort`.
+  auto sortTree = ad_utility::makeExecutionTree<Sort>(
+      qec, makeValues(makeIdTableFromVector({{1, 0}, {0, 1}})), SC{1});
+  sortTree->getRootOperation()->setSelectedVariablesForSubquery({Var{"?a"}});
+
+  auto sortedSort = QueryExecutionTree::createSortedTree(sortTree, {0});
+  ASSERT_TRUE(std::dynamic_pointer_cast<Sort>(sortedSort->getRootOperation()));
+  EXPECT_EQ(sortedSort->getVariableColumns(), expectedVariables);
 }
 
 // _____________________________________________________________________________

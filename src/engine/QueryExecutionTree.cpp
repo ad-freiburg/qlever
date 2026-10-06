@@ -25,6 +25,22 @@ using std::string;
 
 using parsedQuery::SelectClause;
 
+namespace {
+// `Operation::makeSortedTree` and `Operation::makeDistinctTree` build a new
+// root operation from the children of the root operation of `original`.
+// Variables that were hidden in `original` (by a subquery when the columns are
+// not stripped, see `Operation::setSelectedVariablesForSubquery`) would
+// therefore become visible again in `rewritten`. Hide them again.
+void hideVariablesHiddenInOriginal(const QueryExecutionTree& original,
+                                   const QueryExecutionTree& rewritten) {
+  std::vector<Variable> visibleVariables;
+  ql::ranges::copy(original.getVariableColumns() | ql::views::keys,
+                   std::back_inserter(visibleVariables));
+  rewritten.getRootOperation()->setSelectedVariablesForSubquery(
+      visibleVariables);
+}
+}  // namespace
+
 // _____________________________________________________________________________
 QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec,
                                        std::shared_ptr<Operation> operation)
@@ -220,6 +236,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 
   if (sortedQet.has_value()) {
     AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
+    hideVariablesHiddenInOriginal(*qet, *sortedQet.value());
     AD_CORRECTNESS_CHECK(qet->getVariableColumns() ==
                          sortedQet.value()->getVariableColumns());
     const auto& sortedRootOperation = sortedQet.value()->getRootOperation();
@@ -276,6 +293,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
   auto distinctQet = rootOperation->makeDistinctTree(distinctIndices);
   if (distinctQet.has_value()) {
     AD_CORRECTNESS_CHECK(distinctQet.value() != nullptr);
+    hideVariablesHiddenInOriginal(*qet, *distinctQet.value());
     // Pushing the `DISTINCT` down must preserve the set of visible variables,
     // but the exact column layout may change: e.g. pushing into a
     // `CartesianProductJoin` can collapse a child to a single row, which
