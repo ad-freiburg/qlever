@@ -238,8 +238,7 @@ TEST(MergeHelpers, targetsFromChunkSizes) {
   // The smallest possible chunks: one element each.
   EXPECT_THAT(targets(5, {}, 1), ::testing::ElementsAre(1u, 2u, 3u, 4u));
   // In contrast to `uniformTargets`, these targets are strictly increasing,
-  // because all the chunk sizes are strictly positive (which the public
-  // `computeChunkBoundaries` checks).
+  // because all the chunk sizes are strictly positive.
   auto manyTargets = targets(1000, {1, 2, 3}, 7);
   ASSERT_FALSE(manyTargets.empty());
   for (size_t i = 1; i < manyTargets.size(); ++i) {
@@ -394,46 +393,9 @@ TEST(MergeHelpers, chunkBoundaryEdgeCases) {
 }
 
 // _____________________________________________________________________________
-TEST(MergeHelpers, chunkBoundariesFromExplicitChunkSizes) {
-  // A single run with the elements `0 ... 99`, one element per block, so that
-  // the split points can be predicted exactly.
-  SizeVec run(100);
-  ql::ranges::generate(run, [i = size_t{0}]() mutable { return i++; });
-  std::vector<SizeVec> runs{run};
-  auto input = makeVectorInput(runs, 1);
-  auto splitPointsFor = [&input](ChunkSizes chunkSizes) {
-    return chunkSplitPoints(
-        computeChunkBoundaries(input, std::less<>{}, std::move(chunkSizes)));
-  };
-
-  // NOTE: A chunk starts at the largest element that is still needed to reach a
-  // target, so a chunk that is supposed to start after `n` elements starts at
-  // the element `n - 1`. That is the same convention as for a uniform number of
-  // chunks, see `computeChunkBoundaries`, and it is why the chunk sizes below
-  // are only exact up to that single element.
-
-  // Uniform chunks of 25 elements each, so the chunks start after `25`, `50`
-  // and `75` elements.
-  EXPECT_THAT(splitPointsFor(ChunkSizes{{}, 25}),
-              ::testing::ElementsAre(24u, 49u, 74u));
-  // Three small leading chunks, then chunks of 40, so the chunks start after
-  // `5`, `10`, `20` and `60` elements.
-  EXPECT_THAT(splitPointsFor(ChunkSizes{{5, 5, 10}, 40}),
-              ::testing::ElementsAre(4u, 9u, 19u, 59u));
-  // The leading sizes cover the whole input exactly, so no chunk is left for
-  // `remainingChunkSize_`.
-  EXPECT_THAT(splitPointsFor(ChunkSizes{{50, 50}, 10}),
-              ::testing::ElementsAre(49u));
-  // The leading sizes exceed the input, so the surplus ones are dropped.
-  EXPECT_THAT(splitPointsFor(ChunkSizes{{30, 500, 7}, 10}),
-              ::testing::ElementsAre(29u));
-}
-
-// _____________________________________________________________________________
 TEST(MergeHelpers, chunkBoundariesWithRampedUpLeadingChunks) {
   // A single run with the elements `0 ... 99`, one element per block, so that
-  // the split points can be predicted exactly. For the off-by-one convention of
-  // the split points see `chunkBoundariesFromExplicitChunkSizes` above.
+  // the split points can be predicted exactly.
   SizeVec run(100);
   ql::ranges::generate(run, [i = size_t{0}]() mutable { return i++; });
   std::vector<SizeVec> runs{run};
@@ -442,6 +404,12 @@ TEST(MergeHelpers, chunkBoundariesWithRampedUpLeadingChunks) {
     return chunkSplitPoints(computeChunkBoundaries(input, std::less<>{},
                                                    numChunks, firstChunkSize));
   };
+
+  // NOTE: A chunk starts at the largest element that is still needed to reach a
+  // target, so a chunk that is supposed to start after `n` elements starts at
+  // the element `n - 1`. That is the same convention as for a uniform number of
+  // chunks, see `computeChunkBoundaries`, and it is why the chunk sizes below
+  // are only exact up to that single element.
 
   // A first chunk size of `0` is exactly the uniform overload: four chunks of
   // 25 elements each.
@@ -469,46 +437,36 @@ TEST(MergeHelpers, chunkBoundariesWithRampedUpLeadingChunks) {
 }
 
 // _____________________________________________________________________________
-TEST(MergeHelpers, chunkBoundariesFromChunkSizesEdgeCases) {
+TEST(MergeHelpers, chunkBoundariesWithRampUpEdgeCases) {
   auto runs = makeRandomRuns(4, 50, 50);
   auto input = makeVectorInput(runs, 7);
-  auto splitPointsFor = [](const auto& theInput, ChunkSizes chunkSizes) {
-    return chunkSplitPoints(
-        computeChunkBoundaries(theInput, std::less<>{}, std::move(chunkSizes)));
+  auto splitPointsFor = [](const auto& theInput, size_t numChunks,
+                           size_t firstChunkSize) {
+    return chunkSplitPoints(computeChunkBoundaries(theInput, std::less<>{},
+                                                   numChunks, firstChunkSize));
   };
 
-  // A chunk that is at least as large as the whole input needs no split point.
-  EXPECT_THAT(splitPointsFor(input, ChunkSizes{{}, 1000}),
-              ::testing::IsEmpty());
-  EXPECT_THAT(splitPointsFor(input, ChunkSizes{{1000}, 10}),
-              ::testing::IsEmpty());
   // Zero runs, and only empty runs.
-  EXPECT_THAT(splitPointsFor(makeVectorInput(std::vector<SizeVec>{}, 7),
-                             ChunkSizes{{}, 4}),
+  EXPECT_THAT(splitPointsFor(makeVectorInput(std::vector<SizeVec>{}, 7), 8, 2),
               ::testing::IsEmpty());
   std::vector<SizeVec> emptyRuns{SizeVec{}, SizeVec{}};
-  EXPECT_THAT(splitPointsFor(makeVectorInput(emptyRuns, 7), ChunkSizes{{}, 4}),
+  EXPECT_THAT(splitPointsFor(makeVectorInput(emptyRuns, 7), 8, 2),
               ::testing::IsEmpty());
   // All elements are equal, so there is no way to actually split the input, no
-  // matter which chunk sizes are requested. The single split point that is
+  // matter how the leading chunks are ramped up. The single split point that is
   // picked yields an empty first chunk, see `pickChunkSplitPoints`.
-  EXPECT_THAT(splitPointsFor(makeVectorInput(runsWithEqualElements(), 7),
-                             ChunkSizes{{2, 2}, 2}),
+  EXPECT_THAT(splitPointsFor(makeVectorInput(runsWithEqualElements(), 7), 8, 2),
               ::testing::ElementsAre(42u));
-  // The split points are strictly increasing, also for very small chunks.
-  {
-    auto splitPoints = splitPointsFor(input, ChunkSizes{{1, 2, 3}, 1});
+  // The split points are strictly increasing, also for the smallest possible
+  // first chunk and more chunks than blocks.
+  for (size_t numChunks : {2u, 8u, 1000u}) {
+    SCOPED_TRACE(numChunks);
+    auto splitPoints = splitPointsFor(input, numChunks, 1);
+    EXPECT_FALSE(splitPoints.empty());
     for (size_t i = 1; i < splitPoints.size(); ++i) {
       EXPECT_LT(splitPoints[i - 1], splitPoints[i]);
     }
   }
-  // A size of zero is illegal, because it would describe an empty chunk.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      computeChunkBoundaries(input, std::less<>{}, ChunkSizes{{}, 0}),
-      ::testing::HasSubstr("remainingChunkSize_ > 0"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      computeChunkBoundaries(input, std::less<>{}, ChunkSizes{{4, 0, 4}, 4}),
-      ::testing::HasSubstr("size > 0"));
 }
 
 // _____________________________________________________________________________

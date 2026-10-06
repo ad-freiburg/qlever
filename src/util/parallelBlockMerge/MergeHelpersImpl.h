@@ -163,9 +163,11 @@ inline std::vector<size_t> uniformTargets(size_t totalNumElements,
   return targets;
 }
 
-// Step 3b: The same, but for explicitly given chunk sizes (the components of a
-// `ChunkSizes`, see `MergeHelpers.h`): the `i`-th target is the total size of
-// the first `i` chunks. Stop as soon as a target has reached the total number
+// Step 3b: The same, but for explicitly given chunk sizes: the first
+// `firstChunkSizes.size()` chunks get the corresponding size from that vector,
+// and all the remaining chunks get the size `remainingChunkSize`. All the sizes
+// have to be strictly positive. The `i`-th target is the total size of the
+// first `i` chunks. Stop as soon as a target has reached the total number
 // of elements, because all the chunks after that one would be empty. This is
 // what makes a `remainingChunkSize` that is smaller than the input terminate,
 // and it also handles leading sizes that already exceed the input.
