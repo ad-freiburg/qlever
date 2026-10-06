@@ -30,11 +30,13 @@ TEST(HyperLogLog, Estimate) {
     EXPECT_NEAR(hll.estimate(), numDistinct, 0.01 * numDistinct);
   }
 
-  // Large cardinalities are estimated with an error of a few percent at most.
+  // Large cardinalities are estimated with an error of a few percent at most,
+  // also with interleaved duplicates.
   for (uint64_t numDistinct : {100'000, 3'000'000}) {
     HyperLogLog hll;
     for (uint64_t i = 0; i < numDistinct; ++i) {
       hll.add(i * 7 + 3);
+      hll.add((i / 2) * 7 + 3);
     }
     EXPECT_NEAR(hll.estimate(), numDistinct, 0.03 * numDistinct);
   }

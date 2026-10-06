@@ -25,6 +25,7 @@
 #include "./util/FileTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
@@ -638,9 +639,6 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   using ViewQuery = parsedQuery::MaterializedViewQuery;
   using Triple = SparqlTripleSimple;
   using V = Variable;
-  auto iri = [](const std::string& ref) {
-    return ad_utility::triple_component::Iri::fromIriref(ref);
-  };
 
   const V placeholderP{"?_ql_materialized_view_p"};
   const V placeholderO{"?_ql_materialized_view_o"};
@@ -1374,9 +1372,6 @@ TEST_F(MaterializedViewsTestLarge, Multiplicities) {
   auto qec = getQec();
   using ViewQuery = parsedQuery::MaterializedViewQuery;
   using V = Variable;
-  auto iri = [](std::string_view s) {
-    return TripleComponent{ad_utility::triple_component::Iri::fromIriref(s)};
-  };
 
   // Return the multiplicity of the given variable in the result of `scan`.
   auto multiplicity = [](IndexScan& scan, const V& var) {
