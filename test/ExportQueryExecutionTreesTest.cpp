@@ -17,6 +17,7 @@
 #include "util/ParseableDuration.h"
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
+#include "util/Views.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -1970,6 +1971,50 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
   EXPECT_THAT(consume(std::move(res.value())),
               AllOf(HasSubstr("!!!!>># An error has occurred"),
                     HasSubstr("A very strange")));
+}
+
+// _____________________________________________________________________________
+// With `adaptive-export-chunk-size` (the default), the chunked transfer starts
+// with a 64 KiB chunk and doubles the chunk size after every chunk up to the
+// 1 MiB buffer of the `stream_generator`. The concatenated bytes are the same
+// as without it.
+TEST(ExportQueryExecutionTrees, adaptiveExportChunkSize) {
+  using S = ad_utility::streams::stream_generator;
+  EXPECT_TRUE(
+      getRuntimeParameter<&RuntimeParameters::adaptiveExportChunkSize_>());
+  constexpr size_t KiB = size_t{1} << 10;
+  // 3 MiB of output, yielded in pieces that do not align with chunk borders.
+  auto generate = []() -> S {
+    std::string piece;
+    for (size_t i : ad_utility::integerRange(size_t{3} * 1024)) {
+      piece.assign(KiB, static_cast<char>('a' + i % 26));
+      co_yield std::string_view{piece}.substr(0, 1000);
+      co_yield std::string_view{piece}.substr(1000);
+    }
+  };
+  auto chunkSizesAndBytes = [&generate]() {
+    std::vector<size_t> sizes;
+    std::string bytes;
+    for (const std::string& chunk :
+         ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
+             generate())) {
+      sizes.push_back(chunk.size());
+      bytes.append(chunk);
+    }
+    return std::pair{std::move(sizes), std::move(bytes)};
+  };
+
+  auto [adaptiveSizes, adaptiveBytes] = chunkSizesAndBytes();
+  EXPECT_THAT(adaptiveSizes,
+              ElementsAre(64 * KiB, 128 * KiB, 256 * KiB, 512 * KiB, 1024 * KiB,
+                          1024 * KiB, 64 * KiB));
+
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::adaptiveExportChunkSize_>(
+          false);
+  auto [fixedSizes, fixedBytes] = chunkSizesAndBytes();
+  EXPECT_THAT(fixedSizes, ElementsAre(1024 * KiB, 1024 * KiB, 1024 * KiB));
+  EXPECT_EQ(adaptiveBytes, fixedBytes);
 }
 
 // _____________________________________________________________________________

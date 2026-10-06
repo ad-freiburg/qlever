@@ -67,6 +67,12 @@ class stream_generator_promise {
   std::array<char, BUFFER_SIZE> data_;
   size_t currentIndex_ = 0;
   static_assert(BUFFER_SIZE > 0, "Buffer size must be greater than zero");
+  // The number of bytes after which a chunk is handed to the consumer. It is
+  // at most `BUFFER_SIZE` and only changes at a chunk boundary, see
+  // `setChunkCapacity`.
+  size_t capacity_ = BUFFER_SIZE;
+  // The capacity that becomes active when the next chunk starts.
+  size_t nextCapacity_ = BUFFER_SIZE;
   // Temporarily store data that didn't fit into the buffer so far.
   std::string_view overflow_;
   std::exception_ptr exception_;
@@ -95,12 +101,12 @@ class stream_generator_promise {
       }
       currentIndex_ += value.size();
       overflow_ = {};
-      // Only suspend if we reached the maximum capacity exactly.
-      return suspend_sometimes{currentIndex_ == BUFFER_SIZE};
+      // Only suspend if we reached the capacity exactly.
+      return suspend_sometimes{currentIndex_ == capacity_};
     }
-    size_t fittingSize = BUFFER_SIZE - currentIndex_;
+    size_t fittingSize = capacity_ - currentIndex_;
     std::memcpy(data_.data() + currentIndex_, value.data(), fittingSize);
-    currentIndex_ = BUFFER_SIZE;
+    currentIndex_ = capacity_;
     overflow_ = value.substr(fittingSize);
     return suspend_sometimes{true};
   }
@@ -127,7 +133,24 @@ class stream_generator_promise {
   // buffer still has capacity after this, false otherwise.
   bool commitOverflow() noexcept {
     currentIndex_ = 0;
+    capacity_ = nextCapacity_;
     return yield_value(overflow_).await_ready();
+  }
+
+  // Set the number of bytes after which the following chunks are handed to the
+  // consumer (at most `BUFFER_SIZE`). The new capacity applies to the next
+  // chunk that is started, so a chunk that is currently being filled keeps its
+  // size.
+  void setChunkCapacity(size_t capacity) {
+    AD_CONTRACT_CHECK(capacity > 0 && capacity <= BUFFER_SIZE);
+    nextCapacity_ = capacity;
+    // `overflow_` is always empty when `currentIndex_ == 0`: the index starts
+    // at zero with an empty overflow and is reset to zero only in
+    // `commitOverflow`, which immediately refills from the overflow. A fresh
+    // chunk therefore starts exactly when `currentIndex_ == 0`.
+    if (currentIndex_ == 0) {
+      capacity_ = capacity;
+    }
   }
 
   void unhandled_exception() { exception_ = std::current_exception(); }
@@ -150,9 +173,13 @@ class stream_generator_promise {
 
  private:
   // Return true if the buffer still has enough capacity remaining to copy
-  // `value` in its entirety.
+  // `value` in its entirety. Written as a subtraction so that no addition can
+  // overflow: `currentIndex_` never exceeds `capacity_` (it only grows while
+  // the value fits, is set to exactly `capacity_` otherwise, and is reset to
+  // zero only in `commitOverflow`, which immediately refills from the
+  // overflow).
   bool isBufferLargeEnough(std::string_view value) const {
-    return currentIndex_ + value.size() <= BUFFER_SIZE;
+    return value.size() <= capacity_ - currentIndex_;
   }
 };
 
@@ -242,6 +269,7 @@ class [[nodiscard]] basic_stream_generator {
   using promise_type = detail::stream_generator_promise<BUFFER_SIZE>;
   using iterator = detail::stream_generator_iterator<BUFFER_SIZE>;
   using value_type = typename iterator::value_type;
+  static constexpr size_t bufferSize = BUFFER_SIZE;
 
  private:
   std::coroutine_handle<promise_type> coroutine_ = nullptr;
@@ -282,6 +310,15 @@ class [[nodiscard]] basic_stream_generator {
 
   detail::stream_generator_sentinel end() noexcept {
     return detail::stream_generator_sentinel{};
+  }
+
+  // Hand chunks of `capacity` bytes (at most `BUFFER_SIZE`) to the consumer
+  // instead of chunks of `BUFFER_SIZE` bytes. Called before `begin()`, it
+  // determines the size of the first chunk; called while iterating, it
+  // determines the size of the chunks after the current one.
+  void setChunkCapacity(size_t capacity) {
+    AD_CONTRACT_CHECK(coroutine_ != nullptr);
+    coroutine_.promise().setChunkCapacity(capacity);
   }
 
  private:
