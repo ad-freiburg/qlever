@@ -497,11 +497,17 @@ std::vector<float> IndexScan::computeMultiplicitiesForView(
   auto numRows = static_cast<float>(sizeEstimate_);
 
   // With a fixed first column, the relation metadata has the exact number of
-  // rows and the exact multiplicity of the second column. The size estimate is
-  // never smaller than the size of the relation, unless the scan is
-  // prefiltered, so the minimum of both is used. Only for a small
-  // relation (computed on demand) is the third column's multiplicity also
-  // exact, the stored one of a large relation is a copy of the second's.
+  // rows and the exact multiplicity of the second column. Use the exact number
+  // of rows, unless the scan is prefiltered (then it has fewer rows than the
+  // relation, so use its size estimate, which for a small relation can still
+  // exceed the relation). Only for a small relation (computed on demand) is
+  // the third column's multiplicity also exact, the stored one of a large
+  // relation is a copy of the second's.
+  //
+  // NOTE: The size estimate of a small relation (one that shares its block
+  // with other relations) is a fixed fraction of the block size (see
+  // `small-index-scan-size-estimate-divisor`) and can be much smaller than the
+  // relation.
   std::optional<CompressedRelationMetadata> relation;
   bool isSmallRelation = false;
   if (numVariables_ == 2) {
@@ -510,10 +516,14 @@ std::vector<float> IndexScan::computeMultiplicitiesForView(
         !permutation().metaData().getMetaDataIfPresent(col0Id).has_value();
     relation = permutation().getMetadata(col0Id, locatedTriplesState());
     // No metadata means that the relation (and thus the scan) is empty.
-    numRows =
-        relation.has_value()
-            ? std::min(numRows, static_cast<float>(relation.value().numRows_))
-            : 0.0f;
+    if (!relation.has_value()) {
+      numRows = 0.0f;
+    } else if (scanSpecAndBlocksIsPrefiltered_) {
+      numRows =
+          std::min(numRows, static_cast<float>(relation.value().numRows_));
+    } else {
+      numRows = static_cast<float>(relation.value().numRows_);
+    }
   }
 
   auto multiplicity = [&](ColumnIndex col) {
