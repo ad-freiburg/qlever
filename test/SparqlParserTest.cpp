@@ -1047,6 +1047,8 @@ TEST(ParserTest, isDeterministic) {
       "SELECT * { ?a <rel> ?b FILTER(?b > 3) BIND(?b + 1 AS ?c) }"));
   EXPECT_TRUE(
       isDeterministic("SELECT * { ?a <rel> ?b FILTER EXISTS { ?b ?p ?o } }"));
+  EXPECT_TRUE(
+      isDeterministic("SELECT * { { ?a <rel> ?b } UNION { ?a <rel2> ?b } }"));
 
   // Non-deterministic expressions in all the places where they can occur.
   EXPECT_FALSE(
@@ -1057,9 +1059,13 @@ TEST(ParserTest, isDeterministic) {
   EXPECT_FALSE(isDeterministic(
       "SELECT ?a { ?a <rel> ?b } GROUP BY ?a HAVING (SUM(RAND()) > 1)"));
   EXPECT_FALSE(isDeterministic(
+      "SELECT ?a { ?a <rel> ?b } GROUP BY ?a HAVING (RAND() < 0.5)"));
+  EXPECT_FALSE(isDeterministic(
       "SELECT * { ?a <rel> ?b OPTIONAL { BIND(BNODE() AS ?c) } }"));
   EXPECT_FALSE(isDeterministic(
       "SELECT * { { ?a <rel> ?b } UNION { BIND(STRUUID() AS ?c) } }"));
+  EXPECT_FALSE(isDeterministic(
+      "SELECT * { { BIND(STRUUID() AS ?c) } UNION { ?a <rel> ?b } }"));
   EXPECT_FALSE(isDeterministic(
       "SELECT * { ?a <rel> ?b { SELECT ?c { BIND(RAND() AS ?c) } } }"));
   EXPECT_FALSE(isDeterministic(
@@ -1073,6 +1079,46 @@ TEST(ParserTest, isDeterministic) {
       setRuntimeParameterForTest<&RuntimeParameters::cacheServiceResults_>(
           true);
   EXPECT_TRUE(isDeterministic(serviceQuery));
+
+  // Magic services with a child graph pattern depend on it.
+  auto pathSearch = [](std::string_view child) {
+    return absl::StrCat(
+        "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+        "SELECT * { SERVICE pathSearch: {"
+        "_:p pathSearch:algorithm pathSearch:allPaths ;"
+        "pathSearch:source <x> ; pathSearch:target <z> ;"
+        "pathSearch:pathColumn ?path ; pathSearch:edgeColumn ?edge ;"
+        "pathSearch:start ?start ; pathSearch:end ?end ."
+        "{ SELECT * { ",
+        child, " } } } }");
+  };
+  EXPECT_TRUE(isDeterministic(pathSearch("?start <p> ?end")));
+  EXPECT_FALSE(
+      isDeterministic(pathSearch("?start <p> ?end BIND(RAND() AS ?r)")));
+  EXPECT_TRUE(isDeterministic(
+      "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * { ?e <p> ?z SERVICE qlss: {"
+      "_:config qlss:left ?e ; qlss:right ?z ; qlss:maxDistance 500 ;"
+      "qlss:algorithm qlss:s2 . } }"));
+
+  // External values are never deterministic.
+  EXPECT_FALSE(isDeterministic(
+      "PREFIX qlext: <https://qlever.cs.uni-freiburg.de/external-values/>"
+      "SELECT * { SERVICE qlext: { _:b qlext:name \"myId\" ;"
+      "qlext:variable ?x . } }"));
+
+  // `Describe`, `TransPath` and `Load` never occur in the argument of an
+  // `EXISTS`, the only place where `isDeterministic()` is called.
+  auto expectUnreachable = [](p::GraphPatternOperation op) {
+    ParsedQuery::GraphPattern pattern;
+    pattern._graphPatterns.push_back(std::move(op));
+    AD_EXPECT_THROW_WITH_MESSAGE(std::ignore = pattern.isDeterministic(),
+                                 ::testing::HasSubstr("unreachable"));
+  };
+  expectUnreachable(p::Describe{});
+  expectUnreachable(p::TransPath{});
+  expectUnreachable(p::Load{
+      TripleComponent::Iri::fromIriref("<https://example.org>"), false});
 }
 
 // _____________________________________________________________________________
