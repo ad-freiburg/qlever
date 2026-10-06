@@ -432,6 +432,19 @@ TEST(TypeTraits, getInvokeResultImpl) {
                       InvalidInvokeResult<decltype(lambda), const char*>>));
 }
 
+namespace {
+// True iff `visitIf` can be called with the given arguments.
+template <typename AlwaysVoid, typename Variant, typename... Funcs>
+constexpr bool visitIfCompilesImpl = false;
+template <typename Variant, typename... Funcs>
+constexpr bool visitIfCompilesImpl<
+    std::void_t<decltype(ad_utility::visitIf(std::declval<Variant>(),
+                                             std::declval<Funcs>()...))>,
+    Variant, Funcs...> = true;
+template <typename Variant, typename... Funcs>
+constexpr bool visitIfCompiles = visitIfCompilesImpl<void, Variant, Funcs...>;
+}  // namespace
+
 TEST(TypeTraits, visitIf) {
   std::variant<int, std::string> v{42};
   EXPECT_EQ(ad_utility::visitIf(
@@ -454,6 +467,15 @@ TEST(TypeTraits, visitIf) {
       v, [&numCalls](const std::string&) { ++numCalls; }, ignore);
   ad_utility::visitIf(v, [&numCalls](int) { ++numCalls; }, ignore);
   EXPECT_EQ(numCalls, 1);
+
+  // A non-exhaustive list of functions doesn't compile.
+  using V = decltype(v);
+  auto onInt = [](int) {};
+  auto onString = [](const std::string&) {};
+  static_assert(visitIfCompiles<V&, decltype(onInt), decltype(onString)>);
+  static_assert(visitIfCompiles<V&, decltype(onInt), decltype(ignore)>);
+  static_assert(!visitIfCompiles<V&, decltype(onInt)>);
+  static_assert(!visitIfCompiles<V&, decltype(onString)>);
 
   // A function whose parameter type is implicitly convertible from (but not
   // the same as) the active alternative does not match.

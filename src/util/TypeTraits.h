@@ -341,30 +341,50 @@ constexpr bool isMatchForVisitIf<
     Func, Value, std::void_t<FirstArgumentT<std::decay_t<Func>>>> =
     isSimilar<FirstArgumentT<std::decay_t<Func>>, Value>;
 
+// Wrapper type, s.t. `std::disjunction` below can stop instantiating at the
+// first match. Otherwise a generic catch-all function would also be
+// instantiated with alternatives that are already matched by earlier ones.
+template <typename Func, typename Value>
+struct IsMatchForVisitIf : std::bool_constant<isMatchForVisitIf<Func, Value>> {
+};
+
+template <typename Value, typename... Funcs>
+constexpr bool anyMatchForVisitIf =
+    std::disjunction_v<IsMatchForVisitIf<Funcs, Value>...>;
+
+template <typename Variant, typename... Funcs, size_t... Is>
+constexpr bool isExhaustiveForVisitIfImpl(std::index_sequence<Is...>) {
+  return (... &&
+          anyMatchForVisitIf<decltype(std::get<Is>(std::declval<Variant>())),
+                             Funcs...>);
+}
+
+// True iff every alternative of `Variant` is matched by one of `funcs`.
+template <typename Variant, typename... Funcs>
+CPP_concept IsExhaustiveForVisitIf =
+    isExhaustiveForVisitIfImpl<Variant, Funcs...>(
+        std::make_index_sequence<std::variant_size_v<std::decay_t<Variant>>>{});
+
 // Call the first of `funcs` that matches `value`. Note: Recursion compiles
 // faster than a fold + `std::get<i>(std::tie(funcs...))`, as it stops early.
 template <typename Value, typename Func, typename... Rest>
 decltype(auto) tryInvoke(Value&& value, Func&& func, Rest&&... rest) {
   if constexpr (isMatchForVisitIf<Func, Value>) {
     return func(AD_FWD(value));
-  } else if constexpr (sizeof...(Rest) > 0) {
-    return tryInvoke(AD_FWD(value), AD_FWD(rest)...);
   } else {
-    static_assert(alwaysFalse<Value>,
-                  "None of the functions passed to `visitIf` matches the "
-                  "active alternative. Pass a generic catch-all function "
-                  "(e.g. `[](const auto&) {}`) as the last argument to "
-                  "explicitly ignore the remaining alternatives.");
+    return tryInvoke(AD_FWD(value), AD_FWD(rest)...);
   }
 }
 }  // namespace detail
 
-/// Replacement for `std::visit` + `if constexpr` chains: Call the first of
-/// `funcs` whose parameter type matches the active alternative of `variant`.
-/// Every alternative must be matched (checked at compile time); a generic
-/// lambda can be passed last as an "else" branch.
-template <typename Variant, typename... Funcs>
-decltype(auto) visitIf(Variant&& variant, Funcs&&... funcs) {
+// Replacement for `std::visit` + `if constexpr` chains: Call the first of
+// `funcs` whose parameter type matches the active alternative of `variant`.
+// Every alternative must be matched, otherwise this doesn't compile. To
+// explicitly ignore the remaining alternatives, pass a generic catch-all
+// function (e.g. `[](const auto&) {}`) as the last argument.
+CPP_template(typename Variant, typename... Funcs)(
+    requires detail::IsExhaustiveForVisitIf<Variant, Funcs...>) decltype(auto)
+    visitIf(Variant&& variant, Funcs&&... funcs) {
   return std::visit(
       [&](auto&& value) -> decltype(auto) {
         return detail::tryInvoke(AD_FWD(value), AD_FWD(funcs)...);
