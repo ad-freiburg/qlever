@@ -2907,6 +2907,50 @@ TEST(QueryPlanner, Exists) {
       "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER EXISTS { ?s <r> ?b } }",
       h::Join(filterExistsSRB(h::IndexScanFromStrings("?s", "<p>", "?o")),
               filterExistsSRB(h::IndexScanFromStrings("?s", "<q>", "?y"))));
+
+  // The `ExistsJoin` adds a column for the result of the `EXISTS`, which is
+  // then hidden by the `Filter`.
+  using ::testing::Pair;
+  auto variableColumnsAre = [](auto... columns) {
+    return AD_PROPERTY(QueryExecutionTree, getVariableColumns,
+                       ::testing::UnorderedElementsAre(columns...));
+  };
+  auto column = [](const std::string& variable, ColumnIndex columnIndex) {
+    return Pair(Var{variable}, makeAlwaysDefinedColumn(columnIndex));
+  };
+  auto existsColumn = [](ColumnIndex columnIndex) {
+    return Pair(AD_PROPERTY(Var, name, HasSubstr("?ql_internal_exists_")),
+                makeAlwaysDefinedColumn(columnIndex));
+  };
+  auto filterExistsSRBWithColumns =
+      [&](const auto& subtree,
+          const std::string& otherVariable) -> h::QetMatcher {
+    return ::testing::AllOf(
+        h::Filter(
+            "EXISTS { ?s <r> ?b }",
+            ::testing::AllOf(
+                h::ExistsJoin(subtree,
+                              h::IndexScanFromStrings("?s", "<r>", "?b")),
+                variableColumnsAre(column("?s", 0), column(otherVariable, 1),
+                                   existsColumn(2)))),
+        variableColumnsAre(column("?s", 0), column(otherVariable, 1)));
+  };
+  h::expect("SELECT * { ?s <p> ?o FILTER EXISTS { ?s <r> ?b } }",
+            filterExistsSRBWithColumns(
+                h::IndexScanFromStrings("?s", "<p>", "?o"), "?o"));
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER EXISTS { ?s <r> ?b } }",
+      ::testing::AllOf(
+          h::Join(filterExistsSRBWithColumns(
+                      h::IndexScanFromStrings("?s", "<p>", "?o"), "?o"),
+                  filterExistsSRBWithColumns(
+                      h::IndexScanFromStrings("?s", "<q>", "?y"), "?y")),
+          // The hidden columns of the `ExistsJoin`s are still present in the
+          // result (columns 2 and 4), but not visible.
+          // TODO<StripColumns> Adapt once `Filter` can strip columns.
+          AD_PROPERTY(QueryExecutionTree, getResultWidth, ::testing::Eq(5)),
+          variableColumnsAre(column("?s", 0), column("?o", 1),
+                             column("?y", 3))));
 }
 
 // _____________________________________________________________________________
