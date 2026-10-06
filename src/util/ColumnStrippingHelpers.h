@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef COLUMN_STRIPPING_HELPERS_H
-#define COLUMN_STRIPPING_HELPERS_H
+#ifndef QLEVER_SRC_UTIL_COLUMNSTRIPPINGHELPERS_H
+#define QLEVER_SRC_UTIL_COLUMNSTRIPPINGHELPERS_H
 
 #include <set>
 
@@ -63,7 +63,7 @@ class VarsRequiredFromSubtree {
 
 namespace columnStrippingHelpers {
 // A helper for the column stripping of operations.
-// It returns true when all the variables provided by the qet are requested from
+// It returns true when all the variables provided by the 'qet' are requested from
 // the parent-operation. Otherwise it returns false.
 inline bool allVariablesAreRequired(
     std::shared_ptr<QueryExecutionTree> qet,
@@ -100,7 +100,7 @@ makeTreeWithOptionalStripOperation(
   auto treeWithOperationAsRoot = ad_utility::makeExecutionTree<Operation>(
       qec, std::forward<Args>(args)...);
 
-  // check whether all variables needed for the given operation are also
+  // Check whether all variables needed for the given operation are also
   // requested from the parent. And either return the QueryExecutionTree with or
   // without an additional StripColumns-Operation.
   if (allVariablesAreRequired(treeWithOperationAsRoot,
@@ -113,4 +113,4 @@ makeTreeWithOptionalStripOperation(
 }
 }  // namespace columnStrippingHelpers
 
-#endif  // COLUMN_STRIPPING_HELPERS_H
+#endif  // QLEVER_SRC_UTIL_COLUMNSTRIPPINGHELPERS_H
