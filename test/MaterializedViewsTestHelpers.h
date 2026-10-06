@@ -356,10 +356,12 @@ inline void expectNotSuitableForRewrite(
   // cache-key based rewriting, even for queries that (by design) are not
   // suitable for the pattern-based (star/chain) rewriting tested here. So
   // check the latter directly instead of relying on the overall return value.
-  const auto& graphPattern = plan.parsedQuery()._rootGraphPattern;
-  EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(
-                     qec.get(), graphPattern._graphPatterns.at(0).getBasic())
-                  .empty());
+  const auto& firstPattern =
+      plan.parsedQuery()._rootGraphPattern._graphPatterns.at(0);
+  if (const auto* basic =
+          std::get_if<parsedQuery::BasicGraphPattern>(&firstPattern)) {
+    EXPECT_TRUE(qpc.makeJoinReplacementIndexScans(qec.get(), *basic).empty());
+  }
   manager.unloadViewIfLoaded(viewName);
 };
 
