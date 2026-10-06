@@ -274,7 +274,9 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Block with blank nodes only.
   const CompressedBlockMetadata bBlank =
       makeBlock(BlankNodeId(11), BlankNodeId(12));
-  // All the blocks of the geo point tests, in sorted order.
+  // The mixed input of the geo point tests (points among dates and blank
+  // nodes), in sorted order. The third point-only block `bGeoPoint3` is not
+  // part of it, it is only used for the input of point blocks only.
   const std::vector<CompressedBlockMetadata> allTestBlocksIsGeoPoint = {
       b1,         b2,         b6,
       b19,        b27,        bDateGeoPointGap,
