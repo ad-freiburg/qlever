@@ -19,6 +19,7 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/GTestHelpers.h"
+#include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/NamedResultCache.h"
@@ -229,4 +230,54 @@ TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabWithGeoIndex) {
                           secondaryVocab));
     }
   }
+}
+
+// _____________________________________________________________________________
+// Test local vocab entries whose words are already contained in the vocabulary
+// of the main index or in the secondary vocabulary of the index itself (for
+// example because it was loaded from a blob). No query produces such entries,
+// so the entry of the named result cache is built by hand.
+TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
+  ad_utility::testing::TestIndexConfig config{std::string{kb}};
+  config.secondaryVocabWords = std::vector<std::string>{"<a>"};
+  auto qec = ad_utility::testing::getQec(std::move(config));
+  const auto& context = qec->getLocalVocabContext();
+
+  // The words are contained in the main vocabulary (`<m>`), in the secondary
+  // vocabulary of the index (`<a>`), and in neither of them (`<y>`).
+  LocalVocab localVocab;
+  auto idOf = [&localVocab, &context](std::string_view iriref) {
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::fromIriref(iriref, context)));
+  };
+  Id m = idOf("<m>");
+  Id a = idOf("<a>");
+  Id y = idOf("<y>");
+  // The position of `<a>` is its `Id` in the secondary vocabulary of the index.
+  auto positionOfA = a.getLocalVocabIndex()->positionInVocab();
+  ASSERT_NE(positionOfA.lowerBound_, positionOfA.upperBound_);
+  EXPECT_EQ(Id::fromBits(positionOfA.lowerBound_.get()), secondaryId(0));
+  auto value = std::make_shared<const Value>(Value{
+      std::make_shared<const IdTable>(makeIdTableFromVector({{m}, {a}, {y}})),
+      VariableToColumnMap{}, std::vector<ColumnIndex>{}, std::move(localVocab),
+      "handmade", std::nullopt});
+
+  // The secondary vocabulary that is passed in has to be an extension of the
+  // one of the index (see the precondition in
+  // `NamedCacheSecondaryVocabRewriter.h`). Only `<y>` is new.
+  SecondaryVocabulary secondaryVocab{std::vector<std::string>{"<a>"}};
+  EXPECT_EQ(addNewWordsToSecondaryVocab({{"entry", value}}, secondaryVocab), 1);
+  EXPECT_EQ(secondaryVocab.numWords(), 2);
+  EXPECT_EQ(secondaryVocab.getId("<y>"), SecondaryVocabIndex::make(1));
+
+  // The word of the main vocabulary is rewritten to its `Id` there, and the
+  // word of the secondary vocabulary of the index keeps its `Id`.
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  EXPECT_EQ(rewriteId(m, secondaryVocab), getId("<m>"));
+  EXPECT_EQ(rewriteId(a, secondaryVocab), secondaryId(0));
+  EXPECT_EQ(rewriteId(y, secondaryVocab), secondaryId(1));
+  auto rewritten = rewriteToSecondaryVocab(
+      *value, secondaryVocab, ad_utility::testing::makeAllocator());
+  EXPECT_THAT(column(rewritten, 0),
+              ElementsAre(getId("<m>"), secondaryId(0), secondaryId(1)));
 }
