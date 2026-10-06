@@ -289,6 +289,19 @@ class CompressedRelationWriter {
                                             BlockToWrite block,
                                             bool invokeCallback);
 
+  // Do the bookkeeping of `addBlockForLargeRelation` (see there for the
+  // preconditions) for a block with `numRows` rows, but don't write the block.
+  // The caller then has to write it via `compressAndWriteBlockInCallingThread`
+  // (with `col0Id` as the first and last `col0` ID, and `invokeCallback` set to
+  // `false`). This allows code that runs on the global executor to write the
+  // blocks of a large relation without going through the (blocking)
+  // `blockWriteQueue_`, see `PermutationWriter::scheduleBlockOfLargeRelation`.
+  //
+  // NOTE: This function itself is not thread-safe and may push to the
+  // `blockWriteQueue_`, so it must be called by the thread that drives this
+  // writer (and not from the global executor).
+  void prepareBlockForLargeRelation(Id col0Id, size_t numRows);
+
   // Return the number of rows that a single block of small relations may hold
   // at most.
   //

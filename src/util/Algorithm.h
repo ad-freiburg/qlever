@@ -6,7 +6,10 @@
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
+#include <algorithm>
 #include <boost/optional.hpp>
+#include <functional>
+#include <iterator>
 #include <numeric>
 #include <string>
 #include <string_view>
@@ -266,6 +269,40 @@ CPP_template(typename ForwardIterator, typename Tp,
     }
   }
   return first;
+}
+
+// Same as `std::partition_point`, but use an exponential ("galloping") search
+// instead of a binary search: The step size is doubled until an element is
+// found that doesn't satisfy the `pred`, and only the remaining range is then
+// searched binarily. That way a partition point that is close to `first` is
+// found with a handful of calls to `pred` (a binary search would need about
+// `log2(last - first)` calls), while a partition point that is far away still
+// requires only a logarithmic number of calls (a linear scan would need
+// `last - first` calls). As for `std::partition_point`, the range
+// `[first, last)` has to be partitioned with respect to `pred`, i.e. all the
+// elements that satisfy `pred` have to precede all the elements that don't.
+CPP_template(typename RandomAccessIterator, typename Predicate)(
+    requires ql::concepts::random_access_iterator<
+        RandomAccessIterator>) constexpr RandomAccessIterator
+    gallopingPartitionPoint(RandomAccessIterator first,
+                            RandomAccessIterator last, Predicate pred) {
+  using DistanceType =
+      typename std::iterator_traits<RandomAccessIterator>::difference_type;
+  // Invariant of the following loop: All the elements in `[first, first +
+  // numSatisfying)` satisfy the `pred`, and the partition point is at most
+  // `first + upperBound`.
+  DistanceType numSatisfying = 0;
+  DistanceType upperBound = last - first;
+  for (DistanceType step = 1; step <= upperBound - numSatisfying; step *= 2) {
+    DistanceType probe = numSatisfying + step - 1;
+    if (!std::invoke(pred, first[probe])) {
+      upperBound = probe;
+      break;
+    }
+    numSatisfying = probe + 1;
+  }
+  return std::partition_point(first + numSatisfying, first + upperBound,
+                              std::ref(pred));
 }
 
 // In place version of `ql::ranges::set_difference` which writes the output to
