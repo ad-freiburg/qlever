@@ -647,8 +647,15 @@ void ParsedQuery::moveAliasesAfterPostQueryValues(
       postQueryValuesClause_->_inlineValues._variables;
   ad_utility::HashSet<Variable> lateVariables{valuesVariables.begin(),
                                               valuesVariables.end()};
+  // `HAVING` is applied before the join, so its (internal) aliases are always
+  // computed by the `GroupBy`, where the `VALUES` variables are unbound.
+  ad_utility::HashSet<Variable> havingVariables;
+  for (const auto& having : _havingClauses) {
+    havingVariables.insert(having.expression_.getVariableOrNullopt().value());
+  }
   for (auto& alias : selectClause().deleteAliasesButKeepVariables()) {
-    if (ql::ranges::none_of(alias._expression.getUnaggregatedVariables({}),
+    if (havingVariables.contains(alias._target) ||
+        ql::ranges::none_of(alias._expression.getUnaggregatedVariables({}),
                             [&lateVariables](const Variable& variable) {
                               return lateVariables.contains(variable);
                             })) {

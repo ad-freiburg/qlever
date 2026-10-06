@@ -1566,6 +1566,12 @@ TEST(ExportQueryExecutionTrees, TrailingValuesBeforeDistinctAndOrderBy) {
   EXPECT_EQ(tsv("SELECT ?s (?v AS ?w) { ?s <p> ?o } GROUP BY ?s "
                 "HAVING (BOUND(?w)) VALUES ?v { 1 }"),
             "?s\t?w\n");
+  EXPECT_EQ(tsv("SELECT ?s (?v AS ?w) { ?s <p> ?o } GROUP BY ?s "
+                "HAVING (!BOUND(?w) && !BOUND(?v)) VALUES ?v { 1 }"),
+            "?s\t?w\n<a>\t1\n<b>\t1\n<d>\t1\n");
+  EXPECT_EQ(tsv("SELECT ?s { ?s <p> ?o } GROUP BY ?s "
+                "HAVING (COUNT(*) > 1 || ?v = 1) VALUES ?v { 1 }"),
+            "?s\n<a>\n");
   // The `CONSTRUCT` template can also use the `VALUES` variables.
   EXPECT_EQ(runQueryStreamableResult(
                 kg,
