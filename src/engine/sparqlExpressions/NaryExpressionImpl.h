@@ -10,6 +10,7 @@
 #include <absl/functional/bind_front.h>
 #include <absl/strings/str_join.h>
 
+#include "engine/sparqlExpressions/ExpressionResultHelpers.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 #include "engine/sparqlExpressions/NumericExpressionWrappers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -55,27 +56,6 @@ class NaryExpressionBase : public SparqlExpression {
     return {children_.data(), children_.size()};
   }
 };
-
-// Convert an N-ary operand into a representation that can be accessed by index.
-// Variables and interval sets are materialized as ValueId vectors, while
-// existing vectors and constants are forwarded unchanged.
-template <typename T>
-decltype(auto) convertNaryOperandToVectorOrConstant(
-    T&& value, EvaluationContext* context) {
-  using Type = std::decay_t<T>;
-
-  if constexpr (ad_utility::isSimilar<Type, ad_utility::SetOfIntervals>) {
-    AD_CORRECTNESS_CHECK(value.size() == context->size(),
-                         "The size of a `SetOfIntervals` does not match the "
-                         "size of the evaluation context.");
-    return ad_utility::SetOfIntervals::toIdVector(value, context->_allocator);
-  } else if constexpr (ad_utility::isSimilar<Type, ::Variable>) {
-    return getIdsFromVariable(value, context);
-  } else {
-    static_assert(isVectorResult<Type> || isConstantResult<Type>);
-    return AD_FWD(value);
-  }
-}
 
 // Create an indexed accessor for an N-ary operand. Vector operands are read at
 // the requested row, while constant operands always return the same converted
@@ -150,23 +130,26 @@ class NaryExpressionStronglyTyped
 
       using ValueGetters = typename NaryOperation::ValueGetters;
 
-      auto convertedOperands = std::tuple{
-          convertNaryOperandToVectorOrConstant(AD_FWD(operands), context)...};
+      auto convertedOperands =
+          std::tuple{convertToVectorOrConstant(AD_FWD(operands), context)...};
 
       using ConvertedOperands = decltype(convertedOperands);
 
-      constexpr bool supportsNumericFastPath =
-          []<size_t... I>(std::index_sequence<I...>) {
-            return (... && (homogeneousNumeric::supportsNumericFastPath<
-                                std::tuple_element_t<I, ValueGetters>> &&
-                            homogeneousNumeric::supportsNumericFastPathOperand<
-                                std::tuple_element_t<I, ConvertedOperands>>()));
-          }(std::index_sequence_for<Operands...>{});
+      constexpr bool canUseNumericFastPath = []<size_t... I>(
+                                                 std::index_sequence<I...>) {
+        using namespace homogeneousNumeric;
+
+        return (
+            ... &&
+            (supportsNumericFastPath<std::tuple_element_t<I, ValueGetters>> &&
+             supportsNumericFastPathOperand<
+                 std::tuple_element_t<I, ConvertedOperands>>()));
+      }(std::index_sequence_for<Operands...>{});
 
       // For numeric N-ary expressions, first try homogeneous execution, then a
       // speculative majority-type path. Fall back to the generic indexed
       // evaluation if neither optimization applies.
-      if constexpr (supportsNumericFastPath && !resultIsConstant) {
+      if constexpr (canUseNumericFastPath && !resultIsConstant) {
         auto classifications = std::apply(
             [context](const auto&... values) {
               return homogeneousNumeric::classifyNumericOperands(context,
@@ -180,14 +163,11 @@ class NaryExpressionStronglyTyped
         if (homogeneousTypes.has_value()) {
           return homogeneousNumeric::dispatchNumericTypes(
               homogeneousTypes.value(),
-              [&]<typename... NumericTypes>(NumericTypes...) {
+              [&convertedOperands,
+               context]<typename... NumericTypes>(NumericTypes...) {
                 return homogeneousNumeric::evaluateHomogeneousNumericOperation<
                     typename NaryOperation::Function,
-                    typename NumericTypes::type...>(
-                    std::apply(
-                        [](auto&... values) { return std::tie(values...); },
-                        convertedOperands),
-                    context);
+                    typename NumericTypes::type...>(convertedOperands, context);
               });
         }
 
@@ -197,25 +177,27 @@ class NaryExpressionStronglyTyped
         if (majorityTypes.has_value()) {
           return homogeneousNumeric::dispatchNumericTypes(
               majorityTypes.value(),
-              [&]<typename... NumericTypes>(NumericTypes...) {
+              [&convertedOperands,
+               context]<typename... NumericTypes>(NumericTypes...) {
                 return homogeneousNumeric::
                     evaluateSpeculativeNaryNumericOperation<
                         typename NaryOperation::Function, ValueGetters,
-                        typename NumericTypes::type...>(
-                        std::apply(
-                            [](auto&... values) { return std::tie(values...); },
-                            convertedOperands),
-                        context);
+                        typename NumericTypes::type...>(convertedOperands,
+                                                        context);
               });
         }
       }
 
+      // Create one indexed getter per operand, matching each operand with its
+      // corresponding value getter from `ValueGetters`.
       auto indexedGetters = [&]<size_t... I>(std::index_sequence<I...>) {
         return std::tuple{
             makeIndexedNaryValueGetter<std::tuple_element_t<I, ValueGetters>>(
                 std::get<I>(convertedOperands), context)...};
       }(std::index_sequence_for<Operands...>{});
 
+      // Evaluate one result row by invoking every indexed getter at `i` and
+      // passing the resulting values to the N-ary function.
       auto computeValue = [&](size_t i) {
         return std::apply(
             [&](auto&... getters) {
@@ -231,9 +213,8 @@ class NaryExpressionStronglyTyped
       result.reserve(targetSize);
 
       for (size_t i = 0; i < targetSize; ++i) {
-        auto value = computeValue(i);
         result.push_back(promoteToLocalVocabEntry(
-            std::move(value), context->getLocalVocabContext()));
+            computeValue(i), context->getLocalVocabContext()));
       }
 
       if constexpr (resultIsConstant) {

@@ -23,12 +23,13 @@ namespace sparqlExpression::detail {
 // They convert primitive numeric functions into the `Id`- and
 // `NumericValue`-based interfaces used by the expression framework.
 
-// Takes a `Function` that returns a numeric value (integral or floating
-// point) and converts it to a function, that takes the same arguments and
-// returns the same result, but the return type is the `NumericValue` variant.
+// Takes a `Function` that returns a built-in arithmetic type (integral or
+// floating-point type) and converts it to a function with the same arguments
+// that returns the result as an `Id`. If `nanToUndef` is true, floating-point
+// NaN and infinity results are converted to `UNDEF`.
 template <typename Function, bool nanToUndef = false>
 struct NumericIdWrapper {
-  Function function_{};
+  [[no_unique_address]] Function function_{};
 
   template <typename... Args>
   Id operator()(Args&&... args) const {
@@ -36,12 +37,15 @@ struct NumericIdWrapper {
   }
 };
 
-// Takes a `Function` that takes and returns numeric values (integral or
-// floating point) and converts it to a function, that takes the same
-// arguments and returns the same result, but the arguments and the return
-// type are the `NumericValue` variant.
+// Takes a `Function` that operates on built-in arithmetic types (integral or
+// floating-point types) and lifts it to accept `NumericValue` arguments.
+// Non-numeric arguments yield `UNDEF`, and arithmetic results are converted
+// to `Id`. If `NanOrInfToUndef` is true, floating-point NaN and infinity
+// results are converted to `UNDEF`.
 template <typename Function, bool NanOrInfToUndef = false>
 struct MakeNumericExpression {
+  Function function_{};
+
   template <typename... Args>
   Id operator()(const Args&... args) const {
     CPP_assert((concepts::same_as<std::decay_t<Args>, NumericValue> && ...));

@@ -373,6 +373,16 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     NumericExpressionBenchmarkContext benchmarkContext{numRows};
     NumericExpressionBenchmarkContext mixedTernaryContext{numRows};
 
+    NumericExpressionBenchmarkContext genericFallbackContext{numRows};
+
+    for (size_t i = 1; i < numRows; i += 2) {
+      genericFallbackContext.table(i, 0) = Id::makeFromDouble(
+          static_cast<double>(genericFallbackContext.table(i, 0).getInt()));
+    }
+
+    genericFallbackContext.context._inputTable =
+        genericFallbackContext.table.asStaticView<0>();
+
     auto leftIds = sparqlExpression::detail::getIdsFromVariable(
         Variable{"?left"}, &benchmarkContext.context);
     auto rightIds = sparqlExpression::detail::getIdsFromVariable(
@@ -457,6 +467,7 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     auto ternaryAdd = makeBenchmarkTernaryAddExpression();
     auto mixedTernaryAdd = makeBenchmarkMixedTernaryAddExpression();
     auto mixedFallbackTernaryAdd = makeBenchmarkTernaryAddExpression();
+    auto genericFallbackTernaryAdd = makeBenchmarkTernaryAddExpression();
 
     // Warm up the multiplication implementations and validate their results.
     validateResult(*legacyVectorVector, benchmarkContext.context, numRows);
@@ -468,6 +479,8 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     validateResult(*ternaryAdd, benchmarkContext.context, numRows);
     validateResult(*mixedTernaryAdd, benchmarkContext.context, numRows);
     validateResult(*mixedFallbackTernaryAdd, benchmarkContext.context, numRows);
+    validateResult(*genericFallbackTernaryAdd, genericFallbackContext.context,
+                   numRows);
 
     // Warm up the homogeneous numeric benchmark paths.
     auto warmUpHomogeneousCase = [&](const auto& left, const auto& right,
@@ -664,6 +677,12 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
         [&]() {
           evaluateRepeatedly(*mixedFallbackTernaryAdd,
                              mixedTernaryContext.context, repetitions);
+        });
+
+    results.addMeasurement(
+        "NaryExpression ternary add: 50-50 mixed input, 100k rows x 50", [&]() {
+          evaluateRepeatedly(*genericFallbackTernaryAdd,
+                             genericFallbackContext.context, repetitions);
         });
 
     return results;

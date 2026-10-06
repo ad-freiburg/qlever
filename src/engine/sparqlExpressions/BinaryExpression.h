@@ -14,6 +14,7 @@
 #include <tuple>
 #include <utility>
 
+#include "engine/sparqlExpressions/ExpressionResultHelpers.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "util/ChunkedForLoop.h"
@@ -28,28 +29,6 @@ namespace sparqlExpression::detail {
 // binary expressions because the operation is applied in direct loops over
 // vector or constant operands, avoiding the generator-based per-element
 // abstraction.
-
-// Convert an expression result into either a vector-like or constant
-// representation that can be handled directly by the binary evaluation loop.
-template <typename T>
-decltype(auto) convertToVectorOrConstant(T&& value,
-                                         EvaluationContext* context) {
-  using Type = std::decay_t<T>;
-
-  if constexpr (ad_utility::isSimilar<Type, ad_utility::SetOfIntervals>) {
-    AD_CORRECTNESS_CHECK(value.size() == context->size(),
-                         "The size of a `SetOfIntervals` does not match the "
-                         "size of the evaluation context.");
-    return ad_utility::SetOfIntervals::toIdVector(value, context->_allocator);
-  } else if constexpr (ad_utility::isSimilar<Type, ::Variable>) {
-    return getIdsFromVariable(value, context);
-  } else {
-    static_assert(isVectorResult<Type> || isConstantResult<Type>,
-                  "BinaryExpression only supports vectors and constants after "
-                  "conversion");
-    return AD_FWD(value);
-  }
-}
 
 // Return a callable that provides the converted value at index `i`. For
 // constant operands, the converted value is computed only once.

@@ -158,7 +158,7 @@ void checkNumericOperandSizes(const std::tuple<Operands...>& operands,
 // means that at least one operand is vector-like.
 template <typename Function, typename... NumericTypes, typename... Operands>
 ExpressionResult evaluateHomogeneousNumericOperation(
-    std::tuple<Operands...> operands, EvaluationContext* context) {
+    const std::tuple<Operands...>& operands, EvaluationContext* context) {
   static_assert(sizeof...(NumericTypes) == sizeof...(Operands));
   static_assert((... || isVectorResult<std::decay_t<Operands>>),
                 "At least one operand must be vector-like");
@@ -302,6 +302,44 @@ ExpressionResult evaluateSpeculativeNumericOperation(
   return result;
 }
 
+template <typename Function, typename ValueGetters, typename... NumericTypes,
+          typename... Operands>
+Id evaluateSpeculativeNaryRow(
+    size_t i, const std::tuple<Operands...>& operands,
+    const std::array<Datatype, sizeof...(NumericTypes)>& expectedTypes,
+    EvaluationContext* context) {
+  using FastFunction = RawNumericFunctionT<Function>;
+  FastFunction fastFunction;
+  Function genericFunction;
+
+  const auto values = std::apply(
+      [i](const auto&... operand) {
+        return std::array{getIdAt(operand, i)...};
+      },
+      operands);
+
+  const bool allMatch =
+      [&values, &expectedTypes]<size_t... I>(std::index_sequence<I...>) {
+        return ((values[I].getDatatype() == expectedTypes[I]) && ...);
+      }(std::index_sequence_for<Operands...>{});
+
+  if (allMatch) {
+    return std::apply(
+        [&fastFunction](const auto&... values) {
+          // Expand the numeric types and corresponding values in lockstep.
+          return fastFunction(
+              getPrimitiveNumericValue<NumericTypes>(values)...);
+        },
+        values);
+  }
+
+  return [&genericFunction, &values,
+          context]<size_t... I>(std::index_sequence<I...>) {
+    return genericFunction(
+        std::tuple_element_t<I, ValueGetters>{}(values[I], context)...);
+  }(std::index_sequence_for<Operands...>{});
+}
+
 // Evaluate an N-ary numeric operation speculatively using the majority
 // datatype of every operand. Rows whose datatypes all match the expected
 // majority types use the primitive numeric fast path. Rows with at least one
@@ -309,15 +347,11 @@ ExpressionResult evaluateSpeculativeNumericOperation(
 template <typename Function, typename ValueGetters, typename... NumericTypes,
           typename... Operands>
 ExpressionResult evaluateSpeculativeNaryNumericOperation(
-    std::tuple<Operands...> operands, EvaluationContext* context) {
+    const std::tuple<Operands...>& operands, EvaluationContext* context) {
   static_assert(sizeof...(NumericTypes) == sizeof...(Operands));
   static_assert(sizeof...(NumericTypes) == std::tuple_size_v<ValueGetters>);
 
   checkNumericOperandSizes(operands, context);
-
-  using FastFunction = RawNumericFunctionT<Function>;
-  FastFunction fastFunction;
-  Function genericFunction;
 
   constexpr std::array<Datatype, sizeof...(NumericTypes)> expectedTypes{
       datatypeForNumericType<NumericTypes>()...};
@@ -327,35 +361,10 @@ ExpressionResult evaluateSpeculativeNaryNumericOperation(
 
   ad_utility::chunkedForLoop<1000>(
       0, context->size(),
-      [&](size_t i) {
-        const auto values = std::apply(
-            [i](const auto&... operand) {
-              return std::array<ValueId, sizeof...(Operands)>{
-                  getIdAt(operand, i)...};
-            },
-            operands);
-
-        bool allMatch = true;
-        for (size_t operandIndex = 0; operandIndex < values.size();
-             ++operandIndex) {
-          if (values[operandIndex].getDatatype() !=
-              expectedTypes[operandIndex]) {
-            allMatch = false;
-            break;
-          }
-        }
-
-        if (allMatch) {
-          result[i] = [&]<size_t... I>(std::index_sequence<I...>) {
-            return fastFunction(
-                getPrimitiveNumericValue<NumericTypes>(values[I])...);
-          }(std::index_sequence_for<NumericTypes...>{});
-        } else {
-          result[i] = [&]<size_t... I>(std::index_sequence<I...>) {
-            return genericFunction(
-                std::tuple_element_t<I, ValueGetters>{}(values[I], context)...);
-          }(std::index_sequence_for<Operands...>{});
-        }
+      [&result, &operands, &expectedTypes, context](size_t i) {
+        result[i] =
+            evaluateSpeculativeNaryRow<Function, ValueGetters, NumericTypes...>(
+                i, operands, expectedTypes, context);
       },
       [context]() { context->cancellationHandle_->throwIfCancelled(); });
 
