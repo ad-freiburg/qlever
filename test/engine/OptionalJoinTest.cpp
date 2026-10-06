@@ -566,7 +566,7 @@ TEST(OptionalJoin, resultSortedOnDependsOnKeepJoinColumns) {
                         idTableToExecutionTree(qec, a), keepJoinColumns};
   };
   EXPECT_THAT(make(false).resultSortedOn(), ::testing::IsEmpty());
-  EXPECT_NO_THROW(make(true).resultSortedOn());
+  EXPECT_NO_THROW(static_cast<void>(make(true).resultSortedOn()));
 }
 
 // _____________________________________________________________________________

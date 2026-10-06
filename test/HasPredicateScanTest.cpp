@@ -529,5 +529,5 @@ TEST_F(HasPredicateScanTest, descriptorAndSortOrderForAllScanTypes) {
                                 std::vector<std::optional<V>>{{V{"?p"}}}),
                             0, V{"?x"}};
   EXPECT_EQ(subquery.getDescriptor(), "HasPredicateScan with subquery");
-  EXPECT_NO_THROW(subquery.resultSortedOn());
+  EXPECT_NO_THROW(static_cast<void>(subquery.resultSortedOn()));
 }
