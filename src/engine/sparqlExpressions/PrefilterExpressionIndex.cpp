@@ -358,6 +358,8 @@ static std::string getDatatypeIsTypeStr(const IsDatatype isDtype) {
       return "Numeric";
     case ENCODED_IRI:
       return "EncodedIri";
+    case GEO_POINT:
+      return "GeoPoint";
     default:
       AD_FAIL();
   }
@@ -764,6 +766,20 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::ENCODED_IRI>::evaluateImpl(
 
 //______________________________________________________________________________
 template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::GEO_POINT>::evaluateImpl(
+    [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  // The geo points that are encoded in the `Id` are exactly the `ValueId`s of
+  // datatype `GeoPoint` (the WKT literals of the vocabulary are not points).
+  // They sort in one contiguous range, so only the blocks of points are kept,
+  // or, for the negation, only the other blocks.
+  std::array datatypes{Datatype::GeoPoint};
+  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+}
+
+//______________________________________________________________________________
+template <>
 BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
     const IndexImpl& index, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange,
@@ -1093,6 +1109,7 @@ template class IsDatatypeExpression<IsDatatype::BLANK>;
 template class IsDatatypeExpression<IsDatatype::LITERAL>;
 template class IsDatatypeExpression<IsDatatype::NUMERIC>;
 template class IsDatatypeExpression<IsDatatype::ENCODED_IRI>;
+template class IsDatatypeExpression<IsDatatype::GEO_POINT>;
 
 template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;
