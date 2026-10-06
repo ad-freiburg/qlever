@@ -618,6 +618,8 @@ addLinkAndDiscoverTest(ExternalValuesTest engine)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 
+addLinkAndDiscoverTest(FastExportStreamFormatterTest engine rdfEscaping)
+
 addLinkAndDiscoverTest(ExportIdsTest engine sparqlParser)
 
 addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
