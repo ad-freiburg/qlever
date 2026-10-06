@@ -21,9 +21,11 @@
 // a destroyed local object that a dangling view still points into) become
 // implausible to survive. Every call starts at the same depth, so repeated
 // calls overwrite the same region; to reach further down, use a larger
-// `NumBytes`. Returns the last byte written, read back through the `volatile`
-// buffer, so callers can assert that the stack was actually overwritten with
-// the sentinel.
+// `NumBytes`. Returns the last byte of the buffer, loaded from memory (a
+// `volatile` read) before the function returns, so callers can check that the
+// writes were not optimized away. Whether the stack still holds the sentinel
+// after the function has returned cannot be checked without undefined
+// behavior.
 template <size_t NumBytes = 4096>
 [[gnu::noinline]] char clobberStack(char sentinel = '#') {
   // `volatile` prevents the compiler from optimizing the stack writes away.
