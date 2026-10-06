@@ -12,4 +12,8 @@ if (USE_PRECOMPILED_HEADERS)
     endif ()
     target_precompile_headers(testUtil PRIVATE
             <gtest/gtest.h> <gmock/gmock.h> ${PRECOMPILED_HEADER_FILES_TEST})
+    # GCC only uses the precompiled header of `testUtil` for a test if every
+    # definition of `testUtil` is also defined for the test. We therefore omit
+    # the (unused) `testUtil_EXPORTS`, which CMake defines for shared libraries.
+    set_target_properties(testUtil PROPERTIES DEFINE_SYMBOL "")
 endif ()

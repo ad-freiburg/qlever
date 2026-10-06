@@ -15,13 +15,6 @@ function(linkTest basename)
     # still includes all its headers).
     if (USE_PRECOMPILED_HEADERS AND "testUtil" IN_LIST ARGN)
         target_precompile_headers(${basename} REUSE_FROM testUtil)
-        # With shared libraries, all code is compiled with `-fPIC` anyway (see the
-        # top-level `CMakeLists.txt`). The `-fPIE` that CMake would additionally
-        # add for the test executables makes the precompiled header of the shared
-        # `testUtil` unusable for them (Clang even fails with an error).
-        if (BUILD_SHARED_LIBS)
-            set_target_properties(${basename} PROPERTIES POSITION_INDEPENDENT_CODE OFF)
-        endif ()
     endif ()
 endfunction()
 
