@@ -115,6 +115,14 @@ struct CompressedRelationWriter::PermutationWriter {
   MetadataWriter writeMetadata_;
 
   const size_t blocksize_{writer1_->blocksize()};
+  // The factor by which the blocks that the `twinRelationSorter_` yields for a
+  // large relation are larger than the `blocksize_`. Larger blocks reduce the
+  // per-block cost of the merge phase of that sorter, and
+  // `CompressedRelationWriter::writeLargeRelationBlockInSlices` cuts them into
+  // blocks of about `blocksize_` rows again. The factor is bounded, because
+  // each of those blocks stays alive until all of its slices have been
+  // written.
+  static constexpr size_t twinSorterBlocksizeFactor_ = 16;
   const size_t numColumns_{writer1_->numColumns()};
   size_t numDistinctCol0_ = 0;
 
@@ -280,7 +288,8 @@ struct CompressedRelationWriter::PermutationWriter {
         largeTwinRelationTimer_.cont();
         auto md2 = writer2_->addCompleteLargeRelation(
             col0IdCurrentRelation_.value(),
-            twinRelationSorter_.getSortedBlocks(blocksize_));
+            twinRelationSorter_.getSortedBlocks(twinSorterBlocksizeFactor_ *
+                                                blocksize_));
         largeTwinRelationTimer_.stop();
         twinRelationSorter_.clear();
         writeMetadata_(md1, md2);

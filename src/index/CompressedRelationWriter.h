@@ -419,10 +419,6 @@ class CompressedRelationWriter {
   // lets the source of the blocks (the twin sorter of a large relation, see
   // `addCompleteLargeRelation`) work with much larger blocks than the ones
   // that end up in the permutation, which has a per-block cost.
-  //
-  // NOTE: That source currently yields blocks of exactly `blocksize()` rows,
-  // so the splitting only becomes effective with a follow-up that lets it
-  // yield larger ones.
   void writeLargeRelationBlockInSlices(Id col0Id, IdTable block);
 
   // Return an empty block buffer with room for at least `2 * blocksize()`

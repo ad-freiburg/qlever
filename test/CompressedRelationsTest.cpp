@@ -2812,3 +2812,66 @@ TEST(CompressedRelationWriter, writtenColumnsExactlyTileTheFile) {
   }
   EXPECT_EQ(expectedOffset, ad_utility::File(filename, "r").sizeOfFile());
 }
+
+// A large relation of a pair of permutations is written to the twin
+// permutation from the blocks of the twin sorter, which are larger than the
+// `blocksize()` (see `twinSorterBlocksizeFactor_` in
+// `CompressedRelationPermutationWriterImpl.h`). Those blocks are cut into
+// blocks of about the `blocksize()` again, and rows that agree in their first
+// three columns are not split, even across the boundaries of the blocks of the
+// twin sorter.
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, largeTwinRelationIsWrittenInSlices) {
+  constexpr int col0 = 42;
+  static constexpr size_t blocksize = 10;
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  std::string twinFilename = filename + ".twin";
+  absl::Cleanup twinCleanup{
+      [&twinFilename] { ad_utility::deleteFile(twinFilename); }};
+
+  // 400 rows, where the rows `[155, 170)` are the same triple in 15 different
+  // graphs. With 10 rows per block, the twin sorter yields blocks of 160 rows,
+  // so this run crosses the boundary between its first two blocks. Note that
+  // `col2 == 2 * col1` for all rows, so the twin permutation has the same
+  // order of rows as the original one.
+  auto block = makeBlockOfLargeRelation(col0, 400, 155, 170);
+  auto noop = [](ql::span<const CompressedRelationMetadata>) {};
+  auto makeWriter = [](const std::string& name) {
+    return std::make_unique<CompressedRelationWriter>(
+        4, ad_utility::File{name, "w"}, blocksize);
+  };
+  std::vector<IdTableStatic<0>> input;
+  input.push_back(block.clone());
+  auto result = CompressedRelationWriter::createPermutationPair(
+      filename, {makeWriter(filename), noop}, {makeWriter(twinFilename), noop},
+      ad_utility::InputRangeTypeErased{std::move(input)},
+      qlever::KeyOrder{0, 1, 2, 3}, {});
+
+  // The first 150 rows, then the 20 rows `[150, 170)` which contain the
+  // complete run, and the remaining 230 rows.
+  std::vector<size_t> expectedBlockSizes(15, blocksize);
+  expectedBlockSizes.push_back(20);
+  expectedBlockSizes.insert(expectedBlockSizes.end(), 23, blocksize);
+  std::vector<size_t> blockSizes;
+  for (const auto& b : result.blockMetadataSwitched_) {
+    blockSizes.push_back(b.numRows_);
+  }
+  EXPECT_EQ(blockSizes, expectedBlockSizes);
+
+  // Both permutations contain all the rows of the `block`, the twin with
+  // `col1` and `col2` swapped.
+  auto scanResult = scanLargeRelation(filename, result.blockMetadata_, V(col0));
+  auto twinScanResult =
+      scanLargeRelation(twinFilename, result.blockMetadataSwitched_, V(col0));
+  ASSERT_EQ(scanResult.numRows(), block.numRows());
+  ASSERT_EQ(twinScanResult.numRows(), block.numRows());
+  for (size_t i = 0; i < block.numRows(); ++i) {
+    SCOPED_TRACE(absl::StrCat("row ", i));
+    EXPECT_EQ(scanResult(i, 0), block(i, 1));
+    EXPECT_EQ(scanResult(i, 1), block(i, 2));
+    EXPECT_EQ(scanResult(i, 2), block(i, ADDITIONAL_COLUMN_GRAPH_ID));
+    EXPECT_EQ(twinScanResult(i, 0), block(i, 2));
+    EXPECT_EQ(twinScanResult(i, 1), block(i, 1));
+    EXPECT_EQ(twinScanResult(i, 2), block(i, ADDITIONAL_COLUMN_GRAPH_ID));
+  }
+}
