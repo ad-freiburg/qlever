@@ -358,18 +358,15 @@ getTriplesForPatternRewrite(const ParsedQuery& parsed) {
     return "The view's query aggregates (GROUP BY, either explicit or "
            "implicit via an aggregate expression in the SELECT clause)";
   }
+  // Without `GROUP BY`, a trailing `VALUES` clause is part of
+  // `_rootGraphPattern`, see `ParsedQuery::addSolutionModifiers`.
+  AD_CORRECTNESS_CHECK(!parsed.postQueryValuesClause_.has_value());
 
   // A top-level `FILTER` restricts which rows end up on disk, but (unlike the
   // triples analyzed below) is not part of `_graphPatterns` and would
   // otherwise go unnoticed by `graphPatternInvariantFilter`.
   if (!parsed._rootGraphPattern._filters.empty()) {
     return "The view's query has a top-level FILTER";
-  }
-
-  // A trailing `VALUES` clause also restricts the on-disk rows and is stored
-  // separately from `_rootGraphPattern`, so it needs an explicit check too.
-  if (parsed.postQueryValuesClause_.has_value()) {
-    return "The view's query has a trailing VALUES clause";
   }
 
   // `DISTINCT`/`REDUCED` change the cardinality of the result and thus of the
