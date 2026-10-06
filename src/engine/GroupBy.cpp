@@ -83,7 +83,9 @@ const std::vector<Variable>& GroupBy::groupByVariables() const {
 const std::vector<Alias>& GroupBy::aliases() const { return _impl->aliases(); }
 
 // _____________________________________________________________________________
-bool GroupBy::isDeterministicImpl() const { return _impl->isDeterministic(); }
+bool GroupBy::isDeterministicImpl() const {
+  return _impl->isDeterministicImpl();
+}
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> GroupBy::cloneImpl() const {

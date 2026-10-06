@@ -221,8 +221,7 @@ PlanVec QueryPlanner::createExecutionTrees(ParsedQuery& pq, bool isSubquery) {
 
   // Apply trailing `VALUES` clause
   auto& postValues = pq.postQueryValuesClause_;
-  if (postValues.has_value() &&
-      !postValues.value()._inlineValues._variables.empty()) {
+  if (postValues.has_value()) {
     plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
     checkCancellation();
   }
@@ -3674,10 +3673,12 @@ QueryPlanner::findApplicableReplacementPlans(
     uint64_t nodesCoveredByReplacementPlans = 0;
     for (auto& plans : applicableReplacementPlans | ql::views::reverse) {
       ql::erase_if(plans, [&](SubtreePlan& plan) {
-        bool res =
-            (plan._idsOfIncludedNodes & nodesCoveredByReplacementPlans) != 0;
+        // Only plans that are kept may block later plans.
+        if (plan._idsOfIncludedNodes & nodesCoveredByReplacementPlans) {
+          return true;
+        }
         nodesCoveredByReplacementPlans |= plan._idsOfIncludedNodes;
-        return res;
+        return false;
       });
     }
   }
