@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "../QueryPlannerTestHelpers.h"
+#include "../index/SecondaryVocabularyTestHelpers.h"
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -28,6 +29,7 @@
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 
 using namespace qlever::namedCacheSecondaryVocab;
+using secondaryVocabTestHelpers::secondaryVocabIs;
 using ::testing::ElementsAre;
 using ::testing::HasSubstr;
 
@@ -108,13 +110,9 @@ TEST(NamedCacheSecondaryVocabRewriter, addNewWordsAndRewriteIds) {
   // is the one of a previously written blob), which therefore keeps its `Id`.
   SecondaryVocabulary secondaryVocab{std::vector<std::string>{"<c>"}};
   EXPECT_EQ(addNewWordsToSecondaryVocab(entries, secondaryVocab), 2);
-  EXPECT_EQ(secondaryVocab.numSegments(), 2);
-  EXPECT_EQ(secondaryVocab.numWords(), 3);
   // The new words form one sorted segment. Words of the main vocabulary
   // (`<m>`) are not part of it.
-  EXPECT_EQ(secondaryVocab.getId("<c>"), SecondaryVocabIndex::make(0));
-  EXPECT_EQ(secondaryVocab.getId("<b>"), SecondaryVocabIndex::make(1));
-  EXPECT_EQ(secondaryVocab.getId("<y>"), SecondaryVocabIndex::make(2));
+  EXPECT_THAT(secondaryVocab, secondaryVocabIs(2, {"<c>", "<b>", "<y>"}));
   EXPECT_EQ(secondaryVocab.getId("<m>"), std::nullopt);
 
   // Calling it again finds no more new words and adds no segment.
@@ -267,8 +265,7 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
   // `NamedCacheSecondaryVocabRewriter.h`). Only `<y>` is new.
   SecondaryVocabulary secondaryVocab{std::vector<std::string>{"<a>"}};
   EXPECT_EQ(addNewWordsToSecondaryVocab({{"entry", value}}, secondaryVocab), 1);
-  EXPECT_EQ(secondaryVocab.numWords(), 2);
-  EXPECT_EQ(secondaryVocab.getId("<y>"), SecondaryVocabIndex::make(1));
+  EXPECT_THAT(secondaryVocab, secondaryVocabIs(2, {"<a>", "<y>"}));
 
   // The word of the main vocabulary is rewritten to its `Id` there, and the
   // word of the secondary vocabulary of the index keeps its `Id`.

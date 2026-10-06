@@ -22,6 +22,7 @@
 #include <variant>
 #include <vector>
 
+#include "../index/SecondaryVocabularyTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "./QleverTestHelpers.h"
 #include "backports/memory_resource.h"
@@ -39,6 +40,7 @@
 
 using namespace qlever;
 using namespace testing;
+using secondaryVocabTestHelpers::secondaryVocabIs;
 
 namespace {
 using Manager = NamedCachedQueryBlobManager;
@@ -263,15 +265,16 @@ nlohmann::json metadataFromBlob(ql::span<const char> compressedBlob) {
   return nlohmann::json::parse(metadataJson);
 }
 
-// Decompress the `compressedBlob` and return the format version from its
-// header.
-uint16_t formatVersionOfBlob(ql::span<const char> compressedBlob) {
+// Decompress the `compressedBlob` and expect that the format version from its
+// header is the `expectedVersion`.
+void expectBlobFormatVersion(
+    ql::span<const char> compressedBlob, uint16_t expectedVersion,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
   auto uncompressed = decompressOrFail(compressedBlob);
   auto reader = makeBlobReader(uncompressed);
-  auto formatVersion = Manager::tryToSkipAndVerifyBlobHeader(reader);
-  EXPECT_THAT(formatVersion, VariantWith<uint16_t>(_));
-  auto* version = std::get_if<uint16_t>(&formatVersion);
-  return version != nullptr ? *version : 0;
+  EXPECT_THAT(Manager::tryToSkipAndVerifyBlobHeader(reader),
+              VariantWith<uint16_t>(expectedVersion));
 }
 
 // Return the secondary vocabulary of the index of `qlever`, or `nullptr` if it
@@ -601,8 +604,8 @@ TEST(NamedCachedQueryBlobManager, combinedBlob) {
 
   // Without any new words, the blob is written in the old format without a
   // secondary vocabulary.
-  EXPECT_EQ(formatVersionOfBlob(compressedBlob),
-            Manager::formatVersionWithoutSecondaryVocab);
+  expectBlobFormatVersion(compressedBlob,
+                          Manager::formatVersionWithoutSecondaryVocab);
 
   // A completely fresh instance with NO index files on disk (`skipLoading`);
   // everything needed to answer the cached-result query comes from the blob.
@@ -1002,21 +1005,15 @@ TEST(NamedCachedQueryBlobManager, blobWithExcludedEntriesRejectsGeoSplitVocab) {
 TEST(NamedCachedQueryBlobManager, blobWithNewWords) {
   auto sourceConfig = buildTestIndex(newWordsTestData);
   auto compressedBlob = serializeNewWordsTestBlob(sourceConfig);
-  EXPECT_EQ(formatVersionOfBlob(compressedBlob),
-            Manager::formatVersionWithSecondaryVocab);
+  expectBlobFormatVersion(compressedBlob,
+                          Manager::formatVersionWithSecondaryVocab);
 
   Qlever target{EngineConfig{}, /*skipLoading=*/true};
   target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob);
 
   // The new words form a single sorted segment of the secondary vocabulary.
-  const auto* secondaryVocab = secondaryVocabOf(target);
-  ASSERT_NE(secondaryVocab, nullptr);
-  EXPECT_EQ(secondaryVocab->numSegments(), 1);
-  EXPECT_EQ(secondaryVocab->numWords(), 3);
-  EXPECT_EQ(secondaryVocab->getId("\"new literal\""),
-            SecondaryVocabIndex::make(0));
-  EXPECT_EQ(secondaryVocab->getId("<a>"), SecondaryVocabIndex::make(1));
-  EXPECT_EQ(secondaryVocab->getId("<y>"), SecondaryVocabIndex::make(2));
+  EXPECT_THAT(secondaryVocabOf(target),
+              Pointee(secondaryVocabIs(1, {"\"new literal\"", "<a>", "<y>"})));
 
   // The pinned result refers to the words of the secondary vocabulary, and is
   // still sorted in the order of its `Id`s.
@@ -1051,20 +1048,13 @@ TEST(NamedCachedQueryBlobManager, blobWithPreexistingSecondaryVocab) {
   intermediate.queryAndPinResultWithName(
       "second", "SELECT ?s WHERE { VALUES ?s { <z> <a> <m> } }");
   auto secondBlob = intermediate.serializeVocabAndNamedCacheToCompressedBlob();
-  EXPECT_EQ(formatVersionOfBlob(secondBlob),
-            Manager::formatVersionWithSecondaryVocab);
+  expectBlobFormatVersion(secondBlob, Manager::formatVersionWithSecondaryVocab);
 
   Qlever target{EngineConfig{}, /*skipLoading=*/true};
   target.deserializeVocabAndNamedCacheFromCompressedBlob(secondBlob);
-  const auto* secondaryVocab = secondaryVocabOf(target);
-  ASSERT_NE(secondaryVocab, nullptr);
-  EXPECT_EQ(secondaryVocab->numSegments(), 2);
-  EXPECT_EQ(secondaryVocab->numWords(), 4);
-  EXPECT_EQ(secondaryVocab->getId("\"new literal\""),
-            SecondaryVocabIndex::make(0));
-  EXPECT_EQ(secondaryVocab->getId("<a>"), SecondaryVocabIndex::make(1));
-  EXPECT_EQ(secondaryVocab->getId("<y>"), SecondaryVocabIndex::make(2));
-  EXPECT_EQ(secondaryVocab->getId("<z>"), SecondaryVocabIndex::make(3));
+  EXPECT_THAT(
+      secondaryVocabOf(target),
+      Pointee(secondaryVocabIs(2, {"\"new literal\"", "<a>", "<y>", "<z>"})));
 
   // The entry from the first blob is carried over unchanged.
   EXPECT_EQ(columnsOfPinnedResult(target, "pin"),
@@ -1099,8 +1089,8 @@ TEST(NamedCachedQueryBlobManager, blobWithNewWordsAndSpatialIndex) {
         "SELECT * { ?s2 <asWKT> ?geo2 }");
     return source.serializeVocabAndNamedCacheToCompressedBlob();
   }();
-  EXPECT_EQ(formatVersionOfBlob(compressedBlob),
-            Manager::formatVersionWithSecondaryVocab);
+  expectBlobFormatVersion(compressedBlob,
+                          Manager::formatVersionWithSecondaryVocab);
 
   Qlever target{EngineConfig{}, /*skipLoading=*/true};
   target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob);
