@@ -54,8 +54,9 @@
       _Pragma("GCC diagnostic ignored \"-Wdangling-reference\"")
 
 // Disable the `array-bounds` warning, which produces false positives on GCC 13
+// when small functions are inlined into standard library code. For example,
 // when the comparators in `ExternalSortFunctors.h` are inlined into
-// `std::__insertion_sort`. GCC then conflates the `Row<ValueId, 5>` and
+// `std::__insertion_sort`, GCC conflates the `Row<ValueId, 5>` and
 // `Row<ValueId, 4>` instantiations and wrongly believes an out-of-bounds access
 // happens.
 #define DISABLE_ARRAY_BOUNDS_WARNINGS \

@@ -904,6 +904,11 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
     if (USE_PRECOMPILED_HEADERS)
         target_precompile_headers(qlever-server REUSE_FROM engine)
+        # GCC only uses the precompiled header of `engine` for `qlever-server` if
+        # every definition of `engine` is also defined for `qlever-server`. We
+        # therefore omit the (unused) `engine_EXPORTS`, which CMake defines for
+        # shared libraries.
+        set_target_properties(engine PROPERTIES DEFINE_SYMBOL "")
     endif()
 
     add_executable(qlever-upgrade-index src/IndexUpgraderMain.cpp)
