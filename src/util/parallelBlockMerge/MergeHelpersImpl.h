@@ -174,6 +174,11 @@ inline std::vector<size_t> uniformTargets(size_t totalNumElements,
 inline std::vector<size_t> targetsFromChunkSizes(
     size_t totalNumElements, const std::vector<size_t>& firstChunkSizes,
     size_t remainingChunkSize) {
+  // A size of zero would describe an empty chunk, and a `remainingChunkSize`
+  // of zero would make the loop below run forever.
+  AD_CONTRACT_CHECK(remainingChunkSize > 0);
+  AD_CONTRACT_CHECK(ql::ranges::all_of(firstChunkSizes,
+                                       [](size_t size) { return size > 0; }));
   std::vector<size_t> targets;
   size_t sizeOfPreviousChunks = 0;
   // Return `false` if the chunk of the given `chunkSize` is the last one.

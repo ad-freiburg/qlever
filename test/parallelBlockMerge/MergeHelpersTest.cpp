@@ -244,6 +244,11 @@ TEST(MergeHelpers, targetsFromChunkSizes) {
   for (size_t i = 1; i < manyTargets.size(); ++i) {
     EXPECT_LT(manyTargets[i - 1], manyTargets[i]);
   }
+  // A size of zero is illegal, because it would describe an empty chunk.
+  AD_EXPECT_THROW_WITH_MESSAGE(targets(100, {}, 0),
+                               ::testing::HasSubstr("remainingChunkSize > 0"));
+  AD_EXPECT_THROW_WITH_MESSAGE(targets(100, {4, 0, 4}, 4),
+                               ::testing::HasSubstr("size > 0"));
 }
 
 // _____________________________________________________________________________
