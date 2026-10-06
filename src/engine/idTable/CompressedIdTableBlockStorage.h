@@ -46,8 +46,9 @@ namespace ad_utility {
 namespace net = boost::asio;
 
 // A `parallelBlockMerge::BlockStorageConcept` for blocks of type
-// `IdTableStatic`, which keeps only a bounded number of blocks per chunk in
-// memory and spills the rest to a temporary file, compressed. A producer
+// `IdTableStatic`, which keeps only a bounded number of blocks of the chunk
+// that the consumer currently reads in memory and spills all other blocks to a
+// temporary file, compressed (see `State::mayChunkKeepBlocks`). A producer
 // therefore never waits (except for the duration of the I/O), at the price of
 // compressing and writing its blocks and reading them back again.
 //
@@ -91,12 +92,15 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
     bool wasCancelled_ = false;
 
     // Return whether the chunk with the given `chunkIndex` may keep blocks in
-    // memory instead of spilling all of them. Currently, only chunks that are
-    // not ahead of the consumer may, because a chunk that has been merged
-    // completely lives on until the consumer has read it, so the memory of the
-    // chunks ahead would otherwise grow with the total number of chunks (see
-    // `computeMergePhaseParameters`). Like all of `State`, this may only be
-    // called on `strand_`.
+    // memory (up to `maxBufferedBlocksPerChunk_`) or has to spill all of them.
+    // Only the chunk that the consumer currently reads may. Like all of
+    // `State`, this may only be called on `strand_`.
+    //
+    // NOTE: A chunk that has been merged completely lives on until the
+    // consumer has read it, and the consumer reads the chunks in order. If the
+    // chunks ahead of the consumer could keep blocks, their memory would grow
+    // with the total number of chunks and not with the number of chunks in
+    // flight, which is all that `computeMergePhaseParameters` accounts for.
     bool mayChunkKeepBlocks(size_t chunkIndex) const {
       return chunkIndex <= chunkOfConsumer_;
     }
@@ -115,10 +119,11 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   // decompression and the I/O are run and from which the strands of this
   // storage and of its chunks are derived, the name of the file to spill to,
   // the `allocator` for the blocks that are read back, and the number of blocks
-  // that are kept in memory per chunk before that chunk starts spilling. That
-  // number may be zero, in which case every block is spilled. The
-  // `compressionLevel` decides how the spilled blocks are stored, see
-  // `CompressedBlockFile::CompressionLevel`.
+  // that the chunk which the consumer currently reads keeps in memory before it
+  // starts spilling (every other chunk spills all of its blocks, see
+  // `State::mayChunkKeepBlocks`). That number may be zero, in which case every
+  // block is spilled. The `compressionLevel` decides how the spilled blocks are
+  // stored, see `CompressedBlockFile::CompressionLevel`.
   //
   // NOTE: The `filenamePrefix` is not a filename but the prefix of one per
   // chunk, see `spillFilename`. It has to be unique among all the storages that
@@ -146,9 +151,10 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
     return absl::StrCat(filenamePrefix_, ".", chunkIndex);
   }
 
-  // Append the `block` to the queue of the chunk, spilling it if that chunk
-  // already buffers `maxBufferedBlocksPerChunk` blocks, see
-  // `BlockStorageConcept::storeBlock`.
+  // Append the `block` to the queue of the chunk, spilling it unless that chunk
+  // is the one that the consumer currently reads and buffers fewer than
+  // `maxBufferedBlocksPerChunk` blocks, see `BlockStorageConcept::storeBlock`
+  // and `State::mayChunkKeepBlocks`.
   //
   // NOTE: `co_spawn` of an awaitable that `co_return`s a `bool` completes with
   // `void(std::exception_ptr, bool)`, which is exactly the completion signature
