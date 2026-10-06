@@ -28,7 +28,6 @@
 #include <cstddef>
 #include <memory>
 #include <string>
-#include <type_traits>
 #include <utility>
 
 #include "engine/idTable/CompressedIdTableChunkQueue.h"
@@ -47,16 +46,15 @@ namespace ad_utility {
 namespace net = boost::asio;
 
 // A `parallelBlockMerge::BlockStorageConcept` for blocks of type
-// `IdTableStatic`, which keeps only a bounded number of blocks per chunk in
-// memory and spills the rest to a temporary file, compressed. A producer
+// `IdTableStatic`, which keeps only a bounded number of blocks of the chunk
+// that the consumer currently reads in memory and spills all other blocks to a
+// temporary file, compressed (see `State::mayChunkKeepBlocks`). A producer
 // therefore never waits (except for the duration of the I/O), at the price of
 // compressing and writing its blocks and reading them back again.
 //
 // This class is nothing but the owner of one `compressedIdTable::ChunkQueue`
 // per chunk, which does all the actual work (see
 // `CompressedIdTableChunkQueue.h`) and owns the file that its chunk spills to.
-// In particular, the queue is also where the spilled blocks are read back
-// concurrently (see the READ-AHEAD note there).
 //
 // THREAD SAFETY: The asynchronous operations may be initiated from anywhere,
 // because they schedule themselves onto `strand_`, which nothing ever blocks.
@@ -71,6 +69,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   using Block = IdTableStatic<NumCols>;
   using OptionalBlock = parallelBlockMerge::OptionalBlock<Block>;
   using GetResult = parallelBlockMerge::GetResult<Block>;
+  using DeferredBlock = parallelBlockMerge::DeferredBlock<Block>;
   using Strand = parallelBlockMerge::Strand;
 
  private:
@@ -87,31 +86,44 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   // handler that does it may well run once this storage is gone.
   struct State {
     HashMap<size_t, SharedChunkQueue> chunks_;
+    // The chunk that the consumer currently reads, see `mayChunkKeepBlocks`.
+    size_t chunkOfConsumer_ = 0;
     // Set by `cancelAll`, only to check the PRECONDITION that no operation is
     // initiated afterwards, see the `BlockStorageConcept`.
     bool wasCancelled_ = false;
+
+    // Return whether the chunk with the given `chunkIndex` may keep blocks in
+    // memory (up to `maxBufferedBlocksPerChunk_`) or has to spill all of them.
+    // Only the chunk that the consumer currently reads may. Like all of
+    // `State`, this may only be called on `strand_`.
+    //
+    // NOTE: A chunk that has been merged completely lives on until the
+    // consumer has read it, and the consumer reads the chunks in order. If the
+    // chunks ahead of the consumer could keep blocks, their memory would grow
+    // with the total number of chunks and not with the number of chunks in
+    // flight, which is all that `computeMergePhaseParameters` accounts for.
+    bool mayChunkKeepBlocks(size_t chunkIndex) const {
+      return chunkIndex <= chunkOfConsumer_;
+    }
   };
 
   net::any_io_executor ioExecutor_;
   Strand strand_;
   AllocatorWithLimit<Id> allocator_;
   size_t maxBufferedBlocksPerChunk_;
-  size_t maxReadAheadBlocks_;
   std::string filenamePrefix_;
   CompressedBlockFile::CompressionLevel compressionLevel_;
   std::shared_ptr<State> state_ = std::make_shared<State>();
 
  public:
-  // Construct from the `ioExecutor` on which the compression, the
-  // decompression and the I/O are run and from which the strands of this
-  // storage and of its chunks are derived, the name of the file to spill to,
-  // the `allocator` for the blocks that are read back, the number of blocks
-  // that are kept in memory per chunk before that chunk starts spilling, and
-  // the number of spilled blocks that are read back concurrently (see the
-  // READ-AHEAD note at `CompressedIdTableChunkQueue.h`). The former may be
-  // zero, in which case every block is spilled; the latter may be zero as
-  // well, in which case a spilled block is only read once the consumer asks for
-  // it. The `compressionLevel` decides how the spilled blocks are stored, see
+  // Construct from the `ioExecutor` on which the compression and the writes
+  // are run and from which the strands of this storage and of its chunks are
+  // derived, the name of the file to spill to, the `allocator` for the blocks
+  // that are read back, and the number of blocks that the chunk which the
+  // consumer currently reads keeps in memory before it starts spilling (every
+  // other chunk spills all of its blocks, see `State::mayChunkKeepBlocks`).
+  // That number may be zero, in which case every block is spilled. The
+  // `compressionLevel` decides how the spilled blocks are stored, see
   // `CompressedBlockFile::CompressionLevel`.
   //
   // NOTE: The `filenamePrefix` is not a filename but the prefix of one per
@@ -121,14 +133,12 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
   CompressedIdTableBlockStorage(
       net::any_io_executor ioExecutor, std::string filenamePrefix,
       AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerChunk,
-      size_t maxReadAheadBlocks = 0,
       CompressedBlockFile::CompressionLevel compressionLevel =
           ZSTD_DEFAULT_LEVEL)
       : ioExecutor_{std::move(ioExecutor)},
         strand_{net::make_strand(ioExecutor_)},
         allocator_{std::move(allocator)},
         maxBufferedBlocksPerChunk_{maxBufferedBlocksPerChunk},
-        maxReadAheadBlocks_{maxReadAheadBlocks},
         filenamePrefix_{std::move(filenamePrefix)},
         compressionLevel_{compressionLevel} {}
 
@@ -142,9 +152,10 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
     return absl::StrCat(filenamePrefix_, ".", chunkIndex);
   }
 
-  // Append the `block` to the queue of the chunk, spilling it if that chunk
-  // already buffers `maxBufferedBlocksPerChunk` blocks, see
-  // `BlockStorageConcept::storeBlock`.
+  // Append the `block` to the queue of the chunk, spilling it unless that chunk
+  // is the one that the consumer currently reads and buffers fewer than
+  // `maxBufferedBlocksPerChunk` blocks, see `BlockStorageConcept::storeBlock`
+  // and `State::mayChunkKeepBlocks`.
   //
   // NOTE: `co_spawn` of an awaitable that `co_return`s a `bool` completes with
   // `void(std::exception_ptr, bool)`, which is exactly the completion signature
@@ -164,19 +175,22 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
            std::shared_ptr<State> state) -> net::awaitable<bool> {
           AD_CORRECTNESS_CHECK(!state->wasCancelled_);
           SharedChunkQueue chunk = self->getOrCreateChunk(*state, chunkIndex);
+          bool mayKeepInMemory = state->mayChunkKeepBlocks(chunkIndex);
           // NOTE: Awaiting the chunk releases `strand_`: the chunk runs on a
           // strand of its own and resumes this coroutine back on `strand_`, so
           // the compression and the I/O never occupy the strand of this
           // storage, which is hence no bottleneck.
-          bool wasStored =
-              co_await chunk->storeBlock(std::move(block), net::use_awaitable);
+          bool wasStored = co_await chunk->storeBlock(
+              std::move(block), mayKeepInMemory, net::use_awaitable);
           co_return wasStored;
         }(this, chunkIndex, std::move(block), state_),
         AD_FWD(completionToken));
   }
 
-  // Remove the front of the queue of the chunk, reading it back from the file
-  // if it was spilled, see `BlockStorageConcept::getBlock`.
+  // Remove the front of the queue of the chunk, see
+  // `BlockStorageConcept::getBlock`. A block that was spilled is handed out as
+  // a `DeferredBlock` that reads it back from the file, see
+  // `ChunkQueue::deferSpilledBlock`.
   template <typename CompletionToken>
   auto getBlock(size_t chunkIndex, CompletionToken&& completionToken) {
     return net::co_spawn(
@@ -184,6 +198,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
         [](CompressedIdTableBlockStorage* self, size_t chunkIndex,
            std::shared_ptr<State> state) -> net::awaitable<GetResult> {
           AD_CORRECTNESS_CHECK(!state->wasCancelled_);
+          state->chunkOfConsumer_ = chunkIndex;
           // NOTE: The queue of a chunk that does not exist yet is created,
           // because the consumer of a chunk may well be faster than its
           // producer, see `BlockStorageConcept::getBlock`.
@@ -239,32 +254,6 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
         AD_FWD(completionToken));
   }
 
-  // Complete with the number of blocks of the chunk with the given `chunkIndex`
-  // that the read-ahead has claimed and that have not been consumed yet, see
-  // `ChunkQueue::asyncNumPendingReadsForTesting`. Only used for testing.
-  // Asynchronous, because that number lives on the strand of that chunk.
-  template <typename CompletionToken>
-  auto asyncNumPendingReadsForTesting(size_t chunkIndex,
-                                      CompletionToken&& completionToken) {
-    return net::co_spawn(
-        strand_,
-        [](size_t chunkIndex,
-           std::shared_ptr<State> state) -> net::awaitable<size_t> {
-          auto iterator = state->chunks_.find(chunkIndex);
-          if (iterator == state->chunks_.end()) {
-            co_return 0;
-          }
-          // NOTE: The queue is held by a `shared_ptr` of its own, which
-          // outlives the `co_await` even if its chunk is erased meanwhile.
-          SharedChunkQueue chunk = iterator->second;
-          size_t numPendingReads =
-              co_await chunk->asyncNumPendingReadsForTesting(
-                  net::use_awaitable);
-          co_return numPendingReads;
-        }(chunkIndex, state_),
-        AD_FWD(completionToken));
-  }
-
  private:
   // Return the queue of the chunk with the given `chunkIndex`, creating it if
   // that chunk has none yet.
@@ -276,7 +265,7 @@ class CompressedIdTableBlockStorage : public NoCopyNoMove {
     if (chunk == nullptr) {
       chunk = std::make_shared<ChunkQueue>(
           ioExecutor_, allocator_, spillFilename(chunkIndex), compressionLevel_,
-          maxBufferedBlocksPerChunk_, maxReadAheadBlocks_);
+          maxBufferedBlocksPerChunk_);
     }
     return chunk;
   }
@@ -288,20 +277,18 @@ template <size_t NumCols>
 auto makeCompressedIdTableStorageFactory(
     net::any_io_executor ioExecutor, std::string filenamePrefix,
     AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerChunk,
-    size_t maxReadAheadBlocks = 0,
     CompressedBlockFile::CompressionLevel compressionLevel =
         ZSTD_DEFAULT_LEVEL) {
   return [ioExecutor = std::move(ioExecutor),
           filenamePrefix = std::move(filenamePrefix),
           allocator = std::move(allocator), maxBufferedBlocksPerChunk,
-          maxReadAheadBlocks, compressionLevel](
+          compressionLevel](
              [[maybe_unused]] const parallelBlockMerge::Strand& strand) {
     // NOTE: This storage brings a strand of its own, so the one that the
     // sink offers is not needed.
     return CompressedIdTableBlockStorage<NumCols>{
-        ioExecutor,         filenamePrefix,
-        allocator,          maxBufferedBlocksPerChunk,
-        maxReadAheadBlocks, compressionLevel};
+        ioExecutor, filenamePrefix, allocator, maxBufferedBlocksPerChunk,
+        compressionLevel};
   };
 }
 

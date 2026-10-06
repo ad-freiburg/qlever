@@ -12,16 +12,12 @@
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONHELPERSIMPL_H_
 
 #include <array>
-#include <deque>
 #include <functional>
-#include <future>
 #include <optional>
 
 #include "backports/numeric.h"
 #include "index/CompressedRelationWriter.h"
 #include "util/ExceptionHandling.h"
-#include "util/GlobalExecutor.h"
-#include "util/TaskQueueOnExecutor.h"
 
 namespace compressedRelationHelpers {
 
@@ -200,16 +196,13 @@ class DistinctIdCounter {
     if (column.empty()) {
       return;
     }
-    addBlockCount(countDistinctIds(column));
+    addCountOfBlock(countDistinctIds(column));
   }
 
-  // Add the already computed `DistinctIdCountOfBlock` of the next block. Use
-  // this instead of `addBlock` above when the blocks are counted concurrently:
-  // the counting of a single block (which is by far the expensive part, as it
-  // touches every ID) is then independent, and only this fold has to see the
-  // blocks in their original order, see
-  // `CompressedRelationWriter::PermutationWriter::getAndResetNumDistinctCol1`.
-  void addBlockCount(const DistinctIdCountOfBlock& countOfBlock) {
+  // Like `addBlock`, but for a block whose `DistinctIdCountOfBlock` has
+  // already been computed (e.g. concurrently, see
+  // `CompressedRelationWriter::addCompleteLargeRelation`).
+  void addCountOfBlock(const DistinctIdCountOfBlock& countOfBlock) {
     count_ += countOfBlock.count_;
     if (lastBitsOfPreviousBlock_ ==
         bitsOfIdWithoutLocalVocab(countOfBlock.first_)) {
@@ -217,10 +210,6 @@ class DistinctIdCounter {
     }
     lastBitsOfPreviousBlock_ = bitsOfIdWithoutLocalVocab(countOfBlock.last_);
   }
-
-  // The number of distinct IDs in all the blocks that have been added since
-  // the last reset.
-  size_t get() const { return count_; }
 
   // Reset the counter, so that it can be reused for the next relation. Use
   // this instead of `getAndReset` if the count itself is not needed.
@@ -235,98 +224,6 @@ class DistinctIdCounter {
     auto count = count_;
     reset();
     return count;
-  }
-};
-
-// Read the blocks of the `BlockRange` (skipping empty blocks) and count the
-// distinct IDs in one of their columns on the global thread pool, while the
-// caller is still processing the preceding blocks. The blocks are yielded again
-// in their original order, because the further processing of the blocks has to
-// happen in order, and so does the fold of the per-block counts (see
-// `DistinctIdCounter`).
-template <typename BlockRange>
-class AsyncDistinctIdCounter {
- public:
-  using Block = std::decay_t<ql::ranges::range_value_t<BlockRange>>;
-
- private:
-  // One block that has been read, together with the (possibly still running)
-  // computation of the number of distinct IDs in its column.
-  struct Entry {
-    Block block_;
-    std::future<DistinctIdCountOfBlock> count_;
-  };
-
-  size_t columnIdx_;
-  size_t maxNumBlocksInFlight_;
-  ql::ranges::iterator_t<BlockRange> it_;
-  ql::ranges::sentinel_t<BlockRange> end_;
-  std::deque<Entry> pending_;
-  // The fold of the counts of the blocks that have been yielded so far, which
-  // makes sure that an ID which ends one block and starts the next one is only
-  // counted once.
-  DistinctIdCounter counter_;
-  size_t countOfPreviousBlocks_ = 0;
-
-  // NOTE: This member is deliberately declared last, so that its destructor
-  // (which waits for all pending tasks) runs before the `pending_` blocks,
-  // into which those tasks point, are destroyed.
-  ad_utility::TaskQueueOnExecutor queue_;
-
- public:
-  // Construct from the `blocks` (which have to outlive this object), the index
-  // of the column whose distinct IDs are counted, and the maximal number of
-  // blocks that are read ahead.
-  AsyncDistinctIdCounter(BlockRange& blocks, size_t columnIdx,
-                         size_t maxNumBlocksInFlight)
-      : columnIdx_{columnIdx},
-        maxNumBlocksInFlight_{maxNumBlocksInFlight},
-        it_{ql::ranges::begin(blocks)},
-        end_{ql::ranges::end(blocks)},
-        queue_{ad_utility::globalExecutor(), maxNumBlocksInFlight,
-               "Counting distinct IDs in the blocks of a large relation"} {
-    AD_CONTRACT_CHECK(maxNumBlocksInFlight_ > 0);
-  }
-
-  // Return the next non-empty block together with the number of distinct IDs in
-  // its column, where an ID that already ended the previous block is not
-  // counted again. Return `std::nullopt` once all blocks have been yielded.
-  std::optional<std::pair<Block, size_t>> next() {
-    readAhead();
-    if (pending_.empty()) {
-      return std::nullopt;
-    }
-    // NOTE: `get()` rethrows an exception that the background task has thrown.
-    DistinctIdCountOfBlock countOfBlock = pending_.front().count_.get();
-    Block block = std::move(pending_.front().block_);
-    pending_.pop_front();
-    counter_.addBlockCount(countOfBlock);
-    size_t total = counter_.get();
-    size_t count = total - countOfPreviousBlocks_;
-    countOfPreviousBlocks_ = total;
-    return std::pair<Block, size_t>{std::move(block), count};
-  }
-
- private:
-  // Read blocks and start the counting for them until `maxNumBlocksInFlight_`
-  // blocks are pending or the input is exhausted.
-  void readAhead() {
-    while (pending_.size() < maxNumBlocksInFlight_ && it_ != end_) {
-      Block block = std::move(*it_);
-      ++it_;
-      if (block.empty()) {
-        continue;
-      }
-      pending_.push_back(Entry{std::move(block), {}});
-      // NOTE: The `column` is a view into the memory of the block. That memory
-      // is stable, because `std::deque` never moves its elements, and because
-      // the entry is only popped after its task has completed (and moving the
-      // block then doesn't move the memory of its columns).
-      ql::span<const Id> column =
-          std::as_const(pending_.back().block_).getColumn(columnIdx_);
-      pending_.back().count_ =
-          queue_.submit([column]() { return countDistinctIds(column); });
-    }
   }
 };
 

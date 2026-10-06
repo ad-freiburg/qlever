@@ -344,6 +344,8 @@ addLinkAndDiscoverTestNoLibs(ViewsTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(UniqueBlockViewTest qlever_util)
 
+addLinkAndDiscoverTestNoLibs(AsyncTransformViewTest qlever_util)
+
 addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
 addLinkAndDiscoverTestNoLibs(ChunkedIotaViewTest)

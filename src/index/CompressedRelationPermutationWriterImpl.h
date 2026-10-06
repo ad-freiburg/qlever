@@ -399,13 +399,13 @@ struct CompressedRelationWriter::PermutationWriter {
   // just completed, and reset the counting for the next relation. An ID that
   // ends one block and starts the next one is only counted once, which is why
   // the counts of the single blocks have to be folded in the order of the
-  // blocks, see `DistinctIdCounter::addBlockCount`.
+  // blocks, see `DistinctIdCounter::addCountOfBlock`.
   //
   // PRECONDITION: `waitForBlocksOfLargeRelation` has been called, so that no
   // background task writes into the counts anymore.
   size_t getAndResetNumDistinctCol1() {
     for (const auto& countOfBlock : distinctCol1Counts_) {
-      distinctCol1Counter_.addBlockCount(countOfBlock);
+      distinctCol1Counter_.addCountOfBlock(countOfBlock);
     }
     distinctCol1Counts_.clear();
     return distinctCol1Counter_.getAndReset();

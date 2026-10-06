@@ -1142,18 +1142,23 @@ TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
     // A spill file is created with the first block that its chunk spills, so
     // there is none before the merge has produced anything. The chunks that
     // this thread does not consume yet run ahead and spill, so files appear
-    // although nothing is consumed here. Poll for that, because it happens on
+    // although nothing is consumed here. Wait for that, because it happens on
     // the threads of the merge executor.
     SpillFiles spilled;
-    for (size_t i = 0; i < 1000 && spilled.totalSize_ == 0; ++i) {
+    ASSERT_TRUE(waitUntil([&spilled, &spillPrefix] {
       spilled = currentSpillFiles(spillPrefix);
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+      return spilled.totalSize_ > 0;
+    }));
     EXPECT_GT(spilled.numFiles_, 0u);
-    EXPECT_GT(spilled.totalSize_, 0u);
     table = idTableFromBlockGenerator(blocks);
-    // Every chunk that was fully consumed had its file deleted, so nothing is
+    // Every chunk that was fully consumed has its file deleted, so nothing is
     // left over even though neither the merge nor the sorter is destroyed yet.
+    // That deletion is only posted to the merge executor when the chunk is
+    // finished, see `ChunkQueue::finish`, so the last file may still exist
+    // for a moment after its last block was consumed. Wait for that as well.
+    waitUntil([&spillPrefix] {
+      return currentSpillFiles(spillPrefix).numFiles_ == 0;
+    });
     EXPECT_EQ(currentSpillFiles(spillPrefix).numFiles_, 0u);
   }
   workGuard.reset();
@@ -1379,19 +1384,19 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // single chunk still leaves `(16 - 2) MB / (12 + 3) = 933 kB` (that is
   // `29'166` rows), which is well above the hard floor of
   // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows. The `12` are the default
-  // of `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`.
+  // of `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`, and the
+  // `3` is `mergePhaseOutputBlocksPerChunk` of the minimal buffering.
   //
   // NOTE: The memory is deliberately larger than the minimum that reaches this
   // code path, because the margin is what keeps the test meaningful. With
   // these values the single-chunk path holds for every
   // `numBufferedOutputBlocks_` from 1 to 40, so a future change to that
   // default cannot silently turn this into a test that no longer reaches its
-  // warning. (With 8 MB the usable range was only 1 to 15, and the throw
-  // happens before the assertion, so the test would have stopped testing
-  // anything rather than failing.) Re-derive both numbers with
+  // warning. (With the 8 MB that this test used before the default was raised
+  // to 12, the usable range was only 1 to 15.) Re-derive both numbers with
   // `computeMergePhaseParameters` when the memory or the default changes.
-  const auto memory = ad_utility::MemorySize::bytes(16'000'000);
-  const auto blocksizeCompression = ad_utility::MemorySize::bytes(250'000);
+  const auto memory = 16_MB;
+  const auto blocksizeCompression = 250_kB;
   // One run holds `16'000'000 / (4 * 8 * 2) = 250'000` rows, so the following
   // number of rows yields two runs.
   constexpr size_t numRows = 300'000;
