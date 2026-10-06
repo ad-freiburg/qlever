@@ -363,7 +363,7 @@ struct CompressedRelationWriter::PermutationWriter {
   // large relation (see `scheduleBlockOfLargeRelation` above), and rethrow the
   // first exception of a push into the `twinRelationSorter_`, if any. This has
   // to be called before `writer1_` is finished or the `twinRelationSorter_` is
-  // re-used by this thread. It also has to be called before the counts in the
+  // reused by this thread. It also has to be called before the counts in the
   // `distinctCol1Counts_` are read.
   void waitForBlocksOfLargeRelation() {
     largeRelationBlockTimer_.cont();
@@ -669,7 +669,8 @@ struct CompressedRelationWriter::PermutationWriter {
     auto belongsToRun = [col0Bits](Id id) {
       return bitsOfIdWithoutLocalVocab(id) == col0Bits;
     };
-    // Note: The row `begin` belongs to the run, so the search starts after it.
+    // Note: The row `begin` is guaranteed to belong to the run, so the search
+    // starts after it.
     auto it = ad_utility::gallopingPartitionPoint(col0.begin() + begin + 1,
                                                   col0.end(), belongsToRun);
     return static_cast<size_t>(it - col0.begin());

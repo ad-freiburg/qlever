@@ -288,21 +288,23 @@ CPP_template(typename RandomAccessIterator, typename Predicate)(
                             RandomAccessIterator last, Predicate pred) {
   using DistanceType =
       typename std::iterator_traits<RandomAccessIterator>::difference_type;
-  // Invariant of the following loop: All the elements in `[first, first +
-  // numSatisfying)` satisfy the `pred`, and the partition point is at most
-  // `first + upperBound`.
-  DistanceType numSatisfying = 0;
-  DistanceType upperBound = last - first;
-  for (DistanceType step = 1; step <= upperBound - numSatisfying; step *= 2) {
-    DistanceType probe = numSatisfying + step - 1;
-    if (!std::invoke(pred, first[probe])) {
+  // Invariant of the following loop: All the elements in `[first,
+  // lowerBound)` satisfy the `pred`, and the partition point lies in
+  // `[lowerBound, upperBound]`.
+  RandomAccessIterator lowerBound = first;
+  RandomAccessIterator upperBound = last;
+  for (DistanceType step = 1; step <= upperBound - lowerBound; step *= 2) {
+    RandomAccessIterator probe = lowerBound + (step - 1);
+    if (!std::invoke(pred, *probe)) {
       upperBound = probe;
       break;
     }
-    numSatisfying = probe + 1;
+    lowerBound = probe + 1;
   }
-  return std::partition_point(first + numSatisfying, first + upperBound,
-                              std::ref(pred));
+  // Binary search in `[lowerBound, upperBound)`, i.e. between the element after
+  // the last galloping step that satisfied the `pred` and the first galloping
+  // step that violated it (or `last` if there was no such step).
+  return std::partition_point(lowerBound, upperBound, std::ref(pred));
 }
 
 // In place version of `ql::ranges::set_difference` which writes the output to
