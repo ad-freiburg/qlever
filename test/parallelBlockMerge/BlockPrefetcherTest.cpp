@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "../util/GTestHelpers.h"
+#include "../util/TestException.h"
 
 // The `BlockPrefetcher` only exists in C++20 mode, see its header.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -46,19 +47,6 @@ namespace net = boost::asio;
 using ad_utility::parallelBlockMerge::detail::BlockPrefetcher;
 using Block = size_t;
 using DeferredBlock = ad_utility::parallelBlockMerge::DeferredBlock<Block>;
-
-// The exception that the tests throw. Its message is a string literal, so that
-// it owns no memory besides the exception object itself. The freeing of a
-// message that is owned by the exception (e.g. by a `std::runtime_error`) would
-// be reported as a false positive by TSAN, see `misc/tsan-suppressions.txt`.
-class TestException : public std::exception {
- private:
-  const char* message_;
-
- public:
-  explicit TestException(const char* message) : message_{message} {}
-  const char* what() const noexcept override { return message_; }
-};
 
 // A fake sink whose `asyncGetNextBlock` completes with the given script of
 // outcomes (blocks in memory, blocks that still have to be read by a `Reader`,
