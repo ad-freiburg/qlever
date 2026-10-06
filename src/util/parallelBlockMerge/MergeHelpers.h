@@ -218,6 +218,12 @@ CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
         for (size_t size = firstChunkSize; size < uniformChunkSize; size *= 2) {
           leadingSizes.push_back(size);
         }
+        // Without leading chunks, split exactly like the `numChunks` overload.
+        // The uniform size above is rounded down, so the targets from the chunk
+        // sizes would otherwise put the remainder into a chunk of its own.
+        if (leadingSizes.empty()) {
+          return detail::uniformTargets(totalNumElements, numChunks);
+        }
         return detail::targetsFromChunkSizes(totalNumElements, leadingSizes,
                                              uniformChunkSize);
       });

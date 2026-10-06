@@ -426,6 +426,22 @@ TEST(MergeHelpers, chunkBoundariesWithRampedUpLeadingChunks) {
   // ramp-up completely, so the parallelism is unaffected.
   EXPECT_THAT(splitPointsFor(4, 25), ::testing::ElementsAre(24u, 49u, 74u));
   EXPECT_THAT(splitPointsFor(4, 40), ::testing::ElementsAre(24u, 49u, 74u));
+  // The same for an input whose size is not a multiple of the number of chunks
+  // (the uniform chunk size is rounded down to `103 / 4 == 25`, but the
+  // remainder must not end up in a chunk of its own).
+  SizeVec longerRun(103);
+  ql::ranges::generate(longerRun, [i = size_t{0}]() mutable { return i++; });
+  std::vector<SizeVec> longerRuns{longerRun};
+  auto longerInput = makeVectorInput(longerRuns, 1);
+  auto uniformSplitPoints =
+      chunkSplitPoints(computeChunkBoundaries(longerInput, std::less<>{}, 4));
+  EXPECT_THAT(uniformSplitPoints, ::testing::ElementsAre(24u, 50u, 76u));
+  for (size_t firstChunkSize : {25u, 40u, 1000u}) {
+    SCOPED_TRACE(firstChunkSize);
+    EXPECT_EQ(chunkSplitPoints(computeChunkBoundaries(
+                  longerInput, std::less<>{}, 4, firstChunkSize)),
+              uniformSplitPoints);
+  }
   // The property that the cases above exercise one by one: the ramp-up never
   // *reduces* the number of chunks, so it can never cost parallelism.
   for (size_t firstChunkSize : {0, 1, 5, 12, 24, 25, 99, 100, 1000}) {
