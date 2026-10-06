@@ -189,12 +189,13 @@ VocabBatchLookupResult VocabularyOnDisk::readStrings(
   std::vector<uint64_t> fileOffsets(numIndices);
   for (auto&& [size, fileOffset, offsetPair] :
        ::ranges::views::zip(sizes, fileOffsets, offsetPairs)) {
-    size = offsetPair.nextOffset_ - offsetPair.offset_;
-    fileOffset = offsetPair.offset_;
+    size = offsetPair.wordSize();
+    fileOffset = offsetPair.offset();
   }
 
   // `lookupBatch` rejects empty input, so `sizes` is non-empty here, as the
   // builder requires.
+  AD_CORRECTNESS_CHECK(!sizes.empty());
   ContiguousVocabBatchBuilder builder(sizes);
   // Bind the returned array: `addBatch` takes a span, and the pointers must
   // stay alive until `wait` returns.
