@@ -183,6 +183,9 @@ class SortedSequence {
     }
   }
 
+  // Reserve storage for `n` elements in total (including the current ones).
+  void reserve(size_t n) { elements_.reserve(n); }
+
   // Insert an element. `consolidate` must be called before the next read
   // access.
   void insert(ValueType elem) {
