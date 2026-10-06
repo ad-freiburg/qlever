@@ -52,9 +52,7 @@ namespace qlever::namedCacheSecondaryVocab {
 
 // The entries of a `NamedResultCache`, as returned by
 // `NamedResultCache::getAllEntriesSortedByKey`.
-using Entries =
-    std::vector<std::pair<NamedResultCache::Key,
-                          std::shared_ptr<const NamedResultCache::Value>>>;
+using Entries = NamedResultCache::Entries;
 
 // Return true iff the result of `value` contains at least one `Id` of type
 // `LocalVocabIndex`, that is, iff `value` has to be rewritten via

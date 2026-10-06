@@ -13,11 +13,12 @@
 #include <optional>
 #include <range/v3/view/zip.hpp>
 #include <string>
+#include <string_view>
 
 #include "backports/algorithm.h"
 #include "engine/ExplicitIdTableOperation.h"
+#include "index/IdTableUtils.h"
 #include "index/LocalVocabEntry.h"
-#include "util/Algorithm.h"
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
@@ -125,12 +126,8 @@ void collectNewWords(
 
 // _____________________________________________________________________________
 bool containsLocalVocabIds(const NamedResultCache::Value& value) {
-  auto view = ExplicitIdTableOperation::viewOf(value.result_);
-  return ql::ranges::any_of(view.getColumns(), [](const auto& column) {
-    return ad_utility::contains_if(column, [](Id id) {
-      return id.getDatatype() == Datatype::LocalVocabIndex;
-    });
-  });
+  return IdTableUtils::containsLocalVocabIds(
+      ExplicitIdTableOperation::viewOf(value.result_));
 }
 
 // _____________________________________________________________________________
@@ -149,7 +146,8 @@ size_t addNewWordsToSecondaryVocab(const Entries& entries,
 
   // The words of a segment have to be sorted (see
   // `SecondaryVocabulary::appendSegment`).
-  std::vector<std::string> sortedNewWords{newWords.begin(), newWords.end()};
+  std::vector<std::string_view> sortedNewWords{newWords.begin(),
+                                               newWords.end()};
   ql::ranges::sort(sortedNewWords);
   CompactVectorOfStrings<char> segment;
   segment.build(sortedNewWords);

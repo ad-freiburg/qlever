@@ -377,11 +377,16 @@ NamedCachedQueryBlobManager::tryToDeserialize(
   }
 
   // A secondary vocabulary of the blob would replace the one of the index, the
-  // words of which might be referenced by `Id`s that are already in use.
-  AD_CONTRACT_CHECK(formatVersion != formatVersionWithSecondaryVocab ||
-                        indexImpl.secondaryVocab() == nullptr,
-                    "A blob with a secondary vocabulary cannot be loaded into "
-                    "an index that already has one");
+  // words of which might be referenced by `Id`s that are already in use. This
+  // cannot happen via the public interface: the secondary vocabulary of an
+  // index is only set below, and this function may be called at most once per
+  // `Qlever` instance (see the check at its beginning). Therefore, this is not
+  // reported as a `BlobError`.
+  AD_CORRECTNESS_CHECK(
+      formatVersion != formatVersionWithSecondaryVocab ||
+          indexImpl.secondaryVocab() == nullptr,
+      "A blob with a secondary vocabulary cannot be loaded into "
+      "an index that already has one");
 
   // From here on, `qlever` is modified, and its vocabulary and named result
   // cache may hold views into the buffer, so the buffer must be kept alive even

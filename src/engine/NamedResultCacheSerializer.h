@@ -33,6 +33,9 @@ constexpr uint16_t formatVersion = 1;
 }  // namespace namedResultCacheSerializer::detail
 
 namespace namedResultCacheSerializer {
+using Entries = NamedResultCache::Entries;
+using Value = NamedResultCache::Value;
+
 // Write the `entries` (as returned by `getAllEntriesSortedByKey`) to the
 // `serializer`, in exactly the format that `readFromSerializer` reads. Each
 // value is written via `writeEntry(serializer, value)`, which has to write a
@@ -42,14 +45,9 @@ CPP_template(typename Serializer, typename WriteEntry)(
     requires ad_utility::serialization::WriteSerializer<Serializer> CPP_and
         ql::concepts::invocable<
             const WriteEntry&, Serializer&,
-            const NamedResultCache::
-                Value&>) void writeEntries(Serializer& serializer,
-                                           const std::vector<std::pair<
-                                               NamedResultCache::Key,
-                                               std::shared_ptr<
-                                                   const NamedResultCache::
-                                                       Value>>>& entries,
-                                           const WriteEntry& writeEntry) {
+            const Value&>) void writeEntries(Serializer& serializer,
+                                             const Entries& entries,
+                                             const WriteEntry& writeEntry) {
   // Write the magic byte and format version first, s.t. `readFromSerializer`
   // can detect and reject incompatible or unrelated input.
   serializer << detail::magicByte;
