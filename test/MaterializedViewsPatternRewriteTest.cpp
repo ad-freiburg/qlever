@@ -669,3 +669,51 @@ TEST_F(MaterializedViewsPatternMatchingTest, BookkeepingEdgeCases) {
               1u);
   }
 }
+
+// Test that for greedy planning, a replacement plan is only dropped if it
+// overlaps a kept plan, not if it only overlaps a dropped plan.
+TEST(MaterializedViewsGreedyPlanningTest,
+     findApplicableReplacementPlansGreedyOverlap) {
+  using SubtreePlan = QueryPlanner::SubtreePlan;
+  auto plan = [](uint64_t nodes) {
+    SubtreePlan p{nullptr};
+    p._idsOfIncludedNodes = nodes;
+    return p;
+  };
+  auto nodeIds = [](const std::vector<SubtreePlan>& plans) {
+    std::vector<uint64_t> ids;
+    for (const auto& p : plans) {
+      ids.push_back(p._idsOfIncludedNodes);
+    }
+    return ids;
+  };
+  // Plans are given by the triples they cover: A = {1,2,3}, B = {3,4},
+  // C = {4,5}. Larger plans are in later groups.
+  constexpr uint64_t a = 0b01110, b = 0b11000, c = 0b110000;
+  auto makeAll = [&]() {
+    QueryPlanner::ReplacementPlans all(2);
+    all[0].push_back(plan(b));
+    all[0].push_back(plan(c));
+    all[1].push_back(plan(a));
+    return all;
+  };
+
+  // Greedy: A is kept, B overlaps A and is dropped. C does not overlap A and
+  // must be kept, even though it overlaps the dropped B.
+  auto all = makeAll();
+  auto [greedy, hasGreedy] =
+      QueryPlanner::findApplicableReplacementPlans(all, 0b111110, true);
+  EXPECT_TRUE(hasGreedy);
+  ASSERT_EQ(greedy.size(), 2);
+  EXPECT_THAT(nodeIds(greedy[0]), ::testing::ElementsAre(c));
+  EXPECT_THAT(nodeIds(greedy[1]), ::testing::ElementsAre(a));
+
+  // Non-greedy: all plans are kept.
+  all = makeAll();
+  auto [nonGreedy, hasNonGreedy] =
+      QueryPlanner::findApplicableReplacementPlans(all, 0b111110, false);
+  EXPECT_TRUE(hasNonGreedy);
+  ASSERT_EQ(nonGreedy.size(), 2);
+  EXPECT_THAT(nodeIds(nonGreedy[0]), ::testing::ElementsAre(b, c));
+  EXPECT_THAT(nodeIds(nonGreedy[1]), ::testing::ElementsAre(a));
+}
