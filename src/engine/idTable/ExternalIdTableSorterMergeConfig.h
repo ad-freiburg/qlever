@@ -175,8 +175,9 @@ inline size_t numBufferedOutputBlocksPerChunk(const MergePhaseConfig& config,
     return MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK;
   }
   // The blocks that are not buffered by the chunks: those between the merge and
-  // the consumer, and the two per chunk that `mergePhaseOutputBlocksPerChunk`
-  // adds on top of the buffered ones.
+  // the consumer (which include the blocks that are concurrently read back from
+  // the spill files, see `makeMergeOptions`), and the two per chunk that
+  // `mergePhaseOutputBlocksPerChunk` adds on top of the buffered ones.
   const size_t numUnbufferedBlocks =
       config.numBufferedOutputBlocks_ + 2 * numChunksInFlight;
   const size_t numAffordableBlocks =
@@ -309,6 +310,18 @@ inline parallelBlockMerge::MergeOptions makeMergeOptions(
       parameters.outputBlockSize_);
   options.parallelismHint = config.parallelism_;
   options.maxNumChunksInFlight = parameters.numChunksInFlight_;
+  // The output blocks that the merge phase reserves on the consumer side (see
+  // `MergePhaseConfig::numBufferedOutputBlocks_`) are the one that the consumer
+  // currently holds, the one that the read-ahead of the consumer is just
+  // handing over, and the rest, which the consumer reads ahead. That read-ahead
+  // is also what reads the spilled blocks back from disk, all of its blocks
+  // concurrently, see `parallelBlockMerge::detail::BlockPrefetcher`. It is
+  // never zero, see `MergeOptions::numPrefetchedOutputBlocks`.
+  constexpr size_t numReservedBlocks = 2;
+  options.numPrefetchedOutputBlocks =
+      config.numBufferedOutputBlocks_ > numReservedBlocks
+          ? config.numBufferedOutputBlocks_ - numReservedBlocks
+          : 1;
   return options;
 }
 
