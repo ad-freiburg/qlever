@@ -51,6 +51,9 @@ static bool pointsIntoObject(const void* pointer, const T& object) {
   return address >= start && address - start < sizeof(object);
 }
 
+// The probe string type of the SSO helpers.
+using detail::PmrSsoProbeString;
+
 // _____________________________________________________________________________
 TEST(GTestHelpersTest, PmrStringSsoCapacity) {
   // Ensure that the discovered capacity is usable: strings up to that size are
