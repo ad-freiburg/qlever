@@ -1572,7 +1572,8 @@ TEST(ExportQueryExecutionTrees, TrailingValuesBeforeDistinctAndOrderBy) {
   EXPECT_EQ(tsv("SELECT ?s { ?s <p> ?o } GROUP BY ?s "
                 "HAVING (COUNT(*) > 1 || ?v = 1) VALUES ?v { 1 }"),
             "?s\n<a>\n");
-  // The `CONSTRUCT` template can also use the `VALUES` variables.
+  // The `CONSTRUCT` template can also use the `VALUES` variables, and the
+  // `VALUES` can restrict a grouped variable.
   EXPECT_EQ(runQueryStreamableResult(
                 kg,
                 "CONSTRUCT { ?s <r> ?r } { ?s <p> ?o } GROUP BY ?s "
