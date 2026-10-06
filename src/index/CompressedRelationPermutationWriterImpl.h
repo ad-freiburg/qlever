@@ -75,14 +75,14 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
 struct BlockCallbackManager {
   const CompressedRelationWriter::PerBlockCallbacks perBlockCallbacks_;
 
-  // A queue for the callbacks that have to be applied for each triple. It is
-  // crucial that the callbacks are invoked one after the other and in the
-  // order in which the blocks were pushed. The queue therefore runs on a
-  // strand (and not directly on the global thread pool), which serializes the
-  // tasks and runs them in the order in which they were posted. Note that the
-  // latter guarantee requires that all the tasks are posted by a single
-  // thread, which is the case here, because `passToBlockCallbacks` is only
-  // called by the single thread that drives the `PermutationWriter`.
+  // A queue for the callbacks that have to be applied for each triple. It runs
+  // on a strand of the global thread pool (and not directly on the pool), so
+  // that the callbacks are invoked one after the other and in the order in
+  // which the blocks were pushed (both is crucial).
+  //
+  // NOTE: A strand only preserves the order of tasks that are posted by a
+  // single thread. This is the case here, because `passToBlockCallbacks` is
+  // only called by the thread that drives the `PermutationWriter`.
   ad_utility::TaskQueueOnExecutor blockCallbackQueue_{
       boost::asio::make_strand(ad_utility::globalExecutor()), 3,
       "Additional callbacks during permutation building"};
@@ -157,13 +157,6 @@ struct CompressedRelationWriter::PermutationWriter {
 
   BlockCallbackManager blockCallbackManager_;
 
-  // The maximal number of blocks of large relations that are written in the
-  // background at the same time, see `scheduleBlockOfLargeRelation`. Each of
-  // them is held in memory until it has been written, so this bounds the
-  // memory that the background writing consumes.
-  const size_t maxNumBlocksOfLargeRelationsInFlight_ =
-      2 * ad_utility::globalExecutorNumThreads();
-
   // The number of distinct `col1` IDs of each block of the large relation that
   // is currently written, in the order in which the blocks were scheduled (see
   // `scheduleBlockOfLargeRelation`). The counting is done by the background
@@ -181,9 +174,10 @@ struct CompressedRelationWriter::PermutationWriter {
       distinctCol1Counts_;
 
   // The total time that this writer has spent waiting for the background tasks
-  // that write the blocks of large relations, see
-  // `waitForBlocksOfLargeRelation`. It is reported at the end of
-  // `writePermutation`.
+  // that write the blocks of large relations (for a free slot when scheduling
+  // a block, see `scheduleBlockOfLargeRelation`, and for the completion of all
+  // the tasks, see `waitForBlocksOfLargeRelation`). It is reported at the end
+  // of `writePermutation`.
   ad_utility::Timer largeRelationBlockTimer_{ad_utility::Timer::Stopped};
 
   // The pending pushes of the blocks of the current large relation into the
@@ -201,19 +195,27 @@ struct CompressedRelationWriter::PermutationWriter {
   // fine: the blocks of a relation may be written in any order (the block
   // metadata is sorted at the end, see `getFinishedBlocks`).
   //
-  // NOTE: The tasks never block (in particular they never wait for other tasks
-  // of the global thread pool), which is what makes it safe to run them on
-  // that pool. All the operations that may block (the bookkeeping of
+  // NOTE 1: The queue is configured exactly like the `blockWriteQueue_` of
+  // `writer1_`, so that the blocks of large relations respect the same
+  // concurrency setting as all the other blocks (in particular, the runtime
+  // index rebuild throttles the writers to a single block at a time, see
+  // `rebuild-permutation-writer-num-threads`). Each block in flight is held in
+  // memory until it has been written, so the bound of the queue also bounds the
+  // memory that the background writing consumes.
+  //
+  // NOTE 2: The tasks never block (in particular they never wait for other
+  // tasks of the global thread pool), which is what makes it safe to run them
+  // on that pool. All the operations that may block (the bookkeeping of
   // `writer1_`, which may push to its bounded block write queue, and the
   // waiting for free slots in this queue) are performed by the thread that
   // drives this `PermutationWriter`, see `scheduleBlockOfLargeRelation`.
   //
-  // NOTE: This member is deliberately declared after all the members that its
-  // tasks use, so that its destructor (which waits for the pending tasks) runs
-  // before those members are destroyed.
+  // NOTE 3: This member is deliberately declared after all the members that
+  // its tasks use, so that its destructor (which waits for the pending tasks)
+  // runs before those members are destroyed.
   ad_utility::TaskQueueOnExecutor largeRelationBlockQueue_{
-      ad_utility::globalExecutor(), maxNumBlocksOfLargeRelationsInFlight_,
-      "Writing blocks of large relations"};
+      CompressedRelationWriter::makeBlockWriteQueue(
+          writer1_->numConcurrentBlocks_)};
 
   size_t numTriplesProcessed_ = 0;
   ad_utility::ProgressBar progressBar_{numTriplesProcessed_,
@@ -319,8 +321,10 @@ struct CompressedRelationWriter::PermutationWriter {
     writer1_->prepareBlockForLargeRelation(col0Id, block.numRows());
     if constexpr (WritePair) {
       // Bound the number of pending pushes (and thus the number of blocks that
-      // they keep alive).
-      if (twinRelationPushes_.size() >= maxNumBlocksOfLargeRelationsInFlight_) {
+      // they keep alive) by the same number as the tasks of the
+      // `largeRelationBlockQueue_`.
+      if (twinRelationPushes_.size() >=
+          largeRelationBlockQueue_.maxNumTasksInFlight()) {
         largeRelationBlockTimer_.cont();
         twinRelationPushes_.front().get();
         largeRelationBlockTimer_.stop();
@@ -346,7 +350,10 @@ struct CompressedRelationWriter::PermutationWriter {
     distinctCol1Counts_.emplace_back();
     auto* distinctCol1Count = &distinctCol1Counts_.back();
     // Note: This task could be merged with the task below, but two smaller
-    // tasks can be spread more evenly across the threads of the pool.
+    // tasks can be spread more evenly across the threads of the pool. The
+    // pushes block while the queue is full, which is time spent waiting for
+    // the background tasks, hence the timer.
+    largeRelationBlockTimer_.cont();
     largeRelationBlockQueue_.push([block, owner, distinctCol1Count]() {
       *distinctCol1Count = countDistinctIds(block.getColumn(c1Idx));
     });
@@ -357,6 +364,7 @@ struct CompressedRelationWriter::PermutationWriter {
           writer1_->compressAndWriteBlockInCallingThread(
               col0Id, col0Id, BlockToWrite{block, std::move(owner)}, false);
         });
+    largeRelationBlockTimer_.stop();
   }
 
   // Wait for all the background operations that write blocks of the current
@@ -652,16 +660,16 @@ struct CompressedRelationWriter::PermutationWriter {
   // Return the end of the run of rows of the input block that starts at row
   // `begin` and consists of all rows that have the same `col0` ID as that row.
   // Such a run is exactly the part of one relation that is contained in the
-  // current input block.
+  // current input block. The end is found by an exponential ("galloping")
+  // search over the sorted `col0` column, see
+  // `ad_utility::gallopingPartitionPoint`.
   //
-  // Note: The `col0` column is sorted, so the end of the run could be found by
-  // a binary search. That would be much slower than a linear scan for the
-  // short runs of the many small relations though, so we use an exponential
-  // ("galloping") search, see `ad_utility::gallopingPartitionPoint`. That way a
-  // short run is found with a handful of comparisons, while a long run (a large
-  // relation, whose run may span the complete input block) doesn't require a
-  // linear scan of its `col0` column. The comparison is performed on the bits
-  // of the `Id`s, which is much cheaper, see `bitsOfIdWithoutLocalVocab`.
+  // NOTE: A linear scan would be slow for the long run of a large relation
+  // (which may span the complete input block), and a binary search would be
+  // slow for the short runs of the many small relations. The galloping search
+  // finds a short run with a handful of comparisons and a long run with a
+  // logarithmic number of them. The comparison is performed on the bits of the
+  // `Id`s, which is much cheaper, see `bitsOfIdWithoutLocalVocab`.
   template <typename Col0>
   static size_t findEndOfRun(const Col0& col0, size_t begin) {
     using compressedRelationHelpers::bitsOfIdWithoutLocalVocab;
@@ -844,10 +852,11 @@ struct CompressedRelationWriter::PermutationWriter {
       finishRelation();
     }
     waitForBlocksOfLargeRelation();
-    // Note: This is logged only now (and not directly after the final progress
-    // string above), because the last blocks of the last relation are written
-    // by the two calls above, so only now is the measurement complete.
-    // Note: The `value()` (in microseconds) is used instead of the `msecs()`
+    // Log the total waiting time only now (and not directly after the final
+    // progress string above), because the last blocks of the last relation are
+    // written by the two calls above.
+    //
+    // NOTE: The `value()` (in microseconds) is used instead of the `msecs()`
     // of the other timers, because this wait is expected to be short and would
     // otherwise be truncated to zero.
     AD_LOG_INFO << "Time spent waiting for the background tasks that write the "

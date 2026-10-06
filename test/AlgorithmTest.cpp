@@ -320,7 +320,7 @@ TEST(AlgorithmTest, SetDifference) {
 }
 
 // _____________________________________________________________________________
-TEST(Algorithm, gallopingPartitionPoint) {
+TEST(AlgorithmTest, gallopingPartitionPoint) {
   // Compare against `std::partition_point` for all the partition points of
   // ranges of different sizes (the sizes cover all the cases in which the
   // galloping steps exactly hit or overshoot the end of the range).

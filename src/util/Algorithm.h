@@ -274,13 +274,14 @@ CPP_template(typename ForwardIterator, typename Tp,
 // Same as `std::partition_point`, but use an exponential ("galloping") search
 // instead of a binary search: The step size is doubled until an element is
 // found that doesn't satisfy the `pred`, and only the remaining range is then
-// searched binarily. That way a partition point that is close to `first` is
-// found with a handful of calls to `pred` (a binary search would need about
-// `log2(last - first)` calls), while a partition point that is far away still
-// requires only a logarithmic number of calls (a linear scan would need
-// `last - first` calls). As for `std::partition_point`, the range
-// `[first, last)` has to be partitioned with respect to `pred`, i.e. all the
-// elements that satisfy `pred` have to precede all the elements that don't.
+// searched binarily. As for `std::partition_point`, the range `[first, last)`
+// has to be partitioned with respect to `pred`, i.e. all the elements that
+// satisfy `pred` have to precede all the elements that don't.
+//
+// NOTE: A partition point that is close to `first` is found with a handful of
+// calls to `pred` (a binary search would need about `log2(last - first)`
+// calls), while a partition point that is far away still requires only a
+// logarithmic number of calls (a linear scan would need `last - first` calls).
 CPP_template(typename RandomAccessIterator, typename Predicate)(
     requires ql::concepts::random_access_iterator<
         RandomAccessIterator>) constexpr RandomAccessIterator

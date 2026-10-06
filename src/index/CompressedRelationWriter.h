@@ -68,6 +68,11 @@ class CompressedRelationWriter {
   Id currentCol0Id_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
+  // The number of blocks that are compressed and written concurrently, see
+  // `getNumConcurrentBlocks`. The `PermutationWriter` configures its queue for
+  // the blocks of large relations (which bypass the `blockWriteQueue_`) with
+  // the same number, see `PermutationWriter::largeRelationBlockQueue_`.
+  size_t numConcurrentBlocks_;
   ad_utility::TaskQueueOnExecutor blockWriteQueue_;
   ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
 
@@ -100,8 +105,8 @@ class CompressedRelationWriter {
       : outfile_{std::move(f)},
         numColumns_{numColumns},
         rowsPerBlock_{rowsPerBlock},
-        blockWriteQueue_{
-            makeBlockWriteQueue(getNumConcurrentBlocks(numWriterThreads))} {
+        numConcurrentBlocks_{getNumConcurrentBlocks(numWriterThreads)},
+        blockWriteQueue_{makeBlockWriteQueue(numConcurrentBlocks_)} {
     AD_CONTRACT_CHECK(rowsPerBlock_ > 0,
                       "A block must have room for at least one row");
   }
@@ -472,6 +477,8 @@ class CompressedRelationWriter {
       std::optional<size_t> numConcurrentBlocksOverride);
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfTasksInFlight);
+  FRIEND_TEST(CompressedRelationWriter,
+              largeRelationBlockQueueFollowsTheWriter);
 };
 
 #endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_H
