@@ -52,7 +52,9 @@ class CompressedRelationWriter {
   // `File::write` at a range that `nextOffset_` hands out, see
   // `compressAndWriteColumn`.
   ad_utility::Synchronized<ad_utility::File, std::shared_mutex> outfile_;
-  // The offset at which the next block is written.
+  // The offset at which the next block is written. It starts at `0`, which is
+  // why the `outfile_` has to be empty when this writer is constructed (this
+  // is checked there).
   std::atomic<off_t> nextOffset_{0};
   ad_utility::Synchronized<std::vector<CompressedBlockMetadataNoBlockIndex>>
       blockBuffer_;
@@ -102,6 +104,11 @@ class CompressedRelationWriter {
   // If `numWriterThreads` is set, it determines how many blocks are
   // compressed and written concurrently; otherwise the runtime parameter
   // `permutation-writer-num-threads` is used (see `getNumConcurrentBlocks`).
+  //
+  // The file `f` has to be empty, because this writer writes the blocks at
+  // the offsets that `nextOffset_` hands out, starting at `0`. It never
+  // appends at the current file position (see `compressAndWriteColumn`), so
+  // it would otherwise silently overwrite the existing content.
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f, size_t rowsPerBlock,
       std::optional<size_t> numWriterThreads = std::nullopt)
@@ -112,6 +119,11 @@ class CompressedRelationWriter {
             makeBlockWriteQueue(getNumConcurrentBlocks(numWriterThreads))} {
     AD_CONTRACT_CHECK(rowsPerBlock_ > 0,
                       "A block must have room for at least one row");
+    // NOTE: `File::empty` moves the file position, which doesn't matter,
+    // because all the writing uses the positioned `File::write`.
+    AD_CONTRACT_CHECK(
+        outfile_.wlock()->empty(),
+        "A `CompressedRelationWriter` requires a file that is empty");
   }
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.

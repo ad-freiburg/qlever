@@ -2007,6 +2007,22 @@ TEST(CompressedRelationWriter, blockMustHaveRoomForAtLeastOneRow) {
   ad_utility::deleteFile(filename);
 }
 
+// The blocks are written at the offsets that an atomic counter hands out,
+// starting at `0`, so the writer requires an empty file, see
+// `CompressedRelationWriter::compressAndWriteColumn`.
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, fileMustBeEmpty) {
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  {
+    ad_utility::File file{filename, "w"};
+    const std::string content = "someContentThatMustNotBeOverwritten";
+    file.write(content.data(), content.size());
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (CompressedRelationWriter{1, ad_utility::File{filename, "r+"}, 2}),
+      ::testing::HasSubstr("requires a file that is empty"));
+}
+
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfTasksInFlight) {
   auto threads = ad_utility::globalExecutorNumThreads();
@@ -2684,8 +2700,7 @@ TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices) {
   // blocks together with the result of a full scan of the relation. The
   // `filename` is reused, because the writer closes the file before the
   // reading starts.
-  auto writeAndScan = [&filename, col0](const IdTable& block,
-                                        size_t blocksize) {
+  auto writeAndScan = [&filename](const IdTable& block, size_t blocksize) {
     std::vector<CompressedBlockMetadata> blocks;
     {
       CompressedRelationWriter writer{
