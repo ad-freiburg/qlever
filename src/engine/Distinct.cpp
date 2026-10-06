@@ -247,7 +247,7 @@ IdTable Distinct::outOfPlaceDistinctForTesting(const IdTable& input) const {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Distinct::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
-  // Add 'requestedVariables' and the variables corresponding to the keepIndices_ to the
+  // Add `requestedVariables` and the variables corresponding to the keepIndices_ to the
   // variables that are required from the subtree.
   VarsRequiredFromSubtree helper(&requestedVariables);
   std::vector<const Variable*> keepVars;
