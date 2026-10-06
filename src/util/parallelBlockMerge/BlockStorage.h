@@ -18,12 +18,17 @@
 // see `util/parallelBlockMerge/ParallelMergeState.h`.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include <absl/functional/any_invocable.h>
+
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/strand.hpp>
 #include <cstddef>
 #include <exception>
+#include <functional>
 #include <optional>
+#include <type_traits>
 #include <utility>
+#include <variant>
 
 #include "util/Exception.h"
 
@@ -36,8 +41,8 @@ namespace net = boost::asio;
 // `InOrderBlockSink`.
 using Strand = net::strand<net::any_io_executor>;
 
-// The value that a storage stores and retrieves. An empty `OptionalBlock` is
-// the end-of-chunk sentinel.
+// The value that a storage stores (it retrieves a `GetResult`, see below). An
+// empty `OptionalBlock` is the end-of-chunk sentinel.
 //
 // NOTE: `Block` need not be default-constructible (an `IdTable` for example is
 // not), which is why the blocks travel as an `std::optional` throughout. That
@@ -45,17 +50,73 @@ using Strand = net::strand<net::any_io_executor>;
 template <typename Block>
 using OptionalBlock = std::optional<Block>;
 
+// A block that a storage hands out, which is either already in memory or still
+// has to be produced by an expensive `Reader` (typically a read from disk plus
+// a decompression). The storage only decides *what* has to be read, while the
+// expensive read itself is left to whoever consumes the block, who can thereby
+// run the reads of several consecutive blocks concurrently without touching
+// their order, see `detail::BlockPrefetcher`.
+template <typename Block>
+class DeferredBlock {
+ public:
+  using Reader = absl::AnyInvocable<Block() &&>;
+  // The converting constructor of the `std::variant` below (see `fromBlock` and
+  // `fromReader`) relies on the two alternatives being clearly distinct.
+  static_assert(!std::is_same_v<Block, Reader> &&
+                !std::is_constructible_v<Block, Reader> &&
+                !std::is_constructible_v<Reader, Block>);
+
+ private:
+  std::variant<Block, Reader> value_;
+
+  explicit DeferredBlock(std::variant<Block, Reader> value)
+      : value_{std::move(value)} {}
+
+ public:
+  // Construct from a `block` that is already in memory.
+  static DeferredBlock fromBlock(Block block) {
+    return DeferredBlock{std::variant<Block, Reader>{std::move(block)}};
+  }
+
+  // Construct from a `reader` that produces the block when it is called. The
+  // `reader` must not be null.
+  static DeferredBlock fromReader(Reader reader) {
+    AD_CONTRACT_CHECK(reader != nullptr);
+    return DeferredBlock{std::variant<Block, Reader>{std::move(reader)}};
+  }
+
+  // Return true if the block is already in memory, such that `materialize` is
+  // cheap.
+  bool isInMemory() const noexcept {
+    return std::holds_alternative<Block>(value_);
+  }
+
+  // Return the block, calling the reader if it is not in memory yet. Rethrow
+  // whatever the reader throws.
+  //
+  // NOTE: Everything that the reader holds (for example a file) is only
+  // released when this object is destroyed, which a caller that has to control
+  // where expensive destructors run should keep in mind.
+  Block materialize() && {
+    if (isInMemory()) {
+      return std::get<Block>(std::move(value_));
+    }
+    return std::invoke(std::move(std::get<Reader>(value_)));
+  }
+};
+
 // The result of `getBlock`, which is exactly one of the following three: an
-// actual block, the end-of-chunk sentinel, or the information that the storage
-// was cancelled (see `cancelAll`) while the operation was in flight.
+// actual (possibly deferred) block, the end-of-chunk sentinel, or the
+// information that the storage was cancelled (see `cancelAll`) while the
+// operation was in flight.
 template <typename Block>
 class GetResult {
  private:
-  // `std::nullopt` means "cancelled", an empty `OptionalBlock` is the
+  // `std::nullopt` means "cancelled", an empty inner optional is the
   // end-of-chunk sentinel.
-  std::optional<OptionalBlock<Block>> result_;
+  std::optional<std::optional<DeferredBlock<Block>>> result_;
 
-  explicit GetResult(std::optional<OptionalBlock<Block>> result)
+  explicit GetResult(std::optional<std::optional<DeferredBlock<Block>>> result)
       : result_{std::move(result)} {}
 
  public:
@@ -72,12 +133,18 @@ class GetResult {
 
   // Construct the end-of-chunk sentinel.
   static GetResult endOfChunk() {
-    return GetResult{OptionalBlock<Block>{std::nullopt}};
+    return GetResult{std::optional<DeferredBlock<Block>>{std::nullopt}};
   }
 
-  // Construct from an actual `block`.
+  // Construct from an actual `block` that is in memory.
   static GetResult fromBlock(Block block) {
-    return GetResult{OptionalBlock<Block>{std::move(block)}};
+    return fromDeferredBlock(DeferredBlock<Block>::fromBlock(std::move(block)));
+  }
+
+  // Construct from a `block` that may still have to be read, see
+  // `DeferredBlock`.
+  static GetResult fromDeferredBlock(DeferredBlock<Block> block) {
+    return GetResult{std::optional<DeferredBlock<Block>>{std::move(block)}};
   }
 
   // Return true if the storage was cancelled while the operation was in
@@ -95,10 +162,10 @@ class GetResult {
     return result_.has_value() && result_.value().has_value();
   }
 
-  // Move the block out.
+  // Move the (possibly deferred) block out.
   //
   // PRECONDITION: `hasValue()` is true.
-  Block get() && {
+  DeferredBlock<Block> get() && {
     AD_CONTRACT_CHECK(hasValue());
     return std::move(result_).value().value();
   }
@@ -132,14 +199,17 @@ class GetResult {
 //
 // * `getBlock(chunkIndex, token)` — remove the front of the queue of the chunk
 //   with the given `chunkIndex` and complete with it, waiting until that queue
-//   is non-empty. Complete with a cancelled `GetResult` if the storage was
-//   cancelled while the operation was in flight. A queue that does not exist
-//   yet is created (and is then simply empty), because the consumer of a chunk
-//   may well be faster than its producer. Once the end-of-chunk sentinel of a
-//   chunk was handed out, that chunk is done, and the implementation has to
-//   drop everything that belongs to it, so that the memory (and the disk space)
-//   that a storage occupies is proportional to the number of chunks that are in
-//   flight and not to their total number.
+//   is non-empty. A block that is not in memory anymore (e.g. because it was
+//   spilled to disk) is *not* read here but handed out as a `DeferredBlock`,
+//   whose reader the consumer calls, so that a single, sequential consumer can
+//   still read several blocks concurrently. Complete with a cancelled
+//   `GetResult` if the storage was cancelled while the operation was in flight.
+//   A queue that does not exist yet is created (and is then simply empty),
+//   because the consumer of a chunk may well be faster than its producer. Once
+//   the end-of-chunk sentinel of a chunk was handed out, that chunk is done,
+//   and the implementation has to drop everything that belongs to it, so that
+//   the memory (and the disk space) that a storage occupies is proportional to
+//   the number of chunks that are in flight and not to their total number.
 //
 // * `cancelAll() noexcept` — wake up every operation that is currently
 //   suspended, completing it as "not stored" respectively "cancelled", and

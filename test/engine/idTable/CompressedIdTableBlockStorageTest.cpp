@@ -38,9 +38,12 @@
 #include "../../util/AsioTestHelpers.h"
 #include "../../util/AsyncTestHelpers.h"
 #include "../../util/GTestHelpers.h"
+#include "../../util/ParallelBlockMergeTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedIdTableBlockStorage.h"
 #include "util/parallelBlockMerge/InOrderBlockSink.h"
+
+using parallelBlockMergeTestHelpers::asyncGetNextBlock;
 
 namespace {
 // The storage under test, whose operations may be initiated from anywhere,
@@ -278,7 +281,8 @@ void get(Storage<NumCols>& storage, size_t chunkIndex, GetOutcomes& outcomes,
           outcomes.sawSentinel_ = true;
           return;
         }
-        outcomes.blocks_.push_back(blockRows<NumCols>(std::move(result).get()));
+        outcomes.blocks_.push_back(
+            blockRows<NumCols>(std::move(result).get().materialize()));
         if (keepGoing) {
           get(storage, chunkIndex, outcomes, keepGoing);
         }
@@ -452,6 +456,46 @@ TEST(CompressedIdTableBlockStorage, laterBlocksMayLandInMemory) {
 }
 
 // _____________________________________________________________________________
+TEST(CompressedIdTableBlockStorage,
+     onlyTheChunkOfTheConsumerKeepsBlocksInMemory) {
+  // A chunk that is ahead of the consumer spills all its blocks, although it
+  // has a free in-memory slot. Otherwise every chunk that has been merged
+  // completely, but not yet consumed, would keep blocks in memory, and the
+  // memory of the merge would grow with the total number of chunks.
+  net::io_context ioContext;
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 1);
+  Producer<0> producerOfChunkZero{storage, 0, makeValues<0>(1, {{0}}, true)};
+  Producer<0> producerOfChunkOne{storage, 1, makeValues<0>(1, {{10}}, false)};
+  runAndPoll(ioContext, [&] {
+    producerOfChunkZero.storeAll();
+    producerOfChunkOne.storeAll();
+  });
+  // The consumer starts with chunk zero, whose block therefore stays in memory,
+  // whereas the block of chunk one is spilled.
+  EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(0)));
+  auto sizeAfterTheSpill = ql::filesystem::file_size(storage.spillFilename(1));
+  EXPECT_GT(sizeAfterTheSpill, 0u);
+  GetOutcomes getsOfChunkZero;
+  runAndPoll(ioContext, [&] { get(storage, 0, getsOfChunkZero, true); });
+  EXPECT_THAT(getsOfChunkZero.blocks_,
+              ::testing::ElementsAre(makeRows(1, {0})));
+  EXPECT_TRUE(getsOfChunkZero.sawSentinel_);
+  // Once the consumer has moved on to chunk one, the blocks of that chunk stay
+  // in memory again, so the file does not grow anymore.
+  GetOutcomes getsOfChunkOne;
+  runAndPoll(ioContext, [&] { get(storage, 1, getsOfChunkOne, false); });
+  Producer<0> secondProducerOfChunkOne{storage, 1,
+                                       makeValues<0>(1, {{11}}, true)};
+  runAndPoll(ioContext, [&] { secondProducerOfChunkOne.storeAll(); });
+  EXPECT_EQ(ql::filesystem::file_size(storage.spillFilename(1)),
+            sizeAfterTheSpill);
+  runAndPoll(ioContext, [&] { get(storage, 1, getsOfChunkOne, true); });
+  EXPECT_THAT(getsOfChunkOne.blocks_,
+              ::testing::ElementsAre(makeRows(1, {10}), makeRows(1, {11})));
+  EXPECT_TRUE(getsOfChunkOne.sawSentinel_);
+}
+
+// _____________________________________________________________________________
 TEST(CompressedIdTableBlockStorage, theProducerIsNotBlockedByALaggingConsumer) {
   // The whole point of this storage: a producer runs ahead no matter how far
   // the consumer lags behind, in contrast to a storage that keeps its blocks in
@@ -552,6 +596,60 @@ TEST(CompressedIdTableBlockStorage, aSpillThatOutlivesItsChunkIsDropped) {
               ::testing::ElementsAre(false));
   // The file that the dropped block created on its way is deleted again with
   // the queue that nobody holds anymore.
+  EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(0)));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedIdTableBlockStorage, aSpilledBlockIsHandedOutUnread) {
+  // A block that is still in memory is handed out as it is, whereas a spilled
+  // block is handed out as a `DeferredBlock` that is only read back from the
+  // file when it is materialized, so that the consumer can read several such
+  // blocks concurrently, see `ChunkQueue::deferSpilledBlock`.
+  net::io_context ioContext;
+  // Buffer a single block, such that the first block stays in memory and the
+  // second one is spilled.
+  Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 1);
+  absl::Cleanup cleanup = [&storage] {
+    ad_utility::deleteFile(storage.spillFilename(0), false);
+  };
+  Producer<0> producer{storage, 0, makeValues<0>(1, {{0}, {1}}, true)};
+  runAndPoll(ioContext, [&] { producer.storeAll(); });
+  EXPECT_THAT(producer.outcomes_.wasStored_,
+              ::testing::ElementsAre(true, true, true));
+  EXPECT_TRUE(ql::filesystem::exists(storage.spillFilename(0)));
+
+  std::vector<Storage<0>::DeferredBlock> blocks;
+  bool sawSentinel = false;
+  auto getOne = [&] {
+    storage.getBlock(
+        0, [&](std::exception_ptr exception, Storage<0>::GetResult result) {
+          ASSERT_EQ(exception, nullptr);
+          if (result.isEndOfChunk()) {
+            sawSentinel = true;
+            return;
+          }
+          blocks.push_back(std::move(result).get());
+        });
+  };
+  for (size_t i = 0; i < 3; ++i) {
+    runAndPoll(ioContext, getOne);
+  }
+  ASSERT_EQ(blocks.size(), 2u);
+  EXPECT_TRUE(sawSentinel);
+  EXPECT_TRUE(blocks.at(0).isInMemory());
+  EXPECT_FALSE(blocks.at(1).isInMemory());
+  // The chunk is done, but the unread block still holds its file.
+  EXPECT_EQ(numLiveChunks(ioContext, storage), 0u);
+  EXPECT_TRUE(ql::filesystem::exists(storage.spillFilename(0)));
+
+  // The blocks may be read in any order and on any thread, here in the reverse
+  // order and in the test thread.
+  EXPECT_EQ(blockRows<0>(std::move(blocks.at(1)).materialize()),
+            makeRows(1, {1}));
+  EXPECT_EQ(blockRows<0>(std::move(blocks.at(0)).materialize()),
+            makeRows(1, {0}));
+  // The file is deleted together with the last block that could read from it.
+  blocks.clear();
   EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(0)));
 }
 
@@ -748,7 +846,7 @@ net::awaitable<void> pushBlocks(Sink<NumCols>& sink, size_t chunkIndex,
 template <size_t NumCols>
 net::awaitable<std::vector<Row>> collectRows(Sink<NumCols>& sink) {
   std::vector<Row> rows;
-  while (auto block = co_await sink.asyncGetNextBlock(net::use_awaitable)) {
+  while (auto block = co_await asyncGetNextBlock(sink)) {
     for (Row& row : blockRows<NumCols>(block.value())) {
       rows.push_back(std::move(row));
     }
@@ -903,7 +1001,7 @@ ASYNC_TEST(CompressedIdTableBlockStorage, pushExceptionSurfaces) {
   EXPECT_TRUE(sink.stopRequested());
   bool didThrow = false;
   try {
-    co_await sink.asyncGetNextBlock(net::use_awaitable);
+    co_await asyncGetNextBlock(sink);
   } catch (const std::runtime_error& exception) {
     didThrow = true;
     EXPECT_STREQ(exception.what(), "kaboom");
@@ -925,8 +1023,7 @@ ASYNC_TEST(CompressedIdTableBlockStorage, abortWhileTheConsumerWaits) {
   Latch latch{ioContext.get_executor(), 1};
   net::co_spawn(ioContext, abortAfterYielding(sink, ioContext, latch),
                 net::detached);
-  std::optional<IdTableStatic<0>> block =
-      co_await sink.asyncGetNextBlock(net::use_awaitable);
+  std::optional<IdTableStatic<0>> block = co_await asyncGetNextBlock(sink);
   EXPECT_FALSE(block.has_value());
   EXPECT_TRUE(sink.stopRequested());
   co_await waitForLatch(latch);
@@ -953,7 +1050,7 @@ ASYNC_TEST_N(CompressedIdTableBlockStorage, abortWhileProducersRun, 4) {
   // Consume a little, such that the producers really are in flight, and then
   // abort in the middle of everything.
   for (size_t i = 0; i < 3; ++i) {
-    co_await sink.asyncGetNextBlock(net::use_awaitable);
+    co_await asyncGetNextBlock(sink);
   }
   co_await sink.asyncStop(net::use_awaitable);
   EXPECT_TRUE(sink.stopRequested());
@@ -962,8 +1059,7 @@ ASYNC_TEST_N(CompressedIdTableBlockStorage, abortWhileProducersRun, 4) {
   // The producers are told to stop: a push that is initiated now is dropped.
   EXPECT_FALSE(
       co_await sink.asyncPush(0, makeBlock<0>(2, {0}), net::use_awaitable));
-  std::optional<IdTableStatic<0>> block =
-      co_await sink.asyncGetNextBlock(net::use_awaitable);
+  std::optional<IdTableStatic<0>> block = co_await asyncGetNextBlock(sink);
   EXPECT_FALSE(block.has_value());
 }
 
