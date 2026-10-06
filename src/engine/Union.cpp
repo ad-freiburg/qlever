@@ -399,13 +399,7 @@ Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
 
-  // TODO<ullingerc> Implement this optimization for the `sortedUnion`
-  // case. `computeVariableToColumnMap` assigns column indices to variables in
-  // order of their physical column index within each subtree; inserting the
-  // `BIND`'s column into the middle of a child's columns can therefore shift
-  // the `UNION`-level column index of every variable that used to come after
-  // it, so `targetOrder_` can no longer be reused as-is and would first have
-  // to be translated to the new indices.
+  // The TODO in `makeTreeWithStrippedColumns` below also applies here.
   if (!targetOrder_.empty()) {
     return std::nullopt;
   }
