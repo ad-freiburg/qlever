@@ -16,6 +16,7 @@
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/iterator.h"
 #include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -286,8 +287,7 @@ CPP_template(typename RandomAccessIterator, typename Predicate)(
         RandomAccessIterator>) constexpr RandomAccessIterator
     gallopingPartitionPoint(RandomAccessIterator first,
                             RandomAccessIterator last, Predicate pred) {
-  using DistanceType =
-      typename std::iterator_traits<RandomAccessIterator>::difference_type;
+  using DistanceType = ql::iter_difference_t<RandomAccessIterator>;
   // Invariant of the following loop: All the elements in `[first,
   // lowerBound)` satisfy the `pred`, and the partition point lies in
   // `[lowerBound, upperBound]`.
@@ -304,7 +304,7 @@ CPP_template(typename RandomAccessIterator, typename Predicate)(
   // Binary search in `[lowerBound, upperBound)`, i.e. between the element after
   // the last galloping step that satisfied the `pred` and the first galloping
   // step that violated it (or `last` if there was no such step).
-  return std::partition_point(lowerBound, upperBound, std::ref(pred));
+  return ql::ranges::partition_point(lowerBound, upperBound, std::move(pred));
 }
 
 // In place version of `ql::ranges::set_difference` which writes the output to
