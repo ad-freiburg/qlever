@@ -85,8 +85,7 @@ class PolymorphicVocabulary {
   void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
     ad_utility::visitIf(
         vocab_,
-        CPP_template_lambda(&grid)(typename T)(T & vocab)(
-            requires MaybeProvidesGeoCellGrid<T>) {
+        [&grid](OnDiskCompressedGeoSplit& vocab) {
           vocab.setGeoCellGrid(grid);
         },
         [](const auto& vocab) {
@@ -100,11 +99,12 @@ class PolymorphicVocabulary {
   std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
     return ad_utility::visitIf(
         vocab_,
-        CPP_template_lambda()(typename T)(const T& vocab)(
-            requires MaybeProvidesGeoCellGrid<T>) {
+        [](const OnDiskCompressedGeoSplit& vocab) {
           return vocab.getGeoCellGrid();
         },
-        [](const auto&) -> std::optional<ad_utility::GeoCellGrid> {
+        [](const auto& vocab) -> std::optional<ad_utility::GeoCellGrid> {
+          static_assert(
+              NeverProvidesGeometryInfo<std::decay_t<decltype(vocab)>>);
           return std::nullopt;
         });
   }
