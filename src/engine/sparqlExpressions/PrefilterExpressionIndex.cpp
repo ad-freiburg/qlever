@@ -835,17 +835,29 @@ BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
   // belong to geometries whose bounding box intersects the rectangle. The
   // intervals are constructed in ascending order: the `VocabIndex` datatype
   // first (`Datatype::VocabIndex` < `Datatype::GeoPoint`), then the latitude
-  // band of the `GeoPoint`s.
-  //
-  // NOTE: The coordinates of a WKT literal cannot be seen from its ID, so the
-  // whole `VocabIndex` region is kept. The parameter `index` is unused here,
-  // but it is the hook for an index whose vocabulary stores the geometries in
-  // a spatial order.
-  (void)index;
+  // band of the `GeoPoint`s. With a geo cell grid, the WKT literals are
+  // restricted to the ID ranges of the cells that the rectangle covers;
+  // without one, the coordinates of a WKT literal cannot be seen from its ID,
+  // so the whole `VocabIndex` region is kept.
   std::vector<std::pair<ValueId, ValueId>> keepIntervals;
-  keepIntervals.emplace_back(
-      Id::makeFromVocabIndex(VocabIndex::make(0)),
-      Id::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)));
+  const auto& grid = index.getVocab().getGeoCellGrid();
+  if (grid.has_value()) {
+    for (auto [firstCell, lastCell] : grid.value().coveringCellRanges(
+             rectangle_.minLng_, rectangle_.minLat_, rectangle_.maxLng_,
+             rectangle_.maxLat_)) {
+      auto [lower, upper] =
+          grid.value().vocabIndexRangeForCells(firstCell, lastCell);
+      // `upper` is exclusive and can exceed the largest valid index payload
+      // (for the sentinel cell), so convert to a closed interval.
+      keepIntervals.emplace_back(
+          Id::makeFromVocabIndex(VocabIndex::make(lower)),
+          Id::makeFromVocabIndex(VocabIndex::make(upper - 1)));
+    }
+  } else {
+    keepIntervals.emplace_back(
+        Id::makeFromVocabIndex(VocabIndex::make(0)),
+        Id::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)));
+  }
 
   // The `GeoPoint` region: the intervals of the bit representations that
   // contain all points of the rectangle, which depend on the encoding of the
@@ -863,20 +875,38 @@ BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
   }
 
   // For each interval, find the corresponding range of block-boundary
-  // `ValueId`s. Empty ranges are deliberately kept: they indicate a block
-  // whose first and last ID enclose the whole interval, which must survive
-  // (same reasoning as for the `EQ` case of `RelationalExpression`).
+  // `ValueId`s. Search in the order of the `ValueId`s, which is the order of
+  // the block boundaries (for the `VocabIndex` and `GeoPoint` IDs of the
+  // intervals, it is the order of their bits, but an ID of type
+  // `LocalVocabIndex` is ordered by its position in the vocabulary). Empty
+  // ranges are deliberately kept: they indicate a block whose first and last
+  // ID enclose the whole interval, which must survive (same reasoning as for
+  // the `EQ` case of `RelationalExpression`).
   std::vector<ValueIdItPair> relevantRanges;
   relevantRanges.reserve(keepIntervals.size());
   for (const auto& [lower, upper] : keepIntervals) {
-    relevantRanges.emplace_back(
-        ql::ranges::lower_bound(idRange, lower,
-                                &valueIdComparators::compareByBits),
-        ql::ranges::upper_bound(idRange, upper,
-                                &valueIdComparators::compareByBits));
+    relevantRanges.emplace_back(ql::ranges::lower_bound(idRange, lower),
+                                ql::ranges::upper_bound(idRange, upper));
   }
-  return detail::mapping::mapValueIdItRangesToBlockItRanges(
+  auto keptByIntervals = detail::mapping::mapValueIdItRangesToBlockItRanges(
       relevantRanges, idRange, blockRange);
+
+  // Also keep every block whose first or last ID is of type `LocalVocabIndex`
+  // (a WKT literal inserted by an update). Such an ID has no cell, and its
+  // position in the vocabulary lies between the existing words, which can be
+  // outside the ID range of its cell (when the cell has no words, or the
+  // literal comes after all words of its cell), so the intervals above cannot
+  // decide it.
+  std::vector<ValueIdItPair> localVocabBoundaries;
+  for (auto it = idRange.begin(); it != idRange.end(); it += 2) {
+    if ((*it).getDatatype() == Datatype::LocalVocabIndex ||
+        (*std::next(it)).getDatatype() == Datatype::LocalVocabIndex) {
+      localVocabBoundaries.emplace_back(it, std::next(it));
+    }
+  }
+  return detail::logicalOps::mergeRelevantBlockItRanges<true>(
+      keptByIntervals, detail::mapping::mapValueIdItRangesToBlockItRanges(
+                           localVocabBoundaries, idRange, blockRange));
 }
 
 //______________________________________________________________________________
@@ -1003,8 +1033,8 @@ std::string LogicalExpression<Operation>::asString(size_t depth) const {
   std::stringstream stream;
   stream << "Prefilter LogicalExpression<" << getLogicalOpStr(Operation)
          << ">\n"
-         << "child1 {" << child1Info << "}" << "child2 {" << child2Info << "}"
-         << std::endl;
+         << "child1 {" << child1Info << "}"
+         << "child2 {" << child2Info << "}" << std::endl;
   return stream.str();
 }
 

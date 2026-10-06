@@ -363,6 +363,22 @@ class SplitVocabulary {
     }
   }
 
+  // Forward the minimum length for parsed geometries to the underlying
+  // `GeoVocabulary`, if there is one (see there for the effect). No-op
+  // otherwise.
+  void setParsedGeometriesMinLength(size_t minLength) {
+    for (auto& vocab : underlying_) {
+      std::visit(
+          [minLength](auto& v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+              v.setParsedGeometriesMinLength(minLength);
+            }
+          },
+          vocab);
+    }
+  }
+
   // The geo cell grid of the underlying `GeoVocabulary` (there is at most
   // one, see the `static_assert` above), or `std::nullopt` if there is none
   // or it has no grid.
@@ -448,6 +464,11 @@ class SplitVocabulary {
   // Retrieve GeometryInfo from an underlying vocabulary, if it is a
   // GeoVocabulary.
   std::optional<ad_utility::GeometryInfo> getGeoInfo(
+      uint64_t indexWithMarker) const;
+
+  // Retrieve the parsed geometry from an underlying vocabulary, if it is a
+  // `GeoVocabulary` (see `GeoVocabulary::getParsedGeometry`).
+  std::optional<ad_utility::ParsedGeometry> getParsedGeometry(
       uint64_t indexWithMarker) const;
 
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.

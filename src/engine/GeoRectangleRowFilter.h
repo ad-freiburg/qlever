@@ -15,13 +15,14 @@
 
 // An operation that returns the rows of its only child whose geometry in a
 // given column is not certainly outside a query rectangle, decided per row
-// from the `ValueId` alone (the coordinates of a `GeoPoint`, see
-// `GeoRectangleIdPrefilter`). It complements the block prefilter of an
-// `IndexScan`: the block prefilter can only drop whole blocks, and for
-// `GeoPoint`s it can only restrict the latitude, so the kept blocks may still
-// hold many rows outside the rectangle. Dropping them here, before any `Sort`
-// or `Join` above the scan, keeps those operations small. Everything else
-// (result order, variables, multiplicities) is passed through from the child.
+// from the `ValueId` alone (the coordinates of a `GeoPoint`, the grid cell of
+// a WKT literal, see `GeoRectangleIdPrefilter`). It complements the block
+// prefilter of an `IndexScan`: the block prefilter can only drop whole blocks,
+// and for `GeoPoint`s it can only restrict the latitude, so the kept blocks may
+// still hold many rows outside the rectangle. Dropping them here, before any
+// `Sort` or `Join` above the scan, keeps those operations small. Everything
+// else (result order, variables, multiplicities) is passed through from the
+// child.
 //
 // The size estimate is the child's, unless an explicit estimate is given:
 // the query planner puts this filter on every scan that binds the geometry

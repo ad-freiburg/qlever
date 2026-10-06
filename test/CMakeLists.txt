@@ -95,7 +95,6 @@ function(addLinkAndDiscoverTestNoLibs basename)
     addLinkAndDiscoverTestImpl(linkAndDiscoverTest ${basename} ${ARGN})
 endfunction()
 
-
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
 # `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
 # In contrast to `addLinkAndDiscoverTest` this doesn't let ctest run all subtests individually,
@@ -579,6 +578,8 @@ addLinkAndDiscoverTestNoLibs(RangeThatReleasesOnEndTest)
 addLinkAndDiscoverTest(TripleSerializerTest)
 
 addLinkAndDiscoverTest(GeometryInfoTest qlever_util)
+
+addLinkAndDiscoverTest(ParsedGeometryTest rdfTypes)
 
 addLinkAndDiscoverTest(GeoCellGridTest vocabulary)
 

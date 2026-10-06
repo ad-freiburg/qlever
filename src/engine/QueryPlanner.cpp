@@ -2729,7 +2729,9 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       continue;
     }
     edge.join_->setGeometrySideSelectivity(
-        ad_utility::geoRectangleSelectivity(known.at(other).any_.value()));
+        ad_utility::geoRectangleSelectivity(
+            known.at(other).any_.value(),
+            _qec->getIndex().getVocab().getGeoCellGrid()));
   }
 
   // The evaluated parts of the query join the replacement plans (like the

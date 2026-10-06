@@ -808,6 +808,7 @@ class QueryPlanner {
       const std::vector<SubtreePlan>& lastRow) const;
   static size_t findSmallestExecutionTree(
       const std::vector<SubtreePlan>& lastRow);
+
   static size_t findUniqueNodeIds(
       const std::vector<SubtreePlan>& connectedComponent,
       bool allowReplacementPlans = false);

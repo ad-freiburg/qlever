@@ -22,6 +22,7 @@
 #include "index/LocalVocab.h"
 #include "index/vocabulary/Vocabulary.h"
 #include "parser/TripleComponent.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "rdfTypes/GeoRectangle.h"
 #include "rdfTypes/Variable.h"
 #include "util/Iterators.h"
@@ -296,11 +297,12 @@ class IsInExpression : public PrefilterExpression {
 // prefiltered via the intervals of IDs that the rectangle covers, which depend
 // on the encoding of the points (see `GeoPoint::intervalsForRectangle`): the
 // latitude band of the rectangle for `LatMajor`, little more than the
-// rectangle itself for `ZOrder`. The coordinates of a WKT literal cannot be
-// seen from its ID, so all blocks of the `VocabIndex` datatype are kept. Values
-// of all other datatypes cannot be geometries that satisfy a spatial condition
-// and are pruned (blocks with mixed datatypes are always kept by the
-// surrounding framework).
+// rectangle itself for `ZOrder`. WKT literals of a vocabulary with a geo cell
+// grid are prefiltered via the cell bits of their IDs (see `GeoCellGrid`);
+// without a grid, their coordinates cannot be seen from their IDs, so all
+// blocks of the `VocabIndex` datatype are kept. Values of all other datatypes
+// cannot be geometries that satisfy a spatial condition and are pruned (blocks
+// with mixed datatypes are always kept by the surrounding framework).
 class GeoRectangleExpression : public PrefilterExpression {
  private:
   ad_utility::GeoRectangle rectangle_;
