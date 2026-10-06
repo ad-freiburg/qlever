@@ -286,7 +286,7 @@ TEST_F(GeoRectangleExpressionTest, evaluate) {
   auto clone = expr.clone();
   EXPECT_TRUE(*clone == expr);
   GeoRectangleExpression otherExpr{GeoRectangle{0, 0, 1, 1}};
-  EXPECT_FALSE(otherExpr == expr);
+  EXPECT_FALSE(*otherExpr.clone() == expr);
   EXPECT_THAT(expr.asString(0), ::testing::HasSubstr("GeoRectangleExpression"));
 
   // The logical complement keeps all blocks.
@@ -305,18 +305,19 @@ TEST_F(GeoRectangleExpressionTest, evaluateZOrder) {
   absl::Cleanup restoreEncoding{
       [encoding = GeoPoint::encoding()] { GeoPoint::setEncoding(encoding); }};
   GeoPoint::setEncoding(GeoPointEncodingEnum::ZOrder);
-  // Blocks of points, sorted by their IDs, as the evaluation expects.
+  // Blocks of points, sorted by their IDs, as the evaluation expects. They are
+  // sorted before they are created, because `makeBlock` numbers the blocks in
+  // the order of their creation.
   auto pointBlocks =
       [this](std::vector<std::pair<GeoPoint, GeoPoint>> firstAndLast) {
+        ql::ranges::sort(firstAndLast, {}, [](const auto& pair) {
+          return Id::makeFromGeoPoint(pair.first).getBits();
+        });
         std::vector<CompressedBlockMetadata> blocks;
         for (const auto& [first, last] : firstAndLast) {
           blocks.push_back(makeBlock(Id::makeFromGeoPoint(first),
                                      Id::makeFromGeoPoint(last)));
         }
-        ql::ranges::sort(blocks, [](const auto& a, const auto& b) {
-          return a.firstTriple_.col2Id_.getBits() <
-                 b.firstTriple_.col2Id_.getBits();
-        });
         return blocks;
       };
   auto evaluate = [this](GeoRectangleExpression& expr,
