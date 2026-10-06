@@ -61,8 +61,12 @@ class GroupBy : public Operation {
   GroupByImpl& getImpl();
 
  private:
-  // Delegates to the implementation's isDeterministic(), which checks both
-  // alias expressions and the subtree.
+  // Delegates to the implementation's `isDeterministicImpl()`, which only
+  // checks the alias expressions. The subtree is covered by
+  // `Operation::isDeterministic()` via the forwarded children. Delegating to
+  // the full (recursive) `isDeterministic()` of the implementation instead
+  // would visit the subtree twice per nesting level, which leads to runtime
+  // exponential in the number of nested `GROUP BY`s.
   [[nodiscard]] bool isDeterministicImpl() const override;
 
   std::unique_ptr<GroupByImpl> _impl;

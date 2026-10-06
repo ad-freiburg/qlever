@@ -8,6 +8,7 @@
 
 #include <array>
 #include <memory>
+#include <utility>
 
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
@@ -33,10 +34,6 @@ namespace ad_utility::testing {
 Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
-  EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  // Decrease various default batch sizes such that there are multiple batches
-  // also for the very small test indices (important for test coverage).
-  DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
   index.parserBufferSize() =
       parserBufferSize;  // Note that the default value remains unchanged, but
@@ -163,6 +160,28 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   // NOTE: The SPO and SOP permutations currently don't have patterns stored.
   // with them.
 }
+
+// Set the global settings that make the index building of the very small test
+// indices exercise the same code paths as that of large indices, and return a
+// cleanup that restores the previous values of these settings when it is
+// destroyed.
+//
+// NOTE: The settings are global, so setting them without such a cleanup would
+// make every test that runs afterwards silently depend on them.
+[[nodiscard]] auto setGlobalIndexBuildingSettingsForTesting() {
+  bool previousIgnoreMemoryLimit =
+      EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING.exchange(true);
+  // Decrease various default batch sizes such that there are multiple batches
+  // also for the very small test indices (important for test coverage).
+  size_t previousProgressBarBatchSize =
+      std::exchange(DEFAULT_PROGRESS_BAR_BATCH_SIZE, 2);
+  return absl::Cleanup{
+      [previousIgnoreMemoryLimit, previousProgressBarBatchSize] {
+        EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
+            previousIgnoreMemoryLimit;
+        DEFAULT_PROGRESS_BAR_BATCH_SIZE = previousProgressBarBatchSize;
+      }};
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -172,6 +191,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // stream when it goes out of scope at the end of this function.
   std::ostringstream ignoreLogStream;
   auto logCleanup = setGlobalLoggingStreamForTesting(&ignoreLogStream);
+  // The returned cleanup likewise restores the previous global settings for the
+  // index building at the end of this function.
+  auto settingsCleanup = setGlobalIndexBuildingSettingsForTesting();
   // Remove previous index files. This is necessary because if we previously
   // built the same index without patterns or all 6 permutations, we wouldn't
   // overwrite the patterns or the missing permutations. This would lead to a
@@ -241,6 +263,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         c.vocabularyType.has_value()
             ? c.vocabularyType.value()
             : VocabularyType::randomForIndexBuilding());
+    index.getImpl().setGeoPointEncodingForIndexBuilding(c.geoPointEncoding);
     if (c.encodedPrefixesWithoutAngleBrackets.has_value() ||
         !c.encodedIriPatterns.empty()) {
       index.getImpl().setPrefixesForEncodedValues(
@@ -325,9 +348,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   }
 
   if (c.secondaryVocabWords.has_value()) {
-    index.getImpl().setSecondaryVocabForTesting(
-        std::make_shared<SecondaryVocabulary>(
-            std::move(c.secondaryVocabWords).value()));
+    index.getImpl().setSecondaryVocab(
+        std::make_shared<SecondaryVocabulary>(c.secondaryVocabWords.value()));
   }
 
   if (c.usePatterns && c.loadAllPermutations) {
