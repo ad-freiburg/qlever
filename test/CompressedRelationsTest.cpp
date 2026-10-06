@@ -10,6 +10,7 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <future>
 #include <thread>
 
 #include "./util/GTestHelpers.h"
@@ -2643,4 +2644,59 @@ TEST(DistinctIdCounter, blocksAndReset) {
   counter.reset();
   addBlock({V(6)});
   EXPECT_EQ(counter.getAndReset(), 1);
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, destructorWaitsForAllPendingTwinRelationPushes) {
+  std::string basename = gtestCurrentTestName();
+  std::string filename1 = basename + ".permutation1";
+  std::string filename2 = basename + ".permutation2";
+  absl::Cleanup cleanup{[&filename1, &filename2]() {
+    ad_utility::deleteFile(filename1);
+    ad_utility::deleteFile(filename2);
+  }};
+  auto makeWriter = [](const std::string& filename) {
+    return CompressedRelationWriter::WriterAndCallback{
+        std::make_unique<CompressedRelationWriter>(
+            4, ad_utility::File{filename, "w"}, 100),
+        []([[maybe_unused]] ql::span<const CompressedRelationMetadata>
+               metadata) {}};
+  };
+
+  // The pending pushes are simulated by deferred futures, which run their
+  // function when (and only when) their `get()` is called. That way we can
+  // check that the destructor waits for each of them.
+  bool failingPushWasAwaited = false;
+  bool succeedingPushWasAwaited = false;
+  {
+    CompressedRelationWriter::PermutationWriter<true> writer{
+        basename,
+        makeWriter(filename1),
+        makeWriter(filename2),
+        qlever::KeyOrder{0, 1, 2, 3},
+        {}};
+    auto& pushes = writer.twinRelationPushes_;
+    // A push whose exception has already been rethrown by its `get()` (as it
+    // happens in `waitForBlocksOfLargeRelation`), so that it is no longer
+    // `valid()`.
+    pushes.push_back(std::async(std::launch::deferred, []() {
+      throw std::runtime_error{"push failed"};
+    }));
+    EXPECT_THROW(pushes.back().get(), std::runtime_error);
+    EXPECT_FALSE(pushes.back().valid());
+    // A failing push that is only awaited by the destructor. Its exception is
+    // ignored, and the destructor still waits for the following push.
+    pushes.push_back(
+        std::async(std::launch::deferred, [&failingPushWasAwaited]() {
+          failingPushWasAwaited = true;
+          throw std::runtime_error{"push failed"};
+        }));
+    pushes.push_back(std::async(
+        std::launch::deferred,
+        [&succeedingPushWasAwaited]() { succeedingPushWasAwaited = true; }));
+    EXPECT_FALSE(failingPushWasAwaited);
+    EXPECT_FALSE(succeedingPushWasAwaited);
+  }
+  EXPECT_TRUE(failingPushWasAwaited);
+  EXPECT_TRUE(succeedingPushWasAwaited);
 }
