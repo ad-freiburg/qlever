@@ -15,7 +15,11 @@
 // The headers of `boost::sort` that the block indirect sort (see
 // `util/blockSort/BlockIndirectSort.h`) is built on and that include the
 // `<ciso646>` of libstdc++, which since C++20 is deprecated and warns about
-// itself (from libstdc++ 13 on).
+// itself (from libstdc++ 15 on).
+//
+// Treating the `boost` headers as system headers doesn't help: the warning is
+// a `#warning` directive, which both GCC and Clang report even inside system
+// headers. Only disabling `-Wcpp` (GCC) or `-W#warnings` (Clang) silences it.
 //
 // They are included here instead of directly, so that the warning is disabled
 // exactly once, at the place where the headers are first seen. Disabling it at

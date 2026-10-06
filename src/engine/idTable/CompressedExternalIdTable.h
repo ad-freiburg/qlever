@@ -964,9 +964,11 @@ inline std::atomic<bool>
 
 // Sort the rows of a single block, given as the `range` of those rows.
 //
-// The sort runs on the global thread pool, such that it uses the same threads
-// (and hence obeys the same parallelism setting) as the other phases of the
-// index build, see `util/GlobalExecutor.h`.
+// The sort runs on the global thread pool, such that it shares its threads with
+// the other phases of the index build, see `util/GlobalExecutor.h`. It is split
+// into as many tasks as that pool has threads. This is a choice made here, not
+// a property of the executor: a smaller number would also work, for example to
+// run several sorts concurrently without oversubscribing the pool.
 //
 // NOTE: The sort blocks the calling thread until it is complete, so it must
 // not be called from a thread of the global thread pool itself, or it could
