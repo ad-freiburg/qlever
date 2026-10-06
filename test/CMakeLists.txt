@@ -524,7 +524,8 @@ addLinkAndDiscoverTest(JoinAlgorithmsTest)
 addLinkAndDiscoverTest(AsioHelpersTest)
 # With `-fwasm-exceptions`, clang's `correlated-propagation` pass (run at -O2/-O3)
 # crashes on the coroutine `.resume` body in this file. Compiling just this
-# translation unit at -O1 avoids the crashing pass.
+# translation unit at -O1 avoids the crashing pass (and makes the precompiled
+# header of `testUtil`, which is compiled with the default flags, unusable).
 if (EMSCRIPTEN)
     set_source_files_properties(AsioHelpersTest.cpp PROPERTIES
             COMPILE_OPTIONS "-O1" SKIP_PRECOMPILE_HEADERS ON)

@@ -101,14 +101,15 @@ TEST(Generators, generatorFromActionWithCallbackCreatesProperGenerator) {
   EXPECT_EQ(counter, 3);
 }
 
-// Test that in `generatorFromActionWithCallback` the inner and outer thread
-// run mutually exclusive.
 // GCC 13 produces false-positive `-Warray-bounds` and `-Wstringop-overflow`
 // warnings for the message construction of an `AD_CORRECTNESS_CHECK` in
-// `generatorFromActionWithCallback` when it is inlined into this test (only
-// when compiled with the precompiled headers of the unit tests).
+// `generatorFromActionWithCallback` when it is inlined into the following test
+// (only when compiled with the precompiled headers of the unit tests).
 DISABLE_ARRAY_BOUNDS_WARNINGS
 DISABLE_STRINGOP_OVERFLOW_WARNINGS
+
+// Test that in `generatorFromActionWithCallback` the inner and outer thread
+// run mutually exclusive.
 TEST(Generators, generatorFromActionWithCallbackThreadSafety) {
   size_t counter = 0;
   static constexpr size_t numValues = 20'000;

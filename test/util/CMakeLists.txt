@@ -2,8 +2,8 @@ add_library(testUtil IdTableHelpers.cpp ValidatorHelpers.cpp RandomTestHelpers.c
 # TODO<c++20> Once there is more support for it, we should be able to do this cheaper with modules.
 qlever_target_link_libraries(testUtil engine global gmock_main)
 
-# The precompiled headers of `testUtil` are reused by all the unit tests (see
-# `addTest` in `test/CMakeLists.txt`).
+# The precompiled headers of `testUtil` are reused by all the unit tests that
+# link against `testUtil` (see `linkTest` in `test/CMakeLists.txt`).
 if (USE_PRECOMPILED_HEADERS)
     if (REDUCED_FEATURE_SET_FOR_CPP17)
         set(PRECOMPILED_HEADER_FILES_TEST ${PRECOMPILED_HEADER_FILES_EXTERNAL})
