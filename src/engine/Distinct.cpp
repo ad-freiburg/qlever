@@ -246,10 +246,10 @@ IdTable Distinct::outOfPlaceDistinctForTesting(const IdTable& input) const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Distinct::makeTreeWithStrippedColumns(
-    const std::set<Variable>& variables) const {
-  // Add variables and the variables corresponding to the keepIndices_ to the
+    const std::set<Variable>& requestedVariables) const {
+  // Add 'requestedVariables' and the variables corresponding to the keepIndices_ to the
   // variables that are required from the subtree.
-  VarsRequiredFromSubtree helper(&variables);
+  VarsRequiredFromSubtree helper(&requestedVariables);
   std::vector<const Variable*> keepVars;
   for (const auto& jcl : keepIndices_) {
     const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
@@ -272,6 +272,6 @@ Distinct::makeTreeWithStrippedColumns(
   // Create query execution tree with Distinct-Operation as root-Operation and
   // add additional stripColumns-Operation if needed.
   return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Distinct>(
-      getExecutionContext(), variables, std::move(subtree),
+      getExecutionContext(), requestedVariables, std::move(subtree),
       std::move(distinctKeepIndices));
 }
