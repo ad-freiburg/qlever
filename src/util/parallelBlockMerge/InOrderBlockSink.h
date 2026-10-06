@@ -244,7 +244,12 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
 
   // Complete with the next block in the global order, or with `std::nullopt` if
   // all chunks are exhausted or the merge was stopped. Rethrow a pushed
-  // exception. Suspend until one of these conditions holds.
+  // exception. Suspend until one of these conditions holds. The block is a
+  // `DeferredBlock`, exactly as the storage hands it out: if it was not in
+  // memory anymore, then it is the caller that reads it (on a thread of its own
+  // choosing), which never happens on the strand of this sink and allows the
+  // caller to read several consecutive blocks concurrently, see
+  // `detail::BlockPrefetcher`.
   //
   // IMPORTANT: Run this from a single consumer only, and never concurrently
   // with itself. The strand does not make this requirement go away, because it
@@ -319,7 +324,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
   // if there is nothing left to read, or rethrow the pushed exception.
   //
   // PRECONDITION: This runs on `strand_`, see `spawnOnStrand`.
-  net::awaitable<OptionalBlock> receiveNextBlock() {
+  net::awaitable<std::optional<DeferredBlock<Block>>> receiveNextBlock() {
     AD_CORRECTNESS_CHECK(strand_.running_in_this_thread());
     for (;;) {
       if (exception_ != nullptr) {
@@ -328,7 +333,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
         std::rethrow_exception(exception_);
       }
       if (stopRequested_.load() || nextChunkToRead_ >= numChunks_) {
-        co_return OptionalBlock{std::nullopt};
+        co_return std::nullopt;
       }
       GetResult<Block> result =
           co_await storage_.getBlock(nextChunkToRead_, net::use_awaitable);
@@ -340,7 +345,7 @@ class InOrderBlockSink : public ad_utility::NoCopyNoMove {
         continue;
       }
       if (result.hasValue()) {
-        co_return OptionalBlock{std::move(result).get()};
+        co_return std::move(result).get();
       }
       // The end-of-chunk sentinel, so move on to the next chunk.
       //
