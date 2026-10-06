@@ -82,7 +82,7 @@
 // `-W#warnings` for clang). QLever needs this for the third-party headers that
 // it includes from headers of its own: `<boost/sort/...>` includes the
 // `<ciso646>` of libstdc++, which since C++20 is deprecated and warns about
-// itself, see `util/blockSort/SortState.h` for an example.
+// itself, see `util/blockSort/BoostSortHeaders.h` for an example.
 #if defined(__clang__)
 #define DISABLE_PREPROCESSOR_WARNINGS \
   _Pragma("clang diagnostic push")    \
