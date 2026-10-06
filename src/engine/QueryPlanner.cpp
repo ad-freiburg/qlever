@@ -2526,23 +2526,13 @@ void QueryPlanner::applyGeoRectanglePrefilters(
       }
       auto operation = cheapest._qet->getRootOperation();
       operation->recursivelySetCancellationHandle(cancellationHandle_);
-      std::shared_ptr<const Result> result;
-      try {
-        result =
-            operation->getResult(false, ComputationMode::FULLY_MATERIALIZED);
-      } catch (const std::exception& e) {
-        // The component cannot be evaluated here (for example, because it
-        // exceeds the memory limit): plan without its rectangle.
-        //
-        // NOTE: A cancellation of the query is caught here as well, but the
-        // next `checkCancellation` of the planning throws it again.
-        AD_LOG_DEBUG << "Evaluating a part of the query at planning time "
-                        "failed: "
-                     << e.what() << std::endl;
-        continue;
-      }
-      if (result == nullptr || !result->isFullyMaterialized() ||
-          result->idTableView().numRows() > maxRows) {
+      // NOTE: An error during the evaluation (for example, because the memory
+      // limit is exceeded) is not caught here, so that the plan of a query
+      // never depends on whether an evaluation happened to fail. The part is
+      // computed by the query anyway.
+      auto result =
+          operation->getResult(false, ComputationMode::FULLY_MATERIALIZED);
+      if (result->idTableView().numRows() > maxRows) {
         continue;
       }
       // Every geometry variable that the component binds is fixed now (its
