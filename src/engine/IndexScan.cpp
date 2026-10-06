@@ -491,26 +491,15 @@ std::vector<float> IndexScan::computeMultiplicitiesForIndex() const {
 // _____________________________________________________________________________
 std::vector<float> IndexScan::computeMultiplicitiesForView(
     const MaterializedView& view) const {
-  // A materialized view may contain duplicate rows, its additional columns are
-  // actual data and the statistics of the index are not the statistics of the
-  // view. Therefore estimate the multiplicity of a column as the number of rows
-  // of this scan divided by the number of distinct values of the column in the
-  // whole view. For a scan of the whole view, this is the multiplicity of the
-  // column. With fixed columns, this assumes that the values of the column are
-  // distributed uniformly over the view.
+  // View statistics differ from the index statistics (duplicate rows, data in
+  // additional columns), so estimate a column's multiplicity as the number of
+  // rows of the scan divided by its number of distinct values in the view.
   auto numRows = static_cast<float>(sizeEstimate_);
 
-  // With a fixed first column, the metadata of the relation contains its exact
-  // number of rows and the exact multiplicity of the second column. For a
-  // small relation, which shares its block with other relations, the size
-  // estimate of the scan is only a rough guess based on the size of the block,
-  // so use the exact number of rows instead (the `min` is for prefiltered
-  // scans, which can be smaller than the relation). The metadata of a small
-  // relation is computed when needed and also contains the exact multiplicity
-  // of the third column. A large relation has stored metadata, but there the
-  // multiplicity of the third column is only a copy of the one of the second
-  // column (because the twin permutation, from which it is usually taken,
-  // doesn't exist for views), so we have to estimate it.
+  // With a fixed first column, the relation metadata has the exact number of
+  // rows and the exact multiplicity of the second column. Only for a small
+  // relation (computed on demand) is the third column's multiplicity also
+  // exact, the stored one of a large relation is a copy of the second's.
   std::optional<CompressedRelationMetadata> relation;
   bool isSmallRelation = false;
   if (numVariables_ == 2) {
