@@ -532,7 +532,7 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 // `PrefilterExpressionIndex.cpp`) silently yield wrong results.
 //
 // This is deliberate for now: nothing but a unit test can currently create a
-// secondary vocabulary (see `IndexImpl::setSecondaryVocabForTesting`), so no
+// secondary vocabulary (see `IndexImpl::setSecondaryVocab`), so no
 // query is affected. It has to be fixed *before* anything else creates one.
 // The fix requires the semantically correct position of each word of the
 // secondary vocabulary within the main vocabulary, which the secondary

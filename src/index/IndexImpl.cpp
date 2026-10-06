@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 
 #include <atomic>
+#include <boost/sort/pdqsort/pdqsort.hpp>
 #include <cstdio>
 #include <functional>
 #include <future>
@@ -55,6 +56,7 @@
 #include "util/UnicodeSupport.h"
 #include "util/Views.h"
 #include "util/json.h"
+#include "util/views/UniqueBlockView.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
@@ -442,6 +444,16 @@ void IndexImpl::createFromFiles(
   // this index later on (the server for a materialized view, the index format
   // converter) uses the same block size as this build.
   configurationJson_[INDEX_ROWS_PER_BLOCK_KEY] = rowsPerBlock_;
+
+  // Use the encoding of the index for all points that the index build creates
+  // (`writeConfiguration` records it), and warn if it is the deprecated
+  // `LatMajor`.
+  GeoPoint::setEncoding(geoPointEncodingForIndexBuilding_);
+  if (geoPointEncodingForIndexBuilding_ ==
+      ad_utility::GeoPointEncoding::LatMajor) {
+    AD_LOG_WARN << ad_utility::LAT_MAJOR_GEO_POINT_ENCODING_WARNING
+                << std::endl;
+  }
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
@@ -1051,10 +1063,67 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     setFilenamesForPersistentUpdates(true);
   }
 
+  // Warn if the index uses the deprecated `LatMajor` encoding and may contain
+  // points (an index without points does not depend on the encoding). This is
+  // done after reading the updates, which may contain points as well.
+  if (geoPointEncodingOfLoadedIndex_ ==
+          ad_utility::GeoPointEncoding::LatMajor &&
+      mayContainGeoPoints()) {
+    AD_LOG_WARN << ad_utility::LAT_MAJOR_GEO_POINT_ENCODING_WARNING
+                << std::endl;
+  }
+
   // Only set at the very end, so that an index that failed to load (for
   // example, because it has an incompatible format) does not count as loaded
   // and the destructor does not log that it was unloaded.
   wasLoadedFromDisk_ = true;
+}
+
+// _____________________________________________________________________________
+bool IndexImpl::mayContainGeoPoints() const {
+  // Return true if the `OSP` permutation is not loaded (without it, there is
+  // no cheap way to tell).
+  if (doNotLoadPermutations_ || !loadAllPermutations_) {
+    return true;
+  }
+
+  // Get the blocks of the `OSP` permutation, which is sorted by the object, so
+  // that the points (the objects of type `GeoPoint`) form one contiguous range
+  // of it. The first and last object of each block include the updates.
+  auto locatedTriplesState =
+      deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  BlockMetadataSpan blocks =
+      osp_->getLocatedTriplesForPermutation(*locatedTriplesState)
+          .getAugmentedMetadata();
+
+  // Find the first block whose last object is not of a datatype before
+  // `GeoPoint`. Return false if there is none or if its first object is of a
+  // datatype after `GeoPoint`.
+  auto block = ql::ranges::find_if(blocks, [](const auto& block) {
+    return block.lastTriple_.col0Id_.getDatatype() >= Datatype::GeoPoint;
+  });
+  if (block == blocks.end() ||
+      block->firstTriple_.col0Id_.getDatatype() > Datatype::GeoPoint) {
+    return false;
+  }
+
+  // Otherwise, read the objects of that block and check whether one of them is
+  // a point. This block contains a point if there is any: either its last
+  // object is a point, or it ends after the points.
+  //
+  // NOTE: The metadata alone cannot decide this, because in most indexes
+  // without points, some block starts before and ends after the points (the
+  // datatypes before, e.g. `VocabIndex`, and after, e.g. `BlankNodeIndex`, are
+  // common).
+  CompressedRelationReader::ScanSpecAndBlocks blockOnly{
+      {std::nullopt, std::nullopt, std::nullopt},
+      {BlockMetadataRange{block, block + 1}}};
+  auto objects = osp_->scan(
+      blockOnly, {}, std::make_shared<ad_utility::CancellationHandle<>>(),
+      *locatedTriplesState);
+  return ql::ranges::any_of(objects.getColumn(0), [](Id id) {
+    return id.getDatatype() == Datatype::GeoPoint;
+  });
 }
 
 // _____________________________________________________________________________
@@ -1212,6 +1281,13 @@ void IndexImpl::writeConfiguration() const {
   configuration["git-hash"] =
       *qlever::version::gitShortHashWithoutLinking.wlock();
   configuration["index-format-version"] = qlever::indexFormatVersion;
+  // Record the encoding of the geo points, which is the encoding of the index
+  // that this process builds or has loaded (see `GeoPoint::encoding`). This
+  // also adds the entry when the configuration of an index in the previous
+  // format is written in the current format (for example, when the index is
+  // rebuilt or a text index is added to it).
+  configuration[std::string{ad_utility::GEO_POINT_ENCODING_KEY}] =
+      ad_utility::GeoPointEncoding{GeoPoint::encoding()};
   // Record whether the index was built with ICU (Unicode) support. Indexes
   // built with and without ICU use different collations and are hence not
   // interchangeable; `readConfiguration` throws if the configuration of the
@@ -1286,6 +1362,113 @@ void IndexImpl::readConfiguration() {
 }
 
 // ___________________________________________________________________________
+std::optional<std::string> IndexImpl::checkIndexFormatVersion(
+    const nlohmann::json& configuration) const {
+  // NOTE: Only non-throwing accessors of `nlohmann::json` are used below (in
+  // particular, `find` simply returns `end()` if `configuration` is not an
+  // object).
+  auto versionIt = configuration.find("index-format-version");
+  if (versionIt == configuration.end()) {
+    return std::string{
+        "This index was built before versioning was introduced for QLever's "
+        "index format. Please rebuild your index using the current version of "
+        "QLever."};
+  }
+  const auto& currentVersion = qlever::indexFormatVersion;
+  if (*versionIt == nlohmann::json(currentVersion)) {
+    return std::nullopt;
+  }
+
+  // The version is not the current one. Parse it (without throwing) to check
+  // whether it is one of the other loadable versions, or to give a more
+  // specific message otherwise.
+  auto prNumberIt = versionIt->find("pull-request-number");
+  auto dateIt = versionIt->find("date");
+  std::optional<DateYearOrDuration> date;
+  if (prNumberIt != versionIt->end() && prNumberIt->is_number_unsigned() &&
+      dateIt != versionIt->end() && dateIt->is_string()) {
+    date = DateYearOrDuration::parseXsdDateGetOptDate(
+        dateIt->get_ref<const std::string&>());
+  }
+  if (!date.has_value()) {
+    return absl::StrCat(
+        "The index format version stored in the index metadata is malformed: ",
+        versionIt->dump(),
+        ". Please rebuild your index using the current "
+        "version of QLever.");
+  }
+  qlever::IndexFormatVersion indexFormatVersion{prNumberIt->get<uint64_t>(),
+                                                date.value()};
+  if (qlever::isLoadableIndexFormatVersion(indexFormatVersion)) {
+    return std::nullopt;
+  }
+  auto versionDescription = absl::StrCat(
+      "(PR = ", indexFormatVersion.prNumber_,
+      ", Date = ", indexFormatVersion.date_.toStringAndType().first, ").");
+  if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
+    return absl::StrCat(
+        "The version of QLever you are using is too old for this index. Please "
+        "use a version of QLever that is compatible with this index ",
+        versionDescription);
+  }
+  // If the index is in exactly the format that the `qlever-upgrade-index`
+  // binary upgrades from, return one dedicated message instead of the generic
+  // advice below, so that the upgrade option is not buried among the generic
+  // alternatives. That the current version of QLever can load the upgraded
+  // index is checked by `convertIndexToCurrentFormat` (and by a unit test).
+  using namespace qlever::indexFormatConverter;
+  if (indexFormatVersion == sourceVersion) {
+    return absl::StrCat(
+        "The index format changed on ",
+        targetVersion.date_.toStringAndType().first,
+        " (PR = ", targetVersion.prNumber_,
+        "), but your index uses the previous format\n\nWe do our best "
+        "to keep index format changes rare, but sometimes they are "
+        "unavoidable. Either use an older version of QLever, or rebuild "
+        "the index from scratch with the version of QLever you are "
+        "currently using, or upgrade your index with the following "
+        "command. Upgrading your index is more than 10 times faster "
+        "than rebuilding it from scratch, and the old index is "
+        "preserved in a subdirectory of your index directory in case "
+        "something goes wrong.\n\nqlever upgrade-index ",
+        std::string(onDiskBase_.size(), ' '),
+        "   (if you use the qlever CLI)\n", "qlever-upgrade-index ",
+        onDiskBase_, "   (if the qlever-* binaries are in your PATH)\n");
+  }
+  return absl::StrCat(
+      "The index is too old for this version of QLever. Either rebuild the "
+      "index from scratch with the version of QLever you are currently using, "
+      "or use an older version of QLever that is compatible with this index ",
+      versionDescription);
+}
+
+// ___________________________________________________________________________
+void IndexImpl::applyGeoPointEncoding() {
+  // Determine the encoding of the index. An index in the format that predates
+  // the entry for the encoding always uses `LatMajor`. Throw if an index in
+  // the current format has no entry (its points could then not be decoded
+  // reliably).
+  const std::string key{ad_utility::GEO_POINT_ENCODING_KEY};
+  auto version = static_cast<qlever::IndexFormatVersion>(
+      configurationJson_["index-format-version"]);
+  auto encoding = ad_utility::GeoPointEncoding::LatMajor;
+  if (version != qlever::indexFormatVersionWithLatMajorGeoPoints) {
+    if (!configurationJson_.contains(key)) {
+      throw std::runtime_error{absl::StrCat(
+          "The configuration of the index (\"", onDiskBase_, CONFIGURATION_FILE,
+          "\") has no entry \"", key,
+          "\", which every index in the current format has; please rebuild "
+          "the index")};
+    }
+    encoding = configurationJson_[key].get<ad_utility::GeoPointEncoding>();
+  }
+
+  // Use that encoding for all points of this process.
+  GeoPoint::setEncoding(encoding);
+  geoPointEncodingOfLoadedIndex_ = encoding;
+}
+
+// _____________________________________________________________________________
 void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   configurationJson_ = configuration;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
@@ -1298,67 +1481,12 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
         << std::endl;
   }
 
-  if (configurationJson_.find("index-format-version") !=
-      configurationJson_.end()) {
-    auto indexFormatVersion = static_cast<qlever::IndexFormatVersion>(
-        configurationJson_["index-format-version"]);
-    const auto& currentVersion = qlever::indexFormatVersion;
-    if (indexFormatVersion != currentVersion) {
-      if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
-        AD_LOG_ERROR
-            << "The version of QLever you are using is too old for this "
-               "index. Please use a version of QLever that is "
-               "compatible with this index"
-               " (PR = "
-            << indexFormatVersion.prNumber_
-            << ", Date = " << indexFormatVersion.date_.toStringAndType().first
-            << ")." << std::endl;
-      } else {
-        // If the index is in exactly the format that the
-        // `qlever-upgrade-index` binary upgrades from, throw one dedicated
-        // message instead of logging the generic advice below, so that the
-        // upgrade option is not buried among the generic alternatives.
-        using namespace qlever::indexFormatConverter;
-        if (indexFormatVersion == sourceVersion &&
-            currentVersion == targetVersion) {
-          throw std::runtime_error{absl::StrCat(
-              "The index format changed on ",
-              targetVersion.date_.toStringAndType().first,
-              " (PR = ", targetVersion.prNumber_,
-              "), but your index uses the previous format\n\nWe do our best "
-              "to keep index format changes rare, but sometimes they are "
-              "unavoidable. Either use an older version of QLever, or rebuild "
-              "the index from scratch with the version of QLever you are "
-              "currently using, or upgrade your index with the following "
-              "command. Upgrading your index is more than 10 times faster "
-              "than rebuilding it from scratch, and the old index is "
-              "preserved in a subdirectory of your index directory in case "
-              "something goes wrong.\n\nqlever upgrade-index ",
-              std::string(onDiskBase_.size(), ' '),
-              "   (if you use the qlever CLI)\n", "qlever-upgrade-index ",
-              onDiskBase_, "   (if the qlever-* binaries are in your PATH)\n")};
-        }
-        AD_LOG_ERROR
-            << "The index is too old for this version of QLever. "
-               "Either rebuild the index from scratch with the version of "
-               "QLever you are currently using, or use an older version of "
-               "QLever that is compatible with this index (PR = "
-            << indexFormatVersion.prNumber_
-            << ", Date = " << indexFormatVersion.date_.toStringAndType().first
-            << ")." << std::endl;
-      }
-      throw std::runtime_error{
-          "Incompatible index format, see log message for details"};
-    }
-  } else {
-    AD_LOG_ERROR
-        << "This index was built before versioning was introduced for "
-           "QLever's index format. Please rebuild your index using the "
-           "current version of QLever."
-        << std::endl;
-    throw std::runtime_error{
-        "Incompatible index format, see log message for details"};
+  if (auto error = checkIndexFormatVersion(configurationJson_);
+      error.has_value()) {
+    throw std::runtime_error{std::move(error).value()};
   }
+
+  applyGeoPointEncoding();
 
   // The index and the current binary must agree on whether ICU (Unicode)
   // support is available: the two use different string collations, so mixing
@@ -1700,16 +1828,16 @@ void IndexImpl::writePartialVocabulary(
   }();
   {
     ad_utility::TimeBlockAndLog l{"sorting by unicode order"};
-    // `doParallelSort` is `false` because this function runs on the shared
+    // This sort is single-threaded because this function runs on the shared
     // thread pool of `buildPartialVocabularies`, which already keeps all cores
-    // busy, so an additional parallel sort here would only add contention.
-    sortVocabVector(
-        &vec,
+    // busy. The sort uses `pdqsort` because it is about 10% faster than
+    // `ql::ranges::sort` here (measured on DBLP).
+    boost::sort::pdqsort(
+        vec.begin(), vec.end(),
         [&c = vocab_.getCaseComparator()](const auto& a, const auto& b) {
           return c.isLessInTotalWithExternalFlag(
               a.first, a.second.isExternal(), b.first, b.second.isExternal());
-        },
-        false);
+        });
   }
   auto mapping = [&]() {
     ad_utility::TimeBlockAndLog l{"creating internal mapping"};

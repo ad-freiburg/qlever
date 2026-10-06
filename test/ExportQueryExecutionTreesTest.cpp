@@ -2266,3 +2266,33 @@ INSTANTIATE_TEST_SUITE_P(
         LruWindowParam{5, "abcde"},
         // window 10: all duplicates are caught, 5 unique triples remain.
         LruWindowParam{10, "abcde"}));
+
+// A trailing `VALUES` clause without variables is joined with the result of
+// the query like any other: zero rows make the result empty, one row is the
+// neutral element, and multiple rows duplicate each row of the result.
+TEST(ExportQueryExecutionTrees, PostQueryValuesWithoutVariables) {
+  const std::string kg = "<a> <b> <c> . <d> <e> <f> .";
+  auto run = [&kg](std::string_view values) {
+    return runQueryStreamableResult(
+        kg, absl::StrCat("SELECT ?s { ?s ?p ?o } VALUES () { ", values, " }"),
+        ad_utility::MediaType::tsv);
+  };
+  EXPECT_EQ(run(""), "?s\n");
+  EXPECT_EQ(run("()"), "?s\n<a>\n<d>\n");
+  EXPECT_EQ(run("() ()"), "?s\n<a>\n<d>\n<a>\n<d>\n");
+}
+
+// The trailing `VALUES` clause is joined before the projection, so `SELECT *`
+// also selects its variables.
+TEST(ExportQueryExecutionTrees, SelectStarWithTrailingValues) {
+  const std::string kg = "<a> <p> <c> . <b> <p> <d> .";
+  auto run = [&kg](std::string_view query) {
+    return runQueryStreamableResult(kg, std::string{query},
+                                    ad_utility::MediaType::tsv);
+  };
+  EXPECT_EQ(run("SELECT * { ?s <p> ?o } VALUES ?x { 1 }"),
+            "?s\t?o\t?x\n<a>\t<c>\t1\n<b>\t<d>\t1\n");
+  // A variable that also occurs in the query body is selected only once.
+  EXPECT_EQ(run("SELECT * { ?s <p> ?o } VALUES (?s ?x) { (<a> 1) }"),
+            "?s\t?o\t?x\n<a>\t<c>\t1\n");
+}

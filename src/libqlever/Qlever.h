@@ -32,6 +32,7 @@
 #include "engine/UpdateMetadata.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
+#include "index/GeoPointEncoding.h"
 #include "index/Index.h"
 #include "index/IndexRebuilderTypes.h"
 #include "index/IndexSwap.h"
@@ -134,6 +135,11 @@ struct IndexBuilderConfig : CommonConfig {
   // IDs. See `src/index/vocabulary/VocabularyType.h` for the possible options.
   ad_utility::VocabularyType vocabType_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
+
+  // How geo points are encoded in the `Id`s of the index, see
+  // `ad_utility::GeoPointEncoding`. The encoding `LatMajor` is deprecated.
+  ad_utility::GeoPointEncoding geoPointEncoding_{
+      ad_utility::GeoPointEncoding::ZOrder};
 
   // If set to true, then certain temporary files which are created while
   // building the index are not deleted. This can be useful for debugging.
@@ -609,18 +615,32 @@ class Qlever {
   }
 
   // Load a blob previously written by
-  // `serializeVocabAndNamedCacheToCompressedBlob`. For details see
-  // `NamedCachedQueryBlobManager::deserialize`.
+  // `serializeVocabAndNamedCacheToCompressedBlob`, and return an error instead
+  // of throwing if the blob cannot be decompressed, or if its header or its
+  // index format version is missing or incompatible. For details (in
+  // particular which failures are still reported by an exception) see
+  // `NamedCachedQueryBlobManager::tryToDeserialize`.
   //
   // PRECONDITION: Must only be called while no other thread can concurrently
   // access this instance, e.g. right after construction and before the first
-  // query is answered. Must not be called more than once on the same
-  // instance.
-  void deserializeVocabAndNamedCacheFromCompressedBlob(
+  // query is answered. Must not be called more than once on the same instance,
+  // except after a call that left this instance unchanged (see
+  // `NamedCachedQueryBlobManager::tryToDeserialize`).
+  std::optional<NamedCachedQueryBlobManager::BlobError>
+  tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
       ql::span<const char> blob,
       ql::pmr::polymorphic_allocator<char> allocator = {}) {
     // Note: `polymorphic_allocator` is cheap to copy and has no
     // dedicated move operations.
+    return blobManager_.tryToDeserialize(*this, blob, allocator);
+  }
+
+  // Same as `tryToDeserializeVocabAndNamedCacheFromCompressedBlob`, but throw
+  // instead of returning an error. For details see
+  // `NamedCachedQueryBlobManager::deserialize`.
+  void deserializeVocabAndNamedCacheFromCompressedBlob(
+      ql::span<const char> blob,
+      ql::pmr::polymorphic_allocator<char> allocator = {}) {
     blobManager_.deserialize(*this, blob, allocator);
   }
 
