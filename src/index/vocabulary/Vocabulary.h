@@ -295,9 +295,8 @@ class Vocabulary {
   // untouched and is not part of the blob. The vocabulary is only valid as long
   // as the memory backing `serializer`'s buffer is valid and unchanged.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::ZeroCopyReadSerializer<
-          Serializer>) void loadFromZeroCopyDeserializer(Serializer&
-                                                             serializer) {
+      requires ad_utility::serialization::ZeroCopyReadSerializer<Serializer>)
+  void loadFromZeroCopyDeserializer(Serializer& serializer) {
     applyToUnderlyingZeroCopyVocab(
         *this, "Loading a vocabulary from", [&serializer](auto& vocab) {
           using T = std::decay_t<decltype(vocab)>;
@@ -316,8 +315,8 @@ class Vocabulary {
   // vocabulary's regular (aligned) serialization; the zero-copy read path just
   // reads it back without copying the (large) word data.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::WriteSerializer<
-          Serializer>) void writeAsZeroCopyBlob(Serializer& serializer) const {
+      requires ad_utility::serialization::WriteSerializer<Serializer>)
+  void writeAsZeroCopyBlob(Serializer& serializer) const {
     applyToUnderlyingZeroCopyVocab(
         *this, "Writing a vocabulary to",
         [&serializer](const auto& vocab) { serializer << vocab; });

@@ -221,10 +221,10 @@ class TransitivePathImpl : public TransitivePathBase {
    * LocalVocab is a no-op).
    * @return Map Maps each Id to its connected Ids in the transitive hull
    */
-  CPP_template(typename Node)(requires ql::ranges::range<Node>) NodeGenerator
-      transitiveHull(T edges, LocalVocab edgesVocab, Node startNodes,
-                     TripleComponent start, TripleComponent target,
-                     bool yieldOnce) const {
+  CPP_template(typename Node)(requires ql::ranges::range<Node>)
+  NodeGenerator transitiveHull(T edges, LocalVocab edgesVocab, Node startNodes,
+                               TripleComponent start, TripleComponent target,
+                               bool yieldOnce) const {
     using namespace qlever::graphSearch;
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     // `targetId` is only ever used for comparisons, and never stored in the

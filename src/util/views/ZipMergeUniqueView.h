@@ -36,9 +36,9 @@ namespace ad_utility {
 // *first* range is skipped (last-wins tie-break).
 CPP_template(typename V1, typename V2, typename Compare = std::less<>,
              class Projection = ql::identity)(
-    requires ql::ranges::input_range<V1>&& ql::ranges::view<V1>&&
-        ql::ranges::input_range<V2>&&
-            ql::ranges::view<V2>) class ZipMergeUniqueView
+    requires ql::ranges::input_range<V1> && ql::ranges::view<V1> &&
+    ql::ranges::input_range<V2> && ql::ranges::view<V2>)
+class ZipMergeUniqueView
     : public ql::ranges::view_interface<
           ZipMergeUniqueView<V1, V2, Compare, Projection>> {
  private:

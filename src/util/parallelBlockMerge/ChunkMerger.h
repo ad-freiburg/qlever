@@ -85,9 +85,9 @@ struct MergeState {
 // If `moveElements` is `true`, then the elements are moved out of the input
 // blocks into the output blocks.
 CPP_template(bool moveElements, typename Input, typename Comparator)(
-    requires InputConcept<Input>) class ChunkMerger
-    : public ad_utility::InputRangeFromGet<typename Input::Block>,
-      public ad_utility::NoCopyNoMove {
+            requires InputConcept<Input>)
+class ChunkMerger : public ad_utility::InputRangeFromGet<typename Input::Block>,
+                    public ad_utility::NoCopyNoMove {
  public:
   using Block = typename Input::Block;
   using Element = typename Input::Element;

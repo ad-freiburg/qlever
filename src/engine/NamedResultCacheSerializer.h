@@ -34,10 +34,8 @@ constexpr uint16_t formatVersion = 1;
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::WriteSerializer<
-        Serializer>) void NamedResultCache::writeToSerializer(Serializer&
-                                                                  serializer)
-    const {
+    requires ad_utility::serialization::WriteSerializer<Serializer>)
+void NamedResultCache::writeToSerializer(Serializer& serializer) const {
   // Write the magic byte and format version first, s.t. `readFromSerializer`
   // can detect and reject incompatible or unrelated input.
   serializer << namedResultCacheSerializer::detail::magicByte;
@@ -57,10 +55,10 @@ CPP_template_def(typename Serializer)(
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::ReadSerializer<
-        Serializer>) void NamedResultCache::
-    readFromSerializer(Serializer& serializer, Value::Allocator allocator,
-                       const LocalVocabContext& context) {
+    requires ad_utility::serialization::ReadSerializer<Serializer>)
+void NamedResultCache::readFromSerializer(Serializer& serializer,
+                                          Value::Allocator allocator,
+                                          const LocalVocabContext& context) {
   // Clear the cache first.
   clear();
 

@@ -319,9 +319,8 @@ enum class AnyGeometryMember : uint8_t {
 // Helper to convert the dynamic container `AnyGeometry` to the `ParsedWkt`
 // variant type
 CPP_template(typename Visitor, typename T)(
-    requires SimilarTo<
-        T, DAnyGeometry>) inline auto visitAnyGeometry(Visitor visitor,
-                                                       T&& geom) {
+    requires SimilarTo<T, DAnyGeometry>)
+inline auto visitAnyGeometry(Visitor visitor, T&& geom) {
   using enum AnyGeometryMember;
   // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
   // this is why we use our own enum here. The correct matching of the integer
@@ -363,10 +362,11 @@ struct MetricLengthVisitor {
 
   // Compute the length of a multi-geometry by adding up the lengths of its
   // members.
-  CPP_template(typename T)(requires ad_utility::SimilarToAny<
-                           T, MultiLine<CoordType>, MultiPolygon<CoordType>,
-                           MultiPoint<CoordType>, Collection<CoordType>>) double
-  operator()(const T& multiGeom) const {
+  CPP_template(typename T)(
+      requires ad_utility::SimilarToAny<
+          T, MultiLine<CoordType>, MultiPolygon<CoordType>,
+          MultiPoint<CoordType>, Collection<CoordType>>)
+  double operator()(const T& multiGeom) const {
     // This overload only handles the geometry types implemented by vectors.
     static_assert(ad_utility::similarToInstantiation<T, std::vector>);
 
@@ -377,8 +377,8 @@ struct MetricLengthVisitor {
   // Compute the length for the custom container type `AnyGeometry` from
   // `pb_util`. It can dynamically hold any geometry type.
   CPP_template(typename T)(
-      requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>) double
-  operator()(const T& geom) const {
+      requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>)
+  double operator()(const T& geom) const {
     return visitAnyGeometry(MetricLengthVisitor{}, geom);
   }
 
@@ -457,8 +457,8 @@ struct MetricAreaVisitor {
   // The remaining geometry types always return the area zero
   CPP_template(typename T)(
       requires SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>,
-                         Line<CoordType>, MultiLine<CoordType>>) double
-  operator()(const T&) const {
+                         Line<CoordType>, MultiLine<CoordType>>)
+  double operator()(const T&) const {
     return 0.0;
   }
 
@@ -522,9 +522,8 @@ struct UtilGeomToWktVisitor {
   }
 
   // Visitor for each of the `pb_util` geometry types.
-  CPP_template(typename T)(
-      requires SimilarToAnyTypeIn<T, ParsedWkt>) std::optional<std::string>
-  operator()(const T& geom) const {
+  CPP_template(typename T)(requires SimilarToAnyTypeIn<T, ParsedWkt>)
+  std::optional<std::string> operator()(const T& geom) const {
     return getWKT(geom);
   }
 
@@ -541,9 +540,8 @@ static constexpr UtilGeomToWktVisitor utilGeomToWkt;
 // that this is 1-indexed and non-collection types return themselves at index 1.
 struct GeometryNVisitor {
   // Visitor for collection types.
-  CPP_template(typename T)(
-      requires WktCollectionType<T>) std::optional<ParsedWkt>
-  operator()(const T& geom, int64_t n) const {
+  CPP_template(typename T)(requires WktCollectionType<T>)
+  std::optional<ParsedWkt> operator()(const T& geom, int64_t n) const {
     // Index range check.
     if (n < 1 || n - 1 >= static_cast<int64_t>(geom.size())) {
       return std::nullopt;
@@ -561,9 +559,8 @@ struct GeometryNVisitor {
   }
 
   // Visitor for single geometry types.
-  CPP_template(typename T)(
-      requires WktSingleGeometryType<T>) std::optional<ParsedWkt>
-  operator()(const T& geom, int64_t n) const {
+  CPP_template(typename T)(requires WktSingleGeometryType<T>)
+  std::optional<ParsedWkt> operator()(const T& geom, int64_t n) const {
     // For non collection types, only index 1 is defined and returns the
     // geometry itself.
     if (n == 1) {
@@ -635,8 +632,8 @@ struct UtilGeomProjectionVisitor {
 
   // Transform collections (might be called recursively, for example for points
   // in a `MultiLine`).
-  CPP_template_2(typename T)(requires VectorBasedGeometry<T>) T operator()(
-      T multi) const {
+  CPP_template_2(typename T)(requires VectorBasedGeometry<T>)
+  T operator()(T multi) const {
     ql::ranges::transform(multi, multi.begin(), *this);
     return multi;
   }
@@ -671,9 +668,8 @@ struct UtilGeomProjectionVisitor {
   }
 
   // Handle values contained in `std::optional`.
-  CPP_template_2(typename T)(
-      requires(!SimilarTo<T, GeoPointOrWkt>)) std::optional<T>
-  operator()(std::optional<T> opt) const {
+  CPP_template_2(typename T)(requires(!SimilarTo<T, GeoPointOrWkt>))
+  std::optional<T> operator()(std::optional<T> opt) const {
     if (!opt.has_value()) {
       return std::nullopt;
     }
@@ -710,8 +706,8 @@ struct MetricDistanceVisitor {
   }
 
   // Delegate the actual distance computation to `pb_util`.
-  CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>) double
-  operator()(const T& a, const U& b) const {
+  CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>)
+  double operator()(const T& a, const U& b) const {
     return webMercMeterDist<T, U>(a, b);
   }
 

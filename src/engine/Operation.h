@@ -603,10 +603,10 @@ class Operation {
       requires ad_utility::InvocableWithExactReturnType<
           MakeCloneWithNewChildren, std::shared_ptr<QueryExecutionTree>,
           std::vector<std::shared_ptr<QueryExecutionTree>>>)
-      std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
-          const parsedQuery::Bind& bind,
-          std::vector<std::shared_ptr<QueryExecutionTree>> children,
-          MakeCloneWithNewChildren makeCloneWithNewChildren) const;
+  std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
+      const parsedQuery::Bind& bind,
+      std::vector<std::shared_ptr<QueryExecutionTree>> children,
+      MakeCloneWithNewChildren makeCloneWithNewChildren) const;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

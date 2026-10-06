@@ -22,8 +22,8 @@ namespace ad_utility::unique_cleanup {
 // This class is move-only: The cleanup belongs to exactly one object, and a
 // moved-from object doesn't run it any more.
 CPP_template(typename T, typename Func = std::function<void(T&&)>)(
-    requires ql::concepts::move_constructible<T>) class UniqueCleanup
-    : public ad_utility::NoCopy {
+    requires ql::concepts::move_constructible<T>)
+class UniqueCleanup : public ad_utility::NoCopy {
   // False once the cleanup has run or was cancelled, or if this object was
   // moved from.
   ResetWhenMoved<bool, false> active_ = true;

@@ -73,8 +73,8 @@ class BasicLiteral {
 
  public:
   CPP_template(typename H, typename L)(
-      requires ql::concepts::same_as<L, BasicLiteral>) friend H
-      AbslHashValue(H h, const L& literal) {
+      requires ql::concepts::same_as<L, BasicLiteral>)
+  friend H AbslHashValue(H h, const L& literal) {
     return H::combine(std::move(h), literal.storage_);
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteral, storage_,

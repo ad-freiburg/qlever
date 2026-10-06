@@ -31,9 +31,11 @@ namespace ad_utility {
 // `const` because it has to modify mutable state that tracks, whether the
 // predicate has already been evaluated for the current element.
 CPP_template(typename V, typename Pred)(
-    requires ql::ranges::input_range<V>&& ql::ranges::view<V>&&
-        std::is_object_v<Pred>&& ql::concepts::indirect_unary_predicate<
-            const Pred, ql::ranges::iterator_t<V>>) class TakeUntilInclusiveView
+    requires ql::ranges::input_range<V> && ql::ranges::view<V> &&
+    std::is_object_v<Pred> &&
+    ql::concepts::indirect_unary_predicate<const Pred,
+                                           ql::ranges::iterator_t<V>>)
+class TakeUntilInclusiveView
     : public ql::ranges::view_interface<TakeUntilInclusiveView<V, Pred>> {
  private:
   V base_;
@@ -158,9 +160,9 @@ namespace views {
 // Implement the required machinery to make `takeUntilInclusive` pipeable with
 // other views.
 struct takeUntilInclusiveFn {
-  CPP_template(typename R,
-               typename Pred)(requires ql::ranges::viewable_range<R>) auto
-  operator()(R&& r, Pred pred) const {
+  CPP_template(typename R, typename Pred)(
+      requires ql::ranges::viewable_range<R>)
+  auto operator()(R&& r, Pred pred) const {
     return TakeUntilInclusiveView{ad_utility::allView(std::forward<R>(r)),
                                   std::move(pred)};
   }

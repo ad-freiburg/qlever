@@ -68,8 +68,8 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
              typename WebSocketHandler)(
     requires ad_utility::InvocableWithExactReturnType<
         WebSocketHandler, net::awaitable<void>,
-        const http::request<http::string_body>&,
-        tcp::socket>) class HttpServer {
+        const http::request<http::string_body>&, tcp::socket>)
+class HttpServer {
  private:
   // Returned by `handleEagerRequest` and `handleLazyRequest` to indicate
   // whether the session loop should close the connection after this request.
@@ -123,20 +123,14 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
       ad_utility::InvocableWithConvertibleReturnType<
           HandlerSupplier, WebSocketHandler, net::any_io_executor&>;
   CPP_template_2(typename HandlerSupplier)(
-      requires isSupplier<
-          HandlerSupplier>) explicit HttpServer(unsigned short port,
-                                                std::string_view ipAddress =
-                                                    "0.0.0.0",
-                                                int numServerThreads = 1,
-                                                HttpHandler handler =
-                                                    HttpHandler{},
-                                                HandlerSupplier
-                                                    webSocketHandlerSupplier =
-                                                        {},
-                                                ad_utility::MemorySize
-                                                    lazyBodyChunkSize =
-                                                        ad_utility::MemorySize::
-                                                            megabytes(1))
+              requires isSupplier<HandlerSupplier>)
+  explicit HttpServer(unsigned short port,
+                      std::string_view ipAddress = "0.0.0.0",
+                      int numServerThreads = 1,
+                      HttpHandler handler = HttpHandler{},
+                      HandlerSupplier webSocketHandlerSupplier = {},
+                      ad_utility::MemorySize lazyBodyChunkSize =
+                          ad_utility::MemorySize::megabytes(1))
       : httpHandler_{std::move(handler)},
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?
@@ -264,7 +258,8 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   net::awaitable<SessionControl> handleEagerRequest(
       beast::tcp_stream& stream, beast::flat_buffer& buffer,
       SendMessage& sendMessage, ReleaseConnection& releaseConnection)
-      requires(bodyReadMode == BodyReadMode::Eager) {
+      requires(bodyReadMode == BodyReadMode::Eager)
+  {
     http::request_parser<http::string_body> requestParser;
     auto bodyLimit = getRequestBodyLimit().getBytes();
     requestParser.body_limit(
@@ -411,7 +406,8 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
   net::awaitable<SessionControl> handleLazyRequest(
       beast::tcp_stream& stream, beast::flat_buffer& buffer,
       SendMessage& sendMessage, ReleaseConnection& releaseConnection)
-      requires(bodyReadMode == BodyReadMode::Lazy) {
+      requires(bodyReadMode == BodyReadMode::Lazy)
+  {
     http::request_parser<http::buffer_body> requestParser;
     // Apply the configured body limit (same as eager mode) to guard against
     // excessively large requests.

@@ -40,8 +40,8 @@ CPP_template(typename UnderlyingVocabulary,
              typename CompressionWrapper =
                  ad_utility::vocabulary::FsstSquaredCompressionWrapper,
              size_t NumWordsPerBlock = 1UL << 20)(
-    requires ad_utility::vocabulary::CompressionWrapper<
-        CompressionWrapper>) class CompressedVocabulary {
+    requires ad_utility::vocabulary::CompressionWrapper<CompressionWrapper>)
+class CompressedVocabulary {
  private:
   UnderlyingVocabulary underlyingVocabulary_;
   CompressionWrapper compressionWrapper_;
@@ -87,8 +87,8 @@ CPP_template(typename UnderlyingVocabulary,
   // the enclosing class is itself constrained via `CPP_template`.
   CPP_template_2(typename S)(
       requires ad_utility::serialization::SupportsZeroCopyDeserialization<
-          UnderlyingVocabulary, S>) static CompressedVocabulary
-      fromZeroCopyDeserializer(S& serializer) {
+          UnderlyingVocabulary, S>)
+  static CompressedVocabulary fromZeroCopyDeserializer(S& serializer) {
     CompressedVocabulary result;
     result.underlyingVocabulary_ =
         UnderlyingVocabulary::fromZeroCopyDeserializer(serializer);

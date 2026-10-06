@@ -17,8 +17,8 @@
 // Serialization for `ad_utility::Synchronized<T>`
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    (ad_utility::similarToInstantiation<T, ad_utility::Synchronized>)
-        CPP_and CPP_NOT(std::is_trivially_copyable_v<std::decay_t<T>>)) {
+    (ad_utility::similarToInstantiation<T, ad_utility::Synchronized>) &&
+    CPP_NOT(std::is_trivially_copyable_v<std::decay_t<T>>)) {
   if constexpr (ReadSerializer<S>) {
     arg.withWriteLock([&serializer](auto& t) { serializer >> t; });
   } else {

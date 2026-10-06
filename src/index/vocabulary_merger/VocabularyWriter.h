@@ -49,7 +49,8 @@ class VocabularyWriter {
   // Write the `uniqueWords` to the vocabulary and return the ID map batch that
   // consists of the `localIdxMappings` together with the global IDs of those
   // words (which is then complete and can be handed on to the third stage).
-  CPP_template(typename C)(requires WordCallback<C>) IdMapBatch
+  CPP_template(typename C)(requires WordCallback<C>)
+  IdMapBatch
       writeWordsToVocabulary(const std::vector<UniqueWord>& uniqueWords,
                              LocalIdxToBatchMappings localIdxMappings,
                              C& wordCallback,
@@ -66,10 +67,10 @@ class VocabularyWriter {
 
 // _____________________________________________________________________________
 CPP_template_def(typename C)(requires WordCallback<C>)
-    IdMapBatch VocabularyWriter::writeWordsToVocabulary(
-        const std::vector<UniqueWord>& uniqueWords,
-        LocalIdxToBatchMappings localIdxMappings, C& wordCallback,
-        const ad_utility::RegexSet& blankNodeIriRegexes) {
+IdMapBatch VocabularyWriter::writeWordsToVocabulary(
+    const std::vector<UniqueWord>& uniqueWords,
+    LocalIdxToBatchMappings localIdxMappings, C& wordCallback,
+    const ad_utility::RegexSet& blankNodeIriRegexes) {
   AD_LOG_TRACE << "Start writing a batch of merged words\n";
 
   std::vector<Id> globalIds;

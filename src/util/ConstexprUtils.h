@@ -96,15 +96,15 @@ CPP_concept InvocableWithCase =
 template <auto FirstCase, auto... Cases>
 struct ConstexprSwitch {
   CPP_template(typename FuncType, typename ValueType, typename... Args)(
-      requires ql::concepts::equality_comparable_with<ValueType,
-                                                      decltype(FirstCase)>
-          CPP_and(ql::concepts::equality_comparable_with<ValueType,
-                                                         decltype(Cases)>&&...)
-              CPP_and InvocableWithCase<FuncType, FirstCase, Args...>
-                  CPP_and(InvocableWithCase<FuncType, Cases,
-                                            Args...>&&...)) constexpr auto
-  operator()(FuncType&& function, const ValueType& value,
-             Args&&... args) const -> decltype(auto) {
+              requires ql::concepts::equality_comparable_with<
+                  ValueType, decltype(FirstCase)> &&
+              (ql::concepts::equality_comparable_with<ValueType,
+                                                      decltype(Cases)> &&
+               ...) &&
+              InvocableWithCase<FuncType, FirstCase, Args...> &&
+              (InvocableWithCase<FuncType, Cases, Args...> && ...))
+  constexpr auto operator()(FuncType&& function, const ValueType& value,
+                            Args&&... args) const -> decltype(auto) {
     if (value == FirstCase) {
       return AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
     } else if constexpr (sizeof...(Cases) > 0) {
@@ -251,8 +251,9 @@ auto toIntegerSequenceRef() {
 // the range
 // `[0, ..., (maxValue)]`
 CPP_template(typename Int, size_t NumIntegers)(
-    requires ql::concepts::integral<Int>) constexpr std::
-    array<Int, NumIntegers> integerToArray(Int value, Int numValues) {
+    requires ql::concepts::integral<Int>)
+constexpr std::array<Int, NumIntegers> integerToArray(Int value,
+                                                      Int numValues) {
   std::array<Int, NumIntegers> res{};
   for (auto& el : res | ql::views::reverse) {
     el = value % numValues;
@@ -273,8 +274,8 @@ constexpr inline std::array<Int, NumIntegers> integerToArrayStaticVar =
 // value from `[0, ..., Upper - 1] ^ Num` exactly once. `^` denotes the
 // cartesian power.
 CPP_template(auto Upper, size_t Num)(
-    requires ql::concepts::integral<
-        decltype(Upper)>) constexpr auto cartesianPowerAsArray() {
+    requires ql::concepts::integral<decltype(Upper)>)
+constexpr auto cartesianPowerAsArray() {
   using Int = decltype(Upper);
   constexpr auto numValues = pow(Upper, Num);
   std::array<std::array<Int, Num>, numValues> arr{};
@@ -288,17 +289,16 @@ CPP_template(auto Upper, size_t Num)(
 // variable with linkage that can be used as a `const&` template parameter in
 // C++17 mode.
 CPP_template(auto Upper, size_t Num)(
-    requires ql::concepts::integral<
-        decltype(Upper)>) constexpr auto cartesianPowerAsArrayVal =
-    cartesianPowerAsArray<Upper, Num>();
+            requires ql::concepts::integral<decltype(Upper)>)
+constexpr auto cartesianPowerAsArrayVal = cartesianPowerAsArray<Upper, Num>();
 
 // Return a `ad_utility::ValueSequence<Int,...>` that contains each
 // value from `[0, ..., Upper - 1] X Num` exactly once. `X` denotes the
 // cartesian product of sets. The elements of the `integer_sequence` are
 // of type `std::array<Int, Num>` where `Int` is the type of `Upper`.
-CPP_template(auto Upper,
-             size_t Num)(requires ql::concepts::integral<
-                         decltype(Upper)>) auto cartesianPowerAsIntegerArray() {
+CPP_template(auto Upper, size_t Num)(
+    requires ql::concepts::integral<decltype(Upper)>)
+auto cartesianPowerAsIntegerArray() {
   return toIntegerSequenceRef<cartesianPowerAsArrayVal<Upper, Num>>();
 }
 

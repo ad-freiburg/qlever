@@ -16,8 +16,8 @@ namespace ad_utility {
 // Helper that filters a range, like `std::vector` which contains `std::variant`
 // elements by a certain type `T` and returns a view of the contained values.
 CPP_template(typename T, typename R)(
-    requires ql::ranges::range<
-        std::decay_t<R>>) auto filterRangeOfVariantsByType(R&& range) {
+    requires ql::ranges::range<std::decay_t<R>>)
+auto filterRangeOfVariantsByType(R&& range) {
   return AD_FWD(range) | ql::views::filter(holdsAlternative<T>) |
          ql::views::transform(get<T>);
 }

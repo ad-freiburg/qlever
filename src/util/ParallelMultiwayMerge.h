@@ -26,7 +26,8 @@ using namespace ad_utility::memory_literals;
 // to enable the usage of this lambda in combination with `std::bind_front` and
 // `std::ref`.
 CPP_template(bool moveElements, typename T, typename SizeGetter)(
-    requires ValueSizeGetter<SizeGetter, T>) constexpr auto pushSingleElement =
+            requires ValueSizeGetter<SizeGetter, T>)
+constexpr auto pushSingleElement =
     [](std::vector<T>& buffer, MemorySize& sz, auto& el) {
       sz += SizeGetter{}(el);
       if constexpr (moveElements) {
@@ -58,11 +59,11 @@ CPP_concept RandomAccessRangeOfRanges =
 // buffers.
 CPP_template(typename T, bool moveElements, typename SizeGetter,
              typename Range1, typename Range2, typename ComparisonFuncT)(
-    requires ValueSizeGetter<SizeGetter, T> CPP_and RangeWithValue<Range1, T>
-        CPP_and RangeWithValue<Range2, T>
-            CPP_and ad_utility::InvocableWithExactReturnType<
-                ComparisonFuncT, bool, const T&,
-                const T&>) class LazyBinaryMerge
+    requires ValueSizeGetter<SizeGetter, T> && RangeWithValue<Range1, T> &&
+    RangeWithValue<Range2, T> &&
+    ad_utility::InvocableWithExactReturnType<ComparisonFuncT, bool, const T&,
+                                             const T&>)
+class LazyBinaryMerge
     : public ad_utility::InputRangeMixin<LazyBinaryMerge<
           T, moveElements, SizeGetter, Range1, Range2, ComparisonFuncT>> {
  private:
@@ -166,10 +167,10 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
 // Return the elements of the `range` in blocks of the given `blocksize`.
 // TODO<joka921> This gets much simpler with the buffering generator.
 CPP_template(typename T, bool moveElements, typename SizeGetter,
-             typename R)(requires ValueSizeGetter<SizeGetter, T> CPP_and
-                             RangeWithValue<R, T>) class BatchToVector
-    : public ad_utility::InputRangeMixin<
-          BatchToVector<T, moveElements, SizeGetter, R>> {
+             typename R)(requires ValueSizeGetter<SizeGetter, T> &&
+                               RangeWithValue<R, T>)
+class BatchToVector : public ad_utility::InputRangeMixin<
+                          BatchToVector<T, moveElements, SizeGetter, R>> {
  private:
   MemorySize maxMem_;
   size_t blocksize_;
@@ -215,13 +216,12 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
 // recursion tree.
 CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
              typename ComparisonFuncT)(
-    requires RandomAccessRangeOfRanges<R, T> CPP_and
-        ValueSizeGetter<SizeGetter, T>
-            CPP_and InvocableWithExactReturnType<ComparisonFuncT, bool,
-                                                 const T&, const T&>)
-    ad_utility::InputRangeTypeErased<std::vector<T>> parallelMultiwayMergeImpl(
-        MemorySize maxMemPerNode, size_t blocksize, R&& rangeOfRanges,
-        ComparisonFuncT comparison) {
+    requires RandomAccessRangeOfRanges<R, T> &&
+    ValueSizeGetter<SizeGetter, T> &&
+    InvocableWithExactReturnType<ComparisonFuncT, bool, const T&, const T&>)
+ad_utility::InputRangeTypeErased<std::vector<T>> parallelMultiwayMergeImpl(
+    MemorySize maxMemPerNode, size_t blocksize, R&& rangeOfRanges,
+    ComparisonFuncT comparison) {
   AD_CORRECTNESS_CHECK(!rangeOfRanges.empty());
   auto moveIf = ad_utility::moveIf<moveElements>;
 
@@ -270,18 +270,17 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
 // used in addition to limit the size of intermediate blocks in the recursive
 // implementation. It can be tweaked for maximum performance, currently values
 // of at least `50-100` seem to work well.
-CPP_template(typename T, bool moveElements,
-             typename SizeGetter)(requires ValueSizeGetter<SizeGetter,
-                                                           T>)  //
-    struct ParallelMultiwayMergeStruct {
+CPP_template(typename T, bool moveElements, typename SizeGetter)(
+    requires ValueSizeGetter<SizeGetter,
+                             T>)  //
+struct ParallelMultiwayMergeStruct {
   CPP_template_2(typename R, typename Comp)(
-      requires detail::RandomAccessRangeOfRanges<R, T> CPP_and
-          ValueSizeGetter<SizeGetter, T>
-              CPP_and
-                  InvocableWithExactReturnType<Comp, bool, const T&, const T&>)
-      ad_utility::InputRangeTypeErased<std::vector<T>>
-      operator()(MemorySize memoryLimit, R&& rangeOfRanges, Comp comparison,
-                 size_t blocksize = 100) const {
+      requires detail::RandomAccessRangeOfRanges<R, T> &&
+      ValueSizeGetter<SizeGetter, T> &&
+      InvocableWithExactReturnType<Comp, bool, const T&, const T&>)
+  ad_utility::InputRangeTypeErased<std::vector<T>> operator()(
+      MemorySize memoryLimit, R&& rangeOfRanges, Comp comparison,
+      size_t blocksize = 100) const {
     // There is one suboperation per input in the recursion tree, so we have to
     // divide the memory limit.
     auto maxMemPerNode = memoryLimit / ql::ranges::size(rangeOfRanges);

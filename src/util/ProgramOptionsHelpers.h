@@ -20,13 +20,9 @@ namespace ad_utility {
 // per-type difference is how a single option string is converted to the target
 // type. `convertFromString(s)` must return the value to store in `v`.
 CPP_template(typename ConvertFromString)(
-    requires ql::concepts::invocable<
-        ConvertFromString,
-        const std::string&>) void validateFromString(boost::any& v,
-                                                     const std::vector<
-                                                         std::string>& values,
-                                                     ConvertFromString
-                                                         convertFromString) {
+    requires ql::concepts::invocable<ConvertFromString, const std::string&>)
+void validateFromString(boost::any& v, const std::vector<std::string>& values,
+                        ConvertFromString convertFromString) {
   using namespace boost::program_options;
   // Make sure no previous assignment to `v` was made.
   validators::check_first_occurrence(v);
@@ -49,8 +45,8 @@ class NonNegative {
 };
 
 CPP_template(typename Stream, typename NN)(
-    requires ad_utility::SimilarTo<NN, NonNegative>) Stream&
-operator<<(Stream& stream, NN&& nonNegative) {
+    requires ad_utility::SimilarTo<NN, NonNegative>)
+Stream& operator<<(Stream& stream, NN&& nonNegative) {
   return stream << static_cast<size_t>(nonNegative);
 }
 

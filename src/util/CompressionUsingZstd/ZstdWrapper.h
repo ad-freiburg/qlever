@@ -70,10 +70,9 @@ class ZstdWrapper {
 
   // Decompress the given byte array, assuming that the size of the decompressed
   // data is known.
-  CPP_template(typename T)(
-      requires(std::is_trivially_copyable_v<
-               T>)) static std::vector<T> decompress(void* src, size_t numBytes,
-                                                     size_t knownOriginalSize) {
+  CPP_template(typename T)(requires(std::is_trivially_copyable_v<T>))
+  static std::vector<T> decompress(void* src, size_t numBytes,
+                                   size_t knownOriginalSize) {
     knownOriginalSize *= sizeof(T);
     std::vector<T> result(knownOriginalSize / sizeof(T));
     auto compressedSize =
@@ -86,8 +85,8 @@ class ZstdWrapper {
   // and return the number of bytes of the decompressed data. Report an error if
   // the decompression fails (e.g. because the compressed data is corrupted, or
   // because the buffer is too small).
-  CPP_template(typename T)(
-      requires(std::is_trivially_copyable_v<T>)) static SizeOrError
+  CPP_template(typename T)(requires(std::is_trivially_copyable_v<T>))
+  static SizeOrError
       tryToDecompressToBuffer(const char* src, size_t numBytes, T* buffer,
                               size_t bufferCapacity) noexcept {
     auto decompressedSize =
@@ -100,10 +99,9 @@ class ZstdWrapper {
 
   // Same as `tryToDecompressToBuffer`, but throw a descriptive exception
   // instead of reporting an error.
-  CPP_template(typename T)(
-      requires(std::is_trivially_copyable_v<T>)) static size_t
-      decompressToBuffer(const char* src, size_t numBytes, T* buffer,
-                         size_t bufferCapacity) {
+  CPP_template(typename T)(requires(std::is_trivially_copyable_v<T>))
+  static size_t decompressToBuffer(const char* src, size_t numBytes, T* buffer,
+                                   size_t bufferCapacity) {
     return valueOrThrow(
         tryToDecompressToBuffer(src, numBytes, buffer, bufferCapacity),
         "error during decompression : ");

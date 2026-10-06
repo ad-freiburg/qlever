@@ -42,8 +42,8 @@ namespace ad_utility::parallelBlockMerge::detail {
 //
 // NOTE: The returned view refers to the `input`, which therefore has to outlive
 // it.
-CPP_template(typename Input)(
-    requires InputConcept<Input>) auto allBlocksInAllRuns(const Input& input) {
+CPP_template(typename Input)(requires InputConcept<Input>)
+auto allBlocksInAllRuns(const Input& input) {
   return ::ranges::views::for_each(
       ad_utility::integerRange(input.numRuns()), [&input](size_t runIdx) {
         return ::ranges::views::transform(
@@ -55,8 +55,8 @@ CPP_template(typename Input)(
 }
 
 // Return the total number of elements of all runs of the `input`.
-CPP_template(typename Input)(requires InputConcept<Input>) size_t
-    totalNumElements(const Input& input) {
+CPP_template(typename Input)(requires InputConcept<Input>)
+size_t totalNumElements(const Input& input) {
   return ::ranges::accumulate(
       allBlocksInAllRuns(input) |
           ::ranges::views::transform([&input](const auto& runAndBlock) {
@@ -92,9 +92,9 @@ using ElementAndWeight = std::pair<Element, size_t>;
 // its weight.
 //
 // PRECONDITION: No block of the `input` is empty, see `InputConcept`.
-CPP_template(typename Input)(requires InputConcept<Input>) std::
-    vector<ElementAndWeight<typename Input::Element>> collectElementsAndWeights(
-        const Input& input) {
+CPP_template(typename Input)(requires InputConcept<Input>)
+std::vector<ElementAndWeight<
+    typename Input::Element>> collectElementsAndWeights(const Input& input) {
   using Element = typename Input::Element;
   return ::ranges::to_vector(
       allBlocksInAllRuns(input) |

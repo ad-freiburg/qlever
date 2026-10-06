@@ -83,8 +83,9 @@ struct BlockRange {
 // contain elements in the range of the `boundary`. This only looks at the
 // (I/O-free) metadata of the blocks, so a returned block may still turn out to
 // contain no matching element at all.
-CPP_template(typename Input,
-             typename Comparator)(requires InputConcept<Input>) BlockRange
+CPP_template(typename Input, typename Comparator)(
+    requires InputConcept<Input>)
+BlockRange
     blockRangeForRun(const Input& input, const Comparator& comparator,
                      const ChunkBoundary<typename Input::Element>& boundary,
                      size_t runIdx) {
@@ -148,11 +149,11 @@ std::vector<ChunkBoundary<Element>> chunkBoundariesFromSplitPoints(
 // The common part of the two overloads of `computeChunkBoundaries` below: run
 // the steps from `MergeHelpersImpl.h`, where `makeTargets` turns the total
 // number of elements into the target quantiles.
-CPP_template(typename Input, typename Comparator,
-             typename MakeTargets)(requires InputConcept<Input>)
-    std::vector<ChunkBoundary<typename Input::Element>> chunkBoundariesImpl(
-        const Input& input, const Comparator& comparator,
-        const MakeTargets& makeTargets) {
+CPP_template(typename Input, typename Comparator, typename MakeTargets)(
+    requires InputConcept<Input>)
+std::vector<ChunkBoundary<typename Input::Element>> chunkBoundariesImpl(
+    const Input& input, const Comparator& comparator,
+    const MakeTargets& makeTargets) {
   using Element = typename Input::Element;
   auto elementsAndWeights =
       sortAndAccumulateWeights(collectElementsAndWeights(input), comparator);
@@ -185,9 +186,10 @@ CPP_template(typename Input, typename Comparator,
 // not required) guarantee that the comparator considers all elements of such a
 // chunk equivalent. This only pays off for the parallel merge, so it is
 // deferred until then.
-CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
-    std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
-        const Input& input, const Comparator& comparator, size_t numChunks) {
+CPP_template(typename Input, typename Comparator)(
+    requires InputConcept<Input>)
+std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
+    const Input& input, const Comparator& comparator, size_t numChunks) {
   using Element = typename Input::Element;
   // A single chunk needs no boundaries at all, and in that case even the scan
   // of the block metadata can be skipped.
@@ -209,10 +211,10 @@ CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
 // result may well describe fewer chunks than the `chunkSizes` ask for, and it
 // describes a single chunk if the input has at most `firstChunkSizes_.front()`
 // (respectively `remainingChunkSize_`) elements.
-CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
-    std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
-        const Input& input, const Comparator& comparator,
-        ChunkSizes chunkSizes) {
+CPP_template(typename Input, typename Comparator)(
+    requires InputConcept<Input>)
+std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
+    const Input& input, const Comparator& comparator, ChunkSizes chunkSizes) {
   AD_CONTRACT_CHECK(chunkSizes.remainingChunkSize_ > 0);
   AD_CONTRACT_CHECK(ql::ranges::all_of(chunkSizes.firstChunkSizes_,
                                        [](size_t size) { return size > 0; }));
