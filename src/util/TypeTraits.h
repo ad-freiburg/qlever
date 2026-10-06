@@ -330,15 +330,9 @@ struct FirstArgument<T, std::void_t<decltype(&T::operator())>>
 template <typename T>
 using FirstArgumentT = typename FirstArgument<T>::type;
 
-// True iff `func` should handle `value` in `visitIf` below. If `func`'s
-// parameter type can be determined (i.e. `func` is not generic/overloaded),
-// that parameter type must, up to cv/reference qualification, be the same as
-// the type of `value` -- so that an implicit conversion (e.g. a function taking
-// `int` also being invocable with a `double`) cannot cause a false match.
-// Invocability is deliberately not checked in this case: it is expensive to
-// compile, and a function that has the right type but e.g. the wrong
-// constness is a bug that should fail loudly instead of being silently
-// skipped. A generic or constrained function falls back to invocability.
+// True iff `func` should handle `value` in `visitIf` below: Its parameter type
+// must be `value`'s type (up to cv-ref, so no implicit conversions). Generic
+// functions fall back to invocability.
 template <typename Func, typename Value, typename = void>
 constexpr bool isMatchForVisitIf = std::is_invocable_v<Func&, Value>;
 
@@ -347,11 +341,8 @@ constexpr bool isMatchForVisitIf<
     Func, Value, std::void_t<FirstArgumentT<std::decay_t<Func>>>> =
     isSimilar<FirstArgumentT<std::decay_t<Func>>, Value>;
 
-// Call the first of `funcs` that is a match (see `isMatchForVisitIf`) for
-// `value`. Note: The recursion is cheaper to compile than computing the index
-// of the match via a fold over all `funcs` and then dispatching via
-// `std::get<i>(std::tie(funcs...))`, because the recursion stops at the first
-// match.
+// Call the first of `funcs` that matches `value`. Note: Recursion compiles
+// faster than a fold + `std::get<i>(std::tie(funcs...))`, as it stops early.
 template <typename Value, typename Func, typename... Rest>
 decltype(auto) tryInvoke(Value&& value, Func&& func, Rest&&... rest) {
   if constexpr (isMatchForVisitIf<Func, Value>) {
@@ -368,21 +359,10 @@ decltype(auto) tryInvoke(Value&& value, Func&& func, Rest&&... rest) {
 }
 }  // namespace detail
 
-/// A generic helper for the common `std::visit` idiom of checking (typically
-/// via `if constexpr (isSame<T, ...>)` / `isInstantiation<T, ...>`) which of
-/// several conditions the currently active alternative of `variant` matches,
-/// and running the corresponding function. `funcs` are tried in order, and
-/// the first one that matches (see `detail::isMatchForVisitIf`) the active
-/// alternative is called. Every alternative must be matched by some function
-/// (this is checked at compile time). Which alternative(s) a given function
-/// applies to is determined simply by its parameter type, so each function in
-/// `funcs` is typically a non-generic lambda that takes the concrete, expected
-/// alternative type directly (no `decay_t`/`if constexpr` boilerplate needed
-/// at the call site); the last function may instead be a generic catch-all
-/// (`auto&&`) to act as an explicit "else" branch. A generic or constrained
-/// (e.g. `CPP_template_lambda`) function instead matches all alternatives it
-/// is invocable with; since its parameter type is deduced from (rather than
-/// converted from) the alternative's type, this is exact as well.
+/// Replacement for `std::visit` + `if constexpr` chains: Call the first of
+/// `funcs` whose parameter type matches the active alternative of `variant`.
+/// Every alternative must be matched (checked at compile time); a generic
+/// lambda can be passed last as an "else" branch.
 template <typename Variant, typename... Funcs>
 decltype(auto) visitIf(Variant&& variant, Funcs&&... funcs) {
   return std::visit(
