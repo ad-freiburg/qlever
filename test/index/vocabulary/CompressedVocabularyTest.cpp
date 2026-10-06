@@ -22,9 +22,12 @@
 #include "backports/span.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PrefixCompressor.h"
+#include "index/vocabulary/StringSortComparator.h"
+#include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
+#include "index/vocabulary/VocabularyTypes.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
@@ -195,6 +198,25 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchRespectsMemoryLimit) {
       indices.size(), ad_utility::makeAllocatorWithLimit<Id>(1_MB));
   vocab.lookupBatch(indices, sufficient);
   const auto result = std::move(sufficient).finalize();
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+}
+
+// _____________________________________________________________________________
+// Regression test: nested delegating overloads append to the same builder.
+// Only the outer result boundary finalizes it.
+TYPED_TEST(CompressedVocabularyF, LookupBatchWithBuilderThroughDelegation) {
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta",
+                                       "epsilon"};
+  auto compressed = this->createCompressedVocabulary()(words);
+  const std::array<size_t, 5> indices{4, 1, 0, 3, 1};
+  SimpleStringComparator comparator{"en", "us", false};
+  UnicodeVocabulary<decltype(compressed), decltype(comparator)> innerVocab{
+      comparator, std::move(compressed)};
+  UnicodeVocabulary<decltype(innerVocab), decltype(comparator)> vocab{
+      comparator, std::move(innerVocab)};
+  ArenaVocabBatchBuilder builder(indices.size());
+  vocab.lookupBatch(indices, builder);
+  const auto result = std::move(builder).finalize();
   assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
 }
 
