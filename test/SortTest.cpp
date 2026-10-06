@@ -276,6 +276,32 @@ TEST(Sort, clone) {
   EXPECT_EQ(clone->getDescriptor(), sort.getDescriptor());
 }
 
+// _____________________________________________________________________________
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3568:
+// Cloning must also work if the original has already computed its internal
+// mapping from variables to columns (here: when creating the runtime
+// information), while the freshly constructed clone has not.
+TEST(Sort, cloneAfterVariableColumnsWereComputed) {
+  Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
+  sort.createRuntimeInfoFromEstimates(sort.getRuntimeInfoPointer());
+
+  auto clone = sort.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(sort, IsDeepCopy(*clone));
+}
+
+// _____________________________________________________________________________
+TEST(Sort, cloneKeepsHiddenVariablesHidden) {
+  Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
+  sort.setSelectedVariablesForSubquery({Variable{"?0"}});
+
+  auto clone = sort.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(sort, IsDeepCopy(*clone));
+  EXPECT_FALSE(
+      clone->getExternallyVisibleVariableColumns().contains(Variable{"?1"}));
+}
+
 // Test external sorting with lazy input (multiple IdTable blocks). The test
 // uses 4 blocks where block 3 exceeds the threshold, so block 4 exercises the
 // "remaining blocks" loop in `computeResultExternal`.
