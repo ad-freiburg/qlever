@@ -1458,6 +1458,31 @@ TEST_F(MaterializedViewsTestLarge, Multiplicities) {
     EXPECT_GT(smallScan->getSizeEstimate(), 10);
     EXPECT_FLOAT_EQ(multiplicity(*smallScan, V{"?S"}), 10);
     EXPECT_FLOAT_EQ(multiplicity(*smallScan, V{"?G"}), 1);
+
+    // Fixed first column and prefiltered second column: The multiplicities
+    // are based on the (smaller) size estimate of the prefiltered scan, not on
+    // the number of rows of the whole relation.
+    manager.writeViewToDisk(
+        "multViewPO",
+        qlv().parseAndPlanQuery("SELECT ?p ?o ?s ?g { ?s ?p ?o . "
+                                "VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }"));
+    auto relationScan =
+        manager.makeIndexScan(qec.get(), ViewQuery{"multViewPO",
+                                                   {{V{"?p"}, iri("<p2>")},
+                                                    {V{"?o"}, V{"?O"}},
+                                                    {V{"?s"}, V{"?S"}},
+                                                    {V{"?g"}, V{"?G"}}}});
+    EXPECT_EQ(relationScan->getSizeEstimate(), 100'000);
+    EXPECT_FLOAT_EQ(multiplicity(*relationScan, V{"?G"}), 10'000);
+    auto prefilteredRelation =
+        relationScan->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+            prefilters);
+    ASSERT_TRUE(prefilteredRelation.has_value());
+    auto& prefilteredRelationScan = dynamic_cast<IndexScan&>(
+        *prefilteredRelation.value()->getRootOperation());
+    EXPECT_LT(prefilteredRelationScan.getSizeEstimate(), 100'000);
+    EXPECT_FLOAT_EQ(multiplicity(prefilteredRelationScan, V{"?G"}),
+                    prefilteredRelationScan.getSizeEstimate() / 10.0f);
   }
 
   // Fixed first column with a small relation: the multiplicity of the third

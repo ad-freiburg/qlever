@@ -497,7 +497,9 @@ std::vector<float> IndexScan::computeMultiplicitiesForView(
   auto numRows = static_cast<float>(sizeEstimate_);
 
   // With a fixed first column, the relation metadata has the exact number of
-  // rows and the exact multiplicity of the second column. Only for a small
+  // rows and the exact multiplicity of the second column. The size estimate is
+  // never smaller than the size of the relation, unless the scan is
+  // prefiltered, so the minimum of both is used. Only for a small
   // relation (computed on demand) is the third column's multiplicity also
   // exact, the stored one of a large relation is a copy of the second's.
   std::optional<CompressedRelationMetadata> relation;
