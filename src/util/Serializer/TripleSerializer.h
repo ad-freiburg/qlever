@@ -36,8 +36,8 @@ constexpr uint16_t formatVersion = 1;
 
 // Read a value of type T from the `serializer`.
 CPP_template(typename T, typename Serializer)(
-    requires serialization::ReadSerializer<Serializer>) T
-    readValue(Serializer& serializer) {
+    requires serialization::ReadSerializer<Serializer>)
+T readValue(Serializer& serializer) {
   T value;
   serializer >> value;
   return value;
@@ -46,8 +46,8 @@ CPP_template(typename T, typename Serializer)(
 // Write the header of the file format to the output stream. We are currently at
 // version 1.
 CPP_template(typename Serializer)(
-    requires serialization::WriteSerializer<
-        Serializer>) void writeHeader(Serializer& serializer) {
+    requires serialization::WriteSerializer<Serializer>)
+void writeHeader(Serializer& serializer) {
   serializer << magicBytes;
   serializer << formatVersion;
 }
@@ -55,8 +55,8 @@ CPP_template(typename Serializer)(
 // Read the header of the file format from the input stream and ensure that it
 // is correct.
 CPP_template(typename Serializer)(
-    requires serialization::ReadSerializer<
-        Serializer>) void readHeader(Serializer& serializer) {
+    requires serialization::ReadSerializer<Serializer>)
+void readHeader(Serializer& serializer) {
   std::decay_t<decltype(magicBytes)> magicByteBuffer{};
   serializer >> magicByteBuffer;
   AD_CORRECTNESS_CHECK(magicByteBuffer == magicBytes);
@@ -75,9 +75,8 @@ CPP_template(typename Serializer)(
 // Serialize the local vocabulary to the output stream. Returns a mapping from
 // Ids that map to their string position in the file.
 CPP_template(typename Serializer)(
-    requires serialization::WriteSerializer<
-        Serializer>) void serializeLocalVocab(Serializer& serializer,
-                                              const LocalVocab& vocab) {
+    requires serialization::WriteSerializer<Serializer>)
+void serializeLocalVocab(Serializer& serializer, const LocalVocab& vocab) {
   serializer << vocab.getOwnedLocalBlankNodeBlocks();
   uint64_t numWords = vocab.size();
   serializer << numWords;
@@ -102,20 +101,18 @@ CPP_template(typename Serializer)(
 // those words accordingly, so that the words must not be written a second time
 // here.
 CPP_template(typename Serializer)(
-    requires serialization::WriteSerializer<
-        Serializer>) void serializeOnlyBlankNodeBlocksFromLocalVocab(Serializer&
-                                                                         serializer,
-                                                                     const LocalVocab&
-                                                                         vocab) {
+    requires serialization::WriteSerializer<Serializer>)
+void serializeOnlyBlankNodeBlocksFromLocalVocab(Serializer& serializer,
+                                                const LocalVocab& vocab) {
   serializer << vocab.getOwnedLocalBlankNodeBlocks();
   serializer << uint64_t{0};
 }
 
 // Deserialize the local vocabulary from the input stream.
 CPP_template(typename Serializer)(
-    requires serialization::ReadSerializer<Serializer>) std::
-    tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
-        Serializer& serializer, const LocalVocabContext& context) {
+    requires serialization::ReadSerializer<Serializer>)
+std::tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
+    Serializer& serializer, const LocalVocabContext& context) {
   LocalVocab vocab;
   vocab.reserveBlankNodeBlocksFromExplicitIndices(
       readValue<std::vector<
@@ -140,8 +137,8 @@ CPP_template(typename Serializer)(
 // Serialize a range of Ids to the output stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id before writing it.
 CPP_template(typename Range, typename Serializer)(
-    requires ql::ranges::range<Range>) void serializeIds(Serializer& serializer,
-                                                         Range&& range) {
+    requires ql::ranges::range<Range>)
+void serializeIds(Serializer& serializer, Range&& range) {
   if constexpr (ql::ranges::contiguous_range<std::decay_t<Range>>) {
     serializer << ql::span{range};
   } else {
@@ -186,10 +183,9 @@ std::vector<Id> deserializeIds(Serializer& serializer,
 }  // namespace detail
 
 // Serialize the local vocabulary and the given ranges of Ids to the given path.
-CPP_template(typename Range)(
-    requires ql::ranges::range<
-        Range>) void serializeIds(const ql::filesystem::path& path,
-                                  const LocalVocab& vocab, Range&& idRanges) {
+CPP_template(typename Range)(requires ql::ranges::range<Range>)
+void serializeIds(const ql::filesystem::path& path, const LocalVocab& vocab,
+                  Range&& idRanges) {
   serialization::FileWriteSerializer serializer{path.string()};
   detail::writeHeader(serializer);
   detail::serializeLocalVocab(serializer, vocab);

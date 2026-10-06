@@ -110,8 +110,8 @@ class NamedResultCache {
 
   // Write the current contents of the result cache to the `serializer`.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::WriteSerializer<
-          Serializer>) void writeToSerializer(Serializer& serializer) const;
+      requires ad_utility::serialization::WriteSerializer<Serializer>)
+  void writeToSerializer(Serializer& serializer) const;
 
   // Read the contents of the result cache from the `serializer`.
   // NOTE: This function has to be called after the index has been loaded, but
@@ -120,11 +120,9 @@ class NamedResultCache {
   // contains a local blank node, and the `blankNodeManager` already has handed
   // out randomly allocated blank nodes, an `AD_CORRECTNESS_CHECK` will fail.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::ReadSerializer<
-          Serializer>) void readFromSerializer(Serializer& serializer,
-                                               Value::Allocator allocator,
-                                               const LocalVocabContext&
-                                                   context);
+      requires ad_utility::serialization::ReadSerializer<Serializer>)
+  void readFromSerializer(Serializer& serializer, Value::Allocator allocator,
+                          const LocalVocabContext& context);
 };
 
 #endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H

@@ -137,9 +137,8 @@ class SparqlTriple
 
   // Call a function for every variable contained in the triple.
   CPP_template(typename Function)(
-      requires std::is_invocable_v<
-          Function, const Variable&>) void forEachVariable(Function function)
-      const {
+      requires std::is_invocable_v<Function, const Variable&>)
+  void forEachVariable(Function function) const {
     if (s_.isVariable()) {
       std::invoke(function, s_.getVariable());
     }

@@ -110,7 +110,7 @@ class AllocatorWithLimit {
   AllocatorWithLimit() = delete;
 
   CPP_template(typename U)(requires(!ql::concepts::same_as<U, T>))
-      AllocatorWithLimit(const AllocatorWithLimit<U>& other)  // NOLINT
+  AllocatorWithLimit(const AllocatorWithLimit<U>& other)  // NOLINT
       : tracker_{other.tracker_} {}
 
   // Defaulted copy operations.

@@ -71,9 +71,8 @@ class CompactVectorOfStrings {
   // `util/Serializer/Serializer.h`). The returned object is only valid as
   // long as the memory backing `serializer`'s buffer is valid and unchanged.
   CPP_template(typename S)(
-      requires ad_utility::serialization::ZeroCopyReadSerializer<
-          S>) static CompactVectorOfStrings
-      fromZeroCopyDeserializer(S& serializer) {
+      requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
+  static CompactVectorOfStrings fromZeroCopyDeserializer(S& serializer) {
     using namespace ad_utility::serialization;
     CompactVectorOfStrings result;
     result.data_ = DataStorage::fromZeroCopyDeserializer(serializer);
@@ -94,10 +93,11 @@ class CompactVectorOfStrings {
   // allowed if this object currently owns its storage (i.e. was not created
   // via `fromZeroCopyDeserializer`).
   CPP_template(typename T)(
-      requires ql::ranges::forward_range<T>&& ql::ranges::sized_range<T>&&
-          ql::ranges::sized_range<ql::ranges::range_value_t<T>>&& ad_utility::
-              SimilarTo<ql::ranges::range_value_t<ql::ranges::range_value_t<T>>,
-                        data_type>) void build(const T& input) {
+      requires ql::ranges::forward_range<T> && ql::ranges::sized_range<T> &&
+      ql::ranges::sized_range<ql::ranges::range_value_t<T>> &&
+      ad_utility::SimilarTo<
+          ql::ranges::range_value_t<ql::ranges::range_value_t<T>>, data_type>)
+  void build(const T& input) {
     // Check both before modifying either of them, so that a failed check
     // leaves this object unchanged.
     AD_CONTRACT_CHECK(data_.isOwned() && offsets_.isOwned(),
@@ -164,7 +164,7 @@ class CompactVectorOfStrings {
   CPP_template(typename Func)(
       requires ad_utility::InvocableWithSimilarReturnType<Func, data_type,
                                                           data_type>)
-      CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
+  CompactVectorOfStrings cloneAndRemap(Func mappingFunction) const {
     CompactVectorOfStrings clone;
     clone.offsets_ = offsets_.clone();
     clone.data_ = DataStorage{::ranges::to_vector(

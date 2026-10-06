@@ -153,11 +153,11 @@ struct CompressedRelationWriter::PermutationWriter {
 
   // Constructor for a `PermutationWriter` which writes pair of permutations.
   CPP_template(bool doWritePair = WritePair)(requires doWritePair)
-      PermutationWriter(const std::string& basename,
-                        WriterAndCallback writerAndCallback1,
-                        WriterAndCallback writerAndCallback2,
-                        qlever::KeyOrder permutation,
-                        PerBlockCallbacks perBlockCallbacks)
+  PermutationWriter(const std::string& basename,
+                    WriterAndCallback writerAndCallback1,
+                    WriterAndCallback writerAndCallback2,
+                    qlever::KeyOrder permutation,
+                    PerBlockCallbacks perBlockCallbacks)
       : permutation_{std::move(permutation)},
         writer1_{std::move(writerAndCallback1.writer_)},
         writer2_{std::move(writerAndCallback2.writer_)},
@@ -190,10 +190,10 @@ struct CompressedRelationWriter::PermutationWriter {
   // displayed, which is for callers that display the progress themselves (see
   // `CompressedRelationWriter::createPermutation`).
   CPP_template(bool doWritePair = WritePair)(requires(!doWritePair))
-      PermutationWriter(WriterAndCallback writerAndCallback1,
-                        qlever::KeyOrder permutation,
-                        PerBlockCallbacks perBlockCallbacks,
-                        bool showProgressBar = true)
+  PermutationWriter(WriterAndCallback writerAndCallback1,
+                    qlever::KeyOrder permutation,
+                    PerBlockCallbacks perBlockCallbacks,
+                    bool showProgressBar = true)
       : permutation_{std::move(permutation)},
         writer1_{std::move(writerAndCallback1.writer_)},
         writeMetadata_{std::move(writerAndCallback1.callback_),

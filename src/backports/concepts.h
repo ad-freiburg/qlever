@@ -76,19 +76,20 @@
 //
 // NOTE: The macros are variadic to allow for commas in the argument, like in
 // the second example above.
+//
+// NOTE: Combine several constraints with a plain `&&`, e.g.
+// `CPP_template(typename T)(requires Concept1<T> && Concept2<T>)`. Do not use
+// the `CPP_and` macro from `range-v3`.
 
-// Additionally define the macros `CPP_template_2` and `CPP_and_2` that can
-// be used to constrain member functions of classes where the outer class
-// has already been constrained with `CPP_template`. For a detailed example, see
-// the `test/backports/ConceptsTest.cpp` file.
+// Additionally define the macro `CPP_template_2` that can be used to constrain
+// member functions of classes where the outer class has already been
+// constrained with `CPP_template`. For a detailed example, see the
+// `test/backports/ConceptsTest.cpp` file.
 
 #ifdef QLEVER_CPP_17
 #define QL_CONCEPT_OR_NOTHING(...)
 #define QL_CONCEPT_OR_TYPENAME(...) typename
 #define CPP_template_2 CPP_template_2_SFINAE
-#define CPP_and_2 CPP_and_2_sfinae
-#define CPP_and_def CPP_and_sfinae_def
-#define CPP_and_2_def CPP_and_2_def_sfinae
 #define CPP_variadic_template CPP_template_NO_DEFAULT_SFINAE
 #define CPP_variadic_template_def CPP_variadic_template_def_SFINAE
 #define CPP_class_template CPP_template_VARIADIC_CLASS_SFINAE
@@ -103,9 +104,6 @@
 #define QL_CONCEPT_OR_NOTHING(...) __VA_ARGS__
 #define QL_CONCEPT_OR_TYPENAME(...) __VA_ARGS__
 #define CPP_template_2 CPP_template
-#define CPP_and_2 CPP_and
-#define CPP_and_def CPP_and
-#define CPP_and_2_def CPP_and
 #define CPP_variadic_template CPP_template
 #define CPP_variadic_template_def CPP_variadic_template
 #define CPP_class_template CPP_template

@@ -57,9 +57,9 @@ class BasicIri {
   // A default constructed IRI is empty.
   BasicIri() = default;
 
-  CPP_template(typename H,
-               typename I)(requires ql::concepts::same_as<I, BasicIri>) friend H
-      AbslHashValue(H h, const I& iri) {
+  CPP_template(typename H, typename I)(
+      requires ql::concepts::same_as<I, BasicIri>)
+  friend H AbslHashValue(H h, const I& iri) {
     return H::combine(std::move(h), iri.iri_);
   }
 
@@ -140,9 +140,8 @@ class Iri : public BasicIri<true> {
   // is moved into the `Iri` instead of being copied. Note that this only binds
   // to rvalues of exactly `std::string`; for everything else (in particular
   // lvalues) the `std::string_view` overload above is chosen.
-  CPP_template(typename S)(
-      requires ql::concepts::same_as<S, std::string>) static Iri
-      fromIriref(S&& stringWithBrackets) {
+  CPP_template(typename S)(requires ql::concepts::same_as<S, std::string>)
+  static Iri fromIriref(S&& stringWithBrackets) {
     return fromOwnedIriref(std::move(stringWithBrackets));
   }
 

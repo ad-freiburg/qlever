@@ -4,10 +4,128 @@ DerivePointerAlignment: false
 PointerAlignment: Left
 LineEnding: LF
 InsertNewlineAtEOF: true
-RequiresClausePosition: SingleLine
+# Always put the declaration that follows a `requires` clause on its own line.
+# The only `requires` clauses in the code are the ones of the `CPP_template`
+# macros below.
+RequiresClausePosition: WithPreceding
 IndentRequiresClause: false
 AttributeMacros: [CPP_member, CPP_auto_member, CPP_fun, CPP_auto_fun]
-# TODO<joka921> Update to Clang-format-17 and then we can have much nicer CPP_... macros.
-#Macros:
-#  - CPP_template_2(x)=template<x> requires
+# Teach clang-format the `CPP_template(params...)(requires ...)` macros (and
+# their variants), such that the `requires` clause is formatted as an actual
+# `requires` clause and the declaration starts on its own line, for example:
+#
+#   CPP_template(typename T, typename U)(
+#       requires SomeConcept<T> && OtherConcept<U>)
+#   void f(T t, U u) {
+#
+# How this works: clang-format formats the code after expanding the macros
+# defined here, but it only knows the first parenthesized argument list of a
+# macro, the `(requires ...)` part is ordinary code that directly follows the
+# macro call. That part is laid out once in the expanded code and keeps that
+# layout when mapped back to the original code. We therefore expand
+# `CPP_template(params...)` to
+#
+#   template <class CppTemplateT> requires const_cast<params...>
+#
+# The `template <...>` makes the line a template declaration (with a line break
+# after it). The `requires const_cast<params...>` then makes the following
+# `(requires ...)` the parenthesized operand of a `requires` clause (a cast is
+# the only construct that clang-format accepts directly before the parentheses
+# of a constraint). As the parameters themselves are part of that line, the
+# `(requires ...)` part is laid out only a few columns further to the right than
+# in the original code, so the result stays within the column limit.
+#
+# The macros are not variadic for clang-format, so there is one definition per
+# number of macro arguments (note that commas inside of `<...>` also separate
+# macro arguments). Calls with more than 12 arguments are not expanded.
+#
+# NOTE: Combine constraints with `&&`, not with the `CPP_and` macro. Defining
+# `CPP_and` as a macro here makes the continuation lines inconsistent, and in
+# combination with `CPP_and(...)` clang-format 18 crashes or runs into an
+# infinite loop.
+Macros:
+  - 'CPP_template(a)=template <class CppTemplateT> requires const_cast<a>'
+  - 'CPP_template(a, b)=template <class CppTemplateT> requires const_cast<a, b>'
+  - 'CPP_template(a, b, c)=template <class CppTemplateT> requires const_cast<a, b, c>'
+  - 'CPP_template(a, b, c, d)=template <class CppTemplateT> requires const_cast<a, b, c, d>'
+  - 'CPP_template(a, b, c, d, e)=template <class CppTemplateT> requires const_cast<a, b, c, d, e>'
+  - 'CPP_template(a, b, c, d, e, f)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f>'
+  - 'CPP_template(a, b, c, d, e, f, g)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g>'
+  - 'CPP_template(a, b, c, d, e, f, g, h)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h>'
+  - 'CPP_template(a, b, c, d, e, f, g, h, i)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i>'
+  - 'CPP_template(a, b, c, d, e, f, g, h, i, j)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j>'
+  - 'CPP_template(a, b, c, d, e, f, g, h, i, j, k)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k>'
+  - 'CPP_template(a, b, c, d, e, f, g, h, i, j, k, l)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k, l>'
+  - 'CPP_template_2(a)=template <class CppTemplateT> requires const_cast<a>'
+  - 'CPP_template_2(a, b)=template <class CppTemplateT> requires const_cast<a, b>'
+  - 'CPP_template_2(a, b, c)=template <class CppTemplateT> requires const_cast<a, b, c>'
+  - 'CPP_template_2(a, b, c, d)=template <class CppTemplateT> requires const_cast<a, b, c, d>'
+  - 'CPP_template_2(a, b, c, d, e)=template <class CppTemplateT> requires const_cast<a, b, c, d, e>'
+  - 'CPP_template_2(a, b, c, d, e, f)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f>'
+  - 'CPP_template_2(a, b, c, d, e, f, g)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g>'
+  - 'CPP_template_2(a, b, c, d, e, f, g, h)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h>'
+  - 'CPP_template_2(a, b, c, d, e, f, g, h, i)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i>'
+  - 'CPP_template_2(a, b, c, d, e, f, g, h, i, j)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j>'
+  - 'CPP_template_2(a, b, c, d, e, f, g, h, i, j, k)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k>'
+  - 'CPP_template_2(a, b, c, d, e, f, g, h, i, j, k, l)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k, l>'
+  - 'CPP_template_def(a)=template <class CppTemplateT> requires const_cast<a>'
+  - 'CPP_template_def(a, b)=template <class CppTemplateT> requires const_cast<a, b>'
+  - 'CPP_template_def(a, b, c)=template <class CppTemplateT> requires const_cast<a, b, c>'
+  - 'CPP_template_def(a, b, c, d)=template <class CppTemplateT> requires const_cast<a, b, c, d>'
+  - 'CPP_template_def(a, b, c, d, e)=template <class CppTemplateT> requires const_cast<a, b, c, d, e>'
+  - 'CPP_template_def(a, b, c, d, e, f)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f>'
+  - 'CPP_template_def(a, b, c, d, e, f, g)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g>'
+  - 'CPP_template_def(a, b, c, d, e, f, g, h)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h>'
+  - 'CPP_template_def(a, b, c, d, e, f, g, h, i)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i>'
+  - 'CPP_template_def(a, b, c, d, e, f, g, h, i, j)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j>'
+  - 'CPP_template_def(a, b, c, d, e, f, g, h, i, j, k)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k>'
+  - 'CPP_template_def(a, b, c, d, e, f, g, h, i, j, k, l)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k, l>'
+  - 'CPP_template_out_def(a)=template <class CppTemplateT> requires const_cast<a>'
+  - 'CPP_template_out_def(a, b)=template <class CppTemplateT> requires const_cast<a, b>'
+  - 'CPP_template_out_def(a, b, c)=template <class CppTemplateT> requires const_cast<a, b, c>'
+  - 'CPP_template_out_def(a, b, c, d)=template <class CppTemplateT> requires const_cast<a, b, c, d>'
+  - 'CPP_template_out_def(a, b, c, d, e)=template <class CppTemplateT> requires const_cast<a, b, c, d, e>'
+  - 'CPP_template_out_def(a, b, c, d, e, f)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f>'
+  - 'CPP_template_out_def(a, b, c, d, e, f, g)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g>'
+  - 'CPP_template_out_def(a, b, c, d, e, f, g, h)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h>'
+  - 'CPP_template_out_def(a, b, c, d, e, f, g, h, i)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i>'
+  - 'CPP_template_out_def(a, b, c, d, e, f, g, h, i, j)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j>'
+  - 'CPP_template_out_def(a, b, c, d, e, f, g, h, i, j, k)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k>'
+  - 'CPP_template_out_def(a, b, c, d, e, f, g, h, i, j, k, l)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k, l>'
+  - 'CPP_variadic_template(a)=template <class CppTemplateT> requires const_cast<a>'
+  - 'CPP_variadic_template(a, b)=template <class CppTemplateT> requires const_cast<a, b>'
+  - 'CPP_variadic_template(a, b, c)=template <class CppTemplateT> requires const_cast<a, b, c>'
+  - 'CPP_variadic_template(a, b, c, d)=template <class CppTemplateT> requires const_cast<a, b, c, d>'
+  - 'CPP_variadic_template(a, b, c, d, e)=template <class CppTemplateT> requires const_cast<a, b, c, d, e>'
+  - 'CPP_variadic_template(a, b, c, d, e, f)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f>'
+  - 'CPP_variadic_template(a, b, c, d, e, f, g)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g>'
+  - 'CPP_variadic_template(a, b, c, d, e, f, g, h)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h>'
+  - 'CPP_variadic_template(a, b, c, d, e, f, g, h, i)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i>'
+  - 'CPP_variadic_template(a, b, c, d, e, f, g, h, i, j)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j>'
+  - 'CPP_variadic_template(a, b, c, d, e, f, g, h, i, j, k)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k>'
+  - 'CPP_variadic_template(a, b, c, d, e, f, g, h, i, j, k, l)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k, l>'
+  - 'CPP_variadic_template_def(a)=template <class CppTemplateT> requires const_cast<a>'
+  - 'CPP_variadic_template_def(a, b)=template <class CppTemplateT> requires const_cast<a, b>'
+  - 'CPP_variadic_template_def(a, b, c)=template <class CppTemplateT> requires const_cast<a, b, c>'
+  - 'CPP_variadic_template_def(a, b, c, d)=template <class CppTemplateT> requires const_cast<a, b, c, d>'
+  - 'CPP_variadic_template_def(a, b, c, d, e)=template <class CppTemplateT> requires const_cast<a, b, c, d, e>'
+  - 'CPP_variadic_template_def(a, b, c, d, e, f)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f>'
+  - 'CPP_variadic_template_def(a, b, c, d, e, f, g)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g>'
+  - 'CPP_variadic_template_def(a, b, c, d, e, f, g, h)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h>'
+  - 'CPP_variadic_template_def(a, b, c, d, e, f, g, h, i)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i>'
+  - 'CPP_variadic_template_def(a, b, c, d, e, f, g, h, i, j)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j>'
+  - 'CPP_variadic_template_def(a, b, c, d, e, f, g, h, i, j, k)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k>'
+  - 'CPP_variadic_template_def(a, b, c, d, e, f, g, h, i, j, k, l)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k, l>'
+  - 'CPP_class_template(a)=template <class CppTemplateT> requires const_cast<a>'
+  - 'CPP_class_template(a, b)=template <class CppTemplateT> requires const_cast<a, b>'
+  - 'CPP_class_template(a, b, c)=template <class CppTemplateT> requires const_cast<a, b, c>'
+  - 'CPP_class_template(a, b, c, d)=template <class CppTemplateT> requires const_cast<a, b, c, d>'
+  - 'CPP_class_template(a, b, c, d, e)=template <class CppTemplateT> requires const_cast<a, b, c, d, e>'
+  - 'CPP_class_template(a, b, c, d, e, f)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f>'
+  - 'CPP_class_template(a, b, c, d, e, f, g)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g>'
+  - 'CPP_class_template(a, b, c, d, e, f, g, h)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h>'
+  - 'CPP_class_template(a, b, c, d, e, f, g, h, i)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i>'
+  - 'CPP_class_template(a, b, c, d, e, f, g, h, i, j)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j>'
+  - 'CPP_class_template(a, b, c, d, e, f, g, h, i, j, k)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k>'
+  - 'CPP_class_template(a, b, c, d, e, f, g, h, i, j, k, l)=template <class CppTemplateT> requires const_cast<a, b, c, d, e, f, g, h, i, j, k, l>'
 ...

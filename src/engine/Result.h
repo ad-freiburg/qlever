@@ -76,8 +76,8 @@ class Result : public ad_utility::NoCopy {
     explicit GenContainer(LazyResult generator)
         : generator_{std::move(generator)} {}
     CPP_template(typename Range)(
-        requires std::is_constructible_v<
-            LazyResult, Range>) explicit GenContainer(Range range)
+        requires std::is_constructible_v<LazyResult, Range>)
+    explicit GenContainer(Range range)
         : generator_{LazyResult{std::move(range)}} {}
   };
 
@@ -284,10 +284,9 @@ class Result : public ad_utility::NoCopy {
 
   // Overload for more than two `Results`
   CPP_template(typename R)(
-      requires ql::ranges::forward_range<R> CPP_and ql::concepts::
-          convertible_to<ql::ranges::range_value_t<R>,
-                         const Result&>) static SharedLocalVocabWrapper
-      getMergedLocalVocab(R&& subResults) {
+      requires ql::ranges::forward_range<R> &&
+      ql::concepts::convertible_to<ql::ranges::range_value_t<R>, const Result&>)
+  static SharedLocalVocabWrapper getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
     for (const Result& table : subResults) {
       vocabs.push_back(&table.localVocab());

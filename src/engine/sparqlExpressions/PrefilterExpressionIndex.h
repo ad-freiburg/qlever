@@ -444,9 +444,9 @@ void checkPropertiesForPrefilterConstruction(
 //
 // NOTE: This function is public so that we can test corner cases.
 CPP_template(typename T)(requires(std::is_same_v<T, int64_t> ||
-                                  std::is_same_v<T, double>))
-    std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
-        CompOp comparison, T year);
+                                        std::is_same_v<T, double>))
+std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
+    CompOp comparison, T year);
 
 // Creates a `RelationalExpression<comparison>` prefilter expression based on
 // the specified `CompOp` comparison operation and the reference

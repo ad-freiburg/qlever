@@ -165,14 +165,12 @@ class CancellationHandle {
   /// NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
   /// or `WAITING_FOR_CHECK`, otherwise it will violate the correctness check.
   CPP_template(typename StateFunc)(
-      requires WatchDogEnabled CPP_and
-          ad_utility::InvocableWithConvertibleReturnType<
-              StateFunc,
-              std::string_view>) void pleaseWatchDog(CancellationState state,
-                                                     ad_utility::source_location
-                                                         location,
-                                                     const StateFunc&
-                                                         stageInvocable) {
+      requires WatchDogEnabled &&
+      ad_utility::InvocableWithConvertibleReturnType<StateFunc,
+                                                     std::string_view>)
+  void pleaseWatchDog(CancellationState state,
+                      ad_utility::source_location location,
+                      const StateFunc& stageInvocable) {
     using DurationType =
         std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
     AD_CORRECTNESS_CHECK(!detail::isCancelled(state) &&
@@ -230,8 +228,9 @@ class CancellationHandle {
   /// if this check is not called frequently enough. It will contain the
   /// filename and line of the caller of this method.
   CPP_template(typename Func = decltype(detail::printNothing))(
-      requires ad_utility::InvocableWithConvertibleReturnType<
-          Func, std::string_view>) AD_ALWAYS_INLINE
+      requires ad_utility::InvocableWithConvertibleReturnType<Func,
+                                                              std::string_view>)
+  AD_ALWAYS_INLINE
       void throwIfCancelled([[maybe_unused]] ad_utility::source_location
                                 location = AD_CURRENT_SOURCE_LOC(),
                             const Func& stageInvocable = detail::printNothing) {

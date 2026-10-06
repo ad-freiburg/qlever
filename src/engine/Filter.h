@@ -79,15 +79,13 @@ class Filter : public Operation {
   Result computeResult(bool requestLaziness) override;
 
   // Perform the actual filter operation of the data provided.
-  CPP_template(int WIDTH, typename Table)(
-      requires IdTableLike<
-          Table>) void computeFilterImpl(IdTable& dynamicResultTable,
-                                         Table&& input,
-                                         std::vector<ColumnIndex> sortedBy)
-      const;
+  CPP_template(int WIDTH, typename Table)(requires IdTableLike<Table>)
+  void computeFilterImpl(IdTable& dynamicResultTable, Table&& input,
+                         std::vector<ColumnIndex> sortedBy) const;
 
   // Run `computeFilterImpl` on the provided IdTable.
-  CPP_template(typename Table)(requires IdTableLike<Table>) IdTable
+  CPP_template(typename Table)(requires IdTableLike<Table>)
+  IdTable
       filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable) const;
 };
 

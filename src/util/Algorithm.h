@@ -106,9 +106,8 @@ bool contains_if(const Container& container, const Predicate& predicate) {
  * @param source Vector&& to append
  */
 CPP_template(typename T, typename U)(
-    requires ad_utility::SimilarTo<
-        std::vector<T>, U>) void appendVector(std::vector<T>& destination,
-                                              U&& source) {
+    requires ad_utility::SimilarTo<std::vector<T>, U>)
+void appendVector(std::vector<T>& destination, U&& source) {
   destination.insert(destination.end(),
                      ad_utility::makeForwardingIterator<U>(source.begin()),
                      ad_utility::makeForwardingIterator<U>(source.end()));
@@ -178,8 +177,8 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
 // used to keep track of which values we have already seen. One of these
 // copies could be avoided, but our current uses of this function are
 // currently not at all performance-critical (small `input` and small `T`).
-CPP_template(typename Range)(requires ql::ranges::forward_range<
-                             Range>) auto removeDuplicates(const Range& input)
+CPP_template(typename Range)(requires ql::ranges::forward_range<Range>)
+auto removeDuplicates(const Range& input)
     -> std::vector<typename std::iterator_traits<
         ql::ranges::iterator_t<Range>>::value_type> {
   using T =
@@ -198,12 +197,9 @@ CPP_template(typename Range)(requires ql::ranges::forward_range<
 // Return a new `std::input` that is obtained by applying the `function` to each
 // of the elements of the `input`.
 CPP_template(typename Array, typename Function)(
-    requires ad_utility::isArray<std::decay_t<Array>> CPP_and
-        ql::concepts::invocable<
-            Function,
-            typename Array::value_type>) auto transformArray(Array&& input,
-                                                             Function
-                                                                 function) {
+    requires ad_utility::isArray<std::decay_t<Array>> &&
+    ql::concepts::invocable<Function, typename Array::value_type>)
+auto transformArray(Array&& input, Function function) {
   return std::apply(
       [&function](auto&&... vals) {
         return std::array{std::invoke(function, AD_FWD(vals))...};
@@ -215,9 +211,9 @@ CPP_template(typename Array, typename Function)(
 // but an iterator (first argument) and a value (second argument). The
 // implementation is copied from libstdc++ which has this function as an
 // internal detail, but doesn't expose it to the outside.
-CPP_template(typename ForwardIterator, typename Tp,
-             typename Compare)(requires ql::concepts::forward_iterator<
-                               ForwardIterator>) constexpr ForwardIterator
+CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
+    requires ql::concepts::forward_iterator<ForwardIterator>)
+constexpr ForwardIterator
     lower_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
   using DistanceType =
@@ -243,9 +239,9 @@ CPP_template(typename ForwardIterator, typename Tp,
 // but a value (first argument) and an iterator (second argument). The
 // implementation is copied from libstdc++ which has this function as an
 // internal detail, but doesn't expose it to the outside.
-CPP_template(typename ForwardIterator, typename Tp,
-             typename Compare)(requires ql::concepts::forward_iterator<
-                               ForwardIterator>) constexpr ForwardIterator
+CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
+    requires ql::concepts::forward_iterator<ForwardIterator>)
+constexpr ForwardIterator
     upper_bound_iterator(ForwardIterator first, ForwardIterator last,
                          const Tp& val, Compare comp) {
   using DistanceType =
@@ -274,14 +270,12 @@ CPP_template(typename ForwardIterator, typename Tp,
 // some further optimizations.
 CPP_template_2(typename R1, typename R2, typename Compare = std::less<>,
                typename Proj1 = ql::identity, typename Proj2 = ql::identity)(
-    requires ql::ranges::range<R1> CPP_and_2 ql::ranges::range<R2> CPP_and_2
-        ql::concepts::mergeable<
-            ql::ranges::iterator_t<R1>, ql::ranges::iterator_t<R2>,
-            ql::ranges::iterator_t<R1>, Compare, Proj1,
-            Proj2>) auto inplace_set_difference(R1&& r1, R2&& r2,
-                                                Compare comp = {},
-                                                Proj1 proj1 = {},
-                                                Proj2 proj2 = {}) {
+    requires ql::ranges::range<R1> && ql::ranges::range<R2> &&
+    ql::concepts::mergeable<ql::ranges::iterator_t<R1>,
+                            ql::ranges::iterator_t<R2>,
+                            ql::ranges::iterator_t<R1>, Compare, Proj1, Proj2>)
+auto inplace_set_difference(R1&& r1, R2&& r2, Compare comp = {},
+                            Proj1 proj1 = {}, Proj2 proj2 = {}) {
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(r1, comp, proj1));
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(r2, comp, proj2));
   auto it1 = ql::ranges::begin(r1);

@@ -395,7 +395,7 @@ class SparqlQleverVisitor {
   // services do not need `args`. For them this can be left out.
   CPP_variadic_template(typename T, typename... Args)(
       requires std::is_constructible_v<T, Args...>)
-      parsedQuery::GraphPatternOperation
+  parsedQuery::GraphPatternOperation
       visitMagicServiceQuery(Parser::ServiceGraphPatternContext* ctx,
                              Args&&... args);
 
@@ -704,16 +704,14 @@ class SparqlQleverVisitor {
   }
 
   CPP_template(typename Ctx)(
-      requires SparqlQleverVisitor::voidWhenVisited<
-          SparqlQleverVisitor, Ctx>) void visitVector(const std::vector<Ctx*>&
-                                                          childContexts);
+      requires SparqlQleverVisitor::voidWhenVisited<SparqlQleverVisitor, Ctx>)
+  void visitVector(const std::vector<Ctx*>& childContexts);
 
   // Call `visit` for each of the `childContexts` and return the results of
   // those calls as a `vector`.
   CPP_template(typename Ctx)(requires CPP_NOT(
-      SparqlQleverVisitor::voidWhenVisited<
-          SparqlQleverVisitor, Ctx>)) auto visitVector(const std::vector<Ctx*>&
-                                                           childContexts)
+              SparqlQleverVisitor::voidWhenVisited<SparqlQleverVisitor, Ctx>))
+  auto visitVector(const std::vector<Ctx*>& childContexts)
       -> std::vector<decltype(visit(childContexts[0]))>;
 
   // Check that exactly one of the `ctxs` is not `null`, visit that context,
@@ -737,8 +735,9 @@ class SparqlQleverVisitor {
   template <typename Target, typename Intermediate = Target, typename Ctx>
   void visitIf(Target* target, Ctx* ctx);
 
-  CPP_template(typename Ctx)(requires SparqlQleverVisitor::voidWhenVisited<
-                             SparqlQleverVisitor, Ctx>) void visitIf(Ctx* ctx);
+  CPP_template(typename Ctx)(
+      requires SparqlQleverVisitor::voidWhenVisited<SparqlQleverVisitor, Ctx>)
+  void visitIf(Ctx* ctx);
 
  public:
   [[noreturn]] static void reportError(const antlr4::ParserRuleContext* ctx,

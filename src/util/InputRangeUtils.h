@@ -35,12 +35,11 @@ namespace ad_utility {
 //    the deduction guide), and let the underlying view inherit from the
 //    `DetailsProvider`. See `InputRangeUtilsTest.cpp` for an example, and
 //    `IndexScan.cpp` for a real-life usage.
-CPP_class_template(typename View, typename F,
-                   typename Details = NoDetails)(requires(
-    ql::ranges::input_range<View>&& ql::ranges::view<View>&&
-        std::is_object_v<F>&&
-            ranges::invocable<F, ql::ranges::range_reference_t<
-                                     View>>)) struct CachingTransformInputRange
+CPP_class_template(typename View, typename F, typename Details = NoDetails)(
+    requires(ql::ranges::input_range<View>&& ql::ranges::view<View>&&
+                 std::is_object_v<F>&&
+                     ranges::invocable<F, ql::ranges::range_reference_t<View>>))
+struct CachingTransformInputRange
     : InputRangeFromGet<std::decay_t<std::invoke_result_t<
                             F, ql::ranges::range_reference_t<View>>>,
                         Details> {
@@ -258,8 +257,8 @@ using ResFromFunction = loopControl::loopControlValueT<std::invoke_result_t<F>>;
 
 // A class that allows to synthesize an input range directly from a callable
 // that returns `LoopControl<T>`.
-CPP_class_template(typename F)(
-    requires std::is_object_v<F>) struct InputRangeFromLoopControlGet
+CPP_class_template(typename F)(requires std::is_object_v<F>)
+struct InputRangeFromLoopControlGet
     : InputRangeFromGet<detail::ResFromFunction<F>> {
  private:
   using T = detail::ResFromFunction<F>;
@@ -330,9 +329,10 @@ CPP_class_template(typename F)(
 // A class that takes a view and a function that transforms the elements of the
 // view into a `LoopControl` object, and synthesizes an `input_range` from these
 // arguments.
-CPP_class_template(typename View, typename F)(requires(
-    ql::ranges::input_range<View>&& ql::ranges::view<View>&&
-        std::is_object_v<F>)) struct CachingContinuableTransformInputRange
+CPP_class_template(typename View, typename F)(
+    requires(ql::ranges::input_range<View>&& ql::ranges::view<View>&&
+                 std::is_object_v<F>))
+struct CachingContinuableTransformInputRange
     : InputRangeFromGet<detail::Res<View, F>> {
  private:
   using Res = detail::Res<View, F>;
@@ -399,8 +399,8 @@ CachingContinuableTransformInputRange(Range&&, F)
 
 // A function that returns a lazy range that yields a single value. The value
 // is the result of invoking `singleValueGetter`.
-CPP_template(typename F)(requires std::is_invocable_v<
-                         F>) auto lazySingleValueRange(F singleValueGetter) {
+CPP_template(typename F)(requires std::is_invocable_v<F>)
+auto lazySingleValueRange(F singleValueGetter) {
   using T = std::invoke_result_t<F>;
   static_assert(std::is_object_v<T>,
                 "The functor of `lazySingleValueRange` must yield an "

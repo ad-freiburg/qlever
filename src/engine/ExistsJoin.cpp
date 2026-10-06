@@ -566,11 +566,9 @@ Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
 
 // _____________________________________________________________________________
 CPP_template_def(typename Range)(
-    requires ql::ranges::input_range<Range>&& ql::ranges::sized_range<Range>&&
-        ql::concepts::convertible_to<
-            ql::ranges::range_value_t<Range>,
-            bool>) void ExistsJoin::addExistsColumn(IdTable& idTable,
-                                                    Range&& range) const {
+    requires ql::ranges::input_range<Range> && ql::ranges::sized_range<Range> &&
+    ql::concepts::convertible_to<ql::ranges::range_value_t<Range>, bool>)
+void ExistsJoin::addExistsColumn(IdTable& idTable, Range&& range) const {
   idTable.addEmptyColumn();
   ad_utility::chunkedCopy(
       ql::views::transform(AD_FWD(range),

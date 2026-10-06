@@ -51,9 +51,9 @@ namespace ad_utility {
 // compile time
 struct EnumWithStringsBaseTag {};
 
-CPP_template(typename Derived,
-             typename Enum)(requires std::is_enum_v<Enum>) class EnumWithStrings
-    : public EnumWithStringsBaseTag {
+CPP_template(typename Derived, typename Enum)(
+    requires std::is_enum_v<Enum>)
+class EnumWithStrings : public EnumWithStringsBaseTag {
  private:
   Enum value_{};
 
@@ -158,8 +158,8 @@ CPP_template(typename Derived,
 
   // Hashing
   CPP_template_2(typename H, typename D)(
-      requires ql::concepts::same_as<D, Derived>) friend H
-      AbslHashValue(H h, const D& derived) {
+      requires ql::concepts::same_as<D, Derived>)
+  friend H AbslHashValue(H h, const D& derived) {
     return H::combine(std::move(h), static_cast<Enum>(derived));
   }
 
@@ -172,11 +172,8 @@ CPP_template(typename Derived,
 // classes within `boost::program_options`. The values are parsed via the
 // `fromString` method.
 CPP_template(typename E)(
-    requires std::is_base_of_v<ad_utility::EnumWithStringsBaseTag,
-                               E>) void validate(boost::any& v,
-                                                 const std::vector<std::string>&
-                                                     values,
-                                                 E*, int) {
+    requires std::is_base_of_v<ad_utility::EnumWithStringsBaseTag, E>)
+void validate(boost::any& v, const std::vector<std::string>& values, E*, int) {
   // First parse as the command line argument as a string.
   // Note: `validate` stores the result in `v`.
   std::string* dummy = nullptr;

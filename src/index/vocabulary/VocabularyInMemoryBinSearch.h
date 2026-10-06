@@ -70,9 +70,8 @@ class VocabularyInMemoryBinSearch
   // buffer is valid and unchanged. The layout read here exactly matches the one
   // written by the generic serialization function below.
   CPP_template(typename S)(
-      requires ad_utility::serialization::ZeroCopyReadSerializer<
-          S>) static VocabularyInMemoryBinSearch
-      fromZeroCopyDeserializer(S& serializer) {
+      requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
+  static VocabularyInMemoryBinSearch fromZeroCopyDeserializer(S& serializer) {
     VocabularyInMemoryBinSearch result;
     result.words_ = Words::fromZeroCopyDeserializer(serializer);
     result.indices_ = IndexStorage::fromZeroCopyDeserializer(serializer);

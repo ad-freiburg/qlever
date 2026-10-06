@@ -109,9 +109,9 @@ class BlankNodeExpression : public SparqlExpression {
   // based on the result of `getNextLabel`.
   CPP_template(typename Printable, typename Func)(
       requires ad_utility::InvocableWithConvertibleReturnType<
-          Func, std::optional<Printable>>
-          CPP_and std::is_constructible_v<absl::AlphaNum, Printable>)
-      ExpressionResult
+          Func, std::optional<Printable>> &&
+      std::is_constructible_v<absl::AlphaNum, Printable>)
+  ExpressionResult
       evaluateImpl(EvaluationContext* context, Func getNextLabel) const {
     VectorWithMemoryLimit<IdOrLocalVocabEntry> result{context->_allocator};
     const size_t numElements = context->size();
