@@ -35,13 +35,28 @@ namespace {
 using namespace vocabulary_test;
 using namespace ad_utility::vocabulary;
 
-// A stateless "compressor" that applies a trivial transformation to a string
+// A stateless test "compressor" that applies a trivial transformation to a
+// string. Satisfies the in-place decompression interface: `maxDecompressedSize`
+// provides the output bound, while `decompressInto` writes into caller-provided
+// storage and returns the number of bytes written.
 struct DummyDecoder {
-  static std::string decompress(std::string_view compressed) {
-    std::string result{compressed};
-    for (char& c : result) {
-      c -= 2;
+  static size_t maxDecompressedSize(std::string_view compressed) {
+    return compressed.size();
+  }
+
+  static size_t decompressInto(std::string_view compressed,
+                               ql::span<char> out) {
+    AD_CONTRACT_CHECK(out.size() >= compressed.size());
+    for (auto&& [dest, src] :
+         ::ranges::views::zip(out.subspan(0, compressed.size()), compressed)) {
+      dest = static_cast<char>(src - 2);
     }
+    return compressed.size();
+  }
+
+  static std::string decompress(std::string_view compressed) {
+    std::string result(compressed.size(), '\0');
+    decompressInto(compressed, ql::span<char>{result.data(), result.size()});
     return result;
   }
   // This class has no state, but it still needs to be serialized.
@@ -211,7 +226,8 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchRejectsEmptyIndices) {
 
 // _____________________________________________________________________________
 // A vocabulary containing the empty string word ("") must decompress correctly
-// through `lookupBatch` without crashes across all compressors.
+// through `lookupBatch` without allocations or crashes across all compressors
+// (exercising the `boundOnDecompressedWordSize == 0` fast path).
 TYPED_TEST(CompressedVocabularyF, LookupBatchEmptyWordInVocabulary) {
   const std::vector<std::string> words{"alpha", "", "beta", "", "gamma"};
   auto vocab = this->createCompressedVocabulary()(words);
@@ -655,6 +671,64 @@ TEST(CompressedVocabularyWithHoles, nonAscendingIndicesThrow) {
 }
 
 // _____________________________________________________________________________
+// A vocabulary containing the empty string word ("") must be scanned correctly
+// across all compressors (exercising the `maxDecompressedSize == 0` fast path
+// in `scanAll`'s buffered decode), and zero-length views must provide non-null
+// data pointers.
+TYPED_TEST(CompressedVocabularyF, ScanAllEmptyWordInVocabulary) {
+  auto createVocab = TestFixture::createCompressedVocabulary();
+  const std::vector<std::string> words{"alpha", "", "beta", "", "gamma"};
+  auto vocab = createVocab(words);
+  std::vector<std::string> scannedWords;
+  for (const IndexAndWord& entry : vocab.scanAll()) {
+    if (entry.word_.empty()) {
+      EXPECT_NE(entry.word_.data(), nullptr);
+    }
+    scannedWords.emplace_back(entry.word_);
+  }
+  using ::testing::ElementsAreArray;
+  EXPECT_THAT(scannedWords, ElementsAreArray(words));
+}
+
+// _____________________________________________________________________________
+// Direct test of the documented lifetime semantics of `scanAll`: each yielded
+// `string_view` points into the range object that is REUSED for
+// the next element, so a previously yielded view must no longer hold the old
+// word once the next element has been pulled. Because the buffer outlives the
+// whole range (it lives in the range adaptor's closure), reading the stale
+// view afterwards is well-defined memory access -- which makes the assertion
+// deterministic rather than UB-dependent.
+TYPED_TEST(CompressedVocabularyF, ScanAllViewInvalidAfterNextPull) {
+  auto createVocab = TestFixture::createCompressedVocabulary();
+  // The first word is longer than the second so the decode buffer allocated on
+  // the first pull is guaranteed to have enough capacity for the second word
+  // without reallocating, ensuring the buffer pointer remains stable and
+  // well-defined while its contents are overwritten.
+  const std::vector<std::string> words{"firstMuchLongerWordPreallocatingBuffer",
+                                       "secondShort"};
+  auto vocab = createVocab(words);
+
+  auto range = vocab.scanAll();
+  auto it = ql::ranges::begin(range);
+  ASSERT_NE(it, ql::ranges::end(range));
+  IndexAndWord first = *it;
+  ASSERT_EQ(first.index_, 0u);
+  ASSERT_EQ(first.word_, words[0]);
+  const char* firstData = first.word_.data();
+
+  ++it;
+  ASSERT_NE(it, ql::ranges::end(range));
+  IndexAndWord second = *it;
+  ASSERT_EQ(second.index_, 1u);
+  ASSERT_EQ(second.word_, words[1]);
+
+  // The stale view must no longer represent the first word: the underlying
+  // buffer was reused for the second decompression.
+  EXPECT_EQ(first.word_.data(), firstData);
+  EXPECT_NE(first.word_, words[0]);
+}
+
+// _____________________________________________________________________________
 // `lookupBatch` with several decoder blocks: a small block size (2 words per
 // block) forces multiple decoders, exercising the per-request decoder
 // selection. Covers a single-element batch, a batch with repeated indices,
@@ -705,4 +779,55 @@ TYPED_TEST(CompressedVocabularyF, LookupBatchAcrossDecoderBlocks) {
   }
 
   ad_utility::deleteFile(filename);
+}
+
+// _____________________________________________________________________________
+TEST(DecoderMultiplexer, DirectDecompressIntoAndMaxDecompressedSize) {
+  std::vector<DummyDecoder> decoders{DummyDecoder{}, DummyDecoder{}};
+  ad_utility::vocabulary::detail::DecoderMultiplexer<DummyDecoder> mux{
+      std::move(decoders)};
+  ASSERT_EQ(mux.numDecoders(), 2u);
+
+  const std::string compressed = DummyCompressionWrapper::compress("testword");
+  const size_t bound = mux.maxDecompressedSize(compressed, 0);
+  EXPECT_EQ(bound, compressed.size());
+
+  std::string outputBuffer(bound, '\0');
+  std::string scratch;
+  const size_t written = mux.decompressInto(
+      compressed, 0, ql::span<char>{outputBuffer.data(), outputBuffer.size()},
+      scratch);
+  EXPECT_EQ(written, 8u);
+  EXPECT_EQ(std::string_view(outputBuffer.data(), written), "testword");
+  EXPECT_EQ(mux.decompress(compressed, 0), "testword");
+
+  // An undersized output buffer must be rejected by the underlying decoder's
+  // contract check (`out.size() >= compressed.size()`).
+  ql::span<char> undersized{outputBuffer.data(), bound - 1};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      static_cast<void>(mux.decompressInto(compressed, 0, undersized, scratch)),
+      ::testing::HasSubstr("out.size() >= compressed.size()"));
+
+  // Out-of-range decoder indices must be rejected for all dispatching
+  // methods rather than silently reading out of bounds.
+  const size_t invalidIndex = mux.numDecoders();
+  EXPECT_THROW(
+      static_cast<void>(mux.maxDecompressedSize(compressed, invalidIndex)),
+      std::out_of_range);
+  EXPECT_THROW(
+      static_cast<void>(mux.decompressInto(
+          compressed, invalidIndex,
+          ql::span<char>{outputBuffer.data(), outputBuffer.size()}, scratch)),
+      std::out_of_range);
+  EXPECT_THROW(static_cast<void>(mux.decompress(compressed, invalidIndex)),
+               std::out_of_range);
+
+  // An empty output buffer is valid only for an empty compressed word, which
+  // decompresses to zero bytes; for a non-empty word it is rejected before the
+  // decoder is called.
+  ql::span<char> empty{};
+  EXPECT_EQ(mux.decompressInto("", 0, empty, scratch), 0u);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      static_cast<void>(mux.decompressInto(compressed, 0, empty, scratch)),
+      ::testing::HasSubstr("!out.empty() || compressed.empty()"));
 }

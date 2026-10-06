@@ -46,4 +46,10 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(PrefixCompressorBenchmark)
 
+    addAndLinkBenchmark(CompressedVocabLookupBatchMicroBenchmark vocabulary
+        fsst)
+
+    addAndLinkBenchmark(CompressedVocabLookupBatchEndToEndBenchmark vocabulary
+        fsst)
+
 endif()
