@@ -221,6 +221,49 @@ TEST(CompressedExternalIdTable, sorterRandomInputs) {
   testExternalSorter<0>(NUM_COLS, 0, 1_MB);
 }
 
+// _____________________________________________________________________________
+// The blocks of a column-major buffer are sorted by
+// `ad_utility::blockSort::blockIndirectSort` through the proxy row references
+// of an `IdTable`, see `sortBlockRange`. The blocks of the sorter tests above
+// are far too small for the parallel paths of that sort, so this test sorts
+// ranges that are big enough for them: one that takes the parallel quicksort
+// (fewer than `minNumThreadsForBlocks` threads) and one that takes the full
+// block indirect algorithm, including the merging and the moving of the
+// blocks.
+TEST(CompressedExternalIdTable, blockIndirectSortOfColumnMajorRows) {
+  // Order by all columns, so that the result of the (unstable) sort is unique
+  // and can be compared to a reference.
+  auto lessThanByAllColumns = [](const auto& a, const auto& b) {
+    for (size_t col = 0; col < NUM_COLS; ++col) {
+      if (a[col] != b[col]) {
+        return a[col] < b[col];
+      }
+    }
+    return false;
+  };
+  // Enough rows for `detail::minNumThreadsForBlocks` threads, each of which
+  // needs a whole group of blocks, see `detail::runSort`.
+  constexpr size_t numRows = 400'000;
+  net::thread_pool pool{8};
+  auto runTest = [&](uint32_t numThreads) {
+    SCOPED_TRACE(absl::StrCat("numThreads=", numThreads));
+    CopyableIdTable<NUM_COLS> table =
+        createRandomlyFilledIdTable(numRows, NUM_COLS).toStatic<NUM_COLS>();
+    CopyableIdTable<NUM_COLS> expected = table;
+    ql::ranges::sort(expected, lessThanByAllColumns);
+
+    ad_utility::blockSort::blockIndirectSort(
+        ql::ranges::subrange{table.begin(), table.end()}, lessThanByAllColumns,
+        numThreads, pool.get_executor());
+    EXPECT_EQ(table, expected);
+  };
+  // Below `detail::minNumThreadsForBlocks`, so this is the parallel quicksort.
+  runTest(2);
+  // The full block indirect sort.
+  runTest(8);
+  pool.join();
+}
+
 // Test that destroying the sorter while an async block-sorting task is still
 // running does not cause a use-after-free (caught by ASAN). This used to be a
 // bug, which was fixed by calling `waitForFuture()` in the destructor of

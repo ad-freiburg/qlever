@@ -11,6 +11,7 @@
 #include <absl/strings/str_cat.h>
 
 #include <atomic>
+#include <cstdint>
 #include <future>
 #include <optional>
 #include <utility>
@@ -25,6 +26,7 @@
 #include "util/CancellationHandle.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/File.h"
+#include "util/GlobalExecutor.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
@@ -33,6 +35,7 @@
 #include "util/TransparentFunctors.h"
 #include "util/UniqueCleanup.h"
 #include "util/Views.h"
+#include "util/blockSort/BlockIndirectSort.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 #include "util/views/ChunkedIotaView.h"
 
@@ -959,17 +962,40 @@ class CompressedExternalIdTableSorterTypeErased {
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
-// The implementation of sorting a single block
+// Sort the rows of a single block, given as the `range` of those rows.
+//
+// The sort runs on the global thread pool, such that it uses the same threads
+// (and hence obeys the same parallelism setting) as the other phases of the
+// index build, see `util/GlobalExecutor.h`.
+//
+// NOTE: The sort blocks the calling thread until it is complete, so it must
+// not be called from a thread of the global thread pool itself, or it could
+// deadlock against the pool. It isn't: the only caller that matters is
+// `BlockSorter::operator()` below, which runs either on the dedicated
+// background thread of
+// `CompressedExternalIdTableBase::transformAndWriteBlock`, or in the thread
+// that ends the input phase in
+// `CompressedExternalIdTableBase::transformAndPushLastBlock`. The latter is
+// the thread that consumes the sorted output, and a consumer is never a thread
+// of the pool: the ranges that the output is passed through (see
+// `ad_utility::uniqueBlockView` and `util/views/AsyncTransformView.h`) block
+// their consumer and therefore must not be consumed from such a thread
+// themselves.
+template <typename Range, typename Comparator>
+void sortBlockRange(Range& block, const Comparator& comparator) {
+  ad_utility::blockSort::blockIndirectSort(
+      ql::ranges::subrange{std::begin(block), std::end(block)}, comparator,
+      static_cast<uint32_t>(ad_utility::globalExecutorNumThreads()),
+      ad_utility::globalExecutor());
+}
+
+// The implementation of sorting a single block, see `sortBlockRange` above.
 template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
   template <typename T>
   void operator()(T& block) {
-#ifdef _PARALLEL_SORT
-    ad_utility::parallel_sort(std::begin(block), std::end(block), comparator_);
-#else
-    ql::ranges::sort(block, comparator_);
-#endif
+    sortBlockRange(block, comparator_);
   }
 };
 // Deduction guide for the implicit aggregate initialization (its "constructor")
@@ -1322,11 +1348,7 @@ class CompressedExternalIdTableSorter
 
   // _____________________________________________________________
   void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
-#ifdef _PARALLEL_SORT
-    ad_utility::parallel_sort(block.begin(), block.end(), comparator_);
-#else
-    ql::ranges::sort(block, comparator_);
-#endif
+    sortBlockRange(block, comparator_);
   }
 
   // A function with this name is needed by the mixin base class.
