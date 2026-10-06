@@ -452,8 +452,9 @@ TEST(MergeHelpers, chunkBoundariesWithRampedUpLeadingChunks) {
   EXPECT_THAT(splitPointsFor(4, {5, 10}),
               ::testing::ElementsAre(4u, 14u, 39u, 64u, 89u));
   // A leading size that is not smaller than a uniform chunk is ignored,
-  // together with all the sizes after it. Here only the `5` is a ramp-up, the
-  // `25` is not, so the result is the same as above.
+  // together with all the sizes after it. Here only the `5` is a ramp-up, so
+  // the `25` and the `10` are both dropped and the chunks start after `5`,
+  // `30`, `55` and `80` elements.
   EXPECT_THAT(splitPointsFor(4, {5, 25, 10}),
               ::testing::ElementsAre(4u, 29u, 54u, 79u));
   // The uniform chunks are already smaller than every leading size, so the
