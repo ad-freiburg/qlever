@@ -2007,10 +2007,9 @@ TEST(CompressedRelationWriter, blockMustHaveRoomForAtLeastOneRow) {
   ad_utility::deleteFile(filename);
 }
 
-// The blocks are written at the offsets that an atomic counter hands out,
-// starting at `0`, so the writer requires an empty file, see
+// Test that the writer requires an empty file. The blocks are written at the
+// offsets that an atomic counter hands out, starting at `0`, see
 // `CompressedRelationWriter::compressAndWriteColumn`.
-// _____________________________________________________________________________
 TEST(CompressedRelationWriter, fileMustBeEmpty) {
   auto [filename, cleanup] = testFilenameWithCleanup();
   {
@@ -2682,10 +2681,9 @@ IdTable scanLargeRelation(const std::string& filename,
 }
 }  // namespace
 
-// A block of a large relation that is larger than the `blocksize()` is written
-// as several blocks of about that size, and rows that agree in their first
-// three columns are never split across two of them.
-// _____________________________________________________________________________
+// Test that a block of a large relation that is larger than the `blocksize()`
+// is written as several blocks of about that size, and that rows that agree in
+// their first three columns are never split across two of them.
 TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices) {
   using namespace ::testing;
   constexpr int col0 = 42;
@@ -2777,11 +2775,9 @@ TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices) {
   }
 }
 
-// The compressed columns of the blocks are written concurrently, each of them
-// at a range of the file that it reserves beforehand, see
-// `CompressedRelationWriter::compressAndWriteColumn`. Those ranges have to
+// Test that the ranges of the file that the concurrently written compressed
+// columns reserve (see `CompressedRelationWriter::compressAndWriteColumn`)
 // tile the file exactly, with no gaps and no overlaps.
-// _____________________________________________________________________________
 TEST(CompressedRelationWriter, writtenColumnsExactlyTileTheFile) {
   // Compress and write as many blocks concurrently as the global thread pool
   // allows.
@@ -2813,14 +2809,11 @@ TEST(CompressedRelationWriter, writtenColumnsExactlyTileTheFile) {
   EXPECT_EQ(expectedOffset, ad_utility::File(filename, "r").sizeOfFile());
 }
 
-// A large relation of a pair of permutations is written to the twin
-// permutation from the blocks of the twin sorter, which are larger than the
-// `blocksize()` (see `twinSorterBlocksizeFactor_` in
-// `CompressedRelationPermutationWriterImpl.h`). Those blocks are cut into
-// blocks of about the `blocksize()` again, and rows that agree in their first
-// three columns are not split, even across the boundaries of the blocks of the
-// twin sorter.
-// _____________________________________________________________________________
+// Test that a large relation is written to the twin permutation in blocks of
+// about the `blocksize()`, although the twin sorter yields larger blocks (see
+// `twinSorterBlocksizeFactor_` in `CompressedRelationPermutationWriterImpl.h`),
+// and that rows that agree in their first three columns are not split, even
+// across the boundaries of the blocks of the twin sorter.
 TEST(CompressedRelationWriter, largeTwinRelationIsWrittenInSlices) {
   constexpr int col0 = 42;
   static constexpr size_t blocksize = 10;

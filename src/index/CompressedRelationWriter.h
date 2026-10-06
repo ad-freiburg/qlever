@@ -415,10 +415,12 @@ class CompressedRelationWriter {
   // Write the `block` of a large relation as blocks of about `blocksize()`
   // rows each (see `addBlockForLargeRelation`). Rows that agree in their first
   // three columns are never split across two of those blocks, exactly like at
-  // the boundaries of the input blocks in `addCompleteLargeRelation`. This
-  // lets the source of the blocks (the twin sorter of a large relation, see
-  // `addCompleteLargeRelation`) work with much larger blocks than the ones
-  // that end up in the permutation, which has a per-block cost.
+  // the boundaries of the input blocks in `addCompleteLargeRelation`.
+  //
+  // NOTE: This lets the source of the blocks (the twin sorter of a large
+  // relation, see `addCompleteLargeRelation`) yield much larger blocks than
+  // the ones that end up in the permutation, see `twinSorterBlocksizeFactor_`
+  // in `CompressedRelationPermutationWriterImpl.h`.
   void writeLargeRelationBlockInSlices(Id col0Id, IdTable block);
 
   // Return an empty block buffer with room for at least `2 * blocksize()`
