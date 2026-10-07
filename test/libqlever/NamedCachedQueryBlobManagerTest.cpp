@@ -856,6 +856,9 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
     EXPECT_FALSE(blob.empty());
     return blob;
   }();
+  // A geo index requires the new blob format (also without new words).
+  expectBlobFormatVersion(compressedBlob,
+                          Manager::formatVersionWithSecondaryVocab);
 
   // A spatial join with the cached geometry index (from the blob).
   std::string spatialQuery = spatialJoinQuery("POINT(7.841295 47.997731)");

@@ -211,7 +211,7 @@ TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabWithGeoIndex) {
   ASSERT_FALSE(value->resultSortedOn_.empty());
   ASSERT_TRUE(value->cachedGeoIndex_.has_value());
   const auto& originalGeoIndex = value->cachedGeoIndex_.value();
-  auto numShapes = originalGeoIndex.getIndex()->num_shape_ids();
+  auto numShapes = originalGeoIndex.numShapes();
   ASSERT_EQ(numShapes, 3);
 
   SecondaryVocabulary secondaryVocab;
@@ -219,17 +219,19 @@ TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabWithGeoIndex) {
   EXPECT_EQ(secondaryVocab.numWords(), 2);
   ASSERT_TRUE(rewritten.cachedGeoIndex_.has_value());
   const auto& rewrittenGeoIndex = rewritten.cachedGeoIndex_.value();
-  EXPECT_EQ(rewrittenGeoIndex.getIndex().get(),
-            originalGeoIndex.getIndex().get());
+  ASSERT_EQ(rewrittenGeoIndex.numSegments(), 1);
+  EXPECT_EQ(rewrittenGeoIndex.segments().at(0).get(),
+            originalGeoIndex.segments().at(0).get());
 
   // Each shape refers to the (rewritten) row that it referred to before.
   auto originalView = ExplicitIdTableOperation::viewOf(value->result_);
   auto rewrittenView = ExplicitIdTableOperation::viewOf(rewritten.result_);
-  EXPECT_NE(rewrittenGeoIndex.getRow(0), originalGeoIndex.getRow(0));
-  for (int shape = 0; shape < numShapes; ++shape) {
+  EXPECT_NE(rewrittenGeoIndex.getRow(0, 0), originalGeoIndex.getRow(0, 0));
+  for (size_t shape = 0; shape < numShapes; ++shape) {
     for (size_t col = 0; col < originalView.numColumns(); ++col) {
-      EXPECT_EQ(rewrittenView(rewrittenGeoIndex.getRow(shape), col),
-                rewriteId(originalView(originalGeoIndex.getRow(shape), col),
+      EXPECT_EQ(rewrittenView(rewrittenGeoIndex.getRow(0, shape).value(), col),
+                rewriteId(originalView(
+                              originalGeoIndex.getRow(0, shape).value(), col),
                           secondaryVocab));
     }
   }
