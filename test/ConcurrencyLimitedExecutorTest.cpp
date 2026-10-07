@@ -37,7 +37,7 @@ using namespace std::chrono_literals;
 // Generous, as it is only waited for in full if something is broken.
 constexpr auto timeout = 10s;
 // Always waited for in full to check that something does NOT happen.
-constexpr auto shortTimeout = 50ms;
+constexpr auto shortTimeout = 10ms;
 
 // Track the number of concurrently running tasks and its maximum.
 struct ConcurrencyTracker {
