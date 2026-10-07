@@ -14,6 +14,7 @@
 #include <boost/asio/thread_pool.hpp>
 
 #include "../../util/AllocatorTestHelpers.h"
+#include "../../util/FileTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
@@ -982,17 +983,9 @@ struct SpillFiles {
 };
 SpillFiles currentSpillFiles(const std::string& prefix) {
   SpillFiles result;
-  ql::filesystem::path prefixAsPath{prefix};
-  auto directory = prefixAsPath.parent_path();
-  std::string base = prefixAsPath.filename().string();
   ql::error_code errorCode;
-  for (const auto& entry : ql::filesystem::directory_iterator{
-           directory.empty() ? ql::filesystem::path{"."} : directory,
-           errorCode}) {
-    if (entry.path().filename().string().rfind(base, 0) != 0) {
-      continue;
-    }
-    auto size = ql::filesystem::file_size(entry.path(), errorCode);
+  for (const auto& path : ad_utility::testing::filesWithPrefix(prefix)) {
+    auto size = ql::filesystem::file_size(path, errorCode);
     if (!errorCode) {
       ++result.numFiles_;
       result.totalSize_ += static_cast<size_t>(size);
@@ -1004,19 +997,8 @@ SpillFiles currentSpillFiles(const std::string& prefix) {
 // Delete every spill file that starts with the given `prefix`, for the case
 // that a test failed before the merge could clean up after itself.
 void deleteSpillFiles(const std::string& prefix) {
-  ql::filesystem::path prefixAsPath{prefix};
-  auto directory = prefixAsPath.parent_path();
-  std::string base = prefixAsPath.filename().string();
   ql::error_code errorCode;
-  std::vector<ql::filesystem::path> paths;
-  for (const auto& entry : ql::filesystem::directory_iterator{
-           directory.empty() ? ql::filesystem::path{"."} : directory,
-           errorCode}) {
-    if (entry.path().filename().string().rfind(base, 0) == 0) {
-      paths.push_back(entry.path());
-    }
-  }
-  for (const auto& path : paths) {
+  for (const auto& path : ad_utility::testing::filesWithPrefix(prefix)) {
     ql::filesystem::remove(path, errorCode);
   }
 }

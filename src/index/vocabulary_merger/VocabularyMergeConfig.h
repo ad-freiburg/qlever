@@ -96,18 +96,6 @@ struct VocabularyMergeParameters {
   size_t numPrefetchedOutputBlocks_ = VOCAB_MERGE_NUM_PREFETCHED_OUTPUT_BLOCKS;
 };
 
-// Return the number of output blocks that are alive at the same time when
-// `numChunksInFlight` chunks are merged concurrently: per chunk the one that is
-// being filled, the one that may be on its way to the spill file, and the
-// buffered ones, and on the consumer side the prefetched blocks, the one that
-// the read-ahead is handing over, and the one that the consumer holds.
-constexpr size_t numLiveVocabularyMergeOutputBlocks(
-    size_t numChunksInFlight, size_t numBufferedBlocksPerChunk,
-    size_t numPrefetchedOutputBlocks) {
-  return numChunksInFlight * (numBufferedBlocksPerChunk + 2) +
-         numPrefetchedOutputBlocks + 2;
-}
-
 // The memory of a merge of the partial vocabularies, split between the read
 // buffers of the input blocks and the output blocks, see
 // `vocabularyMergeMemorySplit`.
@@ -131,7 +119,7 @@ inline VocabularyMergeMemorySplit vocabularyMergeMemorySplit(
 // Return the memory of a single output block (before the clamping, see
 // `computeVocabularyMergeParameters`) if the `outputMemory` is split evenly
 // between all the output blocks that are alive at the same time, see
-// `numLiveVocabularyMergeOutputBlocks`.
+// `parallelBlockMerge::numLiveOutputBlocks`.
 inline MemorySize vocabularyMergeOutputBlockMemory(
     MemorySize outputMemory, size_t numChunksInFlight,
     size_t numBufferedBlocksPerChunk =
@@ -139,7 +127,7 @@ inline MemorySize vocabularyMergeOutputBlockMemory(
     size_t numPrefetchedOutputBlocks =
         VOCAB_MERGE_NUM_PREFETCHED_OUTPUT_BLOCKS) {
   return MemorySize::bytes(outputMemory.getBytes() /
-                           numLiveVocabularyMergeOutputBlocks(
+                           parallelBlockMerge::numLiveOutputBlocks(
                                numChunksInFlight, numBufferedBlocksPerChunk,
                                numPrefetchedOutputBlocks));
 }

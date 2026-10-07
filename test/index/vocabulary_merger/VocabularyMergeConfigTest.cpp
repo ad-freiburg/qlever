@@ -17,6 +17,7 @@
 
 using namespace ad_utility::vocabulary_merger;
 using ad_utility::MemorySize;
+using ad_utility::parallelBlockMerge::numLiveOutputBlocks;
 
 namespace {
 // Compute the parameters for a merge of `numRuns` runs with the given
@@ -51,7 +52,7 @@ VocabularyMergeParameters computeAndCheck(
         parameters.readBufferSize_ * (numRuns * parameters.numChunksInFlight_),
         inputMemory);
   }
-  size_t numLiveBlocks = numLiveVocabularyMergeOutputBlocks(
+  size_t numLiveBlocks = numLiveOutputBlocks(
       parameters.numChunksInFlight_, parameters.numBufferedBlocksPerChunk_,
       parameters.numPrefetchedOutputBlocks_);
   if (parameters.outputBlockMemory_ >
@@ -68,10 +69,8 @@ TEST(VocabularyMergeConfig, memorySplit) {
   EXPECT_EQ(input, MemorySize::bytes(200));
   EXPECT_EQ(output, MemorySize::bytes(600));
   // The output memory is split evenly between all the live output blocks.
-  EXPECT_EQ(
-      vocabularyMergeOutputBlockMemory(MemorySize::bytes(1000), 2, 1, 3),
-      MemorySize::bytes(1000 / numLiveVocabularyMergeOutputBlocks(2, 1, 3)));
-  EXPECT_EQ(numLiveVocabularyMergeOutputBlocks(2, 1, 3), 2u * 3u + 3u + 2u);
+  EXPECT_EQ(vocabularyMergeOutputBlockMemory(MemorySize::bytes(1000), 2, 1, 3),
+            MemorySize::bytes(1000 / numLiveOutputBlocks(2, 1, 3)));
 }
 
 // _____________________________________________________________________________

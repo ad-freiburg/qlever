@@ -32,8 +32,6 @@
 using namespace ad_utility::vocabulary_merger;
 using namespace vocabularyMergerTestHelpers;
 using namespace ad_utility::memory_literals;
-using ad_utility::parallelBlockMerge::MergeOptions;
-using ad_utility::parallelBlockMerge::OutputBlockSize;
 using ad_utility::vocabulary_merger::detail::QueueWord;
 
 namespace {
@@ -115,13 +113,8 @@ void expectMergeResult(
     Blocks&& mergedBlocks, const std::vector<std::vector<Word>>& expected,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
-  std::vector<Word> result;
-  for (auto& block : mergedBlocks) {
-    EXPECT_FALSE(block.empty());
-    for (auto& word : block) {
-      result.push_back(toWord(word));
-    }
-  }
+  auto result =
+      parallelBlockMergeTestHelpers::collectBlocks(mergedBlocks, toWord);
   EXPECT_TRUE(ql::ranges::is_sorted(
       result, {},
       [](const Word& word) -> const auto& { return std::get<0>(word); }));
@@ -261,11 +254,7 @@ TEST(PartialVocabularyInput, merge) {
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 5);
   auto expected = writePartialVocabularies({300, 0, 250, 1, 400}, 3);
 
-  MergeOptions options;
-  options.outputBlockSize = OutputBlockSize::numElements(17);
-  options.parallelismHint = 4;
-  options.targetChunksPerThread = 3;
-  options.serialNumElementsThreshold = 0;
+  auto options = parallelBlockMergeTestHelpers::alwaysParallelOptions(17, 3);
 
   expectMergeResult(
       ad_utility::parallelBlockMerge::serialBlockMergeToRange<true>(
