@@ -93,11 +93,9 @@ TEST(IdColumnTest, idColumnViewValueOperators) {
   EXPECT_TRUE(defaultView.empty());
   EXPECT_EQ(defaultView.size(), 0u);
 
-  // `operator[]`/`at()`/`front()`/`back()` are all bounds-checked (via
-  // `AD_CONTRACT_CHECK` in `operator[]`, which `at()`/`front()`/`back()` are
-  // implemented in terms of), so all four throw on an empty view.
+  // `at()`, `front()` and `back()` are bounds-checked and throw on an empty
+  // view (`operator[]` is only checked in builds with expensive checks).
   ASSERT_THROW((void)defaultView.at(0u), ad_utility::Exception);
-  ASSERT_THROW((void)defaultView[0u], ad_utility::Exception);
   ASSERT_THROW((void)defaultView.front(), ad_utility::Exception);
   ASSERT_THROW((void)defaultView.back(), ad_utility::Exception);
 

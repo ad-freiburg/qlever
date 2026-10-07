@@ -81,13 +81,24 @@ class BasicIdColumnView {
   [[nodiscard]] size_t size() const noexcept { return size_; }
   [[nodiscard]] bool empty() const noexcept { return size_ == 0; }
 
+  // Like `ql::span` and the legacy `IdTable`, only `at()` is always
+  // bounds-checked, `operator[]` only in builds with expensive checks.
   [[nodiscard]] Reference operator[](size_t i) const {
-    AD_CONTRACT_CHECK(i < size_);
+    AD_EXPENSIVE_CHECK(i < size_);
     return {payloads_ + i, datatypes_ + i};
   }
-  [[nodiscard]] Reference at(size_t i) const { return (*this)[i]; }
-  [[nodiscard]] Reference front() const { return (*this)[0]; }
-  [[nodiscard]] Reference back() const { return (*this)[size_ - 1]; }
+  [[nodiscard]] Reference at(size_t i) const {
+    AD_CONTRACT_CHECK(i < size_);
+    return (*this)[i];
+  }
+  [[nodiscard]] Reference front() const {
+    AD_CONTRACT_CHECK(!empty());
+    return (*this)[0];
+  }
+  [[nodiscard]] Reference back() const {
+    AD_CONTRACT_CHECK(!empty());
+    return (*this)[size_ - 1];
+  }
 
   [[nodiscard]] iterator begin() const { return {payloads_, datatypes_}; }
   [[nodiscard]] iterator end() const {
