@@ -504,7 +504,12 @@ LimitOffsetHandling OrderBy::handlesLimitOffset() const {
 }
 
 // _____________________________________________________________________________
-void OrderBy::onLimitOffsetChanged([[maybe_unused]] const LimitOffsetClause&) {
+void OrderBy::onLimitOffsetChanged(
+    [[maybe_unused]] const LimitOffsetClause&,
+    [[maybe_unused]] bool childIsExclusivelyOwned) {
+  // NOTE: The child is never changed in place, but replaced by a restricted
+  // copy, so it does not matter whether it is shared.
+  //
   // The complete `LIMIT`/`OFFSET` of this operation (all calls merged).
   const auto& limitOffset = getLimitOffset();
   if (handlesLimitOffset() != LimitOffsetHandling::FULL ||
