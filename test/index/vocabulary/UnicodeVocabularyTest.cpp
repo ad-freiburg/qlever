@@ -99,3 +99,18 @@ TEST(UnicodeVocabulary, ScanAllEmptyVocabulary) {
   auto vocab = createVocabulary({});
   EXPECT_TRUE(scanAllToVector(vocab.scanAll()).empty());
 }
+
+// _____________________________________________________________________________
+// `VocabularyInMemory` has no `lookupBatch` overload that decodes into a
+// builder, so `lookupBatch` with a builder must take the fallback path that
+// copies the owning result into the builder.
+TEST(UnicodeVocabulary, LookupBatchWithoutBuilderSupport) {
+  static_assert(!SupportsBuilderLookupBatch<VocabularyInMemory>);
+  const std::vector<std::string> words{"alpha", "beta", "delta", "gamma"};
+  auto vocab = createVocabulary(words);
+  const std::array<size_t, 4> indices{3, 0, 2, 1};
+  ArenaVocabBatchBuilder builder(indices.size());
+  vocab.lookupBatch(indices, builder);
+  const auto result = std::move(builder).finalize();
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+}
