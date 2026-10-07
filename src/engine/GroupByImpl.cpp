@@ -34,10 +34,10 @@
 #include "index/TripleComponentConversions.h"
 #include "parser/Alias.h"
 #include "util/Algorithm.h"
+#include "util/ColumnStrippingHelpers.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
-#include "util/ColumnStrippingHelpers.h"
 
 namespace groupBy::detail {
 
@@ -468,25 +468,25 @@ float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 GroupByImpl::makeTreeWithStrippedColumns(
-    const std::set<Variable>& variables) const {
-  // Add variables and `_groupByVariables` to the variables that are required from
-  // the subtree. Keep in mind, that variables, which are not part of
+    const std::set<Variable>& requestedVariables) const {
+  // Add `requestedVariables` (the variables that are requested by the parent
+  // tree) and `_groupByVariables` to the variables that are required from the
+  // subtree. Keep in mind, that `requestedVariables` which are not part of
   // `_groupByVariables` or aliases, do not have any impact here, as the
   // columns have been already stripped in the constructor.
-  VarsRequiredFromSubtree helper(&variables);
+  VarsRequiredFromSubtree helper(&requestedVariables);
   std::vector<const Variable*> groupByVarsPtr;
   for (const Variable& groupByVar : _groupByVariables) {
     groupByVarsPtr.push_back(&groupByVar);
     helper.add(groupByVar);
   }
 
-  // Also add aliases if their target is also contained in variables requested
-  // by the parent tree.
+  // Also add aliases if their target is also contained in `requestedVariables`.
   const std::vector<Alias>* resultingAliases = &_aliases;
   std::vector<Alias> bufferAliases;
 
   for (const auto& alias : _aliases) {
-    if (variables.find(alias._target) != variables.end()) {
+    if (requestedVariables.find(alias._target) != requestedVariables.end()) {
       for (const Variable* aliasVar : alias._expression.containedVariables()) {
         helper.add(*aliasVar);
       }
@@ -498,11 +498,11 @@ GroupByImpl::makeTreeWithStrippedColumns(
     }
   }
 
-  // Erase the whole alias for `GroupBy` operation if its target is not contained
-  // in variables requested by the parent tree.
+  // Remove aliases from the `GroupBy` operation whose targets are not
+  // contained in `requestedVariables`.
   if (resultingAliases != &_aliases) {
-    std::erase_if(bufferAliases, [&variables](const Alias& alias) {
-      return !variables.contains(alias._target);
+    std::erase_if(bufferAliases, [&requestedVariables](const Alias& alias) {
+      return !requestedVariables.contains(alias._target);
     });
   }
 
@@ -517,8 +517,8 @@ GroupByImpl::makeTreeWithStrippedColumns(
   // Create `QueryExecutionTree` with `GroupBy` operation as root operation and
   // add additional `StripColumns` operation if needed.
   return columnStrippingHelpers::makeTreeWithOptionalStripOperation<GroupBy>(
-      getExecutionContext(), variables, _groupByVariables, std::move(*resultingAliases),
-      std::move(subtree));
+      getExecutionContext(), requestedVariables, _groupByVariables,
+      std::move(*resultingAliases), std::move(subtree));
 }
 
 // _____________________________________________________________________________

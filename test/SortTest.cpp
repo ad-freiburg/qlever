@@ -14,8 +14,8 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/Sort.h"
-#include "engine/ValuesForTesting.h"
 #include "engine/StripColumns.h"
+#include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
@@ -526,9 +526,9 @@ TEST(Sort, makeTreeWithStrippedColumns) {
       std::vector<std::optional<Variable>>{
           {Variable{"?a"}, Variable{"?b"}, Variable{"?c"}, Variable{"?d"}}});
 
-  // Test case 1: `Sort` keeps the original column 1 (?b).
-  // `makeTreeWithStrippedColumns` function has ?b as variables.
-  // Therefore, only ?b should remain, now at column index 0.
+  // Test case 1: `Sort` produces the column originally at index 1 (?b).
+  // The parent tree requests ?b.
+  // Therefore, only ?b should remain at column index 0.
   {
     Sort sort(qec, values, {1});
     std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
@@ -537,18 +537,19 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     ASSERT_TRUE((*resultTree) != nullptr);
     const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
 
-    // Check whether resultTree contains one column with name ?b
+    // Check whether `resultTree` contains one column with the name ?b.
     EXPECT_EQ(v2cMap.size(), 1);
     EXPECT_TRUE(v2cMap.contains(Variable{"?b"}));
 
-    // After stripping, ?b should have index 0 instead of index 1 as before.
+    // After stripping, ?b should have index 0 instead of index 1.
     ColumnIndex resultColumnIndex = v2cMap.at(Variable{"?b"}).columnIndex_;
     EXPECT_EQ(resultColumnIndex, 0);
   }
 
-  // Test case 2: `Sort` keeps the original columns 1, 3 (?b, ?d).
-  // `makeTreeWithStrippedColumns` function has the variables ?a, ?b and ?d.
-  // Therefore, ?a, ?b and ?d should remain.
+  // Test case 2: `Sort` produces the columns originally at indices 1 and 3
+  // (?b, ?d).
+  // The parent tree requests ?a, ?b and ?d.
+  // Therefore, ?a, ?b and ?d should remain at column indices 0, 1 and 2.
   {
     Sort sort(qec, values, {1, 3});
     std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
@@ -558,14 +559,15 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     ASSERT_TRUE((*resultTree) != nullptr);
     const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
 
-    // Check whether resultTree contains three columns with name ?a, ?b and ?d
+    // Check whether `resultTree` contains three columns with the names ?a, ?b
+    // and ?d.
     EXPECT_EQ(v2cMap.size(), 3);
-    EXPECT_THAT(v2cMap, testing::UnorderedElementsAre(testing::Key(Variable{"?a"}),
-                                                      testing::Key(Variable{"?b"}),
-                                                      testing::Key(Variable{"?d"})));
+    EXPECT_THAT(v2cMap,
+                testing::UnorderedElementsAre(testing::Key(Variable{"?a"}),
+                                              testing::Key(Variable{"?b"}),
+                                              testing::Key(Variable{"?d"})));
 
-    // Check the new indices (?d should have index 2 instead of index 3 as
-    // before the stripping).
+    // After stripping, ?a, ?b and ?d should have indices 0, 1 and 2.
     ColumnIndex resultColumnIndex = v2cMap.at(Variable{"?a"}).columnIndex_;
     EXPECT_EQ(resultColumnIndex, 0);
     resultColumnIndex = v2cMap.at(Variable{"?b"}).columnIndex_;
@@ -574,10 +576,9 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     EXPECT_EQ(resultColumnIndex, 2);
   }
 
-  // Test case 3: `Sort` keeps the original column 1 (?b).
-  // `makeTreeWithStrippedColumns` function has the variables ?a, ?b, ?d and the
-  // variable "?notIncluded", which has to be ignored by the function.
-  // Therefore, only ?a, ?b and ?d should remain.
+  // Test case 3: `Sort` produces the column originally at index 1 (?b).
+  // The parent tree requests ?a, ?b, ?d and ?notIncluded.
+  // Therefore, ?a, ?b and ?d should remain, while ?notIncluded is ignored.
   {
     Sort sort(qec, values, {1});
     std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
@@ -588,14 +589,15 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     ASSERT_TRUE((*resultTree) != nullptr);
     const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
 
-    // check whether resultTree contains three columns with name ?a, ?b and ?d
+    // Check whether `resultTree` contains three columns with the names ?a, ?b
+    // and ?d.
     EXPECT_EQ(v2cMap.size(), 3);
-    EXPECT_THAT(v2cMap, testing::UnorderedElementsAre(testing::Key(Variable{"?a"}),
-                                                      testing::Key(Variable{"?b"}),
-                                                      testing::Key(Variable{"?d"})));
+    EXPECT_THAT(v2cMap,
+                testing::UnorderedElementsAre(testing::Key(Variable{"?a"}),
+                                              testing::Key(Variable{"?b"}),
+                                              testing::Key(Variable{"?d"})));
 
-    // Check the new indices (?d should have index 2 instead of index 3 as
-    // before the stripping)
+    // After stripping, ?a, ?b and ?d should have indices 0, 1 and 2.
     ColumnIndex resultColumnIndex = v2cMap.at(Variable{"?a"}).columnIndex_;
     EXPECT_EQ(resultColumnIndex, 0);
     resultColumnIndex = v2cMap.at(Variable{"?b"}).columnIndex_;
@@ -604,9 +606,9 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     EXPECT_EQ(resultColumnIndex, 2);
   }
 
-  // Test case 4: `Sort` keeps the original column 1.
-  // `makeTreeWithStrippedColumns` function has the variable ?c.
-  // Therefore, only ?c should remain with index 0.
+  // Test case 4: `Sort` produces the column originally at index 1 (?b).
+  // The parent tree requests ?c.
+  // Therefore, only ?c should remain at column index 0.
   {
     Sort sort(qec, values, {1});
     std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
@@ -615,19 +617,20 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     ASSERT_TRUE((*resultTree) != nullptr);
     const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
 
-    // Check whether resultTree contains three columns with name ?a, ?b and ?d
+    // Check whether `resultTree` contains one column with the name ?c.
     EXPECT_EQ(v2cMap.size(), 1);
     EXPECT_TRUE(v2cMap.contains(Variable{"?c"}));
 
-    // Check the new index
+    // After stripping, ?c should have index 0.
     ColumnIndex resultColumnIndex = v2cMap.at(Variable{"?c"}).columnIndex_;
     EXPECT_EQ(resultColumnIndex, 0);
   }
 
-  // Test case 5: `Sort` keeps the original column 0 (?a).
-  // `makeTreeWithStrippedColumns` function has the additional variable ?a, ?b and ?c.
-  // Therefore, ?a, ?b and ?c should remain. This function tests the case when
-  // the `sortColumnIndices_` are already included in variables.
+  // Test case 5: `Sort` produces the column originally at index 0 (?a).
+  // The parent tree requests ?a, ?b and ?c.
+  // Therefore, ?a, ?b and ?c should remain at column indices 0, 1 and 2.
+  // This tests the case where the produced column is already included in the
+  // variables requested by the parent tree.
   {
     Sort sort(qec, values, {0});
     std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
@@ -637,13 +640,15 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     ASSERT_TRUE((*resultTree) != nullptr);
     const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
 
-    // check whether resultTree contains three columns with name ?a, ?b and ?d
+    // Check whether `resultTree` contains three columns with the names ?a, ?b
+    // and ?c.
     EXPECT_EQ(v2cMap.size(), 3);
-    EXPECT_THAT(v2cMap, testing::UnorderedElementsAre(testing::Key(Variable{"?a"}),
-                                                      testing::Key(Variable{"?b"}),
-                                                      testing::Key(Variable{"?c"})));
+    EXPECT_THAT(v2cMap,
+                testing::UnorderedElementsAre(testing::Key(Variable{"?a"}),
+                                              testing::Key(Variable{"?b"}),
+                                              testing::Key(Variable{"?c"})));
 
-    // Check the new indices.
+    // After stripping, ?a, ?b and ?c should have indices 0, 1 and 2.
     ColumnIndex resultColumnIndex = v2cMap.at(Variable{"?a"}).columnIndex_;
     EXPECT_EQ(resultColumnIndex, 0);
     resultColumnIndex = v2cMap.at(Variable{"?b"}).columnIndex_;
@@ -652,9 +657,9 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     EXPECT_EQ(resultColumnIndex, 2);
   }
 
-  // Test case 6: `Sort` keeps no original columns and
-  // `makeTreeWithStrippedColumns` function has no additional variables. Therefore no
-  // columns should remain (never the case). 
+  // Test case 6: `Sort` produces no original columns.
+  // The parent tree does not request any variables.
+  // Therefore, no columns should remain.
   {
     Sort sort(qec, values, {});
     std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
@@ -663,25 +668,25 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     ASSERT_TRUE((*resultTree) != nullptr);
     const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
 
-    // Check whether resultTree does not contain any columns.
+    // Check whether `resultTree` does not contain any columns.
     EXPECT_EQ(v2cMap.size(), 0);
   }
 
-  // Test case 7: Check whether the new `Sort` operation has updated its
-  // `sortColumnIndices_` (but keeps same number of `sortColumnIndices_`). Check
-  // whether additional `StripColumns` operation has been inserted above
-  // `Sort` operation.
+  // Test case 7: `Sort` produces the column originally at index 1 (?b).
+  // The parent tree requests ?d and ?notIncluded.
+  // Therefore, only ?d should remain in the result, while ?notIncluded is
+  // ignored. The `Sort` operation should keep ?b internally for sorting and
+  // should update its column index after stripping. An additional
+  // `StripColumns` operation should be added to the execution tree.
   {
-    // Check whether original `sortColumnIndices_` contains 1 as indicated in the
-    // constructor
+    // Check whether the original `sortColumnIndices_` contains 1 as indicated
+    // in the constructor.
     Sort sort{qec, values, {1}};
     std::vector<ColumnIndex> originalKeepIndices = sort.resultSortedOn();
     EXPECT_EQ(originalKeepIndices.size(), 1);
     EXPECT_EQ(originalKeepIndices[0], 1);
 
-    // Check whether the new `Distinct` operation has updated its
-    // `sortColumnIndices_` according to the variables of the
-    // `makeTreeWithStrippedColumns` function.
+    // Check whether a valid resultTree has been returned.
     std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
         sort.makeTreeWithStrippedColumns(
             std::set<Variable>{Variable{"?d"}, Variable{"?notIncluded"}});
@@ -689,9 +694,8 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     ASSERT_TRUE((*resultTree) != nullptr);
 
     // Check whether a `StripColumns` operation has been added to the execution
-    // tree, because there are keepIndices which are not included in the
-    // required variables of the parent tree. The only remaining variable of the
-    // `StripColumns` operation is ?d.
+    // tree. Only ?d should remain in the result of the `StripColumns`
+    // operation.
     auto rootOperation = (*resultTree)->getRootOperation();
     StripColumns* stripColumnsOperation =
         dynamic_cast<StripColumns*>(rootOperation.get());

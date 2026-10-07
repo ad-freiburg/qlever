@@ -19,8 +19,8 @@
 #include "index/ExternalSortFunctors.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
-#include "util/Random.h"
 #include "util/ColumnStrippingHelpers.h"
+#include "util/Random.h"
 
 // Type alias for the external sorter.
 //
@@ -286,17 +286,19 @@ std::unique_ptr<Operation> Sort::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
-  // Add variables and the variables corresponding to the `sortColumnIndices_` to
+Sort::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // Add `requestedVariables` (the variables that are requested by the parent
+  // tree) and the variables corresponding to the `sortColumnIndices_` to
   // the variables that are required from the subtree.
   std::vector<const Variable*> sortVars;
-  VarsRequiredFromSubtree helper(&variables);
+  VarsRequiredFromSubtree helper(&requestedVariables);
   for (const auto& jcl : sortColumnIndices_) {
     const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
     sortVars.push_back(&var);
     helper.add(var);
   }
-  // Collect all the varaibles that are required from the subtree.
+  // Get all the variables that are required from the subtree.
   const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
   // Continue with the recursion and column stripping of subtree.
@@ -312,7 +314,6 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   // Create `QueryExecutionTree` with `Sort` operation as root operation and add
   // additional `StripColumns` operation if needed.
   return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Sort>(
-      getExecutionContext(), variables,
-      std::move(subtree), std::move(sortColumnIndices),
-      explicitSort_);
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      std::move(sortColumnIndices), explicitSort_);
 }
