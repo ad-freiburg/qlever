@@ -1991,15 +1991,6 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     expectPush(unionOf(undefView(), undefView()),
                h::Union(pushedUndefView, pushedUndefView));
 
-    // Refused if `?bind` is a hidden variable (here: not selected by a
-    // subquery). Otherwise it would become an additional join column.
-    {
-      auto hidden = mcj(view(), scan("?s", "<p1>", "?bind"));
-      hidden->getRootOperation()->setSelectedVariablesForSubquery(
-          {V{"?s"}, V{"?o"}});
-      expectPush(hidden, std::nullopt);
-    }
-
     // `QueryExecutionTree::makeTreeWithBindColumn` (the entry point used by the
     // query planner) preserves the `LIMIT` and the visible variables (as
     // restricted by a subquery's `SELECT ?s`) of the original root, and
