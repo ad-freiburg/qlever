@@ -469,9 +469,9 @@ float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 GroupByImpl::makeTreeWithStrippedColumns(
     const std::set<Variable>& variables) const {
-  // Add variables and _groupByVariables to the variables that are required from
+  // Add variables and `_groupByVariables` to the variables that are required from
   // the subtree. Keep in mind, that variables, which are not part of
-  // _groupByVariables or aliases, dont have any consequences here, as the
+  // `_groupByVariables` or aliases, do not have any impact here, as the
   // columns have been already stripped in the constructor.
   VarsRequiredFromSubtree helper(&variables);
   std::vector<const Variable*> groupByVarsPtr;
@@ -481,7 +481,7 @@ GroupByImpl::makeTreeWithStrippedColumns(
   }
 
   // Also add aliases if their target is also contained in variables requested
-  // by parent-tree.
+  // by the parent tree.
   const std::vector<Alias>* resultingAliases = &_aliases;
   std::vector<Alias> bufferAliases;
 
@@ -498,24 +498,24 @@ GroupByImpl::makeTreeWithStrippedColumns(
     }
   }
 
-  // Erase the whole alias for GroupBy-Operation if its target is not contained
-  // in variables requested by the parent-tree.
+  // Erase the whole alias for `GroupBy` operation if its target is not contained
+  // in variables requested by the parent tree.
   if (resultingAliases != &_aliases) {
     std::erase_if(bufferAliases, [&variables](const Alias& alias) {
       return !variables.contains(alias._target);
     });
   }
 
-  // Collect all variables required from the subtree
+  // Collect all variables required from the subtree.
   const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
-  // Continue with the recursion and strip columns of subtree.
+  // Continue with the recursion and column stripping of subtree.
   std::shared_ptr<QueryExecutionTree> subtree =
       QueryExecutionTree::makeTreeWithStrippedColumns(_subtree,
                                                       varsRequiredFromSubtree);
 
-  // Create query execution tree with GroupBy-Operation as root-Operation and
-  // add additional stripColumns-Operation if needed.
+  // Create `QueryExecutionTree` with `GroupBy` operation as root operation and
+  // add additional `StripColumns` operation if needed.
   return columnStrippingHelpers::makeTreeWithOptionalStripOperation<GroupBy>(
       getExecutionContext(), variables, _groupByVariables, std::move(*resultingAliases),
       std::move(subtree));

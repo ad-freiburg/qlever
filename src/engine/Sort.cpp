@@ -287,7 +287,7 @@ std::unique_ptr<Operation> Sort::cloneImpl() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
-  // Add variables and the variables corresponding to the sortColumnIndices_ to
+  // Add variables and the variables corresponding to the `sortColumnIndices_` to
   // the variables that are required from the subtree.
   std::vector<const Variable*> sortVars;
   VarsRequiredFromSubtree helper(&variables);
@@ -299,18 +299,18 @@ Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
   // Collect all the varaibles that are required from the subtree.
   const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
-  // Continue with the recursion and strip columns of subtree.
+  // Continue with the recursion and column stripping of subtree.
   auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
       subtree_, varsRequiredFromSubtree);
 
-  // Find out the new column indices to update sortColumnIndices_
+  // Find out the new column indices to update `sortColumnIndices_`.
   std::vector<ColumnIndex> sortColumnIndices;
   for (const auto& var : sortVars) {
     sortColumnIndices.push_back(subtree->getVariableColumn(*var));
   }
 
-  // Create query execution tree with Sort-Operation as root-Operation and add
-  // additional stripColumns-Operation if needed.
+  // Create `QueryExecutionTree` with `Sort` operation as root operation and add
+  // additional `StripColumns` operation if needed.
   return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Sort>(
       getExecutionContext(), variables,
       std::move(subtree), std::move(sortColumnIndices),

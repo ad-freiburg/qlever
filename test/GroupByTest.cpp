@@ -3596,10 +3596,10 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(input), std::move(vars));
 
-  // Test case 1: GroupBy keeps ?a and ?b.
+  // Test case 1: `GroupBy` keeps ?a and ?b.
   // Alias: ?b results in ?sumB
-  // makeTreeWithStrippedColumns has ?a and ?sumB as variables.
-  // In this case there are less variables than groupByVariables and aliases.
+  // `makeTreeWithStrippedColumns` has ?a and ?sumB as variables.
+  // In this case there are less variables than `groupByVariables_` and aliases.
   {
     Alias detAlias(
         SparqlExpressionPimpl{
@@ -3623,10 +3623,10 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
                                               testing::Key(Variable{"?sumB"})));
   }
 
-  // Test case 2: GroupBy keeps ?b.
+  // Test case 2: `GroupBy` keeps ?b.
   // Alias: ?b results in ?sumB
-  // makeTreeWithStrippedColumns has ?a, ?b and ?sumB as variables.
-  // In this case there are more variables than groupByVariables and aliases.
+  // `makeTreeWithStrippedColumns` has ?a, ?b and ?sumB as variables.
+  // In this case there are more variables than `groupByVariables_` and aliases.
   {
     Alias detAlias(
         SparqlExpressionPimpl{
@@ -3651,9 +3651,9 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
                                               testing::Key(Variable{"?sumB"})));
   }
 
-  // Test case 3: GroupBy keeps ?a and ?c.
+  // Test case 3: `GroupBy` keeps ?a and ?c.
   // No Alias is available.
-  // makeTreeWithStrippedColumns has ?a, ?c ?b and ?notIncluded as variables.
+  // `makeTreeWithStrippedColumns` has ?a, ?c ?b and ?notIncluded as variables.
   // In this case there are non valid variables.
   {
     GroupBy groupBy(qec, {Variable{"?a"}, Variable{"?c"}}, std::vector<Alias>{},
@@ -3673,11 +3673,11 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
                                               testing::Key(Variable{"?c"})));
   }
 
-  // Test case 4: GroupBy keeps ?c and ?d
+  // Test case 4: `GroupBy` keeps ?c and ?d
   // no aliases
-  // makeTreeWithStrippedColumns has ?d  as additional variables.
-  // In this case we have more groupByVariables than variables. Therefore check,
-  // whether additional StripColumns-Operation has been added.
+  // `makeTreeWithStrippedColumns` has ?d  as additional variables.
+  // In this case we have more `groupByVariables_` than variables. Therefore check,
+  // whether additional `StripColumns` operation has been added.
   {
     GroupBy groupBy(qec, {Variable{"?c"}, Variable{"?d"}}, {}, subtree);
 
@@ -3687,15 +3687,15 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     ASSERT_TRUE((*resultTree) != nullptr);
     const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
 
-    // Only ?d should be kept, as ?c is only needed for groupBy-Operation, but
-    // is not requested by parent tree
+    // Only ?d should be kept, as ?c is only needed for `GroupBy` operation, but
+    // is not requested by parent tree.
     EXPECT_EQ(v2cMap.size(), 1);
     EXPECT_TRUE(v2cMap.contains(Variable{"?d"}));
 
-    // Check whether a StripColumns operation has been added to the execution
-    // tree, because there are groupByVariables_ which are not included in the
+    // Check whether a `StripColumns` operation has been added to the execution
+    // tree, because there are `groupByVariables_` which are not included in the
     // required variables of the parent tree. The only remaining variable of the
-    // StripColumns-Operation is ?d.
+    // `StripColumns` operation is ?d.
     auto rootOperation = (*resultTree)->getRootOperation();
     StripColumns* stripColumnsOperation =
         dynamic_cast<StripColumns*>(rootOperation.get());
@@ -3705,7 +3705,7 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     EXPECT_EQ(strColMap.size(), 1);
     EXPECT_TRUE(strColMap.contains(Variable{"?d"}));
 
-    // Check whether the GroupBy-Operation has still the same groupByVariables_
+    // Check whether the `GroupBy` operation has still the same `groupByVariables_`.
     qlm::vector<QueryExecutionTree*> subtree =
         stripColumnsOperation->getChildren();
     ASSERT_TRUE(subtree.at(0) != nullptr);
@@ -3719,11 +3719,11 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     EXPECT_EQ(newGroupByVariables.at(1), Variable{"?d"});
   }
 
-  // Test case 5: GroupBy keeps ?a
+  // Test case 5: `GroupBy` keeps ?a
   // Alias: ?b results in ?sumB
-  // makeTreeWithStrippedColumns has ?a as variable.
-  // Check whether the Alias is removed, because its target is not requested by
-  // the parent-tree.
+  // `makeTreeWithStrippedColumns` has ?a as variable.
+  // Check whether the alias is removed, because its target is not requested by
+  // the parent tree.
   {
     Alias detAlias(
         SparqlExpressionPimpl{
@@ -3743,10 +3743,10 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     EXPECT_EQ(v2cMap.size(), 1);
     EXPECT_TRUE(v2cMap.contains(Variable{"?a"}));
 
-    // Check whether a StripColumns operation has been added to the execution
-    // tree, because there are groupByVariables_ which are not included in the
+    // Check whether a `StripColumns` operation has been added to the execution
+    // tree, because there are `groupByVariables_` which are not included in the
     // required variables of the parent tree. The only remaining variable of the
-    // StripColumns-Operation is ?d.
+    // `StripColumns` operation is ?d.
     auto rootOperation = (*resultTree)->getRootOperation();
     GroupBy* groupByOperation = dynamic_cast<GroupBy*>(rootOperation.get());
     ASSERT_TRUE(groupByOperation != nullptr);
