@@ -7,6 +7,7 @@
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_join.h>
 
+#include <algorithm>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -115,7 +116,9 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
   AD_CONTRACT_CHECK(qec != nullptr);
   AD_CONTRACT_CHECK(permutation_ != nullptr);
   AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
-  determineMultiplicities();
+  // NOTE: The multiplicities are determined lazily (see `getMultiplicity`),
+  // because they may depend on the size estimate, which some callers only set
+  // after construction (see `makeCopyWithPrefilteredScanSpecAndBlocks`).
 }
 
 // _____________________________________________________________________________
@@ -469,23 +472,89 @@ size_t IndexScan::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-void IndexScan::determineMultiplicities() {
-  multiplicity_ = [this]() -> std::vector<float> {
-    const auto& idx = getIndex();
-    if (numVariables_ == 0) {
-      return {};
-    } else if (numVariables_ == 1) {
-      // There are no duplicate triples in RDF and two elements are fixed.
-      return {1.0f};
-    } else if (numVariables_ == 2) {
-      return idx.getMultiplicities(*getPermutedTriple()[0], permutation(),
+std::vector<float> IndexScan::computeMultiplicitiesForIndex() const {
+  const auto& idx = getIndex();
+  std::vector<float> result;
+  if (numVariables_ == 1) {
+    // There are no duplicate triples in RDF and two elements are fixed.
+    result = {1.0f};
+  } else if (numVariables_ == 2) {
+    result = idx.getMultiplicities(*getPermutedTriple()[0], permutation(),
                                    locatedTriplesState());
+  } else if (numVariables_ == 3) {
+    result = idx.getMultiplicities(permutation());
+  }
+  result.resize(result.size() + additionalColumns_.size(), 1.0f);
+  return result;
+}
+
+// _____________________________________________________________________________
+std::vector<float> IndexScan::computeMultiplicitiesForView(
+    const MaterializedView& view) const {
+  // View statistics differ from the index statistics (duplicate rows, data in
+  // additional columns), so estimate a column's multiplicity as the number of
+  // rows of the scan divided by its number of distinct values in the view.
+  auto numRows = static_cast<float>(sizeEstimate_);
+
+  // With a fixed first column, the relation metadata has the exact number of
+  // rows and the exact multiplicity of the second column. Use the exact number
+  // of rows, unless the scan is prefiltered (then it has fewer rows than the
+  // relation, so use its size estimate, which for a small relation can still
+  // exceed the relation). Only for a small relation (computed on demand) is
+  // the third column's multiplicity also exact, the stored one of a large
+  // relation is a copy of the second's.
+  //
+  // NOTE: The size estimate of a small relation (one that shares its block
+  // with other relations) is a fixed fraction of the block size (see
+  // `small-index-scan-size-estimate-divisor`) and can be much smaller than the
+  // relation.
+  std::optional<CompressedRelationMetadata> relation;
+  bool isSmallRelation = false;
+  if (numVariables_ == 2) {
+    Id col0Id = scanSpecAndBlocks_.scanSpec_.col0Id().value();
+    isSmallRelation =
+        !permutation().metaData().getMetaDataIfPresent(col0Id).has_value();
+    relation = permutation().getMetadata(col0Id, locatedTriplesState());
+    // No metadata means that the relation (and thus the scan) is empty.
+    if (!relation.has_value()) {
+      numRows = 0.0f;
+    } else if (scanSpecAndBlocksIsPrefiltered_) {
+      numRows =
+          std::min(numRows, static_cast<float>(relation.value().numRows_));
     } else {
-      AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      return idx.getMultiplicities(permutation());
+      numRows = static_cast<float>(relation.value().numRows_);
     }
-  }();
-  multiplicity_.resize(multiplicity_.size() + additionalColumns_.size(), 1.0f);
+  }
+
+  auto multiplicity = [&](ColumnIndex col) {
+    if (relation.has_value() && col == 1) {
+      return relation.value().getCol1Multiplicity();
+    }
+    if (relation.has_value() && col == 2 && isSmallRelation) {
+      return relation.value().getCol2Multiplicity();
+    }
+    auto numDistinct = view.numDistinct(col).value_or(0);
+    return numDistinct == 0
+               ? 1.0f
+               : std::max(1.0f, numRows / static_cast<float>(numDistinct));
+  };
+
+  // The (unstripped) result consists of the last `numVariables_` of the first
+  // three columns of the view, followed by the additional columns.
+  std::vector<float> result;
+  for (ColumnIndex col = 3 - numVariables_; col < 3; ++col) {
+    result.push_back(multiplicity(col));
+  }
+  ql::ranges::transform(additionalColumns_, std::back_inserter(result),
+                        multiplicity);
+  return result;
+}
+
+// _____________________________________________________________________________
+void IndexScan::determineMultiplicities() {
+  auto view = permutation().materializedView();
+  multiplicity_ = view != nullptr ? computeMultiplicitiesForView(*view)
+                                  : computeMultiplicitiesForIndex();
 
   if (varsToKeep_.has_value()) {
     std::vector<float> actualMultiplicites;

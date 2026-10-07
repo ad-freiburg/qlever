@@ -14,6 +14,7 @@
 #include <string_view>
 
 #include "./MaterializedViewsTestHelpers.h"
+#include "./PrefilterExpressionTestHelpers.h"
 #include "./QueryPlannerTestHelpers.h"
 // The `server` library is not built under Emscripten (`Server.cpp` crashes
 // emsdk 6.0.2's clang backend, see `src/engine/CMakeLists.txt`), so the
@@ -24,6 +25,7 @@
 #include "./util/FileTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
@@ -637,9 +639,6 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   using ViewQuery = parsedQuery::MaterializedViewQuery;
   using Triple = SparqlTripleSimple;
   using V = Variable;
-  auto iri = [](const std::string& ref) {
-    return ad_utility::triple_component::Iri::fromIriref(ref);
-  };
 
   const V placeholderP{"?_ql_materialized_view_p"};
   const V placeholderO{"?_ql_materialized_view_o"};
@@ -1358,6 +1357,220 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
     auto count = res->idTableView().at(0, col);
     ASSERT_TRUE(count.getDatatype() == Datatype::Int);
     EXPECT_EQ(count.getInt(), 20 * numFakeSubjects_);
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(MaterializedViewsTestLarge, Multiplicities) {
+  // The view has 200'000 rows: 2 distinct predicates, 10'000 distinct
+  // subjects, 10'001 distinct objects and 10 distinct values of `?g`.
+  MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk(
+      "multView",
+      qlv().parseAndPlanQuery("SELECT ?p ?s ?o ?g { ?s ?p ?o . "
+                              "VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }"));
+  auto qec = getQec();
+  using ViewQuery = parsedQuery::MaterializedViewQuery;
+  using V = Variable;
+
+  // Return the multiplicity of the given variable in the result of `scan`.
+  auto multiplicity = [](IndexScan& scan, const V& var) {
+    return scan.getMultiplicity(
+        scan.getExternallyVisibleVariableColumns().at(var).columnIndex_);
+  };
+
+  // The number of distinct values of each column is stored in the info JSON.
+  // The first column is exact, the others are estimated.
+  auto filename =
+      absl::StrCat(testIndexBase_, ".view.multView", VIEW_INFO_SUFFIX);
+  nlohmann::json viewInfo;
+  ad_utility::makeIfstream(filename) >> viewInfo;
+  const auto& columns = viewInfo.at("columns");
+  EXPECT_EQ(columns.at(0).at("num_distinct").get<size_t>(), 2);
+  EXPECT_NEAR(columns.at(1).at("num_distinct").get<size_t>(), 10'000, 100);
+  EXPECT_NEAR(columns.at(2).at("num_distinct").get<size_t>(), 10'001, 100);
+  EXPECT_EQ(columns.at(3).at("num_distinct").get<size_t>(), 10);
+
+  // The number of distinct values is loaded with the view.
+  auto view = manager.getView("multView", nullptr);
+  EXPECT_THAT(view->numDistinct(0), ::testing::Optional(2));
+  EXPECT_NEAR(view->numDistinct(1).value(), 10'000, 100);
+  EXPECT_NEAR(view->numDistinct(2).value(), 10'001, 100);
+  EXPECT_THAT(view->numDistinct(3), ::testing::Optional(10));
+  EXPECT_EQ(view->numDistinct(4), std::nullopt);
+
+  // All columns variable: the multiplicities of the whole view.
+  {
+    auto scan =
+        manager.makeIndexScan(qec.get(), ViewQuery{"multView",
+                                                   {{V{"?p"}, V{"?P"}},
+                                                    {V{"?s"}, V{"?S"}},
+                                                    {V{"?o"}, V{"?O"}},
+                                                    {V{"?g"}, V{"?G"}}}});
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?P"}), 100'000);
+    EXPECT_NEAR(multiplicity(*scan, V{"?S"}), 20, 0.2);
+    EXPECT_NEAR(multiplicity(*scan, V{"?O"}), 20, 0.2);
+    EXPECT_NEAR(multiplicity(*scan, V{"?G"}), 20'000, 200);
+  }
+
+  // Regression test: A prefiltered copy of a scan (the size estimate of which
+  // is only set after construction) has the correct multiplicities. As the
+  // prefilter has to be on the first column, use a view with integers there.
+  {
+    manager.writeViewToDisk(
+        "multViewNum",
+        qlv().parseAndPlanQuery("SELECT ?o ?s ?g { ?s <p2> ?o . "
+                                "VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }"));
+    auto scan = manager.makeIndexScan(
+        qec.get(),
+        ViewQuery{
+            "multViewNum",
+            {{V{"?o"}, V{"?O"}}, {V{"?s"}, V{"?S"}}, {V{"?g"}, V{"?G"}}}});
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?G"}), 10'000);
+    using namespace makeFilterExpression;
+    using namespace filterHelper;
+    std::vector<sparqlExpression::PrefilterExprVariablePair> prefilters;
+    prefilters.push_back(pr(ge(ValueId::makeFromInt(10'000)), Variable{"?O"}));
+    auto prefiltered =
+        scan->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilters);
+    ASSERT_TRUE(prefiltered.has_value());
+    auto& prefilteredScan =
+        dynamic_cast<IndexScan&>(*prefiltered.value()->getRootOperation());
+    EXPECT_LT(prefilteredScan.getSizeEstimate(), scan->getSizeEstimate());
+    EXPECT_GT(prefilteredScan.getSizeEstimate(), 10'000);
+    EXPECT_FLOAT_EQ(multiplicity(prefilteredScan, V{"?G"}),
+                    prefilteredScan.getSizeEstimate() / 10.0f);
+
+    // Fixed first column with a small relation (10 rows: one subject, 10
+    // values of `?g`), which shares its block with other relations: The size
+    // estimate of the scan is only a rough guess, but the multiplicities are
+    // computed using the exact number of rows of the relation.
+    auto smallScan = manager.makeIndexScan(
+        qec.get(), ViewQuery{"multViewNum",
+                             {{V{"?o"}, TripleComponent{int64_t{2}}},
+                              {V{"?s"}, V{"?S"}},
+                              {V{"?g"}, V{"?G"}}}});
+    EXPECT_GT(smallScan->getSizeEstimate(), 10);
+    EXPECT_FLOAT_EQ(multiplicity(*smallScan, V{"?S"}), 10);
+    EXPECT_FLOAT_EQ(multiplicity(*smallScan, V{"?G"}), 1);
+
+    // Fixed first column and prefiltered second column: The multiplicities
+    // are based on the (smaller) size estimate of the prefiltered scan, not on
+    // the number of rows of the whole relation.
+    manager.writeViewToDisk(
+        "multViewPO",
+        qlv().parseAndPlanQuery("SELECT ?p ?o ?s ?g { ?s ?p ?o . "
+                                "VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }"));
+    auto relationScan =
+        manager.makeIndexScan(qec.get(), ViewQuery{"multViewPO",
+                                                   {{V{"?p"}, iri("<p2>")},
+                                                    {V{"?o"}, V{"?O"}},
+                                                    {V{"?s"}, V{"?S"}},
+                                                    {V{"?g"}, V{"?G"}}}});
+    EXPECT_EQ(relationScan->getSizeEstimate(), 100'000);
+    EXPECT_FLOAT_EQ(multiplicity(*relationScan, V{"?G"}), 10'000);
+    auto prefilteredRelation =
+        relationScan->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+            prefilters);
+    ASSERT_TRUE(prefilteredRelation.has_value());
+    auto& prefilteredRelationScan = dynamic_cast<IndexScan&>(
+        *prefilteredRelation.value()->getRootOperation());
+    EXPECT_LT(prefilteredRelationScan.getSizeEstimate(), 100'000);
+    EXPECT_FLOAT_EQ(multiplicity(prefilteredRelationScan, V{"?G"}),
+                    prefilteredRelationScan.getSizeEstimate() / 10.0f);
+  }
+
+  // Fixed first column with a small relation: the multiplicity of the third
+  // column is exact, even if the column is not distributed uniformly over the
+  // view (here `?o` is constant within each of the relations of 10 rows, but
+  // has 10'000 distinct values in the whole view).
+  {
+    manager.writeViewToDisk(
+        "multViewSmall",
+        qlv().parseAndPlanQuery("SELECT ?s ?g ?o { ?s <p2> ?o . "
+                                "VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }"));
+    auto scan = manager.makeIndexScan(
+        qec.get(),
+        ViewQuery{
+            "multViewSmall",
+            {{V{"?s"}, iri("<s1>")}, {V{"?g"}, V{"?G"}}, {V{"?o"}, V{"?O"}}}});
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?G"}), 1);
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?O"}), 10);
+  }
+
+  // Fixed first column with a small relation that fills a large part of its
+  // block (20'000 of 60'000 rows): the size estimate of the scan (a fixed
+  // fraction of the block) is smaller than the relation, but the multiplicity
+  // of the additional column `?o` is computed from the exact number of rows
+  // of the relation (about 10'001 distinct values of `?o` in the whole view).
+  {
+    manager.writeViewToDisk(
+        "multViewG", qlv().parseAndPlanQuery("SELECT ?g ?s ?p ?o { ?s ?p ?o . "
+                                             "VALUES ?g { 1 2 3 } }"));
+    auto scan = manager.makeIndexScan(
+        qec.get(), ViewQuery{"multViewG",
+                             {{V{"?g"}, TripleComponent{int64_t{1}}},
+                              {V{"?s"}, V{"?S"}},
+                              {V{"?p"}, V{"?P"}},
+                              {V{"?o"}, V{"?O"}}}});
+    EXPECT_LT(scan->getSizeEstimate(), 20'000);
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?S"}), 2);
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?P"}), 10'000);
+    EXPECT_NEAR(multiplicity(*scan, V{"?O"}), 2, 0.05);
+  }
+
+  // Fixed first column: the second column is exact (from the metadata of the
+  // relation), the others are estimated from the size of the relation and the
+  // number of distinct values in the whole view. The latter is exact for `?G`,
+  // which is distributed uniformly, but not for `?O`, which is constant in the
+  // relation of `<p1>`.
+  {
+    auto scan =
+        manager.makeIndexScan(qec.get(), ViewQuery{"multView",
+                                                   {{V{"?p"}, iri("<p1>")},
+                                                    {V{"?s"}, V{"?S"}},
+                                                    {V{"?o"}, V{"?O"}},
+                                                    {V{"?g"}, V{"?G"}}}});
+    EXPECT_EQ(scan->getSizeEstimate(), 100'000);
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?S"}), 10);
+    EXPECT_NEAR(multiplicity(*scan, V{"?O"}), 10, 0.1);
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?G"}), 10'000);
+  }
+
+  // Fixed first and second column: the same estimate, based on the
+  // (block-based, thus rough) size estimate of the scan.
+  {
+    auto scan =
+        manager.makeIndexScan(qec.get(), ViewQuery{"multView",
+                                                   {{V{"?p"}, iri("<p1>")},
+                                                    {V{"?s"}, iri("<s1>")},
+                                                    {V{"?g"}, V{"?G"}}}});
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?G"}),
+                    std::max(1.0f, scan->getSizeEstimate() / 10.0f));
+  }
+
+  // Views written without distinct counts (by older versions of QLever) have
+  // multiplicity `1.0` for all columns.
+  {
+    for (auto& column : viewInfo.at("columns")) {
+      column.erase("num_distinct");
+    }
+    ad_utility::makeOfstream(filename) << viewInfo.dump();
+    auto oldView =
+        std::make_shared<MaterializedView>(testIndexBase_, "multView");
+    oldView->connectPermutationBackReference();
+    for (ColumnIndex col = 0; col < 4; ++col) {
+      EXPECT_EQ(oldView->numDistinct(col), std::nullopt);
+    }
+    auto scan =
+        oldView->makeIndexScan(qec.get(), ViewQuery{"multView",
+                                                    {{V{"?p"}, V{"?P"}},
+                                                     {V{"?s"}, V{"?S"}},
+                                                     {V{"?o"}, V{"?O"}},
+                                                     {V{"?g"}, V{"?G"}}}});
+    for (const auto& var : {V{"?P"}, V{"?S"}, V{"?O"}, V{"?G"}}) {
+      EXPECT_FLOAT_EQ(multiplicity(*scan, var), 1.0f);
+    }
   }
 }
 
