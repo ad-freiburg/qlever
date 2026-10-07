@@ -1,14 +1,14 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Pascal Keßler <kesslerp@informatik.uni-freiburg.de>, UFR
+// 2026 Pascal Keßler <kesslerp@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNVECTOR_H
-#define QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNVECTOR_H
+#ifndef QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMNVECTOR_H
+#define QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMNVECTOR_H
 
 #include <memory>
 #include <vector>
@@ -64,7 +64,10 @@ class IdColumnVector {
   // Construct from a range of elements that are convertible to `Id` (e.g.
   // `Id` itself, or `IdRef`/`ConstIdRef` as yielded by another column's
   // iterators). Needed e.g. for `IdTable::clone()` on this storage.
-  // TODO<pas-kes>: Check for performance of this inefficient interface
+  //
+  // TODO<pas-kes>: This element-wise interface is inefficient as soon as the
+  // iterators point into another split column. Check its performance and
+  // replace it where needed.
   template <typename InputIt>
   IdColumnVector(InputIt first, InputIt last, Allocator allocator)
       : IdColumnVector(allocator) {
@@ -96,9 +99,9 @@ class IdColumnVector {
   }
 
   void push_back(const Id id) {
-    auto [datatype_, payload_] = getBitsCompat(id);
-    payloads_.push_back(payload_);
-    datatypes_.push_back(datatype_);
+    auto [datatype, payload] = getBitsCompat(id);
+    payloads_.push_back(payload);
+    datatypes_.push_back(datatype);
   }
 
   void emplace_back() {
@@ -161,9 +164,9 @@ class IdColumnVector {
     std::vector<uint64_t> newPayloads;
     std::vector<uint8_t> newDatatypes;
     for (; first != last; ++first) {
-      auto [datatype_, payload_] = getBitsCompat(static_cast<Id>(*first));
-      newPayloads.push_back(payload_);
-      newDatatypes.push_back(datatype_);
+      auto [datatype, payload] = getBitsCompat(static_cast<Id>(*first));
+      newPayloads.push_back(payload);
+      newDatatypes.push_back(datatype);
     }
     payloads_.insert(payloads_.begin() + offset, newPayloads.begin(),
                      newPayloads.end());
@@ -171,7 +174,8 @@ class IdColumnVector {
       datatypes_.insert(datatypes_.begin() + offset, newDatatypes.begin(),
                         newDatatypes.end());
     } catch (...) {
-      // Rollback the insert into payloads_ if second insert fails
+      // Roll back the insert into `payloads_`, so that the two arrays stay
+      // consistent.
       payloads_.erase(payloads_.begin() + offset,
                       payloads_.begin() + offset + newPayloads.size());
       throw;
@@ -187,7 +191,7 @@ class IdColumnVector {
   }
   // Implicit conversions to the views, like `std::vector<T>` -> `ql::span<T>`.
   // Generic `IdTable` code relies on this to treat the legacy and the split
-  // layout alike
+  // layout alike.
   /*implicit*/ operator IdColumnRef() { return asView(); }  // NOSONAR
   /*implicit*/ operator ConstIdColumnRef() const {
     return asConstView();
@@ -196,4 +200,4 @@ class IdColumnVector {
 
 }  // namespace columnBasedIdTable::splitLayout
 
-#endif  // QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNVECTOR_H
+#endif  // QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMNVECTOR_H

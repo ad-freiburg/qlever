@@ -1,14 +1,14 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Pascal Keßler <kesslerp@informatik.uni-freiburg.de>, UFR
+// 2026 Pascal Keßler <kesslerp@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNITERATOR_H
-#define QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNITERATOR_H
+#ifndef QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMNITERATOR_H
+#define QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMNITERATOR_H
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
@@ -59,8 +59,7 @@ class BasicIdColumnIterator {
   // `iterator` -> `const_iterator` of the standard containers.
   CPP_template(typename = void)(requires IsConst)
       /*implicit*/ BasicIdColumnIterator(
-          const BasicIdColumnIterator<false>& other)  // NOSONAR,
-      // implicit conversion is needed for future IdRefProxy
+          const BasicIdColumnIterator<false>& other)  // NOSONAR, intended
       : payload_{other.payload_}, datatype_{other.datatype_} {}
 
   reference operator*() const { return {payload_, datatype_}; }
@@ -144,4 +143,4 @@ using ConstIdColumnIterator = BasicIdColumnIterator<true>;
 
 }  // namespace columnBasedIdTable::splitLayout
 
-#endif  // QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMNITERATOR_H
+#endif  // QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMNITERATOR_H

@@ -1,23 +1,18 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Pascal Keßler <kesslerp@informatik.uni-freiburg.de>, UFR
+// 2026 Pascal Keßler <kesslerp@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <boost/iostreams/filter/zlib.hpp>
-
-#include "backports/algorithm.h"
 #include "engine/idTable/splitLayout/IdRef.h"
-#include "util/AllocatorWithLimit.h"
-#include "util/json/Writer.h"
 
 using namespace columnBasedIdTable::splitLayout;
+
 // _____________________________________________________________________________
 TEST(SplitLayoutIdBitRepresentationTest, construction) {
   constexpr int idValue = 42;

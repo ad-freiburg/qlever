@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Pascal Keßler <kesslerp@informatik.uni-freiburg.de>, UFR
+// 2026 Pascal Keßler <kesslerp@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -77,7 +77,8 @@ class IdColumnBenchmark : public BenchmarkInterface {
     {
       IdColumnVector vec{ids.begin(), ids.end(), makeTestAllocator()};
       results.addMeasurement(
-          "iterate " + std::to_string(numIds) + " Ids via IdColumnRef", [&vec] {
+          "iterate " + std::to_string(numIds) + " Ids via ConstIdColumnRef",
+          [&vec] {
             int64_t sum = 0;
             for (const Id id : vec.asConstView()) {
               sum += id.getDatatype() == Datatype::Int ? id.getInt() : 0;

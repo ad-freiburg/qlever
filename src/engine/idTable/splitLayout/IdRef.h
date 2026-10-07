@@ -1,14 +1,14 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Pascal Keßler <kesslerp@informatik.uni-freiburg.de>, UFR
+// 2026 Pascal Keßler <kesslerp@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_IDTABLE_IDREF_H
-#define QLEVER_SRC_ENGINE_IDTABLE_IDREF_H
+#ifndef QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDREF_H
+#define QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDREF_H
 
 #include <ostream>
 #include <utility>
@@ -40,9 +40,10 @@ inline Id idFromBitsCompat(const SplitLayoutIdBitRepresentation bits) {
 // `column[i].method()`) also compiles for this proxy. `IdRef` additionally
 // supports assigning a new `Id` to the referenced slot. A thin,
 // cheap-to-copy pair of pointers, not polymorphic, like `Id` itself.
-// TODO<pas-kes>: A lot of read API functions are calling toId()
-// to convert type to an Id, check in the future if this generated code is
-// necessary.
+//
+// TODO<pas-kes>: Most of the read API below first converts to an `Id` via
+// `toId()`. Assess in the future whether this is necessary, or whether the
+// generated code should be avoided.
 template <bool IsConst>
 class BasicIdRef {
  public:
@@ -76,9 +77,9 @@ class BasicIdRef {
   // also what `std::indirectly_writable` (and thus `ranges::sort`) requires.
   CPP_template(typename = void)(requires(!IsConst)) const BasicIdRef& operator=(
       const Id id) const {
-    auto [data_type, pay_load] = getBitsCompat(id);
-    *payload_ = pay_load;
-    *datatype_ = data_type;
+    auto [datatype, payload] = getBitsCompat(id);
+    *payload_ = payload;
+    *datatype_ = datatype;
     return *this;
   }
 
@@ -231,4 +232,4 @@ using ConstIdRef = BasicIdRef<true>;
 
 }  // namespace columnBasedIdTable::splitLayout
 
-#endif  // QLEVER_SRC_ENGINE_IDTABLE_IDREF_H
+#endif  // QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDREF_H

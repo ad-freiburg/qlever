@@ -1,14 +1,14 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Pascal Keßler <kesslerp@informatik.uni-freiburg.de>, UFR
+// 2026 Pascal Keßler <kesslerp@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMN_H
-#define QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMN_H
+#ifndef QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMN_H
+#define QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMN_H
 
 #include <cstddef>
 #include <limits>
@@ -73,9 +73,7 @@ class BasicIdColumnView {
   // mutable instantiation having to name its own type as a target.
   CPP_template(typename = void)(requires IsConst)
       /*implicit*/ BasicIdColumnView(
-          const BasicIdColumnView<false>&
-              other)  // NOSONAR, implicit conversion is needed for future
-                      // IdRefProxy
+          const BasicIdColumnView<false>& other)  // NOSONAR, intended
       : payloads_{other.payloads_},
         datatypes_{other.datatypes_},
         size_{other.size_} {}
@@ -158,4 +156,4 @@ inline constexpr bool std::ranges::enable_view<
     columnBasedIdTable::splitLayout::BasicIdColumnView<IsConst>> = true;
 #endif
 
-#endif  // QLEVER_SRC_ENGINE_IDTABLE_IDCOLUMN_H
+#endif  // QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMN_H
