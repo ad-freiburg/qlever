@@ -648,6 +648,19 @@ class Operation {
           std::vector<std::shared_ptr<QueryExecutionTree>> children,
           MakeCloneWithNewChildren makeCloneWithNewChildren) const;
 
+  // Check whether the `bind` can be pushed into `child` (one of `children`)
+  // without changing the values its expression sees: each variable of the
+  // expression must be contained in `child`, and if it might be `UNDEF` there,
+  // no other of the `children` may contain it. Otherwise a join could fill in
+  // the other child's value for an `UNDEF`, which the original `BIND` would
+  // see, but the pushed-down `BIND` wouldn't. `nullptr`s in `children` are
+  // ignored.
+  //
+  // NOTE: This function is defined in `OperationBindPushDownImpl.h`.
+  static bool canPushBindIntoChild(
+      const parsedQuery::Bind& bind, const QueryExecutionTree& child,
+      const std::vector<std::shared_ptr<QueryExecutionTree>>& children);
+
  private:
   //! Compute the result of the query-subtree rooted at this element..
   virtual Result computeResult(bool requestLaziness) = 0;
