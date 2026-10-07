@@ -58,7 +58,8 @@ class Sort : public Operation {
     return subtree_->getSizeEstimate();
   }
 
-  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+  void onLimitOffsetChanged(const LimitOffsetClause&,
+                            bool childrenAreExclusivelyOwned) override;
 
  public:
   virtual float getMultiplicity(size_t col) override {
