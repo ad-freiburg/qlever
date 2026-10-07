@@ -617,10 +617,11 @@ class ValueId {
     return ostr;
   }
 
-  // Lambdas that forward to the corresponding member functions. Note that
-  // those, other than pointer-to-members also work for proxy types that
-  // implicitly convert to Id
-  constexpr static auto isUndefinedL = [](const auto& id) {
+  // Lambdas that forward to the member function of the same name (without the
+  // suffix `L`). Unlike a pointer-to-member like `&Id::isUndefined`, they also
+  // work for proxy types that provide the same member functions, like the
+  // elements of a column view that does not store `Id`s.
+  static constexpr auto isUndefinedL = [](const auto& id) {
     return id.isUndefined();
   };
 
