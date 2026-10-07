@@ -176,44 +176,45 @@ class IoUringPolicy {
   io_uring ring_{};
   unsigned ringSize_;
 
-  // Total number of reads that occupy a ring slot but have not yet been reaped
-  // via a completion queue entry (CQE), i.e. that are prepared or submitted but
-  // not yet completed. Used to detect whether the ring is full.
-  size_t numInFlightReadRequests_ = 0;
+  // Total number of outstanding reads: reads that occupy a ring slot because
+  // they are prepared (SQE filled in, not yet submitted), in flight (submitted
+  // to the kernel, not yet completed), or completed but not yet reaped via a
+  // completion queue entry (CQE). Used to detect whether the ring is full.
+  size_t numOutstandingReadRequests_ = 0;
 
-  // The same in-flight reads as `numInFlight_`, but broken down per batch:
-  // maps a batch handle to the number of its reads that have not yet completed
-  // (are "in flight"). An entry for a batch (identified by `BatchHandle`) is
+  // The same outstanding reads as `numOutstandingReadRequests_`, but broken
+  // down per batch: maps a batch handle to the number of its reads that have
+  // not yet been reaped. An entry for a batch (identified by `BatchHandle`) is
   // removed once `wait()` has observed all of its reads complete.
-  ad_utility::HashMap<BatchHandle, size_t> numInFlightReadRequestsPerBatch_;
+  ad_utility::HashMap<BatchHandle, size_t> numOutstandingReadRequestsPerBatch_;
 
   // Per-read metadata needed when a completion is reaped: which batch the read
   // belongs to, and how many bytes it was supposed to read (so that reading
   // fewer bytes than expected can be detected). See
-  // `inFlightReadsByRequestId_`.
-  struct InFlightRead {
+  // `outstandingReadsByRequestId_`.
+  struct OutstandingRead {
     BatchHandle batchHandle;
     size_t expectedNumBytes;
   };
 
   // Monotonically increasing counter that mints a unique request id for each
   // individual read. The id is stored in the SQE's `user_data` and recovered
-  // from the matching CQE to look up the read's `InFlightRead` metadata.
+  // from the matching CQE to look up the read's `OutstandingRead` metadata.
   uint64_t nextRequestIdToAssign_ = 0;
 
   // Maps a read's request id to its metadata. An entry is inserted when the
   // read is prepared in `addBatch` and erased when its completion is reaped.
-  ad_utility::HashMap<uint64_t, InFlightRead> inFlightReadsByRequestId_;
+  ad_utility::HashMap<uint64_t, OutstandingRead> outstandingReadsByRequestId_;
 
   // Block until at least `minComplete` CQEs are ready (capped at the number
   // of reads the kernel has received), then reap every ready CQE. Throw after
   // the whole wave is reaped if any read in it failed or was short.
-  // `minComplete` must be > 0 and at most `numInFlightReadRequests_`.
+  // `minComplete` must be > 0 and at most `numOutstandingReadRequests_`.
   void drainAtLeast(unsigned minComplete);
 
-  // Apply one completion to the in-flight bookkeeping. Always updates the
-  // counts, also for a failed read. Return a static error message if the read
-  // failed or was short, and `nullptr` otherwise.
+  // Apply one completion to the bookkeeping of the outstanding reads. Always
+  // updates the counts, also for a failed read. Return a static error message
+  // if the read failed or was short, and `nullptr` otherwise.
   [[nodiscard]] const char* processCqe(int numBytesRead, uint64_t requestId);
 
   // Submit all prepared SQEs to the kernel. Throw if `io_uring_submit`

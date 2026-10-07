@@ -535,10 +535,10 @@ TYPED_TEST(IoUringManagerTest, zeroLengthReadsWithNonZeroLengthReads) {
 
 // Dropping a `SyncIoPolicy`-backed manager with reads submitted but never
 // waited: the synchronous policy performs all reads eagerly in `submitTo`, so
-// by the time the manager is destroyed nothing is in flight, the destructor has
-// nothing to drain, and it logs no warning. This is the counterpart to the
+// by the time the manager is destroyed nothing is outstanding, the destructor
+// has nothing to drain, and it logs no warning. This is the counterpart to the
 // io_uring-specific `dropRunningManager` test below.
-TEST(IoUringManagerDrop, dropSyncManagerHasNothingInFlight) {
+TEST(IoUringManagerDrop, dropSyncManagerHasNothingOutstanding) {
   using Manager = ad_utility::BatchManager<ad_utility::SyncIoPolicy>;
   auto [tmp, fd] = makeTempFile("AAAABBBBCCCCDDDD");
 
@@ -550,7 +550,7 @@ TEST(IoUringManagerDrop, dropSyncManagerHasNothingInFlight) {
   {
     Manager manager(64);
     batch.submitTo(manager, fd);  // reads happen synchronously here
-    // `manager` is destroyed here; nothing is in flight, so no warning.
+    // `manager` is destroyed here; nothing is outstanding, so no warning.
   }
 
   EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
@@ -583,11 +583,11 @@ TEST(IoUringManagerDrop, dropRunningManager) {
   {
     Manager manager(64);
     batch.submitTo(manager, fd);  // submit, but never wait
-    // `manager` is destroyed here; its destructor drains the in-flight reads.
+    // `manager` is destroyed here; its destructor drains the outstanding reads.
   }
 
   EXPECT_THAT(batch.result(), ::testing::ElementsAre("CCCC", "AAAA", "DDDD"));
-  EXPECT_THAT(logStream.str(), ::testing::HasSubstr("still in flight"));
+  EXPECT_THAT(logStream.str(), ::testing::HasSubstr("still outstanding"));
 }
 #endif
 
