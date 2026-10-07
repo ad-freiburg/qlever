@@ -617,6 +617,24 @@ class ValueId {
     return ostr;
   }
 
+  // Lambdas that forward to the member function of the same name (without the
+  // suffix `L`). Unlike a pointer-to-member like `&Id::isUndefined`, they also
+  // work for proxy types that provide the same member functions, like the
+  // elements of a column view that does not store `Id`s.
+  static constexpr auto isUndefinedL = [](const auto& id) {
+    return id.isUndefined();
+  };
+
+  static constexpr auto isDefinedL = [](const auto& id) {
+    return !id.isUndefined();
+  };
+
+  static constexpr auto getBitsL = [](const auto& id) { return id.getBits(); };
+
+  static constexpr auto getDatatypeL = [](const auto& id) {
+    return id.getDatatype();
+  };
+
  private:
   // Compare the bits of an `Id` whose datatype is one of
   // `datatypesOfPositionInVocab_` with a `LocalVocabIndex`. For details see
