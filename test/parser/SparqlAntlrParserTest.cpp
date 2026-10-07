@@ -1507,6 +1507,27 @@ TEST(SparqlParser, Query) {
                                     {{Var{"?y"}, iri("<is-a>"), Var{"?v"}}})),
                                 m::InlineData({Var{"?w"}}, {{iri("<a>")}}))))));
 
+    // The solution modifiers belong to the WHERE clause of the DESCRIBE, not to
+    // the CONSTRUCT query that computes the description.
+    expectQuery(
+        "DESCRIBE <x> ?y <z> { ?y <is-a> ?v } ORDER BY ?v LIMIT 2 OFFSET 1",
+        ::testing::AllOf(
+            m::DescribeQuery(m::Describe(
+                xyz, {},
+                ::testing::AllOf(selectQueryMatcher1,
+                                 m::pq::OrderKeys({{Var{"?v"}, false}}),
+                                 m::pq::LimitOffset({2, 1})))),
+            m::pq::OrderKeys({}), m::pq::LimitOffset({})));
+    expectQuery("DESCRIBE ?y { ?y <is-a> ?v } GROUP BY ?y",
+                m::DescribeQuery(m::Describe(
+                    Resources{Var{"?y"}}, {},
+                    ::testing::AllOf(selectQueryMatcher1,
+                                     m::pq::GroupKeys({Var{"?y"}})))));
+    expectQueryFails("DESCRIBE ?v { ?y <is-a> ?v } GROUP BY ?y",
+                     contains("?v is selected but not aggregated"));
+    expectQueryFails("DESCRIBE * { ?y <is-a> ?v } GROUP BY ?y",
+                     contains("GROUP BY is not allowed"));
+
     // DESCRIBE with FROM and FROM NAMED clauses.
     //
     // NOTE: The clauses are relevant *both* for the retrieval of the resources
