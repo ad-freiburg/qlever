@@ -19,6 +19,7 @@
 #include <variant>
 
 #include "backports/algorithm.h"
+#include "libqlever/CanonicalRowOrder.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
@@ -204,11 +205,10 @@ class DiffBuilder {
         b->sortedOnColumns_ == t.sortedOnColumns_) {
       auto baseColumns = idColumnsOf(base_, *b);
       auto targetColumns = idColumnsOf(target_, t);
-      if (detail::isCanonicallySorted(baseColumns, b->sortedOnColumns_) &&
-          detail::isCanonicallySorted(targetColumns, t.sortedOnColumns_)) {
+      if (isInCanonicalOrder(baseColumns, b->sortedOnColumns_) &&
+          isInCanonicalOrder(targetColumns, t.sortedOnColumns_)) {
         canMerge = true;
-        rowMapping =
-            detail::mergeRows(baseColumns, targetColumns, t.sortedOnColumns_);
+        rowMapping = alignRows(baseColumns, targetColumns, t.sortedOnColumns_);
       }
     }
     for (size_t c = 0; c < t.columnPayloads_.size(); ++c) {
@@ -293,86 +293,6 @@ class DiffBuilder {
 }  // namespace
 
 namespace detail {
-namespace {
-// Return the order in which the columns are compared, or `std::nullopt` if
-// `sortedOn` is invalid.
-std::optional<std::vector<size_t>> comparisonOrder(
-    size_t numColumns, ql::span<const uint64_t> sortedOn) {
-  std::vector<size_t> order;
-  std::vector<bool> used(numColumns, false);
-  for (uint64_t column : sortedOn) {
-    if (column >= numColumns) {
-      return std::nullopt;
-    }
-    if (!used[column]) {
-      used[column] = true;
-      order.push_back(column);
-    }
-  }
-  for (size_t column = 0; column < numColumns; ++column) {
-    if (!used[column]) {
-      order.push_back(column);
-    }
-  }
-  return order;
-}
-
-// Lexicographically compare row `i` of `a` with row `j` of `b` in the given
-// column `order`, comparing the bits of the `Id`s.
-int compareRows(IdColumns a, size_t i, IdColumns b, size_t j,
-                const std::vector<size_t>& order) {
-  for (size_t column : order) {
-    auto x = a[column][i].getBits();
-    auto y = b[column][j].getBits();
-    if (x != y) {
-      return x < y ? -1 : 1;
-    }
-  }
-  return 0;
-}
-}  // namespace
-
-// _____________________________________________________________________________
-bool isCanonicallySorted(IdColumns columns, ql::span<const uint64_t> sortedOn) {
-  auto order = comparisonOrder(columns.size(), sortedOn);
-  if (!order.has_value()) {
-    return false;
-  }
-  size_t numRows = columns.empty() ? 0 : columns[0].size();
-  for (size_t i = 1; i < numRows; ++i) {
-    if (compareRows(columns, i - 1, columns, i, order.value()) > 0) {
-      return false;
-    }
-  }
-  return true;
-}
-
-// _____________________________________________________________________________
-std::vector<size_t> mergeRows(IdColumns base, IdColumns target,
-                              ql::span<const uint64_t> sortedOn) {
-  AD_CONTRACT_CHECK(base.size() == target.size());
-  auto order = comparisonOrder(base.size(), sortedOn);
-  AD_CONTRACT_CHECK(order.has_value());
-  size_t numBase = base.empty() ? 0 : base[0].size();
-  size_t numTarget = target.empty() ? 0 : target[0].size();
-  std::vector<size_t> result(numTarget, noBaseRow);
-  size_t i = 0;
-  size_t j = 0;
-  while (i < numBase && j < numTarget) {
-    int cmp = compareRows(base, i, target, j, order.value());
-    if (cmp < 0) {
-      ++i;
-    } else if (cmp > 0) {
-      ++j;
-    } else {
-      result[j] = i;
-      ++i;
-      ++j;
-    }
-  }
-  return result;
-}
-
 // _____________________________________________________________________________
 std::vector<size_t> greedyMatch(ql::span<const uint64_t> base,
                                 ql::span<const uint64_t> target) {

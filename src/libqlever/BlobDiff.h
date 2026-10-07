@@ -19,6 +19,7 @@
 #include "backports/span.h"
 #include "global/Id.h"
 #include "libqlever/BlobLayout.h"
+#include "libqlever/CanonicalRowOrder.h"
 #include "util/BinaryDiffApplier.h"
 
 namespace qlever {
@@ -29,7 +30,7 @@ namespace qlever {
 // blobs have identical metadata and main vocabulary, if the secondary
 // vocabulary of `target` extends the one of `base`, and if the named cache
 // entries of both blobs only differ by inserted and deleted rows (both tables
-// being in canonical order, see `detail::isCanonicallySorted`). Everything
+// being in canonical order, see `isInCanonicalOrder`). Everything
 // else is inserted literally. In any case
 // `computeBlobDiff(...).apply(base) == target` holds.
 ad_utility::BinaryDiffApplier computeBlobDiff(ql::span<const char> base,
@@ -91,25 +92,7 @@ std::string describeBlobDiff(const ad_utility::BinaryDiffApplier& diff,
 
 namespace detail {
 // The marker for a target element that has no counterpart in the base.
-constexpr size_t noBaseRow = std::numeric_limits<size_t>::max();
-
-// The columns of a table, as spans of `Id`s of equal size.
-using IdColumns = ql::span<const ql::span<const Id>>;
-
-// Return true iff the table `columns` is in canonical order: the rows are
-// sorted lexicographically by the columns `sortedOn` (in that order), followed
-// by all remaining columns in increasing order. The `Id`s are compared by their
-// bits. Return false if `sortedOn` contains an invalid column.
-bool isCanonicallySorted(IdColumns columns, ql::span<const uint64_t> sortedOn);
-
-// Both `base` and `target` have to be tables in canonical order for `sortedOn`
-// (see `isCanonicallySorted`) with the same number of columns. Return for each
-// row of `target` the index of the row of `base` that is equal to it, or
-// `noBaseRow`. Each row of `base` is used at most once, the matches are in
-// increasing order, and for duplicate rows the i-th duplicate in `target` is
-// matched with the i-th duplicate in `base`.
-std::vector<size_t> mergeRows(IdColumns base, IdColumns target,
-                              ql::span<const uint64_t> sortedOn);
+constexpr size_t noBaseRow = noMatchingRow;
 
 // For each element of `target` return the index of the element of `base` that
 // is equal to it, or `noBaseRow`. The matched elements are increasing and each

@@ -228,12 +228,17 @@ TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabWithGeoIndex) {
   auto originalView = ExplicitIdTableOperation::viewOf(value->result_);
   auto rewrittenView = ExplicitIdTableOperation::viewOf(rewritten.result_);
   EXPECT_NE(rewrittenGeoIndex.getRow(0, 0), originalGeoIndex.getRow(0, 0));
+  // NOTE: The columns of the rewritten entry are in a different order, so
+  // they are identified via their variables.
   for (size_t shape = 0; shape < numShapes; ++shape) {
-    for (size_t col = 0; col < originalView.numColumns(); ++col) {
-      EXPECT_EQ(rewrittenView(rewrittenGeoIndex.getRow(0, shape).value(), col),
-                rewriteId(originalView(
-                              originalGeoIndex.getRow(0, shape).value(), col),
-                          secondaryVocab));
+    for (const auto& [variable, info] : value->varToColMap_) {
+      size_t oldCol = info.columnIndex_;
+      size_t newCol = rewritten.varToColMap_.at(variable).columnIndex_;
+      EXPECT_EQ(
+          rewrittenView(rewrittenGeoIndex.getRow(0, shape).value(), newCol),
+          rewriteId(
+              originalView(originalGeoIndex.getRow(0, shape).value(), oldCol),
+              secondaryVocab));
     }
   }
 }
@@ -284,4 +289,67 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
       *value, secondaryVocab, ad_utility::testing::makeAllocator());
   EXPECT_THAT(column(rewritten, 0),
               ElementsAre(getId("<m>"), secondaryId(0), secondaryId(1)));
+}
+
+// _____________________________________________________________________________
+// Test that the columns of an entry are written in the order of the variable
+// names (then the columns without variable), and that `sortOnAllColumns`
+// replaces the sort order of the entry by the lexicographic order of all
+// columns.
+TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
+  using ColumnInfo = ColumnIndexAndTypeInfo;
+  auto info = [](ColumnIndex index) {
+    return ColumnInfo{index, ColumnInfo::AlwaysDefined};
+  };
+  // Column 0 is `?z`, column 1 has no variable, column 2 is `?a`, column 3 is
+  // `?m`.
+  VariableToColumnMap map{{Variable{"?z"}, info(0)},
+                          {Variable{"?a"}, info(2)},
+                          {Variable{"?m"}, info(3)}};
+  EXPECT_THAT(canonicalColumnOrder(map, 4), ElementsAre(2, 3, 0, 1));
+  EXPECT_THAT(canonicalColumnOrder({}, 2), ElementsAre(0, 1));
+  EXPECT_THAT(canonicalColumnOrder(map, 5), ElementsAre(2, 3, 0, 1, 4));
+
+  auto makeValue = [&map](std::vector<ColumnIndex> sortedOn) {
+    return Value{std::make_shared<const IdTable>(makeIdTableFromVector(
+                     {{Id::makeFromInt(1), Id::makeFromInt(7),
+                       Id::makeFromInt(5), Id::makeFromInt(3)},
+                      {Id::makeFromInt(2), Id::makeFromInt(6),
+                       Id::makeFromInt(5), Id::makeFromInt(4)}})),
+                 map,
+                 std::move(sortedOn),
+                 LocalVocab{},
+                 "handmade",
+                 std::nullopt};
+  };
+  SecondaryVocabulary secondaryVocab;
+  auto allocator = ad_utility::testing::makeAllocator();
+  // The table is sorted by its first column.
+  auto value = makeValue({0});
+  auto copy = canonicalizeForSerialization(value, secondaryVocab, allocator);
+  EXPECT_THAT(column(copy, 0),
+              ElementsAre(Id::makeFromInt(5), Id::makeFromInt(5)));
+  EXPECT_THAT(column(copy, 1),
+              ElementsAre(Id::makeFromInt(3), Id::makeFromInt(4)));
+  EXPECT_THAT(column(copy, 2),
+              ElementsAre(Id::makeFromInt(1), Id::makeFromInt(2)));
+  EXPECT_THAT(column(copy, 3),
+              ElementsAre(Id::makeFromInt(7), Id::makeFromInt(6)));
+  EXPECT_EQ(copy.varToColMap_.at(Variable{"?a"}).columnIndex_, 0u);
+  EXPECT_EQ(copy.varToColMap_.at(Variable{"?m"}).columnIndex_, 1u);
+  EXPECT_EQ(copy.varToColMap_.at(Variable{"?z"}).columnIndex_, 2u);
+  EXPECT_THAT(copy.resultSortedOn_, ElementsAre(2));
+
+  // The sort order of the plan does not matter if `sortOnAllColumns` is set.
+  for (std::vector<ColumnIndex> sortedOn :
+       {std::vector<ColumnIndex>{}, std::vector<ColumnIndex>{0},
+        std::vector<ColumnIndex>{3, 1}}) {
+    auto sorted = canonicalizeForSerialization(makeValue(sortedOn),
+                                               secondaryVocab, allocator, true);
+    EXPECT_THAT(sorted.resultSortedOn_, ElementsAre(0, 1, 2, 3));
+    EXPECT_THAT(column(sorted, 0),
+                ElementsAre(Id::makeFromInt(5), Id::makeFromInt(5)));
+    EXPECT_THAT(column(sorted, 1),
+                ElementsAre(Id::makeFromInt(3), Id::makeFromInt(4)));
+  }
 }

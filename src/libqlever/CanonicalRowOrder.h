@@ -36,6 +36,11 @@ namespace qlever {
 // the same value as `SpatialJoinCachedIndex::NO_ROW`.
 inline constexpr size_t noMatchingRow = std::numeric_limits<size_t>::max();
 
+// The columns of a table, as spans of `Id`s of equal size. The overloads of
+// `isInCanonicalOrder` and `alignRows` for this type also work on tables that
+// are not `IdTable`s, for example raw column data in a serialized blob.
+using IdColumns = ql::span<const ql::span<const Id>>;
+
 // Return the permutation `oldRowOfNewRow` that brings the rows of `table` into
 // canonical order, with respect to the `resultSortedOn` columns: the row at
 // position `i` of the sorted table is the row `result[i]` of `table`. The
@@ -46,6 +51,12 @@ std::vector<size_t> canonicalSortingPermutation(
 // Return true iff `table` is in canonical order, with respect to the
 // `resultSortedOn` columns.
 bool isInCanonicalOrder(const IdTableView<0>& table,
+                        ql::span<const ColumnIndex> resultSortedOn);
+
+// Same as above, but for a table that is given by its `columns`. In contrast
+// to the `IdTableView` overload, return false (instead of failing) if
+// `resultSortedOn` contains a column that does not exist.
+bool isInCanonicalOrder(IdColumns columns,
                         ql::span<const ColumnIndex> resultSortedOn);
 
 // Return a copy of `table` (allocated via `allocator`) whose row `i` is the
@@ -76,6 +87,11 @@ std::vector<size_t> invertPermutation(ql::span<const size_t> permutation);
 // order the columns are compared, and hence how the merge of the tables works.
 std::vector<size_t> alignRows(const IdTableView<0>& base,
                               const IdTableView<0>& target,
+                              ql::span<const ColumnIndex> resultSortedOn = {});
+
+// Same as above, but for tables that are given by their columns (which have
+// to have the same number of rows each).
+std::vector<size_t> alignRows(IdColumns base, IdColumns target,
                               ql::span<const ColumnIndex> resultSortedOn = {});
 
 }  // namespace qlever

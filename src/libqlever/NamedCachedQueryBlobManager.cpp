@@ -170,8 +170,8 @@ std::optional<SpatialJoinCachedIndex> tryToExtendGeoIndex(
       baseGeoIndex.getGeometryColumn() != newGeoIndex.getGeometryColumn() ||
       baseGeoIndex.simplificationErrorInMeters() !=
           newGeoIndex.simplificationErrorInMeters() ||
-      baseValue.varToColMap_ != original.varToColMap_ ||
-      baseValue.resultSortedOn_ != original.resultSortedOn_ ||
+      baseValue.varToColMap_ != canonicalValue.varToColMap_ ||
+      baseValue.resultSortedOn_ != canonicalValue.resultSortedOn_ ||
       baseGeoIndex.numRows() != baseView.numRows()) {
     return skip("the structure of the base entry differs");
   }
@@ -406,7 +406,8 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
         const auto& key = entries.at(entryIndex++).first;
         auto canonicalized =
             namedCacheSecondaryVocab::canonicalizeWithPermutation(
-                value, secondaryVocab, qlever.allocator_);
+                value, secondaryVocab, qlever.allocator_,
+                config.sortOnAllColumns_);
         if (incremental.has_value() && value.cachedGeoIndex_.has_value()) {
           auto extended =
               tryToExtendGeoIndex(key, value, canonicalized, baseEntries,

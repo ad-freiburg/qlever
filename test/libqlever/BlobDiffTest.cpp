@@ -45,18 +45,18 @@ struct TestTable {
       spans_.emplace_back(column.data(), column.size());
     }
   }
-  qlever::detail::IdColumns columns() const { return spans_; }
+  qlever::IdColumns columns() const { return spans_; }
 };
 
-// Return `mergeRows` for the two tables, sorted on the columns `sortedOn`.
+// Return `alignRows` for the two tables, sorted on the columns `sortedOn`.
 std::vector<size_t> merge(const std::vector<std::vector<int64_t>>& base,
                           const std::vector<std::vector<int64_t>>& target,
                           std::vector<uint64_t> sortedOn = {}) {
   TestTable b{base};
   TestTable t{target};
-  EXPECT_TRUE(qlever::detail::isCanonicallySorted(b.columns(), sortedOn));
-  EXPECT_TRUE(qlever::detail::isCanonicallySorted(t.columns(), sortedOn));
-  return qlever::detail::mergeRows(b.columns(), t.columns(), sortedOn);
+  EXPECT_TRUE(qlever::isInCanonicalOrder(b.columns(), sortedOn));
+  EXPECT_TRUE(qlever::isInCanonicalOrder(t.columns(), sortedOn));
+  return qlever::alignRows(b.columns(), t.columns(), sortedOn);
 }
 
 // Some triples with distinct subjects and objects.
@@ -147,8 +147,8 @@ bool allTablesCanonical(const ParsedBlob& blob) {
           reinterpret_cast<const Id*>(blob.bytes_.data() + range.begin_),
           entry.numRows_);
     }
-    result = result && qlever::detail::isCanonicallySorted(
-                           columns, entry.sortedOnColumns_);
+    result =
+        result && qlever::isInCanonicalOrder(columns, entry.sortedOnColumns_);
   }
   return result;
 }
@@ -217,24 +217,24 @@ TEST(BlobDiffRowMerge, customSortOrder) {
 // _____________________________________________________________________________
 TEST(BlobDiffRowMerge, isCanonicallySorted) {
   TestTable sorted{{{1, 1, 2}, {1, 2, 0}}};
-  EXPECT_TRUE(qlever::detail::isCanonicallySorted(sorted.columns(),
-                                                  ql::span<const uint64_t>{}));
+  EXPECT_TRUE(
+      qlever::isInCanonicalOrder(sorted.columns(), ql::span<const uint64_t>{}));
   // Sorted by the first column, but not by the second column on ties.
   TestTable unsortedOnTie{{{1, 1, 2}, {2, 1, 0}}};
-  EXPECT_FALSE(qlever::detail::isCanonicallySorted(unsortedOnTie.columns(),
-                                                   ql::span<const uint64_t>{}));
+  EXPECT_FALSE(qlever::isInCanonicalOrder(unsortedOnTie.columns(),
+                                          ql::span<const uint64_t>{}));
   // The same table is not sorted by the second column first.
-  EXPECT_FALSE(qlever::detail::isCanonicallySorted(sorted.columns(),
-                                                   std::vector<uint64_t>{1}));
+  EXPECT_FALSE(
+      qlever::isInCanonicalOrder(sorted.columns(), std::vector<uint64_t>{1}));
   // Invalid sort columns.
-  EXPECT_FALSE(qlever::detail::isCanonicallySorted(sorted.columns(),
-                                                   std::vector<uint64_t>{2}));
+  EXPECT_FALSE(
+      qlever::isInCanonicalOrder(sorted.columns(), std::vector<uint64_t>{2}));
   // Tables without rows or columns.
   TestTable empty{{{}, {}}};
-  EXPECT_TRUE(qlever::detail::isCanonicallySorted(empty.columns(),
-                                                  ql::span<const uint64_t>{}));
-  EXPECT_TRUE(qlever::detail::isCanonicallySorted(qlever::detail::IdColumns{},
-                                                  ql::span<const uint64_t>{}));
+  EXPECT_TRUE(
+      qlever::isInCanonicalOrder(empty.columns(), ql::span<const uint64_t>{}));
+  EXPECT_TRUE(qlever::isInCanonicalOrder(qlever::IdColumns{},
+                                         ql::span<const uint64_t>{}));
 }
 
 // _____________________________________________________________________________
@@ -334,20 +334,13 @@ TEST(BlobDiff, updateWithNewWords) {
             << stats.toString() << std::endl;
   EXPECT_EQ(stats.section("metadata").insertedBytes_, 0u);
   EXPECT_EQ(stats.section("main vocabulary").insertedBytes_, 0u);
-  // NOTE: The blob writer does not yet sort the tables canonically. The rows
-  // with the new words (which have the `Id`s of the secondary vocabulary) are
-  // then not at the end of the table, and the diff falls back to inserting the
-  // tables. These checks only apply (and then must hold) once the writer
-  // writes canonical tables.
-  if (allTablesCanonical(target)) {
-    EXPECT_LT(stats.instructions_.numInsertedBytes_, target.bytes_.size() / 20);
-    const auto& columns = stats.section("entry all: columns");
-    EXPECT_GT(columns.copiedBytes_, columns.size_ * 99 / 100);
-  } else {
-    std::cout << "The writer does not yet produce canonical tables, so the "
-                 "diff is not small."
-              << std::endl;
-  }
+  // The writer always writes canonical tables, so the rows with the new words
+  // (which have the `Id`s of the secondary vocabulary) are inserted into the
+  // tables, and the rest of the tables is copied.
+  EXPECT_TRUE(allTablesCanonical(target));
+  EXPECT_LT(stats.instructions_.numInsertedBytes_, target.bytes_.size() / 20);
+  const auto& columns = stats.section("entry all: columns");
+  EXPECT_GT(columns.copiedBytes_, columns.size_ * 99 / 100);
 }
 
 // _____________________________________________________________________________

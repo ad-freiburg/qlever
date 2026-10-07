@@ -42,6 +42,13 @@ struct BlobSerializationConfig {
   // vocabulary is exported in its original format.
   std::vector<std::string> excludedEntryRegexes_;
 
+  // If true, then every entry is written as sorted lexicographically by all
+  // its columns (and its `resultSortedOn_` is changed accordingly, see
+  // `canonicalizeForSerialization`), instead of by the sort order that the
+  // query plan happened to produce. Needed for a small diff between blobs
+  // when the plan may change between two runs.
+  bool sortOnAllColumns_ = false;
+
   // Settings for writing a blob that is a small modification of a previously
   // written blob (the "base"), such that the two blobs only differ in the
   // parts of the content that actually changed (for example to be able to

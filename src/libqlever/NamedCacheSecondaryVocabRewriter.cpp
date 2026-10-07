@@ -9,6 +9,7 @@
 
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 
+#include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -121,10 +122,36 @@ Id rewriteId(Id id, const SecondaryVocabulary& secondaryVocab) {
 }
 
 // _____________________________________________________________________________
+std::vector<ColumnIndex> canonicalColumnOrder(
+    const VariableToColumnMap& varToColMap, size_t numColumns) {
+  std::vector<std::pair<std::string_view, ColumnIndex>> variables;
+  for (const auto& [variable, info] : varToColMap) {
+    AD_CONTRACT_CHECK(info.columnIndex_ < numColumns);
+    variables.emplace_back(variable.name(), info.columnIndex_);
+  }
+  ql::ranges::sort(variables);
+  std::vector<ColumnIndex> result;
+  std::vector<bool> isUsed(numColumns, false);
+  for (const auto& [name, column] : variables) {
+    if (!isUsed[column]) {
+      isUsed[column] = true;
+      result.push_back(column);
+    }
+  }
+  for (ColumnIndex column = 0; column < numColumns; ++column) {
+    if (!isUsed[column]) {
+      result.push_back(column);
+    }
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
 CanonicalizedValue canonicalizeWithPermutation(
     const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,
-    const NamedResultCache::Value::Allocator& allocator) {
+    const NamedResultCache::Value::Allocator& allocator,
+    bool sortOnAllColumns) {
   // Copy the table (via the given `allocator`), and rewrite the copy in place.
   auto view = ExplicitIdTableOperation::viewOf(value.result_);
   IdTable table{view.numColumns(), allocator};
@@ -137,9 +164,33 @@ CanonicalizedValue canonicalizeWithPermutation(
     }
   }
 
+  // Bring the columns into canonical order. This is necessary because the
+  // order of the columns of a result depends on the query plan, which may
+  // change when the data changes. The columns of the geo index are identified
+  // by their variable, so the index is not affected.
+  auto varToColMap = value.varToColMap_;
+  auto resultSortedOn = value.resultSortedOn_;
+  auto oldColumnOfNewColumn =
+      canonicalColumnOrder(value.varToColMap_, table.numColumns());
+  if (!ql::ranges::is_sorted(oldColumnOfNewColumn)) {
+    table.setColumnSubset(oldColumnOfNewColumn);
+    auto newColumnOfOldColumn = invertPermutation(oldColumnOfNewColumn);
+    for (auto& [variable, info] : varToColMap) {
+      info.columnIndex_ = newColumnOfOldColumn[info.columnIndex_];
+    }
+    for (auto& column : resultSortedOn) {
+      column = newColumnOfOldColumn[column];
+    }
+  }
+
+  if (sortOnAllColumns) {
+    resultSortedOn.resize(table.numColumns());
+    std::iota(resultSortedOn.begin(), resultSortedOn.end(), ColumnIndex{0});
+  }
+
   std::optional<SpatialJoinCachedIndex> geoIndex = value.cachedGeoIndex_;
-  auto permutation = canonicalSortingPermutation(table.asStaticView<0>(),
-                                                 value.resultSortedOn_);
+  auto permutation =
+      canonicalSortingPermutation(table.asStaticView<0>(), resultSortedOn);
   if (!ql::ranges::is_sorted(permutation)) {
     table = permuteRows(table.asStaticView<0>(), permutation, allocator);
     if (geoIndex.has_value()) {
@@ -151,7 +202,7 @@ CanonicalizedValue canonicalizeWithPermutation(
 
   return CanonicalizedValue{
       NamedResultCache::Value{std::make_shared<const IdTable>(std::move(table)),
-                              value.varToColMap_, value.resultSortedOn_,
+                              std::move(varToColMap), std::move(resultSortedOn),
                               value.localVocab_.clone(), value.cacheKey_,
                               std::move(geoIndex)},
       std::move(permutation)};
@@ -161,8 +212,11 @@ CanonicalizedValue canonicalizeWithPermutation(
 NamedResultCache::Value canonicalizeForSerialization(
     const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,
-    const NamedResultCache::Value::Allocator& allocator) {
-  return canonicalizeWithPermutation(value, secondaryVocab, allocator).value_;
+    const NamedResultCache::Value::Allocator& allocator,
+    bool sortOnAllColumns) {
+  return canonicalizeWithPermutation(value, secondaryVocab, allocator,
+                                     sortOnAllColumns)
+      .value_;
 }
 
 // _____________________________________________________________________________

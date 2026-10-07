@@ -10,6 +10,7 @@
 #include "libqlever/CanonicalRowOrder.h"
 
 #include <numeric>
+#include <optional>
 
 #include "backports/algorithm.h"
 #include "util/Exception.h"
@@ -19,14 +20,21 @@ namespace qlever {
 namespace {
 // Return the columns of a table with `numColumns` columns in the order in which
 // they are compared in the canonical order: first the `resultSortedOn`
-// columns, then all other columns in increasing order.
-std::vector<ColumnIndex> comparisonColumns(
+// columns, then all other columns in increasing order. Return `std::nullopt` if
+// `resultSortedOn` contains a column that does not exist. Duplicates in
+// `resultSortedOn` are ignored (they do not change the order).
+std::optional<std::vector<ColumnIndex>> tryComparisonColumns(
     size_t numColumns, ql::span<const ColumnIndex> resultSortedOn) {
-  std::vector<ColumnIndex> result{resultSortedOn.begin(), resultSortedOn.end()};
+  std::vector<ColumnIndex> result;
   std::vector<bool> isSortedOn(numColumns, false);
   for (ColumnIndex column : resultSortedOn) {
-    AD_CONTRACT_CHECK(column < numColumns);
-    isSortedOn[column] = true;
+    if (column >= numColumns) {
+      return std::nullopt;
+    }
+    if (!isSortedOn[column]) {
+      isSortedOn[column] = true;
+      result.push_back(column);
+    }
   }
   for (ColumnIndex column = 0; column < numColumns; ++column) {
     if (!isSortedOn[column]) {
@@ -36,15 +44,37 @@ std::vector<ColumnIndex> comparisonColumns(
   return result;
 }
 
-// Compare the row `rowA` of `tableA` with the row `rowB` of `tableB` by the
-// given `columns` and return a negative number, zero, or a positive number if
-// the first row is less than, equal to, or greater than the second one.
-int compareRows(const IdTableView<0>& tableA, size_t rowA,
-                const IdTableView<0>& tableB, size_t rowB,
+// Like `tryComparisonColumns`, but fail via `AD_CONTRACT_CHECK` for an invalid
+// column.
+std::vector<ColumnIndex> comparisonColumns(
+    size_t numColumns, ql::span<const ColumnIndex> resultSortedOn) {
+  auto result = tryComparisonColumns(numColumns, resultSortedOn);
+  AD_CONTRACT_CHECK(result.has_value());
+  return std::move(result).value();
+}
+
+// Return the number of rows of a table that is given by its `columns`.
+size_t numRowsOf(IdColumns columns) {
+  return columns.empty() ? 0 : columns[0].size();
+}
+
+// Return the columns of `table` as spans, which are valid as long as `table`.
+std::vector<ql::span<const Id>> columnsOf(const IdTableView<0>& table) {
+  std::vector<ql::span<const Id>> result;
+  for (size_t column = 0; column < table.numColumns(); ++column) {
+    result.push_back(table.getColumn(column));
+  }
+  return result;
+}
+
+// Compare the row `rowA` of the table `a` with the row `rowB` of the table `b`
+// by the given `columns` and return a negative number, zero, or a positive
+// number if the first row is less than, equal to, or greater than the second
+// one.
+int compareRows(IdColumns a, size_t rowA, IdColumns b, size_t rowB,
                 const std::vector<ColumnIndex>& columns) {
   for (ColumnIndex column : columns) {
-    auto comparison =
-        tableA(rowA, column).compareThreeWay(tableB(rowB, column));
+    auto comparison = a[column][rowA].compareThreeWay(b[column][rowB]);
     if (comparison < 0) {
       return -1;
     }
@@ -60,8 +90,9 @@ int compareRows(const IdTableView<0>& tableA, size_t rowA,
 std::vector<size_t> canonicalSortingPermutation(
     const IdTableView<0>& table, ql::span<const ColumnIndex> resultSortedOn) {
   auto columns = comparisonColumns(table.numColumns(), resultSortedOn);
-  auto less = [&table, &columns](size_t a, size_t b) {
-    return compareRows(table, a, table, b, columns) < 0;
+  auto tableColumns = columnsOf(table);
+  auto less = [&tableColumns, &columns](size_t a, size_t b) {
+    return compareRows(tableColumns, a, tableColumns, b, columns) < 0;
   };
   std::vector<size_t> permutation(table.numRows());
   std::iota(permutation.begin(), permutation.end(), size_t{0});
@@ -74,15 +105,24 @@ std::vector<size_t> canonicalSortingPermutation(
 }
 
 // _____________________________________________________________________________
-bool isInCanonicalOrder(const IdTableView<0>& table,
+bool isInCanonicalOrder(IdColumns columns,
                         ql::span<const ColumnIndex> resultSortedOn) {
-  auto columns = comparisonColumns(table.numColumns(), resultSortedOn);
-  for (size_t row = 1; row < table.numRows(); ++row) {
-    if (compareRows(table, row - 1, table, row, columns) > 0) {
+  auto order = tryComparisonColumns(columns.size(), resultSortedOn);
+  if (!order.has_value()) {
+    return false;
+  }
+  for (size_t row = 1; row < numRowsOf(columns); ++row) {
+    if (compareRows(columns, row - 1, columns, row, order.value()) > 0) {
       return false;
     }
   }
   return true;
+}
+
+// _____________________________________________________________________________
+bool isInCanonicalOrder(const IdTableView<0>& table,
+                        ql::span<const ColumnIndex> resultSortedOn) {
+  return isInCanonicalOrder(columnsOf(table), resultSortedOn);
 }
 
 // _____________________________________________________________________________
@@ -113,15 +153,16 @@ std::vector<size_t> invertPermutation(ql::span<const size_t> permutation) {
 }
 
 // _____________________________________________________________________________
-std::vector<size_t> alignRows(const IdTableView<0>& base,
-                              const IdTableView<0>& target,
+std::vector<size_t> alignRows(IdColumns base, IdColumns target,
                               ql::span<const ColumnIndex> resultSortedOn) {
-  AD_CONTRACT_CHECK(base.numColumns() == target.numColumns());
-  auto columns = comparisonColumns(base.numColumns(), resultSortedOn);
-  std::vector<size_t> result(target.numRows(), noMatchingRow);
+  AD_CONTRACT_CHECK(base.size() == target.size());
+  auto columns = comparisonColumns(base.size(), resultSortedOn);
+  size_t numBase = numRowsOf(base);
+  size_t numTarget = numRowsOf(target);
+  std::vector<size_t> result(numTarget, noMatchingRow);
   size_t baseRow = 0;
   size_t targetRow = 0;
-  while (baseRow < base.numRows() && targetRow < target.numRows()) {
+  while (baseRow < numBase && targetRow < numTarget) {
     int comparison = compareRows(base, baseRow, target, targetRow, columns);
     if (comparison == 0) {
       result[targetRow++] = baseRow++;
@@ -132,6 +173,13 @@ std::vector<size_t> alignRows(const IdTableView<0>& base,
     }
   }
   return result;
+}
+
+// _____________________________________________________________________________
+std::vector<size_t> alignRows(const IdTableView<0>& base,
+                              const IdTableView<0>& target,
+                              ql::span<const ColumnIndex> resultSortedOn) {
+  return alignRows(columnsOf(base), columnsOf(target), resultSortedOn);
 }
 
 }  // namespace qlever
