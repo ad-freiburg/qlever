@@ -22,6 +22,11 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/Serializer.h"
 
+// The helpers from `ValueIdTestHelpers.h` work with `Id`, so this test only
+// makes sense if `Id` is the `MixedValueId` (it is only built in that case, see
+// `test/CMakeLists.txt`).
+static_assert(std::is_same_v<Id, MixedValueId>);
+
 struct MixedValueIdTest : public ::testing::Test {
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
 };
@@ -49,11 +54,9 @@ TEST_F(MixedValueIdTest, makeFromDouble) {
     ASSERT_EQ(id.getDouble(), 0.0);
   };
   for (size_t i = 0; i < 10'000; ++i) {
-    testRepresentableDouble(
-        positiveRepresentableDoubleGenerator<MixedValueId>());
-    testRepresentableDouble(
-        negativeRepresentableDoubleGenerator<MixedValueId>());
-    auto nonRepresentable = nonRepresentableDoubleGenerator<MixedValueId>();
+    testRepresentableDouble(positiveRepresentableDoubleGenerator());
+    testRepresentableDouble(negativeRepresentableDoubleGenerator());
+    auto nonRepresentable = nonRepresentableDoubleGenerator();
     // The random number generator includes the edge cases which would make the
     // tests fail.
     if (nonRepresentable != MixedValueId::minPositiveDouble &&
@@ -91,7 +94,7 @@ TEST_F(MixedValueIdTest, makeFromDouble) {
 
 TEST_F(MixedValueIdTest, makeFromInt) {
   for (size_t i = 0; i < 10'000; ++i) {
-    auto value = nonOverflowingNBitGenerator<MixedValueId>();
+    auto value = nonOverflowingNBitGenerator();
     auto id = MixedValueId::makeFromInt(value);
     ASSERT_EQ(id.getDatatype(), Datatype::Int);
     ASSERT_EQ(id.getInt(), value);
@@ -108,8 +111,8 @@ TEST_F(MixedValueIdTest, makeFromInt) {
     }
   };
 
-  testOverflow(overflowingNBitGenerator<MixedValueId>);
-  testOverflow(underflowingNBitGenerator<MixedValueId>);
+  testOverflow(overflowingNBitGenerator);
+  testOverflow(underflowingNBitGenerator);
 }
 
 // _____________________________________________________________________________
@@ -133,14 +136,14 @@ TEST_F(MixedValueIdTest, Indices) {
       ASSERT_EQ(std::invoke(getFromId, id), value);
     };
     for (size_t idx = 0; idx < 10'000; ++idx) {
-      testSingle(indexGenerator<MixedValueId>());
+      testSingle(indexGenerator());
     }
     testSingle(0);
     testSingle(MixedValueId::maxIndex);
 
     if (type != Datatype::LocalVocabIndex) {
       for (size_t idx = 0; idx < 10'000; ++idx) {
-        auto value = invalidIndexGenerator<MixedValueId>();
+        auto value = invalidIndexGenerator();
         ASSERT_THROW(makeId(value), MixedValueId::IndexTooLargeException);
         AD_EXPECT_THROW_WITH_MESSAGE(
             makeId(value), ::testing::ContainsRegex("is bigger than"));
@@ -148,20 +151,17 @@ TEST_F(MixedValueIdTest, Indices) {
     }
   };
 
-  testRandomIds(&makeTextRecordId<MixedValueId>,
-                &getTextRecordIndex<MixedValueId>, Datatype::TextRecordIndex);
-  testRandomIds(&makeVocabId<MixedValueId>, &getVocabIndex<MixedValueId>,
-                Datatype::VocabIndex);
+  testRandomIds(&makeTextRecordId, &getTextRecordIndex,
+                Datatype::TextRecordIndex);
+  testRandomIds(&makeVocabId, &getVocabIndex, Datatype::VocabIndex);
 
   auto localVocabWordToInt = [](const auto& input) {
     return std::atoll(getLocalVocabIndex(input).c_str());
   };
-  testRandomIds(&makeLocalVocabId<MixedValueId>, localVocabWordToInt,
+  testRandomIds(&makeLocalVocabId, localVocabWordToInt,
                 Datatype::LocalVocabIndex);
-  testRandomIds(&makeWordVocabId<MixedValueId>,
-                &getWordVocabIndex<MixedValueId>, Datatype::WordVocabIndex);
-  testRandomIds(&makeSecondaryVocabId<MixedValueId>,
-                &getSecondaryVocabIndex<MixedValueId>,
+  testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
+  testRandomIds(&makeSecondaryVocabId, &getSecondaryVocabIndex,
                 Datatype::SecondaryVocabIndex);
 }
 
@@ -184,7 +184,7 @@ TEST_F(MixedValueIdTest, Undefined) {
 }
 
 TEST_F(MixedValueIdTest, OrderingDifferentDatatypes) {
-  std::vector<MixedValueId> ids = makeRandomIds<MixedValueId>();
+  auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end());
 
   auto compareByDatatypeAndIndexTypes = [](MixedValueId a, MixedValueId b) {
@@ -203,8 +203,7 @@ TEST_F(MixedValueIdTest, OrderingDifferentDatatypes) {
 TEST_F(MixedValueIdTest, IndexOrdering) {
   auto testOrder = [](auto makeIdFromIndex, auto getIndexFromId) {
     std::vector<MixedValueId> ids;
-    addIdsFromGenerator<MixedValueId>(indexGenerator<MixedValueId>,
-                                      makeIdFromIndex, ids);
+    addIdsFromGenerator(indexGenerator, makeIdFromIndex, ids);
     std::vector<std::invoke_result_t<decltype(getIndexFromId), MixedValueId>>
         indices;
     for (auto id : ids) {
@@ -219,16 +218,15 @@ TEST_F(MixedValueIdTest, IndexOrdering) {
     }
   };
 
-  testOrder(&makeVocabId<MixedValueId>, &getVocabIndex<MixedValueId>);
-  testOrder(&makeLocalVocabId<MixedValueId>, &getLocalVocabIndex<MixedValueId>);
-  testOrder(&makeWordVocabId<MixedValueId>, &getWordVocabIndex<MixedValueId>);
-  testOrder(&makeSecondaryVocabId<MixedValueId>,
-            &getSecondaryVocabIndex<MixedValueId>);
-  testOrder(&makeTextRecordId<MixedValueId>, &getTextRecordIndex<MixedValueId>);
+  testOrder(&makeVocabId, &getVocabIndex);
+  testOrder(&makeLocalVocabId, &getLocalVocabIndex);
+  testOrder(&makeWordVocabId, &getWordVocabIndex);
+  testOrder(&makeSecondaryVocabId, &getSecondaryVocabIndex);
+  testOrder(&makeTextRecordId, &getTextRecordIndex);
 }
 
 TEST_F(MixedValueIdTest, DoubleOrdering) {
-  auto ids = makeRandomDoubleIds<MixedValueId>();
+  auto ids = makeRandomDoubleIds();
   std::vector<double> doubles;
   doubles.reserve(ids.size());
   for (auto id : ids) {
@@ -284,8 +282,8 @@ TEST_F(MixedValueIdTest, DoubleOrdering) {
 
 TEST_F(MixedValueIdTest, SignedIntegerOrdering) {
   std::vector<MixedValueId> ids;
-  addIdsFromGenerator<MixedValueId>(nonOverflowingNBitGenerator<MixedValueId>,
-                                    &MixedValueId::makeFromInt, ids);
+  addIdsFromGenerator(nonOverflowingNBitGenerator, &MixedValueId::makeFromInt,
+                      ids);
   std::vector<int64_t> integers;
   integers.reserve(ids.size());
   for (auto id : ids) {
@@ -308,7 +306,7 @@ TEST_F(MixedValueIdTest, SignedIntegerOrdering) {
 }
 
 TEST_F(MixedValueIdTest, Serialization) {
-  auto ids = makeRandomIds<MixedValueId>();
+  auto ids = makeRandomIds();
 
   for (auto id : ids) {
     ad_utility::serialization::ByteBufferWriteSerializer writer;
@@ -323,7 +321,7 @@ TEST_F(MixedValueIdTest, Serialization) {
 
 TEST_F(MixedValueIdTest, Hashing) {
   {
-    auto ids = makeRandomIds<MixedValueId>();
+    auto ids = makeRandomIds();
     ad_utility::HashSet<MixedValueId> idsWithoutDuplicates;
     for (size_t i = 0; i < 2; ++i) {
       for (auto id : ids) {
@@ -392,13 +390,13 @@ TEST_F(MixedValueIdTest, toDebugString) {
   test(MixedValueId::makeFromBool(true), "B:true");
   test(MixedValueId::makeBoolFromZeroOrOne(false), "B:false");
   test(MixedValueId::makeBoolFromZeroOrOne(true), "B:true");
-  test(makeVocabId<MixedValueId>(15), "V:15");
+  test(makeVocabId(15), "V:15");
   auto str = LocalVocabEntry::literalWithoutQuotes(
       "SomeValue", qec_->getLocalVocabContext());
   test(MixedValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
-  test(makeTextRecordId<MixedValueId>(37), "T:37");
-  test(makeWordVocabId<MixedValueId>(42), "W:42");
-  test(makeBlankNodeId<MixedValueId>(27), "B:27");
+  test(makeTextRecordId(37), "T:37");
+  test(makeWordVocabId(42), "W:42");
+  test(makeBlankNodeId(27), "B:27");
   test(MixedValueId::makeFromDate(
            DateYearOrDuration{123456, DateYearOrDuration::Type::Year}),
        "D:123456");

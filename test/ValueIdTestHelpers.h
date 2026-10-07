@@ -16,150 +16,118 @@ static constexpr size_t numElements = 10'000;
 static constexpr size_t numElements = 10;
 #endif
 
-template <typename IdType = Id>
 inline auto positiveRepresentableDoubleGenerator =
-    ad_utility::RandomDoubleGenerator(IdType::minPositiveDouble,
+    ad_utility::RandomDoubleGenerator(Id::minPositiveDouble,
                                       std::numeric_limits<double>::max());
-template <typename IdType = Id>
 inline auto negativeRepresentableDoubleGenerator =
     ad_utility::RandomDoubleGenerator(-std::numeric_limits<double>::max(),
-                                      -IdType::minPositiveDouble);
-template <typename IdType = Id>
+                                      -Id::minPositiveDouble);
 inline auto nonRepresentableDoubleGenerator = ad_utility::RandomDoubleGenerator(
-    -IdType::minPositiveDouble, Id::minPositiveDouble);
-template <typename IdType = Id>
+    -Id::minPositiveDouble, Id::minPositiveDouble);
 inline auto indexGenerator =
-    ad_utility::SlowRandomIntGenerator<uint64_t>(0, IdType::maxIndex);
-template <typename IdType = Id>
+    ad_utility::SlowRandomIntGenerator<uint64_t>(0, Id::maxIndex);
 inline auto invalidIndexGenerator =
     ad_utility::SlowRandomIntGenerator<uint64_t>(
-        IdType::maxIndex, std::numeric_limits<uint64_t>::max());
+        Id::maxIndex, std::numeric_limits<uint64_t>::max());
 
-template <typename IdType = Id>
 inline auto nonOverflowingNBitGenerator =
-    ad_utility::SlowRandomIntGenerator<int64_t>(IdType::IntegerType::min(),
-                                                IdType::IntegerType::max());
-template <typename IdType = Id>
+    ad_utility::SlowRandomIntGenerator<int64_t>(Id::IntegerType::min(),
+                                                Id::IntegerType::max());
 inline auto overflowingNBitGenerator =
     ad_utility::SlowRandomIntGenerator<int64_t>(
-        IdType::IntegerType::max() + 1, std::numeric_limits<int64_t>::max());
-template <typename IdType = Id>
+        Id::IntegerType::max() + 1, std::numeric_limits<int64_t>::max());
 inline auto underflowingNBitGenerator =
     ad_utility::SlowRandomIntGenerator<int64_t>(
-        std::numeric_limits<int64_t>::min(), IdType::IntegerType::min() - 1);
+        std::numeric_limits<int64_t>::min(), Id::IntegerType::min() - 1);
 
 // Some helper functions to convert uint64_t values directly to and from index
 // type `Id`s.
-template <typename IdType = Id>
-inline IdType makeVocabId(uint64_t value) {
-  return IdType::makeFromVocabIndex(VocabIndex::make(value));
+inline Id makeVocabId(uint64_t value) {
+  return Id::makeFromVocabIndex(VocabIndex::make(value));
 }
-template <typename IdType = Id>
-inline IdType makeLocalVocabId(uint64_t value) {
+inline Id makeLocalVocabId(uint64_t value) {
   return ad_utility::testing::LocalVocabId(value);
 }
-template <typename IdType = Id>
-inline IdType makeTextRecordId(uint64_t value) {
-  return IdType::makeFromTextRecordIndex(TextRecordIndex::make(value));
+inline Id makeTextRecordId(uint64_t value) {
+  return Id::makeFromTextRecordIndex(TextRecordIndex::make(value));
 }
-template <typename IdType = Id>
-inline IdType makeWordVocabId(uint64_t value) {
-  return IdType::makeFromWordVocabIndex(WordVocabIndex::make(value));
+inline Id makeWordVocabId(uint64_t value) {
+  return Id::makeFromWordVocabIndex(WordVocabIndex::make(value));
 }
-template <typename IdType = Id>
-inline IdType makeBlankNodeId(uint64_t value) {
-  return IdType::makeFromBlankNodeIndex(BlankNodeIndex::make(value));
+inline Id makeBlankNodeId(uint64_t value) {
+  return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(value));
 }
-template <typename IdType = Id>
-inline IdType makeSecondaryVocabId(uint64_t value) {
-  return IdType::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(value));
+inline Id makeSecondaryVocabId(uint64_t value) {
+  return Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(value));
 }
-template <typename IdType = Id>
-inline uint64_t getVocabIndex(IdType id) {
-  return id.getVocabIndex().get();
-}
+
+inline uint64_t getVocabIndex(Id id) { return id.getVocabIndex().get(); }
 // TODO<joka921> Make the tests more precise for the localVocabIndices.
-template <typename IdType = Id>
-inline std::string getLocalVocabIndex(IdType id) {
+inline std::string getLocalVocabIndex(Id id) {
   AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::LocalVocabIndex);
   return std::string{asStringViewUnsafe(id.getLocalVocabIndex()->getContent())};
 }
-template <typename IdType = Id>
-inline uint64_t getTextRecordIndex(IdType id) {
+inline uint64_t getTextRecordIndex(Id id) {
   return id.getTextRecordIndex().get();
 }
-template <typename IdType = Id>
-inline uint64_t getWordVocabIndex(IdType id) {
+inline uint64_t getWordVocabIndex(Id id) {
   return id.getWordVocabIndex().get();
 }
-template <typename IdType = Id>
-inline uint64_t getSecondaryVocabIndex(IdType id) {
+inline uint64_t getSecondaryVocabIndex(Id id) {
   return id.getSecondaryVocabIndex().get();
 }
 
-template <typename IdType = Id>
-inline auto addIdsFromGenerator =
-    [](auto& generator, auto makeIds, std::vector<IdType>& ids) {
-      ad_utility::SlowRandomIntGenerator<uint8_t> numRepetitionGenerator(1, 4);
-      for (size_t i = 0; i < numElements; ++i) {
-        auto randomValue = generator();
-        auto numRepetitions = numRepetitionGenerator();
-        for (size_t j = 0; j < numRepetitions; ++j) {
-          ids.push_back(makeIds(randomValue));
-        }
-      }
-    };
-template <typename IdType = Id>
+inline auto addIdsFromGenerator = [](auto& generator, auto makeIds,
+                                     std::vector<Id>& ids) {
+  ad_utility::SlowRandomIntGenerator<uint8_t> numRepetitionGenerator(1, 4);
+  for (size_t i = 0; i < numElements; ++i) {
+    auto randomValue = generator();
+    auto numRepetitions = numRepetitionGenerator();
+    for (size_t j = 0; j < numRepetitions; ++j) {
+      ids.push_back(makeIds(randomValue));
+    }
+  }
+};
 inline auto makeRandomDoubleIds = []() {
-  std::vector<IdType> ids;
-  addIdsFromGenerator<IdType>(positiveRepresentableDoubleGenerator<IdType>,
-                              &IdType::makeFromDouble, ids);
-  addIdsFromGenerator<IdType>(negativeRepresentableDoubleGenerator<IdType>,
-                              &IdType::makeFromDouble, ids);
+  std::vector<Id> ids;
+  addIdsFromGenerator(positiveRepresentableDoubleGenerator, &Id::makeFromDouble,
+                      ids);
+  addIdsFromGenerator(negativeRepresentableDoubleGenerator, &Id::makeFromDouble,
+                      ids);
 
   for (size_t i = 0; i < numElements; ++i) {
-    ids.push_back(IdType::makeFromDouble(0.0));
-    ids.push_back(IdType::makeFromDouble(-0.0));
+    ids.push_back(Id::makeFromDouble(0.0));
+    ids.push_back(Id::makeFromDouble(-0.0));
     auto inf = std::numeric_limits<double>::infinity();
-    ids.push_back(IdType::makeFromDouble(inf));
-    ids.push_back(IdType::makeFromDouble(-inf));
+    ids.push_back(Id::makeFromDouble(inf));
+    ids.push_back(Id::makeFromDouble(-inf));
     auto quietNan = std::numeric_limits<double>::quiet_NaN();
-    ids.push_back(IdType::makeFromDouble(quietNan));
+    ids.push_back(Id::makeFromDouble(quietNan));
     auto signalingNan = std::numeric_limits<double>::signaling_NaN();
-    ids.push_back(IdType::makeFromDouble(signalingNan));
+    ids.push_back(Id::makeFromDouble(signalingNan));
     auto max = std::numeric_limits<double>::max();
     auto min = std::numeric_limits<double>::min();
-    ids.push_back(IdType::makeFromDouble(max));
-    ids.push_back(IdType::makeFromDouble(min));
+    ids.push_back(Id::makeFromDouble(max));
+    ids.push_back(Id::makeFromDouble(min));
   }
   ad_utility::randomShuffle(ids.begin(), ids.end());
   return ids;
 };
 
-template <typename IdType = Id>
-inline auto makeRandomIds = [] {
-  std::vector<IdType> ids = makeRandomDoubleIds<IdType>();
-  addIdsFromGenerator<IdType>(indexGenerator<IdType>,
-                              &makeVocabId<MixedValueId>, ids);
-  addIdsFromGenerator<IdType>(indexGenerator<IdType>,
-                              &makeLocalVocabId<MixedValueId>, ids);
-  addIdsFromGenerator<IdType>(indexGenerator<IdType>,
-                              &makeTextRecordId<MixedValueId>, ids);
-  addIdsFromGenerator<IdType>(indexGenerator<IdType>,
-                              &makeWordVocabId<MixedValueId>, ids);
-  addIdsFromGenerator<IdType>(indexGenerator<IdType>,
-                              &makeBlankNodeId<MixedValueId>, ids);
-  addIdsFromGenerator<IdType>(indexGenerator<IdType>,
-                              &makeSecondaryVocabId<MixedValueId>, ids);
-  addIdsFromGenerator<IdType>(nonOverflowingNBitGenerator<IdType>,
-                              &IdType::makeFromInt, ids);
-  addIdsFromGenerator<IdType>(overflowingNBitGenerator<IdType>,
-                              &IdType::makeFromInt, ids);
-  addIdsFromGenerator<IdType>(underflowingNBitGenerator<IdType>,
-                              &IdType::makeFromInt, ids);
+inline auto makeRandomIds = []() {
+  std::vector<Id> ids = makeRandomDoubleIds();
+  addIdsFromGenerator(indexGenerator, &makeVocabId, ids);
+  addIdsFromGenerator(indexGenerator, &makeLocalVocabId, ids);
+  addIdsFromGenerator(indexGenerator, &makeTextRecordId, ids);
+  addIdsFromGenerator(indexGenerator, &makeWordVocabId, ids);
+  addIdsFromGenerator(indexGenerator, &makeBlankNodeId, ids);
+  addIdsFromGenerator(indexGenerator, &makeSecondaryVocabId, ids);
+  addIdsFromGenerator(nonOverflowingNBitGenerator, &Id::makeFromInt, ids);
+  addIdsFromGenerator(overflowingNBitGenerator, &Id::makeFromInt, ids);
+  addIdsFromGenerator(underflowingNBitGenerator, &Id::makeFromInt, ids);
 
   for (size_t i = 0; i < numElements; ++i) {
-    ids.push_back(IdType::makeUndefined());
+    ids.push_back(Id::makeUndefined());
   }
 
   ad_utility::randomShuffle(ids.begin(), ids.end());
