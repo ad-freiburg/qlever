@@ -200,6 +200,9 @@ class Index {
   ad_utility::MemorySize& memoryLimitIndexBuilding();
   const ad_utility::MemorySize& memoryLimitIndexBuilding() const;
 
+  ad_utility::MemorySize& largeRelationSortMemory();
+  const ad_utility::MemorySize& largeRelationSortMemory() const;
+
   ad_utility::MemorySize& parserBufferSize();
   const ad_utility::MemorySize& parserBufferSize() const;
 

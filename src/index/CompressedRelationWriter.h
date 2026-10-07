@@ -199,11 +199,16 @@ class CompressedRelationWriter {
   //
   // `permutation`: The permutation to be built (as a permutation of the
   // array `[0, 1, 2]`). The `sortedTriples` must be sorted by this permutation.
+  //
+  // `largeRelationSortMemory`: The memory for sorting a large relation (one
+  // that does not fit into a single block) for the second permutation. A
+  // relation that does not fit into this memory is sorted externally.
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks);
+      qlever::KeyOrder permutation, const PerBlockCallbacks& perBlockCallbacks,
+      ad_utility::MemorySize largeRelationSortMemory);
 
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This also closes the writer. The typical workflow is:
