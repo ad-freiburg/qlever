@@ -5,7 +5,7 @@ add_subdirectory(vocabulary)
 #
 # NOTE: This has to be a separate library, and it must not depend on `index`:
 # comparing two `Id`s calls `LocalVocabEntry::compareThreeWay` and
-# `LocalVocabEntry::positionInVocab` (see `global/MixedSort.hValueId.h`), so EVERY library
+# `LocalVocabEntry::positionInVocab` (see `global/MixedValueId.h`), so EVERY library
 # that compares `Id`s needs the symbols from `LocalVocabEntry.cpp`. That used to
 # require the `index` library, which is why several files that conceptually
 # belong to `src/parser` had to be compiled into `index`. The dependency on the
