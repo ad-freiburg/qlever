@@ -182,7 +182,7 @@ CPP_template(typename Serializer, typename Columns)(
     // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
     // allow local vocab entries here.
     AD_CORRECTNESS_CHECK(
-        ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
+        ql::ranges::find(col, Datatype::LocalVocabIndex, Id::getDatatypeL) ==
             ql::ranges::end(col),
         "Named result cache entries that contain local vocab entries "
         "currently cannot be serialized. Note that local vocab entries can "
@@ -258,7 +258,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
         AD_CORRECTNESS_CHECK(column.size() == numRows);
         AD_CORRECTNESS_CHECK(
             ql::ranges::find(column, Datatype::LocalVocabIndex,
-                             &Id::getDatatype) == column.end(),
+                             Id::getDatatypeL) == column.end(),
             "Named result cache entries that contain local vocab entries "
             "currently cannot be deserialized.");
         columns.push_back(column);
