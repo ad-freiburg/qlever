@@ -40,4 +40,10 @@ if (NOT _NO_BENCHMARK)
 
     addAndLinkBenchmark(SparqlExpressionBenchmark engine testUtil gtest gmock)
 
+    addAndLinkBenchmark(VocabBatchLookupBenchmark vocabulary)
+
+    addAndLinkBenchmark(SplitVocabLookupBatchMicroBenchmark vocabulary)
+
+    addAndLinkBenchmark(SplitVocabLookupBatchEndToEndBenchmark vocabulary)
+
 endif()
