@@ -322,7 +322,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG e7f5fda0d25729bec6c84f129095f4892c41d351
+        GIT_TAG 6540731c0dd7a0e4335474a5e2df28fbbb07ab8b
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -637,7 +637,9 @@ FetchContent_Declare(
         re2
         GIT_REPOSITORY https://github.com/google/re2.git
         GIT_TAG 972a15cedd008d846f1a39b2e88ce48d7f166cbd  # main branch from January 23 2026
-        GIT_SHALLOW TRUE
+        # NOTE: No `GIT_SHALLOW` here. A shallow clone fetches only the tips of
+        # the branches and the tags, and the commit above is neither (it was
+        # the tip of `main` when it was pinned, but `main` has moved on).
         OVERRIDE_FIND_PACKAGE
         SYSTEM
         EXCLUDE_FROM_ALL
@@ -902,6 +904,11 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     qlever_target_link_libraries(qlever-server engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
     if (USE_PRECOMPILED_HEADERS)
         target_precompile_headers(qlever-server REUSE_FROM engine)
+        # GCC only uses the precompiled header of `engine` for `qlever-server` if
+        # every definition of `engine` is also defined for `qlever-server`. We
+        # therefore omit the (unused) `engine_EXPORTS`, which CMake defines for
+        # shared libraries.
+        set_target_properties(engine PROPERTIES DEFINE_SYMBOL "")
     endif()
 
     add_executable(qlever-upgrade-index src/IndexUpgraderMain.cpp)
