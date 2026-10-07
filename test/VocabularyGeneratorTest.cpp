@@ -39,20 +39,21 @@ namespace {
 // unambiguous.
 const std::string partialVocabBasename = "vocab-";
 
-// Write the given `words` as a partial vocabulary file at `path`, assigning
-// them consecutive local ids `0, 1, ...` in the given order and marking all of
-// them as not external.
+// Write the given `words` as a partial vocabulary file at `path` (using the
+// real `writePartialVocabularyToFile`), assigning them consecutive local ids
+// `0, 1, ...` in the given order and marking all of them as external iff
+// `isExternal` is true.
 template <typename Range>
-void writePartialVocabularyFile(const std::string& path, const Range& words) {
-  ad_utility::serialization::FileWriteSerializer partialVocab(path);
-  partialVocab << words.size();
+void writePartialVocabularyFile(const std::string& path, const Range& words,
+                                bool isExternal = false) {
+  ItemVec items;
   size_t localIdx = 0;
   for (const auto& word : words) {
-    partialVocab << std::string_view{word};
-    partialVocab << false;
-    partialVocab << localIdx;
+    items.emplace_back(std::string_view{word},
+                       PartialVocabIndexWithExternalFlag{localIdx, isExternal});
     ++localIdx;
   }
+  writePartialVocabularyToFile(items, path);
 }
 }  // namespace
 
@@ -127,20 +128,18 @@ class MergeVocabularyTest : public ::testing::Test {
          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
          true}};
 
-    // open files for partial Vocabularies
-    ad_utility::serialization::FileWriteSerializer partial0(path0_);
-    ad_utility::serialization::FileWriteSerializer partial1(path1_);
-
-    auto writePartialVocabulary = [](auto& partialVocab,
+    auto writePartialVocabulary = [](const std::string& path,
                                      const auto& tripleComponents,
                                      IdMap* idMap) {
       // write first partial vocabulary
-      partialVocab << tripleComponents.size();
+      ItemVec items;
       size_t localIdx = 0;
-      for (auto w : tripleComponents) {
+      // NOTE: The `ItemVec` only stores `string_view`s, so we have to iterate
+      // by reference.
+      for (const auto& w : tripleComponents) {
         auto globalId = w.index_;
-        w.index_ = localIdx;
-        partialVocab << w;
+        items.emplace_back(w.iriOrLiteral_, PartialVocabIndexWithExternalFlag{
+                                                localIdx, w.isExternal_});
         if (idMap) {
           if (w.isBlankNode({})) {
             idMap->push_back(
@@ -157,10 +156,11 @@ class MergeVocabularyTest : public ::testing::Test {
         }
         localIdx++;
       }
+      writePartialVocabularyToFile(items, path);
     };
-    writePartialVocabulary(partial0, words0, &expectedIdMap0_);
+    writePartialVocabulary(path0_, words0, &expectedIdMap0_);
 
-    writePartialVocabulary(partial1, words1, &expectedIdMap1_);
+    writePartialVocabulary(path1_, words1, &expectedIdMap1_);
   }
 
   // __________________________________________________________________
@@ -446,27 +446,14 @@ TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
   // The first partial vocabulary fills a whole batch and ends with `"zzz"`,
   // which is the only word of the second partial vocabulary, there marked as
   // external.
-  {
-    ad_utility::serialization::FileWriteSerializer partialVocab{
-        filenames.wordsFiles_[0]};
-    partialVocab << numWords;
-    for (size_t i = 0; i + 1 < numWords; ++i) {
-      partialVocab << absl::StrFormat("\"word%08d\"", i);
-      partialVocab << false;
-      partialVocab << i;
-    }
-    partialVocab << std::string{"\"zzz\""};
-    partialVocab << false;
-    partialVocab << numWords - 1;
+  std::vector<std::string> words;
+  for (size_t i = 0; i + 1 < numWords; ++i) {
+    words.push_back(absl::StrFormat("\"word%08d\"", i));
   }
-  {
-    ad_utility::serialization::FileWriteSerializer partialVocab{
-        filenames.wordsFiles_[1]};
-    partialVocab << size_t{1};
-    partialVocab << std::string{"\"zzz\""};
-    partialVocab << true;
-    partialVocab << size_t{0};
-  }
+  words.push_back("\"zzz\"");
+  writePartialVocabularyFile(filenames.wordsFiles_[0], words);
+  writePartialVocabularyFile(filenames.wordsFiles_[1],
+                             std::array{std::string_view{"\"zzz\""}}, true);
 
   std::vector<std::pair<std::string, bool>> vocabulary;
   auto wordCallback = makeCollectingWordCallback(vocabulary);

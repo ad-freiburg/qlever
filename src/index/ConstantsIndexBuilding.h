@@ -52,6 +52,18 @@ constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
 
+// The number of words between two consecutive skip pointers of a partial
+// vocabulary words file, that is the number of words per block when such a
+// file is read in blocks (see `writePartialVocabularyToFile` and
+// `index/vocabulary_merger/PartialVocabularySkipPointers.h`).
+constexpr inline size_t PARTIAL_VOCAB_SKIP_POINTER_INTERVAL = 10'000;
+
+// The magic number at the very end of a partial vocabulary words file, which
+// marks the presence of the skip pointers. Its lowest bytes encode the version
+// of the format.
+constexpr inline uint64_t PARTIAL_VOCAB_SKIP_POINTERS_MAGIC =
+    0x5156'534B'4950'0001ULL;
+
 // The infix of the (compressed) files that hold the parsed triples with their
 // partial IDs, before they are sorted into the permutations. There is one such
 // file per partial vocabulary, holding exactly the triples that were mapped

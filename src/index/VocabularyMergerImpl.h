@@ -15,6 +15,7 @@
 #include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/VocabularyMerger.h"
+#include "index/vocabulary_merger/PartialVocabularySkipPointers.h"
 #include "util/Allocator.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
@@ -194,8 +195,10 @@ inline IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
 
 // _________________________________________________________________________________________________________
 inline void writePartialVocabularyToFile(const ItemVec& els,
-                                         const std::string& fileName) {
+                                         const std::string& fileName,
+                                         size_t skipPointerInterval) {
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
+  AD_CONTRACT_CHECK(skipPointerInterval > 0);
 
   // We buffer the data with our own buffer before passing it to the file in
   // large chunks. Despite `fwrite` (which is ultimately called by
@@ -208,10 +211,21 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   uint64_t size = els.size();
   serializer << size;
 
+  // The byte offsets of the first words of the blocks of
+  // `skipPointerInterval` words, see `PartialVocabularySkipPointers.h`.
+  std::vector<uint64_t> blockOffsets;
+  blockOffsets.reserve((els.size() + skipPointerInterval - 1) /
+                       skipPointerInterval);
+  size_t wordIndex = 0;
+
   // This is essentially a `VectorIncrementalSerializer` with a custom
   // serialization function, which the infrastructure currently does not
   // support.
   for (const auto& [word, idAndExternal] : els) {
+    if (wordIndex % skipPointerInterval == 0) {
+      blockOffsets.push_back(serializer.getSerializationPosition());
+    }
+    ++wordIndex;
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
@@ -219,6 +233,24 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
     serializer << idAndExternal.isExternal();
     serializer << idAndExternal.id();
   }
+
+  // Append the skip pointers, which also store the first and the last word of
+  // each block.
+  auto toTripleComponent = [&els](size_t i) {
+    const auto& [word, idAndExternal] = els.at(i);
+    return TripleComponentWithIndex{
+        std::string{word}, idAndExternal.isExternal(), idAndExternal.id()};
+  };
+  std::vector<PartialVocabularySkipPointer> skipPointers;
+  skipPointers.reserve(blockOffsets.size());
+  for (size_t block = 0; block < blockOffsets.size(); ++block) {
+    size_t begin = block * skipPointerInterval;
+    size_t end = std::min(begin + skipPointerInterval, els.size());
+    skipPointers.push_back(PartialVocabularySkipPointer{
+        blockOffsets[block], begin, toTripleComponent(begin),
+        toTripleComponent(end - 1)});
+  }
+  appendPartialVocabularySkipPointers(serializer, skipPointers);
 
   serializer.close();
 

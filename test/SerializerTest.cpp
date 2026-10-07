@@ -9,10 +9,15 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <memory>
+#include <numeric>
+#include <thread>
+
 #include "backports/span.h"
 #include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
+#include "util/Serializer/BufferedPreadReadSerializer.h"
 #include "util/Serializer/BufferedSerializer.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/CompressedSerializer.h"
@@ -31,6 +36,7 @@ using namespace ad_utility;
 using namespace memory_literals;
 using ad_utility::serialization::AlignedByteBufferReadSerializer;
 using ad_utility::serialization::AlignedByteBufferWriteSerializer;
+using ad_utility::serialization::BufferedPreadReadSerializer;
 using ad_utility::serialization::BufferedWriteSerializer;
 using ad_utility::serialization::ByteBufferReadSerializer;
 using ad_utility::serialization::ByteBufferWriteSerializer;
@@ -1564,4 +1570,194 @@ TEST(VectorIncrementalSerializer, MoveAssignmentFinishesOverwrittenSerializer) {
     }
   }
   EXPECT_EQ(readIntVector(filenameB), originalB);
+}
+
+namespace {
+// Write the `words` to the file `filename` using a `BufferedWriteSerializer`
+// and return the byte offset at which each of the words starts, followed by
+// the total size of the file.
+std::vector<uint64_t> writeWordsAndGetOffsets(
+    const std::string& filename, const std::vector<std::string>& words) {
+  std::vector<uint64_t> offsets;
+  BufferedWriteSerializer writer{FileWriteSerializer{filename}, 7_B};
+  for (const auto& word : words) {
+    offsets.push_back(writer.getSerializationPosition());
+    writer << word;
+  }
+  offsets.push_back(writer.getSerializationPosition());
+  writer.close();
+  return offsets;
+}
+
+// Return words of the lengths `0, 1, ..., numWords - 1`, each consisting of a
+// different character, such that a read from a wrong offset is detected.
+std::vector<std::string> makeWordsOfIncreasingLength(size_t numWords) {
+  std::vector<std::string> words;
+  for (size_t i = 0; i < numWords; ++i) {
+    words.emplace_back(i, static_cast<char>('a' + i % 26));
+  }
+  return words;
+}
+
+// Open the file `filename` for reading as a shared `File`.
+std::shared_ptr<const ad_utility::File> openShared(
+    const std::string& filename) {
+  return std::make_shared<ad_utility::File>(filename, "r");
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(BufferedPreadReadSerializer, IsReadSerializer) {
+  static_assert(ReadSerializer<BufferedPreadReadSerializer>);
+  static_assert(!WriteSerializer<BufferedPreadReadSerializer>);
+}
+
+// _____________________________________________________________________________
+// Read words (some of which are larger than the buffer, some fit exactly into
+// it) with many different buffer sizes, starting at the offset of each word,
+// and check the serialization position after each word.
+TEST(BufferedPreadReadSerializer, ReadFromEveryOffset) {
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  auto words = makeWordsOfIncreasingLength(70);
+  auto offsets = writeWordsAndGetOffsets(filename, words);
+  // The size of a serialized word of length zero is exactly 8 bytes.
+  ASSERT_EQ(offsets.at(1), 8u);
+  auto file = openShared(filename);
+
+  for (MemorySize bufferSize :
+       {1_B, 2_B, 7_B, 8_B, 9_B, 16_B, 17_B, 64_B, 65_B, 1_kB, 1_MB}) {
+    for (size_t start = 0; start < words.size(); ++start) {
+      BufferedPreadReadSerializer reader{file, offsets.at(start), bufferSize};
+      EXPECT_EQ(reader.getSerializationPosition(), offsets.at(start));
+      for (size_t i = start; i < words.size(); ++i) {
+        std::string word;
+        reader >> word;
+        ASSERT_EQ(word, words.at(i))
+            << "buffer size " << bufferSize << ", start " << start;
+        ASSERT_EQ(reader.getSerializationPosition(), offsets.at(i + 1));
+      }
+      // The file is exhausted.
+      std::string word;
+      EXPECT_THROW(reader >> word, serialization::SerializationException);
+    }
+  }
+}
+
+// _____________________________________________________________________________
+// Mix reads that are served from the buffer, reads that cross the end of the
+// buffer, and reads that are larger than the buffer (which bypass it).
+TEST(BufferedPreadReadSerializer, ItemsLargerThanTheBuffer) {
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  std::vector<std::string> words{"a",
+                                 std::string(1000, 'x'),
+                                 "bc",
+                                 std::string(15, 'y'),
+                                 std::string(16, 'z'),
+                                 "",
+                                 std::string(33, 'w'),
+                                 "d"};
+  {
+    FileWriteSerializer writer{filename};
+    writer << words;
+  }
+  auto file = openShared(filename);
+  for (MemorySize bufferSize : {1_B, 15_B, 16_B, 32_B, 4_kB}) {
+    BufferedPreadReadSerializer reader{file, 0, bufferSize};
+    std::vector<std::string> read;
+    reader >> read;
+    EXPECT_EQ(read, words) << "buffer size " << bufferSize;
+  }
+}
+
+// _____________________________________________________________________________
+// Read single integers with buffer sizes that are exact multiples of the size
+// of an integer, such that every refill happens exactly at the boundary.
+TEST(BufferedPreadReadSerializer, ExactBufferBoundaries) {
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  std::vector<uint64_t> values(100);
+  std::iota(values.begin(), values.end(), 42);
+  {
+    FileWriteSerializer writer{filename};
+    for (auto value : values) {
+      writer << value;
+    }
+  }
+  auto file = openShared(filename);
+  for (MemorySize bufferSize : {8_B, 16_B, 800_B, 1600_B}) {
+    BufferedPreadReadSerializer reader{file, 0, bufferSize};
+    for (auto expected : values) {
+      uint64_t value = 0;
+      reader >> value;
+      EXPECT_EQ(value, expected) << "buffer size " << bufferSize;
+    }
+    EXPECT_EQ(reader.getSerializationPosition(),
+              values.size() * sizeof(uint64_t));
+    uint64_t value = 0;
+    EXPECT_THROW(reader >> value, serialization::SerializationException);
+  }
+}
+
+// _____________________________________________________________________________
+// Several readers that share the same `File` read it concurrently from
+// different offsets.
+TEST(BufferedPreadReadSerializer, ConcurrentReadersOnTheSameFile) {
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  auto words = makeWordsOfIncreasingLength(500);
+  auto offsets = writeWordsAndGetOffsets(filename, words);
+  auto file = openShared(filename);
+
+  static constexpr size_t numThreads = 8;
+  std::vector<size_t> numMismatches(numThreads, 0);
+  std::vector<std::thread> threads;
+  for (size_t t = 0; t < numThreads; ++t) {
+    threads.emplace_back([&, t]() {
+      for (size_t round = 0; round < 5; ++round) {
+        size_t start = (t * 61 + round * 17) % words.size();
+        BufferedPreadReadSerializer reader{file, offsets.at(start), 13_B};
+        for (size_t i = start; i < words.size(); ++i) {
+          std::string word;
+          reader >> word;
+          numMismatches.at(t) += word != words.at(i);
+        }
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+  EXPECT_THAT(numMismatches, ::testing::Each(0u));
+}
+
+// _____________________________________________________________________________
+TEST(BufferedPreadReadSerializer, ErrorHandling) {
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  // A string that claims to have 20 characters, but is cut off after 10.
+  {
+    FileWriteSerializer writer{filename};
+    writer << uint64_t{20};
+    writer.serializeBytes(std::string(10, 'x').data(), 10);
+  }
+  auto file = openShared(filename);
+  // Invalid arguments.
+  EXPECT_ANY_THROW((BufferedPreadReadSerializer{file, 0, 0_B}));
+  EXPECT_ANY_THROW((BufferedPreadReadSerializer{nullptr, 0, 1_kB}));
+  // The size of the string can be read, but the string itself is cut off, both
+  // when it is read via the buffer and when it is read directly.
+  for (MemorySize bufferSize : {4_B, 16_B, 1_kB}) {
+    BufferedPreadReadSerializer reader{file, 0, bufferSize};
+    std::string word;
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        reader >> word, ::testing::HasSubstr("past the end of the file"),
+        serialization::SerializationException);
+  }
+  // Starting behind the end of the file.
+  BufferedPreadReadSerializer reader{file, 1000, 1_kB};
+  char c;
+  EXPECT_THROW(reader.serializeBytes(&c, 1),
+               serialization::SerializationException);
 }

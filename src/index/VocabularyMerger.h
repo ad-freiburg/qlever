@@ -124,11 +124,18 @@ IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
  * For each string first writes the size of the string (64 bits). Then the
  * actual string content (no trailing zero) and then the Id (sizeof(Id)
  *
+ * Behind the words, append a skip pointer for every `skipPointerInterval`
+ * words, see `index/vocabulary_merger/PartialVocabularySkipPointers.h` for the
+ * exact layout of the file.
+ *
  * @param els The input
  * @param fileName will write to this file. If it exists it will be overwritten
+ * @param skipPointerInterval The number of words per block of the skip
+ * pointers. Only unit tests should change this from its default.
  */
-void writePartialVocabularyToFile(const ItemVec& els,
-                                  const std::string& fileName);
+void writePartialVocabularyToFile(
+    const ItemVec& els, const std::string& fileName,
+    size_t skipPointerInterval = PARTIAL_VOCAB_SKIP_POINTER_INTERVAL);
 
 /**
  * @brief Take a HashMap of strings to Ids and insert all its elements into a
