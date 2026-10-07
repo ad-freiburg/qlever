@@ -10,10 +10,32 @@
 #ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_SPILLINGBLOCKSTORAGE_H
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_SPILLINGBLOCKSTORAGE_H
 
+#include "util/CompressedBlockFile.h"
+
+namespace ad_utility::parallelBlockMerge {
+// The default compression of the blocks that a `SpillingBlockStorage` spills.
+// A positive value is an ordinary ZSTD level (higher compresses better, but
+// costs more CPU), a negative value is one of the fast ZSTD levels
+// (`zstd --fast=N`, much cheaper and still effective, for example on the long
+// runs of equal `Id`s of sorted columns), `0` is the default level of ZSTD
+// (3), and `NO_BLOCK_COMPRESSION` stores the blocks uncompressed. The
+// compression competes with the merge for CPU time, but with many chunks in
+// flight a large part of the merged data is spilled, so a cheap compression
+// that keeps the spill files (and the page cache) small pays off. The low
+// positive levels 1 and 2 are a bad choice for the data of the external
+// sorter.
+//
+// NOTE: This constant is deliberately available in the C++17 mode as well, in
+// which the storage itself does not exist (see below), because the
+// configuration of its callers refers to it in both modes.
+constexpr inline CompressedBlockFile::CompressionLevel
+    DEFAULT_SPILL_COMPRESSION_LEVEL = -5;
+}  // namespace ad_utility::parallelBlockMerge
+
 // A model of the `parallelBlockMerge::BlockStorageConcept` that spills the
 // output blocks of the merge to disk, for any block type for which there is a
-// `SpillingBlockCodec`. Its only user is the `InOrderBlockSink`,
-// which is coroutine-based, so this whole header is empty when
+// `SpillingBlockCodec`. Its only user is the `InOrderBlockSink`, which is
+// coroutine-based, so the rest of this header is empty when
 // `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` is set, see
 // `util/parallelBlockMerge/BlockStorage.h`.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -44,9 +66,9 @@
 namespace ad_utility::parallelBlockMerge {
 
 // A `BlockStorageConcept` for blocks of type `Codec::Block`, which keeps only a
-// bounded number of blocks of the chunk
-// that the consumer currently reads in memory and spills all other blocks to a
-// temporary file, compressed (see `State::mayChunkKeepBlocks`). A producer
+// bounded number of blocks of the chunk that the consumer currently reads in
+// memory and spills all other blocks to a temporary file, compressed (see
+// `State::mayChunkKeepBlocks`). A producer
 // therefore never waits (except for the duration of the I/O), at the price of
 // compressing and writing its blocks and reading them back again.
 //
@@ -105,7 +127,9 @@ class SpillingBlockStorage : public NoCopyNoMove {
     // consumer has read it, and the consumer reads the chunks in order. If the
     // chunks ahead of the consumer could keep blocks, their memory would grow
     // with the total number of chunks and not with the number of chunks in
-    // flight, which is all that `computeMergePhaseParameters` accounts for.
+    // flight, which is all that the memory accounting of the callers (for
+    // example `computeMergePhaseParameters` of the external sorter and
+    // `computeVocabularyMergeParameters` of the vocabulary merge) covers.
     bool mayChunkKeepBlocks(size_t chunkIndex) const {
       return chunkIndex <= chunkOfConsumer_;
     }
@@ -122,10 +146,11 @@ class SpillingBlockStorage : public NoCopyNoMove {
  public:
   // Construct from the `ioExecutor` on which the compression and the writes
   // are run and from which the strands of this storage and of its chunks are
-  // derived, the name of the file to spill to, the `codec` that stores the
-  // spilled blocks, and the number of blocks that the chunk which the
-  // consumer currently reads keeps in memory before it starts spilling (every
-  // other chunk spills all of its blocks, see `State::mayChunkKeepBlocks`).
+  // derived, the prefix of the names of the files to spill to (one per chunk,
+  // see the NOTE below), the `codec` that stores the spilled blocks, and the
+  // number of blocks that the chunk which the consumer currently reads keeps in
+  // memory before it starts spilling (every other chunk spills all of its
+  // blocks, see `State::mayChunkKeepBlocks`).
   // That number may be zero, in which case every block is spilled. The
   // `compressionLevel` decides how the spilled blocks are stored, see
   // `CompressedBlockFile::CompressionLevel`.
@@ -247,10 +272,10 @@ class SpillingBlockStorage : public NoCopyNoMove {
         "Cancelling a `SpillingBlockStorage` failed.");
   }
 
-  // Complete with the number of chunks for which a queue currently exists. Only
-  // used to test that a chunk is indeed dropped as soon as its end-of-chunk
-  // sentinel was handed out. Asynchronous, because that number lives on
-  // `strand_`.
+  // Complete with the number of chunks for which a queue currently exists. Use
+  // this only to test that a chunk is indeed dropped as soon as its
+  // end-of-chunk sentinel was handed out. The operation is asynchronous,
+  // because that number lives on `strand_`.
   template <typename CompletionToken>
   auto asyncNumLiveChunksForTesting(CompletionToken&& completionToken) {
     return ad_utility::runFunctionOnExecutor(

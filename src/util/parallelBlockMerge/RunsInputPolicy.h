@@ -35,13 +35,13 @@ struct BlockTypeOrVoid {
   using type = void;
 };
 
-// ___________________________________________________________________________
+// _____________________________________________________________________________
 template <typename T>
 struct BlockTypeOrVoid<T, std::void_t<typename T::Block>> {
   using type = typename T::Block;
 };
 
-// ___________________________________________________________________________
+// _____________________________________________________________________________
 template <typename T>
 using BlockTypeOrVoidT = typename BlockTypeOrVoid<T>::type;
 
@@ -52,7 +52,7 @@ struct OutputBlockOrDefault {
   using type = BlockTypeOrVoidT<T>;
 };
 
-// ___________________________________________________________________________
+// _____________________________________________________________________________
 template <typename T>
 struct OutputBlockOrDefault<T, std::void_t<typename T::OutputBlock>> {
   using type = typename T::OutputBlock;
@@ -136,9 +136,10 @@ CPP_requires(
 // size of the input blocks. A `Block` that is a sized random-access range (for
 // example an `IdTable` or a `std::vector`) is trimmed to the range of a chunk
 // via binary search, every other `Block` is trimmed by a linear scan, see
-// `ChunkMerger`. The merge never needs the size of a `Block` (the
-// `numElementsInBlock` of the metadata are used instead), but it relies on the
-// following properties of a lazy `Block`:
+// `ChunkMerger`. The merge never needs the size of a lazy `Block` (the
+// `numElementsInBlock` of the metadata are used instead; only a sized
+// random-access `Block` is asked for its `ql::ranges::size`), but it relies on
+// the following properties of a lazy `Block`:
 // * Its iterators stay valid for as long as the `Block` object lives. A `Block`
 //   has to be move-constructible, but the merge never moves it after calling
 //   `begin()` on it, so a `Block` whose iterators point into the `Block` object

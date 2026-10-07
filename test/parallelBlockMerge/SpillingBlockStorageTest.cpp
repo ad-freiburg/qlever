@@ -23,8 +23,8 @@
 #include "../util/ParallelBlockMergeTestHelpers.h"
 #include "../util/SpillingBlockStorageTestHelpers.h"
 #include "backports/filesystem.h"
+#include "backports/functional.h"
 #include "util/CompressedBlockFile.h"
-#include "util/File.h"
 #include "util/Random.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeString.h"
@@ -75,19 +75,6 @@ static_assert(SpillingBlockCodec<StringBlockCodec>);
 
 using StringStorage = SpillingBlockStorage<StringBlockCodec>;
 static_assert(BlockStorageConcept<StringStorage, std::vector<std::string>>);
-
-// Return the blocks of the given `readBlocks` and whether each of them was
-// still in memory, as two separate vectors.
-std::pair<std::vector<std::vector<std::string>>, std::vector<bool>> split(
-    std::vector<ReadBlock<std::vector<std::string>>> readBlocks) {
-  std::vector<std::vector<std::string>> blocks;
-  std::vector<bool> wasInMemory;
-  for (auto& readBlock : readBlocks) {
-    blocks.push_back(std::move(readBlock.block_));
-    wasInMemory.push_back(readBlock.wasInMemory_);
-  }
-  return {std::move(blocks), std::move(wasInMemory)};
-}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -106,30 +93,9 @@ TEST(SpillingBlockStorage, roundTripOfSpilledAndBufferedBlocks) {
     net::io_context ioContext;
     StringStorage storage{ioContext.get_executor(), prefix, StringBlockCodec{},
                           1, compressionLevel};
-    // NOTE: The storage deletes the spill file of a chunk as soon as that
-    // chunk is done, this cleanup is only a safeguard for a failing test.
-    absl::Cleanup cleanup{[&storage] {
-      for (size_t chunkIndex : {0u, 1u}) {
-        ad_utility::deleteFile(storage.spillFilename(chunkIndex), false);
-      }
-    }};
-    // The consumer reads chunk `0`, so that chunk keeps a single block in
-    // memory and spills the rest, whereas chunk `1` spills every block.
-    storeChunk(ioContext, storage, 0, blocks);
-    storeChunk(ioContext, storage, 1, blocks);
-    EXPECT_TRUE(ql::filesystem::exists(storage.spillFilename(1)));
-    auto [chunkZero, chunkZeroInMemory] =
-        split(readChunk(ioContext, storage, 0));
-    EXPECT_THAT(chunkZero, ::testing::ElementsAreArray(blocks));
-    EXPECT_THAT(chunkZeroInMemory,
-                ::testing::ElementsAre(true, false, false, false));
-    auto [chunkOne, chunkOneInMemory] = split(readChunk(ioContext, storage, 1));
-    EXPECT_THAT(chunkOne, ::testing::ElementsAreArray(blocks));
-    EXPECT_THAT(chunkOneInMemory, ::testing::Each(false));
-    // A chunk that is done deletes its spill file.
-    ad_utility::testing::pollUntilQuiescent(ioContext);
-    EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(0)));
-    EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(1)));
+    auto cleanup = makeSpillFileCleanup(storage, 2);
+    expectRoundTripOfSpilledAndBufferedBlocks(ioContext, storage, blocks, 1,
+                                              ql::identity{});
   }
 }
 
@@ -163,11 +129,6 @@ TEST(SpillingBlockStorage, parallelMergeOfLazyBlocksWithSpilling) {
 
   for (size_t maxBufferedBlocksPerChunk : {0u, 2u}) {
     std::string prefix = gtestCurrentTestName();
-    MergeOptions options = optionsWithBlockSize(16);
-    options.parallelismHint = 4;
-    options.targetChunksPerThread = 3;
-    // Force the parallel code path also for this small input.
-    options.serialNumElementsThreshold = 0;
     net::thread_pool pool{4};
     // All the coroutines have to finish before the pool is destroyed, and only
     // after the range is destroyed, hence the cleanup before the range.
@@ -179,13 +140,8 @@ TEST(SpillingBlockStorage, parallelMergeOfLazyBlocksWithSpilling) {
           makeSpillingBlockStorageFactory(pool.get_executor(), prefix,
                                           StringBlockCodec{},
                                           maxBufferedBlocksPerChunk),
-          options);
-      for (auto& block : blocks) {
-        EXPECT_FALSE(block.empty());
-        for (auto& word : block) {
-          result.push_back(std::move(word));
-        }
-      }
+          alwaysParallelOptions(16, 3));
+      result = collectBlocks(blocks);
     }
     EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
     // Every chunk deletes its spill file once it is done. The deletion is

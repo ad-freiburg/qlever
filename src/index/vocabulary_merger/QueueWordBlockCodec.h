@@ -16,13 +16,13 @@
 #include <utility>
 #include <vector>
 
-#include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
 #include "index/vocabulary_merger/QueueWord.h"
 #include "util/CompressedBlockFile.h"
 #include "util/Exception.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/Serializer.h"
+#include "util/parallelBlockMerge/SpillingBlockStorage.h"
 
 // The spilling of the output blocks of the parallel vocabulary merge, which are
 // vectors of `QueueWord`s. The codec itself is purely about bytes and hence
@@ -31,8 +31,6 @@
 // `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` is not set.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <boost/asio/any_io_executor.hpp>
-
-#include "util/parallelBlockMerge/SpillingBlockStorage.h"
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 namespace ad_utility::vocabulary_merger {
@@ -108,13 +106,13 @@ using QueueWordBlockStorage =
 // `SpillingBlockStorage::spillFilename`). The compression and the writes run
 // on the `ioExecutor`. The chunk that the consumer currently reads keeps up to
 // `maxBufferedBlocksPerChunk` blocks in memory, and all other blocks are
-// spilled with the given `compressionLevel` (by default the same cheap level
-// as the merge phase of the external sorter).
+// spilled with the given `compressionLevel`, see
+// `parallelBlockMerge::DEFAULT_SPILL_COMPRESSION_LEVEL`.
 inline auto makeQueueWordBlockStorageFactory(
     boost::asio::any_io_executor ioExecutor, std::string filenamePrefix,
     size_t maxBufferedBlocksPerChunk,
     CompressedBlockFile::CompressionLevel compressionLevel =
-        compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION) {
+        parallelBlockMerge::DEFAULT_SPILL_COMPRESSION_LEVEL) {
   return parallelBlockMerge::makeSpillingBlockStorageFactory(
       std::move(ioExecutor), std::move(filenamePrefix), QueueWordBlockCodec{},
       maxBufferedBlocksPerChunk, compressionLevel);

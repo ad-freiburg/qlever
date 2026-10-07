@@ -16,17 +16,24 @@
 // `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` is set.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include <absl/cleanup/cleanup.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <boost/asio/io_context.hpp>
 #include <cstddef>
 #include <exception>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "./AsioTestHelpers.h"
+#include "./GTestHelpers.h"
+#include "backports/filesystem.h"
 #include "util/Exception.h"
+#include "util/File.h"
+#include "util/SourceLocation.h"
 #include "util/parallelBlockMerge/BlockStorage.h"
 
 namespace spillingBlockStorageTestHelpers {
@@ -38,6 +45,36 @@ struct ReadBlock {
   Block block_;
   bool wasInMemory_;
 };
+
+// Return an object that deletes the spill files of the chunks
+// `0, ..., numChunks - 1` of the `storage` when it is destroyed. A storage
+// deletes the file of a chunk itself as soon as that chunk is done, so this is
+// only a safeguard for a test that fails (or that deliberately leaves chunks
+// unfinished).
+template <typename Storage>
+auto makeSpillFileCleanup(const Storage& storage, size_t numChunks) {
+  std::vector<std::string> filenames;
+  for (size_t chunkIndex = 0; chunkIndex < numChunks; ++chunkIndex) {
+    filenames.push_back(storage.spillFilename(chunkIndex));
+  }
+  return absl::Cleanup{[filenames = std::move(filenames)] {
+    for (const auto& filename : filenames) {
+      ad_utility::deleteFile(filename, false);
+    }
+  }};
+}
+
+// Return a completion handler for `Storage::getBlock` that expects no
+// exception and stores the `GetResult` in `result`, which therefore has to
+// outlive the operation.
+template <typename Storage>
+auto makeGetHandler(std::optional<typename Storage::GetResult>& result) {
+  return [&result](std::exception_ptr exception,
+                   typename Storage::GetResult getResult) {
+    EXPECT_EQ(exception, nullptr);
+    result = std::move(getResult);
+  };
+}
 
 // Store the `blocks` followed by the end-of-chunk sentinel as the chunk with
 // the given `chunkIndex` of the `storage`, one after the other, and run the
@@ -76,14 +113,9 @@ template <typename Storage>
 std::optional<typename Storage::GetResult> getOnce(
     boost::asio::io_context& ioContext, Storage& storage, size_t chunkIndex) {
   std::optional<typename Storage::GetResult> result;
-  storage.getBlock(chunkIndex,
-                   [&result](std::exception_ptr exception,
-                             typename Storage::GetResult getResult) {
-                     EXPECT_EQ(exception, nullptr);
-                     result = std::move(getResult);
-                   });
+  storage.getBlock(chunkIndex, makeGetHandler<Storage>(result));
   ad_utility::testing::pollUntilQuiescent(ioContext);
-  return std::move(result);
+  return result;
 }
 
 // Read all the blocks of the chunk with the given `chunkIndex` of the
@@ -106,19 +138,52 @@ std::vector<ReadBlock<typename Storage::Block>> readChunk(
   }
 }
 
+// Store the `blocks` as chunk `0` and as chunk `1` of the `storage` (a fresh
+// storage that runs on the `ioContext` and keeps `numBufferedBlocks` blocks
+// in memory), read both chunks back, and check that they arrive unchanged.
+// The blocks are compared after applying the `projection` to them, which has
+// to turn a block into something that `::testing::ElementsAreArray` can
+// compare. The consumer starts with chunk `0`, so that chunk keeps its first
+// `numBufferedBlocks` blocks in memory and spills the others, whereas chunk
+// `1` spills every block. Also check that every spill file is deleted once its
+// chunk is done.
+template <typename Storage, typename Projection>
+void expectRoundTripOfSpilledAndBufferedBlocks(
+    boost::asio::io_context& ioContext, Storage& storage,
+    const std::vector<typename Storage::Block>& blocks,
+    size_t numBufferedBlocks, const Projection& projection,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
+  storeChunk(ioContext, storage, 0, blocks);
+  storeChunk(ioContext, storage, 1, blocks);
+  EXPECT_TRUE(ql::filesystem::exists(storage.spillFilename(1)));
+  for (size_t chunkIndex : {0u, 1u}) {
+    auto readBlocks = readChunk(ioContext, storage, chunkIndex);
+    ASSERT_EQ(readBlocks.size(), blocks.size());
+    for (size_t i = 0; i < blocks.size(); ++i) {
+      EXPECT_THAT(projection(readBlocks.at(i).block_),
+                  ::testing::ElementsAreArray(projection(blocks.at(i))));
+      EXPECT_EQ(readBlocks.at(i).wasInMemory_,
+                chunkIndex == 0 && i < numBufferedBlocks);
+    }
+  }
+  // The deletion of a spill file is posted to the executor of the storage.
+  ad_utility::testing::pollUntilQuiescent(ioContext);
+  EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(0)));
+  EXPECT_FALSE(ql::filesystem::exists(storage.spillFilename(1)));
+}
+
 // Check that a `getBlock` of a chunk that has no block yet suspends, and that
 // `cancelAll` completes it as cancelled.
 template <typename Storage>
-void expectCancelAllWakesUpAWaitingConsumer(boost::asio::io_context& ioContext,
-                                            Storage& storage) {
+void expectCancelAllWakesUpAWaitingConsumer(
+    boost::asio::io_context& ioContext, Storage& storage,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
   // NOTE: The `result` has to outlive the `cancelAll` below, which is what
   // completes the operation, so `getOnce` cannot be used here.
   std::optional<typename Storage::GetResult> result;
-  storage.getBlock(0, [&result](std::exception_ptr exception,
-                                typename Storage::GetResult getResult) {
-    EXPECT_EQ(exception, nullptr);
-    result = std::move(getResult);
-  });
+  storage.getBlock(0, makeGetHandler<Storage>(result));
   ad_utility::testing::pollUntilQuiescent(ioContext);
   EXPECT_FALSE(result.has_value());
   storage.cancelAll();

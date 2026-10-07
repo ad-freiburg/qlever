@@ -164,24 +164,6 @@ struct InstrumentedInput : public SizeInput {
 
 static_assert(InputConcept<InstrumentedInput>);
 
-// Return the elements of all `blocks` in a single vector, and check that no
-// block is empty. The elements are moved out of the `blocks`, which every call
-// site may do because each of them owns its blocks.
-template <typename Blocks>
-std::vector<ql::ranges::range_value_t<ql::ranges::range_value_t<Blocks>>>
-collectBlocks(Blocks&& blocks) {
-  std::vector<ql::ranges::range_value_t<ql::ranges::range_value_t<Blocks>>>
-      result;
-  for (auto& block : blocks) {
-    // An output block is never empty, no matter how the chunks are laid out.
-    EXPECT_FALSE(block.empty());
-    for (auto& element : block) {
-      result.push_back(std::move(element));
-    }
-  }
-  return result;
-}
-
 // Merge the `input` split into (at most) `numChunks` chunks and return the
 // elements of all output blocks in a single vector.
 template <bool moveElements = false, typename Input, typename Comparator>
@@ -1205,26 +1187,11 @@ std::vector<typename Input::value_type> mergeToRangeAndCollect(
   // below exits via an exception, and only after the range is destroyed (which
   // stops the merge), hence the cleanup that is declared before the range.
   absl::Cleanup joinPool = [&pool] { pool.join(); };
-  std::vector<typename Input::value_type> result;
   auto blocks = parallelBlockMergeToRange<moveElements>(
       pool.get_executor(), std::move(input), std::move(comparator),
       makeInMemoryStorageFactory<OutputBlockT<Input>>(bufferedBlocksPerChunk),
       std::move(options), std::move(cancellationHandle));
-  for (auto& block : blocks) {
-    EXPECT_FALSE(block.empty());
-    for (auto& element : block) {
-      result.push_back(std::move(element));
-    }
-  }
-  return result;
-}
-
-// Return `MergeOptions` that force the parallel code path also for the small
-// inputs of these tests, see `MergeOptions::shouldMergeSerially()`.
-MergeOptions alwaysParallelOptions(size_t outputBlockSize = 7) {
-  MergeOptions options = parallelOptions(outputBlockSize);
-  options.serialNumElementsThreshold = 0;
-  return options;
+  return collectBlocks(blocks);
 }
 }  // namespace
 

@@ -25,7 +25,6 @@
 #include "engine/idTable/CompressedIdTableBlocks.h"
 #include "engine/idTable/IdTable.h"
 #include "util/CompressedBlockFile.h"
-#include "util/parallelBlockMerge/BlockStorage.h"
 #include "util/parallelBlockMerge/SpillingBlockStorage.h"
 
 namespace ad_utility {
@@ -33,54 +32,27 @@ namespace ad_utility {
 namespace net = boost::asio;
 
 // The `parallelBlockMerge::SpillingBlockStorage` for blocks of type
-// `IdTableStatic<NumCols>`, which the merge phase of the external sorter uses.
-// All the actual work is done by that generic storage (see
-// `util/parallelBlockMerge/SpillingBlockStorage.h`), this class only fixes the
-// codec (`compressedIdTable::IdTableBlockCodec`) and takes the `allocator` of
-// that codec directly.
+// `IdTableStatic<NumCols>`, which the merge phase of the external sorter uses,
+// see `util/parallelBlockMerge/SpillingBlockStorage.h` and
+// `compressedIdTable::IdTableBlockCodec`.
 template <size_t NumCols = 0>
-class CompressedIdTableBlockStorage
-    : public parallelBlockMerge::SpillingBlockStorage<
-          compressedIdTable::IdTableBlockCodec<NumCols>> {
- public:
-  using Codec = compressedIdTable::IdTableBlockCodec<NumCols>;
-  using Base = parallelBlockMerge::SpillingBlockStorage<Codec>;
-
-  // Construct from the `ioExecutor` on which the compression and the writes
-  // are run, the prefix of the names of the files to spill to, the `allocator`
-  // for the blocks that are read back, the number of blocks that the chunk
-  // which the consumer currently reads keeps in memory, and the
-  // `compressionLevel` of the spilled blocks. See the constructor of
-  // `parallelBlockMerge::SpillingBlockStorage` for the details.
-  CompressedIdTableBlockStorage(
-      net::any_io_executor ioExecutor, std::string filenamePrefix,
-      AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerChunk,
-      CompressedBlockFile::CompressionLevel compressionLevel =
-          ZSTD_DEFAULT_LEVEL)
-      : Base{std::move(ioExecutor), std::move(filenamePrefix),
-             Codec{std::move(allocator)}, maxBufferedBlocksPerChunk,
-             compressionLevel} {}
-};
+using CompressedIdTableBlockStorage = parallelBlockMerge::SpillingBlockStorage<
+    compressedIdTable::IdTableBlockCodec<NumCols>>;
 
 // A factory for a `CompressedIdTableBlockStorage`, for the constructor of
-// `InOrderBlockSink`. The arguments are those of the constructor of that class.
+// `InOrderBlockSink`. The `allocator` is the one for the blocks that are read
+// back, see `compressedIdTable::IdTableBlockCodec`, and the other arguments are
+// those of the constructor of `parallelBlockMerge::SpillingBlockStorage`.
 template <size_t NumCols>
 auto makeCompressedIdTableStorageFactory(
     net::any_io_executor ioExecutor, std::string filenamePrefix,
     AllocatorWithLimit<Id> allocator, size_t maxBufferedBlocksPerChunk,
     CompressedBlockFile::CompressionLevel compressionLevel =
         ZSTD_DEFAULT_LEVEL) {
-  return [ioExecutor = std::move(ioExecutor),
-          filenamePrefix = std::move(filenamePrefix),
-          allocator = std::move(allocator), maxBufferedBlocksPerChunk,
-          compressionLevel](
-             [[maybe_unused]] const parallelBlockMerge::Strand& strand) {
-    // NOTE: This storage brings a strand of its own, so the one that the
-    // sink offers is not needed.
-    return CompressedIdTableBlockStorage<NumCols>{
-        ioExecutor, filenamePrefix, allocator, maxBufferedBlocksPerChunk,
-        compressionLevel};
-  };
+  return parallelBlockMerge::makeSpillingBlockStorageFactory(
+      std::move(ioExecutor), std::move(filenamePrefix),
+      compressedIdTable::IdTableBlockCodec<NumCols>{std::move(allocator)},
+      maxBufferedBlocksPerChunk, compressionLevel);
 }
 
 }  // namespace ad_utility

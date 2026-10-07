@@ -1309,7 +1309,8 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // `29'166` rows), which is well above the hard floor of
   // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows. The `12` are the default
   // of `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`, and the
-  // `3` is `mergePhaseOutputBlocksPerChunk` of the minimal buffering.
+  // `3` is the number of output blocks per chunk with the minimal buffering,
+  // see `parallelBlockMerge::numLiveOutputBlocks`.
   //
   // NOTE: The memory is deliberately larger than the minimum that reaches this
   // code path, because the margin is what keeps the test meaningful. With

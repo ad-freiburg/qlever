@@ -10,9 +10,12 @@
 #ifndef QLEVER_TEST_UTIL_PARALLELBLOCKMERGETESTHELPERS_H
 #define QLEVER_TEST_UTIL_PARALLELBLOCKMERGETESTHELPERS_H
 
+#include <gtest/gtest.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <range/v3/range/conversion.hpp>
 #include <type_traits>
@@ -20,6 +23,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/functional.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
@@ -268,7 +272,7 @@ struct MaterializedBlocks {
   }
 };
 
-// ___________________________________________________________________________
+// _____________________________________________________________________________
 struct LazyBlocks {
   template <typename T>
   static LazyVectorInput<T> makeInput(const std::vector<std::vector<T>>& runs,
@@ -571,6 +575,39 @@ inline ad_utility::parallelBlockMerge::MergeOptions optionsWithBlockSize(
       ad_utility::parallelBlockMerge::OutputBlockSize::numElements(
           outputBlockSize);
   return options;
+}
+
+// Return `MergeOptions` that force the parallel code path also for the small
+// inputs of the tests (see `MergeOptions::shouldMergeSerially()`), with a
+// `parallelismHint` of four threads, the given number of elements per output
+// block, and the given `targetChunksPerThread` (several chunks per thread, so
+// that even the small inputs of the tests are split).
+inline ad_utility::parallelBlockMerge::MergeOptions alwaysParallelOptions(
+    size_t outputBlockSize = 7, size_t targetChunksPerThread = 2) {
+  auto options = optionsWithBlockSize(outputBlockSize);
+  options.parallelismHint = 4;
+  options.targetChunksPerThread = targetChunksPerThread;
+  options.serialNumElementsThreshold = 0;
+  return options;
+}
+
+// Return the elements of all `blocks` (a range of output blocks of a merge) in
+// a single vector, after applying the `projection` to each of them, and check
+// that no block is empty. The elements are moved out of the `blocks`, which
+// every call site may do because each of them owns its blocks.
+template <typename Blocks, typename Projection = ql::identity>
+auto collectBlocks(Blocks&& blocks, Projection projection = {}) {
+  using Element = ql::ranges::range_value_t<ql::ranges::range_value_t<Blocks>>;
+  std::vector<std::decay_t<std::invoke_result_t<Projection&, Element&&>>>
+      result;
+  for (auto& block : blocks) {
+    // An output block is never empty, no matter how the chunks are laid out.
+    EXPECT_FALSE(block.empty());
+    for (auto& element : block) {
+      result.push_back(std::invoke(projection, std::move(element)));
+    }
+  }
+  return result;
 }
 
 // Return `numRuns` sorted vectors of random numbers, the sizes of which are

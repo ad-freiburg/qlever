@@ -294,9 +294,9 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
       cursor.current_.reset();
       auto& current =
           cursor.current_.emplace(input.getBlock(cursor.runIdx_, blockIdx));
-      // Only the very first block of the chunk can contain elements that are
-      // smaller than `lo_`, and only the very last one can contain elements
-      // that are not smaller than `hi_`.
+      // Of the range of blocks of this run that the chunk covers, only the
+      // first block can contain elements that are smaller than `lo_`, and only
+      // the last one can contain elements that are not smaller than `hi_`.
       bool isLastBlock = blockIdx + 1 == cursor.endBlockIdx_;
       trimBlock(current, std::exchange(isFirstBlock, false), isLastBlock);
     }

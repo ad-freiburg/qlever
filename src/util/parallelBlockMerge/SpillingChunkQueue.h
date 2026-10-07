@@ -300,7 +300,8 @@ class SpillingChunkQueue
     SharedSpillFile file = getOrCreateSpillFile();
     // NOTE: The function that runs on the `ioExecutor_` is a named variable and
     // not a temporary inside the `co_await` expression, because GCC 11 destroys
-    // such a temporary twice (a double free of the columns of the `block`).
+    // such a temporary twice (a double free of the `block`, observed with
+    // `IdTable` blocks).
     auto writeToFile = [file = std::move(file), block = std::move(block),
                         codec = codec_] {
       // NOTE: This runs on the plain `ioExecutor_` and may therefore
