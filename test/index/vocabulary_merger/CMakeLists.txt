@@ -11,3 +11,5 @@ addLinkAndDiscoverTest(VocabularyMergePipelineTest index)
 addLinkAndDiscoverTest(PartialVocabularyInputTest index)
 
 addLinkAndDiscoverTest(QueueWordBlockCodecTest index)
+
+addLinkAndDiscoverTest(VocabularyMergeConfigTest index)

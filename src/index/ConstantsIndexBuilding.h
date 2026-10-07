@@ -51,6 +51,12 @@ constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
     ".partial-vocab.words.tmp.";
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
+// The infix of the files to which the merge of the partial vocabularies
+// temporarily spills its output blocks (see
+// `partialVocabularyMergeSpillFilenamePrefix` in
+// `index/PartialVocabularyFilenames.h`).
+constexpr inline std::string_view PARTIAL_VOCAB_MERGE_SPILL_INFIX =
+    ".partial-vocab.merge-spill.tmp";
 
 // The number of words between two consecutive skip pointers of a partial
 // vocabulary words file, that is the number of words per block when such a
@@ -87,9 +93,9 @@ constexpr inline size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 
 // The number of index mappings (which is the same as the number of merged
 // words) that are collected in a single batch of the vocabulary merging (see
-// `index/vocabulary_merger/WordBatch.h`). A single buffer of merged words (as
-// delivered by `parallelMultiwayMerge`, see `VocabularyMergerImpl.h`) only
-// contains a rather small number of words, which would be much too
+// `index/vocabulary_merger/WordBatch.h`). A single block of merged words (as
+// delivered by the parallel block merge, see `VocabularyMergerImpl.h`) may
+// contain only a rather small number of words, which would be much too
 // fine-grained for a task queue.
 constexpr inline size_t VOCAB_MERGER_WORD_BATCH_SIZE = 100'000;
 

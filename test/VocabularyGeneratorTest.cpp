@@ -7,6 +7,7 @@
 #include <gmock/gmock.h>
 
 #include <array>
+#include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
@@ -14,6 +15,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "./index/vocabulary_merger/VocabularyMergerTestHelpers.h"
@@ -29,6 +31,7 @@
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Algorithm.h"
 #include "util/GTestHelpers.h"
+#include "util/Random.h"
 
 using namespace ad_utility::vocabulary_merger;
 using namespace vocabularyMergerTestHelpers;
@@ -580,4 +583,103 @@ TEST(MergeVocabulary, mappedIdsFileRoundTrip) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       writeMappedIdsToFile(unmapped, map, filename),
       ::testing::HasSubstr("not found in mapping"), ad_utility::Exception);
+}
+
+namespace {
+// Return the names of the spill files of the merge of the partial
+// vocabularies in the current working directory, waiting (for at most ten
+// seconds) until they are gone. The spill files are deleted asynchronously on
+// the executor of the merge, so they may still exist shortly after
+// `mergeVocabulary` has returned.
+std::vector<std::string> remainingSpillFiles() {
+  std::vector<std::string> result;
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  do {
+    result.clear();
+    for (const auto& entry : ql::filesystem::directory_iterator{"."}) {
+      auto filename = entry.path().filename().string();
+      if (filename.find(PARTIAL_VOCAB_MERGE_SPILL_INFIX) != std::string::npos) {
+        result.push_back(filename);
+      }
+    }
+    if (!result.empty()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  } while (!result.empty() && std::chrono::steady_clock::now() < deadline);
+  return result;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Merge many partial vocabularies (with tiny blocks, see the skip pointers,
+// and with many words that occur in several of them, partly as external and
+// partly as internal words) with a memory limit that is small enough for the
+// merge to spill its output blocks, and compare the vocabulary and the ID maps
+// against a reference.
+TEST(MergeVocabulary, parallelMergeOfManyPartialVocabularies) {
+  static constexpr size_t numFiles = 12;
+  static constexpr size_t numDistinctWords = 40'000;
+  auto [filenames, cleanup] = makePartialVocabularyFilenamesInFreshDirectory(
+      partialVocabBasename, numFiles);
+
+  // The words of the global vocabulary, in sorted order and of different
+  // lengths.
+  std::vector<std::string> allWords;
+  for (size_t i = 0; i < numDistinctWords; ++i) {
+    allWords.push_back(
+        absl::StrFormat("\"word%08d%s\"", i, std::string(i % 13, 'x')));
+  }
+  ad_utility::SlowRandomIntGenerator<size_t> randomInt{
+      0, 99, ad_utility::RandomSeed::make(42)};
+  // Each partial vocabulary contains every word with a probability of one
+  // half, and each occurrence is external with a probability of one tenth.
+  // `wordsInFile[f]` are the indices of the words of partial vocabulary `f`.
+  std::vector<bool> isExternal(numDistinctWords, false);
+  std::vector<std::vector<size_t>> wordsInFile(numFiles);
+  std::vector<bool> occurs(numDistinctWords, false);
+  for (size_t f = 0; f < numFiles; ++f) {
+    ItemVec items;
+    for (size_t i = 0; i < numDistinctWords; ++i) {
+      if (randomInt() >= 50) {
+        continue;
+      }
+      bool external = randomInt() < 10;
+      isExternal.at(i) = isExternal.at(i) || external;
+      occurs.at(i) = true;
+      items.emplace_back(allWords.at(i),
+                         PartialVocabIndexWithExternalFlag{
+                             wordsInFile.at(f).size(), external});
+      wordsInFile.at(f).push_back(i);
+    }
+    writePartialVocabularyToFile(items, filenames.wordsFiles_.at(f), 37);
+  }
+
+  // The expected vocabulary, and the expected global ID of each word.
+  std::vector<std::pair<std::string, bool>> expectedVocabulary;
+  std::vector<uint64_t> globalId(numDistinctWords, 0);
+  for (size_t i = 0; i < numDistinctWords; ++i) {
+    if (occurs.at(i)) {
+      globalId.at(i) = expectedVocabulary.size();
+      expectedVocabulary.emplace_back(allWords.at(i), isExternal.at(i));
+    }
+  }
+
+  for (size_t numThreads : {1, 8}) {
+    std::vector<std::pair<std::string, bool>> vocabulary;
+    auto wordCallback = makeCollectingWordCallback(vocabulary);
+    auto result = mergeVocabulary(
+        partialVocabBasename, numFiles, std::less{}, wordCallback,
+        ad_utility::MemorySize::megabytes(40), {}, numThreads);
+    EXPECT_EQ(result.numWordsTotal(), expectedVocabulary.size());
+    EXPECT_THAT(vocabulary, ::testing::ElementsAreArray(expectedVocabulary));
+    for (size_t f = 0; f < numFiles; ++f) {
+      IdMap expected;
+      for (size_t j = 0; j < wordsInFile.at(f).size(); ++j) {
+        expected.push_back({L(j), V(globalId.at(wordsInFile.at(f).at(j)))});
+      }
+      EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_.at(f)),
+                  ::testing::ElementsAreArray(expected));
+    }
+    EXPECT_THAT(remainingSpillFiles(), ::testing::IsEmpty());
+  }
 }

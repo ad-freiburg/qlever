@@ -49,13 +49,19 @@ namespace ad_utility::vocabulary_merger {
 // appearance. Argument `blankNodeIriRegexes` is a (possibly empty) set of
 // compiled regexes; IRIs that are fully matched by any of them are treated as
 // blank nodes (see `TripleComponentWithIndex::isBlankNode`). The regexes are
-// compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`).
+// compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`). Argument
+// `numThreads` is the number of threads that the merging of the sorted partial
+// vocabularies may use (the value `0` means all the threads of
+// `ad_utility::globalExecutor()`, on which the merging runs).
 //
 // The merging is organized as a pipeline of four threads, which communicate
 // via task queues, such that all of them can work concurrently:
 //
 // 1. The thread that calls `mergeVocabulary` obtains the merged words in
-//    sorted order and eliminates the duplicates (a word typically occurs in
+//    sorted order (from the parallel block merge, see
+//    `util/parallelBlockMerge/ParallelBlockMerge.h`, which runs on
+//    `ad_utility::globalExecutor()`, so the calling thread must not be one of
+//    its threads) and eliminates the duplicates (a word typically occurs in
 //    many of the partial vocabularies). It collects the distinct words as well
 //    as the index mappings for the partial ID maps in batches (see
 //    `detail::WordBatchBuilder`) and hands each batch to the second thread.
@@ -75,7 +81,8 @@ template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      W comparator, C& wordCallback,
                      ad_utility::MemorySize memoryToUse,
-                     const ad_utility::RegexSet& blankNodeIriRegexes = {})
+                     const ad_utility::RegexSet& blankNodeIriRegexes = {},
+                     size_t numThreads = 0)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>);
 
