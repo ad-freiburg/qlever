@@ -85,6 +85,19 @@ constexpr inline CompressedBlockFile::CompressionLevel
 // below this size, see `computeMergePhaseParameters`.
 constexpr inline size_t MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE = 100'000;
 
+// The size (in elements) of the first chunk of the merge phase. The following
+// chunks double that size until they reach the uniform size that the
+// parallelism implies, see `parallelBlockMerge::MergeOptions::firstChunkSize`.
+//
+// The consumer of the merge has to drain the chunks in the order of their
+// index, so the very first sorted rows are only available once the first chunk
+// has produced its first output block. A small first chunk makes that happen
+// much sooner, while the doubling makes sure that the ramp-up is over after a
+// small fraction of a large input and the merge then runs with the large
+// chunks that give it its throughput. Small inputs, for which even a uniform
+// chunk is not larger than this size, are unaffected.
+constexpr inline size_t FIRST_MERGE_PHASE_CHUNK_SIZE = 1'000'000;
+
 // The hard floor for the size of an output block of the merge phase: if not
 // even a single chunk leaves room for a block of that many rows, then the merge
 // phase gives up and reports that the memory limit is insufficient. Below that
@@ -310,6 +323,7 @@ inline parallelBlockMerge::MergeOptions makeMergeOptions(
       parameters.outputBlockSize_);
   options.parallelismHint = config.parallelism_;
   options.maxNumChunksInFlight = parameters.numChunksInFlight_;
+  options.firstChunkSize = FIRST_MERGE_PHASE_CHUNK_SIZE;
   // The output blocks that the merge phase reserves on the consumer side (see
   // `MergePhaseConfig::numBufferedOutputBlocks_`) are the one that the consumer
   // currently holds, the one that the read-ahead of the consumer is just
