@@ -185,19 +185,23 @@ ad_utility::TaskQueueOnExecutor CompressedRelationWriter::makeBlockWriteQueue(
 }
 
 // _____________________________________________________________________________
-void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
-                                                        BlockToWrite relation) {
-  size_t numRows = relation.view().numRows();
+void CompressedRelationWriter::prepareBlockForLargeRelation(Id col0Id,
+                                                            size_t numRows) {
   AD_CORRECTNESS_CHECK(numRows != 0);
   AD_CORRECTNESS_CHECK(currentCol0Id_ == col0Id ||
                        currentCol0Id_.isUndefined());
   currentCol0Id_ = col0Id;
   currentRelationPreviousSize_ += numRows;
   writeBufferedRelationsToSingleBlock();
+}
+
+// _____________________________________________________________________________
+void CompressedRelationWriter::addBlockForLargeRelation(Id col0Id,
+                                                        BlockToWrite relation) {
+  prepareBlockForLargeRelation(col0Id, relation.view().numRows());
   // This is a block of a large relation, so we don't invoke the
   // `smallBlocksCallback_`. Hence the last argument is `false`.
-  compressAndWriteBlock(currentCol0Id_, currentCol0Id_, std::move(relation),
-                        false);
+  compressAndWriteBlock(col0Id, col0Id, std::move(relation), false);
 }
 
 // The number of blocks of a large relation for which the number of distinct
