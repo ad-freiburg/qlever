@@ -1097,8 +1097,11 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
   auto range = ad_utility::InputRangeFromLoopControlGet{
       [this, state = std::move(innerState),
        metadata = LazyScanMetadata{}]() mutable {
-        // Handle UNDEF case using LoopControl pattern
-        if (state->hasUndef()) {
+        // Handle UNDEF case using LoopControl pattern. A scan with a LIMIT or
+        // OFFSET is handled the same way, because `getLazyScan` ignores the
+        // prefiltered blocks for such a scan and would therefore yield the
+        // complete (limited) scan once per batch of pending blocks.
+        if (!getLimitOffset().isUnconstrained() || state->hasUndef()) {
           auto scan =
               makeShared<CompressedRelationReader::IdTableGeneratorInputRange>(
                   getLazyScan());
