@@ -1172,6 +1172,13 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
 }
 
 // _____________________________________________________________________________
+std::shared_ptr<IndexScan> IndexScan::getIfSupportsPrefilteredJoin(
+    const QueryExecutionTree& tree) {
+  auto scan = std::dynamic_pointer_cast<IndexScan>(tree.getRootOperation());
+  return scan && scan->numVariables() > 0 ? scan : nullptr;
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,

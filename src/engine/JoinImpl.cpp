@@ -68,11 +68,12 @@ JoinImpl::JoinImpl(QueryExecutionContext* qec,
   if (t1->getCacheKey() > t2->getCacheKey()) {
     swapChildren();
   }
-  // If one of the inputs is a SCAN and the other one is not, always make the
-  // SCAN the right child (which also gives a deterministic order of the
-  // subtrees). This simplifies several branches in the `computeResult` method.
-  if (std::dynamic_pointer_cast<IndexScan>(t1->getRootOperation()) &&
-      !std::dynamic_pointer_cast<IndexScan>(t2->getRootOperation())) {
+  // If one of the inputs is a SCAN (that supports prefiltered joins) and the
+  // other one is not, always make the SCAN the right child (which also gives a
+  // deterministic order of the subtrees). This simplifies several branches in
+  // the `computeResult` method.
+  if (IndexScan::getIfSupportsPrefilteredJoin(*t1) &&
+      !IndexScan::getIfSupportsPrefilteredJoin(*t2)) {
     swapChildren();
   }
   left_ = std::move(t1);
@@ -167,10 +168,8 @@ Result JoinImpl::computeResult(bool requestLaziness) {
   auto rightResIfCached = getCachedOrSmallResult(*right_);
   checkCancellation();
 
-  auto leftIndexScan =
-      std::dynamic_pointer_cast<IndexScan>(left_->getRootOperation());
-  if (leftIndexScan &&
-      std::dynamic_pointer_cast<IndexScan>(right_->getRootOperation())) {
+  auto leftIndexScan = IndexScan::getIfSupportsPrefilteredJoin(*left_);
+  if (leftIndexScan && IndexScan::getIfSupportsPrefilteredJoin(*right_)) {
     if (rightResIfCached && !leftResIfCached) {
       AD_CORRECTNESS_CHECK(rightResIfCached->isFullyMaterialized());
       return computeResultForIndexScanAndIdTable<true>(
@@ -191,8 +190,7 @@ Result JoinImpl::computeResult(bool requestLaziness) {
 
   // Note: If only one of the children is a scan, then we have made sure in the
   // constructor that it is the right child.
-  auto rightIndexScan =
-      std::dynamic_pointer_cast<IndexScan>(right_->getRootOperation());
+  auto rightIndexScan = IndexScan::getIfSupportsPrefilteredJoin(*right_);
   if (rightIndexScan && !rightResIfCached) {
     if (leftRes->isFullyMaterialized()) {
       return computeResultForIndexScanAndIdTable<false>(
