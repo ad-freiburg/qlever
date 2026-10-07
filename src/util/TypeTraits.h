@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/keywords.h"
 #include "backports/span.h"
 #include "backports/type_traits.h"
 #include "util/Forward.h"
@@ -353,7 +354,7 @@ constexpr bool anyMatchForVisitIf =
     std::disjunction_v<IsMatchForVisitIf<Funcs, Value>...>;
 
 template <typename Variant, typename... Funcs, size_t... Is>
-constexpr bool isExhaustiveForVisitIfImpl(std::index_sequence<Is...>) {
+QL_CONSTEVAL bool isExhaustiveForVisitIfImpl(std::index_sequence<Is...>) {
   return (... &&
           anyMatchForVisitIf<decltype(std::get<Is>(std::declval<Variant>())),
                              Funcs...>);
