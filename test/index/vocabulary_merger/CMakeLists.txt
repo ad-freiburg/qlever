@@ -7,3 +7,5 @@ addLinkAndDiscoverTest(WordBatchBuilderTest index)
 addLinkAndDiscoverTest(VocabularyWriterTest index)
 
 addLinkAndDiscoverTest(VocabularyMergePipelineTest index)
+
+addLinkAndDiscoverTest(QueueWordBlockCodecTest index)

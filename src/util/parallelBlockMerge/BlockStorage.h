@@ -232,8 +232,8 @@ class GetResult {
 // CONTRACT: All the operations of a storage
 // * run on a single executor of the storage's own choosing: either the `strand`
 //   that the sink hands to the factory of the storage, or one that the storage
-//   creates itself (see `CompressedIdTableBlockStorage` for the latter), which
-//   is also the fallback for completion handlers that have no associated
+//   creates itself (see `SpillingBlockStorage` for the latter), which is
+//   also the fallback for completion handlers that have no associated
 //   executor of their own,
 // * complete their token exactly once, on the executor that is associated with
 //   that token (the sink awaits them, so this is the strand of the sink),

@@ -1077,8 +1077,9 @@ TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
     // Every chunk that was fully consumed has its file deleted, so nothing is
     // left over even though neither the merge nor the sorter is destroyed yet.
     // That deletion is only posted to the merge executor when the chunk is
-    // finished, see `ChunkQueue::finish`, so the last file may still exist
-    // for a moment after its last block was consumed. Wait for that as well.
+    // finished, see `SpillingChunkQueue::finish`, so the last file may still
+    // exist for a moment after its last block was consumed. Wait for that as
+    // well.
     waitUntil([&spillPrefix] {
       return currentSpillFiles(spillPrefix).numFiles_ == 0;
     });

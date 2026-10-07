@@ -249,8 +249,7 @@ auto parallelBlockMergeToSink(
 // storage that keeps them in memory (see
 // `test/parallelBlockMerge/InMemoryBlockStorage.h`) makes a producer whose
 // chunk is far ahead of the consumer suspend, whereas one that spills them to
-// disk (see `engine/idTable/CompressedIdTableBlockStorage.h`) lets it run
-// ahead.
+// disk (see `SpillingBlockStorage.h`) lets it run ahead.
 //
 // The returned range reads ahead: it keeps `options.numPrefetchedOutputBlocks`
 // output blocks ready (fetched in the background, on the very `executor` that

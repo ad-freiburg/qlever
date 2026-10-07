@@ -11,3 +11,5 @@ addLinkAndDiscoverTestNoLibs(ParallelBlockMergeTest)
 addLinkAndDiscoverTestNoLibs(BlockPrefetcherTest)
 
 addLinkAndDiscoverTestNoLibs(MergeHelpersTest)
+
+addLinkAndDiscoverTest(SpillingBlockStorageTest zstd)

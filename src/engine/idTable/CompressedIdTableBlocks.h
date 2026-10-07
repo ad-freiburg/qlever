@@ -12,6 +12,7 @@
 
 #include <cstddef>
 #include <range/v3/view/zip.hpp>
+#include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -21,10 +22,10 @@
 
 // Store a block of an `IdTable` in a `CompressedBlockFile` and read it back.
 // This is the codec of the `CompressedIdTableBlockStorage` (see
-// `CompressedIdTableBlockStorage.h`), which spills the output blocks of the
-// parallel merge to disk. It lives in a header of its own, because it is the
-// part of that storage that is purely about bytes and can hence be read and
-// tested without any of the asynchronous machinery.
+// `CompressedIdTableBlockStorage.h` and `IdTableBlockCodec` below), which
+// spills the output blocks of the parallel merge to disk. It lives in a header
+// of its own, because it is the part of that storage that is purely about bytes
+// and can hence be read and tested without any of the asynchronous machinery.
 //
 // NOTE: The `CompressedExternalIdTableWriter` (see
 // `CompressedExternalIdTable.h`) stores its blocks in a very similar way, but
@@ -84,6 +85,37 @@ IdTableStatic<NumCols> readBlock(const CompressedBlockFile& file,
   }
   return block;
 }
+
+// The `parallelBlockMerge::SpillingBlockCodec` for blocks of type
+// `IdTableStatic<NumCols>`, which stores a block via `writeBlock` and reads it
+// back via `readBlock` (see above) into a block that is allocated via the
+// `allocator` of the codec.
+template <size_t NumCols = 0>
+class IdTableBlockCodec {
+ public:
+  using Block = IdTableStatic<NumCols>;
+  using BlockMetadata = compressedIdTable::BlockMetadata;
+
+ private:
+  AllocatorWithLimit<Id> allocator_;
+
+ public:
+  // Construct from the `allocator` for the blocks that are read back.
+  explicit IdTableBlockCodec(AllocatorWithLimit<Id> allocator)
+      : allocator_{std::move(allocator)} {}
+
+  // Append the whole `block` to the `file` and return its metadata.
+  BlockMetadata writeBlock(CompressedBlockFile& file,
+                           const Block& block) const {
+    return compressedIdTable::writeBlock(file, block, 0, block.numRows());
+  }
+
+  // Read the block that is described by `metadata` back from the `file`.
+  Block readBlock(const CompressedBlockFile& file,
+                  const BlockMetadata& metadata) const {
+    return compressedIdTable::readBlock<NumCols>(file, metadata, allocator_);
+  }
+};
 
 }  // namespace ad_utility::compressedIdTable
 

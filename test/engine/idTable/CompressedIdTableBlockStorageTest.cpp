@@ -565,10 +565,11 @@ TEST(CompressedIdTableBlockStorage, theSentinelDropsTheChunk) {
 TEST(CompressedIdTableBlockStorage, aSpillThatOutlivesItsChunkIsDropped) {
   // A block that is spilled once its chunk has been finished has nobody left
   // who could care about it, so the storage reports that it was *not* stored,
-  // see `ChunkQueue::spillBlock`. In the parallel merge that happens when the
-  // consumer takes the end-of-chunk sentinel while the write of a block is
-  // still in flight on another thread; the single-threaded harness here reaches
-  // the very same check by storing the block after the sentinel was handed out.
+  // see `SpillingChunkQueue::spillBlock`. In the parallel merge that happens
+  // when the consumer takes the end-of-chunk sentinel while the write of a
+  // block is still in flight on another thread; the single-threaded harness
+  // here reaches the very same check by storing the block after the sentinel
+  // was handed out.
   //
   // NOTE: Neither order is the one that the sink uses (it pushes the sentinel
   // last), but the storage has to survive them, because they are what makes
@@ -604,7 +605,7 @@ TEST(CompressedIdTableBlockStorage, aSpilledBlockIsHandedOutUnread) {
   // A block that is still in memory is handed out as it is, whereas a spilled
   // block is handed out as a `DeferredBlock` that is only read back from the
   // file when it is materialized, so that the consumer can read several such
-  // blocks concurrently, see `ChunkQueue::deferSpilledBlock`.
+  // blocks concurrently, see `SpillingChunkQueue::deferSpilledBlock`.
   net::io_context ioContext;
   // Buffer a single block, such that the first block stays in memory and the
   // second one is spilled.
