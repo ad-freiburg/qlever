@@ -10,6 +10,9 @@ on:
     tags: [ "v*" ]
   pull_request:
     branches: [ master ]
+    # Also run when a label is applied, s.t. applying the `run-full-ci` label
+    # triggers the expensive checks (see `full-ci-gate.yml`).
+    types: [ opened, synchronize, reopened, labeled ]
   merge_group:
 
 concurrency:
@@ -33,7 +36,11 @@ permissions:
   contents: read
 
 jobs:
+  gate:
+    uses: ./.github/workflows/full-ci-gate.yml
   build:
+    needs: gate
+    if: needs.gate.outputs.run-full-ci == 'true'
     runs-on: ubuntu-24.04
 
     steps:

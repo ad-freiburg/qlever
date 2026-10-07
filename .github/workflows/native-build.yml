@@ -5,6 +5,9 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+    # Also run when a label is applied, s.t. applying the `run-full-ci` label
+    # triggers the expensive checks (see `full-ci-gate.yml`).
+    types: [ opened, synchronize, reopened, labeled ]
   merge_group:
 
 concurrency:
@@ -16,6 +19,10 @@ permissions:
   contents: read
 
 jobs:
+  gate:
+    uses: ./.github/workflows/full-ci-gate.yml
+
+  # The cheap configurations that are run for every PR.
   build:
 
     # The CMake configure and build commands are platform-agnostic and should work equally
@@ -25,59 +32,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [gcc, clang]
-        compiler-version: [8, 11, 12, 13, 18, 21]
+        compiler: [gcc]
+        compiler-version: [13]
         # `-Woverloaded-virtual` is not part of `-Wall`/`-Wextra`. It catches
         # virtual functions that a derived class hides with an overload of the
         # same name (e.g. a `const` and a non-const overload where only the
         # non-const one is overridden). Only GCC warns about that case.
-        warnings: [  "-Wall -Wextra -Werror -Woverloaded-virtual " ]
+        warnings: &warnings [  "-Wall -Wextra -Werror -Woverloaded-virtual " ]
         build-type: [Release]
         expensive-tests: [true]
         additional-cmake-options: [""]
-        isPr:
-          - ${{github.event_name == 'pull_request'}}  # some checks are only run in the master.
-        skipIfPr: [false]
-        exclude:
-          - compiler: gcc
-            compiler-version: 8
-          - compiler: gcc
-            compiler-version: 12
-            isPr: true
-          - compiler: gcc
-            compiler-version: 18
-          - compiler: gcc
-            compiler-version: 21
-          - compiler: clang
-            compiler-version: 8
-          - compiler: clang
-            compiler-version: 11
-          - compiler: clang
-            compiler-version: 12
-          - compiler: clang
-            compiler-version: 13
-          - compiler: clang
-            compiler-version: 15
-          - compiler: clang
-            compiler-version: 16
-            isPr: true
-          - compiler: clang
-            compiler-version: 18
-            isPr: true
         include:
           - compiler: gcc
             compiler-version: 11
             additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DEXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17=ON"
-            build-type: Release
-          # Exercise the PMR allocator backend in one ordinary configuration so
-          # that `QLEVER_USE_PMR_ALLOCATOR` code is actually built and tested in
-          # CI. NOTE: This entry does not add a new job. Since all its other
-          # values match the existing clang-21 configuration, it is merged into
-          # that job, which hence builds with the PMR backend INSTEAD OF the
-          # default `limit` backend (all other configurations are unaffected).
-          - compiler: clang
-            compiler-version: 21
-            allocator-backend: pmr
             build-type: Release
           - compiler: clang
             compiler-version: 16
@@ -91,27 +59,16 @@ jobs:
             build-type: RelWithDebInfo
             runner: ubuntu-22.04
             expensive-tests: false
-            skipIfPr: false
-          - compiler: clang
-            compiler-version: 17
-            build-type: Debug
-            expensive-tests: false
-            ubsan-flags: " -fsanitize=thread -O1 -g"
-            additional-cmake-options: "-D_NO_TIMING_TESTS=ON"
-            skipIfPr: false
 
-    runs-on: ${{matrix.runner || 'ubuntu-24.04'}}
+    runs-on: &runs-on ${{matrix.runner || 'ubuntu-24.04'}}
 
-    env:
+    env: &env
       # Suppress known ThreadSanitizer false positives in third-party libraries
       # (see the comments in the file for details). This only affects the job
       # that builds with `-fsanitize=thread`, all other jobs ignore the variable.
       TSAN_OPTIONS: "suppressions=${{github.workspace}}/misc/tsan-suppressions.txt"
 
-    steps:
-      - name: Skip early if conditions are not met
-        if: (github.event_name == 'pull_request' && matrix.skipIfPr)
-        run: exit 0;
+    steps: &steps
       - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
@@ -152,3 +109,56 @@ jobs:
           # NOTE: The dispatch by the compiler is arbitrary, we just want to
           # have both cases tested.
           e2e-args: ${{matrix.compiler != 'clang' && '-t' || ''}}
+
+  # The expensive configurations, which are only run for PRs with the
+  # `run-full-ci` label (see `full-ci-gate.yml`) and always on `master`.
+  build-full:
+    needs: gate
+    if: needs.gate.outputs.run-full-ci == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        compiler-version: [11, 12, 18, 21]
+        warnings: *warnings
+        build-type: [Release]
+        expensive-tests: [true]
+        additional-cmake-options: [""]
+        isPr:
+          - ${{github.event_name == 'pull_request'}}  # some checks are only run in the master.
+        exclude:
+          - compiler: gcc
+            compiler-version: 12
+            isPr: true
+          - compiler: gcc
+            compiler-version: 18
+          - compiler: gcc
+            compiler-version: 21
+          - compiler: clang
+            compiler-version: 11
+          - compiler: clang
+            compiler-version: 12
+          - compiler: clang
+            compiler-version: 18
+            isPr: true
+        include:
+          # Exercise the PMR allocator backend in one ordinary configuration so
+          # that `QLEVER_USE_PMR_ALLOCATOR` code is actually built and tested in
+          # CI. NOTE: This entry does not add a new job. Since all its other
+          # values match the existing clang-21 configuration, it is merged into
+          # that job, which hence builds with the PMR backend INSTEAD OF the
+          # default `limit` backend (all other configurations are unaffected).
+          - compiler: clang
+            compiler-version: 21
+            allocator-backend: pmr
+            build-type: Release
+          - compiler: clang
+            compiler-version: 17
+            build-type: Debug
+            expensive-tests: false
+            ubsan-flags: " -fsanitize=thread -O1 -g"
+            additional-cmake-options: "-D_NO_TIMING_TESTS=ON"
+
+    runs-on: *runs-on
+    env: *env
+    steps: *steps

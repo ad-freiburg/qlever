@@ -1,0 +1,48 @@
+# Reusable workflow that decides whether the expensive CI checks are run.
+#
+# The expensive checks are always run for events other than `pull_request`
+# (pushes to master, tags, the merge queue, manual dispatch). For pull
+# requests, they are only run if the PR carries the `run-full-ci` label.
+#
+# Usage (in the calling workflow, which must also listen to the `labeled`
+# event, s.t. applying the label triggers a new run):
+#
+#   on:
+#     pull_request:
+#       types: [ opened, synchronize, reopened, labeled ]
+#   jobs:
+#     gate:
+#       uses: ./.github/workflows/full-ci-gate.yml
+#     expensive-job:
+#       needs: gate
+#       if: needs.gate.outputs.run-full-ci == 'true'
+#
+# NOTE: GitHub Actions has no mechanism to share expressions between
+# workflows, so this tiny reusable workflow is the only way to have the
+# condition in a single place.
+name: Full CI gate
+
+on:
+  workflow_call:
+    outputs:
+      run-full-ci:
+        description: "'true' if the expensive checks should be run, 'false' otherwise."
+        value: ${{ jobs.decide.outputs.run-full-ci }}
+
+permissions: {}
+
+jobs:
+  decide:
+    runs-on: ubuntu-24.04
+    outputs:
+      run-full-ci: ${{ steps.decide.outputs.run-full-ci }}
+    steps:
+      - name: Decide whether to run the expensive checks
+        id: decide
+        env:
+          RUN_FULL_CI: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-full-ci') }}
+        run: |
+          echo "run-full-ci=${RUN_FULL_CI}" >> "$GITHUB_OUTPUT"
+          if [[ "${RUN_FULL_CI}" != "true" ]]; then
+            echo "::notice::Expensive checks are skipped, add the 'run-full-ci' label to the PR to run them."
+          fi

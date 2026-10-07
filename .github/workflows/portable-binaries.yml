@@ -13,6 +13,9 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+    # Also run when a label is applied, s.t. applying the `run-full-ci` label
+    # triggers the expensive checks (see `full-ci-gate.yml`).
+    types: [ opened, synchronize, reopened, labeled ]
   workflow_dispatch:
 
 concurrency:
@@ -23,7 +26,11 @@ permissions:
   contents: read
 
 jobs:
+  gate:
+    uses: ./.github/workflows/full-ci-gate.yml
   build:
+    needs: gate
+    if: needs.gate.outputs.run-full-ci == 'true'
     name: portable-binaries (${{ matrix.arch }})
     # The compiler (also used in the conan cache key below). The default gcc
     # 11 of Ubuntu 22.04 crashes with an internal compiler error on QLever's
