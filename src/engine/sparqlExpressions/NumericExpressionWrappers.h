@@ -44,7 +44,7 @@ struct NumericIdWrapper {
 // results are converted to `UNDEF`.
 template <typename Function, bool NanOrInfToUndef = false>
 struct MakeNumericExpression {
-  Function function_{};
+  [[no_unique_address]] Function function_{};
 
   template <typename... Args>
   Id operator()(const Args&... args) const {
