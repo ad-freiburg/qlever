@@ -77,23 +77,48 @@ size_t addNewWordsToSecondaryVocab(const Entries& entries,
 // contains `id`.
 Id rewriteId(Id id, const SecondaryVocabulary& secondaryVocab);
 
-// Return a copy of `value` in which all `Id`s are rewritten via `rewriteId`.
-// The `value` itself is not modified. The result of the copy is an owning
-// `IdTable` that is allocated via `allocator`.
+// The result of `canonicalizeWithPermutation`.
+struct CanonicalizedValue {
+  // The canonicalized copy of the value (see `canonicalizeForSerialization`).
+  NamedResultCache::Value value_;
+  // The row of the original table that is the row `i` of the table of `value_`
+  // at the position `i` (the identity if the rows were not permuted).
+  std::vector<size_t> oldRowOfNewRow_;
+};
+
+// Return a copy of `value` that is ready to be written to a blob, which means:
+// all `Id`s are rewritten via `rewriteId` (only if `value` contains any `Id`
+// of type `LocalVocabIndex`, see `containsLocalVocabIds`), and the rows are in
+// canonical order (see `CanonicalRowOrder.h`) with respect to the
+// `resultSortedOn_` of `value`. The `value` itself is not modified. The table
+// of the copy is an owning `IdTable` that is allocated via `allocator`.
 //
 // The rewritten `Id`s no longer compare like the `Id`s that they replace:
 // all `Id`s of type `Datatype::SecondaryVocabIndex` compare greater than all
 // `Id`s of the main vocabulary, whereas a `LocalVocabIndex` compares by the
 // position at which its word would be sorted into the main vocabulary (see
 // `ValueId::compareThreeWay`). The rows of the copy are therefore sorted
-// again, such that the copy is sorted by the same columns (`resultSortedOn_`)
-// as `value`. If the rows are permuted, then the mapping from shapes to rows
-// of the `cachedGeoIndex_` is permuted accordingly (see
+// again. If the rows are permuted, then the mapping from shapes to rows of the
+// `cachedGeoIndex_` is permuted accordingly (see
 // `SpatialJoinCachedIndex::withPermutedRows`).
 //
 // NOTE: The `localVocab_` of the copy is a clone of the one of `value`, which
 // is still needed for the blank nodes that the entry may contain. Its words,
 // however, are no longer referenced by any `Id` of the copy.
+NamedResultCache::Value canonicalizeForSerialization(
+    const NamedResultCache::Value& value,
+    const SecondaryVocabulary& secondaryVocab,
+    const NamedResultCache::Value::Allocator& allocator);
+
+// Same as `canonicalizeForSerialization`, but additionally return the
+// permutation of the rows that was applied.
+CanonicalizedValue canonicalizeWithPermutation(
+    const NamedResultCache::Value& value,
+    const SecondaryVocabulary& secondaryVocab,
+    const NamedResultCache::Value::Allocator& allocator);
+
+// Same as `canonicalizeForSerialization`; kept as the name for the case that
+// the focus is on the rewriting of the `Id`s.
 NamedResultCache::Value rewriteToSecondaryVocab(
     const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,

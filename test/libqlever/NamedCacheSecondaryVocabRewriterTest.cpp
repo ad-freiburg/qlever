@@ -150,8 +150,8 @@ TEST(NamedCacheSecondaryVocabRewriter, addNewWordsAndRewriteIds) {
       HasSubstr("call `addNewWordsToSecondaryVocab` first"));
 }
 
-// Test that `rewriteToSecondaryVocab` sorts the rewritten copy again by the
-// columns that the entry is sorted on, and leaves the entry unchanged.
+// Test that `rewriteToSecondaryVocab` sorts the rewritten copy again in
+// canonical order (see `CanonicalRowOrder.h`), and leaves the entry unchanged.
 TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabSortsAgain) {
   auto qec = ad_utility::testing::getQec(std::string{kb});
   // The `DISTINCT` sorts the result by `?x` in the internal order, in which a
@@ -184,11 +184,12 @@ TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabSortsAgain) {
   EXPECT_EQ(column(*value, 0), originalColumn);
   EXPECT_TRUE(containsLocalVocabIds(*value));
 
-  // A result that is not sorted keeps its order of rows.
+  // A result that is not sorted is sorted canonically, that is, by all of its
+  // columns in increasing order.
   auto unsorted = pin(qec, "unsorted", "SELECT ?x { VALUES ?x { <y> <m> } }");
   ASSERT_TRUE(unsorted->resultSortedOn_.empty());
   EXPECT_THAT(column(addAndRewrite(unsorted, secondaryVocab), 0),
-              ElementsAre(secondaryId(1), getId("<m>")));
+              ElementsAre(getId("<m>"), secondaryId(1)));
 }
 
 // Test that the mapping from shapes to rows of a cached geo index is
