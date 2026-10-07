@@ -281,6 +281,10 @@ class ParsedQuery {
   // `GROUP BY` clause is present) or implicitly (no `GROUP BY` clause, but an
   // aggregating expression is used in the `SELECT` clause).
   [[nodiscard]] bool isAggregatingQuery() const;
+
+  // Return false if two evaluations of this query may differ (e.g. `RAND()`).
+  // Like `Operation::isDeterministic()`, but available before planning.
+  [[nodiscard]] bool isDeterministic() const;
 };
 
 #endif  // QLEVER_SRC_PARSER_PARSEDQUERY_H
