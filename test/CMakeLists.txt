@@ -384,10 +384,7 @@ addLinkAndDiscoverTest(DurationTest qlever_util)
 
 addLinkAndDiscoverTest(TripleComponentTest)
 
-# `MixedValueId` is only the active `Id` type in the legacy layout.
-if (NOT USE_SPLIT_LAYOUT)
-    addLinkAndDiscoverTest(MixedValueIdTest qlever_util)
-endif ()
+addLinkAndDiscoverTest(MixedValueIdTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
 
