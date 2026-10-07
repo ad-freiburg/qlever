@@ -365,8 +365,10 @@ CPP_concept IsExhaustiveForVisitIf =
     isExhaustiveForVisitIfImpl<Variant, Funcs...>(
         std::make_index_sequence<std::variant_size_v<std::decay_t<Variant>>>{});
 
-// Call the first of `funcs` that matches `value`. Note: Recursion compiles
-// faster than a fold + `std::get<i>(std::tie(funcs...))`, as it stops early.
+// Call the first of `funcs` that matches `value`.
+//
+// NOTE: Recursion compiles faster than a fold +
+// `std::get<i>(std::tie(funcs...))`, as it stops early.
 template <typename Value, typename Func, typename... Rest>
 decltype(auto) tryInvoke(Value&& value, Func&& func, Rest&&... rest) {
   if constexpr (isMatchForVisitIf<Func, Value>) {

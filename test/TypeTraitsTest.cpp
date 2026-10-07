@@ -443,20 +443,22 @@ constexpr bool visitIfCompilesImpl<
     Variant, Funcs...> = true;
 template <typename Variant, typename... Funcs>
 constexpr bool visitIfCompiles = visitIfCompilesImpl<void, Variant, Funcs...>;
+
+// A plain function, to test `visitIf` with function pointers.
+int plusOne(int i) { return i + 1; }
 }  // namespace
 
+// Test that `visitIf` calls the first function whose parameter type is exactly
+// the active alternative, and that a non-exhaustive list of functions is
+// rejected at compile time.
 TEST(TypeTraits, visitIf) {
+  // A variant of `int` and `std::string` with one function per alternative.
   std::variant<int, std::string> v{42};
-  EXPECT_EQ(ad_utility::visitIf(
-                v, [](int i) { return i + 1; },
-                [](const std::string&) { return -1; }),
-            43);
-
+  auto incremented = [](int i) { return i + 1; };
+  auto minusOne = [](const std::string&) { return -1; };
+  EXPECT_EQ(ad_utility::visitIf(v, incremented, minusOne), 43);
   v = "hello";
-  EXPECT_EQ(ad_utility::visitIf(
-                v, [](int i) { return i + 1; },
-                [](const std::string&) { return -1; }),
-            -1);
+  EXPECT_EQ(ad_utility::visitIf(v, incremented, minusOne), -1);
 
   // Unmatched alternatives have to be ignored explicitly via a catch-all.
   int numCalls = 0;
@@ -498,4 +500,46 @@ TEST(TypeTraits, visitIf) {
   EXPECT_STREQ(describe(v3), "vector");
   v3 = 42;
   EXPECT_STREQ(describe(v3), "int");
+
+  // A constrained generic function matches exactly the alternatives that
+  // satisfy its constraint, the catch-all handles the rest.
+  auto describeIntegral = [](const auto& variant) {
+    return ad_utility::visitIf(
+        variant,
+        CPP_template_lambda()(typename T)(
+            const T&)(requires std::is_integral_v<T>) { return "integral"; },
+        [](const auto&) { return "other"; });
+  };
+  EXPECT_STREQ(describeIntegral(v3), "integral");
+  EXPECT_STREQ(describeIntegral(vNum), "other");
+
+  // A function with a non-const reference parameter modifies the active
+  // alternative in place.
+  v = 1;
+  ad_utility::visitIf(
+      v, [](int& i) { i *= 10; }, [](std::string& s) { s.clear(); });
+  EXPECT_EQ(std::get<int>(v), 10);
+
+  // A reference returned by the matching function is passed through.
+  decltype(auto) ref = ad_utility::visitIf(
+      v, [](int& i) -> int& { return i; },
+      [](std::string&) -> int& { throw std::runtime_error{"unreachable"}; });
+  static_assert(std::is_same_v<decltype(ref), int&>);
+  EXPECT_EQ(&ref, &std::get<int>(v));
+
+  // An rvalue variant is forwarded, so a function can take the alternative by
+  // rvalue reference.
+  EXPECT_EQ(ad_utility::visitIf(
+                V{std::string{"moved"}}, [](int) { return std::string{}; },
+                [](std::string&& s) { return std::move(s); }),
+            "moved");
+
+  // A function pointer (also when passed as a plain function) and a mutable
+  // lambda, whose state is kept across calls when passed as an lvalue.
+  v = 41;
+  EXPECT_EQ(ad_utility::visitIf(v, &plusOne, minusOne), 42);
+  EXPECT_EQ(ad_utility::visitIf(v, plusOne, minusOne), 42);
+  auto counter = [n = 0](int) mutable { return ++n; };
+  EXPECT_EQ(ad_utility::visitIf(v, counter, minusOne), 1);
+  EXPECT_EQ(ad_utility::visitIf(v, counter, minusOne), 2);
 }

@@ -14,7 +14,7 @@
 // _____________________________________________________________________________
 std::string Date::formatTimeZone() const {
   return ad_utility::visitIf(
-      getTimeZone(), [](const NoTimeZone&) { return std::string{""}; },
+      getTimeZone(), [](const NoTimeZone&) { return std::string{}; },
       [](const TimeZoneZ&) { return std::string{"Z"}; },
       [](int value) {
         constexpr static std::string_view format = "%0+3d:00";
