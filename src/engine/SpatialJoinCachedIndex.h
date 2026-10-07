@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 
+#include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
@@ -64,6 +65,19 @@ class SpatialJoinCachedIndex {
   size_t getRow(size_t shapeIndex) const {
     return shapeIndexToRow_.at(shapeIndex);
   }
+
+  // Return a copy of this index for the case that the rows of the `IdTable`
+  // from which this index was created are permuted, where `newRowOfOldRow[r]`
+  // is the row to which the row `r` was moved. The contained (immutable)
+  // `MutableS2ShapeIndex` is shared with this index, only the mapping from
+  // shape ids to rows differs.
+  //
+  // NOTE: This is currently required when an `IdTable` that contains
+  // `LocalVocabEntry`s is serialized into a blob, because its rows are then
+  // rewritten and sorted again, see `rewriteToSecondaryVocab` in
+  // `NamedCacheSecondaryVocabRewriter.h`.
+  SpatialJoinCachedIndex withPermutedRows(
+      ql::span<const size_t> newRowOfOldRow) const;
 
   // Construct an empty, not yet valid index, s.t. it later can be filled via
   // `populateFromSerialized` below.

@@ -43,3 +43,25 @@ TEST(IdTableUtils, countDistinct) {
                                  ::testing::HasSubstr("must be sorted"));
   }
 }
+
+// _____________________________________________________________________________
+TEST(IdTableUtils, containsLocalVocabIds) {
+  // An empty table and a table without `Id`s of type `LocalVocabIndex`.
+  IdTable table{2, ad_utility::testing::makeAllocator()};
+  EXPECT_FALSE(IdTableUtils::containsLocalVocabIds(table));
+  table = makeIdTableFromVector({{0, 1}, {2, 3}});
+  EXPECT_FALSE(IdTableUtils::containsLocalVocabIds(table));
+  EXPECT_FALSE(IdTableUtils::containsLocalVocabIds(table.asStaticView<0>()));
+
+  // An `Id` of type `LocalVocabIndex` in the last row of the last column, and
+  // in the first row of the first column.
+  LocalVocabEntry entry = LocalVocabEntry::literalWithoutQuotes(
+      "word", ad_utility::testing::getQec()->getLocalVocabContext());
+  Id localVocabId = Id::makeFromLocalVocabIndex(&entry);
+  table(1, 1) = localVocabId;
+  EXPECT_TRUE(IdTableUtils::containsLocalVocabIds(table));
+  EXPECT_TRUE(IdTableUtils::containsLocalVocabIds(table.asStaticView<0>()));
+  table(1, 1) = Id::makeFromInt(3);
+  table(0, 0) = localVocabId;
+  EXPECT_TRUE(IdTableUtils::containsLocalVocabIds(table));
+}
