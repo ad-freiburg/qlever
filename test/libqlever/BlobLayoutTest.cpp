@@ -145,7 +145,7 @@ TEST(BlobLayout, blobWithSecondaryVocab) {
 }
 
 // _____________________________________________________________________________
-TEST(BlobLayout, blobWithLegacyGeoIndex) {
+TEST(BlobLayout, blobWithGeoIndexVersion2) {
   auto config = buildTestIndex(
       "<s1> <asWKT> \"LINESTRING(7.8428469 47.9995367,7.8413293 "
       "47.9974942)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n");
@@ -156,12 +156,17 @@ TEST(BlobLayout, blobWithLegacyGeoIndex) {
   auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
   ParsedBlob parsed{blob};
   const auto& layout = parsed.layout_;
-  EXPECT_EQ(layout.entriesVersion_, 1u);
+  // A blob with a geo index is always written with entries version 2, which
+  // stores the segmented geo index (here a single segment).
+  EXPECT_EQ(layout.blobVersion_, 2u);
+  EXPECT_EQ(layout.entriesVersion_, 2u);
   ASSERT_EQ(layout.entryLayouts_.size(), 1u);
   const auto& entry = layout.entryLayouts_[0];
   ASSERT_TRUE(entry.hasGeoIndex_);
   EXPECT_GT(entry.geo_.whole_.size(), 0u);
-  EXPECT_TRUE(entry.geo_.segmentPayloads_.empty());
+  ASSERT_EQ(entry.geo_.segmentPayloads_.size(), 1u);
+  EXPECT_GT(entry.geo_.segmentPayloads_[0].size(), 0u);
+  EXPECT_EQ(entry.geo_.rowToShape_.size(), entry.numRows_ * sizeof(uint64_t));
   expectConsistent(layout);
 }
 
