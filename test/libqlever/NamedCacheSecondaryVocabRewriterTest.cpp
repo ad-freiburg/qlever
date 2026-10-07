@@ -76,12 +76,12 @@ Id localVocabIdOf(const std::vector<Id>& column, std::string_view iriref) {
 
 // Add the new words of the `value` to the `secondaryVocab`, and return the
 // rewritten copy of the `value` (see `addNewWordsToSecondaryVocab` and
-// `rewriteToSecondaryVocab`).
+// `canonicalizeForSerialization`).
 Value addAndRewrite(const std::shared_ptr<const Value>& value,
                     SecondaryVocabulary& secondaryVocab) {
   addNewWordsToSecondaryVocab({{"entry", value}}, secondaryVocab);
-  return rewriteToSecondaryVocab(*value, secondaryVocab,
-                                 ad_utility::testing::makeAllocator());
+  return canonicalizeForSerialization(*value, secondaryVocab,
+                                      ad_utility::testing::makeAllocator());
 }
 
 // The data of the tests below. Most of the new words that the tests use are
@@ -150,9 +150,9 @@ TEST(NamedCacheSecondaryVocabRewriter, addNewWordsAndRewriteIds) {
       HasSubstr("call `addNewWordsToSecondaryVocab` first"));
 }
 
-// Test that `rewriteToSecondaryVocab` sorts the rewritten copy again in
+// Test that `canonicalizeForSerialization` sorts the rewritten copy again in
 // canonical order (see `CanonicalRowOrder.h`), and leaves the entry unchanged.
-TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabSortsAgain) {
+TEST(NamedCacheSecondaryVocabRewriter, canonicalizeForSerializationSortsAgain) {
   auto qec = ad_utility::testing::getQec(std::string{kb});
   // The `DISTINCT` sorts the result by `?x` in the internal order, in which a
   // new word is sorted at the position where it would be sorted into the main
@@ -194,7 +194,8 @@ TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabSortsAgain) {
 
 // Test that the mapping from shapes to rows of a cached geo index is
 // permuted together with the rows of the rewritten copy.
-TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabWithGeoIndex) {
+TEST(NamedCacheSecondaryVocabRewriter,
+     canonicalizeForSerializationWithGeoIndex) {
   auto qec = ad_utility::testing::getQec(
       "<s1> <asWKT> \"LINESTRING(1 1, 2 2)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . "
@@ -285,7 +286,7 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
   EXPECT_EQ(rewriteId(m, secondaryVocab), getId("<m>"));
   EXPECT_EQ(rewriteId(a, secondaryVocab), secondaryId(0));
   EXPECT_EQ(rewriteId(y, secondaryVocab), secondaryId(1));
-  auto rewritten = rewriteToSecondaryVocab(
+  auto rewritten = canonicalizeForSerialization(
       *value, secondaryVocab, ad_utility::testing::makeAllocator());
   EXPECT_THAT(column(rewritten, 0),
               ElementsAre(getId("<m>"), secondaryId(0), secondaryId(1)));

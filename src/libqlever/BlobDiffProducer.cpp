@@ -15,6 +15,7 @@
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
 
+#include <algorithm>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -226,14 +227,6 @@ bool sameBytes(const A& a, const B& b) {
          (a.empty() || std::memcmp(a.data(), b.data(), a.size()) == 0);
 }
 
-// Return a canonical string for a triple, which is used to compute the
-// differences of two sets of triples.
-std::string tripleKey(const TurtleTriple& triple) {
-  return absl::StrCat(triple.subject_.toString(), "\t",
-                      triple.predicate_.toString(), "\t",
-                      triple.object_.toString());
-}
-
 // Parse the Turtle file `path` using the settings of `index`.
 std::vector<TurtleTriple> parseTurtleFile(const fs::path& path,
                                           const Index& index) {
@@ -243,27 +236,6 @@ std::vector<TurtleTriple> parseTurtleFile(const fs::path& path,
   parser.setInputName(path.string());
   parser.setInputStream(content);
   return parser.parseAndReturnAllTriples();
-}
-
-// The result of `difference`: the triples of the first set that are not in the
-// second one, and the keys (see `tripleKey`) of all triples of the first set.
-struct Difference {
-  std::vector<TurtleTriple> onlyInFirst_;
-  ad_utility::HashSet<std::string> keysOfFirst_;
-};
-// Return the triples of `first` whose key is not in `keysOfSecond`. The triples
-// are moved out of `first`.
-Difference difference(std::vector<TurtleTriple>& first,
-                      const ad_utility::HashSet<std::string>& keysOfSecond) {
-  Difference result;
-  for (auto& triple : first) {
-    auto key = tripleKey(triple);
-    if (!keysOfSecond.contains(key) && !result.keysOfFirst_.contains(key)) {
-      result.onlyInFirst_.push_back(std::move(triple));
-    }
-    result.keysOfFirst_.insert(std::move(key));
-  }
-  return result;
 }
 
 // Convert the `triples` into sorted and deduplicated `IdTriple`s in the default
@@ -318,15 +290,24 @@ BlobDiffProducer::WeeklyResult stepImpl(const BlobDiffConfig& config,
   // Compute the changes of the data as delta triples.
   auto oldTriples = parseTurtleFile(paths.currentTurtle_, index);
   auto newTriples = parseTurtleFile(newTurtleFile, index);
-  ad_utility::HashSet<std::string> oldKeys;
-  for (const auto& triple : oldTriples) {
-    oldKeys.insert(tripleKey(triple));
-  }
-  auto inserted = difference(newTriples, oldKeys);
-  auto deleted = difference(oldTriples, inserted.keysOfFirst_);
+  // The difference is computed on the level of the `Id`s, which are exact and
+  // normalized: a change of a literal that only affects its lexical form (for
+  // example `"1"^^xsd:int` to `"01"^^xsd:int`) gives the same `Id` and is thus
+  // no change, whereas a change of the type (for example from `1` to `1.0`) is.
+  // A comparison of the string representations of the parsed triples would get
+  // both cases wrong. The `adder` gives the same `Id` to equal words (also to
+  // those that are not in the vocabulary), and to equal blank node labels.
   BlankNodeAdder adder{index.getBlankNodeManager()};
-  auto toInsert = toIdTriples(inserted.onlyInFirst_, index, adder);
-  auto toDelete = toIdTriples(deleted.onlyInFirst_, index, adder);
+  auto oldIdTriples = toIdTriples(oldTriples, index, adder);
+  auto newIdTriples = toIdTriples(newTriples, index, adder);
+  std::vector<IdTriple<0>> toInsert;
+  std::vector<IdTriple<0>> toDelete;
+  std::set_difference(newIdTriples.begin(), newIdTriples.end(),
+                      oldIdTriples.begin(), oldIdTriples.end(),
+                      std::back_inserter(toInsert));
+  std::set_difference(oldIdTriples.begin(), oldIdTriples.end(),
+                      newIdTriples.begin(), newIdTriples.end(),
+                      std::back_inserter(toDelete));
   result.numInsertedTriples_ = toInsert.size();
   result.numDeletedTriples_ = toDelete.size();
 

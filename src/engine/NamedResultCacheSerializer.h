@@ -46,8 +46,8 @@ using Value = NamedResultCache::Value;
 
 // Write the `entries` (as returned by `getAllEntriesSortedByKey`) to the
 // `serializer`, in exactly the format that `readFromSerializer` reads. Each
-// value is written via `writeEntry(serializer, value)`, which has to write a
-// `NamedResultCache::Value`, but may write a modified version of it (see
+// value is written via `writeEntry(serializer, key, value)`, which has to write
+// a `NamedResultCache::Value`, but may write a modified version of it (see
 // `writeValue` below). The format version `entriesVersion` of the entries is
 // written, it is `detail::formatVersion` by default. Writing the legacy
 // `detail::legacyFormatVersion` is rejected if any of the entries has a geo
@@ -56,7 +56,7 @@ using Value = NamedResultCache::Value;
 CPP_template(typename Serializer, typename WriteEntry)(
     requires ad_utility::serialization::WriteSerializer<Serializer> CPP_and
         ql::concepts::invocable<
-            const WriteEntry&, Serializer&,
+            const WriteEntry&, Serializer&, const std::string&,
             const Value&>) void writeEntries(Serializer& serializer,
                                              const Entries& entries,
                                              const WriteEntry& writeEntry,
@@ -83,7 +83,7 @@ CPP_template(typename Serializer, typename WriteEntry)(
   // Serialize each entry.
   for (const auto& [key, value] : entries) {
     serializer << key;
-    writeEntry(serializer, *value);
+    writeEntry(serializer, key, *value);
   }
 }
 }  // namespace namedResultCacheSerializer
@@ -183,7 +183,8 @@ CPP_template_def(typename Serializer)(
     const {
   namedResultCacheSerializer::writeEntries(
       serializer, getAllEntriesSortedByKey(),
-      [](Serializer& s, const Value& value) { s << value; });
+      [](Serializer& s, [[maybe_unused]] const std::string& key,
+         const Value& value) { s << value; });
 }
 
 // _____________________________________________________________________________
@@ -285,18 +286,21 @@ CPP_template(typename Serializer, typename Columns)(
     // NOTE 1: Although the code for serialization of a local vocab above is
     // already incorporated, we currently still let local vocab entries throw
     // an exception, because there are some caveats in the serialization that
-    // don't work yet, and will only be mitigated in the future. A caller that
-    // has rewritten the `columns` (see above) has already replaced all such
-    // `Id`s, so this check only applies to the `Id`s that are actually
-    // written.
+    // don't work yet, and will only be mitigated in the future. The blob
+    // writer (see `NamedCachedQueryBlobManager::serialize`) never triggers this
+    // check: it always passes `writeLocalVocabWords=false` and `columns` in
+    // which all such `Id`s have already been replaced by canonicalization (see
+    // `canonicalizeWithPermutation`), so this check only applies to the `Id`s
+    // that are actually written.
     //
     // NOTE 2: Even though we disallow the local vocab, it is crucial to
     // serialize the local vocab because of possible added blank node indices,
     // which we do handle correctly, and which also rely on the local vocab.
     //
     // NOTE 3: The blobs of `NamedCachedQueryBlobManager` support local vocab
-    // entries by rewriting them first (see
-    // `NamedCacheSecondaryVocabRewriter.h`).
+    // entries by canonicalizing every entry first, which rewrites those `Id`s
+    // (see `NamedCacheSecondaryVocabRewriter.h`). Only the blank node blocks of
+    // the local vocab are written for them, not its words.
     //
     // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
     // allow local vocab entries here.

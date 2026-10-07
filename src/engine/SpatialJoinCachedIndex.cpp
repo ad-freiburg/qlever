@@ -9,6 +9,8 @@
 #include <s2/s2polyline.h>
 #include <s2/s2shapeutil_coding.h>
 
+#include <numeric>
+
 #include "backports/algorithm.h"
 #include "index/ExportIds.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
@@ -53,7 +55,13 @@ class SegmentBuilder {
 };
 
 // Combine the segment and the shape id to the format used by `rowToShape_`.
+// The `segment` has to be smaller than `2^32`, and the `shapeId` must not be
+// `std::numeric_limits<uint32_t>::max()`, so that the result never collides
+// with `SpatialJoinCachedIndex::NO_SHAPE`.
 uint64_t makeShape(size_t segment, int shapeId) {
+  AD_CONTRACT_CHECK(segment < (1ULL << 32) &&
+                    static_cast<uint32_t>(shapeId) !=
+                        std::numeric_limits<uint32_t>::max());
   return (static_cast<uint64_t>(segment) << 32) |
          static_cast<uint32_t>(shapeId);
 }
@@ -110,11 +118,35 @@ SpatialJoinCachedIndex::SpatialJoinCachedIndex(
 }
 
 // ____________________________________________________________________________
+SpatialJoinCachedIndex SpatialJoinCachedIndex::fromLegacyFormat(
+    Variable geometryColumn, const std::string& encodedSegment,
+    const ad_utility::HashMap<size_t, size_t>& shapeToRow, size_t numRows) {
+  std::vector<uint64_t> rowToShape(numRows, NO_SHAPE);
+  for (const auto& [shapeId, row] : shapeToRow) {
+    AD_CORRECTNESS_CHECK(row < numRows && shapeId < (1ULL << 32),
+                         "The serialized geo index is corrupt");
+    rowToShape[row] = shapeId;
+  }
+  Segments segments;
+  segments.push_back(decodeSegment(encodedSegment));
+  return SpatialJoinCachedIndex{std::move(geometryColumn), std::nullopt,
+                                std::move(segments), std::move(rowToShape)};
+}
+
+// ____________________________________________________________________________
 void SpatialJoinCachedIndex::computeShapeToRow() {
   shapeToRow_.clear();
   shapeToRow_.reserve(segments_.size());
+  // The segment has to fit into the upper 32 bits of a shape, and no shape id
+  // may reach `std::numeric_limits<uint32_t>::max()`, s.t. a shape can never
+  // collide with `NO_SHAPE`.
+  AD_CORRECTNESS_CHECK(segments_.size() < (1ULL << 32),
+                       "The geo index has too many segments");
   for (const auto& segment : segments_) {
     AD_CORRECTNESS_CHECK(segment != nullptr);
+    AD_CORRECTNESS_CHECK(static_cast<uint64_t>(segment->num_shape_ids()) <
+                             std::numeric_limits<uint32_t>::max(),
+                         "A segment of the geo index has too many shapes");
     shapeToRow_.emplace_back(static_cast<size_t>(segment->num_shape_ids()),
                              NO_ROW);
   }
@@ -158,8 +190,15 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::withPermutedRows(
       newRowOfOldRow,
       [numRows = newRowOfOldRow.size()](size_t row) { return row < numRows; }));
   std::vector<uint64_t> rowToShape(rowToShape_.size(), NO_SHAPE);
+  std::vector<bool> isTargetUsed(rowToShape_.size(), false);
   for (size_t oldRow = 0; oldRow < rowToShape_.size(); ++oldRow) {
-    rowToShape[newRowOfOldRow[oldRow]] = rowToShape_[oldRow];
+    size_t newRow = newRowOfOldRow[oldRow];
+    // A target that is used twice would silently drop the shape of one row.
+    AD_CONTRACT_CHECK(!isTargetUsed[newRow],
+                      "`newRowOfOldRow` must be a permutation, but two rows "
+                      "are mapped to the same row");
+    isTargetUsed[newRow] = true;
+    rowToShape[newRow] = rowToShape_[oldRow];
   }
   return SpatialJoinCachedIndex{geometryColumn_, simplificationErrorInMeters_,
                                 segments_, std::move(rowToShape)};
@@ -169,11 +208,28 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::withPermutedRows(
 SpatialJoinCachedIndex SpatialJoinCachedIndex::extend(
     const SpatialJoinCachedIndex& base, ql::span<const size_t> baseRowOfNewRow,
     const IdTableView<0>& newTable, ColumnIndex col, const Index& index) {
+  std::vector<size_t> rowOrder(newTable.size());
+  std::iota(rowOrder.begin(), rowOrder.end(), size_t{0});
+  return extend(base, baseRowOfNewRow, newTable, col, index, rowOrder);
+}
+
+// _____________________________________________________________________________
+SpatialJoinCachedIndex SpatialJoinCachedIndex::extend(
+    const SpatialJoinCachedIndex& base, ql::span<const size_t> baseRowOfNewRow,
+    const IdTableView<0>& newTable, ColumnIndex col, const Index& index,
+    ql::span<const size_t> rowOrder) {
   AD_CONTRACT_CHECK(baseRowOfNewRow.size() == newTable.size());
+  AD_CONTRACT_CHECK(rowOrder.size() == newTable.size());
+  AD_CONTRACT_CHECK(base.segments_.size() < (1ULL << 32),
+                    "The geo index has too many segments");
   SegmentBuilder builder;
   const size_t newSegment = base.segments_.size();
   std::vector<uint64_t> rowToShape(newTable.size(), NO_SHAPE);
-  for (size_t row = 0; row < newTable.size(); ++row) {
+  std::vector<bool> isVisited(newTable.size(), false);
+  for (size_t row : rowOrder) {
+    AD_CONTRACT_CHECK(row < newTable.size() && !isVisited[row],
+                      "`rowOrder` must be a permutation of the rows");
+    isVisited[row] = true;
     size_t baseRow = baseRowOfNewRow[row];
     if (baseRow != NO_ROW) {
       AD_CONTRACT_CHECK(baseRow < base.numRows());

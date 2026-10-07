@@ -67,6 +67,25 @@ std::vector<ql::span<const Id>> columnsOf(const IdTableView<0>& table) {
   return result;
 }
 
+// Compare the two `Id`s via `ValueId::compareThreeWay`, and break ties by
+// their raw bits. `compareThreeWay` can consider two `Id`s equal that differ
+// bitwise (for example `Int(1)` and `Double(1.0)`, or `-0.0` and `0.0`), but
+// the canonical order has to be a total order that only considers bitwise
+// identical `Id`s equal (see `CanonicalRowOrder.h`).
+int compareIds(Id a, Id b) {
+  auto comparison = a.compareThreeWay(b);
+  if (comparison < 0) {
+    return -1;
+  }
+  if (comparison > 0) {
+    return 1;
+  }
+  if (a.getBits() < b.getBits()) {
+    return -1;
+  }
+  return a.getBits() > b.getBits() ? 1 : 0;
+}
+
 // Compare the row `rowA` of the table `a` with the row `rowB` of the table `b`
 // by the given `columns` and return a negative number, zero, or a positive
 // number if the first row is less than, equal to, or greater than the second
@@ -74,12 +93,9 @@ std::vector<ql::span<const Id>> columnsOf(const IdTableView<0>& table) {
 int compareRows(IdColumns a, size_t rowA, IdColumns b, size_t rowB,
                 const std::vector<ColumnIndex>& columns) {
   for (ColumnIndex column : columns) {
-    auto comparison = a[column][rowA].compareThreeWay(b[column][rowB]);
-    if (comparison < 0) {
-      return -1;
-    }
-    if (comparison > 0) {
-      return 1;
+    int comparison = compareIds(a[column][rowA], b[column][rowB]);
+    if (comparison != 0) {
+      return comparison;
     }
   }
   return 0;

@@ -17,6 +17,10 @@
 #include "engine/idTable/IdTable.h"
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
+#include "util/Exception.h"
+// NOTE: The following two includes are only needed to read the hash map of the
+// legacy format (version 1) in the template `readFromSerializer`, which has to
+// be defined in this header because it is generic in the serializer.
 #include "util/HashMap.h"
 #include "util/Serializer/SerializeHashMap.h"
 #include "util/Serializer/SerializeString.h"
@@ -130,10 +134,15 @@ class SpatialJoinCachedIndex {
   // rows differs. `newRowOfOldRow` has to contain one entry for each row of
   // this index.
   //
-  // NOTE: This is currently required when an `IdTable` that contains
-  // `LocalVocabEntry`s is serialized into a blob, because its rows are then
-  // rewritten and sorted again, see `rewriteToSecondaryVocab` in
-  // `NamedCacheSecondaryVocabRewriter.h`.
+  // `newRowOfOldRow` has to be a permutation (checked via
+  // `AD_CONTRACT_CHECK`), because otherwise the shape of a row would be
+  // silently dropped.
+  //
+  // NOTE: This is required whenever the rows of an `IdTable` are brought into
+  // canonical order before it is serialized into a blob (see
+  // `canonicalizeWithPermutation` in `NamedCacheSecondaryVocabRewriter.h`,
+  // which is applied to every entry), and by the incremental blob writer (see
+  // `tryToExtendGeoIndex` in `NamedCachedQueryBlobManager.cpp`).
   SpatialJoinCachedIndex withPermutedRows(
       ql::span<const size_t> newRowOfOldRow) const;
 
@@ -145,13 +154,29 @@ class SpatialJoinCachedIndex {
   // (using the simplification of `base`). A row of `base` that no row of
   // `newTable` refers to becomes a dead shape. Each row of `base` may be
   // referred to at most once.
+  // The rows of `newTable` are visited in their natural order, see the
+  // overload below.
   static SpatialJoinCachedIndex extend(const SpatialJoinCachedIndex& base,
                                        ql::span<const size_t> baseRowOfNewRow,
                                        const IdTableView<0>& newTable,
                                        ColumnIndex col, const Index& index);
 
+  // Same as above, but the rows of `newTable` are visited in the order given
+  // by `rowOrder`, which has to be a permutation of all rows of `newTable`.
+  // The new rows are added to the new segment in that order, so the bytes of
+  // the new segment only depend on the new geometries and on `rowOrder`, but
+  // not on the order of the rows in `newTable`. Passing the canonical row
+  // order makes the result independent of the plan-dependent order of the rows
+  // of `newTable`.
+  static SpatialJoinCachedIndex extend(const SpatialJoinCachedIndex& base,
+                                       ql::span<const size_t> baseRowOfNewRow,
+                                       const IdTableView<0>& newTable,
+                                       ColumnIndex col, const Index& index,
+                                       ql::span<const size_t> rowOrder);
+
   // Retrieves and parses a line string from the given cell of an `IdTable`
-  // and converts it to an `S2Polyline`. Used when populating the index above.
+  // and converts it to an `S2Polyline`. Used when building a segment, in
+  // particular by the constructor and by `extend`.
   // This function is only `public` for testing purposes and should otherwise
   // not be used outside of this class.
   static std::optional<S2Polyline> getPolyline(const IdTableView<0>& restable,
@@ -204,16 +229,8 @@ class SpatialJoinCachedIndex {
       serializer >> encodedSegment;
       ad_utility::HashMap<size_t, size_t> shapeToRow;
       serializer >> shapeToRow;
-      std::vector<uint64_t> rowToShape(numRows, NO_SHAPE);
-      for (const auto& [shapeId, row] : shapeToRow) {
-        AD_CORRECTNESS_CHECK(row < numRows && shapeId < (1ULL << 32),
-                             "The serialized geo index is corrupt");
-        rowToShape[row] = shapeId;
-      }
-      Segments segments;
-      segments.push_back(decodeSegment(encodedSegment));
-      return SpatialJoinCachedIndex{std::move(geometryColumn), std::nullopt,
-                                    std::move(segments), std::move(rowToShape)};
+      return fromLegacyFormat(std::move(geometryColumn),
+                              std::move(encodedSegment), shapeToRow, numRows);
     }
     uint8_t hasSimplification;
     serializer >> hasSimplification;
@@ -225,6 +242,8 @@ class SpatialJoinCachedIndex {
     }
     uint64_t numSegments;
     serializer >> numSegments;
+    AD_CORRECTNESS_CHECK(numSegments < (1ULL << 32),
+                         "The serialized geo index is corrupt");
     Segments segments;
     for (uint64_t i = 0; i < numSegments; ++i) {
       std::string encodedSegment;
@@ -245,6 +264,14 @@ class SpatialJoinCachedIndex {
   SpatialJoinCachedIndex(Variable geometryColumn,
                          std::optional<double> simplificationErrorInMeters,
                          Segments segments, std::vector<uint64_t> rowToShape);
+
+  // Create an index with a single segment and no simplification from the parts
+  // of the legacy format (version 1, see `readFromSerializer`): the encoded
+  // segment and the map from shape ids to rows. Throw an exception if a row is
+  // `>= numRows` or a shape id is `>= 2^32`.
+  static SpatialJoinCachedIndex fromLegacyFormat(
+      Variable geometryColumn, const std::string& encodedSegment,
+      const ad_utility::HashMap<size_t, size_t>& shapeToRow, size_t numRows);
 
   // Compute `shapeToRow_` from `segments_` and `rowToShape_`. Throw an
   // exception if `rowToShape_` refers to a segment or shape that does not

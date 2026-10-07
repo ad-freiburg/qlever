@@ -13,6 +13,7 @@
 #include <s2/util/units/length-units.h>
 
 #include "../QueryPlannerTestHelpers.h"
+#include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/NamedResultCache.h"
@@ -334,6 +335,12 @@ TEST(SpatialJoinCachedIndex, withPermutedRows) {
   // A permutation that does not cover all the rows of the index is rejected.
   std::vector<size_t> tooShort{0, 1};
   EXPECT_ANY_THROW(original.withPermutedRows(tooShort));
+
+  // A mapping that is not a bijection (two rows are mapped to the same row)
+  // is rejected instead of silently dropping the shape of one of them.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      original.withPermutedRows(std::vector<size_t>{0, 0, 2, 3, 4}),
+      ::testing::HasSubstr("same row"));
 }
 
 // Helpers and tests for the segmented index (`extend`, serialization).
@@ -455,6 +462,41 @@ Index deserializeFromBytes(const std::string& bytes, size_t numRows,
   ad_utility::serialization::ByteBufferReadSerializer reader{
       std::vector<char>(bytes.begin(), bytes.end())};
   return Index::readFromSerializer(reader, numRows, version);
+}
+
+// Serialize an index in the format of version 2 that has the given `segments`
+// (taken from `index`) and the given `rowToShape` (which does not have to be
+// valid), by replicating the layout documented at `writeToSerializer`.
+std::string serializeV2WithRowToShape(const Index& index,
+                                      const std::vector<uint64_t>& rowToShape) {
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  writer << index.getGeometryColumn();
+  writer << uint8_t{0};
+  writer << static_cast<uint64_t>(index.segments().size());
+  for (const auto& segment : index.segments()) {
+    Encoder encoder;
+    s2shapeutil::CompactEncodeTaggedShapes(*segment, &encoder);
+    segment->Encode(&encoder);
+    writer << std::string{encoder.base(), encoder.length()};
+  }
+  writer << rowToShape;
+  auto data = std::move(writer).data();
+  return std::string{data.begin(), data.end()};
+}
+
+// Serialize the single segment of `index` and the given `shapeToRow` in the
+// legacy format (version 1).
+std::string serializeLegacy(
+    const Index& index, const ad_utility::HashMap<size_t, size_t>& shapeToRow) {
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  writer << index.getGeometryColumn();
+  Encoder encoder;
+  s2shapeutil::CompactEncodeTaggedShapes(*index.segments()[0], &encoder);
+  index.segments()[0]->Encode(&encoder);
+  writer << std::string{encoder.base(), encoder.length()};
+  writer << shapeToRow;
+  auto data = std::move(writer).data();
+  return std::string{data.begin(), data.end()};
 }
 }  // namespace segmented
 
@@ -692,6 +734,115 @@ TEST(SpatialJoinCachedIndex, legacyVersion1Format) {
 
   // Unknown versions are rejected.
   EXPECT_ANY_THROW(deserializeFromBytes(newBytes, 5, 3));
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, extendWithExplicitRowOrderIsDeterministic) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  const auto& M = t.others_;
+  auto base = t.build(t.select({L[0]}));
+
+  // The same rows (the line 0 of the base, the new lines 1 to 3, and a row
+  // without a linestring) in two different orders.
+  auto tableA = t.select({L[0], L[1], M[0], L[2], L[3]});
+  auto tableB = t.select({L[3], M[0], L[1], L[0], L[2]});
+  std::vector<size_t> baseRowsA{0, Index::NO_ROW, Index::NO_ROW, Index::NO_ROW,
+                                Index::NO_ROW};
+  std::vector<size_t> baseRowsB{Index::NO_ROW, Index::NO_ROW, Index::NO_ROW, 0,
+                                Index::NO_ROW};
+  // The visiting order that corresponds to the canonical order
+  // `L[0], L[1], M[0], L[2], L[3]` of the rows of the tables.
+  std::vector<size_t> rowOrderA{0, 1, 2, 3, 4};
+  std::vector<size_t> rowOrderB{3, 2, 1, 4, 0};
+  auto extend = [&](const IdTable& table, const std::vector<size_t>& baseRows,
+                    const std::vector<size_t>& rowOrder) {
+    auto extended = Index::extend(base, baseRows, table.asStaticView<0>(),
+                                  t.col_, t.qec_->getIndex(), rowOrder);
+    // Permute to the canonical order, as the incremental blob writer does.
+    std::vector<size_t> newRowOfOldRow(rowOrder.size());
+    for (size_t i = 0; i < rowOrder.size(); ++i) {
+      newRowOfOldRow[rowOrder[i]] = i;
+    }
+    return extended.withPermutedRows(newRowOfOldRow);
+  };
+  auto extendedA = extend(tableA, baseRowsA, rowOrderA);
+  auto extendedB = extend(tableB, baseRowsB, rowOrderB);
+  ASSERT_EQ(extendedA.numSegments(), 2);
+  EXPECT_EQ(extendedA.numLiveShapes(), 4);
+  EXPECT_EQ(serializeToBytes(extendedA), serializeToBytes(extendedB));
+
+  // The overload without a row order visits the rows in their natural order.
+  EXPECT_EQ(
+      serializeToBytes(t.extend(base, baseRowsA, tableA)),
+      serializeToBytes(Index::extend(base, baseRowsA, tableA.asStaticView<0>(),
+                                     t.col_, t.qec_->getIndex(), rowOrderA)));
+
+  // An invalid row order is rejected.
+  auto extendWith = [&](const std::vector<size_t>& rowOrder) {
+    return Index::extend(base, baseRowsA, tableA.asStaticView<0>(), t.col_,
+                         t.qec_->getIndex(), rowOrder);
+  };
+  EXPECT_ANY_THROW(extendWith({0, 1, 2, 3}));
+  EXPECT_ANY_THROW(extendWith({0, 1, 2, 3, 3}));
+  EXPECT_ANY_THROW(extendWith({0, 1, 2, 3, 5}));
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, readingCorruptVersion2IndexThrows) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  auto index = t.build(t.select({L[0], L[1]}));
+  ASSERT_EQ(index.numSegments(), 1);
+  constexpr uint64_t none = Index::NO_SHAPE;
+  const auto msg = [](std::string_view s) { return ::testing::HasSubstr(s); };
+
+  // The valid case works.
+  EXPECT_EQ(deserializeFromBytes(serializeV2WithRowToShape(index, {0, 1}), 2)
+                .numLiveShapes(),
+            2);
+  EXPECT_EQ(deserializeFromBytes(serializeV2WithRowToShape(index, {none, 1}), 2)
+                .numLiveShapes(),
+            1);
+  // A segment that does not exist.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      deserializeFromBytes(
+          serializeV2WithRowToShape(index, {0, (uint64_t{1} << 32) | 0}), 2),
+      msg("does not exist"));
+  // A shape that does not exist.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      deserializeFromBytes(serializeV2WithRowToShape(index, {0, 99}), 2),
+      msg("does not exist"));
+  // A shape that is referenced twice.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      deserializeFromBytes(serializeV2WithRowToShape(index, {1, 1}), 2),
+      msg("more than one row"));
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, readingCorruptLegacyIndexThrows) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  auto index = t.build(t.select({L[0], L[1]}));
+  using Map = ad_utility::HashMap<size_t, size_t>;
+  const auto msg = ::testing::HasSubstr("corrupt");
+
+  EXPECT_EQ(
+      deserializeFromBytes(serializeLegacy(index, Map{{0, 0}, {1, 1}}), 2, 1)
+          .numLiveShapes(),
+      2);
+  // A row that is not smaller than the number of rows.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      deserializeFromBytes(serializeLegacy(index, Map{{0, 0}, {1, 2}}), 2, 1),
+      msg);
+  // A shape id that does not fit into 32 bits.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      deserializeFromBytes(
+          serializeLegacy(index, Map{{0, 0}, {size_t{1} << 32, 1}}), 2, 1),
+      msg);
 }
 
 }  // namespace

@@ -13,6 +13,8 @@
 
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/IdTableHelpers.h"
+#include "../util/IndexTestHelpers.h"
+#include "index/LocalVocabEntry.h"
 #include "libqlever/CanonicalRowOrder.h"
 
 using namespace qlever;
@@ -145,4 +147,68 @@ TEST(CanonicalRowOrder, alignRowsWithResultSortedOn) {
   ASSERT_TRUE(isInCanonicalOrder(view(target), sortedOn));
   EXPECT_THAT(alignRows(view(base), view(target), sortedOn),
               ElementsAre(0, noMatchingRow, 2, 3));
+}
+
+namespace {
+// Create a table from the given rows of arbitrary `Id`s.
+IdTable idTable(const std::vector<std::vector<Id>>& rows) {
+  IdTable table{rows.at(0).size(), ad_utility::testing::makeAllocator()};
+  for (const auto& row : rows) {
+    table.emplace_back();
+    for (size_t column = 0; column < row.size(); ++column) {
+      table.back()[column] = row[column];
+    }
+  }
+  return table;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Two `Id`s of type `LocalVocabIndex` that refer to different (equal) entries
+// compare equal via `compareThreeWay`, but differ bitwise (they are pointers).
+// They must neither be matched by `alignRows`, nor must the canonical order
+// depend on their input order.
+TEST(CanonicalRowOrder, idsThatCompareEqualButDifferBitwise) {
+  auto qec = ad_utility::testing::getQec();
+  auto iri = ad_utility::triple_component::Iri::fromIriref("<a>");
+  LocalVocabEntry entry1{iri, qec->getLocalVocabContext()};
+  LocalVocabEntry entry2{iri, qec->getLocalVocabContext()};
+  Id a1 = Id::makeFromLocalVocabIndex(&entry1);
+  Id a2 = Id::makeFromLocalVocabIndex(&entry2);
+  ASSERT_TRUE(a1.compareThreeWay(a2) == 0);
+  ASSERT_NE(a1.getBits(), a2.getBits());
+  Id bitsLess = a1.getBits() < a2.getBits() ? a1 : a2;
+  Id bitsGreater = a1.getBits() < a2.getBits() ? a2 : a1;
+  Id other = Id::makeFromInt(7);
+
+  // The same rows in two different input orders give the same canonical
+  // order.
+  auto sortedOf = [](const IdTable& table) {
+    return permuteRows(view(table),
+                       canonicalSortingPermutation(view(table), {}),
+                       ad_utility::testing::makeAllocator());
+  };
+  auto first = sortedOf(idTable({{a1, other}, {a2, other}}));
+  auto second = sortedOf(idTable({{a2, other}, {a1, other}}));
+  EXPECT_EQ(first, second);
+  EXPECT_EQ(first.at(0, 0), bitsLess);
+  EXPECT_EQ(first.at(1, 0), bitsGreater);
+
+  // The tie-break is part of the canonical order.
+  EXPECT_TRUE(isInCanonicalOrder(
+      view(idTable({{bitsLess, other}, {bitsGreater, other}})), {}));
+  EXPECT_FALSE(isInCanonicalOrder(
+      view(idTable({{bitsGreater, other}, {bitsLess, other}})), {}));
+
+  // Only bitwise identical rows are matched.
+  auto both = idTable({{bitsLess, other}, {bitsGreater, other}});
+  EXPECT_THAT(alignRows(view(both), view(both)), ElementsAre(0, 1));
+  auto onlyLess = idTable({{bitsLess, other}});
+  auto onlyGreater = idTable({{bitsGreater, other}});
+  EXPECT_THAT(alignRows(view(onlyLess), view(onlyGreater)),
+              ElementsAre(noMatchingRow));
+  EXPECT_THAT(alignRows(view(onlyGreater), view(onlyLess)),
+              ElementsAre(noMatchingRow));
+  EXPECT_THAT(alignRows(view(both), view(onlyGreater)), ElementsAre(1));
+  EXPECT_THAT(alignRows(view(both), view(onlyLess)), ElementsAre(0));
 }

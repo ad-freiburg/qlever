@@ -433,6 +433,69 @@ TEST(BlobDiffProducer, stepWithoutChangesGivesTinyDiff) {
 }
 
 // _____________________________________________________________________________
+// A literal that only changes its lexical form but not its value is neither
+// inserted nor deleted (its `Id` is the same), whereas a change of the value or
+// of the type is.
+TEST(BlobDiffProducer, lexicalChangeOfLiteralIsNoDelta) {
+  auto config = BlobDiffConfig::fromJson(nlohmann::json::parse(R"({
+    "index": {"numThreads": 2},
+    "namedQueries": [{"name": "all", "query": "SELECT ?s ?o WHERE { ?s <p> ?o }"}]
+  })"));
+  std::string stateDir = freshDirectory();
+  std::string base = gtestCurrentTestName();
+  std::vector<std::string> files;
+  absl::Cleanup cleanup = [&] {
+    fs::remove_all(stateDir);
+    for (const auto& file : files) {
+      ad_utility::deleteFile(file);
+    }
+  };
+  auto writeTurtle = [&](std::string_view suffix, std::string_view content) {
+    std::string file = absl::StrCat(base, "-", suffix, ".ttl");
+    files.push_back(file);
+    auto stream = ad_utility::makeOfstream(file);
+    stream << content;
+    return file;
+  };
+  constexpr std::string_view xsd = "^^<http://www.w3.org/2001/XMLSchema#";
+  auto turtle = [&](std::string_view intLiteral,
+                    std::string_view doubleLiteral) {
+    return absl::StrCat("<a> <p> \"", intLiteral, "\"", xsd,
+                        "int> .\n<a> <p> \"", doubleLiteral, "\"", xsd,
+                        "double> .\n<b> <p> <c> .\n");
+  };
+  BlobDiffProducer::init(config, writeTurtle("week0", turtle("1", "1.0")),
+                         stateDir);
+
+  // Only the lexical forms change.
+  auto lexical = BlobDiffProducer::step(
+      config, writeTurtle("week1", turtle("01", "1.0e0")), stateDir);
+  EXPECT_EQ(lexical.numInsertedTriples_, 0u);
+  EXPECT_EQ(lexical.numDeletedTriples_, 0u);
+
+  // A change of the value.
+  auto changed = BlobDiffProducer::step(
+      config, writeTurtle("week2", turtle("2", "1.0e0")), stateDir);
+  EXPECT_EQ(changed.numInsertedTriples_, 1u);
+  EXPECT_EQ(changed.numDeletedTriples_, 1u);
+  EXPECT_EQ(BlobDiffProducer::apply(lexical.blob_, changed.diffFile_),
+            changed.blob_);
+
+  // A change of the type with the same number (`2` to `2.0`) is a change as
+  // well.
+  auto retyped = BlobDiffProducer::step(
+      config,
+      writeTurtle("week3", absl::StrCat("<a> <p> \"2.0\"", xsd,
+                                        "double> .\n<a> <p> \"1.0e0\"", xsd,
+                                        "double> .\n<b> <p> <c> .\n")),
+      stateDir);
+  EXPECT_EQ(retyped.numInsertedTriples_, 1u);
+  EXPECT_EQ(retyped.numDeletedTriples_, 1u);
+  EXPECT_EQ(BlobDiffProducer::apply(changed.blob_, retyped.diffFile_),
+            retyped.blob_);
+}
+
+// _____________________________________________________________________________
 TEST(BlobDiffProducer, geoIndicesAreSegmentedAndCanBeCompacted) {
   auto config = snapshotConfigWithoutCompaction();
   std::string stateDir = freshDirectory();

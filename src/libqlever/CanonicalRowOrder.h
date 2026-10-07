@@ -24,12 +24,17 @@
 // to exploit it. A table is in canonical order if its rows are sorted
 // lexicographically by the columns `resultSortedOn` (in that order) first, and
 // then by all remaining columns in increasing order of their column index. The
-// `Id`s are compared via `ValueId::compareThreeWay`. Rows that are equal keep
-// their relative order when a table is brought into canonical order, so the
-// canonical order is unique for a given multiset of rows (equal rows are
-// indistinguishable). Two tables in canonical order differ only by row
-// insertions and deletions iff their contents differ only by these, which is
-// what makes the diff of two blobs small (see `alignRows`).
+// `Id`s are compared via `ValueId::compareThreeWay`, and ties are broken by
+// their raw bits (`Id::getBits()`). The tie-break is necessary because
+// `compareThreeWay` can consider `Id`s equal that differ bitwise (two `Id`s of
+// type `LocalVocabIndex` whose entries hold the same word).
+// With it, two rows are equal in the canonical order iff they are bitwise
+// identical, so the canonical order only depends on the multiset of rows, and
+// not on the order in which a query plan happened to produce them. Rows that
+// are equal keep their relative order when a table is brought into canonical
+// order. Two tables in canonical order differ only by row insertions and
+// deletions iff their contents differ only by these, which is what makes the
+// diff of two blobs small (see `alignRows`).
 namespace qlever {
 
 // The value in the result of `alignRows` for a row without a counterpart. It is
@@ -77,7 +82,8 @@ std::vector<size_t> invertPermutation(ql::span<const size_t> permutation);
 // `resultSortedOn` columns, and have to have the same number of columns
 // (checked via `AD_CONTRACT_CHECK`; the order is not checked, see
 // `isInCanonicalOrder`). Return a vector that contains for each row of `target`
-// the row of `base` that is equal to it, or `noMatchingRow` if there is none.
+// the row of `base` that is equal to it (bitwise identical in all columns, see
+// above), or `noMatchingRow` if there is none.
 // The matching is monotonic (the matched rows of `base` are increasing), and
 // each row of `base` is matched at most once. If a row occurs several times,
 // then the occurrences in `target` and `base` are matched pairwise in their

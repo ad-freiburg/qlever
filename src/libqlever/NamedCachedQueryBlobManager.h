@@ -55,8 +55,8 @@ struct BlobSerializationConfig {
   // compute a small diff between them). In such a blob, the words of the
   // secondary vocabulary of the base keep their `Id`s, and the geo index of an
   // entry is extended from the geo index of the entry with the same name in the
-  // base (reusing its segments) instead of being built from scratch (see
-  // `NamedCachedQueryBlobManager::serialize`).
+  // base (reusing its segments) instead of using the geo index of the entry
+  // itself (see `NamedCachedQueryBlobManager::serialize`).
   struct IncrementalBase {
     // A `Qlever` instance into which the previous blob was loaded, for example
     // via `Qlever{EngineConfig{}, true}` followed by
@@ -68,7 +68,9 @@ struct BlobSerializationConfig {
     // extended index has more than `maxGeoSegments_` segments, or if the
     // fraction of its dead shapes (shapes of deleted rows) is larger than
     // `maxDeadShapeRatio_`, then the extended index is discarded and the entry
-    // is written with a freshly built index that consists of a single segment.
+    // is written with its own geo index, as it was built when the entry was
+    // pinned (it may itself consist of several segments if the live instance
+    // was loaded from a blob).
     size_t maxGeoSegments_ = 8;
     double maxDeadShapeRatio_ = 0.3;
   };

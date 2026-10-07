@@ -219,12 +219,4 @@ NamedResultCache::Value canonicalizeForSerialization(
       .value_;
 }
 
-// _____________________________________________________________________________
-NamedResultCache::Value rewriteToSecondaryVocab(
-    const NamedResultCache::Value& value,
-    const SecondaryVocabulary& secondaryVocab,
-    const NamedResultCache::Value::Allocator& allocator) {
-  return canonicalizeForSerialization(value, secondaryVocab, allocator);
-}
-
 }  // namespace qlever::namedCacheSecondaryVocab

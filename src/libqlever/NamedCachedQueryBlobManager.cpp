@@ -133,14 +133,17 @@ void writeMetadataAndFilteredVocabulary(
 // as the entry `original` (whose canonicalized copy is `canonicalized`), or
 // `std::nullopt` if the extension is not possible or if it has to be compacted
 // (see `BlobSerializationConfig::IncrementalBase`), in which case the geo
-// index of `canonicalized` (which was built from scratch) is to be used. The
-// result is in canonical row order. The `index` is used to resolve the `Id`s
-// of the table of `original`.
+// index of `canonicalized` is to be used, which is the geo index of the entry
+// `original` itself (as built when the entry was pinned, or as loaded from a
+// blob; it may have several segments in the latter case) with its rows
+// permuted to canonical order. The result is in canonical row order. The
+// `index` is used to resolve the `Id`s of the table of `original`.
 //
-// NOTE: The new geometries have to be read from the table of `original`
-// (including all its rows in the original order), because the table of
-// `canonicalized` may contain `Id`s that only the secondary vocabulary of the
-// blob can resolve.
+// NOTE: The new geometries have to be read from the table of `original`,
+// because the table of `canonicalized` may contain `Id`s that only the
+// secondary vocabulary of the blob can resolve. They are added to the new
+// segment in canonical row order, so that the bytes of the segment do not
+// depend on the order of the rows of `original`.
 std::optional<SpatialJoinCachedIndex> tryToExtendGeoIndex(
     const std::string& key, const NamedResultCache::Value& original,
     const namedCacheSecondaryVocab::CanonicalizedValue& canonicalized,
@@ -157,7 +160,9 @@ std::optional<SpatialJoinCachedIndex> tryToExtendGeoIndex(
   const auto& baseValue = *it->second;
   auto skip = [&key](std::string_view reason) {
     AD_LOG_INFO << "The geo index of the named result \"" << key
-                << "\" is built from scratch, because " << reason << std::endl;
+                << "\" is not extended from the base (the geo index of the "
+                   "entry itself is written), because "
+                << reason << std::endl;
     return std::nullopt;
   };
   if (!baseValue.cachedGeoIndex_.has_value()) {
@@ -191,11 +196,11 @@ std::optional<SpatialJoinCachedIndex> tryToExtendGeoIndex(
   }
   ColumnIndex column =
       original.varToColMap_.at(newGeoIndex.getGeometryColumn()).columnIndex_;
-  auto extended =
-      SpatialJoinCachedIndex::extend(
-          baseGeoIndex, baseRowOfOriginalRow,
-          ExplicitIdTableOperation::viewOf(original.result_), column, index)
-          .withPermutedRows(invertPermutation(oldRowOfNewRow));
+  auto extended = SpatialJoinCachedIndex::extend(
+                      baseGeoIndex, baseRowOfOriginalRow,
+                      ExplicitIdTableOperation::viewOf(original.result_),
+                      column, index, oldRowOfNewRow)
+                      .withPermutedRows(invertPermutation(oldRowOfNewRow));
 
   // Decide whether to keep the extension or to compact.
   size_t numDeadShapes = extended.numShapes() - extended.numLiveShapes();
@@ -209,7 +214,8 @@ std::optional<SpatialJoinCachedIndex> tryToExtendGeoIndex(
               << " dead shapes out of " << extended.numShapes()
               << " when extended from the base; "
               << (tooManySegments || tooManyDeadShapes
-                      ? "it is compacted (rebuilt from scratch)"
+                      ? "the extension is discarded and the geo index of the "
+                        "entry itself is written"
                       : "the extension is kept")
               << std::endl;
   if (tooManySegments || tooManyDeadShapes) {
@@ -399,11 +405,10 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // (see `canonicalizeWithPermutation`). The words of the local vocab of such a
   // copy are not written, because they are no longer referenced. The entries
   // are written in the order of `entries`.
-  size_t entryIndex = 0;
   namedResultCacheSerializer::writeEntries(
       serializer, entries,
-      [&](auto& entrySerializer, const NamedResultCache::Value& value) {
-        const auto& key = entries.at(entryIndex++).first;
+      [&](auto& entrySerializer, const std::string& key,
+          const NamedResultCache::Value& value) {
         auto canonicalized =
             namedCacheSecondaryVocab::canonicalizeWithPermutation(
                 value, secondaryVocab, qlever.allocator_,

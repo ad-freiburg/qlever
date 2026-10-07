@@ -32,9 +32,14 @@
 // `addNewWordsToSecondaryVocab` collects the words of all entries and adds the
 // new ones to the secondary vocabulary as a single segment, which has to be
 // sorted and is therefore only known once all entries have been seen. Then,
-// each entry can be rewritten via `rewriteToSecondaryVocab`, one at a time, so
-// that the rewritten copies of the entries never have to be kept in memory
-// all at once.
+// each entry can be canonicalized via `canonicalizeForSerialization` (or
+// `canonicalizeWithPermutation`), one at a time, so that the canonicalized
+// copies of the entries never have to be kept in memory all at once. The
+// canonicalization of an entry rewrites its `Id`s (only if it contains any
+// `Id` of type `LocalVocabIndex`), and additionally brings its columns and rows
+// into canonical order. This is done for every entry that is written to a
+// blob, no matter whether it contains local vocab `Id`s, because the order
+// of the rows has to be canonical for the diff of two blobs to be small.
 //
 // The secondary vocabulary is passed in by the caller, and may already contain
 // words, so that the same functions can also extend a preexisting secondary
@@ -56,7 +61,7 @@ using Entries = NamedResultCache::Entries;
 
 // Return true iff the result of `value` contains at least one `Id` of type
 // `LocalVocabIndex`, that is, iff `value` has to be rewritten via
-// `rewriteToSecondaryVocab` before it can be persisted.
+// rewritten (see `canonicalizeForSerialization`) before it can be persisted.
 bool containsLocalVocabIds(const NamedResultCache::Value& value);
 
 // Append a single segment to the `secondaryVocab` that consists of the words
@@ -64,8 +69,8 @@ bool containsLocalVocabIds(const NamedResultCache::Value& value);
 // neither contained in the vocabulary of the main index (or encodable, see
 // above), nor already in the `secondaryVocab`. Return the number of these new
 // words; if there are none, then the `secondaryVocab` stays unchanged.
-// Afterwards, each of the `entries` can be rewritten via
-// `rewriteToSecondaryVocab`.
+// Afterwards, each of the `entries` can be canonicalized via
+// `canonicalizeForSerialization`.
 size_t addNewWordsToSecondaryVocab(const Entries& entries,
                                    SecondaryVocabulary& secondaryVocab);
 
@@ -137,13 +142,6 @@ CanonicalizedValue canonicalizeWithPermutation(
     const SecondaryVocabulary& secondaryVocab,
     const NamedResultCache::Value::Allocator& allocator,
     bool sortOnAllColumns = false);
-
-// Same as `canonicalizeForSerialization`; kept as the name for the case that
-// the focus is on the rewriting of the `Id`s.
-NamedResultCache::Value rewriteToSecondaryVocab(
-    const NamedResultCache::Value& value,
-    const SecondaryVocabulary& secondaryVocab,
-    const NamedResultCache::Value::Allocator& allocator);
 
 }  // namespace qlever::namedCacheSecondaryVocab
 

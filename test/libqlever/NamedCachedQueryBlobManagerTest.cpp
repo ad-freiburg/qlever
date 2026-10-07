@@ -16,6 +16,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -1456,6 +1457,98 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithoutMatchingBaseEntry) {
   EXPECT_EQ(geoIndexOf(*blob).numSegments(), 1);
   EXPECT_EQ(geoIndexOf(*blob).numShapes(), 2);
   expectAllEntriesCanonical(*blob);
+}
+
+namespace {
+// Write the blob of the second week of the weekly tests incrementally against a
+// base that was written in the first week, where `modifyBase` is applied to the
+// instance that the base blob was loaded into, and that pins the entry
+// "geoPin" with the given `baseSimplification`. Expect that the geo index of
+// the entry "geoPin" is not extended from the base (and hence has a single
+// segment, in contrast to the extension, see `incrementalBlobAfterUpdate`), and
+// that the blob answers all queries like a blob that was written without a
+// base.
+template <typename ModifyBase>
+void expectGeoIndexNotExtended(
+    const ModifyBase& modifyBase,
+    std::optional<double> baseSimplification = std::nullopt) {
+  auto sourceConfig = buildTestIndex(weeklyTestData());
+  auto source = makeWeeklySource(sourceConfig);
+  ad_utility::testing::applyUpdateToEngine(*source, weekOneUpdate());
+  pinWeeklyResults(*source);
+  source->queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"},
+                                               baseSimplification},
+      "SELECT * { ?s2 <asWKT> ?geo2 }");
+  auto base = loadBlob(source->serializeVocabAndNamedCacheToCompressedBlob());
+  modifyBase(*base);
+
+  ad_utility::testing::applyUpdateToEngine(*source, weekTwoDelete());
+  ad_utility::testing::applyUpdateToEngine(*source, weekTwoInsert());
+  pinWeeklyResults(*source);
+  auto incremental =
+      loadBlob(source->serializeVocabAndNamedCacheToCompressedBlob(
+          incrementalConfig(*base)));
+  auto plain = loadBlob(source->serializeVocabAndNamedCacheToCompressedBlob());
+  EXPECT_EQ(geoIndexOf(*incremental).numSegments(), 1);
+  EXPECT_EQ(geoIndexOf(*incremental).numShapes(),
+            geoIndexOf(*plain).numShapes());
+  expectSameAnswers(*incremental, *plain);
+  expectAllEntriesCanonical(*incremental);
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// If the entry of the base has no geo index, the geo index is not extended.
+TEST(NamedCachedQueryBlobManager, incrementalBlobWithBaseEntryWithoutGeoIndex) {
+  expectGeoIndexNotExtended([](Qlever& base) {
+    auto entry = base.namedResultCache().get("geoPin");
+    ASSERT_TRUE(entry->cachedGeoIndex_.has_value());
+    base.namedResultCache().store(
+        "geoPin", NamedResultCache::Value{entry->result_, entry->varToColMap_,
+                                          entry->resultSortedOn_,
+                                          entry->localVocab_.clone(),
+                                          entry->cacheKey_, std::nullopt});
+  });
+}
+
+// _____________________________________________________________________________
+// If the structure of the base entry differs (here: the simplification of the
+// geo index), the geo index is not extended.
+TEST(NamedCachedQueryBlobManager, incrementalBlobWithDifferentSimplification) {
+  expectGeoIndexNotExtended(
+      [](Qlever& base) {
+        EXPECT_EQ(geoIndexOf(base).simplificationErrorInMeters(), 50.0);
+      },
+      50.0);
+}
+
+// _____________________________________________________________________________
+// If the table of the base entry is not in canonical order (for example
+// because the base was written by an older writer), the geo index is not
+// extended, and no error occurs.
+TEST(NamedCachedQueryBlobManager, incrementalBlobWithNonCanonicalBase) {
+  expectGeoIndexNotExtended([](Qlever& base) {
+    auto entry = base.namedResultCache().get("geoPin");
+    ASSERT_TRUE(entry->cachedGeoIndex_.has_value());
+    auto view = ExplicitIdTableOperation::viewOf(entry->result_);
+    // Reverse the order of the rows (a table with at least two different rows
+    // is then not in canonical order).
+    std::vector<size_t> oldRowOfNewRow(view.numRows());
+    std::iota(oldRowOfNewRow.rbegin(), oldRowOfNewRow.rend(), size_t{0});
+    auto table = permuteRows(view, oldRowOfNewRow,
+                             ad_utility::makeUnlimitedAllocator<Id>());
+    ASSERT_FALSE(
+        isInCanonicalOrder(table.asStaticView<0>(), entry->resultSortedOn_));
+    auto geoIndex = entry->cachedGeoIndex_->withPermutedRows(
+        invertPermutation(oldRowOfNewRow));
+    base.namedResultCache().store(
+        "geoPin",
+        NamedResultCache::Value{
+            std::make_shared<const IdTable>(std::move(table)),
+            entry->varToColMap_, entry->resultSortedOn_,
+            entry->localVocab_.clone(), entry->cacheKey_, std::move(geoIndex)});
+  });
 }
 
 // _____________________________________________________________________________

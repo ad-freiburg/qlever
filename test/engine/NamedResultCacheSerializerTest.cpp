@@ -316,7 +316,8 @@ TEST_F(NamedResultCacheSerializerTest, WrongMagicByteOrFormatVersionThrows) {
 // format is rejected.
 TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
   using namespace namedResultCacheSerializer;
-  auto writeLegacy = [](auto& serializer, const NamedResultCache::Value& v) {
+  auto writeLegacy = [](auto& serializer, const std::string&,
+                        const NamedResultCache::Value& v) {
     writeValue(serializer, v,
                ExplicitIdTableOperation::viewOf(v.result_).getColumns(),
                v.resultSortedOn_, /*writeLocalVocabWords=*/true,
@@ -369,7 +370,8 @@ TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
   ByteBufferWriteSerializer writer5;
   EXPECT_NO_THROW(
       writeEntries(writer5, entries,
-                   [](auto& s, const NamedResultCache::Value& v) { s << v; }));
+                   [](auto& s, const std::string&,
+                      const NamedResultCache::Value& v) { s << v; }));
 }
 
 // _____________________________________________________________________________
