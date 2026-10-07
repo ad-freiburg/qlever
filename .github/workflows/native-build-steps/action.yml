@@ -1,0 +1,48 @@
+name: "Native build on Ubuntu"
+description: "Install the dependencies and the compiler, then configure, build, and test QLever. This sequence of steps is shared by `native-build-always.yml` and `native-build-only-if-complete-ci.yml`, which only differ in their build matrix. The repository must already be checked out."
+
+inputs:
+  matrix:
+    description: "The build matrix entry of the calling job, as JSON (pass the `toJSON` of the `matrix` context). Used keys: `compiler`, `compiler-version`, `warnings`, `asan-flags`, `ubsan-flags`, `build-type`, `expensive-tests`, `additional-cmake-options`, `allocator-backend`."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install dependencies
+      uses: ./.github/workflows/install-dependencies-ubuntu
+    - name: Install compiler
+      uses: ./.github/workflows/install-compiler-ubuntu
+      with:
+        compiler: ${{fromJSON(inputs.matrix).compiler}}
+        compiler-version: ${{fromJSON(inputs.matrix).compiler-version}}
+    - name: Reduce address randomization to make sanitizers work
+      # For details see for example `https://stackoverflow.com/questions/77850769/fatal-threadsanitizer-unexpected-memory-mapping-when-running-on-linux-kernels`
+      shell: bash
+      run: |
+        sudo sysctl vm.mmap_rnd_bits
+        sudo sysctl vm.mmap_rnd_bits=28
+
+    - name: Configure, build, and test
+      uses: ./.github/workflows/build-and-test
+      with:
+        build-type: ${{fromJSON(inputs.matrix).build-type}}
+        cmake-args: >-
+          -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{fromJSON(inputs.matrix).compiler}}${{fromJSON(inputs.matrix).compiler-version}}.cmake"
+          -DADDITIONAL_COMPILER_FLAGS="${{fromJSON(inputs.matrix).warnings}} ${{fromJSON(inputs.matrix).asan-flags}} ${{fromJSON(inputs.matrix).ubsan-flags}}"
+          -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"
+          -DUSE_PARALLEL=true
+          -DRUN_EXPENSIVE_TESTS=${{fromJSON(inputs.matrix).expensive-tests}}
+          -DENABLE_EXPENSIVE_CHECKS=true
+          ${{fromJSON(inputs.matrix).additional-cmake-options}}
+          -DBUILD_SHARED_LIBS=ON
+          -DQLEVER_ONE_TEST_CASE_PER_FILE=ON
+          -DUSE_PRECOMPILED_HEADERS=${{fromJSON(inputs.matrix).compiler-version == 21 && 'ON' || 'OFF'}}
+          -DCHEAPER_COMPILATION=${{fromJSON(inputs.matrix).compiler-version == 11 && 'ON' || 'OFF'}}
+          -DQLEVER_ALLOCATOR_BACKEND=${{fromJSON(inputs.matrix).allocator-backend || 'limit'}}
+        # Run the E2E test only once with the index built in one go, but for
+        # GCC add the text index separately.
+        #
+        # NOTE: The dispatch by the compiler is arbitrary, we just want to
+        # have both cases tested.
+        e2e-args: ${{fromJSON(inputs.matrix).compiler != 'clang' && '-t' || ''}}
