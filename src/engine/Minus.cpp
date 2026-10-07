@@ -100,21 +100,16 @@ std::vector<ColumnIndex> Minus::resultSortedOn() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Minus::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // The `BIND` can only be pushed into the left child. Also refuse if `_right`
-  // (the negated pattern) happens to use the `BIND`'s target variable for one
-  // of its own columns: `_right`'s variables are not visible outside the
-  // `MINUS`, so this is legal SPARQL, but after the push down `Minus` would
-  // treat it as a join column shared with `_left`, which can change which
-  // rows get excluded.
-  if (_right->containsVariable(bind._target)) {
-    return std::nullopt;
-  }
-  auto newLeft = QueryExecutionTree::makeTreeWithBindColumn(_left, bind);
-  if (!newLeft.has_value()) {
-    return std::nullopt;
-  }
-  return ad_utility::makeExecutionTree<Minus>(
-      getExecutionContext(), std::move(newLeft.value()), _right);
+  // The `BIND` can only be pushed into the left child, as only its columns are
+  // part of the result.
+  return pushDownBindToChild(bind, {_left, _right}, 0);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Minus::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<Minus>(_executionContext, std::move(children.at(0)),
+                                 std::move(children.at(1)));
 }
 
 // _____________________________________________________________________________

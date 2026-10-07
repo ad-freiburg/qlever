@@ -370,6 +370,11 @@ QueryExecutionTree::makeTreeWithBindColumn(
     const std::shared_ptr<QueryExecutionTree>& qet,
     const parsedQuery::Bind& bind) {
   const auto& rootOperation = qet->getRootOperation();
+  // The target of a `BIND` can't be bound before the `BIND`, but it might be a
+  // hidden variable of `qet`, e.g. one that was not selected by a subquery.
+  if (rootOperation->containsVariableInternally(bind._target)) {
+    return std::nullopt;
+  }
   auto optTree = rootOperation->makeTreeWithBindColumn(bind);
   if (!optTree.has_value()) {
     return std::nullopt;

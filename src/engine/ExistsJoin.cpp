@@ -86,21 +86,17 @@ std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
 // ____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // The `BIND` can only be pushed into the left child. Also refuse if `right_`
-  // happens to use the `BIND`'s target variable for one of its own columns:
-  // `right_`'s variables are not visible outside the `EXISTS`, so this is
-  // legal SPARQL, but after the push down `ExistsJoin` would treat it as a
-  // join column shared with `left_`, which can change the Boolean result.
-  if (right_->containsVariable(bind._target)) {
-    return std::nullopt;
-  }
-  auto newLeft = QueryExecutionTree::makeTreeWithBindColumn(left_, bind);
-  if (!newLeft.has_value()) {
-    return std::nullopt;
-  }
-  return ad_utility::makeExecutionTree<ExistsJoin>(getExecutionContext(),
-                                                   std::move(newLeft.value()),
-                                                   right_, existsVariable_);
+  // The `BIND` can only be pushed into the left child, as only its columns are
+  // part of the result.
+  return pushDownBindToChild(bind, {left_, right_}, 0);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> ExistsJoin::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<ExistsJoin>(
+      _executionContext, std::move(children.at(0)), std::move(children.at(1)),
+      existsVariable_);
 }
 
 // ____________________________________________________________________________

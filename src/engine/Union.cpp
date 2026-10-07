@@ -394,10 +394,7 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // We can't rewrite if the target variable is already covered.
-  if (getExternallyVisibleVariableColumns().contains(bind._target)) {
-    return std::nullopt;
-  }
+  AD_CONTRACT_CHECK(!containsVariableInternally(bind._target));
 
   // The TODO in `makeTreeWithStrippedColumns` below also applies here.
   if (!targetOrder_.empty()) {

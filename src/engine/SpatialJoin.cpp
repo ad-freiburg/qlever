@@ -28,7 +28,6 @@
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
-#include "engine/OperationBindPushDownImpl.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
@@ -639,25 +638,30 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> SpatialJoin::cloneImpl() const {
+  return cloneWithNewChildren({childLeft_ ? childLeft_->clone() : nullptr,
+                               childRight_ ? childRight_->clone() : nullptr});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> SpatialJoin::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  // A child that is not (yet) attached is represented by `nullptr`.
+  auto toOptional = [](std::shared_ptr<QueryExecutionTree>& child)
+      -> std::optional<std::shared_ptr<QueryExecutionTree>> {
+    if (child == nullptr) {
+      return std::nullopt;
+    }
+    return std::move(child);
+  };
   return std::make_unique<SpatialJoin>(
-      _executionContext, config_,
-      childLeft_ ? std::optional{childLeft_->clone()} : std::nullopt,
-      childRight_ ? std::optional{childRight_->clone()} : std::nullopt,
-      substitutesFilterOp_);
+      _executionContext, config_, toOptional(children.at(0)),
+      toOptional(children.at(1)), substitutesFilterOp_);
 }
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  return pushDownBindToAnyChild(
-      bind, {childLeft_, childRight_},
-      [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
-        auto& left = newChildren.at(0);
-        auto& right = newChildren.at(1);
-        return ad_utility::makeExecutionTree<SpatialJoin>(
-            _executionContext, config_, std::move(left), std::move(right),
-            substitutesFilterOp_);
-      });
+  return pushDownBindToAnyChild(bind, {childLeft_, childRight_});
 }
 
 // _____________________________________________________________________________

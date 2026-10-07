@@ -8,7 +8,6 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
-#include "engine/OperationBindPushDownImpl.h"
 #include "index/IdTableUtils.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
@@ -312,12 +311,12 @@ bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 MultiColumnJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  return pushDownBindToAnyChild(
-      bind, {_left, _right},
-      [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
-        auto& left = newChildren.at(0);
-        auto& right = newChildren.at(1);
-        return ad_utility::makeExecutionTree<MultiColumnJoin>(
-            getExecutionContext(), std::move(left), std::move(right));
-      });
+  return pushDownBindToAnyChild(bind, {_left, _right});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> MultiColumnJoin::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<MultiColumnJoin>(
+      _executionContext, std::move(children.at(0)), std::move(children.at(1)));
 }

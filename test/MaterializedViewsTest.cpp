@@ -1881,14 +1881,14 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                                                      std::vector{left, right});
     };
 
-    // Push the `BIND` into `tree` (via the operation's override, like the query
-    // planner does) and check the result. `std::nullopt` means refused.
+    // Push the `BIND` into `tree` (like the query planner does) and check the
+    // result. `std::nullopt` means refused.
     auto expectPush = [&bind](const std::shared_ptr<QueryExecutionTree>& tree,
                               std::optional<h::QetMatcher> expected,
                               ad_utility::source_location location =
                                   AD_CURRENT_SOURCE_LOC()) {
       auto trace = generateLocationTrace(location);
-      auto pushed = tree->getRootOperation()->makeTreeWithBindColumn(bind);
+      auto pushed = QueryExecutionTree::makeTreeWithBindColumn(tree, bind);
       ASSERT_EQ(pushed.has_value(), expected.has_value());
       if (expected.has_value()) {
         EXPECT_THAT(*pushed.value(), expected.value());
@@ -1932,9 +1932,12 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     // would get `UNDEF` instead of evaluating the `BIND`), if a child rejects,
     // or if the `UNION` is sorted.
     expectPush(unionOf(view(), view()), h::Union(pushedView, pushedView));
-    expectPush(
-        unionOf(scan("?s", "<p1>", "?bind"), scan("?s", "<p1>", "?bind")),
-        std::nullopt);
+    auto bindUnion =
+        unionOf(scan("?s", "<p1>", "?bind"), scan("?s", "<p1>", "?bind"));
+    expectPush(bindUnion, std::nullopt);
+    // Calling the operation directly violates its precondition.
+    EXPECT_ANY_THROW(
+        bindUnion->getRootOperation()->makeTreeWithBindColumn(bind));
     expectPush(unionOf(view(), sharesS()), std::nullopt);
     expectPush(unionOf(sharesSAndO(), view()), std::nullopt);
     expectPush(makeExecutionTree<Union>(qec, view(), view(),
@@ -1987,6 +1990,15 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                h::CartesianProductJoin(pushedUndefView, sharesNothingMatcher));
     expectPush(unionOf(undefView(), undefView()),
                h::Union(pushedUndefView, pushedUndefView));
+
+    // Refused if `?bind` is a hidden variable (here: not selected by a
+    // subquery). Otherwise it would become an additional join column.
+    {
+      auto hidden = mcj(view(), scan("?s", "<p1>", "?bind"));
+      hidden->getRootOperation()->setSelectedVariablesForSubquery(
+          {V{"?s"}, V{"?o"}});
+      expectPush(hidden, std::nullopt);
+    }
 
     // `QueryExecutionTree::makeTreeWithBindColumn` (the entry point used by the
     // query planner) preserves the `LIMIT` and the visible variables (as
