@@ -145,6 +145,18 @@ struct MergeOptions {
   // `0` means "as many as `parallelism()`".
   size_t maxNumChunksInFlight = 0;
 
+  // If not `0`, the size (in elements) of the first chunk of the merge. The
+  // following chunks double that size until it reaches the size of a uniform
+  // chunk (the size that `targetNumChunks()` implies), and all the remaining
+  // chunks have that uniform size. The consumer has to drain the chunks in the
+  // order of their index, so smaller leading chunks make the first output
+  // blocks of the merge available much sooner. The value `0` means that all
+  // chunks have the uniform size.
+  //
+  // NOTE: These are targets and not guarantees, and they never *reduce* the
+  // number of chunks, see `computeChunkBoundaries` in `MergeHelpers.h`.
+  size_t firstChunkSize = 0;
+
   // Merge serially in the calling thread if the input has at most that many
   // elements in total, see `shouldMergeSerially()`.
   size_t serialNumElementsThreshold =
