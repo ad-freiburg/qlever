@@ -218,7 +218,8 @@ static auto fixBlockAfterPatternJoin(T block) {
   ql::ranges::for_each(
       block.value().getColumn(ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN),
       [](auto&& id) {
-        id = id.isUndefined() ? Id::makeFromInt(Pattern::NoPattern) : id;
+        std::forward<decltype(id)>(id) =
+            id.isUndefined() ? Id::makeFromInt(Pattern::NoPattern) : id;
       });
   return std::move(block.value()).template toStatic<0>();
 }
