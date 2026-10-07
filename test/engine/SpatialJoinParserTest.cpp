@@ -137,7 +137,7 @@ TEST(SpatialJoinParser, DestroyWithoutDone) {
   sj::Sweeper sweeper{cfg, ".", sweeperPath};
 
   for (size_t numBatches : {0, 1, 5}) {
-    WKTParser parser{&sweeper, 4, true, std::nullopt, index};
+    WKTParser parser{&sweeper, 4, true, std::nullopt, false, index};
     for (size_t i = 0; i < numBatches * WKT_PARSER_BATCH_SIZE; ++i) {
       parser.addValueIdToQueue(idxUni, i, false, std::nullopt);
     }
