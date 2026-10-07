@@ -60,6 +60,10 @@ concept PrefetchableSinkConcept = requires(T& sink) {
 // merge. See the `PrefetchableSinkConcept` above for what the `Sink` has to
 // provide.
 //
+// NOTE: The `Block` of this class is the type of the *output* blocks of the
+// merge, that is `OutputBlockT<Input>` (see `RunsInputPolicy.h`), which may
+// differ from the type `Input::Block` of the (possibly lazy) input blocks.
+//
 // The read-ahead is a single coroutine (the "filler", see `fill()`) that runs
 // on the given executor, reads one block after the other from the sink, and
 // sends each of them into a `concurrent_channel` whose capacity is

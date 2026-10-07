@@ -177,6 +177,10 @@ class GetResult {
 // transports the blocks of that chunk plus a single end-of-chunk sentinel that
 // terminates it.
 //
+// NOTE: The `Block` of this concept is the type of the *output* blocks of the
+// merge, that is `OutputBlockT<Input>` (see `RunsInputPolicy.h`), which may
+// differ from the type `Input::Block` of the (possibly lazy) input blocks.
+//
 // The storage is thereby responsible for three things at once: the buffering,
 // the FIFO order within a chunk, and the rendezvous between the producer and
 // the consumer of a chunk. That last point is why storing and retrieving are

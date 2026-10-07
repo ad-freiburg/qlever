@@ -134,13 +134,13 @@ inline void logIgnoredException(std::exception_ptr exception,
 // file that the input reads from — therefore has to wait for
 // `asyncWaitForCompletion`, see `ParallelMergeRange`.
 template <bool moveElements, typename Input, typename Comparator, typename Sink>
-requires InputConcept<Input> && SinkConcept<Sink, typename Input::Block>
+requires InputConcept<Input> && SinkConcept<Sink, OutputBlockT<Input>>
 class ParallelMergeState
     : public std::enable_shared_from_this<
           ParallelMergeState<moveElements, Input, Comparator, Sink>>,
       public ad_utility::NoCopyNoMove {
  public:
-  using Block = typename Input::Block;
+  using OutputBlock = OutputBlockT<Input>;
   // The merger of a single chunk, and the state that the mergers of all chunks
   // share (see `ChunkMerger`). The latter is the single owner of the input, the
   // comparator, the options, the cancellation handle, and the chunk boundaries
@@ -392,7 +392,7 @@ class ParallelMergeState
       // even do I/O, so a chunk occupies its thread for the duration of one
       // output block. It runs on `executor_` and never on a strand, see the
       // IMPORTANT note at the class comment above.
-      std::optional<Block> block = merger.get();
+      std::optional<OutputBlock> block = merger.get();
       if (!block.has_value()) {
         co_return;
       }

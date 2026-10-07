@@ -61,6 +61,10 @@ namespace ad_utility::parallelBlockMerge {
 // and created by the factory that the constructor takes, so that it can be
 // configured at the single place where a sink is created.
 //
+// NOTE: The `Block` of this class is the type of the *output* blocks of the
+// merge, that is `OutputBlockT<Input>` (see `RunsInputPolicy.h`), which may
+// differ from the type `Input::Block` of the (possibly lazy) input blocks.
+//
 // INTERFACE: All the asynchronous operations of this class (their names start
 // with `async`) are ordinary Boost.Asio operations that take a completion
 // token, so a caller may await them, attach a callback, obtain a `std::future`,

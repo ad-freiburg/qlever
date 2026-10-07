@@ -11,11 +11,14 @@
 #include <gtest/gtest.h>
 
 #include <cstddef>
+#include <range/v3/range/conversion.hpp>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "../util/ParallelBlockMergeTestHelpers.h"
+#include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
@@ -69,6 +72,32 @@ struct DummyInputWithReferenceToBlock : public DummyInput {
   Block block_{};
 };
 
+// An input with lazy blocks and a separate `OutputBlock` type, which the
+// concept explicitly allows, see `LazyVectorInput` for a complete example.
+struct DummyLazyInput : public DummyInput {
+  using Block = ad_utility::InputRangeTypeErased<int>;
+  using OutputBlock = std::vector<int>;
+  Block getBlock([[maybe_unused]] size_t runIdx,
+                 [[maybe_unused]] size_t blockIdx) const {
+    return Block{std::vector<int>{}};
+  }
+};
+
+// An input that declares an `OutputBlock` type which its `makeEmptyBlock` and
+// its `appendToBlock` do not use.
+struct InputWithInconsistentOutputBlock : public DummyInput {
+  using OutputBlock = std::vector<long>;
+};
+
+// An input whose `Block` is not a range at all.
+struct InputWithNonRangeBlock : public DummyInput {
+  using Block = int;
+  Block getBlock([[maybe_unused]] size_t runIdx,
+                 [[maybe_unused]] size_t blockIdx) const {
+    return 0;
+  }
+};
+
 // A type that is missing several of the required member functions.
 struct NotAnInput {};
 
@@ -81,8 +110,19 @@ struct AlmostAnInput {
 static_assert(InputConcept<DummyInput>);
 static_assert(InputConcept<DummyInputWithReferenceToBlock>);
 static_assert(InputConcept<VectorInput<int>>);
+static_assert(InputConcept<DummyLazyInput>);
+static_assert(InputConcept<LazyVectorInput<int>>);
+static_assert(!InputConcept<InputWithInconsistentOutputBlock>);
+static_assert(!InputConcept<InputWithNonRangeBlock>);
 static_assert(!InputConcept<NotAnInput>);
 static_assert(!InputConcept<AlmostAnInput>);
+
+// The `OutputBlockT` is the `OutputBlock` if there is one, and the `Block`
+// otherwise.
+static_assert(std::is_same_v<OutputBlockT<DummyInput>, std::vector<int>>);
+static_assert(std::is_same_v<OutputBlockT<DummyLazyInput>, std::vector<int>>);
+static_assert(std::is_same_v<OutputBlockT<InputWithInconsistentOutputBlock>,
+                             std::vector<long>>);
 }  // namespace
 
 // _____________________________________________________________________________
@@ -139,4 +179,31 @@ TEST(RunsInputPolicy, VectorInputReadBlockReturnsACopy) {
   }
   EXPECT_THAT(input.getBlock(0, 0),
               ::testing::ElementsAre("alphaalpha", "betabeta"));
+}
+
+// _____________________________________________________________________________
+TEST(RunsInputPolicy, LazyVectorInput) {
+  std::vector<std::vector<int>> runs{{1, 3, 5, 7, 9}, {2, 4}};
+  auto input = makeLazyVectorInput(runs, 2);
+  // The metadata are exactly those of the underlying `VectorInput`.
+  EXPECT_EQ(input.numRuns(), 2u);
+  EXPECT_EQ(input.numBlocks(0), 3u);
+  EXPECT_EQ(input.numElementsInBlock(0, 2), 1u);
+  EXPECT_EQ(input.firstElement(0, 1), 5);
+  EXPECT_EQ(input.lastElement(0, 1), 7);
+  // A lazy block yields the elements of the block, and the output blocks are
+  // ordinary vectors.
+  EXPECT_THAT(::ranges::to_vector(input.getBlock(0, 1)),
+              ::testing::ElementsAre(5, 7));
+  std::vector<int> outputBlock = input.makeEmptyBlock();
+  input.appendToBlock(outputBlock, 42);
+  EXPECT_THAT(outputBlock, ::testing::ElementsAre(42));
+
+  // A lazy block may be moved before its iteration has started, but not
+  // afterwards, because its iterators point into the block itself.
+  auto block = input.getBlock(1, 0);
+  auto movedBlock = std::move(block);
+  auto it = movedBlock.begin();
+  EXPECT_EQ(*it, 2);
+  EXPECT_ANY_THROW(auto movedAgain = std::move(movedBlock));
 }
