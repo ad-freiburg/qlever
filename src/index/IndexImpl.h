@@ -305,11 +305,10 @@ class IndexImpl {
   // the `Id`s of a secondary vocabulary are only valid for the very vocabulary
   // that they were created for.
   //
-  // This is currently set only by tests (via
+  // This is set when a blob that contains a secondary vocabulary is loaded
+  // (see `NamedCachedQueryBlobManager::deserialize`), and by tests (via
   // `TestIndexConfig::secondaryVocabWords`, see
-  // `test/util/IndexTestHelpers.h`). It is meant to eventually be set by code
-  // that loads persisted data (e.g. the blobs of `NamedCachedQueryBlobManager`,
-  // in a follow-up change). It has to be set before the first query is
+  // `test/util/IndexTestHelpers.h`). It has to be set before the first query is
   // answered (in particular, before any `LocalVocabEntry` computes its position
   // in the vocabulary, see `positionInVocab()`), and is immutable afterwards.
   const SecondaryVocabulary* secondaryVocab() const {
@@ -318,10 +317,6 @@ class IndexImpl {
 
   // Set the secondary vocabulary, see above. PRECONDITION: Must only be called
   // before the first query is answered (e.g. right after construction).
-  //
-  // NOTE: This setter is not named `setSecondaryVocabForTesting` even though
-  // only tests currently call it, because it is about to get a non-test caller
-  // (see above).
   void setSecondaryVocab(
       std::shared_ptr<const SecondaryVocabulary> secondaryVocab) {
     secondaryVocab_ = std::move(secondaryVocab);
@@ -359,6 +354,16 @@ class IndexImpl {
   // does not itself read from disk, factored out so that a configuration
   // obtained from elsewhere (e.g. a serialized blob) can be applied directly.
   void applyConfiguration(const nlohmann::json& configuration);
+
+  // Check whether the index format version that is stored in the
+  // `configuration` JSON (index metadata) is compatible with this version of
+  // QLever. Return `std::nullopt` if it is, and a message that describes the
+  // incompatibility otherwise. Throw no exception for any `configuration`
+  // (except for allocation failures), so that this check can also be used by
+  // code that must not throw. `applyConfiguration` throws an exception with the
+  // returned message.
+  std::optional<std::string> checkIndexFormatVersion(
+      const nlohmann::json& configuration) const;
 
   // Set the encoding of the geo points of the process (see
   // `GeoPoint::encoding`) to the encoding of the index that is being loaded,

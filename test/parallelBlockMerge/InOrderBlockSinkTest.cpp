@@ -44,6 +44,8 @@
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 
 using namespace ad_utility::parallelBlockMerge;
+using parallelBlockMergeTestHelpers::asyncGetNextBlock;
+using parallelBlockMergeTestHelpers::materialize;
 
 namespace {
 using Block = std::vector<int>;
@@ -105,7 +107,7 @@ net::awaitable<void> pushOneBlockAndFinish(Sink& sink, size_t chunkIndex,
 // Consume all the blocks of the `sink` and return them.
 net::awaitable<std::vector<Block>> collectAsync(Sink& sink) {
   std::vector<Block> result;
-  while (auto block = co_await sink.asyncGetNextBlock(net::use_awaitable)) {
+  while (auto block = co_await asyncGetNextBlock(sink)) {
     result.push_back(std::move(block.value()));
   }
   co_return result;
@@ -244,7 +246,7 @@ net::awaitable<void> pushOneBlock(ControlledSink& sink, size_t chunkIndex,
 net::awaitable<void> getOneBlock(
     ControlledSink& sink,
     std::optional<ControlledSink::OptionalBlock>& received, Latch& latch) {
-  received = co_await sink.asyncGetNextBlock(net::use_awaitable);
+  received = co_await asyncGetNextBlock(sink);
   latch.try_send(boost::system::error_code{});
 }
 
@@ -255,7 +257,7 @@ net::awaitable<void> getOneBlockExpectingThrow(ControlledSink& sink,
                                                std::string expectedMessage,
                                                bool& didThrow, Latch& latch) {
   try {
-    co_await sink.asyncGetNextBlock(net::use_awaitable);
+    co_await asyncGetNextBlock(sink);
   } catch (const std::runtime_error& exception) {
     didThrow = true;
     EXPECT_EQ(exception.what(), expectedMessage);
@@ -283,7 +285,7 @@ ASYNC_TEST(InOrderBlockSink, inOrderAcrossChunks) {
 // _____________________________________________________________________________
 ASYNC_TEST(InOrderBlockSink, empty) {
   auto sink = makeSink(ioContext.get_executor(), 0, 2);
-  auto block = co_await sink.asyncGetNextBlock(net::use_awaitable);
+  auto block = co_await asyncGetNextBlock(sink);
   EXPECT_FALSE(block.has_value());
 }
 
@@ -310,7 +312,7 @@ ASYNC_TEST(InOrderBlockSink, backPressure) {
                 pushBlocks(sink, 1, {{10}, {11}, {12}}, latch, &numPushed),
                 net::detached);
   net::co_spawn(ioContext, pushBlocks(sink, 0, {{0}}, latch), net::detached);
-  auto firstBlock = co_await sink.asyncGetNextBlock(net::use_awaitable);
+  auto firstBlock = co_await asyncGetNextBlock(sink);
   EXPECT_THAT(firstBlock, ::testing::Optional(Block{0}));
   // The producer of chunk `1` may have filled its single buffer slot, but it
   // cannot have pushed more than that, because the consumer has not consumed
@@ -331,7 +333,7 @@ ASYNC_TEST(InOrderBlockSink, pushExceptionSurfaces) {
   EXPECT_TRUE(sink.stopRequested());
   bool didThrow = false;
   try {
-    co_await sink.asyncGetNextBlock(net::use_awaitable);
+    co_await asyncGetNextBlock(sink);
   } catch (const std::runtime_error& exception) {
     didThrow = true;
     EXPECT_STREQ(exception.what(), "kaboom");
@@ -359,7 +361,7 @@ ASYNC_TEST(InOrderBlockSink, exceptionUnblocksProducers) {
   EXPECT_EQ(numPushed.load(), 1u);
   bool didThrow = false;
   try {
-    co_await sink.asyncGetNextBlock(net::use_awaitable);
+    co_await asyncGetNextBlock(sink);
   } catch (const std::runtime_error& exception) {
     didThrow = true;
     EXPECT_STREQ(exception.what(), "kaboom");
@@ -383,7 +385,7 @@ ASYNC_TEST(InOrderBlockSink, stopUnblocksProducers) {
   EXPECT_EQ(numPushed.load(), 1u);
   // A stopped sink yields nothing anymore, not even the block that is still
   // buffered.
-  auto block = co_await sink.asyncGetNextBlock(net::use_awaitable);
+  auto block = co_await asyncGetNextBlock(sink);
   EXPECT_FALSE(block.has_value());
 }
 
@@ -456,13 +458,13 @@ ASYNC_TEST_N(InOrderBlockSink, stopRacesWithProducers, 4) {
   // Consume a little, such that the producers really are in flight, and then
   // stop in the middle of everything.
   for (size_t i = 0; i < 5; ++i) {
-    co_await sink.asyncGetNextBlock(net::use_awaitable);
+    co_await asyncGetNextBlock(sink);
   }
   co_await sink.asyncStop(net::use_awaitable);
   EXPECT_TRUE(sink.stopRequested());
   // This hangs if a single producer was left suspended.
   co_await waitForLatch(latch, numChunks);
-  auto block = co_await sink.asyncGetNextBlock(net::use_awaitable);
+  auto block = co_await asyncGetNextBlock(sink);
   EXPECT_FALSE(block.has_value());
 }
 
@@ -486,7 +488,7 @@ ASYNC_TEST(InOrderBlockSink, onlyTheFirstExceptionIsKept) {
       net::use_awaitable);
   bool didThrow = false;
   try {
-    co_await sink.asyncGetNextBlock(net::use_awaitable);
+    co_await asyncGetNextBlock(sink);
   } catch (const std::runtime_error& exception) {
     didThrow = true;
     EXPECT_STREQ(exception.what(), "first");
@@ -591,7 +593,8 @@ TEST(InOrderBlockSink, parallelMergeReadByBlockingConsumer) {
     auto [state, sink] = startMergeIntoSink(pool.get_executor(), runs,
                                             maxBufferedBlocksPerChunk);
     SizeVec result;
-    while (auto block = sink->asyncGetNextBlock(net::use_future).get()) {
+    while (auto block =
+               materialize(sink->asyncGetNextBlock(net::use_future).get())) {
       result.insert(result.end(), block->begin(), block->end());
     }
     EXPECT_EQ(result, sortedConcatenation(runs));
@@ -607,14 +610,15 @@ TEST(InOrderBlockSink, parallelMergeAbandonedByConsumer) {
   net::thread_pool pool{4};
   auto runs = makeRandomRuns(6, 200, 400);
   auto [state, sink] = startMergeIntoSink(pool.get_executor(), runs, 1);
-  auto first = sink->asyncGetNextBlock(net::use_future).get();
+  auto first = materialize(sink->asyncGetNextBlock(net::use_future).get());
   ASSERT_TRUE(first.has_value());
   // `stop()` only initiates the stop on the strand of the sink, so wait for
   // the (idempotent) `asyncStop` to observe its effect.
   state->stop();
   sink->asyncStop(net::use_future).get();
   EXPECT_TRUE(sink->stopRequested());
-  EXPECT_FALSE(sink->asyncGetNextBlock(net::use_future).get().has_value());
+  EXPECT_FALSE(
+      materialize(sink->asyncGetNextBlock(net::use_future).get()).has_value());
   pool.join();
 }
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

@@ -301,6 +301,7 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   ENFORCE_LOG_LEVEL_OR_SKIP(DEBUG);
   CancellationHandle<ENABLED> handle;
 

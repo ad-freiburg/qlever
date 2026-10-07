@@ -10,16 +10,19 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <future>
 #include <thread>
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "global/Constants.h"
 #include "index/CompressedRelationHelpersImpl.h"
+#include "index/CompressedRelationPermutationWriterImpl.h"
 #include "index/CompressedRelationReader.h"
 #include "index/CompressedRelationWriter.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
+#include "util/GlobalExecutor.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/RuntimeParametersTestHelpers.h"
@@ -1997,13 +2000,6 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
   }
 }
 
-namespace ad_utility {
-std::pair<size_t, size_t> getThreadCountAndTaskSize(
-    const TaskQueue<false>& taskQueue) {
-  return {taskQueue.threads_.size(), taskQueue.queuedTasks_.maxSize()};
-}
-}  // namespace ad_utility
-
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, blockMustHaveRoomForAtLeastOneRow) {
   std::string filename = gtestCurrentTestName();
@@ -2014,32 +2010,35 @@ TEST(CompressedRelationWriter, blockMustHaveRoomForAtLeastOneRow) {
 }
 
 // _____________________________________________________________________________
-TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
-  auto threads = std::thread::hardware_concurrency();
+TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfTasksInFlight) {
+  auto threads = ad_utility::globalExecutorNumThreads();
   if (threads == 1) {
-    GTEST_SKIP_("This test assumes that there are at least 2 threads.");
+    GTEST_SKIP_(
+        "This test assumes that the global thread pool has at least 2 "
+        "threads.");
   }
+  // The blocks are compressed and written on the global thread pool, so the
+  // only thing that the writer controls is the number of blocks that it keeps
+  // in flight, which is twice the number of blocks that are compressed and
+  // written concurrently, see `CompressedRelationWriter::makeBlockWriteQueue`.
+  auto maxNumTasksInFlight = [](const CompressedRelationWriter& writer) {
+    return writer.blockWriteQueue_.maxNumTasksInFlight();
+  };
   {
-    // Check if it is limited to actual threads.
+    // Check if it is limited to the threads of the global thread pool.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(1337);
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
-              threads);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
-              threads * 2);
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
-    // Check if it is expanded to actual threads.
+    // Check if it is expanded to the threads of the global thread pool.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(0);
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
-              threads);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
-              threads * 2);
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
     // Check if minimum of 4 tasks is honored.
@@ -2047,8 +2046,15 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
         &RuntimeParameters::permutationWriterNumThreads_>(1);
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
+    EXPECT_EQ(maxNumTasksInFlight(writer), 4);
+  }
+  if (threads >= 3) {
+    // A value between the minimum and the cap is used as is.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(3);
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
+    EXPECT_EQ(maxNumTasksInFlight(writer), 6);
   }
   {
     // An explicit override (used by the runtime index rebuild via
@@ -2058,19 +2064,45 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
         &RuntimeParameters::permutationWriterNumThreads_>(0);
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2, 1};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
+    EXPECT_EQ(maxNumTasksInFlight(writer), 4);
   }
   {
-    // An override is capped at the number of hardware threads, just like the
-    // runtime parameter.
+    // An override of 0 means "as many as the global thread pool has threads".
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1);
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2, 0};
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
+  }
+  {
+    // An override is capped at the number of threads of the global thread
+    // pool, just like the runtime parameter.
     auto [filename, cleanup] = testFilenameWithCleanup();
     CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2,
                                     1337};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
-              threads);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
-              threads * 2);
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
+  }
+}
+
+// Test that the queue for the blocks of large relations of a
+// `PermutationWriter` is bounded like the block write queue of its writer, in
+// particular when the writer is throttled to a single concurrent block (as the
+// runtime index rebuild does via `rebuild-permutation-writer-num-threads`).
+TEST(CompressedRelationWriter, largeRelationBlockQueueFollowsTheWriter) {
+  auto threads = ad_utility::globalExecutorNumThreads();
+  for (size_t numWriterThreads : {size_t{1}, size_t{0}}) {
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter::WriterAndCallback writerAndCallback{
+        std::make_unique<CompressedRelationWriter>(
+            4, ad_utility::File{filename, "w+"}, 2, numWriterThreads),
+        [](ql::span<const CompressedRelationMetadata>) {}};
+    size_t expected =
+        writerAndCallback.writer_->blockWriteQueue_.maxNumTasksInFlight();
+    EXPECT_EQ(expected, numWriterThreads == 1 ? 4 : threads * 2);
+    CompressedRelationWriter::PermutationWriter<false> permutationWriter{
+        std::move(writerAndCallback), qlever::KeyOrder{0, 1, 2, 3}, {}, false};
+    EXPECT_EQ(permutationWriter.largeRelationBlockQueue_.maxNumTasksInFlight(),
+              expected);
   }
 }
 
@@ -2612,4 +2644,59 @@ TEST(DistinctIdCounter, blocksAndReset) {
   counter.reset();
   addBlock({V(6)});
   EXPECT_EQ(counter.getAndReset(), 1);
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, destructorWaitsForAllPendingTwinRelationPushes) {
+  std::string basename = gtestCurrentTestName();
+  std::string filename1 = basename + ".permutation1";
+  std::string filename2 = basename + ".permutation2";
+  absl::Cleanup cleanup{[&filename1, &filename2]() {
+    ad_utility::deleteFile(filename1);
+    ad_utility::deleteFile(filename2);
+  }};
+  auto makeWriter = [](const std::string& filename) {
+    return CompressedRelationWriter::WriterAndCallback{
+        std::make_unique<CompressedRelationWriter>(
+            4, ad_utility::File{filename, "w"}, 100),
+        []([[maybe_unused]] ql::span<const CompressedRelationMetadata>
+               metadata) {}};
+  };
+
+  // The pending pushes are simulated by deferred futures, which run their
+  // function when (and only when) their `get()` is called. That way we can
+  // check that the destructor waits for each of them.
+  bool failingPushWasAwaited = false;
+  bool succeedingPushWasAwaited = false;
+  {
+    CompressedRelationWriter::PermutationWriter<true> writer{
+        basename,
+        makeWriter(filename1),
+        makeWriter(filename2),
+        qlever::KeyOrder{0, 1, 2, 3},
+        {}};
+    auto& pushes = writer.twinRelationPushes_;
+    // A push whose exception has already been rethrown by its `get()` (as it
+    // happens in `waitForBlocksOfLargeRelation`), so that it is no longer
+    // `valid()`.
+    pushes.push_back(std::async(std::launch::deferred, []() {
+      throw std::runtime_error{"push failed"};
+    }));
+    EXPECT_THROW(pushes.back().get(), std::runtime_error);
+    EXPECT_FALSE(pushes.back().valid());
+    // A failing push that is only awaited by the destructor. Its exception is
+    // ignored, and the destructor still waits for the following push.
+    pushes.push_back(
+        std::async(std::launch::deferred, [&failingPushWasAwaited]() {
+          failingPushWasAwaited = true;
+          throw std::runtime_error{"push failed"};
+        }));
+    pushes.push_back(std::async(
+        std::launch::deferred,
+        [&succeedingPushWasAwaited]() { succeedingPushWasAwaited = true; }));
+    EXPECT_FALSE(failingPushWasAwaited);
+    EXPECT_FALSE(succeedingPushWasAwaited);
+  }
+  EXPECT_TRUE(failingPushWasAwaited);
+  EXPECT_TRUE(succeedingPushWasAwaited);
 }
