@@ -83,11 +83,10 @@ TEST(EngineTest, multiColumnJoinTest) {
   ASSERT_EQ(wantedRes[3], vres[3]);
 }
 
-// _____________________________________________________________________________
-// An UNDEF value in a join column matches every value. Such inputs make the
-// join take the generic path, because the cheap path (see `isCheap` in
-// `computeMultiColumnJoin`) requires that no join column contains UNDEF. The
-// join value of a result row is the one of the side that is not UNDEF.
+// Test the join with UNDEF values in the join columns. An UNDEF value matches
+// every value, and the join value of a result row is the one of the side that
+// is not UNDEF. Such inputs take the generic path of `computeMultiColumnJoin`
+// (see `isCheap` there), which requires that no join column contains UNDEF.
 TEST(MultiColumnJoin, undefInJoinColumns) {
   constexpr auto U = Id::makeUndefined();
   auto* qec = ad_utility::testing::getQec();

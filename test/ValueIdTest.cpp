@@ -628,60 +628,42 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   // of `intId` and `dateId` above.
 }
 
-// _____________________________________________________________________________
-TEST(IdTest, getBitsL_matchesTheMethod) {
+// Test that the forwarding lambdas `Id::isUndefinedL`, `Id::isDefinedL`,
+// `Id::getBitsL` and `Id::getDatatypeL` behave like the member functions they
+// forward to, both for an `Id` and for a proxy type that is not an `Id` but
+// provides the same member functions.
+TEST(ValueId, forwardingLambdas) {
+  // A proxy type with the member functions, like the elements of a column view
+  // that does not store `Id`s.
+  struct Proxy {
+    Id id_;
+    bool isUndefined() const { return id_.isUndefined(); }
+    uint64_t getBits() const { return id_.getBits(); }
+    Datatype getDatatype() const { return id_.getDatatype(); }
+  };
+
+  // Each lambda returns what the corresponding member function returns.
   for (Id id : {Id::makeUndefined(), Id::makeFromInt(42), Id::makeFromInt(-42),
                 Id::makeFromDouble(13.37), Id::makeFromBool(true)}) {
-    EXPECT_EQ(Id::getBitsL(id), id.getBits());
-  }
-}
-
-// _____________________________________________________________________________
-TEST(IdTest, isUndefinedL_matchesTheMethod) {
-  EXPECT_TRUE(Id::isUndefinedL(Id::makeUndefined()));
-  EXPECT_EQ(Id::isUndefinedL(Id::makeUndefined()),
-            Id::makeUndefined().isUndefined());
-
-  for (Id id : {Id::makeFromInt(0), Id::makeFromInt(-42),
-                Id::makeFromDouble(1.5), Id::makeFromBool(true)}) {
-    EXPECT_FALSE(Id::isUndefinedL(id));
     EXPECT_EQ(Id::isUndefinedL(id), id.isUndefined());
-  }
-}
-
-// _____________________________________________________________________________
-TEST(IdTest, isDefinedL_isTheExactOppositeOfIsUndefinedId) {
-  for (Id id : {Id::makeUndefined(), Id::makeFromInt(0), Id::makeFromInt(7),
-                Id::makeFromDouble(-3.14)}) {
     EXPECT_EQ(Id::isDefinedL(id), !id.isUndefined());
-    EXPECT_EQ(Id::isDefinedL(id), !Id::isUndefinedL(id));
+    EXPECT_EQ(Id::getBitsL(id), id.getBits());
+    EXPECT_EQ(Id::getDatatypeL(id), id.getDatatype());
+    EXPECT_EQ(Id::isUndefinedL(Proxy{id}), id.isUndefined());
+    EXPECT_EQ(Id::isDefinedL(Proxy{id}), !id.isUndefined());
+    EXPECT_EQ(Id::getBitsL(Proxy{id}), id.getBits());
+    EXPECT_EQ(Id::getDatatypeL(Proxy{id}), id.getDatatype());
   }
-}
 
-// _____________________________________________________________________________
-TEST(IdTest, isUndefinedL_worksAsAGenericAlgorithmPredicateLikeTheLambdaDid) {
-  // The whole point of `isUndefinedId` replacing the local
-  // `[](const Id& id) { return id.isUndefined(); }` lambdas at their call
-  // sites: passed to a generic algorithm (here `ql::ranges::any_of`), a
-  // reference to the global function must behave exactly like the inline
-  // lambda it replaced.
-  std::vector withoutUndefined{Id::makeFromInt(1), Id::makeFromInt(2),
-                               Id::makeFromDouble(3.5)};
-  std::vector withUndefined{Id::makeFromInt(1), Id::makeUndefined(),
-                            Id::makeFromDouble(3.5)};
-
-  auto isUndefinedLambda = [](const Id& id) { return id.isUndefined(); };
-
-  // 1. The lambda directly
-  EXPECT_FALSE(ql::ranges::any_of(withoutUndefined, isUndefinedLambda));
-  EXPECT_TRUE(ql::ranges::any_of(withUndefined, isUndefinedLambda));
-
-  // 2. Id::isUndefinedL, the replacement
-  EXPECT_FALSE(ql::ranges::any_of(withoutUndefined, Id::isUndefinedL));
-  EXPECT_TRUE(ql::ranges::any_of(withUndefined, Id::isUndefinedL));
-
-  for (const auto& ids : {withoutUndefined, withUndefined}) {
-    EXPECT_EQ(ql::ranges::any_of(ids, isUndefinedLambda),
-              ql::ranges::any_of(ids, Id::isUndefinedL));
-  }
+  // The lambdas work as predicates and projections of generic algorithms, also
+  // over a range of proxies.
+  std::vector ids{Id::makeFromInt(1), Id::makeUndefined(),
+                  Id::makeFromDouble(3.5)};
+  std::vector<Proxy> proxies{{ids[0]}, {ids[1]}, {ids[2]}};
+  EXPECT_TRUE(ql::ranges::any_of(ids, Id::isUndefinedL));
+  EXPECT_TRUE(ql::ranges::any_of(proxies, Id::isUndefinedL));
+  EXPECT_EQ(ql::ranges::find(ids, Datatype::Double, Id::getDatatypeL),
+            ids.begin() + 2);
+  EXPECT_EQ(ql::ranges::find(proxies, Datatype::Double, Id::getDatatypeL),
+            proxies.begin() + 2);
 }
