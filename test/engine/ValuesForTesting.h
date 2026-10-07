@@ -10,6 +10,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
 #include "util/Algorithm.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Random.h"
 
 // An operation that yields a given `IdTable` as its result. It is used for
@@ -204,8 +205,12 @@ class ValuesForTesting : public Operation {
     return static_cast<float>(col + 1) * 42.0f;
   }
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
+  }
 
+ public:
   bool knownEmptyResult() override {
     return ql::ranges::all_of(
         tables(), [](const IdTable& table) { return table.empty(); });
@@ -267,6 +272,22 @@ class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
   using ValuesForTesting::ValuesForTesting;
   bool knownEmptyResult() override { return false; }
   uint64_t getSizeEstimateBeforeLimit() override { return 1; }
+};
+
+// Similar to `ValuesForTesting` above, but counts the calls to
+// `isDeterministicImpl()`. This can be used to test how often an operation is
+// visited by `Operation::isDeterministic()`.
+class ValuesForTestingCountingDeterminismChecks : public ValuesForTesting {
+  mutable size_t numDeterminismChecks_ = 0;
+
+ public:
+  using ValuesForTesting::ValuesForTesting;
+  size_t numDeterminismChecks() const { return numDeterminismChecks_; }
+
+  bool isDeterministicImpl() const override {
+    ++numDeterminismChecks_;
+    return true;
+  }
 };
 
 #endif  // QLEVER_TEST_ENGINE_VALUESFORTESTING_H

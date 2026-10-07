@@ -49,8 +49,8 @@ const auto equalityCheckPrefilterVectors =
                               const PrefilterExprVariablePair& expPair) {
     if (*resPair.first != *expPair.first || resPair.second != expPair.second) {
       std::stringstream stream;
-      stream << "The following value pairs don't match:" << "\nRESULT: "
-             << *resPair.first << "EXPECTED: " << *expPair.first
+      stream << "The following value pairs don't match:"
+             << "\nRESULT: " << *resPair.first << "EXPECTED: " << *expPair.first
              << "RESULT: VARIABLE" << resPair.second.name()
              << "\nEXPECTED: VARIABLE" << expPair.second.name() << std::endl;
       ADD_FAILURE() << stream.str();
@@ -170,6 +170,45 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   // expected: <(> DoubleId(10.2)), ?x>
   evalAndEqualityCheck(gtSprql(var, DoubleId(10.2)),
                        pr(gt(DoubleId(10.2)), var));
+}
+
+//______________________________________________________________________________
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3255 and for
+// the `FILTER(?unit = wd:Q11570)` part of
+// https://github.com/ad-freiburg/qlever/issues/3359: An encodable IRI yields a
+// reference value of datatype `EncodedVal`. This is required for
+// `FILTER(?x = <encodedIri>)` to keep the blocks of an index scan sorted by
+// `?x` that contain encoded IRIs.
+TEST(GetPrefilterExpressionFromSparqlExpression,
+     getPrefilterExpressionForEncodedIri) {
+  ad_utility::testing::TestIndexConfig config;
+  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  const auto& context = qec->getLocalVocabContext();
+  auto evalAndEqualityCheck = makeEvalAndEqualityCheck(context);
+  const Variable var = Variable{"?x"};
+
+  // Matches an encoded prefix and is followed only by digits, hence encodable.
+  const Iri encodedIri = I("<http://example.org/42>");
+  const auto encodedId =
+      context.encodeAsId(encodedIri.toStringRepresentation());
+  ASSERT_TRUE(encodedId.has_value());
+  ASSERT_EQ(encodedId.value().getDatatype(), Datatype::EncodedVal);
+  // ?x == <http://example.org/42>
+  // expected: <(== EncodedVal(42)), ?x>
+  evalAndEqualityCheck(eqSprql(var, encodedIri),
+                       pr(eq(encodedId.value()), var));
+  // Same expected value for <http://example.org/42> == ?x.
+  evalAndEqualityCheck(eqSprql(encodedIri, var),
+                       pr(eq(encodedId.value()), var));
+
+  // A non-encodable IRI still yields a `LocalVocabEntry`.
+  const std::string nonEncodedIriStr = "<http://example.org/noDigits>";
+  const Iri nonEncodedIri = I(nonEncodedIriStr);
+  ASSERT_FALSE(
+      context.encodeAsId(nonEncodedIri.toStringRepresentation()).has_value());
+  evalAndEqualityCheck(eqSprql(var, nonEncodedIri),
+                       pr(eq(LVE(nonEncodedIriStr, context)), var));
 }
 
 //______________________________________________________________________________
@@ -527,7 +566,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 }
 
 // Test PrefilterExpression creation for SparqlExpression isDatatype, where
-// Datatype is Literal, Iri, Numeric or Blank.
+// Datatype is Literal, Iri, Numeric, Blank or GeoPoint.
 //______________________________________________________________________________
 TEST(GetPrefilterExpressionFromSparqlExpression,
      getPrefilterExprForIsDatatypeExpr) {
@@ -540,6 +579,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(isLiteralSprql(varX), pr(isLit(), varX));
   evalAndEqualityCheck(isNumericSprql(varX), pr(isNum(), varX));
   evalAndEqualityCheck(isBlankSprql(varX), pr(isBlank(), varX));
+  evalAndEqualityCheck(isGeoPointSprql(varX), pr(isGeoPoint(), varX));
 
   // For the cases below, no prefilter procedure should be available given that
   // the filter reference isn't a Variable.
@@ -547,6 +587,7 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(isIriSprql(BlankNodeId(10)));
   evalAndEqualityCheck(isBlankSprql(DoubleId(33.1)));
   evalAndEqualityCheck(isNumericSprql((IntId(-0.01))));
+  evalAndEqualityCheck(isGeoPointSprql(VocabId(5)));
 }
 
 // Test PrefilterExpression creation for SparqlExpression InExpression

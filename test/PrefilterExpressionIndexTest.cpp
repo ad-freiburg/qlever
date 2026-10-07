@@ -17,12 +17,18 @@
 // The prefiltering takes the `IndexImpl` itself (it needs the vocabulary), and
 // converting it to a `LocalVocabContext` for `LVE` below requires the complete
 // type.
+#include "engine/ExportQueryExecutionTrees.h"
+#include "engine/QueryPlanner.h"
 #include "index/IndexImpl.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/GTestHelpers.h"
+#include "util/IndexTestHelpers.h"
+#include "util/ParsedQueryTestHelpers.h"
 
 using ad_utility::testing::BlankNodeId;
 using ad_utility::testing::BoolId;
 using ad_utility::testing::DoubleId;
+using ad_utility::testing::GeoPointId;
 using ad_utility::testing::IntId;
 using ad_utility::testing::UndefId;
 using ad_utility::testing::VocabId;
@@ -239,6 +245,44 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
       DateId(DateParser, "2024-10-08"), DateId(DateParser, "2025-10-08"),
       VocabId(0), VocabId(0), VocabId(1), VocabId(0));
 
+  // Geo point related blocks. The `Id`s of datatype `GeoPoint` sort between
+  // the dates and the blank nodes (see `Datatype`). The order of the `Id`s of
+  // the four points depends on the encoding, so they are sorted here.
+  static std::array<Id, 4> sortedGeoPointIds() {
+    std::array ids{
+        GeoPointId(GeoPoint{-33.5, 151.2}), GeoPointId(GeoPoint{48.0, 7.8}),
+        GeoPointId(GeoPoint{52.5, 13.4}), GeoPointId(GeoPoint{40.7, -74.0})};
+    ql::ranges::sort(ids);
+    return ids;
+  }
+  const std::array<Id, 4> geoPointIds = sortedGeoPointIds();
+  // Mixed block: dates and geo points.
+  const CompressedBlockMetadata bDateGeoPointGap =
+      makeBlock(DateId(DateParser, "2024-10-08"), geoPointIds[0]);
+  // Blocks with geo points only.
+  const CompressedBlockMetadata bGeoPoint1 =
+      makeBlock(geoPointIds[0], geoPointIds[1]);
+  const CompressedBlockMetadata bGeoPoint2 =
+      makeBlock(geoPointIds[1], geoPointIds[2]);
+  // Third block of points, for an input of point blocks only (fewer than three
+  // blocks are never prefiltered, see `PrefilterExpression::evaluate`).
+  const CompressedBlockMetadata bGeoPoint3 =
+      makeBlock(geoPointIds[2], geoPointIds[3]);
+  // Mixed block: geo points and blank nodes.
+  const CompressedBlockMetadata bGeoPointBlankGap =
+      makeBlock(geoPointIds[3], BlankNodeId(10));
+  // Block with blank nodes only.
+  const CompressedBlockMetadata bBlank =
+      makeBlock(BlankNodeId(11), BlankNodeId(12));
+  // The mixed input of the geo point tests (points among dates and blank
+  // nodes), in sorted order. The third point-only block `bGeoPoint3` is not
+  // part of it, it is only used for the input of point blocks only.
+  const std::vector<CompressedBlockMetadata> allTestBlocksIsGeoPoint = {
+      b1,         b2,         b6,
+      b19,        b27,        bDateGeoPointGap,
+      bGeoPoint1, bGeoPoint2, bGeoPointBlankGap,
+      bBlank};
+
   // Date related blocks.
   const CompressedBlockMetadata b1Date =
       makeBlock(makeIdForLYearDate(-17546), makeIdForLYearDate(-17545));
@@ -337,6 +381,31 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const std::vector<CompressedBlockMetadata> dateBlocks = {
       b1Date, b2Date, b3Date, b4Date,  b5Date,  b6Date,
       b7Date, b8Date, b9Date, b10Date, b11Date, b12Date};
+
+  // Blocks over numeric values where a single block spans the boundary
+  // between non-negative and negative values. Negative `Int`s are sorted
+  // after all non-negative `Int`s (2s-complement bit order, so ascending from
+  // the most negative value to -1), negative `Double`s after all non-negative
+  // `Double`s (and NaN), in the order of their bits, i.e. from -0.0 down to
+  // the most negative value. Thus `bNegInt3` contains all `Int`s > 62950 and
+  // all `Int`s <= -10, and `bNegDouble3` all `Double`s > 61.0 and all
+  // negative `Double`s >= -1.0.
+  const CompressedBlockMetadata bNegInt1 = makeBlock(IntId(0), IntId(50));
+  const CompressedBlockMetadata bNegInt2 = makeBlock(IntId(51), IntId(62900));
+  const CompressedBlockMetadata bNegInt3 = makeBlock(IntId(62950), IntId(-10));
+  const CompressedBlockMetadata bNegInt4 = makeBlock(IntId(-10), IntId(-1));
+  const std::vector<CompressedBlockMetadata> negIntBlocks = {
+      bNegInt1, bNegInt2, bNegInt3, bNegInt4};
+  const CompressedBlockMetadata bNegDouble1 =
+      makeBlock(DoubleId(0.5), DoubleId(2.5));
+  const CompressedBlockMetadata bNegDouble2 =
+      makeBlock(DoubleId(2.5), DoubleId(60.0));
+  const CompressedBlockMetadata bNegDouble3 =
+      makeBlock(DoubleId(61.0), DoubleId(-1.0));
+  const CompressedBlockMetadata bNegDouble4 =
+      makeBlock(DoubleId(-1.0), DoubleId(-3.0));
+  const std::vector<CompressedBlockMetadata> negDoubleBlocks = {
+      bNegDouble1, bNegDouble2, bNegDouble3, bNegDouble4};
 
   const std::vector<CompressedBlockMetadata> blocksIncomplete = {
       bFirstIncomplete,
@@ -518,6 +587,14 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     ASSERT_EQ(toVec(expr->evaluate(indexImpl, dateBlocks, 2)), expected);
   }
 
+  // Simple `ASSERT_EQ` on `negIntBlocks` / `negDoubleBlocks`.
+  auto makeTestNegativeBoundary(
+      std::unique_ptr<PrefilterExpression> expr,
+      const std::vector<CompressedBlockMetadata>& testBlocks,
+      std::vector<CompressedBlockMetadata>&& expected) {
+    ASSERT_EQ(toVec(expr->evaluate(indexImpl, testBlocks, 2)), expected);
+  }
+
   // Simple `ASSERT_EQ` VocabIdBlocks
   auto makeTestPrefixRegex(std::unique_ptr<PrefilterExpression> expr,
                            std::vector<CompressedBlockMetadata>&& expected) {
@@ -595,8 +672,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testValueIdItToBlockItRangeMapping) {
   makeTestDetailIndexMapping(CompOp::LE, IntId(5), {{2, 5}, {6, 15}}, false);
   makeTestDetailIndexMapping(CompOp::LE, IntId(5),
                              {{0, 3}, {4, 6}, {10, 11}, {14, 23}}, true);
-  // This will yield an empty range. However, in the actual evaluation those
-  // empty ranges will be removed by valueIdComparators::detail::simplifyRanges
+  // This will yield an empty range (which is kept in the actual evaluation,
+  // see `RelationalExpression::evaluateImpl`).
   makeTestDetailIndexMapping(CompOp::GT, DoubleId(10.00), {}, false);
   makeTestDetailIndexMapping(CompOp::GT, DoubleId(10.00), {{0, 23}}, true);
   // b11 is also relevant. But given that this block contains mixed
@@ -714,6 +791,50 @@ TEST_F(PrefilterExpressionOnMetadataTest, testGreaterThanExpression) {
   makeTest(gt(referenceDateEqual), {b28});
   makeTest(gt(referenceDate1), {b26, b27, bLastIncomplete}, true);
   makeTest(gt(referenceDate2), {bLastIncomplete}, true);
+}
+
+// Test the relational expressions on blocks that span the boundary between
+// non-negative and negative numbers (`negIntBlocks` and `negDoubleBlocks`).
+TEST_F(PrefilterExpressionOnMetadataTest, testNegativeNumberBoundaryBlocks) {
+  // Bounds above the largest value of `bNegInt2`. The relevant `ValueId`
+  // range is empty (it starts and ends at the last ID of `bNegInt3`), but
+  // `bNegInt3` may contain matching values and has to be returned.
+  makeTestNegativeBoundary(gt(IntId(63000)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(ge(IntId(63000)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(gt(DoubleId(63000.5)), negIntBlocks, {bNegInt3});
+
+  // Bounds inside `bNegInt2` select that block as well.
+  makeTestNegativeBoundary(gt(IntId(62800)), negIntBlocks,
+                           {bNegInt2, bNegInt3});
+  makeTestNegativeBoundary(gt(IntId(50)), negIntBlocks, {bNegInt2, bNegInt3});
+
+  // Negative bounds: `bNegInt3` holds the `Int`s <= -10, `bNegInt4` the
+  // `Int`s from -10 to -1.
+  makeTestNegativeBoundary(lt(IntId(-20)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(le(IntId(-20)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(lt(IntId(-10)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(lt(IntId(0)), negIntBlocks, {bNegInt3, bNegInt4});
+  makeTestNegativeBoundary(lt(IntId(-5)), negIntBlocks, {bNegInt3, bNegInt4});
+
+  // Equality and inequality on the boundary block.
+  makeTestNegativeBoundary(eq(IntId(70000)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(eq(IntId(-20)), negIntBlocks, {bNegInt3});
+  makeTestNegativeBoundary(neq(IntId(70000)), negIntBlocks,
+                           {bNegInt1, bNegInt2, bNegInt3, bNegInt4});
+
+  // The same for `Double`s, where the negative values are ordered from -0.0
+  // downwards: `bNegDouble3` holds the `Double`s > 61.0 and those in
+  // [-1.0, -0.0], `bNegDouble4` those from -1.0 down to -3.0.
+  makeTestNegativeBoundary(gt(DoubleId(70.0)), negDoubleBlocks, {bNegDouble3});
+  makeTestNegativeBoundary(ge(IntId(70)), negDoubleBlocks, {bNegDouble3});
+  makeTestNegativeBoundary(gt(DoubleId(60.5)), negDoubleBlocks, {bNegDouble3});
+  makeTestNegativeBoundary(gt(DoubleId(59.0)), negDoubleBlocks,
+                           {bNegDouble2, bNegDouble3});
+  makeTestNegativeBoundary(lt(DoubleId(-0.5)), negDoubleBlocks,
+                           {bNegDouble3, bNegDouble4});
+  makeTestNegativeBoundary(lt(DoubleId(-2.0)), negDoubleBlocks, {bNegDouble4});
+  makeTestNegativeBoundary(lt(DoubleId(-4.0)), negDoubleBlocks, {});
+  makeTestNegativeBoundary(eq(DoubleId(70.0)), negDoubleBlocks, {bNegDouble3});
 }
 
 //______________________________________________________________________________
@@ -1276,8 +1397,12 @@ TEST_F(PrefilterExpressionOnMetadataTest, testRelationalPrefilteringDates) {
 }
 
 //______________________________________________________________________________
-// Test that correct errors are thrown for invalid input (condition)
+// Test that correct errors are thrown for invalid input (condition). The check
+// is only run when the expensive checks are enabled.
 TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP() << "The input condition check is an expensive check";
+  }
   makeTestErrorCheck(le(IntId(5)), blocksWithDuplicate1,
                      "Found block metadata duplicates");
   makeTestErrorCheck(andExpr(gt(VocabId(10)), le(VocabId(20))),
@@ -1334,8 +1459,38 @@ TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
 }
 
 //______________________________________________________________________________
+// Test the prefilter for `ql:isGeoPoint` and `!ql:isGeoPoint`. The geo points
+// that are encoded in the `Id` sort in one contiguous range between the dates
+// and the blank nodes.
+TEST_F(PrefilterExpressionOnMetadataTest, testIsGeoPointPrefilter) {
+  // Keep the blocks of points and the mixed blocks at both ends of their range
+  // (`b2` has mixed datatypes too, which `evaluate` always keeps).
+  makeTestIsDatatype(
+      isGeoPoint(),
+      {b2, bDateGeoPointGap, bGeoPoint1, bGeoPoint2, bGeoPointBlankGap}, false,
+      std::vector<CompressedBlockMetadata>(allTestBlocksIsGeoPoint));
+  // The negation keeps everything but the blocks of points only.
+  makeTestIsDatatype(
+      notExpr(isGeoPoint()),
+      {b1, b2, b6, b19, b27, bDateGeoPointGap, bGeoPointBlankGap, bBlank},
+      false, std::vector<CompressedBlockMetadata>(allTestBlocksIsGeoPoint));
+
+  // For blocks of points only, keep all of them, and none for the negation.
+  makeTestIsDatatype(isGeoPoint(), {bGeoPoint1, bGeoPoint2, bGeoPoint3}, false,
+                     {bGeoPoint1, bGeoPoint2, bGeoPoint3});
+  makeTestIsDatatype(notExpr(isGeoPoint()), {}, false,
+                     {bGeoPoint1, bGeoPoint2, bGeoPoint3});
+
+  // A block that spans the whole range of the points (from the dates to the
+  // blank nodes) is kept in both cases.
+  makeTestIsDatatype(isGeoPoint(), {b28}, false, {b19, b27, b28});
+  makeTestIsDatatype(notExpr(isGeoPoint()), {b19, b27, b28}, false,
+                     {b19, b27, b28});
+}
+
 // Test method clone. clone() creates a copy of the complete PrefilterExpression
 // tree.
+//______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
   makeTestClone(lt(VocabId(10)));
   makeTestClone(gt(referenceDate2));
@@ -1344,6 +1499,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
   makeTestClone(isIri(false));
   makeTestClone(isNum(false));
   makeTestClone(isBlank(true));
+  makeTestClone(isGeoPoint(true));
   makeTestClone(andExpr(lt(VocabId(20)), gt(VocabId(10))));
   makeTestClone(neq(IntId(10)));
   makeTestClone(le(LVE("\"Hello World\"", lvc)));
@@ -1382,6 +1538,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   ASSERT_FALSE(*isLit() == *isNum());
   ASSERT_TRUE(*isIri(true) == *isIri(true));
   ASSERT_FALSE(*isNum(true) == *isNum(false));
+  ASSERT_TRUE(*isGeoPoint() == *isGeoPoint());
+  ASSERT_FALSE(*isGeoPoint() == *isBlank());
+  ASSERT_FALSE(*isGeoPoint(true) == *isGeoPoint(false));
   // NotExpression
   ASSERT_TRUE(*notExpr(eq(IntId(0))) == *notExpr(eq(IntId(0))));
   ASSERT_TRUE(*notExpr(notExpr(ge(VocabId(0)))) ==
@@ -1539,6 +1698,9 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   EXPECT_THAT(*isBlank(true),
               matcher("Prefilter IsDatatypeExpression:\nPrefilter "
                       "for datatype: Blank\nis negated: true.\n.\n"));
+  EXPECT_THAT(*isGeoPoint(),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: GeoPoint\nis negated: false.\n.\n"));
   EXPECT_THAT(*notExpr(isNum()),
               matcher("Prefilter NotExpression:\nchild {Prefilter "
                       "IsDatatypeExpression:\nPrefilter for datatype: "
@@ -1571,4 +1733,52 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
       ::testing::HasSubstr(
           "Set unknown (relational) comparison operator for the creation of "
           "PrefilterExpression on date-values: Undefined CompOp value: 10."));
+}
+
+// Test numeric `FILTER`s on an index. With three rows per block, the values
+// of `<p>` form the blocks [1, 2, 3], [4, 5, 6], [7, 8, -5], [-4, -3, -2]; the
+// third block spans the boundary between non-negative and negative numbers and
+// is neither the first nor the last block of the relation, so that only the
+// prefilter decides whether it is read (the same for `<q>` with `Double`s).
+TEST(PrefilterExpressionIndex, negativeNumberBoundaryEndToEnd) {
+  std::string turtle;
+  for (int i : {1, 2, 3, 4, 5, 6, 7, 8, -5, -4, -3, -2}) {
+    absl::StrAppend(&turtle, "<s", i, "> <p> ", i, " . <t", i, "> <q> ", i,
+                    ".5 . ");
+  }
+  ad_utility::testing::TestIndexConfig config{turtle};
+  config.rowsPerBlock = 3;
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  // The `ORDER BY ?x` makes the planner choose the scan that is sorted by
+  // `?x`, which is the one the prefilter applies to.
+  auto query = [qec](std::string_view predicate, std::string_view filter) {
+    auto cancellationHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
+    QueryPlanner planner{qec, cancellationHandle};
+    auto parsedQuery = ad_utility::testing::parseQuery(
+        absl::StrCat("SELECT ?s WHERE { ?s <", predicate, "> ?x . FILTER(?x ",
+                     filter, ") } ORDER BY ?x"));
+    auto tree = planner.createExecutionTree(parsedQuery);
+    ad_utility::Timer timer{ad_utility::Timer::Started};
+    std::string result;
+    for (const auto& block : ExportQueryExecutionTrees::computeResult(
+             parsedQuery, *tree, ad_utility::MediaType::tsv, timer,
+             std::move(cancellationHandle))) {
+      result += block;
+    }
+    return result;
+  };
+
+  // Bounds between the two non-negative values of the boundary block: the
+  // relevant ID range is empty, but the block has to be read.
+  EXPECT_EQ(query("p", "> 7"), "?s\n<s8>\n");
+  EXPECT_EQ(query("p", ">= 8"), "?s\n<s8>\n");
+  EXPECT_EQ(query("q", "> 7.5"), "?s\n<t8>\n");
+  EXPECT_EQ(query("q", ">= 8.5"), "?s\n<t8>\n");
+
+  // Bounds inside an earlier block, and negative bounds.
+  EXPECT_EQ(query("p", "> 5"), "?s\n<s6>\n<s7>\n<s8>\n");
+  EXPECT_EQ(query("p", "<= -4"), "?s\n<s-5>\n<s-4>\n");
+  EXPECT_EQ(query("p", "< -4"), "?s\n<s-5>\n");
+  EXPECT_EQ(query("q", "<= -4.5"), "?s\n<t-5>\n<t-4>\n");
 }

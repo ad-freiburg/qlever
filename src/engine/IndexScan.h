@@ -8,7 +8,9 @@
 #include <string>
 
 #include "engine/Operation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/DeltaTriples.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashMap.h"
 
 class SparqlTriple;
@@ -123,7 +125,7 @@ class IndexScan final : public Operation {
   // join between the first column of the result with the `joinColumn`.
   // Requires that the `joinColumn` is sorted, else the behavior is undefined.
   CompressedRelationReader::IdTableGeneratorInputRange
-  lazyScanForJoinOfColumnWithScan(ql::span<const Id> joinColumn) const;
+  lazyScanForJoinOfColumnWithScan(ConstIdColumnRef joinColumn) const;
 
   // Return two generators, the first of which yields exactly the elements of
   // `input` and the second of which yields the matching blocks, skipping the
@@ -235,7 +237,9 @@ class IndexScan final : public Operation {
 
   Result computeResult(bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
+  }
 
   // Compute the size estimate of the index scan, taking delta triples (from
   // the `queryExecutionContext_`) into account. The `bool` is true iff the
@@ -300,6 +304,13 @@ class IndexScan final : public Operation {
   // has to be applied to the "full" result (without any columns stripped) to
   // get the final result. Throws if `varsToKee_` is `nullopt`.
   std::vector<ColumnIndex> getSubsetForStrippedColumns() const;
+
+  // Helpers for `determineMultiplicities`: Return the multiplicities of the
+  // full result (without any columns stripped) for a scan of a regular index
+  // permutation or of a materialized view, respectively.
+  std::vector<float> computeMultiplicitiesForIndex() const;
+  std::vector<float> computeMultiplicitiesForView(
+      const MaterializedView& view) const;
 
   // Return a lambda that takes an `idTable` that has the result without any
   // columns stripped, and applies the column subset that leads to the correct

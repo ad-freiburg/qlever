@@ -1,16 +1,28 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 The QLever Authors, in particular:
+//
+// 2023 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <future>
 #include <thread>
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
-#include "index/CompressedRelation.h"
+#include "global/Constants.h"
+#include "index/CompressedRelationHelpersImpl.h"
+#include "index/CompressedRelationPermutationWriterImpl.h"
+#include "index/CompressedRelationReader.h"
+#include "index/CompressedRelationWriter.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
+#include "util/GlobalExecutor.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/RuntimeParametersTestHelpers.h"
@@ -31,6 +43,27 @@ Id V(int64_t index) {
 }
 
 auto I = &Id::makeFromInt;
+
+// Compute the distinct graph IDs contained in the SPO permutation of `index`,
+// mirroring the access pattern used by `DistinctGraphs::computeResult()`
+// (`src/engine/DistinctGraphs.cpp`), but starting from a plain `Index` instead
+// of an `Operation`.
+ad_utility::HashSetWithMemoryLimit<Id::T> computeUniqueGraphIdsForIndex(
+    const Index& index,
+    ad_utility::SharedCancellationHandle cancellationHandle =
+        std::make_shared<ad_utility::SharedCancellationHandle::element_type>(),
+    const CompressedRelationReader::Allocator& allocator =
+        ad_utility::makeUnlimitedAllocator<Id>()) {
+  const auto& permutation =
+      index.getImpl().getPermutation(Permutation::Enum::SPO);
+  auto snapshot =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  auto scanSpecAndBlocks = permutation.getScanSpecAndBlocks(
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt}, *snapshot);
+  const auto& ltpb = permutation.getLocatedTriplesForPermutation(*snapshot);
+  return permutation.reader().computeUniqueGraphIds(
+      scanSpecAndBlocks, ltpb, cancellationHandle, allocator);
+}
 
 // Retrieve the corresponding `BlockMetadataRanges` value for the
 // given`CompressedBlockMetadata` vector
@@ -114,7 +147,7 @@ void checkThatTablesAreEqual(const Expected& expected, const IdTable& actual,
 
 // If the `inputs` have no graph column (because the corresponding tests don't
 // care about named graphs), add a constant dummy graph column, such that the
-// assertions inside `CompressedRelation.cpp` (which always expect a graph
+// assertions inside `CompressedRelationWriter.cpp` (which always expect a graph
 // column) work.
 auto addGraphColumnIfNecessary(std::vector<RelationInput>& inputs) {
   size_t numColumns = getNumColumns(inputs) + 1;
@@ -127,19 +160,58 @@ auto addGraphColumnIfNecessary(std::vector<RelationInput>& inputs) {
     }
   }
 }
+
+// Yield the `inputs` as blocks of an `IdTableStatic<0>` with `numColumns`
+// columns. This simulates the input that the permutation writer receives from
+// an external sorter. A block is yielded as soon as it holds more than
+// `inputBlockSize` rows, so the blocks (except for the last one) contain
+// exactly `inputBlockSize + 1` rows. Note that the way in which the input is
+// chopped into blocks must not have any influence on the resulting
+// permutation, which is exactly what the tests below check.
+cppcoro::generator<IdTableStatic<0>> makeInputBlocks(
+    std::vector<RelationInput> inputs, size_t numColumns,
+    size_t inputBlockSize) {
+  // A fixed-size buffer for a single row, which avoids one allocation per row.
+  // Only the first `numColumns` entries are ever used.
+  static constexpr size_t maxNumColumns = 8;
+  AD_CORRECTNESS_CHECK(numColumns <= maxNumColumns);
+  std::array<Id, maxNumColumns> rowBuffer{};
+  IdTableStatic<0> buffer{numColumns, ad_utility::testing::makeAllocator()};
+  for (const auto& input : inputs) {
+    for (const auto& arr : input.col1And2_) {
+      AD_CORRECTNESS_CHECK(arr.size() + 1 == numColumns);
+      rowBuffer[0] = V(input.col0_);
+      ql::ranges::transform(arr, rowBuffer.begin() + 1, V);
+      buffer.push_back(ql::span<const Id>{rowBuffer}.subspan(0, numColumns));
+      if (buffer.numRows() > inputBlockSize) {
+        co_yield buffer;
+        buffer.clear();
+      }
+    }
+  }
+  if (!buffer.empty()) {
+    co_yield buffer;
+  }
+}
 }  // namespace
 
 // Write the given `inputs` (of type `RelationInput`) to a compressed
 // permutation that is stored at the given `filename`.  Return the created
-// metadata for the blocks and large relations.
+// metadata for the blocks and large relations. The `inputBlockSize` controls
+// how the input is chopped into blocks, see `makeInputBlocks` above.
+// Note: This function must not declare a default argument for the
+// `inputBlockSize`, because it is already declared as a `friend` of
+// `CompressedRelationWriter` (see below), and default arguments cannot be
+// added to an already declared function template.
 // Note: This function can't be declared in the anonymous namespace, because it
 // has to be a `friend` of the `CompressedRelationWriter` class. We therefore
 // give it a rather long name.
 template <typename T>
 std::pair<std::vector<CompressedBlockMetadata>,
           std::vector<CompressedRelationMetadata>>
-compressedRelationTestWriteCompressedRelations(
-    T inputs, std::string filename, ad_utility::MemorySize blocksize) {
+compressedRelationTestWriteCompressedRelations(T inputs, std::string filename,
+                                               size_t rowsPerBlock,
+                                               size_t inputBlockSize) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
   AD_CONTRACT_CHECK(ql::ranges::is_sorted(
@@ -153,28 +225,10 @@ compressedRelationTestWriteCompressedRelations(
   addGraphColumnIfNecessary(inputs);
   size_t numColumns = getNumColumns(inputs) + 1;
   AD_CORRECTNESS_CHECK(numColumns >= 4);
-  auto generator =
-      [&](size_t sorterBlockSize) -> cppcoro::generator<IdTableStatic<0>> {
-    IdTableStatic<0> buffer{numColumns, ad_utility::testing::makeAllocator()};
-    for (const auto& input : inputs) {
-      for (const auto& arr : input.col1And2_) {
-        std::vector row{V(input.col0_)};
-        ql::ranges::transform(arr, std::back_inserter(row), V);
-        buffer.push_back(row);
-        if (buffer.numRows() > sorterBlockSize) {
-          co_yield buffer;
-          buffer.clear();
-        }
-      }
-    }
-    if (!buffer.empty()) {
-      co_yield buffer;
-    }
-  };
 
   // First create the on-disk permutation.
   auto writer = std::make_unique<CompressedRelationWriter>(
-      numColumns, ad_utility::File{filename, "w"}, blocksize);
+      numColumns, ad_utility::File{filename, "w"}, rowsPerBlock);
   std::vector<CompressedRelationMetadata> metaData;
   CompressedRelationWriter::WriterAndCallback wc1{
       std::move(writer),
@@ -183,7 +237,9 @@ compressedRelationTestWriteCompressedRelations(
       }};
 
   auto res = CompressedRelationWriter::createPermutation(
-      std::move(wc1), ad_utility::InputRangeTypeErased{generator(5)},
+      std::move(wc1),
+      ad_utility::InputRangeTypeErased{
+          makeInputBlocks(inputs, numColumns, inputBlockSize)},
       qlever::KeyOrder{0, 1, 2, 3}, {});
   auto& blocks = res.blockMetadata_;
   // Test the serialization of the blocks and the metaData.
@@ -255,12 +311,14 @@ makeLocatedTriplesFromPartOfInput(float locatedProbab,
 // Write the relations specified by the `inputs` to a compressed permutation at
 // `filename`. Return the created metadata for blocks and large relations, as
 // well as a `CompressedRelationReader`. These are exactly the datastructures
-// that are required to test the `CompressedRelationReader` class.
+// that are required to test the `CompressedRelationReader` class. The
+// `inputBlockSize` controls how the input is chopped into blocks, see
+// `makeInputBlocks` above.
 auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
-                           std::string filename,
-                           ad_utility::MemorySize blocksize) {
+                           std::string filename, size_t rowsPerBlock,
+                           size_t inputBlockSize = 5) {
   auto [blocks, metaData] = compressedRelationTestWriteCompressedRelations(
-      inputs, filename, blocksize);
+      inputs, filename, rowsPerBlock, inputBlockSize);
   auto reader = [&]() {
     return std::make_unique<CompressedRelationReader>(
         ad_utility::makeUnlimitedAllocator<Id>(),
@@ -270,11 +328,11 @@ auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
 }
 
 // Run a set of tests on a permutation that is defined by the `inputs`. The
-// `inputs` must be ordered wrt the `col0_`.  `blocksize` is the size of the
+// `inputs` must be ordered wrt the `col0_`.  `rowsPerBlock` is the size of the
 // blocks in which the permutation will be compressed and stored on disk.
 template <typename Inputs>
 void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
-                             ad_utility::MemorySize blocksize,
+                             size_t rowsPerBlock,
                              float locatedTriplesProbability = 0.5) {
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
   auto inputs = inputsOriginalBeforeCopy;
@@ -284,7 +342,7 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
   DeltaTriples deltaTriples{ad_utility::testing::getQec()->getIndex()};
   auto [filename, cleanup] = testFilenameWithCleanup();
   auto [blocksOriginal, metaData, readerPtr] =
-      writeAndOpenRelations(inputsWithoutLocated, filename, blocksize);
+      writeAndOpenRelations(inputsWithoutLocated, filename, rowsPerBlock);
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   // deltaTriples.insertTriples(handle, std::move(locatedTriplesInput));
   // auto locatedTriples =
@@ -423,13 +481,13 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
 }
 
 // Run `testCompressedRelations` (see above) for the given `inputs`, but with a
-// set of different `blocksizes` (small and medium size, powers of two and odd),
-// to find subtle rounding bugs when creating the blocks.
+// set of different numbers of rows per block (small and medium, powers of two
+// and odd), to find subtle off-by-one bugs when creating the blocks.
 void testWithDifferentBlockSizes(const std::vector<RelationInput>& inputs,
                                  float locatedTriplesProbability = 0.5) {
-  testCompressedRelations(inputs, 19_B, locatedTriplesProbability);
-  testCompressedRelations(inputs, 237_B, locatedTriplesProbability);
-  testCompressedRelations(inputs, 4096_B, locatedTriplesProbability);
+  testCompressedRelations(inputs, 2, locatedTriplesProbability);
+  testCompressedRelations(inputs, 29, locatedTriplesProbability);
+  testCompressedRelations(inputs, 512, locatedTriplesProbability);
 }
 }  // namespace
 
@@ -476,7 +534,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
 
   auto filename = "getFirstAndLastTriple.dat";
   auto [blocks, metaData, readerPtr] =
-      writeAndOpenRelations(inputs, filename, 40_B);
+      writeAndOpenRelations(inputs, filename, 5);
   auto blockMetadata = getBlockMetadataRangesfromVec(blocks);
 
   // Test that the result of calling `getFirstAndLastTriple` for the index from
@@ -523,7 +581,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
 
   auto filename = "getFirstAndLastTriple2.dat";
   auto [blocks, metaData, readerPtr] =
-      writeAndOpenRelations(inputs, filename, 0_B);
+      writeAndOpenRelations(inputs, filename, 1);
 
   // Set up located triples that delete the first triple. This has the
   // consequence that the first triple of the relation `1` actually lies in the
@@ -1055,8 +1113,7 @@ TEST(CompressedRelationReader, getDistinctCol0Ids) {
   }
   addGraphColumnIfNecessary(inputs);
   auto [filename, cleanup] = testFilenameWithCleanup();
-  auto [blocks, metaData, reader] =
-      writeAndOpenRelations(inputs, filename, 64_B);
+  auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 8);
   LocatedTriplesPerBlock locatedTriples{};
   locatedTriples.setOriginalMetadata(blocks);
   locatedTriples.updateAugmentedMetadata();
@@ -1125,8 +1182,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithGraphFilter) {
   std::vector<RelationInput> inputs{
       {1, {{0, 0, 10}}}, {2, {{0, 0, 11}}}, {3, {{0, 0, 12}}}};
   auto [filename, cleanup] = testFilenameWithCleanup();
-  auto [blocks, metaData, reader] =
-      writeAndOpenRelations(inputs, filename, 8_B);
+  auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 1);
   LocatedTriplesPerBlock locatedTriples{};
   locatedTriples.setOriginalMetadata(blocks);
   locatedTriples.updateAugmentedMetadata();
@@ -1192,7 +1248,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithUnknownGraphsInBlock) {
   auto [filename, cleanup] = testFilenameWithCleanup();
   // All the triples fit into a single block.
   auto [blocks, metaData, reader] =
-      writeAndOpenRelations(inputs, filename, 1_kB);
+      writeAndOpenRelations(inputs, filename, 125);
   ASSERT_EQ(blocks.size(), 1);
   ASSERT_FALSE(blocks.at(0).graphInfo_.has_value());
   LocatedTriplesPerBlock locatedTriples{};
@@ -1252,7 +1308,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithSeveralGraphsInBlock) {
   auto [filename, cleanup] = testFilenameWithCleanup();
   // All the triples fit into a single block.
   auto [blocks, metaData, reader] =
-      writeAndOpenRelations(inputs, filename, 1_kB);
+      writeAndOpenRelations(inputs, filename, 125);
   ASSERT_EQ(blocks.size(), 1);
   ASSERT_TRUE(blocks.at(0).graphInfo_.has_value());
   LocatedTriplesPerBlock locatedTriples{};
@@ -1295,7 +1351,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithExhaustedIdFilter) {
   addGraphColumnIfNecessary(inputs);
   auto [filename, cleanup] = testFilenameWithCleanup();
   auto [blocks, metaData, reader] =
-      writeAndOpenRelations(inputs, filename, 1_kB);
+      writeAndOpenRelations(inputs, filename, 125);
   ASSERT_EQ(blocks.size(), 1);
   LocatedTriplesPerBlock locatedTriples{};
   locatedTriples.setOriginalMetadata(blocks);
@@ -1325,8 +1381,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithDeltaTriples) {
   }
   addGraphColumnIfNecessary(inputs);
   auto [filename, cleanup] = testFilenameWithCleanup();
-  auto [blocks, metaData, reader] =
-      writeAndOpenRelations(inputs, filename, 64_B);
+  auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 8);
   ASSERT_GT(blocks.size(), 2);
   auto tripleOfRelation1 = [](int col2) {
     return IdTriple<>{{V(1), V(0), V(col2), V(graph)}};
@@ -1436,7 +1491,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsYieldsSeveralChunks) {
   addGraphColumnIfNecessary(inputs);
   auto [filename, cleanup] = testFilenameWithCleanup();
   auto [blocks, metaData, reader] =
-      writeAndOpenRelations(inputs, filename, 1_MB);
+      writeAndOpenRelations(inputs, filename, 125'000);
   LocatedTriplesPerBlock locatedTriples{};
   locatedTriples.setOriginalMetadata(blocks);
   locatedTriples.updateAugmentedMetadata();
@@ -1462,8 +1517,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsOnlySupportsFullScans) {
   std::vector<RelationInput> inputs{{1, {{0, 0}}}};
   addGraphColumnIfNecessary(inputs);
   auto [filename, cleanup] = testFilenameWithCleanup();
-  auto [blocks, metaData, reader] =
-      writeAndOpenRelations(inputs, filename, 64_B);
+  auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 8);
   CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{V(1), std::nullopt, std::nullopt},
       getBlockMetadataRangesfromVec(blocks)};
@@ -1478,8 +1532,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsChecksItsPreconditions) {
   std::vector<RelationInput> inputs{{1, {{0, 0}}}, {2, {{0, 0}}}};
   addGraphColumnIfNecessary(inputs);
   auto [filename, cleanup] = testFilenameWithCleanup();
-  auto [blocks, metaData, reader] =
-      writeAndOpenRelations(inputs, filename, 64_B);
+  auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 8);
   CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       getBlockMetadataRangesfromVec(blocks)};
@@ -1746,7 +1799,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   using namespace ::testing;
   {
     auto [blocks, metadata, reader] =
-        writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
+        writeAndOpenRelations(inputs, "graphInfo1", 12'500'000);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
     EXPECT_THAT(blocks.at(0).graphInfo_,
@@ -1760,7 +1813,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   }
   {
     auto [blocks, metadata, reader] =
-        writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
+        writeAndOpenRelations(inputs, "graphInfo1", 12'500'000);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
     AD_EXPECT_NULLOPT(blocks.at(0).graphInfo_);
@@ -1772,12 +1825,84 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
 
   {
     auto [blocks, metadata, reader] =
-        writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
+        writeAndOpenRelations(inputs, "graphInfo1", 12'500'000);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_TRUE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
     EXPECT_THAT(blocks.at(0).graphInfo_,
                 Optional(UnorderedElementsAre(V(0), V(1))));
   }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, computeUniqueGraphIdsAcrossMultipleBlocks) {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <p> <b> <g1> . <c> <p> <d> <g2> . <e> <p> <f> <g1> . <g> <p> <h> "
+      "<g2> ."};
+  config.indexType = qlever::Filetype::NQuad;
+  auto index = ad_utility::testing::makeTestIndex(config);
+  auto getId = ad_utility::testing::makeGetId(index);
+
+  auto graphIds = computeUniqueGraphIdsForIndex(index);
+  EXPECT_THAT(graphIds, ::testing::UnorderedElementsAre(
+                            getId("<g1>").getBits(), getId("<g2>").getBits()));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, computeUniqueGraphIdsIncludesDefaultGraph) {
+  auto index =
+      ad_utility::testing::makeTestIndex("<x> <p> <y> . <x> <p2> <z> .");
+  auto defaultGraphId = toValueId(
+      TripleComponent{
+          ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI)},
+      index.getImpl());
+  ASSERT_TRUE(defaultGraphId.has_value());
+
+  auto graphIds = computeUniqueGraphIdsForIndex(index);
+  EXPECT_THAT(graphIds,
+              ::testing::UnorderedElementsAre(defaultGraphId->getBits()));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, computeUniqueGraphIdsHandlesGraphInfoOverflow) {
+  std::string nquads;
+  std::vector<std::string> expectedGraphs;
+  for (size_t i = 0; i < 2 * MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA; ++i) {
+    std::string graph = absl::StrCat("<g", i, ">");
+    absl::StrAppend(&nquads, "<a> <p> <o", i, "> ", graph, " .\n");
+    expectedGraphs.push_back(graph);
+  }
+  ad_utility::testing::TestIndexConfig config{nquads};
+  config.indexType = qlever::Filetype::NQuad;
+  config.rowsPerBlock = 125'000;
+  auto index = ad_utility::testing::makeTestIndex(config);
+  auto getId = ad_utility::testing::makeGetId(index);
+
+  std::vector<Id::T> expectedIds;
+  for (const auto& graph : expectedGraphs) {
+    expectedIds.push_back(getId(graph).getBits());
+  }
+
+  auto graphIds = computeUniqueGraphIdsForIndex(index);
+  EXPECT_THAT(graphIds, ::testing::UnorderedElementsAreArray(expectedIds));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, computeUniqueGraphIdsOnEmptyIndex) {
+  auto index = ad_utility::testing::makeTestIndex("");
+
+  auto graphIds = computeUniqueGraphIdsForIndex(index);
+  EXPECT_THAT(graphIds, ::testing::IsEmpty());
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, computeUniqueGraphIdsRespectsCancellation) {
+  auto index = ad_utility::testing::makeTestIndex("<x> <p> <y> .");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
+
+  EXPECT_THROW(computeUniqueGraphIdsForIndex(index, cancellationHandle),
+               ad_utility::CancellationException);
 }
 
 // Test the correct setting of the metadata for the contained graphs.
@@ -1794,10 +1919,10 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
                                   {9, 4, 1},
                                   {9, 5, 1}}});
   using namespace ::testing;
-  for (auto blocksize : std::array{8_B, 16_B, 32_B, 64_B, 128_B}) {
+  for (size_t rowsPerBlock : {1, 2, 4, 8, 16}) {
     using GF = ScanSpecification::GraphFilter;
     auto [blocks, metadata, reader] =
-        writeAndOpenRelations(inputs, "scanWithGraphs", blocksize);
+        writeAndOpenRelations(inputs, "scanWithGraphs", rowsPerBlock);
     ad_utility::HashSet<Id> graphs{V(0)};
     ScanSpecification spec{V(42),
                            std::nullopt,
@@ -1850,7 +1975,7 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
                                                {8, 5, 1},
                                                {9, 4, 1},
                                                {9, 5, 1}}))
-        << "Failed with blocksize " << blocksize.getBytes();
+        << "Failed with rowsPerBlock " << rowsPerBlock;
 
     // std::nullopt matches all graphs, but without `additionalColumns` they
     // should be deduplicated.
@@ -1860,7 +1985,7 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
         handle, emptyLocatedTriples);
     EXPECT_THAT(res, matchesIdTableFromVector(
                          {{3, 4}, {7, 4}, {8, 4}, {8, 5}, {9, 4}, {9, 5}}))
-        << "Failed with blocksize " << blocksize.getBytes();
+        << "Failed with rowsPerBlock " << rowsPerBlock;
 
     // std::nullopt matches all graphs, but the default graph ('0' in this test)
     // should be filtered out.
@@ -1871,53 +1996,80 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
         additionalColumns, handle, emptyLocatedTriples);
     EXPECT_THAT(res, matchesIdTableFromVector(
                          {{3, 4, 1}, {8, 5, 1}, {9, 4, 1}, {9, 5, 1}}))
-        << "Failed with blocksize " << blocksize.getBytes();
+        << "Failed with rowsPerBlock " << rowsPerBlock;
   }
 }
-
-namespace ad_utility {
-std::pair<size_t, size_t> getThreadCountAndTaskSize(
-    const TaskQueue<false>& taskQueue) {
-  return {taskQueue.threads_.size(), taskQueue.queuedTasks_.maxSize()};
-}
-}  // namespace ad_utility
 
 // _____________________________________________________________________________
-TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
-  auto threads = std::thread::hardware_concurrency();
-  if (threads == 1) {
-    GTEST_SKIP_("This test assumes that there are at least 2 threads.");
-  }
+TEST(CompressedRelationWriter, blockMustHaveRoomForAtLeastOneRow) {
+  std::string filename = gtestCurrentTestName();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (CompressedRelationWriter{1, ad_utility::File{filename, "w"}, 0}),
+      ::testing::HasSubstr("at least one row"));
+  ad_utility::deleteFile(filename);
+}
+
+// Test that the writer requires an empty file. The blocks are written at the
+// offsets that an atomic counter hands out, starting at `0`, see
+// `CompressedRelationWriter::compressAndWriteColumn`.
+TEST(CompressedRelationWriter, fileMustBeEmpty) {
+  auto [filename, cleanup] = testFilenameWithCleanup();
   {
-    // Check if it is limited to actual threads.
+    ad_utility::File file{filename, "w"};
+    const std::string content = "someContentThatMustNotBeOverwritten";
+    file.write(content.data(), content.size());
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (CompressedRelationWriter{1, ad_utility::File{filename, "r+"}, 2}),
+      ::testing::HasSubstr("requires a file that is empty"));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfTasksInFlight) {
+  auto threads = ad_utility::globalExecutorNumThreads();
+  if (threads == 1) {
+    GTEST_SKIP_(
+        "This test assumes that the global thread pool has at least 2 "
+        "threads.");
+  }
+  // The blocks are compressed and written on the global thread pool, so the
+  // only thing that the writer controls is the number of blocks that it keeps
+  // in flight, which is twice the number of blocks that are compressed and
+  // written concurrently, see `CompressedRelationWriter::makeBlockWriteQueue`.
+  auto maxNumTasksInFlight = [](const CompressedRelationWriter& writer) {
+    return writer.blockWriteQueue_.maxNumTasksInFlight();
+  };
+  {
+    // Check if it is limited to the threads of the global thread pool.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(1337);
     auto [filename, cleanup] = testFilenameWithCleanup();
-    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
-              threads);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
-              threads * 2);
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
-    // Check if it is expanded to actual threads.
+    // Check if it is expanded to the threads of the global thread pool.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(0);
     auto [filename, cleanup] = testFilenameWithCleanup();
-    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
-              threads);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
-              threads * 2);
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
   }
   {
     // Check if minimum of 4 tasks is honored.
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(1);
     auto [filename, cleanup] = testFilenameWithCleanup();
-    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
+    EXPECT_EQ(maxNumTasksInFlight(writer), 4);
+  }
+  if (threads >= 3) {
+    // A value between the minimum and the cap is used as is.
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(3);
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2};
+    EXPECT_EQ(maxNumTasksInFlight(writer), 6);
   }
   {
     // An explicit override (used by the runtime index rebuild via
@@ -1926,21 +2078,46 @@ TEST(CompressedRelationWriter, isInitializedWithCorrectNumberOfThreads) {
     auto reset = setRuntimeParameterForTest<
         &RuntimeParameters::permutationWriterNumThreads_>(0);
     auto [filename, cleanup] = testFilenameWithCleanup();
-    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
-                                    1};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first, 1);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second, 4);
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2, 1};
+    EXPECT_EQ(maxNumTasksInFlight(writer), 4);
   }
   {
-    // An override is capped at the number of hardware threads, just like the
-    // runtime parameter.
+    // An override of 0 means "as many as the global thread pool has threads".
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::permutationWriterNumThreads_>(1);
     auto [filename, cleanup] = testFilenameWithCleanup();
-    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 16_B,
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2, 0};
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
+  }
+  {
+    // An override is capped at the number of threads of the global thread
+    // pool, just like the runtime parameter.
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter writer{1, ad_utility::File{filename, "w+"}, 2,
                                     1337};
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).first,
-              threads);
-    EXPECT_EQ(getThreadCountAndTaskSize(writer.blockWriteQueue_).second,
-              threads * 2);
+    EXPECT_EQ(maxNumTasksInFlight(writer), threads * 2);
+  }
+}
+
+// Test that the queue for the blocks of large relations of a
+// `PermutationWriter` is bounded like the block write queue of its writer, in
+// particular when the writer is throttled to a single concurrent block (as the
+// runtime index rebuild does via `rebuild-permutation-writer-num-threads`).
+TEST(CompressedRelationWriter, largeRelationBlockQueueFollowsTheWriter) {
+  auto threads = ad_utility::globalExecutorNumThreads();
+  for (size_t numWriterThreads : {size_t{1}, size_t{0}}) {
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    CompressedRelationWriter::WriterAndCallback writerAndCallback{
+        std::make_unique<CompressedRelationWriter>(
+            4, ad_utility::File{filename, "w+"}, 2, numWriterThreads),
+        [](ql::span<const CompressedRelationMetadata>) {}};
+    size_t expected =
+        writerAndCallback.writer_->blockWriteQueue_.maxNumTasksInFlight();
+    EXPECT_EQ(expected, numWriterThreads == 1 ? 4 : threads * 2);
+    CompressedRelationWriter::PermutationWriter<false> permutationWriter{
+        std::move(writerAndCallback), qlever::KeyOrder{0, 1, 2, 3}, {}, false};
+    EXPECT_EQ(permutationWriter.largeRelationBlockQueue_.maxNumTasksInFlight(),
+              expected);
   }
 }
 
@@ -1958,7 +2135,7 @@ TEST(ScanSpecAndBlocks, removePrefix) {
                                   {6, 0, 0},
                                   {7, 0, 0}}});
   auto [blocks, metadata, reader] =
-      writeAndOpenRelations(inputs, "removePrefix", 16_B);
+      writeAndOpenRelations(inputs, "removePrefix", 2);
   ScanSpecification spec{std::nullopt, std::nullopt, std::nullopt};
 
   auto getSize = [](auto range) {
@@ -2033,7 +2210,7 @@ std::string writePermutationAndCaptureLog(const std::string& filename,
   };
   CompressedRelationWriter::WriterAndCallback writerAndCallback{
       std::make_unique<CompressedRelationWriter>(
-          4, ad_utility::File{filename, "w"}, 16_B),
+          4, ad_utility::File{filename, "w"}, 2),
       [](ql::span<const CompressedRelationMetadata>) {}};
   CompressedRelationWriter::createPermutation(
       std::move(writerAndCallback),
@@ -2053,4 +2230,720 @@ TEST(CompressedRelationWriter, showProgressBarCanBeDisabled) {
   // With `showProgressBar` set to `false`, the writer stays silent.
   EXPECT_THAT(writePermutationAndCaptureLog(filename, false),
               ::testing::Not(::testing::HasSubstr("Triples sorted")));
+}
+
+namespace {
+// All the results of building a permutation that must not depend on the way in
+// which the input is chopped into blocks. Note that the offsets of the
+// compressed blocks inside the file are deliberately not part of this struct,
+// because the blocks are compressed and written concurrently, so their order
+// inside the file is not deterministic.
+struct PermutationBuildResult {
+  size_t numDistinctCol0_;
+  std::vector<CompressedBlockMetadata> blocks_;
+  // The metadata that is explicitly stored for the large relations. Small
+  // relations don't appear here, because no metadata is persisted for them.
+  std::vector<CompressedRelationMetadata> largeRelationMetadata_;
+  // For each relation of the input (in the order of the input), the result of
+  // a full scan of that relation.
+  std::vector<IdTable> scanResults_;
+};
+
+// Build the permutation for the given `inputs` at `filename`, using
+// `rowsPerBlock` for the blocks that are written and `inputBlockSize` for the
+// blocks of the input (see `makeInputBlocks` above). Return everything that is
+// needed to compare two such builds, see `PermutationBuildResult` above.
+PermutationBuildResult buildPermutation(std::vector<RelationInput> inputs,
+                                        size_t rowsPerBlock,
+                                        size_t inputBlockSize,
+                                        const std::string& filename) {
+  addGraphColumnIfNecessary(inputs);
+  size_t numColumns = getNumColumns(inputs) + 1;
+  PermutationBuildResult result;
+  CompressedRelationWriter::WriterAndCallback writerAndCallback{
+      std::make_unique<CompressedRelationWriter>(
+          numColumns, ad_utility::File{filename, "w"}, rowsPerBlock),
+      [&result](ql::span<const CompressedRelationMetadata> metadata) {
+        auto& target = result.largeRelationMetadata_;
+        target.insert(target.end(), metadata.begin(), metadata.end());
+      }};
+  auto permutationResult = CompressedRelationWriter::createPermutation(
+      std::move(writerAndCallback),
+      ad_utility::InputRangeTypeErased{
+          makeInputBlocks(inputs, numColumns, inputBlockSize)},
+      qlever::KeyOrder{0, 1, 2, 3}, {}, false);
+  result.numDistinctCol0_ = permutationResult.numDistinctCol0_;
+  result.blocks_ = std::move(permutationResult.blockMetadata_);
+
+  // Scan each of the relations completely.
+  CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
+                                  ad_utility::File{filename, "r"}};
+  BlockMetadataSpan blockSpan{result.blocks_};
+  BlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
+  std::vector<ColumnIndex> additionalColumns;
+  for (size_t i = 3; i < numColumns; ++i) {
+    additionalColumns.push_back(i);
+  }
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  for (const auto& input : inputs) {
+    ScanSpecification scanSpec{V(input.col0_), std::nullopt, std::nullopt};
+    result.scanResults_.push_back(reader.scan(
+        CompressedRelationReader::ScanSpecAndBlocks{scanSpec, blockRanges},
+        additionalColumns, cancellationHandle, emptyLocatedTriples));
+  }
+  return result;
+}
+
+// Return the compressed sizes of the columns of the given block.
+std::vector<size_t> getCompressedSizes(const CompressedBlockMetadata& block) {
+  std::vector<size_t> sizes;
+  AD_CONTRACT_CHECK(block.offsetsAndCompressedSize_.has_value());
+  for (const auto& offsetAndSize : block.offsetsAndCompressedSize_.value()) {
+    sizes.push_back(offsetAndSize.compressedSize_);
+  }
+  return sizes;
+}
+
+// Check that the two given results of building a permutation are equal. Only
+// the offsets of the compressed blocks inside the file are excluded from the
+// comparison (see `PermutationBuildResult` above), everything else, including
+// the compressed sizes of the individual columns, has to match exactly.
+void checkBuildResultsAreEqual(const PermutationBuildResult& expected,
+                               const PermutationBuildResult& actual,
+                               source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  EXPECT_EQ(expected.numDistinctCol0_, actual.numDistinctCol0_);
+  EXPECT_EQ(expected.largeRelationMetadata_, actual.largeRelationMetadata_);
+  ASSERT_EQ(expected.blocks_.size(), actual.blocks_.size());
+  for (size_t i = 0; i < expected.blocks_.size(); ++i) {
+    SCOPED_TRACE(absl::StrCat("block ", i));
+    const auto& exp = expected.blocks_.at(i);
+    const auto& act = actual.blocks_.at(i);
+    EXPECT_EQ(exp.blockIndex_, act.blockIndex_);
+    EXPECT_EQ(exp.numRows_, act.numRows_);
+    EXPECT_EQ(exp.firstTriple_, act.firstTriple_);
+    EXPECT_EQ(exp.lastTriple_, act.lastTriple_);
+    EXPECT_EQ(exp.graphInfo_, act.graphInfo_);
+    EXPECT_EQ(exp.containsDuplicatesWithDifferentGraphs_,
+              act.containsDuplicatesWithDifferentGraphs_);
+    EXPECT_EQ(getCompressedSizes(exp), getCompressedSizes(act));
+  }
+  ASSERT_EQ(expected.scanResults_.size(), actual.scanResults_.size());
+  for (size_t i = 0; i < expected.scanResults_.size(); ++i) {
+    SCOPED_TRACE(absl::StrCat("relation ", i));
+    EXPECT_EQ(expected.scanResults_.at(i), actual.scanResults_.at(i));
+  }
+}
+
+// Build the permutation for the `inputs` with the given `rowsPerBlock` once for
+// each of the `inputBlockSizes`, and check the following: The contents of all
+// the relations and the number of distinct `col0` IDs are exactly as specified
+// by the `inputs`, and all the builds yield exactly the same permutation. The
+// latter is the crucial property, because depending on the `inputBlockSize`,
+// a different subset of the relations is written directly as a complete small
+// relation (see `CompressedRelationWriter::PermutationWriter::
+// isCompleteSmallRelation`), while the remaining ones go through the
+// `relation_` buffer. Both paths have to produce an identical result.
+void checkPermutationIsIndependentOfInputBlockSize(
+    std::vector<RelationInput> inputs, size_t rowsPerBlock,
+    const std::vector<size_t>& inputBlockSizes,
+    source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  AD_CONTRACT_CHECK(!inputBlockSizes.empty());
+  addGraphColumnIfNecessary(inputs);
+  std::optional<PermutationBuildResult> reference;
+  for (size_t inputBlockSize : inputBlockSizes) {
+    SCOPED_TRACE(absl::StrCat("input block size ", inputBlockSize));
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    auto result =
+        buildPermutation(inputs, rowsPerBlock, inputBlockSize, filename);
+    // The `numDistinctCol0_` is incremented in two different places (once for
+    // each of the two paths), so check that it is exact.
+    EXPECT_EQ(result.numDistinctCol0_, inputs.size());
+    ASSERT_EQ(result.scanResults_.size(), inputs.size());
+    for (size_t i = 0; i < inputs.size(); ++i) {
+      SCOPED_TRACE(absl::StrCat("relation ", i));
+      checkThatTablesAreEqual(inputs.at(i).col1And2_,
+                              result.scanResults_.at(i));
+    }
+    if (reference.has_value()) {
+      checkBuildResultsAreEqual(reference.value(), result);
+    } else {
+      reference = std::move(result);
+    }
+  }
+}
+
+// Return a relation with the given `col0` and `numRows` rows. If
+// `duplicateCol1` is true, then all rows have the same value for `col1`, such
+// that a large relation is stored in several blocks even for a single value of
+// `(col0, col1)`. All triples are in the graph `graph`.
+RelationInput makeRelation(int col0, int numRows, bool duplicateCol1,
+                           int graph = 17) {
+  std::vector<RowInput> col1And2;
+  for (int j = 0; j < numRows; ++j) {
+    col1And2.push_back({duplicateCol1 ? 7 : j, j + 3, graph});
+  }
+  return RelationInput{col0, std::move(col1And2)};
+}
+
+// A logical input with relations of many different sizes, in particular sizes
+// around the threshold of `0.8 * rowsPerBlock` at which a relation is no longer
+// treated as small, with and without duplicates in `col1`, plus a relation
+// with duplicate triples in different graphs.
+std::vector<RelationInput> makeInputsWithMixedSizes() {
+  std::vector<RelationInput> inputs;
+  int col0 = 0;
+  for (int numRows : {1, 2, 3, 5, 8, 9, 12, 30, 1, 4, 50, 2}) {
+    inputs.push_back(makeRelation(++col0, numRows, false));
+    inputs.push_back(makeRelation(++col0, numRows, true));
+  }
+  // The triple `(x, 1, 2)` occurs in the graphs `0` and `1`.
+  inputs.push_back(
+      RelationInput{++col0, {{1, 2, 0}, {1, 2, 1}, {1, 3, 0}, {4, 5, 2}}});
+  return inputs;
+}
+
+// The input block sizes that are used for most of the tests below. They are
+// chosen such that the boundaries of the input blocks fall into many different
+// places relative to the relations of the input.
+const std::vector<size_t> inputBlockSizesForPathEquivalence{
+    1, 2, 3, 5, 7, 8, 16, 100, 100'000};
+}  // namespace
+
+// The most important test for the two paths of writing a small relation: For a
+// fixed logical input, the resulting permutation must be exactly the same, no
+// matter how the input is chopped into blocks.
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, pathEquivalenceForDifferentInputBlockSizes) {
+  auto inputs = makeInputsWithMixedSizes();
+  // Use several block sizes for the written blocks (2, 10, and 29 triples per
+  // block), such that the threshold for a small relation
+  // (`0.8 * rowsPerBlock`) lies at very different places.
+  for (size_t rowsPerBlock : {2, 10, 29}) {
+    checkPermutationIsIndependentOfInputBlockSize(
+        inputs, rowsPerBlock, inputBlockSizesForPathEquivalence);
+  }
+}
+
+// A run of rows with equal `col0` that ends exactly at the boundary of an input
+// block never takes the fast path, because at that point it is not yet known
+// whether the relation continues in the next input block. Both cases (the
+// relation does and doesn't continue) have to be handled correctly.
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, runEndingExactlyAtInputBlockBoundary) {
+  // With an input block size of `3` the input blocks hold exactly four rows
+  // each (see `makeInputBlocks`). The relation sizes below are chosen such
+  // that each of the following situations occurs at least once: a relation
+  // ends exactly at a block boundary and doesn't continue (sizes 4 and 2), and
+  // a relation ends at a block boundary and continues in the next block (sizes
+  // 6, 5, and 3). The total number of rows is `25`, so the last input block is
+  // only partially filled.
+  std::vector<RelationInput> inputs;
+  int col0 = 0;
+  for (int numRows : {4, 6, 5, 3, 2, 4, 1}) {
+    inputs.push_back(makeRelation(++col0, numRows, false));
+  }
+  // With a block size of 10 triples all these relations are small, with a
+  // block size of 3 triples the larger ones are not.
+  for (size_t rowsPerBlock : {10, 3}) {
+    checkPermutationIsIndependentOfInputBlockSize(inputs, rowsPerBlock,
+                                                  {3, 1, 2, 4, 5, 1000});
+  }
+}
+
+// A small relation that spans several input blocks has to be assembled in the
+// `relation_` buffer, which is then non-empty when the next input block
+// starts.
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, smallRelationSpanningSeveralInputBlocks) {
+  std::vector<RelationInput> inputs;
+  int col0 = 0;
+  for (int numRows : {5, 7, 1, 6, 8}) {
+    inputs.push_back(makeRelation(++col0, numRows, false));
+  }
+  // The block size of 10 triples means that the threshold for a small relation
+  // is 8 rows, so all the relations above are small, but with the input block
+  // sizes 1 and 2 (that is, input blocks of two and three rows) all of them
+  // except the one with a single row span several input blocks.
+  checkPermutationIsIndependentOfInputBlockSize(inputs, 10, {1, 2, 3, 1000});
+}
+
+// Test the interaction of the two paths with large relations: a small relation
+// that is written directly may be preceded and followed by a large relation,
+// and it may also be the first relation of the input.
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, smallRelationsAdjacentToLargeRelations) {
+  // With a block size of 3 triples, the threshold for a small relation is 2.4,
+  // so the relations with at most two rows are small and the ones with ten
+  // rows are large.
+  std::vector<RelationInput> inputs;
+  int col0 = 0;
+  for (int numRows : {2, 10, 1, 10, 2, 10, 2}) {
+    inputs.push_back(makeRelation(++col0, numRows, numRows > 2));
+  }
+  // With an input block size that exceeds the total number of rows, the first
+  // relation of the input is written directly (its run neither starts in a
+  // previous input block nor may continue in the next one), and so are the
+  // small relations between two large ones. Note that the last relation of the
+  // input can never be written directly, because its run always ends at the
+  // end of the last input block.
+  checkPermutationIsIndependentOfInputBlockSize(inputs, 3,
+                                                {1000, 1, 2, 3, 11, 12, 13});
+}
+
+// The threshold at which a relation is no longer treated as small is
+// `0.8 * rowsPerBlock` (inclusive). The two paths have to use exactly the same
+// threshold, so test sizes just below, exactly at, and just above it.
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, relationSizesAtTheSmallRelationThreshold) {
+  // A block size of 10 triples per block means that the threshold for
+  // a small relation is exactly 8 rows.
+  std::vector<RelationInput> inputs;
+  int col0 = 0;
+  for (int numRows : {7, 8, 9, 8, 7, 9, 1}) {
+    inputs.push_back(makeRelation(++col0, numRows, false));
+  }
+  checkPermutationIsIndependentOfInputBlockSize(
+      inputs, 10, inputBlockSizesForPathEquivalence);
+
+  // Explicitly check that exactly the relations with nine rows are treated as
+  // large, no matter which of the two paths is taken. Metadata is only
+  // persisted for large relations, so the `col0Id`s of the explicitly stored
+  // metadata are exactly the `col0Id`s of the large relations.
+  addGraphColumnIfNecessary(inputs);
+  for (size_t inputBlockSize : {size_t{1}, size_t{1000}}) {
+    SCOPED_TRACE(absl::StrCat("input block size ", inputBlockSize));
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    auto result = buildPermutation(inputs, 10, inputBlockSize, filename);
+    std::vector<Id> largeCol0Ids;
+    ql::ranges::transform(result.largeRelationMetadata_,
+                          std::back_inserter(largeCol0Ids),
+                          &CompressedRelationMetadata::col0Id_);
+    EXPECT_THAT(largeCol0Ids, ::testing::ElementsAre(V(3), V(6)));
+  }
+}
+
+// Even a small relation that is written directly has to be handled correctly
+// with respect to the graph information and the duplicate triples in the
+// metadata of the block it ends up in.
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, directlyWrittenSmallRelationWithGraphs) {
+  using namespace ::testing;
+  std::vector<RelationInput> inputs;
+  // The triple `(1, 1, 2)` occurs in the graphs `0` and `1`, and the triple
+  // `(2, 5, 6)` occurs in the graphs `0`, `3`, and `4`.
+  inputs.push_back(RelationInput{1, {{1, 2, 0}, {1, 2, 1}, {3, 4, 0}}});
+  inputs.push_back(RelationInput{2, {{5, 6, 0}, {5, 6, 3}, {5, 6, 4}}});
+  inputs.push_back(RelationInput{3, {{7, 8, 0}}});
+  // A block size of 100 triples means that all the relations are small and end
+  // up in a single block.
+  checkPermutationIsIndependentOfInputBlockSize(
+      inputs, 100, inputBlockSizesForPathEquivalence);
+
+  // Explicitly check the graph information of that single block. With an input
+  // block size that exceeds the total number of rows, the first two relations
+  // are written directly, so this also covers the fast path.
+  for (size_t inputBlockSize : {size_t{1}, size_t{1000}}) {
+    SCOPED_TRACE(absl::StrCat("input block size ", inputBlockSize));
+    auto [filename, cleanup] = testFilenameWithCleanup();
+    auto result = buildPermutation(inputs, 100, inputBlockSize, filename);
+    ASSERT_EQ(result.blocks_.size(), 1);
+    const auto& block = result.blocks_.at(0);
+    EXPECT_EQ(block.numRows_, 7);
+    EXPECT_TRUE(block.containsDuplicatesWithDifferentGraphs_);
+    EXPECT_THAT(block.graphInfo_,
+                Optional(UnorderedElementsAre(V(0), V(1), V(3), V(4))));
+    EXPECT_EQ(result.numDistinctCol0_, 3);
+    // No metadata is persisted for small relations.
+    EXPECT_THAT(result.largeRelationMetadata_, IsEmpty());
+  }
+}
+
+// The number of distinct `col1` IDs of a large relation is counted per block,
+// so an ID that ends one block and also starts the next block must not be
+// counted twice.
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
+  // Blocks of 10 rows each.
+  std::vector<RelationInput> inputs;
+  // 30 rows with 10 distinct `col1` IDs, each of which occurs three times. The
+  // blocks end after 10, 20, and 30 rows, so the `col1` IDs `3` and `6` each
+  // occur in two consecutive blocks.
+  std::vector<RowInput> rowsOfFirstRelation;
+  for (int j = 0; j < 30; ++j) {
+    rowsOfFirstRelation.push_back({j / 3, j, 17});
+  }
+  inputs.push_back(RelationInput{1, std::move(rowsOfFirstRelation)});
+  // 15 rows with 3 distinct `col1` IDs, none of which spans two blocks.
+  std::vector<RowInput> rowsOfSecondRelation;
+  for (int j = 0; j < 15; ++j) {
+    rowsOfSecondRelation.push_back({j / 5, j, 17});
+  }
+  inputs.push_back(RelationInput{2, std::move(rowsOfSecondRelation)});
+
+  checkPermutationIsIndependentOfInputBlockSize(
+      inputs, 10, inputBlockSizesForPathEquivalence);
+
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto result = buildPermutation(inputs, 10, 1000, filename);
+  ASSERT_EQ(result.largeRelationMetadata_.size(), 2);
+  const auto& metadata1 = result.largeRelationMetadata_.at(0);
+  EXPECT_EQ(metadata1.col0Id_, V(1));
+  EXPECT_EQ(metadata1.numRows_, 30);
+  EXPECT_FLOAT_EQ(metadata1.multiplicityCol1_,
+                  CompressedRelationWriter::computeMultiplicity(30, 10));
+  const auto& metadata2 = result.largeRelationMetadata_.at(1);
+  EXPECT_EQ(metadata2.col0Id_, V(2));
+  EXPECT_EQ(metadata2.numRows_, 15);
+  EXPECT_FLOAT_EQ(metadata2.multiplicityCol1_,
+                  CompressedRelationWriter::computeMultiplicity(15, 3));
+}
+
+// _____________________________________________________________________________
+TEST(CountDistinctIds, countAndBoundaryIds) {
+  using compressedRelationHelpers::countDistinctIds;
+  auto count = [](const std::vector<Id>& ids) {
+    return countDistinctIds(ql::span<const Id>{ids});
+  };
+
+  {
+    auto result = count({V(1)});
+    EXPECT_EQ(result.count_, 1);
+    EXPECT_EQ(result.first_, V(1));
+    EXPECT_EQ(result.last_, V(1));
+  }
+  {
+    auto result = count({V(1), V(1), V(2), V(2), V(2), V(5)});
+    EXPECT_EQ(result.count_, 3);
+    EXPECT_EQ(result.first_, V(1));
+    EXPECT_EQ(result.last_, V(5));
+  }
+  {
+    // All IDs equal.
+    auto result = count({V(3), V(3), V(3)});
+    EXPECT_EQ(result.count_, 1);
+    EXPECT_EQ(result.first_, V(3));
+    EXPECT_EQ(result.last_, V(3));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(DistinctIdCounter, blocksAndReset) {
+  compressedRelationHelpers::DistinctIdCounter counter;
+  auto addBlock = [&counter](const std::vector<Id>& ids) {
+    counter.addBlock(ql::span<const Id>{ids});
+  };
+  // A fresh counter has counted nothing.
+  EXPECT_EQ(counter.getAndReset(), 0);
+
+  // An ID that ends one block and starts the next one is counted only once,
+  // and empty blocks are ignored.
+  addBlock({V(1), V(1), V(2)});
+  addBlock({});
+  addBlock({V(2), V(3)});
+  addBlock({V(4)});
+  EXPECT_EQ(counter.getAndReset(), 4);
+
+  // `getAndReset` also clears the last ID of the previous block, so feeding
+  // `V(4)` again counts it as distinct.
+  addBlock({V(4), V(4)});
+  EXPECT_EQ(counter.getAndReset(), 1);
+
+  // `reset` clears the count and the last ID of the previous block.
+  addBlock({V(5), V(6)});
+  counter.reset();
+  EXPECT_EQ(counter.getAndReset(), 0);
+  addBlock({V(6)});
+  counter.reset();
+  addBlock({V(6)});
+  EXPECT_EQ(counter.getAndReset(), 1);
+}
+
+namespace {
+// Build a block of a large relation with the constant `col0` ID, `numRows`
+// rows, and four columns (`col0`, `col1`, `col2`, and the graph). The rows
+// `[runBegin, runEnd)` are the same triple in different graphs, all the other
+// rows are pairwise distinct triples in the graph `0`. The rows are sorted by
+// (`col1`, `col2`, graph), as the writer requires.
+IdTable makeBlockOfLargeRelation(int col0, size_t numRows, size_t runBegin,
+                                 size_t runEnd) {
+  AD_CONTRACT_CHECK(runBegin <= runEnd && runEnd <= numRows);
+  IdTable block{4, ad_utility::makeUnlimitedAllocator<Id>()};
+  block.resize(numRows);
+  for (size_t i = 0; i < numRows; ++i) {
+    bool insideRun = i >= runBegin && i < runEnd;
+    // Inside the run, `col1` and `col2` stay at the values of its first row,
+    // and only the graph changes.
+    auto col1 = static_cast<int64_t>(insideRun ? runBegin : i);
+    auto graph = static_cast<int64_t>(insideRun ? i - runBegin : 0);
+    block(i, 0) = V(col0);
+    block(i, 1) = V(col1);
+    block(i, 2) = V(2 * col1);
+    block(i, ADDITIONAL_COLUMN_GRAPH_ID) = V(graph);
+  }
+  return block;
+}
+
+// Scan the complete relation with the given `col0Id` from the permutation that
+// consists of the given `blocks` and lives at `filename`. The result has the
+// columns `col1`, `col2`, and the graph.
+IdTable scanLargeRelation(const std::string& filename,
+                          const std::vector<CompressedBlockMetadata>& blocks,
+                          Id col0Id) {
+  CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
+                                  ad_utility::File{filename, "r"}};
+  BlockMetadataSpan blockSpan{blocks};
+  BlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
+  ScanSpecification scanSpec{col0Id, std::nullopt, std::nullopt};
+  std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
+  return reader.scan(
+      CompressedRelationReader::ScanSpecAndBlocks{scanSpec, blockRanges},
+      additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
+      emptyLocatedTriples);
+}
+}  // namespace
+
+// Test that a block of a large relation that is larger than the `blocksize()`
+// is written as several blocks of about that size, and that rows that agree in
+// their first three columns are never split across two of them.
+TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices) {
+  using namespace ::testing;
+  constexpr int col0 = 42;
+  // NOTE: The name and the cleanup are deliberately not bound structurally,
+  // because a structured binding may not be captured by the lambdas below in
+  // C++17.
+  auto filenameAndCleanup = testFilenameWithCleanup();
+  const std::string& filename = filenameAndCleanup.first;
+
+  // Write the `block` as the complete large relation with the `col0` ID above,
+  // using `blocksize` rows per block, and return the metadata of the written
+  // blocks together with the result of a full scan of the relation. The
+  // `filename` is reused, because the writer closes the file before the
+  // reading starts.
+  auto writeAndScan = [&filename](const IdTable& block, size_t blocksize) {
+    std::vector<CompressedBlockMetadata> blocks;
+    {
+      CompressedRelationWriter writer{
+          block.numColumns(), ad_utility::File{filename, "w"}, blocksize};
+      writer.writeLargeRelationBlockInSlices(V(col0), block.clone());
+      // The exact number of distinct `col1` IDs is irrelevant here, it only
+      // goes into the multiplicities of the metadata.
+      writer.finishLargeRelation(block.numRows());
+      blocks = std::move(writer).getFinishedBlocks();
+    }
+    auto scanResult = scanLargeRelation(filename, blocks, V(col0));
+    return std::pair{std::move(blocks), std::move(scanResult)};
+  };
+
+  // Check that the `scanResult` consists of the columns `col1`, `col2`, and
+  // the graph of the `block`.
+  auto checkScanResult = [](const IdTable& block, const IdTable& scanResult) {
+    ASSERT_EQ(scanResult.numRows(), block.numRows());
+    ASSERT_EQ(scanResult.numColumns(), 3);
+    for (size_t i = 0; i < block.numRows(); ++i) {
+      SCOPED_TRACE(absl::StrCat("row ", i));
+      EXPECT_EQ(scanResult(i, 0), block(i, 1));
+      EXPECT_EQ(scanResult(i, 1), block(i, 2));
+      EXPECT_EQ(scanResult(i, 2), block(i, ADDITIONAL_COLUMN_GRAPH_ID));
+    }
+  };
+
+  // Return the number of rows of each of the written `blocks`.
+  auto blockSizes = [](const std::vector<CompressedBlockMetadata>& blocks) {
+    std::vector<size_t> result;
+    for (const auto& block : blocks) {
+      result.push_back(block.numRows_);
+    }
+    return result;
+  };
+
+  {
+    // A block with at most `blocksize()` rows is written as a single block,
+    // also when it consists of a single triple in many graphs.
+    for (size_t numRows : {size_t{1}, size_t{9}, size_t{10}}) {
+      SCOPED_TRACE(absl::StrCat("number of rows ", numRows));
+      auto block = makeBlockOfLargeRelation(col0, numRows, 0, numRows);
+      auto [blocks, scanResult] = writeAndScan(block, 10);
+      EXPECT_THAT(blockSizes(blocks), ElementsAre(numRows));
+      checkScanResult(block, scanResult);
+    }
+  }
+  {
+    // 35 rows with 10 rows per block, where the rows `[8, 13)` are the same
+    // triple in five different graphs. The first block therefore has to be
+    // extended from 10 to 13 rows, and the remaining rows are then split
+    // evenly.
+    auto block = makeBlockOfLargeRelation(col0, 35, 8, 13);
+    auto [blocks, scanResult] = writeAndScan(block, 10);
+    EXPECT_THAT(blockSizes(blocks), ElementsAre(13, 10, 10, 2));
+    ASSERT_EQ(blocks.size(), 4);
+    EXPECT_THAT(blocks.at(0).firstTriple_, matchPermutedTriple(col0, 0, 0));
+    EXPECT_THAT(blocks.at(0).lastTriple_, matchPermutedTriple(col0, 8, 16));
+    EXPECT_THAT(blocks.at(1).firstTriple_, matchPermutedTriple(col0, 13, 26));
+    EXPECT_THAT(blocks.at(1).lastTriple_, matchPermutedTriple(col0, 22, 44));
+    EXPECT_THAT(blocks.at(2).firstTriple_, matchPermutedTriple(col0, 23, 46));
+    EXPECT_THAT(blocks.at(2).lastTriple_, matchPermutedTriple(col0, 32, 64));
+    EXPECT_THAT(blocks.at(3).firstTriple_, matchPermutedTriple(col0, 33, 66));
+    EXPECT_THAT(blocks.at(3).lastTriple_, matchPermutedTriple(col0, 34, 68));
+    checkScanResult(block, scanResult);
+  }
+  {
+    // A run of equal triples that is longer than the `blocksize()` always
+    // stays in a single block, no matter where it starts.
+    auto block = makeBlockOfLargeRelation(col0, 30, 5, 25);
+    auto [blocks, scanResult] = writeAndScan(block, 10);
+    EXPECT_THAT(blockSizes(blocks), ElementsAre(25, 5));
+    checkScanResult(block, scanResult);
+  }
+}
+
+// Test that the ranges of the file that the concurrently written compressed
+// columns reserve (see `CompressedRelationWriter::compressAndWriteColumn`)
+// tile the file exactly, with no gaps and no overlaps.
+TEST(CompressedRelationWriter, writtenColumnsExactlyTileTheFile) {
+  // Compress and write as many blocks concurrently as the global thread pool
+  // allows.
+  auto reset = setRuntimeParameterForTest<
+      &RuntimeParameters::permutationWriterNumThreads_>(0);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  // A block size of three triples, so that the input (which has relations with
+  // up to 50 rows) is written as many small blocks.
+  auto result = buildPermutation(makeInputsWithMixedSizes(), 3, 7, filename);
+
+  // Collect the ranges of the file that the compressed columns occupy.
+  std::vector<std::pair<off_t, size_t>> ranges;
+  for (const auto& block : result.blocks_) {
+    ASSERT_TRUE(block.offsetsAndCompressedSize_.has_value());
+    for (const auto& offsetAndSize : block.offsetsAndCompressedSize_.value()) {
+      ranges.emplace_back(offsetAndSize.offsetInFile_,
+                          offsetAndSize.compressedSize_);
+    }
+  }
+  ASSERT_FALSE(ranges.empty());
+  ql::ranges::sort(ranges);
+
+  off_t expectedOffset = 0;
+  for (const auto& [offset, size] : ranges) {
+    EXPECT_EQ(offset, expectedOffset);
+    EXPECT_GT(size, 0);
+    expectedOffset += static_cast<off_t>(size);
+  }
+  EXPECT_EQ(expectedOffset, ad_utility::File(filename, "r").sizeOfFile());
+}
+
+// Test that a large relation is written to the twin permutation in blocks of
+// about the `blocksize()`, although the twin sorter yields larger blocks (see
+// `twinSorterBlocksizeFactor_` in `CompressedRelationPermutationWriterImpl.h`),
+// and that rows that agree in their first three columns are not split, even
+// across the boundaries of the blocks of the twin sorter.
+TEST(CompressedRelationWriter, largeTwinRelationIsWrittenInSlices) {
+  constexpr int col0 = 42;
+  static constexpr size_t blocksize = 10;
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  std::string twinFilename = filename + ".twin";
+  absl::Cleanup twinCleanup{
+      [&twinFilename] { ad_utility::deleteFile(twinFilename); }};
+
+  // 400 rows, where the rows `[155, 170)` are the same triple in 15 different
+  // graphs. With 10 rows per block, the twin sorter yields blocks of 160 rows,
+  // so this run crosses the boundary between its first two blocks. Note that
+  // `col2 == 2 * col1` for all rows, so the twin permutation has the same
+  // order of rows as the original one.
+  auto block = makeBlockOfLargeRelation(col0, 400, 155, 170);
+  auto noop = [](ql::span<const CompressedRelationMetadata>) {};
+  auto makeWriter = [](const std::string& name) {
+    return std::make_unique<CompressedRelationWriter>(
+        4, ad_utility::File{name, "w"}, blocksize);
+  };
+  std::vector<IdTableStatic<0>> input;
+  input.push_back(block.clone());
+  auto result = CompressedRelationWriter::createPermutationPair(
+      filename, {makeWriter(filename), noop}, {makeWriter(twinFilename), noop},
+      ad_utility::InputRangeTypeErased{std::move(input)},
+      qlever::KeyOrder{0, 1, 2, 3}, {});
+
+  // The first 150 rows, then the 20 rows `[150, 170)` which contain the
+  // complete run, and the remaining 230 rows.
+  std::vector<size_t> expectedBlockSizes(15, blocksize);
+  expectedBlockSizes.push_back(20);
+  expectedBlockSizes.insert(expectedBlockSizes.end(), 23, blocksize);
+  std::vector<size_t> blockSizes;
+  for (const auto& b : result.blockMetadataSwitched_) {
+    blockSizes.push_back(b.numRows_);
+  }
+  EXPECT_EQ(blockSizes, expectedBlockSizes);
+
+  // Both permutations contain all the rows of the `block`, the twin with
+  // `col1` and `col2` swapped.
+  auto scanResult = scanLargeRelation(filename, result.blockMetadata_, V(col0));
+  auto twinScanResult =
+      scanLargeRelation(twinFilename, result.blockMetadataSwitched_, V(col0));
+  ASSERT_EQ(scanResult.numRows(), block.numRows());
+  ASSERT_EQ(twinScanResult.numRows(), block.numRows());
+  for (size_t i = 0; i < block.numRows(); ++i) {
+    SCOPED_TRACE(absl::StrCat("row ", i));
+    EXPECT_EQ(scanResult(i, 0), block(i, 1));
+    EXPECT_EQ(scanResult(i, 1), block(i, 2));
+    EXPECT_EQ(scanResult(i, 2), block(i, ADDITIONAL_COLUMN_GRAPH_ID));
+    EXPECT_EQ(twinScanResult(i, 0), block(i, 2));
+    EXPECT_EQ(twinScanResult(i, 1), block(i, 1));
+    EXPECT_EQ(twinScanResult(i, 2), block(i, ADDITIONAL_COLUMN_GRAPH_ID));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, destructorWaitsForAllPendingTwinRelationPushes) {
+  std::string basename = gtestCurrentTestName();
+  std::string filename1 = basename + ".permutation1";
+  std::string filename2 = basename + ".permutation2";
+  absl::Cleanup cleanup{[&filename1, &filename2]() {
+    ad_utility::deleteFile(filename1);
+    ad_utility::deleteFile(filename2);
+  }};
+  auto makeWriter = [](const std::string& filename) {
+    return CompressedRelationWriter::WriterAndCallback{
+        std::make_unique<CompressedRelationWriter>(
+            4, ad_utility::File{filename, "w"}, 100),
+        []([[maybe_unused]] ql::span<const CompressedRelationMetadata>
+               metadata) {}};
+  };
+
+  // The pending pushes are simulated by deferred futures, which run their
+  // function when (and only when) their `get()` is called. That way we can
+  // check that the destructor waits for each of them.
+  bool failingPushWasAwaited = false;
+  bool succeedingPushWasAwaited = false;
+  {
+    CompressedRelationWriter::PermutationWriter<true> writer{
+        basename,
+        makeWriter(filename1),
+        makeWriter(filename2),
+        qlever::KeyOrder{0, 1, 2, 3},
+        {}};
+    auto& pushes = writer.twinRelationPushes_;
+    // A push whose exception has already been rethrown by its `get()` (as it
+    // happens in `waitForBlocksOfLargeRelation`), so that it is no longer
+    // `valid()`.
+    pushes.push_back(std::async(std::launch::deferred, []() {
+      throw std::runtime_error{"push failed"};
+    }));
+    EXPECT_THROW(pushes.back().get(), std::runtime_error);
+    EXPECT_FALSE(pushes.back().valid());
+    // A failing push that is only awaited by the destructor. Its exception is
+    // ignored, and the destructor still waits for the following push.
+    pushes.push_back(
+        std::async(std::launch::deferred, [&failingPushWasAwaited]() {
+          failingPushWasAwaited = true;
+          throw std::runtime_error{"push failed"};
+        }));
+    pushes.push_back(std::async(
+        std::launch::deferred,
+        [&succeedingPushWasAwaited]() { succeedingPushWasAwaited = true; }));
+    EXPECT_FALSE(failingPushWasAwaited);
+    EXPECT_FALSE(succeedingPushWasAwaited);
+  }
+  EXPECT_TRUE(failingPushWasAwaited);
+  EXPECT_TRUE(succeedingPushWasAwaited);
 }
