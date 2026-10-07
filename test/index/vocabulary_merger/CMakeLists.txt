@@ -8,4 +8,6 @@ addLinkAndDiscoverTest(VocabularyWriterTest index)
 
 addLinkAndDiscoverTest(VocabularyMergePipelineTest index)
 
+addLinkAndDiscoverTest(PartialVocabularyInputTest index)
+
 addLinkAndDiscoverTest(QueueWordBlockCodecTest index)
