@@ -78,6 +78,11 @@ class CompressedRelationWriter {
   Id currentCol0Id_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
+  // The number of blocks that are compressed and written concurrently, see
+  // `getNumConcurrentBlocks`. The `PermutationWriter` configures its queue for
+  // the blocks of large relations (which bypass the `blockWriteQueue_`) with
+  // the same number, see `PermutationWriter::largeRelationBlockQueue_`.
+  size_t numConcurrentBlocks_;
   ad_utility::TaskQueueOnExecutor blockWriteQueue_;
   ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
 
@@ -115,8 +120,8 @@ class CompressedRelationWriter {
       : outfile_{std::move(f)},
         numColumns_{numColumns},
         rowsPerBlock_{rowsPerBlock},
-        blockWriteQueue_{
-            makeBlockWriteQueue(getNumConcurrentBlocks(numWriterThreads))} {
+        numConcurrentBlocks_{getNumConcurrentBlocks(numWriterThreads)},
+        blockWriteQueue_{makeBlockWriteQueue(numConcurrentBlocks_)} {
     AD_CONTRACT_CHECK(rowsPerBlock_ > 0,
                       "A block must have room for at least one row");
     // NOTE: `File::empty` moves the file position, which doesn't matter,
@@ -309,6 +314,19 @@ class CompressedRelationWriter {
                                             BlockToWrite block,
                                             bool invokeCallback);
 
+  // Do the bookkeeping of `addBlockForLargeRelation` (see there for the
+  // preconditions) for a block with `numRows` rows, but don't write the block.
+  // The caller then has to write it via `compressAndWriteBlockInCallingThread`
+  // (with `col0Id` as the first and last `col0` ID, and `invokeCallback` set to
+  // `false`). This allows code that runs on the global executor to write the
+  // blocks of a large relation without going through the (blocking)
+  // `blockWriteQueue_`, see `PermutationWriter::scheduleBlockOfLargeRelation`.
+  //
+  // NOTE: This function itself is not thread-safe and may push to the
+  // `blockWriteQueue_`, so it must be called by the thread that drives this
+  // writer (and not from the global executor).
+  void prepareBlockForLargeRelation(Id col0Id, size_t numRows);
+
   // Return the number of rows that a single block of small relations may hold
   // at most.
   //
@@ -489,6 +507,8 @@ class CompressedRelationWriter {
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfTasksInFlight);
   FRIEND_TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices);
+  FRIEND_TEST(CompressedRelationWriter,
+              largeRelationBlockQueueFollowsTheWriter);
 };
 
 #endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATIONWRITER_H
