@@ -8,6 +8,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "../QueryPlannerTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
@@ -307,6 +308,70 @@ TEST_F(NamedResultCacheSerializerTest, WrongMagicByteOrFormatVersionThrows) {
           readerWithWrongVersion, ad_utility::makeUnlimitedAllocator<Id>(),
           qec_->getLocalVocabContext()),
       ::testing::HasSubstr("format version"));
+}
+
+// _____________________________________________________________________________
+// Test that entries without a geo index can be written in the legacy format
+// version 1 and are read correctly, and that writing a geo index in that
+// format is rejected.
+TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
+  using namespace namedResultCacheSerializer;
+  auto writeLegacy = [](auto& serializer, const std::string&,
+                        const NamedResultCache::Value& v) {
+    writeValue(serializer, v,
+               ExplicitIdTableOperation::viewOf(v.result_).getColumns(),
+               v.resultSortedOn_, /*writeLocalVocabWords=*/true,
+               namedResultCacheSerializer::detail::legacyFormatVersion);
+  };
+  NamedResultCache cache;
+  cache.store("a", makeSimpleValue("key-a"));
+  ByteBufferWriteSerializer writer;
+  writeEntries(writer, cache.getAllEntriesSortedByKey(), writeLegacy,
+               namedResultCacheSerializer::detail::legacyFormatVersion);
+  auto data = std::move(writer).data();
+  EXPECT_EQ(static_cast<uint8_t>(data.at(1)),
+            namedResultCacheSerializer::detail::legacyFormatVersion);
+
+  NamedResultCache cache2;
+  ByteBufferReadSerializer reader{std::move(data)};
+  cache2.readFromSerializer(reader, alloc_, qec_->getLocalVocabContext());
+  ASSERT_EQ(cache2.numEntries(), 1);
+  EXPECT_EQ(cache2.get("a")->cacheKey_, "key-a");
+  EXPECT_FALSE(cache2.get("a")->cachedGeoIndex_.has_value());
+
+  // The default version is the current one.
+  ByteBufferWriteSerializer writer2;
+  cache.writeToSerializer(writer2);
+  EXPECT_EQ(static_cast<uint8_t>(std::move(writer2).data().at(1)),
+            namedResultCacheSerializer::detail::formatVersion);
+
+  // An unknown version is rejected when writing.
+  ByteBufferWriteSerializer writer3;
+  EXPECT_ANY_THROW(
+      writeEntries(writer3, cache.getAllEntriesSortedByKey(), writeLegacy, 7));
+
+  // An entry with a geo index cannot be written in the legacy version, but in
+  // the current one.
+  auto qec = ad_utility::testing::getQec(
+      "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .");
+  qec->pinResultWithName() = {"geo", Variable{"?o"}};
+  auto plan =
+      queryPlannerTestHelpers::parseAndPlan("SELECT * { ?s <p> ?o }", qec);
+  [[maybe_unused]] auto result = plan->getResult();
+  auto entries = qec->namedResultCache().getAllEntriesSortedByKey();
+  ASSERT_EQ(entries.size(), 1);
+  ASSERT_TRUE(entries.at(0).second->cachedGeoIndex_.has_value());
+  ByteBufferWriteSerializer writer4;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeEntries(writer4, entries, writeLegacy,
+                   namedResultCacheSerializer::detail::legacyFormatVersion),
+      ::testing::HasSubstr("geo index"));
+  ByteBufferWriteSerializer writer5;
+  EXPECT_NO_THROW(
+      writeEntries(writer5, entries,
+                   [](auto& s, const std::string&,
+                      const NamedResultCache::Value& v) { s << v; }));
 }
 
 // _____________________________________________________________________________

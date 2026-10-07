@@ -41,6 +41,40 @@ struct BlobSerializationConfig {
   // `placeholderForMissingVocabIndex`. If this is empty, the complete
   // vocabulary is exported in its original format.
   std::vector<std::string> excludedEntryRegexes_;
+
+  // If true, then every entry is written as sorted lexicographically by all
+  // its columns (and its `resultSortedOn_` is changed accordingly, see
+  // `canonicalizeForSerialization`), instead of by the sort order that the
+  // query plan happened to produce. Needed for a small diff between blobs
+  // when the plan may change between two runs.
+  bool sortOnAllColumns_ = false;
+
+  // Settings for writing a blob that is a small modification of a previously
+  // written blob (the "base"), such that the two blobs only differ in the
+  // parts of the content that actually changed (for example to be able to
+  // compute a small diff between them). In such a blob, the words of the
+  // secondary vocabulary of the base keep their `Id`s, and the geo index of an
+  // entry is extended from the geo index of the entry with the same name in the
+  // base (reusing its segments) instead of using the geo index of the entry
+  // itself (see `NamedCachedQueryBlobManager::serialize`).
+  struct IncrementalBase {
+    // A `Qlever` instance into which the previous blob was loaded, for example
+    // via `Qlever{EngineConfig{}, true}` followed by
+    // `deserializeVocabAndNamedCacheFromCompressedBlob`. It has to outlive
+    // the call to `serialize`.
+    const Qlever* base_ = nullptr;
+
+    // The thresholds for the compaction of an extended geo index: if the
+    // extended index has more than `maxGeoSegments_` segments, or if the
+    // fraction of its dead shapes (shapes of deleted rows) is larger than
+    // `maxDeadShapeRatio_`, then the extended index is discarded and the entry
+    // is written with its own geo index, as it was built when the entry was
+    // pinned (it may itself consist of several segments if the live instance
+    // was loaded from a blob).
+    size_t maxGeoSegments_ = 8;
+    double maxDeadShapeRatio_ = 0.3;
+  };
+  std::optional<IncrementalBase> incremental_;
 };
 
 // Serialize and deserialize the vocabulary and the `NamedResultCache` of a
@@ -51,9 +85,13 @@ struct BlobSerializationConfig {
 // friend of `Qlever` so that it can access its internals.
 class NamedCachedQueryBlobManager {
  public:
-  // The versions of the blob format. The two versions differ only in that
-  // blobs of the newer version additionally contain a secondary vocabulary
-  // (see `serialize`), so both of them can be read by `tryToDeserialize`.
+  // The versions of the blob format. The two versions differ in that blobs of
+  // the newer version additionally contain a (possibly empty) secondary
+  // vocabulary and that their named cache entries are written in the newer
+  // entries format (with the segmented geo index, see
+  // `NamedResultCacheSerializer.h`). The older version is only written if the
+  // blob has neither a secondary vocabulary nor an entry with a geo index (see
+  // `serialize`). Both of them can be read by `tryToDeserialize`.
   static constexpr uint16_t formatVersionWithoutSecondaryVocab = 1;
   static constexpr uint16_t formatVersionWithSecondaryVocab = 2;
 
@@ -137,9 +175,24 @@ class NamedCachedQueryBlobManager {
   // index of `qlever` (if any), and the entries are written as rewritten
   // copies that refer to that secondary vocabulary (see
   // `NamedCacheSecondaryVocabRewriter.h`); the entries of `qlever` stay
-  // unchanged. If that secondary vocabulary is empty, then the blob is
-  // written with `formatVersionWithoutSecondaryVocab`, else with
+  // unchanged. EVERY entry is written as a copy whose rows are in canonical
+  // order (see `CanonicalRowOrder.h`), and the words of the local vocab of an
+  // entry are never written (they are not referenced by any `Id` of the copy),
+  // only its blank node blocks. If the secondary vocabulary is empty and no
+  // entry has a geo index, then the blob is written with
+  // `formatVersionWithoutSecondaryVocab`, else with
   // `formatVersionWithSecondaryVocab`.
+  //
+  // If `config.incremental_` is set, then the secondary vocabulary of the blob
+  // starts from a copy of the one of the base (its words keep their `Id`s), and
+  // `qlever` must not have a secondary vocabulary itself (otherwise an
+  // exception is thrown). Moreover, for each entry with a geo index for which
+  // the base has an entry with the same name, a geo index, the same geometry
+  // column, variable-to-column map and sort order, and a table in canonical
+  // order, the geo index of the blob is `SpatialJoinCachedIndex::extend`ed from
+  // the one of the base, unless the compaction thresholds of the
+  // `IncrementalBase` are exceeded. If the content of `qlever` equals the one
+  // of the base, then the written blob equals the one of the base.
   std::vector<char> serialize(const Qlever& qlever,
                               const BlobSerializationConfig& config = {}) const;
 
