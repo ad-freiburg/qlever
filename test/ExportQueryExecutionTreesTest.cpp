@@ -1606,6 +1606,40 @@ TEST(ExportQueryExecutionTrees, TrailingValuesOfSubquery) {
             "?s\t?x\n<a>\t11\n<b>\t11\n");
 }
 
+// `HAVING` and `ORDER BY` expressions with `GROUP BY` are computed by internal
+// aliases, which also work for queries without a `SELECT` clause.
+TEST(ExportQueryExecutionTrees, HavingAndOrderByExpressionsWithoutSelect) {
+  std::string kg = "<a> <p> <c> . <a> <p> <f> . <b> <p> <z> .";
+  auto turtle = [&kg](const std::string& query) {
+    return runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle);
+  };
+  EXPECT_EQ(turtle("CONSTRUCT { ?s <r> ?s } { ?s <p> ?o } GROUP BY ?s "
+                   "HAVING (COUNT(*) > 1)"),
+            "<a> <r> <a> .\n");
+  EXPECT_EQ(turtle("CONSTRUCT { ?s <r> ?s } { ?s <p> ?o } GROUP BY ?s "
+                   "ORDER BY COUNT(*)"),
+            "<b> <r> <b> .\n<a> <r> <a> .\n");
+  EXPECT_EQ(turtle("CONSTRUCT { ?s <r> ?s } { ?s <p> ?o } GROUP BY ?s "
+                   "ORDER BY DESC(STR(?s))"),
+            "<b> <r> <b> .\n<a> <r> <a> .\n");
+  // The `ORDER BY` expression uses a variable of the trailing `VALUES`, so it
+  // is computed after the join.
+  EXPECT_EQ(turtle("CONSTRUCT { ?s <r> ?n } { ?s <p> ?o } GROUP BY ?s "
+                   "ORDER BY LCASE(?n) VALUES (?s ?n) { (<a> \"B\") "
+                   "(<b> \"a\") }"),
+            "<b> <r> \"a\" .\n<a> <r> \"B\" .\n");
+  // The pattern trick also reads the aliases.
+  EXPECT_EQ(turtle("CONSTRUCT { ?p <r> ?p } { ?s ?p ?o } GROUP BY ?p"),
+            "<p> <r> <p> .\n");
+  auto ask = [&kg](const std::string& query) {
+    return nlohmann::json::parse(runQueryStreamableResult(
+        kg, query, ad_utility::MediaType::sparqlJson))["boolean"];
+  };
+  EXPECT_EQ(ask("ASK { ?s <p> ?o } GROUP BY ?s HAVING (COUNT(*) > 1)"), true);
+  EXPECT_EQ(ask("ASK { ?s <p> ?o } GROUP BY ?s HAVING (COUNT(*) > 2)"), false);
+  EXPECT_EQ(ask("ASK { ?s <p> ?o } GROUP BY ?s ORDER BY STR(?s)"), true);
+}
+
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, BinaryExport) {
   std::string kg = "<s> <p> 31 . <s> <o> 42";
