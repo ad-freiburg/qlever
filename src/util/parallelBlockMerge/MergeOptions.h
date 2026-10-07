@@ -153,7 +153,9 @@ struct MergeOptions {
   // The number of output blocks that the consumer side of the merge keeps ready
   // in advance: it reads those blocks in the background (on the very executor
   // that the merge itself runs on) instead of fetching a block only once the
-  // consumer asks for it, see `detail::BlockPrefetcher`. Only
+  // consumer asks for it, see `detail::BlockPrefetcher`. This is also the
+  // number of blocks that are read back from a storage that spills to disk
+  // concurrently, see the CONCURRENT READS note there. Only
   // `parallelBlockMergeToRange` (the blocking consumer) looks at this; the
   // serial merge and a caller that reads the sink itself ignore it.
   //
