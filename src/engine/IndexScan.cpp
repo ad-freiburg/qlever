@@ -898,6 +898,21 @@ Result::LazyResult IndexScan::createPrefilteredJoinSide(
 }
 
 // _____________________________________________________________________________
+Result::LazyResult IndexScan::chunkedIndexScanWithRuntimeInfo(
+    size_t numBlocksAll) {
+  using enum RuntimeInformation::SendPriority;
+  auto scan = makeShared<CompressedRelationReader::IdTableGeneratorInputRange>(
+      getLazyScan());
+  scan->details().numBlocksAll_ = numBlocksAll;
+  updateRuntimeInfoForLazyScan(scan->details(), Always);
+  return Result::LazyResult{ad_utility::CachingTransformInputRange(
+      *scan, [this, scan](auto& table) mutable {
+        updateRuntimeInfoForLazyScan(scan->details(), IfDue);
+        return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+      })};
+}
+
+// _____________________________________________________________________________
 Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
   using LoopControl = ad_utility::LoopControl<Result::IdTableVocabPair>;
@@ -907,24 +922,10 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
   auto range = ad_utility::InputRangeFromLoopControlGet{
       [this, state = std::move(innerState),
        metadata = LazyScanMetadata{}]() mutable {
-        // Handle UNDEF case using LoopControl pattern. A scan with a LIMIT or
-        // OFFSET is handled the same way, because `getLazyScan` ignores the
-        // prefiltered blocks for such a scan and would therefore yield the
-        // complete (limited) scan once per batch of pending blocks.
-        if (!getLimitOffset().isUnconstrained() || state->hasUndef()) {
-          auto scan =
-              makeShared<CompressedRelationReader::IdTableGeneratorInputRange>(
-                  getLazyScan());
-          scan->details().numBlocksAll_ =
-              getMetadataForScan().value().sizeBlockMetadata_;
-          updateRuntimeInfoForLazyScan(scan->details(), Always);
-          return LoopControl::breakWithYieldAll(
-              ad_utility::CachingTransformInputRange(
-                  *scan, [this, scan](auto& table) mutable {
-                    updateRuntimeInfoForLazyScan(scan->details(), IfDue);
-                    return Result::IdTableVocabPair{std::move(table),
-                                                    LocalVocab{}};
-                  }));
+        // Handle UNDEF case using LoopControl pattern
+        if (state->hasUndef()) {
+          return LoopControl::breakWithYieldAll(chunkedIndexScanWithRuntimeInfo(
+              state->metaBlocks_.sizeBlockMetadata_));
         }
 
         auto& pendingBlocks = state->pendingBlocks_;
@@ -975,6 +976,13 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
     // Return empty results
     return {filterJoinSide ? Result::LazyResult{} : std::move(input),
             Result::LazyResult{}};
+  }
+
+  // `getLazyScan` ignores prefiltered blocks for a scan with a LIMIT or OFFSET,
+  // so read such a scan once and pass the input through unfiltered.
+  if (!getLimitOffset().isUnconstrained()) {
+    return {std::move(input), chunkedIndexScanWithRuntimeInfo(
+                                  metaBlocks.value().sizeBlockMetadata_)};
   }
 
   auto state = makeShared<SharedGeneratorState>(

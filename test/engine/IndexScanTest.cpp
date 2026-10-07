@@ -1208,20 +1208,26 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
 // _____________________________________________________________________________
 TEST_P(IndexScanWithLazyJoin, prefilterTablesWithLimitYieldsEachRowOnce) {
   // `getLazyScan` ignores the prefiltered blocks for a scan with a LIMIT or
-  // OFFSET. Previously, the scan side then yielded the complete limited scan
-  // once for each batch of matching blocks (here one for `<a>` and one for
-  // `<c>`, which are in different blocks).
+  // OFFSET, so the scan side must be the complete limited scan, read once
+  // (`<a>` and `<c>` are in different blocks), and the join side must be passed
+  // through unfiltered (`<xb>` matches no block).
   IndexScan scan = makeScan();
   scan.applyLimitOffset(LimitOffsetClause{._limit = 3, ._offset = 2});
 
   auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
     return std::array{P{makeIdTable({iri("<a>")}), LocalVocab{}},
-                      P{makeIdTable({iri("<c>")}), LocalVocab{}}};
+                      P{makeIdTable({iri("<c>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<xb>")}), LocalVocab{}}};
   };
 
   auto [joinSideResults, scanResults] =
       consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+
+  ASSERT_EQ(joinSideResults.size(), 3);
+  EXPECT_EQ(joinSideResults.at(0).idTable_, makeIdTable({iri("<a>")}));
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<c>")}));
+  EXPECT_EQ(joinSideResults.at(2).idTable_, makeIdTable({iri("<xb>")}));
 
   IdTable scanTable{2, qec_->getAllocator()};
   for (const auto& [table, vocab] : scanResults) {
@@ -1230,6 +1236,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWithLimitYieldsEachRowOnce) {
   EXPECT_EQ(scanTable, tableFromTriples({{iri("<b>"), iri("<B>")},
                                          {iri("<b>"), iri("<B2>")},
                                          {iri("<c>"), iri("<C>")}}));
+  EXPECT_EQ(scan.runtimeInfo().details_["num-blocks-all"], 3);
 }
 
 // _____________________________________________________________________________
