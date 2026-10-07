@@ -1422,6 +1422,11 @@ void QueryPlanner::applyFiltersIfPossible(
   // end, because adding them inside the loop would invalidate the iterators.
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
+    // If `mode == FilterMode::KeepUnfiltered`, we still want to stack filters
+    // on top of each other, but we don't want to modify the original plan.
+    // So we store which plan in `addedPlans` contains the filters that we have
+    // applied so far and stack new filters on top of that.
+    std::optional<size_t> filteredPlanIndex = std::nullopt;
     for (const auto& [i, filterAndSubst] :
          ::ranges::views::enumerate(filters)) {
       checkCancellation();
@@ -1518,16 +1523,24 @@ void QueryPlanner::applyFiltersIfPossible(
       if (applyAll ||
           plan._qet->getRootOperation()->areVariablesAlwaysDefined(
               filterAndSubst.filter_.expression_.containedVariables())) {
+        auto& planToReplace = filteredPlanIndex.has_value()
+                                  ? addedPlans.at(filteredPlanIndex.value())
+                                  : plan;
         // Apply this filter regularly.
         SubtreePlan newPlan = makeSubtreePlan<Filter>(
-            _qec, plan._qet, filterAndSubst.filter_.expression_);
-        mergeSubtreePlanIds(newPlan, newPlan, plan);
+            _qec, planToReplace._qet, filterAndSubst.filter_.expression_);
+        mergeSubtreePlanIds(newPlan, newPlan, planToReplace);
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
-        newPlan.type = plan.type;
+        newPlan.type = planToReplace.type;
         if constexpr (mode != FilterMode::KeepUnfiltered) {
           plan = std::move(newPlan);
         } else {
-          addedPlans.push_back(std::move(newPlan));
+          if (filteredPlanIndex.has_value()) {
+            planToReplace = std::move(newPlan);
+          } else {
+            filteredPlanIndex = addedPlans.size();
+            addedPlans.push_back(std::move(newPlan));
+          }
         }
       }
     }
