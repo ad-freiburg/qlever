@@ -31,7 +31,7 @@ class BlankNodeManager;
 // NOTE: This is deliberately restricted to the operations that
 // `LocalVocabEntry` actually performs, and in particular does not expose the
 // vocabulary itself. Comparing two `Id`s calls into `LocalVocabEntry` (see
-// `global/ValueId.h`), so every library that compares `Id`s depends on
+// `global/MixedValueId.h`), so every library that compares `Id`s depends on
 // `LocalVocabEntry`. Keeping this interface abstract and minimal is what allows
 // those libraries to be independent of the (much larger) `index` library.
 //

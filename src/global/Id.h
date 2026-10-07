@@ -8,9 +8,10 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "global/ValueId.h"
+#include "global/MixedValueId.h"
 
-using Id = ValueId;
+using Id = MixedValueId;
+using ValueId = Id;
 using Score = float;
 
 // `Id`s are copied around a lot, in particular in bulk (see the `IdTable`
