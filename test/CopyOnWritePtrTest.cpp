@@ -157,6 +157,13 @@ TEST(CopyOnWritePtr, writeOnMovedFromThrows) {
   EXPECT_ANY_THROW(a.write());
 }
 
+// Whether `write()` can be called on a `const T`.
+template <typename T, typename = void>
+struct HasConstWrite : std::false_type {};
+template <typename T>
+struct HasConstWrite<T, std::void_t<decltype(std::declval<const T&>().write())>>
+    : std::true_type {};
+
 // Check at compile time that `write()` is the only way to get a mutable
 // reference, so that an accidental mutation of a shared value cannot compile.
 TEST(CopyOnWritePtr, onlyWriteGivesMutableAccess) {
@@ -169,6 +176,5 @@ TEST(CopyOnWritePtr, onlyWriteGivesMutableAccess) {
   static_assert(
       std::is_same_v<decltype(std::declval<CopyOnWritePtr<int>&>().write()),
                      int&>);
-  static_assert(!std::is_invocable_v<decltype(&CopyOnWritePtr<int>::write),
-                                     const CopyOnWritePtr<int>&>);
+  static_assert(!HasConstWrite<CopyOnWritePtr<int>>::value);
 }

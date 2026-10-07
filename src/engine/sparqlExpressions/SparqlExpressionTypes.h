@@ -364,9 +364,13 @@ constexpr bool isOperation = false;
 template <size_t NumOperations, typename... Ts>
 constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
 
-// Return the common logical size of the `SingleExpressionResults`.
-// This is either 1 (in case all the `inputs` are constants) or the
-// size of the `context`.
+// Return the common logical size of the `SingleExpressionResults` of a
+// non-aggregate expression. This is either 1 (in case all the `inputs` are
+// constants) or the size of the `context`.
+//
+// NOTE: Aggregates must not use this function, they aggregate one value per
+// row of the `context` also for a constant input (see
+// `AggregateExpression.cpp`).
 CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
     size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
   return (... && isConstantResult<Inputs>) ? 1ul : context.size();
