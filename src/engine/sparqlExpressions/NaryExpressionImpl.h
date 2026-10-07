@@ -77,6 +77,26 @@ auto makeIndexedNaryValueGetter(Operand&& operand, EvaluationContext* context) {
   }
 }
 
+// Return whether all value getters and converted operands support the numeric
+// fast path. The index sequence matches each value getter with the
+// corresponding converted operand type.
+template <typename ValueGetters, typename ConvertedOperands, size_t... I>
+constexpr bool canUseNumericFastPathImpl(std::index_sequence<I...>) {
+  using namespace homogeneousNumeric;
+
+  return (... &&
+          (supportsNumericFastPath<std::tuple_element_t<I, ValueGetters>> &&
+           supportsNumericFastPathOperand<
+               std::tuple_element_t<I, ConvertedOperands>>()));
+}
+
+// Convenience wrapper that checks all entries of `ConvertedOperands`.
+template <typename ValueGetters, typename ConvertedOperands>
+constexpr bool canUseNumericFastPath() {
+  return canUseNumericFastPathImpl<ValueGetters, ConvertedOperands>(
+      std::make_index_sequence<std::tuple_size_v<ConvertedOperands>>{});
+}
+
 template <typename NaryOperation>
 class NaryExpressionStronglyTyped
     : public NaryExpressionBase<NaryOperation::N> {
@@ -135,21 +155,13 @@ class NaryExpressionStronglyTyped
 
       using ConvertedOperands = decltype(convertedOperands);
 
-      constexpr bool canUseNumericFastPath = []<size_t... I>(
-                                                 std::index_sequence<I...>) {
-        using namespace homogeneousNumeric;
-
-        return (
-            ... &&
-            (supportsNumericFastPath<std::tuple_element_t<I, ValueGetters>> &&
-             supportsNumericFastPathOperand<
-                 std::tuple_element_t<I, ConvertedOperands>>()));
-      }(std::index_sequence_for<Operands...>{});
+      constexpr bool useNumericFastPath =
+          canUseNumericFastPath<ValueGetters, ConvertedOperands>();
 
       // For numeric N-ary expressions, first try homogeneous execution, then a
       // speculative majority-type path. Fall back to the generic indexed
       // evaluation if neither optimization applies.
-      if constexpr (canUseNumericFastPath && !resultIsConstant) {
+      if constexpr (useNumericFastPath && !resultIsConstant) {
         auto classifications = std::apply(
             [context](const auto&... values) {
               return homogeneousNumeric::classifyNumericOperands(context,
@@ -212,9 +224,12 @@ class NaryExpressionStronglyTyped
       VectorWithMemoryLimit<ResultType> result{context->_allocator};
       result.reserve(targetSize);
 
+      // Keep the named temporary to work around a Clang 16/17 code-generation
+      // crash when `computeValue(i)` is passed directly to this function.
       for (size_t i = 0; i < targetSize; ++i) {
+        auto value = computeValue(i);
         result.push_back(promoteToLocalVocabEntry(
-            computeValue(i), context->getLocalVocabContext()));
+            std::move(value), context->getLocalVocabContext()));
       }
 
       if constexpr (resultIsConstant) {
