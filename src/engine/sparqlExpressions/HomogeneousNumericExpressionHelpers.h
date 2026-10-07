@@ -365,7 +365,7 @@ ExpressionResult evaluateSpeculativeNaryNumericOperation(
 
   ad_utility::chunkedForLoop<1000>(
       0, context->size(),
-      [&result, &operands, context](size_t i) {
+      [&result, &operands, &expectedTypes, context](size_t i) {
         result[i] =
             evaluateSpeculativeNaryRow<Function, ValueGetters, NumericTypes...>(
                 i, operands, expectedTypes, context);
