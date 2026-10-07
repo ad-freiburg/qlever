@@ -21,6 +21,7 @@
 #include "index/IndexBuilderTypes.h"
 #include "util/Exception.h"
 #include "util/File.h"
+#include "util/Serializer/BufferedPreadReadSerializer.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/Serializer.h"
@@ -120,20 +121,11 @@ inline PartialVocabularySkipPointers readPartialVocabularySkipPointers(
   ad_utility::File file{filename, "r"};
   auto fileSize = static_cast<uint64_t>(file.sizeOfFile());
 
-  // Read exactly `numBytes` bytes at the given `offset` into `target`.
-  auto readAt = [&file, &filename](void* target, size_t numBytes,
-                                   uint64_t offset) {
-    AD_CONTRACT_CHECK(file.read(target, numBytes, static_cast<off_t>(offset)) ==
-                          static_cast<ssize_t>(numBytes),
-                      "Reading from the partial vocabulary file `", filename,
-                      "` failed");
-  };
-
   // The footer consists of `wordsEnd` and the magic number.
   constexpr uint64_t footerSize = 2 * sizeof(uint64_t);
   uint64_t magic = 0;
   if (fileSize >= sizeof(uint64_t) + footerSize) {
-    readAt(&magic, sizeof(magic), fileSize - sizeof(magic));
+    ser::preadExactly(file, &magic, sizeof(magic), fileSize - sizeof(magic));
   }
   AD_CONTRACT_CHECK(
       magic == PARTIAL_VOCAB_SKIP_POINTERS_MAGIC,
@@ -143,8 +135,9 @@ inline PartialVocabularySkipPointers readPartialVocabularySkipPointers(
       "were written by an older version of QLever are not supported");
 
   PartialVocabularySkipPointers result;
-  readAt(&result.numWords_, sizeof(uint64_t), 0);
-  readAt(&result.wordsEnd_, sizeof(uint64_t), fileSize - footerSize);
+  ser::preadExactly(file, &result.numWords_, sizeof(uint64_t), 0);
+  ser::preadExactly(file, &result.wordsEnd_, sizeof(uint64_t),
+                    fileSize - footerSize);
   auto errorMessage = [&filename](std::string_view what) {
     return absl::StrCat("The skip pointers of the partial vocabulary file `",
                         filename, "` are corrupted: ", what);
@@ -159,7 +152,7 @@ inline PartialVocabularySkipPointers readPartialVocabularySkipPointers(
   // Read all the skip pointers into memory first, such that corrupted skip
   // pointers can never lead to a read past their end.
   std::vector<char> buffer(fileSize - footerSize - result.wordsEnd_);
-  readAt(buffer.data(), buffer.size(), result.wordsEnd_);
+  ser::preadExactly(file, buffer.data(), buffer.size(), result.wordsEnd_);
   ser::ByteBufferReadSerializer reader{std::move(buffer)};
   uint64_t numEntries = 0;
   reader >> numEntries;

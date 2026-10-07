@@ -7,7 +7,6 @@
 #include <gmock/gmock.h>
 
 #include <array>
-#include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
@@ -15,10 +14,10 @@
 #include <iostream>
 #include <memory>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "./index/vocabulary_merger/VocabularyMergerTestHelpers.h"
+#include "./util/FileTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/filesystem.h"
 #include "global/Constants.h"
@@ -41,23 +40,6 @@ namespace {
 // `makePartialVocabularyFilenamesInFreshDirectory`), so a short fixed name is
 // unambiguous.
 const std::string partialVocabBasename = "vocab-";
-
-// Write the given `words` as a partial vocabulary file at `path` (using the
-// real `writePartialVocabularyToFile`), assigning them consecutive local ids
-// `0, 1, ...` in the given order and marking all of them as external iff
-// `isExternal` is true.
-template <typename Range>
-void writePartialVocabularyFile(const std::string& path, const Range& words,
-                                bool isExternal = false) {
-  ItemVec items;
-  size_t localIdx = 0;
-  for (const auto& word : words) {
-    items.emplace_back(std::string_view{word},
-                       PartialVocabIndexWithExternalFlag{localIdx, isExternal});
-    ++localIdx;
-  }
-  writePartialVocabularyToFile(items, path);
-}
 }  // namespace
 
 // Test fixture that sets up the binary files for partial vocabulary and
@@ -141,8 +123,7 @@ class MergeVocabularyTest : public ::testing::Test {
       // by reference.
       for (const auto& w : tripleComponents) {
         auto globalId = w.index_;
-        items.emplace_back(w.iriOrLiteral_, PartialVocabIndexWithExternalFlag{
-                                                localIdx, w.isExternal_});
+        items.push_back(makeEntry(w.iriOrLiteral_, w.isExternal_, localIdx));
         if (idMap) {
           if (w.isBlankNode({})) {
             idMap->push_back(
@@ -585,31 +566,6 @@ TEST(MergeVocabulary, mappedIdsFileRoundTrip) {
       ::testing::HasSubstr("not found in mapping"), ad_utility::Exception);
 }
 
-namespace {
-// Return the names of the spill files of the merge of the partial
-// vocabularies in the current working directory, waiting (for at most ten
-// seconds) until they are gone. The spill files are deleted asynchronously on
-// the executor of the merge, so they may still exist shortly after
-// `mergeVocabulary` has returned.
-std::vector<std::string> remainingSpillFiles() {
-  std::vector<std::string> result;
-  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-  do {
-    result.clear();
-    for (const auto& entry : ql::filesystem::directory_iterator{"."}) {
-      auto filename = entry.path().filename().string();
-      if (filename.find(PARTIAL_VOCAB_MERGE_SPILL_INFIX) != std::string::npos) {
-        result.push_back(filename);
-      }
-    }
-    if (!result.empty()) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-  } while (!result.empty() && std::chrono::steady_clock::now() < deadline);
-  return result;
-}
-}  // namespace
-
 // _____________________________________________________________________________
 // Merge many partial vocabularies (with tiny blocks, see the skip pointers,
 // and with many words that occur in several of them, partly as external and
@@ -646,9 +602,8 @@ TEST(MergeVocabulary, parallelMergeOfManyPartialVocabularies) {
       bool external = randomInt() < 10;
       isExternal.at(i) = isExternal.at(i) || external;
       occurs.at(i) = true;
-      items.emplace_back(allWords.at(i),
-                         PartialVocabIndexWithExternalFlag{
-                             wordsInFile.at(f).size(), external});
+      items.push_back(
+          makeEntry(allWords.at(i), external, wordsInFile.at(f).size()));
       wordsInFile.at(f).push_back(i);
     }
     writePartialVocabularyToFile(items, filenames.wordsFiles_.at(f), 37);
@@ -680,6 +635,13 @@ TEST(MergeVocabulary, parallelMergeOfManyPartialVocabularies) {
       EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_.at(f)),
                   ::testing::ElementsAreArray(expected));
     }
-    EXPECT_THAT(remainingSpillFiles(), ::testing::IsEmpty());
+    // The spill files are deleted asynchronously on the executor of the merge,
+    // so they may still exist shortly after `mergeVocabulary` has returned.
+    EXPECT_TRUE(waitUntil([]() {
+      return ad_utility::testing::filesWithPrefix(
+                 partialVocabularyMergeSpillFilenamePrefix(
+                     partialVocabBasename))
+          .empty();
+    }));
   }
 }

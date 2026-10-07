@@ -25,6 +25,36 @@
 
 namespace ad_utility::serialization {
 
+namespace detail {
+// Throw if `numRead` (the result of a positioned `File::read` of the `file`)
+// signals an error.
+inline void throwIfPreadFailed(const ad_utility::File& file, ssize_t numRead) {
+  if (numRead < 0) {
+    throw SerializationException{
+        absl::StrCat("Reading from the file `", file.name(), "` failed")};
+  }
+}
+
+// Throw the exception for a read past the end of the `file`.
+[[noreturn]] inline void throwPreadPastEndOfFile(const ad_utility::File& file) {
+  throw SerializationException{absl::StrCat(
+      "Tried to read past the end of the file `", file.name(), "`")};
+}
+}  // namespace detail
+
+// Read exactly `numBytes` bytes at the byte offset `offset` of the `file` into
+// the `target` via a positioned read (`pread`, which neither uses nor changes
+// the file position). Throw a `SerializationException` if the read fails or
+// if the end of the file is reached before.
+inline void preadExactly(const ad_utility::File& file, void* target,
+                         size_t numBytes, uint64_t offset) {
+  ssize_t numRead = file.read(target, numBytes, static_cast<off_t>(offset));
+  detail::throwIfPreadFailed(file, numRead);
+  if (static_cast<size_t>(numRead) < numBytes) {
+    detail::throwPreadPastEndOfFile(file);
+  }
+}
+
 // A `ReadSerializer` that reads a file sequentially, starting at an arbitrary
 // byte offset, through a buffer of fixed size. The buffer is refilled via
 // positioned reads (`pread`, see the corresponding overload of
@@ -83,7 +113,7 @@ class BufferedPreadReadSerializer {
     // copy and works for requests of any size.
     if (numBytes >= bufferCapacity_) {
       uint64_t offset = getSerializationPosition();
-      readExactly(target, numBytes, offset);
+      preadExactly(*file_, target, numBytes, offset);
       bufferStartOffset_ = offset + numBytes;
       bufferSize_ = 0;
       positionInBuffer_ = 0;
@@ -91,7 +121,7 @@ class BufferedPreadReadSerializer {
     }
     refill();
     if (bufferSize_ < numBytes) {
-      throwEndOfFile();
+      detail::throwPreadPastEndOfFile(*file_);
     }
     std::memcpy(target, buffer_.get(), numBytes);
     positionInBuffer_ = numBytes;
@@ -111,34 +141,9 @@ class BufferedPreadReadSerializer {
     bufferStartOffset_ += bufferSize_;
     ssize_t numRead = file_->read(buffer_.get(), bufferCapacity_,
                                   static_cast<off_t>(bufferStartOffset_));
-    throwIfReadFailed(numRead);
+    detail::throwIfPreadFailed(*file_, numRead);
     bufferSize_ = static_cast<size_t>(numRead);
     positionInBuffer_ = 0;
-  }
-
-  // Read exactly `numBytes` bytes at the given `offset` into the `target`, and
-  // throw if that is not possible.
-  void readExactly(char* target, size_t numBytes, uint64_t offset) const {
-    ssize_t numRead = file_->read(target, numBytes, static_cast<off_t>(offset));
-    throwIfReadFailed(numRead);
-    if (static_cast<size_t>(numRead) < numBytes) {
-      throwEndOfFile();
-    }
-  }
-
-  // Throw if `numRead` (the result of `File::read`) signals an error.
-  void throwIfReadFailed(ssize_t numRead) const {
-    if (numRead < 0) {
-      throw SerializationException{
-          absl::StrCat("Reading from the file `", file_->name(), "` failed")};
-    }
-  }
-
-  // Throw the exception for a read past the end of the file.
-  [[noreturn]] void throwEndOfFile() const {
-    throw SerializationException{
-        absl::StrCat("Tried to read past the end of the file `", file_->name(),
-                     "` with a `BufferedPreadReadSerializer`")};
   }
 };
 

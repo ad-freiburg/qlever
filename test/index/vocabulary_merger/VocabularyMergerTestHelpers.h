@@ -12,6 +12,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -23,7 +24,10 @@
 #include "../../util/FileTestHelpers.h"
 #include "../../util/IdTestHelpers.h"
 #include "global/VocabIndex.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/IndexBuilderTypes.h"
 #include "index/PartialVocabularyFilenames.h"
+#include "index/VocabularyMerger.h"
 #include "index/vocabulary_merger/QueueWord.h"
 
 // Helpers that are shared by the tests of the vocabulary merger (see
@@ -49,6 +53,55 @@ inline ad_utility::vocabulary_merger::detail::QueueWord makeQueueWord(
   return ad_utility::vocabulary_merger::detail::QueueWord{
       TripleComponentWithIndex{std::move(word), isExternal, localIndex},
       partialFileId};
+}
+
+// Create the entry of an `ItemVec` (the input of
+// `writePartialVocabularyToFile`) for the `word` with the given `isExternal`
+// flag and local index `id`. NOTE: The entry only holds a `string_view` of the
+// `word`, which therefore has to outlive it.
+inline ItemVec::value_type makeEntry(std::string_view word, bool isExternal,
+                                     uint64_t id) {
+  return {word, PartialVocabIndexWithExternalFlag{id, isExternal}};
+}
+
+// Write the given `words` as a partial vocabulary file at `path` (using the
+// real `writePartialVocabularyToFile` with the given `skipPointerInterval`),
+// assigning them consecutive local ids `0, 1, ...` in the given order and
+// marking all of them as external iff `isExternal` is true.
+template <typename Range>
+void writePartialVocabularyFile(
+    const std::string& path, const Range& words, bool isExternal = false,
+    size_t skipPointerInterval = PARTIAL_VOCAB_SKIP_POINTER_INTERVAL) {
+  ItemVec items;
+  uint64_t localIdx = 0;
+  for (const auto& word : words) {
+    items.push_back(makeEntry(std::string_view{word}, isExternal, localIdx));
+    ++localIdx;
+  }
+  ad_utility::vocabulary_merger::writePartialVocabularyToFile(
+      items, path, skipPointerInterval);
+}
+
+// The range `[begin_, end_)` of the indices of the words of a single block of
+// a partial vocabulary, see `expectedBlockRange`.
+struct BlockRange {
+  size_t begin_;
+  size_t end_;
+};
+
+// Return the number of blocks of a partial vocabulary with `numWords` words
+// that was written with the given `skipPointerInterval`.
+inline size_t expectedNumBlocks(size_t numWords, size_t skipPointerInterval) {
+  return (numWords + skipPointerInterval - 1) / skipPointerInterval;
+}
+
+// Return the range of the indices of the words of the block with index
+// `blockIdx` of a partial vocabulary with `numWords` words that was written
+// with the given `skipPointerInterval`.
+inline BlockRange expectedBlockRange(size_t blockIdx, size_t numWords,
+                                     size_t skipPointerInterval) {
+  size_t begin = blockIdx * skipPointerInterval;
+  return {begin, std::min(begin + skipPointerInterval, numWords)};
 }
 
 // The number and filenames of a set of partial vocabularies, as created by

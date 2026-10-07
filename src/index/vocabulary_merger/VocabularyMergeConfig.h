@@ -36,7 +36,8 @@ namespace ad_utility::vocabulary_merger {
 // The fraction of the memory limit of `mergeVocabulary` that the merge itself
 // may use. The rest is for the batches of merged words that are handed on to
 // the writing of the vocabulary and the ID maps (see
-// `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`), which are hard to measure exactly.
+// `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE` in `index/ConstantsIndexBuilding.h`),
+// the memory of which is hard to measure exactly.
 constexpr inline double VOCAB_MERGE_MEMORY_FRACTION = 0.8;
 
 // The fraction of the memory of the merge (see above) that is used for the
@@ -107,33 +108,64 @@ constexpr size_t numLiveVocabularyMergeOutputBlocks(
          numPrefetchedOutputBlocks + 2;
 }
 
-// Split the memory of a merge of `numRuns` partial vocabularies with the given
-// `memoryToUse` (the memory limit of `mergeVocabulary`) and `parallelism` (the
-// number of threads of the executor) as follows: `VOCAB_MERGE_MEMORY_FRACTION`
-// of the memory is used by the merge, of which
+// The memory of a merge of the partial vocabularies, split between the read
+// buffers of the input blocks and the output blocks, see
+// `vocabularyMergeMemorySplit`.
+struct VocabularyMergeMemorySplit {
+  MemorySize input_;
+  MemorySize output_;
+};
+
+// Split the memory limit `memoryToUse` of `mergeVocabulary` as follows:
+// `VOCAB_MERGE_MEMORY_FRACTION` of it is used by the merge, of which
 // `VOCAB_MERGE_INPUT_MEMORY_FRACTION` goes to the read buffers of the input
-// blocks (every chunk in flight reads one block of every run at a time) and the
-// rest to the output blocks (see `numLiveVocabularyMergeOutputBlocks`). As
-// many chunks as the `parallelism` allows are kept in flight, unless either
-// the read buffers of minimal size (see
-// `PartialVocabularyInput::maxNumChunksInFlightForBudget`) or the output blocks
-// of size `MIN_VOCAB_MERGE_OUTPUT_BLOCK_MEMORY` don't fit for that many chunks.
-inline VocabularyMergeParameters computeVocabularyMergeParameters(
-    MemorySize memoryToUse, size_t numRuns, size_t parallelism) {
-  AD_CONTRACT_CHECK(parallelism > 0);
+// blocks and the rest to the output blocks.
+inline VocabularyMergeMemorySplit vocabularyMergeMemorySplit(
+    MemorySize memoryToUse) {
   const MemorySize mergeMemory = VOCAB_MERGE_MEMORY_FRACTION * memoryToUse;
   const MemorySize inputMemory =
       VOCAB_MERGE_INPUT_MEMORY_FRACTION * mergeMemory;
-  const MemorySize outputMemory = mergeMemory - inputMemory;
+  return {inputMemory, mergeMemory - inputMemory};
+}
+
+// Return the memory of a single output block (before the clamping, see
+// `computeVocabularyMergeParameters`) if the `outputMemory` is split evenly
+// between all the output blocks that are alive at the same time, see
+// `numLiveVocabularyMergeOutputBlocks`.
+inline MemorySize vocabularyMergeOutputBlockMemory(
+    MemorySize outputMemory, size_t numChunksInFlight,
+    size_t numBufferedBlocksPerChunk =
+        VOCAB_MERGE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK,
+    size_t numPrefetchedOutputBlocks =
+        VOCAB_MERGE_NUM_PREFETCHED_OUTPUT_BLOCKS) {
+  return MemorySize::bytes(outputMemory.getBytes() /
+                           numLiveVocabularyMergeOutputBlocks(
+                               numChunksInFlight, numBufferedBlocksPerChunk,
+                               numPrefetchedOutputBlocks));
+}
+
+// Compute the parameters of a merge of `numRuns` partial vocabularies with the
+// given `memoryToUse` (the memory limit of `mergeVocabulary`, which is split
+// by `vocabularyMergeMemorySplit`) and `parallelism` (the number of threads
+// that the merge may use). Every chunk in flight reads one block of every run
+// at a time. As many chunks as the `parallelism` allows are kept in flight,
+// unless either the read buffers of minimal size (see
+// `PartialVocabularyInput::maxNumChunksInFlightForBudget`) or the output blocks
+// of size `MIN_VOCAB_MERGE_OUTPUT_BLOCK_MEMORY` (see
+// `vocabularyMergeOutputBlockMemory`) don't fit for that many chunks.
+inline VocabularyMergeParameters computeVocabularyMergeParameters(
+    MemorySize memoryToUse, size_t numRuns, size_t parallelism) {
+  AD_CONTRACT_CHECK(parallelism > 0);
+  const auto [inputMemory, outputMemory] =
+      vocabularyMergeMemorySplit(memoryToUse);
 
   VocabularyMergeParameters result{};
   // Return the memory of a single output block for `numChunksInFlight`.
-  auto outputBlockMemory = [&result, outputMemory](size_t numChunksInFlight) {
-    return MemorySize::bytes(
-        outputMemory.getBytes() /
-        numLiveVocabularyMergeOutputBlocks(numChunksInFlight,
-                                           result.numBufferedBlocksPerChunk_,
-                                           result.numPrefetchedOutputBlocks_));
+  auto outputBlockMemory = [&result,
+                            outputMemory = outputMemory](size_t numInFlight) {
+    return vocabularyMergeOutputBlockMemory(outputMemory, numInFlight,
+                                            result.numBufferedBlocksPerChunk_,
+                                            result.numPrefetchedOutputBlocks_);
   };
 
   size_t numChunksInFlight =

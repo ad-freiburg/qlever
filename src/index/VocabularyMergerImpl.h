@@ -6,7 +6,6 @@
 #define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 
 #include <cstdint>
-#include <future>
 #include <limits>
 #include <string>
 #include <utility>
@@ -29,7 +28,6 @@
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
-#include "util/Timer.h"
 #include "util/Views.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 

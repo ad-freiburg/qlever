@@ -41,6 +41,10 @@ namespace {
 // runs in its own fresh working directory.
 const std::string partialVocabBasename = "vocab";
 
+// The skip pointer interval of the partial vocabularies of most of the tests
+// below, which is tiny such that there are many blocks.
+constexpr size_t interval = 7;
+
 // A word of a partial vocabulary in a form that is easy to compare:
 // `(word, partialFileId, localIndex, isExternal)`.
 using Word = std::tuple<std::string, size_t, uint64_t, bool>;
@@ -75,8 +79,7 @@ std::vector<std::vector<Word>> writePartialVocabularies(
     auto& expected = result.emplace_back();
     for (size_t i = 0; i < words.size(); ++i) {
       bool isExternal = randomInt() % 2 == 0;
-      items.emplace_back(words.at(i),
-                         PartialVocabIndexWithExternalFlag{i, isExternal});
+      items.push_back(makeEntry(words.at(i), isExternal, i));
       expected.emplace_back(words.at(i), fileId, i, isExternal);
     }
     writePartialVocabularyToFile(
@@ -139,7 +142,7 @@ TEST(PartialVocabularyInput, metadataAndBlocks) {
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 4);
   // The third partial vocabulary is empty, the fourth one has exactly two
   // blocks.
-  auto expected = writePartialVocabularies({100, 1, 0, 14}, 7);
+  auto expected = writePartialVocabularies({100, 1, 0, 14}, interval);
   ASSERT_EQ(expected.at(3).size(), 14u);
 
   for (auto bufferSize : {1_B, 3_B, 64_kB}) {
@@ -147,11 +150,11 @@ TEST(PartialVocabularyInput, metadataAndBlocks) {
     ASSERT_EQ(input.numRuns(), 4u);
     for (size_t runIdx = 0; runIdx < input.numRuns(); ++runIdx) {
       const auto& words = expected.at(runIdx);
-      size_t numBlocks = (words.size() + 6) / 7;
+      size_t numBlocks = expectedNumBlocks(words.size(), interval);
       ASSERT_EQ(input.numBlocks(runIdx), numBlocks);
       for (size_t blockIdx = 0; blockIdx < numBlocks; ++blockIdx) {
-        size_t begin = blockIdx * 7;
-        size_t end = std::min(begin + 7, words.size());
+        auto [begin, end] =
+            expectedBlockRange(blockIdx, words.size(), interval);
         EXPECT_EQ(input.numElementsInBlock(runIdx, blockIdx), end - begin);
         EXPECT_EQ(toWord(input.firstElement(runIdx, blockIdx)),
                   words.at(begin));
@@ -179,7 +182,7 @@ TEST(PartialVocabularyInput, metadataAndBlocks) {
           auto block = readBlock(input, 0, blockIdx);
           for (size_t i = 0; i < block.size(); ++i) {
             numMismatches.at(t) +=
-                block.at(i) != expected.at(0).at(blockIdx * 7 + i);
+                block.at(i) != expected.at(0).at(blockIdx * interval + i);
           }
         }
       }
@@ -199,7 +202,7 @@ TEST(PartialVocabularyInput, emptyInput) {
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 2);
   PartialVocabularyInput noRuns{partialVocabBasename, 0, 64_kB};
   EXPECT_EQ(noRuns.numRuns(), 0u);
-  writePartialVocabularies({0, 0}, 7);
+  writePartialVocabularies({0, 0}, interval);
   PartialVocabularyInput input{partialVocabBasename, 2, 64_kB};
   EXPECT_EQ(input.numRuns(), 2u);
   EXPECT_EQ(input.numBlocks(0), 0u);

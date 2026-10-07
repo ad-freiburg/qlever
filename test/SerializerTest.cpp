@@ -14,6 +14,7 @@
 #include <thread>
 
 #include "backports/span.h"
+#include "util/FileTestHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
@@ -1617,8 +1618,8 @@ TEST(BufferedPreadReadSerializer, IsReadSerializer) {
 // it) with many different buffer sizes, starting at the offset of each word,
 // and check the serialization position after each word.
 TEST(BufferedPreadReadSerializer, ReadFromEveryOffset) {
-  std::string filename = gtestCurrentTestName();
-  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  auto [filePath, cleanup] = ad_utility::testing::filenameForTesting();
+  std::string filename = filePath.string();
   auto words = makeWordsOfIncreasingLength(70);
   auto offsets = writeWordsAndGetOffsets(filename, words);
   // The size of a serialized word of length zero is exactly 8 bytes.
@@ -1648,8 +1649,8 @@ TEST(BufferedPreadReadSerializer, ReadFromEveryOffset) {
 // Mix reads that are served from the buffer, reads that cross the end of the
 // buffer, and reads that are larger than the buffer (which bypass it).
 TEST(BufferedPreadReadSerializer, ItemsLargerThanTheBuffer) {
-  std::string filename = gtestCurrentTestName();
-  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  auto [filePath, cleanup] = ad_utility::testing::filenameForTesting();
+  std::string filename = filePath.string();
   std::vector<std::string> words{"a",
                                  std::string(1000, 'x'),
                                  "bc",
@@ -1675,8 +1676,8 @@ TEST(BufferedPreadReadSerializer, ItemsLargerThanTheBuffer) {
 // Read single integers with buffer sizes that are exact multiples of the size
 // of an integer, such that every refill happens exactly at the boundary.
 TEST(BufferedPreadReadSerializer, ExactBufferBoundaries) {
-  std::string filename = gtestCurrentTestName();
-  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  auto [filePath, cleanup] = ad_utility::testing::filenameForTesting();
+  std::string filename = filePath.string();
   std::vector<uint64_t> values(100);
   std::iota(values.begin(), values.end(), 42);
   {
@@ -1704,8 +1705,8 @@ TEST(BufferedPreadReadSerializer, ExactBufferBoundaries) {
 // Several readers that share the same `File` read it concurrently from
 // different offsets.
 TEST(BufferedPreadReadSerializer, ConcurrentReadersOnTheSameFile) {
-  std::string filename = gtestCurrentTestName();
-  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  auto [filePath, cleanup] = ad_utility::testing::filenameForTesting();
+  std::string filename = filePath.string();
   auto words = makeWordsOfIncreasingLength(500);
   auto offsets = writeWordsAndGetOffsets(filename, words);
   auto file = openShared(filename);
@@ -1734,8 +1735,8 @@ TEST(BufferedPreadReadSerializer, ConcurrentReadersOnTheSameFile) {
 
 // _____________________________________________________________________________
 TEST(BufferedPreadReadSerializer, ErrorHandling) {
-  std::string filename = gtestCurrentTestName();
-  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  auto [filePath, cleanup] = ad_utility::testing::filenameForTesting();
+  std::string filename = filePath.string();
   // A string that claims to have 20 characters, but is cut off after 10.
   {
     FileWriteSerializer writer{filename};
@@ -1743,7 +1744,7 @@ TEST(BufferedPreadReadSerializer, ErrorHandling) {
     writer.serializeBytes(std::string(10, 'x').data(), 10);
   }
   auto file = openShared(filename);
-  // Invalid arguments.
+  // A buffer size of zero and a missing file are rejected.
   EXPECT_ANY_THROW((BufferedPreadReadSerializer{file, 0, 0_B}));
   EXPECT_ANY_THROW((BufferedPreadReadSerializer{nullptr, 0, 1_kB}));
   // The size of the string can be read, but the string itself is cut off, both
@@ -1755,7 +1756,7 @@ TEST(BufferedPreadReadSerializer, ErrorHandling) {
         reader >> word, ::testing::HasSubstr("past the end of the file"),
         serialization::SerializationException);
   }
-  // Starting behind the end of the file.
+  // A reader that starts behind the end of the file cannot read anything.
   BufferedPreadReadSerializer reader{file, 1000, 1_kB};
   char c;
   EXPECT_THROW(reader.serializeBytes(&c, 1),

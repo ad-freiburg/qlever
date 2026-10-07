@@ -16,7 +16,9 @@
 #include <string>
 #include <vector>
 
+#include "../util/FileTestHelpers.h"
 #include "../util/GTestHelpers.h"
+#include "./vocabulary_merger/VocabularyMergerTestHelpers.h"
 #include "index/VocabularyMergerImpl.h"
 #include "index/vocabulary_merger/PartialVocabularySkipPointers.h"
 #include "util/Serializer/BufferedPreadReadSerializer.h"
@@ -28,12 +30,9 @@ using ad_utility::vocabulary_merger::PartialVocabularySkipPointers;
 using ad_utility::vocabulary_merger::readPartialVocabularySkipPointers;
 using ad_utility::vocabulary_merger::writePartialVocabularyToFile;
 using namespace ad_utility::memory_literals;
-
-// Helper to conveniently create an entry for `ItemVec`.
-ItemVec::value_type makeEntry(std::string_view word, bool isExternalized,
-                              uint64_t id) {
-  return {word, ItemVec::value_type::second_type{id, isExternalized}};
-}
+using vocabularyMergerTestHelpers::expectedBlockRange;
+using vocabularyMergerTestHelpers::expectedNumBlocks;
+using vocabularyMergerTestHelpers::makeEntry;
 
 // Read back a file written by `writePartialVocabularyToFile` and return its
 // contents as a vector of (word, isExternalized, id) tuples.
@@ -120,8 +119,8 @@ TEST(IndexVocabularyMergerImpl, writePartialVocabularyToFile) {
 // intervals, read back the skip pointers, and read each block separately via a
 // `BufferedPreadReadSerializer` that starts at the block's byte offset.
 TEST(IndexVocabularyMergerImpl, skipPointersRoundTrip) {
-  std::string fileName = gtestCurrentTestName();
-  absl::Cleanup cleanup{[&fileName]() { ad_utility::deleteFile(fileName); }};
+  auto [filePath, cleanup] = ad_utility::testing::filenameForTesting();
+  std::string fileName = filePath.string();
 
   // The sizes include an empty vocabulary, sizes that are an exact multiple of
   // some of the intervals, and sizes that are smaller than some intervals.
@@ -144,14 +143,13 @@ TEST(IndexVocabularyMergerImpl, skipPointersRoundTrip) {
 
       auto skipPointers = readPartialVocabularySkipPointers(fileName);
       EXPECT_EQ(skipPointers.numWords_, numWords);
-      size_t numBlocks = (numWords + interval - 1) / interval;
+      size_t numBlocks = expectedNumBlocks(numWords, interval);
       ASSERT_EQ(skipPointers.numBlocks(), numBlocks);
 
       auto file = std::make_shared<ad_utility::File>(fileName, "r");
       for (size_t block = 0; block < numBlocks; ++block) {
         const auto& pointer = skipPointers.skipPointers_.at(block);
-        size_t begin = block * interval;
-        size_t end = std::min(begin + interval, numWords);
+        auto [begin, end] = expectedBlockRange(block, numWords, interval);
         EXPECT_EQ(pointer.numWordsBefore_, begin);
         EXPECT_EQ(skipPointers.numWordsInBlock(block), end - begin);
         expectWord(pointer.firstWord_, els, begin);
@@ -176,8 +174,8 @@ TEST(IndexVocabularyMergerImpl, skipPointersRoundTrip) {
 // _____________________________________________________________________________
 // The default interval is `PARTIAL_VOCAB_SKIP_POINTER_INTERVAL`.
 TEST(IndexVocabularyMergerImpl, skipPointersDefaultInterval) {
-  std::string fileName = gtestCurrentTestName();
-  absl::Cleanup cleanup{[&fileName]() { ad_utility::deleteFile(fileName); }};
+  auto [filePath, cleanup] = ad_utility::testing::filenameForTesting();
+  std::string fileName = filePath.string();
   auto words = makeWords(2 * PARTIAL_VOCAB_SKIP_POINTER_INTERVAL + 1);
   writePartialVocabularyToFile(makeItemVec(words), fileName);
   auto skipPointers = readPartialVocabularySkipPointers(fileName);
@@ -192,8 +190,8 @@ TEST(IndexVocabularyMergerImpl, skipPointersDefaultInterval) {
 // A file without skip pointers (written in the format that was used before
 // they were introduced) or with corrupted skip pointers is rejected.
 TEST(IndexVocabularyMergerImpl, skipPointersMissingOrCorrupted) {
-  std::string fileName = gtestCurrentTestName();
-  absl::Cleanup cleanup{[&fileName]() { ad_utility::deleteFile(fileName); }};
+  auto [filePath, cleanup] = ad_utility::testing::filenameForTesting();
+  std::string fileName = filePath.string();
   using ::testing::HasSubstr;
   namespace ser = ad_utility::serialization;
 

@@ -72,6 +72,26 @@ inline auto makeTemporaryDirectory(std::string_view name) {
   return std::make_pair(std::move(directory), std::move(cleanup));
 }
 
+// Return the paths of all the files whose path starts with the given `prefix`
+// (for example the files that a component creates by appending suffixes to a
+// common prefix). Only the directory of the `prefix` (or the working
+// directory, if the `prefix` has no directory component) is searched.
+inline std::vector<std::string> filesWithPrefix(const std::string& prefix) {
+  ql::filesystem::path prefixAsPath{prefix};
+  auto directory = prefixAsPath.parent_path();
+  std::string filenamePrefix = prefixAsPath.filename().string();
+  std::vector<std::string> result;
+  ql::error_code errorCode;
+  for (const auto& entry : ql::filesystem::directory_iterator{
+           directory.empty() ? ql::filesystem::path{"."} : directory,
+           errorCode}) {
+    if (ql::starts_with(entry.path().filename().string(), filenamePrefix)) {
+      result.push_back(entry.path().string());
+    }
+  }
+  return result;
+}
+
 // Create a fresh (empty) directory named after the currently running test and
 // make it the working directory. The returned cleanup first restores the
 // previous working directory and then removes that directory again, so both
