@@ -35,9 +35,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  upload:
+  # Check whether the triggering run of `sonarcloud.yml` uploaded a
+  # `sonarcloud-report` artifact. For PRs without the `run-full-ci` label (see
+  # `full-ci-gate.yml`) this is not the case, and then the (expensive) analysis
+  # is skipped. Pushes don't need the artifact, so they are always analyzed.
+  check-report:
     runs-on: ubuntu-24.04
     if: github.event.workflow_run.conclusion == 'success'
+    outputs:
+      found: ${{ steps.check.outputs.found }}
+    steps:
+      - name: Check for the `sonarcloud-report` artifact
+        id: check
+        uses: actions/github-script@v8
+        with:
+          script: |
+            if ('${{ github.event.workflow_run.event }}' != 'pull_request') {
+              core.setOutput('found', 'true');
+              return;
+            }
+            var artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               run_id: ${{github.event.workflow_run.id }},
+            });
+            var found = artifacts.data.artifacts.some((artifact) => {
+              return artifact.name == "sonarcloud-report"
+            });
+            if (!found) {
+              core.notice('No sonarcloud report found, skipping the analysis.');
+            }
+            core.setOutput('found', found ? 'true' : 'false');
+  upload:
+    needs: check-report
+    runs-on: ubuntu-24.04
+    if: needs.check-report.outputs.found == 'true'
     env:
       compiler: clang
       compiler-version: 21 
