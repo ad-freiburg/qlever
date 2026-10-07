@@ -10,6 +10,8 @@
 
 #include "global/MixedValueId.h"
 
+// TODO<pas-kes>: In future here will be a #ifndef QLEVER_USE_SPLIT_LAYOUT to
+// determine if ValueId or SplitLayoutId should be used
 using Id = MixedValueId;
 using ValueId = Id;
 using Score = float;
