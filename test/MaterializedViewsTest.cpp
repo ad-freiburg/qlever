@@ -1801,6 +1801,22 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                      bindView(AC{{3, V{"?bind"}}})));
   }
 
+  // A `BIND` is not pushed down through a `Join` if its target is hidden in
+  // the `Join` by a subquery (with `strip-columns` disabled). Otherwise the
+  // `BIND` would yield the values of the hidden `?bind` (here `"abc"`).
+  {
+    constexpr std::string_view bindTargetHidden = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?bind {
+        { SELECT ?s ?o { ?s view:bindView-o ?o . ?s <p1> ?bind } }
+        BIND(2 * ?o + 1 AS ?bind)
+      }
+    )";
+    auto actual = getQueryResultAsIdTable(std::string{bindTargetHidden});
+    auto expected = getQueryResultAsIdTable("SELECT (3 AS ?bind) {}");
+    EXPECT_THAT(actual, matchesIdTable(expected));
+  }
+
   // A `BIND` is pushed down through a `SpatialJoin` operation.
   {
     constexpr std::string_view bindThroughSpatialJoin = R"(

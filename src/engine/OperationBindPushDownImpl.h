@@ -27,6 +27,16 @@ CPP_template_def(typename MakeCloneWithNewChildren)(
     return std::nullopt;
   }
 
+  // The target of a `BIND` must not be visible before the `BIND`. If a child
+  // contains it anyway, it is hidden in this operation (e.g. by a subquery), so
+  // the `BIND` must not be pushed down: the new operation built from the
+  // children would also see the hidden column of that child.
+  if (ql::ranges::any_of(children, [&bind](const auto& child) {
+        return child != nullptr && child->containsVariable(bind._target);
+      })) {
+    return std::nullopt;
+  }
+
   // Get the variables used in the bind expression (not the target).
   const auto& bindExpressionVars = bind._expression.containedVariables();
 
@@ -40,8 +50,7 @@ CPP_template_def(typename MakeCloneWithNewChildren)(
       continue;
     }
     if (!child->getRootOperation()->areVariablesAlwaysDefined(
-            bindExpressionVars) ||
-        child->containsVariable(bind._target)) {
+            bindExpressionVars)) {
       continue;
     }
     auto result = child->getRootOperation()->makeTreeWithBindColumn(bind);
