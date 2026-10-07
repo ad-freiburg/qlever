@@ -684,6 +684,13 @@ TEST(QueryPlanner, testSimpleOptional) {
       h::OrderBy({{Variable{"?b"}, ::OrderBy::AscOrDesc::Asc}},
                  h::OptionalJoin(scan("?a", "<rel1>", "?b"),
                                  scan("?a", "<rel2>", "?c"))));
+  // The second OPTIONAL is connected to the result of the first one.
+  h::expect(
+      "SELECT * { ?a <rel1> ?b OPTIONAL { ?a <rel2> ?c } "
+      "OPTIONAL { ?a <rel3> ?d } }",
+      h::OptionalJoin(h::OptionalJoin(scan("?a", "<rel1>", "?b"),
+                                      scan("?a", "<rel2>", "?c")),
+                      scan("?a", "<rel3>", "?d")));
 }
 
 TEST(QueryPlanner, SimpleTripleOneVariable) {
@@ -2546,6 +2553,19 @@ TEST(QueryPlanner, UnboundMinusIgnored) {
   h::expect("SELECT * WHERE {MINUS{?x <is-a> ?y}}", h::NeutralElement());
   h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?x <is-a> ?y}}",
             h::IndexScanFromStrings("?a", "<is-a>", "?b"));
+  h::expect("SELECT * { ?a <is-a> ?b MINUS { ?x <is-a> ?y } }",
+            h::QetWithWarnings({"MINUS clause that shares no variables"},
+                               h::IndexScanFromStrings("?a", "<is-a>", "?b")));
+  // Regression tests for https://github.com/ad-freiburg/qlever/issues/3556:
+  // The variables of a MINUS are not part of its result, so they must not
+  // connect a later MINUS.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?x <is-a> ?y } MINUS { ?z <is-a> ?y } }",
+      h::IndexScanFromStrings("?a", "<is-a>", "?b"));
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?y } MINUS { ?z <is-a> ?y } }",
+      h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+               h::IndexScanFromStrings("?a", "<is-a>", "?y")));
 }
 
 // ___________________________________________________________________________
@@ -2553,6 +2573,12 @@ TEST(QueryPlanner, SimpleMinus) {
   h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?a <is-a> ?b}}",
             h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
                      h::IndexScanFromStrings("?a", "<is-a>", "?b")));
+  // The second MINUS is connected to the result of the first one.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?c } MINUS { ?a <is-a> ?d } }",
+      h::Minus(h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                        h::IndexScanFromStrings("?a", "<is-a>", "?c")),
+               h::IndexScanFromStrings("?a", "<is-a>", "?d")));
 }
 
 // ___________________________________________________________________________
