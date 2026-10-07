@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
@@ -75,6 +76,17 @@ class IdTableUtils {
   // be used to implement a cancellation mechanism that throws on cancellation.
   static size_t countDistinct(const IdTable& input,
                               const std::function<void()>& checkCancellation);
+
+  // Return true iff the `table` (an `IdTable` or a view of one) contains at
+  // least one `Id` of type `Datatype::LocalVocabIndex`.
+  template <typename Table>
+  static bool containsLocalVocabIds(const Table& table) {
+    return ql::ranges::any_of(table.getColumns(), [](const auto& column) {
+      return ql::ranges::any_of(column, [](Id id) {
+        return id.getDatatype() == Datatype::LocalVocabIndex;
+      });
+    });
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_IDTABLEUTILS_H

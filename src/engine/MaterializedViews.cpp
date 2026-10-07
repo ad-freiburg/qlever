@@ -32,6 +32,7 @@
 #include "index/CompressedRelationWriter.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/IdTableUtils.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
@@ -222,13 +223,7 @@ void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
   // Check that there are no values of type `LocalVocabIndex` in the selected
   // columns of the `IdTable` as materialized views do not support them as of
   // now.
-  bool hasLocalVocab =
-      ql::ranges::any_of(block.getColumns(), [](const auto& col) {
-        return ql::ranges::any_of(col, [](ValueId id) {
-          return id.getDatatype() == Datatype::LocalVocabIndex;
-        });
-      });
-  if (hasLocalVocab) {
+  if (IdTableUtils::containsLocalVocabIds(block)) {
     throw std::runtime_error{
         "The query to write a materialized view returned a string not "
         "contained in the index (local vocabulary entry). This could be "
