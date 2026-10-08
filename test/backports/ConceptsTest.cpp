@@ -18,13 +18,15 @@ CPP_template(typename T)(requires(Something<T>)) struct C {
 
   // A member function that is templated and constrained on an independent
   // type `F`.
-  CPP_template_2(typename F)(requires Something<F>) void f(F arg) { (void)arg; }
+  CPP_template_2(typename F)(requires Something<F>)
+  void f(F arg) {
+    (void)arg;
+  }
 
   // Same, but the constraint combines F and T. Note that you have to use
   // `CPP_and_2` instead of `CPP_and`.
-  CPP_template_2(typename F)(
-      requires Something<F> CPP_and_2 Something<T>) auto i() {
-  }  // Additional template parameter + `auto`
+  CPP_template_2(typename F)(requires Something<F> CPP_and_2 Something<T>)
+  auto i() {}  // Additional template parameter + `auto`
 
   // Member function with explicit return type that has no other template
   // arguments but poses additional constraints on `T`.
@@ -39,7 +41,8 @@ CPP_template(typename T)(requires(Something<T>)) struct C {
 // A variadic function template.  NOTE: you currently have to use plain `&&`,
 // the `CPP_and...` macros won't work here.
 CPP_variadic_template(typename... Ts)(
-    requires(Something<Ts...>&& Something<Ts...>)) void f(Ts...) {}
+    requires(Something<Ts...>&& Something<Ts...>))
+void f(Ts...) {}
 
 TEST(ConceptBackports, lambdas) {
   int i = 3;
