@@ -9,10 +9,11 @@
 
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 
-#include <numeric>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "backports/algorithm.h"
 #include "engine/ExplicitIdTableOperation.h"
@@ -22,6 +23,7 @@
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+#include "util/Views.h"
 
 namespace qlever::namedCacheSecondaryVocab {
 
@@ -52,7 +54,7 @@ std::optional<Id> idInMainVocab(const LocalVocabEntry& entry) {
 // `handledEntries` are the `LocalVocabEntry`s that have already been handled
 // (also by previous calls), each of which is handled only once.
 void collectNewWords(
-    ql::span<const Id> column, const SecondaryVocabulary& secondaryVocab,
+    ConstIdColumnRef column, const SecondaryVocabulary& secondaryVocab,
     ad_utility::HashSet<const LocalVocabEntry*>& handledEntries,
     ad_utility::HashSet<std::string>& newWords) {
   for (Id id : column) {
@@ -87,8 +89,12 @@ size_t addNewWordsToSecondaryVocab(const Entries& entries,
   ad_utility::HashSet<std::string> newWords;
   for (const auto& [key, value] : entries) {
     auto view = ExplicitIdTableOperation::viewOf(value->result_);
-    for (const auto& column : view.getColumns()) {
-      collectNewWords(column, secondaryVocab, handledEntries, newWords);
+    // The columns without a variable are not written (see
+    // `canonicalColumnOrder`), so their words are not needed.
+    for (ColumnIndex column :
+         canonicalColumnOrder(value->varToColMap_, view.numColumns())) {
+      collectNewWords(view.getColumn(column), secondaryVocab, handledEntries,
+                      newWords);
     }
   }
 
@@ -131,15 +137,10 @@ std::vector<ColumnIndex> canonicalColumnOrder(
   }
   ql::ranges::sort(variables);
   std::vector<ColumnIndex> result;
-  std::vector<bool> isUsed(numColumns, false);
+  // `std::vector<bool>` does not work with `std::exchange`.
+  std::vector<char> isUsed(numColumns, false);
   for (const auto& [name, column] : variables) {
-    if (!isUsed[column]) {
-      isUsed[column] = true;
-      result.push_back(column);
-    }
-  }
-  for (ColumnIndex column = 0; column < numColumns; ++column) {
-    if (!isUsed[column]) {
+    if (!std::exchange(isUsed[column], true)) {
       result.push_back(column);
     }
   }
@@ -150,12 +151,19 @@ std::vector<ColumnIndex> canonicalColumnOrder(
 CanonicalizedValue canonicalizeWithPermutation(
     const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,
-    const NamedResultCache::Value::Allocator& allocator,
-    bool sortOnAllColumns) {
-  // Copy the table (via the given `allocator`), and rewrite the copy in place.
+    const NamedResultCache::Value::Allocator& allocator) {
+  // Copy the columns of the table in canonical order (via the given
+  // `allocator`), and rewrite the copy in place. The canonical column order is
+  // necessary because the order of the columns of a result depends on the query
+  // plan, which may change when the data changes. The columns without a
+  // variable are dropped, because no query can refer to them. The columns of
+  // the geo index are identified by their variable, so the index is not
+  // affected.
   auto view = ExplicitIdTableOperation::viewOf(value.result_);
-  IdTable table{view.numColumns(), allocator};
-  table.insertAtEnd(view);
+  auto oldColumnOfNewColumn =
+      canonicalColumnOrder(value.varToColMap_, view.numColumns());
+  IdTable table{oldColumnOfNewColumn.size(), allocator};
+  table.insertAtEnd(view.asColumnSubsetView(oldColumnOfNewColumn));
   if (containsLocalVocabIds(value)) {
     for (auto column : table.getColumns()) {
       ql::ranges::for_each(column, [&secondaryVocab](Id& id) {
@@ -164,39 +172,47 @@ CanonicalizedValue canonicalizeWithPermutation(
     }
   }
 
-  // Bring the columns into canonical order. This is necessary because the
-  // order of the columns of a result depends on the query plan, which may
-  // change when the data changes. The columns of the geo index are identified
-  // by their variable, so the index is not affected.
+  // Adapt the `varToColMap` and the `resultSortedOn` to the new columns.
+  constexpr auto droppedColumn = std::numeric_limits<ColumnIndex>::max();
+  std::vector<ColumnIndex> newColumnOfOldColumn(view.numColumns(),
+                                                droppedColumn);
+  for (auto [newColumn, oldColumn] :
+       ::ranges::views::enumerate(oldColumnOfNewColumn)) {
+    newColumnOfOldColumn[oldColumn] = newColumn;
+  }
   auto varToColMap = value.varToColMap_;
-  auto resultSortedOn = value.resultSortedOn_;
-  auto oldColumnOfNewColumn =
-      canonicalColumnOrder(value.varToColMap_, table.numColumns());
-  if (!ql::ranges::is_sorted(oldColumnOfNewColumn)) {
-    table.setColumnSubset(oldColumnOfNewColumn);
-    auto newColumnOfOldColumn = invertPermutation(oldColumnOfNewColumn);
-    for (auto& [variable, info] : varToColMap) {
-      info.columnIndex_ = newColumnOfOldColumn[info.columnIndex_];
+  for (auto& [variable, info] : varToColMap) {
+    info.columnIndex_ = newColumnOfOldColumn[info.columnIndex_];
+  }
+  // The rows are still sorted by the prefix of `resultSortedOn` that consists
+  // only of columns that were not dropped.
+  std::vector<ColumnIndex> resultSortedOn;
+  for (ColumnIndex column : value.resultSortedOn_) {
+    if (newColumnOfOldColumn[column] == droppedColumn) {
+      break;
     }
-    for (auto& column : resultSortedOn) {
-      column = newColumnOfOldColumn[column];
-    }
+    resultSortedOn.push_back(newColumnOfOldColumn[column]);
   }
 
-  if (sortOnAllColumns) {
-    resultSortedOn.resize(table.numColumns());
-    std::iota(resultSortedOn.begin(), resultSortedOn.end(), ColumnIndex{0});
-  }
-
+  // The rows are sorted by `resultSortedOn` first, so the sort order that the
+  // query plan produced is always kept.
+  // TODO<joka921> Distinguish between an explicit sort order of the query
+  // (via `INTERNAL SORT BY`, which has to be kept) and a sort order that the
+  // query plan produced by accident (which may change when the plan changes,
+  // and could be replaced by a plan-independent order to keep the diffs of
+  // two blobs small). This information is currently not stored in a
+  // `NamedResultCache::Value`.
   std::optional<SpatialJoinCachedIndex> geoIndex = value.cachedGeoIndex_;
-  auto permutation =
-      canonicalSortingPermutation(table.asStaticView<0>(), resultSortedOn);
+  auto permutation = canonicalRowOrder::canonicalSortingPermutation(
+      table.asStaticView<0>(), resultSortedOn);
   if (!ql::ranges::is_sorted(permutation)) {
-    table = permuteRows(table.asStaticView<0>(), permutation, allocator);
+    table = canonicalRowOrder::permuteRows(table.asStaticView<0>(), permutation,
+                                           allocator);
     if (geoIndex.has_value()) {
       // `withPermutedRows` requires the new row of each old row, whereas
       // `permutation` contains the old row of each new row.
-      geoIndex = geoIndex->withPermutedRows(invertPermutation(permutation));
+      geoIndex = geoIndex->withPermutedRows(
+          canonicalRowOrder::invertPermutation(permutation));
     }
   }
 
@@ -212,11 +228,8 @@ CanonicalizedValue canonicalizeWithPermutation(
 NamedResultCache::Value canonicalizeForSerialization(
     const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,
-    const NamedResultCache::Value::Allocator& allocator,
-    bool sortOnAllColumns) {
-  return canonicalizeWithPermutation(value, secondaryVocab, allocator,
-                                     sortOnAllColumns)
-      .value_;
+    const NamedResultCache::Value::Allocator& allocator) {
+  return canonicalizeWithPermutation(value, secondaryVocab, allocator).value_;
 }
 
 }  // namespace qlever::namedCacheSecondaryVocab

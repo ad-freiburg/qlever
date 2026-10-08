@@ -35,15 +35,15 @@
 // order. Two tables in canonical order differ only by row insertions and
 // deletions iff their contents differ only by these, which is what makes the
 // diff of two blobs small (see `alignRows`).
-namespace qlever {
+namespace qlever::canonicalRowOrder {
 
 // The value in the result of `alignRows` for a row without a counterpart.
 inline constexpr size_t noMatchingRow = std::numeric_limits<size_t>::max();
 
-// The columns of a table, as spans of `Id`s of equal size. The overloads of
-// `isInCanonicalOrder` and `alignRows` for this type also work on tables that
-// are not `IdTable`s, for example raw column data in a serialized blob.
-using IdColumns = ql::span<const ql::span<const Id>>;
+// The columns of a table, which all have the same number of rows. The overloads
+// of `isInCanonicalOrder` and `alignRows` for this type also work on tables
+// that are not `IdTable`s, for example raw column data in a serialized blob.
+using IdColumns = ql::span<const ConstIdColumnRef>;
 
 // Return the permutation `oldRowOfNewRow` that brings the rows of `table` into
 // canonical order, with respect to the `resultSortedOn` columns: the row at
@@ -53,13 +53,12 @@ std::vector<size_t> canonicalSortingPermutation(
     const IdTableView<0>& table, ql::span<const ColumnIndex> resultSortedOn);
 
 // Return true iff `table` is in canonical order, with respect to the
-// `resultSortedOn` columns.
+// `resultSortedOn` columns. Return false (instead of failing) if
+// `resultSortedOn` contains a column that does not exist.
 bool isInCanonicalOrder(const IdTableView<0>& table,
                         ql::span<const ColumnIndex> resultSortedOn);
 
-// Same as above, but for a table that is given by its `columns`. In contrast
-// to the `IdTableView` overload, return false (instead of failing) if
-// `resultSortedOn` contains a column that does not exist.
+// Same as above, but for a table that is given by its `columns`.
 bool isInCanonicalOrder(IdColumns columns,
                         ql::span<const ColumnIndex> resultSortedOn);
 
@@ -99,6 +98,6 @@ std::vector<size_t> alignRows(const IdTableView<0>& base,
 std::vector<size_t> alignRows(IdColumns base, IdColumns target,
                               ql::span<const ColumnIndex> resultSortedOn = {});
 
-}  // namespace qlever
+}  // namespace qlever::canonicalRowOrder
 
 #endif  // QLEVER_SRC_LIBQLEVER_CANONICALROWORDER_H

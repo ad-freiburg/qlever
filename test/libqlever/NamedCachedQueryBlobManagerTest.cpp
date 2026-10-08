@@ -1108,8 +1108,8 @@ TEST(NamedCachedQueryBlobManager, blobWithNewWordsAndSpatialIndex) {
 
 // _____________________________________________________________________________
 // Test that every entry (also one without local vocab `Id`s) is written in
-// canonical order, that the entries of the source stay unchanged, and that
-// `sortOnAllColumns_` replaces the sort order of the plan by all columns.
+// canonical order with respect to the sort order of the plan, and that the
+// entries of the source stay unchanged.
 TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
   auto sourceConfig =
       buildTestIndex("<m> <p> <b> . <m> <p> <a> . <n> <p> <a> .");
@@ -1132,14 +1132,14 @@ TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
     auto entry = qlever.namedResultCache().get(name);
     ASSERT_NE(entry, nullptr) << name;
     EXPECT_EQ(entry->resultSortedOn_, sortedOn) << name;
-    EXPECT_TRUE(
-        isInCanonicalOrder(ExplicitIdTableOperation::viewOf(entry->result_),
-                           entry->resultSortedOn_))
+    EXPECT_TRUE(canonicalRowOrder::isInCanonicalOrder(
+        ExplicitIdTableOperation::viewOf(entry->result_),
+        entry->resultSortedOn_))
         << name;
   };
 
-  // Without `sortOnAllColumns_`, the sort order of the plan is kept, and the
-  // rows are in canonical order with respect to it.
+  // The sort order of the plan is kept, and the rows are in canonical order
+  // with respect to it.
   auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
   Qlever target{EngineConfig{}, /*skipLoading=*/true};
   target.deserializeVocabAndNamedCacheFromCompressedBlob(blob);
@@ -1153,19 +1153,6 @@ TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
                          "ql:cached-result-with-name-sorted {}}",
                          ad_utility::MediaType::tsv),
             "?s\t?o\n<m>\t<a>\n<m>\t<b>\n<n>\t<a>\n");
-
-  // With `sortOnAllColumns_`, every entry is sorted by all of its columns.
-  BlobSerializationConfig config;
-  config.sortOnAllColumns_ = true;
-  auto sortedBlob = source.serializeVocabAndNamedCacheToCompressedBlob(config);
-  Qlever sortedTarget{EngineConfig{}, /*skipLoading=*/true};
-  sortedTarget.deserializeVocabAndNamedCacheFromCompressedBlob(sortedBlob);
-  expectCanonical(sortedTarget, "ints", {0, 1});
-  expectCanonical(sortedTarget, "sorted", {0, 1});
-  EXPECT_EQ(sortedTarget.query("SELECT ?s ?o WHERE { SERVICE "
-                               "ql:cached-result-with-name-sorted {}}",
-                               ad_utility::MediaType::tsv),
-            "?s\t?o\n<m>\t<a>\n<n>\t<a>\n<m>\t<b>\n");
 
   // The entries of the source are unchanged.
   EXPECT_EQ(columnsOfPinnedResult(source, "ints"), intsBefore);

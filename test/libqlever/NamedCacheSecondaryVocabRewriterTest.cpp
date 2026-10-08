@@ -32,6 +32,7 @@ using namespace qlever::namedCacheSecondaryVocab;
 using secondaryVocabTestHelpers::secondaryVocabIs;
 using ::testing::ElementsAre;
 using ::testing::HasSubstr;
+using ::testing::IsEmpty;
 
 namespace {
 using Value = NamedResultCache::Value;
@@ -267,8 +268,11 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
   EXPECT_EQ(Id::fromBits(positionOfA.lowerBound_.get()), secondaryId(0));
   auto value = std::make_shared<const Value>(Value{
       std::make_shared<const IdTable>(makeIdTableFromVector({{m}, {a}, {y}})),
-      VariableToColumnMap{}, std::vector<ColumnIndex>{}, std::move(localVocab),
-      "handmade", std::nullopt});
+      VariableToColumnMap{
+          {Variable{"?x"},
+           ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
+      std::vector<ColumnIndex>{}, std::move(localVocab), "handmade",
+      std::nullopt});
 
   // The secondary vocabulary that is passed in has to be an extension of the
   // one of the index (see the precondition in
@@ -291,9 +295,8 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
 
 // _____________________________________________________________________________
 // Test that the columns of an entry are written in the order of the variable
-// names (then the columns without variable), and that `sortOnAllColumns`
-// replaces the sort order of the entry by the lexicographic order of all
-// columns.
+// names, that the columns without a variable are dropped, and that the sort
+// order of the entry is kept (up to the first dropped column).
 TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
   using ColumnInfo = ColumnIndexAndTypeInfo;
   auto info = [](ColumnIndex index) {
@@ -304,9 +307,15 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
   VariableToColumnMap map{{Variable{"?z"}, info(0)},
                           {Variable{"?a"}, info(2)},
                           {Variable{"?m"}, info(3)}};
-  EXPECT_THAT(canonicalColumnOrder(map, 4), ElementsAre(2, 3, 0, 1));
-  EXPECT_THAT(canonicalColumnOrder({}, 2), ElementsAre(0, 1));
-  EXPECT_THAT(canonicalColumnOrder(map, 5), ElementsAre(2, 3, 0, 1, 4));
+  EXPECT_THAT(canonicalColumnOrder(map, 4), ElementsAre(2, 3, 0));
+  EXPECT_THAT(canonicalColumnOrder({}, 2), IsEmpty());
+  EXPECT_THAT(canonicalColumnOrder(map, 5), ElementsAre(2, 3, 0));
+  EXPECT_ANY_THROW(canonicalColumnOrder(map, 3));
+  // A column that belongs to two variables is written only once.
+  VariableToColumnMap twoVariables{{Variable{"?b"}, info(1)},
+                                   {Variable{"?c"}, info(1)},
+                                   {Variable{"?a"}, info(0)}};
+  EXPECT_THAT(canonicalColumnOrder(twoVariables, 2), ElementsAre(0, 1));
 
   auto makeValue = [&map](std::vector<ColumnIndex> sortedOn) {
     return Value{std::make_shared<const IdTable>(makeIdTableFromVector(
@@ -325,29 +334,27 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
   // The table is sorted by its first column.
   auto value = makeValue({0});
   auto copy = canonicalizeForSerialization(value, secondaryVocab, allocator);
+  ASSERT_EQ(ExplicitIdTableOperation::viewOf(copy.result_).numColumns(), 3u);
   EXPECT_THAT(column(copy, 0),
               ElementsAre(Id::makeFromInt(5), Id::makeFromInt(5)));
   EXPECT_THAT(column(copy, 1),
               ElementsAre(Id::makeFromInt(3), Id::makeFromInt(4)));
   EXPECT_THAT(column(copy, 2),
               ElementsAre(Id::makeFromInt(1), Id::makeFromInt(2)));
-  EXPECT_THAT(column(copy, 3),
-              ElementsAre(Id::makeFromInt(7), Id::makeFromInt(6)));
+  EXPECT_EQ(copy.varToColMap_.size(), 3u);
   EXPECT_EQ(copy.varToColMap_.at(Variable{"?a"}).columnIndex_, 0u);
   EXPECT_EQ(copy.varToColMap_.at(Variable{"?m"}).columnIndex_, 1u);
   EXPECT_EQ(copy.varToColMap_.at(Variable{"?z"}).columnIndex_, 2u);
   EXPECT_THAT(copy.resultSortedOn_, ElementsAre(2));
 
-  // The sort order of the plan does not matter if `sortOnAllColumns` is set.
-  for (std::vector<ColumnIndex> sortedOn :
-       {std::vector<ColumnIndex>{}, std::vector<ColumnIndex>{0},
-        std::vector<ColumnIndex>{3, 1}}) {
-    auto sorted = canonicalizeForSerialization(makeValue(sortedOn),
-                                               secondaryVocab, allocator, true);
-    EXPECT_THAT(sorted.resultSortedOn_, ElementsAre(0, 1, 2, 3));
-    EXPECT_THAT(column(sorted, 0),
-                ElementsAre(Id::makeFromInt(5), Id::makeFromInt(5)));
-    EXPECT_THAT(column(sorted, 1),
-                ElementsAre(Id::makeFromInt(3), Id::makeFromInt(4)));
-  }
+  // The sort order is kept up to the first dropped column.
+  auto keptSortOrder = [&](std::vector<ColumnIndex> sortedOn) {
+    return canonicalizeForSerialization(makeValue(std::move(sortedOn)),
+                                        secondaryVocab, allocator)
+        .resultSortedOn_;
+  };
+  EXPECT_THAT(keptSortOrder({}), IsEmpty());
+  EXPECT_THAT(keptSortOrder({3, 0}), ElementsAre(1, 2));
+  EXPECT_THAT(keptSortOrder({0, 1, 3}), ElementsAre(2));
+  EXPECT_THAT(keptSortOrder({1, 0}), IsEmpty());
 }

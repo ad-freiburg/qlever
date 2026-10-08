@@ -274,16 +274,17 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
 
   // Write the named cache entries. Each entry is written as a canonicalized
   // copy (the entry in the named cache itself stays unchanged): its `Id`s of
-  // type `LocalVocabIndex` are rewritten and its rows and columns are in
-  // canonical order (see `canonicalizeForSerialization`). The words of the
+  // type `LocalVocabIndex` are rewritten, its columns without a variable are
+  // dropped, and its rows and columns are in canonical order (see
+  // `canonicalizeForSerialization`). The words of the
   // local vocab of such a copy are not written, because they are no longer
   // referenced.
   namedResultCacheSerializer::writeEntries(
       serializer, entries,
-      [&secondaryVocab, &qlever, &config](
-          auto& entrySerializer, const NamedResultCache::Value& value) {
+      [&secondaryVocab, &qlever](auto& entrySerializer,
+                                 const NamedResultCache::Value& value) {
         auto canonical = namedCacheSecondaryVocab::canonicalizeForSerialization(
-            value, secondaryVocab, qlever.allocator_, config.sortOnAllColumns_);
+            value, secondaryVocab, qlever.allocator_);
         namedResultCacheSerializer::writeValue(
             entrySerializer, canonical,
             ExplicitIdTableOperation::viewOf(canonical.result_).getColumns(),

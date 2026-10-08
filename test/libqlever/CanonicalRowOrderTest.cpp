@@ -17,7 +17,7 @@
 #include "index/LocalVocabEntry.h"
 #include "libqlever/CanonicalRowOrder.h"
 
-using namespace qlever;
+using namespace qlever::canonicalRowOrder;
 using testing::ElementsAre;
 using testing::IsEmpty;
 

@@ -11,11 +11,13 @@
 
 #include <numeric>
 #include <optional>
+#include <utility>
 
 #include "backports/algorithm.h"
 #include "util/Exception.h"
+#include "util/Views.h"
 
-namespace qlever {
+namespace qlever::canonicalRowOrder {
 
 namespace {
 // Return the columns of a table with `numColumns` columns in the order in which
@@ -26,17 +28,17 @@ namespace {
 std::optional<std::vector<ColumnIndex>> tryComparisonColumns(
     size_t numColumns, ql::span<const ColumnIndex> resultSortedOn) {
   std::vector<ColumnIndex> result;
-  std::vector<bool> isSortedOn(numColumns, false);
+  // `std::vector<bool>` does not work with `std::exchange`.
+  std::vector<char> isSortedOn(numColumns, false);
   for (ColumnIndex column : resultSortedOn) {
     if (column >= numColumns) {
       return std::nullopt;
     }
-    if (!isSortedOn[column]) {
-      isSortedOn[column] = true;
+    if (!std::exchange(isSortedOn[column], true)) {
       result.push_back(column);
     }
   }
-  for (ColumnIndex column = 0; column < numColumns; ++column) {
+  for (ColumnIndex column : ad_utility::integerRange(numColumns)) {
     if (!isSortedOn[column]) {
       result.push_back(column);
     }
@@ -53,18 +55,22 @@ std::vector<ColumnIndex> comparisonColumns(
   return std::move(result).value();
 }
 
-// Return the number of rows of a table that is given by its `columns`.
+// Return the number of rows of a table that is given by its `columns`, which
+// have to have the same number of rows each.
 size_t numRowsOf(IdColumns columns) {
-  return columns.empty() ? 0 : columns[0].size();
+  if (columns.empty()) {
+    return 0;
+  }
+  size_t numRows = columns[0].size();
+  AD_CONTRACT_CHECK(ql::ranges::all_of(columns, [numRows](const auto& column) {
+    return column.size() == numRows;
+  }));
+  return numRows;
 }
 
-// Return the columns of `table` as spans, which are valid as long as `table`.
-std::vector<ql::span<const Id>> columnsOf(const IdTableView<0>& table) {
-  std::vector<ql::span<const Id>> result;
-  for (size_t column = 0; column < table.numColumns(); ++column) {
-    result.push_back(table.getColumn(column));
-  }
-  return result;
+// Return the columns of `table`, which are valid as long as `table`.
+std::vector<ConstIdColumnRef> columnsOf(const IdTableView<0>& table) {
+  return ::ranges::to<std::vector<ConstIdColumnRef>>(table.getColumns());
 }
 
 // Compare the two `Id`s via `ValueId::compareThreeWay`, and break ties by
@@ -147,10 +153,9 @@ IdTable permuteRows(const IdTableView<0>& table,
                     const ad_utility::AllocatorWithLimit<Id>& allocator) {
   IdTable result{table.numColumns(), allocator};
   result.resize(oldRowOfNewRow.size());
-  for (size_t column = 0; column < table.numColumns(); ++column) {
-    auto source = table.getColumn(column);
-    auto target = result.getColumn(column);
-    for (size_t row = 0; row < oldRowOfNewRow.size(); ++row) {
+  for (auto&& [source, target] :
+       ::ranges::views::zip(table.getColumns(), result.getColumns())) {
+    for (size_t row : ad_utility::integerRange(oldRowOfNewRow.size())) {
       target[row] = source[oldRowOfNewRow[row]];
     }
   }
@@ -160,7 +165,7 @@ IdTable permuteRows(const IdTableView<0>& table,
 // _____________________________________________________________________________
 std::vector<size_t> invertPermutation(ql::span<const size_t> permutation) {
   std::vector<size_t> result(permutation.size(), noMatchingRow);
-  for (size_t i = 0; i < permutation.size(); ++i) {
+  for (size_t i : ad_utility::integerRange(permutation.size())) {
     AD_CONTRACT_CHECK(permutation[i] < permutation.size() &&
                       result[permutation[i]] == noMatchingRow);
     result[permutation[i]] = i;
@@ -198,4 +203,4 @@ std::vector<size_t> alignRows(const IdTableView<0>& base,
   return alignRows(columnsOf(base), columnsOf(target), resultSortedOn);
 }
 
-}  // namespace qlever
+}  // namespace qlever::canonicalRowOrder

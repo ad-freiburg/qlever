@@ -83,10 +83,12 @@ size_t addNewWordsToSecondaryVocab(const Entries& entries,
 Id rewriteId(Id id, const SecondaryVocabulary& secondaryVocab);
 
 // Return the order in which the columns of a table with `numColumns` columns
-// and the given `varToColMap` are written to a blob: first the columns of the
-// variables in the lexicographic order of the variable names, then all columns
-// without a variable in their original order. The result is the vector
-// `oldColumnOfNewColumn`, a permutation of `0, ..., numColumns - 1`.
+// and the given `varToColMap` are written to a blob: the columns of the
+// variables in the lexicographic order of the variable names (a column that
+// belongs to several variables is written only once). The columns without a
+// variable are not written at all, because no query can refer to them. The
+// result is the vector `oldColumnOfNewColumn`, which contains a subset of
+// `0, ..., numColumns - 1`.
 std::vector<ColumnIndex> canonicalColumnOrder(
     const VariableToColumnMap& varToColMap, size_t numColumns);
 
@@ -103,12 +105,15 @@ struct CanonicalizedValue {
 // all `Id`s are rewritten via `rewriteId` (only if `value` contains any `Id`
 // of type `LocalVocabIndex`, see `containsLocalVocabIds`), and the rows are in
 // canonical order (see `CanonicalRowOrder.h`) with respect to the
-// `resultSortedOn_` of the copy. The columns of the copy are in the order given
-// by `canonicalColumnOrder` (the plan of a query may produce its columns in a
-// different order after a change of the data, which would make two otherwise
-// equal blobs differ); `varToColMap_` and `resultSortedOn_` of the copy are
-// adapted accordingly. The `value` itself is not modified. The table
-// of the copy is an owning `IdTable` that is allocated via `allocator`.
+// `resultSortedOn_` of the copy. The columns of the copy are the ones given
+// by `canonicalColumnOrder`, in that order (the plan of a query may produce
+// its columns in a different order after a change of the data, which would
+// make two otherwise equal blobs differ); `varToColMap_` and `resultSortedOn_`
+// of the copy are adapted accordingly. In particular, the `resultSortedOn_` of
+// the copy is the longest prefix of the `resultSortedOn_` of `value` that
+// contains no dropped column, so the sort order that the query plan produced
+// is kept. The `value` itself is not modified. The table of the copy is an
+// owning `IdTable` that is allocated via `allocator`.
 //
 // The rewritten `Id`s no longer compare like the `Id`s that they replace:
 // all `Id`s of type `Datatype::SecondaryVocabIndex` compare greater than all
@@ -119,12 +124,12 @@ struct CanonicalizedValue {
 // `cachedGeoIndex_` is permuted accordingly (see
 // `SpatialJoinCachedIndex::withPermutedRows`).
 //
-// If `sortOnAllColumns` is true, then the `resultSortedOn_` of the copy is
-// replaced by all of its columns in increasing order (so the rows are sorted
-// lexicographically by all columns, which is a true statement about the copy).
-// This makes the canonical order independent of the `resultSortedOn_` of
-// `value`, which depends on the query plan, and thus may differ between two
-// runs of the same query on the same data.
+// NOTE: Keeping the `resultSortedOn_` of `value` is required for queries with
+// an explicit `INTERNAL SORT BY`, whose sort order is part of the query. For
+// other queries, the sort order depends on the query plan and may differ
+// between two runs of the same query, which makes the diff of the two blobs
+// large. Distinguishing the two cases is left to the code that pins the
+// queries.
 //
 // NOTE: The `localVocab_` of the copy is a clone of the one of `value`, which
 // is still needed for the blank nodes that the entry may contain. Its words,
@@ -132,16 +137,14 @@ struct CanonicalizedValue {
 NamedResultCache::Value canonicalizeForSerialization(
     const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,
-    const NamedResultCache::Value::Allocator& allocator,
-    bool sortOnAllColumns = false);
+    const NamedResultCache::Value::Allocator& allocator);
 
 // Same as `canonicalizeForSerialization`, but additionally return the
 // permutation of the rows that was applied.
 CanonicalizedValue canonicalizeWithPermutation(
     const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,
-    const NamedResultCache::Value::Allocator& allocator,
-    bool sortOnAllColumns = false);
+    const NamedResultCache::Value::Allocator& allocator);
 
 }  // namespace qlever::namedCacheSecondaryVocab
 
