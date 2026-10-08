@@ -18,11 +18,11 @@ CPP_template_def(typename MakeCloneWithNewChildren)(
     requires ad_utility::InvocableWithExactReturnType<
         MakeCloneWithNewChildren, std::shared_ptr<QueryExecutionTree>,
         std::vector<std::shared_ptr<QueryExecutionTree>>>)
-    std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
-        pushDownBindToAnyChild(
-            const parsedQuery::Bind& bind,
-            std::vector<std::shared_ptr<QueryExecutionTree>> children,
-            MakeCloneWithNewChildren makeCloneWithNewChildren) const {
+std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
+    pushDownBindToAnyChild(
+        const parsedQuery::Bind& bind,
+        std::vector<std::shared_ptr<QueryExecutionTree>> children,
+        MakeCloneWithNewChildren makeCloneWithNewChildren) const {
   if (children.empty()) {
     return std::nullopt;
   }

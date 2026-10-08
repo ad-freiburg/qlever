@@ -115,8 +115,8 @@ Result Filter::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 CPP_template_def(typename Table)(requires IdTableLike<Table>)
-    IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
-                                  Table&& idTable) const {
+IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
+                              Table&& idTable) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
 
