@@ -1378,6 +1378,13 @@ namespace {
 // does not store plain `Id`s would return it.
 struct Proxy {
   Id id_;
+  // Count the conversions to `Id`, so that a test can check that an operation
+  // really went through the proxy.
+  static inline size_t numConversions = 0;
+  operator Id() const {
+    ++numConversions;
+    return id_;
+  }
 };
 
 // The minimal interface of a table that the `RowReference` class needs, with an
@@ -1430,6 +1437,45 @@ TEST(IdTable, rowReferenceOperatorBracket) {
     ids.push_back(proxy.id_);
   }
   EXPECT_THAT(ids, ::testing::ElementsAre(V(3), V(4)));
+}
+
+// Test that a `RowReference` whose element access returns proxies can be
+// materialized as a `Row` or `std::array` and compared to a `Row`. The
+// elements are `Proxy`s inside `RowReference`, and only the conversion
+// `Proxy` -> `Id` makes them `Id`s again, which is what `numConversions`
+// counts.
+TEST(IdTable, rowReferenceConversionAndComparisonWithProxies) {
+  using ConstRow = columnBasedIdTable::RowReference<TableReturningProxies,
+                                                    ad_utility::IsConst::True>;
+  TableReturningProxies table;
+  const ConstRow constRow{&table, 0};
+
+  // Test that the elements that the conversions and the comparison read (via
+  // `operator[]` of a temporary row reference and via the iterators) are
+  // proxies.
+  static_assert(std::is_same_v<decltype(std::move(constRow)[0]), Proxy>);
+  static_assert(std::is_same_v<decltype(*constRow.begin()), Proxy>);
+
+  // Test the conversion to a `Row`: each of the two proxies is converted.
+  Proxy::numConversions = 0;
+  columnBasedIdTable::Row<Id, 2> row = constRow;
+  EXPECT_EQ(Proxy::numConversions, 2u);
+  EXPECT_EQ(row[0], V(3));
+  EXPECT_EQ(row[1], V(4));
+
+  // Test the conversion to a `std::array`.
+  Proxy::numConversions = 0;
+  const auto array = static_cast<std::array<Id, 2>>(constRow);
+  EXPECT_EQ(Proxy::numConversions, 2u);
+  EXPECT_THAT(array, ::testing::ElementsAre(V(3), V(4)));
+
+  // Test the comparison with a `Row`: the proxies are converted to compare
+  // them to the `Id`s of the `Row`.
+  Proxy::numConversions = 0;
+  EXPECT_TRUE(constRow == row);
+  EXPECT_GT(Proxy::numConversions, 0u);
+  row[1] = V(5);
+  EXPECT_TRUE(constRow != row);
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value
