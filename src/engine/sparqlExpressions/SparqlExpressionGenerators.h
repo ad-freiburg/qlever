@@ -23,7 +23,7 @@
 #ifndef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
 #include "backports/functional.h"
 #endif
-#include "engine/idTable/IdColumn.h"
+#include "engine/idTable/IdTable.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
