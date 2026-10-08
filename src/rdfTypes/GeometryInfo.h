@@ -180,6 +180,10 @@ class GeometryInfo {
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
   uint32_t numGeometries_;
+  // Explicit (zeroed) padding before the 8-byte aligned `metricLength_`. The
+  // `GeoVocabulary` writes the binary representation of this class to disk,
+  // so implicit padding would make the files depend on uninitialized memory.
+  uint32_t padding_ = 0;
   MetricLength metricLength_;
   MetricArea metricArea_;
 
@@ -258,6 +262,10 @@ class GeometryInfo {
       requires RequestedInfoT<RequestedInfo>) static std::
       optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
 };
+
+// The binary representation of a `GeometryInfo` must not contain implicit
+// padding, see `GeometryInfo::padding_`.
+static_assert(sizeof(GeometryInfo) == 48);
 
 // For the disk serialization we require that a `GeometryInfo` is trivially
 // copyable.

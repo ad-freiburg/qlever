@@ -6,6 +6,11 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <boost/asio/use_future.hpp>
+
+#include "util/AsioHelpers.h"
+#include "util/GlobalExecutor.h"
+
 // _____________________________________________________________________________
 std::string VocabularyInternalExternal::operator[](uint64_t i) const {
   auto fromInternal = internalVocab_[i];
@@ -32,6 +37,51 @@ uint64_t VocabularyInternalExternal::WordWriter::operator()(
   }
   ++sinceMilestone_;
   return idx_++;
+}
+
+// _____________________________________________________________________________
+void VocabularyInternalExternal::BlockWriter::append(
+    std::unique_ptr<PreparedBlockBase> prepared) {
+  const WordBlock& block = static_cast<Prepared&>(*prepared).block_;
+  AD_CONTRACT_CHECK(block.firstPosition_ == writer_.idx_);
+  uint64_t dataOffset = writer_.externalWriter_.reserveBlock(block);
+  // The same rule as in `WordWriter::operator()` for the internal vocabulary;
+  // the external vocabulary gets the whole block below.
+  for (size_t i = 0; i < block.numWords(); ++i) {
+    if (!block.isExternal_[i] ||
+        writer_.sinceMilestone_ >= writer_.milestoneDistance_ ||
+        writer_.idx_ == 0) {
+      writer_.internalWriter_(block.word(i), writer_.idx_);
+      writer_.sinceMilestone_ = 0;
+    }
+    ++writer_.sinceMilestone_;
+    ++writer_.idx_;
+  }
+  // Bound the number of writes in flight (each holds its block in memory).
+  // The oldest ones are typically long done, so this rarely waits.
+  const size_t maxNumPendingWrites = 2 * ad_utility::globalExecutorNumThreads();
+  while (pendingWrites_.size() >= maxNumPendingWrites) {
+    pendingWrites_.front().get();
+    pendingWrites_.pop_front();
+  }
+  pendingWrites_.push_back(ad_utility::runFunctionOnExecutor(
+      ad_utility::globalExecutor(),
+      [this, prepared = std::move(prepared), dataOffset]() {
+        writer_.externalWriter_.writeBlockAt(
+            static_cast<Prepared&>(*prepared).block_, dataOffset);
+      },
+      boost::asio::use_future));
+}
+
+// _____________________________________________________________________________
+void VocabularyInternalExternal::BlockWriter::finishImpl() {
+  // Wait for the writes on the pool (and rethrow their exceptions) before the
+  // files are finished.
+  for (auto& write : pendingWrites_) {
+    write.get();
+  }
+  pendingWrites_.clear();
+  writer_.finish();
 }
 
 // _____________________________________________________________________________
