@@ -15,7 +15,8 @@ using namespace sparqlExpression::detail;
 ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
   auto evaluator = [context](const auto& childResult) -> ExpressionResult {
     using T = std::decay_t<decltype(childResult)>;
-    if (getResultSize(*context, childResult) == 0) {
+    // An empty group has no sample.
+    if (context->size() == 0) {
       return Id::makeUndefined();
     }
     if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {

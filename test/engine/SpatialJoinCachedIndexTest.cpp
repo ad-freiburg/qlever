@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <s2/mutable_s2shape_index.h>
 #include <s2/s2polyline.h>
@@ -33,6 +34,18 @@ void serializeAndDeserializeCache(NamedResultCache& cache,
                            qec->getLocalVocabContext());
 }
 
+// Three linestrings (the first three rows of the result of
+// `SELECT * { ?s <p> ?o }`), followed by two rows that are no linestrings.
+const std::string linestringsKb =
+    "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . "
+    "<s> <p> \"LINESTRING(15.5 2.5, 16.0 3.0)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . "
+    "<s2> <p> \"LINESTRING(11.5 21.5, 11.5 22.0)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . "
+    "<s3> <p> <o2> . "
+    "<s4> <p> \"LINESTRING\" . ";
+
 // _____________________________________________________________________________
 class SpatialJoinCachedIndexTest : public ::testing::TestWithParam<bool> {};
 
@@ -41,16 +54,9 @@ TEST_P(SpatialJoinCachedIndexTest, Basic) {
   bool shouldSerialize = GetParam();
   // Sample data and query
   std::string kb =
-      "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . "
-      "<s> <p> \"LINESTRING(15.5 2.5, 16.0 3.0)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . "
-      "<s2> <p> \"LINESTRING(11.5 21.5, 11.5 22.0)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . "
-      "<s3> <p> <o2> . "
-      "<s4> <p> \"LINESTRING\" . "
-      "<s5> <other-p>  \"LINESTRING(11.05 21.5, 11.5 22.0)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . ";
+      absl::StrCat(linestringsKb,
+                   "<s5> <other-p>  \"LINESTRING(11.05 21.5, 11.5 22.0)\""
+                   "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . ");
   std::string pinned = "SELECT * { ?s <p> ?o }";
 
   // Build a `QueryExecutionContext` and pin the query result of `?s <p> ?o`
@@ -292,6 +298,35 @@ TEST(SpatialJoinCachedIndex, GetPolylineGeometryTypeCheck) {
   EXPECT_TRUE(check(0).has_value());
   EXPECT_FALSE(check(1).has_value());
   EXPECT_FALSE(check(2).has_value());
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, withPermutedRows) {
+  auto qec = ad_utility::testing::getQec(linestringsKb);
+  qec->pinResultWithName() = {"permuted", Variable{"?o"}};
+  auto plan =
+      queryPlannerTestHelpers::parseAndPlan("SELECT * { ?s <p> ?o }", qec);
+  [[maybe_unused]] auto pinResult = plan->getResult();
+  auto cacheEntry = qec->namedResultCache().get("permuted");
+  ASSERT_TRUE(cacheEntry->cachedGeoIndex_.has_value());
+  const auto& original = cacheEntry->cachedGeoIndex_.value();
+
+  // Reverse the order of the five rows.
+  std::vector<size_t> newRowOfOldRow{4, 3, 2, 1, 0};
+  auto permuted = original.withPermutedRows(newRowOfOldRow);
+  EXPECT_EQ(permuted.getRow(0), 4);
+  EXPECT_EQ(permuted.getRow(1), 3);
+  EXPECT_EQ(permuted.getRow(2), 2);
+  EXPECT_EQ(permuted.getGeometryColumn(), original.getGeometryColumn());
+  // The S2 index itself is shared, and the original index is unchanged.
+  EXPECT_EQ(permuted.getIndex().get(), original.getIndex().get());
+  EXPECT_EQ(original.getRow(0), 0);
+  EXPECT_EQ(original.getRow(1), 1);
+  EXPECT_EQ(original.getRow(2), 2);
+
+  // A permutation that does not cover all the rows of the index is rejected.
+  std::vector<size_t> tooShort{0, 1};
+  EXPECT_ANY_THROW(original.withPermutedRows(tooShort));
 }
 
 }  // namespace

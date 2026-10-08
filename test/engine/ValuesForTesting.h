@@ -225,8 +225,7 @@ class ValuesForTesting : public Operation {
       }
       bool containsUndef =
           ql::ranges::any_of(tables(), [&i](const IdTable& table) {
-            return ql::ranges::any_of(table.getColumn(i),
-                                      [](Id id) { return id.isUndefined(); });
+            return ql::ranges::any_of(table.getColumn(i), Id::isUndefinedL);
           });
       using enum ColumnIndexAndTypeInfo::UndefStatus;
       m[variables_.at(i).value()] = ColumnIndexAndTypeInfo{
@@ -272,6 +271,22 @@ class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
   using ValuesForTesting::ValuesForTesting;
   bool knownEmptyResult() override { return false; }
   uint64_t getSizeEstimateBeforeLimit() override { return 1; }
+};
+
+// Similar to `ValuesForTesting` above, but counts the calls to
+// `isDeterministicImpl()`. This can be used to test how often an operation is
+// visited by `Operation::isDeterministic()`.
+class ValuesForTestingCountingDeterminismChecks : public ValuesForTesting {
+  mutable size_t numDeterminismChecks_ = 0;
+
+ public:
+  using ValuesForTesting::ValuesForTesting;
+  size_t numDeterminismChecks() const { return numDeterminismChecks_; }
+
+  bool isDeterministicImpl() const override {
+    ++numDeterminismChecks_;
+    return true;
+  }
 };
 
 #endif  // QLEVER_TEST_ENGINE_VALUESFORTESTING_H

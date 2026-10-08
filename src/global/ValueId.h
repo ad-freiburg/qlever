@@ -536,7 +536,8 @@ class ValueId {
 
   // Enable the serialization of `ValueId` in the `ad_utility::serialization`
   // framework.
-  friend void allowTrivialSerialization(ValueId, auto);
+  template <typename T>
+  friend void allowTrivialSerialization(ValueId, T);
 
   // Similar to `std::visit` for `std::variant`. First gets the datatype and
   // then calls `visitor(getTYPE)` where `getTYPE` is the correct getter method
@@ -615,6 +616,24 @@ class ValueId {
     id.visit(visitor);
     return ostr;
   }
+
+  // Lambdas that forward to the member function of the same name (without the
+  // suffix `L`). Unlike a pointer-to-member like `&Id::isUndefined`, they also
+  // work for proxy types that provide the same member functions, like the
+  // elements of a column view that does not store `Id`s.
+  static constexpr auto isUndefinedL = [](const auto& id) {
+    return id.isUndefined();
+  };
+
+  static constexpr auto isDefinedL = [](const auto& id) {
+    return !id.isUndefined();
+  };
+
+  static constexpr auto getBitsL = [](const auto& id) { return id.getBits(); };
+
+  static constexpr auto getDatatypeL = [](const auto& id) {
+    return id.getDatatype();
+  };
 
  private:
   // Compare the bits of an `Id` whose datatype is one of
