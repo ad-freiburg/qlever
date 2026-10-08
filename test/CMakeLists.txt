@@ -7,10 +7,10 @@ include(GoogleTest)
 # makes the test binaries link against that machine code instead of triggering a
 # whole-program optimization at link time.
 #
-# This only works for GCC: the Clang branch of the top-level `CMakeLists.txt`
-# cannot use fat objects (see the explanation there), and linking bitcode-only
-# objects with `-fno-lto` fails outright, so on Clang the tests are link-time
-# optimized along with everything else.
+# This is only needed for GCC, whose linker plugin otherwise runs LTO whenever
+# it encounters GIMPLE bytecode. With Clang, the test binaries link the machine
+# code of the fat objects by default, and only the targets opted in via
+# `qlever_enable_lto` (see the top-level `CMakeLists.txt`) get ThinLTO.
 #
 # NOTE: `add_compile_options`/`add_link_options` set *directory* properties.
 # They therefore apply to all targets created afterwards in this directory and
