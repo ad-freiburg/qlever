@@ -14,6 +14,7 @@
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <condition_variable>
+#include <cstdint>
 #include <exception>
 #include <future>
 #include <mutex>
@@ -1381,34 +1382,60 @@ class CompressedExternalIdTableSorterTypeErased {
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
-// Sort the rows of a single block, given as the `range` of those rows. The
-// `parallelism` argument specifies whether the sort may use several threads,
-// see `CompressedExternalIdTableBase::transformBlock`.
+// Sort the rows of a single block, given as the `range` of those rows.
 //
-// The parallel case sorts on the global thread pool, such that the block sort
-// uses the same threads (and hence obeys the same parallelism setting) as the
-// other phases of the index build, see `util/GlobalExecutor.h`.
+// The sort runs on the global thread pool, such that it shares its threads with
+// the other phases of the index build, see `util/GlobalExecutor.h`. It is split
+// into as many tasks as that pool has threads. This is a choice made here, not
+// a property of the executor: a smaller number would also work, for example to
+// run several sorts concurrently without oversubscribing the pool.
 //
-// NOTE: The parallel sort blocks the calling thread until it is complete, so it
-// must not be called from a thread of the global thread pool itself. It isn't:
-// the parallel invocations of this function all come from the dedicated thread
-// of the `blockWritePool_` of the sorter, see
-// `CompressedExternalIdTableBase::runOnBlockWriteThreadAndWait`.
+// NOTE: The sort blocks the calling thread until it is complete, so it must
+// not be called from a thread of the global thread pool itself, or it could
+// deadlock against the pool. It isn't: the only caller that matters is
+// `BlockSorter::operator()` below, which runs either on the dedicated
+// background thread of
+// `CompressedExternalIdTableBase::transformAndWriteBlock`, or in the thread
+// that ends the input phase in
+// `CompressedExternalIdTableBase::transformAndPushLastBlock`. The latter is
+// the thread that consumes the sorted output, and a consumer is never a thread
+// of the pool: the ranges that the output is passed through (see
+// `ad_utility::uniqueBlockView` and `util/views/AsyncTransformView.h`) block
+// their consumer and therefore must not be consumed from such a thread
+// themselves.
+//
+// NOTE: The same holds for a thread that merely WAITS for the sort. The sink
+// of `asyncPushBlock` (see `setAsyncPushExecutor`) runs on a strand of the
+// executor of `setMergeExecutor` and blocks in `waitForFuture` until the
+// previous block is sorted and written. If that executor is the global pool,
+// each such sorter occupies one thread of the pool while it waits. With as many
+// sorters as the pool has threads (a single sorter with `-j 1`), no thread is
+// left to run the sort and the process deadlocks. So before `asyncPushBlock` is
+// used with the global executor, either the sink must not block on the pool,
+// or the sort has to become non-blocking (see `blockIndirectSortAsync`).
+template <typename Range, typename Comparator>
+void sortBlockRange(Range& block, const Comparator& comparator) {
+  ad_utility::blockSort::blockIndirectSort(
+      ql::ranges::subrange{std::begin(block), std::end(block)}, comparator,
+      static_cast<uint32_t>(ad_utility::globalExecutorNumThreads()),
+      ad_utility::globalExecutor());
+}
+
+// The same, but only sorting in parallel if the `parallelism` is `Allowed`.
+// The sequential case sorts in the calling thread, which is what the sort of a
+// small last block does, see
+// `CompressedExternalIdTableBase::lastBlockIsTransformedSequentially`.
 template <typename Range, typename Comparator>
 void sortBlockRange(Range& block, const Comparator& comparator,
                     compressedExternalIdTable::Parallelism parallelism) {
   if (parallelism == compressedExternalIdTable::Parallelism::Allowed) {
-    ad_utility::blockSort::blockIndirectSort(
-        ql::ranges::subrange{std::begin(block), std::end(block)}, comparator,
-        static_cast<uint32_t>(ad_utility::globalExecutorNumThreads()),
-        ad_utility::globalExecutor());
+    sortBlockRange(block, comparator);
     return;
   }
   ql::ranges::sort(std::begin(block), std::end(block), comparator);
 }
 
-// The implementation of sorting a single block of a `SortBlockBuffer`, no
-// matter in which of its two layouts that block currently is, see
+// The implementation of sorting a single block of a `SortBlockBuffer`, see
 // `sortBlockRange` above.
 template <typename Comparator>
 struct BlockSorter {
@@ -1521,7 +1548,9 @@ class CompressedExternalIdTableSorter
   // The `executor` is also the one on which `asyncPushBlock` runs its work.
   //
   // IMPORTANT: The `executor` must not be run by the thread that consumes the
-  // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`. The
+  // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`. It
+  // must also not be the global pool as long as the blocks are sorted on that
+  // pool, see the second NOTE at `sortBlockRange`. The
   // execution context behind the `executor` (e.g. a `boost::asio::thread_pool`)
   // has to outlive this sorter, because the sorter holds a strand on the
   // `executor` (for `asyncPushBlock`), whose destructor accesses the context.
@@ -1807,6 +1836,16 @@ class CompressedExternalIdTableSorter
                 << this->memory_.asString()
                 << ". Increasing the memory limit will speed up the merge."
                 << std::endl;
+  }
+
+  // _____________________________________________________________
+  void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
+    sortBlockRange(block, comparator_);
+  }
+
+  // A function with this name is needed by the mixin base class.
+  void transformBlock(IdTableStatic<NumStaticCols>& block) const {
+    sortBlockInPlace(block);
   }
 };
 }  // namespace ad_utility

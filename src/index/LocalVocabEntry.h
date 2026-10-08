@@ -50,9 +50,10 @@ class LocalVocabContext;
 // prefilters), see the detailed note at
 // `valueIdComparators::detail::compareIdsImpl`.
 //
-// This is deliberate for now: nothing but a unit test can currently create a
-// secondary vocabulary (see `IndexImpl::setSecondaryVocab`), so no
-// query is affected. It has to be fixed *before* anything else creates one,
+// This is a known limitation for now: apart from unit tests, a secondary
+// vocabulary is only created when a blob of `NamedCachedQueryBlobManager` that
+// contains new words is loaded, so only queries on such a blob are affected.
+// It has to be fixed before a secondary vocabulary is used more widely,
 // most likely by keeping the position in the main vocabulary (which is what a
 // semantic comparison needs, and which can always be computed from the word)
 // separately from the position in the internal order, and by exposing the two

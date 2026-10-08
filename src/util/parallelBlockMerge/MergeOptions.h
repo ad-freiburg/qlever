@@ -14,7 +14,6 @@
 #include <cstddef>
 #include <limits>
 #include <thread>
-#include <vector>
 
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
@@ -146,17 +145,17 @@ struct MergeOptions {
   // `0` means "as many as `parallelism()`".
   size_t maxNumChunksInFlight = 0;
 
-  // If not empty, the sizes (in elements) of the leading chunks of the merge:
-  // the `i`-th chunk gets the size `firstChunkSizes[i]`, and all the remaining
-  // chunks get the size that `targetNumChunks()` implies. The consumer has to
-  // drain the chunks in the order of their index, so smaller leading chunks
-  // make the first output blocks of the merge available much sooner.
+  // If not `0`, the size (in elements) of the first chunk of the merge. The
+  // following chunks double that size until it reaches the size of a uniform
+  // chunk (the size that `targetNumChunks()` implies), and all the remaining
+  // chunks have that uniform size. The consumer has to drain the chunks in the
+  // order of their index, so smaller leading chunks make the first output
+  // blocks of the merge available much sooner. The value `0` means that all
+  // chunks have the uniform size.
   //
   // NOTE: These are targets and not guarantees, and they never *reduce* the
-  // number of chunks: a leading size that is not smaller than the size of a
-  // uniform chunk is ignored, see `computeChunkBoundaries` in
-  // `MergeHelpers.h`.
-  std::vector<size_t> firstChunkSizes{};
+  // number of chunks, see `computeChunkBoundaries` in `MergeHelpers.h`.
+  size_t firstChunkSize = 0;
 
   // Merge serially in the calling thread if the input has at most that many
   // elements in total, see `shouldMergeSerially()`.

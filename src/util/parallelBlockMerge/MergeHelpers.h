@@ -49,24 +49,6 @@ std::vector<ChunkBoundary<Element>> singleChunk() {
   return {ChunkBoundary<Element>{}};
 }
 
-// The sizes of the chunks that the input of a merge is split into: the first
-// `firstChunkSizes_.size()` chunks get the corresponding size from that vector,
-// and all the remaining chunks get the size `remainingChunkSize_`. All the
-// sizes have to be strictly positive.
-//
-// NOTE: Smaller leading chunks reduce the latency at the start of a merge. The
-// consumer has to drain the chunks in the order of their index, so it reaches
-// the output blocks that the producers of the later chunks have already
-// buffered sooner.
-//
-// NOTE: The sizes are targets and not guarantees. The precision of the chunk
-// sizes is limited by the block size of the input of the merge, see
-// `computeChunkBoundaries`.
-struct ChunkSizes {
-  std::vector<size_t> firstChunkSizes_;
-  size_t remainingChunkSize_;
-};
-
 namespace detail {
 
 // The half-open range of block indices `[firstBlockIdx_, endBlockIdx_)` of a
@@ -146,9 +128,9 @@ std::vector<ChunkBoundary<Element>> chunkBoundariesFromSplitPoints(
   return result;
 }
 
-// The common part of the two overloads of `computeChunkBoundaries` below: run
-// the steps from `MergeHelpersImpl.h`, where `makeTargets` turns the total
-// number of elements into the target quantiles.
+// The common part of the overloads of `computeChunkBoundaries` below: run the
+// steps from `MergeHelpersImpl.h`, where `makeTargets` turns the total number
+// of elements into the target quantiles.
 CPP_template(typename Input, typename Comparator,
              typename MakeTargets)(requires InputConcept<Input>)
     std::vector<ChunkBoundary<typename Input::Element>> chunkBoundariesImpl(
@@ -201,71 +183,49 @@ CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
       });
 }
 
-// The same as above, but with explicit `chunkSizes` (see `ChunkSizes`) instead
-// of a fixed number of equally sized chunks. Use this to make the first chunks
-// smaller than the remaining ones, which reduces the latency at the start of
-// the merge.
+// The same as the `numChunks` overload above, but with a ramp-up of the
+// leading chunks, which reduces the latency at the start of the merge (the
+// consumer has to drain the chunks in the order of their index, so it reaches
+// the output blocks that the later chunks have already buffered sooner). The
+// first chunk gets the size `firstChunkSize`, and each following chunk doubles
+// the size of its predecessor until that size reaches the size of a uniform
+// chunk (the size that `numChunks` implies for the given input). All the
+// remaining chunks get that uniform size.
 //
-// NOTE: All the guarantees of the overload above still hold, in particular the
-// result may well describe fewer chunks than the `chunkSizes` ask for, and it
-// describes a single chunk if the input has at most `firstChunkSizes_.front()`
-// (respectively `remainingChunkSize_`) elements.
-CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
-    std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
-        const Input& input, const Comparator& comparator,
-        ChunkSizes chunkSizes) {
-  AD_CONTRACT_CHECK(chunkSizes.remainingChunkSize_ > 0);
-  AD_CONTRACT_CHECK(ql::ranges::all_of(chunkSizes.firstChunkSizes_,
-                                       [](size_t size) { return size > 0; }));
-  return detail::chunkBoundariesImpl(
-      input, comparator, [&chunkSizes](size_t totalNumElements) {
-        return detail::targetsFromChunkSizes(totalNumElements,
-                                             chunkSizes.firstChunkSizes_,
-                                             chunkSizes.remainingChunkSize_);
-      });
-}
-
-// The same as the `numChunks` overload above, but with additional explicit
-// sizes for the leading chunks, which reduces the latency at the start of the
-// merge (the consumer has to drain the chunks in the order of their index, so
-// it reaches the output blocks that the later chunks have already buffered
-// sooner). The `i`-th chunk gets the size `firstChunkSizes[i]`, and all the
-// remaining chunks get the size that `numChunks` implies for the given input.
+// The ramp-up therefore never *reduces* the number of chunks and hence never
+// costs parallelism: if even the first chunk is not smaller than a uniform
+// chunk, then the input is split uniformly, exactly as it would be without the
+// ramp-up. As the leading chunks are together smaller than two uniform chunks,
+// the ramp-up is over after a small fraction of the input.
 //
-// A leading size that is not smaller than the size of a uniform chunk is
-// ignored, together with all the sizes after it. The ramp-up can therefore
-// never *reduce* the number of chunks and hence never cost parallelism: an
-// input that is so small that even a uniform chunk is smaller than the leading
-// sizes is split uniformly, exactly as it would be without them.
-//
-// NOTE: An empty `firstChunkSizes` is exactly the overload above.
+// NOTE: A `firstChunkSize` of `0` is exactly the overload above.
 CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
     std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
         const Input& input, const Comparator& comparator, size_t numChunks,
-        const std::vector<size_t>& firstChunkSizes) {
+        size_t firstChunkSize) {
   using Element = typename Input::Element;
-  AD_CONTRACT_CHECK(ql::ranges::all_of(firstChunkSizes,
-                                       [](size_t size) { return size > 0; }));
-  if (firstChunkSizes.empty()) {
+  if (firstChunkSize == 0) {
     return computeChunkBoundaries(input, comparator, numChunks);
   }
   if (numChunks <= 1) {
     return singleChunk<Element>();
   }
   return detail::chunkBoundariesImpl(
-      input, comparator,
-      [numChunks, &firstChunkSizes](size_t totalNumElements) {
+      input, comparator, [numChunks, firstChunkSize](size_t totalNumElements) {
         const size_t uniformChunkSize =
             std::max<size_t>(1, totalNumElements / numChunks);
-        auto isSmallerThanUniform = [uniformChunkSize](size_t size) {
-          return size < uniformChunkSize;
-        };
-        auto leadingSizes =
-            ql::ranges::find_if_not(firstChunkSizes, isSmallerThanUniform);
-        return detail::targetsFromChunkSizes(
-            totalNumElements,
-            std::vector<size_t>(firstChunkSizes.begin(), leadingSizes),
-            uniformChunkSize);
+        std::vector<size_t> leadingSizes;
+        for (size_t size = firstChunkSize; size < uniformChunkSize; size *= 2) {
+          leadingSizes.push_back(size);
+        }
+        // Without leading chunks, split exactly like the `numChunks` overload.
+        // The uniform size above is rounded down, so the targets from the chunk
+        // sizes would otherwise put the remainder into a chunk of its own.
+        if (leadingSizes.empty()) {
+          return detail::uniformTargets(totalNumElements, numChunks);
+        }
+        return detail::targetsFromChunkSizes(totalNumElements, leadingSizes,
+                                             uniformChunkSize);
       });
 }
 

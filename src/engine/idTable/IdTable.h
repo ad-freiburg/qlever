@@ -15,7 +15,6 @@
 #include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "backports/span.h"
-#include "engine/idTable/IdColumn.h"
 #include "engine/idTable/IdTableRow.h"
 #include "engine/idTable/VectorWithElementwiseMove.h"
 #include "global/Id.h"
@@ -1018,5 +1017,12 @@ template <int COLS>
 inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
+
+// Type aliases for the columns of an `IdTable`. Currently just aliases for
+// `ql::span<Id>`/`ql::span<const Id>`; a later commit switches them to a
+// storage-efficient split-column view, once `IdTable` stores the payload and
+// datatype of each `Id` in separate arrays.
+using IdColumnRef = ql::span<Id>;
+using ConstIdColumnRef = ql::span<const Id>;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H
