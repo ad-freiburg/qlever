@@ -13,48 +13,30 @@
 
 using namespace columnBasedIdTable::splitLayout;
 
-// _____________________________________________________________________________
+// Test the construction from a datatype and a payload.
 TEST(SplitLayoutIdBitRepresentationTest, construction) {
   constexpr int idValue = 42;
-  constexpr ValueId id = Id::makeFromInt(idValue);
-  auto [datatype, payload] = getBitsCompat(id);
+  auto [datatype, payload] = getBitsCompat(Id::makeFromInt(idValue));
   const SplitLayoutIdBitRepresentation representation{datatype, payload};
-
-  ASSERT_EQ(static_cast<Datatype>(representation.datatype_), Datatype::Int);
-  ASSERT_EQ(representation.payload_, idValue);
+  EXPECT_EQ(static_cast<Datatype>(representation.datatype_), Datatype::Int);
+  EXPECT_EQ(representation.payload_, static_cast<uint64_t>(idValue));
 }
 
-// _____________________________________________________________________________
+// Test `incremented`, with and without a carry into the datatype.
 TEST(SplitLayoutIdBitRepresentationTest, incremented) {
+  // Without a carry, only the payload is incremented.
   constexpr int idValue = 42;
-  constexpr ValueId id = Id::makeFromInt(idValue);
-  auto [datatype, payload] = getBitsCompat(id);
+  auto [datatype, payload] = getBitsCompat(Id::makeFromInt(idValue));
   const SplitLayoutIdBitRepresentation representation{datatype, payload};
+  const auto [incDatatype, incPayload] = representation.incremented();
+  EXPECT_EQ(static_cast<Datatype>(incDatatype), Datatype::Int);
+  EXPECT_EQ(incPayload, static_cast<uint64_t>(idValue) + 1);
 
-  ASSERT_EQ(static_cast<Datatype>(representation.datatype_), Datatype::Int);
-  ASSERT_EQ(representation.payload_, idValue);
-
-  const SplitLayoutIdBitRepresentation incrementedRepresentation =
-      representation.incremented();
-  const auto [inc_datatype, inc_payload] = incrementedRepresentation;
-
-  ASSERT_EQ(static_cast<Datatype>(inc_datatype), Datatype::Int);
-  ASSERT_EQ(inc_payload, idValue + 1);
-}
-
-// _____________________________________________________________________________
-TEST(SplitLayoutIdBitRepresentationTest, incremented_maxValue) {
-  constexpr SplitLayoutIdBitRepresentation representation{
+  // The maximal payload carries into the datatype.
+  constexpr SplitLayoutIdBitRepresentation maxPayload{
       static_cast<uint8_t>(Datatype::Int),
       std::numeric_limits<uint64_t>::max()};
-
-  ASSERT_EQ(static_cast<Datatype>(representation.datatype_), Datatype::Int);
-  ASSERT_EQ(representation.payload_, std::numeric_limits<uint64_t>::max());
-
-  constexpr SplitLayoutIdBitRepresentation incrementedRepresentation =
-      representation.incremented();
-  const auto [inc_datatype, inc_payload] = incrementedRepresentation;
-
-  ASSERT_EQ(inc_datatype, static_cast<uint8_t>(Datatype::Int) + 1);
-  ASSERT_EQ(inc_payload, 0u);
+  constexpr auto carried = maxPayload.incremented();
+  EXPECT_EQ(carried.datatype_, static_cast<uint8_t>(Datatype::Int) + 1);
+  EXPECT_EQ(carried.payload_, 0u);
 }
