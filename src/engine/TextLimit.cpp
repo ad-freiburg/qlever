@@ -164,19 +164,20 @@ uint64_t TextLimit::getSizeEstimateBeforeLimit() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TextLimit::resultSortedOn() const {
-  return entityColumns_;
+qlm::vector<ColumnIndex> TextLimit::resultSortedOn() const {
+  return {entityColumns_.begin(), entityColumns_.end(), allocator()};
 }
 
 // _____________________________________________________________________________
-std::string TextLimit::getDescriptor() const {
+qlm::string TextLimit::getDescriptor() const {
   std::ostringstream os;
   os << "TextLimit with limit: " << limit_;
-  return os.str();
+  const auto result = os.str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
-std::string TextLimit::getCacheKeyImpl() const {
+qlm::string TextLimit::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "TEXT LIMIT: " << " with n: " << limit_
      << ", with child: " << child_->getCacheKey()
@@ -190,7 +191,8 @@ std::string TextLimit::getCacheKeyImpl() const {
     os << column << ", ";
   }
   os << "}";
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________

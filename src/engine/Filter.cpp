@@ -38,16 +38,18 @@ Filter::Filter(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::string Filter::getCacheKeyImpl() const {
+qlm::string Filter::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "FILTER " << _subtree->getCacheKey();
   os << " with " << _expression.getCacheKey(_subtree->getVariableColumns());
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 //______________________________________________________________________________
-std::string Filter::getDescriptor() const {
-  return absl::StrCat("Filter ", _expression.getDescriptor());
+qlm::string Filter::getDescriptor() const {
+  return qlm::string{absl::StrCat("Filter ", _expression.getDescriptor()),
+                     allocator()};
 }
 
 //______________________________________________________________________________
@@ -115,7 +117,7 @@ Result Filter::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 CPP_template_def(typename Table)(requires IdTableLike<Table>)
-    IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
+    IdTable Filter::filterIdTable(qlm::vector<ColumnIndex> sortedBy,
                                   Table&& idTable) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
@@ -132,7 +134,7 @@ CPP_template_def(typename Table)(requires IdTableLike<Table>)
 CPP_template_def(int WIDTH,
                  typename Table)(requires IdTableLike<Table>) void Filter::
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
-                      std::vector<ColumnIndex> sortedBy) const {
+                      qlm::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =

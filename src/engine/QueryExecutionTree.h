@@ -6,6 +6,7 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H
 #define QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H
 
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <string>
@@ -16,6 +17,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
 #include "util/AllocateShared.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashSet.h"
 
 // Strongly typed enum for controlling whether stripped variables are explicitly
@@ -86,7 +88,7 @@ class QueryExecutionTree {
       const parsedQuery::SelectClause& selectClause,
       bool includeQuestionMark = true) const;
 
-  const std::vector<ColumnIndex>& resultSortedOn() const {
+  const qlm::vector<ColumnIndex>& resultSortedOn() const {
     return rootOperation_->getResultSortedOn();
   }
 
@@ -168,7 +170,13 @@ class QueryExecutionTree {
   // it is simply returned.
   static std::shared_ptr<QueryExecutionTree> createSortedTreeAnyPermutation(
       std::shared_ptr<QueryExecutionTree> qet,
+      const qlm::vector<ColumnIndex>& sortColumns);
+  static std::shared_ptr<QueryExecutionTree> createSortedTreeAnyPermutation(
+      std::shared_ptr<QueryExecutionTree> qet,
       const std::vector<ColumnIndex>& sortColumns);
+  static std::shared_ptr<QueryExecutionTree> createSortedTreeAnyPermutation(
+      std::shared_ptr<QueryExecutionTree> qet,
+      std::initializer_list<ColumnIndex> sortColumns);
 
   // Create a `QueryExecutionTree` that produces exactly the same result as
   // `qet`, but sorted according to the `sortColumns`. If `qet` is already
@@ -179,7 +187,14 @@ class QueryExecutionTree {
   // limit-pushdown optimization is undesired.
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
+      const qlm::vector<ColumnIndex>& sortColumns, bool explicitSort = false);
+  static std::shared_ptr<QueryExecutionTree> createSortedTree(
+      std::shared_ptr<QueryExecutionTree> qet,
       const std::vector<ColumnIndex>& sortColumns, bool explicitSort = false);
+  static std::shared_ptr<QueryExecutionTree> createSortedTree(
+      std::shared_ptr<QueryExecutionTree> qet,
+      std::initializer_list<ColumnIndex> sortColumns,
+      bool explicitSort = false);
 
   // Create a `QueryExecutionTree` that produces the same set of results as
   // applying a `DISTINCT` on the columns `distinctIndices` to `qet`. In order
@@ -195,6 +210,9 @@ class QueryExecutionTree {
   // The returned tree always exposes the same set of variables as `qet`, but
   // the column order may differ. The `distinctIndices` must not contain
   // duplicates.
+  static std::shared_ptr<QueryExecutionTree> createDistinctTree(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const qlm::vector<ColumnIndex>& distinctIndices);
   static std::shared_ptr<QueryExecutionTree> createDistinctTree(
       std::shared_ptr<QueryExecutionTree> qet,
       const std::vector<ColumnIndex>& distinctIndices);

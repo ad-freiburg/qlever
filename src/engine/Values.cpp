@@ -34,15 +34,17 @@ std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
 }
 
 // ____________________________________________________________________________
-std::string Values::getCacheKeyImpl() const {
-  return absl::StrCat("VALUES (", parsedValues_.variablesToString(), ") { ",
-                      parsedValues_.valuesToString(), " }");
+qlm::string Values::getCacheKeyImpl() const {
+  return qlm::string{absl::StrCat("VALUES (", parsedValues_.variablesToString(),
+                                  ") { ", parsedValues_.valuesToString(), " }"),
+                     allocator()};
 }
 
 // ____________________________________________________________________________
-std::string Values::getDescriptor() const {
-  return absl::StrCat("Values with variables ",
-                      parsedValues_.variablesToString());
+qlm::string Values::getDescriptor() const {
+  return qlm::string{
+      absl::StrCat("Values with variables ", parsedValues_.variablesToString()),
+      allocator()};
 }
 
 // ____________________________________________________________________________
@@ -51,7 +53,9 @@ size_t Values::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> Values::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> Values::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // ____________________________________________________________________________
 VariableToColumnMap Values::computeVariableToColumnMap() const {

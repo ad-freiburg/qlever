@@ -54,14 +54,14 @@ class ExistsJoin : public Operation {
   // All following functions are inherited from `Operation`, see there for
   // comments.
  protected:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
  public:
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return left_->knownEmptyResult(); }
 

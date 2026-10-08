@@ -78,7 +78,7 @@ TEST(QueryExecutionTree, createSortedTreeAnyPermutation) {
     auto castTree =
         std::dynamic_pointer_cast<Sort>(sortedTree->getRootOperation());
     ASSERT_TRUE(castTree);
-    EXPECT_EQ(castTree->getResultSortedOn(), (SC{2}));
+    EXPECT_THAT(castTree->getResultSortedOn(), ::testing::ElementsAre(2));
   }
 
   {
@@ -90,7 +90,7 @@ TEST(QueryExecutionTree, createSortedTreeAnyPermutation) {
     auto castTree =
         std::dynamic_pointer_cast<Sort>(sortedTree->getRootOperation());
     ASSERT_TRUE(castTree);
-    EXPECT_EQ(castTree->getResultSortedOn(), (SC{0, 1}));
+    EXPECT_THAT(castTree->getResultSortedOn(), ::testing::ElementsAre(0, 1));
   }
 }
 

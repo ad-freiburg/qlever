@@ -33,10 +33,10 @@ class GroupBy : public Operation {
   GroupBy(QueryExecutionContext* qec, std::unique_ptr<GroupByImpl>&& impl);
 
   // Virtual functions inherited from the `Operation` base class.
-  std::string getDescriptor() const override;
-  std::string getCacheKeyImpl() const override;
+  qlm::string getDescriptor() const override;
+  qlm::string getCacheKeyImpl() const override;
   size_t getResultWidth() const override;
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
   bool knownEmptyResult() override;
   float getMultiplicity(size_t col) override;
   uint64_t getSizeEstimateBeforeLimit() override;

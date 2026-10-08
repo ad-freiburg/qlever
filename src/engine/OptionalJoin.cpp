@@ -71,7 +71,7 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string OptionalJoin::getCacheKeyImpl() const {
+qlm::string OptionalJoin::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "OPTIONAL_JOIN\n";
   if (!keepJoinColumns_) {
@@ -89,7 +89,8 @@ string OptionalJoin::getCacheKeyImpl() const {
     os << _joinColumns[i][1] << (i < _joinColumns.size() - 1 ? " & " : "");
   };
   os << "]";
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
@@ -135,7 +136,7 @@ std::vector<ColumnIndex> OptionalJoin::leftJoinColumns() const {
 }
 
 // _____________________________________________________________________________
-string OptionalJoin::getDescriptor() const {
+qlm::string OptionalJoin::getDescriptor() const {
   std::string joinVars;
   for (auto [leftCol, rightCol] : _joinColumns) {
     (void)rightCol;
@@ -143,7 +144,7 @@ string OptionalJoin::getDescriptor() const {
         _left->getVariableAndInfoByColumnIndex(leftCol).first.name();
     joinVars += varName + " ";
   }
-  return "OptionalJoin on " + joinVars;
+  return qlm::string{"OptionalJoin on " + joinVars, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -235,11 +236,11 @@ size_t OptionalJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
+qlm::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
   if (!keepJoinColumns_) {
-    return {};
+    return qlm::vector<ColumnIndex>{allocator()};
   }
-  std::vector<ColumnIndex> sortedOn;
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   // This optimization doesn't allow preserving sort order.
   if (isIndexNestedLoopJoinSuitable()) {
     return sortedOn;

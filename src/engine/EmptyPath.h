@@ -120,7 +120,7 @@ class EmptyPath : public Operation {
     return graphVariable_;
   }
 
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
   float getMultiplicity(size_t col) override;
@@ -129,11 +129,11 @@ class EmptyPath : public Operation {
       const Variable& variable) const override;
 
  protected:
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;

@@ -40,9 +40,9 @@ class Join : public Operation {
   Join& operator=(Join&&);
 
   // Virtual functions inherited from the 'Operation' base class.
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
   size_t getResultWidth() const override;
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
   size_t getCostEstimate() override;
   bool knownEmptyResult() override;
   float getMultiplicity(size_t col) override;
@@ -53,7 +53,7 @@ class Join : public Operation {
  public:
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
   Result computeResult(bool requestLaziness) override;
 

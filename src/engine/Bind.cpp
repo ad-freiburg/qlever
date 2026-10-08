@@ -66,24 +66,30 @@ float Bind::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-std::string Bind::getDescriptor() const { return _bind.getDescriptor(); }
+qlm::string Bind::getDescriptor() const {
+  const auto descriptor = _bind.getDescriptor();
+  return {descriptor.begin(), descriptor.end(), allocator()};
+}
 
 // _____________________________________________________________________________
-[[nodiscard]] std::vector<ColumnIndex> Bind::resultSortedOn() const {
+[[nodiscard]] qlm::vector<ColumnIndex> Bind::resultSortedOn() const {
   // We always append the result column of the BIND at the end and this column
   // is not sorted, so the sequence of indices of the sorted columns do not
   // change.
-  return _subtree->resultSortedOn();
+  const auto& sortedOn = _subtree->resultSortedOn();
+  return {sortedOn.begin(), sortedOn.end(), allocator()};
 }
 
 // _____________________________________________________________________________
 bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
-std::string Bind::getCacheKeyImpl() const {
-  return absl::StrCat(
-      "BIND ", _bind._expression.getCacheKey(_subtree->getVariableColumns()),
-      "\n", _subtree->getCacheKey());
+qlm::string Bind::getCacheKeyImpl() const {
+  return qlm::string{absl::StrCat("BIND ",
+                                  _bind._expression.getCacheKey(
+                                      _subtree->getVariableColumns()),
+                                  "\n", _subtree->getCacheKey()),
+                     allocator()};
 }
 
 // _____________________________________________________________________________

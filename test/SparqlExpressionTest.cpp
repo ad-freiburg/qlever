@@ -2609,3 +2609,26 @@ TEST(NaryExpressionTypeErased, isDeterministic) {
 }
 
 }  // anonymous namespace
+
+// _____________________________________________________________________________
+TEST(SparqlExpressionPimpl, copyAndMoveKeepTheSharedExpression) {
+  auto original = SparqlExpressionPimpl::makeVariableExpression(Variable{"?x"});
+  const auto* expression = original.getPimpl();
+
+  // Copy construction and assignment share the expression.
+  SparqlExpressionPimpl copy{original};
+  EXPECT_EQ(copy.getPimpl(), expression);
+  SparqlExpressionPimpl assigned =
+      SparqlExpressionPimpl::makeVariableExpression(Variable{"?y"});
+  assigned = original;
+  EXPECT_EQ(assigned.getPimpl(), expression);
+
+  // Move construction and assignment also end up with the same expression.
+  SparqlExpressionPimpl moved{std::move(copy)};
+  EXPECT_EQ(moved.getPimpl(), expression);
+  SparqlExpressionPimpl moveAssigned =
+      SparqlExpressionPimpl::makeVariableExpression(Variable{"?z"});
+  moveAssigned = std::move(assigned);
+  EXPECT_EQ(moveAssigned.getPimpl(), expression);
+  EXPECT_TRUE(moveAssigned.isVariableContained(Variable{"?x"}));
+}

@@ -680,7 +680,7 @@ TEST(MaterializedViewsGreedyPlanningTest,
     p._idsOfIncludedNodes = nodes;
     return p;
   };
-  auto nodeIds = [](const std::vector<SubtreePlan>& plans) {
+  auto nodeIds = [](const QueryPlanner::PlanVec& plans) {
     std::vector<uint64_t> ids;
     for (const auto& p : plans) {
       ids.push_back(p._idsOfIncludedNodes);
@@ -691,7 +691,8 @@ TEST(MaterializedViewsGreedyPlanningTest,
   // C = {4,5}. Larger plans are in later groups.
   constexpr uint64_t a = 0b01110, b = 0b11000, c = 0b110000;
   auto makeAll = [&]() {
-    QueryPlanner::ReplacementPlans all(2);
+    auto alloc = ad_utility::testing::makeAllocator();
+    QueryPlanner::ReplacementPlans all(2, QueryPlanner::PlanVec{alloc}, alloc);
     all[0].push_back(plan(b));
     all[0].push_back(plan(c));
     all[1].push_back(plan(a));

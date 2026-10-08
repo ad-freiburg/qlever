@@ -176,7 +176,7 @@ CPP_template_2(typename ActionT)(
 // IdTableVocabPair. An optional permutation can be applied to the result.
 template <typename Action>
 inline Result createResultFromAction(bool requestLaziness, Action&& action,
-                                     std::vector<ColumnIndex> resultSortedOn,
+                                     qlm::vector<ColumnIndex> resultSortedOn,
                                      OptionalPermutation permutation) {
   if (requestLaziness) {
     return {runLazyJoinAndConvertToGenerator(std::forward<Action>(action),

@@ -41,14 +41,14 @@ class CountAvailablePredicates : public Operation {
                            Variable predicateVariable, Variable countVariable);
 
  protected:
-  [[nodiscard]] std::string getCacheKeyImpl() const override;
+  [[nodiscard]] qlm::string getCacheKeyImpl() const override;
 
  public:
-  [[nodiscard]] std::string getDescriptor() const override;
+  [[nodiscard]] qlm::string getDescriptor() const override;
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {

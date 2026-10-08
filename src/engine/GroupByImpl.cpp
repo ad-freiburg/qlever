@@ -347,7 +347,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
 
-std::string GroupByImpl::getCacheKeyImpl() const {
+qlm::string GroupByImpl::getCacheKeyImpl() const {
   const auto& varMap = getInternallyVisibleVariableColumns();
   auto varMapInput = _subtree->getVariableColumns();
 
@@ -376,24 +376,26 @@ std::string GroupByImpl::getCacheKeyImpl() const {
   }
   os << std::endl;
   os << _subtree->getCacheKey();
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
-std::string GroupByImpl::getDescriptor() const {
+qlm::string GroupByImpl::getDescriptor() const {
   if (_groupByVariables.empty()) {
-    return "GroupBy (implicit)";
+    return qlm::string{"GroupBy (implicit)", allocator()};
   }
-  return "GroupBy on " +
-         absl::StrJoin(_groupByVariables, " ", &Variable::AbslFormatter);
+  return qlm::string{"GroupBy on " + absl::StrJoin(_groupByVariables, " ",
+                                                   &Variable::AbslFormatter),
+                     allocator()};
 }
 
 size_t GroupByImpl::getResultWidth() const {
   return getInternallyVisibleVariableColumns().size();
 }
 
-std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
+qlm::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
-  vector<ColumnIndex> sortedOn;
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   sortedOn.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
     sortedOn.push_back(varCols[var].columnIndex_);

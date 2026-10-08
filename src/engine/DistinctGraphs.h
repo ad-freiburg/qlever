@@ -61,8 +61,8 @@ class DistinctGraphs : public Operation {
       QueryExecutionContext* qec, const Variable& graphVariable,
       const qlever::index::GraphFilter<TripleComponent>& activeGraphs);
 
-  [[nodiscard]] std::string getDescriptor() const override {
-    return "Distinct Graphs";
+  [[nodiscard]] qlm::string getDescriptor() const override {
+    return qlm::string{"Distinct Graphs", allocator()};
   }
 
   // The result table has only 1 column.
@@ -87,8 +87,8 @@ class DistinctGraphs : public Operation {
 
  protected:
   // No column is sorted in result.
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
-    return {};
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
   }
 
  private:
@@ -101,7 +101,7 @@ class DistinctGraphs : public Operation {
   // for every variable. Whether the default graph is included has to be part
   // of it, because the runtime parameter that decides this can change
   // between two queries.
-  [[nodiscard]] std::string getCacheKeyImpl() const override;
+  [[nodiscard]] qlm::string getCacheKeyImpl() const override;
 
   // Return the last saved number of distinct graphs.
   uint64_t getSizeEstimateBeforeLimit() override {

@@ -558,6 +558,18 @@ TEST(OptionalJoin, clone) {
 }
 
 // _____________________________________________________________________________
+TEST(OptionalJoin, resultSortedOnDependsOnKeepJoinColumns) {
+  auto qec = ad_utility::testing::getQec();
+  auto a = makeIdTableFromVector({{0}});
+  auto make = [&](bool keepJoinColumns) {
+    return OptionalJoin{qec, idTableToExecutionTree(qec, a),
+                        idTableToExecutionTree(qec, a), keepJoinColumns};
+  };
+  EXPECT_THAT(make(false).resultSortedOn(), ::testing::IsEmpty());
+  EXPECT_NO_THROW(static_cast<void>(make(true).resultSortedOn()));
+}
+
+// _____________________________________________________________________________
 TEST(OptionalJoin, limitAndOffsetArePushedDownToLeftChild) {
   auto qec = ad_utility::testing::getQec();
   auto a = makeIdTableFromVector({{0}});

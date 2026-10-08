@@ -63,15 +63,15 @@ class ExplicitIdTableOperation : public Operation {
   size_t sizeEstimate() const { return idTableView().numRows(); }
 
   // Overridden methods from the `Operation` base class.
-  std::string getCacheKeyImpl() const override;
-  std::string getDescriptor() const override;
+  qlm::string getCacheKeyImpl() const override;
+  qlm::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
   uint64_t getSizeEstimateBeforeLimit() override;
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
   std::unique_ptr<Operation> cloneImpl() const override;
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
   VariableToColumnMap computeVariableToColumnMap() const override;
   Result computeResult(bool requestLaziness) override;
 

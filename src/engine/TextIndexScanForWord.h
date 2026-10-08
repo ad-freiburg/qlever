@@ -30,9 +30,9 @@ class TextIndexScanForWord : public Operation {
 
   const std::string& word() const { return config_.word_; }
 
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
-  std::string getDescriptor() const override;
+  qlm::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
@@ -44,7 +44,7 @@ class TextIndexScanForWord : public Operation {
 
   bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

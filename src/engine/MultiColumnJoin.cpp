@@ -31,7 +31,7 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string MultiColumnJoin::getCacheKeyImpl() const {
+qlm::string MultiColumnJoin::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "MULTI_COLUMN_JOIN\n" << _left->getCacheKey() << " ";
   os << "join-columns: [";
@@ -45,17 +45,18 @@ string MultiColumnJoin::getCacheKeyImpl() const {
     os << _joinColumns[i][1] << (i < _joinColumns.size() - 1 ? " & " : "");
   };
   os << "]";
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
-string MultiColumnJoin::getDescriptor() const {
+qlm::string MultiColumnJoin::getDescriptor() const {
   std::string joinVars = "";
   for (auto jc : _joinColumns) {
     joinVars +=
         _left->getVariableAndInfoByColumnIndex(jc[0]).first.name() + " ";
   }
-  return "MultiColumnJoin on " + joinVars;
+  return qlm::string{"MultiColumnJoin on " + joinVars, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -106,8 +107,8 @@ size_t MultiColumnJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
-  std::vector<ColumnIndex> sortedOn;
+qlm::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   // The result is sorted on all join columns from the left subtree.
   for (const auto& a : _joinColumns) {
     sortedOn.push_back(a[0]);

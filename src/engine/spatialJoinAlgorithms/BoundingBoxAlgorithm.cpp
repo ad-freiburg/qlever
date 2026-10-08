@@ -340,7 +340,7 @@ Result BoundingBoxAlgorithm::run() {
     });
   }
   auto resTable =
-      Result(std::move(result), std::vector<ColumnIndex>{},
+      Result(std::move(result), qlm::vector<ColumnIndex>{qec_->getAllocator()},
              Result::getMergedLocalVocab(*resultLeft, *resultRight));
   return resTable;
 #endif

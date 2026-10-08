@@ -29,15 +29,18 @@ Minus::Minus(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string Minus::getCacheKeyImpl() const {
+qlm::string Minus::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "MINUS\n" << _left->getCacheKey() << "\n";
   os << _right->getCacheKey() << " ";
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
-string Minus::getDescriptor() const { return "Minus"; }
+qlm::string Minus::getDescriptor() const {
+  return qlm::string{"Minus", allocator()};
+}
 
 // _____________________________________________________________________________
 Result Minus::computeResult(bool requestLaziness) {
@@ -89,7 +92,7 @@ VariableToColumnMap Minus::computeVariableToColumnMap() const {
 size_t Minus::getResultWidth() const { return _left->getResultWidth(); }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> Minus::resultSortedOn() const {
+qlm::vector<ColumnIndex> Minus::resultSortedOn() const {
   if (rightIndexNestedLoopJoinIsPossible()) {
     return _left->getRootOperation()->getChildren().at(0)->resultSortedOn();
   }

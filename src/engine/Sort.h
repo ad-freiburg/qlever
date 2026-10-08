@@ -41,10 +41,10 @@ class Sort : public Operation {
        std::vector<ColumnIndex> sortColumnIndices, bool explicitSort = false);
 
  public:
-  virtual std::string getDescriptor() const override;
+  virtual qlm::string getDescriptor() const override;
 
-  virtual std::vector<ColumnIndex> resultSortedOn() const override {
-    return sortColumnIndices_;
+  virtual qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return {sortColumnIndices_.begin(), sortColumnIndices_.end(), allocator()};
   }
 
  private:
@@ -137,7 +137,7 @@ class Sort : public Operation {
     return subtree_->getVariableColumns();
   }
 
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SORT_H

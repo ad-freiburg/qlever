@@ -67,14 +67,14 @@ class HasPredicateScan : public Operation {
   HasPredicateScan(QueryExecutionContext* qec, SparqlTriple triple);
 
  private:
-  [[nodiscard]] std::string getCacheKeyImpl() const override;
+  [[nodiscard]] qlm::string getCacheKeyImpl() const override;
 
  public:
-  [[nodiscard]] std::string getDescriptor() const override;
+  [[nodiscard]] qlm::string getDescriptor() const override;
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override;
 

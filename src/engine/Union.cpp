@@ -90,7 +90,7 @@ std::vector<ColumnIndex> Union::sortOrderForSubtree(size_t subtreeIndex) const {
   return specificSortOrder;
 }
 
-std::string Union::getCacheKeyImpl() const {
+qlm::string Union::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "{\n";
   os << _subtrees[0]->getCacheKey() << "\n";
@@ -106,10 +106,13 @@ std::string Union::getCacheKeyImpl() const {
   for (size_t i : targetOrder_) {
     os << i << " ";
   }
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
-std::string Union::getDescriptor() const { return "Union"; }
+qlm::string Union::getDescriptor() const {
+  return qlm::string{"Union", allocator()};
+}
 
 size_t Union::getResultWidth() const {
   // The width depends on the number of unique variables (as the columns of
@@ -118,7 +121,10 @@ size_t Union::getResultWidth() const {
   return _columnOrigins.size();
 }
 
-std::vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
+qlm::vector<ColumnIndex> Union::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{targetOrder_.begin(), targetOrder_.end(),
+                                  allocator()};
+}
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {

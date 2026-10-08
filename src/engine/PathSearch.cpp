@@ -80,7 +80,8 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
 
   auto startCol = subtree_->getVariableColumn(config_.start_);
   auto endCol = subtree_->getVariableColumn(config_.end_);
-  subtree_ = QueryExecutionTree::createSortedTree(subtree_, {startCol, endCol});
+  subtree_ = QueryExecutionTree::createSortedTree(
+      subtree_, std::vector<ColumnIndex>{startCol, endCol});
 
   resultWidth_ = 4 + config_.edgeProperties_.size();
 
@@ -138,7 +139,7 @@ qlm::vector<QueryExecutionTree*> PathSearch::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
-std::string PathSearch::getCacheKeyImpl() const {
+qlm::string PathSearch::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "PathSearch:\n";
   os << config_.toString();
@@ -161,14 +162,16 @@ std::string PathSearch::getCacheKeyImpl() const {
        << sourceAndTargetTree_.value()->getCacheKey() << '\n';
   }
 
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
-std::string PathSearch::getDescriptor() const {
+qlm::string PathSearch::getDescriptor() const {
   std::ostringstream os;
   os << "PathSearch";
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
@@ -203,7 +206,9 @@ bool PathSearch::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> PathSearch::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // _____________________________________________________________________________
 void PathSearch::bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,

@@ -346,7 +346,13 @@ TEST(OperationTest, estimatesForCachedResults) {
   };
   {
     auto qet = makeQet();
-    EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
+    const auto qetCacheKeyString = qet->getCacheKey();
+    const auto cacheKey =
+        std::string{qetCacheKeyString.begin(), qetCacheKeyString.end()};
+    const auto rootCacheKeyString = qet->getRootOperation()->getCacheKey();
+    const auto rootCacheKey =
+        std::string{rootCacheKeyString.begin(), rootCacheKeyString.end()};
+    EXPECT_EQ(cacheKey, rootCacheKey);
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
     EXPECT_EQ(qet->getCostEstimate(), 210u);
 
@@ -360,7 +366,9 @@ TEST(OperationTest, estimatesForCachedResults) {
     auto restoreWhenScopeEnds = setRuntimeParameterForTest<
         &RuntimeParameters::zeroCostEstimateForCachedSubtree_>(true);
     auto qet = makeQet();
-    EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
+    const auto cacheKey = qet->getCacheKey();
+    const auto rootCacheKey = qet->getRootOperation()->getCacheKey();
+    EXPECT_TRUE(std::string_view{cacheKey} == std::string_view{rootCacheKey});
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
     EXPECT_EQ(qet->getCostEstimate(), 0u);
   }
@@ -368,7 +376,9 @@ TEST(OperationTest, estimatesForCachedResults) {
     auto restoreWhenScopeEnds = setRuntimeParameterForTest<
         &RuntimeParameters::zeroCostEstimateForCachedSubtree_>(false);
     auto qet = makeQet();
-    EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
+    const auto cacheKey = qet->getCacheKey();
+    const auto rootCacheKey = qet->getRootOperation()->getCacheKey();
+    EXPECT_TRUE(std::string_view{cacheKey} == std::string_view{rootCacheKey});
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
     EXPECT_EQ(qet->getCostEstimate(), 210u);
   }
@@ -914,8 +924,10 @@ TEST(OperationTest, disableCachingForOperation) {
   ValuesForTesting valuesForTesting{
       qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
 
-  QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
-                         qec->locatedTriplesState().index_};
+  const auto cacheKeyString = valuesForTesting.getCacheKey();
+  QueryCacheKey cacheKey{
+      std::string{cacheKeyString.begin(), cacheKeyString.end()},
+      qec->locatedTriplesState().index_};
 
   // By default, the result of `valuesForTesting` is cached because it is
   // sufficiently small, no matter if it was computed lazily or fully
@@ -955,10 +967,12 @@ TEST(OperationTest, disableCachingGlobally) {
   ValuesForTesting valuesForTesting{
       qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
 
-  EXPECT_THAT(valuesForTesting.getCacheKey(), ::testing::IsEmpty());
+  const auto cacheKeyString = valuesForTesting.getCacheKey();
+  EXPECT_THAT(cacheKeyString, ::testing::IsEmpty());
 
-  QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
-                         qec->locatedTriplesState().index_};
+  QueryCacheKey cacheKey{
+      std::string{cacheKeyString.begin(), cacheKeyString.end()},
+      qec->locatedTriplesState().index_};
 
   // Initially not contained in the cache (because we cleared the cache).
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));

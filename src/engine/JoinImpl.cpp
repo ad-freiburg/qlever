@@ -51,8 +51,10 @@ JoinImpl::JoinImpl(QueryExecutionContext* qec,
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
   // enforce the sorting here.
-  t1 = QueryExecutionTree::createSortedTree(std::move(t1), {t1JoinCol});
-  t2 = QueryExecutionTree::createSortedTree(std::move(t2), {t2JoinCol});
+  t1 = QueryExecutionTree::createSortedTree(
+      std::move(t1), std::vector<ColumnIndex>{t1JoinCol});
+  t2 = QueryExecutionTree::createSortedTree(
+      std::move(t2), std::vector<ColumnIndex>{t2JoinCol});
 
   // Make the order of the two subtrees deterministic. That way, queries that
   // are identical except for the order of the join operands, are easier to
@@ -90,18 +92,21 @@ JoinImpl::JoinImpl(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string JoinImpl::getCacheKeyImpl() const {
+qlm::string JoinImpl::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "JOIN\n"
      << left_->getCacheKey() << " join-column: [" << leftJoinCol_ << "]\n";
   os << "|X|\n"
      << right_->getCacheKey() << " join-column: [" << rightJoinCol_ << "]";
   os << "keep join Col " << keepJoinColumn_;
-  return std::move(os).str();
+  const auto result = std::move(os).str();
+  return {result.begin(), result.end(), allocator()};
 }
 
 // _____________________________________________________________________________
-string JoinImpl::getDescriptor() const { return "Join on " + joinVar_.name(); }
+qlm::string JoinImpl::getDescriptor() const {
+  return qlm::string{"Join on " + joinVar_.name(), allocator()};
+}
 
 // _____________________________________________________________________________
 Result JoinImpl::computeResult(bool requestLaziness) {
@@ -203,11 +208,11 @@ size_t JoinImpl::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> JoinImpl::resultSortedOn() const {
+qlm::vector<ColumnIndex> JoinImpl::resultSortedOn() const {
   if (keepJoinColumn_) {
-    return {leftJoinCol_};
+    return qlm::vector<ColumnIndex>{{leftJoinCol_}, allocator()};
   } else {
-    return {};
+    return qlm::vector<ColumnIndex>{allocator()};
   }
 }
 
@@ -789,8 +794,10 @@ JoinImpl::makeTreeWithStrippedColumns(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 JoinImpl::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   return pushDownBindToAnyChild(
-      bind, {left_, right_},
-      [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
+      bind,
+      qlm::vector<qlm::shared_ptr<QueryExecutionTree>>{{left_, right_},
+                                                       allocator()},
+      [this](qlm::vector<qlm::shared_ptr<QueryExecutionTree>> newChildren) {
         auto& left = newChildren.at(0);
         auto& right = newChildren.at(1);
         auto leftCol = left->getVariableColumn(joinVar_);
