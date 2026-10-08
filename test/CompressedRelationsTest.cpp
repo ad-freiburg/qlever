@@ -10,6 +10,7 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <boost/asio/thread_pool.hpp>
 #include <future>
 #include <thread>
 
@@ -431,7 +432,8 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
              scanSpec,
              CompressedRelationReader::convertBlockMetadataRangesToVector(
                  CompressedRelationReader::getRelevantBlocks(scanSpec, blocks)),
-             additionalColumns, cancellationHandle, locatedTriples)) {
+             additionalColumns, cancellationHandle, locatedTriples,
+             ad_utility::globalExecutor())) {
       table.insertAtEnd(block);
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -459,8 +461,8 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
                CompressedRelationReader::convertBlockMetadataRangesToVector(
                    CompressedRelationReader::getRelevantBlocks(scanSpec,
                                                                blocks)),
-               Permutation::ColumnIndices{}, cancellationHandle,
-               locatedTriples)) {
+               Permutation::ColumnIndices{}, cancellationHandle, locatedTriples,
+               ad_utility::globalExecutor())) {
         tableWidthOne.insertAtEnd(block);
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
@@ -1785,6 +1787,92 @@ TEST(CompressedRelationReader, onlyRequestingObjectPatternsWorks) {
   for (const IdTable& block : blocks) {
     EXPECT_EQ(block.numColumns(), 4);
   }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationReader, lazyScan) {
+  // A relation that spans many blocks (the test index has two rows per block),
+  // with other triples before and after it, such that the first and the last
+  // block are only partially part of the scan.
+  std::string turtle = "<a> <o> <o> . <b> <p> <o> . <a> <q> <o> . ";
+  for (size_t i = 0; i < 30; ++i) {
+    absl::StrAppend(&turtle, "<a> <p> <o", i, "> . ");
+  }
+  auto index = ad_utility::testing::makeTestIndex(turtle);
+  auto getId = ad_utility::testing::makeGetId(index);
+  std::vector<Id> expected;
+  for (size_t i = 0; i < 30; ++i) {
+    expected.push_back(getId(absl::StrCat("<o", i, ">")));
+  }
+  ql::ranges::sort(expected);
+
+  auto snapshot =
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  const auto& permutation = index.getImpl().getPermutation(Permutation::SPO);
+  ScanSpecification scanSpec{getId("<a>"), getId("<p>"), std::nullopt};
+  auto blocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
+      permutation.getScanSpecAndBlocks(scanSpec, *snapshot).blockMetadata_);
+  ASSERT_GT(blocks.size(), 10);
+  const auto& locatedTriples =
+      permutation.getLocatedTriplesForPermutation(*snapshot);
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+
+  auto lazyScan = [&](ql::any_io_executor executor,
+                      const LimitOffsetClause& limitOffset = {}) {
+    return permutation.reader().lazyScan(scanSpec, blocks, {},
+                                         cancellationHandle, locatedTriples,
+                                         std::move(executor), limitOffset);
+  };
+  // Return the concatenation of the (only) column of all the yielded blocks.
+  auto collect = [](auto& scan) {
+    std::vector<Id> result;
+    for (const IdTable& block : scan) {
+      EXPECT_FALSE(block.empty());
+      ql::ranges::copy(block.getColumn(0), std::back_inserter(result));
+    }
+    return result;
+  };
+
+  // The result must not depend on the number of blocks that are read
+  // concurrently, nor on the executor on which they are read.
+  boost::asio::thread_pool ownPool{3};
+  for (size_t numBlocksInFlight : {1, 2, 5}) {
+    auto reset = setRuntimeParameterForTest<
+        &RuntimeParameters::lazyIndexScanNumThreads_>(numBlocksInFlight);
+    for (const auto& executor : {ad_utility::globalExecutor(),
+                                 ql::any_io_executor{ownPool.get_executor()}}) {
+      auto scan = lazyScan(executor);
+      EXPECT_THAT(collect(scan), ::testing::ElementsAreArray(expected));
+      EXPECT_EQ(scan.details().numBlocksRead_, blocks.size());
+      EXPECT_EQ(scan.details().numElementsYielded_, expected.size());
+
+      for (const LimitOffsetClause& limitOffset :
+           std::vector<LimitOffsetClause>{{3, 0},
+                                          {std::nullopt, 7},
+                                          {5, 4},
+                                          {0, 0},
+                                          {100, 29},
+                                          {std::nullopt, 100}}) {
+        auto expectedPart = expected;
+        expectedPart.resize(limitOffset.upperBound(expectedPart.size()));
+        expectedPart.erase(expectedPart.begin(),
+                           expectedPart.begin() +
+                               limitOffset.actualOffset(expectedPart.size()));
+        auto scanWithLimit = lazyScan(executor, limitOffset);
+        EXPECT_THAT(collect(scanWithLimit),
+                    ::testing::ElementsAreArray(expectedPart));
+        EXPECT_EQ(scanWithLimit.details().numElementsYielded_,
+                  expectedPart.size());
+      }
+    }
+  }
+
+  // A cancelled scan throws, both when the cancellation is detected on the
+  // executor and when it is detected by the consumer.
+  auto scan = lazyScan(ad_utility::globalExecutor());
+  cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(collect(scan), ad_utility::CancellationException);
 }
 
 // Test the correct setting of the metadata for the contained graphs.

@@ -326,34 +326,22 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
       *locatedTriplesState);
   auto additionalColumns = getAdditionalColumns(getNumColumns(permutation));
   // The cancellation handle of the scan, which never cancels anything.
-  //
-  // NOTE: The scan stores a *reference* to this `SharedCancellationHandle` (see
-  // the `Generator` in `CompressedRelationReader::lazyScan`), not a copy of it.
-  // It is therefore not enough that the `CancellationHandle` stays alive, the
-  // `shared_ptr` that holds it has to stay alive as well, and at an address
-  // that does not change. That is what this extra indirection is for: the
-  // `unique_ptr` is moved into the lambda below (which keeps everything alive
-  // that the scan borrows), and moving it does not move its pointee. Note that
-  // a scan only touches the handle if the permutation has more than one block,
-  // so getting this wrong is not caught by a test with a tiny permutation.
   auto cancellationHandle =
-      std::make_unique<ad_utility::SharedCancellationHandle>(
-          std::make_shared<ad_utility::CancellationHandle<>>());
+      std::make_shared<ad_utility::CancellationHandle<>>();
   // NOTE: Deliberately no structured binding, because the members are captured
   // by the lambda below, which is only valid in C++20.
   auto scanWithReader = permutation.lazyScanWithUnlimitedReader(
-      scanSpecAndBlocks, additionalColumns, *cancellationHandle,
+      scanSpecAndBlocks, additionalColumns, cancellationHandle,
       *locatedTriplesState);
 
-  // NOTE: The scan borrows the `reader`, the `locatedTriplesState` and the
-  // `cancellationHandle`, so all of them are moved into the transformation
-  // below to keep them alive for as long as the returned range is.
+  // NOTE: The scan borrows the `reader` and the `locatedTriplesState`, so both
+  // of them are moved into the transformation below to keep them alive for as
+  // long as the returned range is.
   return ad_utility::InputRangeTypeErased{
       ad_utility::CachingTransformInputRange{
           std::move(scanWithReader.blocks_),
           [reader = std::move(scanWithReader.reader_),
            locatedTriplesState = std::move(locatedTriplesState),
-           cancellationHandle = std::move(cancellationHandle),
            progress = std::move(progress)](IdTable& idTable) {
             for (auto column : idTable.getColumns()) {
               ql::ranges::for_each(column, [](Id& id) { id = convertId(id); });

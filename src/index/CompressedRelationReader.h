@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/asio.h"
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
@@ -71,8 +72,8 @@ class CompressedRelationReader {
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
-  // Optional override for the number of threads used to read and decompress
-  // blocks in `asyncParallelBlockGenerator`. When set, it takes precedence over
+  // Optional override for the number of blocks that a `lazyScan` reads and
+  // decompresses ahead of its consumer. When set, it takes precedence over
   // the `lazy-index-scan-num-threads` runtime parameter. This is used by the
   // runtime index rebuild, which scans the old permutations through a dedicated
   // reader (see `Permutation::lazyScanWithUnlimitedReader`), to throttle its
@@ -320,13 +321,18 @@ class CompressedRelationReader {
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
-  // The blocks are guaranteed to be in order.
+  // The blocks are guaranteed to be in order. They are read, decompressed, and
+  // postprocessed on the `executor`, several of them concurrently and ahead of
+  // the consumer (see `lazy-index-scan-num-threads` for how many). The
+  // returned generator must therefore not be consumed from a thread of the
+  // `executor`, and the `executor` as well as this reader and the
+  // `locatedTriplesPerBlock` must outlive it.
   CompressedRelationReader::IdTableGeneratorInputRange lazyScan(
       const ScanSpecification& scanSpec,
       std::vector<CompressedBlockMetadata> relevantBlockMetadata,
-      ColumnIndices additionalColumns,
-      const CancellationHandle& cancellationHandle,
+      ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      ql::any_io_executor executor,
       const LimitOffsetClause& limitOffset = {}) const;
 
   // Retrieve all triples in the given block, ignoring updates. This is used in
@@ -540,17 +546,6 @@ class CompressedRelationReader {
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
       const LocatedTriplesPerBlock&) const;
-
-  // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
-  // `columnIndices` are set, only the specified columns from the blocks
-  // are yielded, else all columns are yielded. The blocks are yielded
-  // in the correct order, but asynchronously read and decompressed using
-  // multiple worker threads.
-  template <typename T>
-  IdTableGeneratorInputRange asyncParallelBlockGenerator(
-      T beginBlock, T endBlock, const ScanImplConfig& scanConfig,
-      CancellationHandle cancellationHandle,
-      LimitOffsetClause& limitOffset) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
