@@ -69,18 +69,18 @@ namespace columnStrippingHelpers {
 // by the parent operation. Otherwise, it returns false.
 inline bool allVariablesAreRequired(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::set<Variable>& variablesRequestedFromParent) {
+    const std::set<Variable>& variablesRequestedByParent) {
   return ql::ranges::all_of(
       qet->getVariableColumns() | ql::views::keys,
-      [&variablesRequestedFromParent](const Variable& varNeeded) {
-        return ad_utility::contains(variablesRequestedFromParent, varNeeded);
+      [&variablesRequestedByParent](const Variable& varNeeded) {
+        return ad_utility::contains(variablesRequestedByParent, varNeeded);
       });
 }
 
 // A helper for the column stripping of operations.
 // This function creates an execution tree with the given Operation as its root.
 // If any of the variables produced by the resulting operation are *not*
-// contained in `variablesRequestedFromParent`, an additional `StripColumns`
+// contained in `variablesRequestedByParent`, an additional `StripColumns`
 // operation for those variables is added on top of the operation.
 // Use case: Some operations currently produce certain variables even though
 // these variables are not necessarily part of the result requested by the
@@ -97,7 +97,7 @@ template <typename Operation, typename... Args>
 std::optional<std::shared_ptr<QueryExecutionTree>>
 makeTreeWithOptionalStripOperation(
     QueryExecutionContext* qec,
-    const std::set<Variable>& variablesRequestedFromParent, Args&&... args) {
+    const std::set<Variable>& variablesRequestedByParent, Args&&... args) {
   // Create query execution tree with the given operation as root.
   auto treeWithOperationAsRoot = ad_utility::makeExecutionTree<Operation>(
       qec, std::forward<Args>(args)...);
@@ -106,12 +106,12 @@ makeTreeWithOptionalStripOperation(
   // requested from the parent and return the `QueryExecutionTree` with or
   // without an additional `StripColumns` operation.
   if (allVariablesAreRequired(treeWithOperationAsRoot,
-                              variablesRequestedFromParent)) {
+                              variablesRequestedByParent)) {
     return treeWithOperationAsRoot;
   }
 
   return ad_utility::makeExecutionTree<StripColumns>(
-      qec, std::move(treeWithOperationAsRoot), variablesRequestedFromParent);
+      qec, std::move(treeWithOperationAsRoot), variablesRequestedByParent);
 }
 }  // namespace columnStrippingHelpers
 
