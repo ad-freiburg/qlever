@@ -60,9 +60,12 @@ CompressedRelationWriter::compressAndWriteColumn(ConstIdColumnRef column) {
   std::vector<char> compressedBlock = ZstdWrapper::compress(
       (void*)(column.data()), column.size() * sizeof(column[0]));
   auto compressedSize = compressedBlock.size();
-  auto file = outfile_.wlock();
-  auto offsetInFile = file->tell();
-  file->write(compressedBlock.data(), compressedBlock.size());
+  // Reserve a range of the file and write to it with the positioned
+  // `File::write`, which needs a shared lock only. The compression above and
+  // the write itself therefore run concurrently for any number of blocks.
+  auto offsetInFile = nextOffset_.fetch_add(static_cast<off_t>(compressedSize));
+  // NOTE: This throws if not all the bytes could be written.
+  outfile_.rlock()->write(compressedBlock.data(), compressedSize, offsetInFile);
   return {offsetInFile, compressedSize};
 }
 
@@ -273,18 +276,47 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     // At this point we know that the `block` contains at least a single triple
     // larger than `lastRowFromPrevious`, so we can safely write the
     // `bufferedBlock`.
-    addBlockForLargeRelation(col0Id, BlockToWrite{std::move(*bufferedBlock)});
+    writeLargeRelationBlockInSlices(col0Id, std::move(*bufferedBlock));
     bufferedBlock = std::move(block);
   }
 
   // Write the remaining triples from the buffer.
   if (bufferedBlock.has_value()) {
     AD_CORRECTNESS_CHECK(!bufferedBlock.value().empty());
-    addBlockForLargeRelation(col0Id,
-                             BlockToWrite{std::move(bufferedBlock.value())});
+    writeLargeRelationBlockInSlices(col0Id, std::move(bufferedBlock.value()));
   }
 
   return finishLargeRelation(distinctCol1Counter.getAndReset());
+}
+
+// _____________________________________________________________________________
+void CompressedRelationWriter::writeLargeRelationBlockInSlices(Id col0Id,
+                                                               IdTable block) {
+  using namespace compressedRelationHelpers;
+  const size_t numRows = block.numRows();
+  AD_CORRECTNESS_CHECK(numRows > 0);
+  if (numRows <= blocksize()) {
+    addBlockForLargeRelation(col0Id, BlockToWrite{std::move(block)});
+    return;
+  }
+  // The slices are views into the `block`, which is shared among them and
+  // lives until the last of them has been written.
+  auto owner = std::make_shared<const IdTable>(std::move(block));
+  auto view = owner->asStaticView<0>();
+  size_t begin = 0;
+  while (begin < numRows) {
+    size_t end = std::min(begin + blocksize(), numRows);
+    // Never split rows whose first three columns are equal across two
+    // blocks, exactly like the boundaries between the input blocks above.
+    while (end < numRows &&
+           pickFirstThreeColumnsOfIdsWithoutLocalVocab(view[end]) ==
+               pickFirstThreeColumnsOfIdsWithoutLocalVocab(view[end - 1])) {
+      ++end;
+    }
+    addBlockForLargeRelation(
+        col0Id, BlockToWrite{view.subView(begin, end - begin), owner});
+    begin = end;
+  }
 }
 
 // _____________________________________________________________________________

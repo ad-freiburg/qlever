@@ -637,3 +637,43 @@ TEST(MixedValueId, compareThreeWayWithLocalVocabIndex) {
   // (`type != LocalVocabIndex` and `otherType == LocalVocabIndex`) is the case
   // of `intId` and `dateId` above.
 }
+
+// Test that the forwarding lambdas `Id::isUndefinedL`, `Id::isDefinedL`,
+// `Id::getBitsL` and `Id::getDatatypeL` behave like the member functions they
+// forward to, both for an `Id` and for a proxy type that is not an `Id` but
+// provides the same member functions.
+TEST(ValueId, forwardingLambdas) {
+  // A proxy type with the member functions, like the elements of a column view
+  // that does not store `Id`s.
+  struct Proxy {
+    Id id_;
+    bool isUndefined() const { return id_.isUndefined(); }
+    uint64_t getBits() const { return id_.getBits(); }
+    Datatype getDatatype() const { return id_.getDatatype(); }
+  };
+
+  // Each lambda returns what the corresponding member function returns.
+  for (Id id : {Id::makeUndefined(), Id::makeFromInt(42), Id::makeFromInt(-42),
+                Id::makeFromDouble(13.37), Id::makeFromBool(true)}) {
+    EXPECT_EQ(Id::isUndefinedL(id), id.isUndefined());
+    EXPECT_EQ(Id::isDefinedL(id), !id.isUndefined());
+    EXPECT_EQ(Id::getBitsL(id), id.getBits());
+    EXPECT_EQ(Id::getDatatypeL(id), id.getDatatype());
+    EXPECT_EQ(Id::isUndefinedL(Proxy{id}), id.isUndefined());
+    EXPECT_EQ(Id::isDefinedL(Proxy{id}), !id.isUndefined());
+    EXPECT_EQ(Id::getBitsL(Proxy{id}), id.getBits());
+    EXPECT_EQ(Id::getDatatypeL(Proxy{id}), id.getDatatype());
+  }
+
+  // The lambdas work as predicates and projections of generic algorithms, also
+  // over a range of proxies.
+  std::vector ids{Id::makeFromInt(1), Id::makeUndefined(),
+                  Id::makeFromDouble(3.5)};
+  std::vector<Proxy> proxies{{ids[0]}, {ids[1]}, {ids[2]}};
+  EXPECT_TRUE(ql::ranges::any_of(ids, Id::isUndefinedL));
+  EXPECT_TRUE(ql::ranges::any_of(proxies, Id::isUndefinedL));
+  EXPECT_EQ(ql::ranges::find(ids, Datatype::Double, Id::getDatatypeL),
+            ids.begin() + 2);
+  EXPECT_EQ(ql::ranges::find(proxies, Datatype::Double, Id::getDatatypeL),
+            proxies.begin() + 2);
+}
