@@ -114,7 +114,7 @@ namespace {
 // This code works for `std::integer_sequence` as well as
 // `ad_utility::ValueSequence`.
 template <typename Row, template <typename T, T...> typename Tp, size_t... I>
-auto tieHelper(Row& row, Tp<size_t, I...>) {
+auto idsAsArrayHelper(Row& row, Tp<size_t, I...>) {
   return std::array<Id, sizeof...(I)>{row[I]...};
 }
 }  // namespace
@@ -126,8 +126,8 @@ auto tieHelper(Row& row, Tp<size_t, I...>) {
 CPP_template(size_t numIndexColumns, bool includeGraphColumn,
              typename T)(requires(numIndexColumns >= 1 &&
                                   numIndexColumns <=
-                                      3)) auto tieIdTableRow(T& row) {
-  return tieHelper(
+                                      3)) auto idTableRowAsArray(T& row) {
+  return idsAsArrayHelper(
       row, std::make_index_sequence<numIndexColumns +
                                     static_cast<size_t>(includeGraphColumn)>{});
 }
@@ -138,7 +138,7 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
 // returns `{ids_[1], ids_[2], ids_[3]}`, where `ids_` is from
 // `lt->triple_`.
 template <size_t numIndexColumns, bool includeGraphColumn>
-static constexpr auto tieLocatedTriplesIndices = []() {
+static constexpr auto locatedTriplesIndicesInArray = []() {
   std::array<size_t, numIndexColumns + static_cast<size_t>(includeGraphColumn)>
       a{};
   for (size_t i = 0; i < a.size(); ++i) {
@@ -147,23 +147,23 @@ static constexpr auto tieLocatedTriplesIndices = []() {
   return a;
 }();
 
-// Like `tieLocatedTriple`, but takes a `const LocatedTriple&` value instead of
-// an iterator. Needed for algorithms like `set_intersection` that pass values.
-CPP_template(size_t numIndexColumns, bool includeGraphColumn,
-             typename T)(requires(numIndexColumns >= 1 &&
-                                  numIndexColumns <=
-                                      3)) auto tieLocatedTripleValue(T& lt) {
+// Like `locatedTripleAsArray`, but takes a `const LocatedTriple&` value instead
+// of an iterator. Needed for algorithms like `set_intersection` that pass
+// values.
+CPP_template(size_t numIndexColumns, bool includeGraphColumn, typename T)(
+    requires(numIndexColumns >= 1 &&
+             numIndexColumns <= 3)) auto locatedTripleValueAsArray(T& lt) {
   const auto& ids = lt.triple_.ids();
-  return tieHelper(
+  return idsAsArrayHelper(
       ids,
       ad_utility::toIntegerSequenceRef<
-          tieLocatedTriplesIndices<numIndexColumns, includeGraphColumn>>());
+          locatedTriplesIndicesInArray<numIndexColumns, includeGraphColumn>>());
 }
 CPP_template(size_t numIndexColumns, bool includeGraphColumn,
              typename T)(requires(numIndexColumns >= 1 &&
                                   numIndexColumns <=
-                                      3)) auto tieLocatedTriple(T& lt) {
-  return tieLocatedTripleValue<numIndexColumns, includeGraphColumn>(*lt);
+                                      3)) auto locatedTripleAsArray(T& lt) {
+  return locatedTripleValueAsArray<numIndexColumns, includeGraphColumn>(*lt);
 }
 
 // ____________________________________________________________________________
@@ -184,12 +184,12 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   const auto& locatedTriples = *map_.at(blockIndex);
 
   auto lessThan = [](const auto& lt, const auto& row) {
-    return tieLocatedTriple<numIndexColumns, includeGraphColumn>(lt) <
-           tieIdTableRow<numIndexColumns, includeGraphColumn>(row);
+    return locatedTripleAsArray<numIndexColumns, includeGraphColumn>(lt) <
+           idTableRowAsArray<numIndexColumns, includeGraphColumn>(row);
   };
   auto equal = [](const auto& lt, const auto& row) {
-    return tieLocatedTriple<numIndexColumns, includeGraphColumn>(lt) ==
-           tieIdTableRow<numIndexColumns, includeGraphColumn>(row);
+    return locatedTripleAsArray<numIndexColumns, includeGraphColumn>(lt) ==
+           idTableRowAsArray<numIndexColumns, includeGraphColumn>(row);
   };
 
   auto rowIt = block.begin();
@@ -299,10 +299,10 @@ VacuumStatistics processBlockForVacuum(
   };
 
   auto ltProj = [](const LocatedTriple& lt) -> std::array<Id, 4> {
-    return tieLocatedTripleValue<3, true>(lt);
+    return locatedTripleValueAsArray<3, true>(lt);
   };
   auto rowProj = [](const auto& row) -> std::array<Id, 4> {
-    return tieIdTableRow<3, true>(row);
+    return idTableRowAsArray<3, true>(row);
   };
 
   auto rowsAsTuple = idTable | ql::views::transform(rowProj);
