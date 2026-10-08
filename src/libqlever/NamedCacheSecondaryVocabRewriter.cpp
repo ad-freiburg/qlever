@@ -10,6 +10,7 @@
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 
 #include <limits>
 #include <optional>
@@ -149,12 +150,15 @@ std::vector<ColumnIndex> canonicalColumnOrder(
 }
 
 // _____________________________________________________________________________
-std::string canonicalCacheKey(std::string_view cacheKey) {
+std::string canonicalCacheKey(
+    std::string_view cacheKey,
+    ql::span<const ColumnIndex> oldColumnOfNewColumn) {
   static constexpr std::string_view prefix = "CANONICALIZED FOR SERIALIZATION ";
   if (ql::starts_with(cacheKey, prefix)) {
     return std::string{cacheKey};
   }
-  return absl::StrCat(prefix, "(", cacheKey, ")");
+  return absl::StrCat(prefix, "(", cacheKey, ") COLUMNS [",
+                      absl::StrJoin(oldColumnOfNewColumn, ", "), "]");
 }
 
 // _____________________________________________________________________________
@@ -227,11 +231,12 @@ CanonicalizedValue canonicalizeWithPermutation(
   }
 
   return CanonicalizedValue{
-      NamedResultCache::Value{std::make_shared<const IdTable>(std::move(table)),
-                              std::move(varToColMap), std::move(resultSortedOn),
-                              value.localVocab_.clone(),
-                              canonicalCacheKey(value.cacheKey_),
-                              std::move(geoIndex)},
+      NamedResultCache::Value{
+          std::make_shared<const IdTable>(std::move(table)),
+          std::move(varToColMap), std::move(resultSortedOn),
+          value.localVocab_.clone(),
+          canonicalCacheKey(value.cacheKey_, oldColumnOfNewColumn),
+          std::move(geoIndex)},
       std::move(permutation)};
 }
 

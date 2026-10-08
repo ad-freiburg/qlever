@@ -178,7 +178,8 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeForSerializationSortsAgain) {
   EXPECT_THAT(rewritten.resultSortedOn_, ElementsAre(0));
   EXPECT_FALSE(containsLocalVocabIds(rewritten));
   EXPECT_EQ(rewritten.varToColMap_, value->varToColMap_);
-  EXPECT_EQ(rewritten.cacheKey_, canonicalCacheKey(value->cacheKey_));
+  EXPECT_EQ(rewritten.cacheKey_,
+            canonicalCacheKey(value->cacheKey_, std::vector<ColumnIndex>{0}));
   EXPECT_FALSE(rewritten.cachedGeoIndex_.has_value());
 
   // The original entry is unchanged.
@@ -351,19 +352,45 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
 
 // _____________________________________________________________________________
 // Test that the canonicalized copy of an entry gets a cache key that differs
-// from the one of the entry, and that canonicalizing the copy again keeps it.
+// from the one of the entry and depends on the column order of the copy, and
+// that canonicalizing the copy again keeps it.
 TEST(NamedCacheSecondaryVocabRewriter, canonicalCacheKey) {
-  auto key = canonicalCacheKey("SCAN SPO");
+  using Columns = std::vector<ColumnIndex>;
+  auto key = canonicalCacheKey("SCAN SPO", Columns{1, 0});
   EXPECT_NE(key, "SCAN SPO");
   EXPECT_THAT(key, HasSubstr("SCAN SPO"));
-  EXPECT_EQ(canonicalCacheKey(key), key);
-  EXPECT_NE(canonicalCacheKey("SCAN POS"), key);
+  EXPECT_THAT(key, HasSubstr("[1, 0]"));
+  EXPECT_EQ(canonicalCacheKey(key, Columns{0, 1}), key);
+  EXPECT_NE(canonicalCacheKey("SCAN POS", Columns{1, 0}), key);
+  EXPECT_NE(canonicalCacheKey("SCAN SPO", Columns{0, 1}), key);
+  EXPECT_NE(canonicalCacheKey("SCAN SPO", Columns{1}), key);
 
-  auto qec = ad_utility::testing::getQec(std::string{kb});
-  auto value = pin(qec, "entry", "SELECT ?x { VALUES ?x { <y> <m> } }");
+  // Two entries with the same cache key, but with different variables, and
+  // thus different column orders in their copies, get different keys.
+  auto makeValue = [](VariableToColumnMap map) {
+    return Value{std::make_shared<const IdTable>(makeIdTableFromVector(
+                     {{1, 2}, {3, 4}}, ad_utility::testing::IntId)),
+                 std::move(map),
+                 {},
+                 LocalVocab{},
+                 "handmade",
+                 std::nullopt};
+  };
   SecondaryVocabulary secondaryVocab;
-  auto copy =
-      std::make_shared<const Value>(addAndRewrite(value, secondaryVocab));
-  EXPECT_EQ(copy->cacheKey_, canonicalCacheKey(value->cacheKey_));
-  EXPECT_EQ(addAndRewrite(copy, secondaryVocab).cacheKey_, copy->cacheKey_);
+  auto allocator = ad_utility::testing::makeAllocator();
+  auto canonicalize = [&](const Value& value) {
+    return canonicalizeForSerialization(value, secondaryVocab, allocator);
+  };
+  auto inOrder =
+      canonicalize(makeValue({{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
+                              {Variable{"?b"}, makeAlwaysDefinedColumn(1)}}));
+  auto swapped =
+      canonicalize(makeValue({{Variable{"?y"}, makeAlwaysDefinedColumn(0)},
+                              {Variable{"?x"}, makeAlwaysDefinedColumn(1)}}));
+  EXPECT_EQ(inOrder.cacheKey_, canonicalCacheKey("handmade", Columns{0, 1}));
+  EXPECT_EQ(swapped.cacheKey_, canonicalCacheKey("handmade", Columns{1, 0}));
+  EXPECT_NE(inOrder.cacheKey_, swapped.cacheKey_);
+
+  // Canonicalizing a copy again keeps its key.
+  EXPECT_EQ(canonicalize(swapped).cacheKey_, swapped.cacheKey_);
 }
