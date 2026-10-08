@@ -19,12 +19,17 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
+#include "../index/SecondaryVocabularyTestHelpers.h"
 #include "../util/GTestHelpers.h"
+#include "./QleverTestHelpers.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
@@ -35,9 +40,11 @@
 
 using namespace qlever;
 using namespace testing;
+using secondaryVocabTestHelpers::secondaryVocabIs;
 
 namespace {
 using Manager = NamedCachedQueryBlobManager;
+using ErrorType = Manager::BlobErrorType;
 using ad_utility::VocabularyType;
 
 // A `ql::pmr::memory_resource` that counts the allocations routed through it,
@@ -62,6 +69,99 @@ class CountingMemoryResource : public ql::pmr::memory_resource {
     return this == &other;
   }
 };
+
+// The serializer that reads a decompressed blob (see
+// `Manager::tryToSkipAndVerifyBlobHeader`).
+using BlobReader =
+    ad_utility::serialization::ByteBufferReadSerializerT<true,
+                                                         ql::span<const char>>;
+
+// The magic bytes that `Manager::writeBlobHeader` writes (see
+// `blobMagicBytes`).
+constexpr std::array<char, 8> correctMagicBytes{'Q', 'L', 'V', 'R',
+                                                'B', 'L', 'O', 'B'};
+
+// Return a validly ZSTD-compressed blob whose decompressed contents consist of
+// the given magic bytes followed by the given format version, and nothing else.
+std::vector<char> compressedBlobWithHeader(std::array<char, 8> magicBytes,
+                                           uint16_t formatVersion) {
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
+  writer << magicBytes;
+  writer << formatVersion;
+  auto data = std::move(writer).data();
+  return Manager::compressBlob(ql::span<const char>{data});
+}
+
+// Return a validly ZSTD-compressed blob that consists of nothing but a valid
+// header, so that reading the index metadata JSON that is expected to follow it
+// fails.
+std::vector<char> compressedBlobWithOnlyHeader() {
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
+  Manager::writeBlobHeader(writer, Manager::formatVersionWithSecondaryVocab);
+  auto data = std::move(writer).data();
+  return Manager::compressBlob(ql::span<const char>{data});
+}
+
+// Return a matcher for a `Manager::BlobError` of the given `type` whose message
+// contains the `messageSubstring`.
+auto blobErrorWith(ErrorType type, std::string_view messageSubstring = {}) {
+  return AllOf(Field(&Manager::BlobError::type_, type),
+               Field(&Manager::BlobError::message_,
+                     HasSubstr(std::string{messageSubstring})));
+}
+
+// Return a matcher for a `std::optional<Manager::BlobError>` that holds an
+// error of the given `type` whose message contains the `messageSubstring`.
+auto isBlobError(ErrorType type, std::string_view messageSubstring = {}) {
+  return Optional(blobErrorWith(type, messageSubstring));
+}
+
+// Return a matcher for the result of `Manager::tryToSkipAndVerifyBlobHeader`
+// that holds an error of the given `type` whose message contains
+// `messageSubstring`.
+auto isHeaderError(ErrorType type, std::string_view messageSubstring = {}) {
+  return VariantWith<Manager::BlobError>(blobErrorWith(type, messageSubstring));
+}
+
+// Return a matcher for the result of `Manager::tryToSkipAndVerifyBlobHeader`
+// that holds the given `formatVersion`.
+auto isFormatVersion(uint16_t formatVersion) {
+  return VariantWith<uint16_t>(formatVersion);
+}
+
+// Return a matcher for the result of `Manager::tryToDecompressBlob` that holds
+// an error of type `notDecompressible` with our own message.
+auto isNotDecompressible() {
+  return VariantWith<Manager::BlobError>(
+      blobErrorWith(ErrorType::notDecompressible, "was not written by"));
+}
+
+// Return the decompressed `compressedBlob`, and fail the test if it cannot be
+// decompressed.
+std::vector<char, Manager::BlobAllocator> decompressOrFail(
+    ql::span<const char> compressedBlob,
+    ql::pmr::polymorphic_allocator<char> allocator = {}) {
+  auto result = Manager::tryToDecompressBlob(compressedBlob, allocator);
+  if (const auto* error = std::get_if<Manager::BlobError>(&result)) {
+    ADD_FAILURE() << error->message_;
+    return std::vector<char, Manager::BlobAllocator>{};
+  }
+  return std::get<std::vector<char, Manager::BlobAllocator>>(std::move(result));
+}
+
+// Return a validly ZSTD-compressed blob with a valid header, followed by an
+// index metadata JSON whose index format version is incompatible with the
+// current version of QLever, and nothing else.
+std::vector<char> compressedBlobWithIncompatibleIndexFormat() {
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
+  Manager::writeBlobHeader(writer, Manager::formatVersionWithSecondaryVocab);
+  nlohmann::json metadata;
+  metadata["index-format-version"] =
+      nlohmann::json{{"date", "1900-01-01"}, {"pull-request-number", 42}};
+  writer << metadata.dump();
+  auto data = std::move(writer).data();
+  return Manager::compressBlob(ql::span<const char>{data});
+}
 
 // Write the `turtleContents` to a turtle file, build an index from it with the
 // given vocabulary `type`, and return the corresponding `IndexBuilderConfig`.
@@ -156,12 +256,117 @@ auto makeBlobReader(ql::span<const char> data) {
 // metadata JSON that is stored directly after that header (see
 // `NamedCachedQueryBlobManager::serialize`).
 nlohmann::json metadataFromBlob(ql::span<const char> compressedBlob) {
-  auto uncompressed = Manager::decompressBlob(compressedBlob, {});
+  auto uncompressed = decompressOrFail(compressedBlob);
   auto reader = makeBlobReader(uncompressed);
-  Manager::skipAndVerifyBlobHeader(reader);
+  EXPECT_THAT(Manager::tryToSkipAndVerifyBlobHeader(reader),
+              VariantWith<uint16_t>(_));
   std::string metadataJson;
   reader >> metadataJson;
   return nlohmann::json::parse(metadataJson);
+}
+
+// Decompress the `compressedBlob` and expect that the format version from its
+// header is the `expectedVersion`.
+void expectBlobFormatVersion(
+    ql::span<const char> compressedBlob, uint16_t expectedVersion,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
+  auto uncompressed = decompressOrFail(compressedBlob);
+  auto reader = makeBlobReader(uncompressed);
+  EXPECT_THAT(Manager::tryToSkipAndVerifyBlobHeader(reader),
+              VariantWith<uint16_t>(expectedVersion));
+}
+
+// Return the secondary vocabulary of the index of `qlever`, or `nullptr` if it
+// has none.
+const SecondaryVocabulary* secondaryVocabOf(const Qlever& qlever) {
+  return qlever.indexAndViewsSnapshot()->index_.getImpl().secondaryVocab();
+}
+
+// Return the columns of the result of the named cache entry `name` of
+// `qlever`.
+std::vector<std::vector<Id>> columnsOfPinnedResult(const Qlever& qlever,
+                                                   const std::string& name) {
+  auto view = ExplicitIdTableOperation::viewOf(
+      qlever.namedResultCache().get(name)->result_);
+  std::vector<std::vector<Id>> columns;
+  for (const auto& column : view.getColumns()) {
+    columns.emplace_back(column.begin(), column.end());
+  }
+  return columns;
+}
+
+// The data and the update of the tests below for blobs with new words: the
+// update inserts the new words `<a>`, `<y>`, and `"new literal"`, which are
+// not part of the vocabulary of the index. In the order of the index, `<a>` is
+// sorted before `<m>`, but its `Id` in the secondary vocabulary is sorted after
+// all `Id`s of the main vocabulary, so the pinned result has to be sorted
+// again when it is written to a blob.
+constexpr std::string_view newWordsTestData = "<m> <p> \"old literal\" .";
+constexpr std::string_view newWordsUpdate =
+    "INSERT DATA { <a> <p> \"new literal\" . <m> <p> <y> }";
+constexpr std::string_view newWordsPinQuery =
+    "SELECT ?s ?o WHERE { ?s <p> ?o }";
+constexpr std::string_view newWordsCachedQuery =
+    "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-pin {}}";
+
+// The result of `newWordsCachedQuery` on a blob written from the data of
+// `newWordsTestData` and `newWordsUpdate`. The rows are sorted by the `Id`s,
+// so the rows with the new subject `<a>` come last, and in the rows with
+// subject `<m>`, the new word `<y>` comes after `"old literal"`.
+constexpr std::string_view newWordsExpectedResult =
+    "?s\t?o\n<m>\t\"old literal\"\n<m>\t<y>\n<a>\t\"new literal\"\n";
+
+// Open a `Qlever` instance on the index described by `sourceConfig`, apply
+// `newWordsUpdate`, pin the result of `newWordsPinQuery` under the name `pin`,
+// and return the blob written from that instance.
+std::vector<char> serializeNewWordsTestBlob(
+    const IndexBuilderConfig& sourceConfig) {
+  Qlever source{EngineConfig{sourceConfig}};
+  ad_utility::testing::applyUpdateToEngine(source, std::string{newWordsUpdate});
+  source.queryAndPinResultWithName("pin", std::string{newWordsPinQuery});
+  auto entry = source.namedResultCache().get("pin");
+  EXPECT_TRUE(namedCacheSecondaryVocab::containsLocalVocabIds(*entry));
+  EXPECT_FALSE(entry->resultSortedOn_.empty());
+  auto columnsBefore = columnsOfPinnedResult(source, "pin");
+
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+
+  // Writing the blob does not change the named cache entry of the source.
+  EXPECT_EQ(source.namedResultCache().get("pin"), entry);
+  EXPECT_EQ(columnsOfPinnedResult(source, "pin"), columnsBefore);
+  EXPECT_EQ(secondaryVocabOf(source), nullptr);
+  return blob;
+}
+
+// Two rail segments `<s1>` and `<s2>` in Freiburg (linestrings), which the
+// tests for blobs with a spatial index below use.
+constexpr std::string_view freiburgSegmentsS1S2 =
+    "<s1> <asWKT> \"LINESTRING(7.8428469 47.9995367,7.8413293 "
+    "47.9974942)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+    "<s2> <asWKT> \"LINESTRING(7.8409068 47.9975041,7.8420114 "
+    "47.9989233)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
+
+// Return a spatial join whose right side is the cached geometry index with the
+// name `geoPin` (from a blob), and whose left side is the single `point`
+// (a WKT string) provided inline via `VALUES`, so that no permutations (and
+// hence no on-disk index) are needed. The result consists of the subjects of
+// all segments within 1 km of the `point`, sorted.
+std::string spatialJoinQuery(std::string_view point) {
+  return absl::StrCat(
+      "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/> "
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#> "
+      "SELECT ?s2 WHERE { "
+      "VALUES ?geo1 { \"",
+      point,
+      "\"^^geo:wktLiteral } "
+      "SERVICE qlss: { "
+      "_:config qlss:right ?geo2 ; "
+      "qlss:left ?geo1 ; "
+      "qlss:maxDistance 1000 ; "
+      "qlss:algorithm qlss:experimentalPointPolyline ; "
+      "qlss:experimentalRightCacheName \"geoPin\" . "
+      "} } ORDER BY ?s2");
 }
 
 // Load the `compressedBlob` into a fresh `Qlever` instance that has NO index
@@ -219,36 +424,52 @@ TEST(NamedCachedQueryBlobManager, compressAndDecompressBlob) {
         ZstdWrapper::getUncompressedSize(compressed.data(), compressed.size()),
         original.size());
 
-    auto roundTripped = Manager::decompressBlob(compressed, {});
+    auto roundTripped = decompressOrFail(compressed);
     EXPECT_THAT(roundTripped, ::testing::ElementsAreArray(original));
   }
 }
 
 // _____________________________________________________________________________
-// Test that `writeBlobHeader` and `skipAndVerifyBlobHeader` mirror each other,
-// and that an invalid header is rejected.
+// Test that `writeBlobHeader` and `tryToSkipAndVerifyBlobHeader` mirror each
+// other, and that an invalid header is rejected.
 TEST(NamedCachedQueryBlobManager, writeAndVerifyBlobHeader) {
   ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
-  Manager::writeBlobHeader(writer);
+  Manager::writeBlobHeader(writer, Manager::formatVersionWithSecondaryVocab);
   // Append a payload so that we can check the reader is positioned correctly
   // after the header.
   writer << std::string_view{"payload"};
   auto data = std::move(writer).data();
 
-  auto reader = makeBlobReader(data);
-  EXPECT_NO_THROW(Manager::skipAndVerifyBlobHeader(reader));
+  BlobReader reader{ql::span<const char>{data}};
+  EXPECT_THAT(Manager::tryToSkipAndVerifyBlobHeader(reader),
+              isFormatVersion(Manager::formatVersionWithSecondaryVocab));
   std::string payload;
   reader >> payload;
   EXPECT_EQ(payload, "payload");
+
+  // A blob of the old format version (without a secondary vocabulary) is
+  // accepted as well.
+  ad_utility::serialization::AlignedByteBufferWriteSerializer oldWriter;
+  Manager::writeBlobHeader(oldWriter,
+                           Manager::formatVersionWithoutSecondaryVocab);
+  auto oldData = std::move(oldWriter).data();
+  BlobReader oldReader{ql::span<const char>{oldData}};
+  EXPECT_THAT(Manager::tryToSkipAndVerifyBlobHeader(oldReader),
+              isFormatVersion(Manager::formatVersionWithoutSecondaryVocab));
+
+  // Only the known format versions can be written.
+  ad_utility::serialization::AlignedByteBufferWriteSerializer unknownWriter;
+  EXPECT_ANY_THROW(Manager::writeBlobHeader(unknownWriter, 3));
 
   // A buffer that does not start with the expected magic header is rejected.
   ad_utility::serialization::AlignedByteBufferWriteSerializer wrongWriter;
   wrongWriter << std::array<char, 8>{'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'};
   wrongWriter << uint16_t{1};
   auto wrongData = std::move(wrongWriter).data();
-  auto wrongReader = makeBlobReader(wrongData);
-  AD_EXPECT_THROW_WITH_MESSAGE(Manager::skipAndVerifyBlobHeader(wrongReader),
-                               HasSubstr("was not written by"));
+  BlobReader wrongReader{ql::span<const char>{wrongData}};
+  EXPECT_THAT(
+      Manager::tryToSkipAndVerifyBlobHeader(wrongReader),
+      isHeaderError(ErrorType::invalidMagicBytes, "was not written by"));
 }
 
 // _____________________________________________________________________________
@@ -257,14 +478,18 @@ TEST(NamedCachedQueryBlobManager, writeAndVerifyBlobHeader) {
 TEST(NamedCachedQueryBlobManager, skipAndVerifyBlobHeaderRejectsWrongVersion) {
   ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
   // The correct magic bytes (see `blobMagicBytes`), followed by a format
-  // version that is definitely not the current one.
+  // version that is definitely not one of the known ones.
   writer << std::array<char, 8>{'Q', 'L', 'V', 'R', 'B', 'L', 'O', 'B'};
   writer << uint16_t{63999};
   auto data = std::move(writer).data();
 
-  auto reader = makeBlobReader(data);
-  AD_EXPECT_THROW_WITH_MESSAGE(Manager::skipAndVerifyBlobHeader(reader),
-                               HasSubstr("incompatible version"));
+  BlobReader reader{ql::span<const char>{data}};
+  auto error = Manager::tryToSkipAndVerifyBlobHeader(reader);
+  EXPECT_THAT(error,
+              isHeaderError(ErrorType::invalidVersion, "incompatible version"));
+  // The message also names the version that was found.
+  EXPECT_THAT(error,
+              isHeaderError(ErrorType::invalidVersion, "format version 63999"));
 }
 
 // _____________________________________________________________________________
@@ -276,9 +501,47 @@ TEST(NamedCachedQueryBlobManager, skipAndVerifyBlobHeaderRejectsShortInput) {
   writer << std::array<char, 4>{'Q', 'L', 'V', 'R'};
   auto data = std::move(writer).data();
 
-  auto reader = makeBlobReader(data);
-  AD_EXPECT_THROW_WITH_MESSAGE(Manager::skipAndVerifyBlobHeader(reader),
-                               HasSubstr("was not written by"));
+  BlobReader reader{ql::span<const char>{data}};
+  EXPECT_THAT(
+      Manager::tryToSkipAndVerifyBlobHeader(reader),
+      isHeaderError(ErrorType::invalidMagicBytes, "was not written by"));
+}
+
+// _____________________________________________________________________________
+// Test that a completely empty blob is rejected (and in particular without
+// throwing).
+TEST(NamedCachedQueryBlobManager, skipAndVerifyBlobHeaderRejectsEmptyInput) {
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
+  auto data = std::move(writer).data();
+  ASSERT_TRUE(data.empty());
+
+  BlobReader reader{ql::span<const char>{data}};
+  EXPECT_THAT(
+      Manager::tryToSkipAndVerifyBlobHeader(reader),
+      isHeaderError(ErrorType::invalidMagicBytes, "was not written by"));
+}
+
+// _____________________________________________________________________________
+// Test that the header is also correctly verified if it is not at the very
+// beginning of the buffer, and that the reader is positioned after the header
+// if the header is valid.
+TEST(NamedCachedQueryBlobManager, verifyBlobHeaderAtNonZeroPosition) {
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
+  writer << uint64_t{42};
+  Manager::writeBlobHeader(writer, Manager::formatVersionWithSecondaryVocab);
+  auto data = std::move(writer).data();
+
+  BlobReader reader{ql::span<const char>{data}};
+  uint64_t prefix = 0;
+  reader >> prefix;
+  ASSERT_EQ(prefix, 42u);
+  size_t positionBeforeHeader = reader.getCurrentPosition();
+  EXPECT_THAT(Manager::tryToSkipAndVerifyBlobHeader(reader),
+              isFormatVersion(Manager::formatVersionWithSecondaryVocab));
+  // The reader has been advanced past the magic bytes and the version, and the
+  // buffer is exhausted.
+  EXPECT_EQ(reader.getCurrentPosition() - positionBeforeHeader, 10u);
+  EXPECT_EQ(reader.getCurrentPosition(), data.size());
 }
 
 // _____________________________________________________________________________
@@ -288,17 +551,14 @@ TEST(NamedCachedQueryBlobManager, skipAndVerifyBlobHeaderRejectsShortInput) {
 TEST(NamedCachedQueryBlobManager, decompressBlobRejectsNonZstdInput) {
   // Input that is too short to even hold a ZSTD frame header.
   std::vector<char> tooShort(3, 'x');
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(Manager::decompressBlob(tooShort, {}),
-                                        HasSubstr("was not written by"),
-                                        ad_utility::Exception);
+  EXPECT_THAT(Manager::tryToDecompressBlob(tooShort, {}),
+              isNotDecompressible());
 
   // Longer input that does not start with the ZSTD magic number. Note that
   // interpreting any eight of its bytes as the size of the uncompressed data
   // would yield about 18 exabytes.
   std::vector<char> garbage(1024, '\xFF');
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(Manager::decompressBlob(garbage, {}),
-                                        HasSubstr("was not written by"),
-                                        ad_utility::Exception);
+  EXPECT_THAT(Manager::tryToDecompressBlob(garbage, {}), isNotDecompressible());
 }
 
 // _____________________________________________________________________________
@@ -317,9 +577,10 @@ TEST(NamedCachedQueryBlobManager, decompressBlobRejectsTruncatedInput) {
             original.size());
 
   compressed.pop_back();
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(Manager::decompressBlob(compressed, {}),
-                                        HasSubstr("was not written by"),
-                                        ad_utility::Exception);
+  // Note that the failure occurs during the decompression itself here, not
+  // while reading the frame header.
+  EXPECT_THAT(Manager::tryToDecompressBlob(compressed, {}),
+              isNotDecompressible());
 }
 
 // _____________________________________________________________________________
@@ -340,6 +601,11 @@ TEST(NamedCachedQueryBlobManager, combinedBlob) {
     EXPECT_FALSE(blob.empty());
     return blob;
   }();
+
+  // Without any new words, the blob is written in the old format without a
+  // secondary vocabulary.
+  expectBlobFormatVersion(compressedBlob,
+                          Manager::formatVersionWithoutSecondaryVocab);
 
   // A completely fresh instance with NO index files on disk (`skipLoading`);
   // everything needed to answer the cached-result query comes from the blob.
@@ -434,16 +700,133 @@ TEST(NamedCachedQueryBlobManager, deserializeRejectsInvalidBlob) {
 TEST(NamedCachedQueryBlobManager, deserializeRejectsBlobWithInvalidContents) {
   // A blob that consists of nothing but a valid header, so that reading the
   // index metadata JSON that is expected to follow it fails.
-  ad_utility::serialization::AlignedByteBufferWriteSerializer writer;
-  Manager::writeBlobHeader(writer);
-  auto headerOnly = std::move(writer).data();
-  std::vector<char> compressedBlob =
-      Manager::compressBlob(ql::span<const char>{headerOnly});
+  std::vector<char> compressedBlob = compressedBlobWithOnlyHeader();
 
   Qlever target{EngineConfig{}, /*skipLoading=*/true};
   AD_EXPECT_THROW_WITH_MESSAGE(
       target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
       HasSubstr("Error while reading the contents of a blob"));
+}
+
+// _____________________________________________________________________________
+// Test that `tryToDeserializeVocabAndNamedCacheFromCompressedBlob` reports the
+// details of a failure in the message of the returned error, and also writes
+// that message to the error log, and that
+// `deserializeVocabAndNamedCacheFromCompressedBlob` throws with the same
+// message.
+TEST(NamedCachedQueryBlobManager, tryToDeserializeReportsFailureDetails) {
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+  // Load the `compressedBlob`, expect an error of the `expectedType`, and
+  // return its message. Also check that the message was written to the log,
+  // and that the throwing version throws with the same message.
+  auto loadAndGetMessage = [&target](ql::span<const char> compressedBlob,
+                                     ErrorType expectedType) {
+    auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+    auto error = target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
+        compressedBlob);
+    EXPECT_THAT(error, isBlobError(expectedType));
+    std::string message = error.has_value() ? error.value().message_ : "";
+    EXPECT_THAT(logStream.str(), HasSubstr(message));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob),
+        HasSubstr(message));
+    return message;
+  };
+
+  // The underlying ZSTD error, both for input that does not start with the
+  // ZSTD magic number, and for a validly compressed but truncated blob.
+  std::vector<char> garbage(1024, '\xFF');
+  EXPECT_THAT(loadAndGetMessage(garbage, ErrorType::notDecompressible),
+              AllOf(HasSubstr("was not written by"),
+                    HasSubstr("does not start with a valid ZSTD frame")));
+  std::vector<char> truncated = Manager::compressBlob(garbage);
+  truncated.pop_back();
+  EXPECT_THAT(loadAndGetMessage(truncated, ErrorType::notDecompressible),
+              HasSubstr("was not written by"));
+
+  // The invalid magic bytes.
+  std::vector<char> bogus(64, 'X');
+  EXPECT_THAT(loadAndGetMessage(Manager::compressBlob(bogus),
+                                ErrorType::invalidMagicBytes),
+              HasSubstr("was not written by"));
+
+  // The blob format version that was found.
+  EXPECT_THAT(
+      loadAndGetMessage(compressedBlobWithHeader(correctMagicBytes, 63999),
+                        ErrorType::invalidVersion),
+      AllOf(HasSubstr("incompatible version"),
+            HasSubstr("format version 63999")));
+
+  // The details of the incompatible index format.
+  EXPECT_THAT(loadAndGetMessage(compressedBlobWithIncompatibleIndexFormat(),
+                                ErrorType::incompatibleIndexFormat),
+              AllOf(HasSubstr("incompatible index format"),
+                    HasSubstr("The index is too old for this version of "
+                              "QLever"),
+                    HasSubstr("PR = 42")));
+}
+
+// _____________________________________________________________________________
+// Test that a blob whose header is rejected by
+// `tryToDeserializeVocabAndNamedCacheFromCompressedBlob` leaves the instance
+// completely unchanged, so that a valid blob can still be loaded afterwards,
+// and that a second valid blob is then rejected.
+TEST(NamedCachedQueryBlobManager, tryToDeserializeLeavesInstanceUsable) {
+  IndexBuilderConfig sourceConfig =
+      buildTestIndex("<retrySubject> <retryPredicate> \"retry literal\".");
+
+  const std::vector<char> compressedBlob = [&sourceConfig]() {
+    Qlever source{EngineConfig{sourceConfig}};
+    source.queryAndPinResultWithName(
+        "blobPin", "SELECT ?s ?o WHERE { ?s <retryPredicate> ?o }");
+    return source.serializeVocabAndNamedCacheToCompressedBlob();
+  }();
+
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+
+  // None of an undecompressible, an unrecognized, an incompatible blob, or a
+  // blob with an incompatible index format throws, and none of them counts as
+  // the one allowed load.
+  std::vector<char> garbage(1024, '\xFF');
+  EXPECT_THAT(
+      target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(garbage),
+      isBlobError(ErrorType::notDecompressible));
+  std::vector<char> bogus(64, 'X');
+  EXPECT_THAT(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
+                  Manager::compressBlob(bogus)),
+              isBlobError(ErrorType::invalidMagicBytes));
+  EXPECT_THAT(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
+                  compressedBlobWithHeader(correctMagicBytes, uint16_t{63999})),
+              isBlobError(ErrorType::invalidVersion));
+  EXPECT_THAT(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
+                  compressedBlobWithIncompatibleIndexFormat()),
+              isBlobError(ErrorType::incompatibleIndexFormat));
+
+  // A blob whose metadata JSON cannot be read throws, but it does not count as
+  // the one allowed load either, because nothing of the instance has been
+  // modified yet.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
+          compressedBlobWithOnlyHeader()),
+      HasSubstr("Error while reading the contents of a blob"));
+
+  // The valid blob can still be loaded, and the instance then answers the query
+  // from the named result cache and the vocabulary in the blob.
+  EXPECT_EQ(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
+                compressedBlob),
+            std::nullopt);
+  EXPECT_EQ(
+      target.query(
+          "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-blobPin {}}",
+          ad_utility::MediaType::tsv),
+      "?s\t?o\n<retrySubject>\t\"retry literal\"\n");
+
+  // After a successful load, a second blob is rejected, also by the
+  // non-throwing version (a violated precondition is not a blob error).
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
+          compressedBlob),
+      HasSubstr("must not be called more than once"));
 }
 
 // _____________________________________________________________________________
@@ -456,15 +839,12 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
   // Four rail segments (linestrings) that are pinned as a cached s2 geometry
   // index. The query point used below lies within 1 km of all four segments
   // (see `SpatialJoinCachedIndexTest`).
-  IndexBuilderConfig sourceConfig = buildTestIndex(
-      "<s1> <asWKT> \"LINESTRING(7.8428469 47.9995367,7.8413293 "
-      "47.9974942)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
-      "<s2> <asWKT> \"LINESTRING(7.8409068 47.9975041,7.8420114 "
-      "47.9989233)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+  IndexBuilderConfig sourceConfig = buildTestIndex(absl::StrCat(
+      freiburgSegmentsS1S2,
       "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 "
       "47.9975175)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
       "<s4> <asWKT> \"LINESTRING(7.8422376 47.9990144,7.8411016 "
-      "47.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n");
+      "47.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"));
 
   const std::vector<char> compressedBlob = [&sourceConfig]() {
     Qlever source{EngineConfig{sourceConfig}};
@@ -477,21 +857,8 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
     return blob;
   }();
 
-  // A spatial join whose right side is the cached geometry index (from the
-  // blob) and whose left side is a single point provided inline via `VALUES`,
-  // so that no permutations (and hence no on-disk index) are needed.
-  std::string spatialQuery =
-      "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/> "
-      "PREFIX geo: <http://www.opengis.net/ont/geosparql#> "
-      "SELECT ?s2 WHERE { "
-      "VALUES ?geo1 { \"POINT(7.841295 47.997731)\"^^geo:wktLiteral } "
-      "SERVICE qlss: { "
-      "_:config qlss:right ?geo2 ; "
-      "qlss:left ?geo1 ; "
-      "qlss:maxDistance 1000 ; "
-      "qlss:algorithm qlss:experimentalPointPolyline ; "
-      "qlss:experimentalRightCacheName \"geoPin\" . "
-      "} }";
+  // A spatial join with the cached geometry index (from the blob).
+  std::string spatialQuery = spatialJoinQuery("POINT(7.841295 47.997731)");
 
   // A fresh instance with no index files on disk. Before loading the blob the
   // cached geometry index does not exist, so the spatial query fails.
@@ -629,4 +996,110 @@ TEST(NamedCachedQueryBlobManager, blobWithExcludedEntriesRejectsGeoSplitVocab) {
       source.serializeVocabAndNamedCacheToCompressedBlob(
           excludeConfig({std::string{droppedEntriesRegex}})),
       HasSubstr("on-disk-compressed-geo-split"));
+}
+
+// _____________________________________________________________________________
+// Test a round trip of a blob whose named cache entry contains new words
+// (inserted by a SPARQL UPDATE), which are written to the secondary vocabulary
+// of the blob.
+TEST(NamedCachedQueryBlobManager, blobWithNewWords) {
+  auto sourceConfig = buildTestIndex(newWordsTestData);
+  auto compressedBlob = serializeNewWordsTestBlob(sourceConfig);
+  expectBlobFormatVersion(compressedBlob,
+                          Manager::formatVersionWithSecondaryVocab);
+
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+  target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob);
+
+  // The new words form a single sorted segment of the secondary vocabulary.
+  EXPECT_THAT(secondaryVocabOf(target),
+              Pointee(secondaryVocabIs(1, {"\"new literal\"", "<a>", "<y>"})));
+
+  // The pinned result refers to the words of the secondary vocabulary, and is
+  // still sorted in the order of its `Id`s.
+  auto entry = target.namedResultCache().get("pin");
+  EXPECT_FALSE(namedCacheSecondaryVocab::containsLocalVocabIds(*entry));
+  EXPECT_EQ(target.query(std::string{newWordsCachedQuery},
+                         ad_utility::MediaType::tsv),
+            newWordsExpectedResult);
+
+  // A join with the pinned result relies on it being sorted.
+  auto joinResult = target.query(
+      "SELECT ?s ?o ?x WHERE { SERVICE ql:cached-result-with-name-pin {} "
+      "VALUES (?s ?x) { (<a> 1) (<m> 2) } } ORDER BY ?x ?o",
+      ad_utility::MediaType::tsv);
+  EXPECT_EQ(joinResult,
+            "?s\t?o\t?x\n<a>\t\"new literal\"\t1\n<m>\t\"old "
+            "literal\"\t2\n<m>\t<y>\t2\n");
+}
+
+// _____________________________________________________________________________
+// Test that a blob can be written from an instance that was itself loaded from
+// a blob with a secondary vocabulary: the words of that secondary vocabulary
+// keep their `Id`s, and the new words form one additional segment.
+TEST(NamedCachedQueryBlobManager, blobWithPreexistingSecondaryVocab) {
+  auto sourceConfig = buildTestIndex(newWordsTestData);
+  auto firstBlob = serializeNewWordsTestBlob(sourceConfig);
+
+  Qlever intermediate{EngineConfig{}, /*skipLoading=*/true};
+  intermediate.deserializeVocabAndNamedCacheFromCompressedBlob(firstBlob);
+  // Pin another result with a word of the main vocabulary (`<m>`), a word of
+  // the secondary vocabulary (`<a>`), and a new word (`<z>`).
+  intermediate.queryAndPinResultWithName(
+      "second", "SELECT ?s WHERE { VALUES ?s { <z> <a> <m> } }");
+  auto secondBlob = intermediate.serializeVocabAndNamedCacheToCompressedBlob();
+  expectBlobFormatVersion(secondBlob, Manager::formatVersionWithSecondaryVocab);
+
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+  target.deserializeVocabAndNamedCacheFromCompressedBlob(secondBlob);
+  EXPECT_THAT(
+      secondaryVocabOf(target),
+      Pointee(secondaryVocabIs(2, {"\"new literal\"", "<a>", "<y>", "<z>"})));
+
+  // The entry from the first blob is carried over unchanged.
+  EXPECT_EQ(columnsOfPinnedResult(target, "pin"),
+            columnsOfPinnedResult(intermediate, "pin"));
+  EXPECT_EQ(target.query(std::string{newWordsCachedQuery},
+                         ad_utility::MediaType::tsv),
+            newWordsExpectedResult);
+  EXPECT_EQ(target.query("SELECT ?s WHERE { SERVICE "
+                         "ql:cached-result-with-name-second {}}",
+                         ad_utility::MediaType::tsv),
+            "?s\n<z>\n<a>\n<m>\n");
+}
+
+// _____________________________________________________________________________
+// Test a round trip of a blob whose named cache entry has a geo index and
+// contains a new word that is sorted before all other rows, so that the rows
+// and hence the rows of the geo index are permuted when the entry is written.
+TEST(NamedCachedQueryBlobManager, blobWithNewWordsAndSpatialIndex) {
+  // Two rail segments in Freiburg, and a new one in Berlin (inserted below),
+  // whose subject `<a>` sorts before `<s1>` and `<s2>`.
+  IndexBuilderConfig sourceConfig = buildTestIndex(freiburgSegmentsS1S2);
+
+  const std::vector<char> compressedBlob = [&sourceConfig]() {
+    Qlever source{EngineConfig{sourceConfig}};
+    ad_utility::testing::applyUpdateToEngine(
+        source,
+        "INSERT DATA { <a> <asWKT> \"LINESTRING(13.4363731 52.5100129,"
+        "13.4350587 52.5105704)\"^^"
+        "<http://www.opengis.net/ont/geosparql#wktLiteral> }");
+    source.queryAndPinResultWithName(
+        QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"}},
+        "SELECT * { ?s2 <asWKT> ?geo2 }");
+    return source.serializeVocabAndNamedCacheToCompressedBlob();
+  }();
+  expectBlobFormatVersion(compressedBlob,
+                          Manager::formatVersionWithSecondaryVocab);
+
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+  target.deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob);
+  // If the rows of the geo index were not permuted together with the rows of
+  // the result, then the segment in Berlin would be reported as `<s1>`.
+  EXPECT_EQ(target.query(spatialJoinQuery("POINT(13.4357 52.5103)"),
+                         ad_utility::MediaType::tsv),
+            "?s2\n<a>\n");
+  EXPECT_EQ(target.query(spatialJoinQuery("POINT(7.841295 47.997731)"),
+                         ad_utility::MediaType::tsv),
+            "?s2\n<s1>\n<s2>\n");
 }

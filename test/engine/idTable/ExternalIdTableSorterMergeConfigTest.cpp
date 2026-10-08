@@ -271,6 +271,27 @@ TEST(ExternalIdTableSorterMergeConfig, mergeOptions) {
   EXPECT_EQ(options.parallelism(), config.parallelism_);
   EXPECT_EQ(options.maxNumChunksInFlight, parameters.numChunksInFlight_);
   EXPECT_EQ(options.numChunksInFlight(100), parameters.numChunksInFlight_);
+  EXPECT_EQ(options.firstChunkSize, FIRST_MERGE_PHASE_CHUNK_SIZE);
+  // All the buffered output blocks but the two that the consumer holds are
+  // read ahead by the consumer, see
+  // `MergePhaseConfig::numBufferedOutputBlocks_`.
+  config.numBufferedOutputBlocks_ = 7;
+  options = makeMergeOptions(config, computeMergePhaseParameters(config));
+  EXPECT_EQ(options.numPrefetchedOutputBlocks, 5u);
+}
+
+// _____________________________________________________________________________
+// The read-ahead is never zero, no matter how small the number of buffered
+// output blocks is, because the `BlockPrefetcher` rejects a read-ahead of zero,
+// see `MergeOptions::numPrefetchedOutputBlocks`.
+TEST(ExternalIdTableSorterMergeConfig, mergeOptionsWithFewBufferedBlocks) {
+  auto config = baseConfig();
+  for (size_t numBufferedOutputBlocks : {size_t{1}, size_t{2}, size_t{3}}) {
+    config.numBufferedOutputBlocks_ = numBufferedOutputBlocks;
+    auto options =
+        makeMergeOptions(config, computeMergePhaseParameters(config));
+    EXPECT_EQ(options.numPrefetchedOutputBlocks, 1u);
+  }
 }
 
 // _____________________________________________________________________________
@@ -356,12 +377,12 @@ TEST(ExternalIdTableSorterMergeConfig, blockStorageFactory) {
   for (size_t i = 0; i < numBlocks; ++i) {
     net::post(strand, [&storage, &values]() {
       using GetResult = decltype(storage)::GetResult;
-      storage.getBlock(
-          0, [&values](std::exception_ptr exception, GetResult result) {
-            EXPECT_EQ(exception, nullptr);
-            ASSERT_TRUE(result.hasValue());
-            values.push_back(std::move(result).get()(0, 0).getInt());
-          });
+      storage.getBlock(0, [&values](std::exception_ptr exception,
+                                    GetResult result) {
+        EXPECT_EQ(exception, nullptr);
+        ASSERT_TRUE(result.hasValue());
+        values.push_back(std::move(result).get().materialize()(0, 0).getInt());
+      });
     });
     pollUntilQuiescent(ioContext);
   }
