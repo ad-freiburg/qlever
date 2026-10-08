@@ -1374,13 +1374,17 @@ TYPED_TEST(IdTableSubViewTest, subView) {
 }
 
 namespace {
+// A proxy object for an `Id`, like the element access of a column storage that
+// does not store plain `Id`s would return it.
 struct Proxy {
   Id id_;
 };
 
 // The minimal interface of a table that the `RowReference` class needs, with an
-// element access that returns a proxy object by value (and not an `Id&`).
+// element access that returns a `Proxy` by value (and not an `Id&`).
 struct TableReturningProxies {
+  // Both are required by `RowReference`
+  // (`Table::single_value_type` and `Table::numStaticColumns`).
   using single_value_type = Id;
   static constexpr int numStaticColumns = 2;
   std::array<Id, 2> row_{V(3), V(4)};
@@ -1388,6 +1392,7 @@ struct TableReturningProxies {
   size_t numColumns() const { return 2; }
   Proxy operator()(size_t, size_t column) const { return Proxy{row_[column]}; }
 };
+}  // namespace
 
 // Test that `operator[]` of the `RowReference` (which uses
 // `operatorBracketImpl`) returns exactly what the element access of the table
@@ -1418,6 +1423,7 @@ TEST(IdTable, rowReferenceOperatorBracket) {
   MutableRow mutableRow{&table, 0};
   static_assert(std::is_same_v<decltype(mutableRow[0]), Proxy>);
   EXPECT_EQ(mutableRow[1].id_, V(4));
+
   // Iterating over a row uses the same element access.
   std::vector<Id> ids;
   for (const auto& proxy : constRow) {
@@ -1425,7 +1431,6 @@ TEST(IdTable, rowReferenceOperatorBracket) {
   }
   EXPECT_THAT(ids, ::testing::ElementsAre(V(3), V(4)));
 }
-}  // namespace
 
 // Check that we can completely instantiate `IdTable`s with a different value
 // type and a different underlying storage.
