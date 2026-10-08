@@ -436,8 +436,7 @@ Result::Generator EmptyPath::processTable(IdTableView<0> table,
   // The distinct values of the join column that have to be looked up.
   std::vector<Id> ids;
   ids.reserve(joinColumn.size());
-  ql::ranges::copy_if(joinColumn, std::back_inserter(ids),
-                      [](Id id) { return !id.isUndefined(); });
+  ql::ranges::copy_if(joinColumn, std::back_inserter(ids), Id::isDefinedL);
   bool hasUndef = ids.size() != joinColumn.size();
   ql::ranges::sort(ids);
   // NOTE: `ql::ranges::unique` does not work because of a discrepancy in the

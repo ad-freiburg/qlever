@@ -9,6 +9,7 @@
 #include <s2/s2polyline.h>
 #include <s2/s2shapeutil_coding.h>
 
+#include "backports/algorithm.h"
 #include "index/ExportIds.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GeoConverters.h"
@@ -85,6 +86,19 @@ SpatialJoinCachedIndex::SpatialJoinCachedIndex(
 // ____________________________________________________________________________
 const Variable& SpatialJoinCachedIndex::getGeometryColumn() const {
   return geometryColumn_;
+}
+
+// _____________________________________________________________________________
+SpatialJoinCachedIndex SpatialJoinCachedIndex::withPermutedRows(
+    ql::span<const size_t> newRowOfOldRow) const {
+  AD_CONTRACT_CHECK(ql::ranges::all_of(
+      shapeIndexToRow_ | ql::views::values,
+      [numRows = newRowOfOldRow.size()](size_t row) { return row < numRows; }));
+  SpatialJoinCachedIndex result = *this;
+  for (auto& [shapeIndex, row] : result.shapeIndexToRow_) {
+    row = newRowOfOldRow[row];
+  }
+  return result;
 }
 
 // ____________________________________________________________________________
