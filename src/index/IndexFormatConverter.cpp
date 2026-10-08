@@ -356,7 +356,10 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
            cancellationHandle = std::move(cancellationHandle),
            progress = std::move(progress)](IdTable& idTable) {
             for (auto column : idTable.getColumns()) {
-              ql::ranges::for_each(column, [](Id& id) { id = convertId(id); });
+              ql::ranges::for_each(column, [](auto&& id) {
+                // Forward so that this also works for proxy references.
+                std::forward<decltype(id)>(id) = convertId(id);
+              });
             }
             progress(idTable.numRows());
             return IdTableStatic<0>{std::move(idTable)};

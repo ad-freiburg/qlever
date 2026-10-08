@@ -184,8 +184,9 @@ NamedResultCache::Value rewriteToSecondaryVocab(
   IdTable table{view.numColumns(), allocator};
   table.insertAtEnd(view);
   for (auto column : table.getColumns()) {
-    ql::ranges::for_each(column, [&secondaryVocab](Id& id) {
-      id = rewriteId(id, secondaryVocab);
+    ql::ranges::for_each(column, [&secondaryVocab](auto&& id) {
+      // Forward so that this also works for proxy references.
+      std::forward<decltype(id)>(id) = rewriteId(id, secondaryVocab);
     });
   }
 

@@ -158,7 +158,7 @@ CPP_template(typename Range, typename Serializer)(
 // TODO<joka921> Comments.
 inline void remapLocalVocab(IdColumnRef ids,
                             const absl::flat_hash_map<Id::T, Id>& mapping) {
-  for (Id& id : ids) {
+  for (auto&& id : ids) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
       id = mapping.at(id.getBits());
     }
