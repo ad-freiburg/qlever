@@ -10,16 +10,16 @@
 #include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/QueryExecutionTree.h"
-#include "util/ColumnStrippingHelpers.h"
 
 using std::endl;
 using std::string;
 
-// _______________________________________________________________________________________
+// _____________________________________________________________________________
 size_t Distinct::getResultWidth() const { return subtree_->getResultWidth(); }
 
-// _______________________________________________________________________________________
+// _____________________________________________________________________________
 Distinct::Distinct(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
                    const std::vector<ColumnIndex>& keepIndices)
@@ -29,7 +29,7 @@ Distinct::Distinct(QueryExecutionContext* qec,
       std::move(subtree_), keepIndices_);
 }
 
-// _______________________________________________________________________________________
+// _____________________________________________________________________________
 bool Distinct::isDistinctByImpl(
     const std::vector<ColumnIndex>& distinctIndices) const {
   // The result is distinct wrt `distinctIndices` iff `keepIndices_` is a subset
@@ -40,21 +40,21 @@ bool Distinct::isDistinctByImpl(
   });
 }
 
-// _______________________________________________________________________________________
+// _____________________________________________________________________________
 string Distinct::getCacheKeyImpl() const {
   return absl::StrCat("DISTINCT (", subtree_->getCacheKey(), ") (",
                       absl::StrJoin(keepIndices_, ","), ")");
 }
 
-// _______________________________________________________________________________________
+// _____________________________________________________________________________
 string Distinct::getDescriptor() const { return "Distinct"; }
 
-// _______________________________________________________________________________________
+// _____________________________________________________________________________
 VariableToColumnMap Distinct::computeVariableToColumnMap() const {
   return subtree_->getVariableColumns();
 }
 
-// _______________________________________________________________________________________
+// _____________________________________________________________________________
 template <size_t WIDTH>
 Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
                                           bool yieldOnce) const {
@@ -99,7 +99,7 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
       })};
 }
 
-// _______________________________________________________________________________________
+// _____________________________________________________________________________
 Result Distinct::computeResult(bool requestLaziness) {
   AD_LOG_DEBUG << "Getting sub-result for distinct result computation..."
                << endl;
@@ -127,14 +127,14 @@ Result Distinct::computeResult(bool requestLaziness) {
                       resultSortedOn()};
 }
 
-// _______________________________________________________________________________________
+// _____________________________________________________________________________
 template <typename T1, typename T2>
 bool Distinct::matchesRow(const T1& a, const T2& b) const {
   return ql::ranges::all_of(keepIndices_,
                             [&a, &b](ColumnIndex i) { return a[i] == b[i]; });
 }
 
-// _______________________________________________________________________________________
+// _____________________________________________________________________________
 template <size_t WIDTH>
 IdTable Distinct::distinct(
     IdTable dynInput,
@@ -188,7 +188,7 @@ IdTable Distinct::distinct(
   return std::move(result).toDynamic();
 }
 
-// _______________________________________________________________________________________
+// _____________________________________________________________________________
 template <size_t WIDTH>
 IdTable Distinct::outOfPlaceDistinct(const IdTableView<0>& dynInput) const {
   AD_CONTRACT_CHECK(keepIndices_.size() <= dynInput.numColumns());
@@ -229,48 +229,48 @@ IdTable Distinct::outOfPlaceDistinct(const IdTableView<0>& dynInput) const {
   return std::move(output).toDynamic();
 }
 
-// _______________________________________________________________________________________
+// _____________________________________________________________________________
 std::unique_ptr<Operation> Distinct::cloneImpl() const {
   return std::make_unique<Distinct>(_executionContext, subtree_->clone(),
                                     keepIndices_);
 }
 
-// _______________________________________________________________________________________
+// ____________________________________________________________________________
 IdTable Distinct::outOfPlaceDistinctForTesting(const IdTable& input) const {
   size_t width = input.numColumns();
   return ad_utility::callFixedSizeVi(width, [&, self = this](auto width) {
     return self->outOfPlaceDistinct<width>(input.asStaticView<0>());
   });
 }
-// _______________________________________________________________________________________
+
+// _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Distinct::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
-  // Add `requestedVariables` and the variables corresponding to the `keepIndices_` to the
-  // variables that are required from the subtree.
-  VarsRequiredFromSubtree helper(&requestedVariables);
+  // The subtree has to provide the requested variables and the variables that
+  // the `DISTINCT` compares on (those at `keepIndices_`).
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
   std::vector<const Variable*> keepVars;
-  for (const auto& jcl : keepIndices_) {
-    const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
+  for (ColumnIndex keepIndex : keepIndices_) {
+    const auto& var =
+        subtree_->getVariableAndInfoByColumnIndex(keepIndex).first;
     keepVars.push_back(&var);
-    helper.add(var);
+    varsRequiredFromSubtree.add(var);
   }
-  // Collect all the variables that are required from the subtree.
-  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
-  // Continue with the recursion and column stripping of subtree.
+  // Strip the subtree and translate `keepIndices_` to the column indices of
+  // the stripped subtree.
   auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
-      subtree_, varsRequiredFromSubtree);
-
-  // Find out the new column indices to update `keepIndices_`.
-  std::vector<ColumnIndex> distinctKeepIndices;
-  for (const auto& var : keepVars) {
-    distinctKeepIndices.push_back(subtree->getVariableColumn(*var));
+      subtree_, varsRequiredFromSubtree.get());
+  std::vector<ColumnIndex> newKeepIndices;
+  for (const Variable* var : keepVars) {
+    newKeepIndices.push_back(subtree->getVariableColumn(*var));
   }
 
-  // Create query execution tree with `Distinct` operation as root operation and
-  // add additional `StripColumns` operation if needed.
+  // The new `Distinct` also exports the compared variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
   return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Distinct>(
       getExecutionContext(), requestedVariables, std::move(subtree),
-      std::move(distinctKeepIndices));
+      std::move(newKeepIndices));
 }
