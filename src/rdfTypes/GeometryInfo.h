@@ -264,8 +264,11 @@ class GeometryInfo {
 };
 
 // The binary representation of a `GeometryInfo` must not contain implicit
-// padding, see `GeometryInfo::padding_`.
-static_assert(sizeof(GeometryInfo) == 48);
+// padding, see `GeometryInfo::padding_`. For a standard-layout class, the
+// members are laid out in the order of their declaration, so there is no
+// padding iff its size is the sum of the sizes of its members. That is checked
+// in the constructor (see `GeometryInfo.cpp`), because the members are private.
+static_assert(std::is_standard_layout_v<GeometryInfo>);
 
 // For the disk serialization we require that a `GeometryInfo` is trivially
 // copyable.

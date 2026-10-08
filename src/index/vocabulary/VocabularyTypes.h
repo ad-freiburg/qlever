@@ -424,13 +424,19 @@ class WordWriterBase {
 // the end offset, whether each word is to be externalized (see
 // `WordWriterBase::operator()`), and the position of the first word in the
 // vocabulary.
+//
+// NOTE: The words are deliberately stored as offsets and not as
+// `std::string_view`s into `data_`, because the offsets stay valid when `data_`
+// grows or when the block is copied or moved, and because they are directly
+// what `VocabularyOnDisk` writes to disk. The views are only materialized where
+// they are needed (see `words()`).
 struct WordBlock {
   std::string data_;
   std::vector<uint64_t> offsets_{0};
   std::vector<bool> isExternal_;
   uint64_t firstPosition_ = 0;
   // The precomputed payload of the words, `payloadSize_` bytes per word (see
-  // `BlockWriterBase::precompute`), empty if the vocabulary has none.
+  // `BlockWriterBase::precomputePayload`), empty if the vocabulary has none.
   std::string payload_;
   size_t payloadSize_ = 0;
 
@@ -479,7 +485,7 @@ class PreparedBlockBase {
 
 // The default number of words per block for a vocabulary that has no
 // requirement of its own (see `BlockWriterBase::blockSize`).
-inline constexpr size_t DEFAULT_WORDS_PER_VOCABULARY_BLOCK = 1u << 20;
+inline constexpr size_t DEFAULT_WORDS_PER_VOCABULARY_BLOCK = 100'000;
 
 // The block-wise counterpart of a `WordWriterBase`, see the comment above. The
 // blocks have to be appended in the order of their positions, and every block
@@ -502,14 +508,15 @@ class BlockWriterBase {
 
   // The index of the `word` at the given `position` (the number of words
   // before it), which for most vocabularies is the position itself. This is
-  // what the corresponding `WordWriterBase::operator()` would return, and it
-  // may be called from any thread.
+  // what the corresponding `WordWriterBase::operator()` would return. This
+  // function must be thread-safe (for all overrides), because it may be called
+  // from any thread.
   virtual uint64_t indexOf(uint64_t position,
                            [[maybe_unused]] std::string_view word) const {
     return position;
   }
 
-  // The number of bytes that `precompute` produces per word, `0` if the
+  // The number of bytes that `precomputePayload` produces per word, `0` if the
   // vocabulary precomputes nothing.
   virtual size_t precomputedPayloadSize() const { return 0; }
 
@@ -518,13 +525,17 @@ class BlockWriterBase {
   // of a vocabulary (the geometry info of a WKT literal), which the caller can
   // do wherever it has the words and idle threads; the block then carries the
   // payload (see `WordBlock::payload_`), and `prepare` uses it instead of
-  // computing it. Thread-safe. Never called if the size is `0`.
-  virtual void precompute([[maybe_unused]] std::string_view word,
-                          [[maybe_unused]] char* payload) const {}
+  // computing it. Never called if the size is `0`. This function must be
+  // thread-safe (for all overrides), because it may be called from any thread.
+  virtual void precomputePayload(
+      [[maybe_unused]] std::string_view word,
+      [[maybe_unused]] ql::span<char> payload) const {}
 
   // Do the part of the writing of the `block` that does not depend on any
-  // other block. Thread-safe. The block carries the precomputed payload of its
-  // words if `precomputedPayloadSize()` is not `0`.
+  // other block. The block carries the precomputed payload of its words if
+  // `precomputedPayloadSize()` is not `0`. This function must be thread-safe
+  // (for all overrides), because it may be called from any thread and
+  // concurrently for different blocks.
   virtual std::unique_ptr<PreparedBlockBase> prepare(WordBlock block) = 0;
 
   // Append a prepared block to the vocabulary. Called from a single thread,
@@ -563,11 +574,13 @@ class ParallelWordWriterBase {
   // The number of sub-vocabularies, at least one.
   virtual uint8_t numSubVocabularies() const = 0;
 
-  // The sub-vocabulary to which the `word` belongs. Thread-safe.
+  // The sub-vocabulary to which the `word` belongs. This function must be
+  // thread-safe (for all overrides), because it may be called from any thread.
   virtual uint8_t subVocabularyOf(std::string_view word) const = 0;
 
   // The index in the whole vocabulary of the `word` at the given `position` in
-  // the sub-vocabulary `sub`. Thread-safe.
+  // the sub-vocabulary `sub`. This function must be thread-safe (for all
+  // overrides), because it may be called from any thread.
   virtual uint64_t indexOf(uint8_t sub, uint64_t position,
                            std::string_view word) const = 0;
 

@@ -76,6 +76,10 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     // order of the blocks, then write the block at that offset, which is
     // thread-safe (a positioned write) and may happen in any order. All the
     // writes have to be complete before `finish()`.
+    //
+    // NOTE: The `VocabularyOnDisk` has no `BlockWriter` of its own, because it
+    // is only used as the external part of the `VocabularyInternalExternal`,
+    // whose `BlockWriter` calls these two functions directly.
     uint64_t reserveBlock(const WordBlock& block);
     void writeBlockAt(const WordBlock& block, uint64_t dataOffset) const;
 

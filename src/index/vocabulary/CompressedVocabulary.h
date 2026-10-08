@@ -564,6 +564,9 @@ CPP_template(typename UnderlyingVocabulary,
       compressed.firstPosition_ = block.firstPosition_;
       compressed.offsets_.reserve(compressedWords.size() + 1);
       compressed.isExternal_.reserve(compressedWords.size());
+      // TODO<joka921> This copies all the compressed words from the `buffer`
+      // into the new `WordBlock`, which is unnecessary. Let the `WordBlock`
+      // take over the `buffer` directly instead.
       for (size_t i = 0; i < compressedWords.size(); ++i) {
         compressed.push(compressedWords[i], block.isExternal_[i]);
       }

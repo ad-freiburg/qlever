@@ -114,7 +114,7 @@ std::vector<uint64_t> writeInBlocks(
     indices.push_back(writer->indexOf(sub, numWords[sub]++, word));
     payload.resize(openBlocks[sub].payloadSize_);
     if (!payload.empty()) {
-      writer->blockWriter(sub).precompute(word, payload.data());
+      writer->blockWriter(sub).precomputePayload(word, payload);
     }
     openBlocks[sub].push(word, isExternal, payload);
     if (openBlocks[sub].numWords() == writer->blockWriter(sub).blockSize()) {

@@ -137,6 +137,15 @@ class VocabularyInternalExternal {
     // stored on disk, and not be cached in RAM.
     uint64_t operator()(std::string_view word, bool isExternal) override;
 
+    // Assign the next index to the `word` and also cache it in RAM (write it
+    // to the `internalWriter_`) unless it `isExternal`. A word is cached anyway
+    // if it is the very first word or if the last cached word is at least
+    // `milestoneDistance_` words before it. Return the assigned index. The
+    // `word` is not written to the `externalWriter_`, which the caller has to
+    // do. This is the rule that the `WordWriter` and the `BlockWriter` share.
+    uint64_t addToInternalVocabIfRequired(std::string_view word,
+                                          bool isExternal);
+
     ~WordWriter() override;
 
     // Finish writing.
@@ -179,12 +188,7 @@ class VocabularyInternalExternal {
 
     // Finish if that has not happened yet, so that no write is left running
     // on the pool.
-    ~BlockWriter() override {
-      ad_utility::terminateIfThrows(
-          [this]() { this->finish(); },
-          "Calling `finish` from the destructor of "
-          "`VocabularyInternalExternal::BlockWriter`");
-    }
+    ~BlockWriter() override;
 
    private:
     // Wait for the writes on the pool, then finish the word writer.

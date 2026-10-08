@@ -86,6 +86,15 @@ class GeoVocabulary {
   static constexpr size_t geoInfoHeader =
       sizeof(ad_utility::GEOMETRY_INFO_VERSION);
 
+  // Compute the serialized `GeometryInfo` of the WKT literal `word`, or the
+  // `invalidGeoInfoBuffer` if the `word` cannot be parsed. Increment the
+  // respective counter for an invalid geometry and for a polygon whose area
+  // could not be computed. This is the per-word work that the `WordWriter` and
+  // the `BlockWriter` share.
+  static GeometryInfoBuffer computeGeoInfoRecord(
+      std::string_view word, std::atomic<size_t>& numInvalidGeometries,
+      std::atomic<size_t>& numInvalidPolygonArea);
+
  public:
   // The constructor is defined in the `.cpp` file, where it checks the
   // underlying vocabulary type of the explicit instantiations (the check
@@ -260,9 +269,10 @@ class GeoVocabulary {
   };
 
   // The block-wise counterpart of the `WordWriter` (see `BlockWriterBase`):
-  // the geometry info record of a word is computed by `precompute` (the
-  // expensive per-word work, which the caller does wherever it has the words
-  // and idle threads, see `BlockWriterBase::precompute`) and arrives with the
+  // the geometry info record of a word is computed by `precomputePayload`
+  // (the expensive per-word work, which the caller does wherever it has the
+  // words and idle threads, see `BlockWriterBase::precomputePayload`) and
+  // arrives with the
   // block as its payload; `prepare` only checks the cell order, and the
   // records are written to their position in the `geoInfoFile_` by a task on
   // the global thread pool that `append` starts (a positioned write). With a
@@ -278,7 +288,7 @@ class GeoVocabulary {
     std::optional<GeoCellGrid::CellIndex> lastCellIndex_;
     uint64_t numWords_ = 0;
     // Counters for the warnings that `finishImpl` prints. Atomic, because
-    // `precompute` runs on any thread.
+    // `precomputePayload` runs on any thread.
     mutable std::atomic<size_t> numInvalidGeometries_ = 0;
     mutable std::atomic<size_t> numInvalidPolygonArea_ = 0;
     // The writes of the records that are running on the pool, oldest first;
@@ -301,9 +311,10 @@ class GeoVocabulary {
 
     size_t blockSize() const override { return underlyingWriter_->blockSize(); }
     uint64_t indexOf(uint64_t position, std::string_view word) const override;
-    // The geometry info record of a word, see `precompute`.
+    // The geometry info record of a word, see `precomputePayload`.
     size_t precomputedPayloadSize() const override { return geoInfoOffset; }
-    void precompute(std::string_view word, char* payload) const override;
+    void precomputePayload(std::string_view word,
+                           ql::span<char> payload) const override;
     std::unique_ptr<PreparedBlockBase> prepare(WordBlock block) override;
     void append(std::unique_ptr<PreparedBlockBase> prepared) override;
 
