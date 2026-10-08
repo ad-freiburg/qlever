@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <exception>
 #include <optional>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -73,7 +74,7 @@ void get(Storage& storage, size_t chunkIndex, GetOutcomes& outcomes,
           outcomes.sawSentinel_ = true;
           return;
         }
-        outcomes.blocks_.push_back(std::move(result).get());
+        outcomes.blocks_.push_back(std::move(result).get().materialize());
         if (keepGoing) {
           get(storage, chunkIndex, outcomes, keepGoing);
         }
@@ -122,7 +123,39 @@ TEST(GetResult, theThreeStates) {
   EXPECT_FALSE(withBlock.wasCancelled());
   EXPECT_FALSE(withBlock.isEndOfChunk());
   EXPECT_TRUE(withBlock.hasValue());
-  EXPECT_THAT(std::move(withBlock).get(), ::testing::ElementsAre(1, 2, 3));
+  EXPECT_THAT(std::move(withBlock).get().materialize(),
+              ::testing::ElementsAre(1, 2, 3));
+
+  // A deferred block is only read once it is materialized.
+  bool wasRead = false;
+  Result deferred = Result::fromDeferredBlock(
+      DeferredBlock<Block>::fromReader([&wasRead]() -> Block {
+        wasRead = true;
+        return Block{4, 5};
+      }));
+  EXPECT_TRUE(deferred.hasValue());
+  auto deferredBlock = std::move(deferred).get();
+  EXPECT_FALSE(deferredBlock.isInMemory());
+  EXPECT_FALSE(wasRead);
+  EXPECT_THAT(std::move(deferredBlock).materialize(),
+              ::testing::ElementsAre(4, 5));
+  EXPECT_TRUE(wasRead);
+}
+
+// _____________________________________________________________________________
+TEST(DeferredBlock, inMemoryAndFromReader) {
+  auto inMemory = DeferredBlock<Block>::fromBlock(Block{1, 2});
+  EXPECT_TRUE(inMemory.isInMemory());
+  EXPECT_THAT(std::move(inMemory).materialize(), ::testing::ElementsAre(1, 2));
+
+  // The exception of a reader is propagated by `materialize`.
+  auto failing = DeferredBlock<Block>::fromReader(
+      []() -> Block { throw std::runtime_error{"read failed"}; });
+  EXPECT_FALSE(failing.isInMemory());
+  EXPECT_THROW(std::move(failing).materialize(), std::runtime_error);
+
+  // A null reader is rejected.
+  EXPECT_ANY_THROW(DeferredBlock<Block>::fromReader(nullptr));
 }
 
 // _____________________________________________________________________________
