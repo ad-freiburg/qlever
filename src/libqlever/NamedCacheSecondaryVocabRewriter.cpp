@@ -11,7 +11,6 @@
 
 #include <numeric>
 #include <optional>
-#include <range/v3/view/zip.hpp>
 #include <string>
 #include <string_view>
 
@@ -19,10 +18,10 @@
 #include "engine/ExplicitIdTableOperation.h"
 #include "index/IdTableUtils.h"
 #include "index/LocalVocabEntry.h"
+#include "libqlever/CanonicalRowOrder.h"
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
-#include "util/Views.h"
 
 namespace qlever::namedCacheSecondaryVocab {
 
@@ -45,58 +44,6 @@ std::optional<Id> idInMainVocab(const LocalVocabEntry& entry) {
     return std::nullopt;
   }
   return id;
-}
-
-// Return true iff the row `a` of `table` is less than the row `b` when
-// comparing lexicographically by the `sortedOn` columns.
-bool rowLess(const IdTable& table, const std::vector<ColumnIndex>& sortedOn,
-             size_t a, size_t b) {
-  for (ColumnIndex column : sortedOn) {
-    Id idA = table(a, column);
-    Id idB = table(b, column);
-    if (idA != idB) {
-      return idA < idB;
-    }
-  }
-  return false;
-}
-
-// Return the permutation of the rows of `table` that sorts it by the
-// `sortedOn` columns (the row at position `i` of the sorted table is the row
-// `result[i]` of `table`), or `std::nullopt` if `table` already is sorted.
-//
-// TODO<joka921> The performance of this function (and of `permuteRows`) can be
-// improved, for example by using `CallFixedSize` to make the number of columns
-// a compile-time constant. We first want to make the feature work, and then
-// assess whether this is a bottleneck.
-std::optional<std::vector<size_t>> sortingPermutation(
-    const IdTable& table, const std::vector<ColumnIndex>& sortedOn) {
-  auto less = [&table, &sortedOn](size_t a, size_t b) {
-    return rowLess(table, sortedOn, a, b);
-  };
-  std::vector<size_t> permutation(table.numRows());
-  std::iota(permutation.begin(), permutation.end(), size_t{0});
-  if (ql::ranges::is_sorted(permutation, less)) {
-    return std::nullopt;
-  }
-  ql::ranges::stable_sort(permutation, less);
-  return permutation;
-}
-
-// Return the rows of `table`, permuted via `permutation` (see
-// `sortingPermutation`).
-IdTable permuteRows(const IdTable& table,
-                    const std::vector<size_t>& permutation,
-                    const NamedResultCache::Value::Allocator& allocator) {
-  IdTable result{table.numColumns(), allocator};
-  result.resize(table.numRows());
-  for (auto&& [source, target] :
-       ::ranges::views::zip(table.getColumns(), result.getColumns())) {
-    for (size_t row : ad_utility::integerRange(permutation.size())) {
-      target[row] = source[permutation[row]];
-    }
-  }
-  return result;
 }
 
 // Insert the words of all those `Id`s of type `LocalVocabIndex` of `column`
@@ -175,43 +122,101 @@ Id rewriteId(Id id, const SecondaryVocabulary& secondaryVocab) {
 }
 
 // _____________________________________________________________________________
-NamedResultCache::Value rewriteToSecondaryVocab(
+std::vector<ColumnIndex> canonicalColumnOrder(
+    const VariableToColumnMap& varToColMap, size_t numColumns) {
+  std::vector<std::pair<std::string_view, ColumnIndex>> variables;
+  for (const auto& [variable, info] : varToColMap) {
+    AD_CONTRACT_CHECK(info.columnIndex_ < numColumns);
+    variables.emplace_back(variable.name(), info.columnIndex_);
+  }
+  ql::ranges::sort(variables);
+  std::vector<ColumnIndex> result;
+  std::vector<bool> isUsed(numColumns, false);
+  for (const auto& [name, column] : variables) {
+    if (!isUsed[column]) {
+      isUsed[column] = true;
+      result.push_back(column);
+    }
+  }
+  for (ColumnIndex column = 0; column < numColumns; ++column) {
+    if (!isUsed[column]) {
+      result.push_back(column);
+    }
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+CanonicalizedValue canonicalizeWithPermutation(
     const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,
-    const NamedResultCache::Value::Allocator& allocator) {
+    const NamedResultCache::Value::Allocator& allocator,
+    bool sortOnAllColumns) {
   // Copy the table (via the given `allocator`), and rewrite the copy in place.
   auto view = ExplicitIdTableOperation::viewOf(value.result_);
   IdTable table{view.numColumns(), allocator};
   table.insertAtEnd(view);
-  for (auto column : table.getColumns()) {
-    ql::ranges::for_each(column, [&secondaryVocab](Id& id) {
-      id = rewriteId(id, secondaryVocab);
-    });
-  }
-
-  std::optional<SpatialJoinCachedIndex> geoIndex = value.cachedGeoIndex_;
-  if (auto permutation = sortingPermutation(table, value.resultSortedOn_);
-      permutation.has_value()) {
-    table = permuteRows(table, permutation.value(), allocator);
-    if (geoIndex.has_value()) {
-      // Invert the `permutation`, because `withPermutedRows` requires the new
-      // row of each old row, whereas `permutation` contains the old row of
-      // each new row.
-      std::vector<size_t> newRowOfOldRow(permutation->size());
-      for (size_t newRow = 0; newRow < permutation->size(); ++newRow) {
-        newRowOfOldRow[(*permutation)[newRow]] = newRow;
-      }
-      geoIndex = geoIndex->withPermutedRows(newRowOfOldRow);
+  if (containsLocalVocabIds(value)) {
+    for (auto column : table.getColumns()) {
+      ql::ranges::for_each(column, [&secondaryVocab](Id& id) {
+        id = rewriteId(id, secondaryVocab);
+      });
     }
   }
 
-  return NamedResultCache::Value{
-      std::make_shared<const IdTable>(std::move(table)),
-      value.varToColMap_,
-      value.resultSortedOn_,
-      value.localVocab_.clone(),
-      value.cacheKey_,
-      std::move(geoIndex)};
+  // Bring the columns into canonical order. This is necessary because the
+  // order of the columns of a result depends on the query plan, which may
+  // change when the data changes. The columns of the geo index are identified
+  // by their variable, so the index is not affected.
+  auto varToColMap = value.varToColMap_;
+  auto resultSortedOn = value.resultSortedOn_;
+  auto oldColumnOfNewColumn =
+      canonicalColumnOrder(value.varToColMap_, table.numColumns());
+  if (!ql::ranges::is_sorted(oldColumnOfNewColumn)) {
+    table.setColumnSubset(oldColumnOfNewColumn);
+    auto newColumnOfOldColumn = invertPermutation(oldColumnOfNewColumn);
+    for (auto& [variable, info] : varToColMap) {
+      info.columnIndex_ = newColumnOfOldColumn[info.columnIndex_];
+    }
+    for (auto& column : resultSortedOn) {
+      column = newColumnOfOldColumn[column];
+    }
+  }
+
+  if (sortOnAllColumns) {
+    resultSortedOn.resize(table.numColumns());
+    std::iota(resultSortedOn.begin(), resultSortedOn.end(), ColumnIndex{0});
+  }
+
+  std::optional<SpatialJoinCachedIndex> geoIndex = value.cachedGeoIndex_;
+  auto permutation =
+      canonicalSortingPermutation(table.asStaticView<0>(), resultSortedOn);
+  if (!ql::ranges::is_sorted(permutation)) {
+    table = permuteRows(table.asStaticView<0>(), permutation, allocator);
+    if (geoIndex.has_value()) {
+      // `withPermutedRows` requires the new row of each old row, whereas
+      // `permutation` contains the old row of each new row.
+      geoIndex = geoIndex->withPermutedRows(invertPermutation(permutation));
+    }
+  }
+
+  return CanonicalizedValue{
+      NamedResultCache::Value{std::make_shared<const IdTable>(std::move(table)),
+                              std::move(varToColMap), std::move(resultSortedOn),
+                              value.localVocab_.clone(), value.cacheKey_,
+                              std::move(geoIndex)},
+      std::move(permutation)};
+}
+
+// _____________________________________________________________________________
+NamedResultCache::Value canonicalizeForSerialization(
+    const NamedResultCache::Value& value,
+    const SecondaryVocabulary& secondaryVocab,
+    const NamedResultCache::Value::Allocator& allocator,
+    bool sortOnAllColumns) {
+  return canonicalizeWithPermutation(value, secondaryVocab, allocator,
+                                     sortOnAllColumns)
+      .value_;
 }
 
 }  // namespace qlever::namedCacheSecondaryVocab

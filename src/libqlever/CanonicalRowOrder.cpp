@@ -1,0 +1,201 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#include "libqlever/CanonicalRowOrder.h"
+
+#include <numeric>
+#include <optional>
+
+#include "backports/algorithm.h"
+#include "util/Exception.h"
+
+namespace qlever {
+
+namespace {
+// Return the columns of a table with `numColumns` columns in the order in which
+// they are compared in the canonical order: first the `resultSortedOn`
+// columns, then all other columns in increasing order. Return `std::nullopt` if
+// `resultSortedOn` contains a column that does not exist. Duplicates in
+// `resultSortedOn` are ignored (they do not change the order).
+std::optional<std::vector<ColumnIndex>> tryComparisonColumns(
+    size_t numColumns, ql::span<const ColumnIndex> resultSortedOn) {
+  std::vector<ColumnIndex> result;
+  std::vector<bool> isSortedOn(numColumns, false);
+  for (ColumnIndex column : resultSortedOn) {
+    if (column >= numColumns) {
+      return std::nullopt;
+    }
+    if (!isSortedOn[column]) {
+      isSortedOn[column] = true;
+      result.push_back(column);
+    }
+  }
+  for (ColumnIndex column = 0; column < numColumns; ++column) {
+    if (!isSortedOn[column]) {
+      result.push_back(column);
+    }
+  }
+  return result;
+}
+
+// Like `tryComparisonColumns`, but fail via `AD_CONTRACT_CHECK` for an invalid
+// column.
+std::vector<ColumnIndex> comparisonColumns(
+    size_t numColumns, ql::span<const ColumnIndex> resultSortedOn) {
+  auto result = tryComparisonColumns(numColumns, resultSortedOn);
+  AD_CONTRACT_CHECK(result.has_value());
+  return std::move(result).value();
+}
+
+// Return the number of rows of a table that is given by its `columns`.
+size_t numRowsOf(IdColumns columns) {
+  return columns.empty() ? 0 : columns[0].size();
+}
+
+// Return the columns of `table` as spans, which are valid as long as `table`.
+std::vector<ql::span<const Id>> columnsOf(const IdTableView<0>& table) {
+  std::vector<ql::span<const Id>> result;
+  for (size_t column = 0; column < table.numColumns(); ++column) {
+    result.push_back(table.getColumn(column));
+  }
+  return result;
+}
+
+// Compare the two `Id`s via `ValueId::compareThreeWay`, and break ties by
+// their raw bits. `compareThreeWay` can consider two `Id`s equal that differ
+// bitwise (for example `Int(1)` and `Double(1.0)`, or `-0.0` and `0.0`), but
+// the canonical order has to be a total order that only considers bitwise
+// identical `Id`s equal (see `CanonicalRowOrder.h`).
+int compareIds(Id a, Id b) {
+  auto comparison = a.compareThreeWay(b);
+  if (comparison < 0) {
+    return -1;
+  }
+  if (comparison > 0) {
+    return 1;
+  }
+  if (a.getBits() < b.getBits()) {
+    return -1;
+  }
+  return a.getBits() > b.getBits() ? 1 : 0;
+}
+
+// Compare the row `rowA` of the table `a` with the row `rowB` of the table `b`
+// by the given `columns` and return a negative number, zero, or a positive
+// number if the first row is less than, equal to, or greater than the second
+// one.
+int compareRows(IdColumns a, size_t rowA, IdColumns b, size_t rowB,
+                const std::vector<ColumnIndex>& columns) {
+  for (ColumnIndex column : columns) {
+    int comparison = compareIds(a[column][rowA], b[column][rowB]);
+    if (comparison != 0) {
+      return comparison;
+    }
+  }
+  return 0;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+std::vector<size_t> canonicalSortingPermutation(
+    const IdTableView<0>& table, ql::span<const ColumnIndex> resultSortedOn) {
+  auto columns = comparisonColumns(table.numColumns(), resultSortedOn);
+  auto tableColumns = columnsOf(table);
+  auto less = [&tableColumns, &columns](size_t a, size_t b) {
+    return compareRows(tableColumns, a, tableColumns, b, columns) < 0;
+  };
+  std::vector<size_t> permutation(table.numRows());
+  std::iota(permutation.begin(), permutation.end(), size_t{0});
+  // The check is cheaper than sorting, and the tables that we write are
+  // usually in canonical order already.
+  if (!ql::ranges::is_sorted(permutation, less)) {
+    ql::ranges::stable_sort(permutation, less);
+  }
+  return permutation;
+}
+
+// _____________________________________________________________________________
+bool isInCanonicalOrder(IdColumns columns,
+                        ql::span<const ColumnIndex> resultSortedOn) {
+  auto order = tryComparisonColumns(columns.size(), resultSortedOn);
+  if (!order.has_value()) {
+    return false;
+  }
+  for (size_t row = 1; row < numRowsOf(columns); ++row) {
+    if (compareRows(columns, row - 1, columns, row, order.value()) > 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// _____________________________________________________________________________
+bool isInCanonicalOrder(const IdTableView<0>& table,
+                        ql::span<const ColumnIndex> resultSortedOn) {
+  return isInCanonicalOrder(columnsOf(table), resultSortedOn);
+}
+
+// _____________________________________________________________________________
+IdTable permuteRows(const IdTableView<0>& table,
+                    ql::span<const size_t> oldRowOfNewRow,
+                    const ad_utility::AllocatorWithLimit<Id>& allocator) {
+  IdTable result{table.numColumns(), allocator};
+  result.resize(oldRowOfNewRow.size());
+  for (size_t column = 0; column < table.numColumns(); ++column) {
+    auto source = table.getColumn(column);
+    auto target = result.getColumn(column);
+    for (size_t row = 0; row < oldRowOfNewRow.size(); ++row) {
+      target[row] = source[oldRowOfNewRow[row]];
+    }
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+std::vector<size_t> invertPermutation(ql::span<const size_t> permutation) {
+  std::vector<size_t> result(permutation.size(), noMatchingRow);
+  for (size_t i = 0; i < permutation.size(); ++i) {
+    AD_CONTRACT_CHECK(permutation[i] < permutation.size() &&
+                      result[permutation[i]] == noMatchingRow);
+    result[permutation[i]] = i;
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+std::vector<size_t> alignRows(IdColumns base, IdColumns target,
+                              ql::span<const ColumnIndex> resultSortedOn) {
+  AD_CONTRACT_CHECK(base.size() == target.size());
+  auto columns = comparisonColumns(base.size(), resultSortedOn);
+  size_t numBase = numRowsOf(base);
+  size_t numTarget = numRowsOf(target);
+  std::vector<size_t> result(numTarget, noMatchingRow);
+  size_t baseRow = 0;
+  size_t targetRow = 0;
+  while (baseRow < numBase && targetRow < numTarget) {
+    int comparison = compareRows(base, baseRow, target, targetRow, columns);
+    if (comparison == 0) {
+      result[targetRow++] = baseRow++;
+    } else if (comparison < 0) {
+      ++baseRow;
+    } else {
+      ++targetRow;
+    }
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+std::vector<size_t> alignRows(const IdTableView<0>& base,
+                              const IdTableView<0>& target,
+                              ql::span<const ColumnIndex> resultSortedOn) {
+  return alignRows(columnsOf(base), columnsOf(target), resultSortedOn);
+}
+
+}  // namespace qlever

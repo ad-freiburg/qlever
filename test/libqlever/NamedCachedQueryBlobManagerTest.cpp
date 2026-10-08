@@ -29,6 +29,7 @@
 #include "backports/span.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "libqlever/CanonicalRowOrder.h"
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
@@ -1065,7 +1066,8 @@ TEST(NamedCachedQueryBlobManager, blobWithPreexistingSecondaryVocab) {
   EXPECT_EQ(target.query("SELECT ?s WHERE { SERVICE "
                          "ql:cached-result-with-name-second {}}",
                          ad_utility::MediaType::tsv),
-            "?s\n<z>\n<a>\n<m>\n");
+            // The result is in canonical order (see `CanonicalRowOrder.h`).
+            "?s\n<m>\n<a>\n<z>\n");
 }
 
 // _____________________________________________________________________________
@@ -1102,4 +1104,70 @@ TEST(NamedCachedQueryBlobManager, blobWithNewWordsAndSpatialIndex) {
   EXPECT_EQ(target.query(spatialJoinQuery("POINT(7.841295 47.997731)"),
                          ad_utility::MediaType::tsv),
             "?s2\n<s1>\n<s2>\n");
+}
+
+// _____________________________________________________________________________
+// Test that every entry (also one without local vocab `Id`s) is written in
+// canonical order, that the entries of the source stay unchanged, and that
+// `sortOnAllColumns_` replaces the sort order of the plan by all columns.
+TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
+  auto sourceConfig =
+      buildTestIndex("<m> <p> <b> . <m> <p> <a> . <n> <p> <a> .");
+  Qlever source{EngineConfig{sourceConfig}};
+  // The result of the `VALUES` clause is not sorted, and contains a duplicate
+  // row.
+  source.queryAndPinResultWithName(
+      "ints",
+      "SELECT ?x ?y { VALUES (?x ?y) { (3 1) (1 2) (2 0) (1 1) (1 2) } }");
+  // The result of the index scan is sorted by `?s` and then by `?o`. In the
+  // blob, the columns are in the order `?o`, `?s` (see `canonicalColumnOrder`).
+  source.queryAndPinResultWithName("sorted",
+                                   "SELECT ?s ?o WHERE { ?s <p> ?o }");
+  auto intsBefore = columnsOfPinnedResult(source, "ints");
+  auto sortedEntry = source.namedResultCache().get("sorted");
+  ASSERT_THAT(sortedEntry->resultSortedOn_, ElementsAre(0, 1));
+
+  auto expectCanonical = [](const Qlever& qlever, const std::string& name,
+                            const std::vector<ColumnIndex>& sortedOn) {
+    auto entry = qlever.namedResultCache().get(name);
+    ASSERT_NE(entry, nullptr) << name;
+    EXPECT_EQ(entry->resultSortedOn_, sortedOn) << name;
+    EXPECT_TRUE(
+        isInCanonicalOrder(ExplicitIdTableOperation::viewOf(entry->result_),
+                           entry->resultSortedOn_))
+        << name;
+  };
+
+  // Without `sortOnAllColumns_`, the sort order of the plan is kept, and the
+  // rows are in canonical order with respect to it.
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+  target.deserializeVocabAndNamedCacheFromCompressedBlob(blob);
+  expectCanonical(target, "ints", {});
+  expectCanonical(target, "sorted", {1, 0});
+  EXPECT_EQ(target.query("SELECT ?x ?y WHERE { SERVICE "
+                         "ql:cached-result-with-name-ints {}}",
+                         ad_utility::MediaType::tsv),
+            "?x\t?y\n1\t1\n1\t2\n1\t2\n2\t0\n3\t1\n");
+  EXPECT_EQ(target.query("SELECT ?s ?o WHERE { SERVICE "
+                         "ql:cached-result-with-name-sorted {}}",
+                         ad_utility::MediaType::tsv),
+            "?s\t?o\n<m>\t<a>\n<m>\t<b>\n<n>\t<a>\n");
+
+  // With `sortOnAllColumns_`, every entry is sorted by all of its columns.
+  BlobSerializationConfig config;
+  config.sortOnAllColumns_ = true;
+  auto sortedBlob = source.serializeVocabAndNamedCacheToCompressedBlob(config);
+  Qlever sortedTarget{EngineConfig{}, /*skipLoading=*/true};
+  sortedTarget.deserializeVocabAndNamedCacheFromCompressedBlob(sortedBlob);
+  expectCanonical(sortedTarget, "ints", {0, 1});
+  expectCanonical(sortedTarget, "sorted", {0, 1});
+  EXPECT_EQ(sortedTarget.query("SELECT ?s ?o WHERE { SERVICE "
+                               "ql:cached-result-with-name-sorted {}}",
+                               ad_utility::MediaType::tsv),
+            "?s\t?o\n<m>\t<a>\n<n>\t<a>\n<m>\t<b>\n");
+
+  // The entries of the source are unchanged.
+  EXPECT_EQ(columnsOfPinnedResult(source, "ints"), intsBefore);
+  EXPECT_EQ(source.namedResultCache().get("sorted"), sortedEntry);
 }

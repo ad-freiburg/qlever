@@ -41,6 +41,13 @@ struct BlobSerializationConfig {
   // `placeholderForMissingVocabIndex`. If this is empty, the complete
   // vocabulary is exported in its original format.
   std::vector<std::string> excludedEntryRegexes_;
+
+  // If true, then every entry is written as sorted lexicographically by all
+  // its columns (and its `resultSortedOn_` is changed accordingly, see
+  // `canonicalizeForSerialization`), instead of by the sort order that the
+  // query plan happened to produce. Needed for a small diff between blobs
+  // when the plan may change between two runs.
+  bool sortOnAllColumns_ = false;
 };
 
 // Serialize and deserialize the vocabulary and the `NamedResultCache` of a
@@ -137,8 +144,11 @@ class NamedCachedQueryBlobManager {
   // index of `qlever` (if any), and the entries are written as rewritten
   // copies that refer to that secondary vocabulary (see
   // `NamedCacheSecondaryVocabRewriter.h`); the entries of `qlever` stay
-  // unchanged. If that secondary vocabulary is empty, then the blob is
-  // written with `formatVersionWithoutSecondaryVocab`, else with
+  // unchanged. EVERY entry is written as a copy whose rows are in canonical
+  // order (see `CanonicalRowOrder.h`), and the words of the local vocab of an
+  // entry are never written (they are not referenced by any `Id` of the copy),
+  // only its blank node blocks. If that secondary vocabulary is empty, then
+  // the blob is written with `formatVersionWithoutSecondaryVocab`, else with
   // `formatVersionWithSecondaryVocab`.
   std::vector<char> serialize(const Qlever& qlever,
                               const BlobSerializationConfig& config = {}) const;
