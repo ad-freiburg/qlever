@@ -59,7 +59,7 @@
 //
 // The global index of a word never changes when further segments are appended,
 // which is what allows persisted data (in particular the blobs of
-// `NamedCachedQueryBlobManager`, in a follow-up change) to add words
+// `NamedCachedQueryBlobManager`) to add words
 // incrementally, one segment at a time, without invalidating the `Id`s of the
 // earlier segments. Lexicographic ranks, in contrast, do change when a segment
 // is appended.
