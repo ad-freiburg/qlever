@@ -44,7 +44,6 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
   bool rightHasUndefColumn = false;
   size_t numUndefColumnsLeft = 0;
   ColumnIndex undefColumnLeftIndex = 0;
-  std::vector<bool> leftUndefJoinCols;
   for (size_t i = 0; i < _joinColumns.size(); ++i) {
     auto [leftCol, rightCol] = _joinColumns.at(i);
     auto leftIt = _left->getVariableAndInfoByColumnIndex(leftCol);
@@ -355,7 +354,7 @@ auto OptionalJoin::computeImplementationFromIdTables(
     -> Implementation {
   auto implementation = Implementation::NoUndef;
   auto anyIsUndefined = [](auto column) {
-    return ql::ranges::any_of(column, &Id::isUndefined);
+    return ql::ranges::any_of(column, Id::isUndefinedL);
   };
   for (size_t i = 0; i < joinColumns.size(); ++i) {
     auto [leftCol, rightCol] = joinColumns.at(i);

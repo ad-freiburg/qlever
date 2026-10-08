@@ -17,6 +17,7 @@
 #include "global/ValueIdComparators.h"
 #include "index/IndexImpl.h"
 #include "util/ConstexprMap.h"
+#include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
 
 namespace prefilterExpressions {
@@ -53,10 +54,19 @@ static Id getIdFromColumnIndex(
 // order.
 // (3) Columns with `column index < evaluationColumn` must contain equal
 // values (`ValueId`s).
+//
+// NOTE: These are invariants of the block metadata of an index, which no query
+// can violate, and the check is linear in the number of blocks. It is run at
+// query planning time, once per prefilter evaluation, so it is only enabled
+// together with the other expensive checks (like the same check in the
+// constructor of `ScanSpecAndBlocks`).
 static void checkRequirementsBlockMetadata(
-    ql::span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
-  CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
-      input, evaluationColumn);
+    [[maybe_unused]] ql::span<const CompressedBlockMetadata> input,
+    [[maybe_unused]] size_t evaluationColumn) {
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
+        input, evaluationColumn);
+  }
 }
 
 namespace detail {
@@ -348,6 +358,8 @@ static std::string getDatatypeIsTypeStr(const IsDatatype isDtype) {
       return "Numeric";
     case ENCODED_IRI:
       return "EncodedIri";
+    case GEO_POINT:
+      return "GeoPoint";
     default:
       AD_FAIL();
   }
@@ -554,17 +566,22 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
   LocalVocab localVocab{};
   auto referenceId =
       getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, localVocab);
-  // Use getRangesForId (from valueIdComparators) to extract the ranges
-  // containing the relevant ValueIds.
-  // For pre-filtering with CompOp::EQ, we have to consider empty ranges.
-  // Reason: The referenceId could be contained within the bounds formed by
-  // the IDs of firstTriple_ and lastTriple_ (set false flag to keep
-  // empty ranges).
-  auto relevantIdRanges = Comparison != CompOp::EQ
-                              ? getRangesForId(idRange.begin(), idRange.end(),
-                                               referenceId, Comparison)
-                              : getRangesForId(idRange.begin(), idRange.end(),
-                                               referenceId, Comparison, false);
+  // Compute the ranges of the block boundary IDs (`idRange` holds the first
+  // and the last ID of each block) that satisfy the comparison, and map them
+  // to blocks.
+  //
+  // NOTE: A range is empty if the reference value lies between two
+  // consecutive boundary IDs, neither of which satisfies the comparison. If
+  // these are the first and the last ID of the same block, that block can
+  // still contain matching values, so empty ranges must be kept (last
+  // argument `false`). Besides `=`, this happens for a block that spans the
+  // boundary between non-negative and negative numbers, which are sorted after
+  // the non-negative ones: for `> 63000`, a block with the first ID 62950 and
+  // the last ID -10 yields an empty range but may contain 70000.
+  // `mapValueIdItPairToBlockRange` maps an empty range at a block's last ID to
+  // that block, and one at a block's first ID to no block.
+  auto relevantIdRanges = getRangesForId(idRange.begin(), idRange.end(),
+                                         referenceId, Comparison, false);
   return getTotalComplement
              ? detail::mapping::mapValueIdItRangesToBlockItRangesComplemented(
                    relevantIdRanges, idRange, blockRange)
@@ -710,10 +727,11 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // `index/vocabulary/SecondaryVocabulary.h`). Those sort after all of the
   // ranges below, so neither the `> <>` prefilter nor the datatype range of
   // the encoded IRIs covers them, which means that blocks consisting entirely
-  // of such IRIs are incorrectly pruned. This is deliberate for now, because
-  // nothing but a unit test can currently create a secondary vocabulary, but
-  // it has to be fixed *before* anything else does, together with the semantic
-  // comparison of those `Id`s (see the detailed note at
+  // of such IRIs are incorrectly pruned. This is a known limitation for now,
+  // because apart from unit tests, a secondary vocabulary is only created when
+  // a blob of `NamedCachedQueryBlobManager` that contains new words is loaded,
+  // but it has to be fixed before it is used more widely, together with the
+  // semantic comparison of those `Id`s (see the detailed note at
   // `valueIdComparators::detail::compareIdsImpl`).
   //
   // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids
@@ -744,6 +762,20 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::ENCODED_IRI>::evaluateImpl(
     [[maybe_unused]] bool getTotalComplement) const {
   // Encoded IRIs are exactly the `ValueId`s of datatype `EncodedVal`.
   std::array datatypes{Datatype::EncodedVal};
+  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+}
+
+//______________________________________________________________________________
+template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::GEO_POINT>::evaluateImpl(
+    [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  // The geo points that are encoded in the `Id` are exactly the `ValueId`s of
+  // datatype `GeoPoint` (the WKT literals of the vocabulary are not points).
+  // They sort in one contiguous range, so only the blocks of points are kept,
+  // or, for the negation, only the other blocks.
+  std::array datatypes{Datatype::GeoPoint};
   return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
 }
 
@@ -900,8 +932,8 @@ std::string LogicalExpression<Operation>::asString(size_t depth) const {
   std::stringstream stream;
   stream << "Prefilter LogicalExpression<" << getLogicalOpStr(Operation)
          << ">\n"
-         << "child1 {" << child1Info << "}" << "child2 {" << child2Info << "}"
-         << std::endl;
+         << "child1 {" << child1Info << "}"
+         << "child2 {" << child2Info << "}" << std::endl;
   return stream.str();
 }
 
@@ -960,6 +992,7 @@ template class IsDatatypeExpression<IsDatatype::BLANK>;
 template class IsDatatypeExpression<IsDatatype::LITERAL>;
 template class IsDatatypeExpression<IsDatatype::NUMERIC>;
 template class IsDatatypeExpression<IsDatatype::ENCODED_IRI>;
+template class IsDatatypeExpression<IsDatatype::GEO_POINT>;
 
 template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;

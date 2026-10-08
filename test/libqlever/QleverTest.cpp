@@ -14,6 +14,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
+#include "./QleverTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/ExternalValues.h"
 #include "engine/MaterializedViews.h"
@@ -26,6 +27,7 @@
 #include "parser/SparqlParser.h"
 #include "util/BlankNodeManager.h"
 #include "util/FilesystemHelpers.h"
+#include "util/GlobalExecutor.h"
 
 using namespace qlever;
 using namespace testing;
@@ -84,7 +86,17 @@ TEST(LibQlever, buildIndexAndRunQuery) {
   // Test materialized views to be written at index build time.
   c.writeMaterializedViews_ = {{"demoView", "SELECT ?s { ?s <p> <o> }"}};
 
+  // A non-default block size of the permutations, which the index records so
+  // that it is also used when further permutations of it are written.
+  c.indexRowsPerBlock_ = 8;
+
   EXPECT_NO_THROW(Qlever::buildIndex(c));
+
+  {
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.createFromOnDiskIndex(c.baseName_, false);
+    EXPECT_EQ(index.rowsPerBlock(), 8);
+  }
 
   {
     EngineConfig ec{c};
@@ -152,6 +164,30 @@ TEST(LibQlever, buildIndexAndRunQuery) {
   ec.loadTextIndex_ = true;
   Qlever engine{ec};
 #endif
+}
+
+// _____________________________________________________________________________
+TEST(LibQlever, buildIndexWithAnExistingGlobalThreadPool) {
+  // The global thread pool is created on its first use and cannot be resized
+  // afterwards. An index build in a process where the pool already exists with
+  // a different number of threads still works and only logs a warning.
+  ad_utility::globalExecutor();
+  size_t numThreadsOfPool = ad_utility::globalExecutorNumThreads();
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  ad_utility::makeOfstream(filename) << "<s> <p> <o> .";
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  IndexBuilderConfig config;
+  config.inputFiles_.push_back({filename, Filetype::Turtle, std::nullopt});
+  config.baseName_ = gtestCurrentTestName();
+  config.numThreads_ = numThreadsOfPool + 1;
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  EXPECT_NO_THROW(Qlever::buildIndex(config));
+  EXPECT_THAT(
+      logStream.str(),
+      HasSubstr(absl::StrCat("The global thread pool already exists with ",
+                             numThreadsOfPool, " threads, so the ",
+                             numThreadsOfPool + 1, " threads")));
+  EXPECT_EQ(ad_utility::globalExecutorNumThreads(), numThreadsOfPool);
 }
 
 // _____________________________________________________________________________
@@ -235,6 +271,23 @@ TEST(IndexBuilderConfig, validate) {
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be between"));
 
   c = IndexBuilderConfig{};
+  c.numThreads_ = 0;
+  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be at least 1"));
+
+  c = IndexBuilderConfig{};
+  c.indexRowsPerBlock_ = 0;
+  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
+                               HasSubstr("must be between 1 and 3125000"));
+  // A negative value on the command line becomes a huge number.
+  c.indexRowsPerBlock_ = MAX_INDEX_ROWS_PER_BLOCK + 1;
+  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
+                               HasSubstr("must be between 1 and 3125000"));
+  c.indexRowsPerBlock_ = 128;
+  EXPECT_NO_THROW(c.validate());
+  c.indexRowsPerBlock_ = MAX_INDEX_ROWS_PER_BLOCK;
+  EXPECT_NO_THROW(c.validate());
+
+  c = IndexBuilderConfig{};
   c.wordsfile_ = "blibb";
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(),
                                HasSubstr("Only specified wordsfile"));
@@ -267,6 +320,19 @@ TEST(IndexBuilderConfig, validate) {
       ad_utility::VocabularyType::Enum::InMemoryCompressedWithHoles};
   AD_EXPECT_THROW_WITH_MESSAGE(Qlever::buildIndex(c),
                                HasSubstr("cannot be used for index building"));
+}
+
+// _____________________________________________________________________________
+// The descriptions from the `EngineConfig` replace the names stored in the
+// index files.
+TEST(LibQlever, indexAndTextDescription) {
+  EngineConfig ec = buildTestIndex("<s> <p> <o> .");
+  ec.indexDescription_ = "Some dataset, version 42";
+  ec.textDescription_ = "Some text";
+  Qlever engine{ec};
+  const auto& index = engine.indexAndViewsSnapshot()->index_;
+  EXPECT_EQ(index.getKbName(), "Some dataset, version 42");
+  EXPECT_EQ(index.getTextName(), "Some text");
 }
 
 // _____________________________________________________________________________
@@ -606,9 +672,17 @@ TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
                        std::nullopt, requestTimer);
   EXPECT_GT(plan.queryExecutionTree()
                 .getRootOperation()
-                ->getRuntimeInfoWholeQuery()
+                ->getQueryPlanningInfo()
                 .timeQueryPlanning.count(),
             -1);
+  // The information about how the query was planned ends up there as well, one
+  // entry for the single connected component of the query.
+  const auto& queryPlanning = plan.queryExecutionTree()
+                                  .getRootOperation()
+                                  ->getQueryPlanningInfo()
+                                  .queryPlanning;
+  ASSERT_EQ(queryPlanning.size(), 1u);
+  EXPECT_EQ(queryPlanning[0].numNodes_, 1u);
 
   // A cancellation handle that is already cancelled makes planning fail, which
   // shows that the handle reaches the query planner as well.
@@ -779,26 +853,10 @@ TEST(LibQlever, applyUpdate) {
   EXPECT_EQ(engine.cache().numNonPinnedEntries(), 0U);
 }
 
-namespace {
-// Parse and plan `update` and apply it to `engine` via `Qlever::applyUpdate`,
-// returning the metadata. For why the update has to be parsed separately and
-// for the thread-safety caveat of taking the snapshot only here, see the
-// comments in `LibQlever.applyUpdate` above.
-UpdateMetadata applyUpdateToEngine(Qlever& engine, const std::string& update) {
-  ad_utility::BlankNodeManager bnm;
-  auto parsedUpdates = SparqlParser::parseUpdate(
-      &bnm, ad_utility::testing::encodedIriManager(), update);
-  AD_CORRECTNESS_CHECK(parsedUpdates.size() == 1);
-  auto plannedUpdate =
-      engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  auto snapshot = engine.indexAndViewsSnapshot();
-  return snapshot->index_.deltaTriplesManager().modify<UpdateMetadata>(
-      [&](DeltaTriples& deltaTriples) {
-        return engine.applyUpdate(plannedUpdate, handle, deltaTriples);
-      });
-}
-}  // namespace
+// `applyUpdateToEngine` (used below) is defined in `QleverTestHelpers.h`; see
+// the comment there for why the update has to be parsed separately and for
+// the thread-safety caveat of taking the snapshot only here.
+using ad_utility::testing::applyUpdateToEngine;
 
 // _____________________________________________________________________________
 // Direct counterpart to `ServerTest.clearDeltaTriples`: populate the delta

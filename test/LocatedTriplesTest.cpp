@@ -14,7 +14,8 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
-#include "index/CompressedRelation.h"
+#include "./util/TripleComponentTestHelpers.h"
+#include "index/CompressedRelationMetadata.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
@@ -100,6 +101,29 @@ class LocatedTriplesTest : public ::testing::Test {
   }
 };
 
+// Test the check whether a range of blocks has located triples.
+TEST_F(LocatedTriplesTest, containsLocatedTriplesInBlockRange) {
+  // Located triples in the blocks 2, 5 and 9. Both ends of a range are
+  // inclusive.
+  using LT = LocatedTriple;
+  auto ltpb = makeLocatedTriplesPerBlock(
+      {LT{2, IT(10, 1, 0), true}, LT{5, IT(20, 4, 0), true},
+       LT{5, IT(21, 5, 0), false}, LT{9, IT(30, 6, 0), true}});
+
+  // A range with at most three blocks is checked block by block.
+  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(2, 2));
+  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(3, 5));
+  EXPECT_FALSE(ltpb.containsLocatedTriplesInBlockRange(3, 4));
+
+  // A larger range is checked via the blocks with located triples.
+  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(6, 9));
+  EXPECT_TRUE(ltpb.containsLocatedTriplesInBlockRange(9, 12));
+  EXPECT_FALSE(ltpb.containsLocatedTriplesInBlockRange(10, 100));
+
+  // An inverted range is rejected.
+  EXPECT_ANY_THROW(ltpb.containsLocatedTriplesInBlockRange(3, 2));
+}
+
 // Test the method that counts the number of `LocatedTriple's in a block.
 TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   auto locatedTriplesInBlock = [](const size_t blockIndex,
@@ -108,7 +132,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
     return testing::ResultOf(
         absl::StrCat(".map_.at(", std::to_string(blockIndex), ")"),
         [blockIndex](const LocatedTriplesPerBlock& ltpb) {
-          return ltpb.map_.at(blockIndex).getSortedView();
+          return ltpb.map_.at(blockIndex)->getSortedView();
         },
         testing::ElementsAreArray(expectedLTs));
   };
@@ -125,7 +149,9 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
               return locatedTriplesInBlock(blockIndex, expectedLTs);
             });
         // The macro does not work with templated types.
-        using HashMapType = ad_utility::HashMap<size_t, LocatedTriples>;
+        using HashMapType =
+            ad_utility::HashMap<size_t,
+                                ad_utility::CopyOnWritePtr<LocatedTriples>>;
         return testing::AllOf(
             AD_FIELD(LocatedTriplesPerBlock, map_,
                      AD_PROPERTY(HashMapType, size,
@@ -221,6 +247,40 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
               numTriplesBlockwise(
                   {{1, {0, 0}}, {2, {0, 0}}, {3, {0, 0}}, {4, {0, 0}}}));
   EXPECT_THAT(locatedTriplesPerBlock, locatedTriplesAre({}));
+}
+
+// Test that a copy of a `LocatedTriplesPerBlock` shares its blocks with the
+// original and is not affected by later modifications of the original.
+TEST_F(LocatedTriplesTest, copyOnWrite) {
+  // Located triples in the blocks 2 and 5, and a copy of them.
+  using LT = LocatedTriple;
+  LT lt1{2, IT(10, 1, 0), true};
+  LT lt2{5, IT(20, 4, 0), true};
+  LT lt3{5, IT(21, 5, 0), false};
+  auto original = makeLocatedTriplesPerBlock({lt1, lt2, lt3});
+  auto copy = original;
+
+  // The copy shares both blocks with the original.
+  EXPECT_TRUE(original.map_.at(2).isShared());
+  EXPECT_TRUE(original.map_.at(5).isShared());
+
+  // Adding a triple to block 2 clones that block, block 5 stays shared.
+  LT lt4{2, IT(11, 2, 0), false};
+  original.add(std::vector{lt4});
+  original.consolidateAllBlocks();
+  EXPECT_FALSE(original.map_.at(2).isShared());
+  EXPECT_TRUE(original.map_.at(5).isShared());
+  EXPECT_THAT(original.map_.at(2)->getSortedView(),
+              testing::ElementsAre(lt1, lt4));
+  EXPECT_THAT(copy.map_.at(2)->getSortedView(), testing::ElementsAre(lt1));
+
+  // Erasing all triples of block 5 removes the block from the original only.
+  original.erase(5, lt2);
+  original.erase(5, lt3);
+  original.consolidateAllBlocks();
+  EXPECT_FALSE(original.containsTriples(5));
+  EXPECT_THAT(copy.map_.at(5)->getSortedView(), testing::ElementsAre(lt2, lt3));
+  EXPECT_EQ(copy.numTriplesForTesting(), 3u);
 }
 
 // Test the method that merges the matching `LocatedTriple`s from a block into
@@ -997,7 +1057,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
   static constexpr const char* testTurtle =
       "<a> <upp> <A> . <b> <upp> <B> . <c> <upp> <C> .";
   auto config = ad_utility::testing::TestIndexConfig{testTurtle};
-  config.blocksizePermutations = 1_kB;
+  config.rowsPerBlock = 125;
   auto* qec = ad_utility::testing::getQec(config);
 
   const auto& index = qec->getIndex().getImpl();
@@ -1007,7 +1067,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   using TC = TripleComponent;
-  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto Iri = ad_utility::testing::iri;
   auto getId = [&lv, &index](TC&& tc) {
     return toValueId(std::move(tc), index, lv);
   };

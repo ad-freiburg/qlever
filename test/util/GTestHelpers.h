@@ -12,9 +12,11 @@
 #include <gmock/gmock.h>
 #include <re2/re2.h>
 
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <thread>
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
@@ -111,17 +113,22 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 // capture log output and make assertions about it. This macro enforces that
 // `level` is the runtime log level for the remainder of the enclosing scope, by
 // declaring an `ad_utility::ScopedLogLevel` object that restores the previous
-// level when the scope is left. If the compile-time `LOGLEVEL` is less verbose
-// than `level`, the test is skipped instead: such log levels are compiled out
-// and can never become the runtime log level, so the test could never pass.
-#define ENFORCE_LOG_LEVEL_OR_SKIP(level)                                     \
-  if (LOGLEVEL < ad_utility::LogLevel{level}) {                              \
-    GTEST_SKIP() << "This test requires a compile-time log level of at "     \
-                    "least "                                                 \
-                 << ad_utility::LogLevel{level}.toString() << ", but it is " \
-                 << ad_utility::LogLevel{LOGLEVEL}.toString();               \
-  }                                                                          \
-  ad_utility::ScopedLogLevel AD_SCOPED_LOG_LEVEL_NAME(__COUNTER__) { level }
+// level when the scope is left. If `ad_utility::compileTimeLogLevel` is less
+// verbose than `level`, the test is skipped instead: such log levels are
+// compiled out and can never become the runtime log level, so the test could
+// never pass. The `level` is the plain name of a log level, for example
+// `ENFORCE_LOG_LEVEL_OR_SKIP(INFO)`.
+#define ENFORCE_LOG_LEVEL_OR_SKIP(level)                                      \
+  if (ad_utility::compileTimeLogLevel < ad_utility::LogLevel::Enum::level) {  \
+    GTEST_SKIP()                                                              \
+        << "This test requires a compile-time log level of at least "         \
+        << ad_utility::LogLevel{ad_utility::LogLevel::Enum::level}.toString() \
+        << ", but it is "                                                     \
+        << ad_utility::LogLevel{ad_utility::compileTimeLogLevel}.toString();  \
+  }                                                                           \
+  ad_utility::ScopedLogLevel AD_SCOPED_LOG_LEVEL_NAME(__COUNTER__) {          \
+    ad_utility::LogLevel::Enum::level                                         \
+  }
 
 // _____________________________________________________________________________
 // Skip the enclosing test if the `_NO_TIMING_TESTS` CMake option is set. Use
@@ -338,6 +345,24 @@ inline std::string gtestCurrentTestName(bool assertInGtestEnvironment = true) {
   return absl::StrReplaceAll(
       absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name()),
       {{"/", "_"}});
+}
+
+// _____________________________________________________________________________
+// Block until the `predicate` is true, polling it every millisecond, but at
+// most for the `timeout`. Return the final value of the `predicate`. Use this
+// to wait for the effect of work that runs on another thread, typically as
+// `ASSERT_TRUE(waitUntil(...))`.
+//
+// NOTE: The `timeout` is deliberately generous, because it is only waited for
+// in full when the awaited event never happens, which is a failing test anyway.
+template <typename Predicate>
+bool waitUntil(const Predicate& predicate,
+               std::chrono::milliseconds timeout = std::chrono::seconds{10}) {
+  auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (!predicate() && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
+  return predicate();
 }
 
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H

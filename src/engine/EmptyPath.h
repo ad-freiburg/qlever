@@ -21,6 +21,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/ScanSpecification.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Generator.h"
 
 // Operation that yields all the entities that occur as a subject or an object
@@ -119,7 +120,6 @@ class EmptyPath : public Operation {
     return graphVariable_;
   }
 
-  std::vector<QueryExecutionTree*> getChildren() override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
@@ -132,6 +132,7 @@ class EmptyPath : public Operation {
   std::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
   std::string getCacheKeyImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }

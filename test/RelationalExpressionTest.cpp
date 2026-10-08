@@ -12,6 +12,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -853,43 +854,43 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   auto numeric = Variable{"?numeric"};
   auto vocab = Variable{"?vocab"};
   auto mixed = Variable{"?mixed"};
-  testSortedVariableAndConstant<LT>(ints, int64_t{-1}, {});
-  testSortedVariableAndConstant<GE>(ints, int64_t{-1}, {{{0, 3}}});
-  testSortedVariableAndConstant<LE>(ints, 0.3, {{{0, 1}, {2, 3}}});
+  testSortedVariableAndConstant<LT>(ints, int64_t{-1}, {{}, 3});
+  testSortedVariableAndConstant<GE>(ints, int64_t{-1}, {{{0, 3}}, 3});
+  testSortedVariableAndConstant<LE>(ints, 0.3, {{{0, 1}, {2, 3}}, 3});
   // ints and strings are always incompatible.
   testSortedVariableAndConstant<NE>(ints, IdOrLocalVocabEntry{lve("a string")},
-                                    {});
+                                    {{}, 3});
 
-  testSortedVariableAndConstant<GT>(doubles, int64_t{0}, {{{0, 2}}});
-  testSortedVariableAndConstant<EQ>(doubles, 2.8, {{{1, 2}}});
-  testSortedVariableAndConstant<LE>(doubles, 0.1, {{{0, 1}, {2, 3}}});
+  testSortedVariableAndConstant<GT>(doubles, int64_t{0}, {{{0, 2}}, 3});
+  testSortedVariableAndConstant<EQ>(doubles, 2.8, {{{1, 2}}, 3});
+  testSortedVariableAndConstant<LE>(doubles, 0.1, {{{0, 1}, {2, 3}}, 3});
 
-  testSortedVariableAndConstant<GT>(numeric, -0.1, {{{0, 2}}});
-  testSortedVariableAndConstant<EQ>(numeric, 1.0, {{{0, 1}}});
-  testSortedVariableAndConstant<NE>(numeric, 3.4, {{{0, 1}, {2, 3}}});
+  testSortedVariableAndConstant<GT>(numeric, -0.1, {{{0, 2}}, 3});
+  testSortedVariableAndConstant<EQ>(numeric, 1.0, {{{0, 1}}, 3});
+  testSortedVariableAndConstant<NE>(numeric, 3.4, {{{0, 1}, {2, 3}}, 3});
 
   testSortedVariableAndConstant<GT>(
-      vocab, IdOrLocalVocabEntry{lve("\"alpha\"")}, {{{1, 3}}});
+      vocab, IdOrLocalVocabEntry{lve("\"alpha\"")}, {{{1, 3}}, 3});
   testSortedVariableAndConstant<GE>(
-      vocab, IdOrLocalVocabEntry{lve("\"alpha\"")}, {{{0, 3}}});
+      vocab, IdOrLocalVocabEntry{lve("\"alpha\"")}, {{{0, 3}}, 3});
   testSortedVariableAndConstant<LE>(vocab, IdOrLocalVocabEntry{lve("\"ball\"")},
-                                    {{{0, 2}}});
+                                    {{{0, 2}}, 3});
   testSortedVariableAndConstant<NE>(
-      vocab, IdOrLocalVocabEntry{lve("\"älpha\"")}, {{{0, 1}, {2, 3}}});
-  testSortedVariableAndConstant<LE>(vocab, inf, {});
+      vocab, IdOrLocalVocabEntry{lve("\"älpha\"")}, {{{0, 1}, {2, 3}}, 3});
+  testSortedVariableAndConstant<LE>(vocab, inf, {{}, 3});
 
   // Note: vocab entries and numeric values are not compatible, so every
   // comparison returns false.
-  testSortedVariableAndConstant<NE>(vocab, 3.2, {});
+  testSortedVariableAndConstant<NE>(vocab, 3.2, {{}, 3});
 
   // Note: only *numeric* values that are not equal to 1.0 are considered here.
-  testSortedVariableAndConstant<NE>(mixed, 1.0, {{{1, 2}}});
-  testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
+  testSortedVariableAndConstant<NE>(mixed, 1.0, {{{1, 2}}, 3});
+  testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}, 3});
   testSortedVariableAndConstant<LE>(
       mixed,
       IdOrLocalVocabEntry{
           LocalVocabEntry::fromIriref("<z>", qec->getLocalVocabContext())},
-      {{{2, 3}}});
+      {{{2, 3}}, 3});
 }
 
 TEST(RelationalExpression, InExpressionSimpleMemberVariables) {
@@ -908,6 +909,13 @@ TEST(RelationalExpression, InExpressionSimpleMemberVariables) {
   auto expression = InExpression(std::move(first), std::move(children));
 
   EXPECT_THAT(expression.getCacheKey({}), AllOfArray(matchers));
+}
+
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3559
+TEST(RelationalExpression, NotInEmptyList) {
+  auto notIn = makeUnaryNegateExpression(
+      std::make_unique<InExpression>(makeInExpression(IntId(1))));
+  EXPECT_EQ(std::get<Id>(evaluateOnTestContext(*notIn)), BoolId(true));
 }
 
 TEST(RelationalExpression, InExpressionFilterEstimates) {

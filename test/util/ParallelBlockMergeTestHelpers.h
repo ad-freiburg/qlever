@@ -32,16 +32,20 @@
 // only it needs.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <atomic>
+#include <boost/asio/awaitable.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <exception>
 #include <future>
 #include <mutex>
+#include <optional>
 #include <type_traits>
 
 #include "backports/asio.h"
 #include "util/AsioHelpers.h"
 #include "util/NoCopyNoMove.h"
 #include "util/parallelBlockMerge/BlockSinkPolicy.h"
+#include "util/parallelBlockMerge/BlockStorage.h"
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // Helpers for the tests of the parallel block merge, in particular the
@@ -331,14 +335,10 @@ class CollectingBlockSink : public ad_utility::NoCopyNoMove {
   // `ad_utility::runFunctionOnExecutor`. This is what makes every completion
   // handler of this sink run via a `net::post` and never inline, which the
   // `SinkConcept` requires.
-  //
-  // NOTE: The named `token` is needed because `runFunctionOnExecutor` takes its
-  // completion token by non-const lvalue reference.
   template <typename Function, typename CompletionToken>
   auto runOnExecutor(Function function, CompletionToken&& completionToken) {
-    std::decay_t<CompletionToken> token{AD_FWD(completionToken)};
     return ad_utility::runFunctionOnExecutor(executor_, std::move(function),
-                                             token);
+                                             AD_FWD(completionToken));
   }
 
   // Store the `block` as the next block of the chunk with the given
@@ -393,6 +393,29 @@ std::vector<ql::ranges::range_value_t<Block>> mergedElements(
     }
   }
   return result;
+}
+
+// ___________________________________________________________________________
+// Helpers for the consumer side of an `InOrderBlockSink`.
+// ___________________________________________________________________________
+
+// Materialize a single result of `InOrderBlockSink::asyncGetNextBlock`, see
+// `ad_utility::parallelBlockMerge::DeferredBlock`, in the calling thread.
+template <typename Block>
+std::optional<Block> materialize(
+    std::optional<ad_utility::parallelBlockMerge::DeferredBlock<Block>> block) {
+  if (!block.has_value()) {
+    return std::nullopt;
+  }
+  return std::move(block).value().materialize();
+}
+
+// Await the next block of the `sink` and materialize it, see `materialize`.
+template <typename Sink>
+net::awaitable<std::optional<typename Sink::value_type>> asyncGetNextBlock(
+    Sink& sink) {
+  auto block = co_await sink.asyncGetNextBlock(net::use_awaitable);
+  co_return materialize(std::move(block));
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

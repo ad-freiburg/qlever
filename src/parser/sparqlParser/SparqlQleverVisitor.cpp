@@ -392,11 +392,16 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   // They are visited in the order in which they appear, so a definition can
   // `INCLUDE` previously defined named subqueries.
   visitVector(ctx->namedSubqueryDefinition());
+  // The trailing `VALUES` clause is joined before the projection, so its
+  // variables are also selected by `SELECT *`. The SPARQL 1.1 spec is vague
+  // here, see https://github.com/w3c/rdf-tests/issues/381 for details.
+  postQueryValues_ = visit(ctx->valuesClause());
   auto query =
       visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
                                     ctx->describeQuery(), ctx->askQuery());
-
-  query.postQueryValuesClause_ = visit(ctx->valuesClause());
+  AD_CORRECTNESS_CHECK(!postQueryValues_.has_value(),
+                       "The trailing `VALUES` clause must be consumed by the "
+                       "visitor of the respective query type.");
 
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
@@ -537,7 +542,8 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
         toGraphPattern(query.constructClause().triples_));
   }
   query.addSolutionModifiers(visit(ctx->solutionModifier()),
-                             makeInternalVariableGenerator());
+                             makeInternalVariableGenerator(),
+                             std::exchange(postQueryValues_, std::nullopt));
 
   return query;
 }
@@ -592,8 +598,9 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // (which pertains to the SELECT query that computes the resources to be
   // described).
   parsedQuery_ = ParsedQuery{};
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
-                                    makeInternalVariableGenerator());
+  parsedQuery_.addSolutionModifiers(
+      visit(ctx->solutionModifier()), makeInternalVariableGenerator(),
+      std::exchange(postQueryValues_, std::nullopt));
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
       std::move(describeClause));
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
@@ -626,8 +633,9 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
     solutionModifiers.limitOffset_._limit = 1;
     return solutionModifiers;
   };
-  parsedQuery_.addSolutionModifiers(getSolutionModifiers(),
-                                    makeInternalVariableGenerator());
+  parsedQuery_.addSolutionModifiers(
+      getSolutionModifiers(), makeInternalVariableGenerator(),
+      std::exchange(postQueryValues_, std::nullopt));
   return parsedQuery_;
 }
 
@@ -943,13 +951,13 @@ std::vector<ParsedQuery> Visitor::visit(Parser::CopyContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::InsertDataContext* ctx) {
-  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+  BlankNodeAdder bn{blankNodeManager_};
   return {visit(ctx->quadData()).toTriplesWithGraph(std::monostate{}, bn), {}};
 }
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
-  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+  BlankNodeAdder bn{blankNodeManager_};
   auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
   auto quads = visit(ctx->quadData());
   return {{}, quads.toTriplesWithGraph(std::monostate{}, bn)};
@@ -969,7 +977,7 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   triples.forAllVariables([this](const Variable& v) { addVisibleVariable(v); });
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
-  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+  BlankNodeAdder bn{blankNodeManager_};
   parsedQuery_._clause = parsedQuery::UpdateClause{
       GraphUpdate{{}, triples.toTriplesWithGraph(std::monostate{}, bn)}};
   return parsedQuery_;
@@ -989,7 +997,7 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
     if (ctx) {
       auto quads = this->visit(ctx);
       quads.forAllVariables(ensureVariableIsVisible);
-      Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
+      BlankNodeAdder bn{blankNodeManager_};
       *target = quads.toTriplesWithGraph(defaultGraph, bn);
     }
   };
@@ -1161,11 +1169,7 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
           });
   if (ctx->subSelect()) {
     auto parsedQuerySoFar = std::exchange(parsedQuery_, ParsedQuery{});
-    auto [subquery, valuesOpt] = visit(ctx->subSelect());
-    pattern._graphPatterns.emplace_back(std::move(subquery));
-    if (valuesOpt.has_value()) {
-      pattern._graphPatterns.emplace_back(std::move(valuesOpt.value()));
-    }
+    pattern._graphPatterns.emplace_back(visit(ctx->subSelect()));
     parsedQuery_ = std::move(parsedQuerySoFar);
     return pattern;
   }
@@ -1502,11 +1506,16 @@ RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
 
 // ____________________________________________________________________________________
 TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
-  std::string langtag =
-      ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
-  return TripleComponent::Iri::fromIriref(
-      langtag +
-      visitAlternative<std::string>(ctx->iriref(), ctx->prefixedName()));
+  auto iri = visitAlternative<std::string>(ctx->iriref(), ctx->prefixedName());
+  if (!ctx->PREFIX_LANGTAG()) {
+    return TripleComponent::Iri::fromIriref(std::move(iri));
+  }
+  // The text of a `PREFIX_LANGTAG` is the language tag enclosed in `@`, e.g.
+  // `@en@`; strip those to obtain the bare language tag.
+  std::string prefixLangtag = ctx->PREFIX_LANGTAG()->getText();
+  AD_CORRECTNESS_CHECK(prefixLangtag.size() > 2);
+  return TripleComponent::Iri::fromLangtagAndIriref(
+      std::string_view{prefixLangtag}.substr(1, prefixLangtag.size() - 2), iri);
 }
 
 // ____________________________________________________________________________________
@@ -1617,8 +1626,9 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
   visitWhereClause(ctx->whereClause(), parsedQuery_);
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
-                                    makeInternalVariableGenerator());
+  parsedQuery_.addSolutionModifiers(
+      visit(ctx->solutionModifier()), makeInternalVariableGenerator(),
+      std::exchange(postQueryValues_, std::nullopt));
   return parsedQuery_;
 }
 
@@ -1760,18 +1770,22 @@ ParsedQuery::GraphPattern Visitor::visitSoleInclude(
 }
 
 // ____________________________________________________________________________________
-Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
+parsedQuery::Subquery Visitor::visit(Parser::SubSelectContext* ctx) {
   ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
   visitWhereClause(ctx->whereClause(), query);
+  // The trailing `VALUES` clause belongs to the subquery, it is joined before
+  // the subquery's `ORDER BY`, `DISTINCT`, projection, and `LIMIT`/`OFFSET`
+  // (SPARQL 1.1, sec. 18.2.4.3). Its variables are thus also selected by
+  // `SELECT *`.
   query.addSolutionModifiers(visit(ctx->solutionModifier()),
-                             makeInternalVariableGenerator());
-  auto values = visit(ctx->valuesClause());
+                             makeInternalVariableGenerator(),
+                             visit(ctx->valuesClause()));
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
     addVisibleVariable(variable);
   }
-  return {parsedQuery::Subquery{std::move(query)}, std::move(values)};
+  return parsedQuery::Subquery{std::move(query)};
 }
 
 // ____________________________________________________________________________________
@@ -3246,7 +3260,7 @@ std::variant<int64_t, double> Visitor::visit(
 
 // ____________________________________________________________________________________
 bool Visitor::visit(Parser::BooleanLiteralContext* ctx) {
-  return ctx->getText() == "true";
+  return static_cast<bool>(ctx->BOOL_TRUE());
 }
 
 // ____________________________________________________________________________________

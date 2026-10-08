@@ -39,6 +39,17 @@ constexpr inline MemorySize DEFAULT_PARALLEL_MERGE_OUTPUT_BLOCK_MEMORY =
 // balancing if the individual chunks require different amounts of work.
 constexpr inline size_t DEFAULT_PARALLEL_MERGE_CHUNKS_PER_THREAD = 4;
 
+// The default number of output blocks that the consumer side of a merge keeps
+// ready in advance, see `MergeOptions::numPrefetchedOutputBlocks`.
+constexpr inline size_t DEFAULT_PARALLEL_MERGE_NUM_PREFETCHED_OUTPUT_BLOCKS =
+    10;
+
+// The default number of input elements below which the merge is performed
+// serially. For small inputs the overhead of setting up the parallel merge
+// dominates the actual merging.
+constexpr inline size_t DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD =
+    100'000;
+
 // Return the parallelism that a merge assumes if its `MergeOptions` do not
 // specify one, which is one thread per hardware thread. NOTE: This is a pure
 // tuning default and says nothing about the executor that a merge actually
@@ -134,10 +145,60 @@ struct MergeOptions {
   // `0` means "as many as `parallelism()`".
   size_t maxNumChunksInFlight = 0;
 
+  // If not `0`, the size (in elements) of the first chunk of the merge. The
+  // following chunks double that size until it reaches the size of a uniform
+  // chunk (the size that `targetNumChunks()` implies), and all the remaining
+  // chunks have that uniform size. The consumer has to drain the chunks in the
+  // order of their index, so smaller leading chunks make the first output
+  // blocks of the merge available much sooner. The value `0` means that all
+  // chunks have the uniform size.
+  //
+  // NOTE: These are targets and not guarantees, and they never *reduce* the
+  // number of chunks, see `computeChunkBoundaries` in `MergeHelpers.h`.
+  size_t firstChunkSize = 0;
+
+  // Merge serially in the calling thread if the input has at most that many
+  // elements in total, see `shouldMergeSerially()`.
+  size_t serialNumElementsThreshold =
+      DEFAULT_PARALLEL_MERGE_SERIAL_ELEMENT_THRESHOLD;
+
+  // The number of output blocks that the consumer side of the merge keeps ready
+  // in advance: it reads those blocks in the background (on the very executor
+  // that the merge itself runs on) instead of fetching a block only once the
+  // consumer asks for it, see `detail::BlockPrefetcher`. This is also the
+  // number of blocks that are read back from a storage that spills to disk
+  // concurrently, see the CONCURRENT READS note there. Only
+  // `parallelBlockMergeToRange` (the blocking consumer) looks at this; the
+  // serial merge and a caller that reads the sink itself ignore it.
+  //
+  // The value `1` is the smallest possible read-ahead: one block is kept ready
+  // (and one more is being fetched) while the consumer works on the block that
+  // it currently holds. The value `0` is not allowed and rejected by an
+  // `AD_CONTRACT_CHECK`: the buffer of the read-ahead would then be a mere
+  // rendezvous between the consumer and the read-ahead, so nothing would be
+  // read ahead at all.
+  //
+  // NOTE: Every one of these blocks costs memory, and so does the block that
+  // the operation which is currently in flight is about to deliver, so a caller
+  // with a memory budget has to account for `numPrefetchedOutputBlocks + 1`
+  // blocks besides the one that the consumer itself holds.
+  size_t numPrefetchedOutputBlocks =
+      DEFAULT_PARALLEL_MERGE_NUM_PREFETCHED_OUTPUT_BLOCKS;
+
   // Return the number of threads that the merge assumes, that is the
   // `parallelismHint` with the value `0` resolved to its default.
   size_t parallelism() const {
     return parallelismHint == 0 ? defaultMergeParallelism() : parallelismHint;
+  }
+
+  // Return whether an input with `numElements` elements in total should be
+  // merged serially in the calling thread. This is the case if the merge has a
+  // single thread (which cannot merge two chunks concurrently anyway), or if
+  // the input is small enough for the overhead of setting up the parallel
+  // merge to dominate the actual merging, see `serialNumElementsThreshold`.
+  // Only `parallelBlockMergeToRange` looks at this, see there.
+  bool shouldMergeSerially(size_t numElements) const {
+    return parallelism() <= 1 || numElements <= serialNumElementsThreshold;
   }
 
   // Return the number of chunks that the merge should be split into, see

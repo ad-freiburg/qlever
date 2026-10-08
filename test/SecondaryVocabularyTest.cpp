@@ -12,6 +12,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -33,6 +35,8 @@
 #include "parser/LiteralOrIri.h"
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
+#include "util/CompactStringVector.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
 
@@ -52,23 +56,37 @@ using ::testing::HasSubstr;
 using ::testing::Optional;
 using ::testing::UnorderedElementsAre;
 
-// The words of the secondary vocabulary that the tests below use. In the order
-// of the main vocabulary (see `makeIndexWithSecondaryVocab`), `"a"` is sorted
-// before all of its words, `<b>` between `<a>` and `<c>`, and `<d>` between
-// `<c>` and `<p>`.
-//
-// NOTE: A `SecondaryVocabulary` requires its words to be sorted with respect
-// to `std::string`'s comparison, whereas the actual implementation will use the
-// collation of the vocabulary of the main index (see `SecondaryVocabulary`).
-// These words are deliberately chosen such that the two orders agree: their
-// content is a single ASCII letter, for which the collation is the byte order,
-// and `"` (the first byte of a literal) sorts before `<` (the first byte of an
-// IRI) in both.
+// The words of the secondary vocabulary that the tests below use, sorted, so
+// that they can be appended as a single segment; their global indices are
+// their positions in this vector (see `SecondaryVocabulary`). In the semantic
+// order of the main vocabulary (see `makeIndexWithSecondaryVocab`), `"a"` is
+// sorted before all of its words, `<b>` between `<a>` and `<c>`, and `<d>`
+// between `<c>` and `<p>`.
 const std::vector<std::string> secondaryVocabWords{"\"a\"", "<b>", "<d>"};
 
 // The `Id` of the word of the secondary vocabulary at the given index.
 Id secondaryVocabId(uint64_t index) {
   return Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(index));
+}
+
+// Check that each of `words` is stored in `vocab` at the index equal to its
+// position in `words`, and that `vocab.getId` finds it again at that same
+// index.
+void expectWordsAndIdsMatch(const SecondaryVocabulary& vocab,
+                            const std::vector<std::string>& words) {
+  for (size_t i = 0; i < words.size(); ++i) {
+    SCOPED_TRACE(i);
+    EXPECT_EQ(vocab[SecondaryVocabIndex::make(i)], words.at(i));
+    EXPECT_EQ(vocab.getId(words.at(i)), SecondaryVocabIndex::make(i));
+  }
+}
+
+// Build a `CompactVectorOfStrings<char>` holding `words`, suitable for
+// `SecondaryVocabulary::appendSegment`.
+CompactVectorOfStrings<char> makeSegment(std::vector<std::string> words) {
+  CompactVectorOfStrings<char> segment;
+  segment.build(words);
+  return segment;
 }
 
 // An index whose main vocabulary holds `<a>`, `<c>`, `<p>`, and `<s>`, and
@@ -105,19 +123,14 @@ TEST(SecondaryVocabulary, wordsAndLookup) {
   SecondaryVocabulary vocab{secondaryVocabWords};
   EXPECT_EQ(vocab.numWords(), secondaryVocabWords.size());
   // Each word is stored at its index and is found again by that index.
-  for (size_t i = 0; i < secondaryVocabWords.size(); ++i) {
-    SCOPED_TRACE(i);
-    EXPECT_EQ(vocab[SecondaryVocabIndex::make(i)], secondaryVocabWords.at(i));
-    EXPECT_EQ(vocab.getId(secondaryVocabWords.at(i)),
-              SecondaryVocabIndex::make(i));
-  }
+  expectWordsAndIdsMatch(vocab, secondaryVocabWords);
   // Words that are not contained, before, between, and after the contained
   // ones.
   EXPECT_EQ(vocab.getId("\"A\""), std::nullopt);
   EXPECT_EQ(vocab.getId("<c>"), std::nullopt);
   EXPECT_EQ(vocab.getId("<e>"), std::nullopt);
   AD_EXPECT_THROW_WITH_MESSAGE(vocab[SecondaryVocabIndex::make(3)],
-                               HasSubstr("index.get() < words_.size()"));
+                               HasSubstr("globalIndex < numWords()"));
 
   // A default-constructed vocabulary is empty, which is how an index without a
   // secondary vocabulary behaves.
@@ -128,12 +141,295 @@ TEST(SecondaryVocabulary, wordsAndLookup) {
 
 // _____________________________________________________________________________
 TEST(SecondaryVocabulary, wordsHaveToBeSortedAndDistinct) {
-  // The words are looked up by binary search, so unsorted or duplicate words
-  // are a programming error.
-  AD_EXPECT_THROW_WITH_MESSAGE((SecondaryVocabulary{{"<d>", "<b>"}}),
-                               HasSubstr("have to be sorted"));
-  AD_EXPECT_THROW_WITH_MESSAGE((SecondaryVocabulary{{"<b>", "<b>"}}),
-                               HasSubstr("have to be distinct"));
+  // The words of a segment get their global indices in the order in which
+  // they are stored, which has to be the sorted order.
+  SecondaryVocabulary vocab{std::vector<std::string>{"<b>", "<d>"}};
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(0)], "<b>");
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(1)], "<d>");
+
+  // Unsorted or duplicate words are a programming error.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (SecondaryVocabulary{std::vector<std::string>{"<d>", "<b>"}}),
+      HasSubstr("have to be sorted and pairwise"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (SecondaryVocabulary{std::vector<std::string>{"<b>", "<b>"}}),
+      HasSubstr("have to be sorted and pairwise"));
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, appendSegmentKeepsExistingIndicesStable) {
+  SecondaryVocabulary vocab{secondaryVocabWords};
+  ASSERT_EQ(vocab.numWords(), 3);
+  ASSERT_EQ(vocab.numSegments(), 1);
+
+  vocab.appendSegment(makeSegment({"<f>", "<g>"}));
+
+  EXPECT_EQ(vocab.numWords(), 5);
+  EXPECT_EQ(vocab.numSegments(), 2);
+
+  // The indices of the words that were already contained stay unchanged.
+  expectWordsAndIdsMatch(vocab, secondaryVocabWords);
+  // The words of the new segment continue the global index, and `getId` and
+  // `operator[]` work across the segment boundary.
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(3)], "<f>");
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(4)], "<g>");
+  EXPECT_EQ(vocab.getId("<f>"), SecondaryVocabIndex::make(3));
+  EXPECT_EQ(vocab.getId("<g>"), SecondaryVocabIndex::make(4));
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, appendSegmentRejectsWordAlreadyContained) {
+  SecondaryVocabulary vocab{secondaryVocabWords};
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.appendSegment(makeSegment({"<b>", "<f>"})),
+                               HasSubstr("the word <b> is already contained"));
+  // The rejected segment must not have been appended.
+  EXPECT_EQ(vocab.numWords(), secondaryVocabWords.size());
+  EXPECT_EQ(vocab.numSegments(), 1);
+  expectWordsAndIdsMatch(vocab, secondaryVocabWords);
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, appendSegmentRejectsUnsortedOrDuplicateWords) {
+  SecondaryVocabulary vocab{};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      vocab.appendSegment(makeSegment({"<f>", "<g>", "<e>"})),
+      HasSubstr("have to be sorted and pairwise"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      vocab.appendSegment(makeSegment({"<f>", "<f>", "<g>"})),
+      HasSubstr("have to be sorted and pairwise"));
+  EXPECT_EQ(vocab.numWords(), 0);
+  EXPECT_EQ(vocab.numSegments(), 0);
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, appendSegmentMergesIntoTheSortedIndices) {
+  // The words of the appended segments are interleaved with the ones that are
+  // already contained, in front of them, and behind them, so that the merge
+  // has to move existing entries in all of those ways.
+  SecondaryVocabulary vocab{std::vector<std::string>{"<b>", "<d>"}};
+  vocab.appendSegment(makeSegment({"<a>", "<c>", "<e>"}));
+  vocab.appendSegment(makeSegment({"<f>"}));
+  vocab.appendSegment(makeSegment({"<A>"}));
+
+  // The global indices are the ones from the order in which the words were
+  // appended, not the lexicographic ones.
+  const std::vector<std::string> wordsInGlobalOrder{"<b>", "<d>", "<a>", "<c>",
+                                                    "<e>", "<f>", "<A>"};
+  EXPECT_EQ(vocab.numWords(), wordsInGlobalOrder.size());
+  EXPECT_EQ(vocab.numSegments(), 4);
+  expectWordsAndIdsMatch(vocab, wordsInGlobalOrder);
+
+  // Words that are not contained, in front of, between, and behind the
+  // contained ones.
+  EXPECT_EQ(vocab.getId("<0>"), std::nullopt);
+  EXPECT_EQ(vocab.getId("<c1>"), std::nullopt);
+  EXPECT_EQ(vocab.getId("<g>"), std::nullopt);
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, appendEmptySegmentIsNoOp) {
+  // An empty segment appended to an empty vocabulary.
+  SecondaryVocabulary emptyVocab{};
+  emptyVocab.appendSegment(makeSegment({}));
+  EXPECT_EQ(emptyVocab.numWords(), 0);
+  EXPECT_EQ(emptyVocab.numSegments(), 0);
+  EXPECT_EQ(emptyVocab.getId("<b>"), std::nullopt);
+
+  // The same holds for the constructor.
+  SecondaryVocabulary constructedEmpty{std::vector<std::string>{}};
+  EXPECT_EQ(constructedEmpty.numWords(), 0);
+  EXPECT_EQ(constructedEmpty.numSegments(), 0);
+
+  // An empty segment appended to a nonempty vocabulary, followed by a nonempty
+  // one, whose global indices directly follow the ones of the first segment.
+  SecondaryVocabulary vocab{secondaryVocabWords};
+  vocab.appendSegment(makeSegment({}));
+  EXPECT_EQ(vocab.numWords(), secondaryVocabWords.size());
+  EXPECT_EQ(vocab.numSegments(), 1);
+  expectWordsAndIdsMatch(vocab, secondaryVocabWords);
+
+  vocab.appendSegment(makeSegment({"<f>"}));
+  EXPECT_EQ(vocab.numWords(), 4);
+  EXPECT_EQ(vocab.numSegments(), 2);
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(3)], "<f>");
+  EXPECT_EQ(vocab.getId("<f>"), SecondaryVocabIndex::make(3));
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, appendZeroCopySegment) {
+  SecondaryVocabulary vocab{secondaryVocabWords};
+
+  auto segment = makeSegment({"<f>", "<g>"});
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer << segment;
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  auto zeroCopySegment =
+      CompactVectorOfStrings<char>::fromZeroCopyDeserializer(readSerializer);
+
+  vocab.appendSegment(std::move(zeroCopySegment));
+  EXPECT_EQ(vocab.numWords(), 5);
+  EXPECT_EQ(vocab.numSegments(), 2);
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(3)], "<f>");
+  EXPECT_EQ(vocab[SecondaryVocabIndex::make(4)], "<g>");
+  EXPECT_EQ(vocab.getId("<g>"), SecondaryVocabIndex::make(4));
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, clone) {
+  // A vocabulary with two segments, the second of which is a zero-copy view
+  // into the buffer of a serializer.
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer << makeSegment({"<a>", "<f>"});
+  std::optional<ad_utility::serialization::AlignedByteBufferReadSerializer>
+      readSerializer{std::in_place, std::move(writeSerializer).data()};
+  SecondaryVocabulary vocab{secondaryVocabWords};
+  vocab.appendSegment(
+      CompactVectorOfStrings<char>::fromZeroCopyDeserializer(*readSerializer));
+
+  auto clone = vocab.clone();
+  // The clone owns its segments, so it stays valid when the buffer of the
+  // zero-copy segment of the original is gone.
+  readSerializer.reset();
+  const std::vector<std::string> wordsInGlobalOrder{"\"a\"", "<b>", "<d>",
+                                                    "<a>", "<f>"};
+  EXPECT_EQ(clone.numWords(), 5);
+  EXPECT_EQ(clone.numSegments(), 2);
+  expectWordsAndIdsMatch(clone, wordsInGlobalOrder);
+
+  // The clone can be extended independently of the original.
+  clone.appendSegment(makeSegment({"<g>"}));
+  EXPECT_EQ(clone.getId("<g>"), SecondaryVocabIndex::make(5));
+  EXPECT_EQ(vocab.numWords(), 5);
+  EXPECT_EQ(vocab.numSegments(), 2);
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, serialization) {
+  SecondaryVocabulary vocab{secondaryVocabWords};
+  vocab.appendSegment(makeSegment({"<a>", "<f>"}));
+  const std::vector<std::string> wordsInGlobalOrder{"\"a\"", "<b>", "<d>",
+                                                    "<a>", "<f>"};
+
+  // Read back via a serializer that supports zero-copy deserialization, in
+  // which case the segments and the index arrays are views into its buffer,
+  // and via one that does not, in which case they are owned. The segments and
+  // hence the global indices of all words are the same in both cases.
+  auto check = [&wordsInGlobalOrder](auto& readSerializer) {
+    SecondaryVocabulary readVocab;
+    readSerializer >> readVocab;
+    EXPECT_EQ(readVocab.numSegments(), 2);
+    expectWordsAndIdsMatch(readVocab, wordsInGlobalOrder);
+
+    // A vocabulary that was read via zero-copy deserialization is read-only
+    // (apart from empty segments, which are ignored), but its `clone()` can be
+    // extended. A vocabulary that was read into owned storage can be extended
+    // directly. In both cases, the global indices of the previous words stay
+    // unchanged.
+    using Serializer = std::decay_t<decltype(readSerializer)>;
+    auto extendable = [&readVocab]() {
+      if constexpr (ad_utility::serialization::ZeroCopyReadSerializer<
+                        Serializer>) {
+        readVocab.appendSegment(makeSegment({}));
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            readVocab.appendSegment(makeSegment({"<g>"})),
+            HasSubstr("cannot be extended, call `clone()` first"));
+        EXPECT_EQ(readVocab.numSegments(), 2);
+        return readVocab.clone();
+      } else {
+        return std::move(readVocab);
+      }
+    }();
+    extendable.appendSegment(makeSegment({"<0>", "<g>"}));
+    auto extendedWords = wordsInGlobalOrder;
+    extendedWords.push_back("<0>");
+    extendedWords.push_back("<g>");
+    EXPECT_EQ(extendable.numSegments(), 3);
+    expectWordsAndIdsMatch(extendable, extendedWords);
+    AD_EXPECT_THROW_WITH_MESSAGE(extendable.appendSegment(makeSegment({"<b>"})),
+                                 HasSubstr("is already contained"));
+
+    // Deserializing into a vocabulary that is not empty is not allowed.
+    SecondaryVocabulary nonEmpty{secondaryVocabWords};
+    AD_EXPECT_THROW_WITH_MESSAGE(readSerializer >> nonEmpty,
+                                 HasSubstr("only be deserialized into an "
+                                           "empty one"));
+  };
+  using namespace ad_utility::serialization;
+  AlignedByteBufferWriteSerializer alignedWriter;
+  alignedWriter << vocab;
+  AlignedByteBufferReadSerializer zeroCopyReader{
+      std::move(alignedWriter).data()};
+  static_assert(ZeroCopyReadSerializer<decltype(zeroCopyReader)>);
+  check(zeroCopyReader);
+
+  ByteBufferWriteSerializer writer;
+  writer << vocab;
+  ByteBufferReadSerializer owningReader{std::move(writer).data()};
+  static_assert(!ZeroCopyReadSerializer<decltype(owningReader)>);
+  check(owningReader);
+
+  // An empty vocabulary is serialized as zero segments.
+  ByteBufferWriteSerializer emptyWriter;
+  emptyWriter << SecondaryVocabulary{};
+  ByteBufferReadSerializer emptyReader{std::move(emptyWriter).data()};
+  SecondaryVocabulary readEmpty;
+  emptyReader >> readEmpty;
+  EXPECT_EQ(readEmpty.numSegments(), 0);
+  EXPECT_EQ(readEmpty.numWords(), 0);
+
+  // The contents of the input are not checked when reading, but an input in
+  // which the sizes of the index arrays don't match the segments, or in which
+  // the first segment offset is not zero, is rejected.
+  auto writeVocabWithIndexArrays = [](ByteBufferWriteSerializer& writer,
+                                      const std::vector<uint64_t>& offsets,
+                                      const std::vector<uint64_t>& sorted) {
+    writer << SecondaryVocabulary::serializationMagicBytes;
+    writer << SecondaryVocabulary::serializationFormatVersion;
+    writer << uint64_t{1};
+    writer << makeSegment({"<a>", "<b>"});
+    writer << offsets;
+    writer << sorted;
+  };
+  for (const auto& [offsets, sorted] :
+       std::vector<std::pair<std::vector<uint64_t>, std::vector<uint64_t>>>{
+           {{}, {0, 1}}, {{0}, {0}}, {{0}, {0, 1, 2}}, {{1}, {0, 1, 2}}}) {
+    ByteBufferWriteSerializer corruptedWriter;
+    writeVocabWithIndexArrays(corruptedWriter, offsets, sorted);
+    ByteBufferReadSerializer corruptedReader{std::move(corruptedWriter).data()};
+    SecondaryVocabulary corrupted;
+    EXPECT_ANY_THROW(corruptedReader >> corrupted);
+  }
+  // The same input with matching sizes is read correctly.
+  ByteBufferWriteSerializer validWriter;
+  writeVocabWithIndexArrays(validWriter, {0}, {0, 1});
+  ByteBufferReadSerializer validReader{std::move(validWriter).data()};
+  SecondaryVocabulary valid;
+  validReader >> valid;
+  expectWordsAndIdsMatch(valid, {"<a>", "<b>"});
+
+  // An input with wrong magic bytes or an unsupported format version is
+  // rejected.
+  ByteBufferWriteSerializer wrongMagicWriter;
+  wrongMagicWriter << std::array<char, 8>{'N', 'O', 'T', 'Q',
+                                          'L', 'E', 'V', 'R'};
+  wrongMagicWriter << SecondaryVocabulary::serializationFormatVersion;
+  wrongMagicWriter << uint64_t{0};
+  ByteBufferReadSerializer wrongMagicReader{std::move(wrongMagicWriter).data()};
+  SecondaryVocabulary wrongMagic;
+  AD_EXPECT_THROW_WITH_MESSAGE(wrongMagicReader >> wrongMagic,
+                               HasSubstr("expected magic bytes"));
+
+  ByteBufferWriteSerializer wrongVersionWriter;
+  wrongVersionWriter << SecondaryVocabulary::serializationMagicBytes;
+  wrongVersionWriter << static_cast<uint16_t>(
+      SecondaryVocabulary::serializationFormatVersion + 1);
+  wrongVersionWriter << uint64_t{0};
+  ByteBufferReadSerializer wrongVersionReader{
+      std::move(wrongVersionWriter).data()};
+  SecondaryVocabulary wrongVersion;
+  AD_EXPECT_THROW_WITH_MESSAGE(wrongVersionReader >> wrongVersion,
+                               HasSubstr("unsupported format version 2"));
 }
 
 // _____________________________________________________________________________
@@ -184,7 +480,7 @@ TEST(SecondaryVocabIndex, sortsDirectlyAfterTheMainVocabulary) {
                       secondaryVocabId(1)};
   for (size_t i = 0; i <= static_cast<size_t>(Datatype::MaxValue); ++i) {
     auto datatype = static_cast<Datatype>(i);
-    bool isCovered = ::ranges::contains(ids, datatype, &Id::getDatatype);
+    bool isCovered = ::ranges::contains(ids, datatype, Id::getDatatypeL);
     ASSERT_EQ(isCovered, datatype != Datatype::LocalVocabIndex)
         << toString(datatype);
   }
@@ -194,7 +490,7 @@ TEST(SecondaryVocabIndex, sortsDirectlyAfterTheMainVocabulary) {
   // mergeable into a scan of the main index), and they directly follow them, in
   // ascending order of their indices.
   auto positionOfVocabIndex =
-      ql::ranges::find(ids, Datatype::VocabIndex, &Id::getDatatype);
+      ql::ranges::find(ids, Datatype::VocabIndex, Id::getDatatypeL);
   ASSERT_GE(ids.end() - positionOfVocabIndex, 3);
   EXPECT_EQ(*(positionOfVocabIndex + 1), secondaryVocabId(0));
   EXPECT_EQ(*(positionOfVocabIndex + 2), secondaryVocabId(1));
@@ -453,8 +749,8 @@ TEST_F(SecondaryVocabIndexTest, toValueIdUsesAllVocabularies) {
 
 // _____________________________________________________________________________
 // The same three cases, but for the `TripleComponent` overload that does not
-// add to a local vocabulary. A word of the secondary vocabulary now has an
-// `Id`, so this no longer reports it as "not found".
+// add to a local vocabulary. A word of the secondary vocabulary has an `Id`,
+// so this reports it as found, unlike a word that is in neither vocabulary.
 TEST_F(SecondaryVocabIndexTest, toValueIdWithoutLocalVocab) {
   const IndexImpl& impl = index_.getImpl();
   auto toId = [&impl](std::string_view iriref) {
@@ -656,8 +952,8 @@ TEST(SecondaryVocabIndex, updateWithWordOfTheSecondaryVocabulary) {
 // test that a future change of the secondary vocabulary has to keep passing.
 TEST(SecondaryVocabIndex, sameResultsWithAndWithoutSecondaryVocabulary) {
   // A knowledge graph with enough triples to span several blocks per
-  // permutation (a block holds two `Id`s per column in the tests, see
-  // `TestIndexConfig::blocksizePermutations`), and with objects of several
+  // permutation (a block holds two rows in the tests, see
+  // `TestIndexConfig::rowsPerBlock`), and with objects of several
   // datatypes.
   std::string kg;
   for (size_t i = 0; i < 12; ++i) {

@@ -23,6 +23,7 @@
 #include "util/Serializer/SerializeOptional.h"
 #include "util/Serializer/SerializePair.h"
 #include "util/Serializer/SerializeString.h"
+#include "util/Serializer/SerializeVariant.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 
@@ -705,6 +706,73 @@ TEST(Serializer, serializeOptional) {
 }
 
 // _____________________________________________________________________________
+TEST(Serializer, serializeVariant) {
+  using Variant = std::variant<int, std::string, std::vector<int>>;
+  Variant number = 42;
+  Variant string = std::string{"hallo"};
+  Variant vector = std::vector<int>{1, 2, 3};
+
+  ByteBufferWriteSerializer writer;
+  writer << number;
+  writer << string;
+  writer << vector;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+
+  // The alternative that was written is also the alternative that is read, no
+  // matter which alternative the target currently holds.
+  Variant numberExpected = std::string{"not a number"};
+  Variant stringExpected;
+  Variant vectorExpected;
+  reader >> numberExpected;
+  reader >> stringExpected;
+  reader >> vectorExpected;
+  EXPECT_EQ(numberExpected, number);
+  EXPECT_EQ(stringExpected, string);
+  EXPECT_EQ(vectorExpected, vector);
+}
+
+// _____________________________________________________________________________
+TEST(Serializer, serializeVariantWithAnOutOfRangeIndex) {
+  using Variant = std::variant<int, std::string>;
+  // Write an index that is out of range for `Variant`, which can only happen
+  // for a corrupted or otherwise unsuitable input.
+  ByteBufferWriteSerializer writer;
+  writer << uint64_t{2};
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  Variant variant;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      reader >> variant,
+      ::testing::HasSubstr(
+          "out of range index 2 (the variant has 2 alternatives)"));
+  // The variant is unchanged, in particular it does not hold an alternative
+  // that was never read.
+  EXPECT_EQ(variant, Variant{int{}});
+}
+
+// A type that makes a `std::variant` `valueless_by_exception`, which is the
+// only state in which a variant holds no alternative at all.
+struct ThrowingOnMove {
+  int value_ = 0;
+  ThrowingOnMove() = default;
+  ThrowingOnMove(ThrowingOnMove&&) {
+    throw std::runtime_error{"deliberately throwing move constructor"};
+  }
+  ThrowingOnMove& operator=(ThrowingOnMove&&) = default;
+  AD_SERIALIZE_FRIEND_FUNCTION(ThrowingOnMove) { serializer | arg.value_; }
+};
+
+// _____________________________________________________________________________
+TEST(Serializer, serializeValuelessVariant) {
+  std::variant<int, ThrowingOnMove> variant;
+  EXPECT_ANY_THROW(variant.emplace<ThrowingOnMove>(ThrowingOnMove{}));
+  ASSERT_TRUE(variant.valueless_by_exception());
+
+  ByteBufferWriteSerializer writer;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writer << variant, ::testing::HasSubstr("`valueless_by_exception`"));
+}
+
+// _____________________________________________________________________________
 TEST(Serializer, serializeEnum) {
   // Enums are implicitly serializable without any additional code.
   enum E { a, b, c };
@@ -889,6 +957,49 @@ TEST(ZstdSerializer, RoundtripWithFileSerializer) {
     reader >> read;
     EXPECT_EQ(original, read);
   }
+}
+
+// _____________________________________________________________________________
+TEST(ByteBufferWriteSerializer, serializeAtPosition) {
+  ByteBufferWriteSerializer writer;
+  writer << uint32_t{1};
+  // Remember the position of the value that is patched below, and write a
+  // placeholder for it, as a caller would do for a size that is only known
+  // once the data that it describes has been written.
+  size_t position = writer.getCurrentPosition();
+  writer << uint32_t{0};
+  writer << uint32_t{3};
+
+  serializeAtPosition(writer, position, uint32_t{42});
+  // The number of bytes is unchanged, only the middle value was replaced.
+  EXPECT_EQ(writer.getCurrentPosition(), 3 * sizeof(uint32_t));
+
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  uint32_t first, second, third;
+  reader >> first;
+  reader >> second;
+  reader >> third;
+  EXPECT_EQ(first, 1u);
+  EXPECT_EQ(second, 42u);
+  EXPECT_EQ(third, 3u);
+}
+
+// _____________________________________________________________________________
+TEST(ByteBufferWriteSerializer, serializeAtPositionOutOfRangeThrows) {
+  ByteBufferWriteSerializer writer;
+  writer << uint32_t{1};
+
+  // Overwriting exactly the bytes that were written is still allowed.
+  EXPECT_NO_THROW(serializeAtPosition(writer, 0, uint32_t{7}));
+
+  // Overwriting a single byte past the end throws, as does an overwrite that
+  // starts inside the data but reaches past its end.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serializeAtPosition(writer, sizeof(uint32_t), char{0}),
+      ::testing::HasSubstr("position_ + numBytes <= data_.size()"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serializeAtPosition(writer, 1, uint32_t{7}),
+      ::testing::HasSubstr("position_ + numBytes <= data_.size()"));
 }
 
 // _____________________________________________________________________________
@@ -1211,6 +1322,8 @@ TEST(BufferedWriteSerializer, RoundtripWithFileSerializerViaClose) {
     writer << original;
     // `close` flushes the remaining buffered data to the file.
     writer.close();
+    // Closing again is a no-op.
+    writer.close();
   }
 
   {
@@ -1245,6 +1358,15 @@ TEST(BufferedWriteSerializer, IsWriteSerializer) {
   static_assert(WriteSerializer<BufferedWriteSerializer<FileWriteSerializer>>);
   static_assert(
       WriteSerializer<BufferedWriteSerializer<ByteBufferWriteSerializer>>);
+}
+
+// _____________________________________________________________________________
+// A blocksize of zero is rejected, as it would make `serializeBytes` loop
+// forever.
+TEST(BufferedWriteSerializer, ThrowsOnZeroBlocksize) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (BufferedWriteSerializer{ByteBufferWriteSerializer{}, 0_B}),
+      ::testing::HasSubstr("blocksize_ > 0"));
 }
 
 // _____________________________________________________________________________
@@ -1284,6 +1406,42 @@ TEST(BufferedWriteSerializer, SerializeAtPosition) {
     reader >> read;
     EXPECT_EQ(read, trailer) << "block size was " << blockSize;
   }
+}
+
+// _____________________________________________________________________________
+// A `BufferedWriteSerializer` that has been closed or moved from can no longer
+// be used.
+TEST(BufferedWriteSerializer, ThrowsWhenClosedOrMovedFrom) {
+  std::string filename = gtestCurrentTestName();
+  auto cleanup = absl::Cleanup{[&filename]() { deleteFile(filename); }};
+  using ::testing::HasSubstr;
+
+  auto expectUnusable = [](BufferedWriteSerializer<FileWriteSerializer>& writer,
+                           ad_utility::source_location l =
+                               AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        std::ignore = writer.getSerializationPosition(),
+        HasSubstr("`getSerializationPosition` was called on a "
+                  "`BufferedWriteSerializer` that has already been closed"));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        serializeAtPosition(writer, 0, uint32_t{42}),
+        HasSubstr("`serializeAtPosition` was called on a "
+                  "`BufferedWriteSerializer` that has already been closed"));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        std::move(writer).underlyingSerializer(),
+        HasSubstr("`underlyingSerializer` was called on a "
+                  "`BufferedWriteSerializer` that has already been closed"));
+  };
+
+  BufferedWriteSerializer writer{FileWriteSerializer{filename}, 1_kB};
+  writer << uint32_t{1};
+  auto other = std::move(writer);
+  // NOLINTNEXTLINE(bugprone-use-after-move)
+  expectUnusable(writer);
+
+  other.close();
+  expectUnusable(other);
 }
 
 // _____________________________________________________________________________
@@ -1344,4 +1502,66 @@ TEST(VectorIncrementalSerializer, MoveConstructor) {
   std::vector<int> read;
   reader >> read;
   EXPECT_EQ(read, original);
+}
+
+namespace {
+// Read a `std::vector<int>` from the file with the given name.
+std::vector<int> readIntVector(const std::string& filename) {
+  FileReadSerializer reader{filename};
+  std::vector<int> result;
+  reader >> result;
+  return result;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// Overwriting a `BufferedWriteSerializer` flushes its buffered data.
+TEST(BufferedWriteSerializer, MoveAssignmentFlushesOverwrittenSerializer) {
+  std::string filenameA = gtestCurrentTestName() + "A";
+  std::string filenameB = gtestCurrentTestName() + "B";
+  auto cleanup = absl::Cleanup{[&filenameA, &filenameB]() {
+    deleteFile(filenameA);
+    deleteFile(filenameB);
+  }};
+  std::vector<int> originalA{1, 2, 3};
+  std::vector<int> originalB{4, 5};
+  {
+    BufferedWriteSerializer writerA{FileWriteSerializer{filenameA}, 1_MB};
+    writerA << originalA;
+    BufferedWriteSerializer writerB{FileWriteSerializer{filenameB}, 1_MB};
+    writerB << originalB;
+    writerA = std::move(writerB);
+    // The file of the overwritten serializer is complete and closed.
+    EXPECT_EQ(readIntVector(filenameA), originalA);
+  }
+  EXPECT_EQ(readIntVector(filenameB), originalB);
+}
+
+// _____________________________________________________________________________
+// Overwriting a `VectorIncrementalSerializer` finishes it.
+TEST(VectorIncrementalSerializer, MoveAssignmentFinishesOverwrittenSerializer) {
+  std::string filenameA = gtestCurrentTestName() + "A";
+  std::string filenameB = gtestCurrentTestName() + "B";
+  auto cleanup = absl::Cleanup{[&filenameA, &filenameB]() {
+    deleteFile(filenameA);
+    deleteFile(filenameB);
+  }};
+  std::vector<int> originalA{1, 2, 3};
+  std::vector<int> originalB{4, 5, 6, 7};
+  {
+    using Writer = VectorIncrementalSerializer<int, FileWriteSerializer>;
+    Writer writerA{FileWriteSerializer{filenameA}};
+    writerA.push(originalA.at(0));
+    writerA.push(originalA.at(1));
+    writerA.push(originalA.at(2));
+    Writer writerB{FileWriteSerializer{filenameB}};
+    writerB.push(originalB.at(0));
+    writerA = std::move(writerB);
+    // The file of the overwritten serializer is complete and closed.
+    EXPECT_EQ(readIntVector(filenameA), originalA);
+    for (size_t i = 1; i < originalB.size(); ++i) {
+      writerA.push(originalB.at(i));
+    }
+  }
+  EXPECT_EQ(readIntVector(filenameB), originalB);
 }

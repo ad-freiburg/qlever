@@ -13,11 +13,14 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYPLANNER_H
 #define QLEVER_SRC_ENGINE_QUERYPLANNER_H
 
+#include <gtest/gtest_prod.h>
+
 #include <boost/optional.hpp>
 #include <vector>
 
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/RuntimeInformation.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
@@ -255,6 +258,12 @@ class QueryPlanner {
 
   void setEnablePatternTrick(bool enablePatternTrick);
 
+  // How each connected component of the query graph was planned, in the order
+  // in which they were planned (see `ConnectedComponentPlanningInfo`).
+  const std::vector<ConnectedComponentPlanningInfo>& planningInfo() const {
+    return planningInfo_;
+  }
+
   // Create a set of possible execution trees for the given parsed query. The
   // best (cheapest) execution tree according to the QueryPlanner is part of
   // that set. When the query has no `ORDER BY` clause, the set contains one
@@ -285,6 +294,14 @@ class QueryPlanner {
   // are then passed on to the created `QueryExecutionTree` such that they can
   // be reported as part of the query result if desired.
   std::vector<std::string> warnings_;
+
+  // See `planningInfo()`.
+  std::vector<ConnectedComponentPlanningInfo> planningInfo_;
+
+  // The number of candidate plans that `merge` created so far, for the
+  // `numCandidatePlans_` of `planningInfo_`. It is `mutable` because `merge`
+  // and the functions that call it are `const`.
+  mutable size_t numCandidatePlans_ = 0;
 
   std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
@@ -729,6 +746,14 @@ class QueryPlanner {
     // is made via the type member of the `SubtreePlan`s.
     void visitGroupOptionalOrMinus(std::vector<SubtreePlan>&& candidates);
 
+    // Helper function for `graphPatternOperationVisitor`. For a
+    // `GRAPH ?graphVar {...}` clause, make sure that `graphVar` is bound in
+    // every candidate: if a candidate does not already contain a column for
+    // `graphVar`, cross-join it with all graphs that could possibly match (see
+    // `DistinctGraphs::makeAllGraphs`).
+    void bindGraphVariableIfUnbound(const Variable& graphVar,
+                                    std::vector<SubtreePlan>& candidates);
+
     // This function finds a set of candidates that unite all the different
     // `candidatePlans_` and `candidateTriples_`. It then replaces the contents
     // of `candidatePlans_` with those plans and clears the `candidateTriples_`.
@@ -777,6 +802,8 @@ class QueryPlanner {
   static std::pair<ReplacementPlans, bool> findApplicableReplacementPlans(
       ReplacementPlans& allReplacementPlans, uint64_t coveredNodeIds,
       bool useGreedyPlanning);
+  FRIEND_TEST(MaterializedViewsGreedyPlanningTest,
+              findApplicableReplacementPlansGreedyOverlap);
 
   // Helper for `fillDpTab` that inserts replacement plans into a connected
   // component for greedy query planning. The `IndexScan` plans for triples
