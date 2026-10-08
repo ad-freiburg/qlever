@@ -307,3 +307,16 @@ bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
   }
   return Operation::columnOriginatesFromGraphOrUndef(variable);
 }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+MultiColumnJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  return pushDownBindToAnyChild(bind, {_left, _right});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> MultiColumnJoin::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<MultiColumnJoin>(
+      _executionContext, std::move(children.at(0)), std::move(children.at(1)));
+}

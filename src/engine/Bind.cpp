@@ -247,5 +247,18 @@ bool Bind::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
-  return std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
+  return cloneWithNewChildren({_subtree->clone()});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Bind::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<Bind>(_executionContext, std::move(children.at(0)),
+                                _bind);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Bind::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  return pushDownBindToAnyChild(bind, {_subtree});
 }

@@ -135,6 +135,8 @@ class JoinImpl : public Operation {
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
  private:
   // A special implementation that is called when both children are

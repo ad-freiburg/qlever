@@ -251,6 +251,18 @@ bool Filter::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Filter::cloneImpl() const {
-  return std::make_unique<Filter>(_executionContext, _subtree->clone(),
+  return cloneWithNewChildren({_subtree->clone()});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Filter::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<Filter>(_executionContext, std::move(children.at(0)),
                                   _expression);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Filter::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  return pushDownBindToAnyChild(bind, {_subtree});
 }

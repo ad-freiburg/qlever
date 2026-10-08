@@ -10,6 +10,7 @@
 #include "backports/span.h"
 #include "engine/CallFixedSize.h"
 #include "engine/SortedUnionImpl.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/ChunkedForLoop.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
@@ -388,6 +389,51 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
     subtree = subtree->clone();
   }
   return copy;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  AD_CONTRACT_CHECK(!containsVariableInternally(bind._target));
+
+  // The TODO in `makeTreeWithStrippedColumns` below also applies here.
+  if (!targetOrder_.empty()) {
+    return std::nullopt;
+  }
+
+  // For a `UNION`, the `BIND` must be pushed into every child. A child that
+  // doesn't cover the expression variables can't compute the `BIND` at all,
+  // and leaving it unchanged would rely on `UNION`'s generic `UNDEF`-filling
+  // for the missing target column -- which just fills in `UNDEF` instead of
+  // evaluating the `BIND` expression, silently changing the result for any
+  // expression that isn't itself `UNDEF` on `UNDEF` input (e.g. `COALESCE`).
+  const auto& bindExpressionVars = bind._expression.containedVariables();
+
+  std::array<std::shared_ptr<QueryExecutionTree>, 2> results;
+  // This also guarantees equality of `std::tuple_size<T>::value`, because the
+  // size is a template parameter.
+  static_assert(std::is_same_v<decltype(_subtrees), decltype(results)>);
+
+  for (const auto& [i, subtree] : ::ranges::views::enumerate(_subtrees)) {
+    // `UNION` doesn't change any values, so (unlike for joins) it doesn't
+    // matter whether the variables might be `UNDEF` in `subtree`.
+    if (!ql::ranges::all_of(bindExpressionVars, [&](const Variable* var) {
+          return subtree->containsVariable(*var);
+        })) {
+      return std::nullopt;
+    }
+    auto result = QueryExecutionTree::makeTreeWithBindColumn(subtree, bind);
+    if (!result.has_value()) {
+      return std::nullopt;
+    }
+    results[i] = std::move(result.value());
+  }
+
+  // All children have the `BIND` target column added. Make a new `UNION`
+  // object with the new children (there is no sort order to preserve here,
+  // see the `targetOrder_` check above).
+  return ad_utility::makeExecutionTree<Union>(
+      getExecutionContext(), std::move(results[0]), std::move(results[1]));
 }
 
 // _____________________________________________________________________________

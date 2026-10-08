@@ -557,10 +557,31 @@ class Operation {
   // override this method. Pushing a `BIND` down to a materialized view might
   // produce a cheaper query plan for example. This function is tested in the
   // `BindRewrite` test case in `MaterializedViewsTest`.
+  //
+  // Precondition: The `BIND`'s target is not a variable of this operation (not
+  // even a hidden one). This is checked by
+  // `QueryExecutionTree::makeTreeWithBindColumn`, which should be used instead
+  // of calling this function directly.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithBindColumn(const parsedQuery::Bind&) const {
     return std::nullopt;
   }
+
+  // Return true iff `variable` is a column of this operation, including
+  // columns that are hidden from the outside (e.g. by the `SELECT` clause of a
+  // subquery).
+  bool containsVariableInternally(const Variable& variable) const {
+    return getInternallyVisibleVariableColumns().contains(variable);
+  }
+
+  // Create a new operation of the same type and with the same parameters as
+  // this one, but with the given `children` (in the order of `getChildren()`).
+  // In contrast to `clone()`, the new operation is constructed from scratch, so
+  // it is suitable for children with different columns. Operations that use
+  // `pushDownBindToAnyChild` or `pushDownBindToChild` have to override this.
+  // The default implementation throws.
+  virtual std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const;
 
  protected:
   /**
@@ -590,23 +611,31 @@ class Operation {
   virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
       const final;
 
-  // Internal default implementation for `makeTreeWithBindColumn`. This
-  // implementation makes the assumption that a `BIND` can be pushed into this
-  // `Operation` iff any of its children accepts the `BIND` push down. This is
-  // the correct behavior for various operations like `Join`, which make use of
-  // this function for their `makeTreeWithBindColumn` override. Returns the
-  // index of the replaced child and its new `QueryExecutionTree`.
-  //
-  // NOTE: This function is defined in `OperationBindPushDownImpl.h` s.t. it can
-  // be instantiated in the code for operations that use it.
-  CPP_template(typename MakeCloneWithNewChildren)(
-      requires ad_utility::InvocableWithExactReturnType<
-          MakeCloneWithNewChildren, std::shared_ptr<QueryExecutionTree>,
-          std::vector<std::shared_ptr<QueryExecutionTree>>>)
-      std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
-          const parsedQuery::Bind& bind,
-          std::vector<std::shared_ptr<QueryExecutionTree>> children,
-          MakeCloneWithNewChildren makeCloneWithNewChildren) const;
+  // Try to push `bind` into `children.at(childIndex)`, leave the other
+  // `children` (which must be the children of this operation, in the order of
+  // `getChildren()`) unchanged, and return `cloneWithNewChildren` of the
+  // result. This is refused if it would change the values the `BIND` expression
+  // sees: each variable of the expression must be contained in the child, and
+  // if it might be `UNDEF` there, no other child may contain it (otherwise a
+  // join could fill in the other child's value for an `UNDEF`, which the
+  // original `BIND` would see, but the pushed-down `BIND` wouldn't). It is also
+  // refused if another child contains the `BIND`'s target. This is only
+  // possible for children whose variables are not visible outside of this
+  // operation (e.g. the right child of `MINUS`), but after the push down it
+  // would wrongly become a join column. `nullptr`s in `children` are ignored.
+  std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToChild(
+      const parsedQuery::Bind& bind,
+      std::vector<std::shared_ptr<QueryExecutionTree>> children,
+      size_t childIndex) const;
+
+  // Internal default implementation for `makeTreeWithBindColumn`: Push the
+  // `bind` into the first of the `children` that accepts it (see
+  // `pushDownBindToChild`). This is the correct behavior for various operations
+  // like `Join`, which make use of this function for their
+  // `makeTreeWithBindColumn` override.
+  std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
+      const parsedQuery::Bind& bind,
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

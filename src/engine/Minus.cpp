@@ -9,6 +9,7 @@
 #include "engine/MinusRowHandler.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/Algorithm.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
@@ -94,6 +95,21 @@ std::vector<ColumnIndex> Minus::resultSortedOn() const {
     return _left->getRootOperation()->getChildren().at(0)->resultSortedOn();
   }
   return _left->resultSortedOn();
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Minus::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The `BIND` can only be pushed into the left child, as only its columns are
+  // part of the result.
+  return pushDownBindToChild(bind, {_left, _right}, 0);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Minus::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<Minus>(_executionContext, std::move(children.at(0)),
+                                 std::move(children.at(1)));
 }
 
 // _____________________________________________________________________________

@@ -10,6 +10,14 @@
 // Implement the case where an `OPTIONAL` clause is joined with the empty
 // pattern. Conceptually this is the same as an optional join with the neutral
 // element, but specialized and more efficient.
+//
+// Note: `NeutralOptional` does not override `makeTreeWithBindColumn`. When
+// `tree_` produces zero rows, `computeResult` fabricates a single all-`UNDEF`
+// row without evaluating any expression, so a `BIND` pushed into `tree_`
+// would silently lose its value (e.g. a constant `BIND` would become `UNDEF`)
+// instead of being evaluated on that fallback row like an un-pushed `BIND`
+// would be. There is no cheap way to tell whether `tree_` is guaranteed to be
+// non-empty, so the push down is disallowed entirely.
 class NeutralOptional : public Operation {
   std::shared_ptr<QueryExecutionTree> tree_;
 

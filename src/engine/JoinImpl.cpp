@@ -23,7 +23,6 @@
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/JoinHelpers.h"
-#include "engine/OperationBindPushDownImpl.h"
 #include "engine/Service.h"
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -788,15 +787,19 @@ JoinImpl::makeTreeWithStrippedColumns(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 JoinImpl::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  return pushDownBindToAnyChild(
-      bind, {left_, right_},
-      [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
-        auto& left = newChildren.at(0);
-        auto& right = newChildren.at(1);
-        auto leftCol = left->getVariableColumn(joinVar_);
-        auto rightCol = right->getVariableColumn(joinVar_);
-        return ad_utility::makeExecutionTree<Join>(
-            getExecutionContext(), std::move(left), std::move(right), leftCol,
-            rightCol);
-      });
+  return pushDownBindToAnyChild(bind, {left_, right_});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> JoinImpl::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  auto& left = children.at(0);
+  auto& right = children.at(1);
+  auto leftCol = left->getVariableColumn(joinVar_);
+  auto rightCol = right->getVariableColumn(joinVar_);
+  // Note: This deliberately creates a `Join`, as `JoinImpl` is only used as
+  // the implementation of `Join`.
+  return std::make_unique<Join>(_executionContext, std::move(left),
+                                std::move(right), leftCol, rightCol,
+                                keepJoinColumn_);
 }

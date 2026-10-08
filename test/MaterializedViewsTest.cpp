@@ -1755,6 +1755,14 @@ constexpr std::string_view bindWriteQuery =
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, BindRewrite) {
   qlv().writeMaterializedView("bindView", std::string{bindWriteQuery});
+  // Like `bindView`, but `?o` might be `UNDEF`.
+  qlv().writeMaterializedView("undefBindView", R"(
+    SELECT ?s ?o ?b2 {
+      ?s <p1> ?x .
+      OPTIONAL { ?s <p2> ?o }
+      BIND(2 * ?o + 1 AS ?b2)
+    }
+  )");
 
   // We fix the first columns of the `IndexScan` matcher because we are only
   // interested in the additional columns. The number of columns after stripping
@@ -2025,6 +2033,195 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
              h::Bind(viewScan("bindView", "?s", "?_ql_materialized_view_p",
                               "?x2", 2),
                      "2 * ?s", V{"?x1"}));
+  }
+
+  // `BIND` push down through the remaining operations: `ExistsJoin`, `Minus`,
+  // `MultiColumnJoin`, `OptionalJoin`, `Union`, `NeutralOptional`, `Bind`,
+  // `CartesianProductJoin`, and `Filter`. Each tree is built manually (instead
+  // of going through the query planner) so that the test is independent of
+  // query planning heuristics.
+  {
+    namespace tc = ad_utility::triple_component;
+    using ad_utility::makeExecutionTree;
+
+    auto planView = [this](std::string_view viewName) {
+      return qlv().parseAndPlanQuery(absl::StrCat(
+          "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/> "
+          "SELECT * { ?s view:",
+          viewName, "-o ?o . }"));
+    };
+    auto pq = planView("bindView");
+    auto pqUndef = planView("undefBindView");
+    auto* qec = &pq.queryExecutionContext();
+    // A view scan exposing `?s ?o` (no `BIND` pushed down yet).
+    auto view = [&pq] {
+      return std::make_shared<QueryExecutionTree>(pq.queryExecutionTree());
+    };
+    // Like `view`, but `?o` might be `UNDEF`.
+    auto undefView = [&pqUndef] {
+      return std::make_shared<QueryExecutionTree>(pqUndef.queryExecutionTree());
+    };
+    // A plain (non-view) scan, which never accepts the push down.
+    auto scan = [qec](std::string s, std::string_view p, std::string o) {
+      return makeExecutionTree<IndexScan>(
+          qec, Permutation::PSO,
+          SparqlTripleSimple{V{std::move(s)}, tc::Iri::fromIriref(p),
+                             V{std::move(o)}});
+    };
+    auto sharesS = [&] { return scan("?s", "<p1>", "?x"); };
+    auto sharesSAndO = [&] { return scan("?s", "<p3>", "?o"); };
+    auto sharesNothing = [&] { return scan("?y", "<p1>", "?z"); };
+    auto sharesSMatcher = h::IndexScanFromStrings("?s", "<p1>", "?x");
+    auto pushedView = bindView(AC{{3, V{"?bind"}}});
+
+    auto exists = [qec](auto left, auto right) {
+      return makeExecutionTree<ExistsJoin>(qec, left, right, V{"?exists"});
+    };
+    auto minus = [qec](auto left, auto right) {
+      return makeExecutionTree<Minus>(qec, left, right);
+    };
+    auto mcj = [qec](auto left, auto right) {
+      return makeExecutionTree<MultiColumnJoin>(qec, left, right);
+    };
+    auto optional = [qec](auto left, auto right) {
+      return makeExecutionTree<OptionalJoin>(qec, left, right);
+    };
+    auto unionOf = [qec](auto left, auto right) {
+      return makeExecutionTree<Union>(qec, left, right);
+    };
+    auto cartesian = [qec](auto left, auto right) {
+      return makeExecutionTree<CartesianProductJoin>(qec,
+                                                     std::vector{left, right});
+    };
+
+    // Push the `BIND` into `tree` (like the query planner does) and check the
+    // result. `std::nullopt` means refused.
+    auto expectPush = [&bind](const std::shared_ptr<QueryExecutionTree>& tree,
+                              std::optional<h::QetMatcher> expected,
+                              ad_utility::source_location location =
+                                  AD_CURRENT_SOURCE_LOC()) {
+      auto trace = generateLocationTrace(location);
+      auto pushed = QueryExecutionTree::makeTreeWithBindColumn(tree, bind);
+      ASSERT_EQ(pushed.has_value(), expected.has_value());
+      if (expected.has_value()) {
+        EXPECT_THAT(*pushed.value(), expected.value());
+      }
+    };
+
+    // `ExistsJoin` and `Minus`: only into the left child. Also refused if the
+    // right child (not visible outside) reuses the `BIND`'s target variable,
+    // because it would then become a join column.
+    expectPush(exists(view(), sharesS()),
+               h::ExistsJoin(pushedView, sharesSMatcher));
+    expectPush(exists(sharesS(), view()), std::nullopt);
+    expectPush(exists(view(), scan("?s", "<p1>", "?bind")), std::nullopt);
+    expectPush(minus(view(), sharesS()), h::Minus(pushedView, sharesSMatcher));
+    expectPush(minus(sharesS(), view()), std::nullopt);
+    expectPush(minus(view(), scan("?s", "<p1>", "?bind")), std::nullopt);
+
+    // `MultiColumnJoin`: succeeds iff a child covering `?o` accepts.
+    expectPush(mcj(view(), sharesSAndO()),
+               h::MultiColumnJoin(pushedView,
+                                  h::IndexScanFromStrings("?s", "<p3>", "?o")));
+    expectPush(mcj(scan("?s", "<p4>", "?w"), scan("?s", "<p5>", "?w")),
+               std::nullopt);
+
+    // `OptionalJoin`: only into the left child. For unmatched rows, the right
+    // child's columns are filled with `UNDEF` instead of evaluating the `BIND`.
+    expectPush(optional(view(), sharesS()),
+               h::OptionalJoin(pushedView, sharesSMatcher));
+    expectPush(optional(sharesS(), view()), std::nullopt);
+    expectPush(optional(sharesS(), sharesS()), std::nullopt);
+    // `keepJoinColumns == false` is preserved, so `?s` stays hidden.
+    expectPush(
+        makeExecutionTree<OptionalJoin>(qec, view(), sharesS(), false),
+        ::testing::AllOf(h::OptionalJoin(pushedView, sharesSMatcher),
+                         AD_PROPERTY(QueryExecutionTree, getVariableColumns,
+                                     ::testing::Not(::testing::Contains(
+                                         ::testing::Key(V{"?s"}))))));
+
+    // `Union`: the push down must succeed in all children. Refused if `?bind`
+    // is already a variable of the `UNION`, if a child doesn't cover `?o` (it
+    // would get `UNDEF` instead of evaluating the `BIND`), if a child rejects,
+    // or if the `UNION` is sorted.
+    expectPush(unionOf(view(), view()), h::Union(pushedView, pushedView));
+    auto bindUnion =
+        unionOf(scan("?s", "<p1>", "?bind"), scan("?s", "<p1>", "?bind"));
+    expectPush(bindUnion, std::nullopt);
+    // Calling the operation directly violates its precondition.
+    EXPECT_ANY_THROW(
+        bindUnion->getRootOperation()->makeTreeWithBindColumn(bind));
+    expectPush(unionOf(view(), sharesS()), std::nullopt);
+    expectPush(unionOf(sharesSAndO(), view()), std::nullopt);
+    expectPush(makeExecutionTree<Union>(qec, view(), view(),
+                                        std::vector<ColumnIndex>{0}),
+               std::nullopt);
+
+    // `NeutralOptional` refuses: for an empty child it fabricates an
+    // all-`UNDEF` row without evaluating the `BIND`.
+    expectPush(makeExecutionTree<NeutralOptional>(qec, view()), std::nullopt);
+
+    // `Bind` and `Filter`: succeed iff their only child accepts.
+    parsedQuery::Bind innerBind{
+        sparqlExpression::SparqlExpressionPimpl{
+            std::make_shared<sparqlExpression::IdExpression>(
+                ValueId::makeFromInt(1)),
+            "1"},
+        V{"?other"}};
+    expectPush(makeExecutionTree<::Bind>(qec, view(), innerBind),
+               h::Bind(pushedView, "1", V{"?other"}));
+    expectPush(makeExecutionTree<::Bind>(qec, sharesS(), innerBind),
+               std::nullopt);
+    sparqlExpression::SparqlExpressionPimpl trueExpr{
+        std::make_shared<sparqlExpression::IdExpression>(
+            Id::makeFromBool(true)),
+        "true"};
+    expectPush(makeExecutionTree<Filter>(qec, view(), trueExpr),
+               h::Filter("true", pushedView));
+    expectPush(makeExecutionTree<Filter>(qec, sharesS(), trueExpr),
+               std::nullopt);
+
+    // `CartesianProductJoin`: succeeds iff a child covering `?o` accepts.
+    auto sharesNothingMatcher = h::IndexScanFromStrings("?y", "<p1>", "?z");
+    expectPush(cartesian(view(), sharesNothing()),
+               h::CartesianProductJoin(pushedView, sharesNothingMatcher));
+    expectPush(cartesian(sharesNothing(), scan("?a", "<p1>", "?b")),
+               std::nullopt);
+
+    // `?o` might be `UNDEF` in `undefView`. A join on `?o` could fill in the
+    // other child's value, which the original `BIND` would see, but the
+    // pushed-down one wouldn't. (The join is on `?s` and `?o` because the view
+    // is sorted by them, so no `Sort` is added, which would refuse on its own.)
+    expectPush(optional(undefView(), sharesSAndO()), std::nullopt);
+    expectPush(mcj(undefView(), sharesSAndO()), std::nullopt);
+    // Without such a join, the push down is fine. The view only has three
+    // columns, so `?bind` becomes the object.
+    auto pushedUndefView = viewScan("undefBindView", "?s", "?o", "?bind", 3);
+    expectPush(optional(undefView(), sharesS()),
+               h::OptionalJoin(pushedUndefView, sharesSMatcher));
+    expectPush(cartesian(undefView(), sharesNothing()),
+               h::CartesianProductJoin(pushedUndefView, sharesNothingMatcher));
+    expectPush(unionOf(undefView(), undefView()),
+               h::Union(pushedUndefView, pushedUndefView));
+
+    // `QueryExecutionTree::makeTreeWithBindColumn` (the entry point used by the
+    // query planner) preserves the `LIMIT` and the visible variables (as
+    // restricted by a subquery's `SELECT ?s`) of the original root, and
+    // exposes the `BIND`'s target.
+    {
+      auto filterTree = makeExecutionTree<Filter>(qec, view(), trueExpr);
+      filterTree->applyLimitOffset(LimitOffsetClause{5});
+      filterTree->getRootOperation()->setSelectedVariablesForSubquery(
+          {V{"?s"}});
+      auto result =
+          QueryExecutionTree::makeTreeWithBindColumn(filterTree, bind);
+      ASSERT_TRUE(result.has_value());
+      const auto& root = *result.value()->getRootOperation();
+      EXPECT_EQ(root.getLimitOffset()._limit, 5ul);
+      EXPECT_THAT(root.getExternallyVisibleVariableColumns(),
+                  ::testing::UnorderedElementsAre(::testing::Key(V{"?s"}),
+                                                  ::testing::Key(V{"?bind"})));
+    }
   }
 
   // Test the variable to permutation column index map.
