@@ -767,7 +767,7 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
     auto locationTrace = generateLocationTrace(l);
 
     EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
-    size_t byteCount = numRows * numCols * sizeof(Id);
+    size_t byteCount = numRows * numCols * BYTES_PER_ID_COLUMN_ENTRY;
     EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount - 1)));
     EXPECT_FALSE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount)));
   };

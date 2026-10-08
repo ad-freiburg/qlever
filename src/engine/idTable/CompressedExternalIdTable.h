@@ -508,7 +508,7 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   // the input concept of `parallelBlockMerge`.
   template <typename R>
   MemorySize memorySizeOfElement([[maybe_unused]] const R& row) const {
-    return MemorySize::bytes(writer().numColumns() * sizeof(Id));
+    return MemorySize::bytes(writer().numColumns() * BYTES_PER_ID_COLUMN_ENTRY);
   }
 
  private:

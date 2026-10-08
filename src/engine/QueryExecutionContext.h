@@ -55,7 +55,7 @@ class CacheValue {
       requires IdTableLike<IdTableT>) static ad_utility::MemorySize
       getSize(const IdTableT& idTable) {
     return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
-                                         sizeof(Id));
+                                         BYTES_PER_ID_COLUMN_ENTRY);
   }
 
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
