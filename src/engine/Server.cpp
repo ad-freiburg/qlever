@@ -406,19 +406,14 @@ Awaitable<nlohmann::json> Server::processWriteMaterializedView(
   AD_CONTRACT_CHECK(name != "", "The name for the view may not be empty");
 
   // Extract query body.
-  auto query = std::visit(
+  auto query = ad_utility::visitIf(
+      operation, [](const Query& op) -> Query { return op; },
       [](const auto& op) -> Query {
-        using T = std::decay_t<decltype(op)>;
-        if constexpr (std::is_same_v<T, Query>) {
-          return op;
-        } else {
-          static_assert(
-              ad_utility::SameAsAny<T, Update, GraphStoreOperation, None>);
-          throw std::runtime_error(
-              "Action 'write-materialized-view' requires a 'SELECT' query.");
-        }
-      },
-      operation);
+        static_assert(ad_utility::SimilarToAny<decltype(op), Update,
+                                               GraphStoreOperation, None>);
+        throw std::runtime_error(
+            "Action 'write-materialized-view' requires a 'SELECT' query.");
+      });
 
   // Extract time limit.
   auto timeLimit =

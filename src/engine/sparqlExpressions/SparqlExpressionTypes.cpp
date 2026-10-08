@@ -10,17 +10,9 @@ namespace sparqlExpression {
 
 // _____________________________________________________________________________
 void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os) {
-  std::visit(
-      [&os](const auto& s) {
-        using T = std::decay_t<decltype(s)>;
-        auto& stream = *os;
-        if constexpr (concepts::same_as<T, ValueId>) {
-          stream << s;
-        } else {
-          stream << s.toStringRepresentation();
-        }
-      },
-      var);
+  ad_utility::visitIf(
+      var, [os](const ValueId& s) { *os << s; },
+      [os](const auto& s) { *os << s.toStringRepresentation(); });
 }
 
 // _____________________________________________________________________________
