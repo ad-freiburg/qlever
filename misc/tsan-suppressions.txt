@@ -40,5 +40,5 @@ race:boost::asio::execution::detail::shared_target_executor::~shared_target_exec
 # exception, which `_M_release` calls from within `libstdc++.so`, so
 # `_M_release` does not appear in the reported stacks. The tests that pass
 # exceptions between threads therefore throw exceptions that own no memory
-# (see `TestException` in `test/blockSort/ParallelQuicksortTest.cpp`).
+# (see `TestException` in `test/util/TestException.h`).
 race:std::__exception_ptr::exception_ptr::_M_release
