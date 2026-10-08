@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_GLOBAL_ID_H
 #define QLEVER_SRC_GLOBAL_ID_H
 
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -20,6 +21,11 @@ using Score = float;
 // lost by adding a user-provided copy constructor, copy assignment operator,
 // or destructor to `ValueId`.
 static_assert(std::is_trivially_copyable_v<Id>);
+
+// Bytes per `Id` in the packed on-disk/spill-file byte representation of an
+// `IdTable` column. It depends on the layout of `Id`, so it lives next to the
+// definition of `Id` and has to change together with it.
+inline constexpr size_t BYTES_PER_ID_COLUMN_ENTRY = sizeof(Id);
 
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;
