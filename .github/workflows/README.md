@@ -37,7 +37,6 @@ progress).
 - `native-build-with-conan-and-emscripten.yml`
 - `native-build-conan.yml`
 - `macos.yml`
-- `sparql-conformance.yml`
 - `sonarcloud.yml`
 
 ## Implementation
@@ -61,11 +60,10 @@ GitHub Actions has no way to share such a condition between workflows. A
 reusable workflow that computes it would itself need a runner for every PR
 event, and it would make every run conclude with `success`, which in turn
 triggers the `workflow_run`-based uploaders (`upload-coverage.yml`,
-`upload-sonarcloud.yml`, `sparql-conformance-uploader.yml`,
-`sparql-conformance-new-uploader.yml`). With the inline conditions, a run in
-which all jobs are skipped concludes with `skipped`, and the uploaders (which
-require `success`) are skipped as well, so for a PR without a label really
-nothing runs.
+`upload-sonarcloud.yml`, `sparql-conformance-new-uploader.yml`). With the
+inline conditions, a run in which all jobs are skipped concludes with
+`skipped`, and the uploaders (which require `success`) are skipped as well, so
+for a PR without a label really nothing runs.
 
 When adding a new workflow that is triggered by `pull_request`, add the
 `labeled` event type and one of the two conditions above.
