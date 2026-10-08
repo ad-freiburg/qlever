@@ -475,9 +475,11 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # LTO noticeably increases build time, so it is off by default (e.g. for CI and
-# local builds). It is opted into explicitly for the published Docker image
-# built on `master` (see `Dockerfile` / `.github/workflows/docker-publish.yml`).
-option(ENABLE_LTO "Enable link-time optimization" OFF)
+# local builds). It is opted into explicitly for the Docker image and the
+# portable binaries published from `master` (see `Dockerfile`,
+# `.github/workflows/docker-publish.yml`, and
+# `.github/scripts/build-portable-binaries.sh`).
+option(QLEVER_ENABLE_LTO "Enable link-time optimization" OFF)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
 # GCC 11–15 emit spurious `-Wmaybe-uninitialized` for template instantiations
@@ -512,7 +514,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     # warnings (in particular `-Wodr`, which is one of the main reasons to use
     # LTO in the first place) can fire spuriously, so there is no reason to give
     # up the diagnostics for the default build.
-    if (ENABLE_LTO)
+    if (QLEVER_ENABLE_LTO)
         add_link_options(-Wno-stringop-overflow -Wno-odr -Wno-maybe-uninitialized
                 -Wno-stringop-overread)
     endif ()
@@ -569,7 +571,7 @@ endif ()
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 
-if (ENABLE_LTO)
+if (QLEVER_ENABLE_LTO)
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         # `-ffat-lto-objects` makes every object contain both GIMPLE bytecode and
         # ordinary machine code. This lets the (non-shipped) test binaries link
@@ -595,23 +597,23 @@ if (ENABLE_LTO)
                 OUTPUT_VARIABLE QLEVER_LLD_VERSION
                 ERROR_VARIABLE QLEVER_LLD_VERSION)
         if (NOT QLEVER_LLD_VERSION MATCHES "LLD")
-            message(FATAL_ERROR "`ENABLE_LTO` with Clang requires the `lld` "
+            message(FATAL_ERROR "`QLEVER_ENABLE_LTO` with Clang requires the `lld` "
                     "linker, which was not found.")
         endif ()
     else()
-        message(WARNING "`ENABLE_LTO` is ON, but link-time optimization is not "
+        message(WARNING "`QLEVER_ENABLE_LTO` is ON, but link-time optimization is not "
                 "configured for the compiler `${CMAKE_CXX_COMPILER_ID}`. "
                 "Building without LTO.")
     endif()
 endif()
 
-# Link the given target with (Thin)LTO if `ENABLE_LTO` is set. This is only
+# Link the given target with (Thin)LTO if `QLEVER_ENABLE_LTO` is set. This is only
 # needed for Clang: With GCC, all targets that are not linked with `-fno-lto`
 # (the test binaries, see `test/CMakeLists.txt`) are link-time optimized
 # anyway, because GCC's linker plugin runs LTO whenever it encounters objects
 # with GIMPLE bytecode.
 function(qlever_enable_lto target)
-    if (ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
+    if (QLEVER_ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
         # `-fuse-ld=lld` comes after `CMAKE_EXE_LINKER_FLAGS` on the link
         # command line, so it overrides e.g. a `-fuse-ld=mold` from there.
         target_link_options(${target} PRIVATE -fuse-ld=lld -flto=thin

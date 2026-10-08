@@ -17,7 +17,7 @@ include(GoogleTest)
 # its subdirectories (in particular `testUtil` below, which is why this block
 # has to come first), and never leak into the parent directory, so the shipped
 # binaries keep their LTO regardless of where `add_subdirectory(test)` appears.
-if (ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+if (QLEVER_ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-fno-lto)
     add_link_options(-fno-lto)
 endif()
