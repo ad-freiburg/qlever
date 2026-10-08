@@ -149,20 +149,6 @@ TEST(CanonicalRowOrder, alignRowsWithResultSortedOn) {
               ElementsAre(0, noMatchingRow, 2, 3));
 }
 
-namespace {
-// Create a table from the given rows of arbitrary `Id`s.
-IdTable idTable(const std::vector<std::vector<Id>>& rows) {
-  IdTable table{rows.at(0).size(), ad_utility::testing::makeAllocator()};
-  for (const auto& row : rows) {
-    table.emplace_back();
-    for (size_t column = 0; column < row.size(); ++column) {
-      table.back()[column] = row[column];
-    }
-  }
-  return table;
-}
-}  // namespace
-
 // _____________________________________________________________________________
 // Two `Id`s of type `LocalVocabIndex` that refer to different (equal) entries
 // compare equal via `compareThreeWay`, but differ bitwise (they are pointers).
@@ -188,23 +174,25 @@ TEST(CanonicalRowOrder, idsThatCompareEqualButDifferBitwise) {
                        canonicalSortingPermutation(view(table), {}),
                        ad_utility::testing::makeAllocator());
   };
-  auto first = sortedOf(idTable({{a1, other}, {a2, other}}));
-  auto second = sortedOf(idTable({{a2, other}, {a1, other}}));
+  auto first = sortedOf(makeIdTableFromVector({{a1, other}, {a2, other}}));
+  auto second = sortedOf(makeIdTableFromVector({{a2, other}, {a1, other}}));
   EXPECT_EQ(first, second);
   EXPECT_EQ(first.at(0, 0), bitsLess);
   EXPECT_EQ(first.at(1, 0), bitsGreater);
 
   // The tie-break is part of the canonical order.
   EXPECT_TRUE(isInCanonicalOrder(
-      view(idTable({{bitsLess, other}, {bitsGreater, other}})), {}));
+      view(makeIdTableFromVector({{bitsLess, other}, {bitsGreater, other}})),
+      {}));
   EXPECT_FALSE(isInCanonicalOrder(
-      view(idTable({{bitsGreater, other}, {bitsLess, other}})), {}));
+      view(makeIdTableFromVector({{bitsGreater, other}, {bitsLess, other}})),
+      {}));
 
   // Only bitwise identical rows are matched.
-  auto both = idTable({{bitsLess, other}, {bitsGreater, other}});
+  auto both = makeIdTableFromVector({{bitsLess, other}, {bitsGreater, other}});
   EXPECT_THAT(alignRows(view(both), view(both)), ElementsAre(0, 1));
-  auto onlyLess = idTable({{bitsLess, other}});
-  auto onlyGreater = idTable({{bitsGreater, other}});
+  auto onlyLess = makeIdTableFromVector({{bitsLess, other}});
+  auto onlyGreater = makeIdTableFromVector({{bitsGreater, other}});
   EXPECT_THAT(alignRows(view(onlyLess), view(onlyGreater)),
               ElementsAre(noMatchingRow));
   EXPECT_THAT(alignRows(view(onlyGreater), view(onlyLess)),

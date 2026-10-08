@@ -11,6 +11,8 @@
 #define QLEVER_SRC_LIBQLEVER_NAMEDCACHESECONDARYVOCABREWRITER_H
 
 #include <memory>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -36,10 +38,11 @@
 // `canonicalizeWithPermutation`), one at a time, so that the canonicalized
 // copies of the entries never have to be kept in memory all at once. The
 // canonicalization of an entry rewrites its `Id`s (only if it contains any
-// `Id` of type `LocalVocabIndex`), and additionally brings its columns and rows
-// into canonical order. This is done for every entry that is written to a
-// blob, no matter whether it contains local vocab `Id`s, because the order
-// of the rows has to be canonical for the diff of two blobs to be small.
+// `Id` of type `LocalVocabIndex`), drops its columns without a variable, and
+// brings its other columns and its rows into canonical order. This is done for
+// every entry that is written to a blob, no matter whether it contains local
+// vocab `Id`s, because the order of the rows and columns has to be canonical
+// for the diff of two blobs to be small.
 //
 // The secondary vocabulary is passed in by the caller, and may already contain
 // words, so that the same functions can also extend a preexisting secondary
@@ -92,12 +95,25 @@ Id rewriteId(Id id, const SecondaryVocabulary& secondaryVocab);
 std::vector<ColumnIndex> canonicalColumnOrder(
     const VariableToColumnMap& varToColMap, size_t numColumns);
 
+// Return the cache key of the canonicalized copy of an entry with the given
+// `cacheKey` (see `canonicalizeForSerialization`). The cache key of an
+// operation is derived from the cache keys of its children and the indices of
+// the columns that it uses. The copy therefore needs a key that differs from
+// the one of the original entry, because its columns and rows are in a
+// different order and some of its columns may have been dropped. The key is
+// deterministic, so that two blobs of the same entry stay equal. The key of an
+// entry that already is such a copy (for example because it was loaded from a
+// blob) is returned unchanged, because canonicalizing it again does not change
+// it.
+std::string canonicalCacheKey(std::string_view cacheKey);
+
 // The result of `canonicalizeWithPermutation`.
 struct CanonicalizedValue {
   // The canonicalized copy of the value (see `canonicalizeForSerialization`).
   NamedResultCache::Value value_;
-  // The row of the original table that is the row `i` of the table of `value_`
-  // at the position `i` (the identity if the rows were not permuted).
+  // The vector `oldRowOfNewRow`: its element `i` is the row of the original
+  // table that is the row `i` of the table of `value_` (the identity if the
+  // rows were not permuted).
   std::vector<size_t> oldRowOfNewRow_;
 };
 
@@ -112,8 +128,9 @@ struct CanonicalizedValue {
 // of the copy are adapted accordingly. In particular, the `resultSortedOn_` of
 // the copy is the longest prefix of the `resultSortedOn_` of `value` that
 // contains no dropped column, so the sort order that the query plan produced
-// is kept. The `value` itself is not modified. The table of the copy is an
-// owning `IdTable` that is allocated via `allocator`.
+// is kept. The `cacheKey_` of the copy is `canonicalCacheKey(value.cacheKey_)`.
+// The `value` itself is not modified. The table of the copy is an owning
+// `IdTable` that is allocated via `allocator`.
 //
 // The rewritten `Id`s no longer compare like the `Id`s that they replace:
 // all `Id`s of type `Datatype::SecondaryVocabIndex` compare greater than all

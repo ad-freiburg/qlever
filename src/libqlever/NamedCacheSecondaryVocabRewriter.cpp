@@ -9,12 +9,15 @@
 
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "index/IdTableUtils.h"
@@ -137,14 +140,22 @@ std::vector<ColumnIndex> canonicalColumnOrder(
   }
   ql::ranges::sort(variables);
   std::vector<ColumnIndex> result;
-  // `std::vector<bool>` does not work with `std::exchange`.
-  std::vector<char> isUsed(numColumns, false);
+  ad_utility::HashSet<ColumnIndex> usedColumns;
   for (const auto& [name, column] : variables) {
-    if (!std::exchange(isUsed[column], true)) {
+    if (usedColumns.insert(column).second) {
       result.push_back(column);
     }
   }
   return result;
+}
+
+// _____________________________________________________________________________
+std::string canonicalCacheKey(std::string_view cacheKey) {
+  static constexpr std::string_view prefix = "CANONICALIZED FOR SERIALIZATION ";
+  if (ql::starts_with(cacheKey, prefix)) {
+    return std::string{cacheKey};
+  }
+  return absl::StrCat(prefix, "(", cacheKey, ")");
 }
 
 // _____________________________________________________________________________
@@ -219,7 +230,8 @@ CanonicalizedValue canonicalizeWithPermutation(
   return CanonicalizedValue{
       NamedResultCache::Value{std::make_shared<const IdTable>(std::move(table)),
                               std::move(varToColMap), std::move(resultSortedOn),
-                              value.localVocab_.clone(), value.cacheKey_,
+                              value.localVocab_.clone(),
+                              canonicalCacheKey(value.cacheKey_),
                               std::move(geoIndex)},
       std::move(permutation)};
 }

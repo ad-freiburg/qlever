@@ -134,11 +134,11 @@ class NamedCachedQueryBlobManager {
   // applied before an entry was pinned). The words of such `Id`s that are not
   // contained in the vocabulary are written to a secondary vocabulary in the
   // blob, which also contains the words of the secondary vocabulary of the
-  // index of `qlever` (if any), and the entries are written as rewritten
-  // copies that refer to that secondary vocabulary (see
-  // `NamedCacheSecondaryVocabRewriter.h`); the entries of `qlever` stay
-  // unchanged. Every entry (not only one with local vocab `Id`s) is written as
-  // a canonicalized copy (see `canonicalizeForSerialization`): its columns
+  // index of `qlever` (if any). Every entry (not only one with local vocab
+  // `Id`s) is written as a canonicalized copy (see
+  // `canonicalizeForSerialization` in `NamedCacheSecondaryVocabRewriter.h`);
+  // the entries of `qlever` stay unchanged. In the copy, the `Id`s of type
+  // `LocalVocabIndex` refer to that secondary vocabulary instead, its columns
   // without a variable are dropped, its other columns are ordered by variable
   // name, and its rows are in canonical order with respect to its
   // `resultSortedOn_` (see `CanonicalRowOrder.h`), which is kept. The words of

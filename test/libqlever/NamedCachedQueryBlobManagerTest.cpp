@@ -1128,7 +1128,10 @@ TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
   ASSERT_THAT(sortedEntry->resultSortedOn_, ElementsAre(0, 1));
 
   auto expectCanonical = [](const Qlever& qlever, const std::string& name,
-                            const std::vector<ColumnIndex>& sortedOn) {
+                            const std::vector<ColumnIndex>& sortedOn,
+                            ad_utility::source_location loc =
+                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
     auto entry = qlever.namedResultCache().get(name);
     ASSERT_NE(entry, nullptr) << name;
     EXPECT_EQ(entry->resultSortedOn_, sortedOn) << name;

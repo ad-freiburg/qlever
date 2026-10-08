@@ -76,7 +76,7 @@ Id localVocabIdOf(const std::vector<Id>& column, std::string_view iriref) {
 }
 
 // Add the new words of the `value` to the `secondaryVocab`, and return the
-// rewritten copy of the `value` (see `addNewWordsToSecondaryVocab` and
+// canonicalized copy of the `value` (see `addNewWordsToSecondaryVocab` and
 // `canonicalizeForSerialization`).
 Value addAndRewrite(const std::shared_ptr<const Value>& value,
                     SecondaryVocabulary& secondaryVocab) {
@@ -151,7 +151,7 @@ TEST(NamedCacheSecondaryVocabRewriter, addNewWordsAndRewriteIds) {
       HasSubstr("call `addNewWordsToSecondaryVocab` first"));
 }
 
-// Test that `canonicalizeForSerialization` sorts the rewritten copy again in
+// Test that `canonicalizeForSerialization` sorts the rewritten `Id`s again in
 // canonical order (see `CanonicalRowOrder.h`), and leaves the entry unchanged.
 TEST(NamedCacheSecondaryVocabRewriter, canonicalizeForSerializationSortsAgain) {
   auto qec = ad_utility::testing::getQec(std::string{kb});
@@ -178,7 +178,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeForSerializationSortsAgain) {
   EXPECT_THAT(rewritten.resultSortedOn_, ElementsAre(0));
   EXPECT_FALSE(containsLocalVocabIds(rewritten));
   EXPECT_EQ(rewritten.varToColMap_, value->varToColMap_);
-  EXPECT_EQ(rewritten.cacheKey_, value->cacheKey_);
+  EXPECT_EQ(rewritten.cacheKey_, canonicalCacheKey(value->cacheKey_));
   EXPECT_FALSE(rewritten.cachedGeoIndex_.has_value());
 
   // The original entry is unchanged.
@@ -194,7 +194,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeForSerializationSortsAgain) {
 }
 
 // Test that the mapping from shapes to rows of a cached geo index is
-// permuted together with the rows of the rewritten copy.
+// permuted together with the rows of the canonicalized copy.
 TEST(NamedCacheSecondaryVocabRewriter,
      canonicalizeForSerializationWithGeoIndex) {
   auto qec = ad_utility::testing::getQec(
@@ -357,4 +357,23 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
   EXPECT_THAT(keptSortOrder({3, 0}), ElementsAre(1, 2));
   EXPECT_THAT(keptSortOrder({0, 1, 3}), ElementsAre(2));
   EXPECT_THAT(keptSortOrder({1, 0}), IsEmpty());
+}
+
+// _____________________________________________________________________________
+// Test that the canonicalized copy of an entry gets a cache key that differs
+// from the one of the entry, and that canonicalizing the copy again keeps it.
+TEST(NamedCacheSecondaryVocabRewriter, canonicalCacheKey) {
+  auto key = canonicalCacheKey("SCAN SPO");
+  EXPECT_NE(key, "SCAN SPO");
+  EXPECT_THAT(key, HasSubstr("SCAN SPO"));
+  EXPECT_EQ(canonicalCacheKey(key), key);
+  EXPECT_NE(canonicalCacheKey("SCAN POS"), key);
+
+  auto qec = ad_utility::testing::getQec(std::string{kb});
+  auto value = pin(qec, "entry", "SELECT ?x { VALUES ?x { <y> <m> } }");
+  SecondaryVocabulary secondaryVocab;
+  auto copy =
+      std::make_shared<const Value>(addAndRewrite(value, secondaryVocab));
+  EXPECT_EQ(copy->cacheKey_, canonicalCacheKey(value->cacheKey_));
+  EXPECT_EQ(addAndRewrite(copy, secondaryVocab).cacheKey_, copy->cacheKey_);
 }

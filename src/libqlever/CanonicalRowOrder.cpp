@@ -11,10 +11,10 @@
 
 #include <numeric>
 #include <optional>
-#include <utility>
 
 #include "backports/algorithm.h"
 #include "util/Exception.h"
+#include "util/HashSet.h"
 #include "util/Views.h"
 
 namespace qlever::canonicalRowOrder {
@@ -28,18 +28,17 @@ namespace {
 std::optional<std::vector<ColumnIndex>> tryComparisonColumns(
     size_t numColumns, ql::span<const ColumnIndex> resultSortedOn) {
   std::vector<ColumnIndex> result;
-  // `std::vector<bool>` does not work with `std::exchange`.
-  std::vector<char> isSortedOn(numColumns, false);
+  ad_utility::HashSet<ColumnIndex> sortedOn;
   for (ColumnIndex column : resultSortedOn) {
     if (column >= numColumns) {
       return std::nullopt;
     }
-    if (!std::exchange(isSortedOn[column], true)) {
+    if (sortedOn.insert(column).second) {
       result.push_back(column);
     }
   }
   for (ColumnIndex column : ad_utility::integerRange(numColumns)) {
-    if (!isSortedOn[column]) {
+    if (!sortedOn.contains(column)) {
       result.push_back(column);
     }
   }
@@ -74,10 +73,14 @@ std::vector<ConstIdColumnRef> columnsOf(const IdTableView<0>& table) {
 }
 
 // Compare the two `Id`s via `ValueId::compareThreeWay`, and break ties by
-// their raw bits. `compareThreeWay` can consider two `Id`s equal that differ
-// bitwise (for example `Int(1)` and `Double(1.0)`, or `-0.0` and `0.0`), but
-// the canonical order has to be a total order that only considers bitwise
-// identical `Id`s equal (see `CanonicalRowOrder.h`).
+// their raw bits. `compareThreeWay` compares the raw bits of all `Id`s except
+// those of type `LocalVocabIndex`, which it compares by their words. It thus
+// considers two `Id`s equal that differ bitwise if both are of type
+// `LocalVocabIndex` and refer to different entries with the same word (or if
+// one of them is of type `LocalVocabIndex` and its word is the one at the
+// position in the vocabulary that the other one refers to). The canonical order
+// has to be a total order that only considers bitwise identical `Id`s equal
+// (see `CanonicalRowOrder.h`).
 int compareIds(Id a, Id b) {
   auto comparison = a.compareThreeWay(b);
   if (comparison < 0) {
@@ -133,7 +136,8 @@ bool isInCanonicalOrder(IdColumns columns,
   if (!order.has_value()) {
     return false;
   }
-  for (size_t row = 1; row < numRowsOf(columns); ++row) {
+  size_t numRows = numRowsOf(columns);
+  for (size_t row = 1; row < numRows; ++row) {
     if (compareRows(columns, row - 1, columns, row, order.value()) > 0) {
       return false;
     }
