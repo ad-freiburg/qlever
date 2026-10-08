@@ -185,7 +185,8 @@ CompressedRelationReader::lazyScan(
   const size_t numBlocks = relevantBlockMetadata.size();
 
   // Read, decompress, and postprocess the `i`-th of the relevant blocks, and
-  // return it together with the statistics of reading it. This runs on the
+  // return it together with the statistics of reading it. The block is
+  // `std::nullopt` if it was skipped because of its graphs. This runs on the
   // `executor`, concurrently for several blocks.
   auto readBlock = [this, scanSpec,
                     config = getScanConfig(scanSpec, additionalColumns,
@@ -201,16 +202,14 @@ CompressedRelationReader::lazyScan(
       auto block =
           readPossiblyIncompleteBlock(scanSpec, config, blockMetadata,
                                       std::ref(stats), locatedTriplesPerBlock);
-      return std::pair{std::move(block), stats};
+      return std::pair{std::optional{std::move(block)}, stats};
     }
     auto block = readAndDecompressBlock(blockMetadata, config);
     stats.update(block);
-    // `std::nullopt` means that the block was skipped because of its graphs.
-    return std::pair{
-        block.has_value()
-            ? std::move(block.value().block_)
-            : DecompressedBlock{config.scanColumns_.size(), allocator_},
-        stats};
+    return std::pair{block.has_value()
+                         ? std::optional{std::move(block.value().block_)}
+                         : std::nullopt,
+                     stats};
   };
   // The block that the consumer is currently processing still counts as in
   // flight for the `AsyncTransformView`, so one more block is needed to read
@@ -252,8 +251,12 @@ CompressedRelationReader::lazyScan(
                                    details().numBlocksSkippedBecauseOfGraph_);
           return std::nullopt;
         }
-        auto& [block, stats] = blockAndStats.value();
+        auto& [optBlock, stats] = blockAndStats.value();
         details().aggregate(stats);
+        if (!optBlock.has_value()) {
+          continue;
+        }
+        auto& block = optBlock.value();
         pruneBlock(block, limitOffset_);
         if (!block.empty()) {
           details().numElementsYielded_ += block.numRows();
