@@ -28,7 +28,7 @@ AttributeMacros: [CPP_member, CPP_auto_member, CPP_fun, CPP_auto_fun]
 #
 # How this works: clang-format formats the code after expanding the macros
 # defined here, but it only knows the first parenthesized argument list of a
-# macro, the `(requires ...)` part is ordinary code that directly follows the
+# macro. The `(requires ...)` part is ordinary code that directly follows the
 # macro call. That part is laid out once in the expanded code and keeps that
 # layout when mapped back to the original code. We therefore expand
 # `CPP_template(params...)` to
