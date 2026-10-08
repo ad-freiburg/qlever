@@ -31,6 +31,8 @@ constexpr std::array nonTrivialDatatypes{
 // Test that exactly the datatypes that encode their value directly are
 // trivial, and that both lists above cover all datatypes.
 TEST(DatatypeTest, isDatatypeTrivial) {
+  EXPECT_EQ(trivialDatatypes.size() + nonTrivialDatatypes.size(),
+            static_cast<size_t>(MaxValue) + 1);
   for (const Datatype type : trivialDatatypes) {
     EXPECT_TRUE(isDatatypeTrivial(type));
   }
