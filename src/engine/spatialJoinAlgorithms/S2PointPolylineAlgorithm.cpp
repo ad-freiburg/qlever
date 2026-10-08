@@ -37,11 +37,17 @@ Result S2PointPolylineAlgorithm::run() {
   AD_CORRECTNESS_CHECK(!config_.getMaxResults().has_value() &&
                        maxDist_.has_value());
 
-  // Construct a query object with the given constraints
-  auto s2indexPtr = s2index.value().getIndex();
-  auto s2query = S2ClosestEdgeQuery{s2indexPtr.get()};
-  s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
-      util::units::Meters(static_cast<float>(maxDist_.value()))));
+  // Construct one query object per segment of the index with the given
+  // constraints. The query objects are reused for all points.
+  const auto& geoIndex = s2index.value();
+  std::vector<std::unique_ptr<S2ClosestEdgeQuery>> s2queries;
+  s2queries.reserve(geoIndex.segments().size());
+  for (const auto& segment : geoIndex.segments()) {
+    auto& query = *s2queries.emplace_back(
+        std::make_unique<S2ClosestEdgeQuery>(segment.get()));
+    query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
+        util::units::Meters(static_cast<float>(maxDist_.value()))));
+  }
 
   ad_utility::Timer timerAll{ad_utility::Timer::Started};
   ad_utility::Timer timerS2{ad_utility::Timer::Stopped};
@@ -57,14 +63,18 @@ Result S2PointPolylineAlgorithm::run() {
 
     ad_utility::HashMap<size_t, double> deduplicatedSet{};
     timerS2.cont();
-    auto res = s2query.FindClosestEdges(&s2target);
-
-    for (const auto& neighbor : res) {
-      // In this loop we only receive points that already satisfy the given
-      // criteria
-      auto indexRow = s2index.value().getRow(neighbor.shape_id());
-      auto dist = S2Earth::ToKm(neighbor.distance());
-      deduplicatedSet[indexRow] = dist;
+    for (size_t segment = 0; segment < s2queries.size(); ++segment) {
+      auto res = s2queries[segment]->FindClosestEdges(&s2target);
+      for (const auto& neighbor : res) {
+        // In this loop we only receive points that already satisfy the given
+        // criteria. Shapes that no row refers to anymore are skipped.
+        auto indexRow = geoIndex.getRow(segment, neighbor.shape_id());
+        if (!indexRow.has_value()) {
+          continue;
+        }
+        auto dist = S2Earth::ToKm(neighbor.distance());
+        deduplicatedSet[indexRow.value()] = dist;
+      }
     }
     timerS2.stop();
     timerWrite.cont();

@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -856,6 +857,9 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
     EXPECT_FALSE(blob.empty());
     return blob;
   }();
+  // A geo index requires the new blob format (also without new words).
+  expectBlobFormatVersion(compressedBlob,
+                          Manager::formatVersionWithSecondaryVocab);
 
   // A spatial join with the cached geometry index (from the blob).
   std::string spatialQuery = spatialJoinQuery("POINT(7.841295 47.997731)");
@@ -1102,4 +1106,44 @@ TEST(NamedCachedQueryBlobManager, blobWithNewWordsAndSpatialIndex) {
   EXPECT_EQ(target.query(spatialJoinQuery("POINT(7.841295 47.997731)"),
                          ad_utility::MediaType::tsv),
             "?s2\n<s1>\n<s2>\n");
+}
+
+namespace {
+constexpr std::string_view wktSuffix =
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+// Load the `compressedBlob` into a fresh `Qlever` instance without index.
+std::unique_ptr<Qlever> loadBlob(ql::span<const char> compressedBlob) {
+  auto result = std::make_unique<Qlever>(EngineConfig{}, /*skipLoading=*/true);
+  EXPECT_NO_THROW(
+      result->deserializeVocabAndNamedCacheFromCompressedBlob(compressedBlob));
+  return result;
+}
+
+// The geo index of the entry "geoPin" of `qlever`.
+const SpatialJoinCachedIndex& geoIndexOf(const Qlever& qlever) {
+  auto entry = qlever.namedResultCache().get("geoPin");
+  AD_CORRECTNESS_CHECK(entry != nullptr && entry->cachedGeoIndex_.has_value());
+  // The `Value` is kept alive by the cache.
+  return entry->cachedGeoIndex_.value();
+}
+}  // namespace
+
+// _____________________________________________________________________________
+// A `LINESTRING Z` literal: check whether it is indexed.
+TEST(NamedCachedQueryBlobManager, geoIndexOfLineStringZ) {
+  auto sourceConfig = buildTestIndex(
+      absl::StrCat(freiburgSegmentsS1S2,
+                   "<s3> <asWKT> \"LINESTRING Z(7.8 48.0 268.7, 7.81 "
+                   "48.01 268.9)\"",
+                   wktSuffix, " .\n"));
+  Qlever source{EngineConfig{sourceConfig}};
+  source.queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"}},
+      "SELECT * { ?s2 <asWKT> ?geo2 }");
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  auto loaded = loadBlob(blob);
+  // Two shapes for `<s1>` and `<s2>`, and a third one for `<s3>` iff the Z
+  // form is accepted.
+  EXPECT_EQ(geoIndexOf(*loaded).numShapes(), 3);
 }
