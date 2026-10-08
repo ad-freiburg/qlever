@@ -248,7 +248,15 @@ CPP_template(typename V, typename F)(
     }
   }
 
-  auto begin() { return Iterator{ql::ranges::begin(base_), this}; }
+  auto begin() {
+    auto it = ql::ranges::begin(base_);
+    // For an empty range the iteration ends right away, without any call to
+    // `operator++` of the `Iterator`.
+    if (it == ql::ranges::end(base_)) {
+      maybeInvoke();
+    }
+    return Iterator{std::move(it), this};
+  }
 
   auto end() { return ql::ranges::end(base_); }
 };
