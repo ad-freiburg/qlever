@@ -166,12 +166,12 @@ CPP_template(typename Serializer, typename Columns)(
     // NOTE 1: Although the code for serialization of a local vocab above is
     // already incorporated, we currently still let local vocab entries throw
     // an exception, because there are some caveats in the serialization that
-    // don't work yet, and will only be mitigated in the future. The blob
-    // writer (see `NamedCachedQueryBlobManager::serialize`) never triggers this
-    // check: it always passes `writeLocalVocabWords=false` and `columns` in
-    // which all such `Id`s have already been replaced by canonicalization (see
-    // `canonicalizeForSerialization`), so this check only applies to the `Id`s
-    // that are actually written.
+    // don't work yet, and will only be mitigated in the future. The check only
+    // applies to the `Id`s that are actually written (the `columns`, not
+    // `value.result_`). The blob writer (see
+    // `NamedCachedQueryBlobManager::serialize`) therefore never triggers it,
+    // because it passes `columns` in which canonicalization has already
+    // replaced all such `Id`s (see `canonicalizeForSerialization`).
     //
     // NOTE 2: Even though we disallow the local vocab, it is crucial to
     // serialize the local vocab because of possible added blank node indices,

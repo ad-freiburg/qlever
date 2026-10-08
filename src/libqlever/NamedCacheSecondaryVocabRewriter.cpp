@@ -26,7 +26,6 @@
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
-#include "util/Views.h"
 
 namespace qlever::namedCacheSecondaryVocab {
 
@@ -205,8 +204,8 @@ CanonicalizedValue canonicalizeWithPermutation(
     resultSortedOn.push_back(newColumnOfOldColumn[column]);
   }
 
-  // The rows are sorted by `resultSortedOn` first, so the sort order that the
-  // query plan produced is always kept.
+  // The rows are sorted by `resultSortedOn` first, so the kept prefix of the
+  // sort order that the query plan produced stays valid.
   // TODO<joka921> Distinguish between an explicit sort order of the query
   // (via `INTERNAL SORT BY`, which has to be kept) and a sort order that the
   // query plan produced by accident (which may change when the plan changes,

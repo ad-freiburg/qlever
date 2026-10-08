@@ -10,10 +10,8 @@
 #ifndef QLEVER_SRC_LIBQLEVER_NAMEDCACHESECONDARYVOCABREWRITER_H
 #define QLEVER_SRC_LIBQLEVER_NAMEDCACHESECONDARYVOCABREWRITER_H
 
-#include <memory>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include "engine/NamedResultCache.h"
@@ -64,7 +62,9 @@ using Entries = NamedResultCache::Entries;
 
 // Return true iff the result of `value` contains at least one `Id` of type
 // `LocalVocabIndex`, that is, iff the `Id`s of `value` have to be rewritten
-// (see `canonicalizeForSerialization`) before it can be persisted.
+// (see `canonicalizeForSerialization`) before it can be persisted. This also
+// counts the `Id`s in columns without a variable, which are dropped by
+// `canonicalizeForSerialization` and thus need no rewriting.
 bool containsLocalVocabIds(const NamedResultCache::Value& value);
 
 // Append a single segment to the `secondaryVocab` that consists of the words

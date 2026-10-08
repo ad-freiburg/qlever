@@ -268,9 +268,7 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
   EXPECT_EQ(Id::fromBits(positionOfA.lowerBound_.get()), secondaryId(0));
   auto value = std::make_shared<const Value>(Value{
       std::make_shared<const IdTable>(makeIdTableFromVector({{m}, {a}, {y}})),
-      VariableToColumnMap{
-          {Variable{"?x"},
-           ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
+      VariableToColumnMap{{Variable{"?x"}, makeAlwaysDefinedColumn(0)}},
       std::vector<ColumnIndex>{}, std::move(localVocab), "handmade",
       std::nullopt});
 
@@ -298,31 +296,25 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
 // names, that the columns without a variable are dropped, and that the sort
 // order of the entry is kept (up to the first dropped column).
 TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
-  using ColumnInfo = ColumnIndexAndTypeInfo;
-  auto info = [](ColumnIndex index) {
-    return ColumnInfo{index, ColumnInfo::AlwaysDefined};
-  };
   // Column 0 is `?z`, column 1 has no variable, column 2 is `?a`, column 3 is
   // `?m`.
-  VariableToColumnMap map{{Variable{"?z"}, info(0)},
-                          {Variable{"?a"}, info(2)},
-                          {Variable{"?m"}, info(3)}};
+  VariableToColumnMap map{{Variable{"?z"}, makeAlwaysDefinedColumn(0)},
+                          {Variable{"?a"}, makeAlwaysDefinedColumn(2)},
+                          {Variable{"?m"}, makeAlwaysDefinedColumn(3)}};
   EXPECT_THAT(canonicalColumnOrder(map, 4), ElementsAre(2, 3, 0));
   EXPECT_THAT(canonicalColumnOrder({}, 2), IsEmpty());
   EXPECT_THAT(canonicalColumnOrder(map, 5), ElementsAre(2, 3, 0));
   EXPECT_ANY_THROW(canonicalColumnOrder(map, 3));
   // A column that belongs to two variables is written only once.
-  VariableToColumnMap twoVariables{{Variable{"?b"}, info(1)},
-                                   {Variable{"?c"}, info(1)},
-                                   {Variable{"?a"}, info(0)}};
+  VariableToColumnMap twoVariables{
+      {Variable{"?b"}, makeAlwaysDefinedColumn(1)},
+      {Variable{"?c"}, makeAlwaysDefinedColumn(1)},
+      {Variable{"?a"}, makeAlwaysDefinedColumn(0)}};
   EXPECT_THAT(canonicalColumnOrder(twoVariables, 2), ElementsAre(0, 1));
 
   auto makeValue = [&map](std::vector<ColumnIndex> sortedOn) {
     return Value{std::make_shared<const IdTable>(makeIdTableFromVector(
-                     {{Id::makeFromInt(1), Id::makeFromInt(7),
-                       Id::makeFromInt(5), Id::makeFromInt(3)},
-                      {Id::makeFromInt(2), Id::makeFromInt(6),
-                       Id::makeFromInt(5), Id::makeFromInt(4)}})),
+                     {{1, 7, 5, 3}, {2, 6, 5, 4}}, ad_utility::testing::IntId)),
                  map,
                  std::move(sortedOn),
                  LocalVocab{},
@@ -334,17 +326,15 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
   // The table is sorted by its first column.
   auto value = makeValue({0});
   auto copy = canonicalizeForSerialization(value, secondaryVocab, allocator);
-  ASSERT_EQ(ExplicitIdTableOperation::viewOf(copy.result_).numColumns(), 3u);
-  EXPECT_THAT(column(copy, 0),
-              ElementsAre(Id::makeFromInt(5), Id::makeFromInt(5)));
-  EXPECT_THAT(column(copy, 1),
-              ElementsAre(Id::makeFromInt(3), Id::makeFromInt(4)));
-  EXPECT_THAT(column(copy, 2),
-              ElementsAre(Id::makeFromInt(1), Id::makeFromInt(2)));
-  EXPECT_EQ(copy.varToColMap_.size(), 3u);
-  EXPECT_EQ(copy.varToColMap_.at(Variable{"?a"}).columnIndex_, 0u);
-  EXPECT_EQ(copy.varToColMap_.at(Variable{"?m"}).columnIndex_, 1u);
-  EXPECT_EQ(copy.varToColMap_.at(Variable{"?z"}).columnIndex_, 2u);
+  // The column without a variable is dropped.
+  EXPECT_EQ(ExplicitIdTableOperation::viewOf(copy.result_),
+            makeIdTableFromVector({{5, 3, 1}, {5, 4, 2}},
+                                  ad_utility::testing::IntId));
+  EXPECT_EQ(
+      copy.varToColMap_,
+      (VariableToColumnMap{{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
+                           {Variable{"?m"}, makeAlwaysDefinedColumn(1)},
+                           {Variable{"?z"}, makeAlwaysDefinedColumn(2)}}));
   EXPECT_THAT(copy.resultSortedOn_, ElementsAre(2));
 
   // The sort order is kept up to the first dropped column.

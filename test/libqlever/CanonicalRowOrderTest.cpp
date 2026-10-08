@@ -34,6 +34,15 @@ IdTable intTable(const VectorTable& content, size_t numColumns = 2) {
 }
 
 auto view(const IdTable& table) { return table.asStaticView<0>(); }
+
+// Return a copy of `table` that is in canonical order with respect to the
+// `sortedOn` columns.
+IdTable sortedOf(const IdTable& table,
+                 ql::span<const ColumnIndex> sortedOn = {}) {
+  return permuteRows(view(table),
+                     canonicalSortingPermutation(view(table), sortedOn),
+                     ad_utility::testing::makeAllocator());
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -42,9 +51,7 @@ TEST(CanonicalRowOrder, sortWithoutResultSortedOn) {
   EXPECT_THAT(canonicalSortingPermutation(view(table), {}),
               ElementsAre(2, 1, 3, 0));
   EXPECT_FALSE(isInCanonicalOrder(view(table), {}));
-  auto sorted =
-      permuteRows(view(table), canonicalSortingPermutation(view(table), {}),
-                  ad_utility::testing::makeAllocator());
+  auto sorted = sortedOf(table);
   EXPECT_EQ(sorted, intTable({{1, 2}, {1, 5}, {2, 0}, {2, 1}}));
   EXPECT_TRUE(isInCanonicalOrder(view(sorted), {}));
 }
@@ -56,9 +63,7 @@ TEST(CanonicalRowOrder, sortWithResultSortedOn) {
   std::vector<ColumnIndex> sortedOn{1};
   EXPECT_THAT(canonicalSortingPermutation(view(table), sortedOn),
               ElementsAre(0, 3, 2, 1));
-  auto sorted = permuteRows(view(table),
-                            canonicalSortingPermutation(view(table), sortedOn),
-                            ad_utility::testing::makeAllocator());
+  auto sorted = sortedOf(table, sortedOn);
   EXPECT_EQ(sorted, intTable({{2, 1}, {3, 1}, {1, 2}, {1, 5}}));
   EXPECT_TRUE(isInCanonicalOrder(view(sorted), sortedOn));
   // This table is canonical for column 1 first, but not for the default order.
@@ -67,10 +72,8 @@ TEST(CanonicalRowOrder, sortWithResultSortedOn) {
   // Several sorted columns, in the given order.
   auto table3 = intTable({{1, 2, 3}, {1, 1, 4}, {0, 2, 3}, {5, 1, 1}});
   std::vector<ColumnIndex> sortedOn2{2, 0};
-  auto sorted3 = permuteRows(
-      view(table3), canonicalSortingPermutation(view(table3), sortedOn2),
-      ad_utility::testing::makeAllocator());
-  EXPECT_EQ(sorted3, intTable({{5, 1, 1}, {0, 2, 3}, {1, 2, 3}, {1, 1, 4}}));
+  EXPECT_EQ(sortedOf(table3, sortedOn2),
+            intTable({{5, 1, 1}, {0, 2, 3}, {1, 2, 3}, {1, 1, 4}}));
 }
 
 // _____________________________________________________________________________
@@ -169,11 +172,6 @@ TEST(CanonicalRowOrder, idsThatCompareEqualButDifferBitwise) {
 
   // The same rows in two different input orders give the same canonical
   // order.
-  auto sortedOf = [](const IdTable& table) {
-    return permuteRows(view(table),
-                       canonicalSortingPermutation(view(table), {}),
-                       ad_utility::testing::makeAllocator());
-  };
   auto first = sortedOf(makeIdTableFromVector({{a1, other}, {a2, other}}));
   auto second = sortedOf(makeIdTableFromVector({{a2, other}, {a1, other}}));
   EXPECT_EQ(first, second);

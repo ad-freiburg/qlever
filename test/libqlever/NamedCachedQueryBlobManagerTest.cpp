@@ -297,6 +297,17 @@ std::vector<std::vector<Id>> columnsOfPinnedResult(const Qlever& qlever,
   return columns;
 }
 
+// Return the result (as TSV) of the query that selects the `variables` (for
+// example `"?s ?o"`) from the named cache entry `name` of `qlever`.
+std::string queryPinnedResult(const Qlever& qlever, std::string_view variables,
+                              std::string_view name) {
+  return qlever.query(
+      absl::StrCat("SELECT ", variables,
+                   " WHERE { SERVICE ql:cached-result-with-name-", name,
+                   " {}}"),
+      ad_utility::MediaType::tsv);
+}
+
 // The data and the update of the tests below for blobs with new words: the
 // update inserts the new words `<a>`, `<y>`, and `"new literal"`, which are
 // not part of the vocabulary of the index. In the order of the index, `<a>` is
@@ -673,9 +684,7 @@ TEST(NamedCachedQueryBlobManager, blobUsesProvidedAllocator) {
 
   // The instance still answers queries correctly from the resource-backed
   // buffer.
-  auto res = target.query(
-      "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-blobPin {}}",
-      ad_utility::MediaType::tsv);
+  auto res = queryPinnedResult(target, "?s ?o", "blobPin");
   EXPECT_EQ(res,
             "?s\t?o\n<allocatorBlobSubject>\t\"allocator blob literal\"\n");
 }
@@ -816,11 +825,8 @@ TEST(NamedCachedQueryBlobManager, tryToDeserializeLeavesInstanceUsable) {
   EXPECT_EQ(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
                 compressedBlob),
             std::nullopt);
-  EXPECT_EQ(
-      target.query(
-          "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-blobPin {}}",
-          ad_utility::MediaType::tsv),
-      "?s\t?o\n<retrySubject>\t\"retry literal\"\n");
+  EXPECT_EQ(queryPinnedResult(target, "?s ?o", "blobPin"),
+            "?s\t?o\n<retrySubject>\t\"retry literal\"\n");
 
   // After a successful load, a second blob is rejected, also by the
   // non-throwing version (a violated precondition is not a blob error).
@@ -879,9 +885,7 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
   EXPECT_THAT(res, HasSubstr("<s4>"));
 
   // The pinned result itself is also queryable directly from the blob.
-  auto cachedRes = target.query(
-      "SELECT ?s2 ?geo2 WHERE { SERVICE ql:cached-result-with-name-geoPin {} }",
-      ad_utility::MediaType::tsv);
+  auto cachedRes = queryPinnedResult(target, "?s2 ?geo2", "geoPin");
   EXPECT_THAT(cachedRes, HasSubstr("<s1>"));
 }
 
@@ -1063,9 +1067,7 @@ TEST(NamedCachedQueryBlobManager, blobWithPreexistingSecondaryVocab) {
   EXPECT_EQ(target.query(std::string{newWordsCachedQuery},
                          ad_utility::MediaType::tsv),
             newWordsExpectedResult);
-  EXPECT_EQ(target.query("SELECT ?s WHERE { SERVICE "
-                         "ql:cached-result-with-name-second {}}",
-                         ad_utility::MediaType::tsv),
+  EXPECT_EQ(queryPinnedResult(target, "?s", "second"),
             // The result is in canonical order (see `CanonicalRowOrder.h`).
             "?s\n<m>\n<a>\n<z>\n");
 }
@@ -1148,13 +1150,9 @@ TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
   target.deserializeVocabAndNamedCacheFromCompressedBlob(blob);
   expectCanonical(target, "ints", {});
   expectCanonical(target, "sorted", {1, 0});
-  EXPECT_EQ(target.query("SELECT ?x ?y WHERE { SERVICE "
-                         "ql:cached-result-with-name-ints {}}",
-                         ad_utility::MediaType::tsv),
+  EXPECT_EQ(queryPinnedResult(target, "?x ?y", "ints"),
             "?x\t?y\n1\t1\n1\t2\n1\t2\n2\t0\n3\t1\n");
-  EXPECT_EQ(target.query("SELECT ?s ?o WHERE { SERVICE "
-                         "ql:cached-result-with-name-sorted {}}",
-                         ad_utility::MediaType::tsv),
+  EXPECT_EQ(queryPinnedResult(target, "?s ?o", "sorted"),
             "?s\t?o\n<m>\t<a>\n<m>\t<b>\n<n>\t<a>\n");
 
   // The entries of the source are unchanged.
