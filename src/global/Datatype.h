@@ -1,14 +1,14 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Pascal Keßler <kesslerp@informatik.uni-freiburg.de>, UFR
+// 2026 Pascal Keßler <kesslerp@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_GLOBAL_GLOBAL_DATATYPE_H
-#define QLEVER_SRC_GLOBAL_GLOBAL_DATATYPE_H
+#ifndef QLEVER_SRC_GLOBAL_DATATYPE_H
+#define QLEVER_SRC_GLOBAL_DATATYPE_H
 
 #include <array>
 #include <string_view>
@@ -17,10 +17,10 @@
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 
-// The different Datatypes that a `Id` (see below) can encode.
-// Note: If you add a datatype, make sure to update the `MaxValue` if necessary,
-// and check whether you have to add it to the `isDatatypeTrivial` function
-// directly below.
+// The different datatypes that an `Id` (see `ValueId.h`) can encode.
+//
+// NOTE: If you add a datatype, keep `MaxValue` equal to the last member and
+// check whether the new datatype belongs into `isDatatypeTrivial` below.
 enum struct Datatype {
   Undefined = 0,
   Bool,
@@ -28,12 +28,13 @@ enum struct Datatype {
   Double,
   VocabIndex,
   LocalVocabIndex,
-  // See `index/vocabulary/SecondaryVocabulary.h`. NOTE: The position of this
-  // datatype is not arbitrary. It has to be greater than `VocabIndex` (the
-  // words of a secondary vocabulary are all sorted after the words of the main
-  // vocabulary), and it has to be directly adjacent to `VocabIndex` and
-  // `LocalVocabIndex`, which makes the comparison of an `Id` of type
-  // `LocalVocabIndex` with an `Id` of an unrelated datatype cheap, see
+  // See `index/vocabulary/SecondaryVocabulary.h`.
+  //
+  // NOTE: The position of this datatype is not arbitrary. It has to be greater
+  // than `VocabIndex` (the words of a secondary vocabulary are all sorted after
+  // the words of the main vocabulary), and it has to be directly adjacent to
+  // `VocabIndex` and `LocalVocabIndex`, which makes the comparison of an `Id`
+  // of type `LocalVocabIndex` with an `Id` of an unrelated datatype cheap, see
   // `Id::compareThreeWay`.
   SecondaryVocabIndex,
   TextRecordIndex,
@@ -42,21 +43,20 @@ enum struct Datatype {
   WordVocabIndex,
   BlankNodeIndex,
   EncodedVal,
+  // Always the last member (there is no easy way to get the number of members
+  // of an enum, and other code sizes its arrays by `MaxValue`).
   MaxValue = EncodedVal
-  // Note: Unfortunately, we cannot easily get the size of an enum.
-  // If members are added to this enum, then the `MaxValue`
-  // alias must always be equal to the last member,
-  // else other code breaks with out-of-bounds accesses.
 };
 
-// Return true iff the `datatype` is a trivial datatype. This means that IDs
-// with this datatype directly encode the value they represent and do not point
-// to an external resource. In other words: These IDs can safely be shared
-// across different QLever indices without having to rewrite them. Note:
-// `BlankNodeIndex` is deliberately NOT considered trivial, as blank nodes
-// depend on the context, in particular they have to be remapped when results
-// from different  RDF sources are merged. Same goes for `EncodedVal` which
-// depends on the (configurable!) prefixes for the encoding.
+// Return true iff `datatype` is trivial, that is, IDs with this datatype
+// directly encode the value they represent and do not point to an external
+// resource. Such IDs can be shared across different QLever indices without
+// being rewritten.
+//
+// NOTE: `BlankNodeIndex` is deliberately NOT trivial, as blank nodes depend on
+// the context (they have to be remapped when results from different RDF
+// sources are merged). The same holds for `EncodedVal`, which depends on the
+// configurable prefixes of the encoding.
 constexpr bool isDatatypeTrivial(Datatype datatype) {
   using enum Datatype;
   constexpr std::array trivialDatatypes{Undefined, Bool, Int,
@@ -64,7 +64,7 @@ constexpr bool isDatatypeTrivial(Datatype datatype) {
   return ad_utility::contains(trivialDatatypes, datatype);
 }
 
-// Convert the `Datatype` enum to the corresponding string
+// Convert the `Datatype` enum to the corresponding string.
 inline QL_CONSTEXPR std::string_view toString(Datatype type) {
   switch (type) {
     case Datatype::Undefined:
@@ -98,4 +98,4 @@ inline QL_CONSTEXPR std::string_view toString(Datatype type) {
   AD_FAIL();
 }
 
-#endif  // QLEVER_SRC_GLOBAL_GLOBAL_DATATYPE_H
+#endif  // QLEVER_SRC_GLOBAL_DATATYPE_H

@@ -26,8 +26,8 @@
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
 
-// Encode values of different types (the types from the `Datatype` enum above)
-// using 4 bits for the datatype and 60 bits for the value.
+// Encode values of different types (the types from the `Datatype` enum in
+// `Datatype.h`) using 4 bits for the datatype and 60 bits for the value.
 class ValueId {
  public:
   using T = uint64_t;
