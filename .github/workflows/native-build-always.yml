@@ -1,13 +1,17 @@
 name: Native build
 
-# The cheap native builds, which are run for every PR. The expensive ones are
-# in `native-build-only-if-complete-ci.yml`.
+# The cheap native builds, which are run for PRs with the `run-ci` or the
+# `run-full-ci` label (see `README.md`) and always on `master`. The expensive
+# ones are in `native-build-only-if-complete-ci.yml`.
 
 on:
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+    # Also run when a label is applied, s.t. applying the `run-ci` or
+    # `run-full-ci` label triggers the checks, see `README.md`.
+    types: [ opened, synchronize, reopened, labeled ]
   merge_group:
 
 concurrency:
@@ -20,6 +24,11 @@ permissions:
 
 jobs:
   build:
+    # Only run for PRs with the `run-ci` or `run-full-ci` label, see `README.md`.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'run-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'run-full-ci')
 
     # The CMake configure and build commands are platform-agnostic and should work equally
     # well on Windows or Mac.  You can convert this to a matrix build if you need

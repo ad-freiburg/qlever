@@ -23,7 +23,6 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success'
     steps:
       - name: 'Download artifact'
-        id: download
         uses: actions/github-script@v8
         with:
           script: |
@@ -35,15 +34,6 @@ jobs:
             var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
               return artifact.name == "conformance-report"
             })[0];
-            // There is no report if the conformance tests were skipped because
-            // the PR does not carry the `run-full-ci` label (see
-            // `full-ci-gate.yml`). Then there is nothing to upload.
-            if (!matchArtifact) {
-              core.notice('No conformance report found, nothing to upload.');
-              core.setOutput('found', 'false');
-              return;
-            }
-            core.setOutput('found', 'true');
             var download = await github.rest.actions.downloadArtifact({
                owner: context.repo.owner,
                repo: context.repo.repo,
@@ -52,8 +42,7 @@ jobs:
             });
             var fs = require('fs');
             fs.writeFileSync('${{github.workspace}}/conformance-report.zip', Buffer.from(download.data));
-      - if: steps.download.outputs.found == 'true'
-        run: unzip conformance-report.zip
+      - run: unzip conformance-report.zip
       # Read the metadata from the artifact and submit it to the server.
       #
       # SECURITY: the `event`, `pr` and `sha` files come from the artifact that
@@ -65,7 +54,6 @@ jobs:
       # exfiltration of `SPARQL_CONFORMANCE_TOKEN`). Every value is validated
       # against a strict pattern before use.
       - name: "Submit data to server"
-        if: steps.download.outputs.found == 'true'
         run: |
             set -euo pipefail
             github_event="$(cat event)"
