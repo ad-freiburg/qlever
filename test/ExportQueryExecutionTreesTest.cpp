@@ -6,10 +6,12 @@
 
 #include <gmock/gmock.h>
 
+#include "./WordsAndDocsFileLineCreator.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "index/ExportIds.h"
 #include "parser/SparqlParser.h"
+#include "rdfTypes/RdfEscaping.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -28,14 +30,12 @@ using ::testing::HasSubstr;
 namespace {
 using ad_utility::testing::parseQuery;
 
-// Run the given SPARQL `query` on the given Turtle `kg` and export the result
-// as the `mediaType`. `mediaType` must be TSV or CSV.
+// Run the given SPARQL `query` on the index that is built from the `config` and
+// export the result as the `mediaType`.
 std::string runQueryStreamableResult(
-    const std::string& kg, const std::string& query,
-    ad_utility::MediaType mediaType, bool useTextIndex = false,
+    ad_utility::testing::TestIndexConfig config, const std::string& query,
+    ad_utility::MediaType mediaType,
     std::optional<size_t> exportLimit = std::nullopt) {
-  ad_utility::testing::TestIndexConfig config{kg};
-  config.createTextIndex = useTextIndex;
   auto qec = ad_utility::testing::getQec(std::move(config));
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
@@ -55,6 +55,18 @@ std::string runQueryStreamableResult(
     result += block;
   }
   return result;
+}
+
+// Run the given SPARQL `query` on the given Turtle `kg` and export the result
+// as the `mediaType`.
+std::string runQueryStreamableResult(
+    const std::string& kg, const std::string& query,
+    ad_utility::MediaType mediaType, bool useTextIndex = false,
+    std::optional<size_t> exportLimit = std::nullopt) {
+  ad_utility::testing::TestIndexConfig config{kg};
+  config.createTextIndex = useTextIndex;
+  return runQueryStreamableResult(std::move(config), query, mediaType,
+                                  exportLimit);
 }
 
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
@@ -1418,6 +1430,39 @@ TEST(ExportQueryExecutionTrees, TextIndex) {
                                             std::nullopt, "literal", "alpha")}),
                                         expectedXml};
   runSelectQueryTestCase(testCaseTextIndex, true);
+}
+
+// ____________________________________________________________________________
+// The text records of the text index are plain text (not the representation of
+// a literal with quotes), and thus might contain quotes, which must not be
+// interpreted as the end of a literal in the SPARQL JSON and XML export.
+TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
+  std::string text = "She said \"alpha\" and left";
+  ad_utility::testing::TestIndexConfig config{"<s> <p> <o> ."};
+  config.createTextIndex = true;
+  config.contentsOfWordsFileAndDocsfile =
+      std::pair{absl::StrCat(createWordsFileLineAsString("alpha", false, 1, 1),
+                             createWordsFileLineAsString("<s>", true, 1, 1)),
+                createDocsFileLineAsString(1, text)};
+  std::string query =
+      "SELECT ?o WHERE { ?o ql:contains-entity <s> . ?o ql:contains-word "
+      "\"alph*\" }";
+  using enum ad_utility::MediaType;
+  EXPECT_EQ(runQueryStreamableResult(config, query, tsv),
+            absl::StrCat("?o\n", text, "\n"));
+
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+  EXPECT_EQ(
+      nlohmann::json::parse(
+          runQueryStreamableResult(config, query, sparqlJson)),
+      makeExpectedSparqlJSON({makeJSONBinding(std::nullopt, "literal", text)}));
+  EXPECT_EQ(runQueryStreamableResult(config, query, sparqlXml),
+            absl::StrCat(makeXMLHeader({"o"}), R"(
+  <result>
+    <binding name="o"><literal>)",
+                         RdfEscaping::escapeForXml(text),
+                         "</literal></binding>\n  </result>", xmlTrailer));
 }
 
 // ____________________________________________________________________________
