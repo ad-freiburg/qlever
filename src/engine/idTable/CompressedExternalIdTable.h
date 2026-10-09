@@ -12,7 +12,9 @@
 
 #include <atomic>
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
 #include <condition_variable>
 #include <cstdint>
 #include <exception>
@@ -40,7 +42,6 @@
 #include "util/Log.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
-#include "util/PostAndGetFuture.h"
 #include "util/TransparentFunctors.h"
 #include "util/UniqueCleanup.h"
 #include "util/Views.h"
@@ -331,8 +332,8 @@ class CompressedExternalIdTableWriter {
     std::vector<std::future<void>> workerFutures;
     workerFutures.reserve(numWorkers - 1);
     for ([[maybe_unused]] size_t i : ql::views::iota(size_t{1}, numWorkers)) {
-      workerFutures.push_back(
-          ad_utility::postAndGetFuture(ad_utility::globalExecutor(), worker));
+      workerFutures.push_back(boost::asio::post(
+          ad_utility::globalExecutor(), boost::asio::use_future(worker)));
     }
     worker();
     // NOTE: The `worker` never throws, so none of the `get()` calls does. We
@@ -941,8 +942,8 @@ CPP_class_template(size_t NumStaticCols,
   // `transformAndPushLastBlock` are exempt from that, see there.
   template <typename Function>
   void runOnBlockWriteThreadAndWait(Function function) {
-    ad_utility::postAndGetFuture(blockWritePool_.get_executor(),
-                                 std::move(function))
+    boost::asio::post(blockWritePool_.get_executor(),
+                      boost::asio::use_future(std::move(function)))
         .get();
   }
 
@@ -1156,22 +1157,25 @@ CPP_class_template(size_t NumStaticCols,
         // block has been pushed, then `compressAndWriteFuture_` is valid.
         // Therefore, we have to set a valid future here, even if it does
         // nothing.
-        setFuture(ad_utility::makeReadyFuture(std::move(block)));
+        std::promise<Buffer> promise;
+        promise.set_value(std::move(block));
+        setFuture(promise.get_future());
       }
       return recycledBlock;
     }
     ++numBlocksPushed_;
-    setFuture(ad_utility::postAndGetFuture(
+    setFuture(boost::asio::post(
         blockWritePool_.get_executor(),
-        [block = std::move(block), this]() mutable -> Buffer {
-          transformBlock(block,
-                         compressedExternalIdTable::Parallelism::Allowed);
-          // NOTE: Writing the block also clears it, but keeps its memory, so
-          // the buffer that we give back already has the capacity that the next
-          // block needs, see `SortBlockBuffer::writeToAndClear`.
-          block.writeToAndClear(this->writer_);
-          return std::move(block);
-        }));
+        boost::asio::use_future(
+            [block = std::move(block), this]() mutable -> Buffer {
+              transformBlock(block,
+                             compressedExternalIdTable::Parallelism::Allowed);
+              // NOTE: Writing the block also clears it, but keeps its memory,
+              // so the buffer that we give back already has the capacity that
+              // the next block needs, see `SortBlockBuffer::writeToAndClear`.
+              block.writeToAndClear(this->writer_);
+              return std::move(block);
+            })));
     return recycledBlock;
   }
 

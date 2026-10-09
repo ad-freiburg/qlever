@@ -58,24 +58,16 @@ size_t globalExecutorNumThreads();
 // `setGlobalExecutorNumThreads`).
 //
 // NOTE: So far the users are the merge phase of the external sorters (see
-// `engine/idTable/ExternalIdTableSorterMergeConfig.h`), the removal of
+// `engine/idTable/ExternalIdTableSorterMergeConfig.h`) and the removal of
 // duplicates from a sorted sequence of blocks (see
-// `ad_utility::uniqueBlockView` in `util/views/UniqueBlockView.h`) and the
-// permutation writer (see `index/CompressedRelationWriter.h`); porting the
-// remaining phases of the index build onto this pool is work in progress.
+// `ad_utility::uniqueBlockView` in `util/views/UniqueBlockView.h`); porting
+// the remaining phases of the index build onto this pool is work in progress.
 //
 // NOTE: The pool has static lifetime and we never `join()` or `stop()` it, so
 // it outlives everything that posts to it, which is exactly what its users
 // need: they post tasks that only have to be completed before the process ends.
 // A phase that needs to know when its own work is done therefore has to
 // establish that itself.
-//
-// NOTE: It is safe to share this executor between concurrent users of the
-// parallel merge (see `util/parallelBlockMerge/ParallelBlockMerge.h`), because
-// a chunk of a merge that cannot make progress suspends instead of occupying
-// its thread, so that concurrent merges cannot starve each other. It is however
-// *not* safe to *consume* a merge from one of the threads of the executor that
-// the merge runs on, see `parallelBlockMerge::parallelBlockMergeToRange`.
 ql::any_io_executor globalExecutor();
 
 }  // namespace ad_utility
