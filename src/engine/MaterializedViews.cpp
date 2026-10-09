@@ -36,6 +36,7 @@
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
+#include "parser/PropertyPath.h"
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
 #include "util/AllocatorWithLimit.h"
@@ -46,6 +47,38 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 #include "util/Views.h"
+
+namespace {
+
+// If `path` is built only from `SEQUENCE`/`INVERSE` over plain IRIs, return
+// the number of simple triples it is equivalent to, else `std::nullopt`.
+std::optional<size_t> numTriplesOfSimplePath(const PropertyPath& path) {
+  return path.handlePath<std::optional<size_t>>(
+      [](const ad_utility::triple_component::Iri&) {
+        return std::optional<size_t>{1};
+      },
+      [](const std::vector<PropertyPath>& children,
+         PropertyPath::Modifier modifier) -> std::optional<size_t> {
+        if (modifier != PropertyPath::Modifier::SEQUENCE &&
+            modifier != PropertyPath::Modifier::INVERSE) {
+          return std::nullopt;
+        }
+        size_t sum = 0;
+        for (const auto& child : children) {
+          auto n = numTriplesOfSimplePath(child);
+          if (!n.has_value()) {
+            return std::nullopt;
+          }
+          sum += n.value();
+        }
+        return sum;
+      },
+      [](const PropertyPath&, size_t, size_t) -> std::optional<size_t> {
+        return std::nullopt;
+      });
+}
+
+}  // namespace
 
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(
@@ -62,6 +95,7 @@ MaterializedViewWriter::MaterializedViewWriter(
       allocator_{std::move(allocator)} {
   MaterializedView::throwIfInvalidName(name_);
   throwIfLimitOffset();
+  warnAboutPatternRewriteObstacles();
 
   auto [columnNamesAndPermutation, numAddEmptyColumns] =
       getIdTableColumnNamesAndPermutation();
@@ -83,6 +117,75 @@ void MaterializedViewWriter::throwIfLimitOffset() const {
         "view is sorted after query execution. If you are aware of this and "
         "want to forcefully apply a `LIMIT` or `OFFSET`, use an explicit "
         "subquery.");
+  }
+}
+
+// _____________________________________________________________________________
+void MaterializedViewWriter::warnAboutPatternRewriteObstacles() {
+  // Query planning has already rewritten `parsedQuery_` in place, so
+  // re-parse the original text (as `MaterializedView::MaterializedView`
+  // does) to analyze it unmodified.
+  EncodedIriManager encodedIriManager;
+  auto reparsed = SparqlParser::parseQuery(&encodedIriManager,
+                                           parsedQuery_._originalString, {});
+
+  // Only warn if the blank nodes and paths are the sole obstacles, i.e. the
+  // query otherwise has the shape required by pattern-based rewriting. If it
+  // does not, `QueryPatternCache::analyzeView` logs the reason when the view
+  // is loaded.
+  auto triplesOrReason =
+      materializedViewsQueryAnalysis::getTriplesForPatternRewrite(reparsed);
+  if (!std::holds_alternative<std::vector<SparqlTriple>>(triplesOrReason)) {
+    return;
+  }
+  const auto& triples = std::get<std::vector<SparqlTriple>>(triplesOrReason);
+
+  // Number of simple triples after expanding `/`/`^`-only property paths.
+  size_t numExpandedTriples = 0;
+  bool hasSimplePropertyPath = false;
+  for (const auto& triple : triples) {
+    // Variable predicates and other property paths can not be rewritten.
+    if (!std::holds_alternative<PropertyPath>(triple.p_)) {
+      return;
+    }
+    auto n = numTriplesOfSimplePath(std::get<PropertyPath>(triple.p_));
+    if (!n.has_value()) {
+      return;
+    }
+    hasSimplePropertyPath |= !triple.getSimplePredicate().has_value();
+    numExpandedTriples += n.value();
+  }
+  // A single triple has no join to eliminate, so rewriting needs at least two.
+  if (numExpandedTriples < 2) {
+    return;
+  }
+
+  auto addWarning = [this](std::string warning) {
+    AD_LOG_WARN << warning << std::endl;
+    parsedQuery_.addWarning(std::move(warning));
+  };
+
+  // Blank nodes and `[ ... ]` become unnamed internal variables, which can
+  // never be selected as a view column.
+  auto isInternalVariable = [](const TripleComponent& tc) {
+    return tc.isVariable() && ql::starts_with(tc.getVariable().name(),
+                                              QLEVER_INTERNAL_VARIABLE_PREFIX);
+  };
+  if (ql::ranges::any_of(triples, [&](const SparqlTriple& triple) {
+        return isInternalVariable(triple.s_) || isInternalVariable(triple.o_);
+      })) {
+    addWarning(
+        "The query to write the materialized view contains blank nodes "
+        "(`_:label`) or the `[ ... ]` shorthand. Use an explicitly named and "
+        "selected variable instead for query rewriting to work.");
+  }
+
+  if (hasSimplePropertyPath) {
+    addWarning(
+        "The query to write the materialized view contains a property path "
+        "using only `/` and/or `^`, which could equivalently be expressed by "
+        "simple triples. Use simple triples on selected variables instead "
+        "for query rewriting to work.");
   }
 }
 
@@ -131,7 +234,7 @@ void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
 }
 
 // _____________________________________________________________________________
-void MaterializedViewsManager::writeViewToDisk(
+std::vector<std::string> MaterializedViewsManager::writeViewToDisk(
     std::string name, const qlever::PlannedQuery& plannedQuery,
     ad_utility::MemorySize memoryLimit,
     ad_utility::AllocatorWithLimit<Id> allocator) const {
@@ -147,6 +250,7 @@ void MaterializedViewsManager::writeViewToDisk(
                                 std::move(memoryLimit), std::move(allocator)};
   writer.computeResultAndWritePermutation();
   loadView(writer.name_, writer.qec_.get());
+  return writer.warnings();
 }
 
 // _____________________________________________________________________________
