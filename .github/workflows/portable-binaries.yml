@@ -70,7 +70,11 @@ jobs:
           path: ~/.conan2
           key: conan-portable-${{ env.CC }}-${{ matrix.arch }}-${{ hashFiles('conanfile.txt') }}
 
+      # Link-time optimization only for the binaries published from `master`
+      # (not for pull requests, whose builds stay fast).
       - name: Build, check, and smoke-test the binaries
+        env:
+          QLEVER_ENABLE_LTO: ${{ github.event_name != 'pull_request' }}
         run: .github/scripts/build-portable-binaries.sh
 
       # The binaries of PR builds are only built and smoke-tested, not kept.
