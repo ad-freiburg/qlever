@@ -1518,6 +1518,9 @@ TEST(SparqlParser, Query) {
                                  m::pq::OrderKeys({{Var{"?v"}, false}}),
                                  m::pq::LimitOffset({2, 1})))),
             m::pq::OrderKeys({}), m::pq::LimitOffset({})));
+
+    // With a `GROUP BY`, the described variables must be grouped, like the
+    // selected variables of a `SELECT` query, and `DESCRIBE *` is an error.
     expectQuery("DESCRIBE ?y { ?y <is-a> ?v } GROUP BY ?y",
                 m::DescribeQuery(m::Describe(
                     Resources{Var{"?y"}}, {},
