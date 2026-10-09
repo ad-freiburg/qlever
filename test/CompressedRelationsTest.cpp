@@ -1789,7 +1789,9 @@ TEST(CompressedRelationReader, onlyRequestingObjectPatternsWorks) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that `lazyScan` yields the blocks of a relation in order, independently
+// of the executor and of the number of blocks in flight, that it applies the
+// `LimitOffsetClause`, and that it throws when cancelled.
 TEST(CompressedRelationReader, lazyScan) {
   // A relation that spans many blocks (the test index has two rows per block),
   // with other triples before and after it, such that the first and the last
@@ -1868,8 +1870,8 @@ TEST(CompressedRelationReader, lazyScan) {
     }
   }
 
-  // A cancelled scan throws, both when the cancellation is detected on the
-  // executor and when it is detected by the consumer.
+  // A scan whose cancellation handle is cancelled throws. The cancellation is
+  // detected by the tasks on the executor before they read their block.
   auto scan = lazyScan(ad_utility::globalExecutor());
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
   EXPECT_THROW(collect(scan), ad_utility::CancellationException);
