@@ -1892,6 +1892,35 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                 matchesIdTable(expected));
   }
 
+  // A `BIND` is not pushed down if a variable of its expression (here `?o`) is
+  // hidden by a subquery. The `?o` of the `BIND` is then unbound.
+  {
+    constexpr std::string_view hiddenExprVarInScan = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?bind {
+        { SELECT ?s { ?s view:bindView-o ?o } }
+        BIND(2 * ?o + 1 AS ?bind)
+      }
+    )";
+    auto expected = getQueryResultAsIdTable(
+        "SELECT ?s ?bind { ?s <p2> ?o . BIND(2 * ?unbound + 1 AS ?bind) }");
+    EXPECT_THAT(getQueryResultAsIdTable(std::string{hiddenExprVarInScan}),
+                matchesIdTable(expected));
+
+    constexpr std::string_view hiddenExprVarInJoin = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?bind {
+        { SELECT ?s { ?s view:bindView-o ?o . ?s <p1> ?x } }
+        BIND(2 * ?o + 1 AS ?bind)
+      }
+    )";
+    auto expectedJoin = getQueryResultAsIdTable(
+        "SELECT ?s ?bind { ?s <p2> ?o . ?s <p1> ?x . "
+        "BIND(2 * ?unbound + 1 AS ?bind) }");
+    EXPECT_THAT(getQueryResultAsIdTable(std::string{hiddenExprVarInJoin}),
+                matchesIdTable(expectedJoin));
+  }
+
   // A `BIND` is pushed down through a `SpatialJoin` operation.
   {
     constexpr std::string_view bindThroughSpatialJoin = R"(
