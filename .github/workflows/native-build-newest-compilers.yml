@@ -1,18 +1,25 @@
-# Build QLever with the newest GCC versions. These are not yet used by most of
-# our users, and (especially GCC 16, which the PPA below ships as a snapshot of
-# the not yet released version) they tend to add new warnings that are unrelated
-# to the change that happens to trigger them. Running them for every pull
-# request would therefore block unrelated work, so they only run on `master` and
-# on manual request.
+# Build QLever with the newest GCC versions. These are only run for PRs with
+# the `run-full-ci` label (see `README.md`) and always on `master`.
+#
+# NOTE: `ppa:ubuntu-toolchain-r/test` only provides a pre-release snapshot of
+# GCC 16 (`16-20260315`), whose warnings can differ from those of the released
+# GCC 16. A failure in this workflow can therefore be unrelated to the change
+# that happens to trigger it.
 name: Native build with the newest compilers
 
 on:
   push:
     branches: [ master ]
+  pull_request:
+    branches: [ master ]
+    # Also run when a label is applied, so that applying the `run-ci` or
+    # `run-full-ci` label triggers the checks, see `README.md`.
+    types: [ opened, synchronize, reopened, labeled ]
+  merge_group:
   workflow_dispatch:
 
 concurrency:
-  group: '${{ github.workflow }} @ ${{ github.ref }}'
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: true
 
 # The default GITHUB_TOKEN only needs to read the repository here.
@@ -21,10 +28,19 @@ permissions:
 
 jobs:
   build:
+    # Only run for PRs with the `run-full-ci` label, see `README.md`.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'run-full-ci')
     strategy:
       fail-fast: false
       matrix:
+        compiler: [gcc]
         compiler-version: [15, 16]
+        warnings: [  "-Wall -Wextra -Werror -Woverloaded-virtual " ]
+        build-type: [Release]
+        expensive-tests: [true]
+        additional-cmake-options: [""]
 
     runs-on: ubuntu-24.04
 
@@ -32,21 +48,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
-      - name: Install dependencies
-        uses: ./.github/workflows/install-dependencies-ubuntu
-      - name: Install compiler
-        uses: ./.github/workflows/install-compiler-ubuntu
+      - name: Install dependencies, configure, build, and test
+        uses: ./.github/workflows/native-build-steps
         with:
-          compiler: gcc
-          compiler-version: ${{matrix.compiler-version}}
-      - name: Configure, build, and test
-        uses: ./.github/workflows/build-and-test
-        with:
-          cmake-args: >-
-            -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/gcc${{matrix.compiler-version}}.cmake"
-            -DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror -Woverloaded-virtual"
-            -DADDITIONAL_LINKER_FLAGS="-fuse-ld=mold"
-            -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true
-            -DENABLE_EXPENSIVE_CHECKS=true -DBUILD_SHARED_LIBS=ON
-            -DUSE_PRECOMPILED_HEADERS=OFF -DQLEVER_ONE_TEST_CASE_PER_FILE=ON
-          e2e-args: "-t"
+          matrix: ${{ toJSON(matrix) }}
