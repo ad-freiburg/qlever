@@ -329,6 +329,7 @@ class ParallelMergeState
       // soon as the permit was *acquired* and not when the chunk is done. It
       // therefore needs the permit as an explicit RAII handle that it can hand
       // to the chunk.
+      //
       // Workaround for a GCC 15/16 bug: the hidden object of a by-value
       // structured binding in a coroutine is not always destroyed at the end
       // of its scope, for example when it is initialized by a `co_await` or

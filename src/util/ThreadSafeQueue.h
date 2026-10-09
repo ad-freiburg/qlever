@@ -274,6 +274,7 @@ CPP_template(typename Queue, typename Producer)(
 // thread throws an exception. In that case the exception is propagated to
 // the resulting generator. The resulting generator yields all the values
 // that have been pushed to the queue.
+//
 // NOTE: GCC (since version 16) produces a false-positive `-Warray-bounds`
 // warning for the local `QueueGenerator` below, which it believes lies partly
 // outside the allocated storage. For why the suppression has to wrap the

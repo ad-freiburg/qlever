@@ -35,7 +35,7 @@
 // `DISABLE_...` macros each open their own diagnostic scope, hence the two
 // `GCC_REENABLE_WARNINGS` below.
 //
-// IMPORTANT: Because of the include guards, the suppression only has an effect
+// NOTE: Because of the include guards, the suppression only has an effect
 // in translation units in which `<boost/asio/ip/basic_resolver_results.hpp>`
 // is first included here. It is also pulled in by other Boost headers, for
 // example `<boost/asio/ip/tcp.hpp>` and `<boost/beast/core/tcp_stream.hpp>`.
