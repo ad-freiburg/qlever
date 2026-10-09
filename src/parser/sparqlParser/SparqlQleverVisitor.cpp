@@ -572,12 +572,16 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   describeClause.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
 
-  // Parse the WHERE clause and construct a SELECT query from it. The solution
-  // modifiers and the trailing `VALUES` clause belong to this query, because
-  // they apply to the solutions of the WHERE clause, not to the triples of the
-  // description (SPARQL 1.1, sec. 15 and 16.4). For example, `LIMIT 1` limits
-  // the number of solutions whose resources are described. For `DESCRIBE *`,
-  // add each visible variable as a resource to describe.
+  // Parse the WHERE clause and construct a SELECT query from it, which computes
+  // the resources to describe. The solution modifiers and the trailing `VALUES`
+  // clause belong to this query, because they apply to the solutions of the
+  // WHERE clause and not to the triples of the description (SPARQL 1.1, sec. 15
+  // and 16.4). For example, `LIMIT 1` describes the resources of one solution.
+  //
+  // NOTE: For `DESCRIBE *`, the query is a `SELECT *` while the solution
+  // modifiers are added (so that a `GROUP BY` is rejected like for `SELECT *`),
+  // and the visible variables are selected and described afterwards, when the
+  // variables of the trailing `VALUES` clause are visible, too.
   visitWhereClause(ctx->whereClause(), parsedQuery_);
   auto& selectClause = parsedQuery_.selectClause();
   if (describedResources.empty()) {
