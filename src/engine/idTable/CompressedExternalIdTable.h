@@ -30,6 +30,7 @@
 #include "util/AsyncStream.h"
 #include "util/CancellationHandle.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -663,9 +664,9 @@ CPP_class_template(size_t NumStaticCols,
   // flight: `transformAndWriteBlock` waits for the previous one before it posts
   // the next one.
   //
-  // NOTE: The pool is declared before the `compressAndWriteFuture_`, such that
-  // it is destroyed (and its thread joined) only after that future is gone.
-  // The destructor additionally waits for the task explicitly, see there.
+  // NOTE: The pool is declared after the `writer_`, such that it is destroyed
+  // (and its thread joined) before the `writer_` that its task writes to. The
+  // destructor additionally waits for the task explicitly, see there.
   boost::asio::thread_pool blockWritePool_{1};
 
   // NOTE: The background task hands the block that it is done with back via
@@ -713,7 +714,13 @@ CPP_class_template(size_t NumStaticCols,
   // destroyed. Without this, `blockTransformation_` (declared after
   // `compressAndWriteFuture_`) is destroyed first, and the still-running
   // async thread accesses freed memory via `this->blockTransformation_`.
-  ~CompressedExternalIdTableBase() { waitForFuture(); }
+  // An exception of the task is ignored (and only logged) here, because a
+  // throwing destructor would terminate the program. Such an exception can
+  // only reach the destructor if the task was never waited for, e.g. when the
+  // table is destroyed during the stack unwinding of another error.
+  ~CompressedExternalIdTableBase() {
+    ad_utility::ignoreExceptionIfThrows([this]() { waitForFuture(); });
+  }
 
   explicit CompressedExternalIdTableBase(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
