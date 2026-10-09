@@ -778,7 +778,7 @@ auto IndexImpl::convertPartialToGlobalIds(
   // and hence irrelevant.
   std::atomic<size_t> nextPartialVocabIdx = 0;
   size_t triplesBytesPerWorker =
-      numTriplesPerBatch_ * NumColumnsIndexBuilding * sizeof(Id);
+      numTriplesPerBatch_ * NumColumnsIndexBuilding * BYTES_PER_ID_COLUMN_ENTRY;
   size_t numWorkersThatFitInMemory =
       std::max<size_t>(1, memoryLimitIndexBuilding().getBytes() /
                               std::max<size_t>(1, triplesBytesPerWorker));

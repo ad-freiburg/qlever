@@ -207,9 +207,11 @@ TEST(ExternalIdTableSorterMergeConfig, theTwinPermutationOfTheIndexBuild) {
   config.numBufferedOutputBlocks_ = 12;
   config.maxOutputBlockSize_ = 1_GB;
   config.parallelism_ = 16;
-  config.outputBlockSizeOverride_ = (250_kB).getBytes() / sizeof(Id);
+  const size_t outputBlockSize =
+      (250_kB).getBytes() / BYTES_PER_ID_COLUMN_ENTRY;
+  config.outputBlockSizeOverride_ = outputBlockSize;
   auto parameters = computeMergePhaseParameters(config);
-  EXPECT_EQ(parameters.outputBlockSize_, 31'250u);
+  EXPECT_EQ(parameters.outputBlockSize_, outputBlockSize);
   EXPECT_EQ(parameters.numChunksInFlight_, 16u);
   EXPECT_GT(parameters.numBufferedBlocksPerChunk_, 100u);
 }

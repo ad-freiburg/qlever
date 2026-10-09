@@ -148,7 +148,8 @@ class CompressedExternalIdTableWriter {
           "over");
     }
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
-    size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
+    size_t blockSize =
+        blockSizeUncompressed_.getBytes() / BYTES_PER_ID_COLUMN_ENTRY;
     AD_CONTRACT_CHECK(blockSize > 0);
     startOfSingleIdTables_.push_back(blocksPerColumn_.at(0).size());
     // The `[lower, upper)` row ranges of the blocks into which the `table` is
@@ -173,7 +174,8 @@ class CompressedExternalIdTableWriter {
             auto& blockMetadata = blocksPerColumn_.at(i);
             decltype(auto) column = table.getColumn(i);
             for (auto [lower, upper] : blockRanges) {
-              auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
+              auto thisBlockSizeUncompressed =
+                  (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
               auto compressed = ZstdWrapper::compress(
                   column.data() + lower, thisBlockSizeUncompressed);
               size_t offset = 0;
@@ -282,7 +284,8 @@ class CompressedExternalIdTableWriter {
 
   // The number of rows in the block with the given global index.
   size_t numRowsInBlock(size_t blockIdx) const {
-    return blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
+    return blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ /
+           BYTES_PER_ID_COLUMN_ENTRY;
   }
 
   // The index (in the `ColumnMetadata` of a single column) of the first block
@@ -505,7 +508,7 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   // the input concept of `parallelBlockMerge`.
   template <typename R>
   MemorySize memorySizeOfElement([[maybe_unused]] const R& row) const {
-    return MemorySize::bytes(writer().numColumns() * sizeof(Id));
+    return MemorySize::bytes(writer().numColumns() * BYTES_PER_ID_COLUMN_ENTRY);
   }
 
  private:
@@ -554,7 +557,7 @@ namespace compressedExternalIdTable {
 // being sorted and written to disk in the background, and one that is used to
 // collect rows in the calls to `push`.
 inline size_t blockMemoryPerRow(size_t numColumns) {
-  return numColumns * sizeof(Id) * 2;
+  return numColumns * BYTES_PER_ID_COLUMN_ENTRY * 2;
 }
 
 // The number of rows per block that a `CompressedExternalIdTableBase` with
