@@ -16,6 +16,7 @@
 #include "global/FileSuffixConstants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
+#include "util/GlobalExecutor.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
@@ -264,10 +265,11 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScanImpl(
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
         scanSpecAndBlocks.blockMetadata_);
   }
-  return reader.lazyScan(
-      scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
-      std::move(columns), cancellationHandle,
-      getLocatedTriplesForPermutation(locatedTriplesState), limitOffset);
+  return reader.lazyScan(scanSpecAndBlocks.scanSpec_,
+                         std::move(optBlocks.value()), std::move(columns),
+                         cancellationHandle,
+                         getLocatedTriplesForPermutation(locatedTriplesState),
+                         ad_utility::globalExecutor(), limitOffset);
 }
 
 // _____________________________________________________________________________
@@ -276,13 +278,14 @@ Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState,
-    std::optional<size_t> numThreadsOverride) const {
+    std::optional<size_t> numBlocksInFlightOverride) const {
   auto independentReader = std::make_unique<CompressedRelationReader>(
       reader().makeReaderWithReboundAllocator(
           ad_utility::makeUnlimitedAllocator<Id>()));
   // Applies only to this dedicated reader; query scans use the shared reader
   // and are unaffected.
-  independentReader->lazyScanNumThreadsOverride_ = numThreadsOverride;
+  independentReader->lazyScanNumBlocksInFlightOverride_ =
+      numBlocksInFlightOverride;
   auto blocks = lazyScanImpl(*independentReader, scanSpecAndBlocks,
                              std::nullopt, additionalColumns,
                              cancellationHandle, locatedTriplesState, {});
