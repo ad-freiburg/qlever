@@ -27,20 +27,21 @@
 #define BOOST_BEAST_USE_STD_STRING_VIEW
 #endif
 
-// GCC (since version 15) wrongly believes that
+// GCC 15 and GCC 16 wrongly believe that
 // `boost::asio::ip::basic_resolver_results::create` copies a `tcp::endpoint`
-// out of bounds. GCC 15 reports this as `-Warray-bounds` and GCC 16 as
-// `-Wstringop-overflow`, so both have to be disabled; for why the suppression
-// has to wrap the include, see `util/CompilerWarnings.h`. The two `DISABLE_...`
-// macros each open their own diagnostic scope, hence the two
+// out of bounds. They report this as `-Warray-bounds` and, once that is
+// disabled, as `-Wstringop-overflow`, so both have to be disabled; for why the
+// suppression has to wrap the include, see `util/CompilerWarnings.h`. The two
+// `DISABLE_...` macros each open their own diagnostic scope, hence the two
 // `GCC_REENABLE_WARNINGS` below.
 //
-// IMPORTANT: This only works because `<boost/asio.hpp>` is included here and
-// nowhere else in QLever; it is the only Boost header that pulls in
-// `basic_resolver_results.hpp`. Because of the include guards, a translation
-// unit that included it before this header would parse the offending definition
-// outside the diagnostic scope, and the suppression would silently have no
-// effect. Do not add another include of `<boost/asio.hpp>`.
+// IMPORTANT: Because of the include guards, the suppression only has an effect
+// in translation units in which `<boost/asio/ip/basic_resolver_results.hpp>`
+// is first included here. It is also pulled in by other Boost headers, for
+// example `<boost/asio/ip/tcp.hpp>` and `<boost/beast/core/tcp_stream.hpp>`.
+// Currently, the only translation unit that uses the resolver (and hence
+// instantiates the offending code) is `HttpClient.cpp`, which includes this
+// header first.
 DISABLE_ARRAY_BOUNDS_WARNINGS
 DISABLE_STRINGOP_OVERFLOW_WARNINGS
 #include <boost/asio.hpp>

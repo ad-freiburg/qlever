@@ -5,10 +5,9 @@ target_sources(engine PRIVATE
         S2PointPolylineAlgorithm.cpp BoundingBoxAlgorithm.cpp
         LibspatialjoinAlgorithm.cpp)
 
-# Since GCC 15, the inline storage of the `absl::InlinedVector` inside the
-# priority queue of `S2ClosestPointQueryBase` is wrongly reported as definitely
-# used uninitialized. For why this cannot be suppressed at the include, see
-# `src/util/CompilerWarnings.h`; the same suppression is needed for the `s2`
+# GCC 15 and GCC 16 wrongly report the inline storage of the
+# `absl::InlinedVector` inside the priority queue of `S2ClosestPointQueryBase`
+# as definitely used uninitialized. The same suppression is needed for the `s2`
 # target itself, see the top-level `CMakeLists.txt`.
 #
 # NOTE: `TARGET_DIRECTORY` is required, because source file properties are

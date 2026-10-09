@@ -801,10 +801,9 @@ else ()
 endif ()
 # Disable some warnings in RE2 and GTEST
 # NOTE: `-Wno-uninitialized` is needed in addition to `-Wno-maybe-uninitialized`
-# (which it does not imply): since GCC 15, the inline storage of the
-# `absl::InlinedVector` inside the priority queue of `S2ClosestEdgeQueryBase` is
-# wrongly reported as definitely used uninitialized. For why this has to be
-# disabled for the whole target, see `src/util/CompilerWarnings.h`.
+# (which it does not imply): GCC 15 and GCC 16 wrongly report the inline storage
+# of the `absl::InlinedVector` inside the priority queue of
+# `S2ClosestPointQueryBase` as definitely used uninitialized.
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
