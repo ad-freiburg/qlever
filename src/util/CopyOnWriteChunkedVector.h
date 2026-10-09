@@ -83,11 +83,17 @@ class CopyOnWriteChunkedVector {
   }
 
   // Append an element at the end. Start a new chunk if the last chunk is full.
+  // A new chunk is added only once it holds the element, so that an exception
+  // (from an allocation) leaves the vector unchanged and never an empty chunk.
   void push_back(T value) {
     if (chunks_.empty() || chunks_.back()->size() == ChunkSize) {
-      chunks_.emplace_back().write().reserve(ChunkSize);
+      Chunk chunk;
+      chunk.reserve(ChunkSize);
+      chunk.push_back(std::move(value));
+      chunks_.emplace_back(std::move(chunk));
+    } else {
+      chunks_.back().write().push_back(std::move(value));
     }
-    chunks_.back().write().push_back(std::move(value));
   }
 
   // Remove the last element. Remove the last chunk if it becomes empty.
