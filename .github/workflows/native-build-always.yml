@@ -1,0 +1,72 @@
+name: Native build
+
+# The cheap native builds, which are run for PRs with the `run-ci` or the
+# `run-full-ci` label (see `README.md`) and always on `master`. The expensive
+# ones are in `native-build-only-if-complete-ci.yml`.
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+    # Also run when a label is applied, so that applying the `run-ci` or
+    # `run-full-ci` label triggers the checks, see `README.md`.
+    types: [ opened, synchronize, reopened, labeled ]
+  merge_group:
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+# The default GITHUB_TOKEN only needs to read the repository here.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Only run for PRs with the `run-ci` or `run-full-ci` label, see `README.md`.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'run-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'run-full-ci')
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc]
+        compiler-version: [13]
+        # `-Woverloaded-virtual` is not part of `-Wall`/`-Wextra`. It catches
+        # virtual functions that a derived class hides with an overload of the
+        # same name (e.g. a `const` and a non-const overload where only the
+        # non-const one is overridden). Only GCC warns about that case.
+        warnings: [  "-Wall -Wextra -Werror -Woverloaded-virtual " ]
+        build-type: [Release]
+        expensive-tests: [true]
+        additional-cmake-options: [""]
+        include:
+          - compiler: gcc
+            compiler-version: 11
+            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DEXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17=ON"
+            build-type: Release
+          - compiler: clang
+            compiler-version: 16
+            asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
+            build-type: RelWithDebInfo
+            runner: ubuntu-22.04
+            expensive-tests: false
+          - compiler: clang
+            compiler-version: 16
+            ubsan-flags: " -fsanitize=undefined"
+            build-type: RelWithDebInfo
+            runner: ubuntu-22.04
+            expensive-tests: false
+
+    runs-on: ${{matrix.runner || 'ubuntu-24.04'}}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+      - name: Install dependencies, configure, build, and test
+        uses: ./.github/workflows/native-build-steps
+        with:
+          matrix: ${{ toJSON(matrix) }}

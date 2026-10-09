@@ -358,6 +358,8 @@ static std::string getDatatypeIsTypeStr(const IsDatatype isDtype) {
       return "Numeric";
     case ENCODED_IRI:
       return "EncodedIri";
+    case GEO_POINT:
+      return "GeoPoint";
     default:
       AD_FAIL();
   }
@@ -725,10 +727,11 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // `index/vocabulary/SecondaryVocabulary.h`). Those sort after all of the
   // ranges below, so neither the `> <>` prefilter nor the datatype range of
   // the encoded IRIs covers them, which means that blocks consisting entirely
-  // of such IRIs are incorrectly pruned. This is deliberate for now, because
-  // nothing but a unit test can currently create a secondary vocabulary, but
-  // it has to be fixed *before* anything else does, together with the semantic
-  // comparison of those `Id`s (see the detailed note at
+  // of such IRIs are incorrectly pruned. This is a known limitation for now,
+  // because apart from unit tests, a secondary vocabulary is only created when
+  // a blob of `NamedCachedQueryBlobManager` that contains new words is loaded,
+  // but it has to be fixed before it is used more widely, together with the
+  // semantic comparison of those `Id`s (see the detailed note at
   // `valueIdComparators::detail::compareIdsImpl`).
   //
   // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids
@@ -759,6 +762,20 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::ENCODED_IRI>::evaluateImpl(
     [[maybe_unused]] bool getTotalComplement) const {
   // Encoded IRIs are exactly the `ValueId`s of datatype `EncodedVal`.
   std::array datatypes{Datatype::EncodedVal};
+  return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
+}
+
+//______________________________________________________________________________
+template <>
+BlockMetadataRanges IsDatatypeExpression<IsDatatype::GEO_POINT>::evaluateImpl(
+    [[maybe_unused]] const IndexImpl& index, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
+    [[maybe_unused]] bool getTotalComplement) const {
+  // The geo points that are encoded in the `Id` are exactly the `ValueId`s of
+  // datatype `GeoPoint` (the WKT literals of the vocabulary are not points).
+  // They sort in one contiguous range, so only the blocks of points are kept,
+  // or, for the negation, only the other blocks.
+  std::array datatypes{Datatype::GeoPoint};
   return getRangesForDatatypes(idRange, blockRange, isNegated_, datatypes);
 }
 
@@ -915,8 +932,8 @@ std::string LogicalExpression<Operation>::asString(size_t depth) const {
   std::stringstream stream;
   stream << "Prefilter LogicalExpression<" << getLogicalOpStr(Operation)
          << ">\n"
-         << "child1 {" << child1Info << "}" << "child2 {" << child2Info << "}"
-         << std::endl;
+         << "child1 {" << child1Info << "}"
+         << "child2 {" << child2Info << "}" << std::endl;
   return stream.str();
 }
 
@@ -975,6 +992,7 @@ template class IsDatatypeExpression<IsDatatype::BLANK>;
 template class IsDatatypeExpression<IsDatatype::LITERAL>;
 template class IsDatatypeExpression<IsDatatype::NUMERIC>;
 template class IsDatatypeExpression<IsDatatype::ENCODED_IRI>;
+template class IsDatatypeExpression<IsDatatype::GEO_POINT>;
 
 template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;
@@ -1000,9 +1018,9 @@ void checkPropertiesForPrefilterConstruction(
 
 //______________________________________________________________________________
 CPP_template_def(typename T)(requires(std::is_same_v<T, int64_t> ||
-                                      std::is_same_v<T, double>))
-    std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
-        CompOp comparison, T year) {
+                                        std::is_same_v<T, double>))
+std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
+    CompOp comparison, T year) {
   // Derive integer bounds `yearFloor` and `yearCeil` from the reference `year`.
   // When the `year` is an `int64_t`, they coincide. When it is a non-integer
   // `double`, they differ by 1 so that the code below does the right thing for

@@ -70,17 +70,19 @@ LocatedTriples& LocatedTriplesPerBlock::mutableBlock(size_t blockIndex,
                                                      size_t numNewTriples) {
   unconsolidatedBlocks_.insert(blockIndex);
   blocksWithUpdatedTriples_.insert(blockIndex);
-  auto& block = map_[blockIndex];
-  // Clone a shared block with spare capacity for the new triples. The clone
-  // made by `write()` would have no spare capacity, so that inserting the new
-  // triples would copy the block a second time.
-  if (block.isShared() && numNewTriples > 0) {
+  // If the block is shared with a snapshot, clone it with spare capacity for
+  // the new triples (a clone without spare capacity would be copied a second
+  // time when the first new triple is inserted).
+  //
+  // NOTE: That the capacity survives the copy assignment is not guaranteed by
+  // the standard, but it is how `std::vector` behaves in libstdc++ and libc++.
+  // If it does not, the clone is merely copied a second time.
+  return map_[blockIndex].write([numNewTriples](const LocatedTriples& block) {
     LocatedTriples clone;
-    clone.reserve(block->sizeUpperBound() + numNewTriples);
-    clone = *block;
-    block = ad_utility::CopyOnWritePtr<LocatedTriples>{std::move(clone)};
-  }
-  return block.write();
+    clone.reserve(block.sizeUpperBound() + numNewTriples);
+    clone = block;
+    return clone;
+  });
 }
 
 // ____________________________________________________________________________
