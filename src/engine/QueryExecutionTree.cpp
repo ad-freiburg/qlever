@@ -265,10 +265,11 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
   // deduplication, and the limit can terminate the subtree early). We clone
   // before applying the limit, because `qet` (and its root operation) may be
   // shared with other query execution trees and `applyLimitOffset` mutates the
-  // operation in place.
+  // operation in place. The clone is deep, so its children are then exclusively
+  // owned.
   if (distinctIndices.empty()) {
     auto limitedQet = qet->clone();
-    limitedQet->applyLimitOffset(LimitOffsetClause{._limit = 1});
+    limitedQet->applyLimitOffset(LimitOffsetClause{._limit = 1}, true);
     return limitedQet;
   }
 
@@ -358,6 +359,45 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
     // Store the stripped variables in the result tree
     resultTree->strippedVariables_ = std::move(strippedVariables);
   }
+
+  return resultTree;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+QueryExecutionTree::makeTreeWithBindColumn(
+    const std::shared_ptr<QueryExecutionTree>& qet,
+    const parsedQuery::Bind& bind) {
+  const auto& rootOperation = qet->getRootOperation();
+  auto optTree = rootOperation->makeTreeWithBindColumn(bind);
+  if (!optTree.has_value()) {
+    return std::nullopt;
+  }
+
+  auto& resultTree = optTree.value();
+  AD_CORRECTNESS_CHECK(resultTree != nullptr);
+  AD_CORRECTNESS_CHECK(
+      resultTree->getRootOperation()->getLimitOffset().isUnconstrained(),
+      "`LIMIT` and `OFFSET` are applied by "
+      "`QueryExecutionTree::makeTreeWithBindColumn`, not by the individual "
+      "implementations.");
+  // We cannot use `applyLimitOffset` here, for the same reason as in
+  // `makeTreeWithStrippedColumns` above.
+  resultTree->setLimitOffsetDirectlyWithoutTriggeringHooks(
+      rootOperation->getLimitOffset());
+
+  // Restore the externally visible variables of the original root (e.g. a
+  // restricted `SELECT` clause of a subquery), which the rewrite otherwise
+  // silently drops because it constructs a fresh `Operation` for the
+  // rewritten subtree. Also expose the `BIND`'s target, which was computed at
+  // (or below) what used to be the root and would otherwise be hidden again.
+  std::vector<Variable> visibleVariables;
+  ql::ranges::copy(
+      rootOperation->getExternallyVisibleVariableColumns() | ql::views::keys,
+      std::back_inserter(visibleVariables));
+  visibleVariables.push_back(bind._target);
+  resultTree->getRootOperation()->setSelectedVariablesForSubquery(
+      visibleVariables);
 
   return resultTree;
 }

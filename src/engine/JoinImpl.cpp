@@ -12,6 +12,7 @@
 
 #include "engine/JoinImpl.h"
 
+#include <algorithm>
 #include <sstream>
 #include <vector>
 
@@ -67,11 +68,12 @@ JoinImpl::JoinImpl(QueryExecutionContext* qec,
   if (t1->getCacheKey() > t2->getCacheKey()) {
     swapChildren();
   }
-  // If one of the inputs is a SCAN and the other one is not, always make the
-  // SCAN the right child (which also gives a deterministic order of the
-  // subtrees). This simplifies several branches in the `computeResult` method.
-  if (std::dynamic_pointer_cast<IndexScan>(t1->getRootOperation()) &&
-      !std::dynamic_pointer_cast<IndexScan>(t2->getRootOperation())) {
+  // If one of the inputs is a SCAN (that supports prefiltered joins) and the
+  // other one is not, always make the SCAN the right child (which also gives a
+  // deterministic order of the subtrees). This simplifies several branches in
+  // the `computeResult` method.
+  if (IndexScan::getIfSupportsPrefilteredJoin(*t1) &&
+      !IndexScan::getIfSupportsPrefilteredJoin(*t2)) {
     swapChildren();
   }
   left_ = std::move(t1);
@@ -102,6 +104,30 @@ string JoinImpl::getCacheKeyImpl() const {
 
 // _____________________________________________________________________________
 string JoinImpl::getDescriptor() const { return "Join on " + joinVar_.name(); }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+JoinImpl::getUpdatedQueryExecutionTreeWithPrefilterApplied(
+    const std::vector<PrefilterVariablePair>& prefilters) const {
+  // Try to apply the prefilters on both children (each child only applies
+  // the pairs whose variable it binds).
+  auto updatedLeft = left_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      clonePrefilters(prefilters));
+  auto updatedRight = right_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      clonePrefilters(prefilters));
+  if (!updatedLeft.has_value() && !updatedRight.has_value()) {
+    return std::nullopt;
+  }
+  // Keep the order of the children (the constructor would otherwise order
+  // them by cache key, and the prefiltered child has a new one): the column
+  // layout of the result is the layout of the left child followed by the
+  // remaining columns of the right child, and the operations above this join
+  // refer to the columns of the result by index.
+  return ad_utility::makeExecutionTree<Join>(
+      getExecutionContext(), updatedLeft.value_or(left_),
+      updatedRight.value_or(right_), leftJoinCol_, rightJoinCol_,
+      keepJoinColumn_, false);
+}
 
 // _____________________________________________________________________________
 Result JoinImpl::computeResult(bool requestLaziness) {
@@ -142,10 +168,8 @@ Result JoinImpl::computeResult(bool requestLaziness) {
   auto rightResIfCached = getCachedOrSmallResult(*right_);
   checkCancellation();
 
-  auto leftIndexScan =
-      std::dynamic_pointer_cast<IndexScan>(left_->getRootOperation());
-  if (leftIndexScan &&
-      std::dynamic_pointer_cast<IndexScan>(right_->getRootOperation())) {
+  auto leftIndexScan = IndexScan::getIfSupportsPrefilteredJoin(*left_);
+  if (leftIndexScan && IndexScan::getIfSupportsPrefilteredJoin(*right_)) {
     if (rightResIfCached && !leftResIfCached) {
       AD_CORRECTNESS_CHECK(rightResIfCached->isFullyMaterialized());
       return computeResultForIndexScanAndIdTable<true>(
@@ -166,8 +190,7 @@ Result JoinImpl::computeResult(bool requestLaziness) {
 
   // Note: If only one of the children is a scan, then we have made sure in the
   // constructor that it is the right child.
-  auto rightIndexScan =
-      std::dynamic_pointer_cast<IndexScan>(right_->getRootOperation());
+  auto rightIndexScan = IndexScan::getIfSupportsPrefilteredJoin(*right_);
   if (rightIndexScan && !rightResIfCached) {
     if (leftRes->isFullyMaterialized()) {
       return computeResultForIndexScanAndIdTable<false>(
@@ -222,14 +245,54 @@ float JoinImpl::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 size_t JoinImpl::getCostEstimate() {
-  size_t costJoin = left_->getSizeEstimate() + right_->getSizeEstimate();
-
+  // The join reads both inputs once. An index scan child whose sibling is
+  // small is read lazily, though: the sibling is materialized (see
+  // `lazyIndexScanMaxSizeMaterialization_`), the join hands its join column to
+  // the scan, and the scan reads only the blocks that contain one of those
+  // values (see `IndexScan::lazyScanForJoinOfColumnWithScan`), that is, at
+  // most one block per row of the sibling. The rows beyond that are results of
+  // the join and are charged as such. So such a scan costs at most `rows of
+  // the sibling * rows per block` (at least one block, a sibling that is
+  // estimated to be empty does not make the scan free), and never more than
+  // its size.
+  //
+  // NOTE: This also holds when the small sibling is an index scan itself,
+  // because `computeResult` materializes every small child, also a scan, and
+  // then joins the other scan with the materialized result. Only two scans
+  // that are both not small are joined via `computeResultForTwoIndexScans`,
+  // which prefilters by block ranges only. That is not bounded this way, so
+  // such scans are charged their full size.
   // TODO<joka921> once the `getCostEstimate` functions are `const`,
   // the argument can also be `const auto`
-  auto costOfSubtree = [](auto& subtree) { return subtree->getCostEstimate(); };
+  auto readCost = [this](auto& child, auto& sibling) -> size_t {
+    size_t size = child->getSizeEstimate();
+    auto isScan = [](auto& tree) {
+      return std::dynamic_pointer_cast<IndexScan>(tree->getRootOperation()) !=
+             nullptr;
+    };
+    size_t siblingSize = sibling->getSizeEstimate();
+    if (!isScan(child) ||
+        siblingSize >=
+            getRuntimeParameter<
+                &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>()) {
+      return size;
+    }
+    double blocks = static_cast<double>(std::max<size_t>(siblingSize, 1)) *
+                    static_cast<double>(getIndex().rowsPerBlock());
+    return static_cast<size_t>(std::min(static_cast<double>(size), blocks));
+  };
+  // The cost of a scan is reading it, bounded as above; other children report
+  // their own cost.
+  auto costOfSubtree = [&readCost](auto& subtree, auto& sibling) {
+    if (std::dynamic_pointer_cast<IndexScan>(subtree->getRootOperation())) {
+      return readCost(subtree, sibling);
+    }
+    return subtree->getCostEstimate();
+  };
 
-  return getSizeEstimateBeforeLimit() + costJoin + costOfSubtree(left_) +
-         costOfSubtree(right_);
+  size_t costJoin = readCost(left_, right_) + readCost(right_, left_);
+  return getSizeEstimateBeforeLimit() + costJoin +
+         costOfSubtree(left_, right_) + costOfSubtree(right_, left_);
 }
 
 // _____________________________________________________________________________

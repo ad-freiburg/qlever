@@ -421,6 +421,29 @@ TEST(QueryPlanner, filtersAreNotAppliedToPossiblyUndefinedVariables) {
       qec);
 }
 
+// Non-deterministic filters must not be applied before a join.
+TEST(QueryPlanner, nonDeterministicFiltersAreAppliedLast) {
+  auto scan = h::IndexScanFromStrings;
+  auto join = h::Join(scan("?s", "<p>", "?o"), scan("?s", "<q>", "?y"));
+  h::expectGreedy("SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(?o > 3) }",
+                  h::Join(h::Filter("?o > 3", scan("?s", "<p>", "?o")),
+                          scan("?s", "<q>", "?y")));
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(?o > 3 && RAND() < 0.5) }",
+      h::Filter("?o > 3 && RAND() < 0.5", join));
+  h::expectGreedy("SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(RAND() < 0.5) }",
+                  h::Filter("RAND() < 0.5", join));
+  h::expectDynamicProgramming(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(RAND() < 0.5) }",
+      h::Filter("RAND() < 0.5", join));
+  // The same holds for an `EXISTS` with a non-deterministic argument.
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y "
+      "FILTER EXISTS { ?s <r> ?b FILTER(RAND() < 0.5) } }",
+      h::Filter("EXISTS { ?s <r> ?b FILTER(RAND() < 0.5) }",
+                h::ExistsJoin(join, ::testing::_)));
+}
+
 TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
@@ -684,6 +707,13 @@ TEST(QueryPlanner, testSimpleOptional) {
       h::OrderBy({{Variable{"?b"}, ::OrderBy::AscOrDesc::Asc}},
                  h::OptionalJoin(scan("?a", "<rel1>", "?b"),
                                  scan("?a", "<rel2>", "?c"))));
+  // The second OPTIONAL is connected to the result of the first one.
+  h::expect(
+      "SELECT * { ?a <rel1> ?b OPTIONAL { ?a <rel2> ?c } "
+      "OPTIONAL { ?a <rel3> ?d } }",
+      h::OptionalJoin(h::OptionalJoin(scan("?a", "<rel1>", "?b"),
+                                      scan("?a", "<rel2>", "?c")),
+                      scan("?a", "<rel3>", "?d")));
 }
 
 TEST(QueryPlanner, SimpleTripleOneVariable) {
@@ -2546,6 +2576,19 @@ TEST(QueryPlanner, UnboundMinusIgnored) {
   h::expect("SELECT * WHERE {MINUS{?x <is-a> ?y}}", h::NeutralElement());
   h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?x <is-a> ?y}}",
             h::IndexScanFromStrings("?a", "<is-a>", "?b"));
+  h::expect("SELECT * { ?a <is-a> ?b MINUS { ?x <is-a> ?y } }",
+            h::QetWithWarnings({"MINUS clause that shares no variables"},
+                               h::IndexScanFromStrings("?a", "<is-a>", "?b")));
+  // Regression tests for https://github.com/ad-freiburg/qlever/issues/3556:
+  // The variables of a MINUS are not part of its result, so they must not
+  // connect a later MINUS.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?x <is-a> ?y } MINUS { ?z <is-a> ?y } }",
+      h::IndexScanFromStrings("?a", "<is-a>", "?b"));
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?y } MINUS { ?z <is-a> ?y } }",
+      h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+               h::IndexScanFromStrings("?a", "<is-a>", "?y")));
 }
 
 // ___________________________________________________________________________
@@ -2553,6 +2596,12 @@ TEST(QueryPlanner, SimpleMinus) {
   h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?a <is-a> ?b}}",
             h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
                      h::IndexScanFromStrings("?a", "<is-a>", "?b")));
+  // The second MINUS is connected to the result of the first one.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?c } MINUS { ?a <is-a> ?d } }",
+      h::Minus(h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                        h::IndexScanFromStrings("?a", "<is-a>", "?c")),
+               h::IndexScanFromStrings("?a", "<is-a>", "?d")));
 }
 
 // ___________________________________________________________________________
@@ -2789,6 +2838,25 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
 }
 
 // ____________________________________________________________________________
+// Regression test: `FILTER (NOT) EXISTS` used to be applied speculatively to
+// every candidate subplan inside the dynamic-programming rounds, which made
+// planning exponential in the number of such filters (each clause roughly
+// quadrupled planning time and memory, OOMing on any index from about four
+// clauses). With the filters deferred to the final filter passes, this plans
+// in milliseconds.
+TEST(QueryPlanner, manyExistsFiltersPlanQuickly) {
+  std::string query =
+      "SELECT ?v WHERE {\n"
+      "  ?v <p1> ?w1 . ?w1 <p2> ?w2 . ?w2 <p3> ?w3 .\n";
+  for (int i = 0; i < 8; ++i) {
+    query += absl::StrCat("  FILTER NOT EXISTS { ?v <q", i, "> ?x", i,
+                          " . FILTER (?x", i, " != ?w1) }\n");
+  }
+  query += "}";
+  EXPECT_NO_THROW(
+      h::parseAndPlan(std::move(query), ad_utility::testing::getQec()));
+}
+
 TEST(QueryPlanner, Exists) {
   auto xyz = h::IndexScanFromStrings("?x", "?y", "?z");
   auto abc = h::IndexScanFromStrings("?a", "?b", "?c");
@@ -3880,28 +3948,31 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
   // The dynamic programming planner binds the path to the join of the `VALUES`
   // clause and the index scan. The `?var` of that join is guaranteed to be part
   // of the knowledge graph, so no existence check is required.
+  auto pathOnJoin = h::transitivePath(
+      left, right, 0, std::numeric_limits<size_t>::max(),
+      h::Join(h::Sort(h::ValuesClause("VALUES (?var) { (1) }")),
+              h::IndexScanFromStrings("?var", "<c>", "<d>")),
+      h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                              "?_QLever_internal_variable_qp_1"));
   h::expectWithGivenBudgets(
       "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
-      h::transitivePath(
+      pathOnJoin, qec, {16, 64'000'000});
+  // The greedy planner either does the same, or binds the path to the `VALUES`
+  // clause directly (which requires an existence check) and joins the index
+  // scan afterwards: on this tiny graph the two plans have the same estimated
+  // size and cost (the join reads the scan lazily for the one value), and the
+  // greedy planner takes whichever it sees first.
+  auto joinAfterPath = h::Join(
+      h::Sort(h::transitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
-          h::Join(h::Sort(h::ValuesClause("VALUES (?var) { (1) }")),
-                  h::IndexScanFromStrings("?var", "<c>", "<d>")),
+          h::EmptyPath(Variable{"?var"}, std::nullopt,
+                       h::ValuesClause("VALUES (?var) { (1) }")),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
-                                  "?_QLever_internal_variable_qp_1")),
-      qec, {16, 64'000'000});
-  // The greedy planner binds the path to the `VALUES` clause directly (which
-  // requires an existence check) and joins the index scan afterwards.
+                                  "?_QLever_internal_variable_qp_1"))),
+      h::IndexScanFromStrings("?var", "<c>", "<d>"));
   h::expectWithGivenBudgets(
       "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
-      h::Join(
-          h::Sort(h::transitivePath(
-              left, right, 0, std::numeric_limits<size_t>::max(),
-              h::EmptyPath(Variable{"?var"}, std::nullopt,
-                           h::ValuesClause("VALUES (?var) { (1) }")),
-              h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
-                                      "?_QLever_internal_variable_qp_1"))),
-          h::IndexScanFromStrings("?var", "<c>", "<d>")),
-      qec, {0, 1, 4});
+      ::testing::AnyOf(pathOnJoin, joinAfterPath), qec, {0, 1, 4});
 }
 
 // _____________________________________________________________________________

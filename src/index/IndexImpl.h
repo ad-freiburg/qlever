@@ -120,6 +120,7 @@ class IndexImpl {
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
   size_t rowsPerBlock_ = DEFAULT_INDEX_ROWS_PER_BLOCK;
+  size_t parsedGeometriesMinLength_ = 0;
   nlohmann::json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
@@ -213,6 +214,11 @@ class IndexImpl {
   // index building (only relevant during index building). Set (and compiled
   // from their string representation) via `setBlankNodeIriRegexes`.
   ad_utility::RegexSet blankNodeIriRegexes_;
+
+  // The geo cell grid for WKT literals (see `GeoCellGrid`), only relevant
+  // during index building. When reading an index, the grid comes from its
+  // configuration.
+  std::optional<ad_utility::GeoCellGrid> geoCellGridForIndexBuilding_;
 
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
@@ -447,10 +453,30 @@ class IndexImpl {
   // ___________________________________________________________________________
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
 
+  // Throw if `vocabularyType` cannot hold a geo cell grid (see
+  // `setGeoCellGridForIndexBuilding`).
+  static void checkVocabularyTypeForGeoCellGrid(
+      ad_utility::VocabularyType vocabularyType);
+
   // ___________________________________________________________________________
   TextVocabulary::AccessReturnType indexToString(WordVocabIndex id) const;
 
  public:
+  // Set the geo cell grid for WKT literals (see `GeoCellGrid`), which is
+  // stored in the index configuration. A grid requires the vocabulary type
+  // `OnDiskCompressedGeoSplit`. Only relevant during index building.
+  void setGeoCellGridForIndexBuilding(
+      std::optional<ad_utility::GeoCellGrid> grid) {
+    geoCellGridForIndexBuilding_ = grid;
+    if (grid.has_value()) {
+      configurationJson_["geo-cell-grid-level"] = grid->level();
+      configurationJson_["geo-cell-grid-scheme"] = grid->scheme();
+    } else {
+      configurationJson_.erase("geo-cell-grid-level");
+      configurationJson_.erase("geo-cell-grid-scheme");
+    }
+  }
+
   // ___________________________________________________________________________
   Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
@@ -597,6 +623,13 @@ class IndexImpl {
   size_t& rowsPerBlock() { return rowsPerBlock_; }
 
   const size_t& rowsPerBlock() const { return rowsPerBlock_; }
+
+  // The minimum length of the WKT literals for which the index build stores
+  // the parsed geometry (see `ParsedGeometry`, 0 = none).
+  size_t& parsedGeometriesMinLength() { return parsedGeometriesMinLength_; }
+  const size_t& parsedGeometriesMinLength() const {
+    return parsedGeometriesMinLength_;
+  }
 
   void setOnDiskBase(const std::string& onDiskBase);
 

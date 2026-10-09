@@ -604,6 +604,50 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
 }
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTest, ScansAllocateThroughTheGivenAllocator) {
+  qlv().writeMaterializedView("limitedView", simpleWriteQuery_);
+  auto scanAll = [](const MaterializedView& view) {
+    auto locatedTriples = view.locatedTriplesState();
+    const auto& permutation = *view.permutation();
+    return permutation.scan(
+        permutation.getScanSpecAndBlocks(
+            ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+            *locatedTriples),
+        {}, std::make_shared<ad_utility::CancellationHandle<>>(),
+        *locatedTriples);
+  };
+
+  // A view loaded with an allocator that has no memory left can be loaded,
+  // but every scan of it fails with the memory limit error.
+  MaterializedView limited{
+      testIndexBase_, "limitedView",
+      ad_utility::makeAllocatorWithLimit<Id>(ad_utility::MemorySize::bytes(0))};
+  EXPECT_THROW(scanAll(limited),
+               ad_utility::detail::AllocationExceedsLimitException);
+
+  // With enough memory, the same scan succeeds.
+  MaterializedView unlimited{testIndexBase_, "limitedView"};
+  EXPECT_GT(scanAll(unlimited).numRows(), 0u);
+
+  // A view loaded by an engine allocates through the engine's allocator, i.e.
+  // the query memory limit: with the default limit the scan succeeds, with a
+  // limit of zero bytes it fails.
+  auto viewFromEngine =
+      qlv().indexAndViewsSnapshot()->materializedViewsManager_.getView(
+          "limitedView", nullptr);
+  EXPECT_GT(scanAll(*viewFromEngine).numRows(), 0u);
+  qlever::EngineConfig config;
+  config.baseName_ = testIndexBase_;
+  config.memoryLimit_ = ad_utility::MemorySize::bytes(0);
+  qlever::Qlever engineWithoutMemory{config};
+  auto viewFromLimitedEngine =
+      engineWithoutMemory.indexAndViewsSnapshot()
+          ->materializedViewsManager_.getView("limitedView", nullptr);
+  EXPECT_THROW(scanAll(*viewFromLimitedEngine),
+               ad_utility::detail::AllocationExceedsLimitException);
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, ManualConfigurations) {
   MaterializedViewsManager manager{testIndexBase_};
   auto plan = qlv().parseAndPlanQuery(simpleWriteQuery_);
@@ -1755,6 +1799,14 @@ constexpr std::string_view bindWriteQuery =
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, BindRewrite) {
   qlv().writeMaterializedView("bindView", std::string{bindWriteQuery});
+  // Like `bindView`, but `?o` might be `UNDEF`.
+  qlv().writeMaterializedView("undefBindView", R"(
+    SELECT ?s ?o ?b2 {
+      ?s <p1> ?x .
+      OPTIONAL { ?s <p2> ?o }
+      BIND(2 * ?o + 1 AS ?b2)
+    }
+  )");
 
   // We fix the first columns of the `IndexScan` matcher because we are only
   // interested in the additional columns. The number of columns after stripping
@@ -2027,6 +2079,192 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                      "2 * ?s", V{"?x1"}));
   }
 
+  // `BIND` push down through the remaining operations: `ExistsJoin`, `Minus`,
+  // `MultiColumnJoin`, `OptionalJoin`, `Union`, `NeutralOptional`, `Bind`,
+  // `CartesianProductJoin`, and `Filter`. Each tree is built manually (instead
+  // of going through the query planner) so that the test is independent of
+  // query planning heuristics.
+  {
+    namespace tc = ad_utility::triple_component;
+    using ad_utility::makeExecutionTree;
+
+    auto planView = [this](std::string_view viewName) {
+      return qlv().parseAndPlanQuery(absl::StrCat(
+          "PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/> "
+          "SELECT * { ?s view:",
+          viewName, "-o ?o . }"));
+    };
+    auto pq = planView("bindView");
+    auto pqUndef = planView("undefBindView");
+    auto* qec = &pq.queryExecutionContext();
+    // A view scan exposing `?s ?o` (no `BIND` pushed down yet).
+    auto view = [&pq] {
+      return std::make_shared<QueryExecutionTree>(pq.queryExecutionTree());
+    };
+    // Like `view`, but `?o` might be `UNDEF`.
+    auto undefView = [&pqUndef] {
+      return std::make_shared<QueryExecutionTree>(pqUndef.queryExecutionTree());
+    };
+    // A plain (non-view) scan, which never accepts the push down.
+    auto scan = [qec](std::string s, std::string_view p, std::string o) {
+      return makeExecutionTree<IndexScan>(
+          qec, Permutation::PSO,
+          SparqlTripleSimple{V{std::move(s)}, tc::Iri::fromIriref(p),
+                             V{std::move(o)}});
+    };
+    auto sharesS = [&] { return scan("?s", "<p1>", "?x"); };
+    auto sharesSAndO = [&] { return scan("?s", "<p3>", "?o"); };
+    auto sharesNothing = [&] { return scan("?y", "<p1>", "?z"); };
+    auto sharesSMatcher = h::IndexScanFromStrings("?s", "<p1>", "?x");
+    auto pushedView = bindView(AC{{3, V{"?bind"}}});
+
+    auto exists = [qec](auto left, auto right) {
+      return makeExecutionTree<ExistsJoin>(qec, left, right, V{"?exists"});
+    };
+    auto minus = [qec](auto left, auto right) {
+      return makeExecutionTree<Minus>(qec, left, right);
+    };
+    auto mcj = [qec](auto left, auto right) {
+      return makeExecutionTree<MultiColumnJoin>(qec, left, right);
+    };
+    auto optional = [qec](auto left, auto right) {
+      return makeExecutionTree<OptionalJoin>(qec, left, right);
+    };
+    auto unionOf = [qec](auto left, auto right) {
+      return makeExecutionTree<Union>(qec, left, right);
+    };
+    auto cartesian = [qec](auto left, auto right) {
+      return makeExecutionTree<CartesianProductJoin>(qec,
+                                                     std::vector{left, right});
+    };
+
+    // Push the `BIND` into `tree` (via the operation's override, like the query
+    // planner does) and check the result. `std::nullopt` means refused.
+    auto expectPush = [&bind](const std::shared_ptr<QueryExecutionTree>& tree,
+                              std::optional<h::QetMatcher> expected,
+                              ad_utility::source_location location =
+                                  AD_CURRENT_SOURCE_LOC()) {
+      auto trace = generateLocationTrace(location);
+      auto pushed = tree->getRootOperation()->makeTreeWithBindColumn(bind);
+      ASSERT_EQ(pushed.has_value(), expected.has_value());
+      if (expected.has_value()) {
+        EXPECT_THAT(*pushed.value(), expected.value());
+      }
+    };
+
+    // `ExistsJoin` and `Minus`: only into the left child. Also refused if the
+    // right child (not visible outside) reuses the `BIND`'s target variable,
+    // because it would then become a join column.
+    expectPush(exists(view(), sharesS()),
+               h::ExistsJoin(pushedView, sharesSMatcher));
+    expectPush(exists(sharesS(), view()), std::nullopt);
+    expectPush(exists(view(), scan("?s", "<p1>", "?bind")), std::nullopt);
+    expectPush(minus(view(), sharesS()), h::Minus(pushedView, sharesSMatcher));
+    expectPush(minus(sharesS(), view()), std::nullopt);
+    expectPush(minus(view(), scan("?s", "<p1>", "?bind")), std::nullopt);
+
+    // `MultiColumnJoin`: succeeds iff a child covering `?o` accepts.
+    expectPush(mcj(view(), sharesSAndO()),
+               h::MultiColumnJoin(pushedView,
+                                  h::IndexScanFromStrings("?s", "<p3>", "?o")));
+    expectPush(mcj(scan("?s", "<p4>", "?w"), scan("?s", "<p5>", "?w")),
+               std::nullopt);
+
+    // `OptionalJoin`: only into the left child. For unmatched rows, the right
+    // child's columns are filled with `UNDEF` instead of evaluating the `BIND`.
+    expectPush(optional(view(), sharesS()),
+               h::OptionalJoin(pushedView, sharesSMatcher));
+    expectPush(optional(sharesS(), view()), std::nullopt);
+    expectPush(optional(sharesS(), sharesS()), std::nullopt);
+    // `keepJoinColumns == false` is preserved, so `?s` stays hidden.
+    expectPush(
+        makeExecutionTree<OptionalJoin>(qec, view(), sharesS(), false),
+        ::testing::AllOf(h::OptionalJoin(pushedView, sharesSMatcher),
+                         AD_PROPERTY(QueryExecutionTree, getVariableColumns,
+                                     ::testing::Not(::testing::Contains(
+                                         ::testing::Key(V{"?s"}))))));
+
+    // `Union`: the push down must succeed in all children. Refused if `?bind`
+    // is already a variable of the `UNION`, if a child doesn't cover `?o` (it
+    // would get `UNDEF` instead of evaluating the `BIND`), if a child rejects,
+    // or if the `UNION` is sorted.
+    expectPush(unionOf(view(), view()), h::Union(pushedView, pushedView));
+    expectPush(
+        unionOf(scan("?s", "<p1>", "?bind"), scan("?s", "<p1>", "?bind")),
+        std::nullopt);
+    expectPush(unionOf(view(), sharesS()), std::nullopt);
+    expectPush(unionOf(sharesSAndO(), view()), std::nullopt);
+    expectPush(makeExecutionTree<Union>(qec, view(), view(),
+                                        std::vector<ColumnIndex>{0}),
+               std::nullopt);
+
+    // `NeutralOptional` refuses: for an empty child it fabricates an
+    // all-`UNDEF` row without evaluating the `BIND`.
+    expectPush(makeExecutionTree<NeutralOptional>(qec, view()), std::nullopt);
+
+    // `Bind` and `Filter`: succeed iff their only child accepts.
+    parsedQuery::Bind innerBind{
+        sparqlExpression::SparqlExpressionPimpl{
+            std::make_shared<sparqlExpression::IdExpression>(
+                ValueId::makeFromInt(1)),
+            "1"},
+        V{"?other"}};
+    expectPush(makeExecutionTree<::Bind>(qec, view(), innerBind),
+               h::Bind(pushedView, "1", V{"?other"}));
+    expectPush(makeExecutionTree<::Bind>(qec, sharesS(), innerBind),
+               std::nullopt);
+    sparqlExpression::SparqlExpressionPimpl trueExpr{
+        std::make_shared<sparqlExpression::IdExpression>(
+            Id::makeFromBool(true)),
+        "true"};
+    expectPush(makeExecutionTree<Filter>(qec, view(), trueExpr),
+               h::Filter("true", pushedView));
+    expectPush(makeExecutionTree<Filter>(qec, sharesS(), trueExpr),
+               std::nullopt);
+
+    // `CartesianProductJoin`: succeeds iff a child covering `?o` accepts.
+    auto sharesNothingMatcher = h::IndexScanFromStrings("?y", "<p1>", "?z");
+    expectPush(cartesian(view(), sharesNothing()),
+               h::CartesianProductJoin(pushedView, sharesNothingMatcher));
+    expectPush(cartesian(sharesNothing(), scan("?a", "<p1>", "?b")),
+               std::nullopt);
+
+    // `?o` might be `UNDEF` in `undefView`. A join on `?o` could fill in the
+    // other child's value, which the original `BIND` would see, but the
+    // pushed-down one wouldn't. (The join is on `?s` and `?o` because the view
+    // is sorted by them, so no `Sort` is added, which would refuse on its own.)
+    expectPush(optional(undefView(), sharesSAndO()), std::nullopt);
+    expectPush(mcj(undefView(), sharesSAndO()), std::nullopt);
+    // Without such a join, the push down is fine. The view only has three
+    // columns, so `?bind` becomes the object.
+    auto pushedUndefView = viewScan("undefBindView", "?s", "?o", "?bind", 3);
+    expectPush(optional(undefView(), sharesS()),
+               h::OptionalJoin(pushedUndefView, sharesSMatcher));
+    expectPush(cartesian(undefView(), sharesNothing()),
+               h::CartesianProductJoin(pushedUndefView, sharesNothingMatcher));
+    expectPush(unionOf(undefView(), undefView()),
+               h::Union(pushedUndefView, pushedUndefView));
+
+    // `QueryExecutionTree::makeTreeWithBindColumn` (the entry point used by the
+    // query planner) preserves the `LIMIT` and the visible variables (as
+    // restricted by a subquery's `SELECT ?s`) of the original root, and
+    // exposes the `BIND`'s target.
+    {
+      auto filterTree = makeExecutionTree<Filter>(qec, view(), trueExpr);
+      filterTree->applyLimitOffset(LimitOffsetClause{5});
+      filterTree->getRootOperation()->setSelectedVariablesForSubquery(
+          {V{"?s"}});
+      auto result =
+          QueryExecutionTree::makeTreeWithBindColumn(filterTree, bind);
+      ASSERT_TRUE(result.has_value());
+      const auto& root = *result.value()->getRootOperation();
+      EXPECT_EQ(root.getLimitOffset()._limit, 5ul);
+      EXPECT_THAT(root.getExternallyVisibleVariableColumns(),
+                  ::testing::UnorderedElementsAre(::testing::Key(V{"?s"}),
+                                                  ::testing::Key(V{"?bind"})));
+    }
+  }
+
   // Test the variable to permutation column index map.
   {
     // The column `?b3` is the fifth column in the permutation, but the second
@@ -2195,8 +2433,11 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
     // evaluation of the query plan.
     auto res = qet.getResult();
     const auto& runtimeInfo = qet.getRootOperation()->runtimeInfo().details_;
-    ASSERT_TRUE(runtimeInfo.contains("num-geoms-dropped-by-prefilter"));
-    EXPECT_EQ(runtimeInfo.at("num-geoms-dropped-by-prefilter"), 3);
+    ASSERT_TRUE(runtimeInfo.contains("num-geoms-after-block-prefilter"));
+    EXPECT_EQ(
+        runtimeInfo.at("num-geoms-after-block-prefilter").get<int64_t>() -
+            runtimeInfo.at("num-geoms-after-bbox-prefilter").get<int64_t>(),
+        3);
   }
 }
 
@@ -2252,6 +2493,97 @@ TEST(MaterializedViewsSpatialJoinTest, FixedValueFilterOnFullyCoveredView) {
                PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
                SpatialJoinType::WITHIN_DIST, std::nullopt, valuesPoint,
                viewScan(viewName, "?osm_id", "?intermediate", "?geometry", 3)));
+}
+
+// Whether the plan `tree` contains a scan of a materialized view.
+bool containsViewScan(const QueryExecutionTree& tree) {
+  if (const auto* scan =
+          dynamic_cast<const IndexScan*>(tree.getRootOperation().get());
+      scan != nullptr && scan->permutation().materializedView() != nullptr) {
+    return true;
+  }
+  return ql::ranges::any_of(
+      std::as_const(*tree.getRootOperation()).getChildren(),
+      [](const auto* child) { return containsViewScan(*child); });
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsSpatialJoinTest, EvaluatedPartFilterOnViewCoveredSide) {
+  // A spatial `FILTER` whose one side is the geometry of a fixed subject,
+  // obtained via `geo:hasGeometry/geo:asWKT`, and whose other side is fully
+  // covered by a materialized view. The planner evaluates the fixed side at
+  // planning time and prefilters the other side with its rectangle; the
+  // prefiltered scan of the view must then be the plan for the other side.
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string viewName = "geoms";
+  std::string ttl{geoTtl};
+  absl::StrAppend(&ttl,
+                  "<region> geo:hasGeometry <rm> .\n<rm> geo:asWKT "
+                  "\"POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))\"^^geo:wktLiteral "
+                  ".\n");
+  for (size_t i = 0; i < 500; ++i) {
+    absl::StrAppend(&ttl, "<pad", i, "> geo:hasGeometry <nowkt", i, "> .\n");
+    absl::StrAppend(&ttl, "<nogeom", i, "> geo:asWKT \"POINT(", i % 10, " ",
+                    i / 10, ")\"^^geo:wktLiteral .\n");
+  }
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, ttl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  qlv.writeMaterializedView(
+      viewName,
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/>\n"
+      "PREFIX ql: <http://qlever.cs.uni-freiburg.de/builtin-functions/>\n"
+      "SELECT ?g ?o ?m ?ll ?ur ?c {\n"
+      "  ?o geo:hasGeometry ?m .\n"
+      "  ?m geo:asWKT ?g .\n"
+      "  BIND (ql:envelopeLowerLeft(?g) AS ?ll)\n"
+      "  BIND (ql:envelopeUpperRight(?g) AS ?ur)\n"
+      "  BIND (geof:centroid(?g) AS ?c)\n"
+      "}");
+
+  const std::string query = R"qy(
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    SELECT * {
+      <region> geo:hasGeometry ?rm . ?rm geo:asWKT ?r .
+      ?o geo:hasGeometry ?m . ?m geo:asWKT ?g .
+      FILTER geof:sfContains(?r, ?g)
+    }
+  )qy";
+  qlv.clearQueryResultCache();
+  auto plannedQuery = qlv.parseAndPlanQuery(query);
+  const auto& tree = plannedQuery.queryExecutionTree();
+  EXPECT_TRUE(containsViewScan(tree)) << tree.getCacheKey();
+
+  // With a fixed polygon instead of the fixed subject, and without any
+  // evaluation at planning time, the scans of the side that the view covers,
+  // also the scan of the view, are prefiltered with the rectangle of the
+  // polygon. The plan uses the view, and its result is the same as without
+  // the prefilter.
+  auto noEvaluation = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(0);
+  const std::string queryFixedPolygon = R"qy(
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    SELECT * {
+      ?o geo:hasGeometry ?m . ?m geo:asWKT ?g .
+      FILTER geof:sfContains("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))"^^geo:wktLiteral, ?g)
+    }
+  )qy";
+  auto numRows = [&qlv](const std::string& q) {
+    qlv.clearQueryResultCache();
+    auto planned = qlv.parseAndPlanQuery(q);
+    EXPECT_TRUE(containsViewScan(planned.queryExecutionTree()));
+    return planned.queryExecutionTree().getResult()->idTableView().numRows();
+  };
+  auto numRowsWithPrefilter = numRows(queryFixedPolygon);
+  auto noPrefilter = setRuntimeParameterForTest<
+      &RuntimeParameters::enablePrefilterOnIndexScans_>(false);
+  EXPECT_EQ(numRows(queryFixedPolygon), numRowsWithPrefilter);
 }
 
 // _____________________________________________________________________________

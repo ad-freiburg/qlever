@@ -1,6 +1,11 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 The QLever Authors, in particular:
+//
+// 2022 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_TEST_UTIL_INDEXTESTHELPERS_H
 #define QLEVER_TEST_UTIL_INDEXTESTHELPERS_H
@@ -88,6 +93,8 @@ struct TestIndexConfig {
   bool usePatterns = true;
   bool usePrefixCompression = true;
   size_t rowsPerBlock = 2;
+  // See `Index::parsedGeometriesMinLength`.
+  size_t parsedGeometriesMinLength = 0;
   bool createTextIndex = false;
   bool addWordsFromLiterals = true;
   std::optional<std::pair<std::string, std::string>>
@@ -100,6 +107,13 @@ struct TestIndexConfig {
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
   qlever::Filetype indexType = qlever::Filetype::Turtle;
   std::optional<VocabularyType> vocabularyType = std::nullopt;
+  // The level of the geo cell grid for WKT literals, 0 means no grid (see
+  // `GeoCellGrid`). Requires the `OnDiskCompressedGeoSplit` vocabulary type.
+  uint8_t geoCellGridLevel = 0;
+  // The scheme of the geo cell grid (see `GeoCellGridScheme`), only relevant
+  // with a grid level > 0.
+  ad_utility::GeoCellGridScheme geoCellGridScheme =
+      ad_utility::GeoCellGridScheme::Flat;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
   // The general patterns for IRIs that are encoded directly in an `Id`, see
@@ -150,21 +164,23 @@ struct TestIndexConfig {
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
     return H::combine(
         std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
-        c.usePrefixCompression, c.rowsPerBlock, c.createTextIndex,
-        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
-        c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
-        c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
-        c.parseInParallel, c.additionalSettings, c.geoPointEncoding.value());
+        c.usePrefixCompression, c.rowsPerBlock, c.parsedGeometriesMinLength,
+        c.createTextIndex, c.addWordsFromLiterals,
+        c.contentsOfWordsFileAndDocsfile, c.parserBufferSize, c.scoringMetric,
+        c.bAndKParam, c.indexType, c.vocabularyType, c.geoCellGridLevel,
+        c.geoCellGridScheme, c.encodedPrefixesWithoutAngleBrackets,
+        c.encodedIriPatterns, c.addHasWordTriples, c.secondaryVocabWords,
+        c.numThreads, c.parseInParallel, c.additionalSettings,
+        c.geoPointEncoding.value());
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
-      usePrefixCompression, rowsPerBlock, createTextIndex, addWordsFromLiterals,
-      contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
-      bAndKParam, indexType, vocabularyType,
-      encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
-      addHasWordTriples, secondaryVocabWords, numThreads, parseInParallel,
-      additionalSettings, geoPointEncoding)
+      usePrefixCompression, rowsPerBlock, parsedGeometriesMinLength,
+      createTextIndex, addWordsFromLiterals, contentsOfWordsFileAndDocsfile,
+      parserBufferSize, scoringMetric, bAndKParam, indexType, vocabularyType,
+      geoCellGridLevel, geoCellGridScheme, encodedPrefixesWithoutAngleBrackets,
+      encodedIriPatterns, addHasWordTriples, secondaryVocabWords, numThreads,
+      parseInParallel, additionalSettings, geoPointEncoding)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

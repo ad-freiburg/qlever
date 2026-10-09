@@ -88,7 +88,8 @@ void expectFailureIsPropagated(
   auto trace = generateLocationTrace(loc);
   WordBatchBuilder builder;
   auto push = makePush(pipeline, wordCallback, regexes);
-  builder.addMergedWords({makeQueueWord("\"a\"", false, 0, 0)}, lessThan, push);
+  builder.addMergedWords({makeQueueWord("\"a\"", false, 0, 0)}, keyedLessThan,
+                         push);
   builder.finish(push);
   // The batch is processed asynchronously, so wait for the failure. NOTE: The
   // `finish()` below would also wait, but it throws.
@@ -98,7 +99,8 @@ void expectFailureIsPropagated(
   }
   checkAfterFailure();
 
-  builder.addMergedWords({makeQueueWord("\"b\"", false, 0, 1)}, lessThan, push);
+  builder.addMergedWords({makeQueueWord("\"b\"", false, 0, 1)}, keyedLessThan,
+                         push);
   builder.finish(push);
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(pipeline.finish(),
                                         ::testing::HasSubstr(expectedMessage),
@@ -130,7 +132,7 @@ TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
                             makeQueueWord("\"b\"", false, 0, 1),
                             makeQueueWord("\"b\"", true, 1, 0),
                             makeQueueWord("\"c\"", false, 1, 1)},
-                           lessThan, push);
+                           keyedLessThan, push);
     builder.finish(push);
     metaData = pipeline.finish();
   }

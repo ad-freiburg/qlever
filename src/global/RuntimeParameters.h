@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <optional>
 
+#include "global/Constants.h"
 #include "util/Log.h"
 #include "util/Parameters.h"
 
@@ -51,6 +52,14 @@ struct RuntimeParameters {
   Double sortEstimateCancellationFactor_{3.0,
                                          "sort-estimate-cancellation-factor"};
   SizeT cacheMaxNumEntries_{1000, "cache-max-num-entries"};
+
+  // The total amount of memory that may be used for query processing and
+  // caching (the `--memory-for-queries` option of `qlever-server`, called
+  // `MEMORY_FOR_QUERIES` in a Qleverfile). Increasing it at runtime always
+  // succeeds. Decreasing it requires the freed part to be currently unused,
+  // otherwise the change is rejected.
+  MemorySizeParameter memoryForQueries_{DEFAULT_MEM_FOR_QUERIES,
+                                        "memory-for-queries"};
 
   MemorySizeParameter cacheMaxSize_{ad_utility::MemorySize::gigabytes(30),
                                     "cache-max-size"};
@@ -164,6 +173,14 @@ struct RuntimeParameters {
   // prefilter-free baseline, or for debugging, as wrong results may be
   // related to the `PrefilterExpression`s.
   Bool enablePrefilterOnIndexScans_{true, "enable-prefilter-on-index-scans"};
+  // The query planner evaluates a small part of a query at planning time if
+  // that gives it the rectangle of a geometry variable of a spatial join
+  // (see `QueryPlanner::applyGeoRectanglePrefilters`), but only if the size
+  // and the cost estimates of the cheapest plan of that part are at most
+  // these values.
+  SizeT geoPrefilterPlanningMaxRows_{1'000, "geo-prefilter-planning-max-rows"};
+  SizeT geoPrefilterPlanningMaxCost_{10'000'000,
+                                     "geo-prefilter-planning-max-cost"};
   // The maximum number of threads to be used by the spatial join algorithms.
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
   // The maximum number of threads for the parallel counting loops of the

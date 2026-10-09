@@ -114,7 +114,8 @@ class Union : public Operation {
   }
 
  private:
-  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+  void onLimitOffsetChanged(const LimitOffsetClause&,
+                            bool childrenAreExclusivelyOwned) override;
 
   // The columns that the subtree with index `subtreeIndex` has to be sorted on,
   // such that merging the two subtrees yields a result that is sorted according
@@ -154,6 +155,11 @@ class Union : public Operation {
   Result::LazyResult computeResultKeepOrder(
       bool requestLaziness, std::shared_ptr<const Result> result1,
       std::shared_ptr<const Result> result2) const;
+
+  // If a `BIND` is to be pushed down into a `UNION`, it must be pushed into all
+  // children of the `UNION` that cover its expression variables.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
 
   // ___________________________________________________________________________
   std::optional<std::shared_ptr<QueryExecutionTree>>

@@ -1206,6 +1206,33 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
 }
 
 // _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesWithLimitYieldsEachRowOnce) {
+  // `getLazyScan` ignores the prefiltered blocks for a scan with a LIMIT or
+  // OFFSET. Previously, the scan side then yielded the complete limited scan
+  // once for each batch of matching blocks (here one for `<a>` and one for
+  // `<c>`, which are in different blocks).
+  IndexScan scan = makeScan();
+  scan.applyLimitOffset(LimitOffsetClause{._limit = 3, ._offset = 2});
+
+  auto makeJoinSide = [this]() {
+    using P = Result::IdTableVocabPair;
+    return std::array{P{makeIdTable({iri("<a>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<c>")}), LocalVocab{}}};
+  };
+
+  auto [joinSideResults, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+
+  IdTable scanTable{2, qec_->getAllocator()};
+  for (const auto& [table, vocab] : scanResults) {
+    scanTable.insertAtEnd(table);
+  }
+  EXPECT_EQ(scanTable, tableFromTriples({{iri("<b>"), iri("<B>")},
+                                         {iri("<b>"), iri("<B2>")},
+                                         {iri("<c>"), iri("<C>")}}));
+}
+
+// _____________________________________________________________________________
 TEST_P(IndexScanWithLazyJoin,
        prefilterTablesDoesFilterCorrectlyWithOverlappingValues) {
   std::string kg = "<a> <p> <A> . <b> <p> <B>. ";

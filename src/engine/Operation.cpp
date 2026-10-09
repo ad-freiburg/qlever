@@ -17,6 +17,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/Algorithm.h"
@@ -592,7 +593,8 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
 }
 
 // __________________________________________________________________
-void Operation::applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
+void Operation::applyLimitOffset(const LimitOffsetClause& limitOffsetClause,
+                                 bool childrenAreExclusivelyOwned) {
   limitOffset_.mergeLimitAndOffset(limitOffsetClause);
   // The new limit changes the size estimates and thereby possibly the sort
   // order (see the caution note in the header), so a previously cached value
@@ -606,7 +608,17 @@ void Operation::applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
   }
   // We can safely ignore members that are not `_offset` and `_limit` since
   // they are unused by subclasses of `Operation`.
-  onLimitOffsetChanged(limitOffsetClause);
+  onLimitOffsetChanged(limitOffsetClause, childrenAreExclusivelyOwned);
+}
+
+// _____________________________________________________________________________
+void Operation::applyLimitOffsetToChild(
+    std::shared_ptr<QueryExecutionTree>& child,
+    const LimitOffsetClause& limitOffset, bool childIsExclusivelyOwned) {
+  if (!childIsExclusivelyOwned) {
+    child = child->clone();
+  }
+  child->applyLimitOffset(limitOffset, true);
 }
 
 // __________________________________________________________________
@@ -760,6 +772,17 @@ uint64_t Operation::getSizeEstimate() {
   } else {
     return getSizeEstimateBeforeLimit();
   }
+}
+
+// _____________________________________________________________________________
+std::vector<Operation::PrefilterVariablePair> Operation::clonePrefilters(
+    const std::vector<PrefilterVariablePair>& prefilters) {
+  std::vector<PrefilterVariablePair> result;
+  result.reserve(prefilters.size());
+  for (const auto& [expression, variable] : prefilters) {
+    result.emplace_back(expression->clone(), variable);
+  }
+  return result;
 }
 
 // _____________________________________________________________________________

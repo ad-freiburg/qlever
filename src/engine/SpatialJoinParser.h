@@ -1,6 +1,11 @@
-// Copyright 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOINPARSER_H_
 #define QLEVER_SRC_ENGINE_SPATIALJOINPARSER_H_
@@ -12,6 +17,7 @@
 
 #include "global/ValueId.h"
 #include "index/Index.h"
+#include "rdfTypes/GeoRectangle.h"
 
 namespace ad_utility::detail::parallel_wkt_parser {
 
@@ -41,9 +47,18 @@ inline bool operator==(const SpatialJoinParseJob& a,
 // vocabulary on the fly (and in parallel).
 class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
  public:
+  // If `requireContainment` is set, the prefilter discards every geometry
+  // whose bounding box does not lie inside `prefilterLatLngBox` (see
+  // `LibspatialjoinAlgorithm::prefilterGeoByBoundingBox`).
   WKTParser(sj::Sweeper* sweeper, size_t numThreads, bool usePrefiltering,
             const std::optional<::util::geo::DBox>& prefilterLatLngBox,
-            const Index& index);
+            bool requireContainment, const Index& index);
+
+  // Stop the worker threads. The destructor of `WKTParserBase` does this as
+  // well, but only after the members of this class are destroyed, and the
+  // threads use them until they stop. This matters if the parsing ends
+  // without `done()`, for example because the query was cancelled.
+  ~WKTParser();
 
   // Enqueue a new row from the input table (given the `ValueId` of the
   // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex`, the `rowIndex`
@@ -55,10 +70,17 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
                          std::optional<BoundingBox> boundingBox);
 
   // Accumulate the counters across all threads. They count the number of
-  // geometries skipped by bounding box prefilter and the number of parsed (that
-  // is, not skipped) geometries respectively.
+  // geometries skipped by bounding box prefilter, the number of parsed (that
+  // is, not skipped) geometries, and the number of the parsed geometries that
+  // were taken from the index in their parsed form (see `ParsedGeometry`)
+  // respectively.
   size_t getPrefilterCounter();
   size_t getParseCounter();
+  size_t getFromIndexCounter();
+
+  // The number of geometries skipped by the geo cell test on their `ValueId`
+  // alone (a subset of `getPrefilterCounter`, see `GeoRectangleIdPrefilter`).
+  size_t getCellPrefilterCounter();
 
  protected:
   void processQueue(size_t t) override;
@@ -67,14 +89,25 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // Members are named `_member`, not `member_` for consistency with the base
   // class from `libspatialjoin`.
 
-  // The vectors `_numSkipped` and `_numParsed` hold the number of geometries
-  // that were skipped by prefilter or actually parsed for each of the threads.
+  // The vectors `_numSkipped`, `_numParsed` and `_numFromIndex` hold the
+  // number of geometries that were skipped by prefilter, actually parsed, or
+  // taken from the index in their parsed form for each of the threads.
+  // `_numSkippedByCell` counts the subset of the skipped geometries that were
+  // already skipped by the geo cell test on their `ValueId` (without reading
+  // their bounding box).
   std::vector<size_t> _numSkipped;
+  std::vector<size_t> _numSkippedByCell;
   std::vector<size_t> _numParsed;
+  std::vector<size_t> _numFromIndex;
+
+  // Prefilter on the geo cell bits of `ValueId`s; only set if the vocabulary
+  // was built with a geo cell grid and we have a prefilter box.
+  std::optional<GeoRectangleIdPrefilter> _geoCellPrefilter;
 
   // Configure prefiltering geometries by bounding box.
   bool _usePrefiltering;
   std::optional<::util::geo::DBox> _prefilterLatLngBox;
+  bool _requireContainment;
 
   // A reference to QLever's index is needed to access precomputed geometry
   // bounding boxes and to resolve `ValueId`s into WKT literals.

@@ -18,13 +18,23 @@
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 #include "util/Views.h"
+
+namespace ad_utility {
+class ParsedGeometry;
+}
+namespace sj {
+class Sweeper;
+}
 
 // A `GeoVocabulary` holds Well-Known Text (WKT) literals. In contrast to the
 // regular vocabulary classes it does not only store the strings. Instead it
@@ -45,11 +55,24 @@
 // the geo cell prefilter of spatial joins. The grid itself is not stored by
 // this class; the index configuration provides it before the vocabulary is
 // opened.
+//
+// For the WKT literals of at least a configurable length (see
+// `setParsedGeometriesMinLength`), the vocabulary also stores the geometry as
+// parsed and preprocessed by `libspatialjoin`, so that a spatial join does not
+// have to parse such a literal at query time (see `ParsedGeometry`).
 template <typename UnderlyingVocabulary>
 class GeoVocabulary {
  private:
   using GeometryInfo = ad_utility::GeometryInfo;
   using GeoCellGrid = ad_utility::GeoCellGrid;
+  using ParsedGeometry = ad_utility::ParsedGeometry;
+
+  // The index of a word is computed from its position in the underlying
+  // vocabulary (see `indexFromPosition`), so the positions must be contiguous,
+  // which they are not for the vocabularies with "holes".
+  static_assert(!ad_utility::SameAsAny<
+                UnderlyingVocabulary, VocabularyInMemoryBinSearch,
+                CompressedVocabulary<VocabularyInMemoryBinSearch>>);
 
   // The underlying vocabulary, which stores the WKT literals as strings.
   UnderlyingVocabulary literals_;
@@ -60,6 +83,14 @@ class GeoVocabulary {
 
   // The grid, or `std::nullopt` if the index of a word is its position.
   std::optional<GeoCellGrid> grid_;
+
+  // The file with the parsed geometries (see `ParsedGeometry`), each stored
+  // at the offset given by the `GeometryInfo` of its word.
+  ad_utility::File parsedGeometriesFile_;
+
+  // The words of at least this length (in bytes) get a parsed geometry when
+  // the vocabulary is built (0 = none), see `WordWriter`.
+  size_t parsedGeometriesMinLength_ = 0;
 
   // See `endIndex`, computed once when the vocabulary is opened.
   uint64_t endIndex_ = 0;
@@ -82,6 +113,10 @@ class GeoVocabulary {
   static constexpr size_t geoInfoHeader =
       sizeof(ad_utility::GEOMETRY_INFO_VERSION);
 
+  // Filename suffix for the parsed geometries file, which starts with the
+  // `ad_utility::PARSED_GEOMETRY_VERSION` as header.
+  static constexpr std::string_view parsedGeometriesSuffix = ".parsedgeoms";
+
  public:
   // The constructor is defined in the `.cpp` file, where it checks the
   // underlying vocabulary type of the explicit instantiations (the check
@@ -95,10 +130,27 @@ class GeoVocabulary {
     return geoInfoAtPosition(positionFromIndex(index));
   }
 
+  // The parsed geometry of the literal with the given index (see
+  // `ParsedGeometry`), or `std::nullopt` if none was stored for it.
+  std::optional<ParsedGeometry> getParsedGeometry(uint64_t index) const;
+
   // Construct a filename for the geo info file by appending a suffix to the
   // given filename.
   static std::string getGeoInfoFilename(std::string_view filename) {
     return absl::StrCat(filename, geoInfoSuffix);
+  }
+
+  // Construct a filename for the parsed geometries file by appending a suffix
+  // to the given filename.
+  static std::string getParsedGeometriesFilename(std::string_view filename) {
+    return absl::StrCat(filename, parsedGeometriesSuffix);
+  }
+
+  // Set the minimum length of the words that get a parsed geometry when the
+  // vocabulary is built (see `ParsedGeometry`, 0 = none). Must be called
+  // before `makeDiskWriterPtr`.
+  void setParsedGeometriesMinLength(size_t minLength) {
+    parsedGeometriesMinLength_ = minLength;
   }
 
   // Set the grid. Must be called before `open` (when loading a vocabulary
@@ -197,6 +249,8 @@ class GeoVocabulary {
   // Custom word writer, which precomputes and writes geometry info along with
   // the words. With a grid, it also checks that the words arrive ordered by
   // cell and puts the cell index into the upper bits of the returned indices.
+  // For the words of at least `parsedGeometriesMinLength` bytes, it also
+  // stores the parsed geometry (see `ParsedGeometry`).
   class WordWriter : public WordWriterBase {
    private:
     // The writer of the underlying vocabulary, which stores the strings.
@@ -206,6 +260,15 @@ class GeoVocabulary {
     ad_utility::File geoInfoFile_;
     // The grid, or `std::nullopt` if the index of a word is its position.
     std::optional<GeoCellGrid> grid_;
+    // The file for the parsed geometries, the minimum length of the words
+    // stored there (0 = none), and the number of bytes written to the file so
+    // far (the offset of the next parsed geometry).
+    ad_utility::File parsedGeometriesFile_;
+    size_t parsedGeometriesMinLength_;
+    uint64_t parsedGeometriesFileSize_ = 0;
+    // The sweeper of `libspatialjoin` that computes the parsed geometries,
+    // only if the minimum length is not 0.
+    std::unique_ptr<sj::Sweeper> sweeper_;
     // The cell of the previous word (only with a grid), to check the order.
     std::optional<GeoCellGrid::CellIndex> lastCellIndex_;
     // The number of words written so far (the position of the next word).
@@ -213,38 +276,48 @@ class GeoVocabulary {
     // Counters for the warnings that `finishImpl` prints.
     size_t numInvalidGeometries_ = 0;
     size_t numInvalidPolygonArea_ = 0;
+    // Counters for the words of at least the minimum length that got a parsed
+    // geometry, and that did not (because they are invalid, or because
+    // `libspatialjoin` yields no geometry for them), which `finishImpl` logs.
+    size_t numParsedGeometries_ = 0;
+    size_t numParsedGeometriesSkipped_ = 0;
 
    public:
-    // Initialize the `geoInfoFile_` by writing its header and open a word
-    // writer on the underlying vocabulary.
+    // Initialize the `geoInfoFile_` and the `parsedGeometriesFile_` by
+    // writing their headers and open a word writer on the underlying
+    // vocabulary. The sweeper writes its temporary files next to `filename`.
     WordWriter(const UnderlyingVocabulary& vocabulary,
-               const std::string& filename, std::optional<GeoCellGrid> grid);
+               const std::string& filename, std::optional<GeoCellGrid> grid,
+               size_t parsedGeometriesMinLength);
 
     // Add the next literal to the vocabulary, precompute additional information
     // using `GeometryInfo` and return the literal's new index.
     uint64_t operator()(std::string_view word, bool isExternal) override;
 
-    // Finish the writing on the underlying writer and close the `geoInfoFile_`
-    // file handle. After this no more calls to `operator()` are allowed.
+    // Finish the writing on the underlying writer and close the file handles.
+    // After this no more calls to `operator()` are allowed.
     void finishImpl() override;
 
     ~WordWriter() override;
   };
 
   // The files of the underlying vocabulary, which is stored under the base
-  // filename itself, plus the file with the geometry information.
+  // filename itself, plus the files with the geometry information and the
+  // parsed geometries.
   static FileSuffixes fileSuffixes() {
     FileSuffixes suffixes = UnderlyingVocabulary::fileSuffixes();
     // NOTE: The explicit `std::string` avoids a false positive
     // `-Warray-bounds` of GCC 13 for `emplace_back(geoInfoSuffix)`.
     suffixes.push_back(std::string{geoInfoSuffix});
+    suffixes.push_back(std::string{parsedGeometriesSuffix});
     return suffixes;
   }
 
   // ___________________________________________________________________________
   std::unique_ptr<WordWriter> makeDiskWriterPtr(
       const std::string& filename) const {
-    return std::make_unique<WordWriter>(literals_, filename, grid_);
+    return std::make_unique<WordWriter>(literals_, filename, grid_,
+                                        parsedGeometriesMinLength_);
   }
 
   // ___________________________________________________________________________

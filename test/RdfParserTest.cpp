@@ -181,17 +181,28 @@ TEST(RdfParserTest, prefixedName) {
     p.setInputStream("noDelimiterAtAll");
     ASSERT_FALSE(p.prefixedName());
     ASSERT_EQ(p.getPosition(), 0u);
-    // These unit tests document the current (fast, but suboptimal) behavior of
-    // the CTRE parser. TODO: Try to improve the parser without sacrificing
-    // speed. If that succeeds, adapt this unit test.
+    // An escaped delimiter does not end the local name, and the escape
+    // sequences are resolved.
+    p.setInputStream(R"(wd:esc\,aped)");
+    ASSERT_TRUE(p.prefixedName());
+    ASSERT_EQ(p.lastParseResult_, iri("<www.wikidata.org/esc,aped>"));
+    ASSERT_EQ(p.getPosition(), 12u);
+    p.setInputStream(R"(wd:key:a\;b\(c\) <y>)");
+    ASSERT_TRUE(p.prefixedName());
+    ASSERT_EQ(p.lastParseResult_, iri("<www.wikidata.org/key:a;b(c)>"));
+    ASSERT_EQ(p.getPosition(), 16u);
 
-    // TokenizerCTRE parsers `esc\` , which fails to unescape (single backslash)
-    p.setInputStream("wd:esc\\,aped");
-    ASSERT_THROW(p.prefixedName(), ad_utility::Exception);
+    // An unescaped delimiter ends the local name.
+    p.setInputStream(R"(wd:esc\,aped;more)");
+    ASSERT_TRUE(p.prefixedName());
+    ASSERT_EQ(p.lastParseResult_, iri("<www.wikidata.org/esc,aped>"));
+    ASSERT_EQ(p.getPosition(), 12u);
 
-    // TokenizerCTRE parses `esc\\aped` which fails to unescape (escaped
-    // backslashes are not allowed in prefixed names)
+    // An escaped backslash is not allowed in a prefixed name, and neither is a
+    // backslash at the very end.
     p.setInputStream(R"(wd:esc\\aped.)");
+    ASSERT_THROW(p.prefixedName(), ad_utility::Exception);
+    p.setInputStream(R"(wd:esc\)");
     ASSERT_THROW(p.prefixedName(), ad_utility::Exception);
   }
 }
@@ -1950,16 +1961,15 @@ TEST(RdfParserTest, multifileParserIgnoresRequestForParallelParsing) {
 // _____________________________________________________________________________
 // The `ascii-prefixes-only` setting selects the relaxed `TokenizerCtre` for all
 // input files of the `RdfMultifileParser`. We detect which tokenizer was
-// actually used via a prefixed name with an escape sequence, which the standard
-// compliant `Tokenizer` handles, but the relaxed parsing mode does not. NOTE:
+// actually used via a prefixed name with a `{` in its local name, which is
+// illegal in Turtle. The standard-compliant `Tokenizer` rejects it, whereas the
+// relaxed parsing mode does not check the characters of a local name. NOTE:
 // This is a property of `pnameLnRelaxed` (which bypasses the token regexes),
-// not of the CTRE regexes themselves. If the relaxed mode ever learns to handle
-// escape sequences (see the TODO in the `prefixedName` test above), this test
-// has to be adapted together with that one.
+// not of the CTRE regexes themselves.
 TEST(RdfParserTest, multifileParserSelectsTokenizer) {
   std::string filename = gtestCurrentTestName() + ".ttl";
   ad_utility::makeOfstream(filename)
-      << R"(@prefix wd: <www.wikidata.org/> . wd:esc\,aped <y> <z> .)";
+      << R"(@prefix wd: <www.wikidata.org/> . wd:a{b <y> <z> .)";
   absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
 
   auto parse = [&filename](bool useRelaxedParsing) {
@@ -1977,14 +1987,14 @@ TEST(RdfParserTest, multifileParserSelectsTokenizer) {
     return result;
   };
 
-  // The standard-compliant tokenizer unescapes the `\,` correctly.
-  EXPECT_THAT(parse(false),
-              ::testing::ElementsAre(TurtleTriple{
-                  iri("<www.wikidata.org/esc,aped>"), iri("<y>"), iri("<z>"),
-                  qlever::specialIds().at(DEFAULT_GRAPH_IRI)}));
+  // The standard-compliant tokenizer rejects the `{`.
+  EXPECT_ANY_THROW(parse(false));
 
-  // The relaxed tokenizer does not support escape sequences in prefixed names.
-  EXPECT_ANY_THROW(parse(true));
+  // The relaxed tokenizer accepts it.
+  EXPECT_THAT(parse(true),
+              ::testing::ElementsAre(TurtleTriple{
+                  iri("<www.wikidata.org/a{b>"), iri("<y>"), iri("<z>"),
+                  qlever::specialIds().at(DEFAULT_GRAPH_IRI)}));
 }
 
 // Mirror `multifileParser` above, but for the asynchronous
@@ -2259,7 +2269,7 @@ TEST(RdfParserTest, asyncMultifileParserConcurrentErrors) {
 TEST(RdfParserTest, asyncMultifileParserSelectsTokenizer) {
   std::string filename = gtestCurrentTestName() + ".ttl";
   ad_utility::makeOfstream(filename)
-      << R"(@prefix wd: <www.wikidata.org/> . wd:esc\,aped <y> <z> .)";
+      << R"(@prefix wd: <www.wikidata.org/> . wd:a{b <y> <z> .)";
   absl::Cleanup cleanup{[&filename]() { ad_utility::deleteFile(filename); }};
 
   auto parse = [&filename](bool useRelaxedParsing) {
@@ -2275,14 +2285,14 @@ TEST(RdfParserTest, asyncMultifileParserSelectsTokenizer) {
     return drainAsyncParser(parser, 1);
   };
 
-  // The standard-compliant tokenizer unescapes the `\,` correctly.
-  EXPECT_THAT(parse(false),
-              ::testing::ElementsAre(TurtleTriple{
-                  iri("<www.wikidata.org/esc,aped>"), iri("<y>"), iri("<z>"),
-                  qlever::specialIds().at(DEFAULT_GRAPH_IRI)}));
+  // The standard-compliant tokenizer rejects the `{`.
+  EXPECT_ANY_THROW(parse(false));
 
-  // The relaxed tokenizer does not support escape sequences in prefixed names.
-  EXPECT_ANY_THROW(parse(true));
+  // The relaxed tokenizer accepts it.
+  EXPECT_THAT(parse(true),
+              ::testing::ElementsAre(TurtleTriple{
+                  iri("<www.wikidata.org/a{b>"), iri("<y>"), iri("<z>"),
+                  qlever::specialIds().at(DEFAULT_GRAPH_IRI)}));
 }
 
 // Test the scheduling policy of `RdfAsyncMultifileParser` when there are more

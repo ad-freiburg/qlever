@@ -80,3 +80,18 @@ TEST(RuntimeParameters, getKeysAndToMapAreConsistent) {
     EXPECT_TRUE(map.contains(key)) << key;
   }
 }
+
+// Test that the budgets of the planning-time evaluation of geo prefilters
+// are registered, so that they can be set at runtime.
+TEST(RuntimeParameters, geoPrefilterPlanningBudgets) {
+  RuntimeParameters params;
+  EXPECT_EQ(params.geoPrefilterPlanningMaxRows_.get(), 1'000u);
+  EXPECT_EQ(params.geoPrefilterPlanningMaxCost_.get(), 10'000'000u);
+  params.setFromAssignment("geo-prefilter-planning-max-rows=7");
+  params.setFromAssignment("geo-prefilter-planning-max-cost=42");
+  EXPECT_EQ(params.geoPrefilterPlanningMaxRows_.get(), 7u);
+  EXPECT_EQ(params.geoPrefilterPlanningMaxCost_.get(), 42u);
+  auto map = params.toMap();
+  EXPECT_EQ(map.at("geo-prefilter-planning-max-rows"), "7");
+  EXPECT_EQ(map.at("geo-prefilter-planning-max-cost"), "42");
+}

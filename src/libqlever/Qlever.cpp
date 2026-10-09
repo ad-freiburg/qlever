@@ -12,6 +12,7 @@
 
 #include <boost/optional.hpp>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string_view>
@@ -55,7 +56,7 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                Allocator<Id> allocator)
     : allocator_{std::move(allocator)},
       indexAndViews_{std::make_shared<IndexAndViews>(
-          Index{allocator_}, MaterializedViewsManager{})},
+          Index{allocator_}, MaterializedViewsManager{allocator_})},
       enablePatternTrick_{!config.noPatterns_},
       disableCaching_{config.disableCaching_} {
   // Set runtime parameters relevant for caching and propagate them to the
@@ -68,6 +69,23 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
       [this](ad_utility::MemorySize newValue) {
         cache_.setMaxSizeSingleEntry(newValue);
       });
+
+  // Keep the runtime parameter `memory-for-queries` in sync with the memory
+  // limit of the allocator: first mirror the limit the allocator was
+  // constructed with (clearing any update action left behind by a previous
+  // instance, so that setting the value cannot fire into a destroyed
+  // instance), then register the action that applies later changes of the
+  // parameter to the allocator. Registering triggers the action once, which
+  // is a no-op here because the values are already in sync.
+  {
+    auto runtimeParameters = globalRuntimeParameters.wlock();
+    runtimeParameters->memoryForQueries_.clearOnUpdateAction();
+    runtimeParameters->memoryForQueries_.set(allocator_.memoryLimit());
+    runtimeParameters->memoryForQueries_.setOnUpdateAction(
+        [this](ad_utility::MemorySize newValue) {
+          allocator_.setMemoryLimit(newValue);
+        });
+  }
 
   // If `skipLoading` is set, we do not touch the on-disk index at all; the
   // instance is expected to be populated later from a blob (see
@@ -148,6 +166,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   if (config.indexRowsPerBlock_.has_value()) {
     index.rowsPerBlock() = config.indexRowsPerBlock_.value();
   }
+  index.parsedGeometriesMinLength() = config.parsedGeometriesMinLength_;
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
@@ -166,6 +185,11 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
+  if (config.geoCellGridLevel_ > 0) {
+    index.getImpl().setGeoCellGridForIndexBuilding(
+        ad_utility::GeoCellGrid{static_cast<uint8_t>(config.geoCellGridLevel_),
+                                config.geoCellGridScheme_});
+  }
   index.getImpl().setGeoPointEncodingForIndexBuilding(config.geoPointEncoding_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,
                                               config.patternsForIdEncodedIris_);
@@ -419,6 +443,17 @@ void IndexBuilderConfig::validate() const {
         "\" cannot be used for index building, the supported types are ",
         ad_utility::VocabularyType::getListOfValuesForIndexBuilding()));
   }
+  if (geoCellGridLevel_ > 0) {
+    if (vocabType_ !=
+        ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit) {
+      throw std::invalid_argument(
+          "A geo cell grid (option --geo-cell-grid-level) requires the "
+          "vocabulary type on-disk-compressed-geo-split");
+    }
+    if (geoCellGridLevel_ > std::numeric_limits<uint8_t>::max()) {
+      throw std::invalid_argument("The geo cell grid level is too large");
+    }
+  }
   if (numThreads_ == 0) {
     throw std::invalid_argument(
         "The number of threads for the index build (`num-threads`) must be at "
@@ -652,7 +687,7 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
       materializeToIndex(index, indexBaseName, currentSnapshot, localVocabCopy,
                          ownedBlocks, handle, logFileName);
   auto indexAndViews = std::make_shared<IndexAndViews>(
-      Index{allocator()}, MaterializedViewsManager{});
+      Index{allocator()}, MaterializedViewsManager{allocator()});
   auto& [newIndex, newManager] = *indexAndViews;
   newIndex.usePatterns() = index.usePatterns();
   newIndex.loadAllPermutations() = index.loadAllPermutations();

@@ -27,11 +27,8 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
     return std::nullopt;
   }
 
-  // Get the variables used in the bind expression (not the target).
-  const auto& bindExpressionVars = bind._expression.containedVariables();
-
-  // For each child that covers all expression variables, check whether the bind
-  // can be pushed down into that child.
+  // For each child that can safely compute the `BIND` expression, check whether
+  // the `BIND` can be pushed down into that child.
   bool anyChildRewritten = false;
   for (auto& child : children) {
     if (child == nullptr) {
@@ -39,12 +36,11 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
       // children attached yet.
       continue;
     }
-    if (!child->getRootOperation()->areVariablesAlwaysDefined(
-            bindExpressionVars) ||
+    if (!canPushBindIntoChild(bind, *child, children) ||
         child->containsVariable(bind._target)) {
       continue;
     }
-    auto result = child->getRootOperation()->makeTreeWithBindColumn(bind);
+    auto result = QueryExecutionTree::makeTreeWithBindColumn(child, bind);
     if (result.has_value()) {
       child = result.value();
       anyChildRewritten = true;
@@ -56,6 +52,23 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
     return std::nullopt;
   }
   return makeCloneWithNewChildren(std::move(children));
+}
+
+// _____________________________________________________________________________
+inline bool Operation::canPushBindIntoChild(
+    const parsedQuery::Bind& bind, const QueryExecutionTree& child,
+    const std::vector<std::shared_ptr<QueryExecutionTree>>& children) {
+  return ql::ranges::all_of(
+      bind._expression.containedVariables(), [&](const Variable* var) {
+        if (child.getRootOperation()->isVariableAlwaysDefined(*var)) {
+          return true;
+        }
+        return child.containsVariable(*var) &&
+               ql::ranges::none_of(children, [&](const auto& other) {
+                 return other != nullptr && other.get() != &child &&
+                        other->containsVariable(*var);
+               });
+      });
 }
 
 #endif  // QLEVER_SRC_ENGINE_OPERATIONBINDPUSHDOWNIMPL_H_

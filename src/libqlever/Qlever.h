@@ -40,6 +40,7 @@
 #include "index/vocabulary/EncodedIriPattern.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "util/Allocator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
@@ -111,6 +112,11 @@ struct IndexBuilderConfig : CommonConfig {
   // compromise that favors large scans; see `DEFAULT_INDEX_ROWS_PER_BLOCK`.
   std::optional<size_t> indexRowsPerBlock_;
 
+  // The WKT literals of at least this length (in bytes) are parsed at index
+  // build time and stored in their parsed form, so that spatial joins do not
+  // have to parse them at query time (see `ParsedGeometry`). 0 means none.
+  size_t parsedGeometriesMinLength_ = 0;
+
   // Filename of a JSON file with additional settings. Examples can be seen in
   // https://github.com/ad-freiburg/qlever-control/tree/main/src/qlever/Qleverfiles
   // If empty, default settings are used.
@@ -130,6 +136,16 @@ struct IndexBuilderConfig : CommonConfig {
   // IDs. See `src/index/vocabulary/VocabularyType.h` for the possible options.
   ad_utility::VocabularyType vocabType_{
       ad_utility::VocabularyType::Enum::OnDiskCompressed};
+
+  // The level of the geo cell grid for WKT literals (see `GeoCellGrid`), 0
+  // means no grid. A grid requires the `OnDiskCompressedGeoSplit` vocabulary
+  // type and is the basis for the geo cell prefilter of spatial joins.
+  size_t geoCellGridLevel_ = 0;
+
+  // The scheme of the geo cell grid (see `GeoCellGridScheme`), only relevant
+  // with a grid level > 0.
+  ad_utility::GeoCellGridScheme geoCellGridScheme_ =
+      ad_utility::GeoCellGridScheme::Flat;
 
   // How geo points are encoded in the `Id`s of the index, see
   // `ad_utility::GeoPointEncoding`. The encoding `LatMajor` is deprecated.

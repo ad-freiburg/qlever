@@ -124,6 +124,11 @@ class QueryExecutionTree {
   // to zero. Currently multiplicities are not affected
   bool readFromCache();
 
+  // Set the size estimate of this tree, overriding the estimate of its root
+  // operation. Used by the query planner for a part of the query that it has
+  // evaluated at planning time, whose exact size it therefore knows.
+  void setSizeEstimate(size_t sizeEstimate) { sizeEstimate_ = sizeEstimate; }
+
   // Check whether the cache key of this `QueryExecutionTree` matches a loaded
   // materialized view. If yes, replace the `rootOperation_` with an `IndexScan`
   // on that view with a result equivalent to the current `rootOperation_`.
@@ -233,6 +238,20 @@ class QueryExecutionTree {
       const std::set<Variable>& variablesToKeep,
       HideStrippedColumns hideStrippedColumns = HideStrippedColumns::False);
 
+  // Try to push the given `BIND` down into `qet`'s operation tree (see
+  // `Operation::makeTreeWithBindColumn`). If the push down succeeds, this
+  // additionally restores the `LIMIT`/`OFFSET` and the externally visible
+  // (SELECT-restricted) variables of `qet`'s original root onto the
+  // rewritten tree, which the individual `makeTreeWithBindColumn`
+  // implementations do not (and must not) handle themselves, and adds the
+  // `BIND`'s target as a newly visible variable. This is needed because the
+  // rewrite constructs fresh `Operation`s for the affected subtree, which
+  // would otherwise silently drop such metadata attached to the original
+  // root, e.g. when `qet` is (part of) a subquery.
+  static std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithBindColumn(const std::shared_ptr<QueryExecutionTree>& qet,
+                         const parsedQuery::Bind& bind);
+
   // Return the column pairs where the two `QueryExecutionTree`s have the
   // same variable. The result is sorted by the column indices, so that it is
   // deterministic when called repeatedly. This is important to find a
@@ -266,9 +285,12 @@ class QueryExecutionTree {
   }
 
   // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
-  // result of this operation.
-  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
-    getRootOperation()->applyLimitOffset(limitOffsetClause);
+  // result of this operation. For `childrenAreExclusivelyOwned` see
+  // `Operation::applyLimitOffset`.
+  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause,
+                        bool childrenAreExclusivelyOwned = false) {
+    getRootOperation()->applyLimitOffset(limitOffsetClause,
+                                         childrenAreExclusivelyOwned);
     updateCacheKeyAndSizeEstimate();
   }
 

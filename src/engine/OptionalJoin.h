@@ -46,7 +46,8 @@ class OptionalJoin : public Operation {
  private:
   std::string getCacheKeyImpl() const override;
 
-  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+  void onLimitOffsetChanged(const LimitOffsetClause&,
+                            bool childrenAreExclusivelyOwned) override;
 
  public:
   // We propagate part of the `LimitOffsetClause` to the child operation to
@@ -129,6 +130,9 @@ class OptionalJoin : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
 
   void computeSizeEstimateAndMultiplicities();
 

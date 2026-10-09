@@ -351,6 +351,32 @@ class QueryPlanner {
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 
+  // Prefilter the seeds of the triples that bind a geometry variable of a
+  // spatial join (a filter substitute) with a rectangle that is known for
+  // that variable at planning time: the scan that is sorted by the variable
+  // gets its blocks pruned, every scan that binds the variable gets a row
+  // filter with the same size estimate (both as alternatives to the
+  // unprefiltered scans, the dynamic programming decides by cost), and
+  // replacement plans (from materialized views) get the prefilter forwarded
+  // to their scans. A
+  // rectangle is known for the fixed side of a spatial join (a one-row
+  // `VALUES` created by the rewriting of the filter, or a variable bound by a
+  // `BIND` of a constant expression), and for a geometry variable that is
+  // bound by a small part of the query that is cheap to evaluate (which is
+  // then evaluated here, see the runtime parameters
+  // `geo-prefilter-planning-max-rows` and `geo-prefilter-planning-max-cost`),
+  // and it carries over to the other side of that join and from there along
+  // further spatial joins (see the implementation for the rules). A spatial
+  // join between a fixed side and a prefiltered side is told the selectivity
+  // within the remaining rows (see `SpatialJoin::setGeometrySideSelectivity`).
+  // This is done once, before the dynamic programming, so that it costs one
+  // prefilter evaluation per permutation of the triple and not one per
+  // candidate plan; the DP then decides by cost where the spatial joins go.
+  void applyGeoRectanglePrefilters(
+      std::vector<SubtreePlan>& seeds, FiltersAndOptionalSubstitutes& filters,
+      std::vector<std::vector<SubtreePlan>>& replacementPlans,
+      const TripleGraph& tg) const;
+
   // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
   // substitutes. This is sufficient for the filter modes that never apply
   // substitutes and avoids constructing throwaway substitute plans (which
@@ -685,10 +711,10 @@ class QueryPlanner {
     // with each other and with the contents of  `candidatePlans_`
     parsedQuery::BasicGraphPattern candidateTriples_{};
 
-    // The variables that have been bound by the children of the `rootPattern_`
-    // which we have dealt with so far.
-    // TODO<joka921> verify that we get no false positives with plans that
-    // create no single binding for a variable "by accident".
+    // The variables that have been used by the children of the `rootPattern_`
+    // which we have dealt with so far. They must not be the target of a later
+    // BIND. Note: This includes the variables of MINUS clauses, which are not
+    // part of the result, see `getVariablesOfPreviousPatterns` for those.
     ad_utility::HashSet<Variable> boundVariables_{};
 
     // The filters of the `rootPattern_`, wrapped for `applyFiltersIfPossible`.
@@ -730,6 +756,12 @@ class QueryPlanner {
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
     void visitDescribe(parsedQuery::Describe& describe);
+
+    // Return the variables of the results of the children of the
+    // `rootPattern_` which we have dealt with so far. Such a variable might be
+    // undefined in all rows of the result, which is fine, as only the absence
+    // of shared variables leads to a special case.
+    ad_utility::HashSet<Variable> getVariablesOfPreviousPatterns() const;
 
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
@@ -782,6 +814,7 @@ class QueryPlanner {
       const std::vector<SubtreePlan>& lastRow) const;
   static size_t findSmallestExecutionTree(
       const std::vector<SubtreePlan>& lastRow);
+
   static size_t findUniqueNodeIds(
       const std::vector<SubtreePlan>& connectedComponent,
       bool allowReplacementPlans = false);

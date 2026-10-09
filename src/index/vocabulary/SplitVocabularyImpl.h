@@ -9,6 +9,7 @@
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/Vocabulary.h"
+#include "rdfTypes/ParsedGeometry.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
 
@@ -138,6 +139,27 @@ std::optional<ad_utility::GeometryInfo> SplitVocabulary<
         static_assert(NeverProvidesGeometryInfo<std::decay_t<decltype(v)>>);
         return std::nullopt;
       });
+}
+
+// _____________________________________________________________________________
+template <typename SF, const auto& FS, typename... S>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
+std::optional<ad_utility::ParsedGeometry> SplitVocabulary<
+    SF, FS, S...>::getParsedGeometry(uint64_t indexWithMarker) const {
+  // Like `getGeoInfo` above.
+  const auto& vocab = underlying_[getMarker(indexWithMarker)];
+  return std::visit(
+      [&](const auto& v) -> std::optional<ad_utility::ParsedGeometry> {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+          return v.getParsedGeometry(getVocabIndex(indexWithMarker));
+        } else {
+          static_assert(NeverProvidesGeometryInfo<T>);
+          return std::nullopt;
+        }
+      },
+      vocab);
 }
 
 // _____________________________________________________________________________

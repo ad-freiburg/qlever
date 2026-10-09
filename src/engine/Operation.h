@@ -1,7 +1,12 @@
-// Copyright 2015 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>    [2015 - 2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2018 - 2024]
+// Copyright 2015 - 2024 The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold <buchhold@cs.uni-freiburg.de>, UFR
+// 2018 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_OPERATION_H
 #define QLEVER_SRC_ENGINE_OPERATION_H
@@ -146,6 +151,13 @@ class Operation {
  public:
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
+
+  // Deep-copy a vector of prefilter pairs (the contained
+  // `PrefilterExpression`s are owned via `unique_ptr`). Used by operations
+  // that forward prefilters to more than one child or need to retain the
+  // original pairs.
+  static std::vector<PrefilterVariablePair> clonePrefilters(
+      const std::vector<PrefilterVariablePair>& prefilters);
 
   // Constructor. The `executionContext` must not be `nullptr`, as it is
   // required by the default member initializers of the members above, so it
@@ -337,6 +349,13 @@ class Operation {
     return _runtimeInfo;
   }
 
+  // The root of the runtime information tree this operation belongs to.
+  // Needed when an operation replaces a child tree at execution time and has
+  // to wire the replacement's runtime information into the tree.
+  std::shared_ptr<const RuntimeInformation> rootRuntimeInfo() const {
+    return _rootRuntimeInfo;
+  }
+
   QueryPlanningInfo& getQueryPlanningInfo() { return queryPlanningInfo_; }
 
   // Notify the `QueryExecutionContext` of the latest `RuntimeInformation` with
@@ -394,15 +413,30 @@ class Operation {
  private:
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
-  // way. An implementation that pushes the `LIMIT`/`OFFSET` into a child has to
-  // repair the child afterwards, see the caution note on `applyLimitOffset`.
-  virtual void onLimitOffsetChanged(const LimitOffsetClause&) {
+  // way. An implementation that pushes the `LIMIT`/`OFFSET` into a child should
+  // do so via `applyLimitOffsetToChild` (passing on the second argument,
+  // `childrenAreExclusivelyOwned`, see `applyLimitOffset`) and has to repair
+  // the child afterwards, see the caution note on `applyLimitOffset`.
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&, bool) {
     // By default, do nothing. The `LIMIT`/`OFFSET` will be applied externally
     // after the computation of the result. Make sure to also override
     // `handlesLimitOffset()` if this function is overridden, otherwise the
     // `LIMIT`/`OFFSET` might not be applied correctly.
   }
 
+ protected:
+  // Push `limitOffset` into `child`, for the overrides of
+  // `onLimitOffsetChanged`. A child may be shared with other trees (e.g. other
+  // candidate plans of the query planner), so it is cloned first unless it is
+  // exclusively owned. The clone is a deep copy, so from there on the whole
+  // subtree is exclusively owned and the pushdown continues without further
+  // clones. (Cloning at every level made the pushdown quadratic in the depth
+  // of the tree, see issue #3474.)
+  static void applyLimitOffsetToChild(
+      std::shared_ptr<QueryExecutionTree>& child,
+      const LimitOffsetClause& limitOffset, bool childIsExclusivelyOwned);
+
+ private:
   // This function is called when the operation's result is requested to be
   // cached and pinned to a name.
   void storeToNamedResultCache(const Result& result);
@@ -435,7 +469,13 @@ class Operation {
   // Repairing is only possible while the plan is still being assembled. Calling
   // this during result computation is therefore safe only for operations that
   // neither require nor report a sort order (see `CartesianProductJoin`).
-  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause);
+  //
+  // If `childrenAreExclusivelyOwned` is true, the children of this operation
+  // are not shared with any other tree (because this operation is part of a
+  // fresh clone), so the pushdown may modify them in place, see
+  // `applyLimitOffsetToChild`.
+  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause,
+                        bool childrenAreExclusivelyOwned = false);
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
@@ -607,6 +647,19 @@ class Operation {
           const parsedQuery::Bind& bind,
           std::vector<std::shared_ptr<QueryExecutionTree>> children,
           MakeCloneWithNewChildren makeCloneWithNewChildren) const;
+
+  // Check whether the `bind` can be pushed into `child` (one of `children`)
+  // without changing the values its expression sees: each variable of the
+  // expression must be contained in `child`, and if it might be `UNDEF` there,
+  // no other of the `children` may contain it. Otherwise a join could fill in
+  // the other child's value for an `UNDEF`, which the original `BIND` would
+  // see, but the pushed-down `BIND` wouldn't. `nullptr`s in `children` are
+  // ignored.
+  //
+  // NOTE: This function is defined in `OperationBindPushDownImpl.h`.
+  static bool canPushBindIntoChild(
+      const parsedQuery::Bind& bind, const QueryExecutionTree& child,
+      const std::vector<std::shared_ptr<QueryExecutionTree>>& children);
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

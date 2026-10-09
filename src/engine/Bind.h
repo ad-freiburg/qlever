@@ -37,7 +37,13 @@ class Bind : public Operation {
  public:
   size_t getCostEstimate() override;
   LimitOffsetHandling handlesLimitOffset() const override;
-  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
+  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
+                            bool childrenAreExclusivelyOwned) override;
+
+  // `BIND` needs to be able to push down other `BIND`s if the query contains
+  // multiple `BIND`s of which only some can be rewritten.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override;

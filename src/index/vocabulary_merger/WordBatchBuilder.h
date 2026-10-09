@@ -52,6 +52,9 @@ class WordBatchBuilder {
   // `carriedOverWord_` of the `currentBatch_`.
   std::string_view pendingWord_;
   bool hasPendingWord_ = false;
+  // The geo sort key of the `pendingWord_` (see `QueueWord`), needed to check
+  // the order of the merged words.
+  uint64_t pendingGeoSortKey_ = 0;
   // Whether any of the occurrences of the `pendingWord_` that have been seen
   // so far was marked as external.
   bool pendingWordIsExternal_ = false;
@@ -75,12 +78,12 @@ class WordBatchBuilder {
   // (see the class comment above). Whenever a batch is full (see
   // `VOCAB_MERGER_WORD_BATCH_SIZE` and `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`),
   // it is handed to the `batchCallback`. The `QueueWord`s must be passed in
-  // alphabetical order wrt the `comparator` (also across multiple calls). NOTE:
-  // This order is only checked if the expensive checks are enabled (see
-  // `AD_EXPENSIVE_CHECK`), because the additional comparison per word is rather
-  // costly.
+  // ascending order wrt the `comparator`, which compares (geo sort key, word)
+  // pairs (also across multiple calls). NOTE: This order is only checked if the
+  // expensive checks are enabled (see `AD_EXPENSIVE_CHECK`), because the
+  // additional comparison per word is rather costly.
   CPP_template(typename W, typename F)(
-      requires WordComparator<W> CPP_and WordBatchCallback<
+      requires KeyedWordComparator<W> CPP_and WordBatchCallback<
           F>) void addMergedWords(std::vector<QueueWord> buffer,
                                   const W& comparator, const F& batchCallback);
 
@@ -108,7 +111,7 @@ class WordBatchBuilder {
 
 // _____________________________________________________________________________
 CPP_template_def(typename W,
-                 typename F)(requires WordComparator<W> CPP_and_def
+                 typename F)(requires KeyedWordComparator<W> CPP_and_def
                                  WordBatchCallback<F>) void WordBatchBuilder::
     addMergedWords(std::vector<QueueWord> buffer,
                    [[maybe_unused]] const W& comparator,
@@ -123,13 +126,15 @@ CPP_template_def(typename W,
   for (const auto& top : words) {
     if (!hasPendingWord_ || top.iriOrLiteral() != pendingWord_) {
       AD_EXPENSIVE_CHECK(
-          !hasPendingWord_ || comparator(pendingWord_, top.iriOrLiteral()),
+          !hasPendingWord_ || comparator(pendingGeoSortKey_, pendingWord_,
+                                         top.geoSortKey_, top.iriOrLiteral()),
           "Total vocabulary order violated for ", pendingWord_, " and ",
           top.iriOrLiteral());
       // A word that differs from the `pendingWord_` was merged, so no further
       // occurrence of the latter can arrive and it can be committed.
       commitPendingWord();
       pendingWord_ = top.iriOrLiteral();
+      pendingGeoSortKey_ = top.geoSortKey_;
       pendingWordIsExternal_ = top.isExternal();
       hasPendingWord_ = true;
     } else {
