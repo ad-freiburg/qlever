@@ -4262,3 +4262,23 @@ TEST(QueryPlanner, planningInfo) {
   EXPECT_EQ(info[1].budget_, 1u);
   EXPECT_GT(info[1].numCandidatePlans_, 0u);
 }
+
+// Test that the operations and execution trees that the query planner creates
+// are allocated via the memory-limited allocator of the query.
+TEST(QueryPlanner, plannerAllocationsCountTowardsMemoryLimit) {
+  auto* qec = ad_utility::testing::getQec();
+  const auto& allocator = qec->getAllocator();
+  const auto memoryLeftBefore = allocator.amountMemoryLeft();
+
+  // While the execution tree of a single index scan lives, the memory limit of
+  // the query accounts for the tree and the scan (and not only for the runtime
+  // information of the scan, which the `Operation` constructor allocates).
+  {
+    auto tree = h::parseAndPlan("SELECT * { ?x <p> ?y }", qec);
+    auto used = memoryLeftBefore - allocator.amountMemoryLeft();
+    EXPECT_GE(used.getBytes(), sizeof(IndexScan) + sizeof(QueryExecutionTree));
+  }
+
+  // When the tree is destroyed, the memory is released again.
+  EXPECT_EQ(allocator.amountMemoryLeft(), memoryLeftBefore);
+}
