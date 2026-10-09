@@ -303,6 +303,16 @@ class Operation {
   // subquery.
   virtual const VariableToColumnMap& getExternallyVisibleVariableColumns()
       const final;
+
+  // If this operation is the root of a subquery, it hides the variables that
+  // the subquery does not select. Hide the same variables in `replacement`,
+  // which was built from scratch to replace this operation (e.g. a clone or a
+  // copy with a pushed-down `BIND`). The `additionalVisibleVariable` (e.g. the
+  // target of the pushed-down `BIND`) stays visible.
+  void keepHiddenVariablesHidden(
+      Operation& replacement,
+      std::optional<Variable> additionalVisibleVariable = std::nullopt) const;
+
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
 

@@ -102,5 +102,12 @@ Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
 // ____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Join::makeTreeWithBindColumn(
     const parsedQuery::Bind& bind) const {
-  return impl_->makeTreeWithBindColumn(bind);
+  auto result = impl_->makeTreeWithBindColumn(bind);
+  // The variables hidden by a subquery are stored in this `Join`, not in the
+  // `impl_` that built the new tree.
+  if (result.has_value()) {
+    keepHiddenVariablesHidden(*result.value()->getRootOperation(),
+                              bind._target);
+  }
+  return result;
 }

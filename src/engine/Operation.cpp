@@ -763,16 +763,26 @@ uint64_t Operation::getSizeEstimate() {
 }
 
 // _____________________________________________________________________________
+void Operation::keepHiddenVariablesHidden(
+    Operation& replacement,
+    std::optional<Variable> additionalVisibleVariable) const {
+  // Nothing is hidden if the externally visible variables were never set.
+  if (!variableToColumnMap_ || !externallyVisibleVariableToColumnMap_) {
+    return;
+  }
+  std::vector<Variable> visibleVariables;
+  ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
+                   std::back_inserter(visibleVariables));
+  if (additionalVisibleVariable.has_value()) {
+    visibleVariables.push_back(std::move(additionalVisibleVariable).value());
+  }
+  replacement.setSelectedVariablesForSubquery(visibleVariables);
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> Operation::clone() const {
   auto result = cloneImpl();
-
-  if (variableToColumnMap_ && externallyVisibleVariableToColumnMap_) {
-    // Make sure previously hidden variables remain hidden.
-    std::vector<Variable> visibleVariables;
-    ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
-                     std::back_inserter(visibleVariables));
-    result->setSelectedVariablesForSubquery(visibleVariables);
-  }
+  keepHiddenVariablesHidden(*result);
   result->limitOffset_ = limitOffset_;
 
   auto compareTypes = [this, &result]() {
