@@ -223,11 +223,9 @@ IdTable Describe::getIdsToDescribe(const Result& result,
       if (!column.has_value()) {
         continue;
       }
-      for (Id id : result.idTableView().getColumn(column.value())) {
-        if (!id.isUndefined()) {
-          idsToDescribe.insert(id);
-        }
-      }
+      ql::ranges::copy_if(result.idTableView().getColumn(column.value()),
+                          std::inserter(idsToDescribe, idsToDescribe.end()),
+                          Id::isDefinedL);
     }
   }
 
