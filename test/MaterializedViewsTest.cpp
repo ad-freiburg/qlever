@@ -1952,6 +1952,35 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                  viewScanWithBind));
   }
 
+  // A `BIND` is not pushed down through a `SpatialJoin` if a variable of its
+  // expression (here `?o2`) is hidden by a subquery.
+  {
+    constexpr std::string_view hiddenExprVarInSpatialJoin = R"(
+      PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?o ?bind {
+        {
+          SELECT ?s ?o {
+            ?s view:bindView-o ?o .
+            ?s2 view:bindView-o ?o2 .
+            FILTER(geof:metricDistance(?o, ?o2) <= 100)
+          }
+        }
+        BIND(2 * ?o2 + 1 AS ?bind)
+      }
+    )";
+    qpExpect(
+        qlv(), hiddenExprVarInSpatialJoin,
+        h::Bind(
+            h::spatialJoinFilterSubstitute(
+                100, -1, V{"?o"}, V{"?o2"}, std::nullopt,
+                PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+                SpatialJoinType::WITHIN_DIST, std::nullopt, viewScanNoBind,
+                viewScan("bindView", "?s2", "?o2", "?_ql_materialized_view_o",
+                         2)),
+            "2 * ?o2 + 1", V{"?bind"}));
+  }
+
   // The `2 * ?o + 1` expression.
   auto bindExpr = sparqlExpression::makeAddExpression(
       sparqlExpression::makeMultiplyExpression(

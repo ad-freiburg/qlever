@@ -40,6 +40,12 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
   // Get the variables used in the bind expression (not the target).
   const auto& bindExpressionVars = bind._expression.containedVariables();
 
+  // The variables of the `BIND` expression must be visible in this operation,
+  // not hidden by a subquery (the children still see the hidden variables).
+  if (!areVariablesAlwaysDefined(bindExpressionVars)) {
+    return std::nullopt;
+  }
+
   // For each child that covers all expression variables, check whether the bind
   // can be pushed down into that child.
   bool anyChildRewritten = false;
