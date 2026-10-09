@@ -45,7 +45,8 @@ IdTable sortedOf(const IdTable& table,
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test the canonical order without `resultSortedOn` columns, which is the
+// lexicographic order by all columns in increasing order.
 TEST(CanonicalRowOrder, sortWithoutResultSortedOn) {
   auto table = intTable({{2, 1}, {1, 5}, {1, 2}, {2, 0}});
   EXPECT_THAT(canonicalSortingPermutation(view(table), {}),
@@ -56,7 +57,8 @@ TEST(CanonicalRowOrder, sortWithoutResultSortedOn) {
   EXPECT_TRUE(isInCanonicalOrder(view(sorted), {}));
 }
 
-// _____________________________________________________________________________
+// Test the canonical order with `resultSortedOn` columns, which are compared
+// first and in the given order.
 TEST(CanonicalRowOrder, sortWithResultSortedOn) {
   // First by column 1, then by the remaining column 0.
   auto table = intTable({{2, 1}, {1, 5}, {1, 2}, {3, 1}});
@@ -76,7 +78,8 @@ TEST(CanonicalRowOrder, sortWithResultSortedOn) {
             intTable({{5, 1, 1}, {0, 2, 3}, {1, 2, 3}, {1, 1, 4}}));
 }
 
-// _____________________________________________________________________________
+// Test that equal rows keep their relative order, that a table that already is
+// in canonical order gets the identity permutation, and the empty table.
 TEST(CanonicalRowOrder, stabilityAndIdentity) {
   // Equal rows are not reordered, so the permutation is stable.
   auto table = intTable({{1, 1}, {0, 0}, {1, 1}, {0, 0}});
@@ -92,7 +95,7 @@ TEST(CanonicalRowOrder, stabilityAndIdentity) {
   EXPECT_TRUE(isInCanonicalOrder(view(empty), {}));
 }
 
-// _____________________________________________________________________________
+// Test `invertPermutation`, also for inputs that are not a permutation.
 TEST(CanonicalRowOrder, invertPermutation) {
   EXPECT_THAT(invertPermutation(Ints{2, 0, 1}), ElementsAre(1, 2, 0));
   EXPECT_THAT(invertPermutation(Ints{}), IsEmpty());
@@ -100,7 +103,7 @@ TEST(CanonicalRowOrder, invertPermutation) {
   EXPECT_ANY_THROW(invertPermutation(Ints{0, 2}));
 }
 
-// _____________________________________________________________________________
+// Test that `permuteRows` can also select a subset of the rows.
 TEST(CanonicalRowOrder, permuteRowsSelectsRows) {
   auto table = intTable({{1, 1}, {2, 2}, {3, 3}});
   // The result may have fewer rows than the input.
@@ -109,7 +112,8 @@ TEST(CanonicalRowOrder, permuteRowsSelectsRows) {
             intTable({{3, 3}, {1, 1}}));
 }
 
-// _____________________________________________________________________________
+// Test `alignRows` with inserted, deleted and duplicate rows, identical,
+// disjoint and empty tables, and a mismatching number of columns.
 TEST(CanonicalRowOrder, alignRows) {
   constexpr size_t no = noMatchingRow;
   auto base = intTable({{1, 1}, {2, 2}, {2, 2}, {4, 4}, {6, 6}});
@@ -140,7 +144,7 @@ TEST(CanonicalRowOrder, alignRows) {
   EXPECT_ANY_THROW(alignRows(view(base), view(oneColumn)));
 }
 
-// _____________________________________________________________________________
+// Test that `alignRows` compares the `resultSortedOn` columns first.
 TEST(CanonicalRowOrder, alignRowsWithResultSortedOn) {
   // Canonical for `resultSortedOn == {1}`: sorted by column 1, then column 0.
   std::vector<ColumnIndex> sortedOn{1};
@@ -152,11 +156,10 @@ TEST(CanonicalRowOrder, alignRowsWithResultSortedOn) {
               ElementsAre(0, noMatchingRow, 2, 3));
 }
 
-// _____________________________________________________________________________
-// Two `Id`s of type `LocalVocabIndex` that refer to different (equal) entries
-// compare equal via `compareThreeWay`, but differ bitwise (they are pointers).
-// They must neither be matched by `alignRows`, nor must the canonical order
-// depend on their input order.
+// Test that two `Id`s of type `LocalVocabIndex` that refer to different (equal)
+// entries, which compare equal via `compareThreeWay` but differ bitwise (they
+// are pointers), are neither matched by `alignRows`, nor make the canonical
+// order depend on their input order.
 TEST(CanonicalRowOrder, idsThatCompareEqualButDifferBitwise) {
   auto qec = ad_utility::testing::getQec();
   auto iri = ad_utility::triple_component::Iri::fromIriref("<a>");
