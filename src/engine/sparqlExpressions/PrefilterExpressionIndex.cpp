@@ -1018,9 +1018,9 @@ void checkPropertiesForPrefilterConstruction(
 
 //______________________________________________________________________________
 CPP_template_def(typename T)(requires(std::is_same_v<T, int64_t> ||
-                                      std::is_same_v<T, double>))
-    std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
-        CompOp comparison, T year) {
+                                        std::is_same_v<T, double>))
+std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
+    CompOp comparison, T year) {
   // Derive integer bounds `yearFloor` and `yearCeil` from the reference `year`.
   // When the `year` is an `int64_t`, they coincide. When it is a non-integer
   // `double`, they differ by 1 so that the code below does the right thing for

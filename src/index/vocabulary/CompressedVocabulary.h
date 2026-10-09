@@ -87,8 +87,8 @@ CPP_template(typename UnderlyingVocabulary,
   // the enclosing class is itself constrained via `CPP_template`.
   CPP_template_2(typename S)(
       requires ad_utility::serialization::SupportsZeroCopyDeserialization<
-          UnderlyingVocabulary, S>) static CompressedVocabulary
-      fromZeroCopyDeserializer(S& serializer) {
+          UnderlyingVocabulary, S>)
+  static CompressedVocabulary fromZeroCopyDeserializer(S& serializer) {
     CompressedVocabulary result;
     result.underlyingVocabulary_ =
         UnderlyingVocabulary::fromZeroCopyDeserializer(serializer);

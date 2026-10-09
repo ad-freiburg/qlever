@@ -13,6 +13,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/Distinct.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
@@ -318,13 +319,10 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
     HideStrippedColumns hideStrippedColumns) {
   // If all variables of this tree are part of `variablesToKeep`, we can simply
   // return the original tree, without stripping any columns.
-  if (ql::ranges::all_of(qet->getVariableColumns() | ql::views::keys,
-                         [&variablesToKeep](const Variable& variable) {
-                           return ad_utility::contains(variablesToKeep,
-                                                       variable);
-                         })) {
+  if (columnStrippingHelpers::allVariablesAreRequired(*qet, variablesToKeep)) {
     return qet;
   }
+
   const auto& rootOperation = qet->getRootOperation();
   auto optTree = rootOperation->makeTreeWithStrippedColumns(variablesToKeep);
   if (!optTree.has_value()) {

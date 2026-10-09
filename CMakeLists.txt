@@ -474,6 +474,13 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+# LTO noticeably increases build time, so it is off by default (e.g. for CI and
+# local builds). It is opted into explicitly for the Docker image and the
+# portable binaries published from `master` (see `Dockerfile`,
+# `.github/workflows/docker-publish.yml`, and
+# `.github/scripts/build-portable-binaries.sh`).
+option(QLEVER_ENABLE_LTO "Enable link-time optimization" OFF)
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
 # GCC 11–15 emit spurious `-Wmaybe-uninitialized` for template instantiations
 # that cross the system-header boundary (e.g. absl containers instantiated with
@@ -538,6 +545,79 @@ if (${ALLOW_SHUTDOWN})
 endif ()
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+
+if (QLEVER_ENABLE_LTO)
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # `-ffat-lto-objects` makes every object contain both GIMPLE bytecode and
+        # ordinary machine code. All targets link with `-fno-lto` by default and
+        # thus reuse the embedded machine code, and only the targets opted in via
+        # `qlever_enable_lto` (see below) link with `-flto` and get full LTO. In
+        # particular, the (non-shipped) test and benchmark binaries never pay for
+        # a whole-program optimization at link time.
+        #
+        # NOTE 1: GCC disables LTO as soon as `-fno-lto` appears anywhere on the
+        # link command line, so the opted-in targets must not get it at all,
+        # hence the condition on the target property `QLEVER_LTO`.
+        #
+        # NOTE 2: With `BUILD_SHARED_LIBS`, the shared libraries link without
+        # LTO as well, so an opted-in binary only optimizes its own objects.
+        add_compile_options(-flto=auto -ffat-lto-objects)
+        add_link_options($<$<NOT:$<BOOL:$<TARGET_PROPERTY:QLEVER_LTO>>>:-fno-lto>)
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
+        # Unlike GCC, Clang's linkers use the embedded machine code of a fat
+        # object and only run (Thin)LTO on its bitcode when explicitly told to
+        # via `--fat-lto-objects`, which `lld` understands, but e.g. `mold`
+        # silently ignores. So by default every target links the machine code
+        # without paying for LTO, and only the targets opted in via
+        # `qlever_enable_lto` (see below) are linked with `lld` and get ThinLTO.
+        add_compile_options(-flto=thin -ffat-lto-objects)
+        # Ask the compiler driver whether `lld` is available, to fail early
+        # instead of only when linking the first LTO target.
+        execute_process(
+                COMMAND ${CMAKE_CXX_COMPILER} -fuse-ld=lld -Wl,--version
+                OUTPUT_VARIABLE QLEVER_LLD_VERSION
+                ERROR_VARIABLE QLEVER_LLD_VERSION)
+        if (NOT QLEVER_LLD_VERSION MATCHES "LLD")
+            message(FATAL_ERROR "`QLEVER_ENABLE_LTO` with Clang requires the `lld` "
+                    "linker, which was not found.")
+        endif ()
+    else()
+        message(WARNING "`QLEVER_ENABLE_LTO` is ON, but link-time optimization is not "
+                "configured for the compiler `${CMAKE_CXX_COMPILER_ID}`. "
+                "Building without LTO.")
+    endif()
+endif()
+
+# Link the given target with LTO (full LTO with GCC, ThinLTO via `lld` with
+# Clang) if `QLEVER_ENABLE_LTO` is set. All other targets link the machine code
+# of the fat objects without LTO (see above).
+function(qlever_enable_lto target)
+    if (NOT QLEVER_ENABLE_LTO)
+        return()
+    endif ()
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set_target_properties(${target} PROPERTIES QLEVER_LTO ON)
+        target_link_options(${target} PRIVATE -flto=auto)
+        # Suppress the false positives that GCC raises in the link-time
+        # optimization phase (`lto1`). They cannot be suppressed via the pragmas
+        # in `CompilerWarnings.h`, because `lto1` takes its warning flags from
+        # the link command line. Without LTO, these diagnostics stay enabled.
+        #
+        # NOTE: The known false positives are `stringop-overflow` in abseil's
+        # `str_cat.cc` inlined into `flag.cc`, `odr` on the compiler-generated
+        # frame types of coroutines (whose fields get different internal names
+        # per translation unit), `maybe-uninitialized` in abseil's
+        # `inlined_vector` inlined through s2's `s2closest_point_query_base.h`,
+        # and `stringop-overread` in s2's `compact_array.h`.
+        target_link_options(${target} PRIVATE -Wno-stringop-overflow -Wno-odr
+                -Wno-maybe-uninitialized -Wno-stringop-overread)
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
+        # `-fuse-ld=lld` comes after `CMAKE_EXE_LINKER_FLAGS` on the link
+        # command line, so it overrides e.g. a `-fuse-ld=mold` from there.
+        target_link_options(${target} PRIVATE -fuse-ld=lld -flto=thin
+                -ffat-lto-objects -Wl,--thinlto-jobs=all)
+    endif ()
+endfunction()
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
@@ -913,6 +993,10 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
 
     add_executable(qlever-upgrade-index src/IndexUpgraderMain.cpp)
     qlever_target_link_libraries(qlever-upgrade-index index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
+
+    qlever_enable_lto(qlever-index)
+    qlever_enable_lto(qlever-server)
+    qlever_enable_lto(qlever-upgrade-index)
 endif()
 
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)

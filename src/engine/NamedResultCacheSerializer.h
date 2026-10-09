@@ -66,10 +66,8 @@ CPP_template(typename Serializer, typename WriteEntry)(
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::WriteSerializer<
-        Serializer>) void NamedResultCache::writeToSerializer(Serializer&
-                                                                  serializer)
-    const {
+    requires ad_utility::serialization::WriteSerializer<Serializer>)
+void NamedResultCache::writeToSerializer(Serializer& serializer) const {
   namedResultCacheSerializer::writeEntries(
       serializer, getAllEntriesSortedByKey(),
       [](Serializer& s, const Value& value) { s << value; });
@@ -77,10 +75,10 @@ CPP_template_def(typename Serializer)(
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::ReadSerializer<
-        Serializer>) void NamedResultCache::
-    readFromSerializer(Serializer& serializer, Value::Allocator allocator,
-                       const LocalVocabContext& context) {
+    requires ad_utility::serialization::ReadSerializer<Serializer>)
+void NamedResultCache::readFromSerializer(Serializer& serializer,
+                                          Value::Allocator allocator,
+                                          const LocalVocabContext& context) {
   // Clear the cache first.
   clear();
 

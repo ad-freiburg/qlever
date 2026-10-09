@@ -1,5 +1,17 @@
 include(GoogleTest)
 
+# The test binaries are not shipped and link without LTO (see
+# `QLEVER_ENABLE_LTO` in the top-level `CMakeLists.txt`). With GCC, also compile
+# them without LTO, so that no (unused) GIMPLE bytecode is generated for them.
+#
+# NOTE: `add_compile_options` sets a directory property that applies to all
+# targets created afterwards in this directory and its subdirectories (in
+# particular `testUtil` below, which is why this block comes first), and never
+# to the parent directory.
+if (QLEVER_ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-fno-lto)
+endif()
+
 # Needed for creating the `testUil`-library.
 add_subdirectory(util EXCLUDE_FROM_ALL)
 
@@ -385,6 +397,8 @@ addLinkAndDiscoverTest(DurationTest qlever_util)
 addLinkAndDiscoverTest(TripleComponentTest)
 
 addLinkAndDiscoverTest(ValueIdTest qlever_util)
+
+addLinkAndDiscoverTest(DatatypeTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
 

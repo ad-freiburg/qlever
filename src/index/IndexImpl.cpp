@@ -2018,12 +2018,11 @@ std::string IndexImpl::getPatternFilename() const {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(requires(
-    sizeof...(NextSorter) <=
-    1)) void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
-                                            BlocksOfTriples sortedTriples,
-                                            bool doWriteConfiguration,
-                                            NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
+                                    BlocksOfTriples sortedTriples,
+                                    bool doWriteConfiguration,
+                                    NextSorter&&... nextSorter) {
   size_t numTriples = 0;
   auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
   uint64_t nextAvailableIndex = 1;
@@ -2067,20 +2066,19 @@ CPP_template_def(typename... NextSorter)(requires(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(
-    requires(sizeof...(NextSorter) <=
-             1)) void IndexImpl::createPSOAndPOS(size_t numColumns,
-                                                 BlocksOfTriples sortedTriples,
-                                                 NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createPSOAndPOS(size_t numColumns,
+                                BlocksOfTriples sortedTriples,
+                                NextSorter&&... nextSorter) {
   createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
                       AD_FWD(nextSorter)...);
 }
 
 // _____________________________________________________________________________
 CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
-    std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
-        size_t numColumns, BlocksOfTriples sortedTriples,
-        NextSorter&&... nextSorter) {
+std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
+    size_t numColumns, BlocksOfTriples sortedTriples,
+    NextSorter&&... nextSorter) {
   std::optional<PatternCreator::TripleSorter> result;
   if (usePatterns_) {
     // We will return the next sorter.
@@ -2118,11 +2116,10 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(
-    requires(sizeof...(NextSorter) <=
-             1)) void IndexImpl::createOSPAndOPS(size_t numColumns,
-                                                 BlocksOfTriples sortedTriples,
-                                                 NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createOSPAndOPS(size_t numColumns,
+                                BlocksOfTriples sortedTriples,
+                                NextSorter&&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjects =
