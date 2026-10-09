@@ -22,6 +22,7 @@
 
 using namespace ad_utility::testing;
 using ad_utility::use_type_identity::ti;
+
 namespace {
 auto V = ad_utility::testing::VocabId;
 
@@ -33,6 +34,7 @@ auto V = ad_utility::testing::VocabId;
 template <typename T>
 struct VectorWithExtraConstructor : public std::vector<T> {
   using std::vector<T>::vector;
+
   VectorWithExtraConstructor(size_t, std::string) {}
 };
 }  // namespace
@@ -116,7 +118,7 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
     // The technical reason is that the `operator[]` returns a `const Id&` even
     // though the `rowProxy` object is not const:
 #if false
-//#ifdef __GLIBCXX__
+    //#ifdef __GLIBCXX__
     static_assert(std::is_same_v<const Id&, decltype(rowProxy[0])>);
 #endif
   }
@@ -135,7 +137,7 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
     // The technical reason is that the `operator[]` returns a `const Id&` even
     // though the `rowProxy` object is not const:
 #if false
-//#ifdef __GLIBCXX__
+    //#ifdef __GLIBCXX__
     static_assert(std::is_same_v<const Id&, decltype(rowProxy[0])>);
 #endif
   }
@@ -1086,6 +1088,7 @@ TEST(IdTableStatic, setColumnSubset) {
   // For static tables, we need a permutation, a real subset is not allowed.
   ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2}));
 }
+
 TEST(IdTable, deleteColumn) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   IntTable t{3};  // three columns.
@@ -1315,6 +1318,7 @@ TEST(IdTable, fromColumns) {
 // `IdTableView<0>`.
 template <typename T>
 class IdTableSubViewTest : public testing::Test {};
+
 using SubViewTestTypes = testing::Types<IdTable, IdTableView<0>>;
 TYPED_TEST_SUITE(IdTableSubViewTest, SubViewTestTypes);
 
@@ -1367,6 +1371,111 @@ TYPED_TEST(IdTableSubViewTest, subView) {
   } else {
     runTests(table);
   }
+}
+
+namespace {
+// A proxy object for an `Id`, like the element access of a column storage that
+// does not store plain `Id`s would return it.
+struct Proxy {
+  Id id_;
+  // Count the conversions to `Id`, so that a test can check that an operation
+  // really went through the proxy.
+  static inline size_t numConversions = 0;
+  operator Id() const {
+    ++numConversions;
+    return id_;
+  }
+};
+
+// The minimal interface of a table that the `RowReference` class needs, with an
+// element access that returns a `Proxy` by value (and not an `Id&`).
+struct TableReturningProxies {
+  // Both are required by `RowReference`
+  // (`Table::single_value_type` and `Table::numStaticColumns`).
+  using single_value_type = Id;
+  static constexpr int numStaticColumns = 2;
+  std::array<Id, 2> row_{V(3), V(4)};
+
+  size_t numColumns() const { return 2; }
+  Proxy operator()(size_t, size_t column) const { return Proxy{row_[column]}; }
+};
+}  // namespace
+
+// Test that `operator[]` of the `RowReference` (which uses
+// `operatorBracketImpl`) returns exactly what the element access of the table
+// returns: an `Id&` for the `IdTable`, and the proxy for a table that returns
+// proxies by value.
+TEST(IdTable, rowReferenceOperatorBracket) {
+  // The `IdTable` returns references.
+  IdTable idTable{2, makeAllocator()};
+  idTable.push_back({V(1), V(2)});
+  IdTable::row_reference row = idTable[0];
+  static_assert(std::is_same_v<decltype(row[0]), Id&>);
+  row[1] = V(20);
+  EXPECT_EQ(idTable(0, 1), V(20));
+
+  // A table that returns proxies.
+  using ConstRow = columnBasedIdTable::RowReference<TableReturningProxies,
+                                                    ad_utility::IsConst::True>;
+  using MutableRow =
+      columnBasedIdTable::RowReference<TableReturningProxies,
+                                       ad_utility::IsConst::False>;
+  TableReturningProxies table;
+  const ConstRow constRow{&table, 0};
+  static_assert(std::is_same_v<decltype(constRow[0]), Proxy>);
+  EXPECT_EQ(constRow[0].id_, V(3));
+  EXPECT_EQ(constRow[1].id_, V(4));
+
+  // The same for a non-const row reference.
+  MutableRow mutableRow{&table, 0};
+  static_assert(std::is_same_v<decltype(mutableRow[0]), Proxy>);
+  EXPECT_EQ(mutableRow[1].id_, V(4));
+
+  // Iterating over a row uses the same element access.
+  std::vector<Id> ids;
+  for (const auto& proxy : constRow) {
+    ids.push_back(proxy.id_);
+  }
+  EXPECT_THAT(ids, ::testing::ElementsAre(V(3), V(4)));
+}
+
+// Test that a `RowReference` whose element access returns proxies can be
+// materialized as a `Row` or `std::array` and compared to a `Row`. The
+// elements are `Proxy`s inside `RowReference`, and only the conversion
+// `Proxy` -> `Id` makes them `Id`s again, which is what `numConversions`
+// counts.
+TEST(IdTable, rowReferenceConversionAndComparisonWithProxies) {
+  using ConstRow = columnBasedIdTable::RowReference<TableReturningProxies,
+                                                    ad_utility::IsConst::True>;
+  TableReturningProxies table;
+  const ConstRow constRow{&table, 0};
+
+  // Test that the elements that the conversions and the comparison read (via
+  // `operator[]` of a temporary row reference and via the iterators) are
+  // proxies.
+  static_assert(std::is_same_v<decltype(std::move(constRow)[0]), Proxy>);
+  static_assert(std::is_same_v<decltype(*constRow.begin()), Proxy>);
+
+  // Test the conversion to a `Row`: each of the two proxies is converted.
+  Proxy::numConversions = 0;
+  columnBasedIdTable::Row<Id, 2> row = constRow;
+  EXPECT_EQ(Proxy::numConversions, 2u);
+  EXPECT_EQ(row[0], V(3));
+  EXPECT_EQ(row[1], V(4));
+
+  // Test the conversion to a `std::array`.
+  Proxy::numConversions = 0;
+  const auto array = static_cast<std::array<Id, 2>>(constRow);
+  EXPECT_EQ(Proxy::numConversions, 2u);
+  EXPECT_THAT(array, ::testing::ElementsAre(V(3), V(4)));
+
+  // Test the comparison with a `Row`: the proxies are converted to compare
+  // them to the `Id`s of the `Row`.
+  Proxy::numConversions = 0;
+  EXPECT_TRUE(constRow == row);
+  EXPECT_GT(Proxy::numConversions, 0u);
+  row[1] = V(5);
+  EXPECT_TRUE(constRow != row);
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value

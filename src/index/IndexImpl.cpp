@@ -163,7 +163,7 @@ template <typename T1, typename T2, typename F>
 static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
                                           F resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto projectionForComparator = [](const auto& rowOrId) -> const Id& {
+  auto projectionForComparator = [](const auto& rowOrId) -> Id {
     using T = std::decay_t<decltype(rowOrId)>;
     if constexpr (ad_utility::SimilarTo<T, Id>) {
       return rowOrId;
@@ -217,8 +217,9 @@ static auto fixBlockAfterPatternJoin(T block) {
   block.value().setColumnSubset(permutation);
   ql::ranges::for_each(
       block.value().getColumn(ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN),
-      [](Id& id) {
-        id = id.isUndefined() ? Id::makeFromInt(Pattern::NoPattern) : id;
+      [](auto&& id) {
+        std::forward<decltype(id)>(id) =
+            id.isUndefined() ? Id::makeFromInt(Pattern::NoPattern) : id;
       });
   return std::move(block.value()).template toStatic<0>();
 }
@@ -344,7 +345,7 @@ IndexImpl::buildOspWithPatterns(
   // TODO<joka921> Simply get the output unsorted (should be cheaper).
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
     internalTripleSorter.push(
-        std::array{row[0], row[1], row[2], internalGraph});
+        std::array<Id, 4>{row[0], row[1], row[2], internalGraph});
   }
   hasPatternPredicateSortedByPSO->clear();
   return thirdSorter;
@@ -651,7 +652,7 @@ using BufferView = IdTableView<NumColumnsIndexBuilding>;
 void transformTriples(Buffer& triples,
                       const ad_utility::HashMap<VocabIndex, Id>& idMap) {
   for (IdColumnRef column : triples.getColumns()) {
-    for (Id& id : column) {
+    for (auto&& id : column) {
       if (id.getDatatype() != Datatype::VocabIndex) {
         // Check that all the internal, special IDs which we have introduced
         // for performance reasons are eliminated.
@@ -2092,7 +2093,8 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
       static_assert(NumColumnsIndexBuilding == 4,
                     "this place probably has to be changed when additional "
                     "payload columns are added");
-      auto tripleArr = std::array{triple[0], triple[1], triple[2], triple[3]};
+      auto tripleArr =
+          std::array<Id, 4>{triple[0], triple[1], triple[2], triple[3]};
       patternCreator.processTriple(tripleArr);
     };
     size_t numSubjects = createPermutationPair(

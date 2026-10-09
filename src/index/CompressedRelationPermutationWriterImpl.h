@@ -54,8 +54,8 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
     // Note: it is important that we store these two IDs before moving the
     // `relation`, because the evaluation order of function arguments is
     // unspecified.
-    auto firstCol0 = blockOfSmallRelations.at(0, 0);
-    auto lastCol0 =
+    Id firstCol0 = blockOfSmallRelations.at(0, 0);
+    Id lastCol0 =
         blockOfSmallRelations.at(blockOfSmallRelations.numRows() - 1, 0);
     // NOTE: This function is called from within a task of the block write
     // queue of the other writer, which runs on the global thread pool. We
