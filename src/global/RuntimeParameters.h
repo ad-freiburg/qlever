@@ -63,17 +63,18 @@ struct RuntimeParameters {
   // that consumes the blocks processes them on a single thread and can barely
   // keep up with the decompression.
   SizeT lazyIndexScanNumThreads_{2, "lazy-index-scan-num-threads"};
-  // The number of threads used to read and decompress blocks when scanning
-  // permutations during a runtime index rebuild (see `IndexRebuilder`), both
-  // for the main scan of the old permutations and for the statistics
-  // recomputation. Lowering it reduces the rebuild's CPU usage without
-  // affecting query scans. The default of 1 keeps a rebuild on a live server
-  // from starving concurrent queries of CPU, at nearly no cost in wall time:
-  // the bottleneck of each permutation pipeline is its single sequential
-  // remap thread, so additional scan threads mostly add contention (measured
-  // on Wikidata on an otherwise idle 16-core server, where the wall time was
-  // the same for 1, 2, and 4 threads). A value of 0 falls back to
-  // `lazy-index-scan-num-threads`, the same value as for query scans.
+  // The number of blocks that are read and decompressed ahead of the consumer
+  // when scanning permutations during a runtime index rebuild (see
+  // `IndexRebuilder`), both for the main scan of the old permutations and for
+  // the statistics recomputation, with the same meaning as
+  // `lazy-index-scan-num-threads` above. Lowering it reduces the rebuild's CPU
+  // usage without affecting query scans. The default of 1 keeps a rebuild on a
+  // live server from starving concurrent queries of CPU, at nearly no cost in
+  // wall time: the bottleneck of each permutation pipeline is its single
+  // sequential remap thread, so more concurrent block reads mostly add
+  // contention (measured on Wikidata on an otherwise idle 16-core server,
+  // where the wall time was the same for 1, 2, and 4). A value of 0 falls back
+  // to `lazy-index-scan-num-threads`, the same value as for query scans.
   SizeT rebuildIndexScanNumThreads_{1, "rebuild-index-scan-num-threads"};
   // How many blocks per permutation are compressed and written at the same
   // time during a runtime index rebuild (on the global thread pool, see

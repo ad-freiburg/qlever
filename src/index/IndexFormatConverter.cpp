@@ -568,11 +568,11 @@ void convertPermutations(const std::string& oldBasename,
 
     // Convert the two permutations of the pair concurrently. They are
     // independent of each other (each has its own reader, its own writer, and
-    // its own metadata), and a single conversion uses only few threads
-    // (`lazy-index-scan-num-threads` for reading and
-    // `permutation-writer-num-threads` for writing), so there are cores to
-    // spare. One of the two conversions runs on this thread, so that only one
-    // additional thread is needed.
+    // its own metadata), and a single conversion keeps only few tasks in
+    // flight on the global thread pool (`lazy-index-scan-num-threads` for
+    // reading and `permutation-writer-num-threads` for writing), so there are
+    // cores to spare. One of the two conversions runs on this thread, so that
+    // only one additional thread is needed.
     //
     // NOTE: If the conversion on this thread throws, the destructor of
     // `futureB` waits for the other conversion to finish before the exception

@@ -191,11 +191,11 @@ class Permutation {
   // this permutation's shared reader. This allows the scan to run independently
   // of memory constraints imposed on most queries.
   //
-  // `numThreadsOverride`, if set, overrides the number of block read/decompress
-  // threads for this scan (otherwise the `lazy-index-scan-num-threads` runtime
-  // parameter is used, as for query scans). The runtime index rebuild uses this
-  // to throttle its read parallelism (and hence peak CPU) without affecting
-  // queries.
+  // `numThreadsOverride`, if set, overrides the number of blocks that this scan
+  // reads and decompresses ahead of its consumer (otherwise the
+  // `lazy-index-scan-num-threads` runtime parameter is used, as for query
+  // scans). The runtime index rebuild uses this to throttle its read
+  // parallelism (and hence peak CPU) without affecting queries.
   LazyScanWithReader lazyScanWithUnlimitedReader(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       ColumnIndicesRef additionalColumns,

@@ -288,7 +288,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
   // A value of 0 means "fall back to `lazy-index-scan-num-threads`" (the same
-  // thread count as query scans); a positive value throttles the rebuild's
+  // value as for query scans); a positive value throttles the rebuild's
   // read/decompress parallelism only, reducing its peak CPU without touching
   // queries.
   auto numThreadsOverride = getRuntimeParameterAsOptional<
