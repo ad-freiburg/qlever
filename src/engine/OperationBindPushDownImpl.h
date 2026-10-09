@@ -31,10 +31,12 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
   // operation or a child contains it anyway, it is hidden in this operation by
   // a subquery. Then the `BIND` must not be pushed down, because the new
   // operation would have two columns for the target (the hidden one and the
-  // pushed-down one). Note that this operation can add variables that no child
-  // contains (e.g. the distance variable of a `SpatialJoin`), and a child can
-  // contain variables that this operation drops (e.g. the payload variables of
-  // a `SpatialJoin`).
+  // pushed-down one).
+  //
+  // NOTE: Both checks are needed. This operation can add variables that no
+  // child contains (e.g. the distance variable of a `SpatialJoin`), and a
+  // child can contain variables that this operation drops (e.g. the payload
+  // variables of a `SpatialJoin`).
   if (getInternallyVisibleVariableColumns().contains(bind._target) ||
       ql::ranges::any_of(children, [&bind](const auto& child) {
         return child != nullptr && child->containsVariable(bind._target);
