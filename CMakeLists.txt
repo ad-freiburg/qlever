@@ -823,12 +823,6 @@ target_compile_options(civetweb PRIVATE -Wno-missing-field-initializers)
 # overloaded virtual functions.
 target_compile_options(pull PRIVATE -Wno-overloaded-virtual)
 
-# The utility libraries of `spatialjoin` use `std::wstring_convert`, which is
-# deprecated since C++17 and which libstdc++ marks as such since GCC 15.
-foreach (target pb_util pb_util_geo pb_util_json)
-    target_compile_options(${target} PRIVATE -Wno-deprecated-declarations)
-endforeach ()
-
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
 message(STATUS "CXX_FLAGS_RELEASE are : " ${CMAKE_CXX_FLAGS_RELEASE})
