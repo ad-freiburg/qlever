@@ -2,9 +2,9 @@
 # the `run-full-ci` label (see `README.md`) and always on `master`.
 #
 # NOTE: `ppa:ubuntu-toolchain-r/test` only provides a pre-release snapshot of
-# GCC 16 (`16-20260315`), whose warnings can differ from those of the released
-# GCC 16. A failure in this workflow can therefore be unrelated to the change
-# that happens to trigger it.
+# GCC 16 (`16-20260315`). It does not behave exactly like the released GCC 16:
+# for example, the released version rejects code that the snapshot accepts
+# (see #3454), and it fixes GCC bug 124584, which the snapshot still has.
 name: Native build with the newest compilers
 
 on:
