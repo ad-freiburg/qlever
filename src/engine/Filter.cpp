@@ -12,6 +12,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -35,6 +36,21 @@ Filter::Filter(QueryExecutionContext* qec,
   if (getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     setPrefilterExpressionForChildren();
   }
+}
+
+// _____________________________________________________________________________
+VariableToColumnMap Filter::computeVariableToColumnMap() const {
+  // The columns of the `ExistsJoin`s are only needed to evaluate this filter.
+  // Hide them, so that parents neither join on them nor see them twice.
+  // TODO<StripColumns> Don't write these columns once `Filter` can strip
+  // columns.
+  auto variableColumns = _subtree->getVariableColumns();
+  for (const auto* expression : _expression.getExistsExpressions()) {
+    variableColumns.erase(
+        dynamic_cast<const sparqlExpression::ExistsExpression&>(*expression)
+            .variable());
+  }
+  return variableColumns;
 }
 
 // _____________________________________________________________________________
