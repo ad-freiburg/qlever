@@ -29,8 +29,8 @@
 
 namespace sparqlExpression::detail {
 
-/// Convert a variable to a vector of all the Ids it is bound to in the
-/// `context`.
+/// Return the column of all the `Id`s that the `variable` is bound to in the
+/// `context`, restricted to the rows `[beginIndex, endIndex)`.
 inline ConstIdColumnRef getIdsFromVariable(const ::Variable& variable,
                                            const EvaluationContext* context,
                                            size_t beginIndex, size_t endIndex) {

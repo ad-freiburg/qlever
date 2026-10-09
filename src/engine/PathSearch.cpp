@@ -44,9 +44,9 @@ std::vector<Edge> BinSearchWrapper::outgoingEdes(const Id node) const {
 }
 
 // _____________________________________________________________________________
-std::vector<Id> BinSearchWrapper::getSources() const {
+IdColumn BinSearchWrapper::getSources() const {
   auto startIds = table_.getColumn(startCol_);
-  std::vector<Id> sources;
+  IdColumn sources;
   ql::ranges::unique_copy(startIds, std::back_inserter(sources));
 
   return sources;

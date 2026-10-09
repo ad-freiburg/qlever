@@ -490,9 +490,13 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream(
          getRowIndices(limitAndOffset, *result, resultSize)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
-          // TODO<pas-kes>: Decide on the binary export format of the IDs.
-          // Sending `sizeof(Id)` bytes is wasteful with the new `Id` (128
-          // instead of 72 bits per ID, the rest is padding).
+          // Copy the ID, since the element access of the split-layout
+          // `IdTable` returns a proxy and not a reference to an `Id`.
+          //
+          // TODO<pas-kes>: Decide on the binary export format of the IDs. Once
+          // an `Id` no longer fits into 64 bits, sending `sizeof(Id)` bytes per
+          // ID is wasteful (128 bits for 72 bits of payload, the rest is
+          // padding).
           Id id = pair.idTable()(i, columnIndex.value().columnIndex_);
           STREAMABLE_YIELD(
               std::string_view{reinterpret_cast<const char*>(&id), sizeof(Id)});
