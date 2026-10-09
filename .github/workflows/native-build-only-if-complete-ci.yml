@@ -9,7 +9,7 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
-    # Also run when a label is applied, s.t. applying the `run-ci` or
+    # Also run when a label is applied, so that applying the `run-ci` or
     # `run-full-ci` label triggers the checks, see `README.md`.
     types: [ opened, synchronize, reopened, labeled ]
   merge_group:
