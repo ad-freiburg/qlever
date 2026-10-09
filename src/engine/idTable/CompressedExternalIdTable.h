@@ -11,13 +11,10 @@
 #include <absl/strings/str_cat.h>
 
 #include <atomic>
-#include <boost/asio/post.hpp>
-#include <condition_variable>
 #include <cstdint>
 #include <exception>
 #include <future>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <utility>
 
@@ -37,6 +34,7 @@
 #include "util/Log.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
+#include "util/ParallelExecutor.h"
 #include "util/TransparentFunctors.h"
 #include "util/UniqueCleanup.h"
 #include "util/Views.h"
@@ -52,99 +50,6 @@ CPP_requires(HasPushBackRequires, requires(B& b, const R& r)(b.push_back(r)));
 
 template <typename B, typename R>
 CPP_concept HasPushBack = CPP_requires_ref(HasPushBackRequires, B, R);
-
-// The state that the caller of `runTasksInParallel` (see below) shares with the
-// helpers that it posts to the global thread pool.
-struct RunTasksInParallelState {
-  // The index of the next task that has not been claimed yet.
-  std::atomic<size_t> nextTaskIdx_ = 0;
-  // All the members below are protected by the `mutex_`.
-  std::mutex mutex_;
-  std::condition_variable helperFinished_;
-  // The number of helpers that are currently running tasks.
-  size_t numActiveHelpers_ = 0;
-  // Set by the caller as soon as it has stopped running tasks itself. A helper
-  // that starts after that returns right away.
-  bool isClosed_ = false;
-  std::exception_ptr firstException_;
-};
-
-// Claim and run tasks of the `state` until there are none left. Never throw:
-// after a task has thrown, store the exception in the `state` and stop handing
-// out the remaining tasks.
-template <typename RunTask>
-void claimAndRunTasks(RunTasksInParallelState& state, size_t numTasks,
-                      const RunTask& runTask) {
-  try {
-    while (true) {
-      size_t taskIdx = state.nextTaskIdx_.fetch_add(1);
-      if (taskIdx >= numTasks) {
-        return;
-      }
-      runTask(taskIdx);
-    }
-  } catch (...) {
-    state.nextTaskIdx_.store(numTasks);
-    std::lock_guard lock{state.mutex_};
-    if (!state.firstException_) {
-      state.firstException_ = std::current_exception();
-    }
-  }
-}
-
-// Run the `numTasks` tasks `runTask(0), ..., runTask(numTasks - 1)` on the
-// global thread pool (see `util/GlobalExecutor.h`). Return only when all of
-// them are done, rethrowing the first exception that any of them has thrown.
-// After a task has thrown, the tasks that have not been started yet are
-// skipped. The tasks are started in the order of their indices.
-//
-// NOTE: The calling thread doesn't only wait for the pool, but also runs tasks
-// itself, and it waits only for the helpers on the pool that have actually
-// started. That way this function completes even if none of the threads of the
-// pool ever becomes available, so that it can safely be called from a thread
-// that the threads of the pool are (indirectly) waiting for, and from the
-// threads of the pool themselves.
-template <typename RunTask>
-void runTasksInParallel(size_t numTasks, const RunTask& runTask) {
-  if (numTasks == 0) {
-    return;
-  }
-  // NOTE: The `state` is shared with the helpers, because a helper may only be
-  // started after this function has returned. Such a helper then sees that the
-  // `state` is closed and returns without touching the `runTask`.
-  auto state = std::make_shared<RunTasksInParallelState>();
-  auto helper = [state, numTasks, &runTask]() {
-    {
-      std::lock_guard lock{state->mutex_};
-      if (state->isClosed_) {
-        return;
-      }
-      ++state->numActiveHelpers_;
-    }
-    claimAndRunTasks(*state, numTasks, runTask);
-    {
-      std::lock_guard lock{state->mutex_};
-      --state->numActiveHelpers_;
-    }
-    state->helperFinished_.notify_all();
-  };
-  size_t numHelpers =
-      std::min(numTasks, ad_utility::globalExecutorNumThreads()) - 1;
-  for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, numHelpers)) {
-    boost::asio::post(ad_utility::globalExecutor(), helper);
-  }
-  claimAndRunTasks(*state, numTasks, runTask);
-
-  // All the tasks have been claimed, so wait for the helpers that are still
-  // running one of them, and keep all the other ones from starting.
-  std::unique_lock lock{state->mutex_};
-  state->isClosed_ = true;
-  state->helperFinished_.wait(
-      lock, [&state]() { return state->numActiveHelpers_ == 0; });
-  if (state->firstException_) {
-    std::rethrow_exception(state->firstException_);
-  }
-}
 }  // namespace compressedExternalIdTable::detail
 
 using namespace ad_utility::memory_literals;
@@ -252,7 +157,8 @@ class CompressedExternalIdTableWriter {
     // (and within a block, in the order of the columns), such that the parts
     // that are later read together (see `readBlockSequential`) tend to end up
     // close to each other in the file.
-    compressedExternalIdTable::detail::runTasksInParallel(
+    ad_utility::runIndexedTasksOnExecutor(
+        ad_utility::globalExecutor(), ad_utility::globalExecutorNumThreads(),
         layout.numBlocks_ * numColumns(),
         [this, &table, &layout](size_t taskIdx) {
           compressAndWriteBlockOfColumn(table, taskIdx / numColumns(),
