@@ -9,6 +9,7 @@
 #include <s2/s2polyline.h>
 #include <s2/s2shapeutil_coding.h>
 
+#include <functional>
 #include <numeric>
 
 #include "backports/algorithm.h"
@@ -53,19 +54,15 @@ class SegmentBuilder {
     return std::shared_ptr<const MutableS2ShapeIndex>{std::move(index_)};
   }
 };
-
-// Combine the segment and the shape id to the format used by `rowToShape_`.
-// The `segment` has to be smaller than `2^32`, and the `shapeId` must not be
-// `std::numeric_limits<uint32_t>::max()`, so that the result never collides
-// with `SpatialJoinCachedIndex::NO_SHAPE`.
-uint64_t makeShape(size_t segment, int shapeId) {
-  AD_CONTRACT_CHECK(segment < (1ULL << 32) &&
-                    static_cast<uint32_t>(shapeId) !=
-                        std::numeric_limits<uint32_t>::max());
-  return (static_cast<uint64_t>(segment) << 32) |
-         static_cast<uint32_t>(shapeId);
-}
 }  // namespace
+
+// ____________________________________________________________________________
+uint64_t SpatialJoinCachedIndex::encodeShape(size_t segment, size_t shapeId) {
+  AD_CONTRACT_CHECK(segment < MAX_NUM_SEGMENTS &&
+                    shapeId < MAX_NUM_SHAPES_PER_SEGMENT);
+  return (static_cast<uint64_t>(segment) << SHAPE_ID_BITS) |
+         static_cast<uint64_t>(shapeId);
+}
 
 // ____________________________________________________________________________
 std::optional<S2Polyline> SpatialJoinCachedIndex::getPolyline(
@@ -93,13 +90,16 @@ SpatialJoinCachedIndex::SpatialJoinCachedIndex(
     const Index& index, std::optional<double> simplificationErrorInMeters)
     : geometryColumn_{std::move(geometryColumn)},
       simplificationErrorInMeters_{simplificationErrorInMeters} {
+  // This constructor builds an index that consists of a single segment.
+  constexpr size_t segmentIdx = 0;
   SegmentBuilder builder;
   rowToShape_.assign(restable.size(), NO_SHAPE);
   for (size_t row = 0; row < restable.size(); row++) {
     auto shapeId =
         builder.addRow(restable, row, col, index, simplificationErrorInMeters_);
     if (shapeId.has_value()) {
-      rowToShape_[row] = makeShape(0, shapeId.value());
+      rowToShape_[row] =
+          encodeShape(segmentIdx, static_cast<size_t>(shapeId.value()));
     }
   }
   segments_.push_back(builder.finish());
@@ -121,11 +121,12 @@ SpatialJoinCachedIndex::SpatialJoinCachedIndex(
 SpatialJoinCachedIndex SpatialJoinCachedIndex::fromLegacyFormat(
     Variable geometryColumn, const std::string& encodedSegment,
     const ad_utility::HashMap<size_t, size_t>& shapeToRow, size_t numRows) {
-  std::vector<uint64_t> rowToShape(numRows, NO_SHAPE);
+  constexpr size_t segmentIdx = 0;
+  std::vector rowToShape(numRows, NO_SHAPE);
   for (const auto& [shapeId, row] : shapeToRow) {
-    AD_CORRECTNESS_CHECK(row < numRows && shapeId < (1ULL << 32),
+    AD_CORRECTNESS_CHECK(row < numRows && shapeId < MAX_NUM_SHAPES_PER_SEGMENT,
                          "The serialized geo index is corrupt");
-    rowToShape[row] = shapeId;
+    rowToShape[row] = encodeShape(segmentIdx, shapeId);
   }
   Segments segments;
   segments.push_back(decodeSegment(encodedSegment));
@@ -137,15 +138,13 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::fromLegacyFormat(
 void SpatialJoinCachedIndex::computeShapeToRow() {
   shapeToRow_.clear();
   shapeToRow_.reserve(segments_.size());
-  // The segment has to fit into the upper 32 bits of a shape, and no shape id
-  // may reach `std::numeric_limits<uint32_t>::max()`, s.t. a shape can never
-  // collide with `NO_SHAPE`.
-  AD_CORRECTNESS_CHECK(segments_.size() < (1ULL << 32),
+  // Each shape has to be representable by `encodeShape`.
+  AD_CORRECTNESS_CHECK(segments_.size() < MAX_NUM_SEGMENTS,
                        "The geo index has too many segments");
   for (const auto& segment : segments_) {
     AD_CORRECTNESS_CHECK(segment != nullptr);
-    AD_CORRECTNESS_CHECK(static_cast<uint64_t>(segment->num_shape_ids()) <
-                             std::numeric_limits<uint32_t>::max(),
+    AD_CORRECTNESS_CHECK(static_cast<uint64_t>(segment->num_shape_ids()) <=
+                             MAX_NUM_SHAPES_PER_SEGMENT,
                          "A segment of the geo index has too many shapes");
     shapeToRow_.emplace_back(static_cast<size_t>(segment->num_shape_ids()),
                              NO_ROW);
@@ -155,8 +154,7 @@ void SpatialJoinCachedIndex::computeShapeToRow() {
     if (shape == NO_SHAPE) {
       continue;
     }
-    size_t segment = shape >> 32;
-    size_t shapeId = shape & 0xFFFFFFFFu;
+    auto [segment, shapeId] = decodeShape(shape);
     AD_CORRECTNESS_CHECK(
         segment < shapeToRow_.size() && shapeId < shapeToRow_[segment].size(),
         "A row of the geo index refers to a shape that does not exist");
@@ -169,11 +167,8 @@ void SpatialJoinCachedIndex::computeShapeToRow() {
 
 // ____________________________________________________________________________
 size_t SpatialJoinCachedIndex::numShapes() const {
-  size_t result = 0;
-  for (const auto& shapeToRow : shapeToRow_) {
-    result += shapeToRow.size();
-  }
-  return result;
+  return ::ranges::accumulate(shapeToRow_, size_t{0}, std::plus{},
+                              [](const auto& v) { return v.size(); });
 }
 
 // ____________________________________________________________________________
@@ -189,7 +184,7 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::withPermutedRows(
   AD_CONTRACT_CHECK(ql::ranges::all_of(
       newRowOfOldRow,
       [numRows = newRowOfOldRow.size()](size_t row) { return row < numRows; }));
-  std::vector<uint64_t> rowToShape(rowToShape_.size(), NO_SHAPE);
+  std::vector rowToShape(rowToShape_.size(), NO_SHAPE);
   std::vector<bool> isTargetUsed(rowToShape_.size(), false);
   for (size_t oldRow = 0; oldRow < rowToShape_.size(); ++oldRow) {
     size_t newRow = newRowOfOldRow[oldRow];
@@ -205,26 +200,26 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::withPermutedRows(
 }
 
 // _____________________________________________________________________________
-SpatialJoinCachedIndex SpatialJoinCachedIndex::extend(
+SpatialJoinCachedIndex SpatialJoinCachedIndex::forUpdatedTable(
     const SpatialJoinCachedIndex& base, ql::span<const size_t> baseRowOfNewRow,
     const IdTableView<0>& newTable, ColumnIndex col, const Index& index) {
   std::vector<size_t> rowOrder(newTable.size());
   std::iota(rowOrder.begin(), rowOrder.end(), size_t{0});
-  return extend(base, baseRowOfNewRow, newTable, col, index, rowOrder);
+  return forUpdatedTable(base, baseRowOfNewRow, newTable, col, index, rowOrder);
 }
 
 // _____________________________________________________________________________
-SpatialJoinCachedIndex SpatialJoinCachedIndex::extend(
+SpatialJoinCachedIndex SpatialJoinCachedIndex::forUpdatedTable(
     const SpatialJoinCachedIndex& base, ql::span<const size_t> baseRowOfNewRow,
     const IdTableView<0>& newTable, ColumnIndex col, const Index& index,
     ql::span<const size_t> rowOrder) {
   AD_CONTRACT_CHECK(baseRowOfNewRow.size() == newTable.size());
   AD_CONTRACT_CHECK(rowOrder.size() == newTable.size());
-  AD_CONTRACT_CHECK(base.segments_.size() < (1ULL << 32),
+  AD_CONTRACT_CHECK(base.segments_.size() + 1 < MAX_NUM_SEGMENTS,
                     "The geo index has too many segments");
   SegmentBuilder builder;
   const size_t newSegment = base.segments_.size();
-  std::vector<uint64_t> rowToShape(newTable.size(), NO_SHAPE);
+  std::vector rowToShape(newTable.size(), NO_SHAPE);
   std::vector<bool> isVisited(newTable.size(), false);
   for (size_t row : rowOrder) {
     AD_CONTRACT_CHECK(row < newTable.size() && !isVisited[row],
@@ -239,7 +234,8 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::extend(
     auto shapeId = builder.addRow(newTable, row, col, index,
                                   base.simplificationErrorInMeters_);
     if (shapeId.has_value()) {
-      rowToShape[row] = makeShape(newSegment, shapeId.value());
+      rowToShape[row] =
+          encodeShape(newSegment, static_cast<size_t>(shapeId.value()));
     }
   }
   Segments segments = base.segments_;
@@ -251,6 +247,20 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::extend(
   return SpatialJoinCachedIndex{base.geometryColumn_,
                                 base.simplificationErrorInMeters_,
                                 std::move(segments), std::move(rowToShape)};
+}
+
+// _____________________________________________________________________________
+ad_utility::HashMap<size_t, size_t> SpatialJoinCachedIndex::legacyShapeToRow()
+    const {
+  AD_CONTRACT_CHECK(shapeToRow_.size() == 1);
+  ad_utility::HashMap<size_t, size_t> result;
+  for (const auto& [shapeId, row] :
+       ::ranges::views::enumerate(shapeToRow_.at(0))) {
+    if (row != NO_ROW) {
+      result[shapeId] = row;
+    }
+  }
+  return result;
 }
 
 // ____________________________________________________________________________

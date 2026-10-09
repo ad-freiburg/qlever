@@ -857,9 +857,10 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
     EXPECT_FALSE(blob.empty());
     return blob;
   }();
-  // A geo index requires the new blob format (also without new words).
+  // A geo index with a single segment and no new words can be written in the
+  // old blob format.
   expectBlobFormatVersion(compressedBlob,
-                          Manager::formatVersionWithSecondaryVocab);
+                          Manager::formatVersionWithoutSecondaryVocab);
 
   // A spatial join with the cached geometry index (from the blob).
   std::string spatialQuery = spatialJoinQuery("POINT(7.841295 47.997731)");
@@ -1146,4 +1147,62 @@ TEST(NamedCachedQueryBlobManager, geoIndexOfLineStringZ) {
   // Two shapes for `<s1>` and `<s2>`, and a third one for `<s3>` iff the Z
   // form is accepted.
   EXPECT_EQ(geoIndexOf(*loaded).numShapes(), 3);
+}
+
+// _____________________________________________________________________________
+// Run a spatial join on a cached geometry index that consists of two segments
+// and has dead shapes (as created by
+// `SpatialJoinCachedIndex::forUpdatedTable`), both directly and after a round
+// trip through a blob, which then requires the new blob format.
+TEST(NamedCachedQueryBlobManager, blobWithSegmentedSpatialIndex) {
+  IndexBuilderConfig sourceConfig = buildTestIndex(absl::StrCat(
+      freiburgSegmentsS1S2,
+      "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 "
+      "47.9975175)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s4> <asWKT> \"LINESTRING(7.8422376 47.9990144,7.8411016 "
+      "47.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s5> <asWKT> \"LINESTRING(8.8422376 48.9990144,8.8411016 "
+      "48.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"));
+  Qlever source{EngineConfig{sourceConfig}};
+  source.queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"}},
+      "SELECT * { ?s2 <asWKT> ?geo2 }");
+  auto value = source.namedResultCache().get("geoPin");
+  ASSERT_NE(value, nullptr);
+  ASSERT_TRUE(value->cachedGeoIndex_.has_value());
+  const auto& base = value->cachedGeoIndex_.value();
+  ASSERT_EQ(base.numSegments(), 1);
+  ASSERT_EQ(base.numShapes(), 5);
+
+  // Replace the shapes of the first and last row by new shapes in a second
+  // segment. Their shapes in the first segment become dead and must not be
+  // found by the spatial join.
+  constexpr size_t NO_ROW = SpatialJoinCachedIndex::NO_ROW;
+  auto view = ExplicitIdTableOperation::viewOf(value->result_);
+  auto col = value->varToColMap_.at(Variable{"?geo2"}).columnIndex_;
+  auto updated = SpatialJoinCachedIndex::forUpdatedTable(
+      base, std::vector{NO_ROW, size_t{1}, size_t{2}, size_t{3}, NO_ROW}, view,
+      col, source.indexAndViewsSnapshot()->index_);
+  ASSERT_EQ(updated.numSegments(), 2);
+  ASSERT_EQ(updated.numShapes(), 7);
+  ASSERT_EQ(updated.numLiveShapes(), 5);
+  source.namedResultCache().store(
+      "geoPin", NamedResultCache::Value{value->result_, value->varToColMap_,
+                                        value->resultSortedOn_,
+                                        value->localVocab_.clone(),
+                                        value->cacheKey_, std::move(updated)});
+
+  // Each of the four segments near the point is found exactly once, the far
+  // away fifth one is not found.
+  const std::string expected = "?s2\n<s1>\n<s2>\n<s3>\n<s4>\n";
+  std::string spatialQuery = spatialJoinQuery("POINT(7.841295 47.997731)");
+  EXPECT_EQ(source.query(spatialQuery, ad_utility::MediaType::tsv), expected);
+
+  // A geo index with more than one segment requires the new blob format, and
+  // gives the same result after loading the blob.
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  expectBlobFormatVersion(blob, Manager::formatVersionWithSecondaryVocab);
+  auto loaded = loadBlob(blob);
+  EXPECT_EQ(geoIndexOf(*loaded).numSegments(), 2);
+  EXPECT_EQ(loaded->query(spatialQuery, ad_utility::MediaType::tsv), expected);
 }

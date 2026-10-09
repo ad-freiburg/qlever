@@ -18,11 +18,13 @@
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
 #include "util/Exception.h"
-// NOTE: The following two includes are only needed to read the hash map of the
-// legacy format (version 1) in the template `readFromSerializer`, which has to
-// be defined in this header because it is generic in the serializer.
+// NOTE: The following two includes are only needed to read and write the hash
+// map of the legacy format (version 1) in the templates `readFromSerializer`
+// and `writeToSerializer`, which have to be defined in this header because
+// they are generic in the serializer.
 #include "util/HashMap.h"
 #include "util/Serializer/SerializeHashMap.h"
+#include "util/Serializer/SerializeOptional.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
@@ -37,8 +39,8 @@ class S2Polyline;
 // built and can be shared between several `SpatialJoinCachedIndex`es. A
 // `SpatialJoinCachedIndex` that was created from the geometries of an
 // `IdTable` can be cheaply adapted to a modified version of that table via
-// `extend` (which reuses all existing segments and only builds one new segment
-// for the new rows).
+// `forUpdatedTable` (which reuses all existing segments and only builds one new
+// segment for the new rows).
 //
 // As `MutableS2ShapeIndex` doesn't support additional payloads, the
 // association between the rows of the `IdTable` and the shapes in the segments
@@ -53,10 +55,29 @@ class SpatialJoinCachedIndex {
   // because it contains no linestring).
   static constexpr uint64_t NO_SHAPE = std::numeric_limits<uint64_t>::max();
 
-  // The value in `shapeToRow_` (and the value of `baseRowOfNewRow` in `extend`)
-  // for a shape that is not referenced by any row (and for a row that has no
-  // counterpart in the base index, respectively).
+  // The value in `shapeToRow_` (and the value of `baseRowOfNewRow` in
+  // `forUpdatedTable`) for a shape that is not referenced by any row (and for a
+  // row that has no counterpart in the base index, respectively).
   static constexpr size_t NO_ROW = std::numeric_limits<size_t>::max();
+
+  // A shape in `rowToShape_` is encoded as `(segment << SHAPE_ID_BITS) |
+  // shapeId` (see `encodeShape` and `decodeShape`).
+  static constexpr size_t SHAPE_ID_BITS = 32;
+  static constexpr uint64_t SHAPE_ID_MASK = (uint64_t{1} << SHAPE_ID_BITS) - 1;
+
+  // The number of segments has to be smaller than `MAX_NUM_SEGMENTS`, and the
+  // number of shapes in a segment must be smaller than
+  // `MAX_NUM_SHAPES_PER_SEGMENT`, s.t. each shape can be encoded and an encoded
+  // shape never collides with `NO_SHAPE`.
+  static constexpr uint64_t MAX_NUM_SEGMENTS = uint64_t{1}
+                                               << (64 - SHAPE_ID_BITS);
+  static constexpr uint64_t MAX_NUM_SHAPES_PER_SEGMENT = SHAPE_ID_MASK;
+
+  // A shape, decoded from the format of `rowToShape_`.
+  struct DecodedShape {
+    size_t segment_;
+    size_t shapeId_;
+  };
 
  private:
   // The `geometryColumn_` indicates the variable name of the column from which
@@ -65,16 +86,16 @@ class SpatialJoinCachedIndex {
 
   // The maximum error in meters of the Douglas-Peucker simplification that was
   // applied to the geometries before indexing them (`std::nullopt` means no
-  // simplification). It is stored s.t. `extend` can simplify new geometries in
-  // exactly the same way.
+  // simplification). It is stored s.t. `forUpdatedTable` can simplify new
+  // geometries in exactly the same way.
   std::optional<double> simplificationErrorInMeters_;
 
   // The immutable shape indices.
   Segments segments_;
 
   // For each row of the `IdTable` from which this index was created, the shape
-  // that represents the geometry of the row, encoded as `(segment << 32) |
-  // shapeId`, or `NO_SHAPE` if the row has no shape.
+  // that represents the geometry of the row, encoded via `encodeShape`, or
+  // `NO_SHAPE` if the row has no shape.
   std::vector<uint64_t> rowToShape_;
 
   // For each segment, and for each shape id in that segment, the row of the
@@ -153,54 +174,87 @@ class SpatialJoinCachedIndex {
   // (using the simplification of `base`). A row of `base` that no row of
   // `newTable` refers to becomes a dead shape. Each row of `base` may be
   // referred to at most once.
-  // The rows of `newTable` are visited in their natural order, see the
-  // overload below.
-  static SpatialJoinCachedIndex extend(const SpatialJoinCachedIndex& base,
-                                       ql::span<const size_t> baseRowOfNewRow,
-                                       const IdTableView<0>& newTable,
-                                       ColumnIndex col, const Index& index);
+  // The new rows are added to the new segment in their order in `newTable`,
+  // see the overload below.
+  static SpatialJoinCachedIndex forUpdatedTable(
+      const SpatialJoinCachedIndex& base,
+      ql::span<const size_t> baseRowOfNewRow, const IdTableView<0>& newTable,
+      ColumnIndex col, const Index& index);
 
-  // Same as above, but the rows of `newTable` are visited in the order given
-  // by `rowOrder`, which has to be a permutation of all rows of `newTable`.
-  // The new rows are added to the new segment in that order, so the bytes of
-  // the new segment only depend on the new geometries and on `rowOrder`, but
-  // not on the order of the rows in `newTable`. Passing the canonical row
-  // order makes the result independent of the plan-dependent order of the rows
-  // of `newTable`.
-  static SpatialJoinCachedIndex extend(const SpatialJoinCachedIndex& base,
-                                       ql::span<const size_t> baseRowOfNewRow,
-                                       const IdTableView<0>& newTable,
-                                       ColumnIndex col, const Index& index,
-                                       ql::span<const size_t> rowOrder);
+  // Same as above, but the new rows are added to the new segment in the order
+  // given by `rowOrder`, which has to be a permutation of all rows of
+  // `newTable`. The result is the same as that of the following (more
+  // expensive) steps: Permute the rows of `newTable` (and the entries of
+  // `baseRowOfNewRow`) s.t. the row `rowOrder[i]` becomes the row `i`, call
+  // the overload above on the permuted table, and permute the rows of the
+  // result back to the order of `newTable` via `withPermutedRows`. In
+  // particular, the bytes of the new segment only depend on the new geometries
+  // and on `rowOrder`, but not on the order of the rows in `newTable`. This is
+  // used when writing a blob, where `rowOrder` is the canonical row order of
+  // the result, s.t. the written index doesn't depend on the order of the rows
+  // that the query plan happened to produce.
+  static SpatialJoinCachedIndex forUpdatedTable(
+      const SpatialJoinCachedIndex& base,
+      ql::span<const size_t> baseRowOfNewRow, const IdTableView<0>& newTable,
+      ColumnIndex col, const Index& index, ql::span<const size_t> rowOrder);
 
   // Retrieves and parses a line string from the given cell of an `IdTable`
   // and converts it to an `S2Polyline`. Used when building a segment, in
-  // particular by the constructor and by `extend`.
+  // particular by the constructor and by `forUpdatedTable`.
   // This function is only `public` for testing purposes and should otherwise
   // not be used outside of this class.
   static std::optional<S2Polyline> getPolyline(const IdTableView<0>& restable,
                                                size_t row, ColumnIndex col,
                                                const Index& index);
 
-  // Write this index to the `serializer` in the format of version 2 (see
-  // `readFromSerializer`). The result only depends on the logical content of
-  // the index, in particular, it is deterministic. The layout is:
+  // Encode the given `segment` and `shapeId` in the format of `rowToShape_`.
+  // Throw an exception if `segment >= MAX_NUM_SEGMENTS` or if
+  // `shapeId >= MAX_NUM_SHAPES_PER_SEGMENT`.
+  // This function is only `public` for testing purposes.
+  static uint64_t encodeShape(size_t segment, size_t shapeId);
+
+  // Decode a shape that was encoded via `encodeShape`. The `shape` must not be
+  // `NO_SHAPE`.
+  // This function is only `public` for testing purposes.
+  static DecodedShape decodeShape(uint64_t shape) {
+    return {static_cast<size_t>(shape >> SHAPE_ID_BITS),
+            static_cast<size_t>(shape & SHAPE_ID_MASK)};
+  }
+
+  // Write this index to the `serializer` in the format of the given
+  // `entriesFormatVersion` (see `NamedResultCacheSerializer.h`), which is read
+  // by `readFromSerializer`. The version 2 only depends on the logical content
+  // of the index, in particular, it is deterministic. Its layout is:
   //
   //   Variable geometryColumn_
-  //   uint8_t hasSimplification
-  //   double simplificationErrorInMeters  (only if hasSimplification == 1)
+  //   std::optional<double> simplificationErrorInMeters_
   //   uint64_t numSegments
   //   for each segment: std::string (the encoded `MutableS2ShapeIndex`)
   //   std::vector<uint64_t> rowToShape_   (aligned raw array)
+  //
+  // The version 1 is the legacy format, which consists of the geometry
+  // column, the encoded `MutableS2ShapeIndex` of the single segment, and a hash
+  // map from the shape ids of the live shapes to their rows. It can only be
+  // written if the index has exactly one segment (checked via
+  // `AD_CONTRACT_CHECK`). The `simplificationErrorInMeters_` cannot be
+  // represented in that format and is silently dropped (it is only needed by
+  // `forUpdatedTable`).
   CPP_template(typename Serializer)(
       requires ad_utility::serialization::WriteSerializer<
-          Serializer>) void writeToSerializer(Serializer& serializer) const {
+          Serializer>) void writeToSerializer(Serializer& serializer,
+                                              uint16_t entriesFormatVersion)
+      const {
+    AD_CONTRACT_CHECK(entriesFormatVersion == 1 || entriesFormatVersion == 2);
     serializer << geometryColumn_;
-    serializer << static_cast<uint8_t>(
-        simplificationErrorInMeters_.has_value());
-    if (simplificationErrorInMeters_.has_value()) {
-      serializer << simplificationErrorInMeters_.value();
+    if (entriesFormatVersion == 1) {
+      AD_CONTRACT_CHECK(segments_.size() == 1,
+                        "Only a geo index with a single segment can be "
+                        "written in the legacy format");
+      serializer << encodeSegment(*segments_.at(0));
+      serializer << legacyShapeToRow();
+      return;
     }
+    serializer << simplificationErrorInMeters_;
     serializer << static_cast<uint64_t>(segments_.size());
     for (const auto& segment : segments_) {
       serializer << encodeSegment(*segment);
@@ -209,12 +263,10 @@ class SpatialJoinCachedIndex {
   }
 
   // Read an index from the `serializer` that was written with the given
-  // `entriesFormatVersion` (see `NamedResultCacheSerializer.h`). The version
-  // 2 is the format written by `writeToSerializer`. The version 1 is the
-  // legacy format that consists of the geometry column, one string with the
-  // encoded `MutableS2ShapeIndex`, and a hash map from shape ids to rows; it is
-  // converted to an index with one segment and no simplification. `numRows` is
-  // the number of rows of the `IdTable` that the index refers to.
+  // `entriesFormatVersion` (see `NamedResultCacheSerializer.h`) by
+  // `writeToSerializer`. An index in the legacy format (version 1) is read as
+  // an index with one segment and no simplification. `numRows` is the number of
+  // rows of the `IdTable` that the index refers to.
   CPP_template(typename Serializer)(
       requires ad_utility::serialization::ReadSerializer<
           Serializer>) static SpatialJoinCachedIndex
@@ -228,20 +280,14 @@ class SpatialJoinCachedIndex {
       serializer >> encodedSegment;
       ad_utility::HashMap<size_t, size_t> shapeToRow;
       serializer >> shapeToRow;
-      return fromLegacyFormat(std::move(geometryColumn),
-                              std::move(encodedSegment), shapeToRow, numRows);
+      return fromLegacyFormat(std::move(geometryColumn), encodedSegment,
+                              shapeToRow, numRows);
     }
-    uint8_t hasSimplification;
-    serializer >> hasSimplification;
     std::optional<double> simplification;
-    if (hasSimplification != 0) {
-      double value;
-      serializer >> value;
-      simplification = value;
-    }
+    serializer >> simplification;
     uint64_t numSegments;
     serializer >> numSegments;
-    AD_CORRECTNESS_CHECK(numSegments < (1ULL << 32),
+    AD_CORRECTNESS_CHECK(numSegments < MAX_NUM_SEGMENTS,
                          "The serialized geo index is corrupt");
     Segments segments;
     for (uint64_t i = 0; i < numSegments; ++i) {
@@ -267,7 +313,7 @@ class SpatialJoinCachedIndex {
   // Create an index with a single segment and no simplification from the parts
   // of the legacy format (version 1, see `readFromSerializer`): the encoded
   // segment and the map from shape ids to rows. Throw an exception if a row is
-  // `>= numRows` or a shape id is `>= 2^32`.
+  // `>= numRows` or a shape id is `>= MAX_NUM_SHAPES_PER_SEGMENT`.
   static SpatialJoinCachedIndex fromLegacyFormat(
       Variable geometryColumn, const std::string& encodedSegment,
       const ad_utility::HashMap<size_t, size_t>& shapeToRow, size_t numRows);
@@ -276,6 +322,11 @@ class SpatialJoinCachedIndex {
   // exception if `rowToShape_` refers to a segment or shape that does not
   // exist, or if a shape is referenced by more than one row.
   void computeShapeToRow();
+
+  // Return the map from the shape ids of the live shapes to their rows, which
+  // is part of the legacy format (see `writeToSerializer`). The index must
+  // have exactly one segment.
+  ad_utility::HashMap<size_t, size_t> legacyShapeToRow() const;
 
   // Serialize the `MutableS2ShapeIndex` as well as the contained shapes.
   static std::string encodeSegment(const MutableS2ShapeIndex& segment);

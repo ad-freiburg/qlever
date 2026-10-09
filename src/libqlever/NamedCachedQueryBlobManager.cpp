@@ -242,22 +242,24 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // any, for example because the index was itself loaded from a blob, so that
   // the `Id`s of its words stay valid), extended by the new words of the
   // named cache entries (see `NamedCacheSecondaryVocabRewriter.h`). Only if it
-  // is empty and no entry has a geo index, the blob is written in the old
-  // format (blob version 1 and entries version 1) without a secondary
-  // vocabulary, which can also be read by older versions of QLever. Otherwise
-  // the new format is used (blob version 2, which then contains a possibly
-  // empty secondary vocabulary, and entries version 2, which is required for
-  // the segmented geo index).
+  // is empty and no entry has a geo index with more than one segment, the blob
+  // is written in the old format (blob version 1 and entries version 1)
+  // without a secondary vocabulary, which can also be read by older versions
+  // of QLever. Otherwise the new format is used (blob version 2, which then
+  // contains a possibly empty secondary vocabulary, and entries version 2,
+  // which is required for a geo index with more than one segment).
   auto entries = qlever.namedResultCache_.getAllEntriesSortedByKey();
   SecondaryVocabulary secondaryVocab = indexImpl.secondaryVocab() != nullptr
                                            ? indexImpl.secondaryVocab()->clone()
                                            : SecondaryVocabulary{};
   namedCacheSecondaryVocab::addNewWordsToSecondaryVocab(entries,
                                                         secondaryVocab);
-  bool hasGeoIndex = ql::ranges::any_of(entries, [](const auto& entry) {
-    return entry.second->cachedGeoIndex_.has_value();
-  });
-  bool useNewFormat = secondaryVocab.numWords() > 0 || hasGeoIndex;
+  bool hasSegmentedGeoIndex =
+      ql::ranges::any_of(entries, [](const auto& entry) {
+        const auto& geoIndex = entry.second->cachedGeoIndex_;
+        return geoIndex.has_value() && geoIndex.value().numSegments() > 1;
+      });
+  bool useNewFormat = secondaryVocab.numWords() > 0 || hasSegmentedGeoIndex;
   writeBlobHeader(serializer, useNewFormat
                                   ? formatVersionWithSecondaryVocab
                                   : formatVersionWithoutSecondaryVocab);
