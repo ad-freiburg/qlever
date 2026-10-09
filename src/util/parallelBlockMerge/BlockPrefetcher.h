@@ -35,6 +35,7 @@
 
 #include "util/AsioHelpers.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/NoCopyNoMove.h"
 #include "util/parallelBlockMerge/BlockStorage.h"
 
@@ -143,8 +144,13 @@ class BlockPrefetcher : public ad_utility::NoCopyNoMove {
                                   net::use_future);
   }
 
-  // Shut the read-ahead down, see `shutDown()`.
-  ~BlockPrefetcher() { shutDown(); }
+  // Shut the read-ahead down, see `shutDown()`. A destructor must not throw,
+  // and an exception here (from waiting for the sink or the channel) means
+  // that the read-ahead is in an unknown state, so terminate with a message.
+  ~BlockPrefetcher() {
+    ad_utility::terminateIfThrows([this]() { shutDown(); },
+                                  "Shutting down a `BlockPrefetcher`");
+  }
 
   // Return the next block of the merge, or `std::nullopt` at its end (or after
   // `shutDown()`), and block the calling thread until one of the two is
