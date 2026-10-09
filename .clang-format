@@ -4,10 +4,62 @@ DerivePointerAlignment: false
 PointerAlignment: Left
 LineEnding: LF
 InsertNewlineAtEOF: true
-RequiresClausePosition: SingleLine
+# Always put the declaration that follows a `requires` clause on its own line.
+# This is needed for the `CPP_template` macros below; with `SingleLine`, the
+# declaration often directly follows the closing parenthesis of a multi-line
+# clause.
+#
+# CAVEAT: This also applies to the (C++20-only) trailing `requires` clauses of
+# functions. clang-format 18 then always puts the `= delete`, `= default`, or
+# the opening brace of the function body on a separate line. None of the other
+# values of `RequiresClausePosition` avoids this without breaking the
+# formatting of the `CPP_template` macros. Where this is too ugly (e.g. for the
+# special member functions in `IdTable.h`), use `// clang-format off`.
+RequiresClausePosition: WithPreceding
 IndentRequiresClause: false
 AttributeMacros: [CPP_member, CPP_auto_member, CPP_fun, CPP_auto_fun]
-# TODO<joka921> Update to Clang-format-17 and then we can have much nicer CPP_... macros.
-#Macros:
-#  - CPP_template_2(x)=template<x> requires
+# Teach clang-format the `CPP_template(params...)(requires ...)` macros (and
+# their variants), such that the `requires` clause is formatted as an actual
+# `requires` clause and the declaration starts on its own line, for example:
+#
+#   CPP_template_def(typename T)(
+#       requires SomeConcept<T> && OtherConcept<T>)
+#   void Foo::f(T t) {
+#
+# How this works: clang-format formats the code after expanding the macros
+# defined here, but it only knows the first parenthesized argument list of a
+# macro. The `(requires ...)` part is ordinary code that directly follows the
+# macro call. That part is laid out once in the expanded code and keeps that
+# layout when mapped back to the original code. We therefore expand
+# `CPP_template(params...)` to
+#
+#   template <class CppTemplateT> requires const_cast<params...>
+#
+# The `template <...>` makes the line a template declaration (with a line break
+# after it). The `requires const_cast<params...>` then makes the following
+# `(requires ...)` the parenthesized operand of a `requires` clause (a cast is
+# the only construct that clang-format accepts directly before the parentheses
+# of a constraint). As the parameters themselves are part of that line, the
+# `(requires ...)` part is laid out only a few columns further to the right than
+# in the original code, so the result stays within the column limit.
+#
+# The macros are not variadic for clang-format, so there is one definition per
+# number of macro arguments (note that commas inside of `<...>` also separate
+# macro arguments). For now, only the single-argument calls of the macros below
+# are expanded. The plain `CPP_template` macro and calls with more arguments
+# will follow in subsequent changes.
+#
+# NOTE: Prefer combining constraints with `&&` over the `CPP_and` macro (which
+# the existing code uses in many places). `CPP_and` gives slightly better error
+# messages for violated constraints in C++17 mode, but defining it as a macro
+# here makes the continuation lines inconsistent, and in combination with
+# `CPP_and(...)` clang-format 18 crashes or runs into an infinite loop. Use
+# `CPP_and` temporarily when debugging such an error.
+Macros:
+  - 'CPP_template_2(a)=template <class CppTemplateT> requires const_cast<a>'
+  - 'CPP_template_def(a)=template <class CppTemplateT> requires const_cast<a>'
+  - 'CPP_template_out_def(a)=template <class CppTemplateT> requires const_cast<a>'
+  - 'CPP_variadic_template(a)=template <class CppTemplateT> requires const_cast<a>'
+  - 'CPP_variadic_template_def(a)=template <class CppTemplateT> requires const_cast<a>'
+  - 'CPP_class_template(a)=template <class CppTemplateT> requires const_cast<a>'
 ...
