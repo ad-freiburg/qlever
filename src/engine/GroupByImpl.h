@@ -48,6 +48,10 @@ class GroupByImpl : public Operation {
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<Variable> _groupByVariables;
   std::vector<Alias> _aliases;
+  // True iff there is no GROUP BY clause, so that even an empty input forms a
+  // group. This differs from `_groupByVariables.empty()`, from which unbound
+  // variables have been removed.
+  bool isImplicitGroupBy_;
 
  public:
   /**
@@ -74,7 +78,7 @@ class GroupByImpl : public Operation {
 
   virtual bool knownEmptyResult() override {
     // Implicit group by always returns a single row.
-    return _subtree->knownEmptyResult() && !_groupByVariables.empty();
+    return _subtree->knownEmptyResult() && !isImplicitGroupBy_;
   }
 
   virtual float getMultiplicity(size_t col) override;
@@ -511,6 +515,7 @@ class GroupByImpl : public Operation {
   // Check if hash map optimization is applicable. This is the case when
   // the following conditions hold true:
   // - Runtime parameter is set
+  // - There is at least one GROUP BY column
   // - Child operation is SORT
   std::optional<HashMapOptimizationData> checkIfHashMapOptimizationPossible(
       std::vector<Aggregate>& aggregates) const;

@@ -3583,3 +3583,147 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_EQ(table(1, 1).getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_NE(table(0, 1), table(1, 1));
 }
+
+// A `GROUP BY` on unbound variables has one group for a non-empty input, but,
+// unlike an implicit `GROUP BY`, none for an empty input.
+TEST(GroupBy, GroupByUnboundVariable) {
+  auto* qec = getQec();
+  Variable x{"?x"};
+  Variable unbound{"?unbound"};
+
+  auto makeSubtree = [qec, &x](IdTable input, bool inputIsLazy) {
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(input), std::vector<std::optional<Variable>>{x});
+    dynamic_cast<ValuesForTesting&>(*subtree->getRootOperation())
+        .forceFullyMaterialized() = !inputIsLazy;
+    return subtree;
+  };
+  auto sum = [&x]() {
+    return Alias{SparqlExpressionPimpl{
+                     std::make_unique<SumExpression>(
+                         false, std::make_unique<VariableExpression>(x)),
+                     "SUM(?x)"},
+                 Variable{"?sum"}};
+  };
+  // `COUNT(*)` is computed by `computeCountStar` for an implicit `GROUP BY`.
+  auto countStar = []() {
+    return Alias{
+        SparqlExpressionPimpl{makeCountStarExpression(false), "COUNT(*)"},
+        Variable{"?count"}};
+  };
+
+  // Compute `GROUP BY ?unbound` (implicit `GROUP BY` if `implicit`) with the
+  // alias `makeAlias()` (none for `nullptr`) on the materialized and the lazy
+  // path, check that both agree, and return the result.
+  auto compute = [&](IdTable input, auto makeAlias, bool implicit,
+                     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    std::optional<IdTable> firstResult;
+    for (bool inputIsLazy : {false, true}) {
+      // Clear the cache, else the second run reuses the first one's result.
+      qec->getQueryTreeCache().clearAll();
+      std::vector<Alias> aliases;
+      if constexpr (!std::is_same_v<decltype(makeAlias), std::nullptr_t>) {
+        aliases.push_back(makeAlias());
+      }
+      GroupByImpl groupBy{
+          qec,
+          implicit ? std::vector<Variable>{} : std::vector<Variable>{unbound},
+          std::move(aliases), makeSubtree(input.clone(), inputIsLazy)};
+      EXPECT_TRUE(groupBy.groupByVariables().empty());
+      auto result = groupBy.computeResultOnlyForTesting(inputIsLazy);
+      IdTable table{groupBy.getResultWidth(), qec->getAllocator()};
+      if (result.isFullyMaterialized()) {
+        table = result.idTableView().clone();
+      } else {
+        for (auto& [idTable, localVocab] : result.idTables()) {
+          table.insertAtEnd(idTable);
+        }
+      }
+      if (firstResult.has_value()) {
+        EXPECT_EQ(table, firstResult.value());
+      } else {
+        firstResult = std::move(table);
+      }
+    }
+    return std::move(firstResult).value();
+  };
+
+  auto emptyInput = [qec]() { return IdTable{1, qec->getAllocator()}; };
+  auto nonEmptyInput = []() {
+    return makeIdTableFromVector({{I(1)}, {I(2)}, {I(4)}});
+  };
+
+  // Empty input: no group, but one for the implicit `GROUP BY`.
+  EXPECT_EQ(compute(emptyInput(), sum, false).numRows(), 0);
+  EXPECT_EQ(compute(emptyInput(), countStar, false).numRows(), 0);
+  EXPECT_EQ(compute(emptyInput(), nullptr, false).numRows(), 0);
+  EXPECT_EQ(compute(emptyInput(), sum, true), makeIdTableFromVector({{I(0)}}));
+  EXPECT_EQ(compute(emptyInput(), countStar, true),
+            makeIdTableFromVector({{I(0)}}));
+
+  // Non-empty input: one group in both cases.
+  for (bool implicit : {false, true}) {
+    EXPECT_EQ(compute(nonEmptyInput(), sum, implicit),
+              makeIdTableFromVector({{I(7)}}));
+    EXPECT_EQ(compute(nonEmptyInput(), countStar, implicit),
+              makeIdTableFromVector({{I(3)}}));
+    EXPECT_EQ(compute(nonEmptyInput(), nullptr, implicit).numRows(), 1);
+  }
+
+  // Both cases differ in the cache key, descriptor and `knownEmptyResult()`.
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, emptyInput(), std::vector<std::optional<Variable>>{x});
+  GroupBy groupByUnbound{qec, {unbound}, {sum()}, subtree};
+  GroupBy groupByImplicit{qec, {}, {sum()}, subtree};
+  EXPECT_NE(groupByUnbound.getCacheKey(), groupByImplicit.getCacheKey());
+  EXPECT_EQ(groupByUnbound.getDescriptor(), "GroupBy on unbound variables");
+  EXPECT_EQ(groupByImplicit.getDescriptor(), "GroupBy (implicit)");
+  EXPECT_TRUE(groupByUnbound.knownEmptyResult());
+  EXPECT_FALSE(groupByImplicit.knownEmptyResult());
+
+  auto clone = groupByUnbound.clone();
+  EXPECT_THAT(groupByUnbound, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getCacheKey(), groupByUnbound.getCacheKey());
+  EXPECT_TRUE(clone->knownEmptyResult());
+}
+
+// The hash map optimization doesn't support GROUP BYs without GROUP BY columns.
+// It used to be applied to them anyway (if the input is a `Sort`), which
+// crashed for a non-empty input and returned no row for an empty input with an
+// implicit `GROUP BY`.
+TEST(GroupBy, HashMapOptimizationWithoutGroupByColumns) {
+  auto* qec = getQec();
+  Variable x{"?x"};
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
+          true);
+
+  auto compute = [&](IdTable input, std::vector<Variable> groupByVariables) {
+    qec->getQueryTreeCache().clearAll();
+    auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(input), std::vector<std::optional<Variable>>{x});
+    auto sorted = ad_utility::makeExecutionTree<Sort>(
+        qec, std::move(values), std::vector<ColumnIndex>{0});
+    GroupByImpl groupBy{
+        qec,
+        std::move(groupByVariables),
+        {Alias{SparqlExpressionPimpl{
+                   std::make_unique<SumExpression>(
+                       false, std::make_unique<VariableExpression>(x)),
+                   "SUM(?x)"},
+               Variable{"?sum"}}},
+        std::move(sorted)};
+    return groupBy.computeResultOnlyForTesting(false).idTableView().clone();
+  };
+
+  auto emptyInput = [qec]() { return IdTable{1, qec->getAllocator()}; };
+  auto nonEmptyInput = []() { return makeIdTableFromVector({{I(1)}, {I(2)}}); };
+  Variable unbound{"?unbound"};
+
+  EXPECT_EQ(compute(emptyInput(), {}), makeIdTableFromVector({{I(0)}}));
+  EXPECT_EQ(compute(nonEmptyInput(), {}), makeIdTableFromVector({{I(3)}}));
+  EXPECT_EQ(compute(emptyInput(), {unbound}).numRows(), 0);
+  EXPECT_EQ(compute(nonEmptyInput(), {unbound}),
+            makeIdTableFromVector({{I(3)}}));
+}
