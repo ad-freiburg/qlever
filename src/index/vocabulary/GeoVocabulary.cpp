@@ -10,6 +10,7 @@
 
 #include "index/vocabulary/GeoVocabulary.h"
 
+#include <boost/asio/post.hpp>
 #include <boost/asio/use_future.hpp>
 #include <stdexcept>
 #include <vector>
@@ -20,7 +21,6 @@
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
-#include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/GlobalExecutor.h"
@@ -225,9 +225,9 @@ void GeoVocabulary<V>::WordWriter::flushBatch() {
         static_cast<off_t>(geoInfoHeader + firstPosition * geoInfoOffset);
     geoInfoFile_.write(records.data(), records.size() * geoInfoOffset, offset);
   };
-  pendingBatches_.push_back(ad_utility::runFunctionOnExecutor(
-      ad_utility::globalExecutor(), std::move(computeAndWrite),
-      boost::asio::use_future));
+  pendingBatches_.push_back(
+      boost::asio::post(ad_utility::globalExecutor(),
+                        boost::asio::use_future(std::move(computeAndWrite))));
   currentBatch_.clear();
   currentBatchSize_ = 0;
 }
@@ -368,13 +368,13 @@ void GeoVocabulary<V>::BlockWriter::append(
     pendingWrites_.front().get();
     pendingWrites_.pop_front();
   }
-  pendingWrites_.push_back(ad_utility::runFunctionOnExecutor(
+  pendingWrites_.push_back(boost::asio::post(
       ad_utility::globalExecutor(),
-      [this, records = std::move(prepared.records_), offset]() {
-        geoInfoFile_.write(records.data(), records.size() * geoInfoOffset,
-                           offset);
-      },
-      boost::asio::use_future));
+      boost::asio::use_future(
+          [this, records = std::move(prepared.records_), offset]() {
+            geoInfoFile_.write(records.data(), records.size() * geoInfoOffset,
+                               offset);
+          })));
 }
 
 // ____________________________________________________________________________

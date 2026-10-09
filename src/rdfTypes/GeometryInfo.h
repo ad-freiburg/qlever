@@ -209,6 +209,7 @@ class GeometryInfo {
 #endif
 
   GeometryInfo(const GeometryInfo& other) = default;
+  GeometryInfo& operator=(const GeometryInfo& other) = default;
 
   // Parse an arbitrary WKT literal and compute all attributes. Return
   // `std:nullopt` if `wkt` cannot be parsed.

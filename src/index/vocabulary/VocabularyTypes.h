@@ -498,8 +498,10 @@ class BlockWriterBase {
 
  public:
   // NOTE: The destructor is `noexcept(false)` like the one of
-  // `WordWriterBase`, because the block writers hold word writers.
-  virtual ~BlockWriterBase() noexcept(false) = default;
+  // `WordWriterBase`, because the block writers hold word writers. It is
+  // deliberately not `= default`, which GCC 8 rejects (it deletes a defaulted
+  // destructor whose exception specification differs from the implicit one).
+  virtual ~BlockWriterBase() noexcept(false) {}
 
   // The number of words per block that this vocabulary requires, for example
   // because it creates one codebook per block. A vocabulary without such a
@@ -569,7 +571,8 @@ class ParallelWordWriterBase {
   std::atomic_bool finishWasCalled_ = false;
 
  public:
-  virtual ~ParallelWordWriterBase() noexcept(false) = default;
+  // NOTE: Not `= default`, see `~BlockWriterBase`.
+  virtual ~ParallelWordWriterBase() noexcept(false) {}
 
   // The number of sub-vocabularies, at least one.
   virtual uint8_t numSubVocabularies() const = 0;

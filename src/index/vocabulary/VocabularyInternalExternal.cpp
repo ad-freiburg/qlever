@@ -6,9 +6,9 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <boost/asio/post.hpp>
 #include <boost/asio/use_future.hpp>
 
-#include "util/AsioHelpers.h"
 #include "util/GlobalExecutor.h"
 
 // _____________________________________________________________________________
@@ -66,13 +66,13 @@ void VocabularyInternalExternal::BlockWriter::append(
     pendingWrites_.front().get();
     pendingWrites_.pop_front();
   }
-  pendingWrites_.push_back(ad_utility::runFunctionOnExecutor(
+  pendingWrites_.push_back(boost::asio::post(
       ad_utility::globalExecutor(),
-      [this, prepared = std::move(prepared), dataOffset]() {
-        writer_.externalWriter_.writeBlockAt(
-            dynamic_cast<Prepared&>(*prepared).block_, dataOffset);
-      },
-      boost::asio::use_future));
+      boost::asio::use_future(
+          [this, prepared = std::move(prepared), dataOffset]() {
+            writer_.externalWriter_.writeBlockAt(
+                dynamic_cast<Prepared&>(*prepared).block_, dataOffset);
+          })));
 }
 
 // _____________________________________________________________________________
