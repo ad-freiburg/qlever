@@ -118,6 +118,8 @@ class IndexImpl {
   bool keepTempFiles_ = false;
   ad_utility::MemorySize memoryLimitIndexBuilding_ =
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
+  ad_utility::MemorySize largeRelationSortMemory_ =
+      DEFAULT_LARGE_RELATION_SORT_MEMORY;
   ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
   size_t rowsPerBlock_ = DEFAULT_INDEX_ROWS_PER_BLOCK;
   nlohmann::json configurationJson_;
@@ -589,6 +591,16 @@ class IndexImpl {
     return memoryLimitIndexBuilding_;
   }
 
+  // The memory for sorting the large relations of the permutation pairs
+  // SPO/SOP and OSP/OPS for their second permutation, see
+  // `DEFAULT_LARGE_RELATION_SORT_MEMORY`.
+  ad_utility::MemorySize& largeRelationSortMemory() {
+    return largeRelationSortMemory_;
+  }
+  const ad_utility::MemorySize& largeRelationSortMemory() const {
+    return largeRelationSortMemory_;
+  }
+
   ad_utility::MemorySize& parserBufferSize() { return parserBufferSize_; }
   const ad_utility::MemorySize& parserBufferSize() const {
     return parserBufferSize_;
@@ -760,9 +772,10 @@ class IndexImpl {
   // `sortedTriples` argument.
   template <typename T, typename... Callbacks>
   std::tuple<size_t, IndexMetaData, IndexMetaData> createPermutationPairImpl(
-      size_t numColumns, const std::string& fileName1,
-      const std::string& fileName2, T&& sortedTriples,
-      Permutation::KeyOrder permutation, Callbacks&&... perTripleCallbacks);
+      size_t numColumns, ad_utility::MemorySize largeRelationSortMemory,
+      const std::string& fileName1, const std::string& fileName2,
+      T&& sortedTriples, Permutation::KeyOrder permutation,
+      Callbacks&&... perTripleCallbacks);
 
   // Write a single permutation to disk. `numColumns` specifies the number of
   // columns in the relation (usually 4, sometimes 6 with patterns).
@@ -796,11 +809,15 @@ class IndexImpl {
   void writeMetaData(IndexMetaData& metaData,
                      const std::string& filename) const;
 
+  // The `largeRelationSortMemory` is the memory for sorting the large
+  // relations for the second permutation, see
+  // `CompressedRelationWriter::createPermutationPair` and
+  // `DEFAULT_LARGE_RELATION_SORT_MEMORY`.
   template <typename SortedTriplesType, typename... CallbackTypes>
   [[nodiscard]] size_t createPermutationPair(
-      size_t numColumns, SortedTriplesType&& sortedTriples,
-      const Permutation& p1, const Permutation& p2,
-      CallbackTypes&&... perTripleCallbacks);
+      size_t numColumns, ad_utility::MemorySize largeRelationSortMemory,
+      SortedTriplesType&& sortedTriples, const Permutation& p1,
+      const Permutation& p2, CallbackTypes&&... perTripleCallbacks);
 
   // wrapper for createPermutation that saves a lot of code duplications
   // Writes the permutation that is specified by argument permutation
@@ -813,8 +830,9 @@ class IndexImpl {
   // the optional is std::nullopt if vec and thus the index is empty
   template <typename T, typename... Callbacks>
   std::tuple<size_t, IndexMetaData, IndexMetaData> createPermutations(
-      size_t numColumns, T&& sortedTriples, const Permutation& p1,
-      const Permutation& p2, Callbacks&&... perTripleCallbacks);
+      size_t numColumns, ad_utility::MemorySize largeRelationSortMemory,
+      T&& sortedTriples, const Permutation& p1, const Permutation& p2,
+      Callbacks&&... perTripleCallbacks);
 
  public:
   // Write a single permutation to disk. `numColumns` specifies the number of

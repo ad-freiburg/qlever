@@ -851,12 +851,11 @@ CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
 // _____________________________________________________________________________
 template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexMetaData, IndexMetaData>
-IndexImpl::createPermutationPairImpl(size_t numColumns,
-                                     const std::string& fileName1,
-                                     const std::string& fileName2,
-                                     T&& sortedTriples,
-                                     Permutation::KeyOrder permutation,
-                                     Callbacks&&... perTripleCallbacks) {
+IndexImpl::createPermutationPairImpl(
+    size_t numColumns, ad_utility::MemorySize largeRelationSortMemory,
+    const std::string& fileName1, const std::string& fileName2,
+    T&& sortedTriples, Permutation::KeyOrder permutation,
+    Callbacks&&... perTripleCallbacks) {
   IndexMetaData metaData1;
   auto writerAndCallback1 =
       getWriterAndCallback(metaData1, numColumns, fileName1);
@@ -871,7 +870,7 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
       CompressedRelationWriter::createPermutationPair(
           fileName1, std::move(writerAndCallback1),
           std::move(writerAndCallback2), AD_FWD(sortedTriples), permutation,
-          perBlockCallbacks);
+          perBlockCallbacks, largeRelationSortMemory);
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
 
@@ -901,12 +900,13 @@ std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
 // ________________________________________________________________________
 template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexMetaData, IndexMetaData> IndexImpl::createPermutations(
-    size_t numColumns, T&& sortedTriples, const Permutation& p1,
-    const Permutation& p2, Callbacks&&... perTripleCallbacks) {
+    size_t numColumns, ad_utility::MemorySize largeRelationSortMemory,
+    T&& sortedTriples, const Permutation& p1, const Permutation& p2,
+    Callbacks&&... perTripleCallbacks) {
   AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
               << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
-      numColumns, getFilenameForPermutation(p1, false),
+      numColumns, largeRelationSortMemory, getFilenameForPermutation(p1, false),
       getFilenameForPermutation(p2, false), AD_FWD(sortedTriples),
       p1.keyOrder(), AD_FWD(perTripleCallbacks)...);
 
@@ -967,13 +967,13 @@ void IndexImpl::finalizePermutation(IndexMetaData& meta,
 
 // ________________________________________________________________________
 template <typename SortedTriplesType, typename... CallbackTypes>
-size_t IndexImpl::createPermutationPair(size_t numColumns,
-                                        SortedTriplesType&& sortedTriples,
-                                        const Permutation& p1,
-                                        const Permutation& p2,
-                                        CallbackTypes&&... perTripleCallbacks) {
+size_t IndexImpl::createPermutationPair(
+    size_t numColumns, ad_utility::MemorySize largeRelationSortMemory,
+    SortedTriplesType&& sortedTriples, const Permutation& p1,
+    const Permutation& p2, CallbackTypes&&... perTripleCallbacks) {
   auto [numDistinctC0, metaData1, metaData2] = createPermutations(
-      numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
+      numColumns, largeRelationSortMemory, AD_FWD(sortedTriples), p1, p2,
+      AD_FWD(perTripleCallbacks)...);
   AD_LOG_DEBUG << "Writing meta data for " << p1.readableName() << " and "
                << p2.readableName() << " ..." << std::endl;
   writeMetaData(metaData1, getFilenameForPermutation(p1, false));
@@ -2049,10 +2049,17 @@ void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
             std::max(nextAvailableIndex,
                      EncodedIriManager::decodeDecimalFrom64Bit(payload) + 1);
       };
-  size_t numPredicates =
-      createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
-                            nextSorter.makePushBlockCallback()..., countTriples,
-                            determineNextAvailableInternalGraph);
+  // PSO/POS is the last (or the only) permutation pair, so no sorter of a
+  // next pair holds its half of the memory limit; that half goes to sorting
+  // the large relations (which, for predicates, are the rule, think
+  // `rdf:type`), see `DEFAULT_LARGE_RELATION_SORT_MEMORY`.
+  static_assert(NUM_EXTERNAL_SORTERS_AT_SAME_TIME == 2);
+  size_t numPredicates = createPermutationPair(
+      numColumns,
+      memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
+      AD_FWD(sortedTriples), *pso_, *pos_,
+      nextSorter.makePushBlockCallback()..., countTriples,
+      determineNextAvailableInternalGraph);
   configurationJson_["num-predicates"] =
       NumNormalAndInternal::fromNormal(numPredicates);
   configurationJson_["num-triples"] =
@@ -2096,8 +2103,8 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
       patternCreator.processTriple(tripleArr);
     };
     size_t numSubjects = createPermutationPair(
-        numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-        nextSorter.makePushBlockCallback()..., pushTripleToPatterns);
+        numColumns, largeRelationSortMemory(), AD_FWD(sortedTriples), *spo_,
+        *sop_, nextSorter.makePushBlockCallback()..., pushTripleToPatterns);
     patternCreator.finish();
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
@@ -2105,9 +2112,9 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     result = std::move(patternCreator).getTripleSorter();
   } else {
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
-    size_t numSubjects =
-        createPermutationPair(numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-                              nextSorter.makePushBlockCallback()...);
+    size_t numSubjects = createPermutationPair(
+        numColumns, largeRelationSortMemory(), AD_FWD(sortedTriples), *spo_,
+        *sop_, nextSorter.makePushBlockCallback()...);
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
     writeConfiguration();
@@ -2122,9 +2129,9 @@ void IndexImpl::createOSPAndOPS(size_t numColumns,
                                 NextSorter&&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
-  size_t numObjects =
-      createPermutationPair(numColumns, AD_FWD(sortedTriples), *osp_, *ops_,
-                            nextSorter.makePushBlockCallback()...);
+  size_t numObjects = createPermutationPair(
+      numColumns, largeRelationSortMemory(), AD_FWD(sortedTriples), *osp_,
+      *ops_, nextSorter.makePushBlockCallback()...);
   configurationJson_["num-objects"] =
       NumNormalAndInternal::fromNormal(numObjects);
   configurationJson_["has-all-permutations"] = true;

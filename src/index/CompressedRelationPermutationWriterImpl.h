@@ -234,12 +234,15 @@ struct CompressedRelationWriter::PermutationWriter {
   bool showProgressBar_ = true;
 
   // Constructor for a `PermutationWriter` which writes pair of permutations.
+  // The `largeRelationSortMemory` is for the `twinRelationSorter_`, see
+  // `CompressedRelationWriter::createPermutationPair`.
   CPP_template(bool doWritePair = WritePair)(requires doWritePair)
       PermutationWriter(const std::string& basename,
                         WriterAndCallback writerAndCallback1,
                         WriterAndCallback writerAndCallback2,
                         qlever::KeyOrder permutation,
-                        PerBlockCallbacks perBlockCallbacks)
+                        PerBlockCallbacks perBlockCallbacks,
+                        ad_utility::MemorySize largeRelationSortMemory)
       : permutation_{std::move(permutation)},
         writer1_{std::move(writerAndCallback1.writer_)},
         writer2_{std::move(writerAndCallback2.writer_)},
@@ -248,7 +251,7 @@ struct CompressedRelationWriter::PermutationWriter {
                        writer1_->blocksize()},
         largeTwinRelationTimer_{ad_utility::Timer::Stopped},
         twinRelationSorter_{basename + ".twin-twinRelationSorter", numColumns_,
-                            4_GB, alloc_},
+                            largeRelationSortMemory, alloc_},
         blockCallbackManager_{std::move(perBlockCallbacks)} {
     static_assert(WritePair);
     // This logic only works for permutations that have the graph as the fourth
