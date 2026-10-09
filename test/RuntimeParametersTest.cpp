@@ -53,17 +53,19 @@ TEST(RuntimeParameters, setFromAssignment) {
   EXPECT_EQ(params.serviceMaxRedirects_.get(), 5u);
 }
 
-// Test that the value `0` is rejected for `lazy-index-scan-num-threads`
-// (the implementation of the lazy scans requires at least one thread).
-TEST(RuntimeParameters, lazyIndexScanNumThreadsIsStrictlyPositive) {
+// Test that the value `0` is rejected for
+// `lazy-index-scan-num-blocks-in-flight` (a lazy scan reads at least one block
+// ahead of its consumer).
+TEST(RuntimeParameters, lazyIndexScanNumBlocksInFlightIsStrictlyPositive) {
   RuntimeParameters params;
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      params.setFromAssignment("lazy-index-scan-num-threads=0"),
-      AllOf(HasSubstr("lazy-index-scan-num-threads"),
+      params.setFromAssignment("lazy-index-scan-num-blocks-in-flight=0"),
+      AllOf(HasSubstr("lazy-index-scan-num-blocks-in-flight"),
             HasSubstr("strictly positive")),
       std::runtime_error);
-  EXPECT_NO_THROW(params.setFromAssignment("lazy-index-scan-num-threads=1"));
-  EXPECT_EQ(params.lazyIndexScanNumThreads_.get(), 1u);
+  EXPECT_NO_THROW(
+      params.setFromAssignment("lazy-index-scan-num-blocks-in-flight=1"));
+  EXPECT_EQ(params.lazyIndexScanNumBlocksInFlight_.get(), 1u);
 }
 
 // Test that `getKeys` and `toMap` (the building blocks of
