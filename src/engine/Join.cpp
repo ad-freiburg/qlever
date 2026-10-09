@@ -102,7 +102,8 @@ Join::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
 // ____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Join::makeTreeWithBindColumn(
     const parsedQuery::Bind& bind) const {
-  // The variables of the `BIND` expression must not be hidden by a subquery.
+  // The variables of the `BIND` expression must not be hidden by a subquery or
+  // stripped away.
   // The `impl_` cannot check this, because it only sees its children.
   if (!areVariablesVisible(bind._expression.containedVariables())) {
     return std::nullopt;

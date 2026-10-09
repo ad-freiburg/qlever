@@ -2011,6 +2011,38 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                 "2 * ?o2 + 1", V{"?bind"}));
   }
 
+  // A `BIND` is not pushed down through a `SpatialJoin` if its target (here
+  // `?d`) is the hidden distance variable of the `SpatialJoin` itself.
+  {
+    constexpr std::string_view hiddenTargetInSpatialJoin = R"(
+      PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?o ?d {
+        {
+          SELECT ?s ?o {
+            ?s view:bindView-o ?o .
+            SERVICE spatialSearch: {
+              _:config spatialSearch:algorithm spatialSearch:libspatialjoin ;
+                       spatialSearch:left ?o ;
+                       spatialSearch:right ?o2 ;
+                       spatialSearch:joinType spatialSearch:within-dist ;
+                       spatialSearch:maxDistance 100 ;
+                       spatialSearch:bindDistance ?d .
+              { ?s2 view:bindView-o ?o2 }
+            }
+          }
+        }
+        BIND(2 * ?o + 1 AS ?d)
+      }
+    )";
+    qpExpect(
+        qlv(), hiddenTargetInSpatialJoin,
+        h::Bind(h::MatchTypeAndOrderedChildren<::SpatialJoin>(
+                    viewScanNoBind, viewScan("bindView", "?s2", "?o2",
+                                             "?_ql_materialized_view_o", 2)),
+                "2 * ?o + 1", V{"?d"}));
+  }
+
   // The `2 * ?o + 1` expression.
   auto bindExpr = sparqlExpression::makeAddExpression(
       sparqlExpression::makeMultiplyExpression(
