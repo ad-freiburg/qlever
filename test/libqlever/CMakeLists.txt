@@ -1,3 +1,4 @@
 addLinkAndDiscoverTestNoLibs(QleverTest qlever testUtil)
 addLinkAndDiscoverTestNoLibs(NamedCachedQueryBlobManagerTest qlever testUtil)
 addLinkAndDiscoverTestNoLibs(NamedCacheSecondaryVocabRewriterTest qlever testUtil)
+addLinkAndDiscoverTestNoLibs(CanonicalRowOrderTest qlever testUtil)
