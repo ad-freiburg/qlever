@@ -214,8 +214,14 @@ CanonicalizedValue canonicalizeWithPermutation(
   // order (the common case, for example for an index scan), then the copy
   // only consists of a view of the columns of `value`, which avoids copying
   // the (possibly very large) table.
-  if (!containsLocalVocabIds(value) &&
-      canonicalRowOrder::isInCanonicalOrder(columnSubset, resultSortedOn)) {
+  //
+  // NOTE: A table without columns (for example, the result of a triple pattern
+  // without variables, which has one row if the triple exists) has nothing to
+  // rewrite or sort either. It takes the same path because the functions of
+  // `CanonicalRowOrder.h` reject such a table if it has rows.
+  if (columnSubset.numColumns() == 0 ||
+      (!containsLocalVocabIds(value) &&
+       canonicalRowOrder::isInCanonicalOrder(columnSubset, resultSortedOn))) {
     return CanonicalizedValue{
         makeValue(std::move(columnSubset), value.cachedGeoIndex_),
         std::nullopt};

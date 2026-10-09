@@ -398,7 +398,6 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalCacheKey) {
   EXPECT_EQ(canonicalize(swapped).cacheKey_, swapped.cacheKey_);
 }
 
-// _____________________________________________________________________________
 // Test that an entry that needs neither rewriting nor sorting is canonicalized
 // without copying its table (the copy is a view of its columns), and that every
 // other entry is copied.
@@ -445,4 +444,22 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
   EXPECT_EQ(
       ExplicitIdTableOperation::viewOf(copy.value_.result_),
       makeIdTableFromVector({{3, 1}, {4, 2}}, ad_utility::testing::IntId));
+
+  // A table with rows but no columns (the result of a triple pattern without
+  // variables) is not copied either, and keeps its number of rows.
+  IdTable noColumns{0, allocator};
+  noColumns.resize(1);
+  Value zeroColumns{std::make_shared<const IdTable>(std::move(noColumns)),
+                    VariableToColumnMap{},
+                    {},
+                    LocalVocab{},
+                    "handmade",
+                    std::nullopt};
+  auto zero =
+      canonicalizeWithPermutation(zeroColumns, secondaryVocab, allocator);
+  EXPECT_TRUE(isView(zero.value_));
+  EXPECT_FALSE(zero.oldRowOfNewRow_.has_value());
+  auto zeroView = ExplicitIdTableOperation::viewOf(zero.value_.result_);
+  EXPECT_EQ(zeroView.numColumns(), 0u);
+  EXPECT_EQ(zeroView.numRows(), 1u);
 }
