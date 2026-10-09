@@ -5,8 +5,11 @@
 #include <gmock/gmock.h>
 
 #include "../util/GTestHelpers.h"
+#include "../util/IdTableHelpers.h"
+#include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "./ValuesForTesting.h"
 #include "engine/Describe.h"
 #include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
@@ -121,6 +124,23 @@ TEST(Describe, describeWithVariableButNoWhereClause) {
   auto result = describe.computeResultOnlyForTesting();
   EXPECT_EQ(result.idTableView().size(), 0);
   EXPECT_EQ(result.idTableView().numColumns(), 3);
+}
+
+// Test DESCRIBE query with a variable that is unbound in some rows of the WHERE
+// clause (e.g. because of an `OPTIONAL`). The unbound values are skipped.
+TEST(Describe, describeWithUndefinedValues) {
+  auto qec = getQec("<s> <p> <o> . <s2> <p> <o2>");
+  auto getId = makeGetId(qec->getIndex());
+  parsedQuery::Describe parsedDescribe;
+  parsedDescribe.resources_.push_back(Variable{"?x"});
+  auto where = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{getId("<s>")}, {UndefId()}, {UndefId()}}),
+      std::vector<std::optional<Variable>>{Variable{"?x"}});
+  Describe describe{qec, where, parsedDescribe};
+  auto result = describe.computeResultOnlyForTesting();
+  EXPECT_THAT(
+      result.idTableView(),
+      matchesIdTableFromVector({{getId("<s>"), getId("<p>"), getId("<o>")}}));
 }
 
 // TODO<joka921> Add tests with inputs from a different graph, but those are
