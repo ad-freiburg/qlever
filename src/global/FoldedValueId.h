@@ -4,8 +4,8 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#ifndef QLEVER_SRC_GLOBAL_MIXEDVALUEID_H
-#define QLEVER_SRC_GLOBAL_MIXEDVALUEID_H
+#ifndef QLEVER_SRC_GLOBAL_VALUEID_H
+#define QLEVER_SRC_GLOBAL_VALUEID_H
 
 #include <absl/strings/str_cat.h>
 
@@ -25,10 +25,11 @@
 #include "util/NBitInteger.h"
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
+namespace foldedValueId {
 
 // Encode values of different types (the types from the `Datatype` enum in
 // `Datatype.h`) using 4 bits for the datatype and 60 bits for the value.
-class MixedValueId {
+class ValueId {
  public:
   using T = uint64_t;
   static constexpr T numDatatypeBits = 4;
@@ -99,7 +100,7 @@ class MixedValueId {
                 static_cast<size_t>(Datatype::LocalVocabIndex) + 1);
 
   // Assert that the size of an encoded GeoPoint equals the available bits in a
-  // MixedValueId.
+  // ValueId.
   static_assert(numDataBits == GeoPoint::numDataBits);
 
   // This exception is thrown if we try to store a value of an index type
@@ -115,7 +116,7 @@ class MixedValueId {
         ad_utility::source_location s = AD_CURRENT_SOURCE_LOC()) {
       errorMessage_ = absl::StrCat(
           s.file_name(), ", line ", s.line(), ": The given value ", tooBigValue,
-          " is bigger than what the maxIndex of MixedValueId allows.");
+          " is bigger than what the maxIndex of ValueId allows.");
     }
 
     const char* what() const noexcept override { return errorMessage_.c_str(); }
@@ -131,7 +132,7 @@ class MixedValueId {
 
  public:
   // Default construction of an uninitialized id.
-  MixedValueId() = default;
+  ValueId() = default;
 
   // Comparison is performed directly on the underlying representation. Note
   // that because the type bits are the most significant bits, all values of
@@ -162,7 +163,7 @@ class MixedValueId {
   // uses, rejects the branches below in a relaxed-constexpr function
   // ("expression `<statement>` is not a constant expression"), and nothing
   // compares `Id`s at compile time anyway.
-  QL_CONSTEXPR auto compareThreeWay(const MixedValueId& other) const {
+  QL_CONSTEXPR auto compareThreeWay(const ValueId& other) const {
     using enum Datatype;
     auto type = getDatatype();
     auto otherType = other.getDatatype();
@@ -196,14 +197,14 @@ class MixedValueId {
   }
   // NOTE: All the comparison operators are `QL_CONSTEXPR` and not `constexpr`,
   // because they call `compareThreeWay` above, see the note there.
-  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_QL_CONSTEXPR(MixedValueId)
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL_QL_CONSTEXPR(ValueId)
 
-  friend QL_CONSTEXPR bool operator==(const MixedValueId& left,
-                                      const MixedValueId& right) {
+  friend QL_CONSTEXPR bool operator==(const ValueId& left,
+                                      const ValueId& right) {
     return ql::compareThreeWay(left, right) == 0;
   }
-  friend QL_CONSTEXPR bool operator!=(const MixedValueId& left,
-                                      const MixedValueId& right) {
+  friend QL_CONSTEXPR bool operator!=(const ValueId& left,
+                                      const ValueId& right) {
     return !(left == right);
   }
 
@@ -213,7 +214,7 @@ class MixedValueId {
   // during index building.
   // NOTE: This is only `constexpr` in C++20 mode, for the same reason as
   // `compareThreeWay` above.
-  QL_CONSTEXPR auto compareWithoutLocalVocab(const MixedValueId& other) const {
+  QL_CONSTEXPR auto compareWithoutLocalVocab(const ValueId& other) const {
     // NOTE: If this static assertion is violated at some point, make sure to
     // check all callers of this function if they are still correct.
     static_assert(isOnlyLocalVocabNotBitwiseComparable);
@@ -225,18 +226,18 @@ class MixedValueId {
   // Get the underlying bit representation, e.g. for compression etc.
   [[nodiscard]] constexpr T getBits() const noexcept { return _bits; }
   // Construct from the underlying bit representation. `bits` must have been
-  // obtained by a call to `getBits()` on a valid `MixedValueId`.
-  static constexpr MixedValueId fromBits(T bits) noexcept { return {bits}; }
+  // obtained by a call to `getBits()` on a valid `ValueId`.
+  static constexpr ValueId fromBits(T bits) noexcept { return {bits}; }
 
   // Get the datatype.
   [[nodiscard]] constexpr Datatype getDatatype() const noexcept {
     return static_cast<Datatype>(_bits >> numDataBits);
   }
 
-  // Create a `MixedValueId` of the `Undefined` type. There is only one such ID
-  // and it is guaranteed to be smaller than all IDs of other types. This helps
+  // Create a `ValueId` of the `Undefined` type. There is only one such ID and
+  // it is guaranteed to be smaller than all IDs of other types. This helps
   // implementing the correct join behavior in presence of undefined values.
-  constexpr static MixedValueId makeUndefined() noexcept { return {0}; }
+  constexpr static ValueId makeUndefined() noexcept { return {0}; }
 
   // Returns an object of `UndefinedType`. In many scenarios this function is
   // unnecessary because `getDatatype() == Undefined` already identifies the
@@ -249,46 +250,45 @@ class MixedValueId {
     return *this == makeUndefined();
   }
 
-  // Create a `MixedValueId` for a double value. The conversion will reduce the
+  // Create a `ValueId` for a double value. The conversion will reduce the
   // precision of the mantissa of an IEEE double precision floating point
   // number from 53 to 49 significant bits.
   // NOTE: This function and `getDouble` below are only `constexpr` in C++20
   // mode, where `absl::bit_cast` is `std::bit_cast`. In C++17 mode it falls
   // back to a `memcpy`, see also the note on `minPositiveDouble` above.
-  static QL_CONSTEXPR MixedValueId makeFromDouble(double d) {
+  static QL_CONSTEXPR ValueId makeFromDouble(double d) {
     auto shifted = absl::bit_cast<T>(d) >> numDatatypeBits;
     return addDatatypeBits(shifted, Datatype::Double);
   }
-  // Obtain the `double` that this `MixedValueId` encodes. If `getDatatype() !=
+  // Obtain the `double` that this `ValueId` encodes. If `getDatatype() !=
   // Double` then the result is unspecified.
   [[nodiscard]] QL_CONSTEXPR double getDouble() const noexcept {
     return absl::bit_cast<double>(_bits << numDatatypeBits);
   }
 
-  // Create a `MixedValueId` for a signed integer value. Integers in the range
+  // Create a `ValueId` for a signed integer value. Integers in the range
   // [-2^59, 2^59-1] can be represented. Integers outside of this range will
   // overflow according to the semantics of `NBitInteger<60>`.
-  static constexpr MixedValueId makeFromInt(int64_t i) {
+  static constexpr ValueId makeFromInt(int64_t i) {
     auto nbit = IntegerType::toNBit(i);
     return addDatatypeBits(nbit, Datatype::Int);
   }
 
-  // Obtain the signed integer that this `MixedValueId` encodes. If
-  // `getDatatype()
+  // Obtain the signed integer that this `ValueId` encodes. If `getDatatype()
   // != Int` then the result is unspecified.
   [[nodiscard]] constexpr int64_t getInt() const noexcept {
     return IntegerType::fromNBit(_bits);
   }
 
-  // Create a `MixedValueId` for a boolean value.
-  static constexpr MixedValueId makeFromBool(bool b) noexcept {
+  // Create a `ValueId` for a boolean value.
+  static constexpr ValueId makeFromBool(bool b) noexcept {
     auto bits = static_cast<T>(b);
     return addDatatypeBits(bits, Datatype::Bool);
   }
 
-  // Create a `MixedValueId` for a boolean value, represented as "0" or "1"
-  // instead of "false" or "true".
-  static constexpr MixedValueId makeBoolFromZeroOrOne(bool b) noexcept {
+  // Create a `ValueId` for a boolean value, represented as "0" or "1" instead
+  // of "false" or "true".
+  static constexpr ValueId makeBoolFromZeroOrOne(bool b) noexcept {
     auto bits = static_cast<T>(b);
     bits |= static_cast<T>(true) << 1;
     return addDatatypeBits(bits, Datatype::Bool);
@@ -310,42 +310,42 @@ class MixedValueId {
     return value ? "true" : "false";
   }
 
-  // Create a `MixedValueId` for an unsigned index of one of the index types
-  // (see `global/IndexTypes.h`). These types can represent values in the range
-  // [0, 2^60]. When `index` is outside of this range, and
-  // `IndexTooLargeException` is thrown.
-  static constexpr MixedValueId makeFromVocabIndex(VocabIndex index) {
+  // Create a `ValueId` for an unsigned index of one of the index types (see
+  // `global/IndexTypes.h`). These types can
+  // represent values in the range [0, 2^60]. When `index` is outside of this
+  // range, and `IndexTooLargeException` is thrown.
+  static constexpr ValueId makeFromVocabIndex(VocabIndex index) {
     return makeFromIndex(index.get(), Datatype::VocabIndex);
   }
 
-  static constexpr MixedValueId makeFromEncodedVal(uint64_t idx) {
+  static constexpr ValueId makeFromEncodedVal(uint64_t idx) {
     return makeFromIndex(idx, Datatype::EncodedVal);
   }
 
-  static constexpr MixedValueId makeFromTextRecordIndex(TextRecordIndex index) {
+  static constexpr ValueId makeFromTextRecordIndex(TextRecordIndex index) {
     return makeFromIndex(index.get(), Datatype::TextRecordIndex);
   }
-  static MixedValueId makeFromLocalVocabIndex(LocalVocabIndex index) {
+  static ValueId makeFromLocalVocabIndex(LocalVocabIndex index) {
     // The last `numDatatypeBits` of a `LocalVocabIndex` are always zero, so we
     // can reuse them for the datatype.
     static_assert(alignof(decltype(*index)) >= (1u << numDatatypeBits));
     return makeFromIndex(reinterpret_cast<T>(index) >> numDatatypeBits,
                          Datatype::LocalVocabIndex);
   }
-  static constexpr MixedValueId makeFromWordVocabIndex(WordVocabIndex index) {
+  static constexpr ValueId makeFromWordVocabIndex(WordVocabIndex index) {
     return makeFromIndex(index.get(), Datatype::WordVocabIndex);
   }
-  static constexpr MixedValueId makeFromBlankNodeIndex(BlankNodeIndex index) {
+  static constexpr ValueId makeFromBlankNodeIndex(BlankNodeIndex index) {
     return makeFromIndex(index.get(), Datatype::BlankNodeIndex);
   }
-  static constexpr MixedValueId makeFromSecondaryVocabIndex(
+  static constexpr ValueId makeFromSecondaryVocabIndex(
       SecondaryVocabIndex index) {
     return makeFromIndex(index.get(), Datatype::SecondaryVocabIndex);
   }
 
-  // Obtain the unsigned index that this `MixedValueId` encodes. If
-  // `getDatatype()` is not the index type that the respective getter below is
-  // named after, then the result is unspecified.
+  // Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()`
+  // is not the index type that the respective getter below is named after, then
+  // the result is unspecified.
   [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
     return VocabIndex::make(removeDatatypeBits(_bits));
   }
@@ -376,7 +376,7 @@ class MixedValueId {
   // Store or load a `Date` object.
   // NOTE: These functions cannot be `constexpr`, because
   // `DateYearOrDuration` is not a literal type.
-  static MixedValueId makeFromDate(DateYearOrDuration d) noexcept {
+  static ValueId makeFromDate(DateYearOrDuration d) noexcept {
     return addDatatypeBits(absl::bit_cast<uint64_t>(d), Datatype::Date);
   }
 
@@ -386,14 +386,13 @@ class MixedValueId {
 
   // TODO<joka921> implement dates
 
-  // Create a `MixedValueId` for a GeoPoint object (representing a POINT from
-  // WKT).
-  static MixedValueId makeFromGeoPoint(GeoPoint p) {
+  // Create a `ValueId` for a GeoPoint object (representing a POINT from WKT).
+  static ValueId makeFromGeoPoint(GeoPoint p) {
     return addDatatypeBits(p.toBitRepresentation(), Datatype::GeoPoint);
   }
 
   // Obtain a new `GeoPoint` object representing the pair of coordinates that
-  // this `MixedValueId` encodes. If `getDatatype() != GeoPoint` then the result
+  // this `ValueId` encodes. If `getDatatype() != GeoPoint` then the result
   // is unspecified.
   GeoPoint getGeoPoint() const {
     T bits = removeDatatypeBits(_bits);
@@ -427,19 +426,19 @@ class MixedValueId {
       !isTypeBitwiseComparable_.at(
           static_cast<size_t>(Datatype::LocalVocabIndex));
 
-  // Return the smallest and largest possible `MixedValueId` wrt the underlying
+  // Return the smallest and largest possible `ValueId` wrt the underlying
   // representation
-  constexpr static MixedValueId min() noexcept {
+  constexpr static ValueId min() noexcept {
     return {std::numeric_limits<T>::min()};
   }
-  constexpr static MixedValueId max() noexcept {
+  constexpr static ValueId max() noexcept {
     return {std::numeric_limits<T>::max()};
   }
 
-  // Enable hashing in abseil for `MixedValueId` (required by
-  // `ad_utility::HashSet` and `ad_utility::HashMap`
+  // Enable hashing in abseil for `ValueId` (required by `ad_utility::HashSet`
+  // and `ad_utility::HashMap`
   template <typename H>
-  friend H AbslHashValue(H h, const MixedValueId& id) {
+  friend H AbslHashValue(H h, const ValueId& id) {
     // Adding 0/1 to the hash is required to ensure that for two unequal
     // elements the hash expansions of neither is a suffix of the other.This is
     // a property that absl requires for hashes. The hash expansion is the list
@@ -456,10 +455,10 @@ class MixedValueId {
     return H::combine(std::move(h), *id.getLocalVocabIndex(), 1);
   }
 
-  // Enable the serialization of `MixedValueId` in the
-  // `ad_utility::serialization` framework.
+  // Enable the serialization of `ValueId` in the `ad_utility::serialization`
+  // framework.
   template <typename T>
-  friend void allowTrivialSerialization(MixedValueId, T);
+  friend void allowTrivialSerialization(ValueId, T);
 
   // Similar to `std::visit` for `std::variant`. First gets the datatype and
   // then calls `visitor(getTYPE)` where `getTYPE` is the correct getter method
@@ -469,7 +468,7 @@ class MixedValueId {
   // TODO<joka921> This currently still has limited functionality because
   // VocabIndex, LocalVocabIndex, TextRecordIndex,  and EncodedVal are all of
   // the same type `uint64_t` and the visitor cannot distinguish between them.
-  // Create strong types for these indices and make the `MixedValueId` class use
+  // Create strong types for these indices and make the `ValueId` class use
   // them.
   template <typename Visitor>
   decltype(auto) visit(Visitor&& visitor) const {
@@ -506,7 +505,7 @@ class MixedValueId {
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
-  friend std::ostream& operator<<(std::ostream& ostr, const MixedValueId& id) {
+  friend std::ostream& operator<<(std::ostream& ostr, const ValueId& id) {
     ostr << toString(id.getDatatype())[0] << ':';
     if (id.getDatatype() == Datatype::Undefined) {
       return ostr << id.getBits();
@@ -576,11 +575,11 @@ class MixedValueId {
   // Private constructor that implicitly converts from the underlying
   // representation. Used in the implementation of the static factory methods
   // `Double()`, `Int()` etc.
-  constexpr MixedValueId(T bits) : _bits{bits} {}
+  constexpr ValueId(T bits) : _bits{bits} {}
 
   // Set the first 4 bits of `bits` to a 4-bit representation of `type`.
   // Requires that the first four bits of `bits` are all zero.
-  static constexpr MixedValueId addDatatypeBits(T bits, Datatype type) {
+  static constexpr ValueId addDatatypeBits(T bits, Datatype type) {
     auto mask = static_cast<T>(type) << numDataBits;
     return {bits | mask};
   }
@@ -592,7 +591,7 @@ class MixedValueId {
   }
 
   // Helper function for the implementation of the unsigned index types.
-  static constexpr MixedValueId makeFromIndex(T id, Datatype type) {
+  static constexpr ValueId makeFromIndex(T id, Datatype type) {
     if (id > maxIndex) {
       throw IndexTooLargeException(id);
     }
@@ -600,4 +599,5 @@ class MixedValueId {
   }
 };
 
-#endif  // QLEVER_SRC_GLOBAL_MIXEDVALUEID_H
+}  // namespace foldedValueId
+#endif  // QLEVER_SRC_GLOBAL_VALUEID_H

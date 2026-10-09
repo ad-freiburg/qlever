@@ -14,7 +14,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "backports/algorithm.h"
-#include "global/MixedValueId.h"
+#include "global/FoldedValueId.h"
 #include "index/LocalVocabEntry.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "util/HashSet.h"
@@ -22,18 +22,15 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/Serializer.h"
 
-// The helpers from `ValueIdTestHelpers.h` work with `Id`, so this test only
-// makes sense if `Id` is the `MixedValueId` (it is only built in that case, see
-// `test/CMakeLists.txt`).
-static_assert(std::is_same_v<Id, MixedValueId>);
-
-struct MixedValueIdTest : public ::testing::Test {
+struct ValueIdTest : public ::testing::Test {
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
 };
 
-TEST_F(MixedValueIdTest, makeFromDouble) {
+namespace foldedValueId {
+
+TEST_F(ValueIdTest, makeFromDouble) {
   auto testRepresentableDouble = [](double d) {
-    auto id = MixedValueId::makeFromDouble(d);
+    auto id = ValueId::makeFromDouble(d);
     ASSERT_EQ(id.getDatatype(), Datatype::Double);
     // We lose `numDatatypeBits` bits of precision, so `ASSERT_DOUBLE_EQ` would
     // fail.
@@ -43,12 +40,12 @@ TEST_F(MixedValueIdTest, makeFromDouble) {
       // The if is needed for the case of += infinity.
       ASSERT_NEAR(
           id.getDouble(), d,
-          std::abs(d / (uint64_t{1} << (52 - MixedValueId::numDatatypeBits))));
+          std::abs(d / (uint64_t{1} << (52 - ValueId::numDatatypeBits))));
     }
   };
 
   auto testNonRepresentableSubnormal = [](double d) {
-    auto id = MixedValueId::makeFromDouble(d);
+    auto id = ValueId::makeFromDouble(d);
     ASSERT_EQ(id.getDatatype(), Datatype::Double);
     // Subnormal numbers with a too small fraction are rounded to zero.
     ASSERT_EQ(id.getDouble(), 0.0);
@@ -59,8 +56,8 @@ TEST_F(MixedValueIdTest, makeFromDouble) {
     auto nonRepresentable = nonRepresentableDoubleGenerator();
     // The random number generator includes the edge cases which would make the
     // tests fail.
-    if (nonRepresentable != MixedValueId::minPositiveDouble &&
-        nonRepresentable != -MixedValueId::minPositiveDouble) {
+    if (nonRepresentable != ValueId::minPositiveDouble &&
+        nonRepresentable != -ValueId::minPositiveDouble) {
       testNonRepresentableSubnormal(nonRepresentable);
     }
   }
@@ -78,33 +75,32 @@ TEST_F(MixedValueIdTest, makeFromDouble) {
 
   auto quietNan = std::numeric_limits<double>::quiet_NaN();
   auto signalingNan = std::numeric_limits<double>::signaling_NaN();
-  ASSERT_TRUE(std::isnan(MixedValueId::makeFromDouble(quietNan).getDouble()));
-  ASSERT_TRUE(
-      std::isnan(MixedValueId::makeFromDouble(signalingNan).getDouble()));
+  ASSERT_TRUE(std::isnan(ValueId::makeFromDouble(quietNan).getDouble()));
+  ASSERT_TRUE(std::isnan(ValueId::makeFromDouble(signalingNan).getDouble()));
 
   // Test that the value of `minPositiveDouble` is correct.
   auto testSmallestNumber = [](double d) {
-    ASSERT_EQ(MixedValueId::makeFromDouble(d).getDouble(), d);
+    ASSERT_EQ(ValueId::makeFromDouble(d).getDouble(), d);
     ASSERT_NE(d / 2, 0.0);
-    ASSERT_EQ(MixedValueId::makeFromDouble(d / 2).getDouble(), 0.0);
+    ASSERT_EQ(ValueId::makeFromDouble(d / 2).getDouble(), 0.0);
   };
-  testSmallestNumber(MixedValueId::minPositiveDouble);
-  testSmallestNumber(-MixedValueId::minPositiveDouble);
+  testSmallestNumber(ValueId::minPositiveDouble);
+  testSmallestNumber(-ValueId::minPositiveDouble);
 }
 
-TEST_F(MixedValueIdTest, makeFromInt) {
+TEST_F(ValueIdTest, makeFromInt) {
   for (size_t i = 0; i < 10'000; ++i) {
     auto value = nonOverflowingNBitGenerator();
-    auto id = MixedValueId::makeFromInt(value);
+    auto id = ValueId::makeFromInt(value);
     ASSERT_EQ(id.getDatatype(), Datatype::Int);
     ASSERT_EQ(id.getInt(), value);
   }
 
   auto testOverflow = [](auto generator) {
-    using I = MixedValueId::IntegerType;
+    using I = ValueId::IntegerType;
     for (size_t i = 0; i < 10'000; ++i) {
       auto value = generator();
-      auto id = MixedValueId::makeFromInt(value);
+      auto id = ValueId::makeFromInt(value);
       ASSERT_EQ(id.getDatatype(), Datatype::Int);
       ASSERT_EQ(id.getInt(), I::fromNBit(I::toNBit(value)));
       ASSERT_NE(id.getInt(), value);
@@ -116,19 +112,19 @@ TEST_F(MixedValueIdTest, makeFromInt) {
 }
 
 // _____________________________________________________________________________
-TEST_F(MixedValueIdTest, makeFromBool) {
-  EXPECT_TRUE(MixedValueId::makeBoolFromZeroOrOne(true).getBool());
-  EXPECT_TRUE(MixedValueId::makeFromBool(true).getBool());
-  EXPECT_FALSE(MixedValueId::makeBoolFromZeroOrOne(false).getBool());
-  EXPECT_FALSE(MixedValueId::makeFromBool(false).getBool());
+TEST_F(ValueIdTest, makeFromBool) {
+  EXPECT_TRUE(ValueId::makeBoolFromZeroOrOne(true).getBool());
+  EXPECT_TRUE(ValueId::makeFromBool(true).getBool());
+  EXPECT_FALSE(ValueId::makeBoolFromZeroOrOne(false).getBool());
+  EXPECT_FALSE(ValueId::makeFromBool(false).getBool());
 
-  EXPECT_EQ(MixedValueId::makeBoolFromZeroOrOne(true).getBoolLiteral(), "1");
-  EXPECT_EQ(MixedValueId::makeFromBool(true).getBoolLiteral(), "true");
-  EXPECT_EQ(MixedValueId::makeBoolFromZeroOrOne(false).getBoolLiteral(), "0");
-  EXPECT_EQ(MixedValueId::makeFromBool(false).getBoolLiteral(), "false");
+  EXPECT_EQ(ValueId::makeBoolFromZeroOrOne(true).getBoolLiteral(), "1");
+  EXPECT_EQ(ValueId::makeFromBool(true).getBoolLiteral(), "true");
+  EXPECT_EQ(ValueId::makeBoolFromZeroOrOne(false).getBoolLiteral(), "0");
+  EXPECT_EQ(ValueId::makeFromBool(false).getBoolLiteral(), "false");
 }
 
-TEST_F(MixedValueIdTest, Indices) {
+TEST_F(ValueIdTest, Indices) {
   auto testRandomIds = [&](auto makeId, auto getFromId, Datatype type) {
     auto testSingle = [&](auto value) {
       auto id = makeId(value);
@@ -139,12 +135,12 @@ TEST_F(MixedValueIdTest, Indices) {
       testSingle(indexGenerator());
     }
     testSingle(0);
-    testSingle(MixedValueId::maxIndex);
+    testSingle(ValueId::maxIndex);
 
     if (type != Datatype::LocalVocabIndex) {
       for (size_t idx = 0; idx < 10'000; ++idx) {
         auto value = invalidIndexGenerator();
-        ASSERT_THROW(makeId(value), MixedValueId::IndexTooLargeException);
+        ASSERT_THROW(makeId(value), ValueId::IndexTooLargeException);
         AD_EXPECT_THROW_WITH_MESSAGE(
             makeId(value), ::testing::ContainsRegex("is bigger than"));
       }
@@ -165,33 +161,33 @@ TEST_F(MixedValueIdTest, Indices) {
                 Datatype::SecondaryVocabIndex);
 }
 
-TEST_F(MixedValueIdTest, Undefined) {
-  auto id = MixedValueId::makeUndefined();
+TEST_F(ValueIdTest, Undefined) {
+  auto id = ValueId::makeUndefined();
   ASSERT_EQ(id.getDatatype(), Datatype::Undefined);
 
   // `getUndefined()` returns the single value of `UndefinedType`. Its main
   // purpose is the generic code in `visit`, which has to dispatch on the
   // datatype, so we also test it via that path.
   static_assert(
-      std::is_same_v<decltype(id.getUndefined()), MixedValueId::UndefinedType>);
+      std::is_same_v<decltype(id.getUndefined()), ValueId::UndefinedType>);
   auto isUndefinedType = [](const auto& value) {
     return std::is_same_v<std::decay_t<decltype(value)>,
-                          MixedValueId::UndefinedType>;
+                          ValueId::UndefinedType>;
   };
   EXPECT_TRUE(isUndefinedType(id.getUndefined()));
   EXPECT_TRUE(id.visit(isUndefinedType));
-  EXPECT_FALSE(MixedValueId::makeFromInt(42).visit(isUndefinedType));
+  EXPECT_FALSE(ValueId::makeFromInt(42).visit(isUndefinedType));
 }
 
-TEST_F(MixedValueIdTest, OrderingDifferentDatatypes) {
+TEST_F(ValueIdTest, OrderingDifferentDatatypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end());
 
-  auto compareByDatatypeAndIndexTypes = [](MixedValueId a, MixedValueId b) {
+  auto compareByDatatypeAndIndexTypes = [](ValueId a, ValueId b) {
     auto typeA = a.getDatatype();
     auto typeB = b.getDatatype();
-    if (ad_utility::contains(MixedValueId::stringTypes_, typeA) &&
-        ad_utility::contains(MixedValueId::stringTypes_, typeB)) {
+    if (ad_utility::contains(ValueId::stringTypes_, typeA) &&
+        ad_utility::contains(ValueId::stringTypes_, typeB)) {
       return false;
     }
     return a.getDatatype() < b.getDatatype();
@@ -200,11 +196,11 @@ TEST_F(MixedValueIdTest, OrderingDifferentDatatypes) {
       std::is_sorted(ids.begin(), ids.end(), compareByDatatypeAndIndexTypes));
 }
 
-TEST_F(MixedValueIdTest, IndexOrdering) {
+TEST_F(ValueIdTest, IndexOrdering) {
   auto testOrder = [](auto makeIdFromIndex, auto getIndexFromId) {
-    std::vector<MixedValueId> ids;
+    std::vector<ValueId> ids;
     addIdsFromGenerator(indexGenerator, makeIdFromIndex, ids);
-    std::vector<std::invoke_result_t<decltype(getIndexFromId), MixedValueId>>
+    std::vector<std::invoke_result_t<decltype(getIndexFromId), ValueId>>
         indices;
     for (auto id : ids) {
       indices.push_back(std::invoke(getIndexFromId, id));
@@ -225,7 +221,7 @@ TEST_F(MixedValueIdTest, IndexOrdering) {
   testOrder(&makeTextRecordId, &getTextRecordIndex);
 }
 
-TEST_F(MixedValueIdTest, DoubleOrdering) {
+TEST_F(ValueIdTest, DoubleOrdering) {
   auto ids = makeRandomDoubleIds();
   std::vector<double> doubles;
   doubles.reserve(ids.size());
@@ -239,8 +235,8 @@ TEST_F(MixedValueIdTest, DoubleOrdering) {
   ql::erase_if(doubles, [](double d) { return std::isnan(d); });
   std::sort(doubles.begin(), doubles.end());
 
-  // When sorting MixedValueIds that hold doubles, the NaN values form a
-  // contiguous range.
+  // When sorting ValueIds that hold doubles, the NaN values form a contiguous
+  // range.
   auto beginOfNans = std::find_if(ids.begin(), ids.end(), [](const auto& id) {
     return std::isnan(id.getDouble());
   });
@@ -259,7 +255,7 @@ TEST_F(MixedValueIdTest, DoubleOrdering) {
 
   // In `ids` the negative number stand AFTER the positive numbers because of
   // the bitOrdering. First rotate the negative numbers to the beginning.
-  auto doubleIdIsNegative = [](MixedValueId id) {
+  auto doubleIdIsNegative = [](ValueId id) {
     auto bits = absl::bit_cast<uint64_t>(id.getDouble());
     return bits & ad_utility::bitMaskForHigherBits(1);
   };
@@ -275,15 +271,14 @@ TEST_F(MixedValueIdTest, DoubleOrdering) {
   // reverse negative range) the `ids` are sorted in exactly the same order as
   // the `doubles`.
   for (size_t i = 0; i < ids.size(); ++i) {
-    auto doubleTruncated = MixedValueId::makeFromDouble(doubles[i]).getDouble();
+    auto doubleTruncated = ValueId::makeFromDouble(doubles[i]).getDouble();
     ASSERT_EQ(ids[i].getDouble(), doubleTruncated);
   }
 }
 
-TEST_F(MixedValueIdTest, SignedIntegerOrdering) {
-  std::vector<MixedValueId> ids;
-  addIdsFromGenerator(nonOverflowingNBitGenerator, &MixedValueId::makeFromInt,
-                      ids);
+TEST_F(ValueIdTest, SignedIntegerOrdering) {
+  std::vector<ValueId> ids;
+  addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
   std::vector<int64_t> integers;
   integers.reserve(ids.size());
   for (auto id : ids) {
@@ -296,7 +291,7 @@ TEST_F(MixedValueIdTest, SignedIntegerOrdering) {
   // The negative integers stand after the positive integers, so we have to
   // switch these ranges.
   auto beginOfNegative = std::find_if(
-      ids.begin(), ids.end(), [](MixedValueId id) { return id.getInt() < 0; });
+      ids.begin(), ids.end(), [](ValueId id) { return id.getInt() < 0; });
   std::rotate(ids.begin(), beginOfNegative, ids.end());
 
   // Now `integers` and `ids` should be in the same order
@@ -305,7 +300,7 @@ TEST_F(MixedValueIdTest, SignedIntegerOrdering) {
   }
 }
 
-TEST_F(MixedValueIdTest, Serialization) {
+TEST_F(ValueIdTest, Serialization) {
   auto ids = makeRandomIds();
 
   for (auto id : ids) {
@@ -313,22 +308,22 @@ TEST_F(MixedValueIdTest, Serialization) {
     writer << id;
     ad_utility::serialization::ByteBufferReadSerializer reader{
         std::move(writer).data()};
-    MixedValueId serializedId;
+    ValueId serializedId;
     reader >> serializedId;
     ASSERT_EQ(id, serializedId);
   }
 }
 
-TEST_F(MixedValueIdTest, Hashing) {
+TEST_F(ValueIdTest, Hashing) {
   {
     auto ids = makeRandomIds();
-    ad_utility::HashSet<MixedValueId> idsWithoutDuplicates;
+    ad_utility::HashSet<ValueId> idsWithoutDuplicates;
     for (size_t i = 0; i < 2; ++i) {
       for (auto id : ids) {
         idsWithoutDuplicates.insert(id);
       }
     }
-    std::vector<MixedValueId> idsWithoutDuplicatesAsVector(
+    std::vector<ValueId> idsWithoutDuplicatesAsVector(
         idsWithoutDuplicates.begin(), idsWithoutDuplicates.end());
 
     std::sort(idsWithoutDuplicatesAsVector.begin(),
@@ -370,98 +365,91 @@ TEST_F(MixedValueIdTest, Hashing) {
   }
 }
 
-TEST_F(MixedValueIdTest, toDebugString) {
-  auto test = [](MixedValueId id, std::string_view expected) {
+TEST_F(ValueIdTest, toDebugString) {
+  auto test = [](ValueId id, std::string_view expected) {
     std::stringstream stream;
     stream << id;
     ASSERT_EQ(stream.str(), expected);
   };
-  test(MixedValueId::makeUndefined(), "U:0");
+  test(ValueId::makeUndefined(), "U:0");
   // Values with type undefined can usually only have one value (all data bits
-  // zero). Sometimes MixedValueIds with type undefined but non-zero data bits
-  // are used. The following test tests one of these internal MixedValueIds.
-  MixedValueId customUndefined =
-      MixedValueId::fromBits(MixedValueId::IntegerType::fromNBit(100) |
-                             (static_cast<MixedValueId::T>(Datatype::Undefined)
-                              << MixedValueId::numDataBits));
+  // zero). Sometimes ValueIds with type undefined but non-zero data bits are
+  // used. The following test tests one of these internal ValueIds.
+  ValueId customUndefined = ValueId::fromBits(
+      ValueId::IntegerType::fromNBit(100) |
+      (static_cast<ValueId::T>(Datatype::Undefined) << ValueId::numDataBits));
   test(customUndefined, "U:100");
-  test(MixedValueId::makeFromDouble(42.0), "D:42.000000");
-  test(MixedValueId::makeFromBool(false), "B:false");
-  test(MixedValueId::makeFromBool(true), "B:true");
-  test(MixedValueId::makeBoolFromZeroOrOne(false), "B:false");
-  test(MixedValueId::makeBoolFromZeroOrOne(true), "B:true");
+  test(ValueId::makeFromDouble(42.0), "D:42.000000");
+  test(ValueId::makeFromBool(false), "B:false");
+  test(ValueId::makeFromBool(true), "B:true");
+  test(ValueId::makeBoolFromZeroOrOne(false), "B:false");
+  test(ValueId::makeBoolFromZeroOrOne(true), "B:true");
   test(makeVocabId(15), "V:15");
   auto str = LocalVocabEntry::literalWithoutQuotes(
       "SomeValue", qec_->getLocalVocabContext());
-  test(MixedValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
+  test(ValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
   test(makeTextRecordId(37), "T:37");
   test(makeWordVocabId(42), "W:42");
   test(makeBlankNodeId(27), "B:27");
-  test(MixedValueId::makeFromDate(
+  test(ValueId::makeFromDate(
            DateYearOrDuration{123456, DateYearOrDuration::Type::Year}),
        "D:123456");
-  test(MixedValueId::makeFromGeoPoint(GeoPoint{50.0, 50.0}),
+  test(ValueId::makeFromGeoPoint(GeoPoint{50.0, 50.0}),
        "G:POINT(50.000000 50.000000)");
   // make an ID with an invalid datatype
-  ASSERT_ANY_THROW(test(MixedValueId::max(), "blim"));
+  ASSERT_ANY_THROW(test(ValueId::max(), "blim"));
 }
 
-TEST_F(MixedValueIdTest, InvalidDatatypeEnumValue) {
-  ASSERT_ANY_THROW(toString(static_cast<Datatype>(2345)));
+TEST_F(ValueIdTest, TriviallyCopyable) {
+  static_assert(std::is_trivially_copyable_v<ValueId>);
 }
 
-TEST_F(MixedValueIdTest, TriviallyCopyable) {
-  static_assert(std::is_trivially_copyable_v<MixedValueId>);
-}
-
-// Pin down that the `MixedValueId` functions that can be evaluated at compile
-// time actually are `constexpr`. Note that several of them contain an
+// Pin down that the `ValueId` functions that can be evaluated at compile time
+// actually are `constexpr`. Note that several of them contain an
 // `AD_CONTRACT_CHECK`/`AD_EXPENSIVE_CHECK`, which is only possible because
 // those macros are `constexpr`-friendly, see the note on `constexpr` in
 // `util/Exception.h`.
 // NOTE: The functions that are only `QL_CONSTEXPR` (`constexpr` in C++20 mode
-// only) are excluded in C++17 mode, see the notes in `global/MixedValueId.h`.
-namespace constexprMixedValueId {
-static_assert(MixedValueId::makeUndefined().getDatatype() ==
-              Datatype::Undefined);
-static_assert(MixedValueId::makeFromBool(true).getBool());
-static_assert(!MixedValueId::makeBoolFromZeroOrOne(false).getBool());
-static_assert(MixedValueId::makeFromInt(42).getDatatype() == Datatype::Int);
-static_assert(MixedValueId::makeFromVocabIndex(VocabIndex::make(17))
+// only) are excluded in C++17 mode, see the notes in `global/ValueId.h`.
+namespace constexprValueId {
+static_assert(ValueId::makeUndefined().getDatatype() == Datatype::Undefined);
+static_assert(ValueId::makeFromBool(true).getBool());
+static_assert(!ValueId::makeBoolFromZeroOrOne(false).getBool());
+static_assert(ValueId::makeFromInt(42).getDatatype() == Datatype::Int);
+static_assert(ValueId::makeFromVocabIndex(VocabIndex::make(17))
                   .getVocabIndex() == VocabIndex::make(17));
-static_assert(MixedValueId::makeFromEncodedVal(17).getEncodedVal() == 17);
-static_assert(MixedValueId::makeFromTextRecordIndex(TextRecordIndex::make(17))
+static_assert(ValueId::makeFromEncodedVal(17).getEncodedVal() == 17);
+static_assert(ValueId::makeFromTextRecordIndex(TextRecordIndex::make(17))
                   .getTextRecordIndex() == TextRecordIndex::make(17));
-static_assert(MixedValueId::makeFromWordVocabIndex(WordVocabIndex::make(17))
+static_assert(ValueId::makeFromWordVocabIndex(WordVocabIndex::make(17))
                   .getWordVocabIndex() == WordVocabIndex::make(17));
-static_assert(MixedValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
+static_assert(ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
                   .getBlankNodeIndex() == BlankNodeIndex::make(17));
 static_assert(
-    MixedValueId::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(17))
+    ValueId::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(17))
         .getSecondaryVocabIndex() == SecondaryVocabIndex::make(17));
-static_assert(MixedValueId::makeFromBool(true).getBoolLiteral() == "true");
-static_assert(MixedValueId::makeBoolFromZeroOrOne(true).getBoolLiteral() ==
-              "1");
+static_assert(ValueId::makeFromBool(true).getBoolLiteral() == "true");
+static_assert(ValueId::makeBoolFromZeroOrOne(true).getBoolLiteral() == "1");
 #ifndef QLEVER_CPP_17
 // `getInt` performs a signed left shift, which is only a constant expression
 // since C++20.
-static_assert(MixedValueId::makeFromInt(-42).getInt() == -42);
-static_assert(MixedValueId::fromBits(MixedValueId::makeFromInt(42).getBits())
-                  .getInt() == 42);
-static_assert(MixedValueId::makeUndefined().isTrivial());
-static_assert(MixedValueId::makeUndefined().isUndefined());
-static_assert(!MixedValueId::makeFromBool(true).isUndefined());
-static_assert(MixedValueId::makeFromDouble(0.5).getDouble() == 0.5);
+static_assert(ValueId::makeFromInt(-42).getInt() == -42);
+static_assert(ValueId::fromBits(ValueId::makeFromInt(42).getBits()).getInt() ==
+              42);
+static_assert(ValueId::makeUndefined().isTrivial());
+static_assert(ValueId::makeUndefined().isUndefined());
+static_assert(!ValueId::makeFromBool(true).isUndefined());
+static_assert(ValueId::makeFromDouble(0.5).getDouble() == 0.5);
 // The `compareWithoutLocalVocab` contains two `AD_EXPENSIVE_CHECK`s.
-static_assert(MixedValueId::makeFromBool(true).compareWithoutLocalVocab(
-                  MixedValueId::makeUndefined()) > 0);
-static_assert(MixedValueId::makeUndefined().compareWithoutLocalVocab(
-                  MixedValueId::makeUndefined()) == 0);
+static_assert(ValueId::makeFromBool(true).compareWithoutLocalVocab(
+                  ValueId::makeUndefined()) > 0);
+static_assert(ValueId::makeUndefined().compareWithoutLocalVocab(
+                  ValueId::makeUndefined()) == 0);
 #endif
-}  // namespace constexprMixedValueId
+}  // namespace constexprValueId
 
 // _____________________________________________________________________________
-TEST_F(MixedValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
+TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
   // Test that an ID storing an encoded IRI compares equal to a LocalVocabEntry
   // with the same IRI value.
 
@@ -489,7 +477,7 @@ TEST_F(MixedValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
   // Create a LocalVocabEntry with the same IRI
   auto iri = ad_utility::triple_component::Iri::fromIriref(encodableIri);
   LocalVocabEntry localVocabEntry{iri, qec_->getLocalVocabContext()};
-  auto localVocabId = MixedValueId::makeFromLocalVocabIndex(&localVocabEntry);
+  auto localVocabId = ValueId::makeFromLocalVocabIndex(&localVocabEntry);
 
   // The encoded ID should compare equal to the LocalVocabEntry ID
   EXPECT_EQ(encodedId, localVocabId)
@@ -504,7 +492,7 @@ TEST_F(MixedValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
   auto encodedId2 = *encodedIdOpt2;
   auto iri2 = ad_utility::triple_component::Iri::fromIriref(encodableIri2);
   LocalVocabEntry localVocabEntry2{iri2, qec_->getLocalVocabContext()};
-  auto localVocabId2 = MixedValueId::makeFromLocalVocabIndex(&localVocabEntry2);
+  auto localVocabId2 = ValueId::makeFromLocalVocabIndex(&localVocabEntry2);
 
   EXPECT_EQ(encodedId2, localVocabId2)
       << "Encoded ID should equal LocalVocabEntry ID for IRI: "
@@ -533,36 +521,37 @@ TEST_F(MixedValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 // Note: the `isTrivial` functionality is also tested using `static_assert`s
 // across the codebase, hence we don't test it exhaustively here, but only
 // please the coverage tool.
-TEST(MixedValueId, isTrivial) {
-  EXPECT_TRUE(Id::makeUndefined().isTrivial());
+TEST(ValueId, isTrivial) {
+  EXPECT_TRUE(ValueId::makeUndefined().isTrivial());
   EXPECT_FALSE(
-      Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
-  EXPECT_FALSE(Id::makeFromEncodedVal(738).isTrivial());
+      ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
+  EXPECT_FALSE(ValueId::makeFromEncodedVal(738).isTrivial());
 }
 
 // _____________________________________________________________________________
-TEST(MixedValueId, canBeComparedBitwise) {
-  EXPECT_TRUE(Id::makeUndefined().canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromBool(true).canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromInt(1337).canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromDouble(3.14).canBeComparedBitwise());
+TEST(ValueId, canBeComparedBitwise) {
+  EXPECT_TRUE(ValueId::makeUndefined().canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeFromBool(true).canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeFromInt(1337).canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeFromDouble(3.14).canBeComparedBitwise());
   EXPECT_TRUE(
-      Id::makeFromVocabIndex(VocabIndex::make(0)).canBeComparedBitwise());
-  EXPECT_FALSE(Id::makeFromLocalVocabIndex(nullptr).canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromTextRecordIndex(TextRecordIndex::make(0))
+      ValueId::makeFromVocabIndex(VocabIndex::make(0)).canBeComparedBitwise());
+  EXPECT_FALSE(
+      ValueId::makeFromLocalVocabIndex(nullptr).canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeFromTextRecordIndex(TextRecordIndex::make(0))
                   .canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromDate(DateYearOrDuration{Date{0, 0, 0}})
+  EXPECT_TRUE(ValueId::makeFromDate(DateYearOrDuration{Date{0, 0, 0}})
                   .canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromGeoPoint(GeoPoint{0, 0}).canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromWordVocabIndex(WordVocabIndex::make(0))
+  EXPECT_TRUE(ValueId::makeFromGeoPoint(GeoPoint{0, 0}).canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeFromWordVocabIndex(WordVocabIndex::make(0))
                   .canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
+  EXPECT_TRUE(ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
                   .canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromEncodedVal(738).canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeFromEncodedVal(738).canBeComparedBitwise());
 }
 
 // _____________________________________________________________________________
-TEST(MixedValueId, compareThreeWayWithLocalVocabIndex) {
+TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   using namespace ad_utility::testing;
   // Use a fresh index (and not the shared one of `getQec`), because the
   // secondary vocabulary must not leak into other tests.
@@ -579,16 +568,16 @@ TEST(MixedValueId, compareThreeWayWithLocalVocabIndex) {
   LocalVocabEntry entryInVocab = LocalVocabEntry::fromIriref("<b>", ctx);
   LocalVocabEntry entryInSecondaryVocab =
       LocalVocabEntry::fromIriref("<zzz>", ctx);
-  Id localVocabId = Id::makeFromLocalVocabIndex(&entryInVocab);
-  Id localVocabIdSecondary =
-      Id::makeFromLocalVocabIndex(&entryInSecondaryVocab);
-  Id secondaryVocabId =
-      Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
+  ValueId localVocabId = Id::makeFromLocalVocabIndex(&entryInVocab);
+  ValueId localVocabIdSecondary =
+      ValueId::makeFromLocalVocabIndex(&entryInSecondaryVocab);
+  ValueId secondaryVocabId =
+      ValueId::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
   // `Int` is a datatype that is smaller than `LocalVocabIndex` and `Date` is
   // one that is greater, and neither of them is a datatype that a position in
   // the vocabularies can have.
-  Id intId = Id::makeFromInt(42);
-  Id dateId = Id::makeFromDate(DateYearOrDuration{Date{2026, 8, 19}});
+  ValueId intId = ValueId::makeFromInt(42);
+  ValueId dateId = ValueId::makeFromDate(DateYearOrDuration{Date{2026, 8, 19}});
 
   // `isDatatypeOfPositionInVocab(type) == true` and
   // `otherType == LocalVocabIndex`: the position of the entry is compared to
@@ -646,34 +635,36 @@ TEST(ValueId, forwardingLambdas) {
   // A proxy type with the member functions, like the elements of a column view
   // that does not store `Id`s.
   struct Proxy {
-    Id id_;
+    ValueId id_;
     bool isUndefined() const { return id_.isUndefined(); }
     uint64_t getBits() const { return id_.getBits(); }
     Datatype getDatatype() const { return id_.getDatatype(); }
   };
 
   // Each lambda returns what the corresponding member function returns.
-  for (Id id : {Id::makeUndefined(), Id::makeFromInt(42), Id::makeFromInt(-42),
-                Id::makeFromDouble(13.37), Id::makeFromBool(true)}) {
-    EXPECT_EQ(Id::isUndefinedL(id), id.isUndefined());
-    EXPECT_EQ(Id::isDefinedL(id), !id.isUndefined());
-    EXPECT_EQ(Id::getBitsL(id), id.getBits());
-    EXPECT_EQ(Id::getDatatypeL(id), id.getDatatype());
-    EXPECT_EQ(Id::isUndefinedL(Proxy{id}), id.isUndefined());
-    EXPECT_EQ(Id::isDefinedL(Proxy{id}), !id.isUndefined());
-    EXPECT_EQ(Id::getBitsL(Proxy{id}), id.getBits());
-    EXPECT_EQ(Id::getDatatypeL(Proxy{id}), id.getDatatype());
+  for (ValueId id : {ValueId::makeUndefined(), ValueId::makeFromInt(42),
+                     ValueId::makeFromInt(-42), ValueId::makeFromDouble(13.37),
+                     ValueId::makeFromBool(true)}) {
+    EXPECT_EQ(ValueId::isUndefinedL(id), id.isUndefined());
+    EXPECT_EQ(ValueId::isDefinedL(id), !id.isUndefined());
+    EXPECT_EQ(ValueId::getBitsL(id), id.getBits());
+    EXPECT_EQ(ValueId::getDatatypeL(id), id.getDatatype());
+    EXPECT_EQ(ValueId::isUndefinedL(Proxy{id}), id.isUndefined());
+    EXPECT_EQ(ValueId::isDefinedL(Proxy{id}), !id.isUndefined());
+    EXPECT_EQ(ValueId::getBitsL(Proxy{id}), id.getBits());
+    EXPECT_EQ(ValueId::getDatatypeL(Proxy{id}), id.getDatatype());
   }
 
   // The lambdas work as predicates and projections of generic algorithms, also
   // over a range of proxies.
-  std::vector ids{Id::makeFromInt(1), Id::makeUndefined(),
-                  Id::makeFromDouble(3.5)};
+  std::vector ids{ValueId::makeFromInt(1), ValueId::makeUndefined(),
+                  ValueId::makeFromDouble(3.5)};
   std::vector<Proxy> proxies{{ids[0]}, {ids[1]}, {ids[2]}};
-  EXPECT_TRUE(ql::ranges::any_of(ids, Id::isUndefinedL));
-  EXPECT_TRUE(ql::ranges::any_of(proxies, Id::isUndefinedL));
-  EXPECT_EQ(ql::ranges::find(ids, Datatype::Double, Id::getDatatypeL),
+  EXPECT_TRUE(ql::ranges::any_of(ids, ValueId::isUndefinedL));
+  EXPECT_TRUE(ql::ranges::any_of(proxies, ValueId::isUndefinedL));
+  EXPECT_EQ(ql::ranges::find(ids, Datatype::Double, ValueId::getDatatypeL),
             ids.begin() + 2);
-  EXPECT_EQ(ql::ranges::find(proxies, Datatype::Double, Id::getDatatypeL),
+  EXPECT_EQ(ql::ranges::find(proxies, Datatype::Double, ValueId::getDatatypeL),
             proxies.begin() + 2);
 }
+}  // namespace foldedValueId
