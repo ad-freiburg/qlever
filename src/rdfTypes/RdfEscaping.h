@@ -9,7 +9,6 @@
 #include <string>
 
 #include "backports/StartsWithAndEndsWith.h"
-#include "global/TypedIndex.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
 
@@ -52,46 +51,7 @@ std::string unescapeNewlinesAndBackslashes(std::string_view literal);
  * This is NOT a valid RDF form of literals, but this format is only used
  * inside QLever.
  */
-
-// The following two strong typedefs statically keep track of the fact whether a
-// string literal is stored in the normalized form that was described above.
-
-// A strong typedef for a `std::string_view` that stores a normalized RDF
-// literal.
-constexpr inline ad_utility::IndexTag normalizedRDFStringViewTag =
-    "NormalizedRDFString";
-using NormalizedRDFStringView =
-    ad_utility::TypedIndex<std::string_view, normalizedRDFStringViewTag>;
-
-// A strong typedef for a `std::string` that stores a normalized RDF literal.
-class NormalizedRDFString {
-  std::string
-      data_;  // The actual string content. Always is enclosed in quotes.
-
- public:
-  // Const access to the underlying data in the normalized form.
-  const std::string& get() const { return data_; }
-
-  // Explicit conversion from a `NormalizedRDFStringView`.
-  // Note: Conversion to a `NormalizedRDFStringView` is currently not needed in
-  // QLever, but could be easily implemented using a (possibly implicit)
-  // `operator NormalizedRDFStringView()`
-  explicit NormalizedRDFString(NormalizedRDFStringView sv) : data_{sv.get()} {}
-
- private:
-  // Construct from the raw `data`. This function can only be called by the
-  // free `normalizeRDFLiteral` function, so that function is the only way to
-  // create a new `NormalizedRDFString`.
-  explicit NormalizedRDFString(std::string data) : data_{std::move(data)} {
-    AD_CORRECTNESS_CHECK(data_.size() >= 2 && ql::starts_with(data_, '"') &&
-                         ql::ends_with(data_, '"'));
-  }
-  friend NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
-};
-
-// The actual function to obtain a `NormalizedRDFString` from any valid form of
-// RDF literals. For details on the normalization format, see above.
-NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
+std::string normalizeRDFLiteral(std::string_view origLiteral);
 
 /**
  * Convert a literal in the form produced by `normalizeRDFLiteral` into a form
