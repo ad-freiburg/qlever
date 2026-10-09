@@ -39,11 +39,14 @@
 #include "../../util/AsyncTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/ParallelBlockMergeTestHelpers.h"
+#include "../../util/SpillingBlockStorageTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedIdTableBlockStorage.h"
 #include "util/parallelBlockMerge/InOrderBlockSink.h"
 
 using parallelBlockMergeTestHelpers::asyncGetNextBlock;
+using spillingBlockStorageTestHelpers::expectCancelAllWakesUpAWaitingConsumer;
+using spillingBlockStorageTestHelpers::makeSpillFileCleanup;
 
 namespace {
 // The storage under test, whose operations may be initiated from anywhere,
@@ -185,9 +188,11 @@ Storage<NumCols> makeStorage(
     size_t maxBufferedBlocksPerChunk,
     ad_utility::CompressedBlockFile::CompressionLevel compressionLevel =
         ad_utility::ZSTD_DEFAULT_LEVEL) {
-  return Storage<NumCols>{ioContext.get_executor(), std::move(filename),
-                          ad_utility::testing::makeAllocator(),
-                          maxBufferedBlocksPerChunk, compressionLevel};
+  return Storage<NumCols>{
+      ioContext.get_executor(), std::move(filename),
+      ad_utility::compressedIdTable::IdTableBlockCodec<NumCols>{
+          ad_utility::testing::makeAllocator()},
+      maxBufferedBlocksPerChunk, compressionLevel};
 }
 
 // The compression levels that the round trips below are run with: the default
@@ -565,10 +570,11 @@ TEST(CompressedIdTableBlockStorage, theSentinelDropsTheChunk) {
 TEST(CompressedIdTableBlockStorage, aSpillThatOutlivesItsChunkIsDropped) {
   // A block that is spilled once its chunk has been finished has nobody left
   // who could care about it, so the storage reports that it was *not* stored,
-  // see `ChunkQueue::spillBlock`. In the parallel merge that happens when the
-  // consumer takes the end-of-chunk sentinel while the write of a block is
-  // still in flight on another thread; the single-threaded harness here reaches
-  // the very same check by storing the block after the sentinel was handed out.
+  // see `SpillingChunkQueue::spillBlock`. In the parallel merge that happens
+  // when the consumer takes the end-of-chunk sentinel while the write of a
+  // block is still in flight on another thread; the single-threaded harness
+  // here reaches the very same check by storing the block after the sentinel
+  // was handed out.
   //
   // NOTE: Neither order is the one that the sink uses (it pushes the sentinel
   // last), but the storage has to survive them, because they are what makes
@@ -604,14 +610,12 @@ TEST(CompressedIdTableBlockStorage, aSpilledBlockIsHandedOutUnread) {
   // A block that is still in memory is handed out as it is, whereas a spilled
   // block is handed out as a `DeferredBlock` that is only read back from the
   // file when it is materialized, so that the consumer can read several such
-  // blocks concurrently, see `ChunkQueue::deferSpilledBlock`.
+  // blocks concurrently, see `SpillingChunkQueue::deferSpilledBlock`.
   net::io_context ioContext;
   // Buffer a single block, such that the first block stays in memory and the
   // second one is spilled.
   Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 1);
-  absl::Cleanup cleanup = [&storage] {
-    ad_utility::deleteFile(storage.spillFilename(0), false);
-  };
+  auto cleanup = makeSpillFileCleanup(storage, 1);
   Producer<0> producer{storage, 0, makeValues<0>(1, {{0}, {1}}, true)};
   runAndPoll(ioContext, [&] { producer.storeAll(); });
   EXPECT_THAT(producer.outcomes_.wasStored_,
@@ -657,12 +661,7 @@ TEST(CompressedIdTableBlockStorage, aSpilledBlockIsHandedOutUnread) {
 TEST(CompressedIdTableBlockStorage, cancelAllWakesUpAWaitingConsumer) {
   net::io_context ioContext;
   Storage<0> storage = makeStorage<0>(ioContext, gtestCurrentTestName(), 1);
-  GetOutcomes gets;
-  runAndPoll(ioContext, [&] { get(storage, 0, gets, false); });
-  EXPECT_FALSE(gets.wasCancelled_);
-  runAndPoll(ioContext, [&] { storage.cancelAll(); });
-  EXPECT_TRUE(gets.wasCancelled_);
-  EXPECT_THAT(gets.blocks_, ::testing::IsEmpty());
+  expectCancelAllWakesUpAWaitingConsumer(ioContext, storage);
 }
 
 // _____________________________________________________________________________
@@ -728,11 +727,7 @@ TEST(CompressedIdTableBlockStorage, aFinishedChunkReclaimsItsSpillFile) {
   net::io_context ioContext;
   // Buffer nothing, such that every block of every chunk is spilled.
   Storage<0> storage = makeStorage<0>(ioContext, prefix, 0);
-  absl::Cleanup cleanup = [&storage] {
-    for (size_t chunkIndex = 0; chunkIndex < 3; ++chunkIndex) {
-      ad_utility::deleteFile(storage.spillFilename(chunkIndex), false);
-    }
-  };
+  auto cleanup = makeSpillFileCleanup(storage, 3);
   // Fill three chunks, each of which then has a file of its own.
   for (size_t chunkIndex = 0; chunkIndex < 3; ++chunkIndex) {
     Producer<0> producer{storage, chunkIndex,

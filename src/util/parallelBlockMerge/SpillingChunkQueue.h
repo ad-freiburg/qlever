@@ -7,13 +7,15 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_IDTABLE_COMPRESSEDIDTABLECHUNKQUEUE_H
-#define QLEVER_SRC_ENGINE_IDTABLE_COMPRESSEDIDTABLECHUNKQUEUE_H
+#ifndef QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_SPILLINGCHUNKQUEUE_H
+#define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_SPILLINGCHUNKQUEUE_H
 
-// The queue of a single chunk of a `CompressedIdTableBlockStorage`, which is
-// where all the actual work of that storage happens (see
-// `CompressedIdTableBlockStorage.h`). Both are coroutine-based, so this whole
-// header is empty when `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` is set, see
+// The queue of a single chunk of a `SpillingBlockStorage`, which is where all
+// the actual work of that storage happens (see
+// `util/parallelBlockMerge/SpillingBlockStorage.h`), together with the
+// `SpillingBlockCodec` that decides how a block is stored in its spill file.
+// Both are coroutine-based, so this whole header is empty when
+// `QLEVER_REDUCED_FEATURE_SET_FOR_CPP17` is set, see
 // `util/parallelBlockMerge/BlockStorage.h`.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
@@ -27,6 +29,7 @@
 #include <boost/asio/strand.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/system/error_code.hpp>
+#include <concepts>
 #include <cstddef>
 #include <limits>
 #include <memory>
@@ -34,8 +37,6 @@
 #include <utility>
 #include <variant>
 
-#include "engine/idTable/CompressedIdTableBlocks.h"
-#include "engine/idTable/IdTable.h"
 #include "util/AsioHelpers.h"
 #include "util/CompressedBlockFile.h"
 #include "util/Exception.h"
@@ -44,11 +45,45 @@
 #include "util/NoCopyNoMove.h"
 #include "util/parallelBlockMerge/BlockStorage.h"
 
-namespace ad_utility::compressedIdTable {
+namespace ad_utility::parallelBlockMerge {
 
-// The FIFO queue of the blocks of a single chunk of a
-// `CompressedIdTableBlockStorage`, which keeps only a bounded number of them in
-// memory and spills the rest to a file of its own, compressed.
+// The policy that decides how a single block of a `SpillingBlockStorage` is
+// stored in (and read back from) the `CompressedBlockFile` that its chunk
+// spills to. A codec is a cheap, copyable object (it is copied into every write
+// and into every reader of a spilled block) with
+// * a type `Block`, the blocks that are stored,
+// * a type `BlockMetadata`, everything that is needed to read a single block
+//   back, which is kept in memory for every spilled block and should therefore
+//   be small,
+// * `writeBlock(file, block)`, which appends the `block` to the `file` (whose
+//   compression level the storage chooses) and returns its `BlockMetadata`,
+// * and `readBlock(file, metadata)`, which reads that block back.
+//
+// Both functions are called concurrently (for different blocks of the same
+// file, and for different files), and they must be `const` and thread-safe.
+// A `CompressedBlockFile` synchronizes its own operations, so a codec that has
+// no mutable state of its own (which is the typical case) is thread-safe
+// automatically. For examples see `compressedIdTable::IdTableBlockCodec` (in
+// `engine/idTable/CompressedIdTableBlocks.h`) and `QueueWordBlockCodec` (in
+// `index/vocabulary_merger/QueueWordBlockCodec.h`).
+template <typename T>
+concept SpillingBlockCodec =
+    std::copy_constructible<T> &&
+    requires(const T& codec, CompressedBlockFile& file,
+             const CompressedBlockFile& constFile,
+             const typename T::Block& block,
+             const typename T::BlockMetadata& metadata) {
+      {
+        codec.writeBlock(file, block)
+      } -> std::same_as<typename T::BlockMetadata>;
+      {
+        codec.readBlock(constFile, metadata)
+      } -> std::same_as<typename T::Block>;
+    };
+
+// The FIFO queue of the blocks of a single chunk of a `SpillingBlockStorage`,
+// which keeps only a bounded number of them in memory and spills the rest to a
+// file of its own, compressed via the `Codec`.
 //
 // The blocks keep their order no matter whether they were spilled, because a
 // single FIFO holds the blocks that are still in memory *and* the metadata of
@@ -66,15 +101,17 @@ namespace ad_utility::compressedIdTable {
 //
 // LIFETIME: This queue and its spill file have to outlive every operation of
 // them that is in flight. The operations of this class itself use a raw `this`
-// and rely on the `CompressedIdTableBlockStorage`, whose operations hold a
+// and rely on the `SpillingBlockStorage`, whose operations hold a
 // `shared_ptr` to the queue for their whole duration. The spill file is shared
 // with the writes that run on the `ioExecutor` and with the readers of the
 // deferred blocks, and may outlive the queue.
-template <size_t NumCols = 0>
-class ChunkQueue : public NoCopyNoMove,
-                   public std::enable_shared_from_this<ChunkQueue<NumCols>> {
+template <SpillingBlockCodec Codec>
+class SpillingChunkQueue
+    : public NoCopyNoMove,
+      public std::enable_shared_from_this<SpillingChunkQueue<Codec>> {
  public:
-  using Block = IdTableStatic<NumCols>;
+  using Block = typename Codec::Block;
+  using BlockMetadata = typename Codec::BlockMetadata;
   using OptionalBlock = parallelBlockMerge::OptionalBlock<Block>;
   using GetResult = parallelBlockMerge::GetResult<Block>;
   using DeferredBlock = parallelBlockMerge::DeferredBlock<Block>;
@@ -98,7 +135,7 @@ class ChunkQueue : public NoCopyNoMove,
 
   net::any_io_executor ioExecutor_;
   Strand strand_;
-  AllocatorWithLimit<Id> allocator_;
+  Codec codec_;
   std::string filename_;
   CompressedBlockFile::CompressionLevel compressionLevel_;
   size_t maxBufferedBlocks_;
@@ -121,20 +158,20 @@ class ChunkQueue : public NoCopyNoMove,
 
  public:
   // Construct from the `ioExecutor` on which the compression and the writes
-  // are run and from which the strand of this queue is derived, the `allocator`
-  // for the blocks that are read back, the name of the file to spill to (which
+  // are run and from which the strand of this queue is derived, the `codec`
+  // that stores the spilled blocks, the name of the file to spill to (which
   // is overwritten if it already exists and deleted again as soon as this queue
   // is done with it), the `compressionLevel` that the spilled blocks are stored
   // with, and the number of blocks that are kept in memory before this queue
   // starts spilling. That number may be zero, in which case every block is
   // spilled.
-  ChunkQueue(net::any_io_executor ioExecutor, AllocatorWithLimit<Id> allocator,
-             std::string filename,
-             CompressedBlockFile::CompressionLevel compressionLevel,
-             size_t maxBufferedBlocks)
+  SpillingChunkQueue(net::any_io_executor ioExecutor, Codec codec,
+                     std::string filename,
+                     CompressedBlockFile::CompressionLevel compressionLevel,
+                     size_t maxBufferedBlocks)
       : ioExecutor_{std::move(ioExecutor)},
         strand_{net::make_strand(ioExecutor_)},
-        allocator_{std::move(allocator)},
+        codec_{std::move(codec)},
         filename_{std::move(filename)},
         compressionLevel_{compressionLevel},
         maxBufferedBlocks_{maxBufferedBlocks},
@@ -152,7 +189,7 @@ class ChunkQueue : public NoCopyNoMove,
                   CompletionToken&& completionToken) {
     return net::co_spawn(
         strand_,
-        [](ChunkQueue* self, OptionalBlock block,
+        [](SpillingChunkQueue* self, OptionalBlock block,
            bool mayKeepInMemory) -> net::awaitable<bool> {
           AD_CORRECTNESS_CHECK(self->strand_.running_in_this_thread());
           // The end-of-chunk sentinel is never spilled, because it occupies no
@@ -263,8 +300,10 @@ class ChunkQueue : public NoCopyNoMove,
     SharedSpillFile file = getOrCreateSpillFile();
     // NOTE: The function that runs on the `ioExecutor_` is a named variable and
     // not a temporary inside the `co_await` expression, because GCC 11 destroys
-    // such a temporary twice (a double free of the columns of the `block`).
-    auto writeToFile = [file = std::move(file), block = std::move(block)] {
+    // such a temporary twice (a double free of the `block`, observed with
+    // `IdTable` blocks).
+    auto writeToFile = [file = std::move(file), block = std::move(block),
+                        codec = codec_] {
       // NOTE: This runs on the plain `ioExecutor_` and may therefore
       // overlap with a read of the same file (never with another write, as
       // a chunk has a single producer). That is safe, because a
@@ -273,7 +312,7 @@ class ChunkQueue : public NoCopyNoMove,
       // because neither the appends nor the reads of that file go through
       // the buffer of the `FILE*`, and its chunk may indeed be consumed
       // while further blocks are still being written.
-      return writeBlock(*file, block, 0, block.numRows());
+      return codec.writeBlock(*file, block);
     };
     BlockMetadata metadata = co_await runFunctionOnExecutor(
         ioExecutor_, std::move(writeToFile), net::use_awaitable);
@@ -308,11 +347,11 @@ class ChunkQueue : public NoCopyNoMove,
     AD_CORRECTNESS_CHECK(spillFile_ != nullptr);
     return DeferredBlock::fromReader([file = spillFile_,
                                       metadata = std::move(metadata),
-                                      allocator = allocator_]() -> Block {
+                                      codec = codec_]() -> Block {
       // NOTE: This may run concurrently with other reads and with a write
       // of the same file, which is safe, because a `CompressedBlockFile`
       // synchronizes its operations internally.
-      return readBlock<NumCols>(*file, metadata, allocator);
+      return codec.readBlock(*file, metadata);
     });
   }
 
@@ -361,12 +400,12 @@ class ChunkQueue : public NoCopyNoMove,
                                           "failed.");
           });
         },
-        "Finishing a chunk of a `CompressedIdTableBlockStorage` failed.");
+        "Finishing a chunk of a `SpillingBlockStorage` failed.");
   }
 };
 
-}  // namespace ad_utility::compressedIdTable
+}  // namespace ad_utility::parallelBlockMerge
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#endif  // QLEVER_SRC_ENGINE_IDTABLE_COMPRESSEDIDTABLECHUNKQUEUE_H
+#endif  // QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_SPILLINGCHUNKQUEUE_H

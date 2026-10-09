@@ -28,6 +28,7 @@
 #include "util/GlobalExecutor.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
+#include "util/parallelBlockMerge/SpillingBlockStorage.h"
 
 // How the merge phase of a `CompressedExternalIdTableSorter` (see
 // `engine/idTable/CompressedExternalIdTable.h`) is configured: the constants
@@ -56,28 +57,12 @@ constexpr inline size_t MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK = 1;
 // size and has a very large memory limit.
 constexpr inline size_t MAX_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK = 1024;
 
-// The number of output blocks that a single in-flight chunk of the merge phase
-// occupies at the same time: the one that it is currently merging into, the one
-// that may be on its way to the spill file, and the
-// `numBufferedBlocksPerChunk` that the block storage keeps in memory (see
-// above).
-constexpr size_t mergePhaseOutputBlocksPerChunk(
-    size_t numBufferedBlocksPerChunk) {
-  return numBufferedBlocksPerChunk + 2;
-}
-
 // The compression that the merge phase applies to the output blocks that it
-// spills, see `makeMergePhaseBlockStorageFactory`. A positive value is an
-// ordinary ZSTD level (higher compresses better, but costs more CPU), a
-// negative value is one of the fast ZSTD levels (`zstd --fast=N`, much cheaper
-// and still effective on the long runs of equal `Id`s of sorted columns), `0`
-// is the default level of ZSTD (3), and `NO_BLOCK_COMPRESSION` stores the
-// blocks uncompressed. The compression competes with the merge for CPU time,
-// but with many chunks in flight a large part of the merged data is spilled,
-// so a cheap compression that keeps the spill files (and the page cache) small
-// pays off. The low positive levels 1 and 2 are a bad choice for this data.
+// spills, see `makeMergePhaseBlockStorageFactory` and
+// `parallelBlockMerge::DEFAULT_SPILL_COMPRESSION_LEVEL` for the rationale.
 constexpr inline CompressedBlockFile::CompressionLevel
-    MERGE_PHASE_SPILL_COMPRESSION = -5;
+    MERGE_PHASE_SPILL_COMPRESSION =
+        parallelBlockMerge::DEFAULT_SPILL_COMPRESSION_LEVEL;
 
 // The smallest number of rows that an output block of the merge phase may have.
 // The number of chunks that are merged concurrently is chosen as large as the
@@ -162,6 +147,22 @@ struct MergePhaseParameters {
       MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK;
 };
 
+// Return the number of output blocks that the consumer of the merge phase reads
+// ahead, see `MergeOptions::numPrefetchedOutputBlocks`. These are all the
+// `numBufferedOutputBlocks_` of the `config` but the two that the consumer side
+// holds besides them (the one that the consumer currently holds and the one
+// that the read-ahead is just handing over), see
+// `parallelBlockMerge::numLiveOutputBlocks`. That read-ahead is also what reads
+// the spilled blocks back from disk, all of its blocks concurrently, see
+// `parallelBlockMerge::detail::BlockPrefetcher`. It is never zero, see
+// `MergeOptions::numPrefetchedOutputBlocks`.
+inline size_t numPrefetchedOutputBlocks(const MergePhaseConfig& config) {
+  constexpr size_t numReservedBlocks = 2;
+  return config.numBufferedOutputBlocks_ > numReservedBlocks
+             ? config.numBufferedOutputBlocks_ - numReservedBlocks
+             : 1;
+}
+
 // Return the number of finished output blocks that the chunk which the consumer
 // currently reads may keep in memory (and therefore does not spill, all other
 // chunks spill every block, see `CompressedIdTableBlockStorage`),
@@ -190,9 +191,9 @@ inline size_t numBufferedOutputBlocksPerChunk(const MergePhaseConfig& config,
   // The blocks that are not buffered by the chunks: those between the merge and
   // the consumer (which include the blocks that are concurrently read back from
   // the spill files, see `makeMergeOptions`), and the two per chunk that
-  // `mergePhaseOutputBlocksPerChunk` adds on top of the buffered ones.
-  const size_t numUnbufferedBlocks =
-      config.numBufferedOutputBlocks_ + 2 * numChunksInFlight;
+  // `parallelBlockMerge::numLiveOutputBlocks` adds on top of the buffered ones.
+  const size_t numUnbufferedBlocks = parallelBlockMerge::numLiveOutputBlocks(
+      numChunksInFlight, 0, numPrefetchedOutputBlocks(config));
   const size_t numAffordableBlocks =
       (config.memoryLimit_ - inputMemory).getBytes() / blockMemory.getBytes();
   if (numAffordableBlocks <= numUnbufferedBlocks) {
@@ -207,8 +208,8 @@ inline size_t numBufferedOutputBlocksPerChunk(const MergePhaseConfig& config,
 // Split the memory limit of the merge phase between the size of the output
 // blocks and the number of chunks that are merged concurrently. Each chunk in
 // flight holds one decompressed input block per run and column, and on top of
-// that come the `numBufferedOutputBlocks_` between the merge and its consumer
-// plus `mergePhaseOutputBlocksPerChunk` output blocks per chunk. The strategy
+// that come the output blocks that `parallelBlockMerge::numLiveOutputBlocks`
+// accounts for (on the consumer side and per chunk). The strategy
 // is to use as many chunks as the memory limit allows without letting the
 // output blocks fall below `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows.
 // The `outputBlockSizeOverride_`, if present, pins the output block size, so
@@ -263,11 +264,9 @@ inline MergePhaseParameters computeMergePhaseParameters(
     if (inputMemory >= config.memoryLimit_) {
       return std::optional<size_t>{};
     }
-    const size_t numOutputBlocks =
-        config.numBufferedOutputBlocks_ +
-        mergePhaseOutputBlocksPerChunk(
-            MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK) *
-            numInFlight;
+    const size_t numOutputBlocks = parallelBlockMerge::numLiveOutputBlocks(
+        numInFlight, MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK,
+        numPrefetchedOutputBlocks(config));
     const MemorySize perBlock =
         std::min((config.memoryLimit_ - inputMemory) / numOutputBlocks,
                  config.maxOutputBlockSize_);
@@ -324,24 +323,13 @@ inline parallelBlockMerge::MergeOptions makeMergeOptions(
   options.parallelismHint = config.parallelism_;
   options.maxNumChunksInFlight = parameters.numChunksInFlight_;
   options.firstChunkSize = FIRST_MERGE_PHASE_CHUNK_SIZE;
-  // The output blocks that the merge phase reserves on the consumer side (see
-  // `MergePhaseConfig::numBufferedOutputBlocks_`) are the one that the consumer
-  // currently holds, the one that the read-ahead of the consumer is just
-  // handing over, and the rest, which the consumer reads ahead. That read-ahead
-  // is also what reads the spilled blocks back from disk, all of its blocks
-  // concurrently, see `parallelBlockMerge::detail::BlockPrefetcher`. It is
-  // never zero, see `MergeOptions::numPrefetchedOutputBlocks`.
-  constexpr size_t numReservedBlocks = 2;
-  options.numPrefetchedOutputBlocks =
-      config.numBufferedOutputBlocks_ > numReservedBlocks
-          ? config.numBufferedOutputBlocks_ - numReservedBlocks
-          : 1;
+  options.numPrefetchedOutputBlocks = numPrefetchedOutputBlocks(config);
   return options;
 }
 
 // The common prefix of the names of the files that a single merge phase spills
 // its output blocks to. Every chunk gets a file of its own below that prefix,
-// see `CompressedIdTableBlockStorage::spillFilename`.
+// see `SpillingBlockStorage::spillFilename`.
 //
 // NOTE: The prefix has to be unique per merge phase, because the storage of a
 // previous merge phase may still be alive when the next one starts, and it
@@ -373,15 +361,14 @@ inline std::string makeSpillFilename(const std::string& sorterFilename,
 // altogether (see there). A placeholder therefore suffices in that mode.
 template <size_t NumCols>
 auto makeMergePhaseBlockStorageFactory(
-    ql::any_io_executor ioExecutor, std::string spillFilenamePrefix,
-    AllocatorWithLimit<Id> allocator,
-    size_t numBufferedBlocksPerChunk =
+    [[maybe_unused]] ql::any_io_executor ioExecutor,
+    [[maybe_unused]] std::string spillFilenamePrefix,
+    [[maybe_unused]] AllocatorWithLimit<Id> allocator,
+    [[maybe_unused]] size_t numBufferedBlocksPerChunk =
         MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK,
-    CompressedBlockFile::CompressionLevel compression =
+    [[maybe_unused]] CompressedBlockFile::CompressionLevel compression =
         MERGE_PHASE_SPILL_COMPRESSION) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  (void)ioExecutor, (void)spillFilenamePrefix, (void)allocator,
-      (void)numBufferedBlocksPerChunk, (void)compression;
   return std::monostate{};
 #else
   return makeCompressedIdTableStorageFactory<NumCols>(

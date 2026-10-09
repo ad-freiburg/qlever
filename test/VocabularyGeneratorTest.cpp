@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "./index/vocabulary_merger/VocabularyMergerTestHelpers.h"
+#include "./util/FileTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/filesystem.h"
 #include "global/Constants.h"
@@ -29,6 +30,7 @@
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Algorithm.h"
 #include "util/GTestHelpers.h"
+#include "util/Random.h"
 
 using namespace ad_utility::vocabulary_merger;
 using namespace vocabularyMergerTestHelpers;
@@ -38,22 +40,6 @@ namespace {
 // `makePartialVocabularyFilenamesInFreshDirectory`), so a short fixed name is
 // unambiguous.
 const std::string partialVocabBasename = "vocab-";
-
-// Write the given `words` as a partial vocabulary file at `path`, assigning
-// them consecutive local ids `0, 1, ...` in the given order and marking all of
-// them as not external.
-template <typename Range>
-void writePartialVocabularyFile(const std::string& path, const Range& words) {
-  ad_utility::serialization::FileWriteSerializer partialVocab(path);
-  partialVocab << words.size();
-  size_t localIdx = 0;
-  for (const auto& word : words) {
-    partialVocab << std::string_view{word};
-    partialVocab << false;
-    partialVocab << localIdx;
-    ++localIdx;
-  }
-}
 }  // namespace
 
 // Test fixture that sets up the binary files for partial vocabulary and
@@ -127,20 +113,17 @@ class MergeVocabularyTest : public ::testing::Test {
          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
          true}};
 
-    // open files for partial Vocabularies
-    ad_utility::serialization::FileWriteSerializer partial0(path0_);
-    ad_utility::serialization::FileWriteSerializer partial1(path1_);
-
-    auto writePartialVocabulary = [](auto& partialVocab,
+    auto writePartialVocabulary = [](const std::string& path,
                                      const auto& tripleComponents,
                                      IdMap* idMap) {
       // write first partial vocabulary
-      partialVocab << tripleComponents.size();
+      ItemVec items;
       size_t localIdx = 0;
-      for (auto w : tripleComponents) {
+      // NOTE: The `ItemVec` only stores `string_view`s, so we have to iterate
+      // by reference.
+      for (const auto& w : tripleComponents) {
         auto globalId = w.index_;
-        w.index_ = localIdx;
-        partialVocab << w;
+        items.push_back(makeEntry(w.iriOrLiteral_, w.isExternal_, localIdx));
         if (idMap) {
           if (w.isBlankNode({})) {
             idMap->push_back(
@@ -157,10 +140,11 @@ class MergeVocabularyTest : public ::testing::Test {
         }
         localIdx++;
       }
+      writePartialVocabularyToFile(items, path);
     };
-    writePartialVocabulary(partial0, words0, &expectedIdMap0_);
+    writePartialVocabulary(path0_, words0, &expectedIdMap0_);
 
-    writePartialVocabulary(partial1, words1, &expectedIdMap1_);
+    writePartialVocabulary(path1_, words1, &expectedIdMap1_);
   }
 
   // __________________________________________________________________
@@ -446,27 +430,14 @@ TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
   // The first partial vocabulary fills a whole batch and ends with `"zzz"`,
   // which is the only word of the second partial vocabulary, there marked as
   // external.
-  {
-    ad_utility::serialization::FileWriteSerializer partialVocab{
-        filenames.wordsFiles_[0]};
-    partialVocab << numWords;
-    for (size_t i = 0; i + 1 < numWords; ++i) {
-      partialVocab << absl::StrFormat("\"word%08d\"", i);
-      partialVocab << false;
-      partialVocab << i;
-    }
-    partialVocab << std::string{"\"zzz\""};
-    partialVocab << false;
-    partialVocab << numWords - 1;
+  std::vector<std::string> words;
+  for (size_t i = 0; i + 1 < numWords; ++i) {
+    words.push_back(absl::StrFormat("\"word%08d\"", i));
   }
-  {
-    ad_utility::serialization::FileWriteSerializer partialVocab{
-        filenames.wordsFiles_[1]};
-    partialVocab << size_t{1};
-    partialVocab << std::string{"\"zzz\""};
-    partialVocab << true;
-    partialVocab << size_t{0};
-  }
+  words.push_back("\"zzz\"");
+  writePartialVocabularyFile(filenames.wordsFiles_[0], words);
+  writePartialVocabularyFile(filenames.wordsFiles_[1],
+                             std::array{std::string_view{"\"zzz\""}}, true);
 
   std::vector<std::pair<std::string, bool>> vocabulary;
   auto wordCallback = makeCollectingWordCallback(vocabulary);
@@ -593,4 +564,84 @@ TEST(MergeVocabulary, mappedIdsFileRoundTrip) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       writeMappedIdsToFile(unmapped, map, filename),
       ::testing::HasSubstr("not found in mapping"), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+// Merge many partial vocabularies (with tiny blocks, see the skip pointers,
+// and with many words that occur in several of them, partly as external and
+// partly as internal words) with a memory limit that is small enough for the
+// merge to spill its output blocks, and compare the vocabulary and the ID maps
+// against a reference.
+TEST(MergeVocabulary, parallelMergeOfManyPartialVocabularies) {
+  static constexpr size_t numFiles = 12;
+  static constexpr size_t numDistinctWords = 40'000;
+  auto [filenames, cleanup] = makePartialVocabularyFilenamesInFreshDirectory(
+      partialVocabBasename, numFiles);
+
+  // The words of the global vocabulary, in sorted order and of different
+  // lengths.
+  std::vector<std::string> allWords;
+  for (size_t i = 0; i < numDistinctWords; ++i) {
+    allWords.push_back(
+        absl::StrFormat("\"word%08d%s\"", i, std::string(i % 13, 'x')));
+  }
+  ad_utility::SlowRandomIntGenerator<size_t> randomInt{
+      0, 99, ad_utility::RandomSeed::make(42)};
+  // Each partial vocabulary contains every word with a probability of one
+  // half, and each occurrence is external with a probability of one tenth.
+  // `wordsInFile[f]` are the indices of the words of partial vocabulary `f`.
+  std::vector<bool> isExternal(numDistinctWords, false);
+  std::vector<std::vector<size_t>> wordsInFile(numFiles);
+  std::vector<bool> occurs(numDistinctWords, false);
+  for (size_t f = 0; f < numFiles; ++f) {
+    ItemVec items;
+    for (size_t i = 0; i < numDistinctWords; ++i) {
+      if (randomInt() >= 50) {
+        continue;
+      }
+      bool external = randomInt() < 10;
+      isExternal.at(i) = isExternal.at(i) || external;
+      occurs.at(i) = true;
+      items.push_back(
+          makeEntry(allWords.at(i), external, wordsInFile.at(f).size()));
+      wordsInFile.at(f).push_back(i);
+    }
+    writePartialVocabularyToFile(items, filenames.wordsFiles_.at(f), 37);
+  }
+
+  // The expected vocabulary, and the expected global ID of each word.
+  std::vector<std::pair<std::string, bool>> expectedVocabulary;
+  std::vector<uint64_t> globalId(numDistinctWords, 0);
+  for (size_t i = 0; i < numDistinctWords; ++i) {
+    if (occurs.at(i)) {
+      globalId.at(i) = expectedVocabulary.size();
+      expectedVocabulary.emplace_back(allWords.at(i), isExternal.at(i));
+    }
+  }
+
+  for (size_t numThreads : {1, 8}) {
+    std::vector<std::pair<std::string, bool>> vocabulary;
+    auto wordCallback = makeCollectingWordCallback(vocabulary);
+    auto result = mergeVocabulary(
+        partialVocabBasename, numFiles, std::less{}, wordCallback,
+        ad_utility::MemorySize::megabytes(40), {}, numThreads);
+    EXPECT_EQ(result.numWordsTotal(), expectedVocabulary.size());
+    EXPECT_THAT(vocabulary, ::testing::ElementsAreArray(expectedVocabulary));
+    for (size_t f = 0; f < numFiles; ++f) {
+      IdMap expected;
+      for (size_t j = 0; j < wordsInFile.at(f).size(); ++j) {
+        expected.push_back({L(j), V(globalId.at(wordsInFile.at(f).at(j)))});
+      }
+      EXPECT_THAT(getIdMapFromFile(filenames.idMapFiles_.at(f)),
+                  ::testing::ElementsAreArray(expected));
+    }
+    // The spill files are deleted asynchronously on the executor of the merge,
+    // so they may still exist shortly after `mergeVocabulary` has returned.
+    EXPECT_TRUE(waitUntil([]() {
+      return ad_utility::testing::filesWithPrefix(
+                 partialVocabularyMergeSpillFilenamePrefix(
+                     partialVocabBasename))
+          .empty();
+    }));
+  }
 }

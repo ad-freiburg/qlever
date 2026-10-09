@@ -49,6 +49,15 @@ inline std::string partialVocabularyIdMapFilename(std::string_view basename,
   return absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, idx);
 }
 
+// The common prefix of the files to which the merge of the partial
+// vocabularies spills its output blocks (one file per chunk of the merge, see
+// `parallelBlockMerge::SpillingBlockStorage::spillFilename`). Those files are
+// deleted by the merge itself.
+inline std::string partialVocabularyMergeSpillFilenamePrefix(
+    std::string_view basename) {
+  return absl::StrCat(basename, PARTIAL_VOCAB_MERGE_SPILL_INFIX);
+}
+
 // The file that holds the triples that were mapped using the `idx`-th partial
 // vocabulary.
 inline std::string unsortedTriplesFilename(std::string_view basename,

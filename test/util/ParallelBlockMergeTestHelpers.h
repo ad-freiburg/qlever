@@ -10,16 +10,23 @@
 #ifndef QLEVER_TEST_UTIL_PARALLELBLOCKMERGETESTHELPERS_H
 #define QLEVER_TEST_UTIL_PARALLELBLOCKMERGETESTHELPERS_H
 
+#include <gtest/gtest.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <optional>
 #include <range/v3/range/conversion.hpp>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/functional.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
 #include "util/parallelBlockMerge/MergeHelpers.h"
@@ -38,8 +45,6 @@
 #include <exception>
 #include <future>
 #include <mutex>
-#include <optional>
-#include <type_traits>
 
 #include "backports/asio.h"
 #include "util/AsioHelpers.h"
@@ -49,11 +54,12 @@
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
 // Helpers for the tests of the parallel block merge, in particular the
-// in-memory `VectorInput` input policy and the in-memory `CollectingBlockSink`
-// output policy. They are needed by `ParallelBlockMergeTest.cpp` (which tests
-// the merge itself), by `RunsInputPolicyTest.cpp` (which tests the input policy
-// from `RunsInputPolicy.h`, `VectorInput` included), and by
-// `MergeHelpersTest.cpp` (which tests the helpers from `MergeHelpers.h`).
+// in-memory `VectorInput` input policy (and its lazy counterpart
+// `LazyVectorInput`) and the in-memory `CollectingBlockSink` output policy.
+// They are needed by `ParallelBlockMergeTest.cpp` (which tests the merge
+// itself), by `RunsInputPolicyTest.cpp` (which tests the input policy from
+// `RunsInputPolicy.h`, `VectorInput` included), and by `MergeHelpersTest.cpp`
+// (which tests the helpers from `MergeHelpers.h`).
 namespace parallelBlockMergeTestHelpers {
 
 // ___________________________________________________________________________
@@ -166,6 +172,114 @@ VectorInput<T> makeVectorInput(const std::vector<std::vector<T>>& runs,
 // documents.
 static_assert(
     ad_utility::parallelBlockMerge::InputConcept<VectorInput<size_t>>);
+
+// A lazy, single-pass input block (see the LAZY BLOCKS note at
+// `ad_utility::parallelBlockMerge::InputConcept`) that owns a copy of the
+// elements of a block and yields them one at a time, moving each of them into
+// the storage of the `ad_utility::InputRangeFromGet`, from which the merge
+// reads it (repeatedly) via the iterator.
+//
+// The block checks the requirement of the merge that a lazy block is never
+// moved once its iteration has started (the iterators of an
+// `InputRangeFromGet` point into the block object itself, so such a move would
+// let them dangle).
+template <typename T>
+class LazyVectorBlock : public ad_utility::InputRangeFromGet<T> {
+ private:
+  using Base = ad_utility::InputRangeFromGet<T>;
+  std::vector<T> elements_;
+  size_t nextIdx_ = 0;
+  bool hasStarted_ = false;
+
+ public:
+  // Construct from the `elements` of the block.
+  explicit LazyVectorBlock(std::vector<T> elements)
+      : elements_{std::move(elements)} {}
+
+  // Move constructor that throws if the iteration of `other` has already
+  // started, see above.
+  LazyVectorBlock(LazyVectorBlock&& other)
+      : Base{std::move(other)},
+        elements_{std::move(other.elements_)},
+        nextIdx_{other.nextIdx_},
+        hasStarted_{other.hasStarted_} {
+    AD_CORRECTNESS_CHECK(!hasStarted_,
+                         "A lazy block must not be moved once its iteration "
+                         "has started");
+  }
+  LazyVectorBlock& operator=(LazyVectorBlock&&) = delete;
+
+  // Yield the next element, see `ad_utility::InputRangeFromGet`.
+  std::optional<T> get() override {
+    hasStarted_ = true;
+    if (nextIdx_ == elements_.size()) {
+      return std::nullopt;
+    }
+    return std::move(elements_[nextIdx_++]);
+  }
+};
+
+// A `VectorInput` whose blocks are lazy (namely `LazyVectorBlock`s), and whose
+// output blocks are ordinary `std::vector`s. It exists to run the very same
+// tests with lazy and with random-access input blocks.
+template <typename T>
+class LazyVectorInput : public VectorInput<T> {
+ public:
+  using Block = LazyVectorBlock<T>;
+  using OutputBlock = std::vector<T>;
+
+  // Construct from the `VectorInput` that holds the actual blocks.
+  explicit LazyVectorInput(VectorInput<T> input)
+      : VectorInput<T>{std::move(input)} {}
+
+  // Return a lazy block over a copy of the elements of the block, see the
+  // note at `VectorInput` for why it is a copy.
+  Block getBlock(size_t runIdx, size_t blockIdx) const {
+    return Block{VectorInput<T>::getBlock(runIdx, blockIdx)};
+  }
+};
+
+// The same as `makeVectorInput`, but for a `LazyVectorInput`.
+template <typename T>
+LazyVectorInput<T> makeLazyVectorInput(const std::vector<std::vector<T>>& runs,
+                                       size_t blockSize) {
+  return LazyVectorInput<T>{makeVectorInput(runs, blockSize)};
+}
+
+// Pin down that `LazyVectorInput` models the input policy concept, and that
+// its lazy blocks are indeed no more than `input_range`s.
+static_assert(
+    ad_utility::parallelBlockMerge::InputConcept<LazyVectorInput<size_t>>);
+static_assert(!ql::ranges::forward_range<LazyVectorBlock<size_t>>);
+static_assert(
+    std::is_same_v<
+        ad_utility::parallelBlockMerge::OutputBlockT<LazyVectorInput<size_t>>,
+        std::vector<size_t>>);
+static_assert(std::is_same_v<
+              ad_utility::parallelBlockMerge::OutputBlockT<VectorInput<size_t>>,
+              std::vector<size_t>>);
+
+// The two kinds of input blocks for which the (typed) tests of the merge are
+// run: `MaterializedBlocks` yields a `VectorInput` (with random-access blocks)
+// and `LazyBlocks` a `LazyVectorInput` (with lazy single-pass blocks). Both are
+// created from the same `runs` that are split into blocks of `blockSize`
+// elements, see `makeVectorInput`.
+struct MaterializedBlocks {
+  template <typename T>
+  static VectorInput<T> makeInput(const std::vector<std::vector<T>>& runs,
+                                  size_t blockSize) {
+    return makeVectorInput(runs, blockSize);
+  }
+};
+
+// _____________________________________________________________________________
+struct LazyBlocks {
+  template <typename T>
+  static LazyVectorInput<T> makeInput(const std::vector<std::vector<T>>& runs,
+                                      size_t blockSize) {
+    return makeLazyVectorInput(runs, blockSize);
+  }
+};
 
 // ___________________________________________________________________________
 // An in-memory output policy. NOTE: Only the parallel merge pushes to a sink,
@@ -461,6 +575,39 @@ inline ad_utility::parallelBlockMerge::MergeOptions optionsWithBlockSize(
       ad_utility::parallelBlockMerge::OutputBlockSize::numElements(
           outputBlockSize);
   return options;
+}
+
+// Return `MergeOptions` that force the parallel code path also for the small
+// inputs of the tests (see `MergeOptions::shouldMergeSerially()`), with a
+// `parallelismHint` of four threads, the given number of elements per output
+// block, and the given `targetChunksPerThread` (several chunks per thread, so
+// that even the small inputs of the tests are split).
+inline ad_utility::parallelBlockMerge::MergeOptions alwaysParallelOptions(
+    size_t outputBlockSize = 7, size_t targetChunksPerThread = 2) {
+  auto options = optionsWithBlockSize(outputBlockSize);
+  options.parallelismHint = 4;
+  options.targetChunksPerThread = targetChunksPerThread;
+  options.serialNumElementsThreshold = 0;
+  return options;
+}
+
+// Return the elements of all `blocks` (a range of output blocks of a merge) in
+// a single vector, after applying the `projection` to each of them, and check
+// that no block is empty. The elements are moved out of the `blocks`, which
+// every call site may do because each of them owns its blocks.
+template <typename Blocks, typename Projection = ql::identity>
+auto collectBlocks(Blocks&& blocks, Projection projection = {}) {
+  using Element = ql::ranges::range_value_t<ql::ranges::range_value_t<Blocks>>;
+  std::vector<std::decay_t<std::invoke_result_t<Projection&, Element&&>>>
+      result;
+  for (auto& block : blocks) {
+    // An output block is never empty, no matter how the chunks are laid out.
+    EXPECT_FALSE(block.empty());
+    for (auto& element : block) {
+      result.push_back(std::invoke(projection, std::move(element)));
+    }
+  }
+  return result;
 }
 
 // Return `numRuns` sorted vectors of random numbers, the sizes of which are

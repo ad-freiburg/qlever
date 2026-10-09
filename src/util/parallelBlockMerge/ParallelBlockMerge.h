@@ -43,8 +43,19 @@
 // * A `run` is one of the presorted inputs of the merge.
 // * A `block` is a contiguous piece of a run. It is the unit of I/O: the blocks
 //   may live compressed on disk, and only their element count and their first
-//   and last element have to be available without I/O. The output of the merge
-//   consists of blocks as well, the size of which the `MergeOptions` control.
+//   and last element have to be available without I/O. An input block need not
+//   be materialized at all: it may also be a lazy single-pass range (a `lazy
+//   block`) that reads its elements only while the merge iterates over it, see
+//   `InputConcept` in `RunsInputPolicy.h` for the requirements.
+// * An `output block` is a block of the *output* of the merge, the size of
+//   which the `MergeOptions` control. Its type is `OutputBlockT<Input>`, which
+//   is `Input::OutputBlock` if the input declares such a type and
+//   `Input::Block` otherwise. An input with lazy blocks therefore typically
+//   declares an owning `OutputBlock` (for example a `std::vector`), whereas for
+//   an input with materialized blocks (for example the `IdTable`s of the
+//   external sorter) the two types usually coincide. Everything downstream of
+//   the merging itself (the sinks, the storages, the read-ahead, and the
+//   returned ranges) only ever deals with output blocks.
 // * A `chunk` is a contiguous piece of the *output*, described by a
 //   `ChunkBoundary` (a half-open range of elements). The chunks partition the
 //   whole range of elements, so every element belongs to exactly one chunk.
@@ -85,8 +96,8 @@ namespace ad_utility::parallelBlockMerge {
 // ___________________________________________________________________________
 
 // Merge the presorted runs of `input` according to `comparator` in the calling
-// thread and return the merged elements as a lazy range of blocks in globally
-// sorted order.
+// thread and return the merged elements as a lazy range of output blocks in
+// globally sorted order.
 //
 // The `chunkBoundaries` describe the chunks that the merge is split into (see
 // `computeChunkBoundaries`); they are merged one after the other. The default
@@ -108,13 +119,13 @@ namespace ad_utility::parallelBlockMerge {
 // blocks.
 CPP_template(bool moveElements, typename Input,
              typename Comparator)(requires InputConcept<Input>) ad_utility::
-    InputRangeTypeErased<typename Input::Block> serialBlockMergeToRange(
+    InputRangeTypeErased<OutputBlockT<Input>> serialBlockMergeToRange(
         Input input, Comparator comparator, MergeOptions options = {},
         ad_utility::SharedCancellationHandle cancellationHandle =
             std::make_shared<ad_utility::CancellationHandle<>>(),
         std::vector<ChunkBoundary<typename Input::Element>> chunkBoundaries =
             singleChunk<typename Input::Element>()) {
-  using Block = typename Input::Block;
+  using Block = OutputBlockT<Input>;
   using Merger = detail::ChunkMerger<moveElements, Input, Comparator>;
   auto state = std::make_shared<const typename Merger::State>(
       std::move(input), std::move(comparator), std::move(options),
@@ -198,7 +209,7 @@ CPP_template(bool moveElements, typename Input,
 template <bool moveElements, typename Input, typename Comparator,
           typename SinkFactory>
 requires InputConcept<Input> &&
-             SinkFactoryConcept<SinkFactory, typename Input::Block>
+             SinkFactoryConcept<SinkFactory, OutputBlockT<Input>>
 auto parallelBlockMergeToSink(
     ql::any_io_executor executor, Input input, Comparator comparator,
     SinkFactory makeSink, MergeOptions options = {},
@@ -238,8 +249,7 @@ auto parallelBlockMergeToSink(
 // storage that keeps them in memory (see
 // `test/parallelBlockMerge/InMemoryBlockStorage.h`) makes a producer whose
 // chunk is far ahead of the consumer suspend, whereas one that spills them to
-// disk (see `engine/idTable/CompressedIdTableBlockStorage.h`) lets it run
-// ahead.
+// disk (see `SpillingBlockStorage.h`) lets it run ahead.
 //
 // The returned range reads ahead: it keeps `options.numPrefetchedOutputBlocks`
 // output blocks ready (fetched in the background, on the very `executor` that
@@ -273,7 +283,7 @@ auto parallelBlockMergeToSink(
 // ignores the `executor` and the `storageFactory`.
 CPP_template(bool moveElements, typename Input, typename Comparator,
              typename StorageFactory)(requires InputConcept<Input>) ad_utility::
-    InputRangeTypeErased<typename Input::Block> parallelBlockMergeToRange(
+    InputRangeTypeErased<OutputBlockT<Input>> parallelBlockMergeToRange(
         ql::any_io_executor executor, Input input, Comparator comparator,
         StorageFactory storageFactory, MergeOptions options = {},
         ad_utility::SharedCancellationHandle cancellationHandle =
@@ -295,7 +305,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator,
   if (options.shouldMergeSerially(detail::totalNumElements(input))) {
     return mergeSerially();
   }
-  using Block = typename Input::Block;
+  using Block = OutputBlockT<Input>;
   using Result = ad_utility::InputRangeTypeErased<Block>;
   using Storage = std::invoke_result_t<StorageFactory&, const Strand&>;
   using Sink = InOrderBlockSink<Block, Storage>;

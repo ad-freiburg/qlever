@@ -63,10 +63,10 @@ namespace detail {
 // the coroutines of the merge, see the destructor.
 template <typename State, typename Sink>
 class ParallelMergeRange
-    : public ad_utility::InputRangeFromGet<typename State::Block>,
+    : public ad_utility::InputRangeFromGet<typename State::OutputBlock>,
       public ad_utility::NoCopyNoMove {
  public:
-  using Block = typename State::Block;
+  using Block = typename State::OutputBlock;
 
  private:
   using Prefetcher = BlockPrefetcher<Block, Sink>;

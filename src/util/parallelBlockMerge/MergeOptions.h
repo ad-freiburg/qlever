@@ -223,6 +223,24 @@ struct MergeOptions {
   }
 };
 
+// Return the number of output blocks that a parallel merge via
+// `parallelBlockMergeToRange` holds in memory at the same time, which a caller
+// with a memory budget has to account for:
+// * Every one of the `numChunksInFlight` chunks holds the block that it is
+//   currently merging into, the one that may be on its way to the storage (for
+//   example to a spill file), and the `numBufferedBlocksPerChunk` that the
+//   storage keeps in memory, that is `numBufferedBlocksPerChunk + 2`.
+// * The consumer side holds the `numPrefetchedOutputBlocks` of the read-ahead
+//   (see `MergeOptions::numPrefetchedOutputBlocks`), the one that the
+//   read-ahead is just handing over, and the one that the consumer currently
+//   holds, that is `numPrefetchedOutputBlocks + 2`.
+constexpr size_t numLiveOutputBlocks(size_t numChunksInFlight,
+                                     size_t numBufferedBlocksPerChunk,
+                                     size_t numPrefetchedOutputBlocks) {
+  return numChunksInFlight * (numBufferedBlocksPerChunk + 2) +
+         numPrefetchedOutputBlocks + 2;
+}
+
 }  // namespace ad_utility::parallelBlockMerge
 
 #endif  // QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_MERGEOPTIONS_H

@@ -44,6 +44,10 @@ namespace ad_utility::parallelBlockMerge {
 // that writes them to (say) several files in parallel plug into the very same
 // merge.
 //
+// NOTE: The `Block` of this concept is the type of the *output* blocks of the
+// merge, that is `OutputBlockT<Input>` (see `RunsInputPolicy.h`), which may
+// differ from the type `Input::Block` of the (possibly lazy) input blocks.
+//
 // INTERFACE: All the operations whose name starts with `async` are ordinary
 // Boost.Asio operations that take a completion token, so a caller may await
 // them, attach a callback, obtain a `std::future`, or detach them, whatever

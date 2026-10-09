@@ -14,6 +14,7 @@
 #include <boost/asio/thread_pool.hpp>
 
 #include "../../util/AllocatorTestHelpers.h"
+#include "../../util/FileTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
@@ -982,17 +983,9 @@ struct SpillFiles {
 };
 SpillFiles currentSpillFiles(const std::string& prefix) {
   SpillFiles result;
-  ql::filesystem::path prefixAsPath{prefix};
-  auto directory = prefixAsPath.parent_path();
-  std::string base = prefixAsPath.filename().string();
   ql::error_code errorCode;
-  for (const auto& entry : ql::filesystem::directory_iterator{
-           directory.empty() ? ql::filesystem::path{"."} : directory,
-           errorCode}) {
-    if (entry.path().filename().string().rfind(base, 0) != 0) {
-      continue;
-    }
-    auto size = ql::filesystem::file_size(entry.path(), errorCode);
+  for (const auto& path : ad_utility::testing::filesWithPrefix(prefix)) {
+    auto size = ql::filesystem::file_size(path, errorCode);
     if (!errorCode) {
       ++result.numFiles_;
       result.totalSize_ += static_cast<size_t>(size);
@@ -1004,19 +997,8 @@ SpillFiles currentSpillFiles(const std::string& prefix) {
 // Delete every spill file that starts with the given `prefix`, for the case
 // that a test failed before the merge could clean up after itself.
 void deleteSpillFiles(const std::string& prefix) {
-  ql::filesystem::path prefixAsPath{prefix};
-  auto directory = prefixAsPath.parent_path();
-  std::string base = prefixAsPath.filename().string();
   ql::error_code errorCode;
-  std::vector<ql::filesystem::path> paths;
-  for (const auto& entry : ql::filesystem::directory_iterator{
-           directory.empty() ? ql::filesystem::path{"."} : directory,
-           errorCode}) {
-    if (entry.path().filename().string().rfind(base, 0) == 0) {
-      paths.push_back(entry.path());
-    }
-  }
-  for (const auto& path : paths) {
+  for (const auto& path : ad_utility::testing::filesWithPrefix(prefix)) {
     ql::filesystem::remove(path, errorCode);
   }
 }
@@ -1077,8 +1059,9 @@ TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
     // Every chunk that was fully consumed has its file deleted, so nothing is
     // left over even though neither the merge nor the sorter is destroyed yet.
     // That deletion is only posted to the merge executor when the chunk is
-    // finished, see `ChunkQueue::finish`, so the last file may still exist
-    // for a moment after its last block was consumed. Wait for that as well.
+    // finished, see `SpillingChunkQueue::finish`, so the last file may still
+    // exist for a moment after its last block was consumed. Wait for that as
+    // well.
     waitUntil([&spillPrefix] {
       return currentSpillFiles(spillPrefix).numFiles_ == 0;
     });
@@ -1308,7 +1291,8 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // `29'166` rows), which is well above the hard floor of
   // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows. The `12` are the default
   // of `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`, and the
-  // `3` is `mergePhaseOutputBlocksPerChunk` of the minimal buffering.
+  // `3` is the number of output blocks per chunk with the minimal buffering,
+  // see `parallelBlockMerge::numLiveOutputBlocks`.
   //
   // NOTE: The memory is deliberately larger than the minimum that reaches this
   // code path, because the margin is what keeps the test meaningful. With

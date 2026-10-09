@@ -51,6 +51,24 @@ constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
     ".partial-vocab.words.tmp.";
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
+// The infix of the files to which the merge of the partial vocabularies
+// temporarily spills its output blocks (see
+// `partialVocabularyMergeSpillFilenamePrefix` in
+// `index/PartialVocabularyFilenames.h`).
+constexpr inline std::string_view PARTIAL_VOCAB_MERGE_SPILL_INFIX =
+    ".partial-vocab.merge-spill.tmp";
+
+// The number of words between two consecutive skip pointers of a partial
+// vocabulary words file, that is the number of words per block when such a
+// file is read in blocks (see `writePartialVocabularyToFile` and
+// `index/vocabulary_merger/PartialVocabularySkipPointers.h`).
+constexpr inline size_t PARTIAL_VOCAB_SKIP_POINTER_INTERVAL = 10'000;
+
+// The magic number at the very end of a partial vocabulary words file, which
+// marks the presence of the skip pointers. Its lowest bytes encode the version
+// of the format.
+constexpr inline uint64_t PARTIAL_VOCAB_SKIP_POINTERS_MAGIC =
+    0x5156'534B'4950'0001ULL;
 
 // The infix of the (compressed) files that hold the parsed triples with their
 // partial IDs, before they are sorted into the permutations. There is one such
@@ -75,9 +93,9 @@ constexpr inline size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 
 // The number of index mappings (which is the same as the number of merged
 // words) that are collected in a single batch of the vocabulary merging (see
-// `index/vocabulary_merger/WordBatch.h`). A single buffer of merged words (as
-// delivered by `parallelMultiwayMerge`, see `VocabularyMergerImpl.h`) only
-// contains a rather small number of words, which would be much too
+// `index/vocabulary_merger/WordBatch.h`). A single block of merged words (as
+// delivered by the parallel block merge, see `VocabularyMergerImpl.h`) may
+// contain only a rather small number of words, which would be much too
 // fine-grained for a task queue.
 constexpr inline size_t VOCAB_MERGER_WORD_BATCH_SIZE = 100'000;
 
