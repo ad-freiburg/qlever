@@ -67,8 +67,13 @@ size_t numRowsOf(IdColumns columns) {
   return numRows;
 }
 
-// Return the columns of `table`, which are valid as long as `table`.
+// Return the columns of `table`, which are valid as long as `table`. Fail via
+// `AD_CONTRACT_CHECK` if `table` has rows but no columns, because the columns
+// would then not carry the number of rows.
 std::vector<ConstIdColumnRef> columnsOf(const IdTableView<0>& table) {
+  AD_CONTRACT_CHECK(table.numColumns() > 0 || table.numRows() == 0,
+                    "The canonical row order is not supported for tables "
+                    "that have rows but no columns");
   return ::ranges::to<std::vector<ConstIdColumnRef>>(table.getColumns());
 }
 

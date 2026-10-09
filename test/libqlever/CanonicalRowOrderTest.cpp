@@ -201,3 +201,79 @@ TEST(CanonicalRowOrder, idsThatCompareEqualButDifferBitwise) {
   EXPECT_THAT(alignRows(view(both), view(onlyGreater)), ElementsAre(1));
   EXPECT_THAT(alignRows(view(both), view(onlyLess)), ElementsAre(0));
 }
+
+// Test that a `resultSortedOn` column that does not exist makes
+// `isInCanonicalOrder` return false, and the other functions fail.
+TEST(CanonicalRowOrder, invalidResultSortedOn) {
+  auto table = intTable({{1, 2}, {3, 4}});
+  std::vector<ColumnIndex> invalid{0, 2};
+  EXPECT_FALSE(isInCanonicalOrder(view(table), invalid));
+  EXPECT_ANY_THROW(canonicalSortingPermutation(view(table), invalid));
+  EXPECT_ANY_THROW(alignRows(view(table), view(table), invalid));
+}
+
+// Test that duplicates in `resultSortedOn` do not change the canonical order.
+TEST(CanonicalRowOrder, duplicateResultSortedOn) {
+  std::vector<ColumnIndex> sortedOn{1};
+  std::vector<ColumnIndex> duplicates{1, 1};
+  auto table = intTable({{2, 3}, {1, 5}, {3, 3}, {0, 4}});
+  EXPECT_THAT(canonicalSortingPermutation(view(table), duplicates),
+              ElementsAre(0, 2, 3, 1));
+  EXPECT_THAT(canonicalSortingPermutation(view(table), duplicates),
+              ::testing::ElementsAreArray(
+                  canonicalSortingPermutation(view(table), sortedOn)));
+
+  auto sorted = sortedOf(table, sortedOn);
+  EXPECT_TRUE(isInCanonicalOrder(view(sorted), duplicates));
+  EXPECT_FALSE(isInCanonicalOrder(view(table), duplicates));
+  EXPECT_THAT(alignRows(view(sorted), view(sorted), duplicates),
+              ElementsAre(0, 1, 2, 3));
+}
+
+// Test the overloads for tables that are given by their columns, in particular
+// a table without columns and columns with different numbers of rows.
+TEST(CanonicalRowOrder, columnsOverloads) {
+  // A table without columns is trivially in canonical order.
+  IdColumns noColumns{};
+  EXPECT_TRUE(isInCanonicalOrder(noColumns, {}));
+  EXPECT_THAT(alignRows(noColumns, noColumns), IsEmpty());
+
+  // Columns with the same number of rows.
+  auto I = ad_utility::testing::IntId;
+  std::vector<Id> first{I(1), I(2), I(3)};
+  std::vector<Id> second{I(4), I(5), I(6)};
+  std::vector<ConstIdColumnRef> columns{first, second};
+  EXPECT_TRUE(isInCanonicalOrder(columns, {}));
+  EXPECT_THAT(alignRows(columns, columns), ElementsAre(0, 1, 2));
+
+  // Columns with different numbers of rows are rejected.
+  std::vector<Id> shorter{I(4), I(5)};
+  std::vector<ConstIdColumnRef> inconsistent{first, shorter};
+  EXPECT_ANY_THROW(isInCanonicalOrder(inconsistent, {}));
+  EXPECT_ANY_THROW(alignRows(inconsistent, inconsistent));
+  EXPECT_ANY_THROW(alignRows(columns, inconsistent));
+}
+
+// Test that the functions for an `IdTable` reject a table that has rows but no
+// columns, because its rows cannot be represented by its (empty) columns.
+TEST(CanonicalRowOrder, tableWithRowsButNoColumns) {
+  IdTable noColumnsNoRows{0, ad_utility::testing::makeAllocator()};
+  EXPECT_TRUE(isInCanonicalOrder(view(noColumnsNoRows), {}));
+  EXPECT_THAT(canonicalSortingPermutation(view(noColumnsNoRows), {}),
+              IsEmpty());
+  EXPECT_THAT(alignRows(view(noColumnsNoRows), view(noColumnsNoRows)),
+              IsEmpty());
+
+  IdTable noColumns{0, ad_utility::testing::makeAllocator()};
+  noColumns.resize(3);
+  ASSERT_EQ(noColumns.numRows(), 3);
+  auto matcher = ::testing::HasSubstr("rows but no columns");
+  AD_EXPECT_THROW_WITH_MESSAGE(isInCanonicalOrder(view(noColumns), {}),
+                               matcher);
+  AD_EXPECT_THROW_WITH_MESSAGE(canonicalSortingPermutation(view(noColumns), {}),
+                               matcher);
+  AD_EXPECT_THROW_WITH_MESSAGE(alignRows(view(noColumns), view(noColumns)),
+                               matcher);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      alignRows(view(noColumnsNoRows), view(noColumns)), matcher);
+}

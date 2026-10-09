@@ -46,6 +46,10 @@ inline constexpr size_t noMatchingRow = std::numeric_limits<size_t>::max();
 // The columns of a table, which all have the same number of rows. The overloads
 // of `isInCanonicalOrder` and `alignRows` for this type also work on tables
 // that are not `IdTable`s, for example raw column data in a serialized blob.
+//
+// NOTE: `canonicalSortingPermutation` and the overloads of `isInCanonicalOrder`
+// and `alignRows` that take an `IdTableView` fail via `AD_CONTRACT_CHECK` for a
+// table that has rows but no columns.
 using IdColumns = ql::span<const ConstIdColumnRef>;
 
 // Return the permutation `oldRowOfNewRow` that brings the rows of `table` into
