@@ -107,7 +107,7 @@ class TaskQueueOnExecutor {
   // average the executor is at least as fast as the "pusher", but the pusher
   // is faster sometimes (which the queue can then accommodate).
   TaskQueueOnExecutor(ql::any_io_executor executor, size_t maxNumTasksInFlight,
-                      std::string name = "")
+                      const std::string& name = "")
       : executor_{std::move(executor)},
         maxNumTasksInFlight_{maxNumTasksInFlight},
         errorMessage_{
@@ -126,16 +126,18 @@ class TaskQueueOnExecutor {
   // instead be propagated to the pushing thread. The *scheduling* of the task
   // also terminates if it throws, see below.
   void push(Task task) {
-    std::unique_lock lock{mutex_};
-    cv_.wait(lock, [this]() {
-      return startedFinishing_ || numTasksInFlight_ < maxNumTasksInFlight_;
-    });
-    // NOTE: This is checked after the wait and not before it, because another
-    // thread may call `finish()` while this push waits for a free slot. A task
-    // that is enqueued afterwards would not be waited for by that `finish()`.
-    AD_CONTRACT_CHECK(!startedFinishing_);
-    ++numTasksInFlight_;
-    lock.unlock();
+    {
+      std::unique_lock lock{mutex_};
+      cv_.wait(lock, [this]() {
+        return startedFinishing_ || numTasksInFlight_ < maxNumTasksInFlight_;
+      });
+      // NOTE: This is checked after the wait and not before it, because
+      // another thread may call `finish()` while this push waits for a free
+      // slot. A task that is enqueued afterwards would not be waited for by
+      // that `finish()`.
+      AD_CONTRACT_CHECK(!startedFinishing_);
+      ++numTasksInFlight_;
+    }
     // NOTE: The only way in which `boost::asio::post` can fail is that the
     // executor runs out of resources while scheduling the task (in practice,
     // one of the allocations for the queued operation throws `std::bad_alloc`;

@@ -392,18 +392,16 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   // They are visited in the order in which they appear, so a definition can
   // `INCLUDE` previously defined named subqueries.
   visitVector(ctx->namedSubqueryDefinition());
-  auto query =
-      visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
-                                    ctx->describeQuery(), ctx->askQuery());
-
   // The trailing `VALUES` clause is joined before the projection, so its
   // variables are also selected by `SELECT *`. The SPARQL 1.1 spec is vague
   // here, see https://github.com/w3c/rdf-tests/issues/381 for details.
-  query.postQueryValuesClause_ = visit(ctx->valuesClause());
-  if (query.postQueryValuesClause_.has_value()) {
-    query.registerVariablesVisibleInQueryBody(
-        query.postQueryValuesClause_->_inlineValues._variables);
-  }
+  postQueryValues_ = visit(ctx->valuesClause());
+  auto query =
+      visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
+                                    ctx->describeQuery(), ctx->askQuery());
+  AD_CORRECTNESS_CHECK(!postQueryValues_.has_value(),
+                       "The trailing `VALUES` clause must be consumed by the "
+                       "visitor of the respective query type.");
 
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
@@ -544,7 +542,8 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
         toGraphPattern(query.constructClause().triples_));
   }
   query.addSolutionModifiers(visit(ctx->solutionModifier()),
-                             makeInternalVariableGenerator());
+                             makeInternalVariableGenerator(),
+                             std::exchange(postQueryValues_, std::nullopt));
 
   return query;
 }
@@ -573,9 +572,14 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   describeClause.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
 
-  // Parse the WHERE clause and construct a SELECT query from it. For `DESCRIBE
-  // *`, add each visible variable as a resource to describe.
+  // Parse the WHERE clause and construct a SELECT query from it. The trailing
+  // `VALUES` clause belongs to this query (which computes the resources to
+  // describe), the other solution modifiers to the CONSTRUCT query below. For
+  // `DESCRIBE *`, add each visible variable as a resource to describe.
   visitWhereClause(ctx->whereClause(), parsedQuery_);
+  parsedQuery_.addSolutionModifiers(
+      {}, makeInternalVariableGenerator(),
+      std::exchange(postQueryValues_, std::nullopt));
   if (describedResources.empty()) {
     const auto& visibleVariables =
         parsedQuery_.selectClause().getVisibleVariables();
@@ -600,7 +604,8 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // described).
   parsedQuery_ = ParsedQuery{};
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
-                                    makeInternalVariableGenerator());
+                                    makeInternalVariableGenerator(),
+                                    std::nullopt);
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
       std::move(describeClause));
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
@@ -633,8 +638,9 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
     solutionModifiers.limitOffset_._limit = 1;
     return solutionModifiers;
   };
-  parsedQuery_.addSolutionModifiers(getSolutionModifiers(),
-                                    makeInternalVariableGenerator());
+  parsedQuery_.addSolutionModifiers(
+      getSolutionModifiers(), makeInternalVariableGenerator(),
+      std::exchange(postQueryValues_, std::nullopt));
   return parsedQuery_;
 }
 
@@ -1168,11 +1174,7 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
           });
   if (ctx->subSelect()) {
     auto parsedQuerySoFar = std::exchange(parsedQuery_, ParsedQuery{});
-    auto [subquery, valuesOpt] = visit(ctx->subSelect());
-    pattern._graphPatterns.emplace_back(std::move(subquery));
-    if (valuesOpt.has_value()) {
-      pattern._graphPatterns.emplace_back(std::move(valuesOpt.value()));
-    }
+    pattern._graphPatterns.emplace_back(visit(ctx->subSelect()));
     parsedQuery_ = std::move(parsedQuerySoFar);
     return pattern;
   }
@@ -1629,8 +1631,9 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
   visitWhereClause(ctx->whereClause(), parsedQuery_);
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
-                                    makeInternalVariableGenerator());
+  parsedQuery_.addSolutionModifiers(
+      visit(ctx->solutionModifier()), makeInternalVariableGenerator(),
+      std::exchange(postQueryValues_, std::nullopt));
   return parsedQuery_;
 }
 
@@ -1772,18 +1775,22 @@ ParsedQuery::GraphPattern Visitor::visitSoleInclude(
 }
 
 // ____________________________________________________________________________________
-Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
+parsedQuery::Subquery Visitor::visit(Parser::SubSelectContext* ctx) {
   ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
   visitWhereClause(ctx->whereClause(), query);
+  // The trailing `VALUES` clause belongs to the subquery, it is joined before
+  // the subquery's `ORDER BY`, `DISTINCT`, projection, and `LIMIT`/`OFFSET`
+  // (SPARQL 1.1, sec. 18.2.4.3). Its variables are thus also selected by
+  // `SELECT *`.
   query.addSolutionModifiers(visit(ctx->solutionModifier()),
-                             makeInternalVariableGenerator());
-  auto values = visit(ctx->valuesClause());
+                             makeInternalVariableGenerator(),
+                             visit(ctx->valuesClause()));
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
     addVisibleVariable(variable);
   }
-  return {parsedQuery::Subquery{std::move(query)}, std::move(values)};
+  return parsedQuery::Subquery{std::move(query)};
 }
 
 // ____________________________________________________________________________________
@@ -3294,8 +3301,8 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
 
 // ____________________________________________________________________________________
 CPP_template_def(typename Ctx)(
-    requires Visitor::voidWhenVisited<Visitor, Ctx>) void Visitor::
-    visitVector(const std::vector<Ctx*>& childContexts) {
+    requires Visitor::voidWhenVisited<Visitor, Ctx>)
+void Visitor::visitVector(const std::vector<Ctx*>& childContexts) {
   for (const auto& child : childContexts) {
     visit(child);
   }
@@ -3303,10 +3310,9 @@ CPP_template_def(typename Ctx)(
 
 // ____________________________________________________________________________________
 CPP_template_def(typename Ctx)(
-    requires CPP_NOT(Visitor::voidWhenVisited<Visitor, Ctx>))
-    [[nodiscard]] auto Visitor::visitVector(
-        const std::vector<Ctx*>& childContexts)
-        -> std::vector<decltype(visit(childContexts[0]))> {
+            requires CPP_NOT(Visitor::voidWhenVisited<Visitor, Ctx>))
+[[nodiscard]] auto Visitor::visitVector(const std::vector<Ctx*>& childContexts)
+    -> std::vector<decltype(visit(childContexts[0]))> {
   std::vector<decltype(visit(childContexts[0]))> children;
   for (const auto& child : childContexts) {
     children.emplace_back(visit(child));
@@ -3349,8 +3355,9 @@ void Visitor::visitIf(Target* target, Ctx* ctx) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename Ctx)(requires Visitor::voidWhenVisited<
-                               Visitor, Ctx>) void Visitor::visitIf(Ctx* ctx) {
+CPP_template_def(typename Ctx)(
+    requires Visitor::voidWhenVisited<Visitor, Ctx>)
+void Visitor::visitIf(Ctx* ctx) {
   if (ctx) {
     visit(ctx);
   }
