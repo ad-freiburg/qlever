@@ -1873,6 +1873,44 @@ TEST(SpatialJoin, LibspatialJoinDe9imFilter) {
   EXPECT_EQ(noMatchRes.idTableView().numRows(), 0);
 }
 
+// Test that a spatial join, one side of which has no valid geometry, has an
+// empty result and does not parse the geometries of the other side.
+TEST(SpatialJoin, LibspatialJoinWithoutValidGeometryOnOneSide) {
+  // Two valid areas with predicate `<asWKT>` and a single WKT literal with a
+  // missing closing parenthesis with predicate `<asInvalidWKT>`.
+  std::string kg;
+  addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
+  addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
+  const std::string invalidLine = absl::StrCat(
+      "\"LINESTRING(7.83 48.01, 7.85 47.99\"^^<", GEO_WKT_LITERAL, ">");
+  kg += absl::StrCat("<geometryInvalid> <asInvalidWKT> ", invalidLine, " .\n");
+  ad_utility::testing::TestIndexConfig idxConfig{kg};
+  idxConfig.rowsPerBlock = 2'000'000;
+  idxConfig.parserBufferSize = 10_kB;
+  auto qec = ad_utility::testing::getQec(std::move(idxConfig));
+
+  // Join the invalid geometry (the smaller side) with the two areas.
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asInvalidWKT>"}, "?geo1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"});
+  SpatialJoinConfiguration config{
+      LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 1000, std::nullopt},
+      Variable{"?geo1"}, Variable{"?geo2"}};
+  config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec, config, leftChild, rightChild);
+  auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
+      spatialJoinOperation->getRootOperation());
+  auto res = spatialJoin->computeResult(false);
+
+  // The result is empty, and the larger side was not parsed at all.
+  EXPECT_EQ(res.idTableView().numRows(), 0);
+  const auto& details = spatialJoin->runtimeInfo().details_;
+  EXPECT_TRUE(details.contains("num-parser-threads-smaller-side"));
+  EXPECT_FALSE(details.contains("num-parser-threads-larger-side"));
+}
+
 // _____________________________________________________________________________
 TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
   std::string kg;
