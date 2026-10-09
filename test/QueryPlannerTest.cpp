@@ -2770,6 +2770,13 @@ TEST(QueryPlanner, Describe) {
       h::Describe(::testing::_, h::IndexScanFromStrings(
                                     "?y", "<p>", "<o>", {},
                                     ad_utility::HashSet<std::string>{"<g>"})));
+  // A trailing `VALUES` clause restricts the WHERE clause (the input of the
+  // `Describe`), not the result of the `Describe`.
+  h::expect(
+      "DESCRIBE ?y { ?y <p> ?o } VALUES ?y { <a> }",
+      h::Describe(::testing::_,
+                  h::Join(h::IndexScanFromStrings("?y", "<p>", "?o"),
+                          h::Sort(h::ValuesClause("VALUES (?y) { (<a>) }")))));
 }
 
 // ____________________________________________________________________________
