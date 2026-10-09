@@ -42,7 +42,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
 
   // The variables of the `BIND` expression must be visible in this operation,
   // not hidden by a subquery (the children still see the hidden variables).
-  if (!areVariablesAlwaysDefined(bindExpressionVars)) {
+  if (!areVariablesVisible(bindExpressionVars)) {
     return std::nullopt;
   }
 

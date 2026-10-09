@@ -1095,20 +1095,9 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
 
-  // The variables of the `BIND` expression must be visible, not hidden by a
-  // subquery. Note that `computePermutationColumnIndices` below also contains
-  // the hidden variables.
-  if (!areVariablesAlwaysDefined(bind._expression.containedVariables())) {
-    return std::nullopt;
-  }
-
-  // Check if all variables required for the `BIND` expression are covered by
-  // this `IndexScan`.
-  const auto& visibleVars = computePermutationColumnIndices();
-  bool allVarsCovered = ql::ranges::all_of(
-      bind._expression.containedVariables(),
-      [&visibleVars](const auto* v) { return visibleVars.contains(*v); });
-  if (!allVarsCovered) {
+  // All variables of the `BIND` expression must be read by this scan and be
+  // visible, that is, neither hidden by a subquery nor stripped away.
+  if (!areVariablesVisible(bind._expression.containedVariables())) {
     return std::nullopt;
   }
 
@@ -1126,7 +1115,9 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   }
 
   // Check the `BIND` cache of the underlying `MaterializedView` for the `BIND`
-  // expression's cache key.
+  // expression's cache key (computed on all columns of this scan, hidden ones
+  // included).
+  const auto& visibleVars = computePermutationColumnIndices();
   auto targetCol =
       view->lookupBindTargetColumn(bind._expression.getCacheKey(visibleVars));
   if (!targetCol.has_value()) {

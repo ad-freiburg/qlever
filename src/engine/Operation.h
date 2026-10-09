@@ -335,6 +335,12 @@ class Operation {
   bool areVariablesAlwaysDefined(
       const std::vector<const Variable*>& variables) const;
 
+  // Check whether all the given variables are externally visible in the result
+  // of this `Operation`, that is, neither hidden by a subquery nor stripped
+  // away. In contrast to `areVariablesAlwaysDefined`, the variables may be
+  // UNDEF.
+  bool areVariablesVisible(const std::vector<const Variable*>& variables) const;
+
   // See the member variable with the same name below for documentation.
   std::optional<std::shared_ptr<const Result>>&
   precomputedResultBecauseSiblingOfService() {

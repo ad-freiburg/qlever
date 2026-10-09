@@ -905,6 +905,15 @@ bool Operation::areVariablesAlwaysDefined(
 }
 
 // _____________________________________________________________________________
+bool Operation::areVariablesVisible(
+    const std::vector<const Variable*>& variables) const {
+  const auto& visibleVariables = getExternallyVisibleVariableColumns();
+  return ql::ranges::all_of(variables, [&visibleVariables](const auto v) {
+    return visibleVariables.contains(*v);
+  });
+}
+
+// _____________________________________________________________________________
 bool Operation::columnOriginatesFromGraphOrUndef(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
