@@ -14,6 +14,7 @@
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/ParsedGeometry.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 
@@ -234,6 +235,19 @@ std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
   // their definitions in `VocabularyConstraints.h`.
   if constexpr (MaybeProvidesGeometryInfo<S>) {
     return vocabulary_.getUnderlyingVocabulary().getGeoInfo(idx.get());
+  } else {
+    static_assert(NeverProvidesGeometryInfo<S>);
+    return std::nullopt;
+  }
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+std::optional<ad_utility::ParsedGeometry>
+Vocabulary<S, C, I>::getParsedGeometry(IndexType idx) const {
+  // Like `getGeoInfo` above.
+  if constexpr (MaybeProvidesGeometryInfo<S>) {
+    return vocabulary_.getUnderlyingVocabulary().getParsedGeometry(idx.get());
   } else {
     static_assert(NeverProvidesGeometryInfo<S>);
     return std::nullopt;

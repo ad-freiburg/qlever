@@ -165,7 +165,7 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 
 // The version of the `GeometryInfo`: to ensure correctness when reading disk
 // serialized objects of this class.
-constexpr uint64_t GEOMETRY_INFO_VERSION = 5;
+constexpr uint64_t GEOMETRY_INFO_VERSION = 6;
 
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
@@ -182,10 +182,9 @@ class GeometryInfo {
   uint32_t numGeometries_;
   MetricLength metricLength_;
   MetricArea metricArea_;
-
-  // TODO<ullingerc>: Implement the behavior for the following two
-  // attributes
-  //   int64_t parsedGeometryOffset_ = -1;
+  // The offset of the geometry in the file with the parsed geometries of the
+  // `GeoVocabulary` (see `ParsedGeometry`), or -1 if it is not stored there.
+  int64_t parsedGeometryOffset_ = -1;
 
   static constexpr uint64_t bitMaskGeometryType =
       bitMaskForHigherBits(ValueId::numDatatypeBits);
@@ -247,6 +246,14 @@ class GeometryInfo {
   // Parse an arbitrary WKT literal and compute only the length in meters.
   static std::optional<MetricLength> getMetricLength(
       const std::string_view& wkt);
+
+  // The offset of the parsed geometry (see `parsedGeometryOffset_`). It is
+  // set by the `GeoVocabulary::WordWriter` after it stored the parsed
+  // geometry.
+  int64_t getParsedGeometryOffset() const { return parsedGeometryOffset_; }
+  void setParsedGeometryOffset(int64_t offset) {
+    parsedGeometryOffset_ = offset;
+  }
 
   // Extract the requested information from this object.
   CPP_template(typename RequestedInfo = GeometryInfo)(

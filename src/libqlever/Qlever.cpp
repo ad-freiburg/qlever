@@ -148,6 +148,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   if (config.indexRowsPerBlock_.has_value()) {
     index.rowsPerBlock() = config.indexRowsPerBlock_.value();
   }
+  index.parsedGeometriesMinLength() = config.parsedGeometriesMinLength_;
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.

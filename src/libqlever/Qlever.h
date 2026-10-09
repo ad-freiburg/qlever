@@ -111,6 +111,11 @@ struct IndexBuilderConfig : CommonConfig {
   // compromise that favors large scans; see `DEFAULT_INDEX_ROWS_PER_BLOCK`.
   std::optional<size_t> indexRowsPerBlock_;
 
+  // The WKT literals of at least this length (in bytes) are parsed at index
+  // build time and stored in their parsed form, so that spatial joins do not
+  // have to parse them at query time (see `ParsedGeometry`). 0 means none.
+  size_t parsedGeometriesMinLength_ = 0;
+
   // Filename of a JSON file with additional settings. Examples can be seen in
   // https://github.com/ad-freiburg/qlever-control/tree/main/src/qlever/Qleverfiles
   // If empty, default settings are used.

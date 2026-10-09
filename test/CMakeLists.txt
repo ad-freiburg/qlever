@@ -604,6 +604,8 @@ addLinkAndDiscoverTest(TripleSerializerTest)
 
 addLinkAndDiscoverTest(GeometryInfoTest qlever_util)
 
+addLinkAndDiscoverTest(ParsedGeometryTest rdfTypes)
+
 addLinkAndDiscoverTest(GeoCellGridTest vocabulary)
 
 addLinkAndDiscoverTest(QueryRewriteUtilTest engine)

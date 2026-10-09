@@ -146,6 +146,12 @@ class Vocabulary {
   // is returned.
   std::optional<ad_utility::GeometryInfo> getGeoInfo(IndexType idx) const;
 
+  // Retrieves the parsed geometry of the literal with the given index from
+  // the (possibly) underlying `GeoVocabulary`, if it stored one (see
+  // `ParsedGeometry`). In all other cases, `std::nullopt` is returned.
+  std::optional<ad_utility::ParsedGeometry> getParsedGeometry(
+      IndexType idx) const;
+
   // This function determines if precomputed `GeometryInfo` is available for
   // this vocabulary. More specifically, `isGeoInfoAvailable` returns `true` if
   // there is an underlying `GeoVocabulary` such that `getGeoInfo` will return a
@@ -266,6 +272,16 @@ class Vocabulary {
   void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
     if constexpr (MaybeProvidesGeoCellGrid<UnderlyingVocabulary>) {
       vocabulary_.getUnderlyingVocabulary().setGeoCellGrid(std::move(grid));
+    }
+  }
+
+  // Set the minimum length of the WKT literals for which the geo vocabulary
+  // stores the parsed geometry when it is built (see `GeoVocabulary`, 0 =
+  // none). No-op unless the underlying vocabulary might be a geo vocabulary.
+  void setParsedGeometriesMinLength(size_t minLength) {
+    if constexpr (MaybeProvidesGeometryInfo<UnderlyingVocabulary>) {
+      vocabulary_.getUnderlyingVocabulary().setParsedGeometriesMinLength(
+          minLength);
     }
   }
 

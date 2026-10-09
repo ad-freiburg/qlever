@@ -19,6 +19,7 @@
 #include "engine/SpatialJoinParser.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
+#include "rdfTypes/ParsedGeometry.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 #include "util/Timer.h"
@@ -134,7 +135,10 @@ sj::SweeperCfg LibspatialjoinAlgorithm::sweeperConfig(
   };
   AD_CORRECTNESS_CHECK(threads > 0);
 
-  sj::SweeperCfg cfg;
+  // The geometry options come from `ParsedGeometry::sweeperConfig`, because
+  // the parsed geometries stored in the index were computed with them and
+  // can only be used by a sweeper with the same options.
+  sj::SweeperCfg cfg = ad_utility::ParsedGeometry::sweeperConfig();
   cfg.numThreads = threads;
   cfg.numCacheThreads = threads;
   // Cache memory per thread, in bytes
@@ -147,29 +151,6 @@ sj::SweeperCfg LibspatialjoinAlgorithm::sweeperConfig(
   cfg.sepEquals = sep(EQUALS);
   cfg.sepOverlaps = sep(OVERLAPS);
   cfg.sepCrosses = sep(CROSSES);
-  cfg.useBoxIds = true;
-  cfg.useArea = true;
-  cfg.useOBB = false;
-  cfg.useDiagBox = true;
-  cfg.useFastSweepSkip = true;
-  cfg.noGeometryChecks = false;
-  cfg.euclideanDist = false;
-  cfg.haversineApprox = false;
-  cfg.computeDE9IM = false;
-  cfg.de9imFilter = ::util::geo::FANY;
-  // Never let `libspatialjoin` fall back to a self-join when it considers one
-  // side to be empty; QLever's callbacks rely on the first geometry of each
-  // result pair coming from the left side and the second one from the right
-  // side (see #3068).
-  cfg.forceTwoSided = true;
-  // This has to be set to a value < 0 to disable the `WITHIN_DIST`
-  // calculation in `libspatialjoin`.
-  cfg.withinDist = -1;
-  cfg.writeRelCb = {};
-  cfg.logCb = {};
-  cfg.statsCb = {};
-  cfg.sweepProgressCb = {};
-  cfg.sweepCancellationCb = {};
   return cfg;
 }
 
@@ -232,7 +213,8 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 
   auto numGeomsDropped = parser.getPrefilterCounter();
   auto numGeomsParsed = idTable->size() - numGeomsDropped;
-  return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped, numThreads};
+  return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped, numThreads,
+          parser.getFromIndexCounter()};
 }
 
 // ____________________________________________________________________________
@@ -315,7 +297,7 @@ Result LibspatialjoinAlgorithm::run() {
   auto runParser = [&](ParseInput smaller, ParseInput larger,
                        bool smallerIsRight) {
     // Parse and add all geometries of the smaller side
-    auto [boxSmall, countSmall, droppedSmall, threadsSmall] =
+    auto [boxSmall, countSmall, droppedSmall, threadsSmall, fromIndexSmall] =
         parse(smallerIsRight, smaller, sweeper, NUM_THREADS, std::nullopt);
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
     spatialJoin_.value()->runtimeInfo().addDetail(
@@ -331,7 +313,7 @@ Result LibspatialjoinAlgorithm::run() {
 
     // Parse and add the relevant (intersection with the bounding box)
     // geometries from the larger side
-    auto [boxLarge, countLarge, droppedLarge, threadsLarge] =
+    auto [boxLarge, countLarge, droppedLarge, threadsLarge, fromIndexLarge] =
         parse(!smallerIsRight, larger, sweeper, NUM_THREADS,
               sweeper.getPaddedBoundingBox(boxSmall));
     auto numValidGeomsTotal = sweeper.numElements();
@@ -342,6 +324,8 @@ Result LibspatialjoinAlgorithm::run() {
         "num-parser-threads-larger-side", threadsLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-parsed",
                                                   countSmall + countLarge);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-from-index", fromIndexSmall + fromIndexLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-valid-geoms-parsed",
                                                   numValidGeomsTotal);
     spatialJoin_.value()->runtimeInfo().addDetail(
