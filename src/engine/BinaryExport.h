@@ -13,9 +13,13 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include "engine/QueryExecutionTree.h"
+#include "engine/Result.h"
 #include "engine/StringMapping.h"
 #include "global/Id.h"
 #include "index/Index.h"
+#include "parser/SelectClause.h"
+#include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/Serializer/FromCallableSerializer.h"
 #include "util/http/HttpClient.h"
@@ -29,6 +33,14 @@ namespace qlever::binary_export {
 Id toExportableId(Id originalId, const LocalVocab& localVocab,
                   StringMapping& stringMapping);
 
+// Export the result of `qet` in QLever's binary format, which is used for the
+// efficient transfer of results between two QLever instances (see
+// `ad_utility::MediaType::binaryQleverExport`). The format consists of a
+// header (see `writeHeader` in the `.cpp` file), followed by the IDs of the
+// rows (as produced by `toExportableId`), which are interrupted by batches of
+// the strings that the non-trivial IDs refer to (see `StringMapping`). The
+// format always ends with such a batch. If there are no columns, the header is
+// followed by the number of rows only.
 ad_utility::streams::stream_generator exportAsQLeverBinary(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
@@ -91,21 +103,22 @@ class BinaryExportHelpers {
     return result;
   }
 
-  // Rewrite vocab IDs in result table using transmitted strings.
+  // Convert the IDs of `result`, starting at row `dirtyIndex`, from the
+  // representation of the exporting instance to IDs of the local instance
+  // `qec`. IDs that refer to strings are replaced by the corresponding entries
+  // of `transmittedStrings`, encoded IRIs are remapped using `prefixMapping`
+  // (see `getPrefixMapping`) or decoded using the remote `prefixes`, blank
+  // nodes are replaced by new local blank nodes (consistently via
+  // `blankNodeMapping`), and `GeoPoint`s are converted to the local encoding.
+  // New entries are added to `vocab`.
   static void rewriteVocabIds(
       IdTable& result, const size_t dirtyIndex,
       const QueryExecutionContext& qec, LocalVocab& vocab,
       const std::vector<std::string>& transmittedStrings,
       const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
       const std::vector<encodedIri::Pattern>& prefixes,
-      ad_utility::HashMap<Id::T, Id>& blankNodeMapping);
-
-  // Convert raw ID bits to a proper Id, handling encoded values.
-  static Id toIdImpl(const QueryExecutionContext& qec,
-                     const std::vector<encodedIri::Pattern>& prefixes,
-                     const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
-                     LocalVocab& vocab, Id::T bits,
-                     ad_utility::HashMap<Id::T, Id>& blankNodeMapping);
+      ad_utility::HashMap<Id::T, Id>& blankNodeMapping,
+      GeoPointEncodingEnum remoteGeoPointEncoding);
 
   // Get mapping from remote prefixes to local prefixes.
   static ad_utility::HashMap<uint8_t, uint8_t> getPrefixMapping(
@@ -113,10 +126,14 @@ class BinaryExportHelpers {
       const std::vector<encodedIri::Pattern>& prefixes);
 };
 
-// _____________________________________________________________________________
+// Read the result that the exporting instance sent in the binary format (see
+// `exportAsQLeverBinary`) from the `response`. The columns of the result are
+// the `expectedVariables` (names with a leading `?`) in this order; a
+// variable that the response doesn't contain is undefined in all rows.
 Result importBinaryHttpResponse(bool requestLaziness,
                                 HttpOrHttpsResponse response,
                                 const QueryExecutionContext& qec,
+                                std::vector<std::string> expectedVariables,
                                 std::vector<ColumnIndex> resultSortedOn);
 }  // namespace qlever::binary_export
 

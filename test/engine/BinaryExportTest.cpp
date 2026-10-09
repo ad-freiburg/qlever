@@ -2,13 +2,17 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <random>
 #include <ranges>
 #include <vector>
 
+#include "../ValueGetterTestHelpers.h"
+#include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "ValuesForTesting.h"
@@ -131,8 +135,9 @@ TEST(BinaryExportHelpers, rewriteVocabIds) {
 
   // Rewrite vocab IDs starting from index 0
   ad_utility::HashMap<Id::T, Id> blankNodeMapping;
-  BinaryExportHelpers::rewriteVocabIds(
-      table, 0, *qec, vocab, transmittedStrings, {}, {}, blankNodeMapping);
+  BinaryExportHelpers::rewriteVocabIds(table, 0, *qec, vocab,
+                                       transmittedStrings, {}, {},
+                                       blankNodeMapping, GeoPoint::encoding());
 
   // Check that local vocab indices were rewritten
   // The first column should remain unchanged (integers)
@@ -159,23 +164,6 @@ TEST(BinaryExportHelpers, getPrefixMapping) {
   // The mapping should be empty or contain mappings only for prefixes
   // that exist in the local index
   EXPECT_TRUE(mapping.size() <= remotePrefixes.size());
-}
-
-// _____________________________________________________________________________
-TEST(BinaryExportHelpers, toIdImpl) {
-  auto* qec = ad_utility::testing::getQec();
-
-  // Test with a trivial ID (integer)
-  Id intId = Id::makeFromInt(42);
-  LocalVocab vocab;
-  std::vector<encodedIri::Pattern> prefixes;
-  ad_utility::HashMap<uint8_t, uint8_t> prefixMapping;
-  ad_utility::HashMap<Id::T, Id> blankNodeMapping;
-
-  Id result = BinaryExportHelpers::toIdImpl(
-      *qec, prefixes, prefixMapping, vocab, intId.getBits(), blankNodeMapping);
-
-  EXPECT_EQ(result, intId);
 }
 
 // ============================================================================
@@ -214,11 +202,11 @@ class BinaryExportRoundTrip : public ::testing::Test {
         start += chunkSize;
       }
     };
-    return HttpOrHttpsResponse{
-        .status_ = boost::beast::http::status::ok,
-        .contentType_ = "application/qlever-export+octet-stream",
-        .location_ = {},
-        .body_ = body(std::move(bytes))};
+    return HttpOrHttpsResponse{.status_ = boost::beast::http::status::ok,
+                               .contentType_ = ad_utility::toString(
+                                   ad_utility::MediaType::binaryQleverExport),
+                               .location_ = {},
+                               .body_ = body(std::move(bytes))};
   }
 
   // Create a QueryExecutionTree from an IdTable and variable names.
@@ -259,11 +247,34 @@ class BinaryExportRoundTrip : public ::testing::Test {
 
     auto qet =
         makeQet(exportQec, std::move(table), variables, std::move(localVocab));
-    auto selectClause = makeSelectClause(varNames);
-    std::string bytes = collectExportBytes(qet, selectClause);
-    auto response = makeResponse(std::move(bytes));
-    return importBinaryHttpResponse(requestLaziness, std::move(response),
-                                    *importQec, {});
+    return roundTrip(qet, importQec, std::move(varNames), requestLaziness);
+  }
+
+  // Export the result of `qet` (which has to contain all the `varNames`) and
+  // import it into `importQec`. The imported result has the columns
+  // `expectedVariables`, which default to `varNames`.
+  static Result roundTrip(
+      const QueryExecutionTree& qet, QueryExecutionContext* importQec,
+      std::vector<std::string> varNames, bool requestLaziness = false,
+      std::optional<std::vector<std::string>> expectedVariables =
+          std::nullopt) {
+    std::string bytes = collectExportBytes(qet, makeSelectClause(varNames));
+    return importBinaryHttpResponse(requestLaziness,
+                                    makeResponse(std::move(bytes)), *importQec,
+                                    expectedVariables.value_or(varNames), {});
+  }
+
+  // Return the (possibly lazy) `result` as a single table, together with all
+  // its local vocabs merged into one.
+  static std::pair<IdTable, LocalVocab> materialize(const Result& result,
+                                                    size_t numColumns) {
+    if (result.isFullyMaterialized()) {
+      return {result.idTableView().clone(), result.localVocab().clone()};
+    }
+    auto [table, vocabs] = aggregateTables(result.idTables(), numColumns);
+    LocalVocab vocab;
+    vocab.mergeWith(vocabs);
+    return {std::move(table), std::move(vocab)};
   }
 
   // Resolve an Id to its string representation using a given index and
@@ -478,5 +489,242 @@ TEST_F(BinaryExportRoundTrip, trivialOnlyIdsNoVocabNeeded) {
   ASSERT_EQ(resultTable.numRows(), 50);
   for (int i = 0; i < 50; ++i) {
     EXPECT_EQ(resultTable(i, 0), Id::makeFromInt(i));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(BinaryExportRoundTrip, allDatatypes) {
+  using namespace valueGetterTestHelpers;
+  AllDatatypesTestContext testContext;
+  auto* qec = testContext.qec;
+  const auto& index = qec->getIndex();
+
+  // One `Id` per datatype that the export has to handle.
+  Id blankNode = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(42));
+  std::vector<Id> ids{
+      Id::makeUndefined(),
+      Id::makeFromBool(true),
+      Id::makeFromInt(-42),
+      Id::makeFromDouble(1.5),
+      testContext.getId(vocabTypedLiteral),
+      testContext.localVocabId("\"onlyInLocalVocab\"@de"),
+      testContext.secondaryVocabId(secondaryLangLiteral),
+      Id::makeFromTextRecordIndex(TextRecordIndex::make(0)),
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2000-01-01")),
+      Id::makeFromGeoPoint(GeoPoint{47.9, 7.8}),
+      Id::makeFromWordVocabIndex(WordVocabIndex::make(0)),
+      blankNode,
+      testContext.encodedIriId()};
+  // Make sure that every datatype is covered.
+  ASSERT_EQ(ids.size(), static_cast<size_t>(Datatype::MaxValue) + 1);
+  for (size_t i = 0; i < ids.size(); ++i) {
+    ASSERT_EQ(static_cast<size_t>(ids[i].getDatatype()), i);
+  }
+
+  // Every datatype gets its own column, and the blank node appears twice.
+  std::vector<std::string> varNames;
+  for (size_t i = 0; i < ids.size(); ++i) {
+    varNames.push_back(absl::StrCat("?col", i));
+  }
+  varNames.push_back("?secondBlankNode");
+  IdTable table{varNames.size(), ad_utility::makeUnlimitedAllocator<Id>()};
+  table.emplace_back();
+  for (size_t i = 0; i < ids.size(); ++i) {
+    table(0, i) = ids[i];
+  }
+  table(0, ids.size()) = blankNode;
+
+  for (bool requestLaziness : {false, true}) {
+    auto result = roundTrip(qec, qec, table.clone(), varNames,
+                            testContext.localVocab.clone(), requestLaziness);
+    auto [resultTable, resultVocab] = materialize(result, varNames.size());
+    ASSERT_EQ(resultTable.numRows(), 1);
+
+    for (size_t i = 0; i < ids.size(); ++i) {
+      Id original = ids[i];
+      Id imported = resultTable(0, i);
+      switch (original.getDatatype()) {
+        case Datatype::BlankNodeIndex:
+          // A new local blank node, which is the same for both occurrences.
+          EXPECT_EQ(imported.getDatatype(), Datatype::BlankNodeIndex);
+          EXPECT_NE(imported, original);
+          EXPECT_EQ(imported, resultTable(0, ids.size()));
+          break;
+        case Datatype::TextRecordIndex:
+        case Datatype::WordVocabIndex:
+        case Datatype::LocalVocabIndex:
+          // These are transferred as strings, which are then looked up in the
+          // vocabularies, or stored in the local vocab.
+          EXPECT_EQ(idToString(index, imported, resultVocab),
+                    idToString(index, original, testContext.localVocab));
+          break;
+        default:
+          // The import uses the same index as the export, so the strings are
+          // found in the vocabularies and the IDs are the same.
+          EXPECT_EQ(imported, original) << i;
+      }
+    }
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(BinaryExportRoundTrip, variablesAreMatchedByName) {
+  auto* qec = ad_utility::testing::getQec();
+  IdTable table{2, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({Id::makeFromInt(1), Id::makeFromInt(2)});
+  auto qet = makeQet(qec, std::move(table), {Variable{"?x"}, Variable{"?y"}});
+
+  // The columns are reordered, `?z` is not part of the result, so it is
+  // undefined.
+  auto result = roundTrip(qet, qec, {"?x", "?y"}, false,
+                          std::vector<std::string>{"?y", "?z", "?x"});
+  const auto& resultTable = result.idTableView();
+  ASSERT_EQ(resultTable.numRows(), 1);
+  ASSERT_EQ(resultTable.numColumns(), 3);
+  EXPECT_EQ(resultTable(0, 0), Id::makeFromInt(2));
+  EXPECT_EQ(resultTable(0, 1), Id::makeUndefined());
+  EXPECT_EQ(resultTable(0, 2), Id::makeFromInt(1));
+
+  // The same for a result without any columns.
+  IdTable noColumns{0, ad_utility::makeUnlimitedAllocator<Id>()};
+  noColumns.resize(2);
+  auto qetNoColumns = makeQet(qec, std::move(noColumns), {});
+  result =
+      roundTrip(qetNoColumns, qec, {}, false, std::vector<std::string>{"?z"});
+  ASSERT_EQ(result.idTableView().numRows(), 2);
+  ASSERT_EQ(result.idTableView().numColumns(), 1);
+  EXPECT_EQ(result.idTableView()(1, 0), Id::makeUndefined());
+}
+
+// _____________________________________________________________________________
+TEST_F(BinaryExportRoundTrip, geoPointsAreConvertedToTheLocalEncoding) {
+  auto* qec = ad_utility::testing::getQec();
+  GeoPoint point{47.9, 7.8};
+  ASSERT_EQ(GeoPoint::encoding(), GeoPointEncodingEnum::ZOrder);
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({Id::makeFromGeoPoint(point)});
+  auto bytes =
+      collectExportBytes(makeQet(qec, std::move(table), {Variable{"?x"}}),
+                         makeSelectClause({"?x"}));
+
+  // Import with a different encoding, as if the importing QLever instance used
+  // an index with a different encoding.
+  GeoPoint::setEncoding(GeoPointEncodingEnum::LatMajor);
+  absl::Cleanup resetEncoding{
+      []() { GeoPoint::setEncoding(GeoPointEncodingEnum::ZOrder); }};
+  auto result = importBinaryHttpResponse(false, makeResponse(std::move(bytes)),
+                                         *qec, {"?x"}, {});
+  Id imported = result.idTableView()(0, 0);
+  EXPECT_EQ(imported, Id::makeFromGeoPoint(point));
+  EXPECT_EQ(imported.getGeoPoint(), Id::makeFromGeoPoint(point).getGeoPoint());
+}
+
+// _____________________________________________________________________________
+TEST_F(BinaryExportRoundTrip, invalidHeader) {
+  auto* qec = ad_utility::testing::getQec();
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({Id::makeFromInt(1)});
+  auto bytes =
+      collectExportBytes(makeQet(qec, std::move(table), {Variable{"?x"}}),
+                         makeSelectClause({"?x"}));
+  auto import = [qec](std::string bytes) {
+    return importBinaryHttpResponse(false, makeResponse(std::move(bytes)), *qec,
+                                    {"?x"}, {});
+  };
+
+  // The header starts with the magic bytes (serialized as their size followed
+  // by the characters) and the version.
+  std::string_view magic = "QLEVER.EXPORT";
+  size_t versionOffset = sizeof(size_t) + magic.size();
+  ASSERT_EQ(bytes.substr(sizeof(size_t), magic.size()), magic);
+  uint16_t version;
+  std::memcpy(&version, bytes.data() + versionOffset, sizeof(version));
+  ASSERT_EQ(version, ad_utility::binaryQleverExportVersion);
+
+  auto wrongVersion = bytes;
+  ++wrongVersion[versionOffset];
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      import(wrongVersion),
+      ::testing::HasSubstr("only version 1 is supported"));
+
+  auto wrongMagic = bytes;
+  wrongMagic[sizeof(size_t)] = 'X';
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      import(wrongMagic),
+      ::testing::HasSubstr("not in QLever's binary export format"));
+
+  // A result that is cut off in the middle of the trailing batch of strings,
+  // and one that is cut off directly after the last row (before the marker and
+  // the empty batch of strings).
+  EXPECT_ANY_THROW(import(bytes.substr(0, bytes.size() - 1)));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      import(bytes.substr(0, bytes.size() - sizeof(Id::T) - sizeof(size_t))),
+      ::testing::HasSubstr("ended unexpectedly"));
+}
+
+// _____________________________________________________________________________
+TEST_F(BinaryExportRoundTrip, lazyExportWithSeveralLocalVocabs) {
+  auto* qec = ad_utility::testing::getQec();
+  Id blankNode = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(7));
+
+  // Two tables, each with its own local vocab, and the same blank node.
+  std::vector<Result::IdTableVocabPair> tables;
+  std::vector<std::string> words{"\"first\"", "\"second\""};
+  for (const auto& word : words) {
+    LocalVocab localVocab;
+    Id id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::fromStringRepresentation(
+            word, qec->getLocalVocabContext())));
+    IdTable table{2, ad_utility::makeUnlimitedAllocator<Id>()};
+    table.push_back({id, blankNode});
+    tables.emplace_back(std::move(table), std::move(localVocab));
+  }
+
+  for (bool requestLaziness : {false, true}) {
+    std::vector<Result::IdTableVocabPair> tablesCopy;
+    for (const auto& [table, vocab] : tables) {
+      tablesCopy.emplace_back(table.clone(), vocab.clone());
+    }
+    QueryExecutionTree qet{qec, std::make_shared<ValuesForTesting>(
+                                    qec, std::move(tablesCopy),
+                                    std::vector<std::optional<Variable>>{
+                                        Variable{"?x"}, Variable{"?y"}})};
+    auto result = roundTrip(qet, qec, {"?x", "?y"}, requestLaziness);
+
+    auto [resultTable, resultVocab] = materialize(result, 2);
+    ASSERT_EQ(resultTable.numRows(), 2);
+    for (size_t row = 0; row < 2; ++row) {
+      EXPECT_EQ(idToString(qec->getIndex(), resultTable(row, 0), resultVocab),
+                words[row]);
+    }
+    EXPECT_EQ(resultTable(0, 1).getDatatype(), Datatype::BlankNodeIndex);
+    EXPECT_EQ(resultTable(0, 1), resultTable(1, 1));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(BinaryExportRoundTrip, severalBatchesOfStrings) {
+  auto* qec = ad_utility::testing::getQec();
+  // More distinct strings than fit into a single batch, see
+  // `exportAsQLeverBinary`.
+  static constexpr size_t numRows = 25'000;
+  LocalVocab localVocab;
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  for (size_t i = 0; i < numRows; ++i) {
+    table.push_back(
+        {Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry::fromStringRepresentation(
+                absl::StrCat("\"word", i, "\""),
+                qec->getLocalVocabContext())))});
+  }
+  for (bool requestLaziness : {false, true}) {
+    auto result = roundTrip(qec, qec, table.clone(), {"?x"}, localVocab.clone(),
+                            requestLaziness);
+    auto [resultTable, resultVocab] = materialize(result, 1);
+    ASSERT_EQ(resultTable.numRows(), numRows);
+    for (size_t i = 0; i < numRows; ++i) {
+      ASSERT_EQ(idToString(qec->getIndex(), resultTable(i, 0), resultVocab),
+                absl::StrCat("\"word", i, "\""));
+    }
   }
 }

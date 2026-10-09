@@ -263,8 +263,10 @@ struct RuntimeParameters {
   DeduplicationModeParameter constructDeduplication_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
 
-  // If set to `true`, then the experimental binary federation via SERVICE
-  // queries is enabled between QLever ins
+  // If set to `true`, a `SERVICE` requests the result in QLever's binary format
+  // (see `engine/BinaryExport.h`), which is much more efficient than JSON. Only
+  // QLever endpoints that support the same version of the format respond in
+  // that format, all others respond with JSON as before.
   Bool binaryServiceEnabled_{true, "binary-service-enabled"};
 
   // ___________________________________________________________________________

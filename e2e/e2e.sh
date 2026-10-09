@@ -177,7 +177,7 @@ $PYTHON_BINARY "$PROJECT_DIR/e2e/proxy.py" "$PROXY_PORT" "$PROXY_LOG" > /dev/nul
 PROXY_PID=$!
 
 pushd "$BINARY_DIR"
-env http_proxy="http://localhost:$PROXY_PORT" ./qlever-server -i "$INDEX" -p 9098 -m 1GB --default-query-timeout 30s &> server_with_proxy_log.txt &
+env http_proxy="http://localhost:$PROXY_PORT" ./qlever-server -i "$INDEX" -p 9098 -m 1GB --default-query-timeout 30s -a e2e-access-token &> server_with_proxy_log.txt &
 SERVER_WITH_PROXY_PID=$!
 popd
 
@@ -215,4 +215,69 @@ popd
 grep -q "only supports plain HTTP proxies" "$BINARY_DIR/bad_proxy_log.txt" \
   || bail "The error message for a malformed http_proxy is missing"
 echo "The HTTP proxy tests passed"
+
+# Test QLever's binary format for the results of federated queries
+# (`SERVICE`), see `src/engine/BinaryExport.h`. The second server (which uses
+# the proxy) sends queries with `SERVICE` parts to the first server. The result
+# must be the same as the one of the direct query, both with the binary format
+# (the default) and with JSON (when the runtime parameter
+# `binary-service-enabled` is false), and the binary format must be used only
+# in the first case. The queries cover all the datatypes that
+# the binary format has to handle, except for the ones that are tested in the
+# unit tests only (blank nodes, encoded IRIs, and the secondary vocabulary).
+echo "Testing the binary format for federated queries ..."
+function sorted_tsv_result {
+  curl --silent --fail "http://localhost:$1/" -H "Accept: text/tab-separated-values" \
+    --data-urlencode "query=$2" | sort
+}
+function num_binary_service_results {
+  grep -c "transferred in QLever's binary format" "$BINARY_DIR/server_with_proxy_log.txt" || true
+}
+GEO_PREFIX="PREFIX geo: <http://www.opengis.net/ont/geosparql#>"
+# Vocab entries, dates, undefined values, local vocab entries, booleans,
+# integers, decimals, and geo points.
+VARIABLES_1="?s ?name ?birth ?str ?bool ?len ?num ?geo"
+BODY_1='?s <is-a> <Scientist> . ?s <label> ?name .
+  OPTIONAL { ?s <Date_of_birth> ?birth }
+  BIND(CONCAT(STR(?name), "!") AS ?str) BIND(STRLEN(?name) > 10 AS ?bool)
+  BIND(STRLEN(?name) AS ?len) BIND(STRLEN(?name) / 4 AS ?num)
+  BIND("POINT(7.8 47.9)"^^geo:wktLiteral AS ?geo)'
+# Text records and words of the text index.
+VARIABLES_2="?s ?t ?ql_matchingword_t_relati"
+BODY_2='?s <is-a> <Scientist> . ?t ql:contains-entity ?s . ?t ql:contains-word "relati*"'
+# The text records and words are printed without quotes by the direct query,
+# but are ordinary literals after the transfer (with JSON as well as with the
+# binary format), so the quotes are ignored for that query.
+NORMALIZE_1="cat"
+NORMALIZE_2="tr -d \""
+function federated_result {
+  sorted_tsv_result 9098 "$GEO_PREFIX SELECT ${!1} WHERE { SERVICE <http://localhost:9099> { SELECT ${!1} WHERE { ${!2} } } }"
+}
+NUM_BEFORE=$(num_binary_service_results)
+FEDERATED_BINARY_1=$(federated_result VARIABLES_1 BODY_1)
+FEDERATED_BINARY_2=$(federated_result VARIABLES_2 BODY_2)
+[ "$(num_binary_service_results)" -eq $((NUM_BEFORE + 2)) ] \
+  || bail "The federated queries did not use the binary format"
+curl --silent --fail "http://localhost:9098/?binary-service-enabled=false&access-token=e2e-access-token" > /dev/null \
+  || bail "Disabling the binary format failed"
+# NOTE: The text query is not checked with JSON, because the import of JSON
+# results currently mangles literals that contain quotes.
+FEDERATED_JSON_1=$(federated_result VARIABLES_1 BODY_1)
+[ "$(num_binary_service_results)" -eq $((NUM_BEFORE + 2)) ] \
+  || bail "The federated queries used the binary format, although it was disabled"
+for i in 1 2; do
+  VARIABLES="VARIABLES_$i"
+  BODY="BODY_$i"
+  NORMALIZE="NORMALIZE_$i"
+  BINARY="FEDERATED_BINARY_$i"
+  DIRECT=$(sorted_tsv_result 9099 "$GEO_PREFIX SELECT ${!VARIABLES} WHERE { ${!BODY} }")
+  [ "$(echo "$DIRECT" | wc -l)" -gt 100 ] || bail "The direct query $i returned too few rows"
+  [ "$(echo "$DIRECT" | ${!NORMALIZE})" == "$(echo "${!BINARY}" | ${!NORMALIZE})" ] \
+    || bail "The federated query $i returned a different result than the direct query"
+  if [ $i -eq 1 ]; then
+    [ "$DIRECT" == "$FEDERATED_JSON_1" ] \
+      || bail "The federated query $i returned a different result with JSON than the direct query"
+  fi
+done
+echo "The tests of the binary format for federated queries passed"
 popd

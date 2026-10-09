@@ -201,16 +201,15 @@ Result Service::computeResultImpl(bool requestLaziness) {
               << ", target: " << serviceUrl.target() << ")" << std::endl
               << serviceQuery << std::endl;
 
-  static constexpr std::string_view acceptWithBinaryExport =
-      "application/qlever-export+octet-stream;q=0.9,application/"
-      "sparql-results+json;q=0.1";
-  static constexpr std::string_view acceptWithoutBinaryExport =
-      "application/sparql-results+json";
-
-  const std::string_view accept =
+  // If enabled, prefer QLever's binary format (which only other QLever
+  // instances that support the same version of the format understand, see
+  // `ad_utility::binaryQleverExportVersion`) over JSON.
+  const std::string accept =
       getRuntimeParameter<&RuntimeParameters::binaryServiceEnabled_>()
-          ? acceptWithBinaryExport
-          : acceptWithoutBinaryExport;
+          ? absl::StrCat(
+                ad_utility::toString(ad_utility::MediaType::binaryQleverExport),
+                ",application/sparql-results+json;q=0.9")
+          : "application/sparql-results+json";
 
   // Send the query to the remote endpoint. Redirects are handled automatically
   // by the HTTP client up to the limit specified by the runtime parameter
@@ -233,10 +232,14 @@ Result Service::computeResultImpl(bool requestLaziness) {
         toStd(boost::beast::http::obsolete_reason(response.status_))));
   }
 
-  auto contentType = ad_utility::utf8ToLower(response.contentType_);
-  if (ql::starts_with(contentType, "application/qlever-export+octet-stream")) {
+  if (ad_utility::toMediaType(response.contentType_) ==
+      ad_utility::MediaType::binaryQleverExport) {
+    AD_LOG_INFO << "The result of the SERVICE is transferred in QLever's "
+                   "binary format"
+                << std::endl;
     return computeBinaryResult(requestLaziness, std::move(response));
   }
+  auto contentType = ad_utility::utf8ToLower(response.contentType_);
   if (!ql::starts_with(contentType, "application/sparql-results+json")) {
     throwErrorWithContext(absl::StrCat(
         "QLever requires the endpoint of a SERVICE to send the result as "
@@ -271,6 +274,8 @@ Result Service::computeBinaryResult(bool requestLaziness,
                                     HttpOrHttpsResponse response) {
   return qlever::binary_export::importBinaryHttpResponse(
       requestLaziness, std::move(response), *getExecutionContext(),
+      ad_utility::transform(parsedServiceClause_.visibleVariables_,
+                            &Variable::name),
       resultSortedOn());
 }
 

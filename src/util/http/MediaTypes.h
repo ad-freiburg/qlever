@@ -8,6 +8,7 @@
 #ifndef QLEVER_MEDIATYPES_H
 #define QLEVER_MEDIATYPES_H
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <variant>
@@ -32,8 +33,17 @@ enum class MediaType {
   ntriples,
   nquads,
   octetStream,
+  // QLever's binary format for the efficient transfer of results between two
+  // QLever instances, see `engine/BinaryExport.h`.
   binaryQleverExport
 };
+
+// The version of the format of `MediaType::binaryQleverExport`. It is part of
+// the name of the media type, such that two QLever instances only agree on
+// this format if they use the same version (and otherwise fall back to a
+// different format like JSON). Increase it whenever the format changes, in
+// particular when the bit representation of an `Id` changes.
+inline constexpr uint16_t binaryQleverExportVersion = 1;
 
 struct MediaTypeWithQuality {
   struct Wildcard {};  // Represents the total wildcard */*
