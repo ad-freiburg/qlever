@@ -68,10 +68,11 @@ struct HasGet<Handle, std::void_t<decltype(std::declval<Handle&>().get())>>
 //
 // NOTE: Every caller below stores the result in a named variable and then takes
 // a *reference* structured binding of it. This is a workaround for a GCC 15/16
-// bug: the hidden object of a by-value structured binding that is initialized
-// by a `co_await` is not destroyed at the end of its scope (gcc.gnu.org bug
-// 124584), so the `Handle` would never return its resource to the pool. See
-// also the pull request that fixed the same pattern elsewhere (#2906).
+// bug: the hidden object of a by-value structured binding in a coroutine is not
+// always destroyed at the end of its scope, for example when it is initialized
+// by a `co_await` (gcc.gnu.org bug 124584), so the `Handle` would never return
+// its resource to the pool. See also the pull request that fixed the same
+// pattern elsewhere (#2906).
 template <typename ResourceType>
 net::awaitable<std::tuple<boost::system::error_code,
                           typename AsyncResourcePool<ResourceType>::Handle>>
