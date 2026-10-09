@@ -142,6 +142,37 @@ TYPED_TEST(AllocatorBackendTest, ClearOnAllocationHook) {
   alloc.deallocate(p1, 1);
 }
 
+// The memory limit can be changed after construction: increasing always
+// succeeds, decreasing only as long as the difference is currently free.
+// A rejected decrease changes nothing.
+TYPED_TEST(AllocatorBackendTest, SetMemoryLimit) {
+  static_assert(sizeof(int) == 4);
+  auto alloc = TypeParam::makeLimited(20_B);
+  EXPECT_EQ(alloc.memoryLimit(), 20_B);
+
+  int* p = alloc.allocate(3);  // 12 bytes consumed
+  EXPECT_EQ(alloc.amountMemoryLeft(), 8_B);
+
+  alloc.setMemoryLimit(40_B);
+  EXPECT_EQ(alloc.memoryLimit(), 40_B);
+  EXPECT_EQ(alloc.amountMemoryLeft(), 28_B);
+
+  // 16 bytes are enough for the 12 bytes currently allocated.
+  alloc.setMemoryLimit(16_B);
+  EXPECT_EQ(alloc.memoryLimit(), 16_B);
+  EXPECT_EQ(alloc.amountMemoryLeft(), 4_B);
+
+  // 8 bytes are not.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      alloc.setMemoryLimit(8_B),
+      ::testing::HasSubstr("only 4 B of the current limit of 16 B are unused"));
+  EXPECT_EQ(alloc.memoryLimit(), 16_B);
+  EXPECT_EQ(alloc.amountMemoryLeft(), 4_B);
+
+  alloc.deallocate(p, 3);
+  EXPECT_EQ(alloc.amountMemoryLeft(), 16_B);
+}
+
 // .as<char>() yields an allocator sharing the same budget: consuming bytes
 // through the char allocator reduces the int allocator's amountMemoryLeft().
 TYPED_TEST(AllocatorBackendTest, AsSharesBudget) {
