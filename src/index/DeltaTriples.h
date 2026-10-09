@@ -52,6 +52,26 @@ struct LocatedTriplesState {
   // Counts of the external triples. Only set when this is a deep copy, not for
   // references.
   std::optional<DeltaTriplesCount> counts_ = std::nullopt;
+
+  // Construct from the located triples for the external and internal
+  // permutations, the lifetime extender for the local vocab, the index of the
+  // snapshot, and (only for deep copies) the counts of the external triples.
+  // NOTE: This constructor is explicitly declared (and not only implicitly
+  // via aggregate initialization) because parenthesized initialization of
+  // aggregates is not supported in C++17.
+  LocatedTriplesState(
+      LocatedTriplesPerBlockAllPermutations<false> locatedTriplesPerBlock,
+      LocatedTriplesPerBlockAllPermutations<true>
+          internalLocatedTriplesPerBlock,
+      std::optional<LocalVocab::LifetimeExtender> localVocabLifetimeExtender,
+      size_t index, std::optional<DeltaTriplesCount> counts = std::nullopt)
+      : locatedTriplesPerBlock_{std::move(locatedTriplesPerBlock)},
+        internalLocatedTriplesPerBlock_{
+            std::move(internalLocatedTriplesPerBlock)},
+        localVocabLifetimeExtender_{std::move(localVocabLifetimeExtender)},
+        index_{index},
+        counts_{std::move(counts)} {}
+
   // Get `LocatedTriplesPerBlock` objects for the given permutation.
   template <bool isInternal>
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
