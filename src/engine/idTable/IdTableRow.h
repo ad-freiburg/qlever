@@ -389,7 +389,7 @@ class RowReference
 
   // Access to the `i`-th column of this row.
   CPP_template_2(typename = void)(requires(!isConst))
-  T& operator[](size_t i) {
+  decltype(auto) operator[](size_t i) {
     return Base::operatorBracketImpl(base(), i);
   }
   decltype(auto) operator[](size_t i) const {
