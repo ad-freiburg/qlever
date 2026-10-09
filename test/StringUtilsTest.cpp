@@ -572,3 +572,69 @@ TEST(StringUtils, commonPrefix) {
   EXPECT_EQ(ad_utility::commonPrefix("ab", "b"), "");
   EXPECT_EQ(ad_utility::commonPrefix("b", "ab"), "");
 }
+
+// _____________________________________________________________________________
+TEST(StringUtils, makeCharLookupTableAndFindFirstOfWithLookupTable) {
+  using ad_utility::findFirstOfWithLookupTable;
+  using ad_utility::makeCharLookupTable;
+  constexpr std::string_view delimiters = " \t\r\n,;[]():";
+  constexpr ad_utility::CharLookupTable table = makeCharLookupTable(delimiters);
+  constexpr size_t npos = std::string_view::npos;
+
+  // `makeCharLookupTable` sets exactly the entries of the given characters.
+  // Note that this also covers the bytes >= 128, which must not be interpreted
+  // as negative indices.
+  for (size_t i = 0; i < table.size(); ++i) {
+    bool isDelimiter = delimiters.find(static_cast<char>(i)) != npos;
+    EXPECT_EQ(table[i], isDelimiter) << "for the byte " << i;
+  }
+  static_assert(table[static_cast<unsigned char>(':')]);
+  static_assert(!table[static_cast<unsigned char>('x')]);
+  // The empty set of characters matches nothing.
+  EXPECT_EQ(findFirstOfWithLookupTable(delimiters, makeCharLookupTable("")),
+            npos);
+  // All the calls to `makeCharLookupTable` above are evaluated at compile time
+  // (or have an empty argument); check that the result is also correct when it
+  // is called at runtime with a nonempty argument.
+  std::string delimitersAtRuntime{delimiters};
+  EXPECT_EQ(makeCharLookupTable(delimitersAtRuntime), table);
+
+  // Each single delimiter is found at the correct position.
+  for (char c : delimiters) {
+    std::string input = std::string{"ab"} + c + "cd";
+    EXPECT_EQ(findFirstOfWithLookupTable(input, table), 2u)
+        << "for the delimiter " << static_cast<int>(c);
+  }
+
+  // Input without any delimiter, including non-ASCII input (the UTF-8 encoding
+  // of "ä" consists of the bytes 0xC3 and 0xA4).
+  EXPECT_EQ(findFirstOfWithLookupTable("", table), npos);
+  EXPECT_EQ(findFirstOfWithLookupTable("abc", table), npos);
+  EXPECT_EQ(findFirstOfWithLookupTable("äöü", table), npos);
+
+  // The `pos` argument skips a prefix of the input; `pos == view.size()` is
+  // allowed and yields `npos`.
+  EXPECT_EQ(findFirstOfWithLookupTable("a:b:c", table), 1u);
+  EXPECT_EQ(findFirstOfWithLookupTable("a:b:c", table, 1), 1u);
+  EXPECT_EQ(findFirstOfWithLookupTable("a:b:c", table, 2), 3u);
+  EXPECT_EQ(findFirstOfWithLookupTable("a:b:c", table, 4), npos);
+  EXPECT_EQ(findFirstOfWithLookupTable("a:b:c", table, 5), npos);
+  EXPECT_EQ(findFirstOfWithLookupTable("", table, 0), npos);
+
+  // For all positions, the result is the same as that of the
+  // `std::string_view::find_first_of` that `findFirstOfWithLookupTable`
+  // replaces.
+  auto expectSameAsFindFirstOf = [&table, &delimiters](std::string_view view) {
+    for (size_t pos = 0; pos <= view.size(); ++pos) {
+      EXPECT_EQ(findFirstOfWithLookupTable(view, table, pos),
+                view.find_first_of(delimiters, pos))
+          << "for the input \"" << view << "\" and the position " << pos;
+    }
+  };
+  expectSameAsFindFirstOf("");
+  expectSameAsFindFirstOf(":");
+  expectSameAsFindFirstOf("wd:Q430 someotherContent");
+  expectSameAsFindFirstOf("noDelimiterAtAll");
+  expectSameAsFindFirstOf("[](),;:\t\r\n ");
+  expectSameAsFindFirstOf("<http://example.org/äöü> ;");
+}

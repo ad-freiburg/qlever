@@ -106,9 +106,11 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els);
 
 // For each of the IdTriples in `input`: map its Ids using the `map` and
 // serialize the resulting batch of Id triples to the file `filename`, which is
-// created and closed by this function. Counterpart of `readMappedIdsFromFile`.
+// created and closed by this function. `input` is only passed by reference so
+// that the caller can reuse its memory; its contents are unspecified
+// afterwards. Counterpart of `readMappedIdsFromFile`.
 void writeMappedIdsToFile(
-    std::vector<std::array<Id, NumColumnsIndexBuilding>> input,
+    std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
     const HashMap<uint64_t, uint64_t>& map, const std::string& filename);
 
 // Read back the Id triples that `writeMappedIdsToFile` has written to the file
@@ -134,19 +136,6 @@ void writePartialVocabularyToFile(const ItemVec& els,
  * size of the hash map
  */
 ItemVec vocabMapsToVector(const ItemMapAndBuffer& map);
-
-// _____________________________________________________________________________________________________________
-/**
- * @brief Sort the input in-place according to the strings as compared by the
- * StringComparator
- * @tparam A binary Function object to compare strings (e.g.
- * std::less<std::string>())
- * @param doParallelSort if true and USE_PARALLEL_SORT is true, use the gnu
- * parallel extension for sorting.
- */
-template <class StringSortComparator>
-void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
-                     bool doParallelSort);
 }  // namespace ad_utility::vocabulary_merger
 
 #include "index/VocabularyMergerImpl.h"

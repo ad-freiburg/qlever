@@ -13,7 +13,8 @@ qlever_target_link_libraries(basicParser qlever_util rdfTypes parserData)
 # The parser for the RDF input formats. It is used by `index` (which builds an
 # index from RDF input files), so it must not depend on `index` itself. It needs
 # the `vocabulary` library for the `EncodedIriManager`.
-add_library(rdfParser RdfParser.cpp AsyncFileBlockDriver.cpp AsyncSerialParserAdapter.cpp)
+add_library(rdfParser RdfParser.cpp AsyncFileBlockDriver.cpp AsyncSerialParserAdapter.cpp
+        BlankNodeAdder.cpp)
 # `RdfAsyncParallelParser` and `RdfAsyncMultifileParser` are implemented using
 # C++20 coroutines, and the former uses `ad_utility::AsyncResourcePool`, which
 # needs `boost::asio::experimental::concurrent_channel` (Boost 1.80 or newer),

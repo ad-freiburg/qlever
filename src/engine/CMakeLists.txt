@@ -21,7 +21,8 @@ add_library(engine
         PermutationSelector.cpp ConstructTripleGenerator.cpp
         ConstructTemplatePreprocessor.cpp ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp
         ConstructDeduplicator.cpp MaterializedViewsQueryAnalysis.cpp
-        MaterializedViewsPatternMatcher.cpp UpdateMetadata.cpp ExternalValues.cpp)
+        MaterializedViewsPatternMatcher.cpp UpdateMetadata.cpp ExternalValues.cpp
+        DistinctGraphs.cpp)
 add_subdirectory(spatialJoinAlgorithms)
 
 # `Boost::program_options` is not used inside `engine` itself, but the

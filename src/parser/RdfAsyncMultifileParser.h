@@ -20,7 +20,6 @@
 #include "backports/asio.h"
 #include "index/InputFileSpecification.h"
 #include "index/vocabulary/EncodedIriManager.h"
-#include "parser/AsyncParserDriver.h"
 #include "parser/AsyncRdfParserBase.h"
 #include "parser/RdfParser.h"
 #include "util/Iterators.h"
@@ -154,7 +153,8 @@ class RdfAsyncMultifileParser : public AsyncRdfParserBase {
   // (like `boost::asio::use_future`), so `co_spawn` returns `void` for it, and
   // the whole completion-token machinery lives one level up, in
   // `AsyncRdfParserBase::asyncGetBatch`.
-  void asyncGetBatchImpl(Handler handler) override;
+  void asyncGetBatchImpl(std::vector<TurtleTriple> buffer,
+                         Handler handler) override;
 
  private:
   // The implementation of `asyncGetBatchImpl`: pick a file according to the
@@ -162,8 +162,10 @@ class RdfAsyncMultifileParser : public AsyncRdfParserBase {
   // `asyncGetBatch()`, and retry with a (possibly different) file if that
   // file turns out to be already exhausted. Return `nullopt` once every file
   // is exhausted or an error was previously encountered. See the class
-  // comment for the exact error semantics.
-  boost::asio::awaitable<OptionalTriples> getBatchCoroutine();
+  // comment for the exact error semantics. `buffer` is handed to the file that
+  // was picked, see `AsyncRdfParserBase::asyncGetBatch`.
+  boost::asio::awaitable<OptionalTriples> getBatchCoroutine(
+      std::vector<TurtleTriple> buffer);
 
   // Pick the next file to call according to the scheduling policy from the
   // class comment above (opening a new one if necessary and incrementing its
@@ -185,26 +187,6 @@ class RdfAsyncMultifileParser : public AsyncRdfParserBase {
   // `pickFile` to call it while holding the lock.
   std::unique_ptr<AsyncRdfParserBase> makeFileParser(
       const qlever::InputFileSpecification& spec) const;
-};
-
-// The `RdfAsyncMultifileParser` driven by its own thread pool, which makes it a
-// drop-in replacement for `RdfMultifileParser`. The only purpose of this class
-// is to provide the constructor of `RdfMultifileParser`; everything else is
-// inherited from `AsyncParserDriver`.
-class RdfMultifileParserViaAsync
-    : public AsyncParserDriver<RdfAsyncMultifileParser> {
- public:
-  // Construct a parser that reads the files produced by `files` on an
-  // internally-managed thread pool. The interface is identical to that of
-  // `RdfMultifileParser`.
-  RdfMultifileParserViaAsync(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-      const EncodedIriManager* encodedIriManager,
-      ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
-      RdfParserSettings settings = {})
-      : AsyncParserDriver<RdfAsyncMultifileParser>{
-            encodedIriManager, std::move(files), encodedIriManager, bufferSize,
-            settings} {}
 };
 
 #endif  // QLEVER_SRC_PARSER_RDFASYNCMULTIFILEPARSER_H

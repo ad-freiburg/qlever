@@ -27,6 +27,7 @@
 #include <boost/system/error_code.hpp>
 #include <cstddef>
 #include <exception>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -125,6 +126,13 @@ inline void logIgnoredException(std::exception_ptr exception,
 // outlives them as well. A consumer that abandons the merge has to call
 // `stop()`, so that those coroutines actually finish instead of waiting for a
 // consumer that is gone.
+//
+// A consequence of this is that the merge still owns (and still uses) its input
+// after the consumer is gone, and that the input is released on whichever
+// thread happens to run the last coroutine. A consumer that has to know when
+// the input is truly untouched again — for example because it then deletes the
+// file that the input reads from — therefore has to wait for
+// `asyncWaitForCompletion`, see `ParallelMergeRange`.
 template <bool moveElements, typename Input, typename Comparator, typename Sink>
 requires InputConcept<Input> && SinkConcept<Sink, typename Input::Block>
 class ParallelMergeState
@@ -150,6 +158,26 @@ class ParallelMergeState
   // `ParallelMergeState` can only be created via `create()` and hence only ever
   // exists inside a `shared_ptr`, see the LIFETIME note above.
   struct PrivateTag {};
+
+  // Fulfills its promise when it is destroyed, see `asyncWaitForCompletion`.
+  struct CompletionSignal {
+    std::promise<void> promise_;
+    ~CompletionSignal() noexcept {
+      ad_utility::terminateIfThrows(
+          [this] { promise_.set_value(); },
+          "Signalling the completion of a `ParallelMergeState` failed.");
+    }
+  };
+
+  // IMPORTANT: This is the *first* data member, such that it is destroyed
+  // *last*. Only then does the promise that it fulfills mean what
+  // `asyncWaitForCompletion` promises: that every other member is gone, in
+  // particular the `mergeState_`, which is the single owner of the input of the
+  // merge (see `MergeState`). The `ChunkMerger`s, which are the only other
+  // owners of the `mergeState_`, live in the frames of the chunk coroutines and
+  // are therefore already destroyed when the last of those coroutines releases
+  // its `shared_ptr` to this object.
+  CompletionSignal completionSignal_;
 
   ql::any_io_executor executor_;
   // Both are never `nullptr`, see `create()` below.
@@ -202,6 +230,19 @@ class ParallelMergeState
   // The number of chunks that this merge consists of, see
   // `computeChunkBoundaries`. Always at least one.
   size_t numChunks() const { return mergeState_->chunkBoundaries_.size(); }
+
+  // Return a future that becomes ready once this object has been destroyed,
+  // which is when the last coroutine of the merge is done (see the LIFETIME
+  // note above). At that point the merge has released everything that it owns,
+  // in particular its input, and will never touch it again. Combine this with
+  // `stop()` to wait for a merge that is abandoned; without the `stop()` the
+  // wait may last until the merge has run to completion.
+  //
+  // NOTE: May be called at most once per merge, because a `std::promise` hands
+  // out its future only once.
+  std::future<void> asyncWaitForCompletion() {
+    return completionSignal_.promise_.get_future();
+  }
 
   // Stop the merge, so that no coroutine is left waiting for a consumer that is
   // gone. NOTE: This returns immediately, it does *not* wait for the coroutines

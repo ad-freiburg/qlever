@@ -13,6 +13,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 // An operation that takes a set of subresults that pairwise-disjoint sets of
 // bound variables and materializes the full Cartesian product of these
@@ -53,7 +54,7 @@ class CartesianProductJoin : public Operation {
                                 size_t chunkSize = 1'000'000);
 
  private:
-  std::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
@@ -128,9 +129,8 @@ class CartesianProductJoin : public Operation {
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write.
-  void writeResultColumn(ql::span<Id> targetColumn,
-                         ql::span<const Id> inputColumn, size_t groupSize,
-                         size_t offset) const;
+  void writeResultColumn(IdColumnRef targetColumn, ConstIdColumnRef inputColumn,
+                         size_t groupSize, size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.
   // `offset` indicates how many rows to skip in the result and `limit` how many

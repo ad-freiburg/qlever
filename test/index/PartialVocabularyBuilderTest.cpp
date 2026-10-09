@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -26,8 +27,7 @@
 #include "global/Constants.h"
 #include "global/SpecialIds.h"
 #include "index/PartialVocabularyBuilder.h"
-#include "util/CachingMemoryResource.h"
-#include "util/Conversions.h"
+#include "rdfTypes/Iri.h"
 #include "util/HashMap.h"
 
 namespace {
@@ -46,10 +46,16 @@ using StringTriple = std::array<std::string, NumColumnsIndexBuilding>;
 // call that would deliver the batch with that index fails with a
 // `std::runtime_error` instead, and all subsequent calls deliver `nullopt`
 // (the same contract as the real parsers, see `AsyncRdfParserBase`).
+//
+// The buffers that the callers pass in are not used for the batches (which are
+// fixed), but they are checked to be empty, and those that already have a
+// capacity (i.e. that were recycled by their caller) are counted in
+// `*numCallsWithReusedBuffer` if that pointer is not null.
 class MockParser : public AsyncRdfParserBase {
  private:
   std::vector<std::vector<TurtleTriple>> batches_;
   std::optional<size_t> failAtBatch_;
+  std::atomic<size_t>* numCallsWithReusedBuffer_;
   std::mutex mutex_;
   size_t nextBatch_ = 0;
   bool failed_ = false;
@@ -57,13 +63,20 @@ class MockParser : public AsyncRdfParserBase {
  public:
   MockParser(const ql::any_io_executor& executor,
              std::vector<std::vector<TurtleTriple>> batches,
-             std::optional<size_t> failAtBatch = std::nullopt)
+             std::optional<size_t> failAtBatch = std::nullopt,
+             std::atomic<size_t>* numCallsWithReusedBuffer = nullptr)
       : AsyncRdfParserBase{executor},
         batches_{std::move(batches)},
-        failAtBatch_{failAtBatch} {}
+        failAtBatch_{failAtBatch},
+        numCallsWithReusedBuffer_{numCallsWithReusedBuffer} {}
 
  protected:
-  void asyncGetBatchImpl(Handler handler) override {
+  void asyncGetBatchImpl(std::vector<TurtleTriple> buffer,
+                         Handler handler) override {
+    EXPECT_TRUE(buffer.empty());
+    if (numCallsWithReusedBuffer_ != nullptr && buffer.capacity() > 0) {
+      numCallsWithReusedBuffer_->fetch_add(1);
+    }
     std::lock_guard l{mutex_};
     if (failed_ || nextBatch_ >= batches_.size()) {
       handler(nullptr, std::nullopt);
@@ -113,8 +126,9 @@ class MockIndex {
     return result;
   }
 
-  void writePartialVocabulary(size_t partialVocabIdx, ItemMapAndBuffer items,
-                              std::vector<IdRow> localIds) {
+  void writePartialVocabulary(size_t partialVocabIdx,
+                              const ItemMapAndBuffer& items,
+                              std::vector<IdRow>& localIds) {
     if (throwOnWrite_) {
       throw std::runtime_error{"write error"};
     }
@@ -192,24 +206,28 @@ struct RunResult {
   size_t numPartialVocabularies_;
   size_t numTriples_;
   bool stopRequested_;
+  // The number of `asyncGetBatch` calls that passed a buffer which a task
+  // chain had already used for a previous batch, see `MockParser`.
+  size_t numCallsWithReusedBuffer_;
 };
 RunResult run(MockIndex& index, std::vector<std::vector<TurtleTriple>> batches,
               size_t linesPerPartial, size_t numThreads,
               std::optional<size_t> failAtBatch = std::nullopt) {
-  ad_utility::CachingMemoryResource cachingMemoryResource;
-  ItemAlloc itemAlloc(&cachingMemoryResource);
   TripleComponentComparator comparator;
 
-  FirstPassSharedState<MockIndex> shared{&index, &comparator, itemAlloc,
-                                         linesPerPartial};
+  FirstPassSharedState<MockIndex> shared{&index, &comparator, linesPerPartial};
+  // Outlives `runTaskChains` (and hence the `MockParser` that writes it).
+  std::atomic<size_t> numCallsWithReusedBuffer{0};
   runTaskChains(shared, numThreads,
-                [&batches, failAtBatch](const ql::any_io_executor& executor)
+                [&batches, failAtBatch,
+                 &numCallsWithReusedBuffer](const ql::any_io_executor& executor)
                     -> std::unique_ptr<AsyncRdfParserBase> {
                   return std::make_unique<MockParser>(
-                      executor, std::move(batches), failAtBatch);
+                      executor, std::move(batches), failAtBatch,
+                      &numCallsWithReusedBuffer);
                 });
   return {shared.nextPartialVocabIdx_.load(), shared.numTriples_.load(),
-          shared.stopRequested_.load()};
+          shared.stopRequested_.load(), numCallsWithReusedBuffer.load()};
 }
 }  // namespace
 
@@ -255,6 +273,20 @@ TEST(PartialVocabularyBuilder, singleChainSeveralPartialVocabularies) {
     expectedWords.insert(triple.begin(), triple.end());
   }
   EXPECT_EQ(second.words_, expectedWords);
+}
+
+// _____________________________________________________________________________
+TEST(PartialVocabularyBuilder, batchBuffersAreReused) {
+  // A single chain consumes four batches one after the other, which takes five
+  // calls (the last one reports the end of the input). It hands the buffer of
+  // every batch it has consumed back to the parser, so only the very first of
+  // those calls passes a buffer without a capacity.
+  std::vector<std::vector<TurtleTriple>> batches{
+      {makeTriple(0)}, {makeTriple(1)}, {makeTriple(2)}, {makeTriple(3)}};
+  MockIndex index;
+  auto result = run(index, batches, 100, 1);
+  EXPECT_EQ(result.numTriples_, 4u);
+  EXPECT_EQ(result.numCallsWithReusedBuffer_, 4u);
 }
 
 // _____________________________________________________________________________
@@ -327,11 +359,10 @@ TEST(PartialVocabularyBuilder, languageTaggedLiteralAddsInternalTriples) {
   EXPECT_EQ(result.numTriples_, 3u);
 
   auto graph = std::string{DEFAULT_GRAPH_IRI};
-  auto langTag =
-      str(TripleComponent{ad_utility::convertLangtagToEntityUri("en")});
+  auto langTag = str(
+      TripleComponent{ad_utility::triple_component::Iri::fromLangtag("en")});
   auto langTaggedPredicate =
-      str(TripleComponent{ad_utility::convertToLanguageTaggedPredicate(
-          triple.predicate_.getIri(), "en")});
+      str(TripleComponent{triple.predicate_.getIri().withLanguageTag("en")});
   auto langPredicate = str(TripleComponent{iri(LANGUAGE_PREDICATE)});
   StringTriple expectedOriginal{str(triple.subject_), str(triple.predicate_),
                                 str(triple.object_), graph};

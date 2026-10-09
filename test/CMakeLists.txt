@@ -1,5 +1,17 @@
 include(GoogleTest)
 
+# The test binaries are not shipped and link without LTO (see
+# `QLEVER_ENABLE_LTO` in the top-level `CMakeLists.txt`). With GCC, also compile
+# them without LTO, so that no (unused) GIMPLE bytecode is generated for them.
+#
+# NOTE: `add_compile_options` sets a directory property that applies to all
+# targets created afterwards in this directory and its subdirectories (in
+# particular `testUtil` below, which is why this block comes first), and never
+# to the parent directory.
+if (QLEVER_ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-fno-lto)
+endif()
+
 # Needed for creating the `testUil`-library.
 add_subdirectory(util EXCLUDE_FROM_ALL)
 
@@ -8,6 +20,14 @@ add_subdirectory(util EXCLUDE_FROM_ALL)
 # arguments.
 function(linkTest basename)
     qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main ${CMAKE_THREAD_LIBS_INIT} global)
+    # Reuse the precompiled headers of `testUtil`. This requires the same
+    # compiler flags and definitions as `testUtil`, so only tests that link
+    # against `testUtil` qualify (otherwise, e.g., the definitions of
+    # OpenTelemetry are missing, and GCC ignores the precompiled header, but
+    # still includes all its headers).
+    if (USE_PRECOMPILED_HEADERS AND "testUtil" IN_LIST ARGN)
+        target_precompile_headers(${basename} REUSE_FROM testUtil)
+    endif ()
 endfunction()
 
 # Add the executable ${basename} that is compiled from the source file
@@ -143,6 +163,7 @@ add_subdirectory(rdfTypes)
 add_subdirectory(joinAlgorithms)
 add_subdirectory(libqlever)
 add_subdirectory(parallelBlockMerge)
+add_subdirectory(blockSort)
 
 OPTION(_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS "Disable some tests that cause undefined symbol errors when building with Emscripten." OFF)
 
@@ -175,6 +196,8 @@ addLinkAndDiscoverTest(VariableCounterTest sparqlParser engine)
 addLinkAndDiscoverTest(StringUtilsTest qlever_util)
 
 addLinkAndDiscoverTest(RegexSetTest qlever_util)
+
+addLinkAndDiscoverTest(BinaryDiffApplierTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
 
@@ -301,7 +324,11 @@ addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)
 
 addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
+addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
+
 addLinkAndDiscoverTest(TaskQueueTest)
+
+addLinkAndDiscoverTest(TaskQueueOnExecutorTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
@@ -321,6 +348,8 @@ addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
 addLinkAndDiscoverTestNoLibs(CompactStringVectorTest sparqlParser)
 
+addLinkAndDiscoverTestNoLibs(OwnedOrViewedVectorTest)
+
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
 addLinkAndDiscoverTest(ContentEncodingHelperTest http)
@@ -333,7 +362,13 @@ addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
 
+addLinkAndDiscoverTestNoLibs(UniqueBlockViewTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(AsyncTransformViewTest qlever_util)
+
 addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
+
+addLinkAndDiscoverTestNoLibs(ChunkedIotaViewTest)
 
 addLinkAndDiscoverTest(ForwardTest)
 
@@ -342,6 +377,8 @@ addLinkAndDiscoverTestNoLibs(CompressorStreamTest Boost::iostreams)
 addLinkAndDiscoverTestNoLibs(AsyncStreamTest)
 
 addLinkAndDiscoverTest(BitUtilsTest)
+
+addLinkAndDiscoverTest(HyperLogLogTest)
 
 addLinkAndDiscoverTest(NBitIntegerTest)
 
@@ -360,6 +397,8 @@ addLinkAndDiscoverTest(DurationTest qlever_util)
 addLinkAndDiscoverTest(TripleComponentTest)
 
 addLinkAndDiscoverTest(ValueIdTest qlever_util)
+
+addLinkAndDiscoverTest(DatatypeTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
 
@@ -395,6 +434,13 @@ if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
 endif ()
 
 addLinkAndDiscoverTest(HttpProxyConfigTest http)
+
+# The `fetch`-based implementation of the HTTP client that replaces the
+# Boost.Beast-based one for Emscripten (see `HttpClientEmscripten.cpp`) can of
+# course only be tested in a WebAssembly build.
+if (EMSCRIPTEN)
+    addLinkAndDiscoverTest(HttpClientEmscriptenTest http)
+endif ()
 
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
@@ -472,6 +518,8 @@ addLinkAndDiscoverTest(ComparisonWithNanTest)
 
 addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
 
+addLinkAndDiscoverTestNoLibs(RecyclingPoolTest)
+
 addLinkAndDiscoverTest(IdTableHelpersTest)
 
 addLinkAndDiscoverTest(GeneratorTest)
@@ -485,9 +533,11 @@ addLinkAndDiscoverTest(JoinAlgorithmsTest)
 addLinkAndDiscoverTest(AsioHelpersTest)
 # With `-fwasm-exceptions`, clang's `correlated-propagation` pass (run at -O2/-O3)
 # crashes on the coroutine `.resume` body in this file. Compiling just this
-# translation unit at -O1 avoids the crashing pass.
+# translation unit at -O1 avoids the crashing pass (and makes the precompiled
+# header of `testUtil`, which is compiled with the default flags, unusable).
 if (EMSCRIPTEN)
-    set_source_files_properties(AsioHelpersTest.cpp PROPERTIES COMPILE_OPTIONS "-O1")
+    set_source_files_properties(AsioHelpersTest.cpp PROPERTIES
+            COMPILE_OPTIONS "-O1" SKIP_PRECOMPILE_HEADERS ON)
 endif ()
 
 addLinkAndDiscoverTest(AsyncResourcePoolTest)
@@ -509,8 +559,6 @@ addLinkAndDiscoverTest(MessageSenderTest http)
 addLinkAndDiscoverTestNoLibs(CancellationHandleTest qlever_util)
 
 addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
-
-addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
@@ -549,6 +597,8 @@ addLinkAndDiscoverTest(LruCacheTest)
 addLinkAndDiscoverTest(LruCacheWithStatisticsTest)
 
 addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
+
+addLinkAndDiscoverTestNoLibs(RangeThatReleasesOnEndTest)
 
 addLinkAndDiscoverTest(TripleSerializerTest)
 
@@ -607,6 +657,8 @@ addLinkAndDiscoverTest(FilesystemHelpersTest qlever_util)
 addLinkAndDiscoverTest(LogTest)
 
 addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(GlobalExecutorTest qlever_util)
 
 addLinkAndDiscoverTest(MetricsTest metrics)
 

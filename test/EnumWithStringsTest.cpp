@@ -7,15 +7,13 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-// Must be included before `EnumWithStrings.h` (via `VocabularyType.h`) so
-// that `boost::any` and `boost::program_options::validate` are visible when
-// the `EnumWithStrings::validate` template is instantiated.
 #include <gmock/gmock.h>
 
 #include <boost/program_options.hpp>
 
 #include "./util/GTestHelpers.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/EnumWithStringsProgramOptions.h"
 #include "util/HashMap.h"
 
 // _____________________________________________________________________________

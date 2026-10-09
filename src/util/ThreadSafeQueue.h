@@ -116,9 +116,9 @@ class ThreadSafeQueue : public ad_utility::NoCopyNoMove {
   // explicit call to `finish` is missing.
   ~ThreadSafeQueue() { finish(); }
 
-  // Blocks until another thread pushes an element via push() which is
-  // hen returned or signalLastElementWasPushed() is called resulting in an
-  // empty optional, whatever happens first
+  // Block until another thread pushes an element, which is then returned, or
+  // until `finish` is called, which results in an empty optional, whatever
+  // happens first.
   std::optional<T> pop() {
     std::unique_lock lock{mutex_};
     pushNotification_.wait(lock, [this] {
