@@ -253,7 +253,7 @@ uint64_t VocabularyOnDisk::WordWriter::operator()(
 uint64_t VocabularyOnDisk::WordWriter::reserveBlock(const WordBlock& block) {
   AD_CONTRACT_CHECK(block.firstPosition_ == numWords_);
   uint64_t dataOffset = currentOffset_;
-  currentOffset_ += block.data_.size();
+  currentOffset_ += block.data().size();
   numWords_ += block.numWords();
   return dataOffset;
 }
@@ -266,13 +266,13 @@ void VocabularyOnDisk::WordWriter::writeBlockAt(const WordBlock& block,
   // are absolute.
   std::vector<uint64_t> offsets(numWords);
   for (size_t i = 0; i < numWords; ++i) {
-    offsets[i] = dataOffset + block.offsets_[i];
+    offsets[i] = dataOffset + block.offsets()[i];
   }
   // NOTE: The positioned `write` throws if not all the bytes could be written.
   offsetsFile_.write(
       offsets.data(), numWords * sizeof(uint64_t),
       static_cast<off_t>(block.firstPosition_ * sizeof(uint64_t)));
-  file_.write(block.data_.data(), block.data_.size(),
+  file_.write(block.data().data(), block.data().size(),
               static_cast<off_t>(dataOffset));
 }
 

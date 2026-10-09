@@ -275,11 +275,11 @@ class GeoVocabulary {
   // arrives with the
   // block as its payload; `prepare` only checks the cell order, and the
   // records are written to their position in the `geoInfoFile_` by a task on
-  // the global thread pool that `append` starts (a positioned write). With a
-  // grid, `indexOf` computes the cell of a word from the literal (exactly as
-  // `WordWriter::operator()`), and the order of the cells is checked in
-  // `prepare` (within a block) and `append` (across blocks). The files are the
-  // same as those of the `WordWriter`.
+  // the global thread pool that the append step starts (a positioned write).
+  // With a grid, `indexOf` computes the cell of a word from the literal
+  // (exactly as `WordWriter::operator()`), and the order of the cells is
+  // checked in `prepare` (within a block) and in the append step (across
+  // blocks). The files are the same as those of the `WordWriter`.
   class BlockWriter : public BlockWriterBase {
    private:
     std::unique_ptr<BlockWriterBase> underlyingWriter_;
@@ -292,17 +292,8 @@ class GeoVocabulary {
     mutable std::atomic<size_t> numInvalidGeometries_ = 0;
     mutable std::atomic<size_t> numInvalidPolygonArea_ = 0;
     // The writes of the records that are running on the pool, oldest first;
-    // bounded, see `append`.
+    // bounded, see `appendRecords`.
     std::deque<std::future<void>> pendingWrites_;
-
-    struct Prepared : public PreparedBlockBase {
-      std::unique_ptr<PreparedBlockBase> underlying_;
-      std::vector<GeometryInfoBuffer> records_;
-      uint64_t firstPosition_;
-      // The cells of the first and the last word (only with a grid).
-      std::optional<GeoCellGrid::CellIndex> firstCellIndex_;
-      std::optional<GeoCellGrid::CellIndex> lastCellIndex_;
-    };
 
    public:
     // Constructor, see `WordWriter`.
@@ -315,8 +306,7 @@ class GeoVocabulary {
     size_t precomputedPayloadSize() const override { return geoInfoOffset; }
     void precomputePayload(std::string_view word,
                            ql::span<char> payload) const override;
-    std::unique_ptr<PreparedBlockBase> prepare(WordBlock block) override;
-    void append(std::unique_ptr<PreparedBlockBase> prepared) override;
+    AppendBlock prepare(WordBlock block) override;
 
     // Finish if that has not happened yet, so that no write is left running
     // on the pool.
@@ -328,6 +318,16 @@ class GeoVocabulary {
 
    private:
     void finishImpl() override;
+
+    // The append step of a block (see `prepare`): check the cells of its
+    // first and last word (only with a grid) against the previous block,
+    // append the block to the underlying vocabulary (via `appendUnderlying`),
+    // and write its `records` to their position in the `geoInfoFile_`.
+    void appendRecords(uint64_t firstPosition,
+                       std::vector<GeometryInfoBuffer> records,
+                       std::optional<GeoCellGrid::CellIndex> firstCellIndex,
+                       std::optional<GeoCellGrid::CellIndex> lastCellIndex,
+                       AppendBlock appendUnderlying);
   };
 
   // The files of the underlying vocabulary, which is stored under the base

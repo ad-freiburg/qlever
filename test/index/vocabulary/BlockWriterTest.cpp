@@ -82,8 +82,7 @@ std::vector<uint64_t> writeInBlocks(
   const uint8_t numSubs = writer->numSubVocabularies();
   std::vector<WordBlock> openBlocks(numSubs);
   std::vector<uint64_t> numWordsWritten(numSubs, 0);
-  std::vector<std::vector<std::future<std::unique_ptr<PreparedBlockBase>>>>
-      preparedBlocks(numSubs);
+  std::vector<std::vector<std::future<AppendBlock>>> preparedBlocks(numSubs);
   std::vector<uint64_t> indices;
 
   // Prepare a full (or the last) block of the sub-vocabulary `sub`
@@ -124,7 +123,8 @@ std::vector<uint64_t> writeInBlocks(
   for (uint8_t sub = 0; sub < numSubs; ++sub) {
     flush(sub);
     for (auto& future : preparedBlocks[sub]) {
-      writer->blockWriter(sub).append(future.get());
+      AppendBlock appendBlock = future.get();
+      std::move(appendBlock)();
     }
   }
   writer->finish();
@@ -182,12 +182,12 @@ TEST(BlockWriter, fromCallback) {
   WordBlock block;
   block.push("a", true);
   block.push("bc", false);
-  auto prepared = writer.prepare(std::move(block));
-  writer.append(std::move(prepared));
+  AppendBlock appendBlock = writer.prepare(std::move(block));
+  std::move(appendBlock)();
   WordBlock block2;
   block2.firstPosition_ = 2;
   block2.push("d", true);
-  writer.append(writer.prepare(std::move(block2)));
+  writer.prepare(std::move(block2))();
   EXPECT_THAT(
       writer.callback().words_,
       ::testing::ElementsAre(std::pair{"a", true}, std::pair{"bc", false},
@@ -200,6 +200,23 @@ TEST(BlockWriter, fromCallback) {
   BlockWriterFromCallback<Callback> writerOff{Callback{{}, false, 1}};
   WordBlock block3;
   block3.push("a", true);
-  EXPECT_ANY_THROW(writerOff.append(writerOff.prepare(std::move(block3))));
+  EXPECT_ANY_THROW(writerOff.prepare(std::move(block3))());
   writerOff.finish();
+}
+
+// _____________________________________________________________________________
+TEST(BlockWriter, wordBlock) {
+  WordBlock block;
+  EXPECT_TRUE(block.empty());
+  EXPECT_TRUE(block.data().empty());
+  EXPECT_TRUE(block.offsets().empty());
+  block.push("ab", true);
+  block.push("", false);
+  block.push("cde", true);
+  EXPECT_EQ(block.numWords(), 3u);
+  EXPECT_EQ(block.word(2), "cde");
+  EXPECT_THAT(block.words(), ::testing::ElementsAre("ab", "", "cde"));
+  EXPECT_EQ(std::string_view(block.data().data(), block.data().size()),
+            "abcde");
+  EXPECT_THAT(block.offsets(), ::testing::ElementsAre(0, 2, 2, 5));
 }

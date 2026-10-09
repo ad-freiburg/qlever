@@ -512,8 +512,9 @@ CPP_template(typename UnderlyingVocabulary,
   // The block-wise counterpart of the `DiskWriterFromUncompressedWords` (see
   // `BlockWriterBase`): a block is compressed in `prepare` (with one decoder
   // per block, so a block has to be exactly `NumWordsPerBlock` words, as the
-  // word-by-word writer cuts them), and `append` hands the compressed block to
-  // the block writer of the underlying vocabulary and stores the decoder. The
+  // word-by-word writer cuts them), and the append step hands the compressed
+  // block to the block writer of the underlying vocabulary and stores the
+  // decoder. The
   // files are the same as those of the word-by-word writer.
   //
   // NOTE: This is a template for the same reason as
@@ -530,14 +531,6 @@ CPP_template(typename UnderlyingVocabulary,
     size_t numBlocksLargerWhenCompressed_ = 0u;
     uint64_t numWords_ = 0;
 
-    struct Prepared : public PreparedBlockBase {
-      std::unique_ptr<PreparedBlockBase> underlying_;
-      typename CompressionWrapper::Decoder decoder_;
-      size_t numWords_;
-      size_t uncompressedSize_;
-      size_t compressedSize_;
-    };
-
    public:
     // Constructor, see `DiskWriterFromUncompressedWords`.
     explicit BlockWriter(const std::string& filename)
@@ -548,13 +541,13 @@ CPP_template(typename UnderlyingVocabulary,
     size_t blockSize() const override { return NumWordsPerBlock; }
 
     // Compress the `block` and prepare the compressed block for the underlying
-    // vocabulary.
-    std::unique_ptr<PreparedBlockBase> prepare(WordBlock block) override {
+    // vocabulary. The append step appends the compressed block to the
+    // underlying vocabulary and stores its decoder.
+    AppendBlock prepare(WordBlock block) override {
       AD_CONTRACT_CHECK(block.firstPosition_ % NumWordsPerBlock == 0 &&
                         block.numWords() <= NumWordsPerBlock);
-      auto prepared = std::make_unique<Prepared>();
-      prepared->numWords_ = block.numWords();
-      prepared->uncompressedSize_ = block.data_.size();
+      const size_t numWords = block.numWords();
+      const size_t uncompressedSize = block.data().size();
       auto [buffer, compressedWords, decoder] =
           CompressionWrapper::compressAll(block.words());
       // The compressed block for the underlying vocabulary. NOTE: The
@@ -562,7 +555,6 @@ CPP_template(typename UnderlyingVocabulary,
       // so it has to be kept alive until they are copied.
       WordBlock compressed;
       compressed.firstPosition_ = block.firstPosition_;
-      compressed.offsets_.reserve(compressedWords.size() + 1);
       compressed.isExternal_.reserve(compressedWords.size());
       // TODO<joka921> This copies all the compressed words from the `buffer`
       // into the new `WordBlock`, which is unnecessary. Let the `WordBlock`
@@ -570,10 +562,21 @@ CPP_template(typename UnderlyingVocabulary,
       for (size_t i = 0; i < compressedWords.size(); ++i) {
         compressed.push(compressedWords[i], block.isExternal_[i]);
       }
-      prepared->compressedSize_ = compressed.data_.size();
-      prepared->decoder_ = std::move(decoder);
-      prepared->underlying_ = underlyingWriter_->prepare(std::move(compressed));
-      return prepared;
+      const size_t compressedSize = compressed.data().size();
+      return [this, numWords, uncompressedSize, compressedSize,
+              decoder = std::move(decoder),
+              appendUnderlying =
+                  underlyingWriter_->prepare(std::move(compressed))]() mutable {
+        AD_CONTRACT_CHECK(numWords_ % NumWordsPerBlock == 0);
+        numWords_ += numWords;
+        uncompressedSize_ += bytes(uncompressedSize);
+        compressedSize_ += bytes(compressedSize);
+        ++numBlocks_;
+        numBlocksLargerWhenCompressed_ +=
+            static_cast<size_t>(compressedSize > uncompressedSize);
+        decoders_.push_back(std::move(decoder));
+        std::move(appendUnderlying)();
+      };
     }
 
     // Finish if that has not happened yet, see
@@ -582,21 +585,6 @@ CPP_template(typename UnderlyingVocabulary,
       ad_utility::terminateIfThrows([this]() { this->finish(); },
                                     "Calling `finish` from the destructor of "
                                     "`CompressedVocabulary::BlockWriter`");
-    }
-
-    // Append the compressed block to the underlying vocabulary and store its
-    // decoder.
-    void append(std::unique_ptr<PreparedBlockBase> preparedBase) override {
-      auto& prepared = dynamic_cast<Prepared&>(*preparedBase);
-      AD_CONTRACT_CHECK(numWords_ % NumWordsPerBlock == 0);
-      numWords_ += prepared.numWords_;
-      uncompressedSize_ += bytes(prepared.uncompressedSize_);
-      compressedSize_ += bytes(prepared.compressedSize_);
-      ++numBlocks_;
-      numBlocksLargerWhenCompressed_ += static_cast<size_t>(
-          prepared.compressedSize_ > prepared.uncompressedSize_);
-      decoders_.push_back(std::move(prepared.decoder_));
-      underlyingWriter_->append(std::move(prepared.underlying_));
     }
 
    private:

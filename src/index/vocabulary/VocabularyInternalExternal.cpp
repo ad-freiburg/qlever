@@ -46,9 +46,7 @@ uint64_t VocabularyInternalExternal::WordWriter::addToInternalVocabIfRequired(
 }
 
 // _____________________________________________________________________________
-void VocabularyInternalExternal::BlockWriter::append(
-    std::unique_ptr<PreparedBlockBase> prepared) {
-  const WordBlock& block = dynamic_cast<Prepared&>(*prepared).block_;
+void VocabularyInternalExternal::BlockWriter::appendBlock(WordBlock block) {
   AD_CONTRACT_CHECK(block.firstPosition_ == writer_.idx_);
   uint64_t dataOffset = writer_.externalWriter_.reserveBlock(block);
   // The same rule as in `WordWriter::operator()` for the internal vocabulary;
@@ -68,11 +66,9 @@ void VocabularyInternalExternal::BlockWriter::append(
   }
   pendingWrites_.push_back(boost::asio::post(
       ad_utility::globalExecutor(),
-      boost::asio::use_future(
-          [this, prepared = std::move(prepared), dataOffset]() {
-            writer_.externalWriter_.writeBlockAt(
-                dynamic_cast<Prepared&>(*prepared).block_, dataOffset);
-          })));
+      boost::asio::use_future([this, block = std::move(block), dataOffset]() {
+        writer_.externalWriter_.writeBlockAt(block, dataOffset);
+      })));
 }
 
 // _____________________________________________________________________________
@@ -87,7 +83,7 @@ void VocabularyInternalExternal::BlockWriter::finishImpl() {
   // Wait for the writes on the pool (and rethrow their exceptions) before the
   // files are finished.
   // TODO<joka921> Contribute the waiting thread to the global executor, see
-  // the same TODO in `append`.
+  // the same TODO in `appendBlock`.
   for (auto& write : pendingWrites_) {
     write.get();
   }

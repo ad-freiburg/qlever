@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
 
+#include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 
 #include <atomic>
@@ -21,6 +22,7 @@
 
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Iterators.h"
@@ -414,25 +416,20 @@ class WordWriterBase {
 // fed in blocks of consecutive words, and it splits the writing of a block into
 // a `prepare` step, which runs on any thread and concurrently for different
 // blocks (the compression of the words, the geometry info of WKT literals), and
-// an `append` step, which appends the prepared block to the files and runs on a
-// single thread, in the order of the blocks. That is what will let the
+// an append step (the `AppendBlock` that `prepare` returns), which appends the
+// prepared block to the files and runs on a single thread, in the order of the
+// blocks. That is what will let the
 // vocabulary merger (see `index/VocabularyMerger.h`, in a follow-up PR) do the
 // expensive per-word work of the writing on all its threads.
 
 // A block of consecutive words of a vocabulary, the unit in which a
-// `BlockWriterBase` works: the concatenated words, one offset per word plus
-// the end offset, whether each word is to be externalized (see
-// `WordWriterBase::operator()`), and the position of the first word in the
-// vocabulary.
-//
-// NOTE: The words are deliberately stored as offsets and not as
-// `std::string_view`s into `data_`, because the offsets stay valid when `data_`
-// grows or when the block is copied or moved, and because they are directly
-// what `VocabularyOnDisk` writes to disk. The views are only materialized where
-// they are needed (see `words()`).
+// `BlockWriterBase` works: the words, whether each word is to be externalized
+// (see `WordWriterBase::operator()`), and the position of the first word in the
+// vocabulary. The concatenated bytes of the words and their offsets (see
+// `data()` and `offsets()`) are directly what `VocabularyOnDisk` writes to
+// disk.
 struct WordBlock {
-  std::string data_;
-  std::vector<uint64_t> offsets_{0};
+  CompactVectorOfStrings<char> words_;
   std::vector<bool> isExternal_;
   uint64_t firstPosition_ = 0;
   // The precomputed payload of the words, `payloadSize_` bytes per word (see
@@ -445,8 +442,7 @@ struct WordBlock {
   void push(std::string_view word, bool isExternal,
             std::string_view payload = {}) {
     AD_CORRECTNESS_CHECK(payload.size() == payloadSize_);
-    data_.append(word);
-    offsets_.push_back(data_.size());
+    words_.push_back(word);
     isExternal_.push_back(isExternal);
     payload_.append(payload);
   }
@@ -460,28 +456,24 @@ struct WordBlock {
   bool empty() const { return numWords() == 0; }
 
   // The `i`-th word of the block.
-  std::string_view word(size_t i) const {
-    return std::string_view{data_.data() + offsets_[i],
-                            offsets_[i + 1] - offsets_[i]};
-  }
+  std::string_view word(size_t i) const { return words_[i]; }
 
-  // The words of the block as views into `data_`.
+  // The words of the block as views into `words_`.
   std::vector<std::string_view> words() const {
-    std::vector<std::string_view> result;
-    result.reserve(numWords());
-    for (size_t i = 0; i < numWords(); ++i) {
-      result.push_back(word(i));
-    }
-    return result;
+    return {words_.begin(), words_.end()};
   }
+
+  // The concatenated bytes of all the words.
+  ql::span<const char> data() const { return words_.dataSpan(); }
+
+  // The offset of each word in `data()`, plus the end of the last word. Empty
+  // if the block is empty.
+  ql::span<const uint64_t> offsets() const { return words_.offsetsSpan(); }
 };
 
-// The result of `BlockWriterBase::prepare`, whose contents only the block
-// writer that created it knows.
-class PreparedBlockBase {
- public:
-  virtual ~PreparedBlockBase() = default;
-};
+// The append step of a block that `BlockWriterBase::prepare` returns, see the
+// comment above. It has to be called exactly once.
+using AppendBlock = absl::AnyInvocable<void() &&>;
 
 // The default number of words per block for a vocabulary that has no
 // requirement of its own (see `BlockWriterBase::blockSize`).
@@ -537,12 +529,10 @@ class BlockWriterBase {
   // other block. The block carries the precomputed payload of its words if
   // `precomputedPayloadSize()` is not `0`. This function must be thread-safe
   // (for all overrides), because it may be called from any thread and
-  // concurrently for different blocks.
-  virtual std::unique_ptr<PreparedBlockBase> prepare(WordBlock block) = 0;
-
-  // Append a prepared block to the vocabulary. Called from a single thread,
-  // in the order of the blocks.
-  virtual void append(std::unique_ptr<PreparedBlockBase> block) = 0;
+  // concurrently for different blocks. Return the step that appends the
+  // prepared block to the vocabulary, which has to be called from a single
+  // thread, in the order of the blocks, and before `finish()`.
+  virtual AppendBlock prepare(WordBlock block) = 0;
 
   // Signal that the last block has been appended (flush and close the files).
   // No further block may be prepared or appended afterwards.
@@ -646,16 +636,11 @@ struct HasFinish<T, std::void_t<decltype(std::declval<T&>().finish())>>
 // signature of `WordWriterBase::operator()` and which has to return the
 // position of the word (the block writer checks that). If the callback has a
 // `finish()`, it is called by `finishImpl`. The `prepare` step does nothing,
-// so all the work of such a writer happens in `append`.
+// so all the work of such a writer happens in the append step.
 template <typename Callback>
 class BlockWriterFromCallback : public BlockWriterBase {
  private:
   Callback callback_;
-
-  struct Prepared : public PreparedBlockBase {
-    WordBlock block_;
-    explicit Prepared(WordBlock block) : block_{std::move(block)} {}
-  };
 
  public:
   explicit BlockWriterFromCallback(Callback callback)
@@ -668,17 +653,14 @@ class BlockWriterFromCallback : public BlockWriterBase {
     return DEFAULT_WORDS_PER_VOCABULARY_BLOCK;
   }
 
-  std::unique_ptr<PreparedBlockBase> prepare(WordBlock block) override {
-    return std::make_unique<Prepared>(std::move(block));
-  }
-
-  void append(std::unique_ptr<PreparedBlockBase> prepared) override {
-    const auto& block = dynamic_cast<Prepared&>(*prepared).block_;
-    for (size_t i = 0; i < block.numWords(); ++i) {
-      uint64_t position = std::invoke(callback_, block.word(i),
-                                      static_cast<bool>(block.isExternal_[i]));
-      AD_CORRECTNESS_CHECK(position == block.firstPosition_ + i);
-    }
+  AppendBlock prepare(WordBlock block) override {
+    return [this, block = std::move(block)]() {
+      for (size_t i = 0; i < block.numWords(); ++i) {
+        uint64_t position = std::invoke(
+            callback_, block.word(i), static_cast<bool>(block.isExternal_[i]));
+        AD_CORRECTNESS_CHECK(position == block.firstPosition_ + i);
+      }
+    };
   }
 
  private:

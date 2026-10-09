@@ -304,63 +304,70 @@ void GeoVocabulary<V>::BlockWriter::precomputePayload(
 
 // ____________________________________________________________________________
 template <typename V>
-std::unique_ptr<PreparedBlockBase> GeoVocabulary<V>::BlockWriter::prepare(
-    WordBlock block) {
+AppendBlock GeoVocabulary<V>::BlockWriter::prepare(WordBlock block) {
   AD_CONTRACT_CHECK(block.payloadSize_ == geoInfoOffset);
-  auto prepared = std::make_unique<Prepared>();
-  prepared->firstPosition_ = block.firstPosition_;
+  const uint64_t firstPosition = block.firstPosition_;
+  std::vector<GeometryInfoBuffer> records;
+  // The cells of the first and the last word (only with a grid).
+  std::optional<GeoCellGrid::CellIndex> firstCellIndex;
+  std::optional<GeoCellGrid::CellIndex> lastCellIndex;
   // The records come precomputed with the block (see `precomputePayload`); with
   // a grid, check that the cells are non-decreasing within the block, see
   // `WordWriter::operator()`.
-  prepared->records_.reserve(block.numWords());
+  records.reserve(block.numWords());
   for (size_t i = 0; i < block.numWords(); ++i) {
     std::string_view word = block.word(i);
     // NOTE: The size of the payload has been checked at the beginning.
-    ql::ranges::copy(block.payload(i),
-                     prepared->records_.emplace_back().begin());
+    ql::ranges::copy(block.payload(i), records.emplace_back().begin());
     if (grid_.has_value()) {
-      const auto& record = prepared->records_.back();
+      const auto& record = records.back();
       std::optional<GeometryInfo> info;
       if (record != invalidGeoInfoBuffer) {
         info = absl::bit_cast<GeometryInfo>(record);
       }
       auto cellIndex = cellIndexOfWord(grid_.value(), info, word);
-      AD_CONTRACT_CHECK(!prepared->lastCellIndex_.has_value() ||
-                            prepared->lastCellIndex_.value() <= cellIndex,
-                        "WKT literals were not passed to the GeoVocabulary in "
-                        "the order of their geo grid cells");
-      if (!prepared->firstCellIndex_.has_value()) {
-        prepared->firstCellIndex_ = cellIndex;
+      AD_CONTRACT_CHECK(
+          !lastCellIndex.has_value() || lastCellIndex.value() <= cellIndex,
+          "WKT literals were not passed to the GeoVocabulary in "
+          "the order of their geo grid cells");
+      if (!firstCellIndex.has_value()) {
+        firstCellIndex = cellIndex;
       }
-      prepared->lastCellIndex_ = cellIndex;
+      lastCellIndex = cellIndex;
     }
   }
-  prepared->underlying_ = underlyingWriter_->prepare(std::move(block));
-  return prepared;
+  return [this, firstPosition, records = std::move(records), firstCellIndex,
+          lastCellIndex,
+          appendUnderlying =
+              underlyingWriter_->prepare(std::move(block))]() mutable {
+    appendRecords(firstPosition, std::move(records), firstCellIndex,
+                  lastCellIndex, std::move(appendUnderlying));
+  };
 }
 
 // ____________________________________________________________________________
 template <typename V>
-void GeoVocabulary<V>::BlockWriter::append(
-    std::unique_ptr<PreparedBlockBase> preparedBase) {
-  auto& prepared = dynamic_cast<Prepared&>(*preparedBase);
-  AD_CONTRACT_CHECK(prepared.firstPosition_ == numWords_);
-  const size_t numWords = prepared.records_.size();
+void GeoVocabulary<V>::BlockWriter::appendRecords(
+    uint64_t firstPosition, std::vector<GeometryInfoBuffer> records,
+    std::optional<GeoCellGrid::CellIndex> firstCellIndex,
+    std::optional<GeoCellGrid::CellIndex> lastCellIndex,
+    AppendBlock appendUnderlying) {
+  AD_CONTRACT_CHECK(firstPosition == numWords_);
+  const size_t numWords = records.size();
   if (grid_.has_value() && numWords > 0) {
     // Keep one position free, see `WordWriter::operator()`.
     AD_CONTRACT_CHECK(numWords_ + numWords < grid_->maxNumWords(),
                       "Too many WKT literals for the configured geo cell "
                       "grid, please rebuild with a smaller grid level");
-    AD_CONTRACT_CHECK(
-        !lastCellIndex_.has_value() ||
-            lastCellIndex_.value() <= prepared.firstCellIndex_.value(),
-        "WKT literals were not passed to the GeoVocabulary in "
-        "the order of their geo grid cells");
-    lastCellIndex_ = prepared.lastCellIndex_;
+    AD_CONTRACT_CHECK(!lastCellIndex_.has_value() ||
+                          lastCellIndex_.value() <= firstCellIndex.value(),
+                      "WKT literals were not passed to the GeoVocabulary in "
+                      "the order of their geo grid cells");
+    lastCellIndex_ = lastCellIndex;
   }
   auto offset = static_cast<off_t>(geoInfoHeader + numWords_ * geoInfoOffset);
   numWords_ += numWords;
-  underlyingWriter_->append(std::move(prepared.underlying_));
+  std::move(appendUnderlying)();
   // The records are written by the pool, see `WordWriter::flushBatch` for
   // the bound on the writes in flight.
   const size_t maxNumPendingWrites = 2 * ad_utility::globalExecutorNumThreads();
@@ -370,11 +377,10 @@ void GeoVocabulary<V>::BlockWriter::append(
   }
   pendingWrites_.push_back(boost::asio::post(
       ad_utility::globalExecutor(),
-      boost::asio::use_future(
-          [this, records = std::move(prepared.records_), offset]() {
-            geoInfoFile_.write(records.data(), records.size() * geoInfoOffset,
-                               offset);
-          })));
+      boost::asio::use_future([this, records = std::move(records), offset]() {
+        geoInfoFile_.write(records.data(), records.size() * geoInfoOffset,
+                           offset);
+      })));
 }
 
 // ____________________________________________________________________________
