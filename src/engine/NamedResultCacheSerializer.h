@@ -12,6 +12,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
+#include "engine/NamedResultCacheFormatVersion.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/Serializer/SerializeString.h"
@@ -24,21 +25,6 @@ namespace namedResultCacheSerializer::detail {
 // serialized `NamedResultCache`. Used by `readFromSerializer` to give a clear
 // error message when the input is not a serialized `NamedResultCache`.
 constexpr uint8_t magicByte = 0xC3;
-
-// The version of the (de)serialization format implemented below. Increment
-// this whenever the format changes in a way that is incompatible with
-// previously serialized data, s.t. `readFromSerializer` can detect and reject
-// data that was written by an incompatible version of QLever.
-//
-// Version 1 is the legacy format, whose geo index consists of the geometry
-// column, one encoded S2 index, and a hash map from shape ids to rows. It can
-// only represent a geo index with a single segment. Version 2 is the current
-// format, whose geo index is the segmented one. Both versions are read by
-// `readFromSerializer` and written by `writeEntries` (see
-// `SpatialJoinCachedIndex::writeToSerializer` for the two formats of the geo
-// index). All other parts of the two formats are identical.
-constexpr uint16_t legacyFormatVersion = 1;
-constexpr uint16_t formatVersion = 2;
 }  // namespace namedResultCacheSerializer::detail
 
 namespace namedResultCacheSerializer {
@@ -50,8 +36,8 @@ using Value = NamedResultCache::Value;
 // value is written via `writeEntry(serializer, value)`, which has to write a
 // `NamedResultCache::Value`, but may write a modified version of it (see
 // `writeValue` below). The entries are written in the format version
-// `entriesVersion` (one of `detail::legacyFormatVersion` and
-// `detail::formatVersion`). Note that `writeEntry` has to write the values in
+// `entriesVersion` (one of `legacyFormatVersion` and
+// `formatVersion`). Note that `writeEntry` has to write the values in
 // the same `entriesVersion`, and that the legacy version can only represent
 // geo indices with a single segment.
 CPP_template(typename Serializer, typename WriteEntry)(
@@ -62,8 +48,8 @@ CPP_template(typename Serializer, typename WriteEntry)(
                                              const Entries& entries,
                                              const WriteEntry& writeEntry,
                                              uint16_t entriesVersion) {
-  AD_CONTRACT_CHECK(entriesVersion == detail::formatVersion ||
-                    entriesVersion == detail::legacyFormatVersion);
+  AD_CONTRACT_CHECK(entriesVersion == formatVersion ||
+                    entriesVersion == legacyFormatVersion);
   // Write the magic byte and format version first, s.t. `readFromSerializer`
   // can detect and reject incompatible or unrelated input.
   serializer << detail::magicByte;
@@ -82,8 +68,8 @@ CPP_template(typename Serializer, typename WriteEntry)(
 
 namespace namedResultCacheSerializer {
 // Read a `NamedResultCache::Value` that was written in the format of the given
-// `entriesVersion` (one of `detail::legacyFormatVersion` and
-// `detail::formatVersion`) from the `serializer` into `arg`. The
+// `entriesVersion` (one of `legacyFormatVersion` and
+// `formatVersion`) from the `serializer` into `arg`. The
 // `allocatorForSerialization_` and `contextForSerialization_` of `arg` have to
 // be set. This is the read counterpart of `writeValue` below, and also what the
 // generic serialization of a `NamedResultCache::Value` below does (for the
@@ -176,7 +162,7 @@ CPP_template_def(typename Serializer)(
   namedResultCacheSerializer::writeEntries(
       serializer, getAllEntriesSortedByKey(),
       [](Serializer& s, const Value& value) { s << value; },
-      namedResultCacheSerializer::detail::formatVersion);
+      namedResultCacheSerializer::formatVersion);
 }
 
 // _____________________________________________________________________________
@@ -199,15 +185,14 @@ CPP_template_def(typename Serializer)(
   }
   uint16_t readFormatVersion;
   serializer >> readFormatVersion;
-  if (readFormatVersion != namedResultCacheSerializer::detail::formatVersion &&
-      readFormatVersion !=
-          namedResultCacheSerializer::detail::legacyFormatVersion) {
+  if (readFormatVersion != namedResultCacheSerializer::formatVersion &&
+      readFormatVersion != namedResultCacheSerializer::legacyFormatVersion) {
     AD_THROW(absl::StrCat(
         "The serialized `NamedResultCache` has format version ",
         readFormatVersion,
         ", but this version of QLever only supports the format versions ",
-        namedResultCacheSerializer::detail::legacyFormatVersion, " and ",
-        namedResultCacheSerializer::detail::formatVersion,
+        namedResultCacheSerializer::legacyFormatVersion, " and ",
+        namedResultCacheSerializer::formatVersion,
         ". The named result cache was probably written by an incompatible "
         "version of QLever"));
   }
@@ -342,10 +327,10 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     namedResultCacheSerializer::writeValue(
         serializer, arg, resultView.getColumns(), arg.resultSortedOn_,
         /*writeLocalVocabWords=*/true,
-        namedResultCacheSerializer::detail::formatVersion);
+        namedResultCacheSerializer::formatVersion);
   } else {
     namedResultCacheSerializer::readValue(
-        serializer, arg, namedResultCacheSerializer::detail::formatVersion);
+        serializer, arg, namedResultCacheSerializer::formatVersion);
   }
 }
 

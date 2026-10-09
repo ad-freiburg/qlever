@@ -14,9 +14,11 @@
 #include <vector>
 
 #include "backports/span.h"
+#include "engine/NamedResultCacheFormatVersion.h"
 #include "engine/idTable/IdTable.h"
 #include "index/Index.h"
 #include "rdfTypes/Variable.h"
+#include "util/BitUtils.h"
 #include "util/Exception.h"
 // NOTE: The following two includes are only needed to read and write the hash
 // map of the legacy format (version 1) in the templates `readFromSerializer`
@@ -63,14 +65,15 @@ class SpatialJoinCachedIndex {
   // A shape in `rowToShape_` is encoded as `(segment << SHAPE_ID_BITS) |
   // shapeId` (see `encodeShape` and `decodeShape`).
   static constexpr size_t SHAPE_ID_BITS = 32;
-  static constexpr uint64_t SHAPE_ID_MASK = (uint64_t{1} << SHAPE_ID_BITS) - 1;
+  static constexpr uint64_t SHAPE_ID_MASK =
+      ad_utility::bitMaskForLowerBits(SHAPE_ID_BITS);
 
   // The number of segments has to be smaller than `MAX_NUM_SEGMENTS`, and the
   // number of shapes in a segment must be smaller than
   // `MAX_NUM_SHAPES_PER_SEGMENT`, s.t. each shape can be encoded and an encoded
   // shape never collides with `NO_SHAPE`.
-  static constexpr uint64_t MAX_NUM_SEGMENTS = uint64_t{1}
-                                               << (64 - SHAPE_ID_BITS);
+  static constexpr uint64_t MAX_NUM_SEGMENTS =
+      ad_utility::bitMaskForLowerBits(64 - SHAPE_ID_BITS) + 1;
   static constexpr uint64_t MAX_NUM_SHAPES_PER_SEGMENT = SHAPE_ID_MASK;
 
   // A shape, decoded from the format of `rowToShape_`.
@@ -244,9 +247,13 @@ class SpatialJoinCachedIndex {
           Serializer>) void writeToSerializer(Serializer& serializer,
                                               uint16_t entriesFormatVersion)
       const {
-    AD_CONTRACT_CHECK(entriesFormatVersion == 1 || entriesFormatVersion == 2);
+    AD_CONTRACT_CHECK(entriesFormatVersion ==
+                          namedResultCacheSerializer::legacyFormatVersion ||
+                      entriesFormatVersion ==
+                          namedResultCacheSerializer::formatVersion);
     serializer << geometryColumn_;
-    if (entriesFormatVersion == 1) {
+    if (entriesFormatVersion ==
+        namedResultCacheSerializer::legacyFormatVersion) {
       AD_CONTRACT_CHECK(segments_.size() == 1,
                         "Only a geo index with a single segment can be "
                         "written in the legacy format");
@@ -272,10 +279,14 @@ class SpatialJoinCachedIndex {
           Serializer>) static SpatialJoinCachedIndex
       readFromSerializer(Serializer& serializer, size_t numRows,
                          uint16_t entriesFormatVersion) {
-    AD_CONTRACT_CHECK(entriesFormatVersion == 1 || entriesFormatVersion == 2);
+    AD_CONTRACT_CHECK(entriesFormatVersion ==
+                          namedResultCacheSerializer::legacyFormatVersion ||
+                      entriesFormatVersion ==
+                          namedResultCacheSerializer::formatVersion);
     Variable geometryColumn{"?dummyCol"};
     serializer >> geometryColumn;
-    if (entriesFormatVersion == 1) {
+    if (entriesFormatVersion ==
+        namedResultCacheSerializer::legacyFormatVersion) {
       std::string encodedSegment;
       serializer >> encodedSegment;
       ad_utility::HashMap<size_t, size_t> shapeToRow;

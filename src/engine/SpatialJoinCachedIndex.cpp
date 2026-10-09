@@ -124,7 +124,11 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::fromLegacyFormat(
   constexpr size_t segmentIdx = 0;
   std::vector rowToShape(numRows, NO_SHAPE);
   for (const auto& [shapeId, row] : shapeToRow) {
-    AD_CORRECTNESS_CHECK(row < numRows && shapeId < MAX_NUM_SHAPES_PER_SEGMENT,
+    // The last condition catches a row that is referenced by more than one
+    // shape.
+    AD_CORRECTNESS_CHECK(row < numRows &&
+                             shapeId < MAX_NUM_SHAPES_PER_SEGMENT &&
+                             rowToShape[row] == NO_SHAPE,
                          "The serialized geo index is corrupt");
     rowToShape[row] = encodeShape(segmentIdx, shapeId);
   }

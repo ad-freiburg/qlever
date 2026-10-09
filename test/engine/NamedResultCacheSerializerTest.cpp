@@ -324,15 +324,15 @@ TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
     };
   };
   auto writeLegacy =
-      writeWithVersion(namedResultCacheSerializer::detail::legacyFormatVersion);
+      writeWithVersion(namedResultCacheSerializer::legacyFormatVersion);
   NamedResultCache cache;
   cache.store("a", makeSimpleValue("key-a"));
   ByteBufferWriteSerializer writer;
   writeEntries(writer, cache.getAllEntriesSortedByKey(), writeLegacy,
-               namedResultCacheSerializer::detail::legacyFormatVersion);
+               namedResultCacheSerializer::legacyFormatVersion);
   auto data = std::move(writer).data();
   EXPECT_EQ(static_cast<uint8_t>(data.at(1)),
-            namedResultCacheSerializer::detail::legacyFormatVersion);
+            namedResultCacheSerializer::legacyFormatVersion);
 
   NamedResultCache cache2;
   ByteBufferReadSerializer reader{std::move(data)};
@@ -345,7 +345,7 @@ TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
   ByteBufferWriteSerializer writer2;
   cache.writeToSerializer(writer2);
   EXPECT_EQ(static_cast<uint8_t>(std::move(writer2).data().at(1)),
-            namedResultCacheSerializer::detail::formatVersion);
+            namedResultCacheSerializer::formatVersion);
 
   // An unknown version is rejected when writing.
   ByteBufferWriteSerializer writer3;
@@ -368,7 +368,7 @@ TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
   ASSERT_EQ(value.cachedGeoIndex_.value().numSegments(), 1);
   ByteBufferWriteSerializer writer4;
   writeEntries(writer4, entries, writeLegacy,
-               namedResultCacheSerializer::detail::legacyFormatVersion);
+               namedResultCacheSerializer::legacyFormatVersion);
   NamedResultCache cache4;
   ByteBufferReadSerializer reader4{std::move(writer4).data()};
   cache4.readFromSerializer(reader4, alloc_, qec->getLocalVocabContext());
@@ -396,13 +396,13 @@ TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
   ByteBufferWriteSerializer writer5;
   AD_EXPECT_THROW_WITH_MESSAGE(
       writeEntries(writer5, entriesWithTwoSegments, writeLegacy,
-                   namedResultCacheSerializer::detail::legacyFormatVersion),
+                   namedResultCacheSerializer::legacyFormatVersion),
       ::testing::HasSubstr("single segment"));
   ByteBufferWriteSerializer writer6;
-  EXPECT_NO_THROW(writeEntries(
-      writer6, entriesWithTwoSegments,
-      writeWithVersion(namedResultCacheSerializer::detail::formatVersion),
-      namedResultCacheSerializer::detail::formatVersion));
+  EXPECT_NO_THROW(
+      writeEntries(writer6, entriesWithTwoSegments,
+                   writeWithVersion(namedResultCacheSerializer::formatVersion),
+                   namedResultCacheSerializer::formatVersion));
 }
 
 // _____________________________________________________________________________
@@ -513,7 +513,7 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   namedResultCacheSerializer::writeValue(
       writer, value, replacedColumns, shortenedSortOrder,
       /*writeLocalVocabWords=*/false,
-      namedResultCacheSerializer::detail::formatVersion);
+      namedResultCacheSerializer::formatVersion);
   auto readValue = deserializeValue(std::move(writer).data());
 
   EXPECT_THAT(ExplicitIdTableOperation::viewOf(readValue.result_),
@@ -534,13 +534,13 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       namedResultCacheSerializer::writeValue(
           writer, value, tooFewColumns, shortenedSortOrder, false,
-          namedResultCacheSerializer::detail::formatVersion),
+          namedResultCacheSerializer::formatVersion),
       ::testing::HasSubstr("resultView.numColumns()"));
   std::vector<std::vector<Id>> tooFewRows{{V(1), V(2)}, {V(4), V(5)}};
   AD_EXPECT_THROW_WITH_MESSAGE(
       namedResultCacheSerializer::writeValue(
           writer, value, tooFewRows, shortenedSortOrder, false,
-          namedResultCacheSerializer::detail::formatVersion),
+          namedResultCacheSerializer::formatVersion),
       ::testing::HasSubstr("resultView.numRows()"));
 }
 

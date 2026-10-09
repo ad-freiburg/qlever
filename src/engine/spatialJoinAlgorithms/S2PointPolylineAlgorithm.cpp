@@ -43,8 +43,9 @@ S2Queries makeQueriesForAllSegments(const SpatialJoinCachedIndex& geoIndex,
 
 // Return all rows of the `geoIndex` whose shape is within the maximal distance
 // of the `queries` (see `makeQueriesForAllSegments`) from the `target`,
-// together with that distance in km. Shapes that no row refers to anymore are
-// skipped.
+// together with that distance in km. If several edges of the shape of a row are
+// within the maximal distance, the smallest distance is returned. Shapes that
+// no row refers to anymore are skipped.
 ad_utility::HashMap<size_t, double> findRowsWithinDistance(
     const SpatialJoinCachedIndex& geoIndex, const S2Queries& queries,
     S2ClosestEdgeQuery::PointTarget& target) {
@@ -53,8 +54,13 @@ ad_utility::HashMap<size_t, double> findRowsWithinDistance(
                          size_t segment,
                          const S2ClosestEdgeQuery::Result& neighbor) {
     auto row = geoIndex.getRow(segment, neighbor.shape_id());
-    if (row.has_value()) {
-      result[row.value()] = S2Earth::ToKm(neighbor.distance());
+    if (!row.has_value()) {
+      return;
+    }
+    auto dist = S2Earth::ToKm(neighbor.distance());
+    auto [it, isNew] = result.try_emplace(row.value(), dist);
+    if (!isNew) {
+      it->second = std::min(it->second, dist);
     }
   };
   for (size_t segment = 0; segment < queries.size(); ++segment) {
@@ -75,9 +81,11 @@ Result S2PointPolylineAlgorithm::run() {
   IdTable result{numColumns, qec_->getAllocator()};
 
   AD_CORRECTNESS_CHECK(config_.rightCacheName_.has_value());
-  auto s2index = qec_->namedResultCache()
-                     .get(config_.rightCacheName_.value())
-                     ->cachedGeoIndex_;
+  // The `cacheEntry` is a `shared_ptr` that keeps the `s2index` below alive.
+  // Binding the `s2index` by reference avoids copying the geo index.
+  auto cacheEntry =
+      qec_->namedResultCache().get(config_.rightCacheName_.value());
+  const auto& s2index = cacheEntry->cachedGeoIndex_;
   AD_CORRECTNESS_CHECK(s2index.has_value());
   AD_CORRECTNESS_CHECK(!config_.getMaxResults().has_value() &&
                        maxDist_.has_value());

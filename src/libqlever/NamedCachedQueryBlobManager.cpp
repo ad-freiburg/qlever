@@ -282,8 +282,8 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
     serializer << secondaryVocab;
   }
   const uint16_t entriesVersion =
-      useNewFormat ? namedResultCacheSerializer::detail::formatVersion
-                   : namedResultCacheSerializer::detail::legacyFormatVersion;
+      useNewFormat ? namedResultCacheSerializer::formatVersion
+                   : namedResultCacheSerializer::legacyFormatVersion;
 
   // Write the named cache entries. An entry that contains `Id`s of type
   // `LocalVocabIndex` is replaced by a rewritten copy (the entry in the named
