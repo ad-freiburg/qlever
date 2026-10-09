@@ -1495,6 +1495,18 @@ TEST(SparqlParser, Query) {
     expectQuery("DESCRIBE * { ?y <is-a> ?v }",
                 m::DescribeQuery(m::Describe(yv, {}, selectQueryMatcher2)));
 
+    // A trailing `VALUES` clause belongs to the WHERE clause of the DESCRIBE,
+    // and for `DESCRIBE *` its variables are also described.
+    expectQuery(
+        "DESCRIBE * { ?y <is-a> ?v } VALUES ?w { <a> }",
+        m::DescribeQuery(m::Describe(
+            Resources{Var{"?y"}, Var{"?v"}, Var{"?w"}}, {},
+            m::SelectQuery(
+                m::Select({Var{"?y"}, Var{"?v"}, Var{"?w"}}),
+                m::GraphPattern(m::GroupGraphPattern(m::Triples(
+                                    {{Var{"?y"}, iri("<is-a>"), Var{"?v"}}})),
+                                m::InlineData({Var{"?w"}}, {{iri("<a>")}}))))));
+
     // DESCRIBE with FROM and FROM NAMED clauses.
     //
     // NOTE: The clauses are relevant *both* for the retrieval of the resources
