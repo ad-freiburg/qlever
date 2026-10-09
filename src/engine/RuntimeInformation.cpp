@@ -158,9 +158,13 @@ std::chrono::microseconds RuntimeInformation::getOperationTime() const {
 
 // __________________________________________________________________________
 size_t RuntimeInformation::getOperationCostEstimate() const {
+  // The cost of a child can exceed its share in the cost of its parent: a join
+  // charges an index scan only for the blocks it reads (see
+  // `JoinImpl::getCostEstimate`), whereas the scan on its own is charged its
+  // full size. The operation cost is then zero, not a wrapped-around value.
   size_t result = costEstimate_;
   for (const auto& child : children_) {
-    result -= child->costEstimate_;
+    result -= std::min(result, child->costEstimate_);
   }
   return result;
 }

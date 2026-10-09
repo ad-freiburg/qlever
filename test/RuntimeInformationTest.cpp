@@ -72,6 +72,11 @@ TEST(RuntimeInformation, getOperationTimeAndCostEstimate) {
 
   // 45 == 100 - 43 - 12
   ASSERT_EQ(parent.getOperationCostEstimate(), 45);
+
+  // A child whose own cost exceeds the parent's cost (a join charges a scan
+  // only for the blocks it reads) does not wrap the operation cost around.
+  parent.children_.at(0)->costEstimate_ = 70;
+  ASSERT_EQ(parent.getOperationCostEstimate(), 0);
 }
 
 // ________________________________________________________________
