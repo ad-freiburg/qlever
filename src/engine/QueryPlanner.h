@@ -351,6 +351,32 @@ class QueryPlanner {
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 
+  // Prefilter the seeds of the triples that bind a geometry variable of a
+  // spatial join (a filter substitute) with a rectangle that is known for
+  // that variable at planning time: the scan that is sorted by the variable
+  // gets its blocks pruned, every scan that binds the variable gets a row
+  // filter with the same size estimate (both as alternatives to the
+  // unprefiltered scans, the dynamic programming decides by cost), and
+  // replacement plans (from materialized views) get the prefilter forwarded
+  // to their scans. A
+  // rectangle is known for the fixed side of a spatial join (a one-row
+  // `VALUES` created by the rewriting of the filter, or a variable bound by a
+  // `BIND` of a constant expression), and for a geometry variable that is
+  // bound by a small part of the query that is cheap to evaluate (which is
+  // then evaluated here, see the runtime parameters
+  // `geo-prefilter-planning-max-rows` and `geo-prefilter-planning-max-cost`),
+  // and it carries over to the other side of that join and from there along
+  // further spatial joins (see the implementation for the rules). A spatial
+  // join between a fixed side and a prefiltered side is told the selectivity
+  // within the remaining rows (see `SpatialJoin::setGeometrySideSelectivity`).
+  // This is done once, before the dynamic programming, so that it costs one
+  // prefilter evaluation per permutation of the triple and not one per
+  // candidate plan; the DP then decides by cost where the spatial joins go.
+  void applyGeoRectanglePrefilters(
+      std::vector<SubtreePlan>& seeds, FiltersAndOptionalSubstitutes& filters,
+      std::vector<std::vector<SubtreePlan>>& replacementPlans,
+      const TripleGraph& tg) const;
+
   // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
   // substitutes. This is sufficient for the filter modes that never apply
   // substitutes and avoids constructing throwaway substitute plans (which

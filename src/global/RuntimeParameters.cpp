@@ -48,6 +48,8 @@ RuntimeParameters::RuntimeParameters() {
   add(syntaxTestMode_);
   add(divisionByZeroIsUndef_);
   add(enablePrefilterOnIndexScans_);
+  add(geoPrefilterPlanningMaxRows_);
+  add(geoPrefilterPlanningMaxCost_);
   add(spatialJoinMaxNumThreads_);
   add(patternTrickNumThreads_);
   add(parallelSortNumThreads_);

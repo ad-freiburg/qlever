@@ -246,6 +246,8 @@ addLinkAndDiscoverTest(QueryPlannerTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerSpatialJoinTest engine)
 
+addLinkAndDiscoverTest(GeoRectanglePrefilterTest engine)
+
 addLinkAndDiscoverTestNoLibs(HashMapTest)
 
 addLinkAndDiscoverTestNoLibs(StringPairHashMapTest)

@@ -124,6 +124,11 @@ class QueryExecutionTree {
   // to zero. Currently multiplicities are not affected
   bool readFromCache();
 
+  // Set the size estimate of this tree, overriding the estimate of its root
+  // operation. Used by the query planner for a part of the query that it has
+  // evaluated at planning time, whose exact size it therefore knows.
+  void setSizeEstimate(size_t sizeEstimate) { sizeEstimate_ = sizeEstimate; }
+
   // Check whether the cache key of this `QueryExecutionTree` matches a loaded
   // materialized view. If yes, replace the `rootOperation_` with an `IndexScan`
   // on that view with a result equivalent to the current `rootOperation_`.

@@ -2195,8 +2195,11 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
     // evaluation of the query plan.
     auto res = qet.getResult();
     const auto& runtimeInfo = qet.getRootOperation()->runtimeInfo().details_;
-    ASSERT_TRUE(runtimeInfo.contains("num-geoms-dropped-by-prefilter"));
-    EXPECT_EQ(runtimeInfo.at("num-geoms-dropped-by-prefilter"), 3);
+    ASSERT_TRUE(runtimeInfo.contains("num-geoms-after-block-prefilter"));
+    EXPECT_EQ(
+        runtimeInfo.at("num-geoms-after-block-prefilter").get<int64_t>() -
+            runtimeInfo.at("num-geoms-after-bbox-prefilter").get<int64_t>(),
+        3);
   }
 }
 
@@ -2252,6 +2255,97 @@ TEST(MaterializedViewsSpatialJoinTest, FixedValueFilterOnFullyCoveredView) {
                PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
                SpatialJoinType::WITHIN_DIST, std::nullopt, valuesPoint,
                viewScan(viewName, "?osm_id", "?intermediate", "?geometry", 3)));
+}
+
+// Whether the plan `tree` contains a scan of a materialized view.
+bool containsViewScan(const QueryExecutionTree& tree) {
+  if (const auto* scan =
+          dynamic_cast<const IndexScan*>(tree.getRootOperation().get());
+      scan != nullptr && scan->permutation().materializedView() != nullptr) {
+    return true;
+  }
+  return ql::ranges::any_of(
+      std::as_const(*tree.getRootOperation()).getChildren(),
+      [](const auto* child) { return containsViewScan(*child); });
+}
+
+// _____________________________________________________________________________
+TEST(MaterializedViewsSpatialJoinTest, EvaluatedPartFilterOnViewCoveredSide) {
+  // A spatial `FILTER` whose one side is the geometry of a fixed subject,
+  // obtained via `geo:hasGeometry/geo:asWKT`, and whose other side is fully
+  // covered by a materialized view. The planner evaluates the fixed side at
+  // planning time and prefilters the other side with its rectangle; the
+  // prefiltered scan of the view must then be the plan for the other side.
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string viewName = "geoms";
+  std::string ttl{geoTtl};
+  absl::StrAppend(&ttl,
+                  "<region> geo:hasGeometry <rm> .\n<rm> geo:asWKT "
+                  "\"POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))\"^^geo:wktLiteral "
+                  ".\n");
+  for (size_t i = 0; i < 500; ++i) {
+    absl::StrAppend(&ttl, "<pad", i, "> geo:hasGeometry <nowkt", i, "> .\n");
+    absl::StrAppend(&ttl, "<nogeom", i, "> geo:asWKT \"POINT(", i % 10, " ",
+                    i / 10, ")\"^^geo:wktLiteral .\n");
+  }
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, ttl);
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  qlv.writeMaterializedView(
+      viewName,
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n"
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/>\n"
+      "PREFIX ql: <http://qlever.cs.uni-freiburg.de/builtin-functions/>\n"
+      "SELECT ?g ?o ?m ?ll ?ur ?c {\n"
+      "  ?o geo:hasGeometry ?m .\n"
+      "  ?m geo:asWKT ?g .\n"
+      "  BIND (ql:envelopeLowerLeft(?g) AS ?ll)\n"
+      "  BIND (ql:envelopeUpperRight(?g) AS ?ur)\n"
+      "  BIND (geof:centroid(?g) AS ?c)\n"
+      "}");
+
+  const std::string query = R"qy(
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    SELECT * {
+      <region> geo:hasGeometry ?rm . ?rm geo:asWKT ?r .
+      ?o geo:hasGeometry ?m . ?m geo:asWKT ?g .
+      FILTER geof:sfContains(?r, ?g)
+    }
+  )qy";
+  qlv.clearQueryResultCache();
+  auto plannedQuery = qlv.parseAndPlanQuery(query);
+  const auto& tree = plannedQuery.queryExecutionTree();
+  EXPECT_TRUE(containsViewScan(tree)) << tree.getCacheKey();
+
+  // With a fixed polygon instead of the fixed subject, and without any
+  // evaluation at planning time, the scans of the side that the view covers,
+  // also the scan of the view, are prefiltered with the rectangle of the
+  // polygon. The plan uses the view, and its result is the same as without
+  // the prefilter.
+  auto noEvaluation = setRuntimeParameterForTest<
+      &RuntimeParameters::geoPrefilterPlanningMaxRows_>(0);
+  const std::string queryFixedPolygon = R"qy(
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    SELECT * {
+      ?o geo:hasGeometry ?m . ?m geo:asWKT ?g .
+      FILTER geof:sfContains("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))"^^geo:wktLiteral, ?g)
+    }
+  )qy";
+  auto numRows = [&qlv](const std::string& q) {
+    qlv.clearQueryResultCache();
+    auto planned = qlv.parseAndPlanQuery(q);
+    EXPECT_TRUE(containsViewScan(planned.queryExecutionTree()));
+    return planned.queryExecutionTree().getResult()->idTableView().numRows();
+  };
+  auto numRowsWithPrefilter = numRows(queryFixedPolygon);
+  auto noPrefilter = setRuntimeParameterForTest<
+      &RuntimeParameters::enablePrefilterOnIndexScans_>(false);
+  EXPECT_EQ(numRows(queryFixedPolygon), numRowsWithPrefilter);
 }
 
 // _____________________________________________________________________________

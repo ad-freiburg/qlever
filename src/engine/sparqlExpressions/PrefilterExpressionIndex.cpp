@@ -809,6 +809,94 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
 
 // SECTION IS-IN-EXPRESSION (and NOT-IS-IN-EXPRESSION)
 //______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> GeoRectangleExpression::logicalComplement()
+    const {
+  // The complement ("all geometries outside the rectangle, plus all
+  // non-geometries") cannot be expressed as ID ranges; return the
+  // conservative prefilter that keeps all blocks.
+  return make<IsInExpression>(std::vector<IdOrLocalVocabEntry>{},
+                              /*isNegated=*/true);
+}
+
+//______________________________________________________________________________
+bool GeoRectangleExpression::operator==(
+    const PrefilterExpression& other) const {
+  const auto* otherGeo = dynamic_cast<const GeoRectangleExpression*>(&other);
+  if (!otherGeo) {
+    return false;
+  }
+  return rectangle_ == otherGeo->rectangle_;
+}
+
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> GeoRectangleExpression::clone() const {
+  return make<GeoRectangleExpression>(*this);
+}
+
+//______________________________________________________________________________
+std::string GeoRectangleExpression::asString(
+    [[maybe_unused]] size_t depth) const {
+  return absl::StrCat("Prefilter GeoRectangleExpression on rectangle: [lng ",
+                      rectangle_.minLng_, " to ", rectangle_.maxLng_, ", lat ",
+                      rectangle_.minLat_, " to ", rectangle_.maxLat_, "]\n.");
+}
+
+//______________________________________________________________________________
+BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
+    const IndexImpl& index, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange, bool getTotalComplement) const {
+  // A negation is evaluated via `logicalComplement`, which keeps all blocks.
+  AD_CORRECTNESS_CHECK(!getTotalComplement);
+
+  // Compute the closed intervals `[lowerId, upperId]` of `ValueId`s that may
+  // belong to geometries whose bounding box intersects the rectangle. The
+  // intervals are constructed in ascending order: the `VocabIndex` datatype
+  // first (`Datatype::VocabIndex` < `Datatype::GeoPoint`), then the latitude
+  // band of the `GeoPoint`s.
+  //
+  // NOTE: The coordinates of a WKT literal cannot be seen from its ID, so the
+  // whole `VocabIndex` region is kept. The parameter `index` is unused here,
+  // but it is the hook for an index whose vocabulary stores the geometries in
+  // a spatial order.
+  (void)index;
+  std::vector<std::pair<ValueId, ValueId>> keepIntervals;
+  keepIntervals.emplace_back(
+      Id::makeFromVocabIndex(VocabIndex::make(0)),
+      Id::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)));
+
+  // The `GeoPoint` region: the intervals of the bit representations that
+  // contain all points of the rectangle, which depend on the encoding of the
+  // points (one latitude band for `LatMajor`, the quadtree cells that cover
+  // the rectangle for `ZOrder`, see `GeoPoint::intervalsForRectangle`). The
+  // round trip through `fromBitRepresentation` is exact and turns the bits
+  // into IDs.
+  for (auto [lower, upper] : GeoPoint::intervalsForRectangle(
+           GeoPoint{rectangle_.minLat_, rectangle_.minLng_},
+           GeoPoint{rectangle_.maxLat_, rectangle_.maxLng_},
+           GeoPoint::encoding())) {
+    keepIntervals.emplace_back(
+        Id::makeFromGeoPoint(GeoPoint::fromBitRepresentation(lower)),
+        Id::makeFromGeoPoint(GeoPoint::fromBitRepresentation(upper)));
+  }
+
+  // For each interval, find the corresponding range of block-boundary
+  // `ValueId`s. Empty ranges are deliberately kept: they indicate a block
+  // whose first and last ID enclose the whole interval, which must survive
+  // (same reasoning as for the `EQ` case of `RelationalExpression`).
+  std::vector<ValueIdItPair> relevantRanges;
+  relevantRanges.reserve(keepIntervals.size());
+  for (const auto& [lower, upper] : keepIntervals) {
+    relevantRanges.emplace_back(
+        ql::ranges::lower_bound(idRange, lower,
+                                &valueIdComparators::compareByBits),
+        ql::ranges::upper_bound(idRange, upper,
+                                &valueIdComparators::compareByBits));
+  }
+  return detail::mapping::mapValueIdItRangesToBlockItRanges(
+      relevantRanges, idRange, blockRange);
+}
+
+//______________________________________________________________________________
 std::unique_ptr<PrefilterExpression> IsInExpression::logicalComplement() const {
   return make<IsInExpression>(referenceValues_, true);
 }
