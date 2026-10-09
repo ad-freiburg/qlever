@@ -99,17 +99,21 @@ struct Header {
         ad_utility::serialization::ReadSerializer<S>;
     std::string magic{magicBytes};
     serializer | magic;
-    if (isReader && magic != magicBytes) {
-      throw std::runtime_error{
-          "The result is not in QLever's binary export format"};
+    if constexpr (isReader) {
+      if (magic != magicBytes) {
+        throw std::runtime_error{
+            "The result is not in QLever's binary export format"};
+      }
     }
     uint16_t version = ad_utility::binaryQleverExportVersion;
     serializer | version;
-    if (isReader && version != ad_utility::binaryQleverExportVersion) {
-      throw std::runtime_error{
-          absl::StrCat("The result is in version ", version,
-                       " of QLever's binary export format, but only version ",
-                       ad_utility::binaryQleverExportVersion, " is supported")};
+    if constexpr (isReader) {
+      if (version != ad_utility::binaryQleverExportVersion) {
+        throw std::runtime_error{absl::StrCat(
+            "The result is in version ", version,
+            " of QLever's binary export format, but only version ",
+            ad_utility::binaryQleverExportVersion, " is supported")};
+      }
     }
     serializer | arg.geoPointEncoding_;
     std::string patterns;
@@ -202,7 +206,7 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
       }
       cancellationHandle->throwIfCancelled();
     }
-    if (stringMapping.size() > 0 && !pair.localVocab().empty()) {
+    if (stringMapping.size() > 0) {
       localVocabsOfBatch.mergeWith(pair.localVocab());
     }
   }
@@ -218,6 +222,20 @@ static Id stringToId(std::string representation,
   return vocab.getIdAndAddIfNotContained(
       LocalVocabEntry::fromStringRepresentation(std::move(representation),
                                                 qec.getLocalVocabContext()));
+}
+
+// Replace a blank node of the exporting instance by a new local blank node.
+// The same remote blank node is always replaced by the same local one, see
+// `blankNodeMapping`.
+static Id remapBlankNode(Id id, const QueryExecutionContext& qec,
+                         LocalVocab& vocab,
+                         ad_utility::HashMap<Id::T, Id>& blankNodeMapping) {
+  auto [it, inserted] = blankNodeMapping.try_emplace(id.getBits(), Id{});
+  if (inserted) {
+    it->second = Id::makeFromBlankNodeIndex(
+        vocab.getBlankNodeIndex(qec.getIndex().getBlankNodeManager()));
+  }
+  return it->second;
 }
 
 // Remap an `Id` of type `EncodedVal` that was encoded using the remote
@@ -254,16 +272,9 @@ void BinaryExportHelpers::rewriteVocabIds(
             case Datatype::EncodedVal:
               id = remapEncodedVal(id, qec, vocab, prefixMapping, prefixes);
               break;
-            case Datatype::BlankNodeIndex: {
-              auto [it, inserted] =
-                  blankNodeMapping.try_emplace(id.getBits(), ValueId{});
-              if (inserted) {
-                it->second = Id::makeFromBlankNodeIndex(vocab.getBlankNodeIndex(
-                    qec.getIndex().getBlankNodeManager()));
-              }
-              id = it->second;
+            case Datatype::BlankNodeIndex:
+              id = remapBlankNode(id, qec, vocab, blankNodeMapping);
               break;
-            }
             case Datatype::LocalVocabIndex:
               // Undo the shift done during encoding.
               id = stringToId(

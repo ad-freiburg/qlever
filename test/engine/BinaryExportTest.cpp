@@ -653,13 +653,16 @@ TEST_F(BinaryExportRoundTrip, invalidHeader) {
       import(wrongMagic),
       ::testing::HasSubstr("not in QLever's binary export format"));
 
-  // A result that is cut off in the middle of the trailing batch of strings,
-  // and one that is cut off directly after the last row (before the marker and
-  // the empty batch of strings).
+  // The result ends with the last row, the marker, and the (empty) trailing
+  // batch of strings. Cut it off in the middle of that batch, directly after
+  // the last row, and in the middle of the last row.
+  size_t endOfLastRow = bytes.size() - sizeof(Id::T) - sizeof(size_t);
   EXPECT_ANY_THROW(import(bytes.substr(0, bytes.size() - 1)));
+  AD_EXPECT_THROW_WITH_MESSAGE(import(bytes.substr(0, endOfLastRow)),
+                               ::testing::HasSubstr("ended unexpectedly"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      import(bytes.substr(0, bytes.size() - sizeof(Id::T) - sizeof(size_t))),
-      ::testing::HasSubstr("ended unexpectedly"));
+      import(bytes.substr(0, endOfLastRow - sizeof(Id::T) / 2)),
+      ::testing::HasSubstr("Stream ended unexpectedly"));
 }
 
 // _____________________________________________________________________________
@@ -703,7 +706,7 @@ TEST_F(BinaryExportRoundTrip, lazyExportWithSeveralLocalVocabs) {
 }
 
 // _____________________________________________________________________________
-TEST_F(BinaryExportRoundTrip, severalBatchesOfStrings) {
+TEST_F(BinaryExportRoundTrip, severalBatches) {
   auto* qec = ad_utility::testing::getQec();
   // One more distinct string than fits into a single batch, see
   // `exportAsQLeverBinary`.
@@ -727,4 +730,16 @@ TEST_F(BinaryExportRoundTrip, severalBatchesOfStrings) {
                 absl::StrCat("\"word", i, "\""));
     }
   }
+
+  // One more row than fits into a single batch.
+  static constexpr size_t numIntRows = 100'001;
+  IdTable intTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  for (size_t i = 0; i < numIntRows; ++i) {
+    intTable.push_back({Id::makeFromInt(static_cast<int64_t>(i))});
+  }
+  auto result =
+      roundTrip(qec, qec, intTable.clone(), {"?x"}, LocalVocab{}, true);
+  auto [resultTable, resultVocabs] = aggregateTables(result.idTables(), 1);
+  EXPECT_GE(resultVocabs.size(), 2);
+  EXPECT_EQ(resultTable, intTable);
 }
