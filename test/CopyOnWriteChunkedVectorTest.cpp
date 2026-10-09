@@ -10,6 +10,7 @@
 #include <gmock/gmock.h>
 
 #include <numeric>
+#include <utility>
 #include <vector>
 
 #include "util/CopyOnWriteChunkedVector.h"
@@ -87,6 +88,16 @@ TEST(CopyOnWriteChunkedVector, pushBackAndPopBack) {
   // beyond the end.
   EXPECT_THROW(vec.pop_back(), ad_utility::Exception);
   EXPECT_THROW(vec.mutableAt(0), ad_utility::Exception);
+}
+
+// Test that a move transfers the elements and leaves an empty vector behind.
+TEST(CopyOnWriteChunkedVector, move) {
+  // Five elements in two chunks, moved into a new vector.
+  Vec vec{iota(5)};
+  Vec moved = std::move(vec);
+  EXPECT_EQ(elements(moved), iota(5));
+  EXPECT_TRUE(vec.empty());
+  EXPECT_EQ(vec.size(), 0u);
 }
 
 // Test that a copy shares all chunks, that a mutation clones only the chunk it
