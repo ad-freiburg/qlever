@@ -5,9 +5,15 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <s2/mutable_s2shape_index.h>
+#include <s2/s2closest_edge_query.h>
+#include <s2/s2earth.h>
+#include <s2/s2latlng.h>
 #include <s2/s2polyline.h>
+#include <s2/s2shapeutil_coding.h>
+#include <s2/util/units/length-units.h>
 
 #include "../QueryPlannerTestHelpers.h"
+#include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/NamedResultCache.h"
@@ -17,6 +23,7 @@
 #include "global/ValueId.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/Variable.h"
+#include "util/HashMap.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
@@ -85,14 +92,15 @@ TEST_P(SpatialJoinCachedIndexTest, Basic) {
   ASSERT_TRUE(cacheEntry->cachedGeoIndex_.has_value());
   EXPECT_EQ(cacheEntry->cachedGeoIndex_.value().getGeometryColumn().name(),
             "?o");
-  auto index = cacheEntry->cachedGeoIndex_.value().getIndex();
+  const auto& cachedIndex = cacheEntry->cachedGeoIndex_.value();
+  ASSERT_EQ(cachedIndex.numSegments(), 1);
+  auto index = cachedIndex.segments().at(0);
   ASSERT_NE(index.get(), nullptr);
   EXPECT_EQ(index->num_shape_ids(), 3);
 
-  const auto& cachedIndex = cacheEntry->cachedGeoIndex_.value();
-  EXPECT_EQ(cachedIndex.getRow(0), 0);
-  EXPECT_EQ(cachedIndex.getRow(1), 1);
-  EXPECT_EQ(cachedIndex.getRow(2), 2);
+  EXPECT_EQ(cachedIndex.getRow(0, 0), 0);
+  EXPECT_EQ(cachedIndex.getRow(0, 1), 1);
+  EXPECT_EQ(cachedIndex.getRow(0, 2), 2);
 
   // The method `is_fresh()` tells us that there are no pending updates to be
   // applied (which would slow down the first query).
@@ -200,6 +208,48 @@ INSTANTIATE_TEST_SUITE_P(WithAndWithoutSerialization,
                          SpatialJoinCachedIndexTest, ::testing::Bool());
 
 // _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, S2PointPolylineAlgorithmReturnsMinimalDistance) {
+  // A linestring with three edges, which are all within the maximal distance
+  // from the point. The closest edge is the first one, at a distance of 0.001
+  // degrees of latitude from the point.
+  const std::string kb =
+      "<s1> <asWKT> \"LINESTRING(0 0.001, 0 0.002, 0 0.003, 0 0.004)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<p1> <asWKT2> \"POINT(0 0)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
+  auto qec = ad_utility::testing::getQec(kb);
+  qec->pinResultWithName() = {"dummy", Variable{"?geo2"}};
+  auto plan = queryPlannerTestHelpers::parseAndPlan(
+      "SELECT * { ?s2 <asWKT> ?geo2 }", qec);
+  [[maybe_unused]] auto pinResult = plan->getResult();
+
+  auto leftChild =
+      buildIndexScan(qec, {"?s1", std::string{"<asWKT2>"}, "?geo1"});
+  SpatialJoinConfiguration config{MaxDistanceConfig{1000}, Variable{"?geo1"},
+                                  Variable{"?geo2"}};
+  config.algo_ = SpatialJoinAlgorithm::S2_POINT_POLYLINE;
+  config.rightCacheName_ = "dummy";
+  config.distanceVariable_ = Variable{"?dist"};
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      ad_utility::makeExecutionTree<SpatialJoin>(qec, config, leftChild,
+                                                 std::nullopt);
+  auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
+      spatialJoinOperation->getRootOperation());
+  const auto res = spatialJoin->computeResult(false);
+
+  // The row of the linestring is returned once, with the distance of the
+  // closest edge (and not of the edge that the S2 query returns last). The
+  // tolerance accounts for the limited precision of the stored coordinates, and
+  // is much smaller than the distance between the edges.
+  ASSERT_EQ(res.idTableView().numRows(), 1);
+  const auto distCol = spatialJoin->computeVariableToColumnMap()
+                           .at(Variable{"?dist"})
+                           .columnIndex_;
+  EXPECT_NEAR(res.idTableView()(0, distCol).getDouble(),
+              S2Earth::ToKm(S1Angle::Degrees(0.001)), 1e-4);
+}
+
+// _____________________________________________________________________________
 // Tests for `SpatialJoinCachedIndex` with and without simplification.
 class SpatialJoinCachedIndexSimplificationTest
     : public ::testing::TestWithParam<bool> {};
@@ -226,7 +276,7 @@ TEST_P(SpatialJoinCachedIndexSimplificationTest, WithoutSimplification) {
 
   const auto entry = qec->namedResultCache().get("idx");
   ASSERT_TRUE(entry->cachedGeoIndex_.has_value());
-  auto s2idx = entry->cachedGeoIndex_.value().getIndex();
+  auto s2idx = entry->cachedGeoIndex_.value().segments().at(0);
   ASSERT_EQ(s2idx->num_shape_ids(), 1);
   // 3 vertices → 2 edges, stored as a single shape.
   EXPECT_EQ(s2idx->shape(0)->num_edges(), 2);
@@ -255,7 +305,7 @@ TEST_P(SpatialJoinCachedIndexSimplificationTest, WithSimplification) {
 
   const auto entry = qec->namedResultCache().get("idx");
   ASSERT_TRUE(entry->cachedGeoIndex_.has_value());
-  auto s2idx = entry->cachedGeoIndex_.value().getIndex();
+  auto s2idx = entry->cachedGeoIndex_.value().segments().at(0);
   ASSERT_EQ(s2idx->num_shape_ids(), 1);
   // Middle vertex removed by simplification: 2 vertices → 1 edge.
   EXPECT_EQ(s2idx->shape(0)->num_edges(), 1);
@@ -314,19 +364,600 @@ TEST(SpatialJoinCachedIndex, withPermutedRows) {
   // Reverse the order of the five rows.
   std::vector<size_t> newRowOfOldRow{4, 3, 2, 1, 0};
   auto permuted = original.withPermutedRows(newRowOfOldRow);
-  EXPECT_EQ(permuted.getRow(0), 4);
-  EXPECT_EQ(permuted.getRow(1), 3);
-  EXPECT_EQ(permuted.getRow(2), 2);
+  EXPECT_EQ(permuted.getRow(0, 0), 4);
+  EXPECT_EQ(permuted.getRow(0, 1), 3);
+  EXPECT_EQ(permuted.getRow(0, 2), 2);
   EXPECT_EQ(permuted.getGeometryColumn(), original.getGeometryColumn());
   // The S2 index itself is shared, and the original index is unchanged.
-  EXPECT_EQ(permuted.getIndex().get(), original.getIndex().get());
-  EXPECT_EQ(original.getRow(0), 0);
-  EXPECT_EQ(original.getRow(1), 1);
-  EXPECT_EQ(original.getRow(2), 2);
+  EXPECT_EQ(permuted.segments().at(0).get(), original.segments().at(0).get());
+  EXPECT_EQ(original.getRow(0, 0), 0);
+  EXPECT_EQ(original.getRow(0, 1), 1);
+  EXPECT_EQ(original.getRow(0, 2), 2);
 
   // A permutation that does not cover all the rows of the index is rejected.
   std::vector<size_t> tooShort{0, 1};
   EXPECT_ANY_THROW(original.withPermutedRows(tooShort));
+
+  // A mapping that is not a bijection (two rows are mapped to the same row)
+  // is rejected instead of silently dropping the shape of one of them.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      original.withPermutedRows(std::vector<size_t>{0, 0, 2, 3, 4}),
+      ::testing::HasSubstr("same row"));
+}
+
+// Helpers and tests for the segmented index (`forUpdatedTable`, serialization).
+namespace segmented {
+using Index = SpatialJoinCachedIndex;
+using namedResultCacheSerializer::formatVersion;
+using namedResultCacheSerializer::legacyFormatVersion;
+
+// Return a matcher for a `SpatialJoinCachedIndex` with the given statistics.
+auto hasStats(size_t numSegments, size_t numShapes, size_t numLiveShapes,
+              size_t numRows) {
+  using ::testing::Eq;
+  return ::testing::AllOf(AD_PROPERTY(Index, numSegments, Eq(numSegments)),
+                          AD_PROPERTY(Index, numShapes, Eq(numShapes)),
+                          AD_PROPERTY(Index, numLiveShapes, Eq(numLiveShapes)),
+                          AD_PROPERTY(Index, numRows, Eq(numRows)));
+}
+
+// Six linestrings far apart from each other (the `i`-th starts at the longitude
+// `10 * i`), and two rows that are no linestrings.
+std::string segmentedKb() {
+  std::string kb;
+  for (int i = 1; i <= 6; ++i) {
+    absl::StrAppend(&kb, "<s", i, "> <p> \"LINESTRING(", 10 * i, " 0, ", 10 * i,
+                    " 0.1)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
+                    " . ");
+  }
+  absl::StrAppend(&kb, "<n1> <p> <o1> . ");
+  absl::StrAppend(&kb,
+                  "<n2> <p> \"POINT(1 2)\"^^<http://www.opengis.net/ont/"
+                  "geosparql#wktLiteral> . ");
+  return kb;
+}
+
+// A table together with everything that is needed to build indices on it.
+struct TestTables {
+  QueryExecutionContext* qec_;
+  std::shared_ptr<const Result> result_;
+  ColumnIndex col_;
+  // The rows of the full table that contain a linestring, in the order of
+  // their longitude, and the rows that contain no linestring.
+  std::vector<size_t> lines_;
+  std::vector<size_t> others_;
+
+  explicit TestTables(const std::string& kb)
+      : qec_{ad_utility::testing::getQec(kb)} {
+    auto plan =
+        queryPlannerTestHelpers::parseAndPlan("SELECT * { ?s <p> ?o }", qec_);
+    result_ = plan->getResult();
+    col_ = plan->getVariableColumn(Variable{"?o"});
+    auto view = result_->idTableView();
+    for (size_t row = 0; row < view.size(); ++row) {
+      auto polyline = Index::getPolyline(view, row, col_, qec_->getIndex());
+      (polyline.has_value() ? lines_ : others_).push_back(row);
+    }
+    // The rows are sorted by `?s`, which is also the order of the longitudes.
+    AD_CORRECTNESS_CHECK(lines_.size() == 6 && others_.size() == 2);
+  }
+
+  // Create a table that consists of the given rows of the full table.
+  IdTable select(const std::vector<size_t>& rows) const {
+    auto view = result_->idTableView();
+    IdTable table{view.numColumns(), ad_utility::makeUnlimitedAllocator<Id>()};
+    table.resize(rows.size());
+    for (size_t i = 0; i < rows.size(); ++i) {
+      for (size_t c = 0; c < view.numColumns(); ++c) {
+        table(i, c) = view(rows[i], c);
+      }
+    }
+    return table;
+  }
+
+  Index build(const IdTable& table,
+              std::optional<double> simplification = std::nullopt) const {
+    return Index{Variable{"?o"}, col_, table.asStaticView<0>(),
+                 qec_->getIndex(), simplification};
+  }
+
+  Index forUpdatedTable(const Index& base,
+                        const std::vector<size_t>& baseRowOfNewRow,
+                        const IdTable& newTable) const {
+    return Index::forUpdatedTable(base, baseRowOfNewRow,
+                                  newTable.asStaticView<0>(), col_,
+                                  qec_->getIndex());
+  }
+};
+
+// Return all rows of the `index` within `meters` of the given point, together
+// with their minimal distances (in km), by querying all segments.
+std::map<size_t, double> queryRows(const Index& index, double lon, double lat,
+                                   double meters) {
+  std::map<size_t, double> result;
+  S2ClosestEdgeQuery::PointTarget target{
+      S2LatLng::FromDegrees(lat, lon).ToPoint()};
+  for (size_t segment = 0; segment < index.segments().size(); ++segment) {
+    S2ClosestEdgeQuery query{index.segments()[segment].get()};
+    query.mutable_options()->set_inclusive_max_distance(
+        S2Earth::ToAngle(util::units::Meters(meters)));
+    for (const auto& neighbor : query.FindClosestEdges(&target)) {
+      auto row = index.getRow(segment, neighbor.shape_id());
+      if (!row.has_value()) {
+        continue;
+      }
+      auto dist = S2Earth::ToKm(neighbor.distance());
+      auto [it, isNew] = result.try_emplace(row.value(), dist);
+      if (!isNew) {
+        it->second = std::min(it->second, dist);
+      }
+    }
+  }
+  return result;
+}
+
+// Check that the two indices give the same results for queries around all six
+// linestrings, and one query that is far away from all of them.
+void expectSameResults(
+    const Index& a, const Index& b,
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  for (int i = 1; i <= 6; ++i) {
+    EXPECT_EQ(queryRows(a, 10 * i, 0.05, 50'000),
+              queryRows(b, 10 * i, 0.05, 50'000))
+        << "line " << i;
+  }
+  // A large radius, which finds all lines.
+  EXPECT_EQ(queryRows(a, 35, 0, 10'000'000), queryRows(b, 35, 0, 10'000'000));
+  EXPECT_EQ(queryRows(a, -100, 50, 50'000), queryRows(b, -100, 50, 50'000));
+}
+
+// Serialize `index` into a byte string (in the format of the given `version`).
+std::string serializeToBytes(const Index& index,
+                             uint16_t version = formatVersion) {
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  index.writeToSerializer(writer, version);
+  auto data = std::move(writer).data();
+  return std::string{data.begin(), data.end()};
+}
+
+// Deserialize the bytes written by `serializeToBytes`.
+Index deserializeFromBytes(const std::string& bytes, size_t numRows,
+                           uint16_t version = formatVersion) {
+  ad_utility::serialization::ByteBufferReadSerializer reader{
+      std::vector<char>(bytes.begin(), bytes.end())};
+  return Index::readFromSerializer(reader, numRows, version);
+}
+
+// Serialize an index in the format of version 2 that has the given `segments`
+// (taken from `index`) and the given `rowToShape` (which does not have to be
+// valid), by replicating the layout documented at `writeToSerializer`.
+std::string serializeV2WithRowToShape(const Index& index,
+                                      const std::vector<uint64_t>& rowToShape) {
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  writer << index.getGeometryColumn();
+  writer << std::optional<double>{};
+  writer << static_cast<uint64_t>(index.segments().size());
+  for (const auto& segment : index.segments()) {
+    Encoder encoder;
+    s2shapeutil::CompactEncodeTaggedShapes(*segment, &encoder);
+    segment->Encode(&encoder);
+    writer << std::string{encoder.base(), encoder.length()};
+  }
+  writer << rowToShape;
+  auto data = std::move(writer).data();
+  return std::string{data.begin(), data.end()};
+}
+
+// Serialize the single segment of `index` and the given `shapeToRow` in the
+// legacy format (version 1).
+std::string serializeLegacy(
+    const Index& index, const ad_utility::HashMap<size_t, size_t>& shapeToRow) {
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  writer << index.getGeometryColumn();
+  Encoder encoder;
+  s2shapeutil::CompactEncodeTaggedShapes(*index.segments()[0], &encoder);
+  index.segments()[0]->Encode(&encoder);
+  writer << std::string{encoder.base(), encoder.length()};
+  writer << shapeToRow;
+  auto data = std::move(writer).data();
+  return std::string{data.begin(), data.end()};
+}
+}  // namespace segmented
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex,
+     forUpdatedTableWithInsertedDeletedAndReorderedRows) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  const auto& M = t.others_;
+  for (auto simplification : {std::optional<double>{}, std::optional{10.0}}) {
+    // The base table has the lines 0 to 3 and a row without a linestring.
+    auto baseTable = t.select({L[0], L[1], M[0], L[2], L[3]});
+    auto base = t.build(baseTable, simplification);
+    EXPECT_THAT(base, hasStats(1, 4, 4, 5));
+    EXPECT_EQ(base.simplificationErrorInMeters(), simplification);
+
+    // The new table is reordered, lacks the lines 1 and 3 (deleted), and has
+    // the new lines 4 and 5 and a new row without a linestring.
+    auto newTable = t.select({L[2], L[4], L[0], M[1], L[5]});
+    std::vector<size_t> baseRowOfNewRow{3, Index::NO_ROW, 0, Index::NO_ROW,
+                                        Index::NO_ROW};
+    auto extended = t.forUpdatedTable(base, baseRowOfNewRow, newTable);
+
+    // The base is unchanged, and its first segment is shared.
+    EXPECT_THAT(base, hasStats(1, 4, 4, 5));
+    ASSERT_THAT(extended, hasStats(2, 6, 4, 5));
+    EXPECT_EQ(extended.segments()[0].get(), base.segments()[0].get());
+    EXPECT_EQ(extended.simplificationErrorInMeters(), simplification);
+    EXPECT_EQ(extended.getGeometryColumn(), base.getGeometryColumn());
+
+    // The results are the same as for a fresh index on the new table.
+    auto fresh = t.build(newTable, simplification);
+    expectSameResults(extended, fresh);
+    EXPECT_THAT(fresh, hasStats(1, 4, 4, 5));
+
+    // Extending with only matched rows adds no segment.
+    auto onlyMatched = t.select({L[3], L[0]});
+    auto extended2 = t.forUpdatedTable(base, {4, 0}, onlyMatched);
+    EXPECT_THAT(extended2, hasStats(1, 4, 2, 2));
+    expectSameResults(extended2, t.build(onlyMatched, simplification));
+
+    // Extending an extended index again works.
+    auto newTable2 = t.select({L[5], L[2], L[1]});
+    auto extended3 =
+        t.forUpdatedTable(extended, {4, 0, Index::NO_ROW}, newTable2);
+    EXPECT_THAT(extended3, hasStats(3, 7, 3, 3));
+    expectSameResults(extended3, t.build(newTable2, simplification));
+
+    // Invalid input is rejected: wrong size, base row out of range, and a base
+    // row that is used twice.
+    EXPECT_ANY_THROW(t.forUpdatedTable(base, {0}, newTable));
+    EXPECT_ANY_THROW(t.forUpdatedTable(base, {0, 1, 2, 3, 17}, newTable));
+    EXPECT_ANY_THROW(t.forUpdatedTable(base, {0, 0, 1, 2, 3}, newTable));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, deadShapesAreSkipped) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  auto baseTable = t.select({L[0], L[1], L[2]});
+  auto base = t.build(baseTable);
+  // Delete the middle line.
+  auto newTable = t.select({L[0], L[2]});
+  auto extended = t.forUpdatedTable(base, {0, 2}, newTable);
+  EXPECT_THAT(extended, hasStats(1, 3, 2, 2));
+  EXPECT_EQ(extended.getRow(0, 0), 0);
+  EXPECT_EQ(extended.getRow(0, 1), std::nullopt);
+  EXPECT_EQ(extended.getRow(0, 2), 1);
+  // The deleted line is still in the S2 index, but no row is returned.
+  EXPECT_EQ(extended.segments()[0]->num_shape_ids(), 3);
+  EXPECT_TRUE(queryRows(extended, 20, 0.05, 50'000).empty());
+  EXPECT_EQ(queryRows(extended, 10, 0.05, 50'000).size(), 1);
+  EXPECT_EQ(queryRows(extended, 30, 0.05, 50'000).size(), 1);
+  // Delete everything.
+  auto empty = t.forUpdatedTable(base, {}, t.select({}));
+  EXPECT_THAT(empty, hasStats(1, 3, 0, 0));
+  EXPECT_TRUE(queryRows(empty, 10, 0.05, 50'000).empty());
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, statistics) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  const auto& M = t.others_;
+  // No linestring at all: One (empty) segment.
+  auto noLines = t.build(t.select({M[0], M[1]}));
+  EXPECT_THAT(noLines, hasStats(1, 0, 0, 2));
+
+  auto base = t.build(t.select({L[0], M[0], L[1]}));
+  EXPECT_THAT(base, hasStats(1, 2, 2, 3));
+  EXPECT_EQ(base.getRow(0, 0), 0);
+  EXPECT_EQ(base.getRow(0, 1), 2);
+
+  // Only new rows without a linestring: No new segment, one dead shape.
+  auto ext =
+      t.forUpdatedTable(base, {0, Index::NO_ROW}, t.select({L[0], M[1]}));
+  EXPECT_THAT(ext, hasStats(1, 2, 1, 2));
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, withPermutedRowsAndMultipleSegments) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  const auto& M = t.others_;
+  auto base = t.build(t.select({L[0], L[1]}));
+  auto newTable = t.select({L[1], M[0], L[2], L[3], L[0]});
+  auto ext = t.forUpdatedTable(
+      base, {1, Index::NO_ROW, Index::NO_ROW, Index::NO_ROW, 0}, newTable);
+  ASSERT_THAT(ext, hasStats(2, 4, 4, 5));
+
+  std::vector<size_t> newRowOfOldRow{4, 3, 2, 1, 0};
+  auto permuted = ext.withPermutedRows(newRowOfOldRow);
+  EXPECT_THAT(permuted, hasStats(2, 4, 4, 5));
+  EXPECT_EQ(permuted.segments()[0].get(), ext.segments()[0].get());
+  EXPECT_EQ(permuted.segments()[1].get(), ext.segments()[1].get());
+  EXPECT_EQ(permuted.simplificationErrorInMeters(),
+            ext.simplificationErrorInMeters());
+  for (int i = 1; i <= 4; ++i) {
+    auto before = queryRows(ext, 10 * i, 0.05, 50'000);
+    auto after = queryRows(permuted, 10 * i, 0.05, 50'000);
+    ASSERT_EQ(before.size(), 1);
+    ASSERT_EQ(after.size(), 1);
+    EXPECT_EQ(newRowOfOldRow[before.begin()->first], after.begin()->first);
+    EXPECT_EQ(before.begin()->second, after.begin()->second);
+  }
+  EXPECT_ANY_THROW(ext.withPermutedRows(std::vector<size_t>{0, 1}));
+  EXPECT_ANY_THROW(ext.withPermutedRows(std::vector<size_t>{0, 1, 2, 3, 5}));
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, serializationOfVersion2) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  const auto& M = t.others_;
+  for (auto simplification : {std::optional<double>{}, std::optional{10.0}}) {
+    auto base = t.build(t.select({L[0], L[1], M[0]}), simplification);
+    auto newTable = t.select({L[1], L[2], M[1], L[3]});
+    auto ext = t.forUpdatedTable(
+        base, {1, Index::NO_ROW, Index::NO_ROW, Index::NO_ROW}, newTable);
+    for (const auto* index : {&base, &ext}) {
+      auto bytes = serializeToBytes(*index);
+      // Deterministic.
+      EXPECT_EQ(bytes, serializeToBytes(*index));
+      auto restored = deserializeFromBytes(bytes, index->numRows());
+      EXPECT_EQ(restored.getGeometryColumn(), index->getGeometryColumn());
+      EXPECT_EQ(restored.simplificationErrorInMeters(), simplification);
+      EXPECT_THAT(restored, hasStats(index->numSegments(), index->numShapes(),
+                                     index->numLiveShapes(), index->numRows()));
+      expectSameResults(restored, *index);
+      // Byte-identical after a round trip.
+      EXPECT_EQ(serializeToBytes(restored), bytes);
+      // The wrong number of rows is detected.
+      EXPECT_ANY_THROW(deserializeFromBytes(bytes, index->numRows() + 1));
+    }
+    // A restored index can be extended, with the persisted simplification.
+    auto restoredBase =
+        deserializeFromBytes(serializeToBytes(base), base.numRows());
+    auto ext2 = t.forUpdatedTable(
+        restoredBase, {1, Index::NO_ROW, Index::NO_ROW, Index::NO_ROW},
+        newTable);
+    expectSameResults(ext2, ext);
+    EXPECT_EQ(serializeToBytes(ext2), serializeToBytes(ext));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, legacyVersion1Format) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  const auto& M = t.others_;
+  auto table = t.select({M[0], L[0], L[1], M[1], L[2]});
+  auto index = t.build(table);
+  ASSERT_EQ(index.numSegments(), 1);
+
+  // Write the legacy format by hand.
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  writer << index.getGeometryColumn();
+  Encoder encoder;
+  s2shapeutil::CompactEncodeTaggedShapes(*index.segments()[0], &encoder);
+  index.segments()[0]->Encode(&encoder);
+  writer << std::string{encoder.base(), encoder.length()};
+  ad_utility::HashMap<size_t, size_t> shapeToRow;
+  for (size_t shape = 0; shape < index.numShapes(); ++shape) {
+    shapeToRow[shape] = index.getRow(0, shape).value();
+  }
+  writer << shapeToRow;
+  auto data = std::move(writer).data();
+
+  ad_utility::serialization::ByteBufferReadSerializer reader{std::move(data)};
+  auto loaded =
+      Index::readFromSerializer(reader, index.numRows(), legacyFormatVersion);
+  EXPECT_EQ(loaded.getGeometryColumn(), index.getGeometryColumn());
+  EXPECT_EQ(loaded.simplificationErrorInMeters(), std::nullopt);
+  EXPECT_THAT(loaded, hasStats(1, 3, 3, 5));
+  EXPECT_EQ(loaded.getRow(0, 0), 1);
+  EXPECT_EQ(loaded.getRow(0, 1), 2);
+  EXPECT_EQ(loaded.getRow(0, 2), 4);
+  expectSameResults(loaded, index);
+  // The loaded index can be written in the new format and extended.
+  auto newBytes = serializeToBytes(loaded);
+  EXPECT_EQ(newBytes, serializeToBytes(index));
+  auto ext =
+      t.forUpdatedTable(loaded, {1, Index::NO_ROW}, t.select({L[0], L[4]}));
+  EXPECT_THAT(ext, hasStats(2, 4, 2, 2));
+
+  // Writing the legacy format via `writeToSerializer` gives an index that
+  // behaves the same.
+  auto reloaded = deserializeFromBytes(
+      serializeToBytes(index, legacyFormatVersion), 5, legacyFormatVersion);
+  EXPECT_EQ(serializeToBytes(reloaded), serializeToBytes(index));
+
+  // Unknown versions are rejected.
+  EXPECT_ANY_THROW(deserializeFromBytes(newBytes, 5, 3));
+  EXPECT_ANY_THROW(serializeToBytes(index, 3));
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, writeLegacyVersion1Format) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  const auto& M = t.others_;
+  // An index with a single segment, a dead shape (the line 1), and a
+  // simplification, which is dropped by the legacy format.
+  auto base = t.build(t.select({L[0], L[1], M[0], L[2]}), 10.0);
+  auto updated = t.forUpdatedTable(base, {3, 0, Index::NO_ROW},
+                                   t.select({L[2], L[0], M[1]}));
+  ASSERT_THAT(updated, hasStats(1, 3, 2, 3));
+
+  auto loaded = deserializeFromBytes(
+      serializeToBytes(updated, legacyFormatVersion), 3, legacyFormatVersion);
+  EXPECT_EQ(loaded.getGeometryColumn(), updated.getGeometryColumn());
+  EXPECT_EQ(loaded.simplificationErrorInMeters(), std::nullopt);
+  EXPECT_THAT(loaded, hasStats(1, 3, 2, 3));
+  for (size_t shapeId = 0; shapeId < 3; ++shapeId) {
+    EXPECT_EQ(loaded.getRow(0, shapeId), updated.getRow(0, shapeId));
+  }
+  expectSameResults(loaded, updated);
+
+  // An index with more than one segment cannot be written in the legacy
+  // format.
+  auto twoSegments =
+      t.forUpdatedTable(base, {0, Index::NO_ROW}, t.select({L[0], L[4]}));
+  ASSERT_EQ(twoSegments.numSegments(), 2);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serializeToBytes(twoSegments, legacyFormatVersion),
+      ::testing::HasSubstr("single segment"));
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, encodeAndDecodeShape) {
+  using namespace segmented;
+  auto roundTrip = [](size_t segment, size_t shapeId,
+                      ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto shape = Index::encodeShape(segment, shapeId);
+    EXPECT_NE(shape, Index::NO_SHAPE);
+    auto decoded = Index::decodeShape(shape);
+    EXPECT_EQ(decoded.segment_, segment);
+    EXPECT_EQ(decoded.shapeId_, shapeId);
+  };
+  roundTrip(0, 0);
+  roundTrip(0, 17);
+  roundTrip(3, 42);
+  roundTrip(Index::MAX_NUM_SEGMENTS - 1, Index::MAX_NUM_SHAPES_PER_SEGMENT - 1);
+  EXPECT_EQ(Index::encodeShape(0, 5), 5);
+  EXPECT_EQ(Index::encodeShape(2, 5),
+            (uint64_t{2} << Index::SHAPE_ID_BITS) | 5);
+  // Values that are too large are rejected.
+  EXPECT_ANY_THROW(Index::encodeShape(Index::MAX_NUM_SEGMENTS, 0));
+  EXPECT_ANY_THROW(Index::encodeShape(0, Index::MAX_NUM_SHAPES_PER_SEGMENT));
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex,
+     forUpdatedTableWithExplicitRowOrderIsDeterministic) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  const auto& M = t.others_;
+  auto base = t.build(t.select({L[0]}));
+
+  // The same rows (the line 0 of the base, the new lines 1 to 3, and a row
+  // without a linestring) in two different orders.
+  auto tableA = t.select({L[0], L[1], M[0], L[2], L[3]});
+  auto tableB = t.select({L[3], M[0], L[1], L[0], L[2]});
+  std::vector<size_t> baseRowsA{0, Index::NO_ROW, Index::NO_ROW, Index::NO_ROW,
+                                Index::NO_ROW};
+  std::vector<size_t> baseRowsB{Index::NO_ROW, Index::NO_ROW, Index::NO_ROW, 0,
+                                Index::NO_ROW};
+  // The visiting order that corresponds to the canonical order
+  // `L[0], L[1], M[0], L[2], L[3]` of the rows of the tables.
+  std::vector<size_t> rowOrderA{0, 1, 2, 3, 4};
+  std::vector<size_t> rowOrderB{3, 2, 1, 4, 0};
+  auto update = [&](const IdTable& table, const std::vector<size_t>& baseRows,
+                    const std::vector<size_t>& rowOrder) {
+    auto extended =
+        Index::forUpdatedTable(base, baseRows, table.asStaticView<0>(), t.col_,
+                               t.qec_->getIndex(), rowOrder);
+    // Permute to the canonical order, as a writer that extends a serialized
+    // index against the rows of a new table in canonical order would do.
+    std::vector<size_t> newRowOfOldRow(rowOrder.size());
+    for (size_t i = 0; i < rowOrder.size(); ++i) {
+      newRowOfOldRow[rowOrder[i]] = i;
+    }
+    return extended.withPermutedRows(newRowOfOldRow);
+  };
+  auto extendedA = update(tableA, baseRowsA, rowOrderA);
+  auto extendedB = update(tableB, baseRowsB, rowOrderB);
+  ASSERT_THAT(extendedA, hasStats(2, 4, 4, 5));
+  EXPECT_EQ(serializeToBytes(extendedA), serializeToBytes(extendedB));
+
+  // The overload without a row order visits the rows in their natural order.
+  EXPECT_EQ(serializeToBytes(t.forUpdatedTable(base, baseRowsA, tableA)),
+            serializeToBytes(Index::forUpdatedTable(
+                base, baseRowsA, tableA.asStaticView<0>(), t.col_,
+                t.qec_->getIndex(), rowOrderA)));
+
+  // An invalid row order is rejected.
+  auto updateWith = [&](const std::vector<size_t>& rowOrder) {
+    return Index::forUpdatedTable(base, baseRowsA, tableA.asStaticView<0>(),
+                                  t.col_, t.qec_->getIndex(), rowOrder);
+  };
+  EXPECT_ANY_THROW(updateWith({0, 1, 2, 3}));
+  EXPECT_ANY_THROW(updateWith({0, 1, 2, 3, 3}));
+  EXPECT_ANY_THROW(updateWith({0, 1, 2, 3, 5}));
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, readingCorruptVersion2IndexThrows) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  auto index = t.build(t.select({L[0], L[1]}));
+  ASSERT_EQ(index.numSegments(), 1);
+  constexpr uint64_t none = Index::NO_SHAPE;
+  const auto msg = [](std::string_view s) { return ::testing::HasSubstr(s); };
+
+  // The valid case works.
+  EXPECT_EQ(deserializeFromBytes(serializeV2WithRowToShape(index, {0, 1}), 2)
+                .numLiveShapes(),
+            2);
+  EXPECT_EQ(deserializeFromBytes(serializeV2WithRowToShape(index, {none, 1}), 2)
+                .numLiveShapes(),
+            1);
+  // A segment that does not exist.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      deserializeFromBytes(
+          serializeV2WithRowToShape(index, {0, (uint64_t{1} << 32) | 0}), 2),
+      msg("does not exist"));
+  // A shape that does not exist.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      deserializeFromBytes(serializeV2WithRowToShape(index, {0, 99}), 2),
+      msg("does not exist"));
+  // A shape that is referenced twice.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      deserializeFromBytes(serializeV2WithRowToShape(index, {1, 1}), 2),
+      msg("more than one row"));
+}
+
+// _____________________________________________________________________________
+TEST(SpatialJoinCachedIndex, readingCorruptLegacyIndexThrows) {
+  using namespace segmented;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  auto index = t.build(t.select({L[0], L[1]}));
+  using Map = ad_utility::HashMap<size_t, size_t>;
+  const auto msg = ::testing::HasSubstr("corrupt");
+
+  EXPECT_EQ(deserializeFromBytes(serializeLegacy(index, Map{{0, 0}, {1, 1}}), 2,
+                                 legacyFormatVersion)
+                .numLiveShapes(),
+            2);
+  // A row that is not smaller than the number of rows.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      deserializeFromBytes(serializeLegacy(index, Map{{0, 0}, {1, 2}}), 2,
+                           legacyFormatVersion),
+      msg);
+  // A shape id that does not fit into 32 bits.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      deserializeFromBytes(
+          serializeLegacy(index, Map{{0, 0}, {size_t{1} << 32, 1}}), 2,
+          legacyFormatVersion),
+      msg);
+  // A row that is referenced by more than one shape.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      deserializeFromBytes(serializeLegacy(index, Map{{0, 1}, {1, 1}}), 2,
+                           legacyFormatVersion),
+      msg);
 }
 
 }  // namespace

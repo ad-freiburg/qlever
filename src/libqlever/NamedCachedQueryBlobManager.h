@@ -51,9 +51,14 @@ struct BlobSerializationConfig {
 // friend of `Qlever` so that it can access its internals.
 class NamedCachedQueryBlobManager {
  public:
-  // The versions of the blob format. The two versions differ only in that
-  // blobs of the newer version additionally contain a secondary vocabulary
-  // (see `serialize`), so both of them can be read by `tryToDeserialize`.
+  // The versions of the blob format. The two versions differ in that blobs of
+  // the newer version additionally contain a (possibly empty) secondary
+  // vocabulary and that their named cache entries are written in the newer
+  // entries format (with the segmented geo index, see
+  // `NamedResultCacheSerializer.h`). The older version is only written if the
+  // blob has neither a secondary vocabulary nor an entry with a geo index that
+  // consists of more than one segment (see `serialize`). Both of them can be
+  // read by `tryToDeserialize`.
   static constexpr uint16_t formatVersionWithoutSecondaryVocab = 1;
   static constexpr uint16_t formatVersionWithSecondaryVocab = 2;
 
@@ -137,8 +142,9 @@ class NamedCachedQueryBlobManager {
   // index of `qlever` (if any), and the entries are written as rewritten
   // copies that refer to that secondary vocabulary (see
   // `NamedCacheSecondaryVocabRewriter.h`); the entries of `qlever` stay
-  // unchanged. If that secondary vocabulary is empty, then the blob is
-  // written with `formatVersionWithoutSecondaryVocab`, else with
+  // unchanged. If that secondary vocabulary is empty and no entry has a geo
+  // index with more than one segment, then the blob is written with
+  // `formatVersionWithoutSecondaryVocab`, else with
   // `formatVersionWithSecondaryVocab`.
   std::vector<char> serialize(const Qlever& qlever,
                               const BlobSerializationConfig& config = {}) const;

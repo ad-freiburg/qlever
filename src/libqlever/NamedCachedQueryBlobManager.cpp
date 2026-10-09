@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <variant>
 
+#include "backports/algorithm.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "index/IndexImpl.h"
@@ -241,16 +242,25 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // any, for example because the index was itself loaded from a blob, so that
   // the `Id`s of its words stay valid), extended by the new words of the
   // named cache entries (see `NamedCacheSecondaryVocabRewriter.h`). Only if it
-  // is empty, the blob is written in the old format without a secondary
-  // vocabulary, which can also be read by older versions of QLever.
+  // is empty and no entry has a geo index with more than one segment, the blob
+  // is written in the old format (blob version 1 and entries version 1)
+  // without a secondary vocabulary, which can also be read by older versions
+  // of QLever. Otherwise the new format is used (blob version 2, which then
+  // contains a possibly empty secondary vocabulary, and entries version 2,
+  // which is required for a geo index with more than one segment).
   auto entries = qlever.namedResultCache_.getAllEntriesSortedByKey();
   SecondaryVocabulary secondaryVocab = indexImpl.secondaryVocab() != nullptr
                                            ? indexImpl.secondaryVocab()->clone()
                                            : SecondaryVocabulary{};
   namedCacheSecondaryVocab::addNewWordsToSecondaryVocab(entries,
                                                         secondaryVocab);
-  bool hasSecondaryVocab = secondaryVocab.numWords() > 0;
-  writeBlobHeader(serializer, hasSecondaryVocab
+  bool hasSegmentedGeoIndex =
+      ql::ranges::any_of(entries, [](const auto& entry) {
+        const auto& geoIndex = entry.second->cachedGeoIndex_;
+        return geoIndex.has_value() && geoIndex.value().numSegments() > 1;
+      });
+  bool useNewFormat = secondaryVocab.numWords() > 0 || hasSegmentedGeoIndex;
+  writeBlobHeader(serializer, useNewFormat
                                   ? formatVersionWithSecondaryVocab
                                   : formatVersionWithoutSecondaryVocab);
   // Serialize the index metadata JSON together with the vocabulary, so that the
@@ -268,21 +278,29 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
         serializer, indexImpl, indexImpl.getVocab().getUnderlyingVocabulary(),
         config.excludedEntryRegexes_);
   }
-  if (hasSecondaryVocab) {
+  if (useNewFormat) {
     serializer << secondaryVocab;
   }
+  const uint16_t entriesVersion =
+      useNewFormat ? namedResultCacheSerializer::formatVersion
+                   : namedResultCacheSerializer::legacyFormatVersion;
 
   // Write the named cache entries. An entry that contains `Id`s of type
   // `LocalVocabIndex` is replaced by a rewritten copy (the entry in the named
   // cache itself stays unchanged). The words of the local vocab of such a copy
   // are not written, because they are no longer referenced (see
-  // `rewriteToSecondaryVocab`).
+  // `rewriteToSecondaryVocab`). All entries are written in the
+  // `entriesVersion` (see above).
   namedResultCacheSerializer::writeEntries(
       serializer, entries,
-      [&secondaryVocab, &qlever](auto& entrySerializer,
-                                 const NamedResultCache::Value& value) {
+      [&secondaryVocab, &qlever, entriesVersion](
+          auto& entrySerializer, const NamedResultCache::Value& value) {
         if (!namedCacheSecondaryVocab::containsLocalVocabIds(value)) {
-          entrySerializer << value;
+          namedResultCacheSerializer::writeValue(
+              entrySerializer, value,
+              ExplicitIdTableOperation::viewOf(value.result_).getColumns(),
+              value.resultSortedOn_, /*writeLocalVocabWords=*/true,
+              entriesVersion);
           return;
         }
         auto rewritten = namedCacheSecondaryVocab::rewriteToSecondaryVocab(
@@ -290,8 +308,10 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
         namedResultCacheSerializer::writeValue(
             entrySerializer, rewritten,
             ExplicitIdTableOperation::viewOf(rewritten.result_).getColumns(),
-            rewritten.resultSortedOn_, /*writeLocalVocabWords=*/false);
-      });
+            rewritten.resultSortedOn_, /*writeLocalVocabWords=*/false,
+            entriesVersion);
+      },
+      entriesVersion);
   auto uncompressed = std::move(serializer).data();
 
   return compressBlob(uncompressed);

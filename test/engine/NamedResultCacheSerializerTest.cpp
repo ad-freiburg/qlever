@@ -8,6 +8,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "../QueryPlannerTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
@@ -310,6 +311,101 @@ TEST_F(NamedResultCacheSerializerTest, WrongMagicByteOrFormatVersionThrows) {
 }
 
 // _____________________________________________________________________________
+// Test that entries can be written in the legacy format version 1 and are read
+// correctly, including a geo index with a single segment, and that writing a
+// geo index with more than one segment in that format is rejected.
+TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
+  using namespace namedResultCacheSerializer;
+  auto writeWithVersion = [](uint16_t version) {
+    return [version](auto& serializer, const NamedResultCache::Value& v) {
+      writeValue(serializer, v,
+                 ExplicitIdTableOperation::viewOf(v.result_).getColumns(),
+                 v.resultSortedOn_, /*writeLocalVocabWords=*/true, version);
+    };
+  };
+  auto writeLegacy =
+      writeWithVersion(namedResultCacheSerializer::legacyFormatVersion);
+  NamedResultCache cache;
+  cache.store("a", makeSimpleValue("key-a"));
+  ByteBufferWriteSerializer writer;
+  writeEntries(writer, cache.getAllEntriesSortedByKey(), writeLegacy,
+               namedResultCacheSerializer::legacyFormatVersion);
+  auto data = std::move(writer).data();
+  EXPECT_EQ(static_cast<uint8_t>(data.at(1)),
+            namedResultCacheSerializer::legacyFormatVersion);
+
+  NamedResultCache cache2;
+  ByteBufferReadSerializer reader{std::move(data)};
+  cache2.readFromSerializer(reader, alloc_, qec_->getLocalVocabContext());
+  ASSERT_EQ(cache2.numEntries(), 1);
+  EXPECT_EQ(cache2.get("a")->cacheKey_, "key-a");
+  EXPECT_FALSE(cache2.get("a")->cachedGeoIndex_.has_value());
+
+  // The generic serialization uses the current version.
+  ByteBufferWriteSerializer writer2;
+  cache.writeToSerializer(writer2);
+  EXPECT_EQ(static_cast<uint8_t>(std::move(writer2).data().at(1)),
+            namedResultCacheSerializer::formatVersion);
+
+  // An unknown version is rejected when writing.
+  ByteBufferWriteSerializer writer3;
+  EXPECT_ANY_THROW(
+      writeEntries(writer3, cache.getAllEntriesSortedByKey(), writeLegacy, 7));
+
+  // An entry with a geo index that has a single segment can be written in the
+  // legacy version.
+  auto qec = ad_utility::testing::getQec(
+      "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .");
+  qec->pinResultWithName() = {"geo", Variable{"?o"}};
+  auto plan =
+      queryPlannerTestHelpers::parseAndPlan("SELECT * { ?s <p> ?o }", qec);
+  [[maybe_unused]] auto result = plan->getResult();
+  auto entries = qec->namedResultCache().getAllEntriesSortedByKey();
+  ASSERT_EQ(entries.size(), 1);
+  const auto& value = *entries.at(0).second;
+  ASSERT_TRUE(value.cachedGeoIndex_.has_value());
+  ASSERT_EQ(value.cachedGeoIndex_.value().numSegments(), 1);
+  ByteBufferWriteSerializer writer4;
+  writeEntries(writer4, entries, writeLegacy,
+               namedResultCacheSerializer::legacyFormatVersion);
+  NamedResultCache cache4;
+  ByteBufferReadSerializer reader4{std::move(writer4).data()};
+  cache4.readFromSerializer(reader4, alloc_, qec->getLocalVocabContext());
+  ASSERT_EQ(cache4.numEntries(), 1);
+  const auto& geoIndex4 = cache4.get("geo")->cachedGeoIndex_;
+  ASSERT_TRUE(geoIndex4.has_value());
+  EXPECT_EQ(geoIndex4.value().numSegments(), 1);
+  EXPECT_EQ(geoIndex4.value().numLiveShapes(), 1);
+  EXPECT_EQ(geoIndex4.value().getRow(0, 0), 0);
+
+  // A geo index with two segments (the shape of the only row is replaced by a
+  // new one in a second segment) cannot be written in the legacy version, but
+  // in the current one.
+  const auto& geoIndex = value.cachedGeoIndex_.value();
+  auto twoSegments = SpatialJoinCachedIndex::forUpdatedTable(
+      geoIndex, std::vector{SpatialJoinCachedIndex::NO_ROW},
+      ExplicitIdTableOperation::viewOf(value.result_),
+      plan->getVariableColumn(Variable{"?o"}), qec->getIndex());
+  ASSERT_EQ(twoSegments.numSegments(), 2);
+  NamedResultCache::Entries entriesWithTwoSegments{
+      {"geo",
+       std::make_shared<const NamedResultCache::Value>(NamedResultCache::Value{
+           value.result_, value.varToColMap_, value.resultSortedOn_,
+           value.localVocab_.clone(), value.cacheKey_, twoSegments})}};
+  ByteBufferWriteSerializer writer5;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeEntries(writer5, entriesWithTwoSegments, writeLegacy,
+                   namedResultCacheSerializer::legacyFormatVersion),
+      ::testing::HasSubstr("single segment"));
+  ByteBufferWriteSerializer writer6;
+  EXPECT_NO_THROW(
+      writeEntries(writer6, entriesWithTwoSegments,
+                   writeWithVersion(namedResultCacheSerializer::formatVersion),
+                   namedResultCacheSerializer::formatVersion));
+}
+
+// _____________________________________________________________________________
 // Test that `getAllEntriesSortedByKey` returns all entries of the cache,
 // sorted by their key, no matter in which order they were stored.
 TEST_F(NamedResultCacheSerializerTest, GetAllEntriesSortedByKey) {
@@ -414,9 +510,10 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   std::vector<ColumnIndex> shortenedSortOrder{0};
 
   ByteBufferWriteSerializer writer;
-  namedResultCacheSerializer::writeValue(writer, value, replacedColumns,
-                                         shortenedSortOrder,
-                                         /*writeLocalVocabWords=*/false);
+  namedResultCacheSerializer::writeValue(
+      writer, value, replacedColumns, shortenedSortOrder,
+      /*writeLocalVocabWords=*/false,
+      namedResultCacheSerializer::formatVersion);
   auto readValue = deserializeValue(std::move(writer).data());
 
   EXPECT_THAT(ExplicitIdTableOperation::viewOf(readValue.result_),
@@ -435,13 +532,15 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   // agree with the table of the `value`.
   std::vector<std::vector<Id>> tooFewColumns{{V(1), V(2), V(3)}};
   AD_EXPECT_THROW_WITH_MESSAGE(
-      namedResultCacheSerializer::writeValue(writer, value, tooFewColumns,
-                                             shortenedSortOrder, false),
+      namedResultCacheSerializer::writeValue(
+          writer, value, tooFewColumns, shortenedSortOrder, false,
+          namedResultCacheSerializer::formatVersion),
       ::testing::HasSubstr("resultView.numColumns()"));
   std::vector<std::vector<Id>> tooFewRows{{V(1), V(2)}, {V(4), V(5)}};
   AD_EXPECT_THROW_WITH_MESSAGE(
-      namedResultCacheSerializer::writeValue(writer, value, tooFewRows,
-                                             shortenedSortOrder, false),
+      namedResultCacheSerializer::writeValue(
+          writer, value, tooFewRows, shortenedSortOrder, false,
+          namedResultCacheSerializer::formatVersion),
       ::testing::HasSubstr("resultView.numRows()"));
 }
 
