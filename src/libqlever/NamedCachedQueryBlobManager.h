@@ -129,22 +129,23 @@ class NamedCachedQueryBlobManager {
   // `deserialize` picks up the correct vocabulary implementation without any
   // change to the blob format.
   //
-  // The named cache entries are allowed to contain `Id`s of type
-  // `LocalVocabIndex` (for example because SPARQL UPDATE operations were
-  // applied before an entry was pinned). The words of such `Id`s that are not
-  // contained in the vocabulary are written to a secondary vocabulary in the
-  // blob, which also contains the words of the secondary vocabulary of the
-  // index of `qlever` (if any). Every entry (not only one with local vocab
-  // `Id`s) is written as a canonicalized copy (see
-  // `canonicalizeForSerialization` in `NamedCacheSecondaryVocabRewriter.h`);
-  // the entries of `qlever` stay unchanged. In the copy, the `Id`s of type
-  // `LocalVocabIndex` refer to that secondary vocabulary instead, its columns
-  // without a variable are dropped, its other columns are ordered by variable
-  // name, and its rows are in canonical order with respect to its
-  // `resultSortedOn_` (see `CanonicalRowOrder.h`), which is kept. The words of
-  // the local vocab of an entry are never written (they are not referenced by
-  // any `Id` of the copy), only its blank node blocks. If that secondary
-  // vocabulary is empty, then the blob is written with
+  // Every named cache entry is written as a canonicalized copy (see
+  // `canonicalizeForSerialization` in `NamedCacheSecondaryVocabRewriter.h`),
+  // the entries of `qlever` stay unchanged. In the copy, the columns without a
+  // variable are dropped, the other columns are ordered by variable name, and
+  // the rows are in canonical order with respect to the `resultSortedOn_` of
+  // the entry (see `CanonicalRowOrder.h`), which is kept.
+  //
+  // NOTE 1: The entries are allowed to contain `Id`s of type `LocalVocabIndex`
+  // (for example because SPARQL UPDATE operations were applied before an entry
+  // was pinned). The words of such `Id`s that are not contained in the
+  // vocabulary are written to a secondary vocabulary in the blob, which also
+  // contains the words of the secondary vocabulary of the index of `qlever` (if
+  // any), and the `Id`s of the copy refer to that secondary vocabulary instead.
+  // The words of the local vocab of an entry are never written (they are not
+  // referenced by any `Id` of the copy), only its blank node blocks.
+  //
+  // NOTE 2: If the secondary vocabulary is empty, then the blob is written with
   // `formatVersionWithoutSecondaryVocab`, else with
   // `formatVersionWithSecondaryVocab`.
   std::vector<char> serialize(const Qlever& qlever,

@@ -25,14 +25,17 @@
 // lexicographically by the columns `resultSortedOn` (in that order) first, and
 // then by all remaining columns in increasing order of their column index. The
 // `Id`s are compared via `ValueId::compareThreeWay`, and ties are broken by
-// their raw bits (`Id::getBits()`). The tie-break is necessary because
-// `compareThreeWay` can consider `Id`s equal that differ bitwise (two `Id`s of
-// type `LocalVocabIndex` whose entries hold the same word).
-// With it, two rows are equal in the canonical order iff they are bitwise
-// identical, so the canonical order only depends on the multiset of rows, and
-// not on the order in which a query plan happened to produce them. Rows that
-// are equal keep their relative order when a table is brought into canonical
-// order. Two tables in canonical order differ only by row insertions and
+// their raw bits (`Id::getBits()`).
+//
+// NOTE 1: The tie-break is necessary because `compareThreeWay` can consider
+// `Id`s equal that differ bitwise (two `Id`s of type `LocalVocabIndex` whose
+// entries hold the same word). With it, two rows are equal in the canonical
+// order iff they are bitwise identical, so the canonical order only depends on
+// the multiset of rows, and not on the order in which a query plan happened to
+// produce them. Rows that are equal keep their relative order when a table is
+// brought into canonical order.
+//
+// NOTE 2: Two tables in canonical order differ only by row insertions and
 // deletions iff their contents differ only by these, which is what makes the
 // diff of two blobs small (see `alignRows`).
 namespace qlever::canonicalRowOrder {
@@ -75,20 +78,22 @@ IdTable permuteRows(const IdTableView<0>& table,
 // particular, for the permutation `oldRowOfNewRow`, this is `newRowOfOldRow`.
 std::vector<size_t> invertPermutation(ql::span<const size_t> permutation);
 
-// Match the rows of the `target` table to the rows of the `base` table. Both
-// tables have to be in canonical order with respect to the same
-// `resultSortedOn` columns, and have to have the same number of columns
-// (checked via `AD_CONTRACT_CHECK`; the order is not checked, see
-// `isInCanonicalOrder`). Return a vector that contains for each row of `target`
-// the row of `base` that is equal to it (bitwise identical in all columns, see
-// above), or `noMatchingRow` if there is none.
-// The matching is monotonic (the matched rows of `base` are increasing), and
-// each row of `base` is matched at most once. If a row occurs several times,
-// then the occurrences in `target` and `base` are matched pairwise in their
-// order. The cost is linear in the sizes of the tables.
+// Match the rows of the `target` table to the rows of the `base` table: return
+// a vector that contains for each row of `target` the row of `base` that is
+// equal to it (bitwise identical in all columns, see above), or `noMatchingRow`
+// if there is none. Both tables have to be in canonical order with respect to
+// the same `resultSortedOn` columns, and have to have the same number of
+// columns. The cost is linear in the sizes of the tables.
 //
-// NOTE: The `resultSortedOn` columns are needed because they determine in which
-// order the columns are compared, and hence how the merge of the tables works.
+// NOTE 1: The matching is monotonic (the matched rows of `base` are
+// increasing), and each row of `base` is matched at most once. If a row occurs
+// several times, then the occurrences in `target` and `base` are matched
+// pairwise in their order.
+//
+// NOTE 2: Only the number of columns is checked (via `AD_CONTRACT_CHECK`), the
+// canonical order is not (see `isInCanonicalOrder`). The `resultSortedOn`
+// columns are needed because they determine in which order the columns are
+// compared, and hence how the merge of the tables works.
 std::vector<size_t> alignRows(const IdTableView<0>& base,
                               const IdTableView<0>& target,
                               ql::span<const ColumnIndex> resultSortedOn = {});

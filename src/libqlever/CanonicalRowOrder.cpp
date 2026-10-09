@@ -73,14 +73,15 @@ std::vector<ConstIdColumnRef> columnsOf(const IdTableView<0>& table) {
 }
 
 // Compare the two `Id`s via `ValueId::compareThreeWay`, and break ties by
-// their raw bits. `compareThreeWay` compares the raw bits of all `Id`s except
-// those of type `LocalVocabIndex`, which it compares by their words. It thus
-// considers two `Id`s equal that differ bitwise if both are of type
-// `LocalVocabIndex` and refer to different entries with the same word (or if
-// one of them is of type `LocalVocabIndex` and its word is the one at the
-// position in the vocabulary that the other one refers to). The canonical order
-// has to be a total order that only considers bitwise identical `Id`s equal
-// (see `CanonicalRowOrder.h`).
+// their raw bits, so that only bitwise identical `Id`s compare equal (the
+// canonical order has to be a total order, see `CanonicalRowOrder.h`).
+//
+// NOTE: `compareThreeWay` compares the raw bits of all `Id`s except those of
+// type `LocalVocabIndex`, which it compares by their words. It thus considers
+// two `Id`s equal that differ bitwise if both are of type `LocalVocabIndex` and
+// refer to different entries with the same word (or if one of them is of type
+// `LocalVocabIndex` and its word is the one at the position in the vocabulary
+// that the other one refers to).
 int compareIds(Id a, Id b) {
   auto comparison = a.compareThreeWay(b);
   if (comparison < 0) {
