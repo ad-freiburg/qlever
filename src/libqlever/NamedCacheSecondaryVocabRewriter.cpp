@@ -166,25 +166,16 @@ CanonicalizedValue canonicalizeWithPermutation(
     const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,
     const NamedResultCache::Value::Allocator& allocator) {
-  // Copy the columns of the table in canonical order (via the given
-  // `allocator`), and rewrite the copy in place. The canonical column order is
-  // necessary because the order of the columns of a result depends on the query
-  // plan, which may change when the data changes. The columns without a
-  // variable are dropped, because no query can refer to them. The columns of
-  // the geo index are identified by their variable, so the index is not
-  // affected.
+  // Bring the columns of the table into canonical order. The canonical column
+  // order is necessary because the order of the columns of a result depends on
+  // the query plan, which may change when the data changes. The columns
+  // without a variable are dropped, because no query can refer to them. The
+  // columns of the geo index are identified by their variable, so the index is
+  // not affected.
   auto view = ExplicitIdTableOperation::viewOf(value.result_);
   auto oldColumnOfNewColumn =
       canonicalColumnOrder(value.varToColMap_, view.numColumns());
-  IdTable table{oldColumnOfNewColumn.size(), allocator};
-  table.insertAtEnd(view.asColumnSubsetView(oldColumnOfNewColumn));
-  if (containsLocalVocabIds(value)) {
-    for (auto column : table.getColumns()) {
-      ql::ranges::for_each(column, [&secondaryVocab](Id& id) {
-        id = rewriteId(id, secondaryVocab);
-      });
-    }
-  }
+  auto columnSubset = view.asColumnSubsetView(oldColumnOfNewColumn);
 
   // Adapt the `varToColMap` and the `resultSortedOn` to the new columns.
   constexpr auto droppedColumn = std::numeric_limits<ColumnIndex>::max();
@@ -208,6 +199,40 @@ CanonicalizedValue canonicalizeWithPermutation(
     resultSortedOn.push_back(newColumnOfOldColumn[column]);
   }
 
+  auto makeValue = [&](ExplicitIdTableOperation::IdTableOrView result,
+                       std::optional<SpatialJoinCachedIndex> geoIndex) {
+    return NamedResultCache::Value{
+        std::move(result),
+        std::move(varToColMap),
+        std::move(resultSortedOn),
+        value.localVocab_.clone(),
+        canonicalCacheKey(value.cacheKey_, oldColumnOfNewColumn),
+        std::move(geoIndex)};
+  };
+
+  // If no `Id` has to be rewritten and the rows already are in canonical
+  // order (the common case, for example for an index scan), then the copy
+  // only consists of a view of the columns of `value`, which avoids copying
+  // the (possibly very large) table.
+  if (!containsLocalVocabIds(value) &&
+      canonicalRowOrder::isInCanonicalOrder(columnSubset, resultSortedOn)) {
+    return CanonicalizedValue{
+        makeValue(std::move(columnSubset), value.cachedGeoIndex_),
+        std::nullopt};
+  }
+
+  // Otherwise, copy the columns (via the given `allocator`), and rewrite the
+  // copy in place.
+  IdTable table{oldColumnOfNewColumn.size(), allocator};
+  table.insertAtEnd(columnSubset);
+  if (containsLocalVocabIds(value)) {
+    for (auto column : table.getColumns()) {
+      ql::ranges::for_each(column, [&secondaryVocab](Id& id) {
+        id = rewriteId(id, secondaryVocab);
+      });
+    }
+  }
+
   // The rows are sorted by `resultSortedOn` first, so the kept prefix of the
   // sort order that the query plan produced stays valid.
   // TODO<joka921> Distinguish between an explicit sort order of the query
@@ -217,6 +242,7 @@ CanonicalizedValue canonicalizeWithPermutation(
   // two blobs small). This information is currently not stored in a
   // `NamedResultCache::Value`.
   std::optional<SpatialJoinCachedIndex> geoIndex = value.cachedGeoIndex_;
+  std::optional<std::vector<size_t>> oldRowOfNewRow;
   auto permutation = canonicalRowOrder::canonicalSortingPermutation(
       table.asStaticView<0>(), resultSortedOn);
   if (!ql::ranges::is_sorted(permutation)) {
@@ -228,16 +254,13 @@ CanonicalizedValue canonicalizeWithPermutation(
       geoIndex = geoIndex->withPermutedRows(
           canonicalRowOrder::invertPermutation(permutation));
     }
+    oldRowOfNewRow = std::move(permutation);
   }
 
   return CanonicalizedValue{
-      NamedResultCache::Value{
-          std::make_shared<const IdTable>(std::move(table)),
-          std::move(varToColMap), std::move(resultSortedOn),
-          value.localVocab_.clone(),
-          canonicalCacheKey(value.cacheKey_, oldColumnOfNewColumn),
-          std::move(geoIndex)},
-      std::move(permutation)};
+      makeValue(std::make_shared<const IdTable>(std::move(table)),
+                std::move(geoIndex)),
+      std::move(oldRowOfNewRow)};
 }
 
 // _____________________________________________________________________________

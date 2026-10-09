@@ -33,6 +33,7 @@ using secondaryVocabTestHelpers::secondaryVocabIs;
 using ::testing::ElementsAre;
 using ::testing::HasSubstr;
 using ::testing::IsEmpty;
+using ::testing::Optional;
 
 namespace {
 using Value = NamedResultCache::Value;
@@ -340,8 +341,8 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
 
   // The sort order is kept up to the first dropped column.
   auto keptSortOrder = [&](std::vector<ColumnIndex> sortedOn) {
-    return canonicalizeForSerialization(makeValue(std::move(sortedOn)),
-                                        secondaryVocab, allocator)
+    auto value = makeValue(std::move(sortedOn));
+    return canonicalizeForSerialization(value, secondaryVocab, allocator)
         .resultSortedOn_;
   };
   EXPECT_THAT(keptSortOrder({}), IsEmpty());
@@ -381,16 +382,67 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalCacheKey) {
   auto canonicalize = [&](const Value& value) {
     return canonicalizeForSerialization(value, secondaryVocab, allocator);
   };
-  auto inOrder =
-      canonicalize(makeValue({{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
-                              {Variable{"?b"}, makeAlwaysDefinedColumn(1)}}));
-  auto swapped =
-      canonicalize(makeValue({{Variable{"?y"}, makeAlwaysDefinedColumn(0)},
-                              {Variable{"?x"}, makeAlwaysDefinedColumn(1)}}));
+  // NOTE: The copies are views of the columns of the values (see
+  // `canonicalizeForSerialization`), so the values have to outlive them.
+  auto inOrderValue = makeValue({{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
+                                 {Variable{"?b"}, makeAlwaysDefinedColumn(1)}});
+  auto swappedValue = makeValue({{Variable{"?y"}, makeAlwaysDefinedColumn(0)},
+                                 {Variable{"?x"}, makeAlwaysDefinedColumn(1)}});
+  auto inOrder = canonicalize(inOrderValue);
+  auto swapped = canonicalize(swappedValue);
   EXPECT_EQ(inOrder.cacheKey_, canonicalCacheKey("handmade", Columns{0, 1}));
   EXPECT_EQ(swapped.cacheKey_, canonicalCacheKey("handmade", Columns{1, 0}));
   EXPECT_NE(inOrder.cacheKey_, swapped.cacheKey_);
 
   // Canonicalizing a copy again keeps its key.
   EXPECT_EQ(canonicalize(swapped).cacheKey_, swapped.cacheKey_);
+}
+
+// _____________________________________________________________________________
+// Test that an entry that needs neither rewriting nor sorting is canonicalized
+// without copying its table (the copy is a view of its columns), and that every
+// other entry is copied.
+TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
+  // Column 0 is `?b`, column 1 has no variable, column 2 is `?a`.
+  auto makeValue = [](const VectorTable& table,
+                      std::vector<ColumnIndex> sortedOn) {
+    return Value{
+        std::make_shared<const IdTable>(
+            makeIdTableFromVector(table, ad_utility::testing::IntId)),
+        VariableToColumnMap{{Variable{"?b"}, makeAlwaysDefinedColumn(0)},
+                            {Variable{"?a"}, makeAlwaysDefinedColumn(2)}},
+        std::move(sortedOn),
+        LocalVocab{},
+        "handmade",
+        std::nullopt};
+  };
+  SecondaryVocabulary secondaryVocab;
+  auto allocator = ad_utility::testing::makeAllocator();
+  auto isView = [](const Value& value) {
+    return std::holds_alternative<IdTableView<0>>(value.result_);
+  };
+
+  // The rows are sorted by `?b`, and then by `?a`, so they already are in
+  // canonical order. The copy is a view of the columns `?a` and `?b` of the
+  // table of the value.
+  auto sorted = makeValue({{1, 9, 4}, {2, 8, 3}}, {0});
+  auto canonical =
+      canonicalizeWithPermutation(sorted, secondaryVocab, allocator);
+  EXPECT_TRUE(isView(canonical.value_));
+  EXPECT_FALSE(canonical.oldRowOfNewRow_.has_value());
+  auto view = ExplicitIdTableOperation::viewOf(canonical.value_.result_);
+  EXPECT_EQ(view, makeIdTableFromVector({{4, 1}, {3, 2}},
+                                        ad_utility::testing::IntId));
+  auto original = ExplicitIdTableOperation::viewOf(sorted.result_);
+  EXPECT_EQ(view.getColumn(0).data(), original.getColumn(2).data());
+  EXPECT_THAT(canonical.value_.resultSortedOn_, ElementsAre(1));
+
+  // A table that is not in canonical order is copied and sorted.
+  auto unsorted = makeValue({{2, 9, 4}, {1, 8, 3}}, {});
+  auto copy = canonicalizeWithPermutation(unsorted, secondaryVocab, allocator);
+  EXPECT_FALSE(isView(copy.value_));
+  EXPECT_THAT(copy.oldRowOfNewRow_, Optional(ElementsAre(1, 0)));
+  EXPECT_EQ(
+      ExplicitIdTableOperation::viewOf(copy.value_.result_),
+      makeIdTableFromVector({{3, 1}, {4, 2}}, ad_utility::testing::IntId));
 }

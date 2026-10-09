@@ -134,7 +134,9 @@ class NamedCachedQueryBlobManager {
   // the entries of `qlever` stay unchanged. In the copy, the columns without a
   // variable are dropped, the other columns are ordered by variable name, and
   // the rows are in canonical order with respect to the `resultSortedOn_` of
-  // the entry (see `CanonicalRowOrder.h`), which is kept.
+  // the entry (see `CanonicalRowOrder.h`), which is kept. Only an entry that
+  // has to be rewritten or sorted is actually copied (one entry at a time), the
+  // copy of every other entry is a view of its columns.
   //
   // NOTE 1: The entries are allowed to contain `Id`s of type `LocalVocabIndex`
   // (for example because SPARQL UPDATE operations were applied before an entry

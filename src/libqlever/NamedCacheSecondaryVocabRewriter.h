@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_LIBQLEVER_NAMEDCACHESECONDARYVOCABREWRITER_H
 #define QLEVER_SRC_LIBQLEVER_NAMEDCACHESECONDARYVOCABREWRITER_H
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -123,9 +124,10 @@ struct CanonicalizedValue {
   // The canonicalized copy of the value (see `canonicalizeForSerialization`).
   NamedResultCache::Value value_;
   // The vector `oldRowOfNewRow`: its element `i` is the row of the original
-  // table that is the row `i` of the table of `value_` (the identity if the
-  // rows were not permuted).
-  std::vector<size_t> oldRowOfNewRow_;
+  // table that is the row `i` of the table of `value_`. It is `std::nullopt`
+  // if the rows were not permuted, so that no identity permutation (which is
+  // as large as a column of the table) has to be allocated.
+  std::optional<std::vector<size_t>> oldRowOfNewRow_;
 };
 
 // Return a copy of `value` that is ready to be written to a blob: its columns
@@ -133,8 +135,14 @@ struct CanonicalizedValue {
 // rewritten via `rewriteId` (only if `value` contains any `Id` of type
 // `LocalVocabIndex`, see `containsLocalVocabIds`), and its rows are in
 // canonical order (see `CanonicalRowOrder.h`) with respect to the
-// `resultSortedOn_` of the copy. The `value` itself is not modified. The table
-// of the copy is an owning `IdTable` that is allocated via `allocator`.
+// `resultSortedOn_` of the copy. The `value` itself is not modified.
+//
+// If no `Id` has to be rewritten and the rows of `value` already are in
+// canonical order (the common case, for example for an index scan), then the
+// table of the copy is a non-owning view of the columns of `value`, so writing
+// the copy needs no additional memory. The `value` then has to outlive the
+// copy. Otherwise, the table of the copy is an owning `IdTable` that is
+// allocated via `allocator`.
 //
 // NOTE 1: The canonical column order is needed because the plan of a query may
 // produce its columns in a different order after a change of the data, which
@@ -169,12 +177,23 @@ NamedResultCache::Value canonicalizeForSerialization(
     const SecondaryVocabulary& secondaryVocab,
     const NamedResultCache::Value::Allocator& allocator);
 
+// The copy may be a view of the columns of `value` (see above), so a temporary
+// `value` is not allowed, because it would not outlive the copy.
+NamedResultCache::Value canonicalizeForSerialization(
+    NamedResultCache::Value&& value, const SecondaryVocabulary& secondaryVocab,
+    const NamedResultCache::Value::Allocator& allocator) = delete;
+
 // Same as `canonicalizeForSerialization`, but additionally return the
 // permutation of the rows that was applied.
 CanonicalizedValue canonicalizeWithPermutation(
     const NamedResultCache::Value& value,
     const SecondaryVocabulary& secondaryVocab,
     const NamedResultCache::Value::Allocator& allocator);
+
+// See the deleted overload of `canonicalizeForSerialization` above.
+CanonicalizedValue canonicalizeWithPermutation(
+    NamedResultCache::Value&& value, const SecondaryVocabulary& secondaryVocab,
+    const NamedResultCache::Value::Allocator& allocator) = delete;
 
 }  // namespace qlever::namedCacheSecondaryVocab
 
