@@ -22,6 +22,7 @@
 
 #include "backports/asio.h"
 #include "engine/idTable/CompressedIdTableBlockStorage.h"
+#include "engine/idTable/ExternalSorterSettings.h"
 #include "engine/idTable/IdTable.h"
 #include "util/CompressedBlockFile.h"
 #include "util/Exception.h"
@@ -78,6 +79,44 @@ constexpr size_t mergePhaseOutputBlocksPerChunk(
 // pays off. The low positive levels 1 and 2 are a bad choice for this data.
 constexpr inline CompressedBlockFile::CompressionLevel
     MERGE_PHASE_SPILL_COMPRESSION = -5;
+
+// The two compression levels with which a `CompressedExternalIdTableSorter`
+// writes its blocks: the blocks of the presorted runs (written by the
+// `CompressedExternalIdTableWriter`) and the output blocks that the merge
+// phase spills to disk. They are derived from the `value` of the runtime
+// parameter `external-sorter-compression-level` (see
+// `ExternalSorterSettings::compressionLevel_`), see
+// `RuntimeParameters::externalSorterCompressionLevel_` for its syntax.
+//
+// Throw a descriptive exception if the `value` is neither `default`, nor
+// `none`, nor an integer.
+struct SorterCompressionLevels {
+  CompressedBlockFile::CompressionLevel presortedRuns_;
+  CompressedBlockFile::CompressionLevel mergePhaseSpill_;
+};
+
+// ___________________________________________________________________________
+inline SorterCompressionLevels sorterCompressionLevels(
+    const std::string& value) {
+  if (value == "default") {
+    return {ZSTD_DEFAULT_LEVEL, MERGE_PHASE_SPILL_COMPRESSION};
+  }
+  if (value == "none") {
+    return {NO_BLOCK_COMPRESSION, NO_BLOCK_COMPRESSION};
+  }
+  int level = 0;
+  try {
+    size_t numCharsParsed = 0;
+    level = std::stoi(value, &numCharsParsed);
+    AD_CONTRACT_CHECK(numCharsParsed == value.size());
+  } catch (const std::exception&) {
+    throw std::runtime_error{absl::StrCat(
+        "The value \"", value,
+        "\" of the runtime parameter `external-sorter-compression-level` is "
+        "neither `default`, nor `none`, nor an integer")};
+  }
+  return {level, level};
+}
 
 // The smallest number of rows that an output block of the merge phase may have.
 // The number of chunks that are merged concurrently is chosen as large as the
@@ -373,15 +412,14 @@ inline std::string makeSpillFilename(const std::string& sorterFilename,
 // altogether (see there). A placeholder therefore suffices in that mode.
 template <size_t NumCols>
 auto makeMergePhaseBlockStorageFactory(
-    ql::any_io_executor ioExecutor, std::string spillFilenamePrefix,
-    AllocatorWithLimit<Id> allocator,
-    size_t numBufferedBlocksPerChunk =
+    [[maybe_unused]] ql::any_io_executor ioExecutor,
+    [[maybe_unused]] std::string spillFilenamePrefix,
+    [[maybe_unused]] AllocatorWithLimit<Id> allocator,
+    [[maybe_unused]] size_t numBufferedBlocksPerChunk =
         MIN_MERGE_PHASE_BUFFERED_OUTPUT_BLOCKS_PER_CHUNK,
-    CompressedBlockFile::CompressionLevel compression =
+    [[maybe_unused]] CompressedBlockFile::CompressionLevel compression =
         MERGE_PHASE_SPILL_COMPRESSION) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  (void)ioExecutor, (void)spillFilenamePrefix, (void)allocator,
-      (void)numBufferedBlocksPerChunk, (void)compression;
   return std::monostate{};
 #else
   return makeCompressedIdTableStorageFactory<NumCols>(

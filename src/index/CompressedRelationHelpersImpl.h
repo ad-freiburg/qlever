@@ -53,6 +53,16 @@ inline constexpr auto pickBitsOfColumns =
 // any payload columns). The comparison is performed on the bits of the `Id`s,
 // see `pickBitsOfColumns` above.
 struct ComparatorForConstCol0 {
+  // Pick the bits of the cells that this comparator looks at. The resulting
+  // `std::array`s compare lexicographically, which is exactly the desired
+  // order.
+  template <typename Row>
+  static std::array<Id::T, 3> pickBits(const Row& row) {
+    return {bitsOfIdWithoutLocalVocab(row[c1Idx]),
+            bitsOfIdWithoutLocalVocab(row[c2Idx]),
+            bitsOfIdWithoutLocalVocab(row[ADDITIONAL_COLUMN_GRAPH_ID])};
+  }
+
   template <typename A, typename B>
   constexpr bool operator()(const A& a, const B& b) const {
     auto pickBits = pickBitsOfColumns<c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID>;

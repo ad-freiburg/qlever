@@ -360,7 +360,7 @@ addLinkAndDiscoverTest(VocabularyTest vocabulary)
 
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
-addLinkAndDiscoverTestNoLibs(ViewsTest)
+addLinkAndDiscoverTestNoLibs(ViewsTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(UniqueBlockViewTest qlever_util)
 

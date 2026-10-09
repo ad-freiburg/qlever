@@ -11,6 +11,7 @@
 #include <absl/strings/str_join.h>
 
 #include "backports/algorithm.h"
+#include "engine/idTable/ExternalSorterSettings.h"
 #include "util/Algorithm.h"
 
 // _____________________________________________________________________________
@@ -65,7 +66,7 @@ RuntimeParameters::RuntimeParameters() {
   add(materializedViewPatternMatchNumAssignments_);
   add(materializedViewPatternMatchNumReplacementPlans_);
   add(serviceAllowedIriPrefixes_);
-  add(permutationWriterNumThreads_);
+  add(externalSorterCompressionLevel_);
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
   add(logLevel_);
@@ -144,4 +145,14 @@ std::vector<std::string> RuntimeParameters::getKeys() const {
   static std::vector<std::string> keys =
       ::ranges::to<std::vector>(runtimeMap_ | ql::views::keys);
   return keys;
+}
+
+// _____________________________________________________________________________
+ad_utility::compressedExternalIdTable::ExternalSorterSettings
+ad_utility::compressedExternalIdTable::externalSorterSettings() {
+  return {
+      getRuntimeParameter<
+          &RuntimeParameters::externalSorterCompressionLevel_>(),
+      getRuntimeParameter<&RuntimeParameters::mergePhaseMaxChunksInFlight_>(),
+      getRuntimeParameter<&RuntimeParameters::mergePhaseMaxOutputBlockRows_>()};
 }

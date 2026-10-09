@@ -20,6 +20,7 @@
 #include "./AsyncPushTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
 #include "util/ConstexprUtils.h"
@@ -219,6 +220,82 @@ TEST(CompressedExternalIdTable, sorterRandomInputs) {
   testExternalSorter<0>(NUM_COLS, 10'000, 10_kB);
   testExternalSorter<0>(NUM_COLS, 1000, 1_MB);
   testExternalSorter<0>(NUM_COLS, 0, 1_MB);
+}
+
+// _____________________________________________________________________________
+// The blocks of a *column-major* buffer are sorted by
+// `ad_utility::blockSort::blockIndirectSort` through the proxy row references
+// of an `IdTable`, see `sortBlockRange`. The blocks of the sorter tests above
+// are far too small for the parallel paths of that sort, so this test sorts
+// ranges that are big enough for them: one that takes the parallel quicksort
+// (fewer than `minNumThreadsForBlocks` threads) and one that takes the full
+// block indirect algorithm, including the merging and the moving of the
+// blocks.
+TEST(CompressedExternalIdTable, blockIndirectSortOfColumnMajorRows) {
+  // Order by all columns, so that the result of the (unstable) sort is unique
+  // and can be compared to a reference.
+  auto lessThanByAllColumns = [](const auto& a, const auto& b) {
+    for (size_t col = 0; col < NUM_COLS; ++col) {
+      if (a[col] != b[col]) {
+        return a[col] < b[col];
+      }
+    }
+    return false;
+  };
+  // Enough rows for `detail::minNumThreadsForBlocks` threads, each of which
+  // needs a whole group of blocks, see `detail::runSort`.
+  constexpr size_t numRows = 400'000;
+  net::thread_pool pool{8};
+  auto runTest = [&](uint32_t numThreads) {
+    SCOPED_TRACE(absl::StrCat("numThreads=", numThreads));
+    CopyableIdTable<NUM_COLS> table =
+        createRandomlyFilledIdTable(numRows, NUM_COLS).toStatic<NUM_COLS>();
+    CopyableIdTable<NUM_COLS> expected = table;
+    ql::ranges::sort(expected, lessThanByAllColumns);
+
+    ad_utility::blockSort::blockIndirectSort(
+        ql::ranges::subrange{table.begin(), table.end()}, lessThanByAllColumns,
+        numThreads, pool.get_executor());
+    EXPECT_EQ(table, expected);
+  };
+  // Below `detail::minNumThreadsForBlocks`, so this is the parallel quicksort.
+  runTest(2);
+  // The full block indirect sort.
+  runTest(8);
+  pool.join();
+}
+
+// _____________________________________________________________________________
+// The runtime parameter `external-sorter-compression-level` (see
+// `RuntimeParameters::externalSorterCompressionLevel_`) sets the compression
+// of the blocks of the presorted runs as well as of the blocks that the merge
+// phase spills. Whatever it is set to, the sorted output has to be the same,
+// and an invalid value has to be rejected.
+TEST(CompressedExternalIdTable, externalSorterCompressionLevel) {
+  using namespace ad_utility::memory_literals;
+  const std::string previousValue = getRuntimeParameter<
+      &RuntimeParameters::externalSorterCompressionLevel_>();
+  absl::Cleanup cleanup = [&previousValue] {
+    setRuntimeParameter<&RuntimeParameters::externalSorterCompressionLevel_>(
+        previousValue);
+  };
+
+  for (const std::string& value : {"default", "none", "1", "-5"}) {
+    SCOPED_TRACE(absl::StrCat("external-sorter-compression-level=", value));
+    setRuntimeParameter<&RuntimeParameters::externalSorterCompressionLevel_>(
+        value);
+    // The blocks are deliberately small, so that both the presorted runs and
+    // the merge phase consist of many of them.
+    testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB);
+  }
+
+  setRuntimeParameter<&RuntimeParameters::externalSorterCompressionLevel_>(
+      "not a level");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::compressedExternalIdTable::sorterCompressionLevels(
+          ad_utility::compressedExternalIdTable::externalSorterSettings()
+              .compressionLevel_),
+      ::testing::HasSubstr("neither `default`, nor `none`, nor an integer"));
 }
 
 // Test that destroying the sorter while an async block-sorting task is still

@@ -234,6 +234,39 @@ struct RuntimeParameters {
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
 
+  // How the external sorters (see
+  // `engine/idTable/CompressedExternalIdTable.h`) compress the blocks that
+  // they write to disk: the blocks of the presorted runs (written by the
+  // `CompressedExternalIdTableWriter`) as well as the output blocks that the
+  // merge phase spills. The value is one of:
+  // * `default`: each of the two uses its own built-in default, which is ZSTD
+  //   level `ad_utility::ZSTD_DEFAULT_LEVEL` for the presorted runs and
+  //   `compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION` for the
+  //   spilled blocks (see there for why those two differ).
+  // * `none`: both are stored uncompressed.
+  // * an integer: the ZSTD compression level for both (negative levels are the
+  //   `zstd --fast` modes).
+  // A sorter reads this parameter once, when it is constructed. See
+  // `compressedExternalIdTable::sorterCompressionLevels`.
+  String externalSorterCompressionLevel_{"default",
+                                         "external-sorter-compression-level"};
+
+  // The largest number of chunks that the merge phase of an external sorter
+  // keeps in flight, or 0 for "as many as the memory limit allows". The chunks
+  // that run ahead of the consumer spill their finished output blocks to disk,
+  // so a smaller number makes the merge and its consumer overlap instead of
+  // writing the whole output once more, at the price of less parallelism in
+  // the merge itself. A sorter reads this parameter once per merge phase.
+  SizeT mergePhaseMaxChunksInFlight_{0, "merge-phase-max-chunks-in-flight"};
+
+  // The largest output block of the merge phase of an external sorter, in
+  // rows, or 0 for "as large as the memory limit allows". The memory that a
+  // smaller block leaves over becomes additional buffered output blocks per
+  // chunk, so that a chunk spills less and the consumer of the merge waits for
+  // a smaller unit of work. A sorter reads this parameter once per merge
+  // phase.
+  SizeT mergePhaseMaxOutputBlockRows_{0, "merge-phase-max-output-block-rows"};
+
   // Configure how many blocks are compressed and written concurrently per
   // permutation. The blocks are compressed and written on the global thread
   // pool, so this is not a number of threads of its own, and it is capped at

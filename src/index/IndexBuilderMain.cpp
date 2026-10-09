@@ -332,6 +332,31 @@ int main(int argc, char** argv) {
       DEFAULT_INDEX_ROWS_PER_BLOCK, ".");
   add("index-rows-per-block", po::value(&indexRowsPerBlock),
       rowsPerBlockDescription.c_str());
+  add("external-sorter-compression-level",
+      optionFactory.getProgramOption<
+          &RuntimeParameters::externalSorterCompressionLevel_>(),
+      "How the external sorters compress the blocks that they write to disk: "
+      "the blocks of the presorted runs as well as the output blocks that the "
+      "merge phase spills. Either `default` (each of the two uses its own "
+      "built-in default), `none` (both are stored uncompressed), or a ZSTD "
+      "compression level for both (negative levels are the `zstd --fast` "
+      "modes).");
+  add("merge-phase-max-chunks-in-flight",
+      optionFactory
+          .getProgramOption<&RuntimeParameters::mergePhaseMaxChunksInFlight_>(),
+      "The largest number of chunks that the merge phase of an external sorter "
+      "merges at the same time, or 0 (the default) for as many as the memory "
+      "limit allows. Chunks that run ahead of the consumer of the merge spill "
+      "their output to disk, so a smaller number makes the merge and its "
+      "consumer overlap, at the price of less parallelism in the merge.");
+  add("merge-phase-max-output-block-rows",
+      optionFactory.getProgramOption<
+          &RuntimeParameters::mergePhaseMaxOutputBlockRows_>(),
+      "The largest output block of the merge phase of an external sorter, in "
+      "rows, or 0 (the default) for as large as the memory limit allows. The "
+      "memory that a smaller block leaves over is spent on buffering the "
+      "output blocks of a chunk instead, which makes a chunk spill less and "
+      "lets the consumer of the merge start on a smaller unit of work.");
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),
@@ -360,9 +385,10 @@ int main(int argc, char** argv) {
       "Default: the number of hardware threads of the machine. NOTE: Currently "
       "the first pass (parsing the input and creating the partial "
       "vocabularies), the conversion to global IDs, and the shared thread pool "
-      "that the permutation writer runs on use this number; the other phases "
-      "use their own parallelism (making all phases respect this option is "
-      "work in progress). The memory of the first pass grows "
+      "that the merge phase of the external sorters and the permutation writer "
+      "run on use this number; the other phases use their own parallelism "
+      "(making all phases respect this option is work in progress). The memory "
+      "of the first pass grows "
       "linearly with this number, since each thread holds one batch of "
       "`num-triples-per-batch` triples with its partial vocabulary in RAM.");
 
