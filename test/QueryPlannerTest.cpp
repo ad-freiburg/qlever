@@ -2793,6 +2793,13 @@ TEST(QueryPlanner, Describe) {
       h::Describe(::testing::_, h::IndexScanFromStrings(
                                     "?y", "<p>", "<o>", {},
                                     ad_utility::HashSet<std::string>{"<g>"})));
+  // A trailing `VALUES` clause restricts the WHERE clause (the input of the
+  // `Describe`), not the result of the `Describe`.
+  h::expect(
+      "DESCRIBE ?y { ?y <p> ?o } VALUES ?y { <a> }",
+      h::Describe(::testing::_,
+                  h::Join(h::IndexScanFromStrings("?y", "<p>", "?o"),
+                          h::Sort(h::ValuesClause("VALUES (?y) { (<a>) }")))));
 }
 
 // ____________________________________________________________________________
@@ -2912,6 +2919,68 @@ TEST(QueryPlanner, Exists) {
                                                   {Permutation::Enum::OSP}),
                           h::IndexScanFromStrings("?s", "?p", "?o",
                                                   {Permutation::Enum::SPO}))));
+
+  // A `FILTER` with an `EXISTS` may be applied to several subtrees, which then
+  // must not share the column of the `ExistsJoin` (see GitHub issue #3555).
+  auto filterExistsEmpty = [](const auto& subtree) {
+    return h::Filter("EXISTS {}", h::ExistsJoin(subtree, h::NeutralElement()));
+  };
+  h::expect(
+      "SELECT * { ?x ?y ?z . ?a ?b ?c FILTER EXISTS {} }",
+      h::CartesianProductJoin(filterExistsEmpty(xyz), filterExistsEmpty(abc)));
+  auto filterExistsSRB = [](const auto& subtree) {
+    return h::Filter(
+        "EXISTS { ?s <r> ?b }",
+        h::ExistsJoin(subtree, h::IndexScanFromStrings("?s", "<r>", "?b")));
+  };
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER EXISTS { ?s <r> ?b } }",
+      h::Join(filterExistsSRB(h::IndexScanFromStrings("?s", "<p>", "?o")),
+              filterExistsSRB(h::IndexScanFromStrings("?s", "<q>", "?y"))));
+
+  // The `ExistsJoin` adds a column for the result of the `EXISTS`, which is
+  // then hidden by the `Filter`.
+  using ::testing::Pair;
+  auto variableColumnsAre = [](auto... columns) {
+    return AD_PROPERTY(QueryExecutionTree, getVariableColumns,
+                       ::testing::UnorderedElementsAre(columns...));
+  };
+  auto column = [](const std::string& variable, ColumnIndex columnIndex) {
+    return Pair(Var{variable}, makeAlwaysDefinedColumn(columnIndex));
+  };
+  auto existsColumn = [](ColumnIndex columnIndex) {
+    return Pair(AD_PROPERTY(Var, name, HasSubstr("?ql_internal_exists_")),
+                makeAlwaysDefinedColumn(columnIndex));
+  };
+  auto filterExistsSRBWithColumns =
+      [&](const auto& subtree,
+          const std::string& otherVariable) -> h::QetMatcher {
+    return ::testing::AllOf(
+        h::Filter(
+            "EXISTS { ?s <r> ?b }",
+            ::testing::AllOf(
+                h::ExistsJoin(subtree,
+                              h::IndexScanFromStrings("?s", "<r>", "?b")),
+                variableColumnsAre(column("?s", 0), column(otherVariable, 1),
+                                   existsColumn(2)))),
+        variableColumnsAre(column("?s", 0), column(otherVariable, 1)));
+  };
+  h::expect("SELECT * { ?s <p> ?o FILTER EXISTS { ?s <r> ?b } }",
+            filterExistsSRBWithColumns(
+                h::IndexScanFromStrings("?s", "<p>", "?o"), "?o"));
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER EXISTS { ?s <r> ?b } }",
+      ::testing::AllOf(
+          h::Join(filterExistsSRBWithColumns(
+                      h::IndexScanFromStrings("?s", "<p>", "?o"), "?o"),
+                  filterExistsSRBWithColumns(
+                      h::IndexScanFromStrings("?s", "<q>", "?y"), "?y")),
+          // The hidden columns of the `ExistsJoin`s are still present in the
+          // result (columns 2 and 4), but not visible.
+          // TODO<StripColumns> Adapt once `Filter` can strip columns.
+          AD_PROPERTY(QueryExecutionTree, getResultWidth, ::testing::Eq(5)),
+          variableColumnsAre(column("?s", 0), column("?o", 1),
+                             column("?y", 3))));
 }
 
 // _____________________________________________________________________________
@@ -4215,4 +4284,24 @@ TEST(QueryPlanner, planningInfo) {
   EXPECT_EQ(info[1].numConnectedSubgraphs_, 2u);
   EXPECT_EQ(info[1].budget_, 1u);
   EXPECT_GT(info[1].numCandidatePlans_, 0u);
+}
+
+// Test that the operations and execution trees that the query planner creates
+// are allocated via the memory-limited allocator of the query.
+TEST(QueryPlanner, plannerAllocationsCountTowardsMemoryLimit) {
+  auto* qec = ad_utility::testing::getQec();
+  const auto& allocator = qec->getAllocator();
+  const auto memoryLeftBefore = allocator.amountMemoryLeft();
+
+  // While the execution tree of a single index scan lives, the memory limit of
+  // the query accounts for the tree and the scan (and not only for the runtime
+  // information of the scan, which the `Operation` constructor allocates).
+  {
+    auto tree = h::parseAndPlan("SELECT * { ?x <p> ?y }", qec);
+    auto used = memoryLeftBefore - allocator.amountMemoryLeft();
+    EXPECT_GE(used.getBytes(), sizeof(IndexScan) + sizeof(QueryExecutionTree));
+  }
+
+  // When the tree is destroyed, the memory is released again.
+  EXPECT_EQ(allocator.amountMemoryLeft(), memoryLeftBefore);
 }

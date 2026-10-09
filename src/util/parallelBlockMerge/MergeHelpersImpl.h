@@ -163,15 +163,22 @@ inline std::vector<size_t> uniformTargets(size_t totalNumElements,
   return targets;
 }
 
-// Step 3b: The same, but for explicitly given chunk sizes (the components of a
-// `ChunkSizes`, see `MergeHelpers.h`): the `i`-th target is the total size of
-// the first `i` chunks. Stop as soon as a target has reached the total number
+// Step 3b: The same, but for explicitly given chunk sizes: the first
+// `firstChunkSizes.size()` chunks get the corresponding size from that vector,
+// and all the remaining chunks get the size `remainingChunkSize`. All the sizes
+// have to be strictly positive. The `i`-th target is the total size of the
+// first `i` chunks. Stop as soon as a target has reached the total number
 // of elements, because all the chunks after that one would be empty. This is
 // what makes a `remainingChunkSize` that is smaller than the input terminate,
 // and it also handles leading sizes that already exceed the input.
 inline std::vector<size_t> targetsFromChunkSizes(
     size_t totalNumElements, const std::vector<size_t>& firstChunkSizes,
     size_t remainingChunkSize) {
+  // A size of zero would describe an empty chunk, and a `remainingChunkSize`
+  // of zero would make the loop below run forever.
+  AD_CONTRACT_CHECK(remainingChunkSize > 0);
+  AD_CONTRACT_CHECK(ql::ranges::all_of(firstChunkSizes,
+                                       [](size_t size) { return size > 0; }));
   std::vector<size_t> targets;
   size_t sizeOfPreviousChunks = 0;
   // Return `false` if the chunk of the given `chunkSize` is the last one.

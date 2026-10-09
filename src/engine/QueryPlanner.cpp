@@ -87,7 +87,7 @@ using SubtreePlan = QueryPlanner::SubtreePlan;
 
 template <typename Operation, typename... Args>
 SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, Args&&... args) {
-  return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
+  return {qec, qec->makeShared<Operation>(qec, AD_FWD(args)...)};
 }
 
 // Create a `SubtreePlan` that holds the given `operation`. `Op` must be a class
@@ -194,6 +194,25 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     checkCancellation();
   }
 
+  // Apply trailing `VALUES` clause of a query with `GROUP BY` (without
+  // `GROUP BY`, it is part of the root graph pattern). As in the SPARQL 1.1
+  // spec (sec. 18.2.4.3), this happens after `GROUP BY` and `HAVING`, but
+  // before `DISTINCT` and `ORDER BY`. Then compute the aliases that use its
+  // variables.
+  auto& postValues = pq.postQueryValuesClause_;
+  if (postValues.has_value()) {
+    plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
+    checkCancellation();
+  }
+  for (const auto& bind : pq.postQueryValuesBinds_) {
+    std::vector<SubtreePlan> row;
+    for (const auto& plan : plans.back()) {
+      row.push_back(makeSubtreePlan<Bind>(_qec, plan._qet, bind));
+    }
+    plans.push_back(std::move(row));
+    checkCancellation();
+  }
+
   // DISTINCT
   if (pq.hasSelectClause()) {
     const auto& selectClause = pq.selectClause();
@@ -209,13 +228,6 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     // just add an order by / sort to every previous result if needed.
     // If the ordering is perfect already, just copy the plan.
     plans.emplace_back(getOrderByRow(pq, plans));
-    checkCancellation();
-  }
-
-  // Apply trailing `VALUES` clause
-  auto& postValues = pq.postQueryValuesClause_;
-  if (postValues.has_value()) {
-    plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
     checkCancellation();
   }
 
@@ -929,7 +941,7 @@ auto QueryPlanner::seedWithScansAndText(
             return std::make_unique<VariableExpression>(std::move(variable));
           };
           addFilter(SparqlFilter{
-              SparqlExpressionPimpl{std::make_shared<EqualExpression>(
+              SparqlExpressionPimpl{_qec->makeShared<EqualExpression>(
                                         std::array<SparqlExpression::Ptr, 2>{
                                             makeVarExpr(graphVariable),
                                             makeVarExpr(internalVariable)}),
@@ -3384,7 +3396,7 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 
   for (auto& sub : candidatesIn) {
     auto pathSearch =
-        std::make_shared<PathSearch>(qec_, std::move(sub._qet), config);
+        qec_->makeShared<PathSearch>(qec_, std::move(sub._qet), config);
     auto plan = makeSubtreePlan<PathSearch>(std::move(pathSearch));
     candidatesOut.push_back(std::move(plan));
   }
@@ -3432,7 +3444,7 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
         right = std::move(sub._qet);
       }
       auto spatialJoin =
-          std::make_shared<SpatialJoin>(qec_, config, std::nullopt, right);
+          qec_->makeShared<SpatialJoin>(qec_, config, std::nullopt, right);
       auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
       candidatesOut.push_back(std::move(plan));
     };
@@ -3472,7 +3484,7 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 void QueryPlanner::GraphPatternPlanner::visitExternalValues(
     const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
   auto externalValues =
-      std::make_shared<ExternalValues>(qec_, externalValuesQuery);
+      qec_->makeShared<ExternalValues>(qec_, externalValuesQuery);
   auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
   visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }

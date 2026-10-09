@@ -54,8 +54,9 @@
       _Pragma("GCC diagnostic ignored \"-Wdangling-reference\"")
 
 // Disable the `array-bounds` warning, which produces false positives on GCC 13
+// when small functions are inlined into standard library code. For example,
 // when the comparators in `ExternalSortFunctors.h` are inlined into
-// `std::__insertion_sort`. GCC then conflates the `Row<ValueId, 5>` and
+// `std::__insertion_sort`, GCC conflates the `Row<ValueId, 5>` and
 // `Row<ValueId, 4>` instantiations and wrongly believes an out-of-bounds access
 // happens.
 #define DISABLE_ARRAY_BOUNDS_WARNINGS \
@@ -75,6 +76,25 @@
 #define DISABLE_DANGLING_REFERENCE_WARNINGS
 #define DISABLE_ARRAY_BOUNDS_WARNINGS
 #define GCC_REENABLE_WARNINGS
+#endif
+
+// Disable the warnings about `#warning` directives (`-Wcpp` for GCC,
+// `-W#warnings` for clang). QLever needs this for the third-party headers that
+// it includes from headers of its own: `<boost/sort/...>` includes the
+// `<ciso646>` of libstdc++, which since C++20 is deprecated and warns about
+// itself, see `util/blockSort/BoostSortHeaders.h` for an example.
+#if defined(__clang__)
+#define DISABLE_PREPROCESSOR_WARNINGS \
+  _Pragma("clang diagnostic push")    \
+      _Pragma("clang diagnostic ignored \"-W#warnings\"")
+#define REENABLE_PREPROCESSOR_WARNINGS _Pragma("clang diagnostic pop")
+#elif defined(__GNUC__)
+#define DISABLE_PREPROCESSOR_WARNINGS \
+  _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wcpp\"")
+#define REENABLE_PREPROCESSOR_WARNINGS _Pragma("GCC diagnostic pop")
+#else
+#define DISABLE_PREPROCESSOR_WARNINGS
+#define REENABLE_PREPROCESSOR_WARNINGS
 #endif
 
 #ifdef __clang__
