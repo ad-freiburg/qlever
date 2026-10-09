@@ -1,5 +1,17 @@
 include(GoogleTest)
 
+# The test binaries are not shipped and link without LTO (see
+# `QLEVER_ENABLE_LTO` in the top-level `CMakeLists.txt`). With GCC, also compile
+# them without LTO, so that no (unused) GIMPLE bytecode is generated for them.
+#
+# NOTE: `add_compile_options` sets a directory property that applies to all
+# targets created afterwards in this directory and its subdirectories (in
+# particular `testUtil` below, which is why this block comes first), and never
+# to the parent directory.
+if (QLEVER_ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-fno-lto)
+endif()
+
 # Needed for creating the `testUil`-library.
 add_subdirectory(util EXCLUDE_FROM_ALL)
 
@@ -8,6 +20,14 @@ add_subdirectory(util EXCLUDE_FROM_ALL)
 # arguments.
 function(linkTest basename)
     qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main ${CMAKE_THREAD_LIBS_INIT} global)
+    # Reuse the precompiled headers of `testUtil`. This requires the same
+    # compiler flags and definitions as `testUtil`, so only tests that link
+    # against `testUtil` qualify (otherwise, e.g., the definitions of
+    # OpenTelemetry are missing, and GCC ignores the precompiled header, but
+    # still includes all its headers).
+    if (USE_PRECOMPILED_HEADERS AND "testUtil" IN_LIST ARGN)
+        target_precompile_headers(${basename} REUSE_FROM testUtil)
+    endif ()
 endfunction()
 
 # Add the executable ${basename} that is compiled from the source file
@@ -344,6 +364,8 @@ addLinkAndDiscoverTestNoLibs(ViewsTest)
 
 addLinkAndDiscoverTestNoLibs(UniqueBlockViewTest qlever_util)
 
+addLinkAndDiscoverTestNoLibs(AsyncTransformViewTest qlever_util)
+
 addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
 
 addLinkAndDiscoverTestNoLibs(ChunkedIotaViewTest)
@@ -355,6 +377,8 @@ addLinkAndDiscoverTestNoLibs(CompressorStreamTest Boost::iostreams)
 addLinkAndDiscoverTestNoLibs(AsyncStreamTest)
 
 addLinkAndDiscoverTest(BitUtilsTest)
+
+addLinkAndDiscoverTest(HyperLogLogTest)
 
 addLinkAndDiscoverTest(NBitIntegerTest)
 
@@ -373,6 +397,8 @@ addLinkAndDiscoverTest(DurationTest qlever_util)
 addLinkAndDiscoverTest(TripleComponentTest)
 
 addLinkAndDiscoverTest(ValueIdTest qlever_util)
+
+addLinkAndDiscoverTest(DatatypeTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
 
@@ -509,9 +535,11 @@ addLinkAndDiscoverTest(JoinAlgorithmsTest)
 addLinkAndDiscoverTest(AsioHelpersTest)
 # With `-fwasm-exceptions`, clang's `correlated-propagation` pass (run at -O2/-O3)
 # crashes on the coroutine `.resume` body in this file. Compiling just this
-# translation unit at -O1 avoids the crashing pass.
+# translation unit at -O1 avoids the crashing pass (and makes the precompiled
+# header of `testUtil`, which is compiled with the default flags, unusable).
 if (EMSCRIPTEN)
-    set_source_files_properties(AsioHelpersTest.cpp PROPERTIES COMPILE_OPTIONS "-O1")
+    set_source_files_properties(AsioHelpersTest.cpp PROPERTIES
+            COMPILE_OPTIONS "-O1" SKIP_PRECOMPILE_HEADERS ON)
 endif ()
 
 addLinkAndDiscoverTest(AsyncResourcePoolTest)
