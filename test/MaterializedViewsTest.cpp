@@ -2043,6 +2043,39 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                 "2 * ?o + 1", V{"?d"}));
   }
 
+  // A `BIND` is not pushed down through a `SpatialJoin` if its target (here
+  // `?s2`) is a variable of a child that the `SpatialJoin` drops, because it is
+  // not one of the payload variables.
+  {
+    constexpr std::string_view droppedTargetInSpatialJoin = R"(
+      PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?o ?s2 {
+        {
+          SELECT ?s ?o {
+            ?s view:bindView-o ?o .
+            SERVICE spatialSearch: {
+              _:config spatialSearch:algorithm spatialSearch:libspatialjoin ;
+                       spatialSearch:left ?o ;
+                       spatialSearch:right ?o2 ;
+                       spatialSearch:joinType spatialSearch:within-dist ;
+                       spatialSearch:maxDistance 100 ;
+                       spatialSearch:payload ?o2 .
+              { ?s2 view:bindView-o ?o2 }
+            }
+          }
+        }
+        BIND(2 * ?o + 1 AS ?s2)
+      }
+    )";
+    qpExpect(
+        qlv(), droppedTargetInSpatialJoin,
+        h::Bind(h::MatchTypeAndOrderedChildren<::SpatialJoin>(
+                    viewScanNoBind, viewScan("bindView", "?s2", "?o2",
+                                             "?_ql_materialized_view_o", 2)),
+                "2 * ?o + 1", V{"?s2"}));
+  }
+
   // The `2 * ?o + 1` expression.
   auto bindExpr = sparqlExpression::makeAddExpression(
       sparqlExpression::makeMultiplyExpression(
@@ -2064,6 +2097,18 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     // `SpatialJoin` has no children.
     SpatialJoin sj{&plan.queryExecutionContext(), config, std::nullopt,
                    std::nullopt};
+    EXPECT_FALSE(sj.makeTreeWithBindColumn(bind).has_value());
+  }
+
+  // A `BIND` is not pushed down into a `SpatialJoin` with only its left child.
+  // The missing right child is skipped, and the left child does not contain
+  // `?o` (here the right variable of the `SpatialJoin`, hence visible).
+  {
+    SpatialJoinConfiguration config{
+        LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, V{"?x"}, V{"?o"}};
+    auto plan = qlv().parseAndPlanQuery("SELECT * { ?s ?p ?x }");
+    SpatialJoin sj{&plan.queryExecutionContext(), config,
+                   plan.queryExecutionTree().clone(), std::nullopt};
     EXPECT_FALSE(sj.makeTreeWithBindColumn(bind).has_value());
   }
 
