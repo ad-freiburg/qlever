@@ -493,31 +493,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     add_compile_options(-Wno-maybe-uninitialized)
     # Unreliable on large translation units; formatting is enforced by clang-format anyway.
     add_compile_options(-Wno-misleading-indentation)
-    # With LTO, GCC raises false positives that surface during the link-time
-    # optimization (`lto1`) phase and therefore cannot be suppressed via the
-    # in-source pragmas in CompilerWarnings.h. They all originate in inlined
-    # third-party code (abseil, s2) that is only stitched together during
-    # whole-program optimization:
-    #  * `stringop-overflow` while optimizing abseil's own translation units
-    #    (e.g. `str_cat.cc` inlined into `flag.cc`).
-    #  * `odr` on compiler-generated coroutine frame types (the `.Frame` structs
-    #    synthesized for `cppcoro::generator` and boost.asio awaitables): the
-    #    synthetic frame fields get different internal names across translation
-    #    units, which GCC misreports as an ODR violation.
-    #  * `maybe-uninitialized` in abseil's `inlined_vector` when inlined through
-    #    s2's `s2closest_point_query_base.h`.
-    #  * `stringop-overread` in s2's `compact_array.h` / `mutable_s2shape_index`.
-    # These are all emitted in the whole-program/`lto1` phase, where the
-    # governing warning flags are read from the link command line, so they are
-    # disabled via the link options (a compile-time suppression would not apply).
-    # This is deliberately restricted to LTO builds: without LTO none of these
-    # warnings (in particular `-Wodr`, which is one of the main reasons to use
-    # LTO in the first place) can fire spuriously, so there is no reason to give
-    # up the diagnostics for the default build.
-    if (QLEVER_ENABLE_LTO)
-        add_link_options(-Wno-stringop-overflow -Wno-odr -Wno-maybe-uninitialized
-                -Wno-stringop-overread)
-    endif ()
 endif()
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
@@ -574,21 +549,27 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 if (QLEVER_ENABLE_LTO)
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         # `-ffat-lto-objects` makes every object contain both GIMPLE bytecode and
-        # ordinary machine code. This lets the (non-shipped) test binaries link
-        # the shared libraries *without* LTO (via `-fno-lto`, see
-        # `test/CMakeLists.txt`): they reuse the embedded machine code instead of
-        # triggering an expensive whole-program optimization at link time, while
-        # the product binaries still link with `-flto` and get full LTO.
+        # ordinary machine code. All targets link with `-fno-lto` by default and
+        # thus reuse the embedded machine code, and only the targets opted in via
+        # `qlever_enable_lto` (see below) link with `-flto` and get full LTO. In
+        # particular, the (non-shipped) test and benchmark binaries never pay for
+        # a whole-program optimization at link time.
+        #
+        # NOTE 1: GCC disables LTO as soon as `-fno-lto` appears anywhere on the
+        # link command line, so the opted-in targets must not get it at all,
+        # hence the condition on the target property `QLEVER_LTO`.
+        #
+        # NOTE 2: With `BUILD_SHARED_LIBS`, the shared libraries link without
+        # LTO as well, so an opted-in binary only optimizes its own objects.
         add_compile_options(-flto=auto -ffat-lto-objects)
-        add_link_options(-flto=auto)
+        add_link_options($<$<NOT:$<BOOL:$<TARGET_PROPERTY:QLEVER_LTO>>>:-fno-lto>)
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
         # Unlike GCC, Clang's linkers use the embedded machine code of a fat
         # object and only run (Thin)LTO on its bitcode when explicitly told to
         # via `--fat-lto-objects`, which `lld` understands, but e.g. `mold`
-        # silently ignores. So by default every target (in particular the
-        # non-shipped test binaries) links the machine code without paying for
-        # LTO, and only the targets opted in via `qlever_enable_lto` (see below)
-        # are linked with `lld` and get ThinLTO.
+        # silently ignores. So by default every target links the machine code
+        # without paying for LTO, and only the targets opted in via
+        # `qlever_enable_lto` (see below) are linked with `lld` and get ThinLTO.
         add_compile_options(-flto=thin -ffat-lto-objects)
         # Ask the compiler driver whether `lld` is available, to fail early
         # instead of only when linking the first LTO target.
@@ -607,13 +588,30 @@ if (QLEVER_ENABLE_LTO)
     endif()
 endif()
 
-# Link the given target with (Thin)LTO if `QLEVER_ENABLE_LTO` is set. This is only
-# needed for Clang: With GCC, all targets that are not linked with `-fno-lto`
-# (the test binaries, see `test/CMakeLists.txt`) are link-time optimized
-# anyway, because GCC's linker plugin runs LTO whenever it encounters objects
-# with GIMPLE bytecode.
+# Link the given target with LTO (full LTO with GCC, ThinLTO via `lld` with
+# Clang) if `QLEVER_ENABLE_LTO` is set. All other targets link the machine code
+# of the fat objects without LTO (see above).
 function(qlever_enable_lto target)
-    if (QLEVER_ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
+    if (NOT QLEVER_ENABLE_LTO)
+        return()
+    endif ()
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set_target_properties(${target} PROPERTIES QLEVER_LTO ON)
+        target_link_options(${target} PRIVATE -flto=auto)
+        # Suppress the false positives that GCC raises in the link-time
+        # optimization phase (`lto1`). They cannot be suppressed via the pragmas
+        # in `CompilerWarnings.h`, because `lto1` takes its warning flags from
+        # the link command line. Without LTO, these diagnostics stay enabled.
+        #
+        # NOTE: The known false positives are `stringop-overflow` in abseil's
+        # `str_cat.cc` inlined into `flag.cc`, `odr` on the compiler-generated
+        # frame types of coroutines (whose fields get different internal names
+        # per translation unit), `maybe-uninitialized` in abseil's
+        # `inlined_vector` inlined through s2's `s2closest_point_query_base.h`,
+        # and `stringop-overread` in s2's `compact_array.h`.
+        target_link_options(${target} PRIVATE -Wno-stringop-overflow -Wno-odr
+                -Wno-maybe-uninitialized -Wno-stringop-overread)
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
         # `-fuse-ld=lld` comes after `CMAKE_EXE_LINKER_FLAGS` on the link
         # command line, so it overrides e.g. a `-fuse-ld=mold` from there.
         target_link_options(${target} PRIVATE -fuse-ld=lld -flto=thin

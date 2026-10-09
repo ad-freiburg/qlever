@@ -1,25 +1,15 @@
 include(GoogleTest)
 
-# The test binaries are not shipped, so there is no point in paying the (large)
-# cost of link-time optimizing them. With GCC the libraries are compiled with
-# `-ffat-lto-objects` (see the top-level `CMakeLists.txt`), i.e. every object
-# also contains ordinary machine code, so disabling LTO here via `-fno-lto`
-# makes the test binaries link against that machine code instead of triggering a
-# whole-program optimization at link time.
+# The test binaries are not shipped and link without LTO (see
+# `QLEVER_ENABLE_LTO` in the top-level `CMakeLists.txt`). With GCC, also compile
+# them without LTO, so that no (unused) GIMPLE bytecode is generated for them.
 #
-# This is only needed for GCC, whose linker plugin otherwise runs LTO whenever
-# it encounters GIMPLE bytecode. With Clang, the test binaries link the machine
-# code of the fat objects by default, and only the targets opted in via
-# `qlever_enable_lto` (see the top-level `CMakeLists.txt`) get ThinLTO.
-#
-# NOTE: `add_compile_options`/`add_link_options` set *directory* properties.
-# They therefore apply to all targets created afterwards in this directory and
-# its subdirectories (in particular `testUtil` below, which is why this block
-# has to come first), and never leak into the parent directory, so the shipped
-# binaries keep their LTO regardless of where `add_subdirectory(test)` appears.
+# NOTE: `add_compile_options` sets a directory property that applies to all
+# targets created afterwards in this directory and its subdirectories (in
+# particular `testUtil` below, which is why this block comes first), and never
+# to the parent directory.
 if (QLEVER_ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-fno-lto)
-    add_link_options(-fno-lto)
 endif()
 
 # Needed for creating the `testUil`-library.
