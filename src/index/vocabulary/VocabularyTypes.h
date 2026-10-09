@@ -664,11 +664,13 @@ class BlockWriterFromCallback : public BlockWriterBase {
   size_t blockSize() const override {
     return DEFAULT_WORDS_PER_VOCABULARY_BLOCK;
   }
+
   std::unique_ptr<PreparedBlockBase> prepare(WordBlock block) override {
     return std::make_unique<Prepared>(std::move(block));
   }
+
   void append(std::unique_ptr<PreparedBlockBase> prepared) override {
-    const auto& block = static_cast<Prepared&>(*prepared).block_;
+    const auto& block = dynamic_cast<Prepared&>(*prepared).block_;
     for (size_t i = 0; i < block.numWords(); ++i) {
       uint64_t position = std::invoke(callback_, block.word(i),
                                       static_cast<bool>(block.isExternal_[i]));

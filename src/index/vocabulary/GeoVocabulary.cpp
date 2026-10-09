@@ -11,7 +11,6 @@
 #include "index/vocabulary/GeoVocabulary.h"
 
 #include <boost/asio/use_future.hpp>
-#include <cstring>
 #include <stdexcept>
 #include <vector>
 
@@ -25,6 +24,7 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/GlobalExecutor.h"
+#include "util/MemorySize/MemorySize.h"
 
 using ad_utility::GeometryInfo;
 
@@ -123,12 +123,14 @@ GeoVocabulary<V>::WordWriter::WordWriter(
   geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
 }
 
+using namespace ad_utility::memory_literals;
+
 // The number of words (and their total size) after which a batch of words is
 // handed to the thread pool, see `flushBatch`. A batch holds copies of its
 // words, and so does an output block of the merge that feeds this writer, so
 // the limits are those of such a block.
 static constexpr size_t GEO_WRITER_BATCH_NUM_WORDS = 10'000;
-static constexpr size_t GEO_WRITER_BATCH_NUM_BYTES = 10 * 1024 * 1024;
+static constexpr size_t GEO_WRITER_BATCH_NUM_BYTES = (10_MB).getBytes();
 
 // ____________________________________________________________________________
 template <typename V>
@@ -187,9 +189,7 @@ auto GeoVocabulary<V>::computeGeoInfoRecord(
   if (!info.value().getMetricArea().isValid()) {
     ++numInvalidPolygonArea;
   }
-  GeometryInfoBuffer record;
-  std::memcpy(record.data(), &info.value(), geoInfoOffset);
-  return record;
+  return absl::bit_cast<GeometryInfoBuffer>(info.value());
 }
 
 // ____________________________________________________________________________
@@ -297,9 +297,9 @@ template <typename V>
 void GeoVocabulary<V>::BlockWriter::precomputePayload(
     std::string_view word, ql::span<char> payload) const {
   AD_CONTRACT_CHECK(payload.size() == geoInfoOffset);
-  auto record =
-      computeGeoInfoRecord(word, numInvalidGeometries_, numInvalidPolygonArea_);
-  std::memcpy(payload.data(), record.data(), geoInfoOffset);
+  ql::ranges::copy(
+      computeGeoInfoRecord(word, numInvalidGeometries_, numInvalidPolygonArea_),
+      payload.begin());
 }
 
 // ____________________________________________________________________________
@@ -315,8 +315,9 @@ std::unique_ptr<PreparedBlockBase> GeoVocabulary<V>::BlockWriter::prepare(
   prepared->records_.reserve(block.numWords());
   for (size_t i = 0; i < block.numWords(); ++i) {
     std::string_view word = block.word(i);
-    std::memcpy(&prepared->records_.emplace_back(), block.payload(i).data(),
-                geoInfoOffset);
+    // NOTE: The size of the payload has been checked at the beginning.
+    ql::ranges::copy(block.payload(i),
+                     prepared->records_.emplace_back().begin());
     if (grid_.has_value()) {
       const auto& record = prepared->records_.back();
       std::optional<GeometryInfo> info;
@@ -342,7 +343,7 @@ std::unique_ptr<PreparedBlockBase> GeoVocabulary<V>::BlockWriter::prepare(
 template <typename V>
 void GeoVocabulary<V>::BlockWriter::append(
     std::unique_ptr<PreparedBlockBase> preparedBase) {
-  auto& prepared = static_cast<Prepared&>(*preparedBase);
+  auto& prepared = dynamic_cast<Prepared&>(*preparedBase);
   AD_CONTRACT_CHECK(prepared.firstPosition_ == numWords_);
   const size_t numWords = prepared.records_.size();
   if (grid_.has_value() && numWords > 0) {

@@ -183,6 +183,9 @@ class GeometryInfo {
   // Explicit (zeroed) padding before the 8-byte aligned `metricLength_`. The
   // `GeoVocabulary` writes the binary representation of this class to disk,
   // so implicit padding would make the files depend on uninitialized memory.
+  // Every alternative (e.g. a 64-bit `numGeometries_`) would be an
+  // index-breaking change, because the existing files contain garbage in these
+  // bytes; the explicit padding keeps them readable.
   uint32_t padding_ = 0;
   MetricLength metricLength_;
   MetricArea metricArea_;

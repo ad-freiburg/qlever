@@ -587,7 +587,7 @@ CPP_template(typename UnderlyingVocabulary,
     // Append the compressed block to the underlying vocabulary and store its
     // decoder.
     void append(std::unique_ptr<PreparedBlockBase> preparedBase) override {
-      auto& prepared = static_cast<Prepared&>(*preparedBase);
+      auto& prepared = dynamic_cast<Prepared&>(*preparedBase);
       AD_CONTRACT_CHECK(numWords_ % NumWordsPerBlock == 0);
       numWords_ += prepared.numWords_;
       uncompressedSize_ += bytes(prepared.uncompressedSize_);

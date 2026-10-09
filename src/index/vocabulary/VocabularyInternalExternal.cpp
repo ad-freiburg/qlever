@@ -29,9 +29,9 @@ VocabularyInternalExternal::WordWriter::WordWriter(const std::string& filename,
 
 // _____________________________________________________________________________
 uint64_t VocabularyInternalExternal::WordWriter::operator()(
-    std::string_view str, bool isExternal) {
-  externalWriter_(str, true);
-  return addToInternalVocabIfRequired(str, isExternal);
+    std::string_view word, bool isExternal) {
+  externalWriter_(word, true);
+  return addToInternalVocabIfRequired(word, isExternal);
 }
 
 // _____________________________________________________________________________
@@ -48,7 +48,7 @@ uint64_t VocabularyInternalExternal::WordWriter::addToInternalVocabIfRequired(
 // _____________________________________________________________________________
 void VocabularyInternalExternal::BlockWriter::append(
     std::unique_ptr<PreparedBlockBase> prepared) {
-  const WordBlock& block = static_cast<Prepared&>(*prepared).block_;
+  const WordBlock& block = dynamic_cast<Prepared&>(*prepared).block_;
   AD_CONTRACT_CHECK(block.firstPosition_ == writer_.idx_);
   uint64_t dataOffset = writer_.externalWriter_.reserveBlock(block);
   // The same rule as in `WordWriter::operator()` for the internal vocabulary;
@@ -70,7 +70,7 @@ void VocabularyInternalExternal::BlockWriter::append(
       ad_utility::globalExecutor(),
       [this, prepared = std::move(prepared), dataOffset]() {
         writer_.externalWriter_.writeBlockAt(
-            static_cast<Prepared&>(*prepared).block_, dataOffset);
+            dynamic_cast<Prepared&>(*prepared).block_, dataOffset);
       },
       boost::asio::use_future));
 }
