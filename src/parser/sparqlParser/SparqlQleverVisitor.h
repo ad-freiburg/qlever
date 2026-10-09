@@ -604,7 +604,7 @@ class SparqlQleverVisitor {
 
   static bool visit(Parser::BooleanLiteralContext* ctx);
 
-  static RdfEscaping::NormalizedRDFString visit(Parser::StringContext* ctx);
+  static std::string visit(Parser::StringContext* ctx);
 
   TripleComponent::Iri visit(Parser::IriContext* ctx);
 
