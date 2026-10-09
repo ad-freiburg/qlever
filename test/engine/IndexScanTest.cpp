@@ -984,6 +984,75 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
       {I(10), I(12), I(18), I(22), I(25), I(147), I(189), I(194)}, true);
 }
 
+// Test the prefiltering of an `IndexScan` whose block metadata comes in
+// several chunks (see `LocatedTriplesPerBlock::getAugmentedMetadata`), where
+// the chunks have 512 blocks and the test index has two triples per block.
+TEST(IndexScan, checkEvaluationWithPrefilteringOnSeveralChunks) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  auto I = ad_utility::testing::IntId;
+
+  // 1200 triples `<P1> <price_tag> 1`, ..., `<P1200> <price_tag> 1200`, that
+  // is, 600 blocks of the `POS` permutation and hence two chunks.
+  std::string kg;
+  for (int i = 1; i <= 1200; ++i) {
+    absl::StrAppend(&kg, "<P", i, "> <price_tag> ", i, " .\n");
+  }
+  SparqlTripleSimple triple{Tc{Variable{"?x"}}, iri("<price_tag>"),
+                            Tc{Variable{"?price"}}};
+
+  // Insert the triple `<P0> <price_tag> 0` as an update and let the scans see
+  // it. The augmented metadata is only chunked once there is an update. The
+  // index of the cached test `QueryExecutionContext` is const, and this update
+  // is the only mutation.
+  auto* qec = getQec(kg);
+  auto& index = const_cast<Index&>(qec->getIndex());
+  auto getId = ad_utility::testing::makeGetId(index);
+  index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    LocalVocabEntry p0 = LocalVocabEntry::fromIriref(
+        "<P0>", index.getImpl().getLocalVocabContext());
+    deltaTriples.insertTriples(
+        std::make_shared<ad_utility::CancellationHandle<>>(),
+        {IdTriple{{Id::makeFromLocalVocabIndex(&p0), getId("<price_tag>"), I(0),
+                   qlever::specialIds().at(DEFAULT_GRAPH_IRI)}}});
+  });
+  qec->setLocatedTriplesForEvaluation(
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+  auto prices = [&I](int from, int to) {
+    std::vector<Id> result;
+    for (int i = from; i <= to; ++i) {
+      result.push_back(I(i));
+    }
+    return result;
+  };
+
+  // A prefilter that selects blocks in the second chunk only. The result
+  // contains the complete blocks (two prices each) that the prefilter cannot
+  // exclude, here and in the following cases.
+  testSetAndMakeScanWithPrefilterExpr(kg, triple, Permutation::POS,
+                                      pr(ge(IntId(1100)), Variable{"?price"}),
+                                      prices(1099, 1200), true);
+
+  // A prefilter that selects blocks across the chunk boundary (between the
+  // prices 1024 and 1025).
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(IntId(1020)), lt(IntId(1030))), Variable{"?price"}),
+      prices(1021, 1030), true);
+
+  // A second prefilter on the already prefiltered blocks across the boundary.
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(IntId(1020)), lt(IntId(1030))), Variable{"?price"}),
+      prices(1023, 1026), true,
+      pr(andExpr(gt(IntId(1022)), lt(IntId(1027))), Variable{"?price"}));
+
+  // A prefilter that selects the inserted triple (in the first chunk).
+  testSetAndMakeScanWithPrefilterExpr(kg, triple, Permutation::POS,
+                                      pr(lt(IntId(5)), Variable{"?price"}),
+                                      prices(0, 4), true);
+}
+
 // _____________________________________________________________________________
 // Regression test for the bug reported by @hannahbast in the review of PR #3069
 // (https://github.com/ad-freiburg/qlever/pull/3069): When a

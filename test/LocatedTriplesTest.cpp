@@ -812,7 +812,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     LocatedTriplesPerBlock locatedTriplesPerBlock;
     locatedTriplesPerBlock.setOriginalMetadata(metadata);
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadataForTesting(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Adding no triples does no changed the augmented metadata.
@@ -821,7 +821,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadataForTesting(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T1 is before block 0. The beginning of block 0 changes.
@@ -832,7 +832,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
     expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = false;
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadataForTesting(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T2 is inside block 1. Borders don't change.
@@ -842,7 +842,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadataForTesting(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T3 is equal to PT4, the beginning of block 2. All update (update and
@@ -853,7 +853,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadataForTesting(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T4 is before block 4. The beginning of block 4 changes.
@@ -865,7 +865,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     expectedAugmentedMetadata[4] = CBM(T4.toPermutedTriple(), PT8);
     expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = true;
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadataForTesting(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Erasing the update of T4 restores the beginning of block 4.
@@ -876,21 +876,80 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     // The block 4 has no more updates, so we restore the info about the block
     // having no duplicates from the original metadata.
     expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = false;
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadataForTesting(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // Clearing the updates restores the original block borders.
     locatedTriplesPerBlock.clear();
     locatedTriplesPerBlock.updateAugmentedMetadata();
 
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadataForTesting(),
                 testing::ElementsAreArray(metadata));
   }
 
   {
     LocatedTriplesPerBlock ltpb;
-    EXPECT_THROW(ltpb.getAugmentedMetadata(), ad_utility::Exception);
+    EXPECT_THROW(ltpb.getAugmentedMetadataForTesting(), ad_utility::Exception);
   }
+}
+
+// Test the augmented metadata with more blocks than fit into one chunk: the
+// metadata then comes in several chunks, and an update clones only the chunks
+// of the blocks that it touches.
+TEST_F(LocatedTriplesTest, augmentedMetadataInChunks) {
+  // 1100 blocks, where block `i` spans the triples (i, 10, 10) to (i, 20, 20).
+  std::vector<CompressedBlockMetadata> metadata;
+  for (int i = 1; i <= 1100; ++i) {
+    metadata.push_back(CBM(PT(i, 10, 10), PT(i, 20, 20)));
+  }
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  LocatedTriplesPerBlock ltpb;
+  ltpb.setOriginalMetadata(metadata);
+
+  // Without updates, the metadata is one span of all blocks.
+  auto chunks = ltpb.getAugmentedMetadata();
+  ASSERT_EQ(chunks.size(), 1u);
+  EXPECT_EQ(chunks[0].size(), 1100u);
+
+  // Two inserted triples, before the blocks with index 1 and 999, change the
+  // first triple of these blocks. The metadata now comes in chunks of 512.
+  auto T1 = IT(2, 5, 5);
+  auto T2 = IT(1000, 5, 5);
+  auto located = LocatedTriple::locateTriplesInPermutation(
+      std::vector<IdTriple<0>>{T1, T2}, metadata, keyOrder, true, handle);
+  ltpb.add(located);
+  ltpb.consolidateAllBlocks();
+  ltpb.updateAugmentedMetadata();
+  chunks = ltpb.getAugmentedMetadata();
+  ASSERT_EQ(chunks.size(), 3u);
+  EXPECT_EQ(chunks[0].size(), 512u);
+  EXPECT_EQ(chunks[1].size(), 512u);
+  EXPECT_EQ(chunks[2].size(), 76u);
+  auto expected = metadata;
+  expected[1].firstTriple_ = T1.toPermutedTriple();
+  expected[999].firstTriple_ = T2.toPermutedTriple();
+  // Without graph info, an insert may create duplicates in different graphs.
+  expected[1].containsDuplicatesWithDifferentGraphs_ = true;
+  expected[999].containsDuplicatesWithDifferentGraphs_ = true;
+  EXPECT_THAT(ltpb.getAugmentedMetadataForTesting(),
+              testing::ElementsAreArray(expected));
+
+  // Erasing the triple of block 999 while a copy exists clones only the second
+  // chunk and restores the original metadata of that block. The copy keeps the
+  // previous metadata.
+  auto copy = ltpb;
+  ltpb.erase(located[1].blockIndex_, located[1]);
+  ltpb.updateAugmentedMetadata();
+  auto chunksAfter = ltpb.getAugmentedMetadata();
+  ASSERT_EQ(chunksAfter.size(), 3u);
+  EXPECT_EQ(chunksAfter[0].data(), chunks[0].data());
+  EXPECT_NE(chunksAfter[1].data(), chunks[1].data());
+  EXPECT_EQ(chunksAfter[2].data(), chunks[2].data());
+  expected[999] = metadata[999];
+  EXPECT_THAT(ltpb.getAugmentedMetadataForTesting(),
+              testing::ElementsAreArray(expected));
+  EXPECT_EQ(copy.getAugmentedMetadataForTesting()[999].firstTriple_,
+            T2.toPermutedTriple());
 }
 
 // Test that the augmented metadata is kept up to date residually: the block
@@ -930,7 +989,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataResidual) {
   ltpb.consolidateAllBlocks();
   ltpb.updateAugmentedMetadata();
   {
-    const auto& augmented = ltpb.getAugmentedMetadata();
+    const auto& augmented = ltpb.getAugmentedMetadataForTesting();
     ASSERT_EQ(augmented.size(), 3u);
     EXPECT_EQ(augmented[0].firstTriple_, T1.toPermutedTriple());
     EXPECT_EQ(augmented[2].firstTriple_, T2.toPermutedTriple());
@@ -942,24 +1001,24 @@ TEST_F(LocatedTriplesTest, augmentedMetadataResidual) {
   ltpb.erase(2, located3[0]);
   ltpb.updateAugmentedMetadata();
   {
-    const auto& augmented = ltpb.getAugmentedMetadata();
+    const auto& augmented = ltpb.getAugmentedMetadataForTesting();
     ASSERT_EQ(augmented.size(), 3u);
     EXPECT_EQ(augmented[2].lastTriple_, T2.toPermutedTriple());
   }
   ltpb.erase(2, located2[0]);
   ltpb.updateAugmentedMetadata();
-  EXPECT_EQ(ltpb.getAugmentedMetadata().size(), 2u);
+  EXPECT_EQ(ltpb.getAugmentedMetadataForTesting().size(), 2u);
 
   // New original metadata replaces the augmented metadata, and the next update
   // recomputes the blocks that still have triples (here block 0 with `T1`).
   const std::vector<CompressedBlockMetadata> newMetadata = {CBM(PT1, PT3),
                                                             CBM(PT4, PT4)};
   ltpb.setOriginalMetadata(newMetadata);
-  EXPECT_THAT(ltpb.getAugmentedMetadata(),
+  EXPECT_THAT(ltpb.getAugmentedMetadataForTesting(),
               testing::ElementsAreArray(newMetadata));
   ltpb.updateAugmentedMetadata();
   {
-    const auto& augmented = ltpb.getAugmentedMetadata();
+    const auto& augmented = ltpb.getAugmentedMetadataForTesting();
     ASSERT_EQ(augmented.size(), 2u);
     EXPECT_EQ(augmented[0].firstTriple_, T1.toPermutedTriple());
     EXPECT_EQ(augmented[0].lastTriple_, PT3);
@@ -1013,7 +1072,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
 
     // Note: the GraphInfo hasn't changed, because the new triples all were
     // deleted.
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadataForTesting(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
   }
   {
@@ -1053,7 +1112,8 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
 
     // Note: the GraphInfo hasn't changed, because the new triples all were
     // deleted.
-    auto actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    auto actualMetadata =
+        locatedTriplesPerBlock.getAugmentedMetadataForTesting();
     EXPECT_THAT(actualMetadata,
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
@@ -1081,7 +1141,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
         handle));
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
-    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadataForTesting();
     ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
 
     // Adding one more graph will exceed the maximum.
@@ -1090,7 +1150,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
         keyOrder, true, handle));
     locatedTriplesPerBlock.consolidateAllBlocks();
     locatedTriplesPerBlock.updateAugmentedMetadata();
-    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadataForTesting();
     ASSERT_FALSE(actualMetadata[1].graphInfo_.has_value());
   }
 }

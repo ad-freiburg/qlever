@@ -302,9 +302,15 @@ const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
 // ______________________________________________________________________
 BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
     const LocatedTriplesState& locatedTriplesState) const {
-  BlockMetadataSpan blocks(getLocatedTriplesForPermutation(locatedTriplesState)
-                               .getAugmentedMetadata());
-  return {{blocks.begin(), blocks.end()}};
+  // One range per chunk of the augmented metadata, see
+  // `LocatedTriplesPerBlock::getAugmentedMetadata`.
+  BlockMetadataRanges result;
+  for (BlockMetadataSpan chunk :
+       getLocatedTriplesForPermutation(locatedTriplesState)
+           .getAugmentedMetadata()) {
+    result.emplace_back(chunk.begin(), chunk.end());
+  }
+  return result;
 }
 
 // ______________________________________________________________________

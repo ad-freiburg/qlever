@@ -1091,18 +1091,24 @@ bool IndexImpl::mayContainGeoPoints() const {
   // of it. The first and last object of each block include the updates.
   auto locatedTriplesState =
       deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  BlockMetadataSpan blocks =
-      osp_->getLocatedTriplesForPermutation(*locatedTriplesState)
-          .getAugmentedMetadata();
+  auto chunks = osp_->getLocatedTriplesForPermutation(*locatedTriplesState)
+                    .getAugmentedMetadata();
 
   // Find the first block whose last object is not of a datatype before
-  // `GeoPoint`. Return false if there is none or if its first object is of a
-  // datatype after `GeoPoint`.
-  auto block = ql::ranges::find_if(blocks, [](const auto& block) {
+  // `GeoPoint` (the metadata comes in contiguous chunks, see
+  // `LocatedTriplesPerBlock::getAugmentedMetadata`). Return false if there is
+  // none or if its first object is of a datatype after `GeoPoint`.
+  auto isAtOrAfterPoints = [](const CompressedBlockMetadata& block) {
     return block.lastTriple_.col0Id_.getDatatype() >= Datatype::GeoPoint;
+  };
+  auto chunk = ql::ranges::find_if(chunks, [&](BlockMetadataSpan chunk) {
+    return ql::ranges::any_of(chunk, isAtOrAfterPoints);
   });
-  if (block == blocks.end() ||
-      block->firstTriple_.col0Id_.getDatatype() > Datatype::GeoPoint) {
+  if (chunk == chunks.end()) {
+    return false;
+  }
+  auto block = ql::ranges::find_if(*chunk, isAtOrAfterPoints);
+  if (block->firstTriple_.col0Id_.getDatatype() > Datatype::GeoPoint) {
     return false;
   }
 

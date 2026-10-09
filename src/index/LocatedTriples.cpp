@@ -557,7 +557,7 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     }
     auto blockUpdates = getUpdatesIfPresent(blockIndex);
     if (blockIndex < numOriginalBlocks) {
-      auto& blockMetadata = augmented[blockIndex];
+      auto& blockMetadata = augmented.mutableAt(blockIndex);
       blockMetadata = original[blockIndex];
       if (blockUpdates.has_value()) {
         blockMetadata.firstTriple_ =
@@ -592,15 +592,35 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     CompressedBlockMetadata lastBlock{lastBlockN, blockIndex};
     updateGraphMetadata(lastBlock, *blockUpdates);
     if (hasBlockAfterLast) {
-      augmented[blockIndex] = std::move(lastBlock);
+      augmented.mutableAt(blockIndex) = std::move(lastBlock);
     } else {
       augmented.push_back(std::move(lastBlock));
     }
   }
   blocksWithUpdatedTriples_.clear();
 
-  AD_EXPENSIVE_CHECK(
-      CompressedBlockMetadata::checkInvariantsForSortedBlocks(augmented));
+  AD_EXPENSIVE_CHECK(CompressedBlockMetadata::checkInvariantsForSortedBlocks(
+      getAugmentedMetadataForTesting()));
+}
+
+// ____________________________________________________________________________
+std::vector<BlockMetadataSpan> LocatedTriplesPerBlock::getAugmentedMetadata()
+    const {
+  if (augmentedMetadata_.has_value()) {
+    return augmentedMetadata_->chunkSpans();
+  }
+  AD_CONTRACT_CHECK(originalMetadata_.has_value());
+  return {BlockMetadataSpan{*originalMetadata_.value()}};
+}
+
+// ____________________________________________________________________________
+std::vector<CompressedBlockMetadata>
+LocatedTriplesPerBlock::getAugmentedMetadataForTesting() const {
+  std::vector<CompressedBlockMetadata> result;
+  for (const auto& chunk : getAugmentedMetadata()) {
+    result.insert(result.end(), chunk.begin(), chunk.end());
+  }
+  return result;
 }
 
 // ____________________________________________________________________________
