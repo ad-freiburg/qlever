@@ -19,14 +19,14 @@ namespace ad_utility {
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                            Centroid centroid, NumGeometries numGeometries,
-                           MetricLength metricLength, MetricArea metricArea,
-                           uint8_t sourceCrs)
+                           uint8_t sourceCrs, MetricLength metricLength,
+                           MetricArea metricArea)
     : boundingBox_{boundingBox.lowerLeft().toBitRepresentation(),
                    boundingBox.upperRight().toBitRepresentation()},
       numGeometries_{numGeometries.numGeometries()},
+      sourceCrs_{sourceCrs},
       metricLength_{metricLength},
-      metricArea_{metricArea},
-      sourceCrs_{sourceCrs} {
+      metricArea_{metricArea} {
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -84,9 +84,9 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                  << std::endl;
   }
 
-  return GeometryInfo{wktType,   boundingBox.value(), centroid.value(),
-                      {numGeom}, metricLength,        MetricArea{area},
-                      sourceCrs};
+  return GeometryInfo{wktType,         boundingBox.value(), centroid.value(),
+                      {numGeom},       sourceCrs,           metricLength,
+                      MetricArea{area}};
 }
 
 // ____________________________________________________________________________
@@ -125,9 +125,8 @@ std::optional<SourceCrsType> GeometryInfo::getSourceCrsType(
 
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
-  return {
-      util::geo::WKTType::POINT, {point, point},  Centroid{point},          {1},
-      MetricLength{0.0},         MetricArea{0.0}, util::geo::CRSType::WGS84};
+  return {util::geo::WKTType::POINT, {point, point},    Centroid{point}, {1},
+          util::geo::CRSType::CRS84, MetricLength{0.0}, MetricArea{0.0}};
 }
 
 // ____________________________________________________________________________

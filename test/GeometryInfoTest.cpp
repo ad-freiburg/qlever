@@ -225,9 +225,8 @@ constexpr std::array<uint32_t, 9> allTestLiteralNumGeometries{1, 1, 1, 1, 1,
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
-  GeometryInfo g{5,   {{1, 1}, {2, 2}},  {1.5, 1.5},
-                 {2}, MetricLength{900}, MetricArea{5},
-                 2};
+  GeometryInfo g{5, {{1, 1}, {2, 2}},  {1.5, 1.5},   {2},
+                 2, MetricLength{900}, MetricArea{5}};
   ASSERT_EQ(g.getWktType().type(), 5);
   ASSERT_NEAR(g.getCentroid().centroid().getLat(), 1.5, 0.0001);
   ASSERT_NEAR(g.getCentroid().centroid().getLng(), 1.5, 0.0001);
@@ -243,38 +242,38 @@ TEST(GeometryInfoTest, BasicTests) {
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{1},
-                   MetricArea{5}, 1),
+      GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, 1, MetricLength{1},
+                   MetricArea{5}),
       ::testing::HasSubstr("WKT Type out of range"));
 
   // Too large crs type value
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{1},
-                   MetricArea{5}, 7),
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, 7, MetricLength{1},
+                   MetricArea{5}),
       ::testing::HasSubstr("CRS Type out of range"));
 
   // Wrong bounding box point ordering
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, {1}, MetricLength{1},
-                   MetricArea{0}, 1),
+      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, {1}, 1, MetricLength{1},
+                   MetricArea{0}),
       ::testing::HasSubstr("Bounding box coordinates invalid"));
 
   // Zero geometries
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(1, {{2, 2}, {3, 3}}, {1.5, 1.5}, {0}, MetricLength{1},
-                   MetricArea{5}, 1),
+      GeometryInfo(1, {{2, 2}, {3, 3}}, {1.5, 1.5}, {0}, 1, MetricLength{1},
+                   MetricArea{5}),
       ::testing::HasSubstr("Number of geometries must be strictly positive"));
 
   // Negative length
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{-900},
-                   MetricArea{5}, 1),
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, 1, MetricLength{-900},
+                   MetricArea{5}),
       ::testing::HasSubstr("Metric length must be positive"));
 
   // Negative area
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{0},
-                   MetricArea{-900}, 1),
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, 1, MetricLength{0},
+                   MetricArea{-900}),
       ::testing::HasSubstr("Metric area must be positive"));
 }
 
@@ -290,9 +289,9 @@ TEST(GeometryInfoTest, FromWktLiteral) {
                    {{4, 3}, {4, 3}},
                    {4, 3},
                    {1},
+                   util::geo::CRSType::CRS84,
                    MetricLength{0},
-                   MetricArea{0},
-                   util::geo::CRSType::CRS84};
+                   MetricArea{0}};
   EXPECT_GEOMETRYINFO(g, exp);
 
   auto g2 = GeometryInfo::fromWktLiteral(litLineString);
@@ -300,9 +299,9 @@ TEST(GeometryInfoTest, FromWktLiteral) {
                     {{2, 2}, {4, 4}},
                     {3, 3},
                     {1},
+                    util::geo::CRSType::CRS84,
                     len(litLineString),
-                    MetricArea{0},
-                    util::geo::CRSType::CRS84};
+                    MetricArea{0}};
   EXPECT_GEOMETRYINFO(g2, exp2);
 
   auto g3 = GeometryInfo::fromWktLiteral(litPolygon);
@@ -310,9 +309,9 @@ TEST(GeometryInfoTest, FromWktLiteral) {
                     {{2, 2}, {4, 4}},
                     {3, 3},
                     {1},
+                    util::geo::CRSType::CRS84,
                     len(litPolygon),
-                    area(litPolygon),
-                    util::geo::CRSType::CRS84};
+                    area(litPolygon)};
   EXPECT_GEOMETRYINFO(g3, exp3);
 
   auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
@@ -320,9 +319,9 @@ TEST(GeometryInfoTest, FromWktLiteral) {
                     {{2, 2}, {4, 4}},
                     {3, 3},
                     {2},
+                    util::geo::CRSType::CRS84,
                     MetricLength{0},
-                    MetricArea{0},
-                    util::geo::CRSType::CRS84};
+                    MetricArea{0}};
   EXPECT_GEOMETRYINFO(g4, exp4);
 
   auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
@@ -330,9 +329,9 @@ TEST(GeometryInfoTest, FromWktLiteral) {
                     {{2, 2}, {8, 6}},
                     {4.436542, 3.718271},
                     {2},
+                    util::geo::CRSType::CRS84,
                     len(litMultiLineString),
-                    MetricArea{0},
-                    util::geo::CRSType::CRS84};
+                    MetricArea{0}};
   EXPECT_GEOMETRYINFO(g5, exp5);
 
   auto g6 = GeometryInfo::fromWktLiteral(litMultiPolygon);
@@ -340,9 +339,9 @@ TEST(GeometryInfoTest, FromWktLiteral) {
                     {{2, 2}, {6, 8}},
                     {4.5, 4.5},
                     {2},
+                    util::geo::CRSType::CRS84,
                     len(litMultiPolygon),
-                    area(litMultiPolygon),
-                    util::geo::CRSType::CRS84};
+                    area(litMultiPolygon)};
   EXPECT_GEOMETRYINFO(g6, exp6);
 
   auto g7 = GeometryInfo::fromWktLiteral(litCollection);
@@ -350,9 +349,9 @@ TEST(GeometryInfoTest, FromWktLiteral) {
                     {{2, 2}, {6, 8}},
                     {5, 5},
                     {3},
+                    util::geo::CRSType::CRS84,
                     len(litCollection),
-                    area(litCollection),
-                    util::geo::CRSType::CRS84};
+                    area(litCollection)};
   EXPECT_GEOMETRYINFO(g7, exp7);
 
   auto g8 = GeometryInfo::fromWktLiteral(litInvalidType);
@@ -363,9 +362,9 @@ TEST(GeometryInfoTest, FromWktLiteral) {
                     {{4, 3}, {4, 3}},
                     {4, 3},
                     {1},
+                    util::geo::CRSType::WGS84,
                     MetricLength{0},
-                    MetricArea{0},
-                    util::geo::CRSType::WGS84};
+                    MetricArea{0}};
   EXPECT_GEOMETRYINFO(g9, exp9);
 
   auto g10 = GeometryInfo::fromWktLiteral(litPointWebMerc);
@@ -373,9 +372,9 @@ TEST(GeometryInfoTest, FromWktLiteral) {
                      {{4, 3}, {4, 3}},
                      {4, 3},
                      {1},
+                     util::geo::CRSType::WEB_MERCATOR,
                      MetricLength{0},
-                     MetricArea{0},
-                     util::geo::CRSType::WEB_MERCATOR};
+                     MetricArea{0}};
   EXPECT_GEOMETRYINFO(g10, exp10);
 }
 
@@ -387,9 +386,9 @@ TEST(GeometryInfoTest, FromGeoPoint) {
                    {p, p},
                    Centroid{p},
                    {1},
+                   util::geo::CRSType::CRS84,
                    MetricLength{0},
-                   MetricArea{0},
-                   util::geo::CRSType::WGS84};
+                   MetricArea{0}};
   EXPECT_GEOMETRYINFO(g, exp);
 
   GeoPoint p2{0, 0};
@@ -398,9 +397,9 @@ TEST(GeometryInfoTest, FromGeoPoint) {
                     {p2, p2},
                     Centroid{p2},
                     {1},
+                    util::geo::CRSType::CRS84,
                     MetricLength{0},
-                    MetricArea{0},
-                    util::geo::CRSType::WGS84};
+                    MetricArea{0}};
   EXPECT_GEOMETRYINFO(g2, exp2);
 }
 

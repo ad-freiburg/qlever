@@ -278,11 +278,11 @@ inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
 
 namespace detail::crsStrings {
 constexpr inline std::string_view crs84 =
-    "<http://www.opengis.net/def/crs/OGC/1.3/CRS84>";
+    "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
 constexpr inline std::string_view wgs84 =
-    "<http://www.opengis.net/def/crs/EPSG/0/4326>";
+    "http://www.opengis.net/def/crs/EPSG/0/4326";
 constexpr inline std::string_view webMerc =
-    "<http://www.opengis.net/def/crs/EPSG/0/3857>";
+    "http://www.opengis.net/def/crs/EPSG/0/3857";
 }  // namespace detail::crsStrings
 inline constexpr auto CRS_TYPE_IRI = []() {
   using namespace detail::crsStrings;

@@ -95,10 +95,14 @@ struct GeometryType {
 // see `libspatialjoin`'s `CRSType`.
 struct SourceCrsType {
  private:
-  uint8_t type_;
+  uint8_t type_ = 1;  // Default CRS type: CRS84.
 
  public:
   explicit SourceCrsType(uint8_t type);
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Required for `bit_cast`.
+  SourceCrsType() = default;
+#endif
 
   uint8_t type() const { return type_; };
 
@@ -182,7 +186,7 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 
 // The version of the `GeometryInfo`: to ensure correctness when reading disk
 // serialized objects of this class.
-constexpr uint64_t GEOMETRY_INFO_VERSION = 5;
+constexpr uint64_t GEOMETRY_INFO_VERSION = 6;
 
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
@@ -197,9 +201,9 @@ class GeometryInfo {
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
   uint32_t numGeometries_;
+  SourceCrsType sourceCrs_;
   MetricLength metricLength_;
   MetricArea metricArea_;
-  SourceCrsType sourceCrs_;
 
   // TODO<ullingerc>: Implement the behavior for the following two
   // attributes
@@ -213,8 +217,8 @@ class GeometryInfo {
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                Centroid centroid, NumGeometries numGeometries,
-               MetricLength metricLength, MetricArea metricArea,
-               uint8_t sourceCrs);
+               uint8_t sourceCrs, MetricLength metricLength,
+               MetricArea metricArea);
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Required for `bit_cast`.
   GeometryInfo() = default;

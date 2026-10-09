@@ -222,9 +222,9 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                               {{2, 2}, {4, 4}},
                                               {3, 3},
                                               {1},
+                                              1,
                                               getLengthForTesting(line),
-                                              MetricArea{0},
-                                              1}));
+                                              MetricArea{0}}));
   static constexpr std::string_view polygon =
       "\"POLYGON((2 4, 4 4, 4 2, 2 2))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -234,9 +234,9 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                               {{2, 2}, {4, 4}},
                                               {3, 3},
                                               {1},
+                                              1,
                                               getLengthForTesting(polygon),
-                                              getAreaForTesting(polygon),
-                                              1}));
+                                              getAreaForTesting(polygon)}));
   static constexpr std::string_view lineWGS84 =
       "\"<http://www.opengis.net/def/crs/EPSG/0/4326> LINESTRING(2 2, 4 4)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -246,9 +246,9 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                               {{2, 2}, {4, 4}},
                                               {3, 3},
                                               {1},
+                                              2,
                                               getLengthForTesting(lineWGS84),
-                                              MetricArea{0},
-                                              2}));
+                                              MetricArea{0}}));
   t.checkFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                            noGeoInfo);
   t.checkFromLocalAndNormalVocabAndLiteral("\"noType\"", noGeoInfo);
@@ -265,9 +265,9 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
                                 {{6, 6}, {8, 8}},
                                 {7, 7},
                                 {1},
+                                1,
                                 getLengthForTesting(secondaryWktLiteral),
-                                MetricArea{0},
-                                1}));
+                                MetricArea{0}}));
   t.checkFromSecondaryVocab(secondaryPlainLiteral, noGeoInfo);
   t.checkFromSecondaryVocab(secondaryIri, noGeoInfo);
 }
@@ -281,9 +281,9 @@ TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
                                                  {{3, 2}, {3, 2}},
                                                  {3, 2},
                                                  {1},
+                                                 1,
                                                  ad_utility::MetricLength{0},
-                                                 MetricArea{0},
-                                                 2}));
+                                                 MetricArea{0}}));
   t.checkFromValueId(ValueId::makeUndefined(), noGeoInfo);
   t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfo);
   t.checkFromValueId(ValueId::makeFromInt(42), noGeoInfo);
