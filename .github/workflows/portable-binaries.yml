@@ -63,8 +63,8 @@ jobs:
           path: ~/.conan2
           key: conan-portable-${{ env.CC }}-${{ matrix.arch }}-${{ hashFiles('conanfile.txt') }}
 
-      # Enable LTO only for the binaries published from `master` (i.e. not for
-      # pull requests), so that PR builds stay fast.
+      # Link-time optimization only for the binaries published from `master`
+      # (not for pull requests, whose builds stay fast).
       - name: Build, check, and smoke-test the binaries
         env:
           QLEVER_ENABLE_LTO: ${{ github.event_name != 'pull_request' }}

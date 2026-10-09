@@ -30,9 +30,8 @@ NUM_THREADS=$(nproc)
 # crashes with an internal compiler error on QLever's C++20 code).
 GCC="${CC:-gcc}"
 
-# Link-time optimization is off by default (it slows down the build). The CI
-# enables it via `QLEVER_ENABLE_LTO=true` only for the binaries published from
-# `master`, so that PR builds stay fast.
+# Link-time optimization (see `QLEVER_ENABLE_LTO` in `CMakeLists.txt`). The CI
+# sets it only for the binaries published from `master`.
 QLEVER_ENABLE_LTO="${QLEVER_ENABLE_LTO:-false}"
 
 # A directory that contains ONLY static archives and is put first in the

@@ -89,10 +89,10 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           tags: ${{ env.IMAGE }}
-          # Enable LTO only for the image published from `master` (i.e. not for
-          # pull requests), so released images are optimized while PR builds stay
-          # fast. The same value must be used for the E2E build step below, so
-          # that it can reuse this build's cache instead of recompiling.
+          # Link-time optimization only for the image published from `master`
+          # (not for pull requests, whose builds stay fast). The E2E build step
+          # below must pass the same value, so that it can reuse this build's
+          # cache instead of recompiling.
           build-args: |
             QLEVER_ENABLE_LTO=${{ github.event_name != 'pull_request' }}
           # push-by-digest means that the built image is not associated with a tag. Instead, the only way to refer to it
