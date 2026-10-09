@@ -74,10 +74,11 @@ EvaluatedVariableValues ConstructBatchEvaluator::evaluateVariableByColumn(
       // Phase 2). `Id`s do not compare and hash bitwise: a `LocalVocabIndex`
       // Id whose term also exists in the index vocabulary compares equal to,
       // and hashes like, the corresponding `VocabIndex` Id (see
-      // `ValueId::compareThreeWay` and `AbslHashValue`). Such a hit is safe,
-      // because the matched entry was inserted under a `VocabIndex` key and
-      // therefore does not point into any block-local `LocalVocab`; and it is
-      // correct, because equal `Id`s denote the same RDF term.
+      // `ValueId::compareThreeWay` and `AbslHashValue` in `ValueId.h`). Such a
+      // hit is safe, because the matched entry was inserted under a
+      // `VocabIndex` key and therefore does not point into any block-local
+      // `LocalVocab`; and it is correct, because equal `Id`s denote the same
+      // RDF term.
       result[rowInBatch] = cached.value();
     } else if (!missIds.empty() && missIds.back() == id) {
       missRows.back().push_back(static_cast<size_t>(rowInBatch));
