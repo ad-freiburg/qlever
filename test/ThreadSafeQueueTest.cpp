@@ -152,8 +152,12 @@ TEST(ThreadSafeQueue, Concurrency) {
     if (ad_utility::isInstantiation<Queue, ThreadSafeQueue>) {
       ql::ranges::sort(result);
     }
-    EXPECT_THAT(result, ::testing::ElementsAreArray(std::views::iota(
-                            size_t{0}, numValues * numThreads)));
+    // Note: The range has to be materialized, because `ElementsAreArray`
+    // deduces the element type via `std::iterator_traits`, which reports `void`
+    // for the iterator of a `std::views::iota` range.
+    EXPECT_THAT(result,
+                ::testing::ElementsAreArray(::ranges::to_vector(
+                    std::views::iota(size_t{0}, numValues * numThreads))));
   };
   runWithBothQueueTypes(runTest);
 }
@@ -402,8 +406,10 @@ struct RunQueueManagerTest {
       if (ad_utility::isInstantiation<Queue, ThreadSafeQueue>) {
         ql::ranges::sort(result);
       }
-      EXPECT_THAT(result, ::testing::ElementsAreArray(
-                              std::views::iota(size_t{0}, numValues)));
+      // Note: The range has to be materialized, see the comment on the
+      // corresponding `EXPECT_THAT` in `ThreadSafeQueue.Concurrency` above.
+      EXPECT_THAT(result, ::testing::ElementsAreArray(::ranges::to_vector(
+                              std::views::iota(size_t{0}, numValues))));
     }
     // The probably most important test of all is that the destructors which are
     // run at the following closing brace never lead to a deadlock.

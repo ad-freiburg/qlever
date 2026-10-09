@@ -1,0 +1,21 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# A stand-in for the `boringssl` Bazel module that forwards to the system
+# OpenSSL. See the `local_path_override` in QLever's `MODULE.bazel` for why this
+# exists. The version and the compatibility level have to match the `boringssl`
+# module that it replaces.
+
+module(
+    name = "boringssl",
+    version = "0.20251002.0",
+    compatibility_level = 2,
+)
+
+bazel_dep(name = "rules_cc", version = "0.2.22")

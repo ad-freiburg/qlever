@@ -1,0 +1,101 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `test/index/vocabulary/CMakeLists.txt`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of this directory. Unlike QLever's own headers these are not on any
+# include path: the tests include their helpers relative to themselves, for
+# example as `../util/GTestHelpers.h`. Declaring them is still necessary, because
+# Bazel only makes declared files visible to a compile action. They are collected
+# by `//test:headers`, which `qlever_cc_test` adds to every test.
+cc_library(
+    name = "headers",
+    # `allow_empty` because not every test directory has helper headers.
+    hdrs = glob(
+        ["**/*.h"],
+        allow_empty = True,
+    ),
+)
+
+qlever_cc_test(
+    name = "VocabularyInMemoryTest",
+    test_utils = False,
+    deps = ["//src/index/vocabulary"],
+)
+
+qlever_cc_test(
+    name = "VocabularyOnDiskTest",
+    test_utils = False,
+    deps = [
+        "//src/index",
+        "//src/parser",
+    ],
+)
+
+qlever_cc_test(
+    name = "CompressedVocabularyTest",
+    deps = ["//src/index/vocabulary"],
+)
+
+qlever_cc_test(
+    name = "UnicodeVocabularyTest",
+    test_utils = False,
+    deps = ["//src/index/vocabulary"],
+)
+
+qlever_cc_test(
+    name = "VocabularyInternalExternalTest",
+    test_utils = False,
+    deps = ["//src/index/vocabulary"],
+)
+
+qlever_cc_test(
+    name = "VocabularyInMemoryBinSearchTest",
+    test_utils = False,
+    deps = ["//src/index/vocabulary"],
+)
+
+qlever_cc_test(
+    name = "PolymorphicVocabularyTest",
+    test_utils = False,
+    deps = [
+        "//src/index/vocabulary",
+        "//src/parser",
+        "//src/util:qlever_util",
+    ],
+)
+
+qlever_cc_test(
+    name = "VocabularyTypeTest",
+    test_utils = False,
+)
+
+qlever_cc_test(
+    name = "GeoVocabularyTest",
+    deps = [
+        "//src/index/vocabulary",
+        "//src/parser",
+        "//src/util:qlever_util",
+    ],
+)
+
+qlever_cc_test(
+    name = "SplitVocabularyTest",
+    deps = ["//src/index"],
+)
+
+qlever_cc_test(
+    name = "VocabularyTypesTest",
+    test_utils = False,
+)

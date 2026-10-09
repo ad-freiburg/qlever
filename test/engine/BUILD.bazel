@@ -1,0 +1,159 @@
+# Copyright 2026 The QLever Authors, in particular:
+#
+# 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+#
+# UFR = University of Freiburg, Chair of Algorithms and Data Structures
+#
+# You may not use this file except in compliance with the Apache 2.0 License,
+# which can be found in the `LICENSE` file at the root of the QLever project.
+
+# The Bazel counterpart of `test/engine/CMakeLists.txt`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:qlever.bzl", "qlever_cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# The headers of this directory. Unlike QLever's own headers these are not on any
+# include path: the tests include their helpers relative to themselves, for
+# example as `../util/GTestHelpers.h`. Declaring them is still necessary, because
+# Bazel only makes declared files visible to a compile action. They are collected
+# by `//test:headers`, which `qlever_cc_test` adds to every test.
+cc_library(
+    name = "headers",
+    # `allow_empty` because not every test directory has helper headers.
+    hdrs = glob(
+        ["**/*.h"],
+        allow_empty = True,
+    ),
+)
+
+qlever_cc_test(
+    name = "IndexScanTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "CartesianProductJoinTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "TextIndexScanForWordTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "TextIndexScanForEntityTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "SpatialJoinTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "DistinctTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "GroupByHashMapOptimizationTest",
+)
+
+qlever_cc_test(
+    name = "LazyGroupByTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "CountConnectedSubgraphsTest",
+)
+
+qlever_cc_test(
+    name = "BindTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "SpatialJoinAlgorithmsTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "SpatialJoinPrefilterTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "SpatialJoinParserTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "SpatialJoinCachedIndexTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "QueryExecutionTreeTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "DescribeTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ExistsJoinTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "NeutralOptionalTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "OptionalJoinTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "GroupConcatExpressionTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "StripColumnsTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "NamedResultCacheTest",
+)
+
+qlever_cc_test(
+    name = "NamedResultCacheSerializerTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ExplicitIdTableOperationTest",
+)
+
+qlever_cc_test(
+    name = "StringMappingTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "PermutationSelectorTest",
+    deps = ["//src/engine"],
+)
+
+qlever_cc_test(
+    name = "ConstructTripleInstantiatorTest",
+)
