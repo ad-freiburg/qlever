@@ -705,9 +705,9 @@ TEST_F(BinaryExportRoundTrip, lazyExportWithSeveralLocalVocabs) {
 // _____________________________________________________________________________
 TEST_F(BinaryExportRoundTrip, severalBatchesOfStrings) {
   auto* qec = ad_utility::testing::getQec();
-  // More distinct strings than fit into a single batch, see
+  // One more distinct string than fits into a single batch, see
   // `exportAsQLeverBinary`.
-  static constexpr size_t numRows = 25'000;
+  static constexpr size_t numRows = 10'001;
   LocalVocab localVocab;
   IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   for (size_t i = 0; i < numRows; ++i) {

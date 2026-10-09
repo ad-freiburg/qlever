@@ -180,7 +180,7 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
   // table is requested. They are kept alive until the next flush.
   LocalVocab localVocabsOfBatch;
   uint64_t numRowsInBatch = 0;
-  auto flush = [&]() {
+  auto flush = [&numRowsInBatch, &stringMapping, &qet, &localVocabsOfBatch]() {
     numRowsInBatch = 0;
     auto strings = BinaryExportHelpers::writeVectorOfStrings(
         stringMapping.flush(qet.getQec()->getIndex()));
@@ -246,45 +246,50 @@ void BinaryExportHelpers::rewriteVocabIds(
     ad_utility::HashMap<Id::T, Id>& blankNodeMapping,
     GeoPointEncodingEnum remoteGeoPointEncoding) {
   for (auto col : result.getColumns()) {
-    ql::ranges::for_each(col.subspan(dirtyIndex), [&](Id& id) {
-      switch (id.getDatatype()) {
-        case Datatype::EncodedVal:
-          id = remapEncodedVal(id, qec, vocab, prefixMapping, prefixes);
-          break;
-        case Datatype::BlankNodeIndex: {
-          auto [it, inserted] =
-              blankNodeMapping.try_emplace(id.getBits(), ValueId{});
-          if (inserted) {
-            it->second = Id::makeFromBlankNodeIndex(
-                vocab.getBlankNodeIndex(qec.getIndex().getBlankNodeManager()));
+    ql::ranges::for_each(
+        col.subspan(dirtyIndex),
+        [&qec, &vocab, &transmittedStrings, &prefixMapping, &prefixes,
+         &blankNodeMapping, remoteGeoPointEncoding](Id& id) {
+          switch (id.getDatatype()) {
+            case Datatype::EncodedVal:
+              id = remapEncodedVal(id, qec, vocab, prefixMapping, prefixes);
+              break;
+            case Datatype::BlankNodeIndex: {
+              auto [it, inserted] =
+                  blankNodeMapping.try_emplace(id.getBits(), ValueId{});
+              if (inserted) {
+                it->second = Id::makeFromBlankNodeIndex(vocab.getBlankNodeIndex(
+                    qec.getIndex().getBlankNodeManager()));
+              }
+              id = it->second;
+              break;
+            }
+            case Datatype::LocalVocabIndex:
+              // Undo the shift done during encoding.
+              id = stringToId(
+                  transmittedStrings.at(
+                      reinterpret_cast<size_t>(id.getLocalVocabIndex()) >>
+                      Id::numDatatypeBits),
+                  qec, vocab);
+              break;
+            case Datatype::GeoPoint:
+              // The two instances might use different encodings of `GeoPoint`s.
+              if (remoteGeoPointEncoding != GeoPoint::encoding()) {
+                static constexpr auto mask =
+                    ad_utility::bitMaskForLowerBits(Id::numDataBits);
+                id = Id::fromBits(
+                    (id.getBits() & ~mask) |
+                    GeoPoint::convertEncoding(id.getBits() & mask,
+                                              remoteGeoPointEncoding,
+                                              GeoPoint::encoding()));
+              }
+              break;
+            default:
+              // All other IDs that the exporter sends are self-contained, see
+              // `toExportableId`.
+              AD_CORRECTNESS_CHECK(id.isTrivial());
           }
-          id = it->second;
-          break;
-        }
-        case Datatype::LocalVocabIndex:
-          // Undo the shift done during encoding.
-          id = stringToId(transmittedStrings.at(reinterpret_cast<size_t>(
-                                                    id.getLocalVocabIndex()) >>
-                                                Id::numDatatypeBits),
-                          qec, vocab);
-          break;
-        case Datatype::GeoPoint:
-          // The two instances might use different encodings of `GeoPoint`s.
-          if (remoteGeoPointEncoding != GeoPoint::encoding()) {
-            static constexpr auto mask =
-                ad_utility::bitMaskForLowerBits(Id::numDataBits);
-            id = Id::fromBits((id.getBits() & ~mask) |
-                              GeoPoint::convertEncoding(id.getBits() & mask,
-                                                        remoteGeoPointEncoding,
-                                                        GeoPoint::encoding()));
-          }
-          break;
-        default:
-          // All other IDs that the exporter sends are self-contained, see
-          // `toExportableId`.
-          AD_CORRECTNESS_CHECK(id.isTrivial());
-      }
-    });
+        });
   }
 }
 
