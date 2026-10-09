@@ -77,6 +77,10 @@ class CopyOnWriteChunkedVector {
 
   // Write access to the element with the given index. Clones the chunk of the
   // element if it is shared with a copy of this vector.
+  //
+  // NOTE: This is deliberately not a non-const overload of `operator[]`, which
+  // would be chosen for every access via a non-const vector, also for pure
+  // reads, and then clone a shared chunk (see `CopyOnWritePtr::write`).
   T& mutableAt(size_t i) {
     AD_CONTRACT_CHECK(i < size());
     return chunks_[i / ChunkSize].write()[i % ChunkSize];
