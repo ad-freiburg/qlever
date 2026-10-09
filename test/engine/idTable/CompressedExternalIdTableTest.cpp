@@ -17,6 +17,7 @@
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
+#include "./AsyncPushTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -130,12 +131,14 @@ void testExternalSorterImpl(
   using namespace ad_utility::memory_literals;
 
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  // NOTE: The pool is only created if it is really needed, because a
+  // `parallelism` of one never touches the executor at all. It is declared
+  // before the `writer`, which holds a strand on the executor of the pool (see
+  // `setMergeExecutor`) and hence has to be destroyed first.
+  std::optional<net::thread_pool> pool;
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticColumns>
       writer{filename, numDynamicColumns, memoryToUse,
              ad_utility::testing::makeAllocator(), 5_kB};
-  // NOTE: The pool is only created if it is really needed, because a
-  // `parallelism` of one never touches the executor at all.
-  std::optional<net::thread_pool> pool;
   if (mergeParallelism.has_value()) {
     pool.emplace(mergeParallelism.value());
     writer.setMergeExecutor(pool->get_executor(), mergeParallelism.value());
@@ -1062,18 +1065,23 @@ TEST(CompressedExternalIdTable, sorterSpillsOutputBlocksToDisk) {
     // A spill file is created with the first block that its chunk spills, so
     // there is none before the merge has produced anything. The chunks that
     // this thread does not consume yet run ahead and spill, so files appear
-    // although nothing is consumed here. Poll for that, because it happens on
+    // although nothing is consumed here. Wait for that, because it happens on
     // the threads of the merge executor.
     SpillFiles spilled;
-    for (size_t i = 0; i < 1000 && spilled.totalSize_ == 0; ++i) {
+    ASSERT_TRUE(waitUntil([&spilled, &spillPrefix] {
       spilled = currentSpillFiles(spillPrefix);
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+      return spilled.totalSize_ > 0;
+    }));
     EXPECT_GT(spilled.numFiles_, 0u);
-    EXPECT_GT(spilled.totalSize_, 0u);
     table = idTableFromBlockGenerator(blocks);
-    // Every chunk that was fully consumed had its file deleted, so nothing is
+    // Every chunk that was fully consumed has its file deleted, so nothing is
     // left over even though neither the merge nor the sorter is destroyed yet.
+    // That deletion is only posted to the merge executor when the chunk is
+    // finished, see `ChunkQueue::finish`, so the last file may still exist
+    // for a moment after its last block was consumed. Wait for that as well.
+    waitUntil([&spillPrefix] {
+      return currentSpillFiles(spillPrefix).numFiles_ == 0;
+    });
     EXPECT_EQ(currentSpillFiles(spillPrefix).numFiles_, 0u);
   }
   workGuard.reset();
@@ -1294,23 +1302,34 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   // `compressedExternalIdTable::computeMergePhaseParameters` ends up with a
   // single chunk in flight without throwing: the input blocks of a single
   // chunk cost `2 * 4 * 250'000 = 2 MB`, so two concurrent chunks leave
-  // `(8 - 4) MB / (4 + 3 * 2) = 400 kB` (that is `12'500` rows) per output
-  // block, which is far below `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`, whereas a
-  // single chunk still leaves `(8 - 2) MB / (4 + 3) = 857 kB` (that is
-  // `26'785` rows), which is above the hard floor of
-  // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows. The `4` are the default
-  // of `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`.
-  const auto memory = ad_utility::MemorySize::bytes(8'000'000);
-  const auto blocksizeCompression = ad_utility::MemorySize::bytes(250'000);
-  // One run holds `8'000'000 / (4 * 8 * 2) = 125'000` rows, so the following
+  // `(16 - 4) MB / (12 + 3 * 2) = 666 kB` (that is `20'833` rows) per output
+  // block, which is below `MIN_MERGE_PHASE_OUTPUT_BLOCK_SIZE`, whereas a
+  // single chunk still leaves `(16 - 2) MB / (12 + 3) = 933 kB` (that is
+  // `29'166` rows), which is well above the hard floor of
+  // `MIN_USABLE_MERGE_PHASE_OUTPUT_BLOCK_SIZE` rows. The `12` are the default
+  // of `CompressedExternalIdTableSorter::numBufferedOutputBlocks_`, and the
+  // `3` is `mergePhaseOutputBlocksPerChunk` of the minimal buffering.
+  //
+  // NOTE: The memory is deliberately larger than the minimum that reaches this
+  // code path, because the margin is what keeps the test meaningful. With
+  // these values the single-chunk path holds for every
+  // `numBufferedOutputBlocks_` from 1 to 40, so a future change to that
+  // default cannot silently turn this into a test that no longer reaches its
+  // warning. (With the 8 MB that this test used before the default was raised
+  // to 12, the usable range was only 1 to 15.) Re-derive both numbers with
+  // `computeMergePhaseParameters` when the memory or the default changes.
+  const auto memory = 16_MB;
+  const auto blocksizeCompression = 250_kB;
+  // One run holds `16'000'000 / (4 * 8 * 2) = 250'000` rows, so the following
   // number of rows yields two runs.
-  constexpr size_t numRows = 170'000;
+  constexpr size_t numRows = 300'000;
 
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(false);
+  // The pool has to outlive the sorter, see `setMergeExecutor`.
+  net::thread_pool pool{8};
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
       filename, NUM_COLS, memory, ad_utility::testing::makeAllocator(),
       blocksizeCompression};
-  net::thread_pool pool{8};
   sorter.setMergeExecutor(pool.get_executor(), 8);
   // Merge twice (which requires that the result is not moved out), such that
   // we can check that the warning is logged only once per sorter.
@@ -1565,4 +1584,76 @@ TEST(CompressedExternalIdTable, pushBlockCreatesSameBlocksAsRowWisePush) {
   runTestForBlocksize(1, 20);
   runTestForBlocksize(10, 100);
   runTestForBlocksize(10, 101);
+}
+
+// _____________________________________________________________________________
+// Push the `tables` into a sorter with the given `blocksize`, using one thread
+// per table that starts an `asyncPushBlock`, and check that the sorted output
+// consists of exactly the rows of all the tables. The `numAdditionalRowWise`
+// last rows of the last table are afterwards pushed one by one via `push`, to
+// check that the concurrent pushing can be mixed with the sequential one.
+void testAsyncPushBlock(const std::vector<IdTable>& tables, size_t blocksize,
+                        size_t numAdditionalRowWise = 0,
+                        source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  SCOPED_TRACE(absl::StrCat("blocksize = ", blocksize));
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  // The pool has to outlive the sorter, see `setMergeExecutor`.
+  net::thread_pool pool{4};
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> sorter{
+      filename, NUM_COLS, memoryForBlocksize(blocksize, NUM_COLS), alloc};
+  sorter.setMergeExecutor(pool.get_executor(), 4);
+
+  // All the rows that are pushed, which is what the sorted output has to
+  // consist of.
+  IdTable expected{NUM_COLS, alloc};
+  for (const auto& table : tables) {
+    expected.insertAtEnd(table);
+  }
+
+  for (auto& future : asyncPushTestHelpers::pushConcurrently(sorter, tables)) {
+    future.get();
+  }
+  EXPECT_EQ(sorter.size(), expected.numRows());
+
+  const auto& lastTable = tables.back();
+  AD_CONTRACT_CHECK(numAdditionalRowWise <= lastTable.numRows());
+  for (size_t i = lastTable.numRows() - numAdditionalRowWise;
+       i < lastTable.numRows(); ++i) {
+    sorter.push(lastTable[i]);
+    expected.push_back(lastTable[i]);
+  }
+  EXPECT_EQ(sorter.size(), expected.numRows());
+
+  ql::ranges::sort(expected, SortByOSP{});
+  auto result = sortedOutput(sorter);
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+// `asyncPushBlock` may be called from several threads at the same time, and
+// the result is the same as if the rows had been pushed sequentially (the order
+// of the rows within a block is arbitrary, but the sorter sorts them anyway).
+TEST(CompressedExternalIdTable, asyncPushBlock) {
+  std::vector<IdTable> tables;
+  for (size_t i = 0; i < 8; ++i) {
+    tables.push_back(createRandomlyFilledIdTable(500 + 37 * i, NUM_COLS));
+  }
+  // A blocksize that is much larger than a single table, one that is much
+  // smaller, and the degenerate case of a single row per block.
+  testAsyncPushBlock(tables, 10'000);
+  testAsyncPushBlock(tables, 64);
+  testAsyncPushBlock(tables, 1);
+  // The pushes are so few that they never fill a single block, so the sorter
+  // takes its "everything fits into a single block" shortcut.
+  testAsyncPushBlock(tables, 100'000);
+  // Mixing the concurrent pushes with sequential ones.
+  testAsyncPushBlock(tables, 64, 20);
+  testAsyncPushBlock(tables, 100'000, 20);
 }

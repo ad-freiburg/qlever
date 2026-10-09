@@ -32,18 +32,26 @@ constexpr uint8_t magicByte = 0xC3;
 constexpr uint16_t formatVersion = 1;
 }  // namespace namedResultCacheSerializer::detail
 
-// _____________________________________________________________________________
-CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::WriteSerializer<
-        Serializer>) void NamedResultCache::writeToSerializer(Serializer&
-                                                                  serializer)
-    const {
+namespace namedResultCacheSerializer {
+using Entries = NamedResultCache::Entries;
+using Value = NamedResultCache::Value;
+
+// Write the `entries` (as returned by `getAllEntriesSortedByKey`) to the
+// `serializer`, in exactly the format that `readFromSerializer` reads. Each
+// value is written via `writeEntry(serializer, value)`, which has to write a
+// `NamedResultCache::Value`, but may write a modified version of it (see
+// `writeValue` below).
+CPP_template(typename Serializer, typename WriteEntry)(
+    requires ad_utility::serialization::WriteSerializer<Serializer> CPP_and
+        ql::concepts::invocable<
+            const WriteEntry&, Serializer&,
+            const Value&>) void writeEntries(Serializer& serializer,
+                                             const Entries& entries,
+                                             const WriteEntry& writeEntry) {
   // Write the magic byte and format version first, s.t. `readFromSerializer`
   // can detect and reject incompatible or unrelated input.
-  serializer << namedResultCacheSerializer::detail::magicByte;
-  serializer << namedResultCacheSerializer::detail::formatVersion;
-
-  auto entries = getAllEntriesSortedByKey();
+  serializer << detail::magicByte;
+  serializer << detail::formatVersion;
 
   // Serialize the number of entries.
   serializer << entries.size();
@@ -51,16 +59,26 @@ CPP_template_def(typename Serializer)(
   // Serialize each entry.
   for (const auto& [key, value] : entries) {
     serializer << key;
-    serializer << *value;
+    writeEntry(serializer, *value);
   }
+}
+}  // namespace namedResultCacheSerializer
+
+// _____________________________________________________________________________
+CPP_template_def(typename Serializer)(
+    requires ad_utility::serialization::WriteSerializer<Serializer>)
+void NamedResultCache::writeToSerializer(Serializer& serializer) const {
+  namedResultCacheSerializer::writeEntries(
+      serializer, getAllEntriesSortedByKey(),
+      [](Serializer& s, const Value& value) { s << value; });
 }
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::ReadSerializer<
-        Serializer>) void NamedResultCache::
-    readFromSerializer(Serializer& serializer, Value::Allocator allocator,
-                       const LocalVocabContext& context) {
+    requires ad_utility::serialization::ReadSerializer<Serializer>)
+void NamedResultCache::readFromSerializer(Serializer& serializer,
+                                          Value::Allocator allocator,
+                                          const LocalVocabContext& context) {
   // Clear the cache first.
   clear();
 
@@ -114,18 +132,20 @@ namespace namedResultCacheSerializer {
 // the `resultSortedOn` are passed separately, so that a caller can write a
 // *rewritten* version of the `value`: a caller may for example replace the
 // `Id`s that refer to local vocab entries by `Id`s of the main or of a
-// persistent vocabulary, which also invalidates a part of the sort order. The
+// secondary vocabulary, which may also change the sort order. The
 // `columns` therefore only have to agree with `value.result_` in their number
 // and in the number of rows, which is checked. If `writeLocalVocabWords` is
 // `false`, the words of the local vocab of the `value` are not written (only
 // its blank node blocks, see `serializeOnlyBlankNodeBlocksFromLocalVocab`),
 // because such a caller has stored them elsewhere.
-template <typename Serializer, typename Columns>
-void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
-                const Columns& columns,
-                const std::vector<ColumnIndex>& resultSortedOn,
-                bool writeLocalVocabWords) {
-  static_assert(ad_utility::serialization::WriteSerializer<Serializer>);
+CPP_template(typename Serializer, typename Columns)(
+    requires ad_utility::serialization::WriteSerializer<
+        Serializer>) void writeValue(Serializer& serializer,
+                                     const NamedResultCache::Value& value,
+                                     const Columns& columns,
+                                     const std::vector<ColumnIndex>&
+                                         resultSortedOn,
+                                     bool writeLocalVocabWords) {
   // Serialize the `LocalVocab` first (required for ID remapping).
   if (writeLocalVocabWords) {
     ad_utility::detail::serializeLocalVocab(serializer, value.localVocab_);
@@ -141,21 +161,26 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
   serializer << resultView.numColumns();
   AD_CORRECTNESS_CHECK(ql::ranges::size(columns) == resultView.numColumns());
   for (const auto& col : columns) {
-    // NOTE: Although the code for serialization of a local vocab above is
+    // NOTE 1: Although the code for serialization of a local vocab above is
     // already incorporated, we currently still let local vocab entries throw
     // an exception, because there are some caveats in the serialization that
-    // don't work yet, and will only be mitigated in the future. Note that a
-    // caller that has rewritten the `columns` (see above) has already replaced
-    // all such `Id`s, so this check only applies to the `Id`s that are
-    // actually written.
+    // don't work yet, and will only be mitigated in the future. A caller that
+    // has rewritten the `columns` (see above) has already replaced all such
+    // `Id`s, so this check only applies to the `Id`s that are actually
+    // written.
     //
     // NOTE 2: Even though we disallow the local vocab, it is crucial to
     // serialize the local vocab because of possible added blank node indices,
     // which we do handle correctly, and which also rely on the local vocab.
+    //
+    // NOTE 3: The blobs of `NamedCachedQueryBlobManager` support local vocab
+    // entries by rewriting them first (see
+    // `NamedCacheSecondaryVocabRewriter.h`).
+    //
     // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
     // allow local vocab entries here.
     AD_CORRECTNESS_CHECK(
-        ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
+        ql::ranges::find(col, Datatype::LocalVocabIndex, Id::getDatatypeL) ==
             ql::ranges::end(col),
         "Named result cache entries that contain local vocab entries "
         "currently cannot be serialized. Note that local vocab entries can "
@@ -231,7 +256,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
         AD_CORRECTNESS_CHECK(column.size() == numRows);
         AD_CORRECTNESS_CHECK(
             ql::ranges::find(column, Datatype::LocalVocabIndex,
-                             &Id::getDatatype) == column.end(),
+                             Id::getDatatypeL) == column.end(),
             "Named result cache entries that contain local vocab entries "
             "currently cannot be deserialized.");
         columns.push_back(column);

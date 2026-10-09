@@ -20,6 +20,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "index/IndexImpl.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/ParsedQueryTestHelpers.h"
@@ -27,6 +28,7 @@
 using ad_utility::testing::BlankNodeId;
 using ad_utility::testing::BoolId;
 using ad_utility::testing::DoubleId;
+using ad_utility::testing::GeoPointId;
 using ad_utility::testing::IntId;
 using ad_utility::testing::UndefId;
 using ad_utility::testing::VocabId;
@@ -242,6 +244,44 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const CompressedBlockMetadata bLastIncomplete = makeBlock(
       DateId(DateParser, "2024-10-08"), DateId(DateParser, "2025-10-08"),
       VocabId(0), VocabId(0), VocabId(1), VocabId(0));
+
+  // Geo point related blocks. The `Id`s of datatype `GeoPoint` sort between
+  // the dates and the blank nodes (see `Datatype`). The order of the `Id`s of
+  // the four points depends on the encoding, so they are sorted here.
+  static std::array<Id, 4> sortedGeoPointIds() {
+    std::array ids{
+        GeoPointId(GeoPoint{-33.5, 151.2}), GeoPointId(GeoPoint{48.0, 7.8}),
+        GeoPointId(GeoPoint{52.5, 13.4}), GeoPointId(GeoPoint{40.7, -74.0})};
+    ql::ranges::sort(ids);
+    return ids;
+  }
+  const std::array<Id, 4> geoPointIds = sortedGeoPointIds();
+  // Mixed block: dates and geo points.
+  const CompressedBlockMetadata bDateGeoPointGap =
+      makeBlock(DateId(DateParser, "2024-10-08"), geoPointIds[0]);
+  // Blocks with geo points only.
+  const CompressedBlockMetadata bGeoPoint1 =
+      makeBlock(geoPointIds[0], geoPointIds[1]);
+  const CompressedBlockMetadata bGeoPoint2 =
+      makeBlock(geoPointIds[1], geoPointIds[2]);
+  // Third block of points, for an input of point blocks only (fewer than three
+  // blocks are never prefiltered, see `PrefilterExpression::evaluate`).
+  const CompressedBlockMetadata bGeoPoint3 =
+      makeBlock(geoPointIds[2], geoPointIds[3]);
+  // Mixed block: geo points and blank nodes.
+  const CompressedBlockMetadata bGeoPointBlankGap =
+      makeBlock(geoPointIds[3], BlankNodeId(10));
+  // Block with blank nodes only.
+  const CompressedBlockMetadata bBlank =
+      makeBlock(BlankNodeId(11), BlankNodeId(12));
+  // The mixed input of the geo point tests (points among dates and blank
+  // nodes), in sorted order. The third point-only block `bGeoPoint3` is not
+  // part of it, it is only used for the input of point blocks only.
+  const std::vector<CompressedBlockMetadata> allTestBlocksIsGeoPoint = {
+      b1,         b2,         b6,
+      b19,        b27,        bDateGeoPointGap,
+      bGeoPoint1, bGeoPoint2, bGeoPointBlankGap,
+      bBlank};
 
   // Date related blocks.
   const CompressedBlockMetadata b1Date =
@@ -1419,8 +1459,38 @@ TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
 }
 
 //______________________________________________________________________________
+// Test the prefilter for `ql:isGeoPoint` and `!ql:isGeoPoint`. The geo points
+// that are encoded in the `Id` sort in one contiguous range between the dates
+// and the blank nodes.
+TEST_F(PrefilterExpressionOnMetadataTest, testIsGeoPointPrefilter) {
+  // Keep the blocks of points and the mixed blocks at both ends of their range
+  // (`b2` has mixed datatypes too, which `evaluate` always keeps).
+  makeTestIsDatatype(
+      isGeoPoint(),
+      {b2, bDateGeoPointGap, bGeoPoint1, bGeoPoint2, bGeoPointBlankGap}, false,
+      std::vector<CompressedBlockMetadata>(allTestBlocksIsGeoPoint));
+  // The negation keeps everything but the blocks of points only.
+  makeTestIsDatatype(
+      notExpr(isGeoPoint()),
+      {b1, b2, b6, b19, b27, bDateGeoPointGap, bGeoPointBlankGap, bBlank},
+      false, std::vector<CompressedBlockMetadata>(allTestBlocksIsGeoPoint));
+
+  // For blocks of points only, keep all of them, and none for the negation.
+  makeTestIsDatatype(isGeoPoint(), {bGeoPoint1, bGeoPoint2, bGeoPoint3}, false,
+                     {bGeoPoint1, bGeoPoint2, bGeoPoint3});
+  makeTestIsDatatype(notExpr(isGeoPoint()), {}, false,
+                     {bGeoPoint1, bGeoPoint2, bGeoPoint3});
+
+  // A block that spans the whole range of the points (from the dates to the
+  // blank nodes) is kept in both cases.
+  makeTestIsDatatype(isGeoPoint(), {b28}, false, {b19, b27, b28});
+  makeTestIsDatatype(notExpr(isGeoPoint()), {b19, b27, b28}, false,
+                     {b19, b27, b28});
+}
+
 // Test method clone. clone() creates a copy of the complete PrefilterExpression
 // tree.
+//______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
   makeTestClone(lt(VocabId(10)));
   makeTestClone(gt(referenceDate2));
@@ -1429,6 +1499,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
   makeTestClone(isIri(false));
   makeTestClone(isNum(false));
   makeTestClone(isBlank(true));
+  makeTestClone(isGeoPoint(true));
   makeTestClone(andExpr(lt(VocabId(20)), gt(VocabId(10))));
   makeTestClone(neq(IntId(10)));
   makeTestClone(le(LVE("\"Hello World\"", lvc)));
@@ -1467,6 +1538,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   ASSERT_FALSE(*isLit() == *isNum());
   ASSERT_TRUE(*isIri(true) == *isIri(true));
   ASSERT_FALSE(*isNum(true) == *isNum(false));
+  ASSERT_TRUE(*isGeoPoint() == *isGeoPoint());
+  ASSERT_FALSE(*isGeoPoint() == *isBlank());
+  ASSERT_FALSE(*isGeoPoint(true) == *isGeoPoint(false));
   // NotExpression
   ASSERT_TRUE(*notExpr(eq(IntId(0))) == *notExpr(eq(IntId(0))));
   ASSERT_TRUE(*notExpr(notExpr(ge(VocabId(0)))) ==
@@ -1624,6 +1698,9 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   EXPECT_THAT(*isBlank(true),
               matcher("Prefilter IsDatatypeExpression:\nPrefilter "
                       "for datatype: Blank\nis negated: true.\n.\n"));
+  EXPECT_THAT(*isGeoPoint(),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: GeoPoint\nis negated: false.\n.\n"));
   EXPECT_THAT(*notExpr(isNum()),
               matcher("Prefilter NotExpression:\nchild {Prefilter "
                       "IsDatatypeExpression:\nPrefilter for datatype: "

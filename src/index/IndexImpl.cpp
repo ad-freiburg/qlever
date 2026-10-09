@@ -1361,6 +1361,87 @@ void IndexImpl::readConfiguration() {
 }
 
 // ___________________________________________________________________________
+std::optional<std::string> IndexImpl::checkIndexFormatVersion(
+    const nlohmann::json& configuration) const {
+  // NOTE: Only non-throwing accessors of `nlohmann::json` are used below (in
+  // particular, `find` simply returns `end()` if `configuration` is not an
+  // object).
+  auto versionIt = configuration.find("index-format-version");
+  if (versionIt == configuration.end()) {
+    return std::string{
+        "This index was built before versioning was introduced for QLever's "
+        "index format. Please rebuild your index using the current version of "
+        "QLever."};
+  }
+  const auto& currentVersion = qlever::indexFormatVersion;
+  if (*versionIt == nlohmann::json(currentVersion)) {
+    return std::nullopt;
+  }
+
+  // The version is not the current one. Parse it (without throwing) to check
+  // whether it is one of the other loadable versions, or to give a more
+  // specific message otherwise.
+  auto prNumberIt = versionIt->find("pull-request-number");
+  auto dateIt = versionIt->find("date");
+  std::optional<DateYearOrDuration> date;
+  if (prNumberIt != versionIt->end() && prNumberIt->is_number_unsigned() &&
+      dateIt != versionIt->end() && dateIt->is_string()) {
+    date = DateYearOrDuration::parseXsdDateGetOptDate(
+        dateIt->get_ref<const std::string&>());
+  }
+  if (!date.has_value()) {
+    return absl::StrCat(
+        "The index format version stored in the index metadata is malformed: ",
+        versionIt->dump(),
+        ". Please rebuild your index using the current "
+        "version of QLever.");
+  }
+  qlever::IndexFormatVersion indexFormatVersion{prNumberIt->get<uint64_t>(),
+                                                date.value()};
+  if (qlever::isLoadableIndexFormatVersion(indexFormatVersion)) {
+    return std::nullopt;
+  }
+  auto versionDescription = absl::StrCat(
+      "(PR = ", indexFormatVersion.prNumber_,
+      ", Date = ", indexFormatVersion.date_.toStringAndType().first, ").");
+  if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
+    return absl::StrCat(
+        "The version of QLever you are using is too old for this index. Please "
+        "use a version of QLever that is compatible with this index ",
+        versionDescription);
+  }
+  // If the index is in exactly the format that the `qlever-upgrade-index`
+  // binary upgrades from, return one dedicated message instead of the generic
+  // advice below, so that the upgrade option is not buried among the generic
+  // alternatives. That the current version of QLever can load the upgraded
+  // index is checked by `convertIndexToCurrentFormat` (and by a unit test).
+  using namespace qlever::indexFormatConverter;
+  if (indexFormatVersion == sourceVersion) {
+    return absl::StrCat(
+        "The index format changed on ",
+        targetVersion.date_.toStringAndType().first,
+        " (PR = ", targetVersion.prNumber_,
+        "), but your index uses the previous format\n\nWe do our best "
+        "to keep index format changes rare, but sometimes they are "
+        "unavoidable. Either use an older version of QLever, or rebuild "
+        "the index from scratch with the version of QLever you are "
+        "currently using, or upgrade your index with the following "
+        "command. Upgrading your index is more than 10 times faster "
+        "than rebuilding it from scratch, and the old index is "
+        "preserved in a subdirectory of your index directory in case "
+        "something goes wrong.\n\nqlever upgrade-index ",
+        std::string(onDiskBase_.size(), ' '),
+        "   (if you use the qlever CLI)\n", "qlever-upgrade-index ",
+        onDiskBase_, "   (if the qlever-* binaries are in your PATH)\n");
+  }
+  return absl::StrCat(
+      "The index is too old for this version of QLever. Either rebuild the "
+      "index from scratch with the version of QLever you are currently using, "
+      "or use an older version of QLever that is compatible with this index ",
+      versionDescription);
+}
+
+// ___________________________________________________________________________
 void IndexImpl::applyGeoPointEncoding() {
   // Determine the encoding of the index. An index in the format that predates
   // the entry for the encoding always uses `LatMajor`. Throw if an index in
@@ -1399,67 +1480,9 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
         << std::endl;
   }
 
-  if (configurationJson_.find("index-format-version") !=
-      configurationJson_.end()) {
-    auto indexFormatVersion = static_cast<qlever::IndexFormatVersion>(
-        configurationJson_["index-format-version"]);
-    const auto& currentVersion = qlever::indexFormatVersion;
-    if (!qlever::isLoadableIndexFormatVersion(indexFormatVersion)) {
-      if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
-        AD_LOG_ERROR
-            << "The version of QLever you are using is too old for this "
-               "index. Please use a version of QLever that is "
-               "compatible with this index"
-               " (PR = "
-            << indexFormatVersion.prNumber_
-            << ", Date = " << indexFormatVersion.date_.toStringAndType().first
-            << ")." << std::endl;
-      } else {
-        // If the index is in exactly the format that the
-        // `qlever-upgrade-index` binary upgrades from, throw one dedicated
-        // message instead of logging the generic advice below, so that the
-        // upgrade option is not buried among the generic alternatives. That
-        // the current version of QLever can load the upgraded index is checked
-        // by `convertIndexToCurrentFormat` (and by a unit test).
-        using namespace qlever::indexFormatConverter;
-        if (indexFormatVersion == sourceVersion) {
-          throw std::runtime_error{absl::StrCat(
-              "The index format changed on ",
-              targetVersion.date_.toStringAndType().first,
-              " (PR = ", targetVersion.prNumber_,
-              "), but your index uses the previous format\n\nWe do our best "
-              "to keep index format changes rare, but sometimes they are "
-              "unavoidable. Either use an older version of QLever, or rebuild "
-              "the index from scratch with the version of QLever you are "
-              "currently using, or upgrade your index with the following "
-              "command. Upgrading your index is more than 10 times faster "
-              "than rebuilding it from scratch, and the old index is "
-              "preserved in a subdirectory of your index directory in case "
-              "something goes wrong.\n\nqlever upgrade-index ",
-              std::string(onDiskBase_.size(), ' '),
-              "   (if you use the qlever CLI)\n", "qlever-upgrade-index ",
-              onDiskBase_, "   (if the qlever-* binaries are in your PATH)\n")};
-        }
-        AD_LOG_ERROR
-            << "The index is too old for this version of QLever. "
-               "Either rebuild the index from scratch with the version of "
-               "QLever you are currently using, or use an older version of "
-               "QLever that is compatible with this index (PR = "
-            << indexFormatVersion.prNumber_
-            << ", Date = " << indexFormatVersion.date_.toStringAndType().first
-            << ")." << std::endl;
-      }
-      throw std::runtime_error{
-          "Incompatible index format, see log message for details"};
-    }
-  } else {
-    AD_LOG_ERROR
-        << "This index was built before versioning was introduced for "
-           "QLever's index format. Please rebuild your index using the "
-           "current version of QLever."
-        << std::endl;
-    throw std::runtime_error{
-        "Incompatible index format, see log message for details"};
+  if (auto error = checkIndexFormatVersion(configurationJson_);
+      error.has_value()) {
+    throw std::runtime_error{std::move(error).value()};
   }
 
   applyGeoPointEncoding();
@@ -1995,12 +2018,11 @@ std::string IndexImpl::getPatternFilename() const {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(requires(
-    sizeof...(NextSorter) <=
-    1)) void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
-                                            BlocksOfTriples sortedTriples,
-                                            bool doWriteConfiguration,
-                                            NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
+                                    BlocksOfTriples sortedTriples,
+                                    bool doWriteConfiguration,
+                                    NextSorter&&... nextSorter) {
   size_t numTriples = 0;
   auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
   uint64_t nextAvailableIndex = 1;
@@ -2044,20 +2066,19 @@ CPP_template_def(typename... NextSorter)(requires(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(
-    requires(sizeof...(NextSorter) <=
-             1)) void IndexImpl::createPSOAndPOS(size_t numColumns,
-                                                 BlocksOfTriples sortedTriples,
-                                                 NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createPSOAndPOS(size_t numColumns,
+                                BlocksOfTriples sortedTriples,
+                                NextSorter&&... nextSorter) {
   createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
                       AD_FWD(nextSorter)...);
 }
 
 // _____________________________________________________________________________
 CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
-    std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
-        size_t numColumns, BlocksOfTriples sortedTriples,
-        NextSorter&&... nextSorter) {
+std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
+    size_t numColumns, BlocksOfTriples sortedTriples,
+    NextSorter&&... nextSorter) {
   std::optional<PatternCreator::TripleSorter> result;
   if (usePatterns_) {
     // We will return the next sorter.
@@ -2095,11 +2116,10 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(
-    requires(sizeof...(NextSorter) <=
-             1)) void IndexImpl::createOSPAndOPS(size_t numColumns,
-                                                 BlocksOfTriples sortedTriples,
-                                                 NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createOSPAndOPS(size_t numColumns,
+                                BlocksOfTriples sortedTriples,
+                                NextSorter&&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjects =
