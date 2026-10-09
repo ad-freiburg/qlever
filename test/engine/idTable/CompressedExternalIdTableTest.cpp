@@ -596,6 +596,32 @@ TEST(CompressedExternalIdTable, concurrentBlockReads) {
 }
 
 // _____________________________________________________________________________
+// With a tiny block size and several columns, `writeIdTable` compresses and
+// writes thousands of (block, column) pairs in parallel. Check that the result
+// is exactly the same as for a sequential write, also after a `clear()`, which
+// starts writing at the beginning of the file again.
+TEST(CompressedExternalIdTable, writerWithManyBlocksAndColumns) {
+  constexpr size_t numColumns = 5;
+  std::vector<CopyableIdTable<0>> tables;
+  for (size_t numRows : {1001, 2, 1, 777}) {
+    tables.emplace_back(createRandomlyFilledIdTable(numRows, numColumns));
+  }
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, numColumns, ad_utility::testing::makeAllocator(), blockSize};
+  for (size_t i = 0; i < 2; ++i) {
+    writeAndFlush(writer, tables);
+    checkBlockMetadata(writer, tables, rowsPerBlockFor(blockSize));
+    checkBlockContents(writer, tables, rowsPerBlockFor(blockSize));
+    writer.clear();
+  }
+}
+
+// _____________________________________________________________________________
 TEST(CompressedExternalIdTable, clearResetsBoundaryMetadata) {
   auto tables = testTables();
   auto blockSize = 16_B;
