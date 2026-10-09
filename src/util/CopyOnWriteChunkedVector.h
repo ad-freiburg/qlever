@@ -51,7 +51,7 @@ class CopyOnWriteChunkedVector {
   explicit CopyOnWriteChunkedVector(ql::span<const T> elements) {
     // The number of chunks is `ceil(elements.size() / ChunkSize)`.
     size_t size = elements.size();
-    chunks_.reserve((size + ChunkSize - 1) / ChunkSize);
+    chunks_.reserve(size / ChunkSize + (size % ChunkSize != 0));
     for (size_t begin = 0; begin < size; begin += ChunkSize) {
       size_t end = std::min(begin + ChunkSize, size);
       chunks_.emplace_back(
