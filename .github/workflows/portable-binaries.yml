@@ -13,6 +13,9 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+    # Also run when a label is applied, so that applying the `run-ci` or
+    # `run-full-ci` label triggers the checks, see `README.md`.
+    types: [ opened, synchronize, reopened, labeled ]
   workflow_dispatch:
 
 concurrency:
@@ -24,6 +27,10 @@ permissions:
 
 jobs:
   build:
+    # Only run for PRs with the `run-full-ci` label, see `README.md`.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'run-full-ci')
     name: portable-binaries (${{ matrix.arch }})
     # The compiler (also used in the conan cache key below). The default gcc
     # 11 of Ubuntu 22.04 crashes with an internal compiler error on QLever's
@@ -63,7 +70,11 @@ jobs:
           path: ~/.conan2
           key: conan-portable-${{ env.CC }}-${{ matrix.arch }}-${{ hashFiles('conanfile.txt') }}
 
+      # Link-time optimization only for the binaries published from `master`
+      # (not for pull requests, whose builds stay fast).
       - name: Build, check, and smoke-test the binaries
+        env:
+          QLEVER_ENABLE_LTO: ${{ github.event_name != 'pull_request' }}
         run: .github/scripts/build-portable-binaries.sh
 
       # The binaries of PR builds are only built and smoke-tested, not kept.

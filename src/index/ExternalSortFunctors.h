@@ -16,12 +16,9 @@
 #include <tuple>
 #include <vector>
 
-#include "global/Id.h"
-
-#ifdef QLEVER_CHEAPER_COMPILATION
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
-#endif
 
 template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
@@ -109,7 +106,6 @@ struct SortByColumns {
   }
 };
 
-#ifdef QLEVER_CHEAPER_COMPILATION
 // Extern-template declarations for the `CompressedExternalIdTableSorter`
 // specialisations used during index building. Without these declarations every
 // `TU` that includes `IndexImpl.h` or `PatternCreator.h` would instantiate all
@@ -120,7 +116,7 @@ struct SortByColumns {
 // NOTE: If you add a new `CompressedExternalIdTableSorter` specialisation used
 // by index building, you must add a matching explicit instantiation in
 // `CompressedExternalIdTableSorterInstantiations.cpp`, otherwise the build will
-// fail at link time when `QLEVER_CHEAPER_COMPILATION` is set.
+// fail at link time.
 namespace ad_utility {
 
 extern template class CompressedExternalIdTableSorter<SortByPSONoGraphColumn,
@@ -138,6 +134,5 @@ extern template class CompressedExternalIdTableSorter<
 extern template class CompressedExternalIdTableSorter<SortText, 5>;
 
 }  // namespace ad_utility
-#endif  // QLEVER_CHEAPER_COMPILATION
 
 #endif  // QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H
