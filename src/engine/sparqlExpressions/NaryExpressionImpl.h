@@ -224,10 +224,10 @@ class NaryExpressionTypeErasedImpl
 
  private:
   // Evaluate the `naryOperation` on the `operands` using the `context`.
-  CPP_variadic_template(typename... Operands)(requires(
-      ...&& std::is_same_v<ExpressionResult, Operands>)) ExpressionResult
-      evaluateOnChildrenOperands(EvaluationContext* context,
-                                 Operands... operands) const {
+  CPP_variadic_template(typename... Operands)(
+      requires(...&& std::is_same_v<ExpressionResult, Operands>))
+  ExpressionResult evaluateOnChildrenOperands(EvaluationContext* context,
+                                              Operands... operands) const {
     // We have to first determine the number of results the expression will
     // produce.
     auto targetSize = context->size();
