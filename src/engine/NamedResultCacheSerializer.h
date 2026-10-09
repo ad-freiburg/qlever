@@ -66,10 +66,8 @@ CPP_template(typename Serializer, typename WriteEntry)(
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::WriteSerializer<
-        Serializer>) void NamedResultCache::writeToSerializer(Serializer&
-                                                                  serializer)
-    const {
+    requires ad_utility::serialization::WriteSerializer<Serializer>)
+void NamedResultCache::writeToSerializer(Serializer& serializer) const {
   namedResultCacheSerializer::writeEntries(
       serializer, getAllEntriesSortedByKey(),
       [](Serializer& s, const Value& value) { s << value; });
@@ -77,10 +75,10 @@ CPP_template_def(typename Serializer)(
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::ReadSerializer<
-        Serializer>) void NamedResultCache::
-    readFromSerializer(Serializer& serializer, Value::Allocator allocator,
-                       const LocalVocabContext& context) {
+    requires ad_utility::serialization::ReadSerializer<Serializer>)
+void NamedResultCache::readFromSerializer(Serializer& serializer,
+                                          Value::Allocator allocator,
+                                          const LocalVocabContext& context) {
   // Clear the cache first.
   clear();
 
@@ -182,7 +180,7 @@ CPP_template(typename Serializer, typename Columns)(
     // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
     // allow local vocab entries here.
     AD_CORRECTNESS_CHECK(
-        ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
+        ql::ranges::find(col, Datatype::LocalVocabIndex, Id::getDatatypeL) ==
             ql::ranges::end(col),
         "Named result cache entries that contain local vocab entries "
         "currently cannot be serialized. Note that local vocab entries can "
@@ -258,7 +256,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
         AD_CORRECTNESS_CHECK(column.size() == numRows);
         AD_CORRECTNESS_CHECK(
             ql::ranges::find(column, Datatype::LocalVocabIndex,
-                             &Id::getDatatype) == column.end(),
+                             Id::getDatatypeL) == column.end(),
             "Named result cache entries that contain local vocab entries "
             "currently cannot be deserialized.");
         columns.push_back(column);
