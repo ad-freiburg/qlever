@@ -439,11 +439,18 @@ bool ParsedQuery::isAggregatingQuery() const {
 bool ParsedQuery::isDeterministic() const {
   // The expressions of `GROUP BY` and `ORDER BY` are `BIND`s in the root
   // pattern or (like those of `HAVING`) internal aliases, so they are covered
-  // by the following checks.
+  // by the following checks. With a `GROUP BY` and a trailing `VALUES`, the
+  // aliases that use a `VALUES` variable are in `postQueryValuesBinds_` (see
+  // `moveAliasesAfterPostQueryValues`).
   return _rootGraphPattern.isDeterministic() &&
-         ql::ranges::all_of(getAliases(), [](const Alias& alias) {
-           return alias._expression.isDeterministic();
-         });
+         ql::ranges::all_of(getAliases(),
+                            [](const Alias& alias) {
+                              return alias._expression.isDeterministic();
+                            }) &&
+         ql::ranges::all_of(postQueryValuesBinds_,
+                            [](const parsedQuery::Bind& bind) {
+                              return bind._expression.isDeterministic();
+                            });
 }
 
 // ____________________________________________________________________________

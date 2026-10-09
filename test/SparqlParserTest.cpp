@@ -1068,6 +1068,12 @@ TEST(ParserTest, isDeterministic) {
       "SELECT * { { BIND(STRUUID() AS ?c) } UNION { ?a <rel> ?b } }"));
   EXPECT_FALSE(isDeterministic(
       "SELECT * { ?a <rel> ?b { SELECT ?c { BIND(RAND() AS ?c) } } }"));
+  // With a `GROUP BY` and a trailing `VALUES`, an alias that uses a `VALUES`
+  // variable is computed after the join with the `VALUES` (see
+  // `moveAliasesAfterPostQueryValues`).
+  EXPECT_FALSE(isDeterministic(
+      "SELECT ?a (RAND() + ?v AS ?c) { ?a <rel> ?b } GROUP BY ?a "
+      "VALUES ?v { 1 }"));
   EXPECT_FALSE(isDeterministic(
       "SELECT * { ?a <rel> ?b FILTER EXISTS { BIND(RAND() AS ?c) } }"));
 
