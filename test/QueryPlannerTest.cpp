@@ -421,7 +421,8 @@ TEST(QueryPlanner, filtersAreNotAppliedToPossiblyUndefinedVariables) {
       qec);
 }
 
-// Non-deterministic filters must not be applied before a join.
+// Test that a non-deterministic filter is applied only at the end of the
+// group graph pattern, not to one side of a join.
 TEST(QueryPlanner, nonDeterministicFiltersAreAppliedLast) {
   auto scan = h::IndexScanFromStrings;
   auto join = h::Join(scan("?s", "<p>", "?o"), scan("?s", "<q>", "?y"));

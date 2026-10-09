@@ -1038,7 +1038,8 @@ TEST(ParserTest, isAggregatingQuery) {
       parseQuery("SELECT ?a ?b WHERE { ?a <rel> ?b }").isAggregatingQuery());
 }
 
-// _____________________________________________________________________________
+// Test `ParsedQuery::isDeterministic()` for all the places where a
+// non-deterministic expression can occur.
 TEST(ParserTest, isDeterministic) {
   auto isDeterministic = [](std::string query) {
     return parseQuery(std::move(query)).isDeterministic();
