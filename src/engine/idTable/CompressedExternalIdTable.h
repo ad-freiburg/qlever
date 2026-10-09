@@ -11,8 +11,13 @@
 #include <absl/strings/str_cat.h>
 
 #include <atomic>
+#include <boost/asio/post.hpp>
+#include <condition_variable>
 #include <cstdint>
+#include <exception>
 #include <future>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <utility>
 
@@ -47,6 +52,99 @@ CPP_requires(HasPushBackRequires, requires(B& b, const R& r)(b.push_back(r)));
 
 template <typename B, typename R>
 CPP_concept HasPushBack = CPP_requires_ref(HasPushBackRequires, B, R);
+
+// The state that the caller of `runTasksInParallel` (see below) shares with the
+// helpers that it posts to the global thread pool.
+struct RunTasksInParallelState {
+  // The index of the next task that has not been claimed yet.
+  std::atomic<size_t> nextTaskIdx_ = 0;
+  // All the members below are protected by the `mutex_`.
+  std::mutex mutex_;
+  std::condition_variable helperFinished_;
+  // The number of helpers that are currently running tasks.
+  size_t numActiveHelpers_ = 0;
+  // Set by the caller as soon as it has stopped running tasks itself. A helper
+  // that starts after that returns right away.
+  bool isClosed_ = false;
+  std::exception_ptr firstException_;
+};
+
+// Claim and run tasks of the `state` until there are none left. Never throw:
+// after a task has thrown, store the exception in the `state` and stop handing
+// out the remaining tasks.
+template <typename RunTask>
+void claimAndRunTasks(RunTasksInParallelState& state, size_t numTasks,
+                      const RunTask& runTask) {
+  try {
+    while (true) {
+      size_t taskIdx = state.nextTaskIdx_.fetch_add(1);
+      if (taskIdx >= numTasks) {
+        return;
+      }
+      runTask(taskIdx);
+    }
+  } catch (...) {
+    state.nextTaskIdx_.store(numTasks);
+    std::lock_guard lock{state.mutex_};
+    if (!state.firstException_) {
+      state.firstException_ = std::current_exception();
+    }
+  }
+}
+
+// Run the `numTasks` tasks `runTask(0), ..., runTask(numTasks - 1)` on the
+// global thread pool (see `util/GlobalExecutor.h`). Return only when all of
+// them are done, rethrowing the first exception that any of them has thrown.
+// After a task has thrown, the tasks that have not been started yet are
+// skipped. The tasks are started in the order of their indices.
+//
+// NOTE: The calling thread doesn't only wait for the pool, but also runs tasks
+// itself, and it waits only for the helpers on the pool that have actually
+// started. That way this function completes even if none of the threads of the
+// pool ever becomes available, so that it can safely be called from a thread
+// that the threads of the pool are (indirectly) waiting for, and from the
+// threads of the pool themselves.
+template <typename RunTask>
+void runTasksInParallel(size_t numTasks, const RunTask& runTask) {
+  if (numTasks == 0) {
+    return;
+  }
+  // NOTE: The `state` is shared with the helpers, because a helper may only be
+  // started after this function has returned. Such a helper then sees that the
+  // `state` is closed and returns without touching the `runTask`.
+  auto state = std::make_shared<RunTasksInParallelState>();
+  auto helper = [state, numTasks, &runTask]() {
+    {
+      std::lock_guard lock{state->mutex_};
+      if (state->isClosed_) {
+        return;
+      }
+      ++state->numActiveHelpers_;
+    }
+    claimAndRunTasks(*state, numTasks, runTask);
+    {
+      std::lock_guard lock{state->mutex_};
+      --state->numActiveHelpers_;
+    }
+    state->helperFinished_.notify_all();
+  };
+  size_t numHelpers =
+      std::min(numTasks, ad_utility::globalExecutorNumThreads()) - 1;
+  for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, numHelpers)) {
+    boost::asio::post(ad_utility::globalExecutor(), helper);
+  }
+  claimAndRunTasks(*state, numTasks, runTask);
+
+  // All the tasks have been claimed, so wait for the helpers that are still
+  // running one of them, and keep all the other ones from starting.
+  std::unique_lock lock{state->mutex_};
+  state->isClosed_ = true;
+  state->helperFinished_.wait(
+      lock, [&state]() { return state->numActiveHelpers_ == 0; });
+  if (state->firstException_) {
+    std::rethrow_exception(state->firstException_);
+  }
+}
 }  // namespace compressedExternalIdTable::detail
 
 using namespace ad_utility::memory_literals;
@@ -77,6 +175,10 @@ class CompressedExternalIdTableWriter {
 
   // The filename and actual file to which the `IdTable` is written .
   std::string filename_;
+  // The offset at which the next block is written. The blocks are written
+  // with the positioned `File::write`, so a thread only has to reserve its
+  // range here, see `compressAndWriteBlockOfColumn`.
+  std::atomic<off_t> nextOffset_{0};
   ad_utility::Synchronized<ad_utility::File, std::shared_mutex> file_{filename_,
                                                                       "w+"};
   // For a single column, the concatenation of the blocks for that column of all
@@ -139,8 +241,42 @@ class CompressedExternalIdTableWriter {
     return blockSizeUncompressed_;
   }
 
-  // Store an `idTable`.
+  // Store an `idTable`. The blocks of all its columns are compressed and
+  // written in parallel, see `compressAndWriteBlockOfColumn`.
   void writeIdTable(const IdTable& table) {
+    const BlockLayout layout = prepareWrite(table);
+    // NOTE: The unit of parallelism is a single column of a single block. The
+    // columns of a table are typically few, while its blocks are many, so the
+    // tasks are small enough to keep all the threads of the pool busy until the
+    // very end of the table. The tasks are started in the order of the blocks
+    // (and within a block, in the order of the columns), such that the parts
+    // that are later read together (see `readBlockSequential`) tend to end up
+    // close to each other in the file.
+    compressedExternalIdTable::detail::runTasksInParallel(
+        layout.numBlocks_ * numColumns(),
+        [this, &table, &layout](size_t taskIdx) {
+          compressAndWriteBlockOfColumn(table, taskIdx / numColumns(),
+                                        taskIdx % numColumns(), layout);
+        });
+  }
+
+ private:
+  // Where the blocks of the table that is currently being written live in the
+  // `blocksPerColumn_`, how many of them there are, and how many rows each of
+  // them has (the last one may have fewer).
+  struct BlockLayout {
+    size_t firstBlockIdx_;
+    size_t numBlocks_;
+    size_t blockSize_;
+  };
+
+  // Check that the `table` can be written, make room for the metadata of its
+  // blocks, and store the first and the last row of each of its blocks.
+  //
+  // NOTE: The first and the last row of a block have to be stored here and not
+  // inside the per-column tasks of `writeIdTable`, because each of those tasks
+  // only sees a single column.
+  BlockLayout prepareWrite(const IdTable& table) {
     if (numActiveGenerators_ != 0) {
       AD_THROW(
           "Trying to call `writeIdTable` on an "
@@ -150,48 +286,55 @@ class CompressedExternalIdTableWriter {
     AD_CONTRACT_CHECK(table.numColumns() == numColumns());
     size_t blockSize = blockSizeUncompressed_.getBytes() / sizeof(Id);
     AD_CONTRACT_CHECK(blockSize > 0);
-    startOfSingleIdTables_.push_back(blocksPerColumn_.at(0).size());
-    // The `[lower, upper)` row ranges of the blocks into which the `table` is
-    // split. It is defined once and used by both loops below, such that the
-    // first and last rows that are stored always match the stored blocks.
-    auto blockRanges = chunkedIotaView(size_t{0}, table.numRows(), blockSize);
+    size_t firstBlockIdx = blocksPerColumn_.at(0).size();
+    startOfSingleIdTables_.push_back(firstBlockIdx);
     // Store the first and the last row of each block, which a merge of the runs
     // needs to split them into disjoint ranges, see
-    // `firstAndLastRowPerBlock_`. This cannot be done inside the per-column
-    // tasks below, because each of those only sees a single column.
-    for (auto [lower, upper] : blockRanges) {
+    // `firstAndLastRowPerBlock_`.
+    size_t numBlocks = 0;
+    for (auto [lower, upper] :
+         chunkedIotaView(size_t{0}, table.numRows(), blockSize)) {
       firstAndLastRowPerBlock_.emplace_back(table[lower], table[upper - 1]);
+      ++numBlocks;
     }
-    // The columns are compressed and stored in parallel.
-    // TODO<joka921> Use parallelism per block instead of per column (more
-    // fine-grained) but only once we have a reasonable abstraction for
-    // parallelism.
-    std::vector<std::future<void>> compressColumnFutures;
-    for (auto i : ql::views::iota(0u, numColumns())) {
-      compressColumnFutures.push_back(
-          std::async(std::launch::async, [this, i, blockRanges, &table]() {
-            auto& blockMetadata = blocksPerColumn_.at(i);
-            decltype(auto) column = table.getColumn(i);
-            for (auto [lower, upper] : blockRanges) {
-              auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
-              auto compressed = ZstdWrapper::compress(
-                  column.data() + lower, thisBlockSizeUncompressed);
-              size_t offset = 0;
-              file_.withWriteLock(
-                  [&offset, &compressed](ad_utility::File& file) {
-                    offset = file.tell();
-                    file.write(compressed.data(), compressed.size());
-                  });
-              blockMetadata.push_back(
-                  {compressed.size(), thisBlockSizeUncompressed, offset});
-            }
-          }));
+    // Make room for the metadata of the new blocks. The tasks of
+    // `writeIdTable` then only *assign* to those elements (each task to an
+    // element of its own), so that no synchronization is needed for the
+    // metadata.
+    for (auto& blockMetadata : blocksPerColumn_) {
+      blockMetadata.resize(firstBlockIdx + numBlocks);
     }
-    for (auto& fut : compressColumnFutures) {
-      fut.get();
-    }
+    return {firstBlockIdx, numBlocks, blockSize};
   }
 
+  // Compress the part of the `columnIdx`-th column of the `table` that belongs
+  // to the block with index `blockIdx` (counted relative to the `table`), write
+  // it to the file, and store the resulting metadata.
+  //
+  // This function may be called concurrently for arbitrary combinations of
+  // `blockIdx` and `columnIdx`: each call first reserves a range of the file of
+  // its own and then writes to it with the positioned `File::write`, which only
+  // needs a shared lock, and the metadata of each block is stored in an element
+  // of its own, which `prepareWrite` has allocated beforehand.
+  void compressAndWriteBlockOfColumn(const IdTable& table, size_t blockIdx,
+                                     size_t columnIdx,
+                                     const BlockLayout& layout) {
+    decltype(auto) column = table.getColumn(columnIdx);
+    size_t lower = blockIdx * layout.blockSize_;
+    size_t upper = std::min(lower + layout.blockSize_, column.size());
+    AD_CORRECTNESS_CHECK(lower < upper);
+    auto uncompressedSize = (upper - lower) * sizeof(Id);
+    auto compressed =
+        ZstdWrapper::compress(column.data() + lower, uncompressedSize);
+    auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
+    // NOTE: This throws if not all the bytes could be written.
+    file_.rlock()->write(compressed.data(), compressed.size(), offset);
+    blocksPerColumn_.at(columnIdx).at(layout.firstBlockIdx_ + blockIdx) =
+        CompressedBlockMetadata{compressed.size(), uncompressedSize,
+                                static_cast<size_t>(offset)};
+  }
+
+ public:
   // Return a vector of generators where the `i-th` generator generates the
   // `i-th` IdTable that was stored. The IdTables are yielded in (smaller)
   // blocks which are `IdTables` themselves.
@@ -267,6 +410,7 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->close();
     ad_utility::deleteFile(filename_);
     file_.wlock()->open(filename_, "w+");
+    nextOffset_.store(0);
     ql::ranges::for_each(blocksPerColumn_, [](auto& block) { block.clear(); });
     startOfSingleIdTables_.clear();
     firstAndLastRowPerBlock_.clear();

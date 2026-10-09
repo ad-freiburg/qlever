@@ -11,7 +11,13 @@
 
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
+#include <chrono>
+#include <future>
+#include <stdexcept>
+#include <thread>
 
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
@@ -593,6 +599,105 @@ TEST(CompressedExternalIdTable, concurrentBlockReads) {
 
   // After all readers are gone, the writer can be written to again.
   EXPECT_NO_THROW(writer.writeIdTable(tables.at(0)));
+}
+
+// _____________________________________________________________________________
+// With a tiny block size and several columns, `writeIdTable` compresses and
+// writes thousands of (block, column) pairs in parallel. Check that the result
+// is exactly the same as for a sequential write, also after a `clear()`, which
+// starts writing at the beginning of the file again.
+TEST(CompressedExternalIdTable, writerWithManyBlocksAndColumns) {
+  constexpr size_t numColumns = 5;
+  std::vector<CopyableIdTable<0>> tables;
+  for (size_t numRows : {1001, 2, 1, 777}) {
+    tables.emplace_back(createRandomlyFilledIdTable(numRows, numColumns));
+  }
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, numColumns, ad_utility::testing::makeAllocator(), blockSize};
+  for (size_t i = 0; i < 2; ++i) {
+    writeAndFlush(writer, tables);
+    checkBlockMetadata(writer, tables, rowsPerBlockFor(blockSize));
+    checkBlockContents(writer, tables, rowsPerBlockFor(blockSize));
+    writer.clear();
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable, runTasksInParallelRunsEachTaskOnce) {
+  using ad_utility::compressedExternalIdTable::detail::runTasksInParallel;
+  // Without any tasks, nothing is run.
+  runTasksInParallel(0, [](size_t) { FAIL() << "No task must be run"; });
+
+  for (size_t numTasks : {1, 2, 7, 1000}) {
+    std::vector<std::atomic<size_t>> numCalls(numTasks);
+    runTasksInParallel(numTasks, [&numCalls](size_t taskIdx) {
+      numCalls.at(taskIdx).fetch_add(1);
+    });
+    for (size_t i = 0; i < numTasks; ++i) {
+      EXPECT_EQ(numCalls.at(i).load(), 1u) << i;
+    }
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CompressedExternalIdTable,
+     runTasksInParallelRethrowsAfterAllTasksAreDone) {
+  using ad_utility::compressedExternalIdTable::detail::runTasksInParallel;
+  constexpr size_t numTasks = 1000;
+  std::atomic<size_t> numStarted = 0;
+  std::atomic<size_t> numFinished = 0;
+  auto runTask = [&](size_t taskIdx) {
+    numStarted.fetch_add(1);
+    absl::Cleanup finish = [&numFinished] { numFinished.fetch_add(1); };
+    if (taskIdx == 5) {
+      throw std::runtime_error("task 5 failed");
+    }
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(runTasksInParallel(numTasks, runTask),
+                               ::testing::HasSubstr("task 5 failed"));
+  // No task is still running when the exception arrives, and the tasks that
+  // were not started before the exception are skipped.
+  EXPECT_EQ(numStarted.load(), numFinished.load());
+  EXPECT_LT(numStarted.load(), numTasks);
+}
+
+// _____________________________________________________________________________
+// The calling thread of `runTasksInParallel` also runs tasks itself, so it
+// completes even when it is called from *all* the threads of the global thread
+// pool at once, such that no thread of the pool is left for the tasks.
+TEST(CompressedExternalIdTable, runTasksInParallelFromAllThreadsOfThePool) {
+  using ad_utility::compressedExternalIdTable::detail::runTasksInParallel;
+  size_t numThreads = ad_utility::globalExecutorNumThreads();
+  std::atomic<size_t> numArrived = 0;
+  std::atomic<size_t> numTasksRun = 0;
+  constexpr size_t numTasksPerCaller = 100;
+  std::vector<std::future<void>> futures;
+  for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, numThreads)) {
+    futures.push_back(net::post(
+        ad_utility::globalExecutor(), net::use_future([&]() {
+          // Wait until every thread of the pool is occupied by one of these
+          // callers.
+          numArrived.fetch_add(1);
+          while (numArrived.load() < numThreads) {
+            std::this_thread::yield();
+          }
+          runTasksInParallel(numTasksPerCaller, [&numTasksRun](size_t) {
+            numTasksRun.fetch_add(1);
+          });
+        })));
+  }
+  for (auto& future : futures) {
+    ASSERT_EQ(future.wait_for(std::chrono::minutes(1)),
+              std::future_status::ready);
+    future.get();
+  }
+  EXPECT_EQ(numTasksRun.load(), numThreads * numTasksPerCaller);
 }
 
 // _____________________________________________________________________________
