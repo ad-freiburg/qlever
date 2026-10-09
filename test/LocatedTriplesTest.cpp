@@ -952,6 +952,80 @@ TEST_F(LocatedTriplesTest, augmentedMetadataInChunks) {
             T2.toPermutedTriple());
 }
 
+// Test that the augmented metadata is kept up to date residually: the block
+// after the last original block comes and goes with its triples, and new
+// original metadata discards the augmented metadata.
+TEST_F(LocatedTriplesTest, augmentedMetadataResidual) {
+  using Span = std::vector<IdTriple<0>>;
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto locate = [&](const IdTriple<0>& triple,
+                    const std::vector<CompressedBlockMetadata>& metadata) {
+    return LocatedTriple::locateTriplesInPermutation(Span{triple}, metadata,
+                                                     keyOrder, true, handle);
+  };
+
+  // Two blocks, a triple before the first block, and two triples after the
+  // last block.
+  auto PT1 = PT(1, 10, 10);
+  auto PT2 = PT(1, 20, 20);
+  auto PT3 = PT(2, 10, 10);
+  auto PT4 = PT(2, 20, 20);
+  const std::vector<CompressedBlockMetadata> metadata = {CBM(PT1, PT2),
+                                                         CBM(PT3, PT4)};
+  auto T1 = IT(1, 5, 5);
+  auto T2 = IT(3, 10, 10);
+  auto T3 = IT(3, 20, 20);
+  LocatedTriplesPerBlock ltpb;
+  ltpb.setOriginalMetadata(metadata);
+
+  // The triples after the last block add a block after the last original
+  // block that spans exactly these triples.
+  auto located1 = locate(T1, metadata);
+  auto located2 = locate(T2, metadata);
+  auto located3 = locate(T3, metadata);
+  ltpb.add(located1);
+  ltpb.add(located2);
+  ltpb.add(located3);
+  ltpb.consolidateAllBlocks();
+  ltpb.updateAugmentedMetadata();
+  {
+    const auto& augmented = ltpb.getAugmentedMetadataForTesting();
+    ASSERT_EQ(augmented.size(), 3u);
+    EXPECT_EQ(augmented[0].firstTriple_, T1.toPermutedTriple());
+    EXPECT_EQ(augmented[2].firstTriple_, T2.toPermutedTriple());
+    EXPECT_EQ(augmented[2].lastTriple_, T3.toPermutedTriple());
+  }
+
+  // Erasing one of the two triples after the last block shrinks that block,
+  // erasing the other one removes it.
+  ltpb.erase(2, located3[0]);
+  ltpb.updateAugmentedMetadata();
+  {
+    const auto& augmented = ltpb.getAugmentedMetadataForTesting();
+    ASSERT_EQ(augmented.size(), 3u);
+    EXPECT_EQ(augmented[2].lastTriple_, T2.toPermutedTriple());
+  }
+  ltpb.erase(2, located2[0]);
+  ltpb.updateAugmentedMetadata();
+  EXPECT_EQ(ltpb.getAugmentedMetadataForTesting().size(), 2u);
+
+  // New original metadata replaces the augmented metadata, and the next update
+  // recomputes the blocks that still have triples (here block 0 with `T1`).
+  const std::vector<CompressedBlockMetadata> newMetadata = {CBM(PT1, PT3),
+                                                            CBM(PT4, PT4)};
+  ltpb.setOriginalMetadata(newMetadata);
+  EXPECT_THAT(ltpb.getAugmentedMetadataForTesting(),
+              testing::ElementsAreArray(newMetadata));
+  ltpb.updateAugmentedMetadata();
+  {
+    const auto& augmented = ltpb.getAugmentedMetadataForTesting();
+    ASSERT_EQ(augmented.size(), 2u);
+    EXPECT_EQ(augmented[0].firstTriple_, T1.toPermutedTriple());
+    EXPECT_EQ(augmented[0].lastTriple_, PT3);
+    EXPECT_EQ(augmented[1], newMetadata[1]);
+  }
+}
+
 // _____________________________________________________________________________
 TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
   // Create a vector that is automatically converted to a span.
