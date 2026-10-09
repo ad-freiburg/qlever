@@ -16,6 +16,7 @@
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "global/Constants.h"
+#include "global/Datatype.h"
 #include "global/IndexTypes.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/Algorithm.h"
@@ -25,89 +26,8 @@
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
 
-// The different Datatypes that a `ValueId` (see below) can encode.
-// Note: If you add a datatype, make sure to update the `MaxValue` if necessary,
-// and check whether you have to add it to the `isDatatypeTrivial` function
-// directly below.
-enum struct Datatype {
-  Undefined = 0,
-  Bool,
-  Int,
-  Double,
-  VocabIndex,
-  LocalVocabIndex,
-  // See `index/vocabulary/SecondaryVocabulary.h`. NOTE: The position of this
-  // datatype is not arbitrary. It has to be greater than `VocabIndex` (the
-  // words of a secondary vocabulary are all sorted after the words of the main
-  // vocabulary), and it has to be directly adjacent to `VocabIndex` and
-  // `LocalVocabIndex`, which makes the comparison of an `Id` of type
-  // `LocalVocabIndex` with an `Id` of an unrelated datatype cheap, see
-  // `ValueId::compareThreeWay`.
-  SecondaryVocabIndex,
-  TextRecordIndex,
-  Date,
-  GeoPoint,
-  WordVocabIndex,
-  BlankNodeIndex,
-  EncodedVal,
-  MaxValue = EncodedVal
-  // Note: Unfortunately, we cannot easily get the size of an enum.
-  // If members are added to this enum, then the `MaxValue`
-  // alias must always be equal to the last member,
-  // else other code breaks with out-of-bounds accesses.
-};
-
-// Return true iff the `datatype` is a trivial datatype. This means that IDs
-// with this datatype directly encode the value they represent and do not point
-// to an external resource. In other words: These IDs can safely be shared
-// across different QLever indices without having to rewrite them. Note:
-// `BlankNodeIndex` is deliberately NOT considered trivial, as blank nodes
-// depend on the context, in particular they have to be remapped when results
-// from different  RDF sources are merged. Same goes for `EncodedVal` which
-// depends on the (configurable!) prefixes for the encoding.
-constexpr bool isDatatypeTrivial(Datatype datatype) {
-  using enum Datatype;
-  constexpr std::array trivialDatatypes{Undefined, Bool, Int,
-                                        Double,    Date, GeoPoint};
-  return ad_utility::contains(trivialDatatypes, datatype);
-}
-
-// Convert the `Datatype` enum to the corresponding string
-inline QL_CONSTEXPR std::string_view toString(Datatype type) {
-  switch (type) {
-    case Datatype::Undefined:
-      return "Undefined";
-    case Datatype::Bool:
-      return "Bool";
-    case Datatype::Double:
-      return "Double";
-    case Datatype::Int:
-      return "Int";
-    case Datatype::EncodedVal:
-      return "EncodedIri";
-    case Datatype::VocabIndex:
-      return "VocabIndex";
-    case Datatype::LocalVocabIndex:
-      return "LocalVocabIndex";
-    case Datatype::TextRecordIndex:
-      return "TextRecordIndex";
-    case Datatype::WordVocabIndex:
-      return "WordVocabIndex";
-    case Datatype::Date:
-      return "Date";
-    case Datatype::GeoPoint:
-      return "GeoPoint";
-    case Datatype::BlankNodeIndex:
-      return "BlankNodeIndex";
-    case Datatype::SecondaryVocabIndex:
-      return "SecondaryVocabIndex";
-  }
-  // This line is reachable if we cast an arbitrary invalid int to this enum
-  AD_FAIL();
-}
-
-// Encode values of different types (the types from the `Datatype` enum above)
-// using 4 bits for the datatype and 60 bits for the value.
+// Encode values of different types (the types from the `Datatype` enum in
+// `Datatype.h`) using 4 bits for the datatype and 60 bits for the value.
 class ValueId {
  public:
   using T = uint64_t;
@@ -616,6 +536,24 @@ class ValueId {
     id.visit(visitor);
     return ostr;
   }
+
+  // Lambdas that forward to the member function of the same name (without the
+  // suffix `L`). Unlike a pointer-to-member like `&Id::isUndefined`, they also
+  // work for proxy types that provide the same member functions, like the
+  // elements of a column view that does not store `Id`s.
+  static constexpr auto isUndefinedL = [](const auto& id) {
+    return id.isUndefined();
+  };
+
+  static constexpr auto isDefinedL = [](const auto& id) {
+    return !id.isUndefined();
+  };
+
+  static constexpr auto getBitsL = [](const auto& id) { return id.getBits(); };
+
+  static constexpr auto getDatatypeL = [](const auto& id) {
+    return id.getDatatype();
+  };
 
  private:
   // Compare the bits of an `Id` whose datatype is one of

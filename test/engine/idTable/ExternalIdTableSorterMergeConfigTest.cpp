@@ -271,6 +271,7 @@ TEST(ExternalIdTableSorterMergeConfig, mergeOptions) {
   EXPECT_EQ(options.parallelism(), config.parallelism_);
   EXPECT_EQ(options.maxNumChunksInFlight, parameters.numChunksInFlight_);
   EXPECT_EQ(options.numChunksInFlight(100), parameters.numChunksInFlight_);
+  EXPECT_EQ(options.firstChunkSize, FIRST_MERGE_PHASE_CHUNK_SIZE);
   // All the buffered output blocks but the two that the consumer holds are
   // read ahead by the consumer, see
   // `MergePhaseConfig::numBufferedOutputBlocks_`.
