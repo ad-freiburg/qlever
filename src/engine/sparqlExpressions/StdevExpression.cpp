@@ -13,21 +13,18 @@ namespace sparqlExpression::detail {
 // _____________________________________________________________________________
 ExpressionResult DeviationExpression::evaluate(
     EvaluationContext* context) const {
-  // Helper: Extracts a double or int (as double) from a variant
-  auto numValVisitor = [](const auto& value) -> std::optional<double> {
-    using T = std::decay_t<decltype(value)>;
-    if constexpr (ad_utility::isSimilar<T, double> ||
-                  ad_utility::isSimilar<T, int64_t>) {
-      return static_cast<double>(value);
-    } else {
-      return std::nullopt;
-    }
+  // Helper: Extracts a double or int (as double) from a `NumericValue`.
+  auto numValToDouble = [](const NumericValue& value) -> std::optional<double> {
+    return ad_utility::visitIf(
+        value, [](double v) { return std::optional{v}; },
+        [](int64_t v) { return std::optional{static_cast<double>(v)}; },
+        [](const auto&) -> std::optional<double> { return std::nullopt; });
   };
 
   // Helper to replace child expression results with their squared deviation
-  auto devImpl = [context, numValVisitor](
+  auto devImpl = [context, numValToDouble](
                      bool& undef,
-                     VectorWithMemoryLimit<IdOrLiteralOrIri>& exprResult,
+                     VectorWithMemoryLimit<IdOrLocalVocabEntry>& exprResult,
                      auto generator) {
     double sum = 0.0;
     // Intermediate storage of the results returned from the child
@@ -37,7 +34,7 @@ ExpressionResult DeviationExpression::evaluate(
     // Collect values as doubles
     for (auto& inp : generator) {
       const auto& n = detail::NumericValueGetter{}(std::move(inp), context);
-      auto v = std::visit(numValVisitor, n);
+      auto v = numValToDouble(n);
       if (v.has_value()) {
         childResults.push_back(v.value());
         sum += v.value();
@@ -53,7 +50,7 @@ ExpressionResult DeviationExpression::evaluate(
     // Calculate squared deviation and save for result
     double avg = sum / static_cast<double>(context->size());
     for (size_t i = 0; i < childResults.size(); i++) {
-      exprResult.at(i) = IdOrLiteralOrIri{
+      exprResult.at(i) = IdOrLocalVocabEntry{
           ValueId::makeFromDouble(std::pow(childResults.at(i) - avg, 2))};
     }
   };
@@ -63,7 +60,7 @@ ExpressionResult DeviationExpression::evaluate(
       -> CPP_ret(ExpressionResult)(
           requires SingleExpressionResult<decltype(el)>) {
     // Prepare space for result
-    VectorWithMemoryLimit<IdOrLiteralOrIri> exprResult{context->_allocator};
+    VectorWithMemoryLimit<IdOrLocalVocabEntry> exprResult{context->_allocator};
     exprResult.resize(context->size());
     bool undef = false;
 
@@ -72,13 +69,13 @@ ExpressionResult DeviationExpression::evaluate(
     devImpl(undef, exprResult, std::move(generator));
 
     if (undef) {
-      return IdOrLiteralOrIri{Id::makeUndefined()};
+      return IdOrLocalVocabEntry{Id::makeUndefined()};
     }
     return exprResult;
   };
 
   auto childRes = child_->evaluate(context);
   return std::visit(impl, std::move(childRes));
-};
+}
 
 }  // namespace sparqlExpression::detail

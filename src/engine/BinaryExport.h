@@ -97,12 +97,12 @@ class BinaryExportHelpers {
       const QueryExecutionContext& qec, LocalVocab& vocab,
       const std::vector<std::string>& transmittedStrings,
       const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
-      const std::vector<std::string>& prefixes,
+      const std::vector<encodedIri::Pattern>& prefixes,
       ad_utility::HashMap<Id::T, Id>& blankNodeMapping);
 
   // Convert raw ID bits to a proper Id, handling encoded values.
   static Id toIdImpl(const QueryExecutionContext& qec,
-                     const std::vector<std::string>& prefixes,
+                     const std::vector<encodedIri::Pattern>& prefixes,
                      const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
                      LocalVocab& vocab, Id::T bits,
                      ad_utility::HashMap<Id::T, Id>& blankNodeMapping);
@@ -110,7 +110,7 @@ class BinaryExportHelpers {
   // Get mapping from remote prefixes to local prefixes.
   static ad_utility::HashMap<uint8_t, uint8_t> getPrefixMapping(
       const QueryExecutionContext& qec,
-      const std::vector<std::string>& prefixes);
+      const std::vector<encodedIri::Pattern>& prefixes);
 };
 
 // _____________________________________________________________________________

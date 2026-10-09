@@ -6,7 +6,7 @@
 
 #include <range/v3/numeric/accumulate.hpp>
 
-#include "engine/SpatialJoinAlgorithms.h"
+#include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
 
 namespace ad_utility::detail::parallel_wkt_parser {
 
@@ -30,12 +30,12 @@ WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
 // _____________________________________________________________________________
 size_t WKTParser::getPrefilterCounter() {
   return ::ranges::accumulate(_numSkipped, 0);
-};
+}
 
 // _____________________________________________________________________________
 size_t WKTParser::getParseCounter() {
   return ::ranges::accumulate(_numParsed, 0);
-};
+}
 
 // _____________________________________________________________________________
 void WKTParser::processQueue(size_t t) {
@@ -52,8 +52,9 @@ void WKTParser::processQueue(size_t t) {
         // If we have a prefilter box, check if we also have a precomputed
         // bounding box for the geometry this `VocabIndex` is referring to.
         if (_usePrefiltering &&
-            SpatialJoinAlgorithms::prefilterGeoByBoundingBox(
-                _prefilterLatLngBox, _index, job.valueId.getVocabIndex())) {
+            LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
+                _prefilterLatLngBox, _index, job.valueId.getVocabIndex(),
+                job.boundingBox)) {
           prefilterCounter++;
           continue;
         }
@@ -106,8 +107,9 @@ void WKTParser::processQueue(size_t t) {
 }
 
 // _____________________________________________________________________________
-void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side) {
-  _curBatch.push_back({valueId, rowIndex, side, ""});
+void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side,
+                                  std::optional<BoundingBox> boundingBox) {
+  _curBatch.push_back({valueId, rowIndex, side, "", std::move(boundingBox)});
 
   if (_curBatch.size() >= WKT_PARSER_BATCH_SIZE) {
     _jobs.add(std::move(_curBatch));

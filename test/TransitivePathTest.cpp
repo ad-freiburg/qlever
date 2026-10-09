@@ -10,6 +10,8 @@
 
 #include "./util/IdTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
+#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/TransitivePathBinSearch.h"
@@ -23,7 +25,10 @@
 using ad_utility::testing::getQec;
 namespace {
 auto V = ad_utility::testing::VocabId;
+auto I = ad_utility::testing::IntId;
+auto iri = ad_utility::testing::iri;
 using Vars = std::vector<std::optional<Variable>>;
+using Graphs = qlever::index::GraphFilter<TripleComponent>;
 auto U = Id::makeUndefined();
 using namespace ::testing;
 }  // namespace
@@ -36,10 +41,11 @@ class TransitivePathTest
  public:
   [[nodiscard]] static std::pair<std::shared_ptr<TransitivePathBase>,
                                  QueryExecutionContext*>
-  makePath(IdTable input, Vars vars, TransitivePathSide left,
+  makePath(IdTable input, const Vars& vars, TransitivePathSide left,
            TransitivePathSide right, size_t minDist, size_t maxDist,
            std::optional<std::string> turtleInput = std::nullopt,
-           const std::optional<Variable>& graphVariable = std::nullopt) {
+           const std::optional<Variable>& graphVariable = std::nullopt,
+           Graphs activeGraphs = Graphs::All()) {
     bool useBinSearch = std::get<0>(GetParam());
     ad_utility::testing::TestIndexConfig config;
     config.turtleInput = std::move(turtleInput);
@@ -53,20 +59,21 @@ class TransitivePathTest
     return {
         TransitivePathBase::makeTransitivePath(
             qec, std::move(subtree), std::move(left), std::move(right), minDist,
-            maxDist, useBinSearch,
-            qlever::index::GraphFilter<TripleComponent>::All(), graphVariable),
+            maxDist, useBinSearch, std::move(activeGraphs), graphVariable),
         qec};
   }
 
   // ___________________________________________________________________________
   [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathUnbound(
-      IdTable input, Vars vars, TransitivePathSide left,
+      IdTable input, const Vars& vars, TransitivePathSide left,
       TransitivePathSide right, size_t minDist, size_t maxDist,
       std::optional<std::string> turtleInput = std::nullopt,
-      const std::optional<Variable>& graphVariable = std::nullopt) {
+      const std::optional<Variable>& graphVariable = std::nullopt,
+      Graphs activeGraphs = Graphs::All()) {
     auto [T, qec] =
         makePath(std::move(input), vars, std::move(left), std::move(right),
-                 minDist, maxDist, std::move(turtleInput), graphVariable);
+                 minDist, maxDist, std::move(turtleInput), graphVariable,
+                 std::move(activeGraphs));
     return T;
   }
 
@@ -124,7 +131,7 @@ class TransitivePathTest
           aggregateTables(result.idTables(), expected.numColumns());
       EXPECT_THAT(idTable, UnorderedElementsAreArray(expected));
     } else {
-      EXPECT_THAT(result.idTable(), UnorderedElementsAreArray(expected));
+      EXPECT_THAT(result.idTableView(), UnorderedElementsAreArray(expected));
     }
   }
 
@@ -847,6 +854,45 @@ TEST_P(TransitivePathTest, maxLength2ToId) {
 }
 
 // _____________________________________________________________________________
+// Exactly `n` occurrences (`{n}` with `n > 1`); on a chain graph the result
+// must contain only the pairs at distance `n`.
+TEST_P(TransitivePathTest, exactLengthGreaterThanOne) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+
+  auto expected = makeIdTableFromVector({{0, 2}, {1, 3}, {2, 4}});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 2, 2);
+
+  EXPECT_FALSE(T->isBoundOrId());
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+// `{n,m}` with `n > m` (e.g. `{5,3}`). The natural reading of the W3C
+// equivalence (empty union over `[n, m]`) is "empty result", and QLever's
+// DFS produces exactly that.
+TEST_P(TransitivePathTest, minGreaterThanMaxIsEmpty) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+
+  IdTable expected{2, sub.getAllocator()};
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 5, 3);
+
+  EXPECT_FALSE(T->isBoundOrId());
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, zeroLength) {
   std::string index = "<a> a 0 , 1 , 2 , 4 , 7 , 10 , 11 .";
 
@@ -905,7 +951,9 @@ TEST_P(TransitivePathTest, zeroLengthWithLiteralsNotInIndex) {
       },
       Id::makeFromInt);
 
-  auto expected = IdTable{2, ad_utility::testing::makeAllocator()};
+  // The empty path matches a hardcoded value even if it doesn't occur in the
+  // knowledge graph at all.
+  auto expected = makeIdTableFromVector({{1337, 1337}}, Id::makeFromInt);
 
   {
     TransitivePathSide left(std::nullopt, 0, 1337, 0);
@@ -1003,8 +1051,24 @@ TEST_P(TransitivePathTest, literalsNotInIndex) {
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   using ad_utility::triple_component::Literal;
-  std::string index = "<a> a 0 , 1 , 2 , 4 .";
+  ad_utility::testing::TestIndexConfig config;
+  config.turtleInput = "<a> a 0 , 1 , 2 , 4 .";
+  auto* qec = getQec(std::move(config));
   std::string literal = "my-literal";
+
+  auto makeCustomPath = [qec](IdTable input, const Vars& vars,
+                              TransitivePathSide left, TransitivePathSide right,
+                              size_t minDist, size_t maxDist) {
+    bool useBinSearch = std::get<0>(GetParam());
+    // Clear the cache to avoid crosstalk between tests.
+    qec->clearCacheUnpinnedOnly();
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(input), vars);
+    return TransitivePathBase::makeTransitivePath(
+        qec, std::move(subtree), std::move(left), std::move(right), minDist,
+        maxDist, useBinSearch,
+        qlever::index::GraphFilter<TripleComponent>::All(), std::nullopt);
+  };
 
   // Simulate entries in the delta triples by using entries that are not in the
   // index
@@ -1015,7 +1079,8 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   // be changed in the future).
   LocalVocab localVocab;
   auto id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{Literal::literalWithoutQuotes(literal)}));
+      LocalVocabEntry::literalWithoutQuotes(literal,
+                                            qec->getLocalVocabContext())));
   auto sub = makeIdTableFromVector({
       {id, id},
   });
@@ -1027,9 +1092,9 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   {
     TransitivePathSide left(std::nullopt, 0, reference, 0);
     TransitivePathSide right(std::nullopt, 1, reference, 1);
-    auto T = makePathUnbound(
-        sub.clone(), {Variable{"?start"}, Variable{"?target"}}, left, right, 1,
-        std::numeric_limits<size_t>::max(), index);
+    auto T =
+        makeCustomPath(sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+                       left, right, 1, std::numeric_limits<size_t>::max());
 
     EXPECT_TRUE(T->isBoundOrId());
 
@@ -1040,9 +1105,9 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   {
     TransitivePathSide left(std::nullopt, 0, reference, 0);
     TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-    auto T = makePathUnbound(
-        sub.clone(), {Variable{"?start"}, Variable{"?target"}}, left, right, 1,
-        std::numeric_limits<size_t>::max(), index);
+    auto T =
+        makeCustomPath(sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+                       left, right, 1, std::numeric_limits<size_t>::max());
 
     EXPECT_TRUE(T->isBoundOrId());
 
@@ -1053,9 +1118,9 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   {
     TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
     TransitivePathSide right(std::nullopt, 1, reference, 1);
-    auto T = makePathUnbound(
-        std::move(sub), {Variable{"?start"}, Variable{"?target"}}, left, right,
-        1, std::numeric_limits<size_t>::max(), std::move(index));
+    auto T = makeCustomPath(std::move(sub),
+                            {Variable{"?start"}, Variable{"?target"}}, left,
+                            right, 1, std::numeric_limits<size_t>::max());
 
     EXPECT_TRUE(T->isBoundOrId());
 
@@ -1218,19 +1283,113 @@ TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndef) {
   }
 
   {
+    // The empty path copies the hardcoded value over to `?target` without
+    // checking it against the knowledge graph.
     TransitivePathSide left(std::nullopt, 0, 1, 0);
     TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
     auto T = makePathUnbound(
-        std::move(sub), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
+        sub.clone(), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
         right, 0, std::numeric_limits<size_t>::max());
 
-    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
     EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal1"}),
                  ad_utility::Exception);
     EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal2"}),
                  ad_utility::Exception);
     EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
                  ad_utility::Exception);
+  }
+
+  {
+    // The same holds if the hardcoded value is on the right hand side.
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, 1, 1);
+    auto T = makePathUnbound(
+        sub.clone(), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
+        right, 0, std::numeric_limits<size_t>::max());
+
+    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?start"}));
+  }
+
+  {
+    // Without the empty path every value stems from the knowledge graph again.
+    TransitivePathSide left(std::nullopt, 0, 1, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathUnbound(
+        sub.clone(), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
+        right, 1, std::numeric_limits<size_t>::max());
+
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+  }
+
+  {
+    // Payload columns are copied over from the bound side verbatim, so they
+    // inherit its guarantee. Here they stem from an index scan.
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto [T, qec] = makePath(std::move(sub),
+                             {Variable{"?internal1"}, Variable{"?internal2"}},
+                             left, right, 1, std::numeric_limits<size_t>::max(),
+                             "<a> <b> <c> . <a> <b> <d> .");
+    auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+        qec, Permutation::Enum::PSO,
+        SparqlTripleSimple{Variable{"?start"}, iri("<b>"), Variable{"?other"}});
+    auto boundPath = T->bindLeftSide(
+        indexScan, indexScan->getVariableColumn(Variable{"?start"}));
+
+    EXPECT_TRUE(
+        boundPath->columnOriginatesFromGraphOrUndef(Variable{"?start"}));
+    EXPECT_TRUE(
+        boundPath->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+    EXPECT_TRUE(
+        boundPath->columnOriginatesFromGraphOrUndef(Variable{"?other"}));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndefWithGraphVariable) {
+  auto sub = makeIdTableFromVector({{0, 2, 0}});
+  Vars vars{Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}};
+
+  {
+    // The graph column is not a node of the knowledge graph: a graph name that
+    // occurs neither as a subject nor as an object still has to be matched.
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathUnbound(sub.clone(), vars, left, right, 1,
+                             std::numeric_limits<size_t>::max(), std::nullopt,
+                             {Variable{"?g"}});
+
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?start"}));
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+  }
+
+  {
+    // `SELECT * { GRAPH ?g { ?g a+ ?x } }`: here `?g` is the left side of the
+    // path, so it is not the graph column but the start node, which has an
+    // outgoing edge in the knowledge graph.
+    TransitivePathSide left(std::nullopt, 0, Variable{"?g"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?x"}, 1);
+    auto T = makePathUnbound(sub.clone(), vars, left, right, 1,
+                             std::numeric_limits<size_t>::max(), std::nullopt,
+                             {Variable{"?g"}});
+
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?x"}));
+  }
+
+  {
+    // `SELECT * { GRAPH ?g { <x> a* ?g } }`: the empty path copies the
+    // hardcoded value over to `?g` without checking it, so the guarantee is
+    // lost even though `?g` is one of the two sides.
+    TransitivePathSide left(std::nullopt, 0, 1337, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?g"}, 1);
+    auto T = makePathUnbound(std::move(sub), vars, left, right, 0,
+                             std::numeric_limits<size_t>::max(), std::nullopt,
+                             {Variable{"?g"}});
+
+    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?g"}));
   }
 }
 
@@ -1391,6 +1550,50 @@ TEST_P(TransitivePathTest, graphVariableBoundToNonGraphOperationEmptyPath) {
       {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}},
       std::move(side), 0, {Variable{"?start"}, Variable{"?other"}}, left, right,
       0, std::numeric_limits<size_t>::max(), false, {Variable{"?g"}},
+      "<a> <b> <c> <a> . <a> <b> <d> <b> .");
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest,
+       graphVariableBoundToOperationThatAlreadyProvidesTheGraph) {
+  auto sub = makeIdTableFromVector({
+      {0, 1, 0},
+      {1, 0, 0},
+      {2, 3, 0},
+      {0, 1, 1},
+      {1, 0, 1},
+      {2, 3, 1},
+      {3, 2, 1},
+      {1, 0, 2},
+      {3, 2, 2},
+  });
+
+  // The bound side already provides the graph, so the pairs of value and graph
+  // are matched against the knowledge graph. `<c>` (id 2) only occurs in the
+  // graph `<a>` (id 0), so the last row is filtered out.
+  auto side = makeIdTableFromVector({
+      {0, 0},
+      {0, 1},
+      {2, 1},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {0, 0, 0},
+      {0, 1, 0},
+      {0, 0, 1},
+      {0, 1, 1},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathBound(
+      true, std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}},
+      std::move(side), 0, {Variable{"?start"}, Variable{"?g"}}, left, right, 0,
+      std::numeric_limits<size_t>::max(), false, {Variable{"?g"}},
       "<a> <b> <c> <a> . <a> <b> <d> <b> .");
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
@@ -1785,6 +1988,62 @@ TEST_P(TransitivePathTest, graphVariableConstrainedByTwoIrisEmptyPath) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, graphVariableEmptyPathWithValueNotInIndex) {
+  // The edge only exists in the graph <a>, the value 1337 doesn't occur in the
+  // knowledge graph at all.
+  auto sub = makeIdTableFromVector({
+      {I(1337), V(1), V(0)},
+  });
+
+  // The empty path matches the hardcoded value in every graph, even in <c>
+  // where it doesn't occur.
+  auto expected = makeIdTableFromVector({
+      {I(1337), I(1337), V(0)},
+      {I(1337), V(1), V(0)},
+      {I(1337), I(1337), V(2)},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, 1337, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathUnbound(
+      std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}}, left,
+      right, 0, std::numeric_limits<size_t>::max(),
+      "<a> <b> <c> <a> . <a> <b> <c> <c> .", {Variable{"?g"}});
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, graphVariableEmptyPathWithRestrictedGraphs) {
+  auto sub = makeIdTableFromVector({
+      {I(1337), V(1), V(0)},
+  });
+
+  // Only the graphs allowed by the filter are matched, but <b> is matched even
+  // though it doesn't contain a single triple.
+  auto expected = makeIdTableFromVector({
+      {I(1337), I(1337), V(0)},
+      {I(1337), V(1), V(0)},
+      {I(1337), I(1337), V(1)},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, 1337, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathUnbound(
+      std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}}, left,
+      right, 0, std::numeric_limits<size_t>::max(),
+      "<a> <b> <c> <a> . <a> <b> <c> <c> .", {Variable{"?g"}},
+      Graphs::Whitelist(
+          {TripleComponent{iri("<a>")}, TripleComponent{iri("<b>")}}));
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, sortOrderGuaranteesWithBoundOperation) {
   auto sub = makeIdTableFromVector({
       {0, 1},
@@ -1901,8 +2160,8 @@ namespace {
 // _____________________________________________________________________________
 HashMapWrapper::MapOfMaps columnsToMap(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    ql::span<const Id> startCol, ql::span<const Id> targetCol,
-    ql::span<const Id> graphCol) {
+    ConstIdColumnRef startCol, ConstIdColumnRef targetCol,
+    ConstIdColumnRef graphCol) {
   HashMapWrapper::MapOfMaps edgesWithGraph{allocator};
   for (size_t i = 0; i < startCol.size(); i++) {
     auto it1 = edgesWithGraph.try_emplace(graphCol[i], allocator).first;
@@ -1915,7 +2174,7 @@ HashMapWrapper::MapOfMaps columnsToMap(
 // _____________________________________________________________________________
 HashMapWrapper::Map columnsToMap(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    ql::span<const Id> startCol, ql::span<const Id> targetCol) {
+    ConstIdColumnRef startCol, ConstIdColumnRef targetCol) {
   HashMapWrapper::Map edges{allocator};
 
   for (size_t i = 0; i < startCol.size(); i++) {

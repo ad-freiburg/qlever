@@ -3,7 +3,11 @@
 import re
 import sys
 
-ERROR_PATTERN = re.compile(r'^(.*?):(\d+):(\d+):\s+error:\s+(.*)$')
+# NOTE: `fatal error:` (for example a missing header, which GCC 8 reports for
+# `#include <coroutine>`) has to be matched as well. Such errors abort the
+# translation unit immediately, so missing them is worse than missing an
+# ordinary `error:`.
+ERROR_PATTERN = re.compile(r'^(.*?):(\d+):(\d+):\s+(?:fatal\s+)?error:\s+(.*)$')
 LANG_SPECIFIC_REGEX = re.compile(
     r'[‘’"]\b(co_await|co_return|co_yield|concept|consteval|constinit|requires)\b[’‘"]',
     re.IGNORECASE
@@ -101,7 +105,8 @@ def generate_report(errors, grouped=False, annotate=False, details_in_group=Fals
     builder = ReportBuilder(grouped=grouped, annotate=annotate, working_dir=working_dir)
     builder.add_line("GCC Error Log Report")
     builder.add_line("====================")
-    builder.begin_group(f"Total Errors: {len(errors)}")
+    num_errors = len(errors)
+    builder.begin_group(f"Total Errors: {num_errors}")
 
     # Language-specific errors
     if lang_specific_errors:
@@ -187,7 +192,7 @@ def generate_report(errors, grouped=False, annotate=False, details_in_group=Fals
             builder.add_line("::notice::Consistency check passed: Accumulated error counts match totals.")
         else:
             builder.add_line("::error::Consistency check failed: Accumulated error counts do not match totals.")
-    return builder.get_report()
+    return num_errors, builder.get_report()
 
 def main():
     grouped = False
@@ -205,13 +210,15 @@ def main():
         sys.exit(1)
     log_file = args[0]
     errors = list(parse_gcc_log(log_file).values())
-    report = generate_report(errors,
+    num_errors, report = generate_report(errors,
                              grouped=grouped,
                              annotate=annotate,
                              working_dir=working_dir,
                              details_in_group=details_in_group,
                              test_mode=test_mode)
     print(report)
+    if (num_errors > 0):
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

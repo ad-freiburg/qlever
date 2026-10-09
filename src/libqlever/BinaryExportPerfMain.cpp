@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
   // Parse and plan the query (measured separately).
   std::cout << "Query: " << query << std::endl;
   ad_utility::Timer planTimer{ad_utility::Timer::Started};
-  qlever::Qlever::QueryPlan queryPlan;
+  std::optional<qlever::Qlever::PlannedQuery> queryPlan;
   try {
     queryPlan = qlever.parseAndPlanQuery(query);
   } catch (const std::exception& e) {
@@ -68,8 +68,8 @@ int main(int argc, char** argv) {
   for (size_t i = 0; i < numRuns; ++i) {
     ad_utility::Timer timer{ad_utility::Timer::Started};
     try {
-      std::string result =
-          qlever.query(queryPlan, ad_utility::MediaType::binaryQleverExport);
+      std::string result = qlever.query(
+          queryPlan.value(), ad_utility::MediaType::binaryQleverExport);
       auto elapsedMs = timer.msecs().count();
       timingsMs.push_back(static_cast<double>(elapsedMs));
       std::cout << "  Run " << (i + 1) << ": " << elapsedMs << " ms"

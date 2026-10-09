@@ -8,13 +8,23 @@
 #include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <optional>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
 #include "AllocatorTestHelpers.h"
+#include "GTestHelpers.h"
 #include "backports/three_way_comparison.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/EncodedIriManager.h"
+#include "index/GeoPointEncoding.h"
 #include "index/Index.h"
+#include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/EncodedIriPattern.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
@@ -22,6 +32,30 @@
 // be used for unit tests.
 
 namespace ad_utility::testing {
+// Set the global `EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING`
+// flag to `value` and restore its previous value when the returned cleanup is
+// destroyed.
+//
+// NOTE: The flag is global, so setting it without such a cleanup would make
+// every test that runs afterwards silently depend on the value that was set
+// here.
+[[nodiscard]] inline auto setIgnoreMemoryLimit(bool value) {
+  bool previousValue =
+      ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING
+          .exchange(value);
+  return absl::Cleanup{[previousValue] {
+    ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
+        previousValue;
+  }};
+}
+
+// Return a pointer to a single, lazily-initialized `EncodedIriManager`
+// instance shared across all tests.
+inline const EncodedIriManager* encodedIriManager() {
+  static EncodedIriManager instance;
+  return &instance;
+}
+
 // Create an empty `Index` object that has certain default settings overwritten
 // such that very small indices, as they are typically used for unit tests,
 // can be built without a lot of time and memory overhead. Using the parameter
@@ -53,7 +87,7 @@ struct TestIndexConfig {
   bool loadAllPermutations = true;
   bool usePatterns = true;
   bool usePrefixCompression = true;
-  ad_utility::MemorySize blocksizePermutations = 16_B;
+  size_t rowsPerBlock = 2;
   bool createTextIndex = false;
   bool addWordsFromLiterals = true;
   std::optional<std::pair<std::string, std::string>>
@@ -66,7 +100,43 @@ struct TestIndexConfig {
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
   qlever::Filetype indexType = qlever::Filetype::Turtle;
   std::optional<VocabularyType> vocabularyType = std::nullopt;
-  std::optional<EncodedIriManager> encodedIriManager = std::nullopt;
+  std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
+      std::nullopt;
+  // The general patterns for IRIs that are encoded directly in an `Id`, see
+  // `index/vocabulary/EncodedIriPattern.h`.
+  std::vector<encodedIri::Pattern> encodedIriPatterns{};
+  // If true, add `ql:has-word` triples for each word in each literal during
+  // index building.
+  bool addHasWordTriples = false;
+  // The words of the secondary vocabulary of the index (see
+  // `index/vocabulary/SecondaryVocabulary.h`). They have to be sorted and
+  // pairwise distinct (see `SecondaryVocabulary::appendSegment`), and must not
+  // be contained in `turtleInput`, because the secondary vocabulary is
+  // disjoint from the vocabulary of the main index.
+  //
+  // NOTE: A secondary vocabulary is currently only created for testing (see
+  // `IndexImpl::setSecondaryVocab`), which is what this member does.
+  std::optional<std::vector<std::string>> secondaryVocabWords = std::nullopt;
+  // The number of threads used during the index build (see
+  // `Index::createFromFiles`).
+  size_t numThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
+  // If set, the input is parsed in parallel (`true`) or serially (`false`), as
+  // if specified on the command line of `qlever-index`. If `nullopt`, a single
+  // input file is parsed in parallel for reasons of backward compatibility (see
+  // `IndexImpl::updateInputFileSpecificationsAndLog`).
+  std::optional<bool> parseInParallel = std::nullopt;
+  // Additional entries for the `.settings.json` file of the index build (see
+  // `IndexImpl::readIndexBuilderSettingsFromFile`) as pairs of a key and a
+  // value in JSON syntax (so a string value has to be quoted).
+  std::vector<std::pair<std::string, std::string>> additionalSettings;
+  // The encoding of the geo points of the index (see
+  // `ad_utility::GeoPointEncoding`).
+  //
+  // NOTE: The encoding is a process-wide setting (see `GeoPoint::encoding`),
+  // which building or loading an index changes. A test that uses `LatMajor`
+  // should therefore not use the cached `getQec`, and restore the encoding.
+  ad_utility::GeoPointEncoding geoPointEncoding =
+      ad_utility::GeoPointEncoding::ZOrder;
 
   // A very typical use case is to only specify the turtle input, and leave all
   // the other members as the default. We therefore have a dedicated constructor
@@ -78,18 +148,23 @@ struct TestIndexConfig {
   // Hashing.
   template <typename H>
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
-    return H::combine(std::move(h), c.turtleInput, c.loadAllPermutations,
-                      c.usePatterns, c.usePrefixCompression,
-                      c.blocksizePermutations, c.createTextIndex,
-                      c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-                      c.parserBufferSize, c.scoringMetric, c.bAndKParam,
-                      c.indexType, c.encodedIriManager);
+    return H::combine(
+        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
+        c.usePrefixCompression, c.rowsPerBlock, c.createTextIndex,
+        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
+        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
+        c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
+        c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
+        c.parseInParallel, c.additionalSettings, c.geoPointEncoding.value());
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
-      usePrefixCompression, blocksizePermutations, createTextIndex,
-      addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
-      scoringMetric, bAndKParam, indexType, vocabularyType, encodedIriManager)
+      usePrefixCompression, rowsPerBlock, createTextIndex, addWordsFromLiterals,
+      contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
+      bAndKParam, indexType, vocabularyType,
+      encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
+      addHasWordTriples, secondaryVocabWords, numThreads, parseInParallel,
+      additionalSettings, geoPointEncoding)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.
@@ -99,11 +174,28 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig config);
 // as input, leave all other settings at the default.
 Index makeTestIndex(const std::string& indexBasename, std::string turtle);
 
-// Return a static  `QueryExecutionContext` that refers to an index that was
+// Overloads that derive the basename from the currently running gtest name.
+inline Index makeTestIndex(TestIndexConfig config) {
+  return makeTestIndex(gtestCurrentTestName(), std::move(config));
+}
+
+inline Index makeTestIndex(std::string turtle) {
+  return makeTestIndex(gtestCurrentTestName(), std::move(turtle));
+}
+
+// Return a static `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
 // relevant for these tests, so the other members are defaulted.
 QueryExecutionContext* getQec(TestIndexConfig config);
+
+// Return a static `QueryExecutionContext` that refers to an index that was
+// build using `makeTestIndex` (see above) at a basename derived from
+// `indexBasenamePrefix` by suffixing it with the test name and the context-map
+// size (see implementation). Use this overload if the test needs control over
+// the on-disk location (e.g. to verify behaviour on an absolute path).
+QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
+                              TestIndexConfig config);
 
 // Overload of `getQec` for the simple case where we only care about the turtle
 // input. All other settings are left at their default values.

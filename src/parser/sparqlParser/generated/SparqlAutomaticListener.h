@@ -19,6 +19,11 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void enterPrologue(SparqlAutomaticParser::PrologueContext* ctx) = 0;
   virtual void exitPrologue(SparqlAutomaticParser::PrologueContext* ctx) = 0;
 
+  virtual void enterNamedSubqueryDefinition(
+      SparqlAutomaticParser::NamedSubqueryDefinitionContext* ctx) = 0;
+  virtual void exitNamedSubqueryDefinition(
+      SparqlAutomaticParser::NamedSubqueryDefinitionContext* ctx) = 0;
+
   virtual void enterBaseDecl(SparqlAutomaticParser::BaseDeclContext* ctx) = 0;
   virtual void exitBaseDecl(SparqlAutomaticParser::BaseDeclContext* ctx) = 0;
 
@@ -272,6 +277,11 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void exitGraphPatternNotTriples(
       SparqlAutomaticParser::GraphPatternNotTriplesContext* ctx) = 0;
 
+  virtual void enterIncludeClause(
+      SparqlAutomaticParser::IncludeClauseContext* ctx) = 0;
+  virtual void exitIncludeClause(
+      SparqlAutomaticParser::IncludeClauseContext* ctx) = 0;
+
   virtual void enterOptionalGraphPattern(
       SparqlAutomaticParser::OptionalGraphPatternContext* ctx) = 0;
   virtual void exitOptionalGraphPattern(
@@ -456,6 +466,25 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
 
   virtual void enterPathMod(SparqlAutomaticParser::PathModContext* ctx) = 0;
   virtual void exitPathMod(SparqlAutomaticParser::PathModContext* ctx) = 0;
+
+  virtual void enterPathSyntaxExtension(
+      SparqlAutomaticParser::PathSyntaxExtensionContext* ctx) = 0;
+  virtual void exitPathSyntaxExtension(
+      SparqlAutomaticParser::PathSyntaxExtensionContext* ctx) = 0;
+
+  virtual void enterExactLength(
+      SparqlAutomaticParser::ExactLengthContext* ctx) = 0;
+  virtual void exitExactLength(
+      SparqlAutomaticParser::ExactLengthContext* ctx) = 0;
+
+  virtual void enterOnlyMin(SparqlAutomaticParser::OnlyMinContext* ctx) = 0;
+  virtual void exitOnlyMin(SparqlAutomaticParser::OnlyMinContext* ctx) = 0;
+
+  virtual void enterMinMax(SparqlAutomaticParser::MinMaxContext* ctx) = 0;
+  virtual void exitMinMax(SparqlAutomaticParser::MinMaxContext* ctx) = 0;
+
+  virtual void enterOnlyMax(SparqlAutomaticParser::OnlyMaxContext* ctx) = 0;
+  virtual void exitOnlyMax(SparqlAutomaticParser::OnlyMaxContext* ctx) = 0;
 
   virtual void enterPathPrimary(
       SparqlAutomaticParser::PathPrimaryContext* ctx) = 0;

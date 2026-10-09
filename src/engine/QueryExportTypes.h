@@ -8,16 +8,16 @@
 #define QLEVER_SRC_ENGINE_TABLEWITHRANGE_H
 
 #include "backports/algorithm.h"
-#include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
+#include "index/LocalVocab.h"
 
-// Helper type that provides const ref access to the underlying `IdTable` and
-// `LocalVocab` associated with the `IdTable`.
+// Helper type that provides non-owning view access to the underlying `IdTable`
+// and `LocalVocab` associated with the `IdTable`.
 struct TableConstRefWithVocab {
-  std::reference_wrapper<const IdTable> idTable_;
+  IdTableView<0> idTable_;
   std::reference_wrapper<const LocalVocab> localVocab_;
 
-  const IdTable& idTable() const { return idTable_.get(); }
+  const IdTableView<0>& idTable() const { return idTable_; }
 
   const LocalVocab& localVocab() const { return localVocab_.get(); }
 };

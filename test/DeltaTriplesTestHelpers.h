@@ -7,6 +7,9 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
+#ifndef QLEVER_TEST_DELTATRIPLESTESTHELPERS_H
+#define QLEVER_TEST_DELTATRIPLESTESTHELPERS_H
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -14,9 +17,6 @@
 #include "index/DeltaTriples.h"
 #include "index/LocatedTriples.h"
 #include "util/GTestHelpers.h"
-
-#ifndef QLEVER_TEST_DELTATRIPLESTESTHELPERS_H
-#define QLEVER_TEST_DELTATRIPLESTESTHELPERS_H
 
 namespace deltaTriplesTestHelpers {
 
@@ -40,7 +40,8 @@ inline auto InAllPermutations =
 // `DeltaTriples`.
 inline auto NumTriplesInAllPermutations =
     [](size_t expectedNumTriples) -> testing::Matcher<const DeltaTriples&> {
-  return InAllPermutations(AD_PROPERTY(LocatedTriplesPerBlock, numTriples,
+  return InAllPermutations(AD_PROPERTY(LocatedTriplesPerBlock,
+                                       numTriplesForTesting,
                                        testing::Eq(expectedNumTriples)));
 };
 // A matcher that checks `numInserted()`, `numDeleted()` and the derived

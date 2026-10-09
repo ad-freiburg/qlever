@@ -33,12 +33,21 @@ bool isTotalWildcard(const MediaTypeWithQuality& a) {
 
 }  // namespace ad_utility
 
+// _____________________________________________________________________________
 TEST(AcceptHeaderParser, singleType) {
   auto c = parseAcceptHeader("application/json");
   ASSERT_EQ(c.size(), 1u);
   ASSERT_EQ(c[0], MediaType::json);
 }
 
+// _____________________________________________________________________________
+TEST(AcceptHeaderParser, singleTypeNQuads) {
+  auto c = parseAcceptHeader("application/n-quads");
+  ASSERT_EQ(c.size(), 1u);
+  ASSERT_EQ(c[0], MediaType::nquads);
+}
+
+// _____________________________________________________________________________
 TEST(AcceptHeaderParser, multipleTypes) {
   auto c = parseAcceptHeader("application/json,text/plain   ,  text/csv");
   ASSERT_EQ(c.size(), 3u);
@@ -47,6 +56,7 @@ TEST(AcceptHeaderParser, multipleTypes) {
   ASSERT_EQ(c[2], MediaType::csv);
 }
 
+// _____________________________________________________________________________
 TEST(AcceptHeaderParser, ignoreUnknown) {
   auto c =
       parseAcceptHeader("application/json,unknown/strangeType   ,  text/csv");
@@ -55,6 +65,7 @@ TEST(AcceptHeaderParser, ignoreUnknown) {
   ASSERT_EQ(c[1], MediaType::csv);
 }
 
+// _____________________________________________________________________________
 TEST(AcceptHeaderParser, MultipleTypesCaseInsensitive) {
   auto c = parseAcceptHeader("appLicaTion/jSOn,teXt/Plain   ,  Text/Csv");
   ASSERT_EQ(c.size(), 3u);
@@ -63,11 +74,13 @@ TEST(AcceptHeaderParser, MultipleTypesCaseInsensitive) {
   ASSERT_EQ(c[2], MediaType::csv);
 }
 
+// _____________________________________________________________________________
 TEST(AcceptHeaderParser, AllTypesUnknownThrow) {
   auto p = std::string{"appLicaTion/unknown, unknown/Html   ,  strange/Css"};
   ASSERT_THROW(parseAcceptHeader(p), AcceptHeaderQleverVisitor::Exception);
 }
 
+// _____________________________________________________________________________
 TEST(AcceptHeaderParser, QualityValues) {
   auto p = std::string{
       "application/json;q=0.35, text/Plain, application/octet-stream;q=0.123"};
@@ -87,6 +100,7 @@ TEST(AcceptHeaderParser, QualityValues) {
   ASSERT_THROW(parseAcceptHeader(p), AcceptHeaderQleverVisitor::ParseException);
 }
 
+// _____________________________________________________________________________
 TEST(AcceptHeaderParser, CharsetParametersNotSupported) {
   // Currently the `charset=UTF-8` is simply ignored.
   auto p = std::string{"application/json;charset=UTF-8, text/Plain"};
@@ -96,6 +110,7 @@ TEST(AcceptHeaderParser, CharsetParametersNotSupported) {
   ASSERT_EQ(c[1], MediaType::textPlain);
 }
 
+// _____________________________________________________________________________
 TEST(AcceptHeaderParser, WildcardSubtype) {
   auto p = std::string{"text/*, application/json"};
   auto c = parseAcceptHeader(p);
@@ -114,6 +129,7 @@ TEST(AcceptHeaderParser, WildcardSubtype) {
   ASSERT_EQ(c[1], MediaType::json);
 }
 
+// _____________________________________________________________________________
 TEST(AcceptHeaderParser, TotalWildCard) {
   auto p = std::string{"text/*, */*, application/json"};
   auto c = parseAcceptHeader(p);
@@ -126,6 +142,7 @@ TEST(AcceptHeaderParser, TotalWildCard) {
   ASSERT_TRUE(isTotalWildcard(c[2]));
 }
 
+// _____________________________________________________________________________
 TEST(AcceptHeaderParser, IllegalInput) {
   ASSERT_THROW(parseAcceptHeader("application/json text/html"), ParseException);
   ASSERT_THROW(parseAcceptHeader("application/json; text/html"),
@@ -136,6 +153,7 @@ TEST(AcceptHeaderParser, IllegalInput) {
   ASSERT_THROW(parseAcceptHeader("application/"), ParseException);
 }
 
+// _____________________________________________________________________________
 TEST(AcceptHeaderParser, FindMediaTypeFromAcceptHeader) {
   using ::testing::ElementsAre;
 

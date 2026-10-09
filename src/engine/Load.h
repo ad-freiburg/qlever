@@ -12,6 +12,7 @@
 
 #include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/http/HttpClient.h"
 
 // This class implements the SPARQL UPDATE `LOAD` operation. It reads a turtle
@@ -35,20 +36,18 @@ class Load final : public Operation {
   // instance of the class.
   uint32_t cacheBreaker_ = counter_++;
 
-  // Initialized to the value of the runtime parameter `cache-load-results` at
-  // construction.
-  bool loadResultCachingEnabled_;
-
  public:
   Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
        SendRequestType getResultFunction = sendHttpOrHttpsRequest);
 
   ~Load() override = default;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
+  }
 
-  bool canResultBeCachedImpl() const override;
-
+ public:
   std::string getCacheKeyImpl() const override;
 
   std::string getDescriptor() const override;
@@ -66,6 +65,14 @@ class Load final : public Operation {
   bool knownEmptyResult() override;
 
  private:
+  // LOAD performs a network request and may return different results on
+  // successive invocations, so it is non-deterministic by default. It is
+  // treated as deterministic (and hence cacheable) iff the runtime parameter
+  // `cache-load-results` is enabled, in which case the user guarantees that the
+  // remote endpoint returns a stable result. This is kept consistent with
+  // `getCacheKeyImpl()`, which also reads the parameter live.
+  [[nodiscard]] bool isDeterministicImpl() const override;
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
  protected:

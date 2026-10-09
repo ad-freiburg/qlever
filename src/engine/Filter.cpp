@@ -12,6 +12,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -38,6 +39,21 @@ Filter::Filter(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
+VariableToColumnMap Filter::computeVariableToColumnMap() const {
+  // The columns of the `ExistsJoin`s are only needed to evaluate this filter.
+  // Hide them, so that parents neither join on them nor see them twice.
+  // TODO<StripColumns> Don't write these columns once `Filter` can strip
+  // columns.
+  auto variableColumns = _subtree->getVariableColumns();
+  for (const auto* expression : _expression.getExistsExpressions()) {
+    variableColumns.erase(
+        dynamic_cast<const sparqlExpression::ExistsExpression&>(*expression)
+            .variable());
+  }
+  return variableColumns;
+}
+
+// _____________________________________________________________________________
 std::string Filter::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "FILTER " << _subtree->getCacheKey();
@@ -53,7 +69,7 @@ std::string Filter::getDescriptor() const {
 //______________________________________________________________________________
 void Filter::setPrefilterExpressionForChildren() {
   std::vector<PrefilterVariablePair> prefilterPairs =
-      _expression.getPrefilterExpressionForMetadata();
+      _expression.getPrefilterExpressionForMetadata(getLocalVocabContext());
   auto optNewSubTree =
       _subtree->getUpdatedQueryExecutionTreeWithPrefilterApplied(
           std::move(prefilterPairs));
@@ -70,7 +86,7 @@ Result Filter::computeResult(bool requestLaziness) {
   checkCancellation();
 
   if (subRes->isFullyMaterialized()) {
-    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTable());
+    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTableView());
     AD_LOG_DEBUG << "Filter result computation done." << endl;
 
     return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
@@ -78,7 +94,7 @@ Result Filter::computeResult(bool requestLaziness) {
 
   if (requestLaziness) {
     return {Result::LazyResult{
-                ad_utility::OwningView{ad_utility::CachingTransformInputRange{
+                ad_utility::CachingTransformInputRange{
                     subRes->idTables(),
                     [this, subRes](auto& idTableVocabPair) {
                       IdTable filteredTable = this->filterIdTable(
@@ -86,7 +102,7 @@ Result Filter::computeResult(bool requestLaziness) {
                       return Result::IdTableVocabPair{
                           std::move(filteredTable),
                           std::move(idTableVocabPair.localVocab_)};
-                    }}} |
+                    }} |
 
                 ql::views::filter(
                     [](const auto& pair) { return !pair.idTable_.empty(); })},
@@ -114,9 +130,9 @@ Result Filter::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
-    IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
-                                  Table&& idTable) const {
+CPP_template_def(typename Table)(requires IdTableLike<Table>)
+IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
+                              Table&& idTable) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
 
@@ -129,8 +145,8 @@ CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
 }
 
 // _____________________________________________________________________________
-CPP_template_def(int WIDTH, typename Table)(
-    requires ad_utility::SimilarTo<Table, IdTable>) void Filter::
+CPP_template_def(int WIDTH,
+                 typename Table)(requires IdTableLike<Table>) void Filter::
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
                       std::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};
@@ -138,7 +154,8 @@ CPP_template_def(int WIDTH, typename Table)(
   IdTableStatic<WIDTH> resultTable =
       std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
+      *getExecutionContext(), _subtree->getVariableColumns(),
+      inputTable.template asStaticView<0>(),
       getExecutionContext()->getAllocator(), dummyLocalVocab,
       cancellationHandle_, deadline_);
 
@@ -162,17 +179,15 @@ CPP_template_def(int WIDTH, typename Table)(
       requires sparqlExpression::SingleExpressionResult<T>) {
     if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
       AD_CONTRACT_CHECK(input.size() == evaluationContext.size());
+      AD_CONTRACT_CHECK(singleResult.size() == input.size(),
+                        "The size of a `SetOfIntervals` does not match the "
+                        "size of the evaluation context.");
       // If the expression result is given as a set of intervals, we copy
       // the corresponding parts of `input` to `resultTable`.
-      //
-      // NOTE: One of the interval ends may be larger than `input.size()`
-      // (as the result of a negation).
       auto totalSize = std::accumulate(
           singleResult._intervals.begin(), singleResult._intervals.end(),
-          resultTable.size(), [&input](const auto& sum, const auto& interval) {
-            size_t intervalBegin = interval.first;
-            size_t intervalEnd = std::min(interval.second, input.size());
-            return sum + (intervalEnd - intervalBegin);
+          resultTable.size(), [](const auto& sum, const auto& interval) {
+            return sum + (interval.second - interval.first);
           });
       if (resultTable.empty() && totalSize == inputTable.size()) {
         // The binary filter contains all elements of the input, and we have
@@ -183,7 +198,6 @@ CPP_template_def(int WIDTH, typename Table)(
       }
       checkCancellation();
       for (auto [intervalBegin, intervalEnd] : singleResult._intervals) {
-        intervalEnd = std::min(intervalEnd, input.size());
         resultTable.insertAtEnd(inputTable, intervalBegin, intervalEnd);
         checkCancellation();
       }
@@ -244,6 +258,11 @@ size_t Filter::getCostEstimate() {
                  _subtree->getSizeEstimate(),
                  _subtree->getRootOperation()->getPrimarySortKeyVariable())
              .costEstimate;
+}
+
+// _____________________________________________________________________________
+bool Filter::isDeterministicImpl() const {
+  return _expression.isDeterministic();
 }
 
 // _____________________________________________________________________________

@@ -25,12 +25,20 @@ class CountStarExpression : public SparqlExpression {
   // COUNT * technically is an aggregate.
   AggregateStatus isAggregate() const override;
 
+  // A `COUNT(DISTINCT *)` implicitly reads all the visible columns of its
+  // input, so the machinery that strips unused columns has to know about it.
+  // A plain `COUNT(*)` only needs the number of rows, which is unaffected by
+  // stripping columns.
+  bool readsAllVisibleColumns() const override { return distinct_; }
+
   // ___________________________________________________________________________
   std::string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override;
 
   // ___________________________________________________________________________
   ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+
+  [[nodiscard]] bool isDeterministic() const override { return true; }
 
   bool isDistinct() const { return distinct_; }
 };

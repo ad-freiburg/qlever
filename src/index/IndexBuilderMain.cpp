@@ -9,6 +9,7 @@
 #include <absl/functional/bind_front.h>
 
 #include <boost/program_options.hpp>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
@@ -16,10 +17,12 @@
 
 #include "CompilationInfo.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
+#include "util/ResourceMonitor.h"
 #include "util/json.h"
 
 using std::string;
@@ -117,7 +120,7 @@ auto getFileSpecifications = [](const auto& filetype, auto& inputFile,
   auto check = absl::bind_front(checkNumParameterValues, inputFile.size());
   check(filetype, "--file-format, -F");
   check(defaultGraphs, "--default-graph, -g");
-  check(parseParallel, "--parse-parallel, p");
+  check(parseParallel, "--parallel-parsing, p");
 
   std::vector<qlever::InputFileSpecification> fileSpecs;
   for (size_t i = 0; i < inputFile.size(); ++i) {
@@ -191,6 +194,16 @@ int main(int argc, char** argv) {
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
+  // NOTE: Not parsed into `config.indexRowsPerBlock_` directly, because
+  // `boost::program_options` cannot parse a `std::optional<size_t>` (see the
+  // `validate` functions in `util/ProgramOptionsHelpers.h`). `NonNegative` also
+  // rejects a negative value right away.
+  std::optional<ad_utility::NonNegative> indexRowsPerBlock;
+  bool noResourceUsageLog = false;
+  uint32_t resourceUsageIntervalS = 1;
+
+  ad_utility::ParameterToProgramOptionFactory optionFactory{
+      &globalRuntimeParameters};
 
   boost::program_options::options_description boostOptions(
       "Options for qlever-index");
@@ -213,7 +226,7 @@ int main(int argc, char** argv) {
       "The graph IRI without angle brackets. Write `-` for the default graph. "
       "Can be omitted (then all files use the default graph), specified once "
       "(then all files use that graph), or once per file.");
-  add("parse-parallel,p", po::value(&parseParallel),
+  add("parallel-parsing,p", po::value(&parseParallel),
       "Enable or disable the parallel parser for all files (if specified once) "
       "or once per input file. Parallel parsing works for all input files "
       "using the N-Triples or N-Quads format, as well as for well-behaved "
@@ -260,10 +273,21 @@ int main(int argc, char** argv) {
       po::bool_switch(&config.onlyPsoAndPos_),
       "Only build the PSO and POS permutations. This is faster, but then "
       "queries with predicate variables are not supported");
+  add("add-has-word-triples", po::bool_switch(&config.addHasWordTriples_),
+      "Add `ql:has-word` triples for each word in each literal. This enables "
+      "keyword search in literals via `?literal ql:has-word \"word\"`.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
-      ad_utility::VocabularyType::getListOfSupportedValues());
+      ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
   add("vocabulary-type", po::value(&config.vocabType_), msg.c_str());
+
+  add("geo-point-encoding", po::value(&config.geoPointEncoding_),
+      "How geo points are encoded in the IDs of the index: `z-order` (the "
+      "default), or `lat-major`, which is how they were encoded before "
+      "2026-09-26. The encoding `lat-major` is deprecated, only use it if "
+      "you need to be compatible with software that decodes the IDs of an "
+      "index. With it, a spatial prefilter on points can only restrict the "
+      "latitude.");
 
   add("encode-as-id",
       po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),
@@ -274,6 +298,22 @@ int main(int argc, char** argv) {
       "among non-encoded IRIs is correct, but the order between encoded "
       "and non-encoded IRIs is not");
 
+  add("iri-as-blank-node-regexes",
+      po::value(&config.blankNodeIriRegexes_)->composing()->multitoken(),
+      "Space-separated list of regexes. An IRI that is fully matched by one of "
+      "these regexes (via RE2 full match) is not stored in the vocabulary, but "
+      "converted to a blank node. This saves memory for IRIs that only act as "
+      "internal connector nodes (e.g. statement nodes). The regex is matched "
+      "against the full IRI text including the angle brackets and has to cover "
+      "the entire IRI, so each regex must start with `<`; to allow an "
+      "arbitrary "
+      "suffix, end it with `.*`, e.g. the regex "
+      "`<https://example\\.org/statement/.*>` matches "
+      "`<https://example.org/statement/42>`. Only IRIs are affected. NOTE: "
+      "This is an experimental feature. The affected IRIs behave as ordinary "
+      "blank nodes, so they are no longer recognized as those IRIs if used, "
+      "e.g., in a query or an update.");
+
   // Options for the index building process.
   add("stxxl-memory,m", po::value(&config.memoryLimit_),
       "The amount of memory in to use for sorting during the index build. "
@@ -281,12 +321,50 @@ int main(int argc, char** argv) {
   add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
+  auto rowsPerBlockDescription = absl::StrCat(
+      "The number of rows of one block of the permutations (and of the other "
+      "sorted lists of the index, like materialized views). Index scans "
+      "always read whole blocks, so a smaller value makes selective scans "
+      "read fewer rows, at the price of more block metadata (which is held in "
+      "RAM) and a slightly larger index. The value is stored in the index, so "
+      "that the server uses the same block size when it writes sorted lists "
+      "(for example, for a materialized view). Default: ",
+      DEFAULT_INDEX_ROWS_PER_BLOCK, ".");
+  add("index-rows-per-block", po::value(&indexRowsPerBlock),
+      rowsPerBlockDescription.c_str());
   add("keep-temporary-files,k", po::bool_switch(&config.keepTemporaryFiles_),
       "Do not delete temporary files from index creation for debugging.");
   add("materialized-views", po::value(&materializedViewsJson),
       "create materialized views after index building. Takes a JSON object "
       "mapping view names to SELECT queries for writing the view, for example: "
       R"({"view1": "SELECT ...", "view2": "SELECT ..."})");
+  add("no-resource-usage-log", po::bool_switch(&noResourceUsageLog),
+      "Disable the resource-usage log. By default a TSV log of the RSS, CPU "
+      "and disk I/O of the index build, plus the system-wide I/O stall (Linux "
+      "only), is written next to the index files "
+      "(`<index-basename>.index.resource-usage-log.tsv`).");
+  add("resource-usage-interval-s",
+      po::value(&resourceUsageIntervalS)->default_value(1),
+      "The sampling interval of the resource-usage log in seconds.");
+  auto logLevelDescription = absl::StrCat(
+      "Runtime log level: FATAL, ERROR, WARN, INFO, DEBUG, TIMING, or TRACE. "
+      "Default is INFO. The compile-time level (",
+      LogLevel{ad_utility::compileTimeLogLevel}.toString(),
+      ") applies as an upper bound — messages above it are never emitted "
+      "regardless of this setting.");
+  add("log-level",
+      optionFactory.getProgramOption<&RuntimeParameters::logLevel_>(),
+      logLevelDescription.c_str());
+  add("num-threads,j", po::value(&config.numThreads_),
+      "The number of threads used during the index build. Must be at least 1. "
+      "Default: the number of hardware threads of the machine. NOTE: Currently "
+      "the first pass (parsing the input and creating the partial "
+      "vocabularies), the conversion to global IDs, and the shared thread pool "
+      "that the permutation writer runs on use this number; the other phases "
+      "use their own parallelism (making all phases respect this option is "
+      "work in progress). The memory of the first pass grows "
+      "linearly with this number, since each thread holds one batch of "
+      "`num-triples-per-batch` triples with its partial vocabulary in RAM.");
 
   // Process command line arguments.
   po::variables_map optionsMap;
@@ -315,11 +393,27 @@ int main(int argc, char** argv) {
               << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
+    // Samples RSS and CPU usage for the duration of the build.
+    ad_utility::ResourceMonitor resourceMonitor;
+    if (!noResourceUsageLog) {
+      resourceMonitor.start(config.baseName_ + ".index.resource-usage-log.tsv",
+                            ad_utility::ResourceMonitor::Mode::Truncate,
+                            std::chrono::seconds{resourceUsageIntervalS});
+    }
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
+    if (indexRowsPerBlock.has_value()) {
+      config.indexRowsPerBlock_ = indexRowsPerBlock.value();
+    }
     config.validate();
+    // For index building, let each permutation writer use all threads of the
+    // global thread pool (whose size is only set to `config.numThreads_` inside
+    // `Qlever::buildIndex`). The default is optimized for `rebuild-index`,
+    // where six permutations are written simultaneously.
+    setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(
+        config.numThreads_);
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "

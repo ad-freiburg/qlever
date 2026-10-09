@@ -7,7 +7,7 @@
 
 #include <vector>
 
-#include "engine/LocalVocab.h"
+#include "index/LocalVocab.h"
 #include "parser/SparqlTriple.h"
 
 namespace updateClause {

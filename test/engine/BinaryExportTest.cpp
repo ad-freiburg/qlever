@@ -16,6 +16,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/Id.h"
+#include "index/ExportIds.h"
 #include "parser/SelectClause.h"
 #include "util/http/HttpClient.h"
 
@@ -147,8 +148,11 @@ TEST(BinaryExportHelpers, rewriteVocabIds) {
 TEST(BinaryExportHelpers, getPrefixMapping) {
   auto* qec = ad_utility::testing::getQec();
 
-  std::vector<std::string> remotePrefixes = {"<http://example.org/",
-                                             "<http://other.org/"};
+  std::vector<encodedIri::Pattern> remotePrefixes = {
+      encodedIri::plainPrefixPattern("<http://example.org/",
+                                     EncodedIriManager::NumBitsEncoding),
+      encodedIri::plainPrefixPattern("<http://other.org/",
+                                     EncodedIriManager::NumBitsEncoding)};
 
   auto mapping = BinaryExportHelpers::getPrefixMapping(*qec, remotePrefixes);
 
@@ -164,7 +168,7 @@ TEST(BinaryExportHelpers, toIdImpl) {
   // Test with a trivial ID (integer)
   Id intId = Id::makeFromInt(42);
   LocalVocab vocab;
-  std::vector<std::string> prefixes;
+  std::vector<encodedIri::Pattern> prefixes;
   ad_utility::HashMap<uint8_t, uint8_t> prefixMapping;
   ad_utility::HashMap<Id::T, Id> blankNodeMapping;
 
@@ -266,8 +270,8 @@ class BinaryExportRoundTrip : public ::testing::Test {
   // local vocab.
   static std::string idToString(const Index& index, Id id,
                                 const LocalVocab& localVocab) {
-    auto optLitOrIri = ExportQueryExecutionTrees::idToLiteralOrIri(
-        index.getImpl(), id, localVocab);
+    auto optLitOrIri =
+        ql::exportIds::idToLiteralOrIri(index.getImpl(), id, localVocab);
     if (optLitOrIri.has_value()) {
       return optLitOrIri->toStringRepresentation();
     }
@@ -288,7 +292,7 @@ TEST_F(BinaryExportRoundTrip, trivialIdsRoundTrip) {
 
   auto result = roundTrip(qec, qec, table.clone(), {"?x", "?y"});
   ASSERT_TRUE(result.isFullyMaterialized());
-  const auto& resultTable = result.idTable();
+  const auto& resultTable = result.idTableView();
   ASSERT_EQ(resultTable.numRows(), 3);
   ASSERT_EQ(resultTable.numColumns(), 2);
 
@@ -310,8 +314,8 @@ TEST_F(BinaryExportRoundTrip, zeroColumns) {
 
   auto result = roundTrip(qec, qec, std::move(table), {});
   ASSERT_TRUE(result.isFullyMaterialized());
-  EXPECT_EQ(result.idTable().numRows(), 5);
-  EXPECT_EQ(result.idTable().numColumns(), 0);
+  EXPECT_EQ(result.idTableView().numRows(), 5);
+  EXPECT_EQ(result.idTableView().numColumns(), 0);
 }
 
 // _____________________________________________________________________________
@@ -323,8 +327,8 @@ TEST_F(BinaryExportRoundTrip, emptyResult) {
 
   auto result = roundTrip(qec, qec, std::move(table), {"?a", "?b", "?c"});
   ASSERT_TRUE(result.isFullyMaterialized());
-  EXPECT_EQ(result.idTable().numRows(), 0);
-  EXPECT_EQ(result.idTable().numColumns(), 3);
+  EXPECT_EQ(result.idTableView().numRows(), 0);
+  EXPECT_EQ(result.idTableView().numColumns(), 3);
 }
 
 // _____________________________________________________________________________
@@ -334,10 +338,10 @@ TEST_F(BinaryExportRoundTrip, nonTrivialIds) {
 
   // Add some entries to a local vocab.
   LocalVocab localVocab;
-  auto iri1 = ad_utility::triple_component::LiteralOrIri::iriref(
-      "<http://example.org/testEntity1>");
-  auto iri2 = ad_utility::triple_component::LiteralOrIri::iriref(
-      "<http://example.org/testEntity2>");
+  auto iri1 = LocalVocabEntry::fromIriref("<http://example.org/testEntity1>",
+                                          qec->getLocalVocabContext());
+  auto iri2 = LocalVocabEntry::fromIriref("<http://example.org/testEntity2>",
+                                          qec->getLocalVocabContext());
   auto id1 = Id::makeFromLocalVocabIndex(
       localVocab.getIndexAndAddIfNotContained(iri1));
   auto id2 = Id::makeFromLocalVocabIndex(
@@ -350,7 +354,7 @@ TEST_F(BinaryExportRoundTrip, nonTrivialIds) {
   auto result =
       roundTrip(qec, qec, table.clone(), {"?x", "?y"}, localVocab.clone());
   ASSERT_TRUE(result.isFullyMaterialized());
-  const auto& resultTable = result.idTable();
+  const auto& resultTable = result.idTableView();
   ASSERT_EQ(resultTable.numRows(), 2);
 
   // Trivial column should match exactly.
@@ -369,11 +373,12 @@ TEST_F(BinaryExportRoundTrip, differentPrefixMappingsPartialOverlap) {
   // Export QEC has prefix "http://example.org/", import QEC has both
   // "http://example.org/" and "http://other.org/".
   ad_utility::testing::TestIndexConfig exportConfig;
-  exportConfig.encodedIriManager = EncodedIriManager({"http://example.org/"});
+  exportConfig.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
 
   ad_utility::testing::TestIndexConfig importConfig;
-  importConfig.encodedIriManager =
-      EncodedIriManager({"http://example.org/", "http://other.org/"});
+  importConfig.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/", "http://other.org/"};
 
   auto* exportQec = ad_utility::testing::getQec(exportConfig);
   auto* importQec = ad_utility::testing::getQec(importConfig);
@@ -388,7 +393,7 @@ TEST_F(BinaryExportRoundTrip, differentPrefixMappingsPartialOverlap) {
 
   auto result = roundTrip(exportQec, importQec, table.clone(), {"?x", "?y"});
   ASSERT_TRUE(result.isFullyMaterialized());
-  const auto& resultTable = result.idTable();
+  const auto& resultTable = result.idTableView();
   ASSERT_EQ(resultTable.numRows(), 1);
 
   // The encoded IRI should be re-mapped to the import QEC's prefix encoding.
@@ -403,12 +408,12 @@ TEST_F(BinaryExportRoundTrip, differentPrefixMappingsPartialOverlap) {
 TEST_F(BinaryExportRoundTrip, disjointPrefixMappings) {
   // Export QEC has prefix A, import QEC has prefix B (no overlap).
   ad_utility::testing::TestIndexConfig exportConfig;
-  exportConfig.encodedIriManager =
-      EncodedIriManager({"http://export-only.org/"});
+  exportConfig.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://export-only.org/"};
 
   ad_utility::testing::TestIndexConfig importConfig;
-  importConfig.encodedIriManager =
-      EncodedIriManager({"http://import-only.org/"});
+  importConfig.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://import-only.org/"};
 
   auto* exportQec = ad_utility::testing::getQec(exportConfig);
   auto* importQec = ad_utility::testing::getQec(importConfig);
@@ -422,7 +427,7 @@ TEST_F(BinaryExportRoundTrip, disjointPrefixMappings) {
 
   auto result = roundTrip(exportQec, importQec, table.clone(), {"?x"});
   ASSERT_TRUE(result.isFullyMaterialized());
-  const auto& resultTable = result.idTable();
+  const auto& resultTable = result.idTableView();
   ASSERT_EQ(resultTable.numRows(), 1);
 
   // No matching prefix on import side, so the IRI falls back to string-based
@@ -469,7 +474,7 @@ TEST_F(BinaryExportRoundTrip, trivialOnlyIdsNoVocabNeeded) {
 
   auto result = roundTrip(qec, qec, table.clone(), {"?x"});
   ASSERT_TRUE(result.isFullyMaterialized());
-  const auto& resultTable = result.idTable();
+  const auto& resultTable = result.idTableView();
   ASSERT_EQ(resultTable.numRows(), 50);
   for (int i = 0; i < 50; ++i) {
     EXPECT_EQ(resultTable(i, 0), Id::makeFromInt(i));

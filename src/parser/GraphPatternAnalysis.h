@@ -8,20 +8,24 @@
 #define QLEVER_SRC_PARSER_GRAPHPATTERNANALYSIS_H_
 
 #include "parser/GraphPatternOperation.h"
+#include "parser/VariableCounter.h"
 
 // This module contains helpers for analyzing the structure of graph patterns.
 
 // _____________________________________________________________________________
 namespace graphPatternAnalysis {
 
-// Check whether certain graph patterns can be ignored when we are only
-// interested in the bindings for variables from `variables_` as they do not
-// affect the result for these `variables_`.
+// Check whether a given `GraphPatternOperation` is invariant with respect to
+// the variable usage in the surrounding `GraphPattern`, meaning that removing
+// it would not affect the result of the query. The variable usage is counted
+// once up front (across the whole `GraphPattern`) into `variableCounts_`; a
+// later `operator()(op)` query then asks whether `op`'s variables appear at
+// most once in the pattern (i.e. only inside `op` itself).
 //
-// For example: A basic graph pattern (a list of triples) is invariant to a
-// `BIND` statement whose target variable is not contained in the basic graph
-// pattern, because the `BIND` only adds its own column, but neither adds nor
-// deletes result rows.
+// For example: a `BIND(... AS ?y)` is invariant when `?y` is not referenced
+// anywhere else in the pattern (the `BIND` only adds its own column without
+// adding or removing rows). A single-row `VALUES` clause is invariant when
+// none of its variables are referenced elsewhere.
 //
 // This is currently used for the `MaterializedViewsManager`'s
 // `QueryPatternCache`.
@@ -29,7 +33,13 @@ namespace graphPatternAnalysis {
 // NOTE: This does not guarantee completeness, so it might return `false` even
 // though we could be invariant to a `GraphPatternOperation`.
 struct BasicGraphPatternsInvariantTo {
-  ad_utility::HashSet<Variable> variables_;
+  parsedQuery::VariableCounter variableCounts_;
+
+  // Initialize with a `GraphPattern`.
+  explicit BasicGraphPatternsInvariantTo(const parsedQuery::GraphPattern& gp);
+
+  explicit BasicGraphPatternsInvariantTo(parsedQuery::VariableCounter vc)
+      : variableCounts_{std::move(vc)} {}
 
   bool operator()(const parsedQuery::Bind& bind) const;
   bool operator()(const parsedQuery::Values& values) const;
@@ -43,9 +53,14 @@ struct BasicGraphPatternsInvariantTo {
             T, pq::Optional, pq::Union, pq::Subquery, pq::TransPath,
             pq::BasicGraphPattern, pq::Service, pq::PathQuery, pq::SpatialQuery,
             pq::TextSearchQuery, pq::Minus, pq::GroupGraphPattern, pq::Describe,
-            pq::Load, pq::NamedCachedResult, pq::MaterializedViewQuery>);
+            pq::Load, pq::NamedCachedResult, pq::MaterializedViewQuery,
+            pq::ExternalValuesQuery>);
     return false;
   }
+
+ private:
+  // Check that the given variable is counted at most once by `variableCounts_`.
+  bool variableAppearsAtMostOnce(const Variable& var) const;
 };
 
 }  // namespace graphPatternAnalysis

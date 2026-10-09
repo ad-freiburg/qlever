@@ -7,8 +7,8 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
-#include "index/PrefixHeuristic.h"
 #include "index/vocabulary/PrefixCompressor.h"
+#include "index/vocabulary/PrefixHeuristic.h"
 #include "util/CompilerWarnings.h"
 #include "util/FsstCompressor.h"
 

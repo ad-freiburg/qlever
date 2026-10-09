@@ -37,10 +37,122 @@ TEST(StringUtils, utf8ToLower) {
 }
 
 // _____________________________________________________________________________
+TEST(StringUtils, utf8ToLowerWithLocale) {
+  // With the default (root) locale, ASCII `I` lowercases to `i`.
+  EXPECT_EQ("i", utf8ToLower("I"));
+  EXPECT_EQ("i", utf8ToLower("I", ""));
+  // The Turkish locale instead lowercases `I` to the dotless `ı` (U+0131).
+  EXPECT_EQ("ı", utf8ToLower("I", "tr"));
+}
+
+// _____________________________________________________________________________
 TEST(StringUtils, utf8ToUpper) {
   EXPECT_EQ("SCHINDLER'S LIST", utf8ToUpper("Schindler's List"));
   EXPECT_EQ("#+-_BIMM__BAMM++", utf8ToUpper("#+-_bImM__baMm++"));
   EXPECT_EQ("FÔÉSSAÉÉ", utf8ToUpper("FôéßaÉé"));
+}
+
+// _____________________________________________________________________________
+TEST(StringUtils, utf8ToUpperWithLocale) {
+  // With the default (root) locale, ASCII `i` uppercases to `I`.
+  EXPECT_EQ("I", utf8ToUpper("i"));
+  EXPECT_EQ("I", utf8ToUpper("i", ""));
+  // The Turkish locale instead uppercases `i` to the dotted `İ` (U+0130).
+  EXPECT_EQ("İ", utf8ToUpper("i", "tr"));
+}
+
+// _____________________________________________________________________________
+// Test the ICU-free (`useICU == false`) implementations of `utf8ToLower` and
+// `utf8ToUpper`. These only fold ASCII characters; all other bytes (including
+// the bytes of multibyte UTF-8 characters) are passed through unchanged.
+TEST(StringUtils, utf8ToLowerUpperNoICU) {
+  // For pure ASCII the result is identical to the ICU-based version.
+  EXPECT_EQ("schindler's list", utf8ToLower<false>("Schindler's List"));
+  EXPECT_EQ("#+-_foo__bar++", utf8ToLower<false>("#+-_foo__Bar++"));
+  EXPECT_EQ("SCHINDLER'S LIST", utf8ToUpper<false>("Schindler's List"));
+  EXPECT_EQ("#+-_BIMM__BAMM++", utf8ToUpper<false>("#+-_bImM__baMm++"));
+
+  // Non-ASCII characters are left untouched (no Unicode-aware case folding);
+  // only the ASCII letters are folded.
+  EXPECT_EQ("cafÉ", utf8ToLower<false>("CAFÉ"));
+  EXPECT_EQ("CAFé", utf8ToUpper<false>("café"));
+  EXPECT_EQ("aÔb", utf8ToLower<false>("AÔB"));
+  EXPECT_EQ("AÔB", utf8ToUpper<false>("aÔb"));
+
+  // The `localeName` is ignored, as locale-specific case folding requires ICU.
+  // Compare the `utf8ToLowerWithLocale` and `utf8ToUpperWithLocale` tests
+  // above, where the Turkish locale yields `ı` and `İ` respectively.
+  EXPECT_EQ("i", utf8ToLower<false>("I", "tr"));
+  EXPECT_EQ("I", utf8ToUpper<false>("i", "tr"));
+
+  // The `useICU == true` instantiation exists and behaves like the default.
+  EXPECT_EQ(utf8ToLower<true>("Schindler's List"),
+            utf8ToLower("Schindler's List"));
+  EXPECT_EQ(utf8ToUpper<true>("Schindler's List"),
+            utf8ToUpper("Schindler's List"));
+}
+
+// _____________________________________________________________________________
+// `getUTF8Prefix` counts Unicode codepoints, never splits a multi-byte
+// character, and is ICU-free.
+TEST(StringUtils, getUTF8Prefix) {
+  using ad_utility::getUTF8Prefix;
+  // Pure ASCII.
+  {
+    auto [num, prefix] = getUTF8Prefix("Apfelsaft", 3);
+    EXPECT_EQ(num, 3u);
+    EXPECT_EQ(prefix, "Apf");
+  }
+  // "Flöhe" where 'ö' occupies two bytes (0xC3 0xB6): codepoints are counted,
+  // so the prefix of length 3 is "Flö" (four bytes) and the multi-byte
+  // character is never split.
+  {
+    auto [num, prefix] = getUTF8Prefix("Flöhe", 3);
+    EXPECT_EQ(num, 3u);
+    EXPECT_EQ(prefix, "Flö");
+  }
+  // Requesting more codepoints than available returns the whole string.
+  {
+    auto [num, prefix] = getUTF8Prefix("ab", 100);
+    EXPECT_EQ(num, 2u);
+    EXPECT_EQ(prefix, "ab");
+  }
+  // Malformed UTF-8 is rejected: a stray continuation byte, a truncated
+  // sequence, an overlong encoding, and a surrogate.
+  for (std::string_view malformed :
+       {"\x80", "\xC3", "\xC0\xAF", "\xED\xA0\x80"}) {
+    EXPECT_THROW(getUTF8Prefix(malformed, 1), std::runtime_error);
+  }
+}
+
+// _____________________________________________________________________________
+// Test the ICU-free `utf8EncodeCodepoint` for one-, two-, three- and four-byte
+// codepoints as well as the replacement of out-of-range codepoints.
+TEST(StringUtils, utf8EncodeCodepoint) {
+  auto encode = [](uint32_t cp) {
+    std::string out;
+    ad_utility::utf8EncodeCodepoint(cp, out);
+    return out;
+  };
+  EXPECT_EQ(encode(0x41), "A");              // one byte
+  EXPECT_EQ(encode(0x00E9), "é");            // two bytes (U+00E9)
+  EXPECT_EQ(encode(0x2702), "✂");            // three bytes
+  EXPECT_EQ(encode(0x1F605), "\U0001F605");  // four bytes
+  // The boundaries between the one-, two-, three- and four-byte encodings.
+  EXPECT_EQ(encode(0x7F), "\x7F");
+  EXPECT_EQ(encode(0x80), "\xC2\x80");
+  EXPECT_EQ(encode(0x7FF), "\xDF\xBF");
+  EXPECT_EQ(encode(0x800), "\xE0\xA0\x80");
+  EXPECT_EQ(encode(0xFFFF), "\xEF\xBF\xBF");
+  EXPECT_EQ(encode(0x10000), "\xF0\x90\x80\x80");
+  // Out-of-range codepoints are replaced by U+FFFD.
+  EXPECT_EQ(encode(0x110000), "�");
+  // Surrogates (reserved for UTF-16, not valid Unicode scalar values) are also
+  // replaced by U+FFFD; their direct neighbors are encoded normally.
+  EXPECT_EQ(encode(0xD800), "�");
+  EXPECT_EQ(encode(0xDFFF), "�");
+  EXPECT_EQ(encode(0xD7FF), "\xED\x9F\xBF");
+  EXPECT_EQ(encode(0xE000), "\xEE\x80\x80");
 }
 
 // _____________________________________________________________________________
@@ -459,4 +571,70 @@ TEST(StringUtils, commonPrefix) {
   EXPECT_EQ(ad_utility::commonPrefix("a", "ab"), "a");
   EXPECT_EQ(ad_utility::commonPrefix("ab", "b"), "");
   EXPECT_EQ(ad_utility::commonPrefix("b", "ab"), "");
+}
+
+// _____________________________________________________________________________
+TEST(StringUtils, makeCharLookupTableAndFindFirstOfWithLookupTable) {
+  using ad_utility::findFirstOfWithLookupTable;
+  using ad_utility::makeCharLookupTable;
+  constexpr std::string_view delimiters = " \t\r\n,;[]():";
+  constexpr ad_utility::CharLookupTable table = makeCharLookupTable(delimiters);
+  constexpr size_t npos = std::string_view::npos;
+
+  // `makeCharLookupTable` sets exactly the entries of the given characters.
+  // Note that this also covers the bytes >= 128, which must not be interpreted
+  // as negative indices.
+  for (size_t i = 0; i < table.size(); ++i) {
+    bool isDelimiter = delimiters.find(static_cast<char>(i)) != npos;
+    EXPECT_EQ(table[i], isDelimiter) << "for the byte " << i;
+  }
+  static_assert(table[static_cast<unsigned char>(':')]);
+  static_assert(!table[static_cast<unsigned char>('x')]);
+  // The empty set of characters matches nothing.
+  EXPECT_EQ(findFirstOfWithLookupTable(delimiters, makeCharLookupTable("")),
+            npos);
+  // All the calls to `makeCharLookupTable` above are evaluated at compile time
+  // (or have an empty argument); check that the result is also correct when it
+  // is called at runtime with a nonempty argument.
+  std::string delimitersAtRuntime{delimiters};
+  EXPECT_EQ(makeCharLookupTable(delimitersAtRuntime), table);
+
+  // Each single delimiter is found at the correct position.
+  for (char c : delimiters) {
+    std::string input = std::string{"ab"} + c + "cd";
+    EXPECT_EQ(findFirstOfWithLookupTable(input, table), 2u)
+        << "for the delimiter " << static_cast<int>(c);
+  }
+
+  // Input without any delimiter, including non-ASCII input (the UTF-8 encoding
+  // of "ä" consists of the bytes 0xC3 and 0xA4).
+  EXPECT_EQ(findFirstOfWithLookupTable("", table), npos);
+  EXPECT_EQ(findFirstOfWithLookupTable("abc", table), npos);
+  EXPECT_EQ(findFirstOfWithLookupTable("äöü", table), npos);
+
+  // The `pos` argument skips a prefix of the input; `pos == view.size()` is
+  // allowed and yields `npos`.
+  EXPECT_EQ(findFirstOfWithLookupTable("a:b:c", table), 1u);
+  EXPECT_EQ(findFirstOfWithLookupTable("a:b:c", table, 1), 1u);
+  EXPECT_EQ(findFirstOfWithLookupTable("a:b:c", table, 2), 3u);
+  EXPECT_EQ(findFirstOfWithLookupTable("a:b:c", table, 4), npos);
+  EXPECT_EQ(findFirstOfWithLookupTable("a:b:c", table, 5), npos);
+  EXPECT_EQ(findFirstOfWithLookupTable("", table, 0), npos);
+
+  // For all positions, the result is the same as that of the
+  // `std::string_view::find_first_of` that `findFirstOfWithLookupTable`
+  // replaces.
+  auto expectSameAsFindFirstOf = [&table, &delimiters](std::string_view view) {
+    for (size_t pos = 0; pos <= view.size(); ++pos) {
+      EXPECT_EQ(findFirstOfWithLookupTable(view, table, pos),
+                view.find_first_of(delimiters, pos))
+          << "for the input \"" << view << "\" and the position " << pos;
+    }
+  };
+  expectSameAsFindFirstOf("");
+  expectSameAsFindFirstOf(":");
+  expectSameAsFindFirstOf("wd:Q430 someotherContent");
+  expectSameAsFindFirstOf("noDelimiterAtAll");
+  expectSameAsFindFirstOf("[](),;:\t\r\n ");
+  expectSameAsFindFirstOf("<http://example.org/äöü> ;");
 }

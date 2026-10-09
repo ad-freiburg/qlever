@@ -8,6 +8,7 @@
 #include "engine/Operation.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
 
 // BIND operation.
 class Bind : public Operation {
@@ -29,13 +30,17 @@ class Bind : public Operation {
   const parsedQuery::Bind& bind() const { return _bind; }
   [[nodiscard]] std::string getDescriptor() const override;
   [[nodiscard]] size_t getResultWidth() const override;
-  std::vector<QueryExecutionTree*> getChildren() override;
-  size_t getCostEstimate() override;
-  bool supportsLimitOffset() const override;
-  void onLimitOffsetChanged(
-      const LimitOffsetClause& limitOffset) const override;
 
  private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
+ public:
+  size_t getCostEstimate() override;
+  LimitOffsetHandling handlesLimitOffset() const override;
+  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
+
+ private:
+  [[nodiscard]] bool isDeterministicImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
 
@@ -49,7 +54,7 @@ class Bind : public Operation {
  private:
   Result computeResult(bool requestLaziness) override;
 
-  static IdTable cloneSubView(const IdTable& idTable,
+  static IdTable cloneSubView(const IdTableView<0>& idTable,
                               const std::pair<size_t, size_t>& subrange);
 
   // Implementation for the binding of arbitrary expressions.

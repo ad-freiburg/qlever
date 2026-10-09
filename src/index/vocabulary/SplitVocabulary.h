@@ -1,25 +1,39 @@
-// Copyright 2025 University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "backports/functional.h"
+#include "backports/type_traits.h"
 #include "global/ValueId.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "rdfTypes/GeoCellGrid.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/BitUtils.h"
+#include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 
 // The signature of the SplitFunction for a SplitVocabulary. For each literal or
 // IRI, it should return a marker index which of the underlying vocabularies of
@@ -30,28 +44,50 @@ template <typename T>
 CPP_concept SplitFunctionT =
     ad_utility::InvocableWithExactReturnType<T, uint8_t, std::string_view>;
 
-// The signature of the SplitFilenameFunction for a SplitVocabulary. For a given
-// base filename the function should construct readable filenames for each of
-// the underlying vocabularies. This should usually happen by appending a suffix
-// for each vocabulary.
+// The type of the FilenameSuffixes of a SplitVocabulary with `N` underlying
+// vocabularies: for each of them, the suffix that is appended to the base
+// filename of the SplitVocabulary to obtain the base filename of that
+// underlying vocabulary. The suffixes have to be distinct.
+// Note: In C++17 an array cannot be a template argument directly, but a
+// reference to an array with static storage duration can, which is why a
+// SplitVocabulary takes its suffixes by reference (`const auto&`).
 template <typename T, uint8_t N>
-CPP_concept SplitFilenameFunctionT =
-    ad_utility::InvocableWithExactReturnType<T, std::array<std::string, N>,
-                                             std::string_view>;
+CPP_concept FilenameSuffixesT =
+    std::is_same_v<std::decay_t<T>, std::array<std::string_view, N>>;
 
 // Forward declaration of `PolymorphicVocabulary` for static assertion.
 class PolymorphicVocabulary;
 
+// Forward declaration of `SplitVocabulary` for the `isSplitVocabulary` trait
+// below.
+template <typename SplitFunction, const auto& FilenameSuffixes,
+          typename... UnderlyingVocabularies>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SplitFunction>&& FilenameSuffixesT<
+        decltype(FilenameSuffixes), sizeof...(UnderlyingVocabularies)>)
+class SplitVocabulary;
+
+// True iff `T` is an instantiation of `SplitVocabulary`. Note that
+// `ad_utility::isInstantiation` cannot be used for this, because
+// `SplitVocabulary` has a non-type template parameter and hence does not match
+// a `template <typename...> typename` template template parameter.
+template <typename T>
+constexpr bool isSplitVocabulary = false;
+
+template <typename SplitFunction, const auto& FilenameSuffixes,
+          typename... UnderlyingVocabularies>
+constexpr bool isSplitVocabulary<SplitVocabulary<
+    SplitFunction, FilenameSuffixes, UnderlyingVocabularies...>> = true;
+
 // A SplitVocabulary is a vocabulary layer that divides words into different
 // underlying vocabularies. It is templated on the UnderlyingVocabularies as
 // well as a SplitFunction that decides which underlying vocabulary is used for
-// each word and a SplitFilenameFunction that assigns filenames to underlying
-// vocabularies.
-template <typename SplitFunction, typename SplitFilenameFunction,
+// each word and the FilenameSuffixes of the underlying vocabularies.
+template <typename SplitFunction, const auto& FilenameSuffixes,
           typename... UnderlyingVocabularies>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SplitFunction>&& SplitFilenameFunctionT<
-        SplitFilenameFunction, sizeof...(UnderlyingVocabularies)>)
+    requires SplitFunctionT<SplitFunction>&& FilenameSuffixesT<
+        decltype(FilenameSuffixes), sizeof...(UnderlyingVocabularies)>)
 class SplitVocabulary {
  public:
   // A SplitVocabulary must have at least two and at most 255 underlying
@@ -63,13 +99,28 @@ class SplitVocabulary {
   static constexpr uint8_t numberOfVocabs =
       static_cast<uint8_t>(sizeof...(UnderlyingVocabularies));
 
+  // There has to be exactly one filename suffix per underlying vocabulary. This
+  // is also part of the constraints of this class, but is repeated here because
+  // those are not enforced in the C++17 mode (see `QL_CONCEPT_OR_NOTHING`).
+  static_assert(FilenameSuffixesT<decltype(FilenameSuffixes), numberOfVocabs>);
+
+  // The suffixes have to be distinct, as otherwise two of the underlying
+  // vocabularies would be stored in the same files.
+  static_assert(ad_utility::allDistinct(FilenameSuffixes));
+
   // Because of the marker bits, a `SplitVocabulary` should not hold another
   // `SplitVocabulary` or a `PolymorphicVocabulary`, where it cannot be
   // guaranteed that it does not hold an underlying `SplitVocabulary`.
-  static_assert(!ad_utility::anyIsInstantiationOf<SplitVocabulary,
-                                                  UnderlyingVocabularies...>);
+  static_assert(!(... || isSplitVocabulary<UnderlyingVocabularies>));
   static_assert(
       !ad_utility::SameAsAny<PolymorphicVocabulary, UnderlyingVocabularies...>);
+  // At most one of the underlying vocabularies may be a `GeoVocabulary`, so
+  // that `setGeoCellGrid` and `getGeoCellGrid` below refer to a unique one.
+  static_assert(
+      (0 + ... +
+       (ad_utility::isInstantiation<UnderlyingVocabularies, GeoVocabulary>
+            ? 1
+            : 0)) <= 1);
 
   // Assuming we only make use of methods that all UnderlyingVocabularies
   // provide, we simplify this class by using an array over a variant instead of
@@ -93,13 +144,40 @@ class SplitVocabulary {
   static constexpr uint64_t vocabIndexBitMask =
       ad_utility::bitMaskForLowerBits(markerShift);
 
-  // Instances of the functions used for implementing the specific split logic
+  // Instance of the function used for implementing the specific split logic
   static constexpr SplitFunction splitFunction_{};
-  static constexpr SplitFilenameFunction splitFilenameFunction_{};
 
  private:
   // Array that holds all underlying vocabularies.
   UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
+
+  // The base filenames of all the underlying vocabularies for the given base
+  // `filename` of this vocabulary, obtained by appending the
+  // `FilenameSuffixes`.
+  static std::array<std::string, numberOfVocabs> underlyingFilenames(
+      std::string_view filename) {
+    std::array<std::string, numberOfVocabs> filenames;
+    for (uint8_t i = 0; i < numberOfVocabs; ++i) {
+      filenames[i] = absl::StrCat(filename, FilenameSuffixes[i]);
+    }
+    return filenames;
+  }
+
+  // Implementation of `scanAll`, written separately because in C++17, lambdas
+  // can't have explicit template parameters.
+  template <size_t... Is>
+  auto scanAllImpl(std::index_sequence<Is...>) const {
+    return ::ranges::views::concat(
+        (ad_utility::OwningView{std::visit(
+             [](const auto& vocab) {
+               return VocabularyScanRange{vocab.scanAll()};
+             },
+             underlying_[Is])} |
+         ql::views::transform([](const IndexAndWord& indexAndWord) {
+           return IndexAndWord{addMarker(indexAndWord.index_, Is),
+                               indexAndWord.word_};
+         }))...);
+  }
 
  public:
   // Check validity of vocabIndex and marker, then return a new 64 bit index
@@ -109,7 +187,7 @@ class SplitVocabulary {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs &&
                          vocabIndex <= vocabIndexBitMask);
     return vocabIndex | (static_cast<uint64_t>(marker) << markerShift);
-  };
+  }
 
   // Extract the marker from a full 64 bit index.
   static constexpr uint8_t getMarker(uint64_t indexWithMarker) {
@@ -122,7 +200,7 @@ class SplitVocabulary {
   // which vocabulary this word would go)
   static uint8_t getMarkerForWord(const std::string_view& word) {
     return splitFunction_(word);
-  };
+  }
 
   // Helper to detect if a "special" vocabulary is used.
   static constexpr bool isSpecialVocabIndex(uint64_t indexWithMarker) {
@@ -133,14 +211,14 @@ class SplitVocabulary {
   // bits.
   static constexpr uint64_t getVocabIndex(uint64_t indexWithMarker) {
     return indexWithMarker & vocabIndexBitMask;
-  };
+  }
 
   // Close all underlying vocabularies.
   void close();
 
   // Read the vocabulary from files: all underlying vocabularies will be read
-  // using the filenames returned by SplitFilenameFunction for the given base
-  // filename.
+  // using the base filename plus the corresponding one of the
+  // `FilenameSuffixes`.
   void readFromFile(const std::string& filename);
 
   // The item-at operator retrieves a word by a given index. The index is
@@ -156,7 +234,10 @@ class SplitVocabulary {
     // Retrieve the word from the indicated underlying vocabulary
     return std::visit(
         [&unmarkedIdx](auto& vocab) {
-          AD_CORRECTNESS_CHECK(unmarkedIdx < vocab.size());
+          // For a `GeoVocabulary` with a geo cell grid, the indices exceed
+          // its size by construction (the cell index is in the upper bits);
+          // it checks the position itself.
+          AD_CORRECTNESS_CHECK(unmarkedIdx < endIndexOf(vocab));
           // TODO<ullingerc>: How to handle if the different underlying
           // vocabularies return different types (std::string / std::string_view
           // / ...) on their operator[] implementations? A variant will probably
@@ -164,6 +245,23 @@ class SplitVocabulary {
           return vocab[unmarkedIdx];
         },
         underlying_[marker]);
+  }
+
+  // Iterate over all words of all underlying vocabularies, one after the other,
+  // together with their global (marker-encoded) index.
+  auto scanAll() const {
+    return scanAllImpl(std::make_index_sequence<numberOfVocabs>{});
+  }
+
+  //____________________________________________________________________________
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+  }
+
+  //____________________________________________________________________________
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return ad_utility::vocabulary::lookupBatchesStreamed(*this,
+                                                         std::move(input));
   }
 
   // The size of a SplitVocabulary is the sum of the sizes of the underlying
@@ -222,10 +320,9 @@ class SplitVocabulary {
                    word, comparator, marker)
                    .positionOfWord(word);
     if (!pos.has_value()) {
-      auto end =
-          addMarker(std::visit([](auto& v) -> uint64_t { return v.size(); },
-                               underlying_[marker]),
-                    marker);
+      // The word is larger than all words of its vocabulary, so return its
+      // past-the-end index.
+      auto end = addMarker(endIndexOfUnderlying(marker), marker);
       return {end, end};
     }
     return pos.value();
@@ -247,9 +344,60 @@ class SplitVocabulary {
     return underlying_[marker];
   }
 
-  // Load from file: open all underlying vocabularies on the corresponding
-  // result of SplitFilenameFunction for the given base filename.
+  // Load from file: open all underlying vocabularies on the given base filename
+  // plus the corresponding one of the `FilenameSuffixes`.
   void open(const std::string& filename);
+
+  // Forward the geo cell grid to the underlying `GeoVocabulary`, if there is
+  // one (see there for the effect). No-op otherwise.
+  void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
+    for (auto& vocab : underlying_) {
+      std::visit(
+          [&grid](auto& v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+              v.setGeoCellGrid(grid);
+            }
+          },
+          vocab);
+    }
+  }
+
+  // The geo cell grid of the underlying `GeoVocabulary` (there is at most
+  // one, see the `static_assert` above), or `std::nullopt` if there is none
+  // or it has no grid.
+  std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
+    std::optional<ad_utility::GeoCellGrid> result = std::nullopt;
+    for (const auto& vocab : underlying_) {
+      std::visit(
+          [&result](const auto& v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+              result = v.getGeoCellGrid();
+            }
+          },
+          vocab);
+    }
+    return result;
+  }
+
+  // The past-the-end index of an underlying vocabulary, which is also the
+  // upper bound for its valid indices. For a `GeoVocabulary` with a geo cell
+  // grid this is not simply the size (see `GeoVocabulary::endIndex`).
+  template <typename V>
+  static uint64_t endIndexOf(const V& vocab) {
+    if constexpr (ad_utility::isInstantiation<V, GeoVocabulary>) {
+      return vocab.endIndex();
+    } else {
+      return vocab.size();
+    }
+  }
+
+  // The same for the underlying vocabulary with the given `marker`.
+  uint64_t endIndexOfUnderlying(uint8_t marker) const {
+    return std::visit([](const auto& v) { return endIndexOf(v); },
+                      underlying_[marker]);
+  }
 
   // This word writer writes words to different vocabularies depending on the
   // result of SplitFunction.
@@ -259,7 +407,8 @@ class SplitVocabulary {
 
    public:
     // Construct a WordWriter for each vocabulary in the given array. Determine
-    // filenames of underlying vocabularies using the SplitFilenameFunction.
+    // the filenames of the underlying vocabularies using the
+    // `FilenameSuffixes`.
     WordWriter(const UnderlyingVocabsArray& underlyingVocabularies,
                const std::string& filename);
 
@@ -272,6 +421,21 @@ class SplitVocabulary {
 
     ~WordWriter() override;
   };
+
+  // The files of all the underlying vocabularies, each prefixed with the
+  // respective one of the `FilenameSuffixes`.
+  static FileSuffixes fileSuffixes() {
+    FileSuffixes suffixes;
+    uint8_t i = 0;
+    auto addOne = [&suffixes, &i](auto vocabulary) {
+      using Vocabulary = typename decltype(vocabulary)::type;
+      addFileSuffixesWithPrefix(suffixes, FilenameSuffixes.at(i),
+                                Vocabulary::fileSuffixes());
+      ++i;
+    };
+    (addOne(ql::type_identity<UnderlyingVocabularies>{}), ...);
+    return suffixes;
+  }
 
   // Construct a SplitVocabulary::WordWriter that creates WordWriters on all
   // underlying vocabularies and calls the appropriate one depending on the
@@ -305,19 +469,14 @@ namespace detail::splitVocabulary {
 // vocabulary 0 except WKT literals, which go to vocabulary 1.
 struct GeoSplitFunc {
   uint8_t operator()(std::string_view word) const {
-    return ql::starts_with(word, "\"") &&
-           ql::ends_with(word, GEO_LITERAL_SUFFIX);
+    return ad_utility::isWktLiteral(word);
   }
 };
 
-// Split filename function for Well-Known Text Literals: The vocabulary 0 is
-// saved under the base filename and WKT literals are saved with a suffix
-// ".geometry"
-struct GeoFilenameFunc {
-  std::array<std::string, 2> operator()(std::string_view base) const {
-    return {std::string(base), absl::StrCat(base, ".geometry")};
-  }
-};
+// Filename suffixes for Well-Known Text Literals: The vocabulary 0 is saved
+// under the base filename and WKT literals are saved with a suffix ".geometry"
+inline constexpr std::array<std::string_view, 2> geoFilenameSuffixes{
+    "", ".geometry"};
 
 }  // namespace detail::splitVocabulary
 
@@ -326,7 +485,7 @@ struct GeoFilenameFunc {
 template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
     SplitVocabulary<detail::splitVocabulary::GeoSplitFunc,
-                    detail::splitVocabulary::GeoFilenameFunc,
+                    detail::splitVocabulary::geoFilenameSuffixes,
                     UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

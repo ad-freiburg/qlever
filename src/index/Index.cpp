@@ -17,7 +17,18 @@ Index::Index(Index&&) noexcept = default;
 // Needs to be in the .cpp file because of the unique_ptr to a forwarded class.
 // See
 // https://stackoverflow.com/questions/13414652/forward-declaration-with-unique-ptr
-Index::~Index() = default;
+Index::~Index() {
+  // NOTE: The message is only logged for an index that was loaded from disk.
+  // It is useful when a process unloads an index and keeps running, in
+  // particular when the runtime index rebuild retires the old index as soon
+  // as the last query on it has finished (see `Qlever::swapInRebuiltIndex`).
+  // For an index that was merely built (`qlever-index`), it would be
+  // confusing, because that index was never loaded in the first place.
+  if (pimpl_ && pimpl_->wasLoadedFromDisk()) {
+    AD_LOG_INFO << "Index with basename \"" << pimpl_->getOnDiskBase()
+                << "\" was unloaded" << std::endl;
+  }
+}
 
 // ____________________________________________________________________________
 void Index::createFromOnDiskIndex(const std::string& onDiskBase,
@@ -44,20 +55,6 @@ auto Index::getNonConstVocabForTesting() -> Vocab& {
 // ____________________________________________________________________________
 ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
   return pimpl_->getBlankNodeManager();
-}
-
-// ____________________________________________________________________________
-size_t Index::getCardinality(
-    const TripleComponent& comp, Permutation::Enum p,
-    const LocatedTriplesState& locatedTriplesState) const {
-  return pimpl_->getCardinality(comp, p, locatedTriplesState);
-}
-
-// ____________________________________________________________________________
-size_t Index::getCardinality(
-    Id id, Permutation::Enum p,
-    const LocatedTriplesState& locatedTriplesState) const {
-  return pimpl_->getCardinality(id, p, locatedTriplesState);
 }
 
 // ____________________________________________________________________________
@@ -152,6 +149,9 @@ bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
 
 // ____________________________________________________________________________
+bool& Index::addHasWordTriples() { return pimpl_->addHasWordTriples(); }
+
+// ____________________________________________________________________________
 bool& Index::doNotLoadPermutations() { return pimpl_->doNotLoadPermutations(); }
 
 // ____________________________________________________________________________
@@ -180,9 +180,10 @@ const ad_utility::MemorySize& Index::parserBufferSize() const {
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
-  return pimpl_->blocksizePermutationPerColumn();
-}
+size_t& Index::rowsPerBlock() { return pimpl_->rowsPerBlock(); }
+
+// ____________________________________________________________________________
+const size_t& Index::rowsPerBlock() const { return pimpl_->rowsPerBlock(); }
 
 // ____________________________________________________________________________
 void Index::setOnDiskBase(const std::string& onDiskBase) {
@@ -282,8 +283,9 @@ size_t Index::getResultSizeOfScan(
 }
 
 // ____________________________________________________________________________
-void Index::createFromFiles(const std::vector<InputFileSpecification>& files) {
-  return pimpl_->createFromFiles(files);
+void Index::createFromFiles(const std::vector<InputFileSpecification>& files,
+                            size_t numThreads) {
+  return pimpl_->createFromFiles(files, numThreads);
 }
 
 // ____________________________________________________________________________
@@ -294,4 +296,18 @@ const DeltaTriplesManager& Index::deltaTriplesManager() const {
 // ____________________________________________________________________________
 DeltaTriplesManager& Index::deltaTriplesManager() {
   return pimpl_->deltaTriplesManager();
+}
+// ____________________________________________________________________________
+GraphNameManager& Index::graphNameManager() {
+  return pimpl_->graphNameManager();
+}
+
+// ____________________________________________________________________________
+const GraphNameManager& Index::graphNameManager() const {
+  return pimpl_->graphNameManager();
+}
+
+// ____________________________________________________________________________
+const LocalVocabContext& Index::getLocalVocabContext() const {
+  return pimpl_->getLocalVocabContext();
 }

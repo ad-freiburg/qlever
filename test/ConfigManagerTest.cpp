@@ -1204,7 +1204,8 @@ struct AddValidatorToConfigManager {
   template <typename... Ts>
   void operator()(size_t variant, ConfigManager& m,
                   ConstConfigOptionProxy<Ts>... validatorArguments) const
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+      requires(sizeof...(Ts) == sizeof...(validatorArguments))
+  {
     // Add the new validator
     addValidatorFunction(
         AdjustVariantArgument{}.template operator()<Ts...>(variant),
@@ -1231,13 +1232,13 @@ not be checked via the validator.
 to `addValidatorToConfigManager`.
 */
 struct TestGeneratedValidatorsOfConfigManager {
-  template <typename... Ts>
-  auto operator()(
-      size_t variantStart, size_t variantEnd, ConfigManager& m,
-      const nlohmann::json& defaultValues,
-      const QL_CONCEPT_OR_NOTHING(
-          ql::concepts::same_as<
-              nlohmann::json::json_pointer>) auto&... configOptionPaths)
+  template <typename... Ts,
+            QL_CONCEPT_OR_TYPENAME(
+                ql::concepts::same_as<
+                    nlohmann::json::json_pointer>)... ConfigOptionPaths>
+  auto operator()(size_t variantStart, size_t variantEnd, ConfigManager& m,
+                  const nlohmann::json& defaultValues,
+                  const ConfigOptionPaths&... configOptionPaths)
       -> CPP_ret(void)(requires(sizeof...(Ts) ==
                                 sizeof...(configOptionPaths))) {
     // Using the invariant of our function generator, to create valid
@@ -1301,7 +1302,8 @@ struct DoTestNoValidatorInSubManager {
       ConfigManager& m, const nlohmann::json& defaultValues,
       const std::pair<nlohmann::json::json_pointer,
                       ConstConfigOptionProxy<Ts>>&... validatorArguments) const
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+      requires(sizeof...(Ts) == sizeof...(validatorArguments))
+  {
     // How many validators are to be added?
     constexpr size_t NUMBER_OF_VALIDATORS{5};
 
@@ -1350,7 +1352,8 @@ struct DoTestAlwaysValidatorInSubManager {
       const nlohmann::json& defaultValues,
       const std::pair<nlohmann::json::json_pointer,
                       ConstConfigOptionProxy<Ts>>&... validatorArguments) const
-      requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+      requires(sizeof...(Ts) == sizeof...(validatorArguments))
+  {
     // How many validators are to be added to each of the managers?
     constexpr size_t NUMBER_OF_VALIDATORS{5};
 

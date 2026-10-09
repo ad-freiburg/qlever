@@ -7,6 +7,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 // This class implements the TextLimit operation. It limits the number of texts
 // that are returned for each unique entity combination. The texts are selected
@@ -63,12 +64,14 @@ class TextLimit : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
-    return {child_.get()};
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{child_.get()}, allocator()};
   }
 };
 

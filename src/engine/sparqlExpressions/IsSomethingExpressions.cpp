@@ -1,6 +1,12 @@
-// Copyright 2023, University of Freiburg,
-//                 Chair of Algorithms and Data Structures.
-// Author: Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
@@ -31,6 +37,7 @@ CPP_class_template(typename NaryOperation,
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] const LocalVocabContext& context,
       [[maybe_unused]] bool isNegated) const override {
     using namespace prefilterExpressions;
     std::vector<PrefilterExprVariablePair> prefilterVec;
@@ -49,8 +56,9 @@ CPP_class_template(typename NaryOperation,
 
 //______________________________________________________________________________
 // Expressions for the builtin functions `isIRI`, `isBlank`, `isLiteral`,
-// `isNumeric`, and the custom function `isWktPoint`. Note that the value
-// getters already return the correct `Id`, hence `ql::identity`.
+// `isNumeric`, and the custom functions `ql:isEncodedIri` and `ql:isGeoPoint`.
+// Note that the value getters already return the correct `Id`, hence
+// `ql::identity`.
 template <typename Getter, prefilterExpressions::IsDatatype Datatype>
 using IsDtypeExpression =
     IsDatatypeExpressionImpl<Operation<1, FV<ql::identity, Getter>>, Datatype>;
@@ -66,10 +74,13 @@ using isBlankExpression =
                       prefilterExpressions::IsDatatype::BLANK>;
 using isIriExpression =
     IsDtypeExpression<IsIriValueGetter, prefilterExpressions::IsDatatype::IRI>;
+using isEncodedIriExpression =
+    IsDtypeExpression<IsValueIdValueGetter<Datatype::EncodedVal>,
+                      prefilterExpressions::IsDatatype::ENCODED_IRI>;
 
-// We currently don't support pre-filtering for `isGeoPointExpression`.
 using isGeoPointExpression =
-    NARY<1, FV<ql::identity, IsValueIdValueGetter<Datatype::GeoPoint>>>;
+    IsDtypeExpression<IsValueIdValueGetter<Datatype::GeoPoint>,
+                      prefilterExpressions::IsDatatype::GEO_POINT>;
 
 //______________________________________________________________________________
 // The expression for `bound` is slightly different as `IsValidValueGetter`
@@ -92,6 +103,9 @@ class BoundExpression : public NARY<1, FV<BoolToId, IsValidValueGetter>> {
 
 SparqlExpression::Ptr makeIsIriExpression(SparqlExpression::Ptr arg) {
   return std::make_unique<detail::isIriExpression>(std::move(arg));
+}
+SparqlExpression::Ptr makeIsEncodedIriExpression(SparqlExpression::Ptr arg) {
+  return std::make_unique<detail::isEncodedIriExpression>(std::move(arg));
 }
 SparqlExpression::Ptr makeIsBlankExpression(SparqlExpression::Ptr arg) {
   return std::make_unique<detail::isBlankExpression>(std::move(arg));

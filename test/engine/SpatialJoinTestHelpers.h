@@ -6,15 +6,15 @@
 #include <cstdlib>
 
 #include "../util/IndexTestHelpers.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
-#include "engine/SpatialJoinAlgorithms.h"
+#include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
+#include "index/ExportIds.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
-#include "util/GeoSparqlHelpers.h"
 
 namespace SpatialJoinTestHelpers {
 
@@ -294,11 +294,11 @@ const std::string approximatedAreaGermany = makeAreaLiteral(
 inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
                                            const Result* table) {
   std::vector<std::string> output;
-  for (size_t i = 0; i < table->idTable().numRows(); i++) {
+  for (size_t i = 0; i < table->idTableView().numRows(); i++) {
     std::string line = "";
-    for (size_t k = 0; k < table->idTable().numColumns(); k++) {
-      auto test = ExportQueryExecutionTrees::idToStringAndType(
-          qec->getIndex(), table->idTable().at(i, k), {});
+    for (size_t k = 0; k < table->idTableView().numColumns(); k++) {
+      auto test = ql::exportIds::idToStringAndType(
+          qec->getIndex(), table->idTableView().at(i, k), {});
       line += test.value().first;
       line += " ";
     }
@@ -427,7 +427,7 @@ inline auto buildQec(std::string turtleKg, bool useGeoVocab = false) {
     vocabType = ad_utility::VocabularyType{OnDiskCompressedGeoSplit};
   }
   config.vocabularyType = vocabType;
-  config.blocksizePermutations = 16_MB;
+  config.rowsPerBlock = 2'000'000;
   config.parserBufferSize = 10_kB;
   return ad_utility::testing::getQec(std::move(config));
 }
@@ -500,13 +500,13 @@ inline std::shared_ptr<QueryExecutionTree> buildSmallChild(
   return buildJoin(qec, scan1, scan2, joinVariable);
 }
 
-// this function creates a minimum viable SpatialJoinAlgorithms class, which
+// this function creates a minimum viable BoundingBoxAlgorithm class, which
 // gets used in testing to access the wrapper methods. Note that not all
 // functions of this class work properly, as many necessary parameters are
 // defaulted as nullpointer or std::nullopt. The maxDist is necessary, because
 // one of the wrapper classes needs a proper maxDistance, otherwise the wrapper
 // can't be used to test the function
-inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
+inline BoundingBoxAlgorithm getDummySpatialJoinAlgsForWrapperTesting(
     size_t maxDist = 1000,
     std::optional<QueryExecutionContext*> qec = std::nullopt) {
   if (!qec) {
@@ -530,11 +530,8 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
                                    0,
                                    0,
                                    std::vector<ColumnIndex>{},
-                                   1,
-                                   spatialJoin->getMaxDist(),
-                                   std::nullopt,
-                                   std::nullopt,
-                                   std::nullopt};
+                                   std::vector<ColumnIndex>{},
+                                   1};
 
   return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};
 }

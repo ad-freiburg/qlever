@@ -1,8 +1,13 @@
-// Copyright 2024 - 2025, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Jonathan Zeller github@Jonathan24680
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
-//          Patrick Brosi <brosi@cs.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 - 2025 Jonathan Zeller github@Jonathan24680, UFR
+// 2024 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025        Patrick Brosi <brosi@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOIN_H
 #define QLEVER_SRC_ENGINE_SPATIALJOIN_H
@@ -15,21 +20,23 @@
 #include "engine/SpatialJoinConfig.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
-// helper struct to improve readability in prepareJoin()
+using SpatialJoinBoundingBoxColumns =
+    std::optional<std::pair<ColumnIndex, ColumnIndex>>;
+
+// Helper providing the left and right input tables and column indices to
+// each spatial join algorithm.
 struct PreparedSpatialJoinParams {
-  const IdTable* const idTableLeft_;
+  const IdTableView<0>* const idTableLeft_;
   std::shared_ptr<const Result> resultLeft_;
-  const IdTable* const idTableRight_;
+  const IdTableView<0>* const idTableRight_;
   std::shared_ptr<const Result> resultRight_;
   ColumnIndex leftJoinCol_;
   ColumnIndex rightJoinCol_;
+  std::vector<ColumnIndex> leftSelectedCols_;
   std::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
-  std::optional<double> maxDist_;
-  std::optional<size_t> maxResults_;
-  std::optional<SpatialJoinType> joinType_;
-  std::optional<std::string> rightCacheName_;
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -48,7 +55,10 @@ class SpatialJoin : public Operation {
               std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
               bool substitutesFilterOp = false);
 
-  std::vector<QueryExecutionTree*> getChildren() override;
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
+ public:
   std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
@@ -96,6 +106,11 @@ class SpatialJoin : public Operation {
   // this function is used to give the maximum number of results
   std::optional<size_t> getMaxResults() const;
 
+  // this function is used to give the DE-9IM filter pattern, if the task is a
+  // `LibSpatialJoinConfig` with one set (only relevant for the `DE9IM` join
+  // type)
+  std::optional<De9imFilterString> getDe9imFilter() const;
+
   // switch the algorithm set in the config parameter at construction time
   void selectAlgorithm(SpatialJoinAlgorithm algo) { config_.algo_ = algo; }
 
@@ -104,7 +119,7 @@ class SpatialJoin : public Operation {
 
   // retrieve the currently selected spatial join type
   std::optional<SpatialJoinType> getJoinType() const {
-    return config_.joinType_;
+    return config_.getJoinType();
   }
 
   // retrieve the variables the spatial join is joining on
@@ -149,6 +164,11 @@ class SpatialJoin : public Operation {
     return prepareJoin();
   }
 
+  std::pair<SpatialJoinBoundingBoxColumns, SpatialJoinBoundingBoxColumns>
+  onlyForTestingGetLibspatialjoinBoundingBoxCols() const {
+    return prepareLibspatialjoinBoundingBoxCols();
+  }
+
   void checkCancellationWrapperForSpatialJoinAlgorithms() const {
     checkCancellation();
   }
@@ -156,7 +176,23 @@ class SpatialJoin : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
 
+  // Get the internal variable names of bounding box columns.
+  static std::pair<Variable, Variable> getBoundingBoxColumnNames(
+      const Variable& joinVar);
+
+  // Check if the child provides bounding boxes and if yes, return the column
+  // indices.
+  SpatialJoinBoundingBoxColumns getBoundingBoxColumnIndices(
+      std::shared_ptr<QueryExecutionTree> child, const Variable& joinVar) const;
+
+  // Make a clone of this `SpatialJoin` which uses precomputed bounding boxes of
+  // the geometries from an underlying `MaterializedView` if possible.
+  std::optional<std::shared_ptr<SpatialJoin>> cloneWithBoundingBoxColumns()
+      const;
+
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // helper function to generate a variable to column map from `childRight_`
@@ -164,8 +200,26 @@ class SpatialJoin : public Operation {
   // and (automatically added) the `config_.right_` variable.
   VariableToColumnMap getVarColMapPayloadVars() const;
 
-  // helper function, to initialize various required objects for both algorithms
+  // The left/right children and join variables, swapped for a `WITHIN` join
+  // (which is computed using `CONTAINS` on swapped tables, see `prepareJoin()`
+  // and `prepareLibspatialjoinBoundingBoxCols()`, the two places that need
+  // this swap).
+  struct SwappedJoinSides {
+    std::shared_ptr<QueryExecutionTree> childLeft_;
+    std::shared_ptr<QueryExecutionTree> childRight_;
+    Variable joinVarLeft_;
+    Variable joinVarRight_;
+  };
+  SwappedJoinSides getSwappedJoinSides() const;
+
+  // helper function, to initialize various required objects for all algorithms
   PreparedSpatialJoinParams prepareJoin() const;
+
+  // Column indices of precomputed bounding boxes for both sides of the join,
+  // only needed by `LibspatialjoinAlgorithm`. Computed separately from
+  // `prepareJoin()` so the other algorithms don't pay for it.
+  std::pair<SpatialJoinBoundingBoxColumns, SpatialJoinBoundingBoxColumns>
+  prepareLibspatialjoinBoundingBoxCols() const;
 
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;

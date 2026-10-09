@@ -55,7 +55,7 @@ CPP_template(typename R,
   const size_t numJoinColumns = row.size();
   // TODO<joka921> This can be done without copying.
   // Row rowLower = row;
-  const size_t upperBound = 1UL << row.size();
+  const size_t upperBound = size_t{1} << row.size();
 
   auto getIthMask = [row = Row{row}, numJoinColumns](size_t i) {
     auto rowLower = row;
@@ -68,7 +68,7 @@ CPP_template(typename R,
   };
   auto permutations = ql::views::iota(size_t{0}, upperBound - 1) |
                       ql::views::transform(getIthMask);
-  return ad_utility::OwningView{std::move(permutations)} |
+  return std::move(permutations) |
          ql::views::transform([begin, end](const Row& row) {
            auto rng = ql::ranges::equal_range(
                begin, end, row, ql::ranges::lexicographical_compare);
@@ -85,9 +85,10 @@ CPP_template(typename R,
 
 // TODO<joka921> We could also implement a version that is optimized on the
 // [begin, end] range not having UNDEF values in some of the columns
-CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
+CPP_template(typename It, typename RowT)(
+    requires ql::concepts::random_access_iterator<It>)  //
     auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
-        const auto& row, const size_t numLastUndefined, It begin, It end,
+        const RowT& row, const size_t numLastUndefined, It begin, It end,
         bool& resultMightBeUnsorted) {
   using Row = typename std::iterator_traits<It>::value_type;
   const size_t numJoinColumns = row.size();
@@ -121,7 +122,7 @@ CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
                       numLastUndefined == 0 ? size_t{0} : upperBound - 1) |
       ql::views::transform(getIthMask);
 
-  return ad_utility::OwningView{std::move(permutations)} |
+  return std::move(permutations) |
          ql::views::transform([begin, end, &resultMightBeUnsorted,
                                numDefinedColumns](Row&& row) {
            auto begOfUndef = std::lower_bound(
@@ -138,8 +139,9 @@ CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
 
 // This function has no additional preconditions, but runs in `O((end - begin) *
 // numColumns)`.
-CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
-    auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
+CPP_template(typename It, typename RowT)(
+    requires ql::concepts::random_access_iterator<It>)  //
+    auto findSmallerUndefRangesArbitrary(const RowT& row, It begin, It end,
                                          bool& resultMightBeUnsorted) {
   assert(row.size() == (*begin).size());
   assert(
@@ -167,7 +169,7 @@ CPP_template(typename It)(requires ql::concepts::random_access_iterator<It>)  //
     return true;
   };
 
-  return ad_utility::OwningView{ad_utility::IteratorRange(begin, end)} |
+  return ad_utility::IteratorRange(begin, end) |
          ql::views::filter(
              [isCompatible, &resultMightBeUnsorted](const auto& otherRow) {
                if (isCompatible(otherRow)) {

@@ -9,14 +9,20 @@
 
 #include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
 
-class Values : public Operation {
+class TripleComponent;
+
+class Values : virtual public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
 
  private:
   std::vector<float> multiplicities_;
-
   SparqlValues parsedValues_;
+
+ protected:
+  // Accessors for the parsed values.
+  SparqlValues& parsedValues() { return parsedValues_; }
 
  public:
   // Create operation from parsed values. This calls `sanitizeValues`.
@@ -34,7 +40,7 @@ class Values : public Operation {
   virtual std::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override {
-    return parsedValues_._variables.empty() || parsedValues_._values.empty();
+    return parsedValues_._values.empty();
   }
 
   virtual float getMultiplicity(size_t col) override;
@@ -45,7 +51,10 @@ class Values : public Operation {
  public:
   virtual size_t getCostEstimate() override;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
+  }
 
  public:
   // These two are also used by class `Service`, hence public.
@@ -54,6 +63,8 @@ class Values : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Compute the per-column multiplicity of the parsed values.
@@ -66,5 +77,9 @@ class Values : public Operation {
   template <size_t I>
   void writeValues(IdTable* idTablePtr, LocalVocab* localVocab);
 };
+
+// Create a one-row `VALUES` clause that binds `value` to `variable`.
+std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
+    QueryExecutionContext* qec, Variable variable, TripleComponent value);
 
 #endif  // QLEVER_SRC_ENGINE_VALUES_H

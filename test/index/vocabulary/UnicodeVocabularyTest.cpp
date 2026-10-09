@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "VocabularyTestHelpers.h"
-#include "index/StringSortComparator.h"
+#include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 
@@ -82,4 +82,20 @@ TEST(UnicodeVocabulary, AccessOperator) {
 TEST(UnicodeVocabulary, EmptyVocabulary) {
   testEmptyVocabularyWithComparator(createVocabulary, Level::PRIMARY);
   testEmptyVocabularyWithComparator(createVocabulary, Level::TOTAL);
+}
+
+// _____________________________________________________________________________
+TEST(UnicodeVocabulary, ScanAll) {
+  // `scanAll` must yield all words in order (it simply delegates to the
+  // underlying vocabulary).
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
+  auto vocab = createVocabulary(words);
+  EXPECT_THAT(scanAllToVector(vocab.scanAll()),
+              ::testing::ElementsAreArray(words));
+}
+
+// _____________________________________________________________________________
+TEST(UnicodeVocabulary, ScanAllEmptyVocabulary) {
+  auto vocab = createVocabulary({});
+  EXPECT_TRUE(scanAllToVector(vocab.scanAll()).empty());
 }

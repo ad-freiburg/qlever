@@ -58,9 +58,8 @@ sparqlExpression::GroupConcatExpression::evaluate(
     if (undefined) {
       return Id::makeUndefined();
     }
-    return IdOrLiteralOrIri{ad_utility::triple_component::LiteralOrIri{
-        ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(result))}};
+    return IdOrLocalVocabEntry{LocalVocabEntry::literalWithNormalizedContent(
+        asNormalizedStringViewUnsafe(result), context->getLocalVocabContext())};
   };
 
   auto childRes = child_->evaluate(context);

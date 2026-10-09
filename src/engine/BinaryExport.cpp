@@ -16,6 +16,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Result.h"
 #include "engine/StringMapping.h"
+#include "index/TripleComponentConversions.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FromCallableSerializer.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -71,20 +72,24 @@ void serializeHeader(Serializer&& serializer, Columns&& cols, auto&& prefixes) {
   serializer | cols;
 }
 
+// The patterns of the `EncodedIriManager` are transmitted as JSON.
 void writeHeader(auto& serializer, const auto& qet, const auto& columns) {
-  const auto& prefixes = qet.getQec()->getIndex().encodedIriManager().prefixes_;
-  serializeHeader(serializer, columns, prefixes);
+  std::string patterns =
+      nlohmann::json(qet.getQec()->getIndex().encodedIriManager()).dump();
+  serializeHeader(serializer, columns, patterns);
 }
 
 auto readHeader(auto& serializer) {
-  std::vector<std::string> prefixes;
+  std::string patternsAsJson;
   QueryExecutionTree::ColumnIndicesAndTypes columns;
-  serializeHeader(serializer, columns, prefixes);
+  serializeHeader(serializer, columns, patternsAsJson);
+  auto patterns =
+      nlohmann::json::parse(patternsAsJson).get<EncodedIriManager>().patterns_;
   std::vector<std::string> variableNames;
   for (auto& opt : columns) {
     variableNames.push_back(std::move(opt.value().variable_));
   }
-  return std::pair{std::move(prefixes), std::move(variableNames)};
+  return std::pair{std::move(patterns), std::move(variableNames)};
 }
 
 // Use special undefined value that's not actually used as a real value.
@@ -158,12 +163,32 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
       stringMapping.flush(qet.getQec()->getIndex()));
 }
 
+// Remap an `Id` of type `EncodedVal` that was encoded using the remote
+// `patterns`. If the pattern also exists locally, only the tag is changed,
+// otherwise the IRI is decoded and converted to a local `Id`.
+static Id remapEncodedVal(
+    Id id, const QueryExecutionContext& qec, LocalVocab& vocab,
+    const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
+    const std::vector<encodedIri::Pattern>& patterns) {
+  auto [prefixIdx, payload] =
+      EncodedIriManager::splitIntoPrefixIdxAndPayload(id);
+  if (prefixMapping.contains(prefixIdx)) {
+    return EncodedIriManager::makeIdFromPrefixIdxAndPayload(
+        prefixMapping.at(prefixIdx), payload);
+  }
+  return toValueId(
+      TripleComponent{
+          ad_utility::triple_component::Iri::fromStringRepresentation(
+              encodedIri::decodeToIri(patterns.at(prefixIdx), payload))},
+      qec.getIndex().getImpl(), vocab);
+}
+
 // _____________________________________________________________________________
 void BinaryExportHelpers::rewriteVocabIds(
     IdTable& result, const size_t dirtyIndex, const QueryExecutionContext& qec,
     LocalVocab& vocab, const std::vector<std::string>& transmittedStrings,
     const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
-    const std::vector<std::string>& prefixes,
+    const std::vector<encodedIri::Pattern>& prefixes,
     ad_utility::HashMap<Id::T, Id>& blankNodeMapping) {
   for (auto col : result.getColumns()) {
     ql::ranges::for_each(col.subspan(dirtyIndex), [&qec, &vocab,
@@ -171,21 +196,7 @@ void BinaryExportHelpers::rewriteVocabIds(
                                                    &prefixMapping, &prefixes,
                                                    &blankNodeMapping](Id& id) {
       if (id.getDatatype() == Datatype::EncodedVal) {
-        auto [prefixIdx, digitEncoding] =
-            EncodedIriManager::splitIntoPrefixIdxAndPayload(id);
-        if (prefixMapping.contains(prefixIdx)) {
-          id = EncodedIriManager::makeIdFromPrefixIdxAndPayload(
-              prefixMapping.at(prefixIdx), digitEncoding);
-        } else {
-          std::string result = EncodedIriManager::toStringWithGivenPrefix(
-              digitEncoding, prefixes.at(prefixIdx));
-          id =
-              TripleComponent{
-                  ad_utility::triple_component::Iri::fromStringRepresentation(
-                      std::move(result))}
-                  .toValueId(qec.getIndex().getVocab(), vocab,
-                             qec.getIndex().encodedIriManager());
-        }
+        id = remapEncodedVal(id, qec, vocab, prefixMapping, prefixes);
       } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
         auto [it, inserted] =
             blankNodeMapping.try_emplace(id.getBits(), ValueId{});
@@ -209,8 +220,7 @@ void BinaryExportHelpers::rewriteVocabIds(
             return TripleComponent{std::move(literalOrIri.getLiteral())};
           }
         };
-        id = tc().toValueId(qec.getIndex().getVocab(), vocab,
-                            qec.getIndex().encodedIriManager());
+        id = toValueId(tc(), qec.getIndex().getImpl(), vocab);
       } else {
         AD_EXPENSIVE_CHECK(id.isTrivial());
       }
@@ -220,25 +230,14 @@ void BinaryExportHelpers::rewriteVocabIds(
 
 // _____________________________________________________________________________
 Id BinaryExportHelpers::toIdImpl(
-    const QueryExecutionContext& qec, const std::vector<std::string>& prefixes,
+    const QueryExecutionContext& qec,
+    const std::vector<encodedIri::Pattern>& prefixes,
     const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
     LocalVocab& vocab, Id::T bits,
     ad_utility::HashMap<Id::T, Id>& blankNodeMapping) {
   Id id = Id::fromBits(bits);
   if (id.getDatatype() == Datatype::EncodedVal) {
-    auto [prefixIdx, digitEncoding] =
-        EncodedIriManager::splitIntoPrefixIdxAndPayload(id);
-    if (prefixMapping.contains(prefixIdx)) {
-      return EncodedIriManager::makeIdFromPrefixIdxAndPayload(
-          prefixMapping.at(prefixIdx), digitEncoding);
-    }
-    std::string result = EncodedIriManager::toStringWithGivenPrefix(
-        digitEncoding, prefixes.at(prefixIdx));
-    return TripleComponent{
-        ad_utility::triple_component::Iri::fromStringRepresentation(
-            std::move(result))}
-        .toValueId(qec.getIndex().getVocab(), vocab,
-                   qec.getIndex().encodedIriManager());
+    return remapEncodedVal(id, qec, vocab, prefixMapping, prefixes);
   }
   if (id.getDatatype() == Datatype::BlankNodeIndex) {
     auto [it, inserted] = blankNodeMapping.try_emplace(bits, ValueId{});
@@ -257,9 +256,9 @@ Id BinaryExportHelpers::toIdImpl(
 // _____________________________________________________________________________
 ad_utility::HashMap<uint8_t, uint8_t> BinaryExportHelpers::getPrefixMapping(
     const QueryExecutionContext& qec,
-    const std::vector<std::string>& prefixes) {
+    const std::vector<encodedIri::Pattern>& prefixes) {
   ad_utility::HashMap<uint8_t, uint8_t> prefixMapping;
-  const auto& localPrefixes = qec.getIndex().encodedIriManager().prefixes_;
+  const auto& localPrefixes = qec.getIndex().encodedIriManager().patterns_;
   for (const auto& [index, prefix] : ::ranges::views::enumerate(prefixes)) {
     auto prefixIt = ql::ranges::find(localPrefixes, prefix);
     if (prefixIt != localPrefixes.end()) {

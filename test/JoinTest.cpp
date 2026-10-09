@@ -17,7 +17,6 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/JoinHelpers.h"
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/JoinHelpers.h"
@@ -26,6 +25,7 @@
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
+#include "index/IdTableUtils.h"
 #include "util/Forward.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -241,8 +241,7 @@ namespace {
 // A hash map that connects variables to the expected contents of the
 // corresponding result column and the `UndefStatus`.
 using ExpectedColumns = ad_utility::HashMap<
-    Variable,
-    std::pair<ql::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
+    Variable, std::pair<ConstIdColumnRef, ColumnIndexAndTypeInfo::UndefStatus>>;
 
 // Test that the result of the `join` matches the `expected` outcome.
 // If `requestLaziness` is true, the join is requested to be lazy. If
@@ -259,12 +258,12 @@ void testJoinOperation(
   const auto& varToCols = join.getExternallyVisibleVariableColumns();
   EXPECT_EQ(varToCols.size(), expected.size());
   if (expectLazinessParityWhenNonEmpty &&
-      (!res->isFullyMaterialized() || !res->idTable().empty())) {
+      (!res->isFullyMaterialized() || !res->idTableView().empty())) {
     EXPECT_EQ(res->isFullyMaterialized(), !requestLaziness);
   }
   IdTable table =
       res->isFullyMaterialized()
-          ? res->idTable().clone()
+          ? res->cloneIdTable()
           : aggregateTables(res->idTables(), join.getResultWidth()).first;
   ASSERT_EQ(table.numColumns(), expected.size());
   for (const auto& [var, columnAndStatus] : expected) {
@@ -605,7 +604,7 @@ TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
 // scans would fail if one element could potentially be found in multiple blocks
 // of the respective other side.
 TEST_P(JoinTestParametrized, joinTwoScansWithSubjectInMultipleBlocks) {
-  // Default block size is 16 bytes for testing, so the triples are spread
+  // Default block size is 2 rows for testing, so the triples are spread
   // across 3 blocks in total.
   auto keepJoinCol = GetParam();
   auto qec = ad_utility::testing::getQec(
@@ -942,6 +941,32 @@ TEST(JoinTest, clone) {
 }
 
 // _____________________________________________________________________________
+// A `BIND` must not be pushed down into a child that already has a column for
+// the target variable, even if that child has all the variables the `BIND`
+// expression needs.
+TEST(JoinTest, makeTreeWithBindColumnSkipsChildThatAlreadyHasTheTarget) {
+  auto qec = ad_utility::testing::getQec();
+  auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{I(1), I(1), I(1)}}),
+      Vars{Variable{"?s"}, Variable{"?o"}, Variable{"?bind"}}, false,
+      std::vector<ColumnIndex>{0});
+  // The right tree doesn't contain `?o`, so the `BIND` can't be pushed down
+  // into it either.
+  auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{I(1)}}), Vars{Variable{"?s"}}, false,
+      std::vector<ColumnIndex>{0});
+  auto join = ad_utility::makeExecutionTree<Join>(qec, std::move(leftTree),
+                                                  std::move(rightTree), 0, 0);
+
+  parsedQuery::Bind bind{
+      sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
+          Variable{"?o"}),
+      Variable{"?bind"}};
+  EXPECT_FALSE(
+      join->getRootOperation()->makeTreeWithBindColumn(bind).has_value());
+}
+
+// _____________________________________________________________________________
 TEST_P(JoinTestParametrized, columnOriginatesFromGraphOrUndef) {
   auto keepJoinCol = GetParam();
   using ad_utility::triple_component::Iri;
@@ -1052,7 +1077,7 @@ TEST(JoinTest, lazyJoinIndexScanDetails) {
 
   // Check that the join result has 10 rows as expected.
   ASSERT_TRUE(result->isFullyMaterialized());
-  EXPECT_EQ(result->idTable().size(), 10);
+  EXPECT_EQ(result->idTableView().size(), 10);
 
   // Get the detalis of the runtime info of both index scans.
   const auto& scan1Rti = scan1->getRootOperation()->getRuntimeInfoPointer();

@@ -51,6 +51,11 @@ class MessageSender {
   const QueryId& getQueryId() const noexcept {
     return distributorAndOwningQueryId_->owningQueryId_.toQueryId();
   }
+
+  // Shared handle to the underlying `OwningQueryId`'s status atomic.
+  std::shared_ptr<std::atomic<QueryStatus>> sharedStatus() const noexcept {
+    return distributorAndOwningQueryId_->owningQueryId_.sharedStatus();
+  }
 };
 
 }  // namespace ad_utility::websocket

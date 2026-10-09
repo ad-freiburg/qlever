@@ -19,7 +19,7 @@ class FileWriteSerializer {
  public:
   using SerializerType = WriteSerializerTag;
 
-  FileWriteSerializer(File&& file) : _file{std::move(file)} {};
+  FileWriteSerializer(File&& file) : _file{std::move(file)} {}
 
   FileWriteSerializer(std::string filename) : _file{filename, "w"} {
     AD_CONTRACT_CHECK(_file.isOpen());
@@ -33,6 +33,10 @@ class FileWriteSerializer {
   }
 
   void close() { _file.close(); }
+
+  // Flush the underlying file, such that all bytes that have been written so
+  // far are visible to other (read) handles on the same file.
+  void flush() { _file.flush(); }
 
   [[nodiscard]] SerializationPosition getSerializationPosition() const {
     return _file.tell();
@@ -52,7 +56,7 @@ class FileReadSerializer {
  public:
   using SerializerType = ReadSerializerTag;
 
-  explicit FileReadSerializer(File&& file) : _file{std::move(file)} {};
+  explicit FileReadSerializer(File&& file) : _file{std::move(file)} {}
 
   explicit FileReadSerializer(const std::string& filename)
       : _file{filename, "r"} {
@@ -85,7 +89,7 @@ class CopyableFileReadSerializer {
  public:
   using SerializerType = ReadSerializerTag;
   explicit CopyableFileReadSerializer(std::shared_ptr<File> filePtr)
-      : _file{std::move(filePtr)} {};
+      : _file{std::move(filePtr)} {}
 
   explicit CopyableFileReadSerializer(std::string filename)
       : _file{std::make_shared<File>(filename, "r")} {

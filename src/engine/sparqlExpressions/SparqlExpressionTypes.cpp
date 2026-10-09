@@ -9,29 +9,21 @@
 namespace sparqlExpression {
 
 // _____________________________________________________________________________
-void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os) {
-  std::visit(
-      [&os](const auto& s) {
-        using T = std::decay_t<decltype(s)>;
-        auto& stream = *os;
-        if constexpr (concepts::same_as<T, ValueId>) {
-          stream << s;
-        } else {
-          stream << s.toStringRepresentation();
-        }
-      },
-      var);
+void PrintTo(const IdOrLocalVocabEntry& var, std::ostream* os) {
+  ad_utility::visitIf(
+      var, [os](const ValueId& s) { *os << s; },
+      [os](const auto& s) { *os << s.toStringRepresentation(); });
 }
 
 // _____________________________________________________________________________
 EvaluationContext::EvaluationContext(
     const QueryExecutionContext& qec,
-    const VariableToColumnMap& variableToColumnMap, const IdTable& inputTable,
+    const VariableToColumnMap& variableToColumnMap, IdTableView<0> inputTable,
     const ad_utility::AllocatorWithLimit<Id>& allocator, LocalVocab& localVocab,
     ad_utility::SharedCancellationHandle cancellationHandle, TimePoint deadline)
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},
-      _inputTable{inputTable},
+      _inputTable{std::move(inputTable)},
       _allocator{allocator},
       _localVocab{localVocab},
       cancellationHandle_{std::move(cancellationHandle)},
@@ -80,4 +72,22 @@ EvaluationContext::getResultFromPreviousAggregate(const Variable& var) const {
   return copyExpressionResult(_previousResultsFromSameGroup.at(idx));
 }
 
+// _____________________________________________________________________________
+const LocalVocabContext& EvaluationContext::getLocalVocabContext() const {
+  return _qec.getLocalVocabContext();
+}
+
 }  // namespace sparqlExpression
+
+namespace sparqlExpression::detail {
+
+// _____________________________________________________________________________
+bool isConstantExpressionResult(const ExpressionResult& res) {
+  return std::visit(
+      [](const auto& el) {
+        return isConstantResult<std::decay_t<decltype(el)>>;
+      },
+      res);
+}
+
+}  // namespace sparqlExpression::detail

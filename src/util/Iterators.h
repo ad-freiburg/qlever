@@ -389,7 +389,7 @@ class InputRangeFromGet
     getNextAndStore();
     return Iterator{this};
   }
-  Sentinel end() const { return {}; };
+  Sentinel end() const { return {}; }
 
   using DetailStorage =
       typename DetailsProvider<InputRangeFromGet<ValueType, DetailsType>,
@@ -623,8 +623,8 @@ class IteratorForAssigmentOperator {
   IteratorForAssigmentOperator& operator++(int) { return *this; }
 };
 
-static_assert(
-    std::output_iterator<IteratorForAssigmentOperator<void (*)(int)>, int>);
+static_assert(ql::concepts::output_iterator<
+              IteratorForAssigmentOperator<void (*)(int)>, int>);
 }  // namespace ad_utility
 
 // `IteratorRanges` are `borrowed ranges`, as their iterators outlive the actual

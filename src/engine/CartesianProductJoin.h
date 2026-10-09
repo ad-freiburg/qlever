@@ -13,6 +13,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 // An operation that takes a set of subresults that pairwise-disjoint sets of
 // bound variables and materializes the full Cartesian product of these
@@ -52,11 +53,9 @@ class CartesianProductJoin : public Operation {
                                 Children children,
                                 size_t chunkSize = 1'000'000);
 
-  /// get non-owning pointers to all the held subtrees to actually use the
-  /// Execution Trees as trees
-  std::vector<QueryExecutionTree*> getChildren() override;
-
  private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
   std::string getCacheKeyImpl() const override;
@@ -78,13 +77,31 @@ class CartesianProductJoin : public Operation {
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
  public:
   float getMultiplicity([[maybe_unused]] size_t col) override;
 
   bool knownEmptyResult() override;
 
   // The Cartesian product join can efficiently evaluate a limited result.
-  [[nodiscard]] bool supportsLimitOffset() const override { return true; }
+  [[nodiscard]] LimitOffsetHandling handlesLimitOffset() const override {
+    return LimitOffsetHandling::FULL;
+  }
+
+  // The Cartesian product is distinct wrt `distinctIndices` iff every child is
+  // distinct wrt the subset of `distinctIndices` that falls into its columns
+  // (because the children have disjoint columns). A child without any such
+  // column must have at most one row.
+  bool isDistinctByImpl(
+      const std::vector<ColumnIndex>& distinctIndices) const override;
+
+  // Push a `DISTINCT` over `distinctIndices` down into the children. Because
+  // the children have disjoint sets of columns, making each child distinct on
+  // its slice of `distinctIndices` and then forming the Cartesian product
+  // yields a result that is already distinct wrt `distinctIndices`.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeDistinctTree(
+      const std::vector<ColumnIndex>& distinctIndices) const override;
 
  protected:
   // Don't promise any sorting of the result.
@@ -92,19 +109,28 @@ class CartesianProductJoin : public Operation {
   // columns from either the first or the last input, but it is questionable if
   // there would be any real benefit from this and it would only increase the
   // complexity of the query planning and required testing.
+  // NOTE: Reporting a sort order here would additionally require revisiting
+  // `calculateSubResults`, which pushes a `LIMIT` into the children while the
+  // result is already being computed, at which point an invalidated sort order
+  // could no longer be repaired (see the caution note on
+  // `Operation::applyLimitOffset`).
   std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
   Result computeResult(bool requestLaziness) override;
 
+  // For each child, compute the subset of `distinctIndices` that falls into
+  // that child's columns, translated into the child's local column indices.
+  std::vector<std::vector<ColumnIndex>> perChildDistinctIndices(
+      const std::vector<ColumnIndex>& distinctIndices) const;
+
   // Copy each element from the `inputColumn` `groupSize` times to the
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write.
-  void writeResultColumn(ql::span<Id> targetColumn,
-                         ql::span<const Id> inputColumn, size_t groupSize,
-                         size_t offset) const;
+  void writeResultColumn(IdColumnRef targetColumn, ConstIdColumnRef inputColumn,
+                         size_t groupSize, size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.
   // `offset` indicates how many rows to skip in the result and `limit` how many

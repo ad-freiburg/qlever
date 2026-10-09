@@ -342,8 +342,8 @@ std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
       Date(date.getYear(), date.getMonth(), date.getDay()));
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // _____________________________________________________________________________
-#ifndef REDUCED_FEATURE_SET_FOR_CPP17
 std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     const DateYearOrDuration& rhs) const {
   if (isDate() && rhs.isDate()) {
@@ -356,14 +356,55 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
     if (!difference.has_value()) {
       return std::nullopt;
     } else {
-      return DateYearOrDuration(difference.value());
+      return DateYearOrDuration{difference.value()};
+    }
+  } else if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
+    //  `DayTimeDuration` - `DayTimeDuration` => `DayTimeDuration`.
+    const DayTimeDuration& ownDuration = getDayTimeDurationUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+
+    std::optional<DayTimeDuration> difference = ownDuration - otherDuration;
+    if (!difference.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration{difference.value()};
+    }
+  } else if (isDate() && rhs.isDayTimeDuration()) {
+    //  `Date` - `DayTimeDuration` => `Date` or `LargeYear`.
+    const Date& ownDate = getDateUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+
+    std::optional<DateYearOrDuration> difference = ownDate - otherDuration;
+    if (!difference.has_value()) {
+      return std::nullopt;
+    } else {
+      return difference.value();
+    }
+  } else if (isLongYear() && rhs.isLongYear()) {
+    //  `LargeYear` - `LargeYear` => `DayTimeDuration`.
+    using namespace std::chrono;
+    // Assuming Jan 1st of respective year because only year is stored.
+    auto year1 = year_month_day{year(getYear()) / 1 / 1};
+    auto year2 = year_month_day{year(rhs.getYear()) / 1 / 1};
+
+    auto difference = sys_days(year1) - sys_days(year2);
+    DayTimeDuration::Type durationType = DayTimeDuration::Type::Positive;
+    auto diff_count = difference.count();
+    if (diff_count < 0) {
+      durationType = DayTimeDuration::Type::Negative;
+      diff_count = -diff_count;
+    }
+    // If the resulting duration is too big for `DayTimeDuration` (>1'048'575
+    // days) return UNDEF.
+    std::optional<DayTimeDuration> result =
+        DayTimeDuration::makeWithBoundsCheck(
+            durationType, static_cast<int>(diff_count), 0, 0, 0);
+    if (!result.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration{result.value()};
     }
   }
-
-  // TODO<yarox-1>: The following subtractions should be implemented next:
-  //  `DayTimeDuration` - `DayTimeDuration`,
-  //  `Date` - `DayTimeDuration`,
-  //  `LargeYear` - `LargeYear`.
 
   // The following will not be implemented (not viable):
   //  `DayTimeDuration` - `Date`,
@@ -371,5 +412,108 @@ std::optional<DateYearOrDuration> DateYearOrDuration::operator-(
 
   // No viable subtraction.
   return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::optional<DateYearOrDuration> DateYearOrDuration::operator+(
+    const DateYearOrDuration& rhs) const {
+  if (isDayTimeDuration() && rhs.isDayTimeDuration()) {
+    //  `DayTimeDuration` + `DayTimeDuration` => `DayTimeDuration`.
+    const DayTimeDuration& ownDuration = getDayTimeDurationUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+
+    std::optional<DayTimeDuration> sum = ownDuration + otherDuration;
+    if (!sum.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration{sum.value()};
+    }
+  } else if (isDate() && rhs.isDayTimeDuration()) {
+    //  `Date` + `DayTimeDuration` => `Date`.
+    const Date& ownDate = getDateUnchecked();
+    const DayTimeDuration& otherDuration = rhs.getDayTimeDurationUnchecked();
+
+    std::optional<DateYearOrDuration> sum = ownDate + otherDuration;
+    if (!sum.has_value()) {
+      return std::nullopt;
+    } else {
+      return DateYearOrDuration{sum.value()};
+    }
+  }
+
+  // The following will not be implemented (not viable):
+  //  `Date` + `Date`,
+  //  `DayTimeDuration` + `Date`,
+  //  `DayTimeDuration` + `LargeYear`,
+  //  `LargeYear` + `LargeYear` .
+
+  // No viable addition.
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+DateYearOrDuration DateYearOrDuration::makeFromEpoch(
+    Date::Milliseconds timestamp, Date::TimeZone tz) {
+  int8_t offset = Date::getTimeZoneOffsetToUTCInHours(tz);
+  // Shift the timestamp according to the given `TimeZone`offset.
+  timestamp = timestamp + std::chrono::hours{offset};
+
+  // Extract date from epoch timestamp.
+  auto days = std::chrono::floor<std::chrono::days>(timestamp);
+  std::chrono::year_month_day date = std::chrono::year_month_day{days};
+
+  auto time = timestamp - days;
+  // Extract time from remaining seconds.
+  auto seconds = std::chrono::floor<std::chrono::seconds>(time);
+  std::chrono::hh_mm_ss remainder = std::chrono::hh_mm_ss{seconds};
+
+  // Extract remaining milliseconds to later reconstruct the seconds correctly.
+  auto milliseconds =
+      std::chrono::floor<std::chrono::milliseconds>(time - seconds);
+
+  auto year = static_cast<int>(date.year());
+  // Check if the result can be stored in a `Date`.
+  if (-9999 <= year && year <= 9999) {
+    // The methods `year`, `month`, `day` return
+    // `std::chrono::year`/`std::chrono::month`/`std::chrono::day`, therefore
+    // static casts are necessary. For `month` and `day` only `operator
+    // unsigned` is supported, therefore two casts are necessary.
+    return DateYearOrDuration{
+        Date{year, static_cast<int>(static_cast<unsigned>(date.month())),
+             static_cast<int>(static_cast<unsigned>(date.day())),
+             static_cast<int>(remainder.hours().count()),
+             static_cast<int>(remainder.minutes().count()),
+             static_cast<double>(remainder.seconds().count() +
+                                 (milliseconds.count() / 1'000.0)),
+             tz}};
+  } else {  // Needs to be stored as a `LargeYear`.
+    return DateYearOrDuration{year, DateYearOrDuration::Type::Year};
+  }
+}
+
+// _____________________________________________________________________________
+std::optional<DateYearOrDuration> operator-(const Date lhs,
+                                            const DayTimeDuration& rhs) {
+  auto epochLhs = lhs.toEpoch();
+  if (!epochLhs.has_value()) {
+    return std::nullopt;
+  }
+  auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
+  Date::Milliseconds newDate =
+      epochLhs.value() - std::chrono::milliseconds(totalMillisecondsRhs);
+  return DateYearOrDuration::makeFromEpoch(newDate, lhs.getTimeZone());
+}
+
+// _____________________________________________________________________________
+std::optional<DateYearOrDuration> operator+(const Date lhs,
+                                            const DayTimeDuration& rhs) {
+  auto epochLhs = lhs.toEpoch();
+  if (!epochLhs.has_value()) {
+    return std::nullopt;
+  }
+  auto totalMillisecondsRhs = rhs.getTotalMilliseconds();
+  Date::Milliseconds newDate =
+      epochLhs.value() + std::chrono::milliseconds(totalMillisecondsRhs);
+  return DateYearOrDuration::makeFromEpoch(newDate, lhs.getTimeZone());
 }
 #endif

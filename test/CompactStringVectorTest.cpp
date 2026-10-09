@@ -9,12 +9,14 @@
 #include <algorithm>
 
 #include "backports/iterator.h"
-#include "global/Pattern.h"
+#include "util/CompactStringVector.h"
+#include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
 
 // _____________________________________________________________________________
-auto iterablesEqual(const auto& a, const auto& b) {
+template <typename A, typename B>
+auto iterablesEqual(const A& a, const B& b) {
   ASSERT_EQ(a.size(), b.size());
   for (size_t i = 0; i < a.size(); ++i) {
     ASSERT_EQ(a[i], b[i]);
@@ -274,6 +276,9 @@ TYPED_TEST(CompactVectorOfStringsFixture, SerializationWithPushMiddleOfFile) {
     fileWriter =
         ad_utility::serialization::FileWriteSerializer{writer.finish()};
     fileWriter << -3;
+    // Finishing again returns an empty file, and pushing is no longer allowed.
+    EXPECT_FALSE(writer.finish().isOpen());
+    EXPECT_ANY_THROW(writer.push(input[0].data(), input[0].size()));
   }
 
   CompactVector compactVector;
@@ -288,6 +293,71 @@ TYPED_TEST(CompactVectorOfStringsFixture, SerializationWithPushMiddleOfFile) {
   vectorsEqual(input, compactVector);
 
   ad_utility::deleteFile(filename);
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(CompactVectorOfStringsFixture, ZeroCopyDeserialization) {
+  const auto& input = TestFixture::input_;
+  using CompactVector = typename TestFixture::CompactVector;
+
+  CompactVector original;
+  original.build(input);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer << original;
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  auto view = CompactVector::fromZeroCopyDeserializer(readSerializer);
+
+  vectorsEqual(input, view);
+  vectorsEqual(view, original);
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(CompactVectorOfStringsFixture, ZeroCopyViewCannotBeMutated) {
+  const auto& input = TestFixture::input_;
+  using CompactVector = typename TestFixture::CompactVector;
+
+  CompactVector original;
+  original.build(input);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer << original;
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  auto view = CompactVector::fromZeroCopyDeserializer(readSerializer);
+
+  // A non-owning, zero-copy view must not be mutated via `build()`, which
+  // requires owned storage.
+  EXPECT_ANY_THROW(view.build(input));
+}
+
+// _____________________________________________________________________________
+TYPED_TEST(CompactVectorOfStringsFixture, clone) {
+  const auto& input = TestFixture::input_;
+  using CompactVector = typename TestFixture::CompactVector;
+
+  // Clone an empty and a non-empty owning vector.
+  CompactVector original;
+  auto copy0 = original.clone();
+  EXPECT_EQ(copy0.size(), 0);
+  original.build(input);
+  auto copy1 = original.clone();
+  vectorsEqual(copy1, input);
+
+  // The clone of a zero-copy view owns its storage, so it stays valid after
+  // the buffer of the view is destroyed, and it can be mutated.
+  auto cloneOfView = [&original]() {
+    ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+    writeSerializer << original;
+    ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+        std::move(writeSerializer).data()};
+    return CompactVector::fromZeroCopyDeserializer(readSerializer).clone();
+  }();
+  vectorsEqual(cloneOfView, input);
+  EXPECT_NO_THROW(cloneOfView.build(input));
 }
 
 // _____________________________________________________________________________

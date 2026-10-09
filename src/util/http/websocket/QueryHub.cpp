@@ -67,7 +67,7 @@ QueryHub::createOrAcquireDistributorInternal(const QueryId& queryId) {
   };
 
   auto distributor = std::make_shared<QueryToSocketDistributor>(
-      ioContext_, std::move(cleanupCall));
+      ioExecutor_, std::move(cleanupCall));
   distributors->insert_or_assign(queryId,
                                  WeakReferenceHolder{distributor, isSender});
   return distributor;

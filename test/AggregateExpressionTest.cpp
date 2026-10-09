@@ -31,8 +31,8 @@ auto V = VocabId;
 auto U = Id::makeUndefined();
 auto D = DoubleId;
 auto lit = [](auto s) {
-  return IdOrLiteralOrIri(
-      ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s)));
+  return IdOrLiteralOrIri{
+      ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s))};
 };
 static const Id NaN = D(std::numeric_limits<double>::quiet_NaN());
 }  // namespace
@@ -46,15 +46,22 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
                         bool distinct = false,
                         source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
-  VectorWithMemoryLimit<T> input(inputAsVector.begin(), inputAsVector.end(),
-                                 makeAllocator());
-  auto d = std::make_unique<SingleUseExpression>(input.clone());
   auto t = TestContext{};
+  VectorWithMemoryLimit<sparqlExpression::detail::PromoteToLocalVocabEntry<T>>
+      input(makeAllocator());
+  input.reserve(inputAsVector.size());
+  for (auto& value : inputAsVector) {
+    input.push_back(sparqlExpression::detail::promoteToLocalVocabEntry(
+        std::move(value), t.context._qec.getLocalVocabContext()));
+  }
+  auto d = std::make_unique<SingleUseExpression>(input.clone());
   t.context._endIndex = input.size();
   AggregateExpressionT m{distinct, std::move(d)};
   auto resAsVariant = m.evaluate(&t.context);
-  auto res = std::get<U>(resAsVariant);
-  EXPECT_EQ(res, expectedResult);
+  auto res = std::get<sparqlExpression::detail::PromoteToLocalVocabEntry<U>>(
+      resAsVariant);
+  EXPECT_EQ(res, sparqlExpression::detail::promoteToLocalVocabEntry(
+                     expectedResult, t.context._qec.getLocalVocabContext()));
 };
 
 // Same as `testAggregate` above, but the input is specified as a variable.
@@ -70,6 +77,39 @@ auto testAggregateWithVariable =
       auto res = std::get<U>(resAsVariant);
       EXPECT_EQ(res, expectedResult);
     };
+
+// Same as `testAggregate` above, but the input is the `constant`, evaluated on
+// the first `numRows` rows of the `TestContext`.
+template <typename AggregateExpressionT>
+void testAggregateWithConstant(Id constant, size_t numRows, Id expectedResult,
+                               bool distinct = false,
+                               source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  auto child = std::make_unique<SingleUseExpression>(constant);
+  TestContext testContext;
+  testContext.context._endIndex = numRows;
+  AggregateExpressionT aggregate{distinct, std::move(child)};
+  auto resAsVariant = aggregate.evaluate(&testContext.context);
+  EXPECT_EQ(std::get<Id>(resAsVariant), expectedResult);
+}
+
+// Test that aggregates of a constant aggregate one copy of the constant per
+// row (see https://github.com/ad-freiburg/qlever/issues/3572).
+TEST(AggregateExpression, constantInput) {
+  testAggregateWithConstant<CountExpression>(I(5), 3, I(3));
+  testAggregateWithConstant<CountExpression>(I(5), 3, I(1), true);
+  testAggregateWithConstant<CountExpression>(I(5), 0, I(0));
+  testAggregateWithConstant<SumExpression>(I(5), 3, I(15));
+  testAggregateWithConstant<SumExpression>(I(5), 0, I(0));
+  testAggregateWithConstant<AvgExpression>(I(5), 3, D(5));
+  testAggregateWithConstant<AvgExpression>(I(5), 0, I(0));
+  testAggregateWithConstant<MinExpression>(I(5), 3, I(5));
+  testAggregateWithConstant<MinExpression>(I(5), 0, U);
+  testAggregateWithConstant<MaxExpression>(I(5), 3, I(5));
+  testAggregateWithConstant<MaxExpression>(I(5), 0, U);
+  testAggregateWithConstant<SampleExpression>(I(5), 3, I(5));
+  testAggregateWithConstant<SampleExpression>(I(5), 0, U);
+}
 
 // Test `CountExpression`.
 TEST(AggregateExpression, count) {
@@ -159,11 +199,12 @@ TEST(AggregateExpression, min) {
   // IDs of one word from the vocabulary ("alpha") and two words
   // from the local vocabulary ("alx" and "aalx").
   Id alpha = t.alpha;
+  const auto& localVocabContext = t.qec->getLocalVocabContext();
   LocalVocabEntry l1 =
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx");
+      LocalVocabEntry::literalWithoutQuotes("alx", localVocabContext);
   Id alx = Id::makeFromLocalVocabIndex(&l1);
   LocalVocabEntry l2 =
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("aalx");
+      LocalVocabEntry::literalWithoutQuotes("aalx", localVocabContext);
   Id aalx = Id::makeFromLocalVocabIndex(&l2);
 
   // Test cases. Make sure that vocab entries and local vocab entries are
@@ -189,8 +230,8 @@ TEST(AggregateExpression, max) {
   // from the local vocabulary ("alx").
   Id alpha = t.alpha;
   Id beta = t.Beta;
-  LocalVocabEntry l =
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx");
+  LocalVocabEntry l = LocalVocabEntry::literalWithoutQuotes(
+      "alx", t.qec->getLocalVocabContext());
   Id alx = Id::makeFromLocalVocabIndex(&l);
 
   // Test cases. Make sure that vocab entries and local vocab entries are
@@ -212,6 +253,7 @@ TEST(AggregateExpression, CountStar) {
   // stores `i`.
   auto matcher = [&](int64_t i) {
     auto evaluate = [&](const SparqlExpression::Ptr& expr) {
+      t.context._inputTable = t.table.asStaticView<0>();
       t.context._beginIndex = 0;
       t.context._endIndex = t.table.size();
       return expr->evaluate(&t.context);
@@ -329,8 +371,9 @@ TEST(AggregateExpression, SampleExpression) {
   v.push_back(I(34));
   v.push_back(I(42));
   testSample(v.clone(), I(34));
-  testSample(ad_utility::SetOfIntervals{}, BoolId(false));
-  testSample(ad_utility::SetOfIntervals{{{3, 17}}}, BoolId(true));
+  // The `TestContext` has three rows.
+  testSample(ad_utility::SetOfIntervals{{}, 3}, BoolId(false));
+  testSample(ad_utility::SetOfIntervals{{{1, 3}}, 3}, BoolId(true));
   v.clear();
   testSample(v.clone(), U);
   // The first value of the ?ints variable inside the `TestContext` is `1`.

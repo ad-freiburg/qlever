@@ -5,14 +5,14 @@
 #include "engine/SortPerformanceEstimator.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 
 #include <cstdlib>
-#include <iomanip>
 
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
+#include "index/IdTableUtils.h"
 #include "util/CancellationHandle.h"
 #include "util/Log.h"
 #include "util/Random.h"
@@ -50,7 +50,7 @@ auto SortPerformanceEstimator::measureSortingTime(
   ad_utility::Timer timer{ad_utility::Timer::Started};
   // Always sort on the first column for simplicity;
   ad_utility::callFixedSizeVi(numColumns, [&](auto numCols) {
-    Engine::sort<numCols>(&randomTable, 0ull);
+    IdTableUtils::sort<numCols>(&randomTable, 0ull);
   });
   return timer.value();
 }
@@ -62,9 +62,8 @@ SortPerformanceEstimator::SortPerformanceEstimator(
   computeEstimatesExpensively(allocator, maxNumElementsToSort);
 }
 
-auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
-                                                 size_t numCols) const noexcept
-    -> Timer::Duration {
+auto SortPerformanceEstimator::estimatedSortTime(
+    size_t numRows, size_t numCols) const noexcept -> Timer::Duration {
   if (!_estimatesWereCalculated) {
     AD_LOG_WARN
         << "The estimates of the SortPerformanceEstimator were never set "
@@ -189,8 +188,9 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
               << "Setting all estimates to 0. This means that no sort "
               << "operations will be canceled." << std::endl;
         }
-        AD_LOG_TRACE << "Estimated the sort time to be " << std::fixed
-                     << std::setprecision(3) << Timer::toSeconds(_samples[i][j])
+        AD_LOG_TRACE << "Estimated the sort time to be "
+                     << absl::StrFormat("%.3f",
+                                        Timer::toSeconds(_samples[i][j]))
                      << " seconds." << std::endl;
       }
     }
@@ -211,6 +211,7 @@ void SortPerformanceEstimator::throwIfEstimateTooLong(
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation.
     throw ad_utility::CancellationException(
+        ad_utility::CancellationState::TIMEOUT,
         absl::StrCat(operationDescriptor,
                      " was canceled, because time estimate exceeded "
                      "remaining time by a factor of ",

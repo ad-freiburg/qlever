@@ -10,7 +10,9 @@
 #ifndef QLEVER_SRC_INDEX_INDEXREBUILDERIMPL_H
 #define QLEVER_SRC_INDEX_INDEXREBUILDERIMPL_H
 
+#include <boost/asio/awaitable.hpp>
 #include <cstdint>
+#include <functional>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -18,41 +20,28 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/IndexRebuilder.h"
+#include "index/IndexRebuilderTypes.h"
 #include "util/CancellationHandle.h"
-#include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
+#include "util/TransparentFunctors.h"
 
 namespace qlever::indexRebuilder {
-
-using OwnedBlocksEntry =
-    ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
-using OwnedBlocks = std::vector<OwnedBlocksEntry>;
-using InsertionPositions = std::vector<VocabIndex>;
-using LocalVocabMapping = ad_utility::HashMap<Id::T, Id>;
-using BlankNodeBlocks = std::vector<uint64_t>;
 
 // Write a new vocabulary that contains all words from `vocab` plus all
 // entries in `entries`. Returns a pair consisting of a vector insertion
 // positions (the `VocabIndex` of the `LocalVocabEntry`s position in the old
 // `vocab`) and a mapping from old local vocab `Id`s bit representation (for
 // cheaper hash functions) to new vocab `Id`s.
+// `progress` is called with the number of newly written words (in batches),
+// for progress reporting; it defaults to a no-op.
 std::tuple<InsertionPositions, LocalVocabMapping> materializeLocalVocab(
     const std::vector<LocalVocabIndex>& entries, const Index::Vocab& vocab,
-    const std::string& newIndexName);
+    const std::string& newIndexName,
+    const std::function<void(size_t)>& progress = ad_utility::noop);
 
 // Turn a vector of `OwnedBlocksEntry`s into a vector of `uint64_t`s
 // representing the block ids of the generated blocks.
 BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks);
-
-// Map old vocab `Id`s to new vocab `Id`s according to the given
-// `insertionPositions`. This is the  most performance critical code of the
-// rebuild.
-Id remapVocabId(Id original, const InsertionPositions& insertionPositions);
-
-// Remaps a blank node `Id` to another blank node `Id` to reduce the gaps in the
-// id space left by random allocation of blank node ids.
-Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
-                    uint64_t minBlankNodeIndex);
 
 // Create a copy of the given `permutation` scanned according to `scanSpec`,
 // where all local vocab `Id`s are remapped according to `localVocabMapping`
@@ -78,7 +67,9 @@ size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges);
 
 // Create a `boost::asio::awaitable<void>` that writes a pair of new
 // permutations according to the settings of `newIndex`, based on the data of
-// the current index.
+// the current index. `progress` is called (possibly from several threads)
+// with the number of newly processed triples, for progress reporting; it
+// defaults to a no-op.
 boost::asio::awaitable<void> createPermutationWriterTask(
     IndexImpl& newIndex, const Permutation& permutationA,
     const Permutation& permutationB, bool isInternal,
@@ -86,7 +77,8 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     const LocalVocabMapping& localVocabMapping,
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
-    const ad_utility::SharedCancellationHandle& cancellationHandle);
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    std::function<void(size_t)> progress = ad_utility::noop);
 
 // Analyze how many columns the new permutation will have and which additional
 // columns it will have based on the given `blockMetadataRanges`. The number of

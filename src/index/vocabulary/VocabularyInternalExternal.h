@@ -27,6 +27,11 @@ class VocabularyInternalExternal {
   VocabularyOnDisk externalVocab_;
 
  public:
+  // These suffixes are appended to the base filename in order to get the base
+  // filenames of the internal and the external vocabulary.
+  static constexpr std::string_view internalSuffix = ".internal";
+  static constexpr std::string_view externalSuffix = ".external";
+
   /// Construct an empty vocabulary
   VocabularyInternalExternal() = default;
 
@@ -48,6 +53,22 @@ class VocabularyInternalExternal {
 
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   std::string operator[](uint64_t i) const;
+
+  // Delegate to `scanAll` of the underlying vocabulary. All words that are
+  // stored in the internal vocabulary, can also be found in the external
+  // vocabulary.
+  auto scanAll() const { return externalVocab_.scanAll(); }
+
+  //____________________________________________________________________________
+  VocabBatchLookupResult lookupBatch(ql::span<const size_t> indices) const {
+    return ad_utility::vocabulary::sequentialLookupBatch(*this, indices);
+  }
+
+  //____________________________________________________________________________
+  VocabLookupOutput lookupBatchesStreamed(VocabLookupInput input) const {
+    return ad_utility::vocabulary::lookupBatchesStreamed(*this,
+                                                         std::move(input));
+  }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
@@ -117,6 +138,17 @@ class VocabularyInternalExternal {
     void finishImpl() override;
   };
 
+  // The files of the internal and the external vocabulary, which are stored
+  // under the base filename plus `internalSuffix`/`externalSuffix`.
+  static FileSuffixes fileSuffixes() {
+    FileSuffixes suffixes;
+    addFileSuffixesWithPrefix(suffixes, internalSuffix,
+                              VocabularyInMemoryBinSearch::fileSuffixes());
+    addFileSuffixesWithPrefix(suffixes, externalSuffix,
+                              VocabularyOnDisk::fileSuffixes());
+    return suffixes;
+  }
+
   // Return a `unique_ptr<WordWriter>` that writes to the given `filename`.
   static auto makeDiskWriterPtr(const std::string& filename) {
     return std::make_unique<WordWriter>(filename);
@@ -133,7 +165,7 @@ class VocabularyInternalExternal {
   }
   uint64_t iteratorToIndex(
       ql::ranges::iterator_t<VocabularyInMemoryBinSearch> it) const {
-    return internalVocab_.indices().at(it - internalVocab_.begin());
+    return internalVocab_.indexAtPosition(it - internalVocab_.begin());
   }
 
   // Generic serialization support.

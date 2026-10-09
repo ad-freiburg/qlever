@@ -9,6 +9,8 @@
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/QueryExecutionTree.h"
+#include "index/TripleComponentConversions.h"
 
 // _____________________________________________________________________________
 Describe::Describe(QueryExecutionContext* qec,
@@ -23,8 +25,8 @@ Describe::Describe(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> Describe::getChildren() {
-  return {subtree_.get()};
+qlm::vector<QueryExecutionTree*> Describe::getChildrenImpl() const {
+  return {{subtree_.get()}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -56,7 +58,7 @@ std::string Describe::getCacheKeyImpl() const {
   if (defaultGraphs.has_value()) {
     std::vector<std::string> graphIdVec;
     ql::ranges::transform(defaultGraphs.value(), std::back_inserter(graphIdVec),
-                          &TripleComponent::toRdfLiteral);
+                          &toRdfLiteral);
     ql::ranges::sort(graphIdVec);
     absl::StrAppend(&result,
                     "\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " "));
@@ -101,7 +103,8 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
 template <typename Allocator>
 static IdTable getNewBlankNodes(
     const Allocator& allocator,
-    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, ql::span<Id> input) {
+    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
+    ConstIdColumnRef input) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) resultColumn = result.getColumn(0);
@@ -161,7 +164,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   using V = Variable;
   auto subjectVar = V{"?subject"};
   auto valuesOp = ad_utility::makeExecutionTree<ExplicitIdTableOperation>(
-      getExecutionContext(), std::make_shared<IdTable>(std::move(input)),
+      getExecutionContext(), makeShared<IdTable>(std::move(input)),
       VariableToColumnMap{
           {subjectVar,
            ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
@@ -187,7 +190,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   // case the `selectColumns` operation is a no-op. Note sure when this is not
   // the case, but better safe than sorry.
   auto result = join->getResult();
-  IdTable resultTable = result->idTable().clone();
+  IdTable resultTable = result->cloneIdTable();
   ColumnIndex s = join->getVariableColumn(V{"?subject"});
   ColumnIndex p = join->getVariableColumn(V{"?predicate"});
   ColumnIndex o = join->getVariableColumn(V{"?object"});
@@ -205,24 +208,24 @@ IdTable Describe::getIdsToDescribe(const Result& result,
                                    LocalVocab& localVocab) const {
   // First collect the `Id`s in a hash set, in order to remove duplicates.
   ad_utility::HashSetWithMemoryLimit<Id> idsToDescribe{allocator()};
-  const auto& vocab = getIndex().getVocab();
   for (const auto& resource : describe_.resources_) {
     if (std::holds_alternative<TripleComponent::Iri>(resource)) {
       // For an IRI, add the corresponding ID to `idsToDescribe`.
       idsToDescribe.insert(
-          TripleComponent{std::get<TripleComponent::Iri>(resource)}.toValueId(
-              vocab, localVocab, getIndex().encodedIriManager()));
+          toValueId(TripleComponent{std::get<TripleComponent::Iri>(resource)},
+                    getIndex(), localVocab));
     } else {
       // For a variable, add all IDs that match the variable in the `result` of
-      // the WHERE clause to `idsToDescribe`.
+      // the WHERE clause to `idsToDescribe`. Unbound values (e.g. from an
+      // `OPTIONAL` or `UNDEF` in a `VALUES` clause) have nothing to describe.
       const auto& var = std::get<Variable>(resource);
       auto column = subtree_->getVariableColumnOrNullopt(var);
       if (!column.has_value()) {
         continue;
       }
-      for (Id id : result.idTable().getColumn(column.value())) {
-        idsToDescribe.insert(id);
-      }
+      ql::ranges::copy_if(result.idTableView().getColumn(column.value()),
+                          std::inserter(idsToDescribe, idsToDescribe.end()),
+                          Id::isDefinedL);
     }
   }
 

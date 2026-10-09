@@ -93,8 +93,7 @@ CPP_template(typename T, typename Transformation = ql::identity)(
         T>) auto resultGeneratorImpl(T&& vector, size_t numItems,
                                      Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
-  return ad_utility::allView(AD_FWD(vector)) |
-         ql::views::transform(std::move(transformation));
+  return AD_FWD(vector) | ql::views::transform(std::move(transformation));
 }
 
 #ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
@@ -109,11 +108,11 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
   };
   absl::InlinedVector<Bounds, 10> bounds;
   bounds.reserve(set._intervals.size() * 2 + 1);
+  AD_CONTRACT_CHECK(set.size() == targetSize,
+                    "The size of a `SetOfIntervals` does not match the size "
+                    "of the evaluation context.");
   size_t last = 0;
   for (const auto& [lower, upper] : set._intervals) {
-    AD_CONTRACT_CHECK(upper <= targetSize,
-                      "The size of a `SetOfIntervals` exceeds the total size "
-                      "of the evaluation context.");
     if (lower != last) {
       bounds.push_back(Bounds{lower - last, false});
     }
@@ -126,7 +125,7 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
     bounds.push_back(Bounds{targetSize - last, false});
   }
   // We have to use `range-v3` as `views::repeat` is a C++23 feature.
-  return ad_utility::OwningView{std::move(bounds)} |
+  return std::move(bounds) |
          ::ranges::views::transform([transformation](const auto& bound) {
            return ::ranges::views::repeat_n(
                transformation(Id::makeFromBool(bound.value_)), bound.num_);
@@ -143,11 +142,9 @@ resultGeneratorImpl(ad_utility::SetOfIntervals set, size_t targetSize,
   size_t i = 0;
   const auto trueTransformed = transformation(Id::makeFromBool(true));
   const auto falseTransformed = transformation(Id::makeFromBool(false));
-  if (!set._intervals.empty()) {
-    AD_CONTRACT_CHECK(set._intervals.back().second <= targetSize,
-                      "The size of a `SetOfIntervals` exceeds the total size "
-                      "of the evaluation context.");
-  }
+  AD_CONTRACT_CHECK(set.size() == targetSize,
+                    "The size of a `SetOfIntervals` does not match the size "
+                    "of the evaluation context.");
   for (const auto& [begin, end] : set._intervals) {
     while (i < begin) {
       co_yield falseTransformed;
@@ -225,8 +222,8 @@ inline auto applyFunction = [](auto function, [[maybe_unused]] size_t numItems,
                                auto... generators) {
   // We have to use `range-v3` as `std::views::zip` is not available in our
   // toolchains.
-  return ::ranges::views::zip(ad_utility::RvalueView{
-             ad_utility::OwningView{std::move(generators)}}...) |
+  return ::ranges::views::zip(
+             ad_utility::RvalueView{std::move(generators)}...) |
          ::ranges::views::transform(
              [f = std::move(function)](auto&& tuple) -> decltype(auto) {
                // If the transformation would return an rvalue reference,
@@ -298,11 +295,11 @@ CPP_template(typename Operation, typename... Operands)(requires(
   return std::apply(getResultFromValueGetters, ValueGetters{});
 }
 
-// Return a lambda that takes a `LiteralOrIri` and converts it to an `Id` by
+// Return a lambda that takes a `LocalVocabEntry` and converts it to an `Id` by
 // adding it to the `localVocab`.
 inline auto makeStringResultGetter(LocalVocab* localVocab) {
-  return [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
-    auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
+  return [localVocab](const LocalVocabEntry& entry) {
+    auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(entry);
     return ValueId::makeFromLocalVocabIndex(localVocabIndex);
   };
 }
@@ -310,14 +307,17 @@ inline auto makeStringResultGetter(LocalVocab* localVocab) {
 // Return the `Id` if the passed `value` contains one, alternatively add the
 // literal or iri in the `value` to the `localVocab` and return the newly
 // created `Id` instead.
-inline Id idOrLiteralOrIriToId(const IdOrLiteralOrIri& value,
-                               LocalVocab* localVocab) {
-  return std::visit(
-      ad_utility::OverloadCallOperator{[](ValueId id) { return id; },
-                                       makeStringResultGetter(localVocab)},
-      value);
-}
+Id idOrLiteralOrIriToId(const IdOrLocalVocabEntry& value,
+                        LocalVocab* localVocab);
 
 }  // namespace sparqlExpression::detail
+
+// If `QLEVER_CHEAPER_COMPILATION` is set the inline definition of
+// `idOrLiteralOrIriToId` lives in a separate .cpp (to avoid instantiating the
+// std::visit vtable in every TU). Otherwise include it inline here so the
+// compiler can inline the call at each use site.
+#ifndef QLEVER_CHEAPER_COMPILATION
+#include "engine/sparqlExpressions/SparqlExpressionGeneratorsImpl.h"
+#endif
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H

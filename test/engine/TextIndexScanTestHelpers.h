@@ -24,7 +24,7 @@ inline std::string getTextRecordFromResultTable(
     const size_t& rowIndex) {
   size_t nofNonLiterals = qec->getIndex().getNofNonLiteralsInTextIndex();
   uint64_t textRecordIdFromTable =
-      result.idTable().getColumn(0)[rowIndex].getTextRecordIndex().get();
+      result.idTableView().getColumn(0)[rowIndex].getTextRecordIndex().get();
   if (nofNonLiterals <= textRecordIdFromTable) {
     // Return when from Literals
     // Note: the return type of `indexToString` might be `string_view` if the
@@ -35,14 +35,14 @@ inline std::string getTextRecordFromResultTable(
   } else {
     // Return when from DocsDB
     return std::string{qec->getIndex().getTextExcerpt(
-        result.idTable().getColumn(0)[rowIndex].getTextRecordIndex())};
+        result.idTableView().getColumn(0)[rowIndex].getTextRecordIndex())};
   }
 }
 
 inline const TextRecordIndex getTextRecordIdFromResultTable(
     [[maybe_unused]] const QueryExecutionContext* qec, const Result& result,
     const size_t& rowIndex) {
-  return result.idTable().getColumn(0)[rowIndex].getTextRecordIndex();
+  return result.idTableView().getColumn(0)[rowIndex].getTextRecordIndex();
 }
 
 // Only use on prefix search results
@@ -53,7 +53,7 @@ inline std::string getEntityFromResultTable(const QueryExecutionContext* qec,
   // `indexToString` might be `string_view` if the vocabulary is stored
   // uncompressed in memory.
   return std::string{qec->getIndex().indexToString(
-      result.idTable().getColumn(1)[rowIndex].getVocabIndex())};
+      result.idTableView().getColumn(1)[rowIndex].getVocabIndex())};
 }
 
 // Only use on prefix search results
@@ -61,7 +61,7 @@ inline std::string getWordFromResultTable(const QueryExecutionContext* qec,
                                           const Result& result,
                                           const size_t& rowIndex) {
   return std::string{qec->getIndex().indexToString(
-      result.idTable().getColumn(1)[rowIndex].getWordVocabIndex())};
+      result.idTableView().getColumn(1)[rowIndex].getWordVocabIndex())};
 }
 
 inline Score getScoreFromResultTable(
@@ -70,10 +70,10 @@ inline Score getScoreFromResultTable(
   size_t colToRetrieve = wasPrefixSearch ? 2 : 1;
   if (scoreIsInt) {
     return static_cast<Score>(
-        result.idTable().getColumn(colToRetrieve)[rowIndex].getInt());
+        result.idTableView().getColumn(colToRetrieve)[rowIndex].getInt());
   } else {
     return static_cast<Score>(
-        result.idTable().getColumn(colToRetrieve)[rowIndex].getDouble());
+        result.idTableView().getColumn(colToRetrieve)[rowIndex].getDouble());
   }
 }
 

@@ -23,7 +23,7 @@ void MaterializedViewQuery::addParameter(const SparqlTriple& triple) {
   TripleComponent object = simpleTriple.o_;
 
   auto parameter = extractParameterName(predicate, MATERIALIZED_VIEW_IRI);
-  if (parameter.starts_with(prefixColumnParam)) {
+  if (ql::starts_with(parameter, prefixColumnParam)) {
     Variable column{
         absl::StrCat("?", parameter.substr(prefixColumnParam.length()))};
     addRequestedColumn(column, object);
@@ -96,7 +96,7 @@ MaterializedViewQuery::MaterializedViewQuery(const SparqlTriple& triple) {
 MaterializedViewQuery::MaterializedViewQuery(std::string name,
                                              RequestedColumns requestedColumns)
     : viewName_{std::move(name)},
-      requestedColumns_{std::move(requestedColumns)} {};
+      requestedColumns_{std::move(requestedColumns)} {}
 
 // _____________________________________________________________________________
 ad_utility::HashSet<Variable> MaterializedViewQuery::getVarsToKeep() const {

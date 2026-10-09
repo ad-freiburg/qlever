@@ -1,30 +1,75 @@
-// Copyright 2025 The QLever Authors, in particular:
+// Copyright 2026 The QLever Authors, in particular:
 //
-// 2025 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+// 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 #define QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H
 
 #include <array>
-#include <optional>
+#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
 
+#include "global/Id.h"
+#include "global/ValueId.h"
+#include "index/LocalVocab.h"
+
 namespace qlever::constructExport {
 
-// A constant (`Iri` or `Literal`) whose string value is fully known at
-// preprocessing time.
-struct PrecomputedConstant {
-  std::string value_;
+// Canonical representation of a resolved RDF term stored in the LRU cache.
+//
+// Two fundamentally different representations are used, distinguished by
+// whether `rdfTermDataType_` is null:
+// 1) `rdfTermDataType_` != nullptr: `rdfTermString_` represents an encoded
+// literal (directly encoded into `ValueId`). `rdfTermString_` is the raw
+// unquoted value (e.g. `42` for an xsd:int, `3.14` for an xsd:decimal). `type`
+// points to the compile-time XSD type string constant (e.g. XSD_INT_TYPE).
+// Whether to emit the short form ("42") or the fully-qualified form
+// ("\"42\"^^<xsd:integer>") is decided at formatting time by `formatTerm`.
+// 2) `rdfTermDataType` == nullptr: an IRI, a blank node, or a
+// vocabulary-indexed literal. `rdfTermString_` already holds the complete,
+// ready-to-emit serialized form (e.g. "<http://example.org/>", "\"hello\"@en").
+// No further formatting is needed; the value is returned as-is for every
+// format. This is the legacy format returned by `ExportIds::idToStringAndType`.
+struct EvaluatedTermData {
+  std::string rdfTermString_;
+  const char* rdfTermDataType_;  // non-null iff encoded literal (case 1 above)
+
+  //____________________________________________________________________________
+  EvaluatedTermData(std::string rdfTermString, const char* rdfTermDataType)
+      : rdfTermString_{std::move(rdfTermString)},
+        rdfTermDataType_{rdfTermDataType} {}
 };
 
-// We precompute which `IdTable` column to look up at construct query triple
-// instantitation time.
+// Shared ownership of `EvaluatedTermData`. The shared_ptr allows cheap copying
+// when the same `Id` appears in multiple rows or is reused from the `IdCache`.
+using EvaluatedTerm = std::shared_ptr<const EvaluatedTermData>;
+
+// A constant (`Iri` or `Literal`) whose string value is fully known at
+// preprocessing time. The `EvaluatedTerm` is built once at preprocessing and
+// shared across all rows, avoiding per-row heap allocation.
+struct PrecomputedConstant {
+  EvaluatedTerm evaluatedTerm_;
+  // The `ValueId` for this constant, used for the CONSTRUCT result
+  // deduplication. It is set to the correct value by
+  // `ConstructTemplatePreprocessor::resolveConstantDedupId`.
+  std::optional<ValueId> dedupId_ = std::nullopt;
+};
+
+// A variable in a CONSTRUCT template. `columnIndex_` is the index of the
+// column in the `IdTable` of the `Result` that holds this variable's values.
+// It is used directly as the key into
+// `BatchEvaluationResult::variablesByColumn_`. The set of distinct column
+// indices used by the whole template is collected in
+// `PreprocessedConstructTemplate::uniqueVariableColumns_`.
 struct PrecomputedVariable {
-  size_t columnIndex_;
+  ColumnIndex columnIndex_;
 };
 
 // A blank node with precomputed prefix and suffix for fast evaluation. The
@@ -48,13 +93,29 @@ inline constexpr size_t NUM_TRIPLE_POSITIONS = 3;
 // A single preprocessed CONSTRUCT template triple.
 using PreprocessedTriple = std::array<PreprocessedTerm, NUM_TRIPLE_POSITIONS>;
 
-// Result of preprocessing all CONSTRUCT template triples. Contains the
-// preprocessed triples and the unique variable column indices that need to be
-// evaluated for each row of the result-table.
-struct PreprocessedConstructTemplate {
-  std::vector<PreprocessedTriple> preprocessedTriples_;
-  std::vector<size_t> uniqueVariableColumns_;
+// Result of instantiating a single template triple for a specific result table
+// row.
+struct EvaluatedTriple {
+  EvaluatedTerm subject_;
+  EvaluatedTerm predicate_;
+  EvaluatedTerm object_;
 };
+
+// Result of preprocessing all CONSTRUCT template triples.
+struct PreprocessedConstructTemplate {
+  // The (non-ground) template triples, in template order.
+  std::vector<PreprocessedTriple> preprocessedTriples_;
+  // Deduplicated `IdTable` column indices of all variables that occur in the
+  // template triples, in order of first encounter.
+  std::vector<ColumnIndex> uniqueVariableColumns_;
+  // `tripleContainsBlankNode_[i]` is true iff `preprocessedTriples_[i]`
+  // contains a blank node constant.
+  std::vector<bool> tripleContainsBlankNode_;
+  // Owns and keeps alive the `LocalVocabEntry`s created while resolving literal
+  // and IRI constants to their `PrecomputedConstant::dedupId_`.
+  LocalVocab localVocabForConstants_;
+};
+
 }  // namespace qlever::constructExport
 
 #endif  // QLEVER_SRC_ENGINE_CONSTRUCTTYPES_H

@@ -6,6 +6,7 @@
 #include "engine/StringMapping.h"
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "index/ExportIds.h"
 #include "index/Index.h"
 
 namespace qlever::binary_export {
@@ -17,7 +18,7 @@ std::vector<std::string> StringMapping::flush(const Index& index) {
   sortedStrings.resize(stringMapping_.size());
   for (const auto& [oldId, newId] : stringMapping_) {
     auto literalOrIri =
-        ExportQueryExecutionTrees::idToLiteralOrIri(index, oldId, dummy, true);
+        ql::exportIds::idToLiteralOrIri(index, oldId, dummy, true);
     AD_CORRECTNESS_CHECK(literalOrIri.has_value());
     sortedStrings[newId] =
         std::move(literalOrIri.value()).toStringRepresentation();
@@ -34,7 +35,8 @@ Id StringMapping::remapId(Id id) {
   // be directly encoded into the ID). All other IDs have to be serialized by
   // different mechanism.
   static constexpr std::array allowedDatatypes{
-      VocabIndex, LocalVocabIndex, TextRecordIndex, WordVocabIndex, EncodedVal};
+      VocabIndex,     LocalVocabIndex,     TextRecordIndex,
+      WordVocabIndex, SecondaryVocabIndex, EncodedVal};
   AD_EXPENSIVE_CHECK(ad_utility::contains(allowedDatatypes, id.getDatatype()));
 
   // A static assertion that each datatype is either `trivial`, or `allowed`

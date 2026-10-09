@@ -9,9 +9,9 @@
 #include <cstdint>
 #include <vector>
 
-#include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "util/Algorithm.h"
 #include "util/TransparentFunctors.h"
 
@@ -56,7 +56,7 @@ class JoinColumnMapping {
   // column in the left input.
   const std::vector<ColumnIndex>& permutationLeft() const {
     return permutationLeft_;
-  };
+  }
   // The same, but for the right input.
   const std::vector<ColumnIndex>& permutationRight() const {
     return permutationRight_;

@@ -1,6 +1,12 @@
-//  Copyright 2024 - 2025, University of Freiburg,
-//                  Chair of Algorithms and Data Structures
-//  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
+// Copyright 2024 - 2026 The QLever Authors, in particular:
+//
+// 2024 - 2025 Hannes Baumann <baumannh@informatik.uni-freiburg.de>, UFR
+// 2026        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_TEST_PREFILTEREXPRESSIONTESTHELPERS_H
 #define QLEVER_TEST_PREFILTEREXPRESSIONTESTHELPERS_H
@@ -13,8 +19,10 @@
 #include "./engine/sparqlExpressions/RegexExpression.h"
 #include "./engine/sparqlExpressions/RelationalExpressions.h"
 #include "./engine/sparqlExpressions/SparqlExpression.h"
+#include "index/LocalVocabContext.h"
 #include "util/DateYearDuration.h"
 #include "util/IdTestHelpers.h"
+#include "util/IndexTestHelpers.h"
 
 using ad_utility::testing::DateId;
 
@@ -88,6 +96,10 @@ constexpr inline auto isLit = isDtypeExpr<IsLiteralExpression>;
 constexpr inline auto isNum = isDtypeExpr<IsNumericExpression>;
 // IS BLANK
 constexpr inline auto isBlank = isDtypeExpr<IsBlankExpression>;
+// IS ENCODED IRI
+constexpr inline auto isEncodedIri = isDtypeExpr<IsEncodedIriExpression>;
+// IS GEO POINT
+constexpr inline auto isGeoPoint = isDtypeExpr<IsGeoPointExpression>;
 // AND (`&&`)
 constexpr inline auto andExpr = logExpr<AndExpression>;
 // OR (`||`)
@@ -104,8 +116,10 @@ namespace filterHelper {
 // Create `LocalVocabEntry` / `LiteralOrIri`.
 // Note: `Iri` string value must start and end with `<`/`>` and the `Literal`
 // value with `'`/`'`.
-constexpr inline auto LVE = [](const std::string& litOrIri) -> LocalVocabEntry {
-  return LocalVocabEntry::fromStringRepresentation(litOrIri);
+inline auto LVE = [](std::string litOrIri,
+                     const LocalVocabContext& context) -> LocalVocabEntry {
+  return LocalVocabEntry::fromStringRepresentation(std::move(litOrIri),
+                                                   context);
 };
 
 //______________________________________________________________________________
@@ -229,6 +243,8 @@ std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
     return makeIsLiteralExpression(std::move(childExpr));
   } else if constexpr (Datatype == NUMERIC) {
     return makeIsNumericExpression(std::move(childExpr));
+  } else if constexpr (Datatype == GEO_POINT) {
+    return makeIsGeoPointExpression(std::move(childExpr));
   } else {
     static_assert(Datatype == BLANK);
     return makeIsBlankExpression(std::move(childExpr));
@@ -297,6 +313,9 @@ constexpr inline auto isNumericSprql = &makeIsDatatypeStartsWithExpression<
 // Create SparqlExpression `isBlank`
 constexpr inline auto isBlankSprql = &makeIsDatatypeStartsWithExpression<
     prefilterExpressions::IsDatatype::BLANK>;
+// Create SparqlExpression `ql:isGeoPoint`
+constexpr inline auto isGeoPointSprql = &makeIsDatatypeStartsWithExpression<
+    prefilterExpressions::IsDatatype::GEO_POINT>;
 // Create SparqlExpression `YEAR`.
 constexpr inline auto yearSprqlExpr = &makeYearSparqlExpression;
 
