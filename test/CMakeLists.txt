@@ -386,6 +386,8 @@ addLinkAndDiscoverTest(TripleComponentTest)
 
 addLinkAndDiscoverTest(ValueIdTest qlever_util)
 
+addLinkAndDiscoverTest(DatatypeTest qlever_util)
+
 addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
 
 addLinkAndDiscoverTest(ParseExceptionTest sparqlParser engine)
