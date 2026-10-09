@@ -11,6 +11,9 @@
 #include <absl/strings/str_cat.h>
 
 #include <atomic>
+#include <boost/asio/post.hpp>
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
 #include <cstdint>
 #include <future>
 #include <optional>
@@ -604,20 +607,39 @@ CPP_class_template(size_t NumStaticCols,
   size_t blocksize_{
       compressedExternalIdTable::blocksizeForMemory(memory_, numColumns_)};
   CompressedExternalIdTableWriter writer_;
-  std::future<void> compressAndWriteFuture_;
+
+  // The dedicated thread on which the blocks are transformed (for the
+  // `CompressedExternalIdTableSorter` this means: sorted), compressed, and
+  // written to the `writer_` in the background, see `transformAndWriteBlock`.
+  // A single thread suffices, because there is always at most one such task in
+  // flight: `transformAndWriteBlock` waits for the previous one before it posts
+  // the next one.
+  //
+  // NOTE: The pool is declared before the `compressAndWriteFuture_`, such that
+  // it is destroyed (and its thread joined) only after that future is gone.
+  // The destructor additionally waits for the task explicitly, see there.
+  boost::asio::thread_pool blockWritePool_{1};
+
+  // NOTE: The background task hands the block that it is done with back via
+  // this future (empty, but with its memory still allocated), so that the next
+  // block can reuse that memory instead of allocating (and faulting in) a
+  // buffer of its own, see `transformAndWriteBlock`.
+  std::future<IdTableStatic<NumStaticCols>> compressAndWriteFuture_;
 
   // If the `compressAndWriteFuture_` is currently active, wait for its
-  // computation to be completed, else do nothing.
-  void waitForFuture() {
+  // computation to be completed and return the block that the background task
+  // has given back. Else do nothing and return `std::nullopt`.
+  std::optional<IdTableStatic<NumStaticCols>> waitForFuture() {
     if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
+      return compressAndWriteFuture_.get();
     }
+    return std::nullopt;
   }
 
   // Store the `future` inside the `compressAndWriteFuture_`. This trivial
   // wrapper can be used to inject more detailed logging when analyzing the
   // control flow of this class or when fixing bugs.
-  void setFuture(std::future<void> future) {
+  void setFuture(std::future<IdTableStatic<NumStaticCols>> future) {
     AD_CORRECTNESS_CHECK(!compressAndWriteFuture_.valid());
     compressAndWriteFuture_ = std::move(future);
   }
@@ -667,8 +689,7 @@ CPP_class_template(size_t NumStaticCols,
     ++numElementsPushed_;
     currentBlock_.push_back(row);
     if (currentBlock_.size() >= blocksize_) {
-      transformAndWriteBlock(std::move(currentBlock_));
-      resetCurrentBlock(true);
+      writeCurrentBlockAndRecycleBuffer();
     }
   }
 
@@ -698,8 +719,7 @@ CPP_class_template(size_t NumStaticCols,
       currentBlock_.insertAtEnd(table, numPushed, numPushed + numToPush);
       numPushed += numToPush;
       if (currentBlock_.numRows() >= blocksize_) {
-        transformAndWriteBlock(std::move(currentBlock_));
-        resetCurrentBlock(true);
+        writeCurrentBlockAndRecycleBuffer();
       }
     }
   }
@@ -807,25 +827,56 @@ CPP_class_template(size_t NumStaticCols,
   // Asynchronously compress the `block` and write it to the underlying
   // `writer_`. Before compressing, apply the transformation that is specified
   // by the `Impl` via the `transformBlock` function.
-  template <typename Transformation = ql::identity>
-  void transformAndWriteBlock(IdTableStatic<NumStaticCols> block) {
-    waitForFuture();
+  //
+  // Return the block of the *previous* such task (empty, but with its memory
+  // still allocated), or `std::nullopt` if there was no previous task. Reusing
+  // that block for the next one is what keeps the number of block buffers that
+  // are ever allocated at two, see `writeCurrentBlockAndRecycleBuffer`.
+  std::optional<IdTableStatic<NumStaticCols>> transformAndWriteBlock(
+      IdTableStatic<NumStaticCols> block) {
+    auto recycledBlock = waitForFuture();
     if (block.empty()) {
       if (numBlocksPushed_ > 0) {
         // NOTE: In `transformAndPushLastBlock` we assert that if at least one
         // block has been pushed, then `compressAndWriteFuture_` is valid.
         // Therefore, we have to set a valid future here, even if it does
         // nothing.
-        setFuture(std::async(std::launch::deferred, []() {}));
+        std::promise<IdTableStatic<NumStaticCols>> promise;
+        promise.set_value(std::move(block));
+        setFuture(promise.get_future());
       }
-      return;
+      return recycledBlock;
     }
     ++numBlocksPushed_;
-    setFuture(std::async(
-        std::launch::async, [block = std::move(block), this]() mutable {
+    setFuture(boost::asio::post(
+        blockWritePool_.get_executor(),
+        boost::asio::use_future([block = std::move(block), this]() mutable
+                                -> IdTableStatic<NumStaticCols> {
           blockTransformation_(block);
-          this->writer_.writeIdTable(std::move(block).toDynamic());
-        }));
+          // NOTE: The round trip via the dynamic table moves the columns, and
+          // so does the `clear()`, so the block that we give back keeps its
+          // memory and already has the capacity that the next block needs.
+          IdTable dynamicBlock = std::move(block).toDynamic();
+          this->writer_.writeIdTable(dynamicBlock);
+          dynamicBlock.clear();
+          return std::move(dynamicBlock)
+              .template toStatic<static_cast<int>(NumStaticCols)>();
+        })));
+    return recycledBlock;
+  }
+
+  // Hand the `currentBlock_` to the background thread (see
+  // `transformAndWriteBlock`) and make the block that the *previous* background
+  // task has given back the new `currentBlock_`. Only the very first block has
+  // no such block to reuse and therefore has to allocate one, so that in total
+  // exactly two block buffers are allocated: the one that the background thread
+  // is working on, and the one that `push` fills.
+  void writeCurrentBlockAndRecycleBuffer() {
+    auto recycledBlock = transformAndWriteBlock(std::move(currentBlock_));
+    if (recycledBlock.has_value()) {
+      currentBlock_ = std::move(recycledBlock).value();
+    }
+    resetCurrentBlock(true);
   }
 
   // If there is less than one complete block (meaning that the number of calls

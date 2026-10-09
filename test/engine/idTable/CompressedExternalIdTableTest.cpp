@@ -442,6 +442,57 @@ TEST(CompressedExternalIdTable, pushBlockProducesCorrectSortedOutput) {
   EXPECT_THAT(result, ElementsAreArray(expected));
 }
 
+// _____________________________________________________________________________
+// The input phase of a `CompressedExternalIdTableBase` only ever allocates two
+// block buffers: the one that the `push` calls fill, and the one that the
+// background thread transforms and writes. Each buffer that the background
+// thread is done with becomes the next block that `push` fills, see
+// `writeCurrentBlockAndRecycleBuffer`. Test this by recording the buffer of
+// each block that reaches the block transformation.
+TEST(CompressedExternalIdTable, blockBuffersAreRecycled) {
+  std::string filename = gtestCurrentTestName();
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+
+  // The address of the first column of each block, in the order of the blocks.
+  // The transformation runs on the single background thread, and each run
+  // completes before the next block is handed over, so no lock is needed.
+  auto buffers = std::make_shared<std::vector<const Id*>>();
+  struct RecordBuffer {
+    std::shared_ptr<std::vector<const Id*>> buffers_;
+    void operator()(IdTableStatic<NUM_COLS>& block) const {
+      buffers_->push_back(block.getColumn(0).data());
+    }
+  };
+  constexpr size_t blockSize = 1000;
+  constexpr size_t numBlocks = 20;
+  {
+    ad_utility::CompressedExternalIdTableBase<NUM_COLS, RecordBuffer> table{
+        filename,
+        NUM_COLS,
+        memoryForBlocksize(blockSize, NUM_COLS),
+        alloc,
+        ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+        RecordBuffer{buffers}};
+    // Keep further allocations of the size of a block column alive in between
+    // the blocks, such that an implementation that allocates a fresh buffer
+    // per block cannot get the address of an earlier buffer back by chance.
+    std::vector<std::vector<Id>> blockers;
+    auto block = createRandomlyFilledIdTable(blockSize, NUM_COLS);
+    for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, numBlocks)) {
+      table.pushBlock(block);
+      blockers.emplace_back(blockSize);
+    }
+  }
+  // The destructor has waited for the last block, so all of them have been
+  // recorded.
+  ASSERT_EQ(buffers->size(), numBlocks);
+  for (size_t i = 2; i < numBlocks; ++i) {
+    EXPECT_EQ(buffers->at(i), buffers->at(i - 2)) << i;
+  }
+  EXPECT_NE(buffers->at(0), buffers->at(1));
+}
+
 // `memoryForBlocksize` and `blocksizeForMemory` are inverses of each other, so
 // the tests below can specify the number of rows per block instead of a memory
 // limit.
