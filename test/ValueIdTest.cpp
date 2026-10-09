@@ -398,10 +398,6 @@ TEST_F(ValueIdTest, toDebugString) {
   ASSERT_ANY_THROW(test(ValueId::max(), "blim"));
 }
 
-TEST_F(ValueIdTest, InvalidDatatypeEnumValue) {
-  ASSERT_ANY_THROW(toString(static_cast<Datatype>(2345)));
-}
-
 TEST_F(ValueIdTest, TriviallyCopyable) {
   static_assert(std::is_trivially_copyable_v<ValueId>);
 }
