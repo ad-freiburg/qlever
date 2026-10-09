@@ -74,12 +74,12 @@ class CompressedRelationReader {
 
   // Optional override for the number of blocks that a `lazyScan` reads and
   // decompresses ahead of its consumer. When set, it takes precedence over
-  // the `lazy-index-scan-num-threads` runtime parameter. This is used by the
-  // runtime index rebuild, which scans the old permutations through a dedicated
-  // reader (see `Permutation::lazyScanWithUnlimitedReader`), to throttle its
-  // read/decompress parallelism without affecting query scans (which use the
-  // permutation's shared reader, where this stays `nullopt`).
-  std::optional<size_t> lazyScanNumThreadsOverride_ = std::nullopt;
+  // the `lazy-index-scan-num-blocks-in-flight` runtime parameter. This is used
+  // by the runtime index rebuild, which scans the old permutations through a
+  // dedicated reader (see `Permutation::lazyScanWithUnlimitedReader`), to
+  // throttle its read/decompress parallelism without affecting query scans
+  // (which use the permutation's shared reader, where this stays `nullopt`).
+  std::optional<size_t> lazyScanNumBlocksInFlightOverride_ = std::nullopt;
 
   // This struct stores a reference to the (optional) graphs by which a result
   // is filtered, the column in which the graph ID will reside in a result,
@@ -323,7 +323,7 @@ class CompressedRelationReader {
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order. They are read, decompressed, and
   // postprocessed on the `executor`, several of them concurrently and ahead of
-  // the consumer (see `lazy-index-scan-num-threads` for how many). The
+  // the consumer (see `lazy-index-scan-num-blocks-in-flight` for how many). The
   // returned generator must therefore not be consumed from a thread of the
   // `executor`, and the `executor` as well as this reader and the
   // `locatedTriplesPerBlock` must outlive it.

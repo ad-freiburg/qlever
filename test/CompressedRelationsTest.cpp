@@ -1841,7 +1841,7 @@ TEST(CompressedRelationReader, lazyScan) {
   boost::asio::thread_pool ownPool{3};
   for (size_t numBlocksInFlight : {1, 2, 5}) {
     auto reset = setRuntimeParameterForTest<
-        &RuntimeParameters::lazyIndexScanNumThreads_>(numBlocksInFlight);
+        &RuntimeParameters::lazyIndexScanNumBlocksInFlight_>(numBlocksInFlight);
     for (const auto& executor : {ad_utility::globalExecutor(),
                                  ql::any_io_executor{ownPool.get_executor()}}) {
       auto scan = lazyScan(executor);

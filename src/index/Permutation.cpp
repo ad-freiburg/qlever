@@ -278,13 +278,14 @@ Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState,
-    std::optional<size_t> numThreadsOverride) const {
+    std::optional<size_t> numBlocksInFlightOverride) const {
   auto independentReader = std::make_unique<CompressedRelationReader>(
       reader().makeReaderWithReboundAllocator(
           ad_utility::makeUnlimitedAllocator<Id>()));
   // Applies only to this dedicated reader; query scans use the shared reader
   // and are unaffected.
-  independentReader->lazyScanNumThreadsOverride_ = numThreadsOverride;
+  independentReader->lazyScanNumBlocksInFlightOverride_ =
+      numBlocksInFlightOverride;
   auto blocks = lazyScanImpl(*independentReader, scanSpecAndBlocks,
                              std::nullopt, additionalColumns,
                              cancellationHandle, locatedTriplesState, {});

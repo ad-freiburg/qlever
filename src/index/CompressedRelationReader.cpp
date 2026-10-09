@@ -213,10 +213,11 @@ CompressedRelationReader::lazyScan(
   };
   // The block that the consumer is currently processing still counts as in
   // flight for the `AsyncTransformView`, so one more block is needed to read
-  // and decompress `numThreads` blocks while the consumer is busy.
-  size_t numThreads = lazyScanNumThreadsOverride_.value_or(
-      getRuntimeParameter<&RuntimeParameters::lazyIndexScanNumThreads_>());
-  size_t numBlocksInFlight = numThreads + 1;
+  // and decompress `numBlocksAhead` blocks while the consumer is busy.
+  size_t numBlocksAhead = lazyScanNumBlocksInFlightOverride_.value_or(
+      getRuntimeParameter<
+          &RuntimeParameters::lazyIndexScanNumBlocksInFlight_>());
+  size_t numBlocksInFlight = numBlocksAhead + 1;
   using BlocksView = ad_utility::AsyncTransformView<
       decltype(ad_utility::integerRange(numBlocks)), decltype(readBlock)>;
 
