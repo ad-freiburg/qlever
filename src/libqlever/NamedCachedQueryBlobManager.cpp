@@ -276,10 +276,10 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // copy (the entry in the named cache itself stays unchanged): its `Id`s of
   // type `LocalVocabIndex` are rewritten, its columns without a variable are
   // dropped, and its rows and columns are in canonical order (see
-  // `canonicalizeForSerialization`). For an entry that needs neither rewriting
-  // nor sorting, the copy is only a view of the columns of the entry, so no
-  // table is copied. The words of the local vocab of such a copy are not
-  // written, because they are no longer referenced.
+  // `canonicalizeForSerialization`). The words of the local vocab of such a
+  // copy are not written, because they are no longer referenced. For an entry
+  // that needs neither rewriting nor sorting, the copy is only a view of the
+  // columns of the entry, so no table is copied.
   namedResultCacheSerializer::writeEntries(
       serializer, entries,
       [&secondaryVocab, &qlever](auto& entrySerializer,
