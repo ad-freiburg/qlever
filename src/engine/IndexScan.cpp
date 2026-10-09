@@ -8,6 +8,8 @@
 #include <absl/strings/str_join.h>
 
 #include <algorithm>
+#include <functional>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <utility>

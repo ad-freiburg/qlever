@@ -10,6 +10,8 @@
 
 #include "index/LocatedTriples.h"
 
+#include <iterator>
+
 #include "backports/algorithm.h"
 #include "global/RuntimeParameters.h"
 #include "index/CompressedRelationMetadata.h"
@@ -581,6 +583,7 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     }
     auto firstTriple = blockUpdates->front().triple_.toPermutedTriple();
     auto lastTriple = blockUpdates->back().triple_.toPermutedTriple();
+
     // The first `std::nullopt` means that this block contains only
     // `LocatedTriple`s.
     CompressedBlockMetadataNoBlockIndex lastBlockN{

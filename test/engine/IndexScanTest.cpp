@@ -1002,9 +1002,9 @@ TEST(IndexScan, checkEvaluationWithPrefilteringOnSeveralChunks) {
                             Tc{Variable{"?price"}}};
 
   // Insert the triple `<P0> <price_tag> 0` as an update and let the scans see
-  // it. The augmented metadata is only chunked once there is an update.
-  // The index of the cached test `QueryExecutionContext` is const; the update
-  // below is the only mutation.
+  // it. The augmented metadata is only chunked once there is an update. The
+  // index of the cached test `QueryExecutionContext` is const, and this update
+  // is the only mutation.
   auto* qec = getQec(kg);
   auto& index = const_cast<Index&>(qec->getIndex());
   auto getId = ad_utility::testing::makeGetId(index);
@@ -1026,24 +1026,28 @@ TEST(IndexScan, checkEvaluationWithPrefilteringOnSeveralChunks) {
     return result;
   };
 
-  // A prefilter that selects blocks in the second chunk only, one that selects
-  // blocks across the chunk boundary (between the prices 1024 and 1025), one
-  // with a second prefilter, and one that selects the inserted triple. The
-  // results contain the complete blocks (two prices each) that the prefilter
-  // cannot exclude.
+  // A prefilter that selects blocks in the second chunk only. The result
+  // contains the complete blocks (two prices each) that the prefilter cannot
+  // exclude, here and in the following cases.
   testSetAndMakeScanWithPrefilterExpr(kg, triple, Permutation::POS,
                                       pr(ge(IntId(1100)), Variable{"?price"}),
                                       prices(1099, 1200), true);
+
+  // A prefilter that selects blocks across the chunk boundary (between the
+  // prices 1024 and 1025).
   testSetAndMakeScanWithPrefilterExpr(
       kg, triple, Permutation::POS,
       pr(andExpr(gt(IntId(1020)), lt(IntId(1030))), Variable{"?price"}),
       prices(1021, 1030), true);
-  // A second prefilter on the already prefiltered blocks.
+
+  // A second prefilter on the already prefiltered blocks across the boundary.
   testSetAndMakeScanWithPrefilterExpr(
       kg, triple, Permutation::POS,
       pr(andExpr(gt(IntId(1020)), lt(IntId(1030))), Variable{"?price"}),
       prices(1023, 1026), true,
       pr(andExpr(gt(IntId(1022)), lt(IntId(1027))), Variable{"?price"}));
+
+  // A prefilter that selects the inserted triple (in the first chunk).
   testSetAndMakeScanWithPrefilterExpr(kg, triple, Permutation::POS,
                                       pr(lt(IntId(5)), Variable{"?price"}),
                                       prices(0, 4), true);
