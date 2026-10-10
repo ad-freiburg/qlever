@@ -53,12 +53,16 @@ jobs:
             build-type: RelWithDebInfo
             runner: ubuntu-22.04
             expensive-tests: false
+            # The sanitizer slows down the tests too much for the timing tests.
+            additional-cmake-options: "-D_NO_TIMING_TESTS=ON"
           - compiler: clang
             compiler-version: 16
             ubsan-flags: " -fsanitize=undefined"
             build-type: RelWithDebInfo
             runner: ubuntu-22.04
             expensive-tests: false
+            # The sanitizer slows down the tests too much for the timing tests.
+            additional-cmake-options: "-D_NO_TIMING_TESTS=ON"
 
     runs-on: ${{matrix.runner || 'ubuntu-24.04'}}
 

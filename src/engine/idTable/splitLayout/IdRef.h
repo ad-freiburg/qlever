@@ -99,7 +99,7 @@ class BasicIdRef {
   }
 
   // The following functions all just forward to the corresponding function
-  // of the legacy `Id`, see `global/ValueId.h` for their documentation.
+  // of the legacy `Id`, see `global/FoldedValueId.h` for their documentation.
   [[nodiscard]] auto compareThreeWay(const Id& other) const {
     return toId().compareThreeWay(other);
   }

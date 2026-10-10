@@ -421,6 +421,30 @@ TEST(QueryPlanner, filtersAreNotAppliedToPossiblyUndefinedVariables) {
       qec);
 }
 
+// Test that a non-deterministic filter is applied only at the end of the
+// group graph pattern, not to one side of a join.
+TEST(QueryPlanner, nonDeterministicFiltersAreAppliedLast) {
+  auto scan = h::IndexScanFromStrings;
+  auto join = h::Join(scan("?s", "<p>", "?o"), scan("?s", "<q>", "?y"));
+  h::expectGreedy("SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(?o > 3) }",
+                  h::Join(h::Filter("?o > 3", scan("?s", "<p>", "?o")),
+                          scan("?s", "<q>", "?y")));
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(?o > 3 && RAND() < 0.5) }",
+      h::Filter("?o > 3 && RAND() < 0.5", join));
+  h::expectGreedy("SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(RAND() < 0.5) }",
+                  h::Filter("RAND() < 0.5", join));
+  h::expectDynamicProgramming(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y FILTER(RAND() < 0.5) }",
+      h::Filter("RAND() < 0.5", join));
+  // The same holds for an `EXISTS` with a non-deterministic argument.
+  h::expectGreedy(
+      "SELECT * { ?s <p> ?o . ?s <q> ?y "
+      "FILTER EXISTS { ?s <r> ?b FILTER(RAND() < 0.5) } }",
+      h::Filter("EXISTS { ?s <r> ?b FILTER(RAND() < 0.5) }",
+                h::ExistsJoin(join, ::testing::_)));
+}
+
 TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
@@ -2777,6 +2801,11 @@ TEST(QueryPlanner, Describe) {
       h::Describe(::testing::_,
                   h::Join(h::IndexScanFromStrings("?y", "<p>", "?o"),
                           h::Sort(h::ValuesClause("VALUES (?y) { (<a>) }")))));
+  // The same holds for LIMIT and OFFSET.
+  h::expect("DESCRIBE ?y { ?y <p> ?o } LIMIT 2 OFFSET 1",
+            h::Describe(::testing::_,
+                        h::WithLimitOffset({2, 1}, h::IndexScanFromStrings(
+                                                       "?y", "<p>", "?o"))));
 }
 
 // ____________________________________________________________________________
@@ -4261,4 +4290,24 @@ TEST(QueryPlanner, planningInfo) {
   EXPECT_EQ(info[1].numConnectedSubgraphs_, 2u);
   EXPECT_EQ(info[1].budget_, 1u);
   EXPECT_GT(info[1].numCandidatePlans_, 0u);
+}
+
+// Test that the operations and execution trees that the query planner creates
+// are allocated via the memory-limited allocator of the query.
+TEST(QueryPlanner, plannerAllocationsCountTowardsMemoryLimit) {
+  auto* qec = ad_utility::testing::getQec();
+  const auto& allocator = qec->getAllocator();
+  const auto memoryLeftBefore = allocator.amountMemoryLeft();
+
+  // While the execution tree of a single index scan lives, the memory limit of
+  // the query accounts for the tree and the scan (and not only for the runtime
+  // information of the scan, which the `Operation` constructor allocates).
+  {
+    auto tree = h::parseAndPlan("SELECT * { ?x <p> ?y }", qec);
+    auto used = memoryLeftBefore - allocator.amountMemoryLeft();
+    EXPECT_GE(used.getBytes(), sizeof(IndexScan) + sizeof(QueryExecutionTree));
+  }
+
+  // When the tree is destroyed, the memory is released again.
+  EXPECT_EQ(allocator.amountMemoryLeft(), memoryLeftBefore);
 }

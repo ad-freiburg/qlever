@@ -14,7 +14,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "backports/algorithm.h"
-#include "global/ValueId.h"
+#include "global/FoldedValueId.h"
 #include "index/LocalVocabEntry.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "util/HashSet.h"
@@ -25,6 +25,8 @@
 struct ValueIdTest : public ::testing::Test {
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
 };
+
+namespace foldedValueId {
 
 TEST_F(ValueIdTest, makeFromDouble) {
   auto testRepresentableDouble = [](double d) {
@@ -408,7 +410,7 @@ TEST_F(ValueIdTest, TriviallyCopyable) {
 // those macros are `constexpr`-friendly, see the note on `constexpr` in
 // `util/Exception.h`.
 // NOTE: The functions that are only `QL_CONSTEXPR` (`constexpr` in C++20 mode
-// only) are excluded in C++17 mode, see the notes in `global/ValueId.h`.
+// only) are excluded in C++17 mode, see the notes in `global/FoldedValueId.h`.
 namespace constexprValueId {
 static_assert(ValueId::makeUndefined().getDatatype() == Datatype::Undefined);
 static_assert(ValueId::makeFromBool(true).getBool());
@@ -520,31 +522,32 @@ TEST_F(ValueIdTest, EncodedIriEqualityWithLocalVocabEntry) {
 // across the codebase, hence we don't test it exhaustively here, but only
 // please the coverage tool.
 TEST(ValueId, isTrivial) {
-  EXPECT_TRUE(Id::makeUndefined().isTrivial());
+  EXPECT_TRUE(ValueId::makeUndefined().isTrivial());
   EXPECT_FALSE(
-      Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
-  EXPECT_FALSE(Id::makeFromEncodedVal(738).isTrivial());
+      ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
+  EXPECT_FALSE(ValueId::makeFromEncodedVal(738).isTrivial());
 }
 
 // _____________________________________________________________________________
 TEST(ValueId, canBeComparedBitwise) {
-  EXPECT_TRUE(Id::makeUndefined().canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromBool(true).canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromInt(1337).canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromDouble(3.14).canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeUndefined().canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeFromBool(true).canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeFromInt(1337).canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeFromDouble(3.14).canBeComparedBitwise());
   EXPECT_TRUE(
-      Id::makeFromVocabIndex(VocabIndex::make(0)).canBeComparedBitwise());
-  EXPECT_FALSE(Id::makeFromLocalVocabIndex(nullptr).canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromTextRecordIndex(TextRecordIndex::make(0))
+      ValueId::makeFromVocabIndex(VocabIndex::make(0)).canBeComparedBitwise());
+  EXPECT_FALSE(
+      ValueId::makeFromLocalVocabIndex(nullptr).canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeFromTextRecordIndex(TextRecordIndex::make(0))
                   .canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromDate(DateYearOrDuration{Date{0, 0, 0}})
+  EXPECT_TRUE(ValueId::makeFromDate(DateYearOrDuration{Date{0, 0, 0}})
                   .canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromGeoPoint(GeoPoint{0, 0}).canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromWordVocabIndex(WordVocabIndex::make(0))
+  EXPECT_TRUE(ValueId::makeFromGeoPoint(GeoPoint{0, 0}).canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeFromWordVocabIndex(WordVocabIndex::make(0))
                   .canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
+  EXPECT_TRUE(ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(17))
                   .canBeComparedBitwise());
-  EXPECT_TRUE(Id::makeFromEncodedVal(738).canBeComparedBitwise());
+  EXPECT_TRUE(ValueId::makeFromEncodedVal(738).canBeComparedBitwise());
 }
 
 // _____________________________________________________________________________
@@ -565,16 +568,16 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   LocalVocabEntry entryInVocab = LocalVocabEntry::fromIriref("<b>", ctx);
   LocalVocabEntry entryInSecondaryVocab =
       LocalVocabEntry::fromIriref("<zzz>", ctx);
-  Id localVocabId = Id::makeFromLocalVocabIndex(&entryInVocab);
-  Id localVocabIdSecondary =
-      Id::makeFromLocalVocabIndex(&entryInSecondaryVocab);
-  Id secondaryVocabId =
-      Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
+  ValueId localVocabId = ValueId::makeFromLocalVocabIndex(&entryInVocab);
+  ValueId localVocabIdSecondary =
+      ValueId::makeFromLocalVocabIndex(&entryInSecondaryVocab);
+  ValueId secondaryVocabId =
+      ValueId::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
   // `Int` is a datatype that is smaller than `LocalVocabIndex` and `Date` is
   // one that is greater, and neither of them is a datatype that a position in
   // the vocabularies can have.
-  Id intId = Id::makeFromInt(42);
-  Id dateId = Id::makeFromDate(DateYearOrDuration{Date{2026, 8, 19}});
+  ValueId intId = ValueId::makeFromInt(42);
+  ValueId dateId = ValueId::makeFromDate(DateYearOrDuration{Date{2026, 8, 19}});
 
   // `isDatatypeOfPositionInVocab(type) == true` and
   // `otherType == LocalVocabIndex`: the position of the entry is compared to
@@ -632,34 +635,37 @@ TEST(ValueId, forwardingLambdas) {
   // A proxy type with the member functions, like the elements of a column view
   // that does not store `Id`s.
   struct Proxy {
-    Id id_;
+    ValueId id_;
     bool isUndefined() const { return id_.isUndefined(); }
     uint64_t getBits() const { return id_.getBits(); }
     Datatype getDatatype() const { return id_.getDatatype(); }
   };
 
   // Each lambda returns what the corresponding member function returns.
-  for (Id id : {Id::makeUndefined(), Id::makeFromInt(42), Id::makeFromInt(-42),
-                Id::makeFromDouble(13.37), Id::makeFromBool(true)}) {
-    EXPECT_EQ(Id::isUndefinedL(id), id.isUndefined());
-    EXPECT_EQ(Id::isDefinedL(id), !id.isUndefined());
-    EXPECT_EQ(Id::getBitsL(id), id.getBits());
-    EXPECT_EQ(Id::getDatatypeL(id), id.getDatatype());
-    EXPECT_EQ(Id::isUndefinedL(Proxy{id}), id.isUndefined());
-    EXPECT_EQ(Id::isDefinedL(Proxy{id}), !id.isUndefined());
-    EXPECT_EQ(Id::getBitsL(Proxy{id}), id.getBits());
-    EXPECT_EQ(Id::getDatatypeL(Proxy{id}), id.getDatatype());
+  for (ValueId id : {ValueId::makeUndefined(), ValueId::makeFromInt(42),
+                     ValueId::makeFromInt(-42), ValueId::makeFromDouble(13.37),
+                     ValueId::makeFromBool(true)}) {
+    EXPECT_EQ(ValueId::isUndefinedL(id), id.isUndefined());
+    EXPECT_EQ(ValueId::isDefinedL(id), !id.isUndefined());
+    EXPECT_EQ(ValueId::getBitsL(id), id.getBits());
+    EXPECT_EQ(ValueId::getDatatypeL(id), id.getDatatype());
+    EXPECT_EQ(ValueId::isUndefinedL(Proxy{id}), id.isUndefined());
+    EXPECT_EQ(ValueId::isDefinedL(Proxy{id}), !id.isUndefined());
+    EXPECT_EQ(ValueId::getBitsL(Proxy{id}), id.getBits());
+    EXPECT_EQ(ValueId::getDatatypeL(Proxy{id}), id.getDatatype());
   }
 
   // The lambdas work as predicates and projections of generic algorithms, also
   // over a range of proxies.
-  std::vector ids{Id::makeFromInt(1), Id::makeUndefined(),
-                  Id::makeFromDouble(3.5)};
+  std::vector ids{ValueId::makeFromInt(1), ValueId::makeUndefined(),
+                  ValueId::makeFromDouble(3.5)};
   std::vector<Proxy> proxies{{ids[0]}, {ids[1]}, {ids[2]}};
-  EXPECT_TRUE(ql::ranges::any_of(ids, Id::isUndefinedL));
-  EXPECT_TRUE(ql::ranges::any_of(proxies, Id::isUndefinedL));
-  EXPECT_EQ(ql::ranges::find(ids, Datatype::Double, Id::getDatatypeL),
+  EXPECT_TRUE(ql::ranges::any_of(ids, ValueId::isUndefinedL));
+  EXPECT_TRUE(ql::ranges::any_of(proxies, ValueId::isUndefinedL));
+  EXPECT_EQ(ql::ranges::find(ids, Datatype::Double, ValueId::getDatatypeL),
             ids.begin() + 2);
-  EXPECT_EQ(ql::ranges::find(proxies, Datatype::Double, Id::getDatatypeL),
+  EXPECT_EQ(ql::ranges::find(proxies, Datatype::Double, ValueId::getDatatypeL),
             proxies.begin() + 2);
 }
+
+}  // namespace foldedValueId

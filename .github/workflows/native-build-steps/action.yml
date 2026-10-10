@@ -1,5 +1,5 @@
 name: "Native build on Ubuntu"
-description: "Install the dependencies and the compiler, then configure, build, and test QLever. This sequence of steps is shared by `native-build-always.yml` and `native-build-only-if-complete-ci.yml`, which only differ in their build matrix. The repository must already be checked out."
+description: "Install the dependencies and the compiler, then configure, build, and test QLever. This sequence of steps is shared by `native-build-always.yml`, `native-build-only-if-complete-ci.yml`, and `native-build-newest-compilers.yml`, which only differ in their build matrix. The repository must already be checked out."
 
 inputs:
   matrix:
