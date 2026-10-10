@@ -44,9 +44,9 @@ std::vector<Edge> BinSearchWrapper::outgoingEdes(const Id node) const {
 }
 
 // _____________________________________________________________________________
-std::vector<Id> BinSearchWrapper::getSources() const {
+IdColumn BinSearchWrapper::getSources() const {
   auto startIds = table_.getColumn(startCol_);
-  std::vector<Id> sources;
+  IdColumn sources;
   ql::ranges::unique_copy(startIds, std::back_inserter(sources));
 
   return sources;
@@ -258,7 +258,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     timer.start();
 
     PathsLimited paths{allocator()};
-    std::vector<Id> allSources;
+    IdColumn allSources;
     if (sources.empty()) {
       allSources = binSearch.getSources();
       sources = allSources;
@@ -313,7 +313,7 @@ std::pair<ConstIdColumnRef, ConstIdColumnRef> PathSearch::handleSearchSides()
   } else if (config_.sourceIsVariable()) {
     sourceIds = {};
   } else {
-    sourceIds = std::get<std::vector<Id>>(config_.sources_);
+    sourceIds = std::get<IdColumn>(config_.sources_);
   }
 
   if (targetTree_.has_value()) {
@@ -322,7 +322,7 @@ std::pair<ConstIdColumnRef, ConstIdColumnRef> PathSearch::handleSearchSides()
   } else if (config_.targetIsVariable()) {
     targetIds = {};
   } else {
-    targetIds = std::get<std::vector<Id>>(config_.targets_);
+    targetIds = std::get<IdColumn>(config_.targets_);
   }
 
   return {sourceIds, targetIds};
