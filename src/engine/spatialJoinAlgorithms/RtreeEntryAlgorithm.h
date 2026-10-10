@@ -11,6 +11,19 @@
 #ifndef QLEVER_SRC_ENGINE_RTREEENTRYALGORITHM_H
 #define QLEVER_SRC_ENGINE_RTREEENTRYALGORITHM_H
 
+// Prevent Boost.Geometry from including `boost/range/algorithm/sort.hpp` (by
+// pretending that it has already been included). That header declares a
+// function `boost::sort`, which conflicts with the namespace `boost::sort` of
+// Boost.Sort, see https://github.com/boostorg/range/issues/126. Boost.Sort is
+// used by `util/blockSort/BlockIndirectSort.h`, which is included almost
+// everywhere.
+//
+// NOTE: Boost.Geometry includes the header (since Boost 1.90) only indirectly,
+// via the parts of Boost.Graph that it uses, which include all of Boost.Range's
+// algorithms. None of that code sorts a range with `boost::sort`, so the header
+// is not needed.
+#define BOOST_RANGE_ALGORITHM_SORT_HPP_INCLUDED
+
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
 #include <boost/geometry/geometries/box.hpp>
