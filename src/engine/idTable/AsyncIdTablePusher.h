@@ -39,16 +39,16 @@ namespace ad_utility {
 // large tables is by far the most expensive part of a push) happens in
 // parallel instead of being serialized.
 //
-// This works as follows: The current block is resized to a complete block up
-// front, so that a push only has to *reserve* the range of rows into which it
-// then copies. The reserving runs on a strand; it is a handful of integer
-// operations, so the next push can start its copy almost immediately. The
-// copies themselves run on the underlying executor, outside of the strand. The
-// only point at which the pushes have to be synchronized is when a block is
-// full: it can only be handed to the `Sink` once all the copies into it have
-// finished. A push that finds the block full in the meantime does not block a
-// thread, but is queued on the strand and resumed as soon as the block has been
-// handed over.
+// This works as follows: The memory of a complete block is allocated up front,
+// so that a push only has to *reserve* the range of rows into which it then
+// copies, and grow the block to it (which never reallocates). The reserving
+// runs on a strand; it is a handful of integer operations, so the next push
+// can start its copy almost immediately. The copies themselves run on the
+// underlying executor, outside of the strand. The only point at which the
+// pushes have to be synchronized is when a block is full: it can only be handed
+// to the `Sink` once all the copies into it have finished. A push that finds
+// the block full in the meantime does not block a thread, but is queued on the
+// strand and resumed as soon as the block has been handed over.
 //
 // NOTE: The rows of a single pushed table are not necessarily contiguous in the
 // resulting blocks, and the blocks contain the rows of concurrent pushes in an
@@ -73,6 +73,8 @@ class AsyncIdTablePusher {
 
  private:
   using Allocator = typename Block::Allocator;
+  // The spans of the columns of a `Block`, see `IdTable::getColumns`.
+  using Columns = decltype(std::declval<Block&>().getColumns());
 
   // The state of a single `asyncPushBlock` that is in flight.
   struct PushOperation {
@@ -97,10 +99,10 @@ class AsyncIdTablePusher {
   // completion handler has not yet been called. It is used to check that no
   // push is in flight when this is required (see `finish`, `numPendingRows`,
   // and the destructor). The members above never change after construction,
-  // and `block_` is only written outside of `strand_` into disjoint ranges of
-  // rows (see `copyColumnsOnExecutor`). Apart from those, this counter and
-  // `pushedSinceFinish_` below are the only members that are accessed outside
-  // of `strand_`.
+  // and only the columns of `block_` are written outside of `strand_`, into
+  // disjoint ranges of rows (see `copyColumnsOnExecutor`). Apart from those,
+  // this counter and `pushedSinceFinish_` below are the only members that are
+  // accessed outside of `strand_`.
   std::atomic<size_t> numOperationsInFlight_ = 0;
   // `true` iff an `asyncPushBlock` has been started since the construction or
   // the last `finish`. It is the cheap first check of `mayHavePendingRows`,
@@ -111,14 +113,10 @@ class AsyncIdTablePusher {
   // `finish`, when no push is in flight), so no further synchronization is
   // needed.
 
-  // The block into which the rows are currently copied.
+  // The block into which the rows are currently copied. Its size is always
+  // `numRowsReserved_`. As soon as it is non-empty, it has the capacity of a
+  // complete block (see `reserveBlockIfNecessary`).
   Block block_;
-  // `true` iff `block_` has been resized to a complete block of `blocksize_`
-  // rows up front. In that case the number of rows that have actually been
-  // pushed into it is `numRowsReserved_` and not its size. It is `false` before
-  // the first push, and after a complete block has been handed to the `sink_`,
-  // so that no memory is allocated for a block that nobody pushes into.
-  bool blockIsResized_ = false;
   // The number of rows of `block_` that have been handed out to pushes, which
   // is also the row at which the next push may start copying.
   size_t numRowsReserved_ = 0;
@@ -206,7 +204,7 @@ class AsyncIdTablePusher {
   // PRECONDITION: No `asyncPushBlock` is in flight, which is checked.
   size_t numPendingRows() const {
     checkNoOperationInFlight();
-    return blockIsResized_ ? numRowsReserved_ : 0;
+    return numRowsReserved_;
   }
 
   // Return `false` if no `asyncPushBlock` has been started since the
@@ -233,12 +231,8 @@ class AsyncIdTablePusher {
     pushedSinceFinish_.store(false, std::memory_order_relaxed);
     exception_ = nullptr;
     Block result{numColumns_, allocator_};
-    if (blockIsResized_) {
-      block_.resize(numRowsReserved_);
-      std::swap(result, block_);
-      blockIsResized_ = false;
-      numRowsReserved_ = 0;
-    }
+    std::swap(result, block_);
+    numRowsReserved_ = 0;
     return result;
   }
 
@@ -290,7 +284,7 @@ class AsyncIdTablePusher {
     if (completeIfDone()) {
       return;
     }
-    resizeBlockIfNecessary();
+    reserveBlockIfNecessary();
     if (completeIfDone()) {
       return;
     }
@@ -307,12 +301,19 @@ class AsyncIdTablePusher {
                  operation->table_->numRows() - operation->numPushed_);
     numRowsReserved_ += numToPush;
     ++numOutstandingCopies_;
+
+    // Grow `block_` to the reserved rows. This doesn't reallocate (see
+    // `reserveBlockIfNecessary`), so the running copies are not affected. The
+    // copy below gets the columns as spans, because `block_` itself must not
+    // be accessed outside of the strand.
+    block_.resize(numRowsReserved_);
     // NOTE: This is the expensive part, and it deliberately runs outside of
     // the strand, so that it runs concurrently with the copies of the other
     // pushes.
     boost::asio::post(executor_, [this, operation = std::move(operation),
+                                  targetColumns = block_.getColumns(),
                                   targetRow, numToPush]() mutable {
-      copyColumnsOnExecutor(*operation, targetRow, numToPush);
+      copyColumnsOnExecutor(*operation, targetColumns, targetRow, numToPush);
       boost::asio::dispatch(strand_, [this, operation = std::move(operation),
                                       numToPush]() mutable {
         onCopyFinished(std::move(operation), numToPush);
@@ -320,33 +321,39 @@ class AsyncIdTablePusher {
     });
   }
 
-  // Resize `block_` to a complete block, unless this has already happened.
-  // Must be called on the strand.
-  void resizeBlockIfNecessary() {
+  // Reserve the memory of a complete block for `block_` if it is empty, so
+  // that growing it up to `blocksize_` rows never reallocates. Must be called
+  // on the strand.
+  //
+  // NOTE: Only the memory is reserved and the rows are added when they are
+  // pushed. Default-constructing a complete block up front would be expensive
+  // in debug builds (where the trivial constructor of `Id` is not inlined), in
+  // particular because `finish` is called after each short sequence of
+  // `asyncPushBlock`s when they are mixed with ordinary pushes.
+  void reserveBlockIfNecessary() {
     recordException([this]() {
-      if (!blockIsResized_) {
-        // `blockIsResized_` is only `false` before the first push, after
-        // `finish`, and after a hand-over, so no copy into `block_` can be
-        // running, which would be invalidated by the `resize`.
+      if (numRowsReserved_ == 0) {
+        // A copy into `block_` always has a reserved row, so none can be
+        // running, which would be invalidated by the `reserve`.
         AD_CORRECTNESS_CHECK(numOutstandingCopies_ == 0);
-        block_.resize(blocksize_);
-        blockIsResized_ = true;
-        numRowsReserved_ = 0;
+        block_.reserve(blocksize_);
       }
     });
   }
 
-  // Copy the next `numToPush` rows of the `operation` into the rows of
-  // `block_` that start at `targetRow`. This runs outside of the strand.
-  void copyColumnsOnExecutor(const PushOperation& operation, size_t targetRow,
+  // Copy the next `numToPush` rows of the `operation` into the rows of the
+  // `targetColumns` (of `block_`) that start at `targetRow`. This runs outside
+  // of the strand.
+  void copyColumnsOnExecutor(const PushOperation& operation,
+                             const Columns& targetColumns, size_t targetRow,
                              size_t numToPush) {
     const size_t beginRow = operation.numPushed_;
     for (size_t col = 0; col < numColumns_; ++col) {
       auto source =
           operation.table_->getColumn(col).subspan(beginRow, numToPush);
-      // Neither `block_` nor its buffers change while copies are outstanding,
-      // so it is safe to access them here.
-      auto target = block_.getColumn(col).subspan(targetRow, numToPush);
+      // The buffers of `block_` are not reallocated while copies are
+      // outstanding, so it is safe to access them here.
+      auto target = targetColumns[col].subspan(targetRow, numToPush);
       // NOTE: Deliberately use `std::copy` and not `ql::ranges::copy`,
       // because only the former is reliably turned into a `std::memmove`,
       // see the detailed note in `IdTable::insertAtEnd`.
@@ -383,15 +390,13 @@ class AsyncIdTablePusher {
   // to the `sink_` and resume the pushes that have been waiting for the next
   // block. Must be called on the strand.
   void handOverBlockIfComplete() {
-    if (!blockIsResized_ || numRowsReserved_ < blocksize_ ||
-        numOutstandingCopies_ > 0) {
+    if (numRowsReserved_ < blocksize_ || numOutstandingCopies_ > 0) {
       return;
     }
     // The early return above guarantees that no copy into `block_` is running
     // anymore, so it may be swapped out.
     Block complete{numColumns_, allocator_};
     std::swap(complete, block_);
-    blockIsResized_ = false;
     numRowsReserved_ = 0;
     recordException([this, &complete]() { sink_(std::move(complete)); });
     auto waiting = std::move(waitingForNextBlock_);
