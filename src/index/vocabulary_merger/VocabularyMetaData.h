@@ -10,9 +10,11 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_VOCABULARYMETADATA_H
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_VOCABULARYMETADATA_H
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
@@ -26,6 +28,49 @@
 // header and which includes this one) because it is understandable and
 // testable on its own.
 namespace ad_utility::vocabulary_merger {
+
+// The metadata of a segment of the merged vocabulary (see
+// `index/vocabulary_merger/Segment.h`), with segment-local IDs: the range of
+// the words with each of the two special prefixes (see `VocabularyMetaData`
+// below), the special IDs, and the number of words. It is added to the
+// `VocabularyMetaData` of the whole vocabulary by `addSegment`, which turns
+// the segment-local IDs into global ones.
+struct SegmentMetaData {
+  // The segment-local IDs of the first and the last word with a prefix.
+  struct LocalIdRange {
+    uint64_t first_ = 0;
+    uint64_t last_ = 0;
+    bool wasSeen_ = false;
+    void add(uint64_t id) {
+      if (!wasSeen_) {
+        first_ = id;
+        wasSeen_ = true;
+      }
+      last_ = id;
+    }
+  };
+  LocalIdRange langTaggedPredicates_;
+  LocalIdRange internalEntities_;
+  std::vector<std::pair<std::string, uint64_t>> specialIds_;
+  size_t numWords_ = 0;
+
+  // Add the next distinct `word` (not a blank node) with its segment-local
+  // `id`. The words have to be added in sorted order.
+  void addWord(std::string_view word, uint64_t id) {
+    ++numWords_;
+    if (ql::starts_with(word, LANGUAGE_TAGGED_PREDICATE_PREFIX)) {
+      langTaggedPredicates_.add(id);
+      return;
+    }
+    if (ql::starts_with(word,
+                        QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
+      internalEntities_.add(id);
+      if (qlever::specialIds().contains(word)) {
+        specialIds_.emplace_back(std::string{word}, id);
+      }
+    }
+  }
+};
 
 // The result of a call to `mergeVocabulary` (see `index/VocabularyMerger.h`).
 struct VocabularyMetaData {
@@ -52,6 +97,16 @@ struct VocabularyMetaData {
       }
       end_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex + 1));
       return true;
+    }
+
+    // Extend the range by the words with the (global) indices `first` to
+    // `last`, which have to come after all the words added so far.
+    void extend(uint64_t first, uint64_t last) {
+      if (!beginWasSeen_) {
+        begin_ = Id::makeFromVocabIndex(VocabIndex::make(first));
+        beginWasSeen_ = true;
+      }
+      end_ = Id::makeFromVocabIndex(VocabIndex::make(last + 1));
     }
 
     Id begin() const { return begin_; }
@@ -89,6 +144,29 @@ struct VocabularyMetaData {
   // of blank nodes. This has to be called for every distinct blank node that
   // is encountered.
   size_t getNextBlankNodeIndex() { return numBlankNodesTotal_++; }
+
+  // Add the metadata of the next `segment` of the vocabulary (see
+  // `SegmentMetaData`), whose segment-local IDs are turned into global
+  // indices by `toGlobalIndex`, and its `numBlankNodes`. The segments have to
+  // be added in the order of the vocabulary.
+  template <typename F>
+  void addSegment(const SegmentMetaData& segment, const F& toGlobalIndex,
+                  size_t numBlankNodes) {
+    numWordsTotal_ += segment.numWords_;
+    numBlankNodesTotal_ += numBlankNodes;
+    auto extend = [&toGlobalIndex](IdRangeForPrefix& range,
+                                   const SegmentMetaData::LocalIdRange& local) {
+      if (local.wasSeen_) {
+        range.extend(toGlobalIndex(local.first_), toGlobalIndex(local.last_));
+      }
+    };
+    extend(langTaggedPredicates_, segment.langTaggedPredicates_);
+    extend(internalEntities_, segment.internalEntities_);
+    for (const auto& [word, id] : segment.specialIds_) {
+      specialIdMapping_[word] =
+          Id::makeFromVocabIndex(VocabIndex::make(toGlobalIndex(id)));
+    }
+  }
 
   // The mapping from the `qlever::specialIds` to their actual IDs.
   // This is created on the fly by the calls to `addWord`.

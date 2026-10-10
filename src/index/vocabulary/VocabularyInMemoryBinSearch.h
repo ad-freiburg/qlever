@@ -183,6 +183,12 @@ class VocabularyInMemoryBinSearch
   [[noreturn]] static std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
       const std::string& filename);
 
+  // The same holds for the block writer, see `BlockWriterBase`.
+  [[noreturn]] static std::unique_ptr<BlockWriterBase> makeBlockWriterPtr(
+      const std::string& filename) {
+    makeDiskWriterPtr(filename);
+  }
+
   // Clear the vocabulary.
   void close();
 

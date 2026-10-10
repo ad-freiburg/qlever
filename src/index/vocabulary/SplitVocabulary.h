@@ -422,6 +422,39 @@ class SplitVocabulary {
     ~WordWriter() override;
   };
 
+  // The parallel writer (see `ParallelWordWriterBase`): one block writer per
+  // underlying vocabulary, the split function decides the sub-vocabulary of a
+  // word, and the index of a word is the index in its underlying vocabulary
+  // plus the marker (exactly as `WordWriter::operator()`).
+  class ParallelWordWriter : public ParallelWordWriterBase {
+   private:
+    std::array<std::unique_ptr<BlockWriterBase>, numberOfVocabs> blockWriters_;
+
+   public:
+    // Construct the block writers of all underlying vocabularies, see
+    // `WordWriter`.
+    ParallelWordWriter(const UnderlyingVocabsArray& underlyingVocabularies,
+                       const std::string& filename);
+
+    uint8_t numSubVocabularies() const override { return numberOfVocabs; }
+    uint8_t subVocabularyOf(std::string_view word) const override {
+      return splitFunction_(word);
+    }
+    uint64_t indexOf(uint8_t sub, uint64_t position,
+                     std::string_view word) const override {
+      return addMarker(blockWriters_.at(sub)->indexOf(position, word), sub);
+    }
+    BlockWriterBase& blockWriter(uint8_t sub) override {
+      return *blockWriters_.at(sub);
+    }
+  };
+
+  // Construct the `ParallelWordWriter` for the given base `filename`.
+  std::unique_ptr<ParallelWordWriter> makeParallelWriterPtr(
+      const std::string& filename) const {
+    return std::make_unique<ParallelWordWriter>(underlying_, filename);
+  }
+
   // The files of all the underlying vocabularies, each prefixed with the
   // respective one of the `FilenameSuffixes`.
   static FileSuffixes fileSuffixes() {

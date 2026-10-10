@@ -5,13 +5,18 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 
+#include <deque>
+#include <future>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/Serializer/Serializer.h"
 
 // A vocabulary that stores all the words on disk. Additionally, some of the
@@ -138,6 +143,54 @@ class VocabularyInternalExternal {
     void finishImpl() override;
   };
 
+  // The block-wise counterpart of the `WordWriter` (see `BlockWriterBase`).
+  // Which of the words of a block are also cached in RAM is decided on the
+  // appending thread exactly as by the `WordWriter`, so the files are the
+  // same; the bytes of the block are then written to the external vocabulary
+  // by a task on the global thread pool (a positioned write, see
+  // `VocabularyOnDisk::WordWriter::writeBlockAt`), so that the appending
+  // thread is not bounded by the bandwidth of a single writer. Nothing is done
+  // in `prepare`.
+  class BlockWriter : public BlockWriterBase {
+   private:
+    WordWriter writer_;
+    // The writes that are running on the pool, oldest first (each holds its
+    // block); bounded, see `append`.
+    std::deque<std::future<void>> pendingWrites_;
+
+    struct Prepared : public PreparedBlockBase {
+      WordBlock block_;
+      explicit Prepared(WordBlock block) : block_{std::move(block)} {}
+    };
+
+   public:
+    // Construct from the `filename`, see `WordWriter`.
+    explicit BlockWriter(const std::string& filename,
+                         size_t milestoneDistance = 1'000)
+        : writer_{filename, milestoneDistance} {}
+
+    size_t blockSize() const override {
+      return DEFAULT_WORDS_PER_VOCABULARY_BLOCK;
+    }
+    std::unique_ptr<PreparedBlockBase> prepare(WordBlock block) override {
+      return std::make_unique<Prepared>(std::move(block));
+    }
+    void append(std::unique_ptr<PreparedBlockBase> prepared) override;
+
+    // Finish if that has not happened yet, so that no write is left running
+    // on the pool.
+    ~BlockWriter() override {
+      ad_utility::terminateIfThrows(
+          [this]() { this->finish(); },
+          "Calling `finish` from the destructor of "
+          "`VocabularyInternalExternal::BlockWriter`");
+    }
+
+   private:
+    // Wait for the writes on the pool, then finish the word writer.
+    void finishImpl() override;
+  };
+
   // The files of the internal and the external vocabulary, which are stored
   // under the base filename plus `internalSuffix`/`externalSuffix`.
   static FileSuffixes fileSuffixes() {
@@ -152,6 +205,12 @@ class VocabularyInternalExternal {
   // Return a `unique_ptr<WordWriter>` that writes to the given `filename`.
   static auto makeDiskWriterPtr(const std::string& filename) {
     return std::make_unique<WordWriter>(filename);
+  }
+
+  // Return the `BlockWriter` that writes to the given `filename`.
+  static std::unique_ptr<BlockWriterBase> makeBlockWriterPtr(
+      const std::string& filename) {
+    return std::make_unique<BlockWriter>(filename);
   }
 
   /// Clear the vocabulary.

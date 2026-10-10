@@ -17,14 +17,17 @@
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/range/operations.hpp>
 #include <range/v3/view/chunk_by.hpp>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
+#include "util/parallelBlockMerge/MergeOptions.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
 // The internals of the computation of the chunk split points. This is the
@@ -88,8 +91,33 @@ CPP_template(typename Input)(requires InputConcept<Input>) size_t
 template <typename Element>
 using ElementAndWeight = std::pair<Element, size_t>;
 
+// Whether the `Input` has a member `blockWeight(runIdx, blockIdx)`, see
+// `blockWeight` below.
+template <typename Input, typename = void>
+struct HasBlockWeight : std::false_type {};
+template <typename Input>
+struct HasBlockWeight<
+    Input, std::void_t<decltype(std::declval<const Input&>().blockWeight(
+               size_t{0}, size_t{0}))>> : std::true_type {};
+
+// The weight of a block for the computation of the chunk boundaries: the
+// chunks are cut such that they all have (approximately) the same total
+// weight. By default this is the number of elements of the block. An input
+// may instead provide a `blockWeight(runIdx, blockIdx)` member, for example
+// the size of the block in bytes for elements of very different sizes whose
+// comparison cost grows with their size, such that the chunks cost the same
+// to merge rather than having the same number of elements.
+CPP_template(typename Input)(requires InputConcept<Input>) size_t
+    blockWeight(const Input& input, size_t runIdx, size_t blockIdx) {
+  if constexpr (HasBlockWeight<Input>::value) {
+    return input.blockWeight(runIdx, blockIdx);
+  } else {
+    return input.numElementsInBlock(runIdx, blockIdx);
+  }
+}
+
 // Step 1: Collect the last element of every block of the `input` together with
-// its weight.
+// its weight (see `blockWeight`).
 //
 // PRECONDITION: No block of the `input` is empty, see `InputConcept`.
 CPP_template(typename Input)(requires InputConcept<Input>) std::
@@ -102,8 +130,10 @@ CPP_template(typename Input)(requires InputConcept<Input>) std::
         auto [runIdx, blockIdx] = runAndBlock;
         size_t numElements = input.numElementsInBlock(runIdx, blockIdx);
         AD_CORRECTNESS_CHECK(numElements > 0);
+        size_t weight = blockWeight(input, runIdx, blockIdx);
+        AD_CORRECTNESS_CHECK(weight > 0);
         return ElementAndWeight<Element>{input.lastElement(runIdx, blockIdx),
-                                         numElements};
+                                         weight};
       }));
 }
 
@@ -116,7 +146,21 @@ template <typename Element, typename Comparator>
 std::vector<ElementAndWeight<Element>> sortAndAccumulateWeights(
     std::vector<ElementAndWeight<Element>> elementsAndWeights,
     const Comparator& comparator) {
-  ql::ranges::sort(elementsAndWeights, comparator, ad_utility::first);
+  // NOTE: This is the only work of the boundary computation that grows with
+  // the number of blocks, and with an expensive comparator (such as a
+  // collation) and millions of blocks it takes a while, so it is sorted in
+  // parallel.
+  if constexpr (USE_PARALLEL_SORT) {
+    auto compareElements = [&comparator](const ElementAndWeight<Element>& a,
+                                         const ElementAndWeight<Element>& b) {
+      return comparator(a.first, b.first);
+    };
+    ad_utility::parallel_sort(
+        elementsAndWeights.begin(), elementsAndWeights.end(), compareElements,
+        ad_utility::parallel_tag(defaultMergeParallelism()));
+  } else {
+    ql::ranges::sort(elementsAndWeights, comparator, ad_utility::first);
+  }
   // Merging equal elements is what makes the quantiles below exact: a target
   // then always identifies a single entry, and picking that entry for two
   // different targets can be avoided by simply moving on to the next one.

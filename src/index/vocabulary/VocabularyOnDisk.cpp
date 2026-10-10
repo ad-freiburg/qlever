@@ -250,7 +250,38 @@ uint64_t VocabularyOnDisk::WordWriter::operator()(
 }
 
 // _____________________________________________________________________________
+uint64_t VocabularyOnDisk::WordWriter::reserveBlock(const WordBlock& block) {
+  AD_CONTRACT_CHECK(block.firstPosition_ == numWords_);
+  uint64_t dataOffset = currentOffset_;
+  currentOffset_ += block.data_.size();
+  numWords_ += block.numWords();
+  return dataOffset;
+}
+
+// _____________________________________________________________________________
+void VocabularyOnDisk::WordWriter::writeBlockAt(const WordBlock& block,
+                                                uint64_t dataOffset) const {
+  const size_t numWords = block.numWords();
+  // The offsets of the block are relative to its data, the ones in the file
+  // are absolute.
+  std::vector<uint64_t> offsets(numWords);
+  for (size_t i = 0; i < numWords; ++i) {
+    offsets[i] = dataOffset + block.offsets_[i];
+  }
+  offsetsFile_.write(
+      offsets.data(), numWords * sizeof(uint64_t),
+      static_cast<off_t>(block.firstPosition_ * sizeof(uint64_t)));
+  file_.write(block.data_.data(), block.data_.size(),
+              static_cast<off_t>(dataOffset));
+}
+
+// _____________________________________________________________________________
 void VocabularyOnDisk::WordWriter::finishImpl() {
+  // The blocks are written with positioned writes (see `writeBlockAt`), which
+  // bypass the position of the files, so the trailer has to go to the end
+  // explicitly. This is a no-op for words that were added one by one.
+  offsetsFile_.seek(0, SEEK_END);
+  file_.seek(0, SEEK_END);
   // End offset of last vocabulary entry, also consistent with the empty
   // vocabulary.
   offsetsFile_.write(&currentOffset_, sizeof(currentOffset_));
