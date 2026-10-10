@@ -111,8 +111,11 @@ class ExistsExpression : public SparqlExpression {
     return true;
   }
 
-  // EXISTS reads from a column computed by ExistsJoin and is deterministic.
-  [[nodiscard]] bool isDeterministic() const override { return true; }
+  // Check the argument, as the query planner needs this before the
+  // `ExistsJoin` exists.
+  [[nodiscard]] bool isDeterministic() const override {
+    return argument_.isDeterministic();
+  }
 
  private:
   ql::span<Ptr> childrenImpl() override { return {}; }

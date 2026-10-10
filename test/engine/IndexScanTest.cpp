@@ -1227,6 +1227,44 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
   EXPECT_EQ(rti.details_["num-elements-read"], 4);
 }
 
+// Test that for a scan with a LIMIT or OFFSET, the scan side of
+// `prefilterTables` is the complete limited scan, read once, and the join side
+// is passed through unfiltered (`getLazyScan` ignores the prefiltered blocks
+// for such a scan, so reading it per batch would repeat it).
+TEST_P(IndexScanWithLazyJoin, prefilterTablesWithLimitYieldsEachRowOnce) {
+  // Rows 3-5 of the six `<p>` rows, join side with two matching values from
+  // different blocks and a value (`<xb>`) that matches no block.
+  IndexScan scan = makeScan();
+  scan.applyLimitOffset(LimitOffsetClause{._limit = 3, ._offset = 2});
+
+  auto makeJoinSide = [this]() {
+    using P = Result::IdTableVocabPair;
+    return std::array{P{makeIdTable({iri("<a>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<c>")}), LocalVocab{}},
+                      P{makeIdTable({iri("<xb>")}), LocalVocab{}}};
+  };
+
+  auto [joinSideResults, scanResults] =
+      consumeRanges(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
+
+  // The join side is passed through unchanged, including the non-matching
+  // table.
+  ASSERT_EQ(joinSideResults.size(), 3);
+  EXPECT_EQ(joinSideResults.at(0).idTable_, makeIdTable({iri("<a>")}));
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<c>")}));
+  EXPECT_EQ(joinSideResults.at(2).idTable_, makeIdTable({iri("<xb>")}));
+
+  // The scan side is exactly the limited scan, each row once.
+  IdTable scanTable{2, qec_->getAllocator()};
+  for (const auto& [table, vocab] : scanResults) {
+    scanTable.insertAtEnd(table);
+  }
+  EXPECT_EQ(scanTable, tableFromTriples({{iri("<b>"), iri("<B>")},
+                                         {iri("<b>"), iri("<B2>")},
+                                         {iri("<c>"), iri("<C>")}}));
+  EXPECT_EQ(scan.runtimeInfo().details_["num-blocks-all"], 3);
+}
+
 // _____________________________________________________________________________
 TEST_P(IndexScanWithLazyJoin,
        prefilterTablesDoesFilterCorrectlyWithOverlappingValues) {

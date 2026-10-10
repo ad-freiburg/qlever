@@ -8,9 +8,16 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "global/ValueId.h"
+#include "global/FoldedValueId.h"
 
-using Id = ValueId;
+// The implementation of `Id`. Every file that needs `Id` or `ValueId` includes
+// this header, not the implementation header.
+//
+// TODO<pas-kes> Once the split layout exists, choose between
+// `foldedValueId::ValueId` and `SplitLayoutId` here via
+// `QLEVER_USE_SPLIT_LAYOUT`.
+using Id = foldedValueId::ValueId;
+using ValueId = Id;
 using Score = float;
 
 // `Id`s are copied around a lot, in particular in bulk (see the `IdTable`

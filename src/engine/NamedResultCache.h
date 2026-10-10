@@ -8,6 +8,9 @@
 #define QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H
 
 #include <boost/optional.hpp>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/SpatialJoinCachedIndex.h"
@@ -63,6 +66,8 @@ class NamedResultCache {
   // We use an LRU cache, where the key is the name of the cached result.
   using Key = std::string;
   using Cache = ad_utility::LRUCache<Key, Value, ValueSizeGetter>;
+  // The entries of the cache, as returned by `getAllEntriesSortedByKey`.
+  using Entries = std::vector<std::pair<Key, std::shared_ptr<const Value>>>;
 
  private:
   // The `cache_` has a non-const `operator[]` which is non-const because it has
@@ -101,8 +106,7 @@ class NamedResultCache {
   // deterministic (and not the arbitrary order of the underlying hash map), so
   // that serializing the same contents twice yields the same bytes, which a
   // byte-level comparison of serialized caches relies on.
-  std::vector<std::pair<Key, std::shared_ptr<const Value>>>
-  getAllEntriesSortedByKey() const;
+  Entries getAllEntriesSortedByKey() const;
 
   // NOTE: The following two templated serialization functions are defined in
   // the `NamedResultCacheSerializer.h` header which has to be included by the

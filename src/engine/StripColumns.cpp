@@ -88,6 +88,12 @@ std::unique_ptr<Operation> StripColumns::cloneImpl() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 StripColumns::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The variables of the `BIND` expression must not be stripped away by this
+  // operation (the child still sees them, so it cannot check this).
+  if (!areVariablesVisible(bind._expression.containedVariables())) {
+    return std::nullopt;
+  }
+
   // Push `bind` down to the child. If successful, create a new `StripColumns`
   // that also keeps the bound target variable.
   auto newChild = child_->makeTreeWithBindColumn(bind);
