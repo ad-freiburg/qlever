@@ -758,6 +758,10 @@ class IndexImpl {
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
+  //
+  // The `sortedTriples` are either a sequential range of sorted blocks (then
+  // the `perTripleCallbacks` are invoked for the blocks in order), or a
+  // `ChunkwiseInput` (see above).
   template <typename T, typename... Callbacks>
   std::tuple<size_t, IndexMetaData, IndexMetaData> createPermutationPairImpl(
       size_t numColumns, const std::string& fileName1,
@@ -955,6 +959,20 @@ class IndexImpl {
 
   using BlocksOfTriples = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
 
+  // The sorted input of a pair of permutations that is written directly from
+  // the chunks of the parallel merge of the `sorter_` (instead of from a
+  // sequential range of sorted blocks), see
+  // `index/ChunkwisePermutationWriter.h`. The `perTripleCallbacks` of such an
+  // input have to be `chunkwisePermutationWriter::ConcurrentBlockCallback`s,
+  // which are invoked concurrently and in an arbitrary order of the blocks.
+  // With `removeDuplicates_` set, consecutive duplicate rows are removed first
+  // (like `ad_utility::uniqueBlockView` does for a sequential input).
+  template <typename Sorter>
+  struct ChunkwiseInput {
+    Sorter& sorter_;
+    bool removeDuplicates_;
+  };
+
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
   // * `sortedInput`  The input, must be sorted by the first permutation in the
@@ -996,6 +1014,40 @@ class IndexImpl {
       sizeof...(NextSorter) <=
       1)) void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
                                NextSorter&&... nextSorter);
+
+  // The variants of the three functions above that write the permutations
+  // directly from the chunks of the parallel merge of the `sortedTriples`
+  // sorter (see `ChunkwiseInput` and `index/ChunkwisePermutationWriter.h`),
+  // and that feed the `nextSorter` (if any) concurrently. They cannot be used
+  // for the SPO and SOP permutations if the patterns are built, because the
+  // pattern creation needs the triples in order. The `removeDuplicates` flag
+  // is for the first pair of permutations, whose input may contain duplicate
+  // triples.
+  CPP_template(typename Sorter, typename... NextSorter)(
+      requires(sizeof...(NextSorter) <=
+               1)) void createPSOAndPOSChunkwise(size_t numColumns,
+                                                 Sorter& sortedTriples,
+                                                 bool removeDuplicates,
+                                                 bool doWriteConfiguration,
+                                                 NextSorter&... nextSorter);
+  CPP_template(typename Sorter, typename... NextSorter)(
+      requires(sizeof...(NextSorter) <=
+               1)) void createSPOAndSOPChunkwise(size_t numColumns,
+                                                 Sorter& sortedTriples,
+                                                 bool removeDuplicates,
+                                                 NextSorter&... nextSorter);
+  CPP_template(typename Sorter, typename... NextSorter)(
+      requires(sizeof...(NextSorter) <=
+               1)) void createOSPAndOPSChunkwise(size_t numColumns,
+                                                 Sorter& sortedTriples,
+                                                 bool removeDuplicates,
+                                                 NextSorter&... nextSorter);
+
+  // Store the statistics of the PSO and POS permutations in the configuration
+  // (and write it if `doWriteConfiguration` is set), see `createPSOAndPOSImpl`.
+  void setPsoAndPosStatistics(size_t numPredicates, size_t numTriples,
+                              uint64_t nextAvailableInternalGraph,
+                              bool doWriteConfiguration);
 
   // Create the internal PSO and POS permutations from the sorted internal
   // triples. Return `(numInternalTriples, numInternalPredicates)`.

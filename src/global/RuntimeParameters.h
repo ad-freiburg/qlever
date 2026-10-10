@@ -247,6 +247,12 @@ struct RuntimeParameters {
   // `--num-threads` option.
   SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
 
+  // The ZSTD compression level of the blocks of the permutations that the
+  // index builder writes (the default of 3 is the default of ZSTD). A lower
+  // level (e.g. 1) compresses noticeably faster and decompresses equally fast,
+  // at the price of a slightly larger index.
+  SizeT permutationCompressionLevel_{3, "permutation-compression-level"};
+
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
 

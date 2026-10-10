@@ -25,6 +25,7 @@
 #include "backports/asio.h"
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/AsyncIdTablePusher.h"
+#include "engine/idTable/BitwiseKeySort.h"
 #include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
@@ -82,6 +83,8 @@ class CompressedExternalIdTableWriter {
 
   // The filename and actual file to which the `IdTable` is written .
   std::string filename_;
+  // The ZSTD compression level of the blocks, see `setCompressionLevel`.
+  int compressionLevel_ = compressedExternalIdTable::DEFAULT_RUN_COMPRESSION;
   // The offset at which the next block is written. The blocks are written
   // with the positioned `File::write`, so a thread only has to reserve its
   // range here, see `compressAndWriteBlockOfColumn`.
@@ -147,6 +150,13 @@ class CompressedExternalIdTableWriter {
   const MemorySize& blockSizeUncompressed() const {
     return blockSizeUncompressed_;
   }
+
+  // Set the ZSTD compression level of the blocks that are written from now
+  // on. The blocks are typically read back exactly once, so a fast level is
+  // appropriate; the default is `DEFAULT_RUN_COMPRESSION`, and a negative
+  // level (see `MERGE_PHASE_SPILL_COMPRESSION`) is even faster at the price
+  // of larger files.
+  void setCompressionLevel(int level) { compressionLevel_ = level; }
 
   // Store an `idTable`. The blocks of all its columns are compressed and
   // written in parallel, see `compressAndWriteBlockOfColumn`.
@@ -232,8 +242,8 @@ class CompressedExternalIdTableWriter {
     size_t upper = std::min(lower + layout.blockSize_, column.size());
     AD_CORRECTNESS_CHECK(lower < upper);
     auto uncompressedSize = (upper - lower) * sizeof(Id);
-    auto compressed =
-        ZstdWrapper::compress(column.data() + lower, uncompressedSize);
+    auto compressed = ZstdWrapper::compress(
+        column.data() + lower, uncompressedSize, compressionLevel_);
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
     // NOTE: This throws if not all the bytes could be written.
     file_.rlock()->write(compressed.data(), compressed.size(), offset);
@@ -547,6 +557,11 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   }
 
   // ________________________________________________________________________
+  void reserveBlock(Block& block, size_t numElements) const {
+    block.reserve(numElements);
+  }
+
+  // ________________________________________________________________________
   template <typename R>
   void appendToBlock(Block& block, const R& row) const {
     block.push_back(row);
@@ -832,6 +847,10 @@ CPP_class_template(size_t NumStaticCols,
     return {this};
   }
 
+  // Set the compression level of the blocks that are written to disk, see
+  // `CompressedExternalIdTableWriter::setCompressionLevel`.
+  void setRunCompressionLevel(int level) { writer_.setCompressionLevel(level); }
+
   // Delete the underlying file and reset the sorter. May only be called if no
   // active `getBlocks()` generator that has not been fully iterated over is
   // currently active, else an exception is thrown by the underlying
@@ -872,16 +891,24 @@ CPP_class_template(size_t NumStaticCols,
                          currentBlock_.getAllocator(),
                          [this](IdTableStatic<NumStaticCols> block) {
                            numElementsPushed_ += block.numRows();
-                           transformAndWriteBlock(std::move(block));
+                           // The block of the previous task is handed back
+                           // to the pusher, which reuses its memory.
+                           return transformAndWriteBlock(std::move(block));
                          });
   }
 
   // Clear the current block. If `reserve` is `true`, we subsequently also
   // reserve the `blocksize_`.
+  // If `reserve` is `false`, the memory of the block is released, because
+  // this is the end of the input phase (and a sorter that only holds its runs
+  // on disk, e.g. one that waits for a merge together with the runs of other
+  // sorters, should not keep a block's worth of memory).
   void resetCurrentBlock(bool reserve) {
     currentBlock_.clear();
     if (reserve) {
       currentBlock_.reserve(blocksize_);
+    } else {
+      currentBlock_.shrinkToFit();
     }
   }
 
@@ -1073,17 +1100,26 @@ class CompressedExternalIdTableSorterTypeErased {
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
-// The implementation of sorting a single block
+// The implementation of sorting a single block. A `Comparator` that compares
+// the bits of some columns (see `hasBitwiseKeyColumns`) is sorted via the much
+// faster `sortByBitwiseKeys`, in parallel on the executor of the
+// `parallelism_` (see `BitwiseKeySortParallelism`).
 template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
+  BitwiseKeySortParallelism parallelism_{};
   template <typename T>
   void operator()(T& block) {
+    if constexpr (hasBitwiseKeyColumns<Comparator>) {
+      sortByBitwiseKeys(block, Comparator::bitwiseKeyColumns, parallelism_);
+    } else {
 #ifdef _PARALLEL_SORT
-    ad_utility::parallel_sort(std::begin(block), std::end(block), comparator_);
+      ad_utility::parallel_sort(std::begin(block), std::end(block),
+                                comparator_);
 #else
-    ql::ranges::sort(block, comparator_);
+      ql::ranges::sort(block, comparator_);
 #endif
+    }
   }
 };
 // Deduction guide for the implicit aggregate initialization (its "constructor")
@@ -1157,6 +1193,7 @@ class CompressedExternalIdTableSorter
              BlockSorter{comparator}},
         comparator_{comparator} {
     this->setAsyncPushExecutor(mergeExecutor_);
+    setBlockSortParallelism();
   }
 
   // When we have a static number of columns, then the `numCols` argument to the
@@ -1191,9 +1228,16 @@ class CompressedExternalIdTableSorter
   // PRECONDITION: No `asyncPushBlock` is in flight.
   void setMergeExecutor(ql::any_io_executor executor, size_t parallelism) {
     AD_CONTRACT_CHECK(parallelism > 0);
+    // A block that is currently being sorted in the background uses the
+    // parallelism that is changed below, so wait for it (without consuming
+    // the future, which `transformAndPushLastBlock` still needs).
+    if (this->compressAndWriteFuture_.valid()) {
+      this->compressAndWriteFuture_.wait();
+    }
     mergeExecutor_ = std::move(executor);
     mergeParallelism_ = parallelism;
     this->setAsyncPushExecutor(mergeExecutor_);
+    setBlockSortParallelism();
   }
 
   // Asynchronously push all the rows of the `table`, in a way that several
@@ -1264,6 +1308,115 @@ class CompressedExternalIdTableSorter
                             mergeIsActive_.store(false);
                           }}};
   }
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Transition from the input phase to the output phase like `getSortedBlocks`,
+  // but instead of yielding the sorted blocks as a sequential range, push them
+  // to the sink that `makeSink` creates, see
+  // `parallelBlockMerge::parallelBlockMergeToSink` for the requirements on
+  // the factory and on the sink. The blocks are pushed from the threads of the
+  // merge executor (see `setMergeExecutor`): the blocks of a single chunk one
+  // after the other and in order, but the chunks concurrently and in an
+  // arbitrary order. This is for consumers that can handle the chunks
+  // independently, which saves the spilling and reordering of the blocks that
+  // a sequential consumer needs.
+  //
+  // Return a future that becomes ready once the merge has completed and has
+  // released this sorter again (only then it may be cleared or destroyed). The
+  // future is deferred, so the caller has to `get()` or `wait()` for it.
+  // Exceptions of the merge are reported to the sink and not via the future.
+  //
+  // NOTE: Like `getSortedBlocks`, this may only be called once if
+  // `moveResultOnMerge()` is set (which is the default).
+  template <size_t N = NumStaticCols, typename SinkFactory>
+  std::future<void> mergeToSink(SinkFactory makeSink) {
+    static_assert(N == NumStaticCols || N == 0);
+    AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
+    AD_CONTRACT_CHECK(!mergeIsActive_.exchange(true));
+    auto finished = [this]() noexcept {
+      this->isFirstIteration_ = false;
+      mergeIsActive_.store(false);
+    };
+    if (!this->transformAndPushLastBlock()) {
+      // There is only a single (already sorted) block, so there is nothing to
+      // merge: push that block to a sink that expects a single chunk, and
+      // synchronously wait for the sink to accept it.
+      //
+      // NOTE: The end of the chunk is deliberately *not* awaited here, but
+      // only via the returned future, because a sink may complete it only
+      // once its consumer (which typically runs after this function has
+      // returned) has processed the chunk.
+      auto sink = makeSink(1);
+      auto& block = this->currentBlock_;
+      if (!block.empty()) {
+        IdTableStatic<N> output = this->moveResultOnMerge_
+                                      ? std::move(block).template toStatic<N>()
+                                      : block.clone().template toStatic<N>();
+        sink->asyncPush(0, std::move(output), boost::asio::use_future).get();
+      }
+      return std::async(
+          std::launch::deferred,
+          [chunkFinished = sink->asyncFinishChunk(0, boost::asio::use_future),
+           finished]() mutable {
+            chunkFinished.get();
+            finished();
+          });
+    }
+    const auto config = makeMergePhaseConfig(std::nullopt);
+    const auto parameters =
+        compressedExternalIdTable::computeMergePhaseParameters(config);
+    warnIfParallelismIsReduced(parameters);
+    auto options =
+        compressedExternalIdTable::makeMergeOptions(config, parameters);
+    auto state = parallelBlockMerge::parallelBlockMergeToSink<true>(
+        mergeExecutor_, CompressedIdTableRunsInput<N>{this->writer_},
+        this->comparator_, std::move(makeSink), std::move(options),
+        std::make_shared<ad_utility::CancellationHandle<>>());
+    // NOTE: The completion future becomes ready once the state of the merge
+    // (which owns the input) has been destroyed, see
+    // `ParallelMergeState::asyncWaitForCompletion`.
+    return std::async(
+        std::launch::deferred,
+        [completion = state->asyncWaitForCompletion(), finished]() mutable {
+          completion.get();
+          finished();
+        });
+  }
+#endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+  // Finish the input phase: sort the rows that are still buffered and write
+  // all the rows to the underlying file as sorted runs (also if there is only
+  // a single run, which `getSortedBlocks` would keep in memory). Return the
+  // input for an external merge of these runs (see `CompressedIdTableRunsInput`
+  // and `parallelBlockMerge::parallelBlockMergeToRange`), which the caller can
+  // combine with the runs of other sorters that have the same comparator and
+  // the same number of columns into a single merge. Afterwards this sorter can
+  // only be cleared (once the returned input has been destroyed) or destroyed.
+  template <size_t N = NumStaticCols>
+  CompressedIdTableRunsInput<N> finishAndGetRunsInput() {
+    static_assert(N == NumStaticCols || N == 0);
+    AD_CONTRACT_CHECK(this->isFirstIteration_);
+    AD_CONTRACT_CHECK(!mergeIsActive_.exchange(true));
+    if (!this->transformAndPushLastBlock()) {
+      // The single block has been sorted in place, but is still in memory.
+      if (!this->currentBlock_.empty()) {
+        this->writer_.writeIdTable(std::move(this->currentBlock_).toDynamic());
+        this->resetCurrentBlock(false);
+      }
+    }
+    this->isFirstIteration_ = false;
+    return CompressedIdTableRunsInput<N>{this->writer_};
+  }
+
+  // The uncompressed size of a single block of a single column in the
+  // underlying file, which is needed to configure a merge of the runs that
+  // `finishAndGetRunsInput` returns.
+  const MemorySize& inputBlockSizePerColumn() const {
+    return this->writer_.blockSizeUncompressed();
+  }
+
+  // The number of columns of the sorted rows.
+  size_t numColumns() const { return this->numColumns_; }
 
   // The implementation of the type-erased interface. Push a complete block at
   // once.
@@ -1434,17 +1587,20 @@ class CompressedExternalIdTableSorter
                 << std::endl;
   }
 
+  // Let the sorts of the blocks (see `BlockSorter`) run on the merge executor
+  // with the merge parallelism, see `setMergeExecutor`.
+  void setBlockSortParallelism() {
+    this->blockTransformation_.parallelism_ =
+        BitwiseKeySortParallelism{mergeExecutor_, mergeParallelism_};
+  }
+
   // _____________________________________________________________
-  void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
-#ifdef _PARALLEL_SORT
-    ad_utility::parallel_sort(block.begin(), block.end(), comparator_);
-#else
-    ql::ranges::sort(block, comparator_);
-#endif
+  void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) {
+    this->blockTransformation_(block);
   }
 
   // A function with this name is needed by the mixin base class.
-  void transformBlock(IdTableStatic<NumStaticCols>& block) const {
+  void transformBlock(IdTableStatic<NumStaticCols>& block) {
     sortBlockInPlace(block);
   }
 };

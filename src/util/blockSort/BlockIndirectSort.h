@@ -19,7 +19,6 @@
 
 #include <algorithm>
 #include <bit>
-#include <boost/sort/pdqsort/pdqsort.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <numeric>
@@ -29,6 +28,7 @@
 #include "backports/asio.h"
 #include "backports/concepts.h"
 #include "util/Exception.h"
+#include "util/blockSort/BoostSortHeaders.h"
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <boost/asio/awaitable.hpp>

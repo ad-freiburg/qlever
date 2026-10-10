@@ -11,8 +11,10 @@
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_CHUNKMERGER_H
 
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <optional>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -34,6 +36,15 @@
 // first.
 namespace ad_utility::parallelBlockMerge {
 namespace detail {
+
+// Whether the `Input` (see `InputConcept`) has an optional
+// `reserveBlock(block, numElements)` function, see `ChunkMerger::get`.
+template <typename Input, typename = void>
+constexpr bool hasReserveBlock = false;
+template <typename Input>
+constexpr bool hasReserveBlock<
+    Input, std::void_t<decltype(std::declval<const Input&>().reserveBlock(
+               std::declval<typename Input::Block&>(), size_t{0}))>> = true;
 
 // Everything that a single merge consists of, and that the mergers of its
 // chunks share. It is always held by a `shared_ptr`, so that a `ChunkMerger`
@@ -147,6 +158,20 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
   // chunk). The returned block is never empty, because an `OutputBlockSize` is
   // never satisfied by an empty block. This is the only function that performs
   // I/O and it must not be called concurrently for the same `ChunkMerger`.
+  // If the `input` has a `reserveBlock(block, numElements)` function, reserve
+  // the memory of a complete output block up front (if the number of elements
+  // per block is bounded), so that the block doesn't grow in several steps.
+  template <typename I = Input>
+  static void reserveBlockIfPossible(const I& input, Block& block,
+                                     const MergeOptions& options) {
+    if constexpr (hasReserveBlock<I>) {
+      size_t maxNumElements = options.outputBlockSize.maxNumElements();
+      if (maxNumElements != std::numeric_limits<size_t>::max()) {
+        input.reserveBlock(block, maxNumElements);
+      }
+    }
+  }
+
   std::optional<Block> get() override {
     initializeIfNecessary();
     if (heap_.empty()) {
@@ -154,6 +179,7 @@ CPP_template(bool moveElements, typename Input, typename Comparator)(
     }
     const Input& input = state_->input_;
     auto block = input.makeEmptyBlock();
+    reserveBlockIfPossible(input, block, state_->options_);
     size_t numElements = 0;
     MemorySize memory = MemorySize::bytes(0);
     auto comparator = heapComparator();
