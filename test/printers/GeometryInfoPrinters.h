@@ -54,6 +54,13 @@ inline void PrintTo(const MetricArea& gt, std::ostream* os) {
 }
 
 // _____________________________________________________________________________
+inline void PrintTo(const SourceCrsType& crs, std::ostream* os) {
+  auto& s = *os;
+  s << "CRSType(" << std::to_string(crs.type())
+    << ", IRI: " << crs.asIri().value_or("-") << ")";
+}
+
+// _____________________________________________________________________________
 inline void PrintTo(const GeometryInfo& gi, std::ostream* os) {
   auto& s = *os;
   s << "GeometryInfo(";
@@ -68,6 +75,8 @@ inline void PrintTo(const GeometryInfo& gi, std::ostream* os) {
   PrintTo(gi.getMetricLength(), os);
   s << ",";
   PrintTo(gi.getMetricArea(), os);
+  s << ",";
+  PrintTo(gi.getSourceCrsType(), os);
   s << ")";
 }
 

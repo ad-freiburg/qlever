@@ -368,6 +368,8 @@ class ValueGetterTester {
       " \"noType\" ,"
       " \"LINESTRING(2 2, 4 4)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,\n"
+      "\"<http://www.opengis.net/def/crs/EPSG/0/4326> LINESTRING(2 2, 4 4)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,\n"
       " \"POLYGON((2 4, 4 4, 4 2, 2 2))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>.\n";
 
