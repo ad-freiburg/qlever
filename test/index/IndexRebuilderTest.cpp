@@ -458,7 +458,8 @@ TEST(IndexRebuilder, readIndexAndRemap) {
   auto range = readIndexAndRemap(permutation, blockMetadataRanges, state,
                                  localVocabMapping, insertionPositions,
                                  blankNodeBlocks, minBlankNodeIndex,
-                                 cancellationHandle, additionalColumns);
+                                 cancellationHandle, additionalColumns,
+                                 ad_utility::testing::singleThreadExecutor());
 
   std::vector<IdTableStatic<0>> idTables = ::ranges::to<std::vector>(
       ql::views::transform(range, ad_utility::staticCast<IdTableStatic<0>&&>));
@@ -561,7 +562,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
       newIndex, index.getImpl().getPermutation(Permutation::Enum::PSO),
       index.getImpl().getPermutation(Permutation::Enum::POS), false, state,
       localVocabMapping, insertionPositions, blankNodeBlocks, 1,
-      cancellationHandle);
+      cancellationHandle, ad_utility::testing::singleThreadExecutor());
 
   // Assert nothing has happened yet
   for (std::string_view suffix : suffixes) {
@@ -651,7 +652,9 @@ TEST(IndexRebuilder, materializeToIndex) {
       auto sourceDate = index.getImpl().dateOfIndexBuild();
 
       qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
-                                 blankNodes, cancellationHandle, logFile);
+                                 blankNodes, cancellationHandle,
+                                 ad_utility::testing::singleThreadExecutor(),
+                                 logFile);
       EXPECT_TRUE(ql::filesystem::exists(logFile));
 
       // Each phase writes its header (which says what is being processed,
@@ -761,9 +764,10 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   absl::Cleanup removeIndexFiles{
       [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
 
-  EXPECT_NO_THROW(qlever::materializeToIndex(index.getImpl(), newIndexName,
-                                             state, vocab, blankNodes,
-                                             cancellationHandle, logFile));
+  EXPECT_NO_THROW(qlever::materializeToIndex(
+      index.getImpl(), newIndexName, state, vocab, blankNodes,
+      cancellationHandle, ad_utility::testing::singleThreadExecutor(),
+      logFile));
 
   IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
   newIndex.createFromOnDiskIndex(newIndexName, false);
@@ -824,6 +828,7 @@ TEST(IndexRebuilder, materializeToIndexKeepsGeoPointEncoding) {
       [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
   qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
                              blankNodes, cancellationHandle,
+                             ad_utility::testing::singleThreadExecutor(),
                              newIndexName + ".log");
 
   // The rebuilt index is in the current format with the entry `lat-major`, and
@@ -860,8 +865,9 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
           .getCurrentLocatedTriplesSharedStateWithVocab();
 
   EXPECT_THROW(
-      qlever::materializeToIndex(index.getImpl(), "nexIndex", state, vocab,
-                                 blankNodes, cancellationHandle, ""),
+      qlever::materializeToIndex(
+          index.getImpl(), "nexIndex", state, vocab, blankNodes,
+          cancellationHandle, ad_utility::testing::singleThreadExecutor(), ""),
       ad_utility::Exception);
 }
 
@@ -886,43 +892,24 @@ void cleanDirsWithPrefix(std::string_view prefix) {
 }  // namespace
 
 // _____________________________________________________________________________
-// The thread-count override for the rebuild's scans must be set on the
-// dedicated reader created by `lazyScanWithUnlimitedReader` (and only there);
-// the permutation's shared reader, which is used by the query scans, must
-// never carry an override.
-TEST(IndexRebuilder, lazyScanNumBlocksInFlightOverride) {
+// Recomputing the statistics must give exactly the same result, no matter by
+// how many threads each of its scans is limited (0 means "no limit"). This
+// exercises both branches of the translation of the runtime parameter
+// `rebuild-index-scan-num-blocks-in-flight` to a concurrency-limited executor.
+TEST(IndexRebuilder, rebuildIndexScanNumBlocksInFlight) {
   auto index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
                                                   "<a> <b> <c> .");
-  const auto& permutation =
-      index.getImpl().getPermutation(Permutation::Enum::PSO);
-  auto cancellationHandle =
-      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
   auto state =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
-  std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-
-  auto scanWithOverride = [&](std::optional<size_t> numBlocksInFlightOverride) {
-    return permutation.lazyScanWithUnlimitedReader(
-        permutation.getScanSpecAndBlocks(scanSpec, *state), additionalColumns,
-        cancellationHandle, *state, numBlocksInFlightOverride);
+  boost::asio::thread_pool pool{4};
+  auto recomputeStatistics = [&](size_t maxNumThreads) {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::rebuildIndexScanNumBlocksInFlight_>(maxNumThreads);
+    return index.getImpl().recomputeStatistics(state, pool.get_executor());
   };
-  auto [reader, scan] = scanWithOverride(3);
-  EXPECT_EQ(reader->lazyScanNumBlocksInFlightOverride_,
-            std::optional<size_t>{3});
-  auto [readerDefault, scanDefault] = scanWithOverride(std::nullopt);
-  EXPECT_EQ(readerDefault->lazyScanNumBlocksInFlightOverride_, std::nullopt);
-  EXPECT_EQ(permutation.reader().lazyScanNumBlocksInFlightOverride_,
-            std::nullopt);
-
-  // Recomputing the statistics with the throttle set must give exactly the
-  // same result as with the default (0, which means "fall back to
-  // `lazy-index-scan-num-blocks-in-flight`"). This exercises the translation of
-  // the runtime parameter to the override at both of its use sites.
-  auto statsDefault = index.getImpl().recomputeStatistics(state);
-  auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::rebuildIndexScanNumBlocksInFlight_>(2);
-  EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
+  auto statsUnlimited = recomputeStatistics(0);
+  EXPECT_EQ(recomputeStatistics(1), statsUnlimited);
+  EXPECT_EQ(recomputeStatistics(2), statsUnlimited);
 }
 
 // _____________________________________________________________________________

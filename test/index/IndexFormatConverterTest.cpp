@@ -150,7 +150,7 @@ class IndexFormatConverterTest : public ::testing::Test {
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
             *locatedTriples),
         {}, std::make_shared<ad_utility::CancellationHandle<>>(),
-        *locatedTriples);
+        *locatedTriples, ad_utility::testing::singleThreadExecutor());
     AD_CORRECTNESS_CHECK(table.numColumns() == 3);
     std::vector<std::array<Id, 3>> triples;
     for (const auto& row : table) {
@@ -229,7 +229,8 @@ TEST(IndexFormatConverter, convertIdOfInvalidId) {
 
 // _____________________________________________________________________________
 TEST_F(IndexFormatConverterTest, convertedIndexHasTheSameContent) {
-  convertIndexToCurrentFormat(oldBasename_, newBasename_);
+  convertIndexToCurrentFormat(oldBasename_, newBasename_,
+                              ad_utility::testing::singleThreadExecutor());
 
   // The converted index has the current index format, and everything else in
   // its configuration is unchanged.
@@ -323,7 +324,8 @@ TEST_F(IndexFormatConverterTest, convertedIndexHasTheSameContent) {
 
 // _____________________________________________________________________________
 TEST_F(IndexFormatConverterTest, convertedIndexHasPatternsAndTextIndex) {
-  convertIndexToCurrentFormat(oldBasename_, newBasename_);
+  convertIndexToCurrentFormat(oldBasename_, newBasename_,
+                              ad_utility::testing::singleThreadExecutor());
   auto [index, locatedTriples] = loadConvertedIndex();
 
   // The patterns (the sets of predicates of the subjects) are converted. Note
@@ -369,7 +371,8 @@ TEST_F(IndexFormatConverterTest, convertedMaterializedView) {
   AD_EXPECT_THROW_WITH_MESSAGE(MaterializedView(oldBasename_, "testview"),
                                HasSubstr("saved with format version 1"));
 
-  convertIndexToCurrentFormat(oldBasename_, newBasename_);
+  convertIndexToCurrentFormat(oldBasename_, newBasename_,
+                              ad_utility::testing::singleThreadExecutor());
 
   // The converted view can be loaded, which also checks its version, its
   // columns, and its query, and it contains all its rows.
@@ -393,7 +396,8 @@ TEST_F(IndexFormatConverterTest, upgradeIndexInPlace) {
     filesBefore.push_back(entry.path().filename().string());
   }
 
-  upgradeIndexInPlace(oldBasename_);
+  upgradeIndexInPlace(oldBasename_,
+                      ad_utility::testing::singleThreadExecutor());
 
   // The upgraded index is at the base name the old index lived at, is in the
   // current format, and can be loaded with all of its triples. Its content is
@@ -428,21 +432,24 @@ TEST_F(IndexFormatConverterTest, upgradeIndexInPlace) {
   // A second upgrade refuses, because the index already is in the current
   // format.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      upgradeIndexInPlace(oldBasename_),
+      upgradeIndexInPlace(oldBasename_,
+                          ad_utility::testing::singleThreadExecutor()),
       HasSubstr("already is in an index format that the current version"));
 }
 
 // _____________________________________________________________________________
 TEST_F(IndexFormatConverterTest, refusesToConvertIndexTwice) {
-  convertIndexToCurrentFormat(oldBasename_, newBasename_);
+  convertIndexToCurrentFormat(oldBasename_, newBasename_,
+                              ad_utility::testing::singleThreadExecutor());
   // The converted index already is in the current format.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      convertIndexToCurrentFormat(newBasename_,
-                                  (directory_ / "again").string()),
+      convertIndexToCurrentFormat(newBasename_, (directory_ / "again").string(),
+                                  ad_utility::testing::singleThreadExecutor()),
       HasSubstr("already is in an index format that the current version"));
   // The files of the converted index must not be overwritten.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      convertIndexToCurrentFormat(oldBasename_, newBasename_),
+      convertIndexToCurrentFormat(oldBasename_, newBasename_,
+                                  ad_utility::testing::singleThreadExecutor()),
       HasSubstr("must not overwrite"));
 }
 
@@ -451,13 +458,15 @@ TEST_F(IndexFormatConverterTest, refusesToConvertUnsuitableIndexes) {
   // The base names have to differ, else the conversion would overwrite the
   // index that it reads.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      convertIndexToCurrentFormat(oldBasename_, oldBasename_),
+      convertIndexToCurrentFormat(oldBasename_, oldBasename_,
+                                  ad_utility::testing::singleThreadExecutor()),
       HasSubstr("has to differ"));
 
   // An index that does not exist at all.
   AD_EXPECT_THROW_WITH_MESSAGE(
       convertIndexToCurrentFormat((directory_ / "doesNotExist").string(),
-                                  newBasename_),
+                                  newBasename_,
+                                  ad_utility::testing::singleThreadExecutor()),
       HasSubstr("is not the base name of a QLever index"));
 
   // An index with an index format that is neither the previous nor the current
@@ -475,7 +484,9 @@ TEST_F(IndexFormatConverterTest, refusesToConvertUnsuitableIndexes) {
     ad_utility::makeOfstream(configurationFilename)
         << modifiedConfiguration.dump();
     AD_EXPECT_THROW_WITH_MESSAGE(
-        convertIndexToCurrentFormat(oldBasename_, newBasename_),
+        convertIndexToCurrentFormat(
+            oldBasename_, newBasename_,
+            ad_utility::testing::singleThreadExecutor()),
         HasSubstr("Please rebuild the index"));
   }
   {
@@ -484,7 +495,9 @@ TEST_F(IndexFormatConverterTest, refusesToConvertUnsuitableIndexes) {
     ad_utility::makeOfstream(configurationFilename)
         << modifiedConfiguration.dump();
     AD_EXPECT_THROW_WITH_MESSAGE(
-        convertIndexToCurrentFormat(oldBasename_, newBasename_),
+        convertIndexToCurrentFormat(
+            oldBasename_, newBasename_,
+            ad_utility::testing::singleThreadExecutor()),
         HasSubstr("before versioning was introduced"));
   }
   restoreConfiguration();
@@ -495,14 +508,16 @@ TEST_F(IndexFormatConverterTest, refusesToConvertUnsuitableIndexes) {
       absl::StrCat(oldBasename_, UPDATE_TRIPLES_SUFFIX);
   ad_utility::makeOfstream(updatesFilename) << "irrelevant content";
   AD_EXPECT_THROW_WITH_MESSAGE(
-      convertIndexToCurrentFormat(oldBasename_, newBasename_),
+      convertIndexToCurrentFormat(oldBasename_, newBasename_,
+                                  ad_utility::testing::singleThreadExecutor()),
       HasSubstr("has persisted updates"));
   ad_utility::deleteFile(updatesFilename);
 
   // An index that has only one of the two permutations of a pair.
   ad_utility::deleteFile(absl::StrCat(oldBasename_, ".index.sop"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      convertIndexToCurrentFormat(oldBasename_, newBasename_),
+      convertIndexToCurrentFormat(oldBasename_, newBasename_,
+                                  ad_utility::testing::singleThreadExecutor()),
       HasSubstr("has only one of the permutations"));
 }
 
@@ -520,7 +535,8 @@ TEST_F(IndexFormatConverterTest, refusesToConvertUnsuitableMaterializedViews) {
   viewInfo["version"] = MATERIALIZED_VIEWS_VERSION;
   ad_utility::makeOfstream(viewInfoFilename) << viewInfo.dump();
   AD_EXPECT_THROW_WITH_MESSAGE(
-      convertIndexToCurrentFormat(oldBasename_, newBasename_),
+      convertIndexToCurrentFormat(oldBasename_, newBasename_,
+                                  ad_utility::testing::singleThreadExecutor()),
       HasSubstr("only converts views in the format version 1"));
   ad_utility::makeOfstream(viewInfoFilename) << originalViewInfo.dump();
 
@@ -530,16 +546,21 @@ TEST_F(IndexFormatConverterTest, refusesToConvertUnsuitableMaterializedViews) {
   ad_utility::deleteFile(absl::StrCat(viewBasename, VIEW_SPO_SUFFIX));
   AD_EXPECT_THROW_WITH_MESSAGE(
       convertIndexToCurrentFormat(oldBasename_,
-                                  (directory_ / "incompleteView").string()),
+                                  (directory_ / "incompleteView").string(),
+                                  ad_utility::testing::singleThreadExecutor()),
       HasSubstr("files that belong to a materialized view"));
 }
 
 // _____________________________________________________________________________
 TEST_F(IndexFormatConverterTest, emptyBasenamesAreARequirementViolation) {
-  AD_EXPECT_THROW_WITH_MESSAGE(convertIndexToCurrentFormat("", newBasename_),
-                               HasSubstr("must not be empty"));
-  AD_EXPECT_THROW_WITH_MESSAGE(convertIndexToCurrentFormat(oldBasename_, ""),
-                               HasSubstr("must not be empty"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      convertIndexToCurrentFormat("", newBasename_,
+                                  ad_utility::testing::singleThreadExecutor()),
+      HasSubstr("must not be empty"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      convertIndexToCurrentFormat(oldBasename_, "",
+                                  ad_utility::testing::singleThreadExecutor()),
+      HasSubstr("must not be empty"));
 }
 
 // _____________________________________________________________________________
@@ -547,11 +568,13 @@ TEST_F(IndexFormatConverterTest, equalBasenamesAreAUserFacingError) {
   // The comparison normalizes the paths, so also a spelled-differently base
   // name of the same index is caught.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      convertIndexToCurrentFormat(oldBasename_, oldBasename_),
+      convertIndexToCurrentFormat(oldBasename_, oldBasename_,
+                                  ad_utility::testing::singleThreadExecutor()),
       HasSubstr("has to differ from the base name"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       convertIndexToCurrentFormat(oldBasename_,
-                                  absl::StrCat("./", oldBasename_)),
+                                  absl::StrCat("./", oldBasename_),
+                                  ad_utility::testing::singleThreadExecutor()),
       HasSubstr("has to differ from the base name"));
 }
 
@@ -617,7 +640,7 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
             *locatedTriples),
         additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
-        *locatedTriples);
+        *locatedTriples, ad_utility::testing::singleThreadExecutor());
   }
 
   // Return true iff the conversion of an `Id` is the identity for every `Id` of
@@ -704,7 +727,8 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
     std::string conversionLog;
     {
       auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
-      convertIndexToCurrentFormat(oldBasename_, newBasename_);
+      convertIndexToCurrentFormat(oldBasename_, newBasename_,
+                                  ad_utility::testing::singleThreadExecutor());
       conversionLog = logStream.str();
     }
 
@@ -827,7 +851,8 @@ TEST_F(MultiBlockIndexFormatConverterTest, convertEmptyIndex) {
   }
   pretendThatTheIndexIsInThePreviousFormat();
 
-  convertIndexToCurrentFormat(oldBasename_, newBasename_);
+  convertIndexToCurrentFormat(oldBasename_, newBasename_,
+                              ad_utility::testing::singleThreadExecutor());
 
   // The converted index can be loaded, and all its permutations are still
   // empty, both according to their metadata and when they are scanned.
@@ -845,7 +870,7 @@ TEST_F(MultiBlockIndexFormatConverterTest, convertEmptyIndex) {
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
             *locatedTriples),
         {}, std::make_shared<ad_utility::CancellationHandle<>>(),
-        *locatedTriples);
+        *locatedTriples, ad_utility::testing::singleThreadExecutor());
     EXPECT_EQ(table.numRows(), 0u);
   }
 }
@@ -917,7 +942,8 @@ TEST_F(MultiBlockIndexFormatConverterTest, indexWithoutRowsPerBlock) {
   }
   {
     auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
-    convertIndexToCurrentFormat(oldBasename_, newBasename_);
+    convertIndexToCurrentFormat(oldBasename_, newBasename_,
+                                ad_utility::testing::singleThreadExecutor());
   }
 
   Index newIndex = loadConvertedIndex();

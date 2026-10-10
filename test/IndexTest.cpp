@@ -88,7 +88,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
                 .toScanSpecification(index),
             locatedTriplesSnapshot),
         additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
-        locatedTriplesSnapshot);
+        locatedTriplesSnapshot, ad_utility::testing::singleThreadExecutor());
     ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
@@ -113,7 +113,7 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
             locatedTriplesSnapshot),
         Permutation::ColumnIndicesRef{},
         std::make_shared<ad_utility::CancellationHandle<>>(),
-        locatedTriplesSnapshot);
+        locatedTriplesSnapshot, ad_utility::testing::singleThreadExecutor());
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
@@ -1072,7 +1072,8 @@ TEST(IndexImpl, recomputeStatistics) {
   auto& indexImpl = index.getImpl();
   // No-op, should return the same stats.
   auto result = indexImpl.recomputeStatistics(
-      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
+      ad_utility::testing::singleThreadExecutor());
   EXPECT_EQ(result, indexImpl.configurationJson_);
 
   // Now, modify the index by adding triples.
@@ -1109,7 +1110,8 @@ TEST(IndexImpl, recomputeStatistics) {
     }
 
     auto newStats = indexImpl.recomputeStatistics(
-        index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+        index.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
+        ad_utility::testing::singleThreadExecutor());
     EXPECT_NE(newStats, indexImpl.configurationJson_);
     EXPECT_EQ(newStats["num-triples"], NNAI(6, 7));
     EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
@@ -1155,7 +1157,7 @@ TEST(IndexImpl, createPermutation) {
       4,
       ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
           tables.at(0).clone(), tables.at(1).clone()}},
-      permutation, false);
+      permutation, false, ad_utility::testing::singleThreadExecutor());
   index.finalizePermutation(meta, permutation, false);
 
   EXPECT_EQ(uniquePredicates, 3);
@@ -1163,11 +1165,11 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
   // Writing the same permutation with the writer-thread throttle disabled
-  // (0 means "fall back to `permutation-writer-num-threads`") must give the
-  // same result. Together with the default of 1 used by the calls above and
-  // below, this exercises the translation of the runtime parameter to the
-  // writer-thread override on both of its branches. Use a separate base name,
-  // so that the permutation that was already finalized above stays intact.
+  // (0 means "no limit") must give the same result. Together with the default
+  // of 1 used by the calls above and below, this exercises the translation of
+  // the runtime parameter to a concurrency-limited executor on both of its
+  // branches. Use a separate base name, so that the permutation that was
+  // already finalized above stays intact.
   {
     auto cleanupParameter = setRuntimeParameterForTest<
         &RuntimeParameters::rebuildPermutationWriterNumThreads_>(0);
@@ -1177,7 +1179,7 @@ TEST(IndexImpl, createPermutation) {
             4,
             ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
                 tables.at(0).clone(), tables.at(1).clone()}},
-            permutation, false);
+            permutation, false, ad_utility::testing::singleThreadExecutor());
     index.setOnDiskBase(onDiskBase);
     EXPECT_EQ(uniquePredicatesUnthrottled, uniquePredicates);
   }
@@ -1185,7 +1187,7 @@ TEST(IndexImpl, createPermutation) {
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(
           4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,
-          true);
+          true, ad_utility::testing::singleThreadExecutor());
   index.finalizePermutation(internalMeta, permutation, true);
 
   EXPECT_EQ(uniqueInternalPredicates, 3);
@@ -1208,7 +1210,7 @@ TEST(IndexImpl, createPermutation) {
         actualPermutation.getScanSpecAndBlocks(scanSpec, *state), std::nullopt,
         std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID},
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>(),
-        *state);
+        *state, ad_utility::testing::singleThreadExecutor());
     auto begin = scan.begin();
     ASSERT_NE(begin, scan.end());
     EXPECT_EQ(*begin, makeIdTableFromVector({{1, 1, 1, 0},

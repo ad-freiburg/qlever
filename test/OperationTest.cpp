@@ -208,6 +208,7 @@ class OperationTestFixture : public testing::Test {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      ad_utility::testing::singleThreadExecutor(),
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
   ValuesForTesting operation{&qec, std::move(table), {}};
@@ -538,6 +539,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      ad_utility::testing::singleThreadExecutor(),
       [&](std::string) { signaledUpdate = true; }};
   AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
@@ -568,6 +570,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      ad_utility::testing::singleThreadExecutor(),
       [&](std::string) { signaledUpdate = true; }};
   CustomGeneratorOperation operation{&context, []() -> Result::Generator {
                                        throw CancellationException{
@@ -605,6 +608,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      ad_utility::testing::singleThreadExecutor(),
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {
@@ -681,6 +685,7 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
       SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
+      ad_utility::testing::singleThreadExecutor(),
       [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
       &context, [](const IdTable& idTable) -> Result::Generator {

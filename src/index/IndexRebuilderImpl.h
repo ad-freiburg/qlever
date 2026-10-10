@@ -47,6 +47,8 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks);
 // where all local vocab `Id`s are remapped according to `localVocabMapping`
 // and all vocab `Id`s are remapped according to `insertInfo` to create a new
 // index where all of these values are all vocab `Id`s in the new vocabulary.
+// The blocks are read on the `executor`, by at most
+// `rebuild-index-scan-num-blocks-in-flight` threads at the same time.
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation,
     const BlockMetadataRanges& blockMetadataRanges,
@@ -55,7 +57,8 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    ql::span<const ColumnIndex> additionalColumns);
+    ql::span<const ColumnIndex> additionalColumns,
+    ql::any_io_executor executor);
 
 // Get the number of columns in the given `blockMetadataRanges`. If this cannot
 // be determined, return 4 as a "safe" default, representing subject + predicate
@@ -67,9 +70,11 @@ size_t getNumColumns(const BlockMetadataRanges& blockMetadataRanges);
 
 // Create a `boost::asio::awaitable<void>` that writes a pair of new
 // permutations according to the settings of `newIndex`, based on the data of
-// the current index. `progress` is called (possibly from several threads)
-// with the number of newly processed triples, for progress reporting; it
-// defaults to a no-op.
+// the current index. The old permutations are read and the new ones are
+// written on the `executor` (see `readIndexAndRemap` and
+// `IndexImpl::createPermutationWithoutMetadata`). `progress` is called
+// (possibly from several threads) with the number of newly processed triples,
+// for progress reporting; it defaults to a no-op.
 boost::asio::awaitable<void> createPermutationWriterTask(
     IndexImpl& newIndex, const Permutation& permutationA,
     const Permutation& permutationB, bool isInternal,
@@ -78,6 +83,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
+    ql::any_io_executor executor,
     std::function<void(size_t)> progress = ad_utility::noop);
 
 // Analyze how many columns the new permutation will have and which additional

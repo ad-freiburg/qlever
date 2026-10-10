@@ -14,6 +14,7 @@
 
 #include "./QueryPlannerTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/IndexTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
@@ -128,7 +129,9 @@ class MaterializedViewsTest : public ::testing::Test {
 
   // ___________________________________________________________________________
   std::shared_ptr<QueryExecutionContext> getQec() {
-    return qlv_->createQueryExecutionContext(qlv_->indexAndViewsSnapshot());
+    return qlv_->createQueryExecutionContext(
+        qlv_->indexAndViewsSnapshot(),
+        ad_utility::testing::singleThreadExecutor());
   }
 
   // ___________________________________________________________________________
@@ -247,7 +250,9 @@ class MaterializedViewsPatternMatchingTest
     config.baseName_ = onDiskBase_;
     qlv_.emplace(config);
     manager_.emplace(onDiskBase_);
-    qec_ = qlv_->createQueryExecutionContext(qlv_->indexAndViewsSnapshot());
+    qec_ = qlv_->createQueryExecutionContext(
+        qlv_->indexAndViewsSnapshot(),
+        ad_utility::testing::singleThreadExecutor());
   }
 
   // ___________________________________________________________________________
@@ -347,7 +352,8 @@ inline void expectNotSuitableForRewrite(
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
   materializedViewsQueryAnalysis::QueryPatternCache qpc;
   auto plan = qlv.parseAndPlanQuery(query);
-  auto qec = qlv.createQueryExecutionContext(qlv.indexAndViewsSnapshot());
+  auto qec = qlv.createQueryExecutionContext(
+      qlv.indexAndViewsSnapshot(), ad_utility::testing::singleThreadExecutor());
   manager.writeViewToDisk(viewName, plan);
   auto view = manager.getView(viewName, qec.get());
   qpc.analyzeView(view, qec.get());

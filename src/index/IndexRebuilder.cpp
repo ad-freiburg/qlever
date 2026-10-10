@@ -41,6 +41,7 @@
 #include "index/LocalVocabEntry.h"
 #include "index/Permutation.h"
 #include "util/CancellationHandle.h"
+#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
@@ -281,21 +282,23 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    ql::span<const ColumnIndex> additionalColumns) {
+    ql::span<const ColumnIndex> additionalColumns,
+    ql::any_io_executor executor) {
   AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(insertionPositions));
   AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(blankNodeBlocks));
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
-  // A value of 0 means "fall back to `lazy-index-scan-num-blocks-in-flight`"
-  // (the same value as for query scans); a positive value throttles the
-  // rebuild's read/decompress parallelism only, reducing its peak CPU without
-  // touching queries.
-  auto numBlocksInFlightOverride = getRuntimeParameterAsOptional<
-      &RuntimeParameters::rebuildIndexScanNumBlocksInFlight_>();
+  // A positive value throttles the rebuild's read/decompress parallelism only,
+  // reducing its peak CPU without touching queries; 0 means "no limit".
+  if (auto maxNumThreads = getRuntimeParameterAsOptional<
+          &RuntimeParameters::rebuildIndexScanNumBlocksInFlight_>()) {
+    executor = ad_utility::makeConcurrencyLimitedExecutor(
+        std::move(executor), maxNumThreads.value());
+  }
   auto [reader, fullScan] = permutation.lazyScanWithUnlimitedReader(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
-      *locatedTriplesSharedState, numBlocksInFlightOverride);
+      *locatedTriplesSharedState, std::move(executor));
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
@@ -399,13 +402,13 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    std::function<void(size_t)> progress) {
+    ql::any_io_executor executor, std::function<void(size_t)> progress) {
   namespace net = boost::asio;
   using namespace net::experimental::awaitable_operators;
   auto makeTaskForPermutation = [&](const Permutation& permutation) {
     return [&newIndex, &permutation, isInternal, &locatedTriplesSharedState,
             &localVocabMapping, &insertionPositions, &blankNodeBlocks,
-            minBlankNodeIndex, &cancellationHandle, progress]() {
+            minBlankNodeIndex, &cancellationHandle, executor, progress]() {
       auto blockMetadataRanges = permutation.getAugmentedMetadataForPermutation(
           *locatedTriplesSharedState);
       auto [numColumns, additionalColumns] =
@@ -414,16 +417,18 @@ boost::asio::awaitable<void> createPermutationWriterTask(
       // reported to `progress` per block.
       auto countingStream = ad_utility::InputRangeTypeErased<IdTableStatic<0>>{
           ad_utility::CachingTransformInputRange{
-              readIndexAndRemap(
-                  permutation, blockMetadataRanges, locatedTriplesSharedState,
-                  localVocabMapping, insertionPositions, blankNodeBlocks,
-                  minBlankNodeIndex, cancellationHandle, additionalColumns),
+              readIndexAndRemap(permutation, blockMetadataRanges,
+                                locatedTriplesSharedState, localVocabMapping,
+                                insertionPositions, blankNodeBlocks,
+                                minBlankNodeIndex, cancellationHandle,
+                                additionalColumns, executor),
               [progress](IdTableStatic<0>& table) {
                 progress(table.numRows());
                 return std::move(table);
               }}};
       return newIndex.createPermutationWithoutMetadata(
-          numColumns, std::move(countingStream), permutation, isInternal);
+          numColumns, std::move(countingStream), permutation, isInternal,
+          executor);
     };
   };
   // Workaround for a GCC 15/16 bug: the hidden object of a by-value
@@ -456,7 +461,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     const std::vector<LocalVocabIndex>& entries,
     const indexRebuilder::OwnedBlocks& ownedBlocks,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const std::string& logFileName) {
+    ql::any_io_executor executor, const std::string& logFileName) {
   using namespace indexRebuilder;
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
 
@@ -526,7 +531,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
       numStatsScans * numTriplesOld.normal + numTriplesOld.internal;
   ad_utility::ConcurrentProgressBar statsProgress{
       "Triples counted: ", statsTotal, batchSizeFor(statsTotal)};
-  auto newStats = index.recomputeStatistics(locatedTriplesSharedState,
+  auto newStats = index.recomputeStatistics(locatedTriplesSharedState, executor,
                                             progressCallbackFor(statsProgress));
   REBUILD_LOG_INFO << statsProgress.getFinalProgressString() << std::flush;
   newStats[DATE_OF_INDEX_BUILD_KEY] = dateOfIndexBuild;
@@ -612,13 +617,14 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
       return isInternal ? perm.internalPermutation() : perm;
     };
 
-    net::co_spawn(threadPool,
-                  createPermutationWriterTask(
-                      newIndex, getPermutation(a), getPermutation(b),
-                      isInternal, locatedTriplesSharedState, localVocabMapping,
-                      insertionPositions, blankNodeBlocks, minBlankNodeIndex,
-                      cancellationHandle, permutationsProgressCallback),
-                  std::ref(exceptionCollector));
+    net::co_spawn(
+        threadPool,
+        createPermutationWriterTask(
+            newIndex, getPermutation(a), getPermutation(b), isInternal,
+            locatedTriplesSharedState, localVocabMapping, insertionPositions,
+            blankNodeBlocks, minBlankNodeIndex, cancellationHandle, executor,
+            permutationsProgressCallback),
+        std::ref(exceptionCollector));
   }
 
   threadPool.join();

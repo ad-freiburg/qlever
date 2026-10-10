@@ -17,6 +17,7 @@
 
 #include "AllocatorTestHelpers.h"
 #include "GTestHelpers.h"
+#include "backports/asio.h"
 #include "backports/three_way_comparison.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -48,6 +49,13 @@ namespace ad_utility::testing {
         previousValue;
   }};
 }
+
+// Return the executor of a single, lazily-initialized thread pool with a single
+// thread, which is shared across all tests. It is used for the
+// `QueryExecutionContext`s of `getQec` (see below) and for the scans of the
+// tests that call the `scan` functions of the `Permutation` or the
+// `CompressedRelationReader` directly.
+ql::any_io_executor singleThreadExecutor();
 
 // Return a pointer to a single, lazily-initialized `EncodedIriManager`
 // instance shared across all tests.

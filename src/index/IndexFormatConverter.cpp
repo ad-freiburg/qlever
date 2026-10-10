@@ -316,10 +316,11 @@ size_t batchSizeFor(size_t total) {
 
 // Return a lazy full scan of `permutation` in which all `Id`s are converted to
 // the current index format, reporting the number of triples of each block to
-// `progress`. The returned range has to be consumed before `permutation` is
-// destroyed.
+// `progress`. The blocks are read on the `executor`. The returned range has to
+// be consumed before `permutation` is destroyed.
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
-    const Permutation& permutation, std::function<void(size_t)> progress) {
+    const Permutation& permutation, std::function<void(size_t)> progress,
+    ql::any_io_executor executor) {
   auto locatedTriplesState = makeEmptyLocatedTriplesState(permutation);
   auto scanSpecAndBlocks = permutation.getScanSpecAndBlocks(
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
@@ -332,7 +333,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
   // by the lambda below, which is only valid in C++20.
   auto scanWithReader = permutation.lazyScanWithUnlimitedReader(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
-      *locatedTriplesState);
+      *locatedTriplesState, std::move(executor));
 
   // NOTE: The scan borrows the `reader` and the `locatedTriplesState`, so both
   // of them are moved into the transformation below to keep them alive for as
@@ -369,11 +370,15 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
 // blocks, the `numRows_` and the multiplicities of the converted permutation
 // can therefore differ from those of the permutation that it was converted
 // from; they are exactly those that a freshly built index would have.
+//
+// The blocks are compressed and written on the `executor`.
 IndexMetaData writePermutation(
     const std::string& filename, size_t numColumns, size_t rowsPerBlock,
-    ad_utility::InputRangeTypeErased<IdTableStatic<0>> blocks) {
+    ad_utility::InputRangeTypeErased<IdTableStatic<0>> blocks,
+    ql::any_io_executor executor) {
   auto writer = std::make_unique<CompressedRelationWriter>(
-      numColumns, ad_utility::File{filename, "w"}, rowsPerBlock);
+      numColumns, ad_utility::File{filename, "w"}, rowsPerBlock,
+      std::move(executor));
   IndexMetaData metaData;
   auto callback =
       [&metaData](ql::span<const CompressedRelationMetadata> metadata) {
@@ -496,12 +501,13 @@ Index::NumNormalAndInternal numPermutationsOfIndex(
 IndexMetaData convertPermutation(const Permutation& oldPermutation,
                                  const std::string& newBasename,
                                  bool isInternal, size_t rowsPerBlock,
-                                 const std::function<void(size_t)>& progress) {
+                                 const std::function<void(size_t)>& progress,
+                                 const ql::any_io_executor& executor) {
   std::string newFilename =
       filenameForPermutation(newBasename, oldPermutation, isInternal);
-  auto newMetaData =
-      writePermutation(newFilename, getNumColumns(oldPermutation), rowsPerBlock,
-                       scanAndConvertIds(oldPermutation, progress));
+  auto newMetaData = writePermutation(
+      newFilename, getNumColumns(oldPermutation), rowsPerBlock,
+      scanAndConvertIds(oldPermutation, progress, executor), executor);
   newMetaData.setName(oldPermutation.metaData().getName());
   verifyConvertedPermutation(oldPermutation.metaData(), newMetaData,
                              newFilename);
@@ -512,11 +518,13 @@ IndexMetaData convertPermutation(const Permutation& oldPermutation,
 // write them to the index with the base name `newBasename`. The `numTriples`
 // are the numbers of triples from the configuration of that index, which are
 // the total for the progress bar below, and `rowsPerBlock` is its block size.
+// The permutations are read and written on the `executor`.
 void convertPermutations(const std::string& oldBasename,
                          const std::string& newBasename,
                          const Index::NumNormalAndInternal& numTriples,
                          size_t rowsPerBlock,
-                         std::vector<fs::path>& handledFiles) {
+                         std::vector<fs::path>& handledFiles,
+                         const ql::any_io_executor& executor) {
   // Each triple is written once per permutation, which gives the total number
   // of triples that the conversion of the permutations writes.
   auto numPermutations = numPermutationsOfIndex(oldBasename);
@@ -569,7 +577,7 @@ void convertPermutations(const std::string& oldBasename,
     // Convert the two permutations of the pair concurrently. They are
     // independent of each other (each has its own reader, its own writer, and
     // its own metadata), and a single conversion keeps only few tasks in
-    // flight on the global thread pool (`lazy-index-scan-num-blocks-in-flight`
+    // flight on the `executor` (`lazy-index-scan-num-blocks-in-flight`
     // for reading and `permutation-writer-num-threads` for writing), so there
     // are cores to spare. One of the two conversions runs on this thread, so
     // that only one additional thread is needed.
@@ -578,10 +586,10 @@ void convertPermutations(const std::string& oldBasename,
     // `futureB` waits for the other conversion to finish before the exception
     // leaves this function. That is exactly what we want: no thread must still
     // be writing to the incomplete index when the caller handles the error.
-    auto convert = [&newBasename, isInternal, rowsPerBlock,
-                    &progress](const Permutation& permutation) {
+    auto convert = [&newBasename, isInternal, rowsPerBlock, &progress,
+                    &executor](const Permutation& permutation) {
       return convertPermutation(permutation, newBasename, isInternal,
-                                rowsPerBlock, progress);
+                                rowsPerBlock, progress, executor);
     };
     auto futureB =
         std::async(std::launch::async, convert, std::cref(*permutationB));
@@ -623,10 +631,12 @@ void convertPatterns(const std::string& oldBasename,
 
 // Convert the materialized view with the given `name` of the index with the
 // base name `oldBasename` and write it to the index with the base name
-// `newBasename`, with the block size `rowsPerBlock` of that index.
+// `newBasename`, with the block size `rowsPerBlock` of that index. The
+// permutation of the view is read and written on the `executor`.
 void convertMaterializedView(const std::string& oldBasename,
                              const std::string& newBasename,
-                             const std::string& name, size_t rowsPerBlock) {
+                             const std::string& name, size_t rowsPerBlock,
+                             const ql::any_io_executor& executor) {
   AD_LOG_INFO << "Converting the materialized view \"" << name << "\" ..."
               << std::endl;
   std::string oldViewBasename = materializedViewFilenameBase(oldBasename, name);
@@ -646,7 +656,9 @@ void convertMaterializedView(const std::string& oldBasename,
       "Triples converted: ", numTriples, batchSizeFor(numTriples)};
   auto newMetaData = writePermutation(
       newFilename, getNumColumns(oldPermutation), rowsPerBlock,
-      scanAndConvertIds(oldPermutation, progressCallbackFor(progressBar)));
+      scanAndConvertIds(oldPermutation, progressCallbackFor(progressBar),
+                        executor),
+      executor);
   progressBar.logFinalProgressString();
   newMetaData.setName(newViewBasename);
   verifyConvertedPermutation(oldPermutation.metaData(), newMetaData,
@@ -677,10 +689,11 @@ void convertMaterializedView(const std::string& oldBasename,
 
 // Convert all materialized views of the index with the base name `oldBasename`
 // and write them to the index with the base name `newBasename`, with the block
-// size `rowsPerBlock` of that index.
+// size `rowsPerBlock` of that index, on the `executor`.
 void convertMaterializedViews(const std::string& oldBasename,
                               const std::string& newBasename,
-                              size_t rowsPerBlock) {
+                              size_t rowsPerBlock,
+                              const ql::any_io_executor& executor) {
   // Each view has exactly one info file, so the names of the views are exactly
   // the infixes of those files (`<basename>.view.<name><suffix>`).
   auto viewFiles =
@@ -709,7 +722,8 @@ void convertMaterializedViews(const std::string& oldBasename,
         "view, or delete the incomplete views.")};
   }
   for (const auto& name : names) {
-    convertMaterializedView(oldBasename, newBasename, name, rowsPerBlock);
+    convertMaterializedView(oldBasename, newBasename, name, rowsPerBlock,
+                            executor);
   }
 }
 
@@ -816,7 +830,8 @@ Id convertId(Id id) {
 
 // _____________________________________________________________________________
 void convertIndexToCurrentFormat(const std::string& oldBasename,
-                                 const std::string& newBasename) {
+                                 const std::string& newBasename,
+                                 ql::any_io_executor executor) {
   AD_CONTRACT_CHECK(!oldBasename.empty() && !newBasename.empty(),
                     "The base names of the indexes must not be empty");
   // NOTE: This is a user-facing error and not a requirement violation, because
@@ -863,11 +878,11 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
   convertPermutations(
       oldBasename, newBasename,
       static_cast<Index::NumNormalAndInternal>(configuration.at("num-triples")),
-      rowsPerBlock, handledFiles);
+      rowsPerBlock, handledFiles, executor);
   convertPatterns(oldBasename, newBasename, handledFiles);
   copyFilesThatNeedNoConversion(oldBasename, newBasename, handledFiles);
   checkAllFilesWereHandled(oldBasename, handledFiles);
-  convertMaterializedViews(oldBasename, newBasename, rowsPerBlock);
+  convertMaterializedViews(oldBasename, newBasename, rowsPerBlock, executor);
 
   // Write the configuration last, with the version of the target format. An
   // index without its configuration file cannot be loaded at all, so if the
@@ -942,7 +957,8 @@ void checkUpgradedIndex(const std::string& newBasename,
 }  // namespace
 
 // _____________________________________________________________________________
-void upgradeIndexInPlace(const std::string& basename) {
+void upgradeIndexInPlace(const std::string& basename,
+                         ql::any_io_executor executor) {
   // Read the configuration of the index that is to be upgraded; this also
   // checks that the index exists and is exactly in the source format.
   auto configuration = readAndCheckConfiguration(basename);
@@ -958,7 +974,8 @@ void upgradeIndexInPlace(const std::string& basename) {
   IndexSwapConfig config =
       makeIndexSwapConfig(basename, naming, std::nullopt, std::nullopt);
 
-  convertIndexToCurrentFormat(basename, config.newIndexSource());
+  convertIndexToCurrentFormat(basename, config.newIndexSource(),
+                              std::move(executor));
   checkUpgradedIndex(config.newIndexSource(),
                      static_cast<Index::NumNormalAndInternal>(
                          configuration.at("num-triples")));

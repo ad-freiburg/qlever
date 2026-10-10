@@ -563,7 +563,8 @@ TEST(EmptyPath, deletedTriplesAreRespected) {
                                 ad_utility::MemorySize::megabytes(100)),
                             SortPerformanceEstimator{},
                             &namedCache,
-                            materializedViews};
+                            materializedViews,
+                            ad_utility::testing::singleThreadExecutor()};
 
   EmptyPath emptyPath{&qec, Variable{"?x"}, Graphs::All(), std::nullopt};
   std::vector<Id> expected{getId("<a>"), getId("<b>"), getId("<z>")};
@@ -791,7 +792,8 @@ TEST(EmptyPath, allEntitiesAreYieldedInChunks) {
                                 ad_utility::MemorySize::megabytes(100)),
                             SortPerformanceEstimator{},
                             &namedCache,
-                            materializedViews};
+                            materializedViews,
+                            ad_utility::testing::singleThreadExecutor()};
 
   EmptyPath emptyPath{&qec, Variable{"?x"}, Graphs::All(), std::nullopt};
   auto result = emptyPath.computeResultOnlyForTesting(true);

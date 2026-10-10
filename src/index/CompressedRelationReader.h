@@ -72,15 +72,6 @@ class CompressedRelationReader {
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
-  // Optional override for the number of blocks that a `lazyScan` reads and
-  // decompresses ahead of its consumer. When set, it takes precedence over
-  // the `lazy-index-scan-num-blocks-in-flight` runtime parameter. This is used
-  // by the runtime index rebuild, which scans the old permutations through a
-  // dedicated reader (see `Permutation::lazyScanWithUnlimitedReader`), to
-  // throttle its read/decompress parallelism without affecting query scans
-  // (which use the permutation's shared reader, where this stays `nullopt`).
-  std::optional<size_t> lazyScanNumBlocksInFlightOverride_ = std::nullopt;
-
   // This struct stores a reference to the (optional) graphs by which a result
   // is filtered, the column in which the graph ID will reside in a result,
   // and the information whether this column is required as part of the output,
@@ -309,6 +300,9 @@ class CompressedRelationReader {
    * exactly one column.
    * @param cancellationHandle An `CancellationException` will be thrown if the
    * cancellationHandle runs out during the execution of this function.
+   * @param executor The blocks are read and decompressed on this executor (see
+   * `lazyScan` below). This function must not be called from one of its
+   * threads.
    *
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * the same `CompressedRelationWriter` (see `CompressedRelationWriter.h`).
@@ -317,6 +311,7 @@ class CompressedRelationReader {
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+               ql::any_io_executor executor,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
@@ -389,15 +384,20 @@ class CompressedRelationReader {
   // over the blocks that actually had to be read, with `numBlocksAll_` set to
   // the total number of blocks of the scan.
   //
-  // NOTE: This reader and `locatedTriplesPerBlock` have to be kept alive until
-  // the returned generator has been fully consumed.
+  // The blocks that have to be read are read and decompressed on the
+  // `executor` (see `lazyScan`), so the returned generator must not be
+  // consumed from one of its threads.
+  //
+  // NOTE: This reader, `locatedTriplesPerBlock`, and the `executor` have to be
+  // kept alive until the returned generator has been fully consumed.
   //
   // The helper classes for the implementation live in `DistinctCol0Ids.h`.
   cppcoro::generator<IdTable, LazyScanMetadata> getDistinctCol0Ids(
       ScanSpecAndBlocks scanSpecAndBlocks, bool addGraphColumn,
       std::optional<std::vector<Id>> idFilter,
       CancellationHandle cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      ql::any_io_executor executor) const;
 #endif
 
   // Return true iff the values of the first `numColumns` columns of all the

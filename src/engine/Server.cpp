@@ -35,6 +35,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
+#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
@@ -274,6 +275,16 @@ class QueryAlreadyInUseError : public std::runtime_error {
                            "' is already in use!"} {}
 };
 
+namespace {
+// Return an executor for a single query, which runs at most
+// `maximum-threads-per-query` tasks on the `executor` at the same time.
+ql::any_io_executor makeQueryExecutor(ql::any_io_executor executor) {
+  return ad_utility::makeConcurrencyLimitedExecutor(
+      std::move(executor),
+      getRuntimeParameter<&RuntimeParameters::maximumThreadsPerQuery_>());
+}
+}  // namespace
+
 // _____________________________________________________________________________
 auto Server::cancelAfterDeadline(
     std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
@@ -338,7 +349,7 @@ auto Server::prepareOperation(
        resultPinning = std::move(resultPinning),
        accessTokenOk](SharedIndexAndView indexAndViews) mutable {
         auto qec = qlever().createQueryExecutionContext(
-            std::move(indexAndViews),
+            std::move(indexAndViews), makeQueryExecutor(qlever().executor()),
             [sharedMessageSender](std::string json) {
               (*sharedMessageSender)(std::move(json));
             },
@@ -448,7 +459,8 @@ nlohmann::json Server::processLoadMaterializedView(
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Loading");
 
-  auto qec = qlever().createQueryExecutionContext(indexAndViews);
+  auto qec = qlever().createQueryExecutionContext(
+      indexAndViews, makeQueryExecutor(qlever().executor()));
   indexAndViews->materializedViewsManager_.loadView(name, qec.get());
 
   return json{{"materialized-view-loaded", name}};

@@ -152,12 +152,12 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
 }
 
 // _____________________________________________________________________________
-size_t CompressedRelationWriter::getNumConcurrentBlocks(
-    std::optional<size_t> numConcurrentBlocksOverride) {
-  size_t requestedBlocks = numConcurrentBlocksOverride.value_or(
-      getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>());
-  // The blocks are compressed and written on the global thread pool, so the
-  // number of threads that is available for them is the size of that pool,
+size_t CompressedRelationWriter::getNumConcurrentBlocks() {
+  size_t requestedBlocks =
+      getRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>();
+  // By default, the blocks are compressed and written on the global thread
+  // pool, so the number of threads that is available for them is the size of
+  // that pool,
   // which the `--num-threads / -j` option of the index builder configures (see
   // `ad_utility::setGlobalExecutorNumThreads`).
   size_t numThreads = ad_utility::globalExecutorNumThreads();
@@ -169,16 +169,13 @@ size_t CompressedRelationWriter::getNumConcurrentBlocks(
 
 // _____________________________________________________________________________
 ad_utility::TaskQueueOnExecutor CompressedRelationWriter::makeBlockWriteQueue(
-    size_t numConcurrentBlocks) {
+    ql::any_io_executor executor, size_t numConcurrentBlocks) {
   // Allow at least 4 blocks to be in flight.
   size_t maxNumTasksInFlight = std::max<size_t>(4, numConcurrentBlocks * 2);
   // The in-flight bound only limits how many blocks are queued or running, not
   // how many of them run at the same time on a pool with idle threads. For a
-  // single concurrent block, run the tasks on a strand of the pool, so that
-  // the blocks are compressed and written one after the other (the runtime
-  // index rebuild relies on this to leave the CPU to concurrent queries, see
-  // `rebuild-permutation-writer-num-threads`).
-  ql::any_io_executor executor = ad_utility::globalExecutor();
+  // single concurrent block, run the tasks on a strand of the `executor`, so
+  // that the blocks are compressed and written one after the other.
   if (numConcurrentBlocks == 1) {
     executor = boost::asio::make_strand(executor);
   }
@@ -220,7 +217,7 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
   DistinctIdCounter distinctCol1Counter;
 
   // Counting the distinct IDs of column 1 is expensive, so it is performed on
-  // the global thread pool. The blocks themselves are yielded in their original
+  // the `executor_`. The blocks themselves are yielded in their original
   // order, because the merging of the blocks below has to happen in order.
   auto countDistinctCol1 = [](IdTable block) {
     auto countOfBlock = countDistinctIds(std::as_const(block).getColumn(c1Idx));
@@ -228,8 +225,7 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
   };
   ad_utility::AsyncTransformView blocksAndCounts{
       sortedBlocks | ql::views::filter(std::not_fn(&IdTable::empty)),
-      countDistinctCol1, numBlocksInFlightForDistinctCol1Count,
-      ad_utility::globalExecutor()};
+      countDistinctCol1, numBlocksInFlightForDistinctCol1Count, executor_};
 
   // Buffer used to ensure the invariant that equal triples (when disregarding
   // the graph) stay in the same block.

@@ -421,7 +421,8 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntitiesWithDeltaTriples) {
                                  makeAllocator(),
                                  SortPerformanceEstimator{},
                                  &namedResultCache,
-                                 std::make_shared<MaterializedViewsManager>()};
+                                 std::make_shared<MaterializedViewsManager>(),
+                                 ad_utility::testing::singleThreadExecutor()};
   };
 
   // Read the `ql:has-pattern` entry of `<z>` (subject, pattern, and the

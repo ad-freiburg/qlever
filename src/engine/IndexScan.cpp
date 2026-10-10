@@ -374,9 +374,10 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
-  IdTable idTable = permutation().scan(scanSpecAndBlocks_, additionalColumns(),
-                                       cancellationHandle_,
-                                       locatedTriplesState(), getLimitOffset());
+  IdTable idTable =
+      permutation().scan(scanSpecAndBlocks_, additionalColumns(),
+                         cancellationHandle_, locatedTriplesState(),
+                         getExecutionContext()->executor(), getLimitOffset());
   AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
   idTable = makeApplyColumnSubset()(std::move(idTable));
@@ -619,7 +620,8 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
       getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
   auto lazyScanAllCols = permutation().lazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
-      cancellationHandle_, locatedTriplesState(), getLimitOffset());
+      cancellationHandle_, locatedTriplesState(),
+      getExecutionContext()->executor(), getLimitOffset());
 
   return CompressedRelationReader::IdTableGeneratorInputRange{
       ad_utility::CachingTransformInputRange{

@@ -24,7 +24,6 @@
 #include "index/LocatedTriples.h"
 #include "util/Algorithm.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
-#include "util/GlobalExecutor.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/Timer.h"
@@ -214,9 +213,8 @@ CompressedRelationReader::lazyScan(
   // The block that the consumer is currently processing still counts as in
   // flight for the `AsyncTransformView`, so one more block is needed to read
   // and decompress `numBlocksAhead` blocks while the consumer is busy.
-  size_t numBlocksAhead = lazyScanNumBlocksInFlightOverride_.value_or(
-      getRuntimeParameter<
-          &RuntimeParameters::lazyIndexScanNumBlocksInFlight_>());
+  size_t numBlocksAhead = getRuntimeParameter<
+      &RuntimeParameters::lazyIndexScanNumBlocksInFlight_>();
   size_t numBlocksInFlight = numBlocksAhead + 1;
   using BlocksView = ad_utility::AsyncTransformView<
       decltype(ad_utility::integerRange(numBlocks)), decltype(readBlock)>;
@@ -292,7 +290,7 @@ IdTable CompressedRelationReader::scan(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    const LimitOffsetClause& limitOffset) const {
+    ql::any_io_executor executor, const LimitOffsetClause& limitOffset) const {
   const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
@@ -311,8 +309,8 @@ IdTable CompressedRelationReader::scan(
            scanSpec,
            convertBlockMetadataRangesToVector(scanSpecAndBlocks.blockMetadata_),
            {additionalColumns.begin(), additionalColumns.end()},
-           cancellationHandle, locatedTriplesPerBlock,
-           ad_utility::globalExecutor(), limitOffset)) {
+           cancellationHandle, locatedTriplesPerBlock, std::move(executor),
+           limitOffset)) {
     result.insertAtEnd(block);
   }
   cancellationHandle->throwIfCancelled();
@@ -520,7 +518,8 @@ CompressedRelationReader::getDistinctCol0Ids(
     ScanSpecAndBlocks scanSpecAndBlocks, bool addGraphColumn,
     std::optional<std::vector<Id>> idFilter,
     CancellationHandle cancellationHandle,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    ql::any_io_executor executor) const {
   using namespace distinctCol0Ids;
   AD_CONTRACT_CHECK(cancellationHandle != nullptr);
   AD_CONTRACT_CHECK(scanSpecAndBlocks.scanSpec_.firstFreeColIndex() == 0,
@@ -550,7 +549,7 @@ CompressedRelationReader::getDistinctCol0Ids(
   details.numBlocksAll_ = scanSpecAndBlocks.sizeBlockMetadata_;
   auto scan = lazyScan(scanSpecAndBlocks.scanSpec_, std::move(blocksToRead),
                        std::move(additionalColumns), cancellationHandle,
-                       locatedTriplesPerBlock, ad_utility::globalExecutor());
+                       locatedTriplesPerBlock, std::move(executor));
   scan.setDetailsPointer(&details);
 
   // The IDs are computed by merging two ascending sources: the IDs that are
