@@ -276,11 +276,10 @@ TEST(Sort, clone) {
   EXPECT_EQ(clone->getDescriptor(), sort.getDescriptor());
 }
 
-// _____________________________________________________________________________
-// Regression test for https://github.com/ad-freiburg/qlever/issues/3568:
-// Cloning must also work if the original has already computed its internal
-// mapping from variables to columns (here: when creating the runtime
-// information), while the freshly constructed clone has not.
+// Test that cloning also works if the original has already computed its
+// mapping from variables to columns (here via the runtime information), while
+// the freshly constructed clone has not (regression test for #3568). A `Sort`
+// is used because its constructor does not compute the mapping.
 TEST(Sort, cloneAfterVariableColumnsWereComputed) {
   Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
   sort.createRuntimeInfoFromEstimates(sort.getRuntimeInfoPointer());
@@ -290,8 +289,10 @@ TEST(Sort, cloneAfterVariableColumnsWereComputed) {
   EXPECT_THAT(sort, IsDeepCopy(*clone));
 }
 
-// _____________________________________________________________________________
+// Test that a clone hides the same variables as the original (see #1943).
 TEST(Sort, cloneKeepsHiddenVariablesHidden) {
+  // A `Sort` with the variables `?0` and `?1`, of which the enclosing subquery
+  // selects only `?0`.
   Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
   sort.setSelectedVariablesForSubquery({Variable{"?0"}});
 
