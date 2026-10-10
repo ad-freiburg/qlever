@@ -11,6 +11,10 @@
 #include <absl/strings/str_cat.h>
 
 #include <atomic>
+#include <boost/asio/post.hpp>
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
+#include <cstdint>
 #include <future>
 #include <optional>
 #include <utility>
@@ -24,7 +28,9 @@
 #include "util/AsyncStream.h"
 #include "util/CancellationHandle.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/ExceptionHandling.h"
 #include "util/File.h"
+#include "util/GlobalExecutor.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
@@ -33,6 +39,7 @@
 #include "util/TransparentFunctors.h"
 #include "util/UniqueCleanup.h"
 #include "util/Views.h"
+#include "util/blockSort/BlockIndirectSort.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 #include "util/views/ChunkedIotaView.h"
 
@@ -601,20 +608,42 @@ CPP_class_template(size_t NumStaticCols,
   size_t blocksize_{
       compressedExternalIdTable::blocksizeForMemory(memory_, numColumns_)};
   CompressedExternalIdTableWriter writer_;
-  std::future<void> compressAndWriteFuture_;
+
+  // The dedicated thread on which the blocks are transformed (for the
+  // `CompressedExternalIdTableSorter` this means: sorted), compressed, and
+  // written to the `writer_` in the background, see `transformAndWriteBlock`.
+  // A single thread suffices, because there is always at most one such task in
+  // flight: `transformAndWriteBlock` waits for the previous one before it posts
+  // the next one.
+  //
+  // NOTE: The pool is declared after the `writer_`, such that it is destroyed
+  // (and its thread joined) before the `writer_` that its task writes to. The
+  // destructor additionally waits for the task explicitly, see there.
+  boost::asio::thread_pool blockWritePool_{1};
+
+  // The future of the block task that is currently in flight on the
+  // `blockWritePool_`, see `transformAndWriteBlock`.
+  //
+  // NOTE: The background task hands the block that it is done with back via
+  // this future (empty, but with its memory still allocated), so that the next
+  // block can reuse that memory instead of allocating (and faulting in) a
+  // buffer of its own.
+  std::future<IdTableStatic<NumStaticCols>> compressAndWriteFuture_;
 
   // If the `compressAndWriteFuture_` is currently active, wait for its
-  // computation to be completed, else do nothing.
-  void waitForFuture() {
+  // computation to be completed and return the block that the background task
+  // has given back. Else do nothing and return `std::nullopt`.
+  std::optional<IdTableStatic<NumStaticCols>> waitForFuture() {
     if (compressAndWriteFuture_.valid()) {
-      compressAndWriteFuture_.get();
+      return compressAndWriteFuture_.get();
     }
+    return std::nullopt;
   }
 
   // Store the `future` inside the `compressAndWriteFuture_`. This trivial
   // wrapper can be used to inject more detailed logging when analyzing the
   // control flow of this class or when fixing bugs.
-  void setFuture(std::future<void> future) {
+  void setFuture(std::future<IdTableStatic<NumStaticCols>> future) {
     AD_CORRECTNESS_CHECK(!compressAndWriteFuture_.valid());
     compressAndWriteFuture_ = std::move(future);
   }
@@ -636,11 +665,20 @@ CPP_class_template(size_t NumStaticCols,
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
  public:
-  // The destructor must wait for any pending async task before members are
-  // destroyed. Without this, `blockTransformation_` (declared after
-  // `compressAndWriteFuture_`) is destroyed first, and the still-running
-  // async thread accesses freed memory via `this->blockTransformation_`.
-  ~CompressedExternalIdTableBase() { waitForFuture(); }
+  // Wait for a pending background task before any member is destroyed.
+  //
+  // NOTE 1: Without this, `blockTransformation_` (declared after
+  // `compressAndWriteFuture_`) is destroyed first, and the still-running task
+  // accesses freed memory via `this->blockTransformation_`.
+  //
+  // NOTE 2: An exception of the task is ignored (and only logged) here,
+  // because a throwing destructor would terminate the program. Such an
+  // exception can only reach the destructor if the task was never waited for,
+  // e.g. when the table is destroyed during the stack unwinding of another
+  // error.
+  ~CompressedExternalIdTableBase() {
+    ad_utility::ignoreExceptionIfThrows([this]() { waitForFuture(); });
+  }
 
   explicit CompressedExternalIdTableBase(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
@@ -664,8 +702,7 @@ CPP_class_template(size_t NumStaticCols,
     ++numElementsPushed_;
     currentBlock_.push_back(row);
     if (currentBlock_.size() >= blocksize_) {
-      transformAndWriteBlock(std::move(currentBlock_));
-      resetCurrentBlock(true);
+      writeCurrentBlockAndRecycleBuffer();
     }
   }
 
@@ -695,8 +732,7 @@ CPP_class_template(size_t NumStaticCols,
       currentBlock_.insertAtEnd(table, numPushed, numPushed + numToPush);
       numPushed += numToPush;
       if (currentBlock_.numRows() >= blocksize_) {
-        transformAndWriteBlock(std::move(currentBlock_));
-        resetCurrentBlock(true);
+        writeCurrentBlockAndRecycleBuffer();
       }
     }
   }
@@ -804,25 +840,55 @@ CPP_class_template(size_t NumStaticCols,
   // Asynchronously compress the `block` and write it to the underlying
   // `writer_`. Before compressing, apply the transformation that is specified
   // by the `Impl` via the `transformBlock` function.
-  template <typename Transformation = ql::identity>
-  void transformAndWriteBlock(IdTableStatic<NumStaticCols> block) {
-    waitForFuture();
+  //
+  // Return the block of the *previous* such task (empty, but with its memory
+  // still allocated), or `std::nullopt` if there was no previous task. Reusing
+  // that block for the next one is what keeps the number of block buffers that
+  // are ever allocated at two, see `writeCurrentBlockAndRecycleBuffer`.
+  std::optional<IdTableStatic<NumStaticCols>> transformAndWriteBlock(
+      IdTableStatic<NumStaticCols> block) {
+    auto recycledBlock = waitForFuture();
     if (block.empty()) {
       if (numBlocksPushed_ > 0) {
         // NOTE: In `transformAndPushLastBlock` we assert that if at least one
         // block has been pushed, then `compressAndWriteFuture_` is valid.
         // Therefore, we have to set a valid future here, even if it does
         // nothing.
-        setFuture(std::async(std::launch::deferred, []() {}));
+        std::promise<IdTableStatic<NumStaticCols>> promise;
+        promise.set_value(std::move(block));
+        setFuture(promise.get_future());
       }
-      return;
+      return recycledBlock;
     }
     ++numBlocksPushed_;
-    setFuture(std::async(
-        std::launch::async, [block = std::move(block), this]() mutable {
+    setFuture(boost::asio::post(
+        blockWritePool_.get_executor(),
+        boost::asio::use_future([block = std::move(block), this]() mutable
+                                -> IdTableStatic<NumStaticCols> {
           blockTransformation_(block);
-          this->writer_.writeIdTable(std::move(block).toDynamic());
-        }));
+          // NOTE: The round trip via the dynamic table moves the columns, and
+          // so does the `clear()`, so the block that we give back keeps its
+          // memory and already has the capacity that the next block needs.
+          IdTable dynamicBlock = std::move(block).toDynamic();
+          this->writer_.writeIdTable(dynamicBlock);
+          dynamicBlock.clear();
+          return std::move(dynamicBlock).template toStatic<NumStaticCols>();
+        })));
+    return recycledBlock;
+  }
+
+  // Hand the `currentBlock_` to the background thread (see
+  // `transformAndWriteBlock`) and make the block that the *previous* background
+  // task has given back the new `currentBlock_`. Only the very first block has
+  // no such block to reuse and therefore has to allocate one, so that in total
+  // exactly two block buffers are allocated: the one that the background thread
+  // is working on, and the one that `push` fills.
+  void writeCurrentBlockAndRecycleBuffer() {
+    auto recycledBlock = transformAndWriteBlock(std::move(currentBlock_));
+    if (recycledBlock.has_value()) {
+      currentBlock_ = std::move(recycledBlock).value();
+    }
+    resetCurrentBlock(true);
   }
 
   // If there is less than one complete block (meaning that the number of calls
@@ -959,17 +1025,52 @@ class CompressedExternalIdTableSorterTypeErased {
 inline std::atomic<bool>
     EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
 
-// The implementation of sorting a single block
+// Sort the rows of a single block, given as the `range` of those rows.
+//
+// The sort runs on the global thread pool, such that it shares its threads with
+// the other phases of the index build, see `util/GlobalExecutor.h`. It is split
+// into as many tasks as that pool has threads. This is a choice made here, not
+// a property of the executor: a smaller number would also work, for example to
+// run several sorts concurrently without oversubscribing the pool.
+//
+// NOTE: The sort blocks the calling thread until it is complete, so it must
+// not be called from a thread of the global thread pool itself, or it could
+// deadlock against the pool. It isn't: the only caller that matters is
+// `BlockSorter::operator()` below, which runs either on the dedicated
+// background thread of
+// `CompressedExternalIdTableBase::transformAndWriteBlock`, or in the thread
+// that ends the input phase in
+// `CompressedExternalIdTableBase::transformAndPushLastBlock`. The latter is
+// the thread that consumes the sorted output, and a consumer is never a thread
+// of the pool: the ranges that the output is passed through (see
+// `ad_utility::uniqueBlockView` and `util/views/AsyncTransformView.h`) block
+// their consumer and therefore must not be consumed from such a thread
+// themselves.
+//
+// NOTE: The same holds for a thread that merely WAITS for the sort. The sink
+// of `asyncPushBlock` (see `setAsyncPushExecutor`) runs on a strand of the
+// executor of `setMergeExecutor` and blocks in `waitForFuture` until the
+// previous block is sorted and written. If that executor is the global pool,
+// each such sorter occupies one thread of the pool while it waits. With as many
+// sorters as the pool has threads (a single sorter with `-j 1`), no thread is
+// left to run the sort and the process deadlocks. So before `asyncPushBlock` is
+// used with the global executor, either the sink must not block on the pool,
+// or the sort has to become non-blocking (see `blockIndirectSortAsync`).
+template <typename Range, typename Comparator>
+void sortBlockRange(Range& block, const Comparator& comparator) {
+  ad_utility::blockSort::blockIndirectSort(
+      ql::ranges::subrange{std::begin(block), std::end(block)}, comparator,
+      static_cast<uint32_t>(ad_utility::globalExecutorNumThreads()),
+      ad_utility::globalExecutor());
+}
+
+// The implementation of sorting a single block, see `sortBlockRange` above.
 template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
   template <typename T>
   void operator()(T& block) {
-#ifdef _PARALLEL_SORT
-    ad_utility::parallel_sort(std::begin(block), std::end(block), comparator_);
-#else
-    ql::ranges::sort(block, comparator_);
-#endif
+    sortBlockRange(block, comparator_);
   }
 };
 // Deduction guide for the implicit aggregate initialization (its "constructor")
@@ -1069,7 +1170,9 @@ class CompressedExternalIdTableSorter
   // The `executor` is also the one on which `asyncPushBlock` runs its work.
   //
   // IMPORTANT: The `executor` must not be run by the thread that consumes the
-  // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`. The
+  // sorted output, see `parallelBlockMerge::parallelBlockMergeToRange`. It
+  // must also not be the global pool as long as the blocks are sorted on that
+  // pool, see the second NOTE at `sortBlockRange`. The
   // execution context behind the `executor` (e.g. a `boost::asio::thread_pool`)
   // has to outlive this sorter, because the sorter holds a strand on the
   // `executor` (for `asyncPushBlock`), whose destructor accesses the context.
@@ -1322,11 +1425,7 @@ class CompressedExternalIdTableSorter
 
   // _____________________________________________________________
   void sortBlockInPlace(IdTableStatic<NumStaticCols>& block) const {
-#ifdef _PARALLEL_SORT
-    ad_utility::parallel_sort(block.begin(), block.end(), comparator_);
-#else
-    ql::ranges::sort(block, comparator_);
-#endif
+    sortBlockRange(block, comparator_);
   }
 
   // A function with this name is needed by the mixin base class.

@@ -1106,24 +1106,29 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
 
-  // Check if all variables required for the `BIND` expression are covered by
-  // this `IndexScan`.
-  const auto& visibleVars = computePermutationColumnIndices();
-  bool allVarsCovered = ql::ranges::all_of(
-      bind._expression.containedVariables(),
-      [&visibleVars](const auto* v) { return visibleVars.contains(*v); });
-  if (!allVarsCovered) {
+  // All variables of the `BIND` expression must be read by this scan and be
+  // visible, that is, neither hidden by a subquery nor stripped away.
+  if (!areVariablesVisible(bind._expression.containedVariables())) {
     return std::nullopt;
   }
 
-  // Check that the target variable of the `BIND` is not used already by this
-  // `IndexScan`.
-  if (visibleVars.contains(bind._target)) {
+  // Check that the target variable of the `BIND` is not read already by this
+  // `IndexScan`, not even into a column that is stripped away or hidden by a
+  // subquery.
+  auto isTarget = [&bind](const auto& var) { return var == bind._target; };
+  if (ql::ranges::any_of(getPermutedTriple(),
+                         [&isTarget](const TripleComponent* component) {
+                           return component->isVariable() &&
+                                  isTarget(component->getVariable());
+                         }) ||
+      ql::ranges::any_of(additionalVariables_, isTarget)) {
     return std::nullopt;
   }
 
   // Check the `BIND` cache of the underlying `MaterializedView` for the `BIND`
-  // expression's cache key.
+  // expression's cache key (computed on all columns of this scan, hidden ones
+  // included).
+  const auto& visibleVars = computePermutationColumnIndices();
   auto targetCol =
       view->lookupBindTargetColumn(bind._expression.getCacheKey(visibleVars));
   if (!targetCol.has_value()) {
@@ -1183,12 +1188,16 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     newVariables.value().insert(bind._target);
   }
 
-  return ad_utility::makeExecutionTree<IndexScan>(
+  // The new scan is built from scratch, so the variables hidden by this scan
+  // (if it is the root of a subquery) must be hidden again.
+  auto newTree = ad_utility::makeExecutionTree<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
       newPredicate, newObject, std::move(newAdditionalColumns),
       std::move(newAdditionalVariables), graphsToFilter_, scanSpecAndBlocks_,
       scanSpecAndBlocksIsPrefiltered_, VarsToKeep{std::move(newVariables)},
       sizeEstimateIsExact_, sizeEstimate_);
+  keepHiddenVariablesHidden(*newTree->getRootOperation(), bind._target);
+  return newTree;
 }
 
 // _____________________________________________________________________________
@@ -1217,7 +1226,9 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computePermutationColumnIndices() const {
   VariableToColumnMap map;
-  const auto& varToColInResult = getExternallyVisibleVariableColumns();
+  // NOTE: The internally visible variables also contain the variables that are
+  // hidden if this scan is the root of a subquery.
+  const auto& varToColInResult = getInternallyVisibleVariableColumns();
 
   auto addVar = [this, &varToColInResult, &map](const Variable& var,
                                                 ColumnIndex col) {

@@ -5,7 +5,7 @@
 
 #include "index/LocalVocab.h"
 
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________

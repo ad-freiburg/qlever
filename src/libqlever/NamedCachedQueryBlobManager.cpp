@@ -272,25 +272,24 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
     serializer << secondaryVocab;
   }
 
-  // Write the named cache entries. An entry that contains `Id`s of type
-  // `LocalVocabIndex` is replaced by a rewritten copy (the entry in the named
-  // cache itself stays unchanged). The words of the local vocab of such a copy
-  // are not written, because they are no longer referenced (see
-  // `rewriteToSecondaryVocab`).
+  // Write the named cache entries. Each entry is written as a canonicalized
+  // copy (the entry in the named cache itself stays unchanged): its `Id`s of
+  // type `LocalVocabIndex` are rewritten, its columns without a variable are
+  // dropped, and its rows and columns are in canonical order (see
+  // `canonicalizeForSerialization`). The words of the local vocab of such a
+  // copy are not written, because they are no longer referenced. For an entry
+  // that needs neither rewriting nor sorting, the copy is only a view of the
+  // columns of the entry, so no table is copied.
   namedResultCacheSerializer::writeEntries(
       serializer, entries,
       [&secondaryVocab, &qlever](auto& entrySerializer,
                                  const NamedResultCache::Value& value) {
-        if (!namedCacheSecondaryVocab::containsLocalVocabIds(value)) {
-          entrySerializer << value;
-          return;
-        }
-        auto rewritten = namedCacheSecondaryVocab::rewriteToSecondaryVocab(
+        auto canonical = namedCacheSecondaryVocab::canonicalizeForSerialization(
             value, secondaryVocab, qlever.allocator_);
         namedResultCacheSerializer::writeValue(
-            entrySerializer, rewritten,
-            ExplicitIdTableOperation::viewOf(rewritten.result_).getColumns(),
-            rewritten.resultSortedOn_, /*writeLocalVocabWords=*/false);
+            entrySerializer, canonical,
+            ExplicitIdTableOperation::viewOf(canonical.result_).getColumns(),
+            canonical.resultSortedOn_, /*writeLocalVocabWords=*/false);
       });
   auto uncompressed = std::move(serializer).data();
 

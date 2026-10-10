@@ -15,9 +15,11 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -45,7 +47,15 @@ using SmallRelationsBuffer = IdTable;
 /// build.
 class CompressedRelationWriter {
  private:
-  ad_utility::Synchronized<ad_utility::File> outfile_;
+  // The file that the blocks of the permutation are written to. A shared
+  // mutex suffices, because the blocks are written with the positioned
+  // `File::write` at a range that `nextOffset_` hands out, see
+  // `compressAndWriteColumn`.
+  ad_utility::Synchronized<ad_utility::File, std::shared_mutex> outfile_;
+  // The offset at which the next block is written. It starts at `0`, which is
+  // why the `outfile_` has to be empty when this writer is constructed (this
+  // is checked there).
+  std::atomic<off_t> nextOffset_{0};
   ad_utility::Synchronized<std::vector<CompressedBlockMetadataNoBlockIndex>>
       blockBuffer_;
   // If multiple small relations are stored in the same block, keep track of the
@@ -99,6 +109,11 @@ class CompressedRelationWriter {
   // If `numWriterThreads` is set, it determines how many blocks are
   // compressed and written concurrently; otherwise the runtime parameter
   // `permutation-writer-num-threads` is used (see `getNumConcurrentBlocks`).
+  //
+  // The file `f` has to be empty, because this writer writes the blocks at
+  // the offsets that `nextOffset_` hands out, starting at `0`. It never
+  // appends at the current file position (see `compressAndWriteColumn`), so
+  // it would otherwise silently overwrite the existing content.
   explicit CompressedRelationWriter(
       size_t numColumns, ad_utility::File f, size_t rowsPerBlock,
       std::optional<size_t> numWriterThreads = std::nullopt)
@@ -109,6 +124,11 @@ class CompressedRelationWriter {
         blockWriteQueue_{makeBlockWriteQueue(numConcurrentBlocks_)} {
     AD_CONTRACT_CHECK(rowsPerBlock_ > 0,
                       "A block must have room for at least one row");
+    // NOTE: `File::empty` moves the file position, which doesn't matter,
+    // because all the writing uses the positioned `File::write`.
+    AD_CONTRACT_CHECK(
+        outfile_.wlock()->empty(),
+        "A `CompressedRelationWriter` requires a file that is empty");
   }
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
@@ -410,6 +430,17 @@ class CompressedRelationWriter {
   // same `col0Id`.
   void addBlockForLargeRelation(Id col0Id, BlockToWrite relation);
 
+  // Write the `block` of a large relation as blocks of about `blocksize()`
+  // rows each (see `addBlockForLargeRelation`). Rows that agree in their first
+  // three columns are never split across two of those blocks, exactly like at
+  // the boundaries of the input blocks in `addCompleteLargeRelation`.
+  //
+  // NOTE: This lets the source of the blocks (the twin sorter of a large
+  // relation, see `addCompleteLargeRelation`) yield much larger blocks than
+  // the ones that end up in the permutation, see `twinSorterBlocksizeFactor_`
+  // in `CompressedRelationPermutationWriterImpl.h`.
+  void writeLargeRelationBlockInSlices(Id col0Id, IdTable block);
+
   // Return an empty block buffer with room for at least `2 * blocksize()`
   // rows, which is taken from the `blockBufferPool_` if possible (then its
   // memory is typically already allocated). Thread-safe.
@@ -477,6 +508,7 @@ class CompressedRelationWriter {
       std::optional<size_t> numConcurrentBlocksOverride);
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfTasksInFlight);
+  FRIEND_TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices);
   FRIEND_TEST(CompressedRelationWriter,
               largeRelationBlockQueueFollowsTheWriter);
 };
