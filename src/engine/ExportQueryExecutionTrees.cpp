@@ -418,7 +418,8 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
     // that there are datatype IRIs which contain quotes.
     size_t quotePos = entitystr.rfind('"');
     if (quotePos == std::string::npos) {
-      // TEXT entries are currently not surrounded by quotes
+      // A string without quotes cannot occur here (the entries of the text
+      // index are handled above), but export it as a plain literal to be safe.
       b["value"] = entitystr;
       b["type"] = "literal";
     } else {
@@ -600,6 +601,9 @@ static std::string idToXMLBinding(std::string_view variable, Id id,
     } else {
       size_t quotePos = entitystr.rfind('"');
       if (quotePos == std::string::npos) {
+        // A string without quotes cannot occur here (the entries of the text
+        // index are handled below), but export it as a plain literal to be
+        // safe.
         absl::StrAppend(&result, "<literal>"sv, escape(entitystr),
                         "</literal>"sv);
       } else {

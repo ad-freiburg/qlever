@@ -1432,11 +1432,13 @@ TEST(ExportQueryExecutionTrees, TextIndex) {
   runSelectQueryTestCase(testCaseTextIndex, true);
 }
 
-// ____________________________________________________________________________
-// The text records of the text index are plain text (not the representation of
-// a literal with quotes), and thus might contain quotes, which must not be
-// interpreted as the end of a literal in the SPARQL JSON and XML export.
+// Test that a text record of the text index that contains quotes is exported
+// in full. The text records are plain text (not the representation of a
+// literal with quotes), so a quote inside must not be taken as the end of a
+// literal in the SPARQL JSON and XML export.
 TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
+  // A text index with a single text record that contains quotes and mentions
+  // the entity `<s>`.
   std::string text = "She said \"alpha\" and left";
   ad_utility::testing::TestIndexConfig config{"<s> <p> <o> ."};
   config.createTextIndex = true;
@@ -1448,9 +1450,12 @@ TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
       "SELECT ?o WHERE { ?o ql:contains-entity <s> . ?o ql:contains-word "
       "\"alph*\" }";
   using enum ad_utility::MediaType;
+
+  // The TSV export writes the text verbatim.
   EXPECT_EQ(runQueryStreamableResult(config, query, tsv),
             absl::StrCat("?o\n", text, "\n"));
 
+  // The SPARQL JSON and XML exports contain the whole text as a plain literal.
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
   EXPECT_EQ(
