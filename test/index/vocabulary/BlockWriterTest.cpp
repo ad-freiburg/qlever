@@ -274,7 +274,7 @@ TEST(GeoBlockWriter, sameFilesAndIndicesWithGrid) {
   // literals, ordered by their cell, more than two blocks of them. Many
   // corners lie on the boundaries of the cells (multiples of 90 degrees of
   // longitude and of 45 degrees of latitude).
-  std::vector<std::pair<std::string, bool>> words;
+  std::vector<std::pair<uint64_t, std::string>> cellsAndWords;
   for (size_t i = 0; i < 2 * DEFAULT_WORDS_PER_VOCABULARY_BLOCK + 1; ++i) {
     long lng = static_cast<long>((i * 7) % 300) - 180;
     long lat = static_cast<long>((i * 11) % 130) - 90;
@@ -283,29 +283,38 @@ TEST(GeoBlockWriter, sameFilesAndIndicesWithGrid) {
                               lat, ", ", lng + size, " ", lat + size, ", ", lng,
                               " ", lat, "))"));
     };
+    std::string word;
     switch (i % 5) {
       case 0:
       case 1:
-        words.emplace_back(wkt(absl::StrCat("POINT(", lng, " ", lat, ")")),
-                           true);
+        word = wkt(absl::StrCat("POINT(", lng, " ", lat, ")"));
         break;
       case 2:
-        words.emplace_back(polygon(1), true);
+        word = polygon(1);
         break;
       case 3:
-        words.emplace_back(polygon(50), true);
+        word = polygon(50);
         break;
       default:
-        words.emplace_back(wkt("NOTAGEOMETRY"), true);
+        word = wkt("NOTAGEOMETRY");
     }
+    auto cell = grid.cellIndexFromWktLiteral(word);
+    cellsAndWords.emplace_back(cell, std::move(word));
   }
-  ql::ranges::stable_sort(words, {}, [&grid](const auto& word) {
-    return grid.cellIndexFromWktLiteral(word.first);
-  });
-  EXPECT_NE(grid.cellIndexFromWktLiteral(words.front().first),
-            grid.sentinelCell());
-  EXPECT_EQ(grid.cellIndexFromWktLiteral(words.back().first),
-            grid.sentinelCell());
+
+  // NOTE: This is `std::stable_sort` and not `ql::ranges::stable_sort`, because
+  // the latter is the `stable_sort` of range-v3 in some builds (e.g. with the
+  // libstdc++ of GCC 11), which for more than 256 elements leaves some
+  // elements in their moved-from state, here empty words.
+  std::stable_sort(
+      cellsAndWords.begin(), cellsAndWords.end(),
+      [](const auto& a, const auto& b) { return a.first < b.first; });
+  EXPECT_NE(cellsAndWords.front().first, grid.sentinelCell());
+  EXPECT_EQ(cellsAndWords.back().first, grid.sentinelCell());
+  std::vector<std::pair<std::string, bool>> words;
+  for (auto& [cell, word] : cellsAndWords) {
+    words.emplace_back(std::move(word), true);
+  }
 
   // The word-by-word writer.
   std::vector<uint64_t> indicesA;
