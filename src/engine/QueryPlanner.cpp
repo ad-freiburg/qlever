@@ -87,7 +87,7 @@ using SubtreePlan = QueryPlanner::SubtreePlan;
 
 template <typename Operation, typename... Args>
 SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, Args&&... args) {
-  return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
+  return {qec, qec->makeShared<Operation>(qec, AD_FWD(args)...)};
 }
 
 // Create a `SubtreePlan` that holds the given `operation`. `Op` must be a class
@@ -941,7 +941,7 @@ auto QueryPlanner::seedWithScansAndText(
             return std::make_unique<VariableExpression>(std::move(variable));
           };
           addFilter(SparqlFilter{
-              SparqlExpressionPimpl{std::make_shared<EqualExpression>(
+              SparqlExpressionPimpl{_qec->makeShared<EqualExpression>(
                                         std::array<SparqlExpression::Ptr, 2>{
                                             makeVarExpr(graphVariable),
                                             makeVarExpr(internalVariable)}),
@@ -3390,7 +3390,7 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 
   for (auto& sub : candidatesIn) {
     auto pathSearch =
-        std::make_shared<PathSearch>(qec_, std::move(sub._qet), config);
+        qec_->makeShared<PathSearch>(qec_, std::move(sub._qet), config);
     auto plan = makeSubtreePlan<PathSearch>(std::move(pathSearch));
     candidatesOut.push_back(std::move(plan));
   }
@@ -3438,7 +3438,7 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
         right = std::move(sub._qet);
       }
       auto spatialJoin =
-          std::make_shared<SpatialJoin>(qec_, config, std::nullopt, right);
+          qec_->makeShared<SpatialJoin>(qec_, config, std::nullopt, right);
       auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
       candidatesOut.push_back(std::move(plan));
     };
@@ -3478,7 +3478,7 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 void QueryPlanner::GraphPatternPlanner::visitExternalValues(
     const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
   auto externalValues =
-      std::make_shared<ExternalValues>(qec_, externalValuesQuery);
+      qec_->makeShared<ExternalValues>(qec_, externalValuesQuery);
   auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
   visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
@@ -3597,6 +3597,8 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
 void QueryPlanner::GraphPatternPlanner::visitDescribe(
     parsedQuery::Describe& describe) {
   auto tree = planner_.createExecutionTree(describe.whereClause_.get(), true);
+  // Like for a subquery, LIMIT and OFFSET apply to the WHERE clause.
+  tree->applyLimitOffset(describe.whereClause_.get()._limitOffset);
   auto describeOp =
       makeSubtreePlan<Describe>(planner_._qec, std::move(tree), describe);
   candidatePlans_.push_back(std::vector{std::move(describeOp)});
