@@ -12,8 +12,20 @@
 
 // All the headers of Boost.Sort that QLever uses. Include this header instead
 // of the Boost headers directly, because of two landmines:
-// 1. `boost/sort/common/range.hpp` includes `<ciso646>`, which `#warning`s
-//    about its own deprecation since C++20 (once per translation unit).
+//
+// 1. `boost/sort/common/range.hpp` includes the `<ciso646>` of libstdc++,
+//    which since C++20 is deprecated and warns about itself (from libstdc++ 15
+//    on). Treating the `boost` headers as system headers doesn't help: the
+//    warning is a `#warning` directive, which both GCC and Clang report even
+//    inside system headers. Only disabling `-Wcpp` (GCC) or `-W#warnings`
+//    (Clang) silences it, see `util/CompilerWarnings.h`. The warning has to be
+//    disabled exactly once, at the place where the headers are first seen.
+//    Disabling it at the consumers instead would not work reliably: the
+//    include guards make it a matter of chance which of them includes the
+//    headers first. `BlockIndirectSort.h` is included by
+//    `engine/idTable/CompressedExternalIdTable.h` and hence by almost every
+//    translation unit of QLever, so that warning would otherwise appear once
+//    per translation unit, and QLever's CI compiles with `-Werror`.
 // 2. `boost/sort/common/util/circular_buffer.hpp` has a member named
 //    `BLOCK_SIZE`, which `<linux/fs.h>` (included by `liburing.h`) defines as a
 //    macro. The macro is not needed by QLever, so it is temporarily undefined

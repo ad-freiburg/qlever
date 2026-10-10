@@ -2116,12 +2116,11 @@ std::string IndexImpl::getPatternFilename() const {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(requires(
-    sizeof...(NextSorter) <=
-    1)) void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
-                                            BlocksOfTriples sortedTriples,
-                                            bool doWriteConfiguration,
-                                            NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
+                                    BlocksOfTriples sortedTriples,
+                                    bool doWriteConfiguration,
+                                    NextSorter&&... nextSorter) {
   size_t numTriples = 0;
   auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
   uint64_t nextAvailableIndex = 1;
@@ -2276,20 +2275,19 @@ CPP_template_def(typename Sorter, typename... NextSorter)(requires(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(
-    requires(sizeof...(NextSorter) <=
-             1)) void IndexImpl::createPSOAndPOS(size_t numColumns,
-                                                 BlocksOfTriples sortedTriples,
-                                                 NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createPSOAndPOS(size_t numColumns,
+                                BlocksOfTriples sortedTriples,
+                                NextSorter&&... nextSorter) {
   createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
                       AD_FWD(nextSorter)...);
 }
 
 // _____________________________________________________________________________
 CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
-    std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
-        size_t numColumns, BlocksOfTriples sortedTriples,
-        NextSorter&&... nextSorter) {
+std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
+    size_t numColumns, BlocksOfTriples sortedTriples,
+    NextSorter&&... nextSorter) {
   std::optional<PatternCreator::TripleSorter> result;
   if (usePatterns_) {
     // We will return the next sorter.
@@ -2327,11 +2325,10 @@ CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(
-    requires(sizeof...(NextSorter) <=
-             1)) void IndexImpl::createOSPAndOPS(size_t numColumns,
-                                                 BlocksOfTriples sortedTriples,
-                                                 NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createOSPAndOPS(size_t numColumns,
+                                BlocksOfTriples sortedTriples,
+                                NextSorter&&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjects =
@@ -2474,15 +2471,16 @@ std::packaged_task<void()> computeStatistics(
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
     // The statistics are only recomputed as part of a runtime index rebuild
     // (see `IndexRebuilder`), so this scan is also throttled by
-    // `rebuild-index-scan-num-threads` (several permutations are scanned in
-    // parallel, so without the throttle this short phase has a high peak
-    // CPU). A value of 0 means "fall back to `lazy-index-scan-num-threads`".
-    auto numThreadsOverride = getRuntimeParameterAsOptional<
-        &RuntimeParameters::rebuildIndexScanNumThreads_>();
+    // `rebuild-index-scan-num-blocks-in-flight` (several permutations are
+    // scanned in parallel, so without the throttle this short phase has a high
+    // peak CPU). A value of 0 means "fall back to
+    // `lazy-index-scan-num-blocks-in-flight`".
+    auto numBlocksInFlightOverride = getRuntimeParameterAsOptional<
+        &RuntimeParameters::rebuildIndexScanNumBlocksInFlight_>();
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
         additionalColumns, cancellationHandle, *locatedTriplesSharedState,
-        numThreadsOverride);
+        numBlocksInFlightOverride);
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);

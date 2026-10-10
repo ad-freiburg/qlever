@@ -6,7 +6,7 @@
 #define QLEVER_VALUEIDTESTHELPERS_H
 
 #include "./util/IdTestHelpers.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/Random.h"
 
 // Enabling cheaper unit tests when building in Debug mode

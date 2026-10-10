@@ -7,8 +7,25 @@
 
 /// Helper macros that allow suppressing specific warnings in certain compiler
 /// versions that turn out to be false positives.
+///
+/// NOTE: Several of the warnings below (`-Wmaybe-uninitialized`,
+/// `-Warray-bounds`, `-Wstringop-overflow`) are emitted by GCC's *middle end*,
+/// long after the preprocessor has run. Two consequences follow:
+///
+/// * Such a warning is NOT suppressed by the offending code being in a system
+///   header (`-isystem`, `/usr/include`). For example, GCC 15 and GCC 16 report
+///   a false-positive `-Wuninitialized` inside `absl::InlinedVector` when
+///   compiling `S2GeometryAlgorithm.cpp`, although Abseil is included as a
+///   system header.
+/// * It IS suppressed by an explicit `#pragma GCC diagnostic` region, because
+///   GCC walks the inlining chain when it decides whether a warning is
+///   disabled. Wrapping the *definition* of the offending function (or the
+///   `#include` that provides it) in the macros below therefore covers every
+///   translation unit that instantiates it, provided that the definition is
+///   not already included before (outside of the region) in that translation
+///   unit.
 
-#if defined(__GNUC__) && (__GNUC__ >= 11 && __GNUC__ <= 15)
+#if defined(__GNUC__) && (__GNUC__ >= 11 && __GNUC__ <= 16)
 
 // Disable the `maybe-uninitialized` warning, which has many false positives.
 #define DISABLE_UNINITIALIZED_WARNINGS \
@@ -78,9 +95,11 @@
 #define GCC_REENABLE_WARNINGS
 #endif
 
-// Disable the warnings that the preprocessor itself emits (`#warning`
-// directives in system headers, e.g. the deprecation of `<ciso646>` that
-// Boost.Sort includes), and re-enable them. Both compilers support this.
+// Disable the warnings about `#warning` directives (`-Wcpp` for GCC,
+// `-W#warnings` for clang). QLever needs this for the third-party headers that
+// it includes from headers of its own: `<boost/sort/...>` includes the
+// `<ciso646>` of libstdc++, which since C++20 is deprecated and warns about
+// itself, see `util/blockSort/BoostSortHeaders.h` for an example.
 #if defined(__clang__)
 #define DISABLE_PREPROCESSOR_WARNINGS \
   _Pragma("clang diagnostic push")    \

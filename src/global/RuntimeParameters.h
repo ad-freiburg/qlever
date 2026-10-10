@@ -56,26 +56,30 @@ struct RuntimeParameters {
                                     "cache-max-size"};
   MemorySizeParameter cacheMaxSizeSingleEntry_{
       ad_utility::MemorySize::gigabytes(5), "cache-max-size-single-entry"};
-  SizeT lazyIndexScanQueueSize_{20, "lazy-index-scan-queue-size"};
-  // The number of threads that read and decompress the blocks of a lazy index
-  // scan. Each lazy scan of a query has its own pool of this many threads.
-  // The value must be at least `1` (enforced by a parameter constraint).
-  // The default of `2` is enough for typical queries, where the operation
-  // that consumes the blocks processes them on a single thread and can barely
-  // keep up with the decompression even for `1` thread.
-  SizeT lazyIndexScanNumThreads_{2, "lazy-index-scan-num-threads"};
-  // The number of threads used to read and decompress blocks when scanning
-  // permutations during a runtime index rebuild (see `IndexRebuilder`), both
-  // for the main scan of the old permutations and for the statistics
-  // recomputation. Lowering it reduces the rebuild's CPU usage without
-  // affecting query scans. The default of 1 keeps a rebuild on a live server
-  // from starving concurrent queries of CPU, at nearly no cost in wall time:
-  // the bottleneck of each permutation pipeline is its single sequential
-  // remap thread, so additional scan threads mostly add contention (measured
-  // on Wikidata on an otherwise idle 16-core server, where the wall time was
-  // the same for 1, 2, and 4 threads). A value of 0 falls back to
-  // `lazy-index-scan-num-threads`, the same value as for query scans.
-  SizeT rebuildIndexScanNumThreads_{1, "rebuild-index-scan-num-threads"};
+  // The number of blocks that a lazy index scan reads and decompresses on the
+  // global thread pool ahead of its consumer. The value must be at least `1`
+  // (enforced by a parameter constraint). The default of `20` keeps the
+  // prefetch depth that the scans had with threads of their own (2 threads
+  // plus a queue of 20 blocks). Smaller values measurably slow down queries
+  // with prefiltered joins on large relations, because their consumer
+  // processes the blocks in bursts.
+  SizeT lazyIndexScanNumBlocksInFlight_{20,
+                                        "lazy-index-scan-num-blocks-in-flight"};
+  // The number of blocks that are read and decompressed ahead of the consumer
+  // when scanning permutations during a runtime index rebuild (see
+  // `IndexRebuilder`), both for the main scan of the old permutations and for
+  // the statistics recomputation, with the same meaning as
+  // `lazy-index-scan-num-blocks-in-flight` above. Lowering it reduces the
+  // rebuild's CPU usage without affecting query scans. The default of 1 keeps a
+  // rebuild on a live server from starving concurrent queries of CPU, at nearly
+  // no cost in wall time: the bottleneck of each permutation pipeline is its
+  // single sequential remap thread, so more concurrent block reads mostly add
+  // contention (measured on Wikidata on an otherwise idle 16-core server,
+  // where the wall time was the same for 1, 2, and 4). A value of 0 falls back
+  // to `lazy-index-scan-num-blocks-in-flight`, the same value as for query
+  // scans.
+  SizeT rebuildIndexScanNumBlocksInFlight_{
+      1, "rebuild-index-scan-num-blocks-in-flight"};
   // How many blocks per permutation are compressed and written at the same
   // time during a runtime index rebuild (on the global thread pool, see
   // `permutation-writer-num-threads` below for the exact meaning of the
