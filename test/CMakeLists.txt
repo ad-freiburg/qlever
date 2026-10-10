@@ -398,7 +398,7 @@ addLinkAndDiscoverTest(DurationTest qlever_util)
 
 addLinkAndDiscoverTest(TripleComponentTest)
 
-addLinkAndDiscoverTest(ValueIdTest qlever_util)
+addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
 
 addLinkAndDiscoverTest(DatatypeTest qlever_util)
 

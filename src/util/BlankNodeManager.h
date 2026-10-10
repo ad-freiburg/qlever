@@ -19,7 +19,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <vector>
 
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"

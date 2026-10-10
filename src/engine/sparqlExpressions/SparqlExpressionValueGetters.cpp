@@ -10,7 +10,7 @@
 #include "backports/type_traits.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/Constants.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/ExportIds.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"

@@ -67,7 +67,6 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
-#include "global/ValueId.h"
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
@@ -1472,6 +1471,12 @@ void QueryPlanner::applyFiltersIfPossible(
         if (filterAndSubst.forceSubstitution_) {
           // An enforced substitute must have already been replaced by now. Do
           // not generate a regular `FILTER` for it.
+          continue;
+        }
+        // Apply a non-deterministic filter (e.g. `RAND() < 0.5`) only at the
+        // end of the group graph pattern, so that it's evaluated per result
+        // row.
+        if (!filterAndSubst.filter_.expression_.isDeterministic()) {
           continue;
         }
       }
