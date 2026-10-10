@@ -42,7 +42,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"

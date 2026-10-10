@@ -22,7 +22,7 @@
 #include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "backports/type_traits.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "rdfTypes/GeoCellGrid.h"
