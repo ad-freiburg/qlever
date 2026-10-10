@@ -268,18 +268,15 @@ class GeoVocabulary {
     void flushBatch();
   };
 
-  // The block-wise counterpart of the `WordWriter` (see `BlockWriterBase`):
-  // the geometry info record of a word is computed by `precomputePayload`
-  // (the expensive per-word work, which the caller does wherever it has the
-  // words and idle threads, see `BlockWriterBase::precomputePayload`) and
-  // arrives with the
-  // block as its payload; `prepare` only checks the cell order, and the
-  // records are written to their position in the `geoInfoFile_` by a task on
-  // the global thread pool that the append step starts (a positioned write).
-  // With a grid, `indexOf` computes the cell of a word from the literal
-  // (exactly as `WordWriter::operator()`), and the order of the cells is
-  // checked in `prepare` (within a block) and in the append step (across
-  // blocks). The files are the same as those of the `WordWriter`.
+  // The block-wise counterpart of the `WordWriter` (see `BlockWriterBase`),
+  // which writes the same files. The geometry info record of a word is
+  // computed by `precomputePayload` and arrives with the block as its payload.
+  // The append step writes the records of a block to their position in the
+  // `geoInfoFile_`, by a task on the global thread pool.
+  //
+  // NOTE: With a grid, `indexOf` computes the cell of a word from the literal
+  // (exactly as `WordWriter::operator()`). The order of the cells is checked
+  // in `prepare` within a block and in the append step across blocks.
   class BlockWriter : public BlockWriterBase {
    private:
     std::unique_ptr<BlockWriterBase> underlyingWriter_;

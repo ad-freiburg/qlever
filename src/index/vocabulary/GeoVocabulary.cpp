@@ -212,8 +212,10 @@ void GeoVocabulary<V>::WordWriter::flushBatch() {
   // Compute the `GeometryInfo` of every word of the batch and write it to its
   // position in the `geoInfoFile_`, or write a zero buffer of the same size
   // (indicating an invalid geometry), so that direct access by position stays
-  // possible. NOTE: The positioned `File::write` is a `pwrite`, so the batches
-  // can write concurrently.
+  // possible.
+  //
+  // NOTE: The positioned `File::write` is a `pwrite`, so the batches can write
+  // concurrently.
   auto computeAndWrite = [this, words = std::move(currentBatch_),
                           firstPosition = firstPositionOfCurrentBatch_]() {
     // The records of the batch are contiguous in the file, so they are

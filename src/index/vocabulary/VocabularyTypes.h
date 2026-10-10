@@ -412,15 +412,19 @@ class WordWriterBase {
 };
 
 // The parallel writers of a vocabulary. A `WordWriterBase` (see above) is fed
-// one word at a time by a single thread. A `BlockWriterBase` in contrast is
-// fed in blocks of consecutive words, and it splits the writing of a block into
-// a `prepare` step, which runs on any thread and concurrently for different
-// blocks (the compression of the words, the geometry info of WKT literals), and
-// an append step (the `AppendBlock` that `prepare` returns), which appends the
-// prepared block to the files and runs on a single thread, in the order of the
-// blocks. That is what will let the
-// vocabulary merger (see `index/VocabularyMerger.h`, in a follow-up PR) do the
-// expensive per-word work of the writing on all its threads.
+// one word at a time by a single thread. A `BlockWriterBase` is fed blocks of
+// consecutive words and splits the writing of a block into two steps:
+//
+// 1. The `prepare` step runs on any thread and concurrently for different
+// blocks (the compression of the words, the geometry info of WKT literals).
+//
+// 2. The append step (the `AppendBlock` that `prepare` returns) appends the
+// prepared block to the files. It runs on a single thread, in the order of the
+// blocks.
+//
+// NOTE: This lets the vocabulary merger (see `index/VocabularyMerger.h`, in a
+// follow-up PR) do the expensive per-word work of the writing on all its
+// threads.
 
 // A block of consecutive words of a vocabulary, the unit in which a
 // `BlockWriterBase` works: the words, whether each word is to be externalized

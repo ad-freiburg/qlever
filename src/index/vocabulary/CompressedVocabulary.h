@@ -510,14 +510,15 @@ CPP_template(typename UnderlyingVocabulary,
                          DiskWriterFromUncompressedWords<>>;
 
   // The block-wise counterpart of the `DiskWriterFromUncompressedWords` (see
-  // `BlockWriterBase`): a block is compressed in `prepare` (with one decoder
-  // per block, so a block has to be exactly `NumWordsPerBlock` words, as the
-  // word-by-word writer cuts them), and the append step hands the compressed
-  // block to the block writer of the underlying vocabulary and stores the
-  // decoder. The
-  // files are the same as those of the word-by-word writer.
+  // `BlockWriterBase`), which writes the same files. A block is compressed in
+  // `prepare`, and the append step hands the compressed block to the block
+  // writer of the underlying vocabulary and stores the decoder.
   //
-  // NOTE: This is a template for the same reason as
+  // NOTE 1: There is one decoder per block, so every block but the last has to
+  // have exactly `NumWordsPerBlock` words, as the word-by-word writer cuts
+  // them.
+  //
+  // NOTE 2: This is a template for the same reason as
   // `DiskWriterFromUncompressedWords`, see there.
   template <typename UnderlyingVocab = UnderlyingVocabulary>
   class BlockWriter : public BlockWriterBase {
@@ -550,9 +551,10 @@ CPP_template(typename UnderlyingVocabulary,
       const size_t uncompressedSize = block.data().size();
       auto [buffer, compressedWords, decoder] =
           CompressionWrapper::compressAll(block.words());
-      // The compressed block for the underlying vocabulary. NOTE: The
-      // `buffer` owns the memory that the `compressedWords` may point into,
-      // so it has to be kept alive until they are copied.
+      // The compressed block for the underlying vocabulary.
+      //
+      // NOTE: The `buffer` owns the memory that the `compressedWords` may
+      // point into, so it has to be kept alive until they are copied.
       WordBlock compressed;
       compressed.firstPosition_ = block.firstPosition_;
       compressed.isExternal_.reserve(compressedWords.size());
