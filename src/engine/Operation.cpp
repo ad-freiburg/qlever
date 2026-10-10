@@ -805,7 +805,13 @@ std::unique_ptr<Operation> Operation::clone() const {
     return true;
   };
   AD_CORRECTNESS_CHECK(areChildrenDifferent());
-  AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
+  // Compare the actual mappings, not the lazily computed caches: the original
+  // might already have computed its mapping, while the clone has not. The
+  // externally visible mappings differ if the clone lost hidden variables.
+  AD_CORRECTNESS_CHECK(getInternallyVisibleVariableColumns() ==
+                       result->getInternallyVisibleVariableColumns());
+  AD_CORRECTNESS_CHECK(getExternallyVisibleVariableColumns() ==
+                       result->getExternallyVisibleVariableColumns());
   // For deterministic operations the cache key must be identical in the clone.
   // Non-deterministic operations (BNODE, RAND, UUID, SERVICE, LOAD) may
   // legitimately produce a different cache key on each instantiation, so we
