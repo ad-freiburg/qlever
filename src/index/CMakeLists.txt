@@ -5,13 +5,13 @@ add_subdirectory(vocabulary)
 #
 # NOTE: This has to be a separate library, and it must not depend on `index`:
 # comparing two `Id`s calls `LocalVocabEntry::compareThreeWay` and
-# `LocalVocabEntry::positionInVocab`, so EVERY library
-# that compares `Id`s needs the symbols from `LocalVocabEntry.cpp`. That used to
-# require the `index` library, which is why several files that conceptually
-# belong to `src/parser` had to be compiled into `index`. The dependency on the
-# actual index is now abstracted away by the minimal `LocalVocabContext`
-# interface, whose only implementation is `LocalVocabContextImpl`, which is part
-# of the `index` library below.
+# `LocalVocabEntry::positionInVocab` (see `ValueId::compareThreeWay`), so EVERY
+# library that compares `Id`s needs the symbols from `LocalVocabEntry.cpp`. That
+# used to require the `index` library, which is why several files that
+# conceptually belong to `src/parser` had to be compiled into `index`. The
+# dependency on the actual index is now abstracted away by the minimal
+# `LocalVocabContext` interface, whose only implementation is
+# `LocalVocabContextImpl`, which is part of the `index` library below.
 add_library(localVocab LocalVocabEntry.cpp LocalVocabContext.cpp LocalVocab.cpp)
 qlever_target_link_libraries(localVocab basicParser)
 

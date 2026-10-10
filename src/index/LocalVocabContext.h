@@ -30,8 +30,8 @@ class BlankNodeManager;
 //
 // NOTE: This is deliberately restricted to the operations that
 // `LocalVocabEntry` actually performs, and in particular does not expose the
-// vocabulary itself. Comparing two `Id`s calls into `LocalVocabEntry`,
-// so every library that compares `Id`s depends on
+// vocabulary itself. Comparing two `Id`s calls into `LocalVocabEntry` (see
+// `ValueId::compareThreeWay`), so every library that compares `Id`s depends on
 // `LocalVocabEntry`. Keeping this interface abstract and minimal is what allows
 // those libraries to be independent of the (much larger) `index` library.
 //

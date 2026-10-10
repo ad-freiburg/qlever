@@ -410,7 +410,7 @@ TEST_F(ValueIdTest, TriviallyCopyable) {
 // those macros are `constexpr`-friendly, see the note on `constexpr` in
 // `util/Exception.h`.
 // NOTE: The functions that are only `QL_CONSTEXPR` (`constexpr` in C++20 mode
-// only) are excluded in C++17 mode, see the notes in `global/ValueId.h`.
+// only) are excluded in C++17 mode, see the notes in `global/FoldedValueId.h`.
 namespace constexprValueId {
 static_assert(ValueId::makeUndefined().getDatatype() == Datatype::Undefined);
 static_assert(ValueId::makeFromBool(true).getBool());
@@ -568,7 +568,7 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   LocalVocabEntry entryInVocab = LocalVocabEntry::fromIriref("<b>", ctx);
   LocalVocabEntry entryInSecondaryVocab =
       LocalVocabEntry::fromIriref("<zzz>", ctx);
-  ValueId localVocabId = Id::makeFromLocalVocabIndex(&entryInVocab);
+  ValueId localVocabId = ValueId::makeFromLocalVocabIndex(&entryInVocab);
   ValueId localVocabIdSecondary =
       ValueId::makeFromLocalVocabIndex(&entryInSecondaryVocab);
   ValueId secondaryVocabId =
@@ -667,4 +667,5 @@ TEST(ValueId, forwardingLambdas) {
   EXPECT_EQ(ql::ranges::find(proxies, Datatype::Double, ValueId::getDatatypeL),
             proxies.begin() + 2);
 }
+
 }  // namespace foldedValueId
