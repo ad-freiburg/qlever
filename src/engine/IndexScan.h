@@ -130,7 +130,7 @@ class IndexScan final : public Operation {
   // Return two generators, the first of which yields exactly the elements of
   // `input` and the second of which yields the matching blocks, skipping the
   // blocks consisting only of rows that don't match the tables yielded by
-  // `input` to speed up join algorithms when no undef values are presend. When
+  // `input` to speed up join algorithms when no undef values are present. When
   // there are undef values or this scan has a LIMIT or OFFSET, the second
   // generator represents the full index scan.
   std::pair<Result::LazyResult, Result::LazyResult> prefilterTables(
