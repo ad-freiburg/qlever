@@ -131,6 +131,21 @@ class VocabularyInMemory
     return std::make_unique<WordWriter>(filename);
   }
 
+  // The block writer of this vocabulary simply feeds its `WordWriter` word by
+  // word (see `BlockWriterBase`).
+  static std::unique_ptr<BlockWriterBase> makeBlockWriterPtr(
+      const std::string& filename) {
+    return makeBlockWriterFromWordWriter(makeDiskWriterPtr(filename));
+  }
+
+  // The `ParallelWordWriterBase` of this (single) vocabulary, for a
+  // `Vocabulary` that is built directly on it (see `Vocabulary.h`).
+  static std::unique_ptr<ParallelWordWriterBase> makeParallelWriterPtr(
+      const std::string& filename) {
+    return std::make_unique<SingleVocabularyParallelWriter>(
+        makeBlockWriterPtr(filename));
+  }
+
   // Clear the vocabulary.
   void close() { _words.clear(); }
 
