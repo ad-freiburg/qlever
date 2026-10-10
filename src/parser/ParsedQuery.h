@@ -87,6 +87,10 @@ class ParsedQuery {
   // `postQueryValuesClause_` and are thus computed by the `QueryPlanner` after
   // joining it, see `moveAliasesAfterPostQueryValues`.
   std::vector<parsedQuery::Bind> postQueryValuesBinds_;
+  // The internal aliases (from `HAVING` and `ORDER BY` with `GROUP BY`) of a
+  // query without a `SELECT` clause (`CONSTRUCT` or `ASK`). For a `SELECT`
+  // query, they are stored in the `SelectClause`.
+  std::vector<Alias> internalAliasesWithoutSelectClause_;
 
   // Contains warnings about queries that are valid according to the SPARQL
   // standard, but are probably semantically wrong.
@@ -202,6 +206,14 @@ class ParsedQuery {
       sparqlExpression::SparqlExpressionPimpl expression,
       InternalVariableGenerator internalVariableGenerator);
 
+  // Add `alias` as an internal alias, either to the `SelectClause` or (for
+  // queries without one) to `internalAliasesWithoutSelectClause_`.
+  void addInternalAlias(Alias alias);
+
+  // Remove all aliases and return them. The (non-internal) targets stay
+  // selected, see `SelectClause::deleteAliasesButKeepVariables`.
+  std::vector<Alias> takeAliases();
+
   // If the `variable` is neither visible in the query body nor contained in the
   // `additionalVisibleVariables`, add a warning or throw an exception (see
   // `addWarningOrThrow`) that uses the `locationDescription` inside the
@@ -268,8 +280,8 @@ class ParsedQuery {
                             InternalVariableGenerator internalVariableGenerator,
                             std::optional<parsedQuery::Values> postQueryValues);
 
-  // If this is a SELECT query, return all the selected aliases. Return an empty
-  // vector for construct clauses.
+  // Return all the aliases of the query, including the internal ones. For a
+  // query without a `SELECT` clause, these are only internal aliases.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
 
   // Update the export limit based on the `send` parameter (historical name).
