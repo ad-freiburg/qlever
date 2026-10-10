@@ -391,7 +391,8 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-void Union::onLimitOffsetChanged(const LimitOffsetClause&) {
+void Union::onLimitOffsetChanged(const LimitOffsetClause&,
+                                 bool childrenAreExclusivelyOwned) {
   // Note that we use the merged `getLimitOffset()` and not the clause that was
   // passed in, which only holds the increment that was just added. The bound
   // below depends on the total limit and offset, so for nested subqueries the
@@ -412,8 +413,8 @@ void Union::onLimitOffsetChanged(const LimitOffsetClause&) {
   // matter whether they are concatenated or merged according to `targetOrder_`.
   for (size_t i = 0; i < _subtrees.size(); ++i) {
     auto& subtree = _subtrees.at(i);
-    subtree = subtree->clone();
-    subtree->applyLimitOffset(LimitOffsetClause{limit + offset});
+    applyLimitOffsetToChild(subtree, LimitOffsetClause{limit + offset},
+                            childrenAreExclusivelyOwned);
 
     // The pushdown may have un-sorted `subtree`, while both the merging
     // implementation and our `resultSortedOn()` require the subtrees to be

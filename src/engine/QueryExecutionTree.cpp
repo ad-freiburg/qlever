@@ -265,10 +265,11 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
   // deduplication, and the limit can terminate the subtree early). We clone
   // before applying the limit, because `qet` (and its root operation) may be
   // shared with other query execution trees and `applyLimitOffset` mutates the
-  // operation in place.
+  // operation in place. The clone is deep, so its children are then exclusively
+  // owned.
   if (distinctIndices.empty()) {
     auto limitedQet = qet->clone();
-    limitedQet->applyLimitOffset(LimitOffsetClause{._limit = 1});
+    limitedQet->applyLimitOffset(LimitOffsetClause{._limit = 1}, true);
     return limitedQet;
   }
 

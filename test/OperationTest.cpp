@@ -14,8 +14,12 @@
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/NeutralOptional.h"
+#include "engine/OptionalJoin.h"
 #include "engine/Sort.h"
+#include "engine/Union.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
@@ -100,6 +104,66 @@ TEST(OperationTest, limitAndOffsetAreStacked) {
 
   n.applyLimitOffset({6, 7});
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(6, 14));
+}
+
+// Test that the operations which push a `LIMIT` into a child clone the child
+// only if it may be shared, and modify it in place if it is exclusively owned
+// (see `Operation::applyLimitOffsetToChild`).
+TEST(OperationTest, limitPushdownClonesOnlySharedChildren) {
+  auto* qec = getQec();
+  // A child that is sorted on its only column `?a`, so that none of the
+  // operations below wraps it in a `Sort`.
+  auto makeChild = [qec]() {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{1}, {2}, {3}}),
+        std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
+        std::vector<ColumnIndex>{0});
+  };
+  auto testPushdown = [&makeChild](auto makeOperation,
+                                   ad_utility::source_location loc =
+                                       AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    auto child = makeChild();
+    auto operation = makeOperation(child);
+
+    // By default the child may be shared, so it is cloned before the pushdown
+    // and stays unchanged itself.
+    operation->applyLimitOffset({2});
+    auto* clone = operation->getChildren().at(0);
+    EXPECT_NE(clone, child.get());
+    EXPECT_TRUE(child->getRootOperation()->getLimitOffset().isUnconstrained());
+    EXPECT_EQ(clone->getRootOperation()->getLimitOffset(),
+              LimitOffsetClause(2));
+
+    // An exclusively owned child is modified in place.
+    operation->applyLimitOffset({1}, true);
+    EXPECT_EQ(operation->getChildren().at(0), clone);
+    EXPECT_EQ(clone->getRootOperation()->getLimitOffset(),
+              LimitOffsetClause(1));
+  };
+
+  testPushdown([qec](auto child) {
+    return std::make_unique<Sort>(qec, std::move(child),
+                                  std::vector<ColumnIndex>{0});
+  });
+  testPushdown([qec](auto child) {
+    using namespace sparqlExpression;
+    return std::make_unique<Bind>(
+        qec, std::move(child),
+        parsedQuery::Bind{SparqlExpressionPimpl{std::make_unique<IdExpression>(
+                                                    Id::makeFromInt(42)),
+                                                "42 AS ?b"},
+                          Variable{"?b"}});
+  });
+  testPushdown([qec](auto child) {
+    return std::make_unique<NeutralOptional>(qec, std::move(child));
+  });
+  testPushdown([qec, &makeChild](auto child) {
+    return std::make_unique<OptionalJoin>(qec, std::move(child), makeChild());
+  });
+  testPushdown([qec, &makeChild](auto child) {
+    return std::make_unique<Union>(qec, std::move(child), makeChild());
+  });
 }
 
 // ________________________________________________
