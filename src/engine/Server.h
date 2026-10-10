@@ -40,6 +40,7 @@
 #include "util/json.h"
 #include "util/metrics/Metrics.h"
 #include "util/metrics/ServerMetrics.h"
+#include "util/metrics/Tracing.h"
 
 template <typename Operation>
 CPP_concept QueryOrUpdate =
@@ -358,9 +359,11 @@ class Server {
   /// \param req The HTTP request.
   /// \param send The action that sends a http:response. (see the
   ///             `HttpServer.h` for documentation).
+  /// \param rootSpan The span covering the whole request.
   CPP_template(typename RequestT, typename SendT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
-      Awaitable<void> process(RequestT& request, SendT&& send);
+      Awaitable<void> process(RequestT& request, SendT&& send,
+                              ad_utility::tracing::SpanGuard& rootSpan);
 
   // The final step of `process()`: by this point the operation type (which also
   // can be `no-operation`) is known, so this builds the
@@ -372,7 +375,8 @@ class Server {
           SparqlOperation operation, const ParamValueMap& parameters,
           bool accessTokenOk, const ad_utility::Timer& requestTimer,
           SharedIndexAndView indexAndViews, RequestT& request, SendT&& send,
-          std::optional<ResponseT> response);
+          std::optional<ResponseT> response,
+          ad_utility::tracing::SpanGuard& rootSpan);
 
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
@@ -381,7 +385,8 @@ class Server {
       Awaitable<void> processOperation(
           SparqlOperation operation, VisitorT visitor,
           const ad_utility::Timer& requestTimer, const RequestT& request,
-          SendT& send, const std::optional<PlannedQuery>& plannedQuery);
+          SendT& send, const std::optional<PlannedQuery>& plannedQuery,
+          ad_utility::tracing::SpanGuard& rootSpan);
 
   // Out of a list of allowed media types, choose the one that best fits the
   // given query type. Currently it just chooses the first from the list. If the
@@ -399,7 +404,8 @@ class Server {
           const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, SendT&& send,
-          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
+          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery,
+          const opentelemetry::trace::SpanContext& parentSpan);
   // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
@@ -415,7 +421,8 @@ class Server {
           const ad_utility::Timer& requestTimer, SharedTimeTracer tracer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           const RequestT& request, SendT&& send, TimeLimit timeLimit,
-          std::optional<PlannedQuery>& plannedUpdate);
+          std::optional<PlannedQuery>& plannedUpdate,
+          const opentelemetry::trace::SpanContext& parentSpan);
 
   //  Prepare the execution of an operation.
   auto prepareOperation(std::string_view operationName,
