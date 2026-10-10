@@ -2777,6 +2777,11 @@ TEST(QueryPlanner, Describe) {
       h::Describe(::testing::_,
                   h::Join(h::IndexScanFromStrings("?y", "<p>", "?o"),
                           h::Sort(h::ValuesClause("VALUES (?y) { (<a>) }")))));
+  // The same holds for LIMIT and OFFSET.
+  h::expect("DESCRIBE ?y { ?y <p> ?o } LIMIT 2 OFFSET 1",
+            h::Describe(::testing::_,
+                        h::WithLimitOffset({2, 1}, h::IndexScanFromStrings(
+                                                       "?y", "<p>", "?o"))));
 }
 
 // ____________________________________________________________________________
