@@ -96,7 +96,7 @@ StripColumns::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 
   // Push `bind` down to the child. If successful, create a new `StripColumns`
   // that also keeps the bound target variable.
-  auto newChild = child_->makeTreeWithBindColumn(bind);
+  auto newChild = child_->getRootOperation()->makeTreeWithBindColumn(bind);
   if (!newChild) {
     return std::nullopt;
   }

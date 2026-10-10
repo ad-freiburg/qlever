@@ -66,7 +66,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
             bindExpressionVars)) {
       continue;
     }
-    auto result = child->makeTreeWithBindColumn(bind);
+    auto result = child->getRootOperation()->makeTreeWithBindColumn(bind);
     if (result.has_value()) {
       child = result.value();
       anyChildRewritten = true;

@@ -891,7 +891,8 @@ TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
   EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
 }
 
-// _____________________________________________________________________________
+// Test that the prefiltered `IndexScan` keeps the variables hidden by a
+// subquery hidden.
 TEST(IndexScan, prefilteringKeepsHiddenVariablesHidden) {
   using namespace makeFilterExpression;
   using namespace filterHelper;

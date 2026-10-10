@@ -156,30 +156,6 @@ QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied(
 }
 
 // _____________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>>
-QueryExecutionTree::makeTreeWithBindColumn(
-    const parsedQuery::Bind& bind) const {
-  // The root operation also sees the variables that are hidden in this tree,
-  // so a `BIND` that uses a variable that is not visible must not be pushed
-  // down, because it would read the values of the hidden variable instead of
-  // an unbound one.
-  if (!ql::ranges::all_of(bind._expression.containedVariables(),
-                          [this](const Variable* variable) {
-                            return containsVariable(*variable);
-                          })) {
-    return std::nullopt;
-  }
-  auto result = rootOperation_->makeTreeWithBindColumn(bind);
-  if (result.has_value()) {
-    AD_CORRECTNESS_CHECK(result.value() != nullptr);
-    // Same as for the prefiltered tree above, but the `BIND` target is new.
-    rootOperation_->keepHiddenVariablesHidden(
-        *result.value()->getRootOperation(), bind._target);
-  }
-  return result;
-}
-
-// _____________________________________________________________________________
 bool QueryExecutionTree::knownEmptyResult() {
   if (cachedResult_) {
     AD_CORRECTNESS_CHECK(cachedResult_->isFullyMaterialized());
