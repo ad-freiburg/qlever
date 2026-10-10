@@ -259,9 +259,13 @@ ExpressionResult NaryExpressionStronglyTyped<NaryOperation>::evaluate(
 
   // A function that only takes several `ExpressionResult`s,
   // and evaluates the expression.
-  auto evaluateOnChildrenResults =
-      absl::bind_front(ad_utility::visitWithVariantsAndParameters,
-                       EvaluateOnChildOperands{}, NaryOperation{}, context);
+  // Avoid an inline NaryOperation{} temporary here: Clang 16/17 can crash
+  // during
+  // IR generation for numeric operation wrappers (for example, RoundImpl).
+  NaryOperation naryOperation;
+  auto evaluateOnChildrenResults = absl::bind_front(
+      ad_utility::visitWithVariantsAndParameters, EvaluateOnChildOperands{},
+      std::move(naryOperation), context);
 
   return std::apply(evaluateOnChildrenResults, std::move(resultsOfChildren));
 }
