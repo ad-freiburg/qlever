@@ -67,7 +67,6 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
-#include "global/ValueId.h"
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
@@ -87,7 +86,7 @@ using SubtreePlan = QueryPlanner::SubtreePlan;
 
 template <typename Operation, typename... Args>
 SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, Args&&... args) {
-  return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
+  return {qec, qec->makeShared<Operation>(qec, AD_FWD(args)...)};
 }
 
 // Create a `SubtreePlan` that holds the given `operation`. `Op` must be a class
@@ -194,6 +193,25 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     checkCancellation();
   }
 
+  // Apply trailing `VALUES` clause of a query with `GROUP BY` (without
+  // `GROUP BY`, it is part of the root graph pattern). As in the SPARQL 1.1
+  // spec (sec. 18.2.4.3), this happens after `GROUP BY` and `HAVING`, but
+  // before `DISTINCT` and `ORDER BY`. Then compute the aliases that use its
+  // variables.
+  auto& postValues = pq.postQueryValuesClause_;
+  if (postValues.has_value()) {
+    plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
+    checkCancellation();
+  }
+  for (const auto& bind : pq.postQueryValuesBinds_) {
+    std::vector<SubtreePlan> row;
+    for (const auto& plan : plans.back()) {
+      row.push_back(makeSubtreePlan<Bind>(_qec, plan._qet, bind));
+    }
+    plans.push_back(std::move(row));
+    checkCancellation();
+  }
+
   // DISTINCT
   if (pq.hasSelectClause()) {
     const auto& selectClause = pq.selectClause();
@@ -209,13 +227,6 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     // just add an order by / sort to every previous result if needed.
     // If the ordering is perfect already, just copy the plan.
     plans.emplace_back(getOrderByRow(pq, plans));
-    checkCancellation();
-  }
-
-  // Apply trailing `VALUES` clause
-  auto& postValues = pq.postQueryValuesClause_;
-  if (postValues.has_value()) {
-    plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
     checkCancellation();
   }
 
@@ -929,7 +940,7 @@ auto QueryPlanner::seedWithScansAndText(
             return std::make_unique<VariableExpression>(std::move(variable));
           };
           addFilter(SparqlFilter{
-              SparqlExpressionPimpl{std::make_shared<EqualExpression>(
+              SparqlExpressionPimpl{_qec->makeShared<EqualExpression>(
                                         std::array<SparqlExpression::Ptr, 2>{
                                             makeVarExpr(graphVariable),
                                             makeVarExpr(internalVariable)}),
@@ -1460,6 +1471,12 @@ void QueryPlanner::applyFiltersIfPossible(
         if (filterAndSubst.forceSubstitution_) {
           // An enforced substitute must have already been replaced by now. Do
           // not generate a regular `FILTER` for it.
+          continue;
+        }
+        // Apply a non-deterministic filter (e.g. `RAND() < 0.5`) only at the
+        // end of the group graph pattern, so that it's evaluated per result
+        // row.
+        if (!filterAndSubst.filter_.expression_.isDeterministic()) {
           continue;
         }
       }
@@ -3378,7 +3395,7 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 
   for (auto& sub : candidatesIn) {
     auto pathSearch =
-        std::make_shared<PathSearch>(qec_, std::move(sub._qet), config);
+        qec_->makeShared<PathSearch>(qec_, std::move(sub._qet), config);
     auto plan = makeSubtreePlan<PathSearch>(std::move(pathSearch));
     candidatesOut.push_back(std::move(plan));
   }
@@ -3426,7 +3443,7 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
         right = std::move(sub._qet);
       }
       auto spatialJoin =
-          std::make_shared<SpatialJoin>(qec_, config, std::nullopt, right);
+          qec_->makeShared<SpatialJoin>(qec_, config, std::nullopt, right);
       auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
       candidatesOut.push_back(std::move(plan));
     };
@@ -3466,7 +3483,7 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 void QueryPlanner::GraphPatternPlanner::visitExternalValues(
     const parsedQuery::ExternalValuesQuery& externalValuesQuery) {
   auto externalValues =
-      std::make_shared<ExternalValues>(qec_, externalValuesQuery);
+      qec_->makeShared<ExternalValues>(qec_, externalValuesQuery);
   auto candidate = makeSubtreePlan<ExternalValues>(std::move(externalValues));
   visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
@@ -3585,6 +3602,8 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
 void QueryPlanner::GraphPatternPlanner::visitDescribe(
     parsedQuery::Describe& describe) {
   auto tree = planner_.createExecutionTree(describe.whereClause_.get(), true);
+  // Like for a subquery, LIMIT and OFFSET apply to the WHERE clause.
+  tree->applyLimitOffset(describe.whereClause_.get()._limitOffset);
   auto describeOp =
       makeSubtreePlan<Describe>(planner_._qec, std::move(tree), describe);
   candidatePlans_.push_back(std::vector{std::move(describeOp)});

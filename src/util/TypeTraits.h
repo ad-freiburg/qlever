@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/keywords.h"
 #include "backports/span.h"
 #include "backports/type_traits.h"
 #include "util/Forward.h"
@@ -294,6 +295,105 @@ inline auto visitWithVariantsAndParameters =
       };
       return std::visit(f, liftToVariant(AD_FWD(parametersOrVariants))...);
     };
+
+namespace detail {
+// The decayed type of the first argument of the callable `T`. Works for
+// function pointers and for class types (in particular lambdas) with a single
+// `operator()` that is neither overloaded nor templated. For all other types
+// (in particular generic or constrained lambdas) the member `type` is absent,
+// so that this can be used in a SFINAE context.
+template <typename T, typename = void>
+struct FirstArgument {};
+
+template <typename R, typename First, typename... Rest>
+struct FirstArgument<R (*)(First, Rest...), void> {
+  using type = std::decay_t<First>;
+  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
+};
+
+template <typename C, typename R, typename First, typename... Rest>
+struct FirstArgument<R (C::*)(First, Rest...), void> {
+  using type = std::decay_t<First>;
+  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
+};
+
+template <typename C, typename R, typename First, typename... Rest>
+struct FirstArgument<R (C::*)(First, Rest...) const, void> {
+  using type = std::decay_t<First>;
+  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
+};
+
+// For a class type (in particular a lambda), look at its `operator()`.
+template <typename T>
+struct FirstArgument<T, std::void_t<decltype(&T::operator())>>
+    : FirstArgument<decltype(&T::operator()), void> {};
+
+template <typename T>
+using FirstArgumentT = typename FirstArgument<T>::type;
+
+// True iff `func` should handle `value` in `visitIf` below: Its parameter type
+// must be `value`'s type (up to cv-ref, so no implicit conversions). Generic
+// functions fall back to invocability.
+template <typename Func, typename Value, typename = void>
+constexpr bool isMatchForVisitIf = std::is_invocable_v<Func&, Value>;
+
+template <typename Func, typename Value>
+constexpr bool isMatchForVisitIf<
+    Func, Value, std::void_t<FirstArgumentT<std::decay_t<Func>>>> =
+    isSimilar<FirstArgumentT<std::decay_t<Func>>, Value>;
+
+// Wrapper type, s.t. `std::disjunction` below can stop instantiating at the
+// first match. Otherwise a generic catch-all function would also be
+// instantiated with alternatives that are already matched by earlier ones.
+template <typename Func, typename Value>
+struct IsMatchForVisitIf : std::bool_constant<isMatchForVisitIf<Func, Value>> {
+};
+
+template <typename Value, typename... Funcs>
+constexpr bool anyMatchForVisitIf =
+    std::disjunction_v<IsMatchForVisitIf<Funcs, Value>...>;
+
+template <typename Variant, typename... Funcs, size_t... Is>
+QL_CONSTEVAL bool isExhaustiveForVisitIfImpl(std::index_sequence<Is...>) {
+  return (... &&
+          anyMatchForVisitIf<decltype(std::get<Is>(std::declval<Variant>())),
+                             Funcs...>);
+}
+
+// True iff every alternative of `Variant` is matched by one of `funcs`.
+template <typename Variant, typename... Funcs>
+CPP_concept IsExhaustiveForVisitIf =
+    isExhaustiveForVisitIfImpl<Variant, Funcs...>(
+        std::make_index_sequence<std::variant_size_v<std::decay_t<Variant>>>{});
+
+// Call the first of `funcs` that matches `value`.
+//
+// NOTE: Recursion compiles faster than a fold +
+// `std::get<i>(std::tie(funcs...))`, as it stops early.
+template <typename Value, typename Func, typename... Rest>
+decltype(auto) tryInvoke(Value&& value, Func&& func, Rest&&... rest) {
+  if constexpr (isMatchForVisitIf<Func, Value>) {
+    return func(AD_FWD(value));
+  } else {
+    return tryInvoke(AD_FWD(value), AD_FWD(rest)...);
+  }
+}
+}  // namespace detail
+
+// Replacement for `std::visit` + `if constexpr` chains: Call the first of
+// `funcs` whose parameter type matches the active alternative of `variant`.
+// Every alternative must be matched, otherwise this doesn't compile. To
+// explicitly ignore the remaining alternatives, pass a generic catch-all
+// function (e.g. `[](const auto&) {}`) as the last argument.
+CPP_template(typename Variant, typename... Funcs)(
+    requires detail::IsExhaustiveForVisitIf<Variant, Funcs...>) decltype(auto)
+    visitIf(Variant&& variant, Funcs&&... funcs) {
+  return std::visit(
+      [&](auto&& value) -> decltype(auto) {
+        return detail::tryInvoke(AD_FWD(value), AD_FWD(funcs)...);
+      },
+      AD_FWD(variant));
+}
 
 /// Apply `Function f` to each element of tuple. Returns a tuple of the results.
 /// Note: 1. The `Function` must not return void (otherwise this doesn't

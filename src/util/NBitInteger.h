@@ -22,8 +22,10 @@ CPP_template(uint8_t N)(requires(N <= 64) CPP_and(N >= 1))  //
   }
 
   static constexpr int64_t fromNBit(T t) {
-    // The right shift is arithmetic, so a sign bit will be propagated.
-    return (static_cast<int64_t>(t) << UNUSED_BITS) >> UNUSED_BITS;
+    // Shift left on the unsigned `t` (well-defined also when bits above the
+    // `N` payload bits are set, e.g. the datatype bits of a `ValueId`), then
+    // shift right arithmetically, which propagates the sign bit.
+    return static_cast<int64_t>(t << UNUSED_BITS) >> UNUSED_BITS;
   }
 
   static constexpr int64_t max() {

@@ -9,7 +9,7 @@
 
 #include "../engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
