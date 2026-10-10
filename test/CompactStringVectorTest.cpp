@@ -92,10 +92,13 @@ TYPED_TEST(CompactVectorOfStringsFixture, Build) {
   vectorsEqual(v, input);
 }
 
-// _____________________________________________________________________________
+// Test that `push_back` appends single elements, to an empty object and to a
+// built one.
 TYPED_TEST(CompactVectorOfStringsFixture, PushBack) {
   const auto& input = TestFixture::input_;
   const auto& input1 = TestFixture::input1_;
+
+  // `push_back` into an empty object yields the pushed elements.
   typename TestFixture::CompactVector v;
   EXPECT_FALSE(v.ready());
   for (const auto& element : input) {
