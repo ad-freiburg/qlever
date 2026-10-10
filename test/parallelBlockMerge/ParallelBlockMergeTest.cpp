@@ -1436,7 +1436,7 @@ ASYNC_TEST(ParallelBlockMerge, singleThreadedConsumer) {
       },
       options);
   SizeVec result;
-  while (auto block = co_await sink->asyncGetNextBlock(net::use_awaitable)) {
+  while (auto block = co_await asyncGetNextBlock(*sink)) {
     result.insert(result.end(), block->begin(), block->end());
   }
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
@@ -1454,8 +1454,8 @@ struct DummyMergeState {
 struct DummySink {
   template <typename Token>
   auto asyncGetNextBlock(Token&& token) {
-    return net::async_initiate<Token, void(std::exception_ptr,
-                                           std::optional<SizeVec>)>(
+    return net::async_initiate<
+        Token, void(std::exception_ptr, std::optional<DeferredBlock<SizeVec>>)>(
         []([[maybe_unused]] auto handler) {}, token);
   }
   template <typename Token>

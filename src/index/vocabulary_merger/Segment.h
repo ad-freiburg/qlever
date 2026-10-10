@@ -21,7 +21,6 @@
 
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
-#include "global/ValueId.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/Concepts.h"
