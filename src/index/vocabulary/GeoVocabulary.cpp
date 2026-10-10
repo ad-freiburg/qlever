@@ -119,8 +119,11 @@ GeoVocabulary<V>::WordWriter::WordWriter(
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"},
       grid_{grid} {
-  // Initialize geo info file with header
-  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
+  // Initialize the geo info file with its header. Like the records (see
+  // `flushBatch`), it is written with a positioned write, because positioned
+  // and sequential writes must not be mixed on the same file (see
+  // `File::write`).
+  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader, 0);
 }
 
 using namespace ad_utility::memory_literals;
@@ -277,7 +280,8 @@ GeoVocabulary<V>::BlockWriter::BlockWriter(
     : underlyingWriter_{vocabulary.makeBlockWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"},
       grid_{grid} {
-  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
+  // The header, with a positioned write, see `WordWriter::WordWriter`.
+  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader, 0);
 }
 
 // ____________________________________________________________________________
