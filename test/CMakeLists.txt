@@ -454,6 +454,8 @@ addLinkAndDiscoverTestNoLibs(NoCopyNoMoveTest)
 
 addLinkAndDiscoverTestNoLibs(CopyOnWritePtrTest)
 
+addLinkAndDiscoverTestNoLibs(CopyOnWriteChunkedVectorTest)
+
 addLinkAndDiscoverTestSerial(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
