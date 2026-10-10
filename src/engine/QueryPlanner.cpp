@@ -3597,6 +3597,8 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
 void QueryPlanner::GraphPatternPlanner::visitDescribe(
     parsedQuery::Describe& describe) {
   auto tree = planner_.createExecutionTree(describe.whereClause_.get(), true);
+  // Like for a subquery, LIMIT and OFFSET apply to the WHERE clause.
+  tree->applyLimitOffset(describe.whereClause_.get()._limitOffset);
   auto describeOp =
       makeSubtreePlan<Describe>(planner_._qec, std::move(tree), describe);
   candidatePlans_.push_back(std::vector{std::move(describeOp)});
