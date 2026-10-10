@@ -14,7 +14,7 @@
 #include "engine/NamedResultCacheSerializer.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/SpatialJoinConfig.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/Variable.h"
 #include "util/Serializer/ByteBufferSerializer.h"

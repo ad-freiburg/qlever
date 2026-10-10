@@ -15,7 +15,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
 #include "global/Id.h"
-#include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
