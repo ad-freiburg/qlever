@@ -206,11 +206,11 @@ struct CompressedRelationWriter::PermutationWriter {
   //
   // NOTE 1: The queue is configured exactly like the `blockWriteQueue_` of
   // `writer1_`, so that the blocks of large relations respect the same
-  // concurrency setting as all the other blocks (in particular, the runtime
-  // index rebuild throttles the writers to a single block at a time, see
-  // `rebuild-permutation-writer-num-threads`). Each block in flight is held in
-  // memory until it has been written, so the bound of the queue also bounds the
-  // memory that the background writing consumes.
+  // concurrency setting and run on the same executor as all the other blocks
+  // (in particular, the runtime index rebuild limits the concurrency of that
+  // executor, see `rebuild-permutation-writer-num-threads`). Each block in
+  // flight is held in memory until it has been written, so the bound of the
+  // queue also bounds the memory that the background writing consumes.
   //
   // NOTE 2: The tasks never block (in particular they never wait for other
   // tasks of the global thread pool), which is what makes it safe to run them
@@ -224,7 +224,7 @@ struct CompressedRelationWriter::PermutationWriter {
   // runs before those members are destroyed.
   ad_utility::TaskQueueOnExecutor largeRelationBlockQueue_{
       CompressedRelationWriter::makeBlockWriteQueue(
-          writer1_->numConcurrentBlocks_)};
+          writer1_->executor_, writer1_->numConcurrentBlocks_)};
 
   size_t numTriplesProcessed_ = 0;
   ad_utility::ProgressBar progressBar_{numTriplesProcessed_,

@@ -4,9 +4,11 @@
 
 #include "IndexTestHelpers.h"
 
+#include <absl/base/no_destructor.h>
 #include <absl/strings/str_cat.h>
 
 #include <array>
+#include <boost/asio/thread_pool.hpp>
 #include <memory>
 #include <utility>
 
@@ -29,6 +31,15 @@
 
 using qlever::TextScoringMetric;
 namespace ad_utility::testing {
+
+// ______________________________________________________________
+ql::any_io_executor singleThreadExecutor() {
+  // Deliberately never destroyed (like the global thread pool, see
+  // `util/GlobalExecutor.h`), such that it outlives the static
+  // `QueryExecutionContext`s of `getQec` that refer to it.
+  static absl::NoDestructor<boost::asio::thread_pool> pool{1};
+  return pool->get_executor();
+}
 
 // ______________________________________________________________
 Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
@@ -92,13 +103,13 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
                              &indexImpl](size_t patternIdx, Id id) {
     const auto& permutation =
         indexImpl.getPermutation(Permutation::Enum::PSO).internalPermutation();
-    auto scanResultHasPattern =
-        permutation.scan(permutation.getScanSpecAndBlocks(
-                             ScanSpecificationAsTripleComponent{
-                                 iriOfHasPattern, id, std::nullopt}
-                                 .toScanSpecification(indexImpl),
-                             locatedTriplesSnapshot),
-                         {}, cancellationDummy, locatedTriplesSnapshot);
+    auto scanResultHasPattern = permutation.scan(
+        permutation.getScanSpecAndBlocks(
+            ScanSpecificationAsTripleComponent{iriOfHasPattern, id,
+                                               std::nullopt}
+                .toScanSpecification(indexImpl),
+            locatedTriplesSnapshot),
+        {}, cancellationDummy, locatedTriplesSnapshot, singleThreadExecutor());
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
@@ -120,7 +131,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
                 locatedTriplesSnapshot),
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
-            cancellationDummy, locatedTriplesSnapshot);
+            cancellationDummy, locatedTriplesSnapshot, singleThreadExecutor());
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
           auto patternIdx = row[2].getInt();
@@ -401,7 +412,7 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
         std::make_unique<QueryExecutionContext>(
             index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
             SortPerformanceEstimator{}, namedCache_.get(),
-            materializedViewsManager_);
+            materializedViewsManager_, singleThreadExecutor());
   };
 
   static ad_utility::HashMap<std::pair<TestIndexConfig, std::string>, Context>

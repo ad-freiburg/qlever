@@ -83,7 +83,8 @@ TEST(Permutation, getDistinctCol0Ids) {
     IdTable result{1, ad_utility::makeUnlimitedAllocator<Id>()};
     for (const IdTable& table :
          pso.getDistinctCol0Ids(fullScan, false, std::move(idFilter),
-                                cancellationHandle, locatedTriplesState)) {
+                                cancellationHandle, locatedTriplesState,
+                                ad_utility::testing::singleThreadExecutor())) {
       result.insertAtEnd(table);
     }
     return result;

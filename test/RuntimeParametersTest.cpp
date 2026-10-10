@@ -68,6 +68,20 @@ TEST(RuntimeParameters, lazyIndexScanNumBlocksInFlightIsStrictlyPositive) {
   EXPECT_EQ(params.lazyIndexScanNumBlocksInFlight_.get(), 1u);
 }
 
+// Test the default of `maximum-threads-per-query` and that the value `0` is
+// rejected (a query has to be able to run at least one task).
+TEST(RuntimeParameters, maximumThreadsPerQueryIsStrictlyPositive) {
+  RuntimeParameters params;
+  EXPECT_EQ(params.maximumThreadsPerQuery_.get(), 6u);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      params.setFromAssignment("maximum-threads-per-query=0"),
+      AllOf(HasSubstr("maximum-threads-per-query"),
+            HasSubstr("strictly positive")),
+      std::runtime_error);
+  EXPECT_NO_THROW(params.setFromAssignment("maximum-threads-per-query=1"));
+  EXPECT_EQ(params.maximumThreadsPerQuery_.get(), 1u);
+}
+
 // Test that `getKeys` and `toMap` (the building blocks of
 // `--set-runtime-parameter help`) are consistent with each other.
 TEST(RuntimeParameters, getKeysAndToMapAreConsistent) {

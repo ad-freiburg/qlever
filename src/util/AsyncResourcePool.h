@@ -222,6 +222,10 @@ class AsyncResourcePool {
     return impl_->executor_;
   }
 
+  // Two pools are equal if they share the same resources (see the NOTE in the
+  // class comment above).
+  bool operator==(const AsyncResourcePool&) const = default;
+
   // Take out a resource, suspending until one is free. The completion signature
   // is `void(boost::system::error_code, Handle)`. On success the `error_code`
   // is falsy and the `Handle` is valid; if the wait was interrupted by

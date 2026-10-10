@@ -82,7 +82,8 @@ TEST(ExecuteUpdate, executeUpdate) {
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
-                                  materializedViewsManager);
+                                  materializedViewsManager,
+                                  ad_utility::testing::singleThreadExecutor());
         expectExecuteUpdateHelper(update, qec, *index);
         index->deltaTriplesManager().modify<void>(
             [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
@@ -104,7 +105,8 @@ TEST(ExecuteUpdate, executeUpdate) {
                                   ad_utility::testing::makeAllocator(
                                       ad_utility::MemorySize::megabytes(100)),
                                   SortPerformanceEstimator{}, &namedResultCache,
-                                  materializedViewsManager);
+                                  materializedViewsManager,
+                                  ad_utility::testing::singleThreadExecutor());
         AD_EXPECT_THROW_WITH_MESSAGE(
             expectExecuteUpdateHelper(update, qec, *index), messageMatcher);
       };

@@ -41,6 +41,7 @@
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/QleverTypes.h"
 #include "util/Allocator.h"
+#include "util/GlobalExecutor.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
 #include "util/TimeTracer.h"
@@ -340,6 +341,9 @@ class Qlever {
   // The cache is threadsafe, so making it `mutable` is reasonably safe.
   mutable QueryResultCache cache_;
   qlever::Allocator<Id> allocator_;
+  // The executor on which the queries and index rebuilds of this instance run
+  // their parallel work, see `executor()`.
+  ql::any_io_executor executor_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   mutable NamedResultCache namedResultCache_;
   ad_utility::Synchronized<std::shared_ptr<IndexAndViews>> indexAndViews_;
@@ -368,13 +372,21 @@ class Qlever {
   // or the `.meta-data.json`, need to exist); the instance must then be
   // populated from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob`
   // before it can answer queries. The memory limit from `config` is enforced
-  // and cache eviction is wired into the allocator.
-  explicit Qlever(const EngineConfig& config, bool skipLoading = false);
+  // and cache eviction is wired into the allocator. The queries and index
+  // rebuilds of this instance run their parallel work on the `executor`.
+  explicit Qlever(const EngineConfig& config, bool skipLoading = false,
+                  ql::any_io_executor executor = ad_utility::globalExecutor());
 
   // Same as above, but with a caller-provided allocator (e.g. a
   // platform-injected memory pool). The allocator is used as-is; the memory
   // limit from `config` is *not* applied on top of it.
-  Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator);
+  Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator,
+         ql::any_io_executor executor = ad_utility::globalExecutor());
+
+  // The executor on which the queries and index rebuilds of this instance run
+  // their parallel work (unless a different one is passed to
+  // `createQueryExecutionContext`).
+  const ql::any_io_executor& executor() const { return executor_; }
 
   // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
   // is also used to represent SPARQL update operations (see
@@ -644,9 +656,11 @@ class Qlever {
 
   // Create a Query Execution Context needed for execution of single SPARQL
   // query. Use an explicitly snapshotted `IndexAndViews` to make sure we have a
-  // consistent state.
+  // consistent state. The `executor` is the one on which the query runs its
+  // parallel work (see `QueryExecutionContext::executor`).
   std::shared_ptr<QueryExecutionContext> createQueryExecutionContext(
       std::shared_ptr<IndexAndViews> indexAndViews,
+      ql::any_io_executor executor,
       std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false,
       QueryExecutionContext::DisableCaching disableCaching =

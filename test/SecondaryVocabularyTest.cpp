@@ -794,7 +794,8 @@ struct ContextWithSecondaryVocab {
                  ad_utility::MemorySize::megabytes(100)),
              SortPerformanceEstimator{},
              &namedResultCache_,
-             materializedViews_} {}
+             materializedViews_,
+             ad_utility::testing::singleThreadExecutor()} {}
 
   // Delete the files of the index again. NOTE: The `Index` is still alive at
   // this point (the `QueryExecutionContext` also holds a reference to it), but

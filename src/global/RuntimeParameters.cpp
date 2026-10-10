@@ -28,6 +28,7 @@ RuntimeParameters::RuntimeParameters() {
   add(cacheMaxSize_);
   add(cacheMaxSizeSingleEntry_);
   add(lazyIndexScanNumBlocksInFlight_);
+  add(maximumThreadsPerQuery_);
   add(rebuildIndexScanNumBlocksInFlight_);
   add(rebuildPermutationWriterNumThreads_);
   add(rebuildMaxConcurrentPermutationPairs_);
@@ -96,6 +97,7 @@ RuntimeParameters::RuntimeParameters() {
   defaultQueryTimeout_.setParameterConstraint(mustBeStrictlyPositive);
   lazyIndexScanNumBlocksInFlight_.setParameterConstraint(
       mustBeStrictlyPositive);
+  maximumThreadsPerQuery_.setParameterConstraint(mustBeStrictlyPositive);
 }
 
 // _____________________________________________________________________________
