@@ -1473,6 +1473,12 @@ void QueryPlanner::applyFiltersIfPossible(
           // not generate a regular `FILTER` for it.
           continue;
         }
+        // Apply a non-deterministic filter (e.g. `RAND() < 0.5`) only at the
+        // end of the group graph pattern, so that it's evaluated per result
+        // row.
+        if (!filterAndSubst.filter_.expression_.isDeterministic()) {
+          continue;
+        }
       }
       // Apply the filter to `plan` only if all its variables are always
       // defined there, not just present (see
