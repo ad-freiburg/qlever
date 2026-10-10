@@ -44,7 +44,8 @@ class ExportQueryExecutionTrees {
   static constexpr std::array supportedMediaTypesForAskQueries{
       qleverJson, sparqlJson, sparqlXml};
   static constexpr std::array supportedMediaTypesForSelectQueries{
-      octetStream, csv, tsv, sparqlXml, sparqlJson, qleverJson};
+      octetStream,       csv, tsv, sparqlXml, sparqlJson, qleverJson,
+      binaryQleverExport};
   // The media types the result-serialization templates may be instantiated
   // with.
   static constexpr std::array staticallySupportedMediaTypes{

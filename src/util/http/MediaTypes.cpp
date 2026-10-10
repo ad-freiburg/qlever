@@ -6,6 +6,8 @@
 
 #include "util/http/MediaTypes.h"
 
+#include <absl/strings/str_cat.h>
+
 #include "util/Algorithm.h"
 #include "util/StringUtils.h"
 #include "util/antlr/ANTLRErrorHandling.h"
@@ -47,7 +49,10 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
     add(ntriples, "application", "n-triples", {".nt"});
     add(nquads, "application", "n-quads", {".nq"});
     add(octetStream, "application", "octet-stream", {});
-    add(binaryQleverExport, "application", "qlever-export+octet-stream", {});
+    add(binaryQleverExport, "application",
+        absl::StrCat("qlever-export-v", binaryQleverExportVersion,
+                     "+octet-stream"),
+        {});
     return t;
   }();
   return types;

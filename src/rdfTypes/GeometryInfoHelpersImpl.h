@@ -246,7 +246,7 @@ constexpr std::string_view addSfPrefix() {
   return constexprStrCat<SF_PREFIX, suffix>();
 }
 
-namespace detail::geoStrings {
+namespace geoStrings {
 constexpr inline std::string_view point = "Point";
 constexpr inline std::string_view linestring = "LineString";
 constexpr inline std::string_view polygon = "Polygon";
@@ -254,9 +254,9 @@ constexpr inline std::string_view multipoint = "MultiPoint";
 constexpr inline std::string_view multiLineString = "MultiLineString";
 constexpr inline std::string_view multiPolygon = "MultiPolygon";
 constexpr inline std::string_view geometryCollection = "GeometryCollection";
-}  // namespace detail::geoStrings
+}  // namespace geoStrings
 inline constexpr auto SF_WKT_TYPE_IRI = []() {
-  using namespace detail::geoStrings;
+  using namespace geoStrings;
   return std::array<std::optional<std::string_view>, 8>{
       std::nullopt,  // Invalid geometry
       addSfPrefix<point>(),

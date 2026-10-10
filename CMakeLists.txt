@@ -1006,6 +1006,9 @@ endif()
 add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
 qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
 
+add_executable(BinaryExportPerfMain src/libqlever/BinaryExportPerfMain.cpp)
+qlever_target_link_libraries(BinaryExportPerfMain sparqlParser engine qlever_util index qlever absl::strings)
+
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
 

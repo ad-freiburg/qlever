@@ -10,6 +10,7 @@
 #include <absl/strings/str_join.h>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/BinaryExport.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Sort.h"
@@ -200,6 +201,16 @@ Result Service::computeResultImpl(bool requestLaziness) {
               << ", target: " << serviceUrl.target() << ")" << std::endl
               << serviceQuery << std::endl;
 
+  // If enabled, prefer QLever's binary format (which only other QLever
+  // instances that support the same version of the format understand, see
+  // `ad_utility::binaryQleverExportVersion`) over JSON.
+  const std::string accept =
+      getRuntimeParameter<&RuntimeParameters::binaryServiceEnabled_>()
+          ? absl::StrCat(
+                ad_utility::toString(ad_utility::MediaType::binaryQleverExport),
+                ",application/sparql-results+json;q=0.9")
+          : "application/sparql-results+json";
+
   // Send the query to the remote endpoint. Redirects are handled automatically
   // by the HTTP client up to the limit specified by the runtime parameter
   // `service-max-redirects`.
@@ -207,8 +218,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
       getRuntimeParameter<&RuntimeParameters::serviceMaxRedirects_>();
   HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
-      serviceQuery, "application/sparql-query",
-      "application/sparql-results+json", maxRedirects);
+      serviceQuery, "application/sparql-query", accept, maxRedirects);
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
@@ -221,8 +231,16 @@ Result Service::computeResultImpl(bool requestLaziness) {
         static_cast<int>(response.status_), ", ",
         toStd(boost::beast::http::obsolete_reason(response.status_))));
   }
-  if (!ql::starts_with(ad_utility::utf8ToLower(response.contentType_),
-                       "application/sparql-results+json")) {
+
+  if (ad_utility::toMediaType(response.contentType_) ==
+      ad_utility::MediaType::binaryQleverExport) {
+    AD_LOG_INFO << "The result of the SERVICE is transferred in QLever's "
+                   "binary format"
+                << std::endl;
+    return computeBinaryResult(requestLaziness, std::move(response));
+  }
+  auto contentType = ad_utility::utf8ToLower(response.contentType_);
+  if (!ql::starts_with(contentType, "application/sparql-results+json")) {
     throwErrorWithContext(absl::StrCat(
         "QLever requires the endpoint of a SERVICE to send the result as "
         "'application/sparql-results+json' but the endpoint sent '",
@@ -251,6 +269,17 @@ Result Service::computeResultImpl(bool requestLaziness) {
                       resultSortedOn()};
 }
 
+// _____________________________________________________________________________
+Result Service::computeBinaryResult(bool requestLaziness,
+                                    HttpOrHttpsResponse response) {
+  return qlever::binary_export::importBinaryHttpResponse(
+      requestLaziness, std::move(response), *getExecutionContext(),
+      ad_utility::transform(parsedServiceClause_.visibleVariables_,
+                            &Variable::name),
+      resultSortedOn());
+}
+
+// _____________________________________________________________________________
 template <size_t I>
 void Service::writeJsonResult(const std::vector<std::string>& vars,
                               const nlohmann::json& partJson,
