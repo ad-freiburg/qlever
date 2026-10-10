@@ -128,10 +128,10 @@ GeoVocabulary<V>::WordWriter::WordWriter(
 
 using namespace ad_utility::memory_literals;
 
-// The number of words (and their total size) after which a batch of words is
-// handed to the thread pool, see `flushBatch`. A batch holds copies of its
-// words, and so does an output block of the merge that feeds this writer, so
-// the limits are those of such a block.
+// A batch of words is handed to the thread pool (see `flushBatch`) as soon as
+// it has this many words or this many bytes. A batch holds copies of its
+// words, so the limits bound its memory, while a batch stays large enough to
+// make the cost of a task on the pool negligible.
 static constexpr size_t GEO_WRITER_BATCH_NUM_WORDS = 10'000;
 static constexpr size_t GEO_WRITER_BATCH_NUM_BYTES = (10_MB).getBytes();
 
