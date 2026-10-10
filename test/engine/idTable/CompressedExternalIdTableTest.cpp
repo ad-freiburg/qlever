@@ -442,13 +442,12 @@ TEST(CompressedExternalIdTable, pushBlockProducesCorrectSortedOutput) {
   EXPECT_THAT(result, ElementsAreArray(expected));
 }
 
-// _____________________________________________________________________________
-// The input phase of a `CompressedExternalIdTableBase` only ever allocates two
-// block buffers: the one that the `push` calls fill, and the one that the
-// background thread transforms and writes. Each buffer that the background
-// thread is done with becomes the next block that `push` fills, see
-// `writeCurrentBlockAndRecycleBuffer`. Test this by recording the buffer of
-// each block that reaches the block transformation.
+// Test that the input phase of a `CompressedExternalIdTableBase` only ever
+// allocates two block buffers: the one that the `push` calls fill, and the one
+// that the background thread transforms and writes. Each buffer that the
+// background thread is done with becomes the next block that `push` fills, see
+// `writeCurrentBlockAndRecycleBuffer`. The test records the buffer of each
+// block that reaches the block transformation.
 TEST(CompressedExternalIdTable, blockBuffersAreRecycled) {
   std::string filename = gtestCurrentTestName();
   auto alloc = ad_utility::testing::makeAllocator();
@@ -464,6 +463,8 @@ TEST(CompressedExternalIdTable, blockBuffersAreRecycled) {
       buffers_->push_back(block.getColumn(0).data());
     }
   };
+
+  // Push 20 blocks of exactly one block size each.
   constexpr size_t blockSize = 1000;
   constexpr size_t numBlocks = 20;
   {
@@ -484,8 +485,10 @@ TEST(CompressedExternalIdTable, blockBuffersAreRecycled) {
       blockers.emplace_back(blockSize);
     }
   }
+
   // The destructor has waited for the last block, so all of them have been
-  // recorded.
+  // recorded, and from the third block on each block reuses the buffer of the
+  // block before its predecessor.
   ASSERT_EQ(buffers->size(), numBlocks);
   for (size_t i = 2; i < numBlocks; ++i) {
     EXPECT_EQ(buffers->at(i), buffers->at(i - 2)) << i;

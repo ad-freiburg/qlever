@@ -621,10 +621,13 @@ CPP_class_template(size_t NumStaticCols,
   // destructor additionally waits for the task explicitly, see there.
   boost::asio::thread_pool blockWritePool_{1};
 
+  // The future of the block task that is currently in flight on the
+  // `blockWritePool_`, see `transformAndWriteBlock`.
+  //
   // NOTE: The background task hands the block that it is done with back via
   // this future (empty, but with its memory still allocated), so that the next
   // block can reuse that memory instead of allocating (and faulting in) a
-  // buffer of its own, see `transformAndWriteBlock`.
+  // buffer of its own.
   std::future<IdTableStatic<NumStaticCols>> compressAndWriteFuture_;
 
   // If the `compressAndWriteFuture_` is currently active, wait for its
@@ -662,14 +665,17 @@ CPP_class_template(size_t NumStaticCols,
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
  public:
-  // The destructor must wait for any pending async task before members are
-  // destroyed. Without this, `blockTransformation_` (declared after
-  // `compressAndWriteFuture_`) is destroyed first, and the still-running
-  // async thread accesses freed memory via `this->blockTransformation_`.
-  // An exception of the task is ignored (and only logged) here, because a
-  // throwing destructor would terminate the program. Such an exception can
-  // only reach the destructor if the task was never waited for, e.g. when the
-  // table is destroyed during the stack unwinding of another error.
+  // Wait for a pending background task before any member is destroyed.
+  //
+  // NOTE 1: Without this, `blockTransformation_` (declared after
+  // `compressAndWriteFuture_`) is destroyed first, and the still-running task
+  // accesses freed memory via `this->blockTransformation_`.
+  //
+  // NOTE 2: An exception of the task is ignored (and only logged) here,
+  // because a throwing destructor would terminate the program. Such an
+  // exception can only reach the destructor if the task was never waited for,
+  // e.g. when the table is destroyed during the stack unwinding of another
+  // error.
   ~CompressedExternalIdTableBase() {
     ad_utility::ignoreExceptionIfThrows([this]() { waitForFuture(); });
   }
@@ -866,8 +872,7 @@ CPP_class_template(size_t NumStaticCols,
           IdTable dynamicBlock = std::move(block).toDynamic();
           this->writer_.writeIdTable(dynamicBlock);
           dynamicBlock.clear();
-          return std::move(dynamicBlock)
-              .template toStatic<static_cast<int>(NumStaticCols)>();
+          return std::move(dynamicBlock).template toStatic<NumStaticCols>();
         })));
     return recycledBlock;
   }
