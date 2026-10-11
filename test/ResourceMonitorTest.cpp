@@ -46,13 +46,27 @@ using ::testing::Gt;
 using ::testing::Optional;
 }  // namespace
 
-// Skip tests of what `ResourceMonitor::start` writes on platforms where it is a
-// no-op (all except Linux and macOS, e.g. Emscripten).
+// `ResourceMonitor::start` only works on Linux and macOS. On all other platforms
+// (e.g. Emscripten) it is a no-op, so we test that instead of what it writes.
 #if defined(__APPLE__) || defined(__linux__)
 #define QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP static_assert(true)
 #else
 #define QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP \
   GTEST_SKIP() << "`ResourceMonitor::start` is a no-op on this platform"
+
+// _____________________________________________________________________________
+TEST(ResourceMonitor, StartIsANoOpOnUnsupportedPlatforms) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  {
+    ResourceMonitor monitor;
+    EXPECT_NO_THROW(monitor.start(path, ResourceMonitor::Mode::Truncate,
+                                  std::chrono::milliseconds{5}));
+  }
+  EXPECT_FALSE(fs::exists(path));
+  EXPECT_THAT(logStream.str(),
+              ::testing::HasSubstr("not supported on this platform"));
+}
 #endif
 
 // _____________________________________________________________________________
@@ -428,22 +442,6 @@ TEST(ResourceMonitor, UnwritablePathDisablesMonitoring) {
                                 std::chrono::seconds{1}));
   EXPECT_FALSE(fs::exists(unwritable));
 }
-
-#if !defined(__APPLE__) && !defined(__linux__)
-// _____________________________________________________________________________
-TEST(ResourceMonitor, StartIsANoOpOnUnsupportedPlatforms) {
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();
-  {
-    ResourceMonitor monitor;
-    EXPECT_NO_THROW(monitor.start(path, ResourceMonitor::Mode::Truncate,
-                                  std::chrono::milliseconds{5}));
-  }
-  EXPECT_FALSE(fs::exists(path));
-  EXPECT_THAT(logStream.str(),
-              ::testing::HasSubstr("not supported on this platform"));
-}
-#endif
 
 // _____________________________________________________________________________
 TEST(ResourceMonitor, TruncateModeWritesHeader) {

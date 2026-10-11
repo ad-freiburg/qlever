@@ -166,21 +166,10 @@ endfunction()
 # The directory with the test data that is checked in (currently only an index
 # in the previous index format, see `data/oldIndexFormat/README.md`). Tests must
 # only read from this directory; anything they write belongs into their working
-# directory.
+# directory. Emscripten tests cannot access the host filesystem, so tests that
+# read from it have to embed it into their binary (see `index/CMakeLists.txt`).
 set(QLEVER_TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data")
 add_compile_definitions(QLEVER_TEST_DATA_DIR="${QLEVER_TEST_DATA_DIR}")
-
-# Emscripten tests cannot access the host filesystem. Tests that read from
-# `QLEVER_TEST_DATA_DIR` have to call this to embed it into their binary.
-function(embedTestDataForEmscripten basename)
-    if (EMSCRIPTEN)
-        if (SINGLE_TEST_BINARY)
-            set(basename QLeverAllUnitTestsMain)
-        endif ()
-        target_link_options(${basename} PRIVATE
-                "--embed-file=${QLEVER_TEST_DATA_DIR}@${QLEVER_TEST_DATA_DIR}")
-    endif ()
-endfunction()
 
 add_subdirectory(engine)
 add_subdirectory(parser)

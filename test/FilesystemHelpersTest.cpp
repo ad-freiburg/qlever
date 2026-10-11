@@ -172,8 +172,8 @@ TEST(IsSubdirectoryOf, differentPaths) {
   EXPECT_FALSE(isSubdirectoryOf("/some/path/other/../../malicious-path/",
                                 "/some/path/"));
 
-  // This only works if the test is not run inside `/` (which is the working
-  // directory under Emscripten).
+  // This only works if the test is not run inside `/`, so we switch to a
+  // temporary directory.
   TempDir tmpDir;
   auto originalCwd = fs::current_path();
   fs::current_path(tmpDir.path());

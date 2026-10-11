@@ -8,7 +8,16 @@ addLinkAndDiscoverTestNoLibs(EncodedIriPatternTest vocabulary)
 addLinkAndDiscoverTestNoLibs(NibbleEncodingTest vocabulary)
 addLinkAndDiscoverTest(GraphNameManagerTest index)
 addLinkAndDiscoverTest(IndexFormatConverterTest index engine)
-embedTestDataForEmscripten(IndexFormatConverterTest)
+# Emscripten tests cannot access the host filesystem, so embed the test data.
+if (EMSCRIPTEN)
+    if (SINGLE_TEST_BINARY)
+        set(target QLeverAllUnitTestsMain)
+    else ()
+        set(target IndexFormatConverterTest)
+    endif ()
+    target_link_options(${target} PRIVATE
+            "--embed-file=${QLEVER_TEST_DATA_DIR}@${QLEVER_TEST_DATA_DIR}")
+endif ()
 # When the `server` library is not built (Emscripten, see
 # `src/engine/CMakeLists.txt`), the server-integration test is compiled out
 # via `#ifndef __EMSCRIPTEN__` in the test file and all other tests still run.
