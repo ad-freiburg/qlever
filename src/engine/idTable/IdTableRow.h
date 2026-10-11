@@ -247,7 +247,7 @@ class RowReferenceImpl {
     CPP_template(typename AType, typename BType)(
         requires(!isConst)) static void swapImpl(AType&& a, BType&& b) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
-        std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
+        ql::ranges::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
       }
     }
 
