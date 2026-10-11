@@ -1022,11 +1022,13 @@ inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
 
-// Type aliases for the columns of an `IdTable`. Currently just aliases for
-// `ql::span<Id>`/`ql::span<const Id>`; a later commit switches them to a
-// storage-efficient split-column view, once `IdTable` stores the payload and
+// Type aliases for the columns of an `IdTable`: a mutable view, a read-only
+// view, and an owning column. Currently just aliases for `ql::span<Id>`,
+// `ql::span<const Id>` and `std::vector<Id>`; a later commit switches them to
+// storage-efficient split-column types, once `IdTable` stores the payload and
 // datatype of each `Id` in separate arrays.
 using IdColumnRef = ql::span<Id>;
 using ConstIdColumnRef = ql::span<const Id>;
+using IdColumn = std::vector<Id>;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H
