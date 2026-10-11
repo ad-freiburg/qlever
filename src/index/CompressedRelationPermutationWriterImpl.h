@@ -11,7 +11,6 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATIONPERMUTATIONWRITERIMPL_H_
 
-#include <array>
 #include <boost/asio/strand.hpp>
 #include <boost/asio/use_future.hpp>
 #include <deque>

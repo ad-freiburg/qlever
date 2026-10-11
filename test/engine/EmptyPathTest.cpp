@@ -10,8 +10,6 @@
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
-#include <array>
-
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -139,8 +137,7 @@ TEST(EmptyPath, allEntitiesWithTheirGraphs) {
   // The result is sorted by the entity and then by the graph.
   EXPECT_TRUE(
       ql::ranges::is_sorted(result, [](const auto& row1, const auto& row2) {
-        return std::array<Id, 2>{row1[0], row1[1]} <
-               std::array<Id, 2>{row2[0], row2[1]};
+        return std::tuple(row1[0], row1[1]) < std::tuple(row2[0], row2[1]);
       }));
 }
 

@@ -10,8 +10,6 @@
 
 #include "index/LocatedTriples.h"
 
-#include <array>
-
 #include "backports/algorithm.h"
 #include "global/RuntimeParameters.h"
 #include "index/CompressedRelationMetadata.h"
@@ -111,34 +109,40 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 
 namespace {
 
+// lvalues stay references, a proxy that is returned by value is stored by value
+template <typename T>
+using TieElement =
+    std::conditional_t<std::is_lvalue_reference_v<T>, T, std::decay_t<T>>;
+
 // This code works for `std::integer_sequence` as well as
 // `ad_utility::ValueSequence`.
+// TODO<pas-kes>: Test/benchmark this with proxies of the split layout in future
 template <typename Row, template <typename T, T...> typename Tp, size_t... I>
-auto idsAsArrayHelper(Row& row, Tp<size_t, I...>) {
-  return std::array<Id, sizeof...(I)>{row[I]...};
+auto tieHelper(Row& row, Tp<size_t, I...>) {
+  return std::tuple<TieElement<decltype(row[I])>...>(row[I]...);
 }
 }  // namespace
 
-// Return an array of the relevant entries of a row, according to
+// Return a `std::tie` of the relevant entries of a row, according to
 // `numIndexColumns` and `includeGraphColumn`. For example, if `numIndexColumns`
 // is `2` and `includeGraphColumn` is `true`, the function returns
-// `{row[0], row[1], row[2]}`.
+// `std::tie(row[0], row[1], row[2])`.
 CPP_template(size_t numIndexColumns, bool includeGraphColumn,
              typename T)(requires(numIndexColumns >= 1 &&
                                   numIndexColumns <=
-                                      3)) auto idTableRowAsArray(T& row) {
-  return idsAsArrayHelper(
+                                      3)) auto tieIdTableRow(T& row) {
+  return tieHelper(
       row, std::make_index_sequence<numIndexColumns +
                                     static_cast<size_t>(includeGraphColumn)>{});
 }
 
-// Return an array of the relevant entries of a located triple, according to
-// `numIndexColumns` and `includeGraphColumn`. For example, if
+// Return a `std::tie` of the relevant entries of a located triple,
+// according to `numIndexColumns` and `includeGraphColumn`. For example, if
 // `numIndexColumns` is `2` and `includeGraphColumn` is `true`, the function
-// returns `{ids_[1], ids_[2], ids_[3]}`, where `ids_` is from
+// returns `std::tie(ids_[1], ids_[2], ids_[3])`, where `ids_` is from
 // `lt->triple_`.
 template <size_t numIndexColumns, bool includeGraphColumn>
-static constexpr auto locatedTriplesIndicesInArray = []() {
+static constexpr auto tieLocatedTriplesIndices = []() {
   std::array<size_t, numIndexColumns + static_cast<size_t>(includeGraphColumn)>
       a{};
   for (size_t i = 0; i < a.size(); ++i) {
@@ -147,23 +151,23 @@ static constexpr auto locatedTriplesIndicesInArray = []() {
   return a;
 }();
 
-// Like `locatedTripleAsArray`, but takes a `const LocatedTriple&` value instead
-// of an iterator. Needed for algorithms like `set_intersection` that pass
-// values.
-CPP_template(size_t numIndexColumns, bool includeGraphColumn, typename T)(
-    requires(numIndexColumns >= 1 &&
-             numIndexColumns <= 3)) auto locatedTripleValueAsArray(T& lt) {
+// Like `tieLocatedTriple`, but takes a `const LocatedTriple&` value instead of
+// an iterator. Needed for algorithms like `set_intersection` that pass values.
+CPP_template(size_t numIndexColumns, bool includeGraphColumn,
+             typename T)(requires(numIndexColumns >= 1 &&
+                                  numIndexColumns <=
+                                      3)) auto tieLocatedTripleValue(T& lt) {
   const auto& ids = lt.triple_.ids();
-  return idsAsArrayHelper(
+  return tieHelper(
       ids,
       ad_utility::toIntegerSequenceRef<
-          locatedTriplesIndicesInArray<numIndexColumns, includeGraphColumn>>());
+          tieLocatedTriplesIndices<numIndexColumns, includeGraphColumn>>());
 }
 CPP_template(size_t numIndexColumns, bool includeGraphColumn,
              typename T)(requires(numIndexColumns >= 1 &&
                                   numIndexColumns <=
-                                      3)) auto locatedTripleAsArray(T& lt) {
-  return locatedTripleValueAsArray<numIndexColumns, includeGraphColumn>(*lt);
+                                      3)) auto tieLocatedTriple(T& lt) {
+  return tieLocatedTripleValue<numIndexColumns, includeGraphColumn>(*lt);
 }
 
 // ____________________________________________________________________________
@@ -184,12 +188,12 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   const auto& locatedTriples = *map_.at(blockIndex);
 
   auto lessThan = [](const auto& lt, const auto& row) {
-    return locatedTripleAsArray<numIndexColumns, includeGraphColumn>(lt) <
-           idTableRowAsArray<numIndexColumns, includeGraphColumn>(row);
+    return tieLocatedTriple<numIndexColumns, includeGraphColumn>(lt) <
+           tieIdTableRow<numIndexColumns, includeGraphColumn>(row);
   };
   auto equal = [](const auto& lt, const auto& row) {
-    return locatedTripleAsArray<numIndexColumns, includeGraphColumn>(lt) ==
-           idTableRowAsArray<numIndexColumns, includeGraphColumn>(row);
+    return tieLocatedTriple<numIndexColumns, includeGraphColumn>(lt) ==
+           tieIdTableRow<numIndexColumns, includeGraphColumn>(row);
   };
 
   auto rowIt = block.begin();
@@ -298,12 +302,11 @@ VacuumStatistics processBlockForVacuum(
     }(std::make_index_sequence<4>{})};
   };
 
-  auto ltProj = [](const LocatedTriple& lt) -> std::array<Id, 4> {
-    return locatedTripleValueAsArray<3, true>(lt);
+  auto ltProj = [](const LocatedTriple& lt)
+      -> std::tuple<const Id&, const Id&, const Id&, const Id&> {
+    return tieLocatedTripleValue<3, true>(lt);
   };
-  auto rowProj = [](const auto& row) -> std::array<Id, 4> {
-    return idTableRowAsArray<3, true>(row);
-  };
+  auto rowProj = [](const auto& row) { return tieIdTableRow<3, true>(row); };
 
   auto rowsAsTuple = idTable | ql::views::transform(rowProj);
   auto filteredTriples = [&](bool isInsertion) {

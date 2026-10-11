@@ -11,8 +11,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <array>
-
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/Sort.h"
@@ -321,8 +319,8 @@ TEST(Sort, externalSortLazyInput) {
   EXPECT_EQ(8000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
-        std::array<Id, 3>{table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)} <=
-        std::array<Id, 3>{table(i, 0), table(i, 1), table(i, 2)};
+        std::tuple(table(i - 1, 0), ki(i - 1, 1), table(i - 1, 2)) <=
+        std::tuple(table(i, 0), table(i, 1), table(i, 2));
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }
@@ -369,8 +367,8 @@ TEST(Sort, externalSortMaterializedInput) {
   EXPECT_EQ(5000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
-        std::array<Id, 3>{table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)} <=
-        std::array<Id, 3>{table(i, 0), table(i, 1), table(i, 2)};
+        std::tuple(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        std::tuple(table(i, 0), table(i, 1), table(i, 2));
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }
@@ -465,8 +463,8 @@ TEST(Sort, inMemorySortMaterializedInput) {
   EXPECT_EQ(100u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
-        std::array<Id, 3>{table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)} <=
-        std::array<Id, 3>{table(i, 0), table(i, 1), table(i, 2)};
+        std::tuple(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        std::tuple(table(i, 0), table(i, 1), table(i, 2));
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }
