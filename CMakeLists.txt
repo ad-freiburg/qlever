@@ -1003,8 +1003,12 @@ if (NOT EMSCRIPTEN)
     qlever_enable_lto(qlever-upgrade-index)
 endif()
 
-add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
+# The example reads its input from and writes its index to the host file system,
+# which a WebAssembly build cannot access.
+if (NOT EMSCRIPTEN)
+    add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
+    qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
+endif()
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
