@@ -57,8 +57,9 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(ConstIdColumnRef column) {
+  static_assert(sizeof(column[0]) == BYTES_PER_ID_COLUMN_ENTRY);
   std::vector<char> compressedBlock = ZstdWrapper::compress(
-      (void*)(column.data()), column.size() * BYTES_PER_ID_COLUMN_ENTRY);
+      (void*)(column.data()), column.size() * sizeof(column[0]));
   auto compressedSize = compressedBlock.size();
   // Reserve a range of the file and write to it with the positioned
   // `File::write`, which needs a shared lock only. The compression above and

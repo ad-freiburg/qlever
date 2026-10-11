@@ -71,6 +71,8 @@ class TextBlockMetaData {
   ContextListMetaData _entityCl;
 
   static constexpr size_t sizeOnDisk() {
+    static_assert(sizeof(_firstWordId) + sizeof(_lastWordId) ==
+                  2 * sizeof(uint64_t));
     return sizeof(_firstWordId) + sizeof(_lastWordId) +
            2 * ContextListMetaData::sizeOnDisk();
   }
@@ -86,7 +88,7 @@ class TextMetaData {
   // Get the corresponding block meta data for some word or entity Id range.
   // Can be multiple blocks. Note: the range is [lower, upper], NOT [lower,
   // upper)
-  std::vector<std::reference_wrapper<const TextBlockMetaData>>
+  std::vector<std::reference_wrapper<const TextBlockMetaData> >
   getBlockInfoByWordRange(const uint64_t lower, const uint64_t upper) const;
 
   size_t getBlockCount() const;
