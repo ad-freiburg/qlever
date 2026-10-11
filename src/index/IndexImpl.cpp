@@ -163,7 +163,7 @@ template <typename T1, typename T2, typename F>
 static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
                                           F resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto projectionForComparator = [](const auto& rowOrId) -> Id {
+  auto projectionForComparator = [](const auto& rowOrId) -> decltype(auto) {
     using T = std::decay_t<decltype(rowOrId)>;
     if constexpr (ad_utility::SimilarTo<T, Id>) {
       return rowOrId;
