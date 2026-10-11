@@ -22,7 +22,6 @@
 
 using namespace ad_utility::testing;
 using ad_utility::use_type_identity::ti;
-
 namespace {
 auto V = ad_utility::testing::VocabId;
 
@@ -34,7 +33,6 @@ auto V = ad_utility::testing::VocabId;
 template <typename T>
 struct VectorWithExtraConstructor : public std::vector<T> {
   using std::vector<T>::vector;
-
   VectorWithExtraConstructor(size_t, std::string) {}
 };
 }  // namespace
@@ -118,7 +116,7 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
     // The technical reason is that the `operator[]` returns a `const Id&` even
     // though the `rowProxy` object is not const:
 #if false
-    //#ifdef __GLIBCXX__
+//#ifdef __GLIBCXX__
     static_assert(std::is_same_v<const Id&, decltype(rowProxy[0])>);
 #endif
   }
@@ -137,7 +135,7 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
     // The technical reason is that the `operator[]` returns a `const Id&` even
     // though the `rowProxy` object is not const:
 #if false
-    //#ifdef __GLIBCXX__
+//#ifdef __GLIBCXX__
     static_assert(std::is_same_v<const Id&, decltype(rowProxy[0])>);
 #endif
   }
@@ -1088,7 +1086,6 @@ TEST(IdTableStatic, setColumnSubset) {
   // For static tables, we need a permutation, a real subset is not allowed.
   ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2}));
 }
-
 TEST(IdTable, deleteColumn) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   IntTable t{3};  // three columns.
@@ -1318,7 +1315,6 @@ TEST(IdTable, fromColumns) {
 // `IdTableView<0>`.
 template <typename T>
 class IdTableSubViewTest : public testing::Test {};
-
 using SubViewTestTypes = testing::Types<IdTable, IdTableView<0>>;
 TYPED_TEST_SUITE(IdTableSubViewTest, SubViewTestTypes);
 

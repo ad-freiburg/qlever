@@ -217,7 +217,6 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
               getMaxValue<decltype(newOverlapMatches)>() - numOccurrences) {
             return;
           }
-          // Forward so that this also works for proxy references.
           std::forward<decltype(id)>(id) = newValue;
           newOverlapMatches += numOccurrences;
         } else if (randomDouble() <= probabilityToCreateOverlap) {
@@ -335,7 +334,6 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
       smallerTableJoinColumnRef, [&smallerTableElementToNewElement](auto&& id) {
         if (auto newValueIterator = smallerTableElementToNewElement.find(id);
             newValueIterator != smallerTableElementToNewElement.end()) {
-          // Forward so that this also works for proxy references.
           std::forward<decltype(id)>(id) = newValueIterator->second;
         }
       });
