@@ -46,8 +46,8 @@ using ::testing::Gt;
 using ::testing::Optional;
 }  // namespace
 
-// `ResourceMonitor::start` only works on Linux and macOS. On all other platforms
-// (e.g. Emscripten) it is a no-op, so we test that instead of what it writes.
+// `ResourceMonitor::start` only works on Linux and macOS. Elsewhere (e.g.
+// Emscripten) it is a no-op, so we test that instead of what it writes.
 #if defined(__APPLE__) || defined(__linux__)
 #define QLEVER_SKIP_TEST_IF_RESOURCE_MONITOR_IS_A_NO_OP static_assert(true)
 #else
