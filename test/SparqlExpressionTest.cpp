@@ -513,6 +513,30 @@ TEST(SparqlExpression, multiplyExpressionWithVariable) {
 }
 
 // _____________________________________________________________________________
+TEST(SparqlExpression, canUseNumericFastPath) {
+  // Coverage tools don't track compile-time uses of these helpers, so also
+  // test them outside a constant-expression context.
+  using sparqlExpression::detail::canUseNumericFastPath;
+  using sparqlExpression::detail::NumericOrDateValueGetter;
+  using sparqlExpression::detail::NumericValueGetter;
+  using sparqlExpression::detail::StringValueGetter;
+
+  EXPECT_TRUE((canUseNumericFastPath<std::tuple<NumericValueGetter>,
+                                     std::tuple<ValueId>>()));
+  EXPECT_TRUE((canUseNumericFastPath<
+               std::tuple<NumericValueGetter, NumericOrDateValueGetter>,
+               std::tuple<V<ValueId>, ValueId>>()));
+
+  EXPECT_FALSE((canUseNumericFastPath<std::tuple<StringValueGetter>,
+                                      std::tuple<ValueId>>()));
+  EXPECT_FALSE((canUseNumericFastPath<std::tuple<NumericValueGetter>,
+                                      std::tuple<IdOrLocalVocabEntry>>()));
+  EXPECT_FALSE(
+      (canUseNumericFastPath<std::tuple<NumericValueGetter, NumericValueGetter>,
+                             std::tuple<ValueId, V<IdOrLocalVocabEntry>>>()));
+}
+
+// _____________________________________________________________________________
 TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
   V<Id> ints{{I(1), I(-2), I(3)}, alloc};
   V<Id> doubles{{D(0.5), D(2.0), D(-1.5)}, alloc};
