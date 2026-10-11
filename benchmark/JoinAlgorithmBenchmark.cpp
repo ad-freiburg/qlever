@@ -42,7 +42,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
@@ -113,14 +113,14 @@ struct SetOfIdTableColumnElements {
   However, accessing a hash map entry based on index position takes linear time,
   instead of constant.
   */
-  std::vector<std::reference_wrapper<const ValueId>> uniqueElements_{};
+  std::vector<ValueId> uniqueElements_{};
   ad_utility::HashMap<ValueId, size_t> numOccurrences_{};
 
   /*
   Set the member variables for the given column.
   */
   explicit SetOfIdTableColumnElements(
-      const ql::span<const ValueId>& idTableColumnRef) {
+      const ConstIdColumnRef& idTableColumnRef) {
     ql::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
       if (auto numOccurrencesIterator = numOccurrences_.find(id);
           numOccurrencesIterator != numOccurrences_.end()) {
@@ -299,8 +299,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   randomShuffle(smallerTableJoinColumnSet.uniqueElements_.begin(),
                 smallerTableJoinColumnSet.uniqueElements_.end(), seeds.at(1));
   size_t newOverlapMatches{0};
-  ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
-      smallerTableElementToNewElement{};
+  ad_utility::HashMap<ValueId, ValueId> smallerTableElementToNewElement{};
   ql::ranges::for_each(
       smallerTableJoinColumnSet.uniqueElements_,
       [&randomBiggerTableElement, &wantedNumNewOverlapMatches,

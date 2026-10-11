@@ -18,7 +18,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "gtest/gtest.h"
 
 using namespace sparqlExpression;

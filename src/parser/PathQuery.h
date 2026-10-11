@@ -65,7 +65,7 @@ struct PathQuery : MagicServiceQuery {
    * the Ids of the TripleComponents. The Vocab is only used if the given vector
    * contains IRIs.
    */
-  std::variant<Variable, std::vector<Id>> toSearchSide(
+  std::variant<Variable, IdColumn> toSearchSide(
       std::vector<TripleComponent> side, const IndexImpl& index) const;
 
   /**
