@@ -36,8 +36,12 @@ struct source_location {
   std::uint_least32_t line_;
   const char* function_;
 
-  static source_location currentImpl(const char* file, std::uint_least32_t line,
-                                     const char* function) {
+  // NOTE: This function has to be `constexpr`, else `AD_CURRENT_SOURCE_LOC()`
+  // and with it all the check macros from `util/Exception.h` could not be used
+  // inside `constexpr` functions.
+  static constexpr source_location currentImpl(const char* file,
+                                               std::uint_least32_t line,
+                                               const char* function) {
     return {file, line, function};
   }
 

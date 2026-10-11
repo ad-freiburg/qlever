@@ -36,7 +36,7 @@ class PolymorphicVocabulary;
 // needs a special `getPositionOfWord` for a completely different reason.
 template <typename T>
 CPP_concept HasSpecialGetPositionOfWord =
-    ad_utility::isInstantiation<T, SplitVocabulary> ||
+    isSplitVocabulary<T> ||
     ad_utility::SameAsAny<T, PolymorphicVocabulary, VocabularyInMemoryBinSearch,
                           CompressedVocabulary<VocabularyInMemoryBinSearch>>;
 
@@ -59,8 +59,17 @@ CPP_concept HasDefaultGetPositionOfWord =
 // `isGeoInfoAvailable` to determine for sure.
 template <typename T>
 CPP_concept MaybeProvidesGeometryInfo =
-    std::is_same_v<T, PolymorphicVocabulary> ||
-    ad_utility::isInstantiation<T, SplitVocabulary> ||
+    std::is_same_v<T, PolymorphicVocabulary> || isSplitVocabulary<T> ||
+    ad_utility::isInstantiation<T, GeoVocabulary>;
+
+// This concept states that the given vocabulary implementation `T` might have
+// a geo cell grid (see `GeoVocabulary`), and hence has the member functions
+// `setGeoCellGrid` and `getGeoCellGrid`. As for `MaybeProvidesGeometryInfo`,
+// this is a static property of the type; whether there actually is a grid is
+// only known at runtime.
+template <typename T>
+CPP_concept MaybeProvidesGeoCellGrid =
+    std::is_same_v<T, PolymorphicVocabulary> || isSplitVocabulary<T> ||
     ad_utility::isInstantiation<T, GeoVocabulary>;
 
 // As a safeguard for the future: This concept states that a vocabulary

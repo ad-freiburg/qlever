@@ -96,10 +96,8 @@ class SortedSequence {
 
   // For the range `rangeToSort` contained in `elements` sort it by the
   // projected key and keep the last element for each projected key.
-  CPP_template_2(typename R)(
-      requires ql::ranges::range<
-          R>) static void sortAndRemoveDuplicates(Storage& elements,
-                                                  R&& rangeToSort) {
+  CPP_template_2(typename R)(requires ql::ranges::range<R>)
+  static void sortAndRemoveDuplicates(Storage& elements, R&& rangeToSort) {
     // Stable sort ensures that the operations for each key are not reordered.
     // Older elements are before newer ones.
     ql::ranges::stable_sort(rangeToSort, Compare{}, Projection{});
@@ -182,6 +180,9 @@ class SortedSequence {
       mergeParts();
     }
   }
+
+  // Reserve storage for `n` elements in total (including the current ones).
+  void reserve(size_t n) { elements_.reserve(n); }
 
   // Insert an element. `consolidate` must be called before the next read
   // access.

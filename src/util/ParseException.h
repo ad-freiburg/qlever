@@ -45,6 +45,14 @@ struct ExceptionMetadata {
   std::string_view offendingClause() const;
 };
 
+// Log `errorMsg`. If `metadata` is present, additionally try to log the
+// query with the offending clause highlighted (see
+// `ExceptionMetadata::coloredError()`). Highlighting can fail because of
+// differing Unicode handling between QLever and ANTLR; in that case log the
+// raw query instead and append the failure reason to `errorMsg`.
+void logErrorAndHighlightedMetadata(
+    std::string& errorMsg, const std::optional<ExceptionMetadata>& metadata);
+
 class ParseException : public std::exception {
  public:
   explicit ParseException(

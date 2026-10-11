@@ -287,15 +287,15 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockMetadataRanges};
-  // A value of 0 means "fall back to `lazy-index-scan-num-threads`" (the same
-  // thread count as query scans); a positive value throttles the rebuild's
-  // read/decompress parallelism only, reducing its peak CPU without touching
-  // queries.
-  auto numThreadsOverride = getRuntimeParameterAsOptional<
-      &RuntimeParameters::rebuildIndexScanNumThreads_>();
+  // A value of 0 means "fall back to `lazy-index-scan-num-blocks-in-flight`"
+  // (the same value as for query scans); a positive value throttles the
+  // rebuild's read/decompress parallelism only, reducing its peak CPU without
+  // touching queries.
+  auto numBlocksInFlightOverride = getRuntimeParameterAsOptional<
+      &RuntimeParameters::rebuildIndexScanNumBlocksInFlight_>();
   auto [reader, fullScan] = permutation.lazyScanWithUnlimitedReader(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
-      *locatedTriplesSharedState, numThreadsOverride);
+      *locatedTriplesSharedState, numBlocksInFlightOverride);
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
@@ -427,8 +427,9 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     };
   };
   // Workaround for a GCC 15/16 bug: the hidden object of a by-value
-  // structured binding is not destroyed when the coroutine frame is
-  // destroyed while suspended (gcc.gnu.org bug 124584).
+  // structured binding in a coroutine is not always destroyed at the end
+  // of its scope, for example when it is initialized by a `co_await` or
+  // lives across one (gcc.gnu.org bug 124584).
   auto results = co_await (asCoroutine(makeTaskForPermutation(permutationA)) &&
                            asCoroutine(makeTaskForPermutation(permutationB)));
   auto& [resultA, resultB] = results;

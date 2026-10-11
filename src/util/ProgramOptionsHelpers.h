@@ -12,6 +12,7 @@
 #include "index/TextScoringEnum.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "util/Concepts.h"
+#include "util/EnumWithStringsProgramOptions.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
 namespace ad_utility {

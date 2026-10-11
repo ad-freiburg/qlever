@@ -1,0 +1,13 @@
+addLinkAndDiscoverTestNoLibs(RunsInputPolicyTest)
+
+addLinkAndDiscoverTestNoLibs(InOrderBlockSinkTest)
+
+addLinkAndDiscoverTestNoLibs(BlockStorageTest)
+
+addLinkAndDiscoverTestNoLibs(MergeOptionsTest)
+
+addLinkAndDiscoverTestNoLibs(ParallelBlockMergeTest)
+
+addLinkAndDiscoverTestNoLibs(BlockPrefetcherTest)
+
+addLinkAndDiscoverTestNoLibs(MergeHelpersTest)

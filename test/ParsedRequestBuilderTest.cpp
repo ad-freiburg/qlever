@@ -9,6 +9,7 @@
 #include "engine/ParsedRequestBuilder.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
+#include "util/TripleComponentTestHelpers.h"
 #include "util/TypeIdentity.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
@@ -86,7 +87,7 @@ TEST(ParsedRequestBuilderTest, extractDatasetClause) {
                 testing::VariantWith<T>(
                     AD_FIELD(T, datasetClauses_, testing::Eq(expected))));
   };
-  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto Iri = ad_utility::testing::iri;
   expect(makeGetRequest("/"), ti<Query>, {});
   expect(makeGetRequest("/?default-graph-uri=foo"), ti<Query>,
          {{Iri("<foo>"), false}});
@@ -170,7 +171,7 @@ TEST(ParsedRequestBuilderTest, isGraphStoreOperationDirect) {
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractGraphStoreOperationIndirect) {
-  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto Iri = ad_utility::testing::iri;
   auto expect = [](const auto& request, const GraphOrDefault& graph,
                    const ad_utility::source_location l =
                        AD_CURRENT_SOURCE_LOC()) {
@@ -204,7 +205,7 @@ TEST(ParsedRequestBuilderTest, extractGraphStoreOperationIndirect) {
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractGraphStoreOperationDirect) {
-  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto Iri = ad_utility::testing::iri;
   auto makeGet = [](const std::string_view target = "/",
                     const std::string& host = "example.com") {
     return makeRequest(http::verb::get, target, {{http::field::host, host}});
@@ -293,7 +294,7 @@ TEST(ParsedRequestBuilderTest, parameterIsContainedExactlyOnce) {
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractTargetGraph) {
-  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto Iri = ad_utility::testing::iri;
   const auto extractTargetGraph = ParsedRequestBuilder::extractTargetGraph;
   // Equivalent to `/?default`
   EXPECT_THAT(extractTargetGraph({{"default", {""}}}), DEFAULT{});

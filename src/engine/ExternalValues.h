@@ -32,7 +32,6 @@ class ExternalValues : private Values, virtual public Operation {
  public:
   // Inherit public member functions from `Values` that are not overridden.
   using Values::computeVariableToColumnMap;
-  using Values::getChildren;
   using Values::getCostEstimate;
   using Values::getMultiplicity;
   using Values::getResultWidth;

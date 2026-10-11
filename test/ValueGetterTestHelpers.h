@@ -149,13 +149,9 @@ inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
 };
 
 // The words of the secondary vocabulary of the index of
-// `AllDatatypesTestContext` (see `index/vocabulary/SecondaryVocabulary.h`), in
-// the order in which a `SecondaryVocabulary` stores them. NOTE: That order is
-// the one of `std::string`, whereas the actual implementation will use the
-// collation of the vocabulary of the main index. These words are deliberately
-// chosen such that the two orders agree (verified against the vocabulary of a
-// test index), so that the tests do not encode a wrong assumption about the
-// order.
+// `AllDatatypesTestContext` (see `index/vocabulary/SecondaryVocabulary.h`),
+// sorted (bytewise), as a `SecondaryVocabulary` requires the words of a
+// segment to be (see `SecondaryVocabulary::appendSegment`).
 inline const std::vector<std::string> secondaryVocabWords{
     "\"\"",
     "\"LINESTRING(6 6, 8 8)\""

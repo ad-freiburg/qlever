@@ -82,11 +82,49 @@ auto PolymorphicVocabulary::makeDiskWriterPtr(const std::string& filename) const
 }
 
 // _____________________________________________________________________________
+auto PolymorphicVocabulary::makeParallelWriterPtr(const std::string& filename)
+    const -> std::unique_ptr<ParallelWordWriterBase> {
+  return std::visit(
+      [&filename](auto& vocab) -> std::unique_ptr<ParallelWordWriterBase> {
+        using T = std::decay_t<decltype(vocab)>;
+        if constexpr (isSplitVocabulary<T>) {
+          return vocab.makeParallelWriterPtr(filename);
+        } else {
+          return std::make_unique<SingleVocabularyParallelWriter>(
+              vocab.makeBlockWriterPtr(filename));
+        }
+      },
+      vocab_);
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<WordWriterBase> PolymorphicVocabulary::makeDiskWriterPtr(
     const std::string& filename, VocabularyType type) {
   PolymorphicVocabulary dummyVocab;
   dummyVocab.resetToType(type);
   return dummyVocab.makeDiskWriterPtr(filename);
+}
+
+// _____________________________________________________________________________
+FileSuffixes PolymorphicVocabulary::fileSuffixes(VocabularyType type) {
+  // The names of the enum values are the same as the type aliases for the
+  // implementations, so we can shorten the following code using a macro.
+#undef AD_CASE
+#define AD_CASE(vocabType)              \
+  case VocabularyType::Enum::vocabType: \
+    return vocabType::fileSuffixes()
+
+  switch (type.value()) {
+    AD_CASE(InMemoryUncompressed);
+    AD_CASE(OnDiskUncompressed);
+    AD_CASE(InMemoryCompressed);
+    AD_CASE(OnDiskCompressed);
+    AD_CASE(OnDiskCompressedGeoSplit);
+    AD_CASE(InMemoryUncompressedWithHoles);
+    AD_CASE(InMemoryCompressedWithHoles);
+    default:
+      AD_FAIL();
+  }
 }
 
 // _____________________________________________________________________________

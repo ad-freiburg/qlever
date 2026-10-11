@@ -7,6 +7,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 // The implementation of an "EXISTS join", which we use to realize the semantics
 // of the SPARQL `EXISTS` function. The join takes two subtrees as input, and
@@ -72,10 +73,12 @@ class ExistsJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
-    return {left_.get(), right_.get()};
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{left_.get(), right_.get()}, allocator()};
   }
 
+ public:
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
 

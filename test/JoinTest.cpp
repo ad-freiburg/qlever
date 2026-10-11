@@ -241,8 +241,7 @@ namespace {
 // A hash map that connects variables to the expected contents of the
 // corresponding result column and the `UndefStatus`.
 using ExpectedColumns = ad_utility::HashMap<
-    Variable,
-    std::pair<ql::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
+    Variable, std::pair<ConstIdColumnRef, ColumnIndexAndTypeInfo::UndefStatus>>;
 
 // Test that the result of the `join` matches the `expected` outcome.
 // If `requestLaziness` is true, the join is requested to be lazy. If
@@ -605,7 +604,7 @@ TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
 // scans would fail if one element could potentially be found in multiple blocks
 // of the respective other side.
 TEST_P(JoinTestParametrized, joinTwoScansWithSubjectInMultipleBlocks) {
-  // Default block size is 16 bytes for testing, so the triples are spread
+  // Default block size is 2 rows for testing, so the triples are spread
   // across 3 blocks in total.
   auto keepJoinCol = GetParam();
   auto qec = ad_utility::testing::getQec(
@@ -939,6 +938,32 @@ TEST(JoinTest, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(join, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), join.getDescriptor());
+}
+
+// _____________________________________________________________________________
+// A `BIND` must not be pushed down into a child that already has a column for
+// the target variable, even if that child has all the variables the `BIND`
+// expression needs.
+TEST(JoinTest, makeTreeWithBindColumnSkipsChildThatAlreadyHasTheTarget) {
+  auto qec = ad_utility::testing::getQec();
+  auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{I(1), I(1), I(1)}}),
+      Vars{Variable{"?s"}, Variable{"?o"}, Variable{"?bind"}}, false,
+      std::vector<ColumnIndex>{0});
+  // The right tree doesn't contain `?o`, so the `BIND` can't be pushed down
+  // into it either.
+  auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{I(1)}}), Vars{Variable{"?s"}}, false,
+      std::vector<ColumnIndex>{0});
+  auto join = ad_utility::makeExecutionTree<Join>(qec, std::move(leftTree),
+                                                  std::move(rightTree), 0, 0);
+
+  parsedQuery::Bind bind{
+      sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
+          Variable{"?o"}),
+      Variable{"?bind"}};
+  EXPECT_FALSE(
+      join->getRootOperation()->makeTreeWithBindColumn(bind).has_value());
 }
 
 // _____________________________________________________________________________

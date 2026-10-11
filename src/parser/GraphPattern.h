@@ -49,6 +49,9 @@ class GraphPattern {
   bool addLanguageFilter(const Variable& variable,
                          const ad_utility::HashSet<std::string>& langTags);
 
+  // See `ParsedQuery::isDeterministic()`.
+  [[nodiscard]] bool isDeterministic() const;
+
   bool _optional;
 
   // Filters always apply to the complete GraphPattern, no matter where

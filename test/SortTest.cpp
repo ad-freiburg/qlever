@@ -276,10 +276,40 @@ TEST(Sort, clone) {
   EXPECT_EQ(clone->getDescriptor(), sort.getDescriptor());
 }
 
+// Test that cloning also works if the original has already computed its
+// mapping from variables to columns (here via the runtime information), while
+// the freshly constructed clone has not (regression test for #3568). A `Sort`
+// is used because its constructor does not compute the mapping.
+TEST(Sort, cloneAfterVariableColumnsWereComputed) {
+  Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
+  sort.createRuntimeInfoFromEstimates(sort.getRuntimeInfoPointer());
+
+  auto clone = sort.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(sort, IsDeepCopy(*clone));
+}
+
+// Test that a clone hides the same variables as the original (see #1943).
+TEST(Sort, cloneKeepsHiddenVariablesHidden) {
+  // A `Sort` with the variables `?0` and `?1`, of which the enclosing subquery
+  // selects only `?0`.
+  Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
+  sort.setSelectedVariablesForSubquery({Variable{"?0"}});
+
+  auto clone = sort.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(sort, IsDeepCopy(*clone));
+  EXPECT_FALSE(
+      clone->getExternallyVisibleVariableColumns().contains(Variable{"?1"}));
+}
+
 // Test external sorting with lazy input (multiple IdTable blocks). The test
 // uses 4 blocks where block 3 exceeds the threshold, so block 4 exercises the
 // "remaining blocks" loop in `computeResultExternal`.
 TEST(Sort, externalSortLazyInput) {
+  // The inputs of this test are so small that the memory limit of the external
+  // sorter would report false positives.
+  auto ignoreMemoryLimit = ad_utility::testing::setIgnoreMemoryLimit(true);
   auto qec = ad_utility::testing::getQec();
 
   // Create multiple tables to simulate lazy input. Total size needs to exceed
@@ -324,6 +354,9 @@ TEST(Sort, externalSortLazyInput) {
 
 // Test external sorting with fully materialized input.
 TEST(Sort, externalSortMaterializedInput) {
+  // The inputs of this test are so small that the memory limit of the external
+  // sorter would report false positives.
+  auto ignoreMemoryLimit = ad_utility::testing::setIgnoreMemoryLimit(true);
   auto qec = ad_utility::testing::getQec();
 
   // Clear cache to avoid hits from previous tests.
@@ -369,6 +402,9 @@ TEST(Sort, externalSortMaterializedInput) {
 
 // Test external sorting with lazy output.
 TEST(Sort, externalSortLazyOutput) {
+  // The inputs of this test are so small that the memory limit of the external
+  // sorter would report false positives.
+  auto ignoreMemoryLimit = ad_utility::testing::setIgnoreMemoryLimit(true);
   auto qec = ad_utility::testing::getQec();
 
   // Clear cache at start to avoid hits from previous tests.

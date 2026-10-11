@@ -13,6 +13,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/Distinct.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
@@ -26,8 +27,19 @@ using std::string;
 using parsedQuery::SelectClause;
 
 // _____________________________________________________________________________
-QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
-    : qec_(qec) {}
+QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec,
+                                       std::shared_ptr<Operation> operation)
+    : qec_{qec}, rootOperation_{std::move(operation)} {
+  // A `QueryExecutionTree` always needs a `QueryExecutionContext`, if only to
+  // obtain the memory limited allocator of the query.
+  AD_CONTRACT_CHECK(qec_ != nullptr);
+  AD_CONTRACT_CHECK(rootOperation_ != nullptr);
+  resultWidth_ = rootOperation_->getResultWidth();
+  cacheKey_ = rootOperation_->getCacheKey();
+  if (!readFromCache()) {
+    readFromMaterializedView();
+  }
+}
 
 // _____________________________________________________________________________
 std::string QueryExecutionTree::getCacheKey() const {
@@ -46,7 +58,6 @@ size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
 // _____________________________________________________________________________
 std::optional<size_t> QueryExecutionTree::getVariableColumnOrNullopt(
     const Variable& variable) const {
-  AD_CONTRACT_CHECK(rootOperation_);
   const auto& varCols = getVariableColumns();
   if (!varCols.contains(variable)) {
     return std::nullopt;
@@ -117,7 +128,6 @@ size_t QueryExecutionTree::getSizeEstimate() {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied(
     std::vector<Operation::PrefilterVariablePair> prefilterPairs) const {
-  AD_CONTRACT_CHECK(rootOperation_);
   VariableToColumnMap varToColMap = getVariableColumns();
 
   // Note: Variables that have been stripped are still semantically part of the
@@ -129,10 +139,20 @@ QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied(
 
   if (prefilterPairs.empty()) {
     return std::nullopt;
-  } else {
-    return rootOperation_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
-        prefilterPairs);
   }
+  auto result =
+      rootOperation_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+          prefilterPairs);
+  if (result.has_value()) {
+    AD_CORRECTNESS_CHECK(result.value() != nullptr);
+    // The prefiltered tree has a new root operation, on which the variables
+    // that are hidden in this tree would be visible again.
+    rootOperation_->keepHiddenVariablesHidden(
+        *result.value()->getRootOperation());
+    AD_CORRECTNESS_CHECK(result.value()->getVariableColumns() ==
+                         getVariableColumns());
+  }
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -145,8 +165,7 @@ bool QueryExecutionTree::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-bool QueryExecutionTree::isVariableCovered(Variable variable) const {
-  AD_CONTRACT_CHECK(rootOperation_);
+bool QueryExecutionTree::containsVariable(Variable variable) const {
   return getVariableColumns().contains(variable);
 }
 
@@ -212,6 +231,10 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 
   if (sortedQet.has_value()) {
     AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
+    // The new root operation is built from the children of `rootOperation`, so
+    // the variables hidden in the latter would become visible again.
+    rootOperation->keepHiddenVariablesHidden(
+        *sortedQet.value()->getRootOperation());
     AD_CORRECTNESS_CHECK(qet->getVariableColumns() ==
                          sortedQet.value()->getVariableColumns());
     const auto& sortedRootOperation = sortedQet.value()->getRootOperation();
@@ -227,6 +250,11 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     // created re-sorted operation, which was removed by the re-sorting.
     sortedRootOperation->setLimitOffsetDirectlyWithoutTriggeringHooks(
         rootOperation->getLimitOffset());
+    // Restoring the limit/offset must not have changed the sort order again.
+    // This holds because it is not propagated to the children, so no size
+    // estimate that an algorithm choice depends on changes (see the caution
+    // note on `Operation::applyLimitOffset`).
+    AD_CORRECTNESS_CHECK(sortedRootOperation->isSortedBy(sortColumns));
     return std::move(sortedQet).value();
   }
 
@@ -263,6 +291,9 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
   auto distinctQet = rootOperation->makeDistinctTree(distinctIndices);
   if (distinctQet.has_value()) {
     AD_CORRECTNESS_CHECK(distinctQet.value() != nullptr);
+    // See the comment in `createSortedTree` above.
+    rootOperation->keepHiddenVariablesHidden(
+        *distinctQet.value()->getRootOperation());
     // Pushing the `DISTINCT` down must preserve the set of visible variables,
     // but the exact column layout may change: e.g. pushing into a
     // `CartesianProductJoin` can collapse a child to a single row, which
@@ -305,13 +336,10 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
     HideStrippedColumns hideStrippedColumns) {
   // If all variables of this tree are part of `variablesToKeep`, we can simply
   // return the original tree, without stripping any columns.
-  if (ql::ranges::all_of(qet->getVariableColumns() | ql::views::keys,
-                         [&variablesToKeep](const Variable& variable) {
-                           return ad_utility::contains(variablesToKeep,
-                                                       variable);
-                         })) {
+  if (columnStrippingHelpers::allVariablesAreRequired(*qet, variablesToKeep)) {
     return qet;
   }
+
   const auto& rootOperation = qet->getRootOperation();
   auto optTree = rootOperation->makeTreeWithStrippedColumns(variablesToKeep);
   if (!optTree.has_value()) {

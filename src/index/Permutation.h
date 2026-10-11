@@ -17,7 +17,7 @@
 
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/IndexMetaData.h"
 #include "index/KeyOrder.h"
 #include "parser/data/LimitOffsetClause.h"
@@ -133,6 +133,21 @@ class Permutation {
       const LocatedTriplesState& locatedTriplesState,
       const LimitOffsetClause& limitOffset) const;
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Lazily compute the distinct `col0Id`s of a full scan of this permutation.
+  // The `scanSpec` must not fix any of the columns, it is only used for its
+  // graph filter. See `CompressedRelationReader::getDistinctCol0Ids` for the
+  // exact semantics of `addGraphColumn` and `idFilter`.
+  //
+  // NOTE: `locatedTriplesState` has to be kept alive until the returned
+  // generator has been fully consumed.
+  cppcoro::generator<IdTable, CompressedRelationReader::LazyScanMetadata>
+  getDistinctCol0Ids(const ScanSpecification& scanSpec, bool addGraphColumn,
+                     std::optional<std::vector<Id>> idFilter,
+                     const CancellationHandle& cancellationHandle,
+                     const LocatedTriplesState& locatedTriplesState) const;
+#endif
+
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks =
       CompressedRelationReader::ScanSpecAndBlocksAndBounds;
@@ -176,17 +191,17 @@ class Permutation {
   // this permutation's shared reader. This allows the scan to run independently
   // of memory constraints imposed on most queries.
   //
-  // `numThreadsOverride`, if set, overrides the number of block read/decompress
-  // threads for this scan (otherwise the `lazy-index-scan-num-threads` runtime
-  // parameter is used, as for query scans). The runtime index rebuild uses this
-  // to throttle its read parallelism (and hence peak CPU) without affecting
-  // queries.
+  // `numBlocksInFlightOverride`, if set, overrides the number of blocks that
+  // this scan reads and decompresses ahead of its consumer (otherwise the
+  // `lazy-index-scan-num-blocks-in-flight` runtime parameter is used, as for
+  // query scans). The runtime index rebuild uses this to throttle its read
+  // parallelism (and hence peak CPU) without affecting queries.
   LazyScanWithReader lazyScanWithUnlimitedReader(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState,
-      std::optional<size_t> numThreadsOverride = std::nullopt) const;
+      std::optional<size_t> numBlocksInFlightOverride = std::nullopt) const;
 
   // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
   // with relevant `BlockMetadataRanges`.

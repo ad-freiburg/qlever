@@ -13,7 +13,7 @@
 #include "./util/IdTableHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/ConstexprUtils.h"
 #include "util/IdTestHelpers.h"

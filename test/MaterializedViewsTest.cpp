@@ -14,6 +14,7 @@
 #include <string_view>
 
 #include "./MaterializedViewsTestHelpers.h"
+#include "./PrefilterExpressionTestHelpers.h"
 #include "./QueryPlannerTestHelpers.h"
 // The `server` library is not built under Emscripten (`Server.cpp` crashes
 // emsdk 6.0.2's clang backend, see `src/engine/CMakeLists.txt`), so the
@@ -24,6 +25,7 @@
 #include "./util/FileTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
@@ -72,17 +74,13 @@ TEST_F(MaterializedViewsTest, Basic) {
   EXPECT_THAT(
       log_.str(),
       ::testing::HasSubstr("Materialized view \"testView1\" written to disk"));
-  EXPECT_FALSE(qlv().isMaterializedViewLoaded("testView1"));
-  qlv().loadMaterializedView("testView1");
   EXPECT_THAT(log_.str(),
               ::testing::HasSubstr(
                   "Loading materialized view \"testView1\" from disk"));
   EXPECT_TRUE(qlv().isMaterializedViewLoaded("testView1"));
 
-  // Overwriting a materialized view automatically unloads it first.
+  // Overwriting a materialized view automatically unloads and reloads it.
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
-  EXPECT_FALSE(qlv().isMaterializedViewLoaded("testView1"));
-  qlv().loadMaterializedView("testView1");
   EXPECT_TRUE(qlv().isMaterializedViewLoaded("testView1"));
 
   // Test index scan on materialized view.
@@ -164,7 +162,6 @@ TEST_F(MaterializedViewsTest, Basic) {
   // Join between index scan on view and regular index scan.
   qlv().writeMaterializedView(
       "testView2", "SELECT * { ?s <p1> ?o . BIND(42 AS ?g) . BIND(3 AS ?x) }");
-  qlv().loadMaterializedView("testView2");
   {
     auto plannedQuery = qlv().parseAndPlanQuery(R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
@@ -186,12 +183,10 @@ TEST_F(MaterializedViewsTest, ViewReferencingAnotherViewDoesNotDeadlock) {
   // detected and skipped instead (see `MaterializedView::computeCacheKey`).
   // The view must still load successfully and remain usable.
   qlv().writeMaterializedView("baseView", simpleWriteQuery_);
-  qlv().loadMaterializedView("baseView");
   qlv().writeMaterializedView("outerView", R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * { ?s view:baseView-g ?x }
     )");
-  qlv().loadMaterializedView("outerView");
   EXPECT_TRUE(qlv().isMaterializedViewLoaded("outerView"));
 
   auto plannedQuery = qlv().parseAndPlanQuery(R"(
@@ -212,7 +207,6 @@ TEST_F(MaterializedViewsTest, ExplicitReferenceWorksWhenAutoRewriteDisabled) {
   // views. It must not affect an *explicit* reference to a view (via the
   // `view:<name>-<column>` predicate or the `SERVICE` syntax).
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
-  qlv().loadMaterializedView("testView1");
 
   auto cleanup = setRuntimeParameterForTest<
       &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
@@ -625,9 +619,13 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   EXPECT_TRUE(manager.isViewLoaded("testView1"));
   EXPECT_FALSE(manager.isViewLoaded("something"));
 
-  // Unloading a view that is not loaded is a no-op.
-  manager.unloadViewIfLoaded("something");
+  // Unloading a view that is not loaded is a no-op, unloading a loaded view
+  // reports that it was loaded.
+  EXPECT_FALSE(manager.unloadViewIfLoaded("something"));
   EXPECT_FALSE(manager.isViewLoaded("something"));
+  EXPECT_TRUE(manager.unloadViewIfLoaded("testView1"));
+  EXPECT_FALSE(manager.isViewLoaded("testView1"));
+  EXPECT_FALSE(manager.unloadViewIfLoaded("testView1"));
   EXPECT_THAT(view->originalQuery(),
               ::testing::Optional(::testing::Eq(simpleWriteQuery_)));
 
@@ -641,9 +639,6 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
   using ViewQuery = parsedQuery::MaterializedViewQuery;
   using Triple = SparqlTripleSimple;
   using V = Variable;
-  auto iri = [](const std::string& ref) {
-    return ad_utility::triple_component::Iri::fromIriref(ref);
-  };
 
   const V placeholderP{"?_ql_materialized_view_p"};
   const V placeholderO{"?_ql_materialized_view_o"};
@@ -821,6 +816,9 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       ad_utility::makeOfstream(metadataFilename)
           << viewInfo.dump() << std::endl;
     }
+    // Force a fresh load from the (now hand-edited) disk file:
+    // `writeViewToDisk` already auto-loaded the view before the edit above.
+    manager.unloadViewIfLoaded("testView6");
     // Load the view: It can be loaded correctly, but does not have an original
     // query set.
     auto view = manager.getView("testView6", nullptr);
@@ -844,6 +842,9 @@ TEST_F(MaterializedViewsTest, ManualConfigurations) {
       ad_utility::makeOfstream(metadataFilename)
           << viewInfo.dump() << std::endl;
     }
+    // Force a fresh load from the (now hand-edited) disk file:
+    // `writeViewToDisk` already auto-loaded the view before the edit above.
+    manager.unloadViewIfLoaded("testView7");
     // Load the view: The view can be loaded correctly, but all columns are
     // possibly undefined because the information is missing.
     auto view = manager.getView("testView7", nullptr);
@@ -999,6 +1000,83 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
             "Loading materialized view \"testViewFromHTTP2\" from disk"));
   }
 
+  // `load-materialized-view` doesn't take a query, so combining it with one
+  // is rejected instead of silently ignoring the query.
+  {
+    auto request = makeGetRequest(
+        "/?cmd=load-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken"
+        "&query=SELECT%20*%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
+    expectHttpError(
+        [&] {
+          responseBodyAsJson(
+              makeServerForTesting(testIndexBase_).process(request));
+        },
+        http::status::bad_request,
+        ::testing::HasSubstr("cmd=load-materialized-view does not accept an "
+                             "additional query or update"));
+  }
+
+  // Unload a materialized view through a simulated HTTP GET request. Reuse
+  // one server instance so the unload actually observes a loaded view.
+  {
+    auto server = makeServerForTesting(testIndexBase_);
+    responseBodyAsJson(server.process(makeGetRequest(
+        "/?cmd=load-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken")));
+
+    clearLog();
+    auto response = responseBodyAsJson(server.process(makeGetRequest(
+        "/?cmd=unload-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken")));
+    EXPECT_THAT(response,
+                ::testing::Optional(::testing::Eq(nlohmann::json{
+                    {"materialized-view-unloaded", "testViewFromHTTP2"},
+                    {"was-loaded", true}})));
+
+    // The view's files remain on disk, unlike deletion.
+    EXPECT_TRUE(ql::filesystem::exists(
+        absl::StrCat(testIndexBase_, ".view.testViewFromHTTP2.viewinfo.json")));
+    EXPECT_THAT(log_.str(),
+                ::testing::HasSubstr(
+                    "Materialized view \"testViewFromHTTP2\" unloaded"));
+
+    // Unloading again is a no-op that reports the view as not loaded.
+    response = responseBodyAsJson(server.process(makeGetRequest(
+        "/?cmd=unload-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken")));
+    EXPECT_THAT(response,
+                ::testing::Optional(::testing::Eq(nlohmann::json{
+                    {"materialized-view-unloaded", "testViewFromHTTP2"},
+                    {"was-loaded", false}})));
+  }
+
+  // Test access token check for unloading.
+  {
+    auto request = makeGetRequest(
+        "/?cmd=unload-materialized-view&view-name=testViewFromHTTP2");
+    expectRequiresValidAccessToken("unload-materialized-view", [&] {
+      makeServerForTesting(testIndexBase_).process(request);
+    });
+  }
+
+  // `unload-materialized-view` doesn't take a query, so combining it with one
+  // is rejected instead of silently ignoring the query.
+  {
+    auto request = makeGetRequest(
+        "/?cmd=unload-materialized-view&view-name=testViewFromHTTP2"
+        "&access-token=accessToken"
+        "&query=SELECT%20*%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
+    expectHttpError(
+        [&] {
+          responseBodyAsJson(
+              makeServerForTesting(testIndexBase_).process(request));
+        },
+        http::status::bad_request,
+        ::testing::HasSubstr("cmd=unload-materialized-view does not accept "
+                             "an additional query or update"));
+  }
+
   // Test error message for wrong query type.
   {
     auto request = makePostRequest(
@@ -1069,6 +1147,23 @@ TEST_F(MaterializedViewsTest, serverIntegration) {
     EXPECT_THAT(log_.str(),
                 ::testing::HasSubstr(
                     "Materialized view \"testViewFromHTTP2\" deleted"));
+  }
+
+  // `delete-materialized-view` doesn't take a query, so combining it with one
+  // is rejected instead of silently ignoring the query.
+  {
+    auto request = makeGetRequest(
+        "/?cmd=delete-materialized-view&view-name=testViewFromHTTP"
+        "&access-token=accessToken"
+        "&query=SELECT%20*%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D");
+    expectHttpError(
+        [&] {
+          responseBodyAsJson(
+              makeServerForTesting(testIndexBase_).process(request));
+        },
+        http::status::bad_request,
+        ::testing::HasSubstr("cmd=delete-materialized-view does not accept "
+                             "an additional query or update"));
   }
 
   // Test access token check for deletion.
@@ -1266,6 +1361,220 @@ TEST_F(MaterializedViewsTestLarge, LazyScan) {
 }
 
 // _____________________________________________________________________________
+TEST_F(MaterializedViewsTestLarge, Multiplicities) {
+  // The view has 200'000 rows: 2 distinct predicates, 10'000 distinct
+  // subjects, 10'001 distinct objects and 10 distinct values of `?g`.
+  MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk(
+      "multView",
+      qlv().parseAndPlanQuery("SELECT ?p ?s ?o ?g { ?s ?p ?o . "
+                              "VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }"));
+  auto qec = getQec();
+  using ViewQuery = parsedQuery::MaterializedViewQuery;
+  using V = Variable;
+
+  // Return the multiplicity of the given variable in the result of `scan`.
+  auto multiplicity = [](IndexScan& scan, const V& var) {
+    return scan.getMultiplicity(
+        scan.getExternallyVisibleVariableColumns().at(var).columnIndex_);
+  };
+
+  // The number of distinct values of each column is stored in the info JSON.
+  // The first column is exact, the others are estimated.
+  auto filename =
+      absl::StrCat(testIndexBase_, ".view.multView", VIEW_INFO_SUFFIX);
+  nlohmann::json viewInfo;
+  ad_utility::makeIfstream(filename) >> viewInfo;
+  const auto& columns = viewInfo.at("columns");
+  EXPECT_EQ(columns.at(0).at("num_distinct").get<size_t>(), 2);
+  EXPECT_NEAR(columns.at(1).at("num_distinct").get<size_t>(), 10'000, 100);
+  EXPECT_NEAR(columns.at(2).at("num_distinct").get<size_t>(), 10'001, 100);
+  EXPECT_EQ(columns.at(3).at("num_distinct").get<size_t>(), 10);
+
+  // The number of distinct values is loaded with the view.
+  auto view = manager.getView("multView", nullptr);
+  EXPECT_THAT(view->numDistinct(0), ::testing::Optional(2));
+  EXPECT_NEAR(view->numDistinct(1).value(), 10'000, 100);
+  EXPECT_NEAR(view->numDistinct(2).value(), 10'001, 100);
+  EXPECT_THAT(view->numDistinct(3), ::testing::Optional(10));
+  EXPECT_EQ(view->numDistinct(4), std::nullopt);
+
+  // All columns variable: the multiplicities of the whole view.
+  {
+    auto scan =
+        manager.makeIndexScan(qec.get(), ViewQuery{"multView",
+                                                   {{V{"?p"}, V{"?P"}},
+                                                    {V{"?s"}, V{"?S"}},
+                                                    {V{"?o"}, V{"?O"}},
+                                                    {V{"?g"}, V{"?G"}}}});
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?P"}), 100'000);
+    EXPECT_NEAR(multiplicity(*scan, V{"?S"}), 20, 0.2);
+    EXPECT_NEAR(multiplicity(*scan, V{"?O"}), 20, 0.2);
+    EXPECT_NEAR(multiplicity(*scan, V{"?G"}), 20'000, 200);
+  }
+
+  // Regression test: A prefiltered copy of a scan (the size estimate of which
+  // is only set after construction) has the correct multiplicities. As the
+  // prefilter has to be on the first column, use a view with integers there.
+  {
+    manager.writeViewToDisk(
+        "multViewNum",
+        qlv().parseAndPlanQuery("SELECT ?o ?s ?g { ?s <p2> ?o . "
+                                "VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }"));
+    auto scan = manager.makeIndexScan(
+        qec.get(),
+        ViewQuery{
+            "multViewNum",
+            {{V{"?o"}, V{"?O"}}, {V{"?s"}, V{"?S"}}, {V{"?g"}, V{"?G"}}}});
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?G"}), 10'000);
+    using namespace makeFilterExpression;
+    using namespace filterHelper;
+    std::vector<sparqlExpression::PrefilterExprVariablePair> prefilters;
+    prefilters.push_back(pr(ge(ValueId::makeFromInt(10'000)), Variable{"?O"}));
+    auto prefiltered =
+        scan->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilters);
+    ASSERT_TRUE(prefiltered.has_value());
+    auto& prefilteredScan =
+        dynamic_cast<IndexScan&>(*prefiltered.value()->getRootOperation());
+    EXPECT_LT(prefilteredScan.getSizeEstimate(), scan->getSizeEstimate());
+    EXPECT_GT(prefilteredScan.getSizeEstimate(), 10'000);
+    EXPECT_FLOAT_EQ(multiplicity(prefilteredScan, V{"?G"}),
+                    prefilteredScan.getSizeEstimate() / 10.0f);
+
+    // Fixed first column with a small relation (10 rows: one subject, 10
+    // values of `?g`), which shares its block with other relations: The size
+    // estimate of the scan is only a rough guess, but the multiplicities are
+    // computed using the exact number of rows of the relation.
+    auto smallScan = manager.makeIndexScan(
+        qec.get(), ViewQuery{"multViewNum",
+                             {{V{"?o"}, TripleComponent{int64_t{2}}},
+                              {V{"?s"}, V{"?S"}},
+                              {V{"?g"}, V{"?G"}}}});
+    EXPECT_GT(smallScan->getSizeEstimate(), 10);
+    EXPECT_FLOAT_EQ(multiplicity(*smallScan, V{"?S"}), 10);
+    EXPECT_FLOAT_EQ(multiplicity(*smallScan, V{"?G"}), 1);
+
+    // Fixed first column and prefiltered second column: The multiplicities
+    // are based on the (smaller) size estimate of the prefiltered scan, not on
+    // the number of rows of the whole relation.
+    manager.writeViewToDisk(
+        "multViewPO",
+        qlv().parseAndPlanQuery("SELECT ?p ?o ?s ?g { ?s ?p ?o . "
+                                "VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }"));
+    auto relationScan =
+        manager.makeIndexScan(qec.get(), ViewQuery{"multViewPO",
+                                                   {{V{"?p"}, iri("<p2>")},
+                                                    {V{"?o"}, V{"?O"}},
+                                                    {V{"?s"}, V{"?S"}},
+                                                    {V{"?g"}, V{"?G"}}}});
+    EXPECT_EQ(relationScan->getSizeEstimate(), 100'000);
+    EXPECT_FLOAT_EQ(multiplicity(*relationScan, V{"?G"}), 10'000);
+    auto prefilteredRelation =
+        relationScan->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+            prefilters);
+    ASSERT_TRUE(prefilteredRelation.has_value());
+    auto& prefilteredRelationScan = dynamic_cast<IndexScan&>(
+        *prefilteredRelation.value()->getRootOperation());
+    EXPECT_LT(prefilteredRelationScan.getSizeEstimate(), 100'000);
+    EXPECT_FLOAT_EQ(multiplicity(prefilteredRelationScan, V{"?G"}),
+                    prefilteredRelationScan.getSizeEstimate() / 10.0f);
+  }
+
+  // Fixed first column with a small relation: the multiplicity of the third
+  // column is exact, even if the column is not distributed uniformly over the
+  // view (here `?o` is constant within each of the relations of 10 rows, but
+  // has 10'000 distinct values in the whole view).
+  {
+    manager.writeViewToDisk(
+        "multViewSmall",
+        qlv().parseAndPlanQuery("SELECT ?s ?g ?o { ?s <p2> ?o . "
+                                "VALUES ?g { 1 2 3 4 5 6 7 8 9 10 } }"));
+    auto scan = manager.makeIndexScan(
+        qec.get(),
+        ViewQuery{
+            "multViewSmall",
+            {{V{"?s"}, iri("<s1>")}, {V{"?g"}, V{"?G"}}, {V{"?o"}, V{"?O"}}}});
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?G"}), 1);
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?O"}), 10);
+  }
+
+  // Fixed first column with a small relation that fills a large part of its
+  // block (20'000 of 60'000 rows): the size estimate of the scan (a fixed
+  // fraction of the block) is smaller than the relation, but the multiplicity
+  // of the additional column `?o` is computed from the exact number of rows
+  // of the relation (about 10'001 distinct values of `?o` in the whole view).
+  {
+    manager.writeViewToDisk(
+        "multViewG", qlv().parseAndPlanQuery("SELECT ?g ?s ?p ?o { ?s ?p ?o . "
+                                             "VALUES ?g { 1 2 3 } }"));
+    auto scan = manager.makeIndexScan(
+        qec.get(), ViewQuery{"multViewG",
+                             {{V{"?g"}, TripleComponent{int64_t{1}}},
+                              {V{"?s"}, V{"?S"}},
+                              {V{"?p"}, V{"?P"}},
+                              {V{"?o"}, V{"?O"}}}});
+    EXPECT_LT(scan->getSizeEstimate(), 20'000);
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?S"}), 2);
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?P"}), 10'000);
+    EXPECT_NEAR(multiplicity(*scan, V{"?O"}), 2, 0.05);
+  }
+
+  // Fixed first column: the second column is exact (from the metadata of the
+  // relation), the others are estimated from the size of the relation and the
+  // number of distinct values in the whole view. The latter is exact for `?G`,
+  // which is distributed uniformly, but not for `?O`, which is constant in the
+  // relation of `<p1>`.
+  {
+    auto scan =
+        manager.makeIndexScan(qec.get(), ViewQuery{"multView",
+                                                   {{V{"?p"}, iri("<p1>")},
+                                                    {V{"?s"}, V{"?S"}},
+                                                    {V{"?o"}, V{"?O"}},
+                                                    {V{"?g"}, V{"?G"}}}});
+    EXPECT_EQ(scan->getSizeEstimate(), 100'000);
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?S"}), 10);
+    EXPECT_NEAR(multiplicity(*scan, V{"?O"}), 10, 0.1);
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?G"}), 10'000);
+  }
+
+  // Fixed first and second column: the same estimate, based on the
+  // (block-based, thus rough) size estimate of the scan.
+  {
+    auto scan =
+        manager.makeIndexScan(qec.get(), ViewQuery{"multView",
+                                                   {{V{"?p"}, iri("<p1>")},
+                                                    {V{"?s"}, iri("<s1>")},
+                                                    {V{"?g"}, V{"?G"}}}});
+    EXPECT_FLOAT_EQ(multiplicity(*scan, V{"?G"}),
+                    std::max(1.0f, scan->getSizeEstimate() / 10.0f));
+  }
+
+  // Views written without distinct counts (by older versions of QLever) have
+  // multiplicity `1.0` for all columns.
+  {
+    for (auto& column : viewInfo.at("columns")) {
+      column.erase("num_distinct");
+    }
+    ad_utility::makeOfstream(filename) << viewInfo.dump();
+    auto oldView =
+        std::make_shared<MaterializedView>(testIndexBase_, "multView");
+    oldView->connectPermutationBackReference();
+    for (ColumnIndex col = 0; col < 4; ++col) {
+      EXPECT_EQ(oldView->numDistinct(col), std::nullopt);
+    }
+    auto scan =
+        oldView->makeIndexScan(qec.get(), ViewQuery{"multView",
+                                                    {{V{"?p"}, V{"?P"}},
+                                                     {V{"?s"}, V{"?S"}},
+                                                     {V{"?o"}, V{"?O"}},
+                                                     {V{"?g"}, V{"?G"}}}});
+    for (const auto& var : {V{"?P"}, V{"?S"}, V{"?O"}, V{"?G"}}) {
+      EXPECT_FLOAT_EQ(multiplicity(*scan, var), 1.0f);
+    }
+  }
+}
+
+// _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, BindToColumnMap) {
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
   MaterializedViewsManager manager{testIndexBase_};
@@ -1329,7 +1638,6 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
   const std::string dupQuery =
       "SELECT ?s ?p ?o ?g { ?s ?p ?o . VALUES ?g { 1 2 } }";
   qlv().writeMaterializedView("dupView", dupQuery);
-  qlv().loadMaterializedView("dupView");
 
   // Base case: Query the view selecting all 4 columns: we expect exactly the
   // original result.
@@ -1408,7 +1716,6 @@ TEST_F(MaterializedViewsTest, DistinctIsNotDroppedForViewScan) {
   // values of the fourth column `?g` (which we do not select below).
   qlv().writeMaterializedView(
       "dupView", "SELECT ?s ?p ?o ?g { ?s ?p ?o . VALUES ?g { 1 2 } }");
-  qlv().loadMaterializedView("dupView");
 
   constexpr std::string_view distinctQuery = R"(
     PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
@@ -1448,7 +1755,6 @@ constexpr std::string_view bindWriteQuery =
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, BindRewrite) {
   qlv().writeMaterializedView("bindView", std::string{bindWriteQuery});
-  qlv().loadMaterializedView("bindView");
 
   // We fix the first columns of the `IndexScan` matcher because we are only
   // interested in the additional columns. The number of columns after stripping
@@ -1495,6 +1801,150 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                      bindView(AC{{3, V{"?bind"}}})));
   }
 
+  // A `BIND` is not pushed down through a `Join` if its target is hidden in
+  // the `Join` by a subquery (with `strip-columns` disabled). Otherwise the
+  // `BIND` would yield the values of the hidden `?bind` (here `"abc"`).
+  {
+    constexpr std::string_view bindTargetHidden = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?bind {
+        { SELECT ?s ?o { ?s view:bindView-o ?o . ?s <p1> ?bind } }
+        BIND(2 * ?o + 1 AS ?bind)
+      }
+    )";
+    auto actual = getQueryResultAsIdTable(std::string{bindTargetHidden});
+    auto expected = getQueryResultAsIdTable("SELECT (3 AS ?bind) {}");
+    EXPECT_THAT(actual, matchesIdTable(expected));
+  }
+
+  // A `BIND` is pushed down through a `Join` that is the root of a subquery.
+  // The variable hidden by the subquery (here `?x`) stays hidden, so the `?x`
+  // of the outer query is a different variable.
+  {
+    constexpr std::string_view hiddenVarInJoin = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?bind {
+        { SELECT ?s ?o { ?s view:bindView-o ?o . ?s <p1> ?x } }
+        BIND(2 * ?o + 1 AS ?bind)
+      }
+    )";
+    qpExpect(qlv(), hiddenVarInJoin,
+             h::Join(h::IndexScanFromStrings("?s", "<p1>", "?x"),
+                     bindView(AC{{3, V{"?bind"}}})));
+    auto qet = qlv()
+                   .parseAndPlanQuery(std::string{hiddenVarInJoin})
+                   .sharedQueryExecutionTree();
+    EXPECT_FALSE(qet->getVariableColumns().contains(V{"?x"}));
+
+    constexpr std::string_view hiddenVarInJoinOuterUse = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?x ?bind {
+        { SELECT ?s ?o { ?s view:bindView-o ?o . ?s <p1> ?x } }
+        BIND(2 * ?o + 1 AS ?bind)
+        ?s <p2> ?x
+      }
+    )";
+    auto actual = getQueryResultAsIdTable(std::string{hiddenVarInJoinOuterUse});
+    auto expected =
+        getQueryResultAsIdTable("SELECT ?s ?x (3 AS ?bind) { ?s <p2> ?x }");
+    EXPECT_THAT(actual, matchesIdTable(expected));
+  }
+
+  // A `BIND` is pushed down into a view scan that is the root of a subquery.
+  // The variable hidden by the subquery (here `?x`) stays hidden.
+  {
+    constexpr std::string_view hiddenVarInScan = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?bind {
+        { SELECT ?s { ?s view:bindView-o ?x } }
+        BIND(15 AS ?bind)
+      }
+    )";
+    qpExpect(qlv(), hiddenVarInScan,
+             viewScan("bindView", "?s", "?x", "?bind", 3));
+    auto qet = qlv()
+                   .parseAndPlanQuery(std::string{hiddenVarInScan})
+                   .sharedQueryExecutionTree();
+    EXPECT_FALSE(qet->getVariableColumns().contains(V{"?x"}));
+    auto actual = getQueryResultAsIdTable(std::string{hiddenVarInScan});
+    auto expected =
+        getQueryResultAsIdTable("SELECT ?s (15 AS ?bind) { ?s <p2> ?o }");
+    EXPECT_THAT(actual, matchesIdTable(expected));
+  }
+
+  // A `BIND` is not pushed down into a view scan that already reads the target
+  // into a column hidden by a subquery, or stripped away (with `strip-columns`
+  // enabled).
+  {
+    constexpr std::string_view hiddenTargetInScan = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?bind {
+        { SELECT ?s { ?s view:bindView-o ?bind } }
+        BIND(15 AS ?bind)
+      }
+    )";
+    auto expected = getQueryResultAsIdTable("SELECT (15 AS ?bind) {}");
+    EXPECT_THAT(getQueryResultAsIdTable(std::string{hiddenTargetInScan}),
+                matchesIdTable(expected));
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(true);
+    EXPECT_THAT(getQueryResultAsIdTable(std::string{hiddenTargetInScan}),
+                matchesIdTable(expected));
+  }
+
+  // A `BIND` is not pushed down if a variable of its expression (here `?o`) is
+  // hidden by a subquery. The `?o` of the `BIND` is then unbound.
+  {
+    constexpr std::string_view hiddenExprVarInScan = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?bind {
+        { SELECT ?s { ?s view:bindView-o ?o } }
+        BIND(2 * ?o + 1 AS ?bind)
+      }
+    )";
+    auto expected = getQueryResultAsIdTable(
+        "SELECT ?s ?bind { ?s <p2> ?o . BIND(2 * ?unbound + 1 AS ?bind) }");
+    EXPECT_THAT(getQueryResultAsIdTable(std::string{hiddenExprVarInScan}),
+                matchesIdTable(expected));
+
+    constexpr std::string_view hiddenExprVarInJoin = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?bind {
+        { SELECT ?s { ?s view:bindView-o ?o . ?s <p1> ?x } }
+        BIND(2 * ?o + 1 AS ?bind)
+      }
+    )";
+    auto expectedJoin = getQueryResultAsIdTable(
+        "SELECT ?s ?bind { ?s <p2> ?o . ?s <p1> ?x . "
+        "BIND(2 * ?unbound + 1 AS ?bind) }");
+    EXPECT_THAT(getQueryResultAsIdTable(std::string{hiddenExprVarInJoin}),
+                matchesIdTable(expectedJoin));
+  }
+
+  // A `BIND` is pushed down if a variable of its expression (here `?b2`) is
+  // visible but may be UNDEF (`?b2` is itself the result of a `BIND`).
+  {
+    qlv().writeMaterializedView(
+        "chainView",
+        "SELECT ?s ?o ?b2 ?b3 { ?s <p2> ?o . BIND(2 * ?o + 1 AS ?b2) "
+        "BIND(?b2 + 1 AS ?b3) }");
+    constexpr std::string_view chainedBind = R"(
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?b2 ?b3 {
+        ?s view:chainView-b2 ?b2 .
+        BIND(?b2 + 1 AS ?b3)
+      }
+    )";
+    qpExpect(qlv(), chainedBind,
+             viewScan("chainView", "?s", "?_ql_materialized_view_p", "?b2", 3,
+                      AC{{3, V{"?b3"}}}));
+    auto expected = getQueryResultAsIdTable(
+        "SELECT ?s ?b2 ?b3 { ?s <p2> ?o . BIND(2 * ?o + 1 AS ?b2) "
+        "BIND(?b2 + 1 AS ?b3) }");
+    EXPECT_THAT(getQueryResultAsIdTable(std::string{chainedBind}),
+                matchesIdTable(expected));
+  }
+
   // A `BIND` is pushed down through a `SpatialJoin` operation.
   {
     constexpr std::string_view bindThroughSpatialJoin = R"(
@@ -1526,6 +1976,106 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                  viewScanWithBind));
   }
 
+  // A `BIND` is not pushed down through a `SpatialJoin` if a variable of its
+  // expression (here `?o2`) is hidden by a subquery.
+  {
+    constexpr std::string_view hiddenExprVarInSpatialJoin = R"(
+      PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?o ?bind {
+        {
+          SELECT ?s ?o {
+            ?s view:bindView-o ?o .
+            ?s2 view:bindView-o ?o2 .
+            FILTER(geof:metricDistance(?o, ?o2) <= 100)
+          }
+        }
+        BIND(2 * ?o2 + 1 AS ?bind)
+      }
+    )";
+    auto spatialJoin = h::spatialJoinFilterSubstitute(
+        100, -1, V{"?o"}, V{"?o2"}, std::nullopt, PayloadVariables::all(),
+        SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::WITHIN_DIST,
+        std::nullopt, viewScanNoBind,
+        viewScan("bindView", "?s2", "?o2", "?_ql_materialized_view_o", 2));
+    qpExpect(qlv(), hiddenExprVarInSpatialJoin,
+             h::Bind(spatialJoin, "2 * ?o2 + 1", V{"?bind"}));
+
+    // With `strip-columns` enabled, the subquery strips `?o2` away in a
+    // `StripColumns` operation on top of the `SpatialJoin`.
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(true);
+    qpExpect(
+        qlv(), hiddenExprVarInSpatialJoin,
+        h::Bind(h::MatchTypeAndOrderedChildren<::StripColumns>(spatialJoin),
+                "2 * ?o2 + 1", V{"?bind"}));
+  }
+
+  // A `BIND` is not pushed down through a `SpatialJoin` if its target (here
+  // `?d`) is the hidden distance variable of the `SpatialJoin` itself.
+  {
+    constexpr std::string_view hiddenTargetInSpatialJoin = R"(
+      PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?o ?d {
+        {
+          SELECT ?s ?o {
+            ?s view:bindView-o ?o .
+            SERVICE spatialSearch: {
+              _:config spatialSearch:algorithm spatialSearch:libspatialjoin ;
+                       spatialSearch:left ?o ;
+                       spatialSearch:right ?o2 ;
+                       spatialSearch:joinType spatialSearch:within-dist ;
+                       spatialSearch:maxDistance 100 ;
+                       spatialSearch:bindDistance ?d .
+              { ?s2 view:bindView-o ?o2 }
+            }
+          }
+        }
+        BIND(2 * ?o + 1 AS ?d)
+      }
+    )";
+    qpExpect(
+        qlv(), hiddenTargetInSpatialJoin,
+        h::Bind(h::MatchTypeAndOrderedChildren<::SpatialJoin>(
+                    viewScanNoBind, viewScan("bindView", "?s2", "?o2",
+                                             "?_ql_materialized_view_o", 2)),
+                "2 * ?o + 1", V{"?d"}));
+  }
+
+  // A `BIND` is not pushed down through a `SpatialJoin` if its target (here
+  // `?s2`) is a variable of a child that the `SpatialJoin` drops, because it is
+  // not one of the payload variables.
+  {
+    constexpr std::string_view droppedTargetInSpatialJoin = R"(
+      PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?o ?s2 {
+        {
+          SELECT ?s ?o {
+            ?s view:bindView-o ?o .
+            SERVICE spatialSearch: {
+              _:config spatialSearch:algorithm spatialSearch:libspatialjoin ;
+                       spatialSearch:left ?o ;
+                       spatialSearch:right ?o2 ;
+                       spatialSearch:joinType spatialSearch:within-dist ;
+                       spatialSearch:maxDistance 100 ;
+                       spatialSearch:payload ?o2 .
+              { ?s2 view:bindView-o ?o2 }
+            }
+          }
+        }
+        BIND(2 * ?o + 1 AS ?s2)
+      }
+    )";
+    qpExpect(
+        qlv(), droppedTargetInSpatialJoin,
+        h::Bind(h::MatchTypeAndOrderedChildren<::SpatialJoin>(
+                    viewScanNoBind, viewScan("bindView", "?s2", "?o2",
+                                             "?_ql_materialized_view_o", 2)),
+                "2 * ?o + 1", V{"?s2"}));
+  }
+
   // The `2 * ?o + 1` expression.
   auto bindExpr = sparqlExpression::makeAddExpression(
       sparqlExpression::makeMultiplyExpression(
@@ -1547,6 +2097,18 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     // `SpatialJoin` has no children.
     SpatialJoin sj{&plan.queryExecutionContext(), config, std::nullopt,
                    std::nullopt};
+    EXPECT_FALSE(sj.makeTreeWithBindColumn(bind).has_value());
+  }
+
+  // A `BIND` is not pushed down into a `SpatialJoin` with only its left child.
+  // The missing right child is skipped, and the left child does not contain
+  // `?o` (here the right variable of the `SpatialJoin`, hence visible).
+  {
+    SpatialJoinConfiguration config{
+        LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, V{"?x"}, V{"?o"}};
+    auto plan = qlv().parseAndPlanQuery("SELECT * { ?s ?p ?x }");
+    SpatialJoin sj{&plan.queryExecutionContext(), config,
+                   plan.queryExecutionTree().clone(), std::nullopt};
     EXPECT_FALSE(sj.makeTreeWithBindColumn(bind).has_value());
   }
 
@@ -1672,7 +2234,6 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     qlv().writeMaterializedView(
         "bindView2",
         "SELECT ?a ?b ?c { <s1> <p2> ?a . BIND(2 * ?a AS ?b) BIND(42 AS ?c) }");
-    qlv().loadMaterializedView("bindView2");
     const std::string secondColBind = R"(
       PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
       SELECT * {
@@ -1824,7 +2385,6 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
 
   // Write geometries view with bounding boxes.
   qlv.writeMaterializedView(viewName, std::string{geoBoundingBoxesViewQuery});
-  qlv.loadMaterializedView(viewName);
 
   // Running the same query for reading that was used for writing results in a
   // single `IndexScan` for all columns of the materialized view.
@@ -1926,7 +2486,6 @@ TEST(MaterializedViewsSpatialJoinTest, FixedValueFilterOnFullyCoveredView) {
       "  ?osm_id geo:hasGeometry ?intermediate .\n"
       "  ?intermediate geo:asWKT ?geometry .\n"
       "}");
-  qlv.loadMaterializedView(viewName);
 
   const std::string query = R"qy(
     PREFIX geo: <http://www.opengis.net/ont/geosparql#>
@@ -2108,11 +2667,10 @@ TEST_F(MaterializedViewsTest, GroupByOptimizations) {
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest,
        GetPermutationForThreeVariableTripleMaterializedView) {
-  // Write and load a three-variable view.
+  // Write a three-variable view (writing auto-loads it).
   auto plan = qlv().parseAndPlanQuery("SELECT ?s ?p ?o { ?s ?p ?o }");
   MaterializedViewsManager manager{testIndexBase_};
   manager.writeViewToDisk("threeVarPermTestView", plan);
-  manager.loadView("threeVarPermTestView", nullptr);
 
   // Create a three-variable scan on the view binding all three columns.
   using RCols = parsedQuery::MaterializedViewQuery::RequestedColumns;

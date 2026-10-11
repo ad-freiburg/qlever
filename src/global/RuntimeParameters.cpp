@@ -27,9 +27,8 @@ RuntimeParameters::RuntimeParameters() {
   add(cacheMaxNumEntries_);
   add(cacheMaxSize_);
   add(cacheMaxSizeSingleEntry_);
-  add(lazyIndexScanQueueSize_);
-  add(lazyIndexScanNumThreads_);
-  add(rebuildIndexScanNumThreads_);
+  add(lazyIndexScanNumBlocksInFlight_);
+  add(rebuildIndexScanNumBlocksInFlight_);
   add(rebuildPermutationWriterNumThreads_);
   add(rebuildMaxConcurrentPermutationPairs_);
   add(lazyIndexScanMaxSizeMaterialization_);
@@ -95,7 +94,8 @@ RuntimeParameters::RuntimeParameters() {
     }
   };
   defaultQueryTimeout_.setParameterConstraint(mustBeStrictlyPositive);
-  lazyIndexScanNumThreads_.setParameterConstraint(mustBeStrictlyPositive);
+  lazyIndexScanNumBlocksInFlight_.setParameterConstraint(
+      mustBeStrictlyPositive);
 }
 
 // _____________________________________________________________________________

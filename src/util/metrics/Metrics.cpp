@@ -17,11 +17,14 @@
 #include <opentelemetry/sdk/metrics/view/instrument_selector_factory.h>
 #include <opentelemetry/sdk/metrics/view/meter_selector_factory.h>
 #include <opentelemetry/sdk/metrics/view/view_factory.h>
+#include <opentelemetry/sdk/metrics/view/view_registry.h>
 #include <prometheus/text_serializer.h>
 
 #include <chrono>
 #include <memory>
 #include <string>
+
+#include "util/metrics/Resource.h"
 
 namespace metrics_api = opentelemetry::metrics;
 namespace metrics_sdk = opentelemetry::sdk::metrics;
@@ -76,7 +79,8 @@ std::shared_ptr<MetricsReader> initialize(bool enabled) {
   // Pull reader — metrics served via /metrics on the main server port.
   auto pullReader = std::make_shared<PullMetricReader>();
 
-  auto provider = metrics_sdk::MeterProviderFactory::Create();
+  auto provider = metrics_sdk::MeterProviderFactory::Create(
+      std::make_unique<metrics_sdk::ViewRegistry>(), sharedResource());
 
   // Custom buckets covering 1 ms – 5 min, suited to SPARQL query latencies.
   auto histogramConfig =

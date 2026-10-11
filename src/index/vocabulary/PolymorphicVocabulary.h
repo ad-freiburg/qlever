@@ -79,6 +79,36 @@ class PolymorphicVocabulary {
   // `VocabularyType` has already been set via `resetToType` above.
   void open(const std::string& filename);
 
+  // Forward the geo cell grid to the currently active vocabulary if it is a
+  // `SplitVocabulary` (which forwards it to its `GeoVocabulary`); no-op
+  // otherwise.
+  void setGeoCellGrid(std::optional<ad_utility::GeoCellGrid> grid) {
+    ad_utility::visitIf(
+        vocab_,
+        [&grid](OnDiskCompressedGeoSplit& vocab) {
+          vocab.setGeoCellGrid(grid);
+        },
+        [](const auto& vocab) {
+          static_assert(
+              NeverProvidesGeometryInfo<std::decay_t<decltype(vocab)>>);
+        });
+  }
+
+  // The geo cell grid of an underlying `GeoVocabulary`, or `std::nullopt` if
+  // the active vocabulary is not a `SplitVocabulary` holding one with a grid.
+  std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
+    return ad_utility::visitIf(
+        vocab_,
+        [](const OnDiskCompressedGeoSplit& vocab) {
+          return vocab.getGeoCellGrid();
+        },
+        [](const auto& vocab) -> std::optional<ad_utility::GeoCellGrid> {
+          static_assert(
+              NeverProvidesGeometryInfo<std::decay_t<decltype(vocab)>>);
+          return std::nullopt;
+        });
+  }
+
   // Close the vocabulary s.t. it consumes no more RAM.
   void close();
 
@@ -209,6 +239,10 @@ class PolymorphicVocabulary {
         vocab_);
   }
 
+  // The files that a vocabulary with the given `type` consists of, as suffixes
+  // of its base filename (see `FileSuffixes`).
+  static FileSuffixes fileSuffixes(VocabularyType type);
+
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`. Throw for a `type` with holes (see
   // `VocabularyInMemoryBinSearch`), which cannot be built word by word.
@@ -218,6 +252,13 @@ class PolymorphicVocabulary {
   // Same as above, but the `VocabularyType` is the currently active type of
   // `this`.
   std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
+      const std::string& filename) const;
+
+  // Create the `ParallelWordWriterBase` (see `index/vocabulary/
+  // VocabularyTypes.h`) that will create a vocabulary of the currently active
+  // type at the given `filename`. Throw for a type with holes, see
+  // `makeDiskWriterPtr`.
+  std::unique_ptr<ParallelWordWriterBase> makeParallelWriterPtr(
       const std::string& filename) const;
 
   // Generic serialization support - delegates to the active variant.

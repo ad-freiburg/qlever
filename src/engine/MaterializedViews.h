@@ -153,8 +153,9 @@ class MaterializedViewWriter {
   IndexMetaData writePermutation(RangeOfIdTables sortedBlocksSPO) const;
 
   // Helper for `computeResultAndWritePermutation`: Writes the metadata JSON
-  // files with column names and ordering to disk.
-  void writeViewMetadata() const;
+  // files with column names, ordering and the given number of distinct values
+  // (one per column in `columnNames_`) to disk.
+  void writeViewMetadata(const std::vector<size_t>& numDistinct) const;
 
   // Actually computes, permutes and if needed externally sorts the query result
   // and writes the view (SPO permutation and metadata) to disk.
@@ -172,6 +173,9 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
   std::shared_ptr<Permutation> permutation_{std::make_shared<Permutation>(
       Permutation::Enum::SPO, ad_utility::makeUnlimitedAllocator<Id>(), name_)};
   VariableToColumnMap varToColMap_;
+  // The number of distinct values of each column over the whole view (if
+  // stored in the view's info JSON), see `numDistinct` below.
+  std::vector<std::optional<size_t>> numDistinct_;
   std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
   std::optional<std::string> originalQuery_;
   std::optional<ParsedQuery> parsedQuery_;
@@ -205,6 +209,14 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
   // Get the variable to column map.
   const VariableToColumnMap& variableToColumnMap() const {
     return varToColMap_;
+  }
+
+  // Get the number of distinct values of a column over the whole view, or
+  // `std::nullopt` if it is unknown (e.g. for views written by older versions
+  // of QLever or for the empty columns added to views with fewer than four
+  // columns). It is used to estimate multiplicities (see `IndexScan`).
+  std::optional<size_t> numDistinct(ColumnIndex col) const {
+    return col < numDistinct_.size() ? numDistinct_[col] : std::nullopt;
   }
 
   // Get the original query string used for writing the view.
@@ -285,7 +297,7 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
     std::optional<CacheKeyAndColumnMapping> withoutInvariants_;
   };
   CacheKeyWithAndWithoutInvariantPatterns computeCacheKey(
-      QueryExecutionContext* qec) const;
+      const QueryExecutionContext* qec) const;
 
   // If the materialized view contains a top-level `BIND` statement where the
   // expression matches the given cache key, return the column index of the
@@ -369,7 +381,7 @@ class MaterializedViewsManager {
   // view atomically with loading it, without releasing the lock in between).
   std::shared_ptr<MaterializedView> loadViewIntoLockedState(
       const std::string& name, LoadedViews& state,
-      QueryExecutionContext* qec) const;
+      const QueryExecutionContext* qec) const;
 
  public:
   MaterializedViewsManager() = default;
@@ -419,11 +431,13 @@ class MaterializedViewsManager {
   // `qec` is forwarded to `MaterializedView::computeCacheKey` for cache-key
   // based query rewriting; passing `nullptr` skips that analysis (currently
   // used by tests that do not care about it).
-  void loadView(const std::string& name, QueryExecutionContext* qec) const;
+  void loadView(const std::string& name,
+                const QueryExecutionContext* qec) const;
 
-  // Unload a materialized view if it is loaded. This function is a no-op
-  // otherwise. It is `const` for the same reason described above.
-  void unloadViewIfLoaded(const std::string& name) const;
+  // Unload a materialized view if it is loaded and return `true`. Return
+  // `false` (and do nothing else) if it is not loaded. It is `const` for the
+  // same reason described above.
+  bool unloadViewIfLoaded(const std::string& name) const;
 
   // Delete a materialized view: unload it if loaded and delete all of its files
   // from disk. Throws if the view does not exist.
@@ -433,7 +447,7 @@ class MaterializedViewsManager {
   // is never `nullptr`. If the view does not exist, the function throws. See
   // `loadView` above for details on the use of the `QueryExecutionContext`.
   std::shared_ptr<const MaterializedView> getView(
-      const std::string& name, QueryExecutionContext* qec) const;
+      const std::string& name, const QueryExecutionContext* qec) const;
 
   // The same as `MaterializedView::makeIndexScan` above, but load and use the
   // right view automatically as requested in the `MaterializedViewQuery`.
@@ -458,7 +472,7 @@ class MaterializedViewsManager {
 
   // Write a `MaterializedView` given a valid `name` (consisting only of
   // alphanumerics and hyphens) and a `plannedQuery` to be executed. The query's
-  // result is written to the view.
+  // result is written to the view. The view is then loaded automatically.
   //
   // If a view with the same name is already loaded, it is unloaded before
   // writing.

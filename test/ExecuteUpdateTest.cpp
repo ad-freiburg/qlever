@@ -59,7 +59,7 @@ TEST(ExecuteUpdate, executeUpdate) {
                 deltaTriples.updateAugmentedMetadata();
                 QueryPlanner qp{&qec, sharedHandle};
                 const auto qet = qp.createExecutionTree(pq);
-                ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,
+                ExecuteUpdate::executeUpdate(index, pq, *qet, deltaTriples,
                                              sharedHandle);
               }
             });
@@ -244,11 +244,11 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       QueryPlanner qp{qec, sharedHandle};
       const auto qet = qp.createExecutionTree(pq);
       UpdateMetadata metadata;
-      auto result = qet.getResult(false);
+      auto result = qet->getResult(false);
       results.push_back(ExecuteUpdate::computeGraphUpdateQuads(
-          index, pq, *result, qet.getVariableColumns(), sharedHandle,
+          index, pq, *result, qet->getVariableColumns(), sharedHandle,
           metadata));
-      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
+      ExecuteUpdate::executeUpdate(index, pq, *qet, deltaTriples, sharedHandle);
     }
     return results;
   };

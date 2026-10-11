@@ -12,6 +12,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 class Filter : public Operation {
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
@@ -45,10 +46,13 @@ class Filter : public Operation {
   size_t getCostEstimate() override;
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; }
-  std::vector<QueryExecutionTree*> getChildren() override {
-    return {_subtree.get()};
+
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{_subtree.get()}, allocator()};
   }
 
+ public:
   bool knownEmptyResult() override { return _subtree->knownEmptyResult(); }
 
   float getMultiplicity(size_t col) override {
@@ -60,9 +64,7 @@ class Filter : public Operation {
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  VariableToColumnMap computeVariableToColumnMap() const override {
-    return _subtree->getVariableColumns();
-  }
+  VariableToColumnMap computeVariableToColumnMap() const override;
 
   // The method is directly invoked with the construction of this `Filter`
   // object. Its implementation retrieves <PrefilterExpression, Variable> pairs

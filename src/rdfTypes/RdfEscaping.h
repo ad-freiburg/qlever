@@ -10,7 +10,6 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/TypedIndex.h"
-#include "parser/NormalizedString.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
 
@@ -119,6 +118,16 @@ std::string normalizedContentFromLiteralOrIri(std::string&& input);
  */
 std::string unescapeIriref(std::string_view iriref);
 
+// Same as `unescapeIriref` above, but do not allocate if there is nothing to
+// unescape: return a view of the unescaped Iriref (including the angle
+// brackets). If `iriref` contains no escape sequence (by far the most common
+// case when parsing RDF input), a view of `iriref` itself is returned and
+// `buffer` is left untouched, which tells the caller that it can keep using
+// the original string. Otherwise the unescaped Iriref is stored in `buffer`
+// and a view of `buffer` is returned. `buffer` must be empty when calling this
+// function and has to outlive the returned view.
+std::string_view unescapeIriref(std::string_view iriref, std::string& buffer);
+
 /**
  * This function unescapes a prefixedIri (the "local" part in the form
  * prefix:local). These may only contain so-called "reserved character escape
@@ -148,28 +157,14 @@ std::string escapeForTsv(std::string input);
 // Escape a string to be compatible with XML.
 std::string escapeForXml(std::string input);
 
-// Create the content for a Literal based on a string that contains
-// the surrounding quotation marks. Escaped characters are stored in
-// their unescaped format, e.g. "Hello \' World" -> "Hello' World".
-// The surrounding quotes are removed
-NormalizedString normalizeLiteralWithQuotes(std::string_view input);
+// Append the content of a literal that does not contain the surrounding
+// quotation marks to `res`. Escaped characters are appended in their unescaped
+// format, e.g. "Hello \' World" -> "Hello' World".
+void unescapeLiteral(std::string_view input, std::string& res);
 
-// Create the content for a Literal based on a string that does not contain
-// the surrounding quotation marks. Escaped characters are stored in
-// their unescaped format, e.g. "Hello \' World" -> "Hello' World".
-NormalizedString normalizeLiteralWithoutQuotes(std::string_view input);
-
-// Created the content for an Iri based on a string that contains
-// the surrounding angled brackets. The angled brackets are removed
-NormalizedString normalizeIriWithBrackets(std::string_view input);
-
-// Created the content for an Iri based on a string that does not contain
-// the surrounding angled brackets.
-NormalizedString normalizeIriWithoutBrackets(std::string_view input);
-
-// Created a normalized representation of the language tag.
-// If it starts with an @, the leading @ character will be removed.
-NormalizedString normalizeLanguageTag(std::string_view input);
+// Like `unescapeLiteral`, but the `input` contains the surrounding quotation
+// marks (either one or three `"` or `'`), which are not appended to `res`.
+void unescapeLiteralWithQuotesRemoved(std::string_view input, std::string& res);
 
 }  // namespace RdfEscaping
 

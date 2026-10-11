@@ -18,7 +18,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/LocalVocabEntry.h"
 #include "parser/NormalizedString.h"
 #include "rdfTypes/GeoPoint.h"

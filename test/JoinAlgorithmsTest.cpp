@@ -294,6 +294,9 @@ struct FakeId {
   auto operator==(const FakeId& other) const {
     return value_.getBits() == other.value_.getBits() && tag_ == other.tag_;
   }
+  // Required by the generic lambda `Id::isUndefinedL`, which calls this member
+  // function on the elements of the join columns.
+  bool isUndefined() const { return value_.isUndefined(); }
 
   friend std::ostream& operator<<(std::ostream& os, const FakeId& id) {
     return os << "FakeId{" << id.value_ << ", " << id.tag_ << "}";

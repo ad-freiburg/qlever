@@ -16,6 +16,7 @@
 #include "global/FileSuffixConstants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
+#include "util/GlobalExecutor.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
@@ -146,6 +147,21 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
       limitOffset);
 }
 
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+// ____________________________________________________________________________
+cppcoro::generator<IdTable, CompressedRelationReader::LazyScanMetadata>
+Permutation::getDistinctCol0Ids(
+    const ScanSpecification& scanSpec, bool addGraphColumn,
+    std::optional<std::vector<Id>> idFilter,
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesState& locatedTriplesState) const {
+  return reader().getDistinctCol0Ids(
+      getScanSpecAndBlocks(scanSpec, locatedTriplesState), addGraphColumn,
+      std::move(idFilter), cancellationHandle,
+      getLocatedTriplesForPermutation(locatedTriplesState));
+}
+#endif
+
 // _____________________________________________________________________
 auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
   using enum Permutation::Enum;
@@ -249,10 +265,11 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScanImpl(
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
         scanSpecAndBlocks.blockMetadata_);
   }
-  return reader.lazyScan(
-      scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
-      std::move(columns), cancellationHandle,
-      getLocatedTriplesForPermutation(locatedTriplesState), limitOffset);
+  return reader.lazyScan(scanSpecAndBlocks.scanSpec_,
+                         std::move(optBlocks.value()), std::move(columns),
+                         cancellationHandle,
+                         getLocatedTriplesForPermutation(locatedTriplesState),
+                         ad_utility::globalExecutor(), limitOffset);
 }
 
 // _____________________________________________________________________________
@@ -261,13 +278,14 @@ Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState,
-    std::optional<size_t> numThreadsOverride) const {
+    std::optional<size_t> numBlocksInFlightOverride) const {
   auto independentReader = std::make_unique<CompressedRelationReader>(
       reader().makeReaderWithReboundAllocator(
           ad_utility::makeUnlimitedAllocator<Id>()));
   // Applies only to this dedicated reader; query scans use the shared reader
   // and are unaffected.
-  independentReader->lazyScanNumThreadsOverride_ = numThreadsOverride;
+  independentReader->lazyScanNumBlocksInFlightOverride_ =
+      numBlocksInFlightOverride;
   auto blocks = lazyScanImpl(*independentReader, scanSpecAndBlocks,
                              std::nullopt, additionalColumns,
                              cancellationHandle, locatedTriplesState, {});

@@ -15,7 +15,8 @@ using namespace sparqlExpression::detail;
 ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
   auto evaluator = [context](const auto& childResult) -> ExpressionResult {
     using T = std::decay_t<decltype(childResult)>;
-    if (getResultSize(*context, childResult) == 0) {
+    // An empty group has no sample.
+    if (context->size() == 0) {
       return Id::makeUndefined();
     }
     if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
@@ -27,9 +28,9 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
     } else if constexpr (std::is_same_v<T, ::Variable>) {
       // TODO<joka921> Can't this be a simpler function (getIdAt)
       AD_CORRECTNESS_CHECK(context->_endIndex > context->_beginIndex);
-      ql::span<const ValueId> idOfFirstAsVector = detail::getIdsFromVariable(
+      ConstIdColumnRef idOfFirst = detail::getIdsFromVariable(
           childResult, context, context->_beginIndex, context->_endIndex);
-      return ExpressionResult{idOfFirstAsVector[0]};
+      return ExpressionResult{idOfFirst[0]};
     } else {
       static_assert(isConstantResult<T>);
       return childResult;

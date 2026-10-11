@@ -98,3 +98,54 @@ TEST(Forward, AD_MOVE) {
     ASSERT_EQ(numCopies, 1u);
   }
 }
+
+namespace {
+// A type that records whether a given instance was created by a copy or by a
+// move. In contrast to `WasMoved` above this uses no global state, so the
+// tests below do not depend on the order in which they are run.
+struct MoveOrCopy {
+  bool wasCopied_ = false;
+  bool wasMoved_ = false;
+
+  MoveOrCopy() = default;
+  MoveOrCopy(const MoveOrCopy&) : wasCopied_{true} {}
+  MoveOrCopy(MoveOrCopy&&) noexcept : wasMoved_{true} {}
+};
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(Forward, moveIfReturnsTheExpectedTypes) {
+  int value = 0;
+  const int constValue = 0;
+  static_assert(
+      std::is_same_v<decltype(ad_utility::moveIf<true>(value)), int&&>);
+  static_assert(
+      std::is_same_v<decltype(ad_utility::moveIf<false>(value)), int&>);
+  // The constness is preserved, so `moveIf<true>` on a `const` lvalue does not
+  // actually move.
+  static_assert(std::is_same_v<decltype(ad_utility::moveIf<true>(constValue)),
+                               const int&&>);
+  static_assert(std::is_same_v<decltype(ad_utility::moveIf<false>(constValue)),
+                               const int&>);
+  // No matter which of the two is used, the value itself is unchanged.
+  EXPECT_EQ(ad_utility::moveIf<true>(value), 0);
+  EXPECT_EQ(ad_utility::moveIf<false>(value), 0);
+}
+
+// _____________________________________________________________________________
+TEST(Forward, moveIfMovesExactlyIfRequested) {
+  MoveOrCopy source;
+  MoveOrCopy copied = ad_utility::moveIf<false>(source);
+  EXPECT_TRUE(copied.wasCopied_);
+  EXPECT_FALSE(copied.wasMoved_);
+
+  MoveOrCopy moved = ad_utility::moveIf<true>(source);
+  EXPECT_FALSE(moved.wasCopied_);
+  EXPECT_TRUE(moved.wasMoved_);
+
+  // A `const` source is copied even if the move was requested.
+  const MoveOrCopy constSource;
+  MoveOrCopy fromConst = ad_utility::moveIf<true>(constSource);
+  EXPECT_TRUE(fromConst.wasCopied_);
+  EXPECT_FALSE(fromConst.wasMoved_);
+}

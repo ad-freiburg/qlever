@@ -25,6 +25,12 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
       numGeometries_{numGeometries.numGeometries()},
       metricLength_{metricLength},
       metricArea_{metricArea} {
+  // The binary representation must not contain implicit padding, see the
+  // `static_assert` after the class in `GeometryInfo.h`.
+  static_assert(sizeof(GeometryInfo) ==
+                sizeof(boundingBox_) + sizeof(geometryTypeAndCentroid_) +
+                    sizeof(numGeometries_) + sizeof(padding_) +
+                    sizeof(metricLength_) + sizeof(metricArea_));
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -53,7 +59,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
 std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   // Parse WKT and compute info
   using namespace detail;
-  auto [type, parsed] = parseWkt(wkt);
+  auto [parsed, wktType, crsType, sourceCrs] = parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
@@ -78,7 +84,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                  << std::endl;
   }
 
-  return GeometryInfo{type,      boundingBox.value(), centroid.value(),
+  return GeometryInfo{wktType,   boundingBox.value(), centroid.value(),
                       {numGeom}, metricLength,        MetricArea{area}};
 }
 
@@ -129,11 +135,11 @@ Centroid GeometryInfo::getCentroid() const {
 
 // ____________________________________________________________________________
 std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
-  if (!parsed.has_value()) {
+  auto parseResult = detail::parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
-  return detail::centroidAsGeoPoint(parsed.value());
+  return detail::centroidAsGeoPoint(parseResult.parsedWkt_.value());
 }
 
 // ____________________________________________________________________________
@@ -144,11 +150,11 @@ BoundingBox GeometryInfo::getBoundingBox() const {
 
 // ____________________________________________________________________________
 std::optional<BoundingBox> GeometryInfo::getBoundingBox(std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
-  if (!parsed.has_value()) {
+  auto parseResult = detail::parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
-  return detail::boundingBoxAsGeoPoints(parsed.value());
+  return detail::boundingBoxAsGeoPoints(parseResult.parsedWkt_.value());
 }
 
 // ____________________________________________________________________________
@@ -166,12 +172,13 @@ MetricArea GeometryInfo::getMetricArea() const { return metricArea_; }
 
 // ____________________________________________________________________________
 std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
-  if (!parsed.has_value()) {
+  auto parseResult = detail::parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
   try {
-    return MetricArea{detail::computeMetricArea(parsed.value())};
+    return MetricArea{
+        detail::computeMetricArea(parseResult.parsedWkt_.value())};
   } catch (const InvalidPolygonError&) {
     return std::nullopt;
   }
@@ -188,11 +195,11 @@ MetricLength GeometryInfo::getMetricLength() const { return metricLength_; }
 // ____________________________________________________________________________
 std::optional<MetricLength> GeometryInfo::getMetricLength(
     const std::string_view& wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
-  if (!parsed.has_value()) {
+  auto parseResult = detail::parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
-  return {detail::computeMetricLength(parsed.value())};
+  return {detail::computeMetricLength(parseResult.parsedWkt_.value())};
 }
 
 // ____________________________________________________________________________
@@ -238,16 +245,18 @@ NumGeometries GeometryInfo::getNumGeometries() const {
 // ____________________________________________________________________________
 std::optional<NumGeometries> GeometryInfo::getNumGeometries(
     std::string_view wkt) {
-  auto [type, parsed] = detail::parseWkt(wkt);
-  if (!parsed.has_value()) {
+  auto parseResult = detail::parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
-  return NumGeometries{detail::countChildGeometries(parsed.value())};
+  return NumGeometries{
+      detail::countChildGeometries(parseResult.parsedWkt_.value())};
 }
 
 // ____________________________________________________________________________
-CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
-    RequestedInfo GeometryInfo::getRequestedInfo() const {
+CPP_template_def(typename RequestedInfo)(
+    requires RequestedInfoT<RequestedInfo>)
+RequestedInfo GeometryInfo::getRequestedInfo() const {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return *this;
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {
@@ -277,9 +286,10 @@ template MetricLength GeometryInfo::getRequestedInfo<MetricLength>() const;
 template MetricArea GeometryInfo::getRequestedInfo<MetricArea>() const;
 
 // ____________________________________________________________________________
-CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
-    std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
-        std::string_view wkt) {
+CPP_template_def(typename RequestedInfo)(
+    requires RequestedInfoT<RequestedInfo>)
+std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
+    std::string_view wkt) {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return GeometryInfo::fromWktLiteral(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {

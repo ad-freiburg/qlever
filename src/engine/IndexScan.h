@@ -8,7 +8,9 @@
 #include <string>
 
 #include "engine/Operation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/DeltaTriples.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashMap.h"
 
 class SparqlTriple;
@@ -123,14 +125,14 @@ class IndexScan final : public Operation {
   // join between the first column of the result with the `joinColumn`.
   // Requires that the `joinColumn` is sorted, else the behavior is undefined.
   CompressedRelationReader::IdTableGeneratorInputRange
-  lazyScanForJoinOfColumnWithScan(ql::span<const Id> joinColumn) const;
+  lazyScanForJoinOfColumnWithScan(ConstIdColumnRef joinColumn) const;
 
   // Return two generators, the first of which yields exactly the elements of
   // `input` and the second of which yields the matching blocks, skipping the
   // blocks consisting only of rows that don't match the tables yielded by
-  // `input` to speed up join algorithms when no undef values are presend. When
-  // there are undef values, the second generator represents the full index
-  // scan.
+  // `input` to speed up join algorithms when no undef values are present. When
+  // there are undef values or this scan has a LIMIT or OFFSET, the second
+  // generator represents the full index scan.
   std::pair<Result::LazyResult, Result::LazyResult> prefilterTables(
       Result::LazyResult input, ColumnIndex joinColumn,
       bool filterJoinSide = true);
@@ -151,6 +153,11 @@ class IndexScan final : public Operation {
   // yielded by the input wrapped by `innerState`.
   Result::LazyResult createPrefilteredIndexScanSide(
       std::shared_ptr<SharedGeneratorState> innerState);
+
+  // Like `chunkedIndexScan`, but keep the runtime info up to date while the
+  // result is consumed. `numBlocksAll` is the total number of blocks of the
+  // scan.
+  Result::LazyResult chunkedIndexScanWithRuntimeInfo(size_t numBlocksAll);
 
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
   // ALL the `Operations`.
@@ -235,7 +242,9 @@ class IndexScan final : public Operation {
 
   Result computeResult(bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
+  }
 
   // Compute the size estimate of the index scan, taking delta triples (from
   // the `queryExecutionContext_`) into account. The `bool` is true iff the
@@ -301,6 +310,13 @@ class IndexScan final : public Operation {
   // get the final result. Throws if `varsToKee_` is `nullopt`.
   std::vector<ColumnIndex> getSubsetForStrippedColumns() const;
 
+  // Helpers for `determineMultiplicities`: Return the multiplicities of the
+  // full result (without any columns stripped) for a scan of a regular index
+  // permutation or of a materialized view, respectively.
+  std::vector<float> computeMultiplicitiesForIndex() const;
+  std::vector<float> computeMultiplicitiesForView(
+      const MaterializedView& view) const;
+
   // Return a lambda that takes an `idTable` that has the result without any
   // columns stripped, and applies the column subset that leads to the correct
   // stripping of the columns. This function can also be used if no columns are
@@ -330,10 +346,10 @@ class IndexScan final : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
 
-  // Returns a `VariableToColumnMap` that maps all visible variables of this
-  // `IndexScan` not to result column indices but to column indices in the
-  // underlying `Permutation`. This differs from the regular
-  // `VariableToColumnMap` if some columns are not read.  Used for
+  // Returns a `VariableToColumnMap` that maps all variables read by this
+  // `IndexScan` (also those hidden by a subquery) not to result column indices
+  // but to column indices in the underlying `Permutation`. This differs from
+  // the regular `VariableToColumnMap` if some columns are not read. Used for
   // `makeTreeWithBindColumn`.
   //
   // Example: We select the first three columns and an additional column at

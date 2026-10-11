@@ -13,6 +13,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
+#include "util/ContainersWithAllocator.h"
 
 // An operation that owns its explicit `Result` via `shared_ptr`s (or a
 // non-owning view) and just returns this result when `computeResult` is
@@ -62,7 +63,6 @@ class ExplicitIdTableOperation : public Operation {
   size_t sizeEstimate() const { return idTableView().numRows(); }
 
   // Overridden methods from the `Operation` base class.
-  std::vector<QueryExecutionTree*> getChildren() override;
   std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
@@ -76,6 +76,7 @@ class ExplicitIdTableOperation : public Operation {
   Result computeResult(bool requestLaziness) override;
 
  private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 };
 

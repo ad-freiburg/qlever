@@ -145,6 +145,7 @@ inline void PrintTo(const SetOfIntervals& set, std::ostream* os) {
   for (auto [first, second] : set._intervals) {
     *os << '{' << first << ", " << second << '}';
   }
+  *os << " of size " << set.size();
 }
 }  // namespace ad_utility
 
