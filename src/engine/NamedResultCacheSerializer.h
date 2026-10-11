@@ -66,10 +66,8 @@ CPP_template(typename Serializer, typename WriteEntry)(
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::WriteSerializer<
-        Serializer>) void NamedResultCache::writeToSerializer(Serializer&
-                                                                  serializer)
-    const {
+    requires ad_utility::serialization::WriteSerializer<Serializer>)
+void NamedResultCache::writeToSerializer(Serializer& serializer) const {
   namedResultCacheSerializer::writeEntries(
       serializer, getAllEntriesSortedByKey(),
       [](Serializer& s, const Value& value) { s << value; });
@@ -77,10 +75,10 @@ CPP_template_def(typename Serializer)(
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::ReadSerializer<
-        Serializer>) void NamedResultCache::
-    readFromSerializer(Serializer& serializer, Value::Allocator allocator,
-                       const LocalVocabContext& context) {
+    requires ad_utility::serialization::ReadSerializer<Serializer>)
+void NamedResultCache::readFromSerializer(Serializer& serializer,
+                                          Value::Allocator allocator,
+                                          const LocalVocabContext& context) {
   // Clear the cache first.
   clear();
 
@@ -166,18 +164,21 @@ CPP_template(typename Serializer, typename Columns)(
     // NOTE 1: Although the code for serialization of a local vocab above is
     // already incorporated, we currently still let local vocab entries throw
     // an exception, because there are some caveats in the serialization that
-    // don't work yet, and will only be mitigated in the future. A caller that
-    // has rewritten the `columns` (see above) has already replaced all such
-    // `Id`s, so this check only applies to the `Id`s that are actually
-    // written.
+    // don't work yet, and will only be mitigated in the future. The check only
+    // applies to the `Id`s that are actually written (the `columns`, not
+    // `value.result_`). The blob writer (see
+    // `NamedCachedQueryBlobManager::serialize`) therefore never triggers it,
+    // because it passes `columns` in which canonicalization has already
+    // replaced all such `Id`s (see `canonicalizeForSerialization`).
     //
     // NOTE 2: Even though we disallow the local vocab, it is crucial to
     // serialize the local vocab because of possible added blank node indices,
     // which we do handle correctly, and which also rely on the local vocab.
     //
     // NOTE 3: The blobs of `NamedCachedQueryBlobManager` support local vocab
-    // entries by rewriting them first (see
-    // `NamedCacheSecondaryVocabRewriter.h`).
+    // entries by canonicalizing every entry first, which rewrites those `Id`s
+    // (see `NamedCacheSecondaryVocabRewriter.h`). Only the blank node blocks of
+    // the local vocab are written for them, not its words.
     //
     // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
     // allow local vocab entries here.

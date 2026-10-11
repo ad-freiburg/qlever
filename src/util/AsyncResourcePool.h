@@ -162,8 +162,8 @@ class AsyncResourcePool {
     //
     // NOTE: This does not exist for an `AsyncResourcePool<void>`, and for an
     // `AsyncResourcePool<const T>` it hands out a `const T&`.
-    CPP_template_2(typename T = ResourceType)(
-        requires(!std::is_void_v<T>)) std::add_lvalue_reference_t<T> get() {
+    CPP_template_2(typename T = ResourceType)(requires(!std::is_void_v<T>))
+    std::add_lvalue_reference_t<T> get() {
       AD_CONTRACT_CHECK(isValid());
       return state_->resource_.value();
     }
@@ -181,7 +181,7 @@ class AsyncResourcePool {
   // where `numResources` is simply the number of permits of the semaphore.
   CPP_template_2(typename T = ResourceType)(
       requires ql::concepts::default_initializable<StoredTypeOf<T>>)
-      AsyncResourcePool(net::any_io_executor executor, size_t numResources)
+  AsyncResourcePool(net::any_io_executor executor, size_t numResources)
       : AsyncResourcePool{std::move(executor),
                           std::vector<StoredType>(numResources)} {}
 
@@ -210,8 +210,8 @@ class AsyncResourcePool {
   CPP_template_2(typename T = ResourceType)(
       requires(!std::is_void_v<T>)
           CPP_and_2 ql::concepts::copy_constructible<StoredTypeOf<T>>)
-      AsyncResourcePool(net::any_io_executor executor, size_t numResources,
-                        const StoredTypeOf<T>& prototype)
+  AsyncResourcePool(net::any_io_executor executor, size_t numResources,
+                    const StoredTypeOf<T>& prototype)
       : AsyncResourcePool{std::move(executor),
                           std::vector<StoredType>(numResources, prototype)} {}
 
