@@ -1,14 +1,7 @@
 # Re-compiling all the infrastructure all the time is a waste of time, so we
 # pre-compile that part as a library.
 
-# The benchmarks are command-line tools, so they are off by default for
-# Emscripten.
-if (EMSCRIPTEN)
-    set(_NO_BENCHMARK_DEFAULT ON)
-else ()
-    set(_NO_BENCHMARK_DEFAULT OFF)
-endif ()
-OPTION(_NO_BENCHMARK "Disable benchmark targets, for example when building with Emscripten." ${_NO_BENCHMARK_DEFAULT})
+OPTION(_NO_BENCHMARK "Disable benchmark targets, for example when building with Emscripten." OFF)
 
 if (NOT _NO_BENCHMARK)
     # This part compiles 'just' the benchmark infrastructure and doesn't provide a main function.
