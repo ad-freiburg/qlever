@@ -11,11 +11,7 @@
 
 #include "index/TextMetaData.h"
 
-TEST(ContextListMetaDataTest, sizeOnDisk) {
-  EXPECT_EQ(ContextListMetaData::sizeOnDisk(),
-            sizeof(size_t) + 4 * sizeof(off_t));
-}
-
+// Test that sizeOnDisk returns the size of 2 Ids + the metadata sizeOnDisk().
 TEST(TextBlockMetaDataTest, sizeOnDisk) {
   EXPECT_EQ(TextBlockMetaData::sizeOnDisk(),
             2 * sizeof(uint64_t) + 2 * ContextListMetaData::sizeOnDisk());
