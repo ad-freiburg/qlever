@@ -8,6 +8,7 @@ addLinkAndDiscoverTestNoLibs(EncodedIriPatternTest vocabulary)
 addLinkAndDiscoverTestNoLibs(NibbleEncodingTest vocabulary)
 addLinkAndDiscoverTest(GraphNameManagerTest index)
 addLinkAndDiscoverTest(IndexFormatConverterTest index engine)
+embedTestDataForEmscripten(IndexFormatConverterTest)
 # When the `server` library is not built (Emscripten, see
 # `src/engine/CMakeLists.txt`), the server-integration test is compiled out
 # via `#ifndef __EMSCRIPTEN__` in the test file and all other tests still run.

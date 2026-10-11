@@ -978,9 +978,9 @@ add_subdirectory(test)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
-OPTION(_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER "Don't build some targets when compiling with Emscripten." OFF)
-
-if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+# The command-line tools are not built for Emscripten (and `qlever-server`
+# cannot be, see `src/engine/CMakeLists.txt`).
+if (NOT EMSCRIPTEN)
     add_executable(qlever-index src/index/IndexBuilderMain.cpp)
     qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
@@ -1012,7 +1012,7 @@ qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THR
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
 
-if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+if (NOT EMSCRIPTEN)
     install(TARGETS
         qlever-index
         qlever-server

@@ -435,15 +435,10 @@ TEST(CancellationHandle, verifyWatchDogEndsEarlyIfCancelled) {
   handle.cancel(MANUAL);
 
   handle.startWatchDog();
-  // Wait for Watchdog to start
-  std::this_thread::sleep_for(5ms);
-
-  handle.cancellationState_ = WAITING_FOR_CHECK;
-
-  // Wait for one watchdog cycle + tolerance
-  std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL + 1ms);
-  // If the watchdog were running it would've set this to CHECK_WINDOW_MISSED
-  EXPECT_EQ(handle.cancellationState_, WAITING_FOR_CHECK);
+  // The watchdog of a cancelled handle has to stop on its own, otherwise this
+  // `join` blocks forever.
+  handle.watchDogThread_.join();
+  EXPECT_EQ(handle.cancellationState_, MANUAL);
 }
 
 // _____________________________________________________________________________

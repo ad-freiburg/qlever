@@ -172,7 +172,12 @@ TEST(IsSubdirectoryOf, differentPaths) {
   EXPECT_FALSE(isSubdirectoryOf("/some/path/other/../../malicious-path/",
                                 "/some/path/"));
 
-  // This only works if the test is not run inside `/`, but this should be fine.
+  // This only works if the test is not run inside `/` (which is the working
+  // directory under Emscripten).
+  TempDir tmpDir;
+  auto originalCwd = fs::current_path();
+  fs::current_path(tmpDir.path());
+  absl::Cleanup restoreCwd{[&originalCwd]() { fs::current_path(originalCwd); }};
   EXPECT_FALSE(isSubdirectoryOf("/malicious-path", "relative-path"));
   EXPECT_FALSE(isSubdirectoryOf("../malicious-path", "relative-path"));
 }
