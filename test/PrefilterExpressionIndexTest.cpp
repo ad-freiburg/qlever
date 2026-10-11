@@ -991,12 +991,10 @@ TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
                        b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
 }
 
-// The range of the prefix is computed on the PRIMARY level of the collation,
-// where strings that differ only in case are equal. `REGEX` relies on this when
-// it drops the `i` flag before deriving the prefix (see
-// `getConstantRegexForPrefiltering`), so pin the property down here: a prefix
-// in a different case selects the same blocks.
-//______________________________________________________________________________
+// Test that a prefix in a different case selects the same blocks: the range of
+// the prefix is computed on the PRIMARY level of the collation, where strings
+// that differ only in case are equal. `REGEX` relies on this when it drops the
+// `i` flag before deriving the prefix (see `getConstantRegexForPrefiltering`).
 TEST_F(PrefilterExpressionOnMetadataTest, prefixRegexPrefixRangesIgnoreCase) {
   // The vocabulary of the test index contains "Berlin", "Düsseldorf",
   // "Hamburg (Altona)", "Stuttgart" and similar values.

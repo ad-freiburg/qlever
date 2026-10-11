@@ -2,7 +2,7 @@
 //
 // 2022 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 // 2022 - 2024 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
-// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -101,19 +101,19 @@ class RegexExpression : public RegexExpressionBase {
     if (!prefix_.has_value()) {
       return {};
     }
-    // A `PrefixRegexExpression` keeps every block that may contain a value in
-    // the range of the prefix, which is exactly what we need here: the prefix
-    // is guaranteed for every match, so a block outside of that range cannot
-    // contain a match. For a negated `REGEX` the requirement is the opposite
-    // one, namely that no block which may contain a *non*-match is dropped, and
-    // that does not hold: the range of the prefix is computed on the PRIMARY
-    // level of the collation, so it also contains values that the regex does
-    // not match (e.g. "ÄBC" is in the range of the prefix "abc"). Those values
-    // satisfy the negated `REGEX`, but their block would be dropped.
+    // Prefilter only the non-negated `REGEX`: a `PrefixRegexExpression` keeps
+    // every block that may contain a value in the range of the prefix, and the
+    // prefix is guaranteed for every match, so a block outside of that range
+    // cannot contain a match.
     //
-    // Note that this is different for `ql:prefix-match` (and `STRSTARTS`),
-    // which is *defined* via the very same range and can therefore be
-    // prefiltered in both directions.
+    // NOTE: For a negated `REGEX` the requirement is the opposite one, namely
+    // that no block which may contain a *non*-match is dropped, and that does
+    // not hold: the range of the prefix is computed on the PRIMARY level of
+    // the collation, so it also contains values that the regex does not match
+    // (e.g. "ÄBC" is in the range of the prefix "abc"). Those values satisfy
+    // the negated `REGEX`, but their block would be dropped. This is different
+    // for `ql:prefix-match` (and `STRSTARTS`), which is *defined* via the very
+    // same range and can therefore be prefiltered in both directions.
     if (isNegated) {
       return {};
     }
@@ -128,10 +128,11 @@ class RegexExpression : public RegexExpressionBase {
 
   // If we know a guaranteed prefix, assume that only 10^-k entries remain,
   // where k is the length of that prefix, and cap to reasonable maximal values
-  // to prevent numerical stability problems. Note that unlike for
-  // `PrefixMatchExpression`, the actual regex has to be evaluated for each of
-  // the input rows, so the cost always includes the full input size (even if
-  // the input is sorted by the variable).
+  // to prevent numerical stability problems.
+  //
+  // NOTE: Unlike for `PrefixMatchExpression`, the actual regex has to be
+  // evaluated for each of the input rows, so the cost always includes the full
+  // input size (even if the input is sorted by the variable).
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSize,
       const std::optional<Variable>& firstSortedVariable) const override {
@@ -189,18 +190,17 @@ std::optional<std::string> getConstantRegexForPrefiltering(
 // `getLiteralPrefixOfRegex`), return the variable and that prefix, which
 // enables prefiltering. Return `std::nullopt` otherwise.
 //
-// Note: Prefiltering `STR(?var)` is deliberately not supported, since we would
-// not only have to match "Bob", but also "Bob"@en, "Bob"^^<iri>, and so on. The
-// current prefilter expressions do not consider this matching logic.
+// NOTE: Prefiltering `STR(?var)` is deliberately not supported (the `STR()`
+// expression is not a `VariableExpression`, so it fails the check below), since
+// we would not only have to match "Bob", but also "Bob"@en, "Bob"^^<iri>, and
+// so on. The current prefilter expressions do not consider this matching logic.
 std::optional<std::pair<Variable, std::string>> getRegexPrefilterInfo(
     const SparqlExpression& string, const SparqlExpression& regex,
     const SparqlExpression* flags) {
-  bool childIsStrExpression = string.isStrExpression();
-  const auto* variableExpression = dynamic_cast<const VariableExpression*>(
-      childIsStrExpression ? string.children()[0].get() : &string);
+  const auto* variableExpression =
+      dynamic_cast<const VariableExpression*>(&string);
   auto constantRegex = getConstantRegexForPrefiltering(regex, flags);
-  if (!variableExpression || !constantRegex.has_value() ||
-      childIsStrExpression) {
+  if (!variableExpression || !constantRegex.has_value()) {
     return std::nullopt;
   }
   std::string prefix = getLiteralPrefixOfRegex(constantRegex.value());

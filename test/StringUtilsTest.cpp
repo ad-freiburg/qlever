@@ -125,9 +125,9 @@ TEST(StringUtils, getUTF8Prefix) {
   }
 }
 
-// _____________________________________________________________________________
-// `removeTrailingIncompleteUtf8Character` cuts off a trailing character that is
-// not completely present, and leaves everything else unchanged.
+// Test that `removeTrailingIncompleteUtf8Character` cuts off a trailing
+// character that is not completely present, and leaves everything else
+// unchanged.
 TEST(StringUtils, removeTrailingIncompleteUtf8Character) {
   using ad_utility::removeTrailingIncompleteUtf8Character;
   // Strings that already end at a character boundary are unchanged, no matter

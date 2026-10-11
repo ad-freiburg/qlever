@@ -1,7 +1,7 @@
 // Copyright 2022 - 2026 The QLever Authors, in particular:
 //
 // 2022 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -77,7 +77,8 @@ void testWithExplicitResult(const SparqlExpression& expression,
 }  // namespace
 
 namespace sparqlExpression {
-// _____________________________________________________________________________
+// Test the construction of a `ql:prefix-match` expression, including the
+// rejection of invalid arguments.
 TEST(PrefixMatchExpression, makePrefixMatchExpression) {
   using namespace ::testing;
   auto hasPrefixAndVariableMatcher = [](std::string variableName,
@@ -118,7 +119,8 @@ auto testPrefixMatchUnorderedColumn =
       testWithExplicitResult(*expr, expectedResult);
     };
 
-// _____________________________________________________________________________
+// Test the evaluation on an input that is not sorted by the variable (one
+// range check per row).
 TEST(PrefixMatchExpression, unorderedColumn) {
   auto test = testPrefixMatchUnorderedColumn;
   // ?vocab column is `"Beta", "alpha", "älpha"
@@ -170,7 +172,8 @@ auto testPrefixMatchOrderedColumn =
       ASSERT_EQ(result, expected);
     };
 
-// _____________________________________________________________________________
+// Test the evaluation on an input that is sorted by the variable (binary
+// searches, the result is a `SetOfIntervals`).
 TEST(PrefixMatchExpression, orderedColumn) {
   auto test = testPrefixMatchOrderedColumn;
   // Sorted order (by bits of the valueIds):
@@ -211,7 +214,8 @@ TEST(PrefixMatchExpression, orderedColumn) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that on a grouped variable (outside of an aggregate) the result is a
+// single constant.
 TEST(PrefixMatchExpression, onGroupedVariableIsConstant) {
   // Evaluate on a single-row "group" in which `?vocab` is constant (`"Beta"`).
   auto setUpGroupedContext = [](TestContext& ctx) {
@@ -241,7 +245,7 @@ TEST(PrefixMatchExpression, onGroupedVariableIsConstant) {
   }
 }
 
-// _____________________________________________________________________________
+// Test the evaluation on a grouped variable whose child yields a vector.
 TEST(PrefixMatchExpression, onGroupedVariableWithVectorChildResult) {
   // Hash-map based or lazy GROUP BY implementations can replace the child of a
   // `PrefixMatchExpression` by an expression that yields one `Id` per group
@@ -271,7 +275,7 @@ TEST(PrefixMatchExpression, onGroupedVariableWithVectorChildResult) {
                   ::testing::ElementsAre(F, T, T, U)));
 }
 
-// _____________________________________________________________________________
+// Test that inside an aggregate the result is computed per row.
 TEST(PrefixMatchExpression, insideAggregateIsNotFolded) {
   auto prefixMatch = makePrefixMatch("?vocab", "al");
   ASSERT_TRUE(isPrefixExpression(prefixMatch));
@@ -290,7 +294,7 @@ TEST(PrefixMatchExpression, insideAggregateIsNotFolded) {
                   ::testing::ElementsAre(F, T, T)));
 }
 
-// _____________________________________________________________________________
+// Test that an unexpected child result on a grouped variable fails.
 TEST(PrefixMatchExpression, onGroupedVariableWithUnexpectedChildResult) {
   // The child of a `PrefixMatchExpression` is always a single variable, so when
   // the variable is grouped, the child evaluates either to a single `ValueId`
@@ -313,7 +317,7 @@ TEST(PrefixMatchExpression, onGroupedVariableWithUnexpectedChildResult) {
                                ::testing::HasSubstr("unreachable"));
 }
 
-// _____________________________________________________________________________
+// Test the cache key.
 TEST(PrefixMatchExpression, getCacheKey) {
   using namespace ::testing;
   VariableToColumnMap map;
@@ -343,7 +347,7 @@ TEST(PrefixMatchExpression, getCacheKey) {
   EXPECT_NE(expression->getCacheKey(map), strExpression->getCacheKey(map));
 }
 
-// _____________________________________________________________________________
+// Test the size and cost estimates.
 TEST(PrefixMatchExpression, getEstimatesForFilterExpression) {
   using Estimates = SparqlExpressionPimpl::Estimates;
   auto hasEstimate = [](size_t sizeEstimate, size_t costEstimate) {

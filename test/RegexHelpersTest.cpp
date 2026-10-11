@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -36,8 +36,9 @@ using ::testing::StartsWith;
 
 namespace {
 
-// A regex without a leading anchor matches anywhere in the string, so nothing
-// can be said about the beginning of the matched values.
+// Test that a regex without a leading anchor has no prefix: it matches anywhere
+// in the string, so nothing can be said about the beginning of the matched
+// values.
 TEST(RegexHelpers, unanchoredRegexesHaveNoPrefix) {
   EXPECT_THAT(getLiteralPrefixOfRegex("alpha"), IsEmpty());
   EXPECT_THAT(getLiteralPrefixOfRegex("abc$"), IsEmpty());
@@ -47,8 +48,8 @@ TEST(RegexHelpers, unanchoredRegexesHaveNoPrefix) {
   EXPECT_THAT(getLiteralPrefixOfRegex("a$"), IsEmpty());
 }
 
-// The `^` anchor (and its explicit spelling `\A`) makes the leading literal a
-// guaranteed prefix.
+// Test that the `^` anchor (and its explicit spelling `\A`) makes the leading
+// literal a guaranteed prefix.
 TEST(RegexHelpers, anchoredRegexes) {
   EXPECT_EQ("alpha", getLiteralPrefixOfRegex("^alpha"));
   EXPECT_EQ("abc", getLiteralPrefixOfRegex("^abc$"));
@@ -61,8 +62,8 @@ TEST(RegexHelpers, anchoredRegexes) {
   EXPECT_THAT(getLiteralPrefixOfRegex("^"), IsEmpty());
 }
 
-// Special regex syntax after the literal prefix only shortens the prefix, it
-// does not disable the optimization completely.
+// Test that special regex syntax after the literal prefix only shortens the
+// prefix, it does not disable the optimization completely.
 TEST(RegexHelpers, prefixIsShortenedBySpecialSyntax) {
   EXPECT_EQ("al", getLiteralPrefixOfRegex("^al.ha"));
   EXPECT_EQ("al", getLiteralPrefixOfRegex("^alh*"));
@@ -77,9 +78,9 @@ TEST(RegexHelpers, prefixIsShortenedBySpecialSyntax) {
   EXPECT_THAT(getLiteralPrefixOfRegex(R"(^\d abc)"), IsEmpty());
 }
 
-// Quantifiers bind to the preceding element. An element that may occur zero
-// times is not part of the guaranteed prefix, whereas a fixed or minimum
-// repetition count still contributes to it.
+// Test the quantifiers, which bind to the preceding element. An element that
+// may occur zero times is not part of the guaranteed prefix, whereas a fixed or
+// minimum repetition count still contributes to it.
 TEST(RegexHelpers, quantifiers) {
   EXPECT_EQ("abc", getLiteralPrefixOfRegex("^abcd?"));
   EXPECT_EQ("abc", getLiteralPrefixOfRegex("^abcd*"));
@@ -95,8 +96,8 @@ TEST(RegexHelpers, quantifiers) {
   EXPECT_EQ("b", getLiteralPrefixOfRegex("^a{0}b"));
 }
 
-// Escaped characters and `\Q...\E` denote literal text and are part of the
-// prefix, with the escaping undone.
+// Test that escaped characters and `\Q...\E` denote literal text and are part
+// of the prefix, with the escaping undone.
 TEST(RegexHelpers, escaping) {
   EXPECT_EQ(R"(\al*ph.a()", getLiteralPrefixOfRegex(R"(^\\al\*ph\.a\()"));
   EXPECT_EQ("abc.def", getLiteralPrefixOfRegex(R"(^abc\.def)"));
@@ -109,8 +110,8 @@ TEST(RegexHelpers, escaping) {
   EXPECT_EQ("über", getLiteralPrefixOfRegex("^über"));
 }
 
-// Groups are "seen through", so a literal inside a group still contributes to
-// the prefix.
+// Test that groups are "seen through", so a literal inside a group still
+// contributes to the prefix.
 TEST(RegexHelpers, groups) {
   EXPECT_EQ("alh", getLiteralPrefixOfRegex("^a(lh)"));
   EXPECT_EQ("abc", getLiteralPrefixOfRegex("^(?:ab)c"));
@@ -118,9 +119,9 @@ TEST(RegexHelpers, groups) {
   EXPECT_EQ("abcdef", getLiteralPrefixOfRegex("^(abc)def"));
 }
 
-// An alternation only shortens the prefix to the common part of its branches.
-// If, however, the alternation is at the top level, the anchor applies to the
-// first branch only and there is no prefix at all.
+// Test that an alternation only shortens the prefix to the common part of its
+// branches. If, however, the alternation is at the top level, the anchor
+// applies to the first branch only and there is no prefix at all.
 TEST(RegexHelpers, alternations) {
   EXPECT_EQ("abc", getLiteralPrefixOfRegex("^abc(d|e)"));
   EXPECT_EQ("a", getLiteralPrefixOfRegex("^(?:ab|ac)"));
@@ -136,7 +137,7 @@ TEST(RegexHelpers, alternations) {
   EXPECT_THAT(getLiteralPrefixOfRegex(R"(^a\Qb)c\E|d)"), IsEmpty());
 }
 
-// Inline flags are taken into account.
+// Test that inline flags are taken into account.
 TEST(RegexHelpers, inlineFlags) {
   // A case-insensitive literal is not a fixed prefix.
   EXPECT_THAT(getLiteralPrefixOfRegex("^(?i)abc"), IsEmpty());
@@ -150,9 +151,9 @@ TEST(RegexHelpers, inlineFlags) {
   EXPECT_EQ("abc", getLiteralPrefixOfRegex("^(?m)abc"));
 }
 
-// The zero-width word-boundary assertions `\b` and `\B` are excluded, because
-// `RE2::PossibleMatchRange` reports wrong bounds for them (see the comment on
-// `containsWordBoundary` in `RegexHelpers.cpp`).
+// Test that the zero-width word-boundary assertions `\b` and `\B` are
+// excluded, because `RE2::PossibleMatchRange` reports wrong bounds for them
+// (see the comment on `containsWordBoundary` in `RegexHelpers.cpp`).
 TEST(RegexHelpers, wordBoundariesAreExcluded) {
   EXPECT_THAT(getLiteralPrefixOfRegex(R"(^a\bc)"), IsEmpty());
   EXPECT_THAT(getLiteralPrefixOfRegex(R"(^a\Bc)"), IsEmpty());
@@ -162,9 +163,9 @@ TEST(RegexHelpers, wordBoundariesAreExcluded) {
   EXPECT_TRUE(RE2::PartialMatch("b", R"(^(?:a|\b))"));
 }
 
-// Invalid regexes are rejected instead of being analysed. In production such a
-// regex never reaches this function (`makeRegexExpression` rejects it first),
-// but the function must not misbehave for them either.
+// Test that invalid regexes are rejected instead of being analysed. In
+// production such a regex never reaches this function (`makeRegexExpression`
+// rejects it first), but the function must not misbehave for them either.
 TEST(RegexHelpers, invalidRegexesHaveNoPrefix) {
   // A trailing backslash.
   EXPECT_THAT(getLiteralPrefixOfRegex(R"(^ab\)"), IsEmpty());
@@ -175,18 +176,20 @@ TEST(RegexHelpers, invalidRegexesHaveNoPrefix) {
   EXPECT_THAT(getLiteralPrefixOfRegex(R"(^ab\Kc)"), IsEmpty());
 }
 
-// For a regex that matches arbitrary bytes, an upper bound would have to be
-// larger than every possible string. RE2 cannot express that and reports no
-// range at all. The empty prefix is the correct answer for such a regex anyway.
+// Test that a regex that matches arbitrary bytes has no prefix: an upper bound
+// would have to be larger than every possible string, which RE2 cannot express,
+// so it reports no range at all. The empty prefix is the correct answer for
+// such a regex anyway.
 TEST(RegexHelpers, regexesWithoutAnUpperBoundHaveNoPrefix) {
   // `\C` matches an arbitrary byte.
   EXPECT_THAT(getLiteralPrefixOfRegex(R"(^\C*)"), IsEmpty());
   EXPECT_THAT(getLiteralPrefixOfRegex(R"(^\C+)"), IsEmpty());
 }
 
-// A regex that is too large to be compiled is not analysed. Note that this is
-// different from an invalid regex: the regex below is perfectly valid, it just
-// does not fit into the memory budget for the compiled program.
+// Test that a regex that is too large to be compiled is not analysed.
+//
+// NOTE: This is different from an invalid regex: the regex below is perfectly
+// valid, it just does not fit into the memory budget for the compiled program.
 TEST(RegexHelpers, regexesThatAreTooLargeHaveNoPrefix) {
   // The character class `\p{L}` alone already compiles to hundreds of
   // instructions, so a thousand repetitions of it blow the budget.
@@ -199,8 +202,8 @@ TEST(RegexHelpers, regexesThatAreTooLargeHaveNoPrefix) {
   EXPECT_EQ(compiled.error_code(), RE2::ErrorPatternTooLarge);
 }
 
-// Very long prefixes are truncated (see `maxPrefixLength`), which is sound
-// because a shorter prefix is always a valid answer.
+// Test that very long prefixes are truncated (see `maxPrefixLength`), which is
+// sound because a shorter prefix is always a valid answer.
 TEST(RegexHelpers, longPrefixesAreTruncated) {
   std::string longLiteral(500, 'a');
   std::string prefix = getLiteralPrefixOfRegex("^" + longLiteral);
@@ -208,8 +211,8 @@ TEST(RegexHelpers, longPrefixesAreTruncated) {
   EXPECT_EQ(prefix, longLiteral.substr(0, prefix.size()));
 }
 
-// The returned prefix is always valid UTF-8, i.e. it never ends in the middle
-// of a multi-byte character (see
+// Test that the returned prefix is always valid UTF-8, i.e. it never ends in
+// the middle of a multi-byte character (see
 // `ad_utility::removeTrailingIncompleteUtf8Character`). This is essential for
 // correctness: the vocabulary interprets the prefix as text, and a dangling
 // byte turns into U+FFFD there, which sorts before all letters and hence yields
@@ -233,7 +236,7 @@ TEST(RegexHelpers, prefixIsAlwaysValidUtf8) {
   }
 }
 
-// _____________________________________________________________________________
+// Test `mergeFlagsIntoRegex`.
 TEST(RegexHelpers, mergeFlagsIntoRegex) {
   // Without flags the regex is unchanged, so that the common case does not pay
   // for a wrapping group.
@@ -258,8 +261,7 @@ TEST(RegexHelpers, mergeFlagsIntoRegex) {
               IsEmpty());
 }
 
-// _____________________________________________________________________________
-// `ensureIsValidRegexFlags` accepts exactly the flags that
+// Test that `ensureIsValidRegexFlags` accepts exactly the flags that
 // `mergeFlagsIntoRegex` accepts (they share the check), but reports an
 // unsupported flag as an error instead of `std::nullopt`.
 TEST(RegexHelpers, ensureIsValidRegexFlags) {
@@ -274,7 +276,7 @@ TEST(RegexHelpers, ensureIsValidRegexFlags) {
                       "any combination of them")));
 }
 
-// _____________________________________________________________________________
+// Test `ensureIsValidRegex`.
 TEST(RegexHelpers, ensureIsValidRegex) {
   EXPECT_NO_THROW(ensureIsValidRegex("^abc[def]"));
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -364,7 +366,7 @@ void addAllStrings(std::string_view alphabet, size_t maxLength,
   }
 }
 
-// For a large number of randomly generated regexes, assert the property that
+// Test, for a large number of randomly generated regexes, the property that
 // `getLiteralPrefixOfRegex` promises: every string that the regex matches (with
 // the partial-match semantics that QLever's `REGEX` uses) starts with the
 // returned prefix.

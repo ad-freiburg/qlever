@@ -1,7 +1,7 @@
 // Copyright 2022 - 2026 The QLever Authors, in particular:
 //
 // 2022 - 2024 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 

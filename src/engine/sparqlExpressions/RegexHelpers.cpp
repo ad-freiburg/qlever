@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -10,12 +10,10 @@
 #include "engine/sparqlExpressions/RegexHelpers.h"
 
 #include <absl/strings/str_cat.h>
-#include <re2/prog.h>
 #include <re2/re2.h>
 #include <re2/regexp.h>
 
 #include <cstddef>
-#include <memory>
 #include <optional>
 #include <stdexcept>
 
@@ -32,8 +30,10 @@ namespace {
 // that tries each of the 256 possible byte values. The concrete value is
 // generous enough that even long IRI prefixes (e.g.
 // `^http://www\.wikidata\.org/entity/Q`) fit into it, and beyond that a longer
-// prefix hardly narrows the scanned blocks any further. Note that a smaller
-// bound can only shorten the resulting prefix, it can never make it unsound.
+// prefix hardly narrows the scanned blocks any further.
+//
+// NOTE: A smaller bound can only shorten the resulting prefix, it can never
+// make it unsound.
 constexpr int maxPrefixLength = 128;
 
 // Return the first character of `flags` that is not one of the
@@ -67,9 +67,10 @@ bool containsWordBoundary(re2::Regexp* regex) {
 }
 
 // Return true iff the `regex` may be used to derive a prefix for the prefilter.
-// Note that this is *not* the same as the regex starting with the character
-// `^`: in `^ab|cd` the anchor only applies to the first alternative, so "Xcd"
-// is matched as well. Conversely, regexes like `(?:^ab)c` are recognized as
+//
+// NOTE: This is *not* the same as the regex starting with the character `^`:
+// in `^ab|cd` the anchor only applies to the first alternative, so "Xcd" is
+// matched as well. Conversely, regexes like `(?:^ab)c` are recognized as
 // anchored although they do not start with a `^`.
 bool isSuitableForPrefixExtraction(re2::Regexp* regex) {
   if (regex->op() != re2::kRegexpConcat) {
@@ -87,41 +88,19 @@ bool isSuitableForPrefixExtraction(re2::Regexp* regex) {
 
 // _____________________________________________________________________________
 std::string getLiteralPrefixOfRegex(std::string_view regex) {
-  // Parse the regex once. Note that we deliberately do not go through `RE2`
-  // here: that would parse the regex a second time, because the structural
-  // check below needs the parsed representation, which `RE2` does not expose.
-  //
-  // Parse with exactly the flags that `RE2` would use, so that constructs like
-  // `^` are guaranteed to be interpreted the same way here and during the
-  // actual evaluation of the regex.
-  re2::RegexpStatus status;
-  auto parseFlags = static_cast<re2::Regexp::ParseFlags>(
-      RE2::Options{RE2::Quiet}.ParseFlags());
-  // A `re2::Regexp` is reference-counted and has a private destructor, so our
-  // reference has to be released via `Decref()` instead of `delete`. Note that
-  // `std::unique_ptr` doesn't run the deleter if the stored pointer is
-  // `nullptr`, which is what `Parse` returns for an invalid regex.
-  auto decref = [](re2::Regexp* parsedRegex) { parsedRegex->Decref(); };
-  std::unique_ptr<re2::Regexp, decltype(decref)> parsed{
-      re2::Regexp::Parse(regex, parseFlags, &status), decref};
-  // This is also the case for an invalid regex.
-  if (parsed == nullptr) {
+  // Compile the regex exactly as the evaluation of `REGEX` does, so that
+  // constructs like `^` are guaranteed to be interpreted the same way here and
+  // during the actual evaluation. This fails for an invalid regex and for a
+  // regex whose compiled program would be too large.
+  RE2 compiled{regex, RE2::Quiet};
+  if (!compiled.ok()) {
     return "";
   }
 
-  // Do the structural check before compiling: most regexes are rejected here
-  // (e.g. because they are not anchored) and then never have to be compiled.
-  if (!isSuitableForPrefixExtraction(parsed.get())) {
-    return "";
-  }
-
-  // `PossibleMatchRange` needs a compiled program, because it works by walking
-  // the resulting DFA. Two thirds of the memory budget is what `RE2` also
-  // grants the forward program. Note that compiling can fail even for a regex
-  // that parses successfully, for example if the program would be too large.
-  std::unique_ptr<re2::Prog> program{
-      parsed->CompileToProg(RE2::Options{RE2::Quiet}.max_mem() * 2 / 3)};
-  if (program == nullptr) {
+  // Do the structural check on the parsed regex, which `RE2` exposes via
+  // `Regexp()`. Most regexes are rejected here (e.g. because they are not
+  // anchored).
+  if (!isSuitableForPrefixExtraction(compiled.Regexp())) {
     return "";
   }
 
@@ -136,7 +115,7 @@ std::string getLiteralPrefixOfRegex(std::string_view regex) {
 
   // `PossibleMatchRange` fails if there is no upper bound that it could report,
   // which is the case if the regex matches arbitrary bytes (e.g. `^\C*`).
-  if (!program->PossibleMatchRange(&lower, &upper, maxPrefixLength)) {
+  if (!compiled.PossibleMatchRange(&lower, &upper, maxPrefixLength)) {
     return "";
   }
   // `RE2` works in UTF-8 mode, so the bounds consist of complete characters,
