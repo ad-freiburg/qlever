@@ -194,6 +194,12 @@ else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
 
+# Clang stores a timestamp in each precompiled header, so `ccache` would never
+# reuse the objects compiled with one. CMake doesn't remove it on its own.
+if (CMAKE_CXX_COMPILER_LAUNCHER MATCHES "ccache" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options("SHELL:-Xclang -fno-pch-timestamp")
+endif ()
+
 # Additionally fall back to `range-v3` whenever the C++ standard library is
 # libstdc++ older than version 12, independent of the compiler. Such versions
 # (e.g. the libstdc++ of GCC 8-11) do not yet provide `std::ranges::owning_view`,
