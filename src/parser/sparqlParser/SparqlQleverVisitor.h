@@ -56,8 +56,6 @@ class SparqlQleverVisitor {
       std::pair<std::variant<GraphPatternOperation, SparqlFilter>,
                 std::optional<parsedQuery::BasicGraphPattern>>;
   using OperationOrFilter = std::variant<GraphPatternOperation, SparqlFilter>;
-  using SubQueryAndMaybeValues =
-      std::pair<parsedQuery::Subquery, std::optional<parsedQuery::Values>>;
   using PatternAndVisibleVariables =
       std::pair<ParsedQuery::GraphPattern, std::vector<Variable>>;
   using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
@@ -130,6 +128,10 @@ class SparqlQleverVisitor {
   // This is the parsed query so far. Currently, this only contains information
   // about the number of internal variables that have already been assigned.
   ParsedQuery parsedQuery_;
+
+  // The trailing `VALUES` clause of the top-level query. It is visited before
+  // the query itself, because `ParsedQuery::addSolutionModifiers` needs it.
+  std::optional<parsedQuery::Values> postQueryValues_;
 
   // In most contexts, blank node labels in a SPARQL query are actually
   // variables. But sometimes they are in fact blank node labels (e.g. in
@@ -255,7 +257,7 @@ class SparqlQleverVisitor {
       Parser::IncludeClauseContext* includeCtx,
       Parser::GroupGraphPatternContext* ctx);
 
-  SubQueryAndMaybeValues visit(Parser::SubSelectContext* ctx);
+  parsedQuery::Subquery visit(Parser::SubSelectContext* ctx);
 
   parsedQuery::SelectClause visit(Parser::SelectClauseContext* ctx);
 

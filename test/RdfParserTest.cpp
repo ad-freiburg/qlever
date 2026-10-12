@@ -25,7 +25,7 @@
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/Constants.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/InputFileSpecification.h"
 #include "index/TripleComponentConversions.h"

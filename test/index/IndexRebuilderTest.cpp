@@ -890,7 +890,7 @@ void cleanDirsWithPrefix(std::string_view prefix) {
 // dedicated reader created by `lazyScanWithUnlimitedReader` (and only there);
 // the permutation's shared reader, which is used by the query scans, must
 // never carry an override.
-TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
+TEST(IndexRebuilder, lazyScanNumBlocksInFlightOverride) {
   auto index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
                                                   "<a> <b> <c> .");
   const auto& permutation =
@@ -902,24 +902,26 @@ TEST(IndexRebuilder, lazyScanNumThreadsOverride) {
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
 
-  auto scanWithOverride = [&](std::optional<size_t> numThreadsOverride) {
+  auto scanWithOverride = [&](std::optional<size_t> numBlocksInFlightOverride) {
     return permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *state), additionalColumns,
-        cancellationHandle, *state, numThreadsOverride);
+        cancellationHandle, *state, numBlocksInFlightOverride);
   };
   auto [reader, scan] = scanWithOverride(3);
-  EXPECT_EQ(reader->lazyScanNumThreadsOverride_, std::optional<size_t>{3});
+  EXPECT_EQ(reader->lazyScanNumBlocksInFlightOverride_,
+            std::optional<size_t>{3});
   auto [readerDefault, scanDefault] = scanWithOverride(std::nullopt);
-  EXPECT_EQ(readerDefault->lazyScanNumThreadsOverride_, std::nullopt);
-  EXPECT_EQ(permutation.reader().lazyScanNumThreadsOverride_, std::nullopt);
+  EXPECT_EQ(readerDefault->lazyScanNumBlocksInFlightOverride_, std::nullopt);
+  EXPECT_EQ(permutation.reader().lazyScanNumBlocksInFlightOverride_,
+            std::nullopt);
 
   // Recomputing the statistics with the throttle set must give exactly the
   // same result as with the default (0, which means "fall back to
-  // `lazy-index-scan-num-threads`"). This exercises the translation of the
-  // runtime parameter to the override at both of its use sites.
+  // `lazy-index-scan-num-blocks-in-flight`"). This exercises the translation of
+  // the runtime parameter to the override at both of its use sites.
   auto statsDefault = index.getImpl().recomputeStatistics(state);
   auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::rebuildIndexScanNumThreads_>(2);
+      &RuntimeParameters::rebuildIndexScanNumBlocksInFlight_>(2);
   EXPECT_EQ(index.getImpl().recomputeStatistics(state), statsDefault);
 }
 
