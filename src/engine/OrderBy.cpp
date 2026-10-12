@@ -9,12 +9,12 @@
 #include <sstream>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/StripColumns.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
 #include "index/IdTableUtils.h"
-#include "util/ColumnStrippingHelpers.h"
 #include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
@@ -347,7 +347,8 @@ OrderBy::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
   // The subtree has to provide the requested variables and the variables that
   // the `OrderBy` sorts by (those at `sortIndices_`).
-  VarsRequiredFromSubtree varsRequiredFromSubtree(requestedVariables);
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
   std::vector<std::pair<Variable, bool>> sortVars;
   for (const auto& sortIndex : sortIndices_) {
     const auto& sortVariable =
@@ -368,7 +369,7 @@ OrderBy::makeTreeWithStrippedColumns(
 
   // The new `OrderBy` also exports sorting variables that the parent did
   // not request, the helper adds a `StripColumns` operation for them.
-  return makeTreeWithOptionalStripOperation<OrderBy>(
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<OrderBy>(
       getExecutionContext(), requestedVariables, std::move(subtree),
       newSortIndices);
 }
