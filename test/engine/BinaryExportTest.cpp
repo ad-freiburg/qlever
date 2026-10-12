@@ -111,59 +111,289 @@ TEST(BinaryExportHelpers, readVectorOfStrings) {
   auto end = data.end();
 
   std::vector<std::string> result =
-      BinaryExportHelpers::readVectorOfStrings(it, end);
+      BinaryExportHelpers::read<std::vector<std::string>>(it, end);
   EXPECT_EQ(result, expected);
   EXPECT_EQ(it, end);
 }
 
+namespace {
+// The `Id` with which the exporter refers to the `i`-th transmitted string of
+// a batch, see `StringMapping`.
+Id transmitted(size_t i) {
+  return Id::makeFromLocalVocabIndex(
+      reinterpret_cast<LocalVocabIndex>(i << Id::numDatatypeBits));
+}
+
+// A test index that encodes the IRIs with the prefix `http://example.org/`
+// directly in the `Id`.
+QueryExecutionContext* qecWithEncodedPrefix() {
+  ad_utility::testing::TestIndexConfig config;
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  return ad_utility::testing::getQec(config);
+}
+
+// The plain prefix pattern for `prefix`, as used by `qecWithEncodedPrefix`.
+encodedIri::Pattern prefixPattern(std::string prefix) {
+  return encodedIri::plainPrefixPattern(std::move(prefix),
+                                        EncodedIriManager::NumBitsEncoding);
+}
+}  // namespace
+
 // _____________________________________________________________________________
-TEST(BinaryExportHelpers, rewriteVocabIds) {
+TEST(IdRewriter, rewriteRows) {
   auto* qec = ad_utility::testing::getQec();
 
-  // Create a test IdTable with local vocab indices
+  // Create a test IdTable with references to the transmitted strings. The
+  // first string is referenced twice.
   IdTable table{2, ad_utility::makeUnlimitedAllocator<Id>()};
-  table.push_back({Id::makeFromInt(42), Id::makeFromLocalVocabIndex(
-                                            reinterpret_cast<LocalVocabIndex>(
-                                                0 << Id::numDatatypeBits))});
-  table.push_back({Id::makeFromInt(43), Id::makeFromLocalVocabIndex(
-                                            reinterpret_cast<LocalVocabIndex>(
-                                                1 << Id::numDatatypeBits))});
+  table.push_back({Id::makeFromInt(41), transmitted(7)});
+  table.push_back({Id::makeFromInt(42), transmitted(0)});
+  table.push_back({Id::makeFromInt(43), transmitted(1)});
+  table.push_back({Id::makeFromInt(44), transmitted(0)});
+  table.push_back({Id::makeFromInt(45), transmitted(2)});
 
-  LocalVocab vocab;
-  std::vector<std::string> transmittedStrings = {"<http://example.org/a>",
-                                                 "\"literal\""};
+  // The first string is contained in the vocabulary of the index, the other
+  // two are not.
+  IdRewriter rewriter{*qec, {}, GeoPoint::encoding()};
+  rewriter.startBatch({"<x>", "<http://example.org/a>", "\"literal\""});
+  // The first row has already been rewritten (as part of a previous batch).
+  rewriter.rewriteRows(table, 1);
 
-  // Rewrite vocab IDs starting from index 0
-  ad_utility::HashMap<Id::T, Id> blankNodeMapping;
-  BinaryExportHelpers::rewriteVocabIds(table, 0, *qec, vocab,
-                                       transmittedStrings, {}, {},
-                                       blankNodeMapping, GeoPoint::encoding());
+  // The trivial IDs and the first row remain unchanged.
+  EXPECT_EQ(table(0, 1).getBits(), transmitted(7).getBits());
+  for (size_t i = 0; i < table.size(); ++i) {
+    EXPECT_EQ(table(i, 0), Id::makeFromInt(41 + static_cast<int64_t>(i)));
+  }
 
-  // Check that local vocab indices were rewritten
-  // The first column should remain unchanged (integers)
-  EXPECT_EQ(table(0, 0), Id::makeFromInt(42));
-  EXPECT_EQ(table(1, 0), Id::makeFromInt(43));
+  // A string that is contained in the vocabulary of the index is converted to
+  // its `VocabIndex` (bitwise, not only semantically), all occurrences in the
+  // same way.
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  EXPECT_EQ(table(1, 1).getBits(), getId("<x>").getBits());
+  EXPECT_EQ(table(3, 1).getBits(), getId("<x>").getBits());
 
-  // The second column should have been converted to LocalVocabIndex IDs
-  EXPECT_EQ(table(0, 1).getDatatype(), Datatype::LocalVocabIndex);
-  EXPECT_EQ(table(1, 1).getDatatype(), Datatype::LocalVocabIndex);
+  // The other strings are added to the local vocab.
+  EXPECT_EQ(table(2, 1).getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(table(4, 1).getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(table(2, 1).getLocalVocabIndex()->toStringRepresentation(),
+            "<http://example.org/a>");
+  EXPECT_EQ(table(4, 1).getLocalVocabIndex()->toStringRepresentation(),
+            "\"literal\"");
+  EXPECT_EQ(rewriter.takeLocalVocab().size(), 2);
 }
 
 // _____________________________________________________________________________
-TEST(BinaryExportHelpers, getPrefixMapping) {
+TEST(IdRewriter, rewriteStringEncodesIris) {
+  auto* qec = qecWithEncodedPrefix();
+  IdRewriter rewriter{*qec, {}, GeoPoint::encoding()};
+  rewriter.startBatch({"<http://example.org/42>"});
+
+  // A transmitted string that can be encoded locally becomes an encoded IRI.
+  EXPECT_EQ(
+      rewriter.rewriteString(transmitted(0)),
+      qec->getIndex().encodedIriManager().encode("<http://example.org/42>"));
+  EXPECT_TRUE(rewriter.takeLocalVocab().empty());
+
+  // A string that is not part of the batch.
+  EXPECT_ANY_THROW(rewriter.rewriteString(transmitted(1)));
+}
+
+// _____________________________________________________________________________
+TEST(IdRewriter, rewriteEncodedVal) {
+  auto* qec = qecWithEncodedPrefix();
+  const auto& manager = qec->getIndex().encodedIriManager();
+
+  // The second remote pattern is the (only) local pattern, the first one
+  // doesn't exist locally.
+  IdRewriter rewriter{*qec,
+                      {prefixPattern("<http://other.org/"),
+                       prefixPattern("<http://example.org/")},
+                      GeoPoint::encoding()};
+  auto local = manager.encode("<http://example.org/42>").value();
+  auto [localPrefixIdx, payload] =
+      EncodedIriManager::splitIntoPrefixIdxAndPayload(local);
+  ASSERT_EQ(localPrefixIdx, 0);
+
+  // A pattern that exists locally: only the index of the pattern changes.
+  Id remote = EncodedIriManager::makeIdFromPrefixIdxAndPayload(1, payload);
+  EXPECT_EQ(rewriter.rewriteEncodedVal(remote), local);
+  EXPECT_EQ(rewriter(remote), local);
+
+  // A pattern that doesn't exist locally: the IRI is decoded and stored in the
+  // local vocab (consistently for repeated occurrences).
+  Id remoteOther = EncodedIriManager::makeIdFromPrefixIdxAndPayload(0, payload);
+  Id rewritten = rewriter.rewriteEncodedVal(remoteOther);
+  ASSERT_EQ(rewritten.getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(rewritten.getLocalVocabIndex()->toStringRepresentation(),
+            "<http://other.org/42>");
+  EXPECT_EQ(rewriter.rewriteEncodedVal(remoteOther).getBits(),
+            rewritten.getBits());
+  EXPECT_EQ(rewriter.takeLocalVocab().size(), 1);
+}
+
+// _____________________________________________________________________________
+TEST(IdRewriter, rewriteBlankNode) {
   auto* qec = ad_utility::testing::getQec();
+  IdRewriter rewriter{*qec, {}, GeoPoint::encoding()};
+  auto remote = [](uint64_t i) {
+    return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(i));
+  };
 
-  std::vector<encodedIri::Pattern> remotePrefixes = {
-      encodedIri::plainPrefixPattern("<http://example.org/",
-                                     EncodedIriManager::NumBitsEncoding),
-      encodedIri::plainPrefixPattern("<http://other.org/",
-                                     EncodedIriManager::NumBitsEncoding)};
+  Id first = rewriter.rewriteBlankNode(remote(1));
+  Id second = rewriter(remote(2));
+  EXPECT_EQ(first.getDatatype(), Datatype::BlankNodeIndex);
+  EXPECT_NE(first, second);
+  EXPECT_EQ(rewriter.rewriteBlankNode(remote(1)), first);
 
-  auto mapping = BinaryExportHelpers::getPrefixMapping(*qec, remotePrefixes);
+  // The blank nodes are consistent also for the following batches.
+  auto vocab = rewriter.takeLocalVocab();
+  rewriter.startBatch({});
+  EXPECT_EQ(rewriter.rewriteBlankNode(remote(2)), second);
+}
 
-  // The mapping should be empty or contain mappings only for prefixes
-  // that exist in the local index
-  EXPECT_TRUE(mapping.size() <= remotePrefixes.size());
+// _____________________________________________________________________________
+TEST(IdRewriter, rewriteGeoPoint) {
+  using E = GeoPointEncodingEnum;
+  auto* qec = ad_utility::testing::getQec();
+  ASSERT_EQ(GeoPoint::encoding(), E::ZOrder);
+  GeoPoint point{47.9, 7.8};
+  Id local = Id::makeFromGeoPoint(point);
+
+  // The same encoding: the `Id` is unchanged.
+  EXPECT_EQ(IdRewriter(*qec, {}, E::ZOrder).rewriteGeoPoint(local), local);
+
+  // A different encoding: the `Id` is converted.
+  Id remote = [&point]() {
+    absl::Cleanup resetEncoding{[]() { GeoPoint::setEncoding(E::ZOrder); }};
+    GeoPoint::setEncoding(E::LatMajor);
+    return Id::makeFromGeoPoint(point);
+  }();
+  ASSERT_NE(remote, local);
+  IdRewriter rewriter{*qec, {}, E::LatMajor};
+  EXPECT_EQ(rewriter.rewriteGeoPoint(remote), local);
+  EXPECT_EQ(rewriter(remote), local);
+}
+
+// _____________________________________________________________________________
+TEST(ExportBatch, minimumSizesAndFormat) {
+  auto* qec = ad_utility::testing::getQec();
+  const auto& index = qec->getIndex();
+  auto I = [](int64_t i) { return Id::makeFromInt(i); };
+
+  IdTable table{3, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({I(1), I(2), I(3)});
+  table.push_back({I(4), I(5), I(6)});
+  table.push_back({I(7), I(8), I(9)});
+  // Only two of the columns are exported, in a different order.
+  std::vector<ColumnIndex> columns{2, 0};
+
+  // Return the bytes of the IDs in `ids`.
+  auto bytesOf = [](std::vector<Id> ids) {
+    std::string result;
+    for (Id id : ids) {
+      Id::T bits = id.getBits();
+      result.append(reinterpret_cast<const char*>(&bits), sizeof(bits));
+    }
+    return result;
+  };
+  // A batch consists of the IDs, followed by a marker (which has the size of
+  // an `Id`) and the strings.
+  auto expectBatch = [&](const std::string& batch, std::vector<Id> ids,
+                         const std::vector<std::string>& strings) {
+    auto idBytes = bytesOf(std::move(ids));
+    auto stringBytes = BinaryExportHelpers::writeVectorOfStrings(strings);
+    ASSERT_EQ(batch.size(),
+              idBytes.size() + sizeof(Id::T) + stringBytes.size());
+    EXPECT_EQ(batch.substr(0, idBytes.size()), idBytes);
+    EXPECT_EQ(batch.substr(idBytes.size() + sizeof(Id::T)), stringBytes);
+  };
+
+  // The minimum size of the IDs (two IDs per row). The batch is finished after
+  // the row that reaches the minimum, so it can be larger.
+  {
+    ExportBatch batch{index, {.minNumIdBytes_ = 3 * sizeof(Id::T)}};
+    EXPECT_FALSE(batch.shouldFinish());
+    batch.addRow(table.asStaticView<0>(), 0, columns);
+    EXPECT_FALSE(batch.shouldFinish());
+    batch.addRow(table.asStaticView<0>(), 1, columns);
+    EXPECT_TRUE(batch.shouldFinish());
+    EXPECT_EQ(batch.numRows(), 2);
+    expectBatch(batch.finish(), {I(3), I(1), I(6), I(4)}, {});
+
+    // After `finish`, a new batch starts.
+    EXPECT_EQ(batch.numRows(), 0);
+    EXPECT_FALSE(batch.shouldFinish());
+    batch.addRow(table.asStaticView<0>(), 2, columns);
+    EXPECT_FALSE(batch.shouldFinish());
+    expectBatch(batch.finish(), {I(9), I(7)}, {});
+  }
+
+  // The minimum size of the strings, the strings are sent at the end of the
+  // batch. A string is only counted once per batch.
+  {
+    LocalVocab localVocab;
+    auto word = [&](std::string_view s) {
+      return Id::makeFromLocalVocabIndex(
+          localVocab.getIndexAndAddIfNotContained(
+              LocalVocabEntry::fromStringRepresentation(
+                  std::string{s}, qec->getLocalVocabContext())));
+    };
+    // A string that alone is larger than the minimum, like the WKT literal of
+    // a large `MULTIPOLYGON`.
+    std::string huge = absl::StrCat("\"", std::string(1000, 'x'), "\"");
+    IdTable stringTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    stringTable.push_back({word("\"a\"")});
+    stringTable.push_back({I(42)});
+    stringTable.push_back({word("\"a\"")});
+    stringTable.push_back({word("\"bc\"")});
+    stringTable.push_back({word(huge)});
+    stringTable.push_back({word(huge)});
+    std::vector<ColumnIndex> stringColumns{0};
+    auto view = stringTable.asStaticView<0>();
+
+    // The strings `"a"` and `"bc"` together take up 7 bytes.
+    ExportBatch batch{index, {.minNumStringBytes_ = 7}};
+    for (size_t i = 0; i < 3; ++i) {
+      batch.addRow(view, i, stringColumns);
+      EXPECT_FALSE(batch.shouldFinish());
+    }
+    batch.addRow(view, 3, stringColumns);
+    EXPECT_TRUE(batch.shouldFinish());
+    // The strings are referred to by their index in the batch (shifted by the
+    // number of datatype bits, see `StringMapping`).
+    auto string = [](size_t i) {
+      return Id::makeFromLocalVocabIndex(
+          reinterpret_cast<LocalVocabIndex>(i << Id::numDatatypeBits));
+    };
+    expectBatch(batch.finish(), {string(0), I(42), string(0), string(1)},
+                {"\"a\"", "\"bc\""});
+
+    // The huge string immediately finishes the batch.
+    batch.addRow(view, 4, stringColumns);
+    EXPECT_TRUE(batch.shouldFinish());
+    expectBatch(batch.finish(), {string(0)}, {huge});
+
+    // With a larger minimum, the repeated huge string is only sent once.
+    ExportBatch largeBatch{index, {.minNumStringBytes_ = 10'000}};
+    largeBatch.addRow(view, 4, stringColumns);
+    largeBatch.addRow(view, 5, stringColumns);
+    EXPECT_FALSE(largeBatch.shouldFinish());
+    expectBatch(largeBatch.finish(), {string(0), string(0)}, {huge});
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IdRewriter, getPrefixMapping) {
+  auto* qec = qecWithEncodedPrefix();
+
+  // Only the second remote pattern exists locally (as the first one).
+  auto mapping = IdRewriter::getPrefixMapping(
+      *qec, {prefixPattern("<http://other.org/"),
+             prefixPattern("<http://example.org/")});
+  EXPECT_THAT(mapping, ::testing::UnorderedElementsAre(::testing::Pair(1, 0)));
+
+  EXPECT_TRUE(IdRewriter::getPrefixMapping(*qec, {}).empty());
 }
 
 // ============================================================================
@@ -449,6 +679,42 @@ TEST_F(BinaryExportRoundTrip, disjointPrefixMappings) {
 }
 
 // _____________________________________________________________________________
+TEST_F(BinaryExportRoundTrip, encodedIriIsReencodedWithDifferentPattern) {
+  // The prefixes of the two instances are different, but overlap, so an IRI
+  // that the exporting instance encodes with its prefix can also be encoded
+  // with the (different) prefix of the importing instance.
+  ad_utility::testing::TestIndexConfig exportConfig;
+  exportConfig.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://overlap.org/"};
+
+  ad_utility::testing::TestIndexConfig importConfig;
+  importConfig.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://overlap.org/1"};
+
+  auto* exportQec = ad_utility::testing::getQec(exportConfig);
+  auto* importQec = ad_utility::testing::getQec(importConfig);
+
+  static constexpr std::string_view iri = "<http://overlap.org/123>";
+  auto encodedId = exportQec->getIndex().encodedIriManager().encode(iri);
+  ASSERT_TRUE(encodedId.has_value());
+  auto expectedId = importQec->getIndex().encodedIriManager().encode(iri);
+  ASSERT_TRUE(expectedId.has_value());
+  ASSERT_NE(encodedId.value(), expectedId.value());
+
+  // The same IRI twice, which is decoded only once.
+  IdTable table{2, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({encodedId.value(), encodedId.value()});
+
+  auto result = roundTrip(exportQec, importQec, table.clone(), {"?x", "?y"});
+  ASSERT_TRUE(result.isFullyMaterialized());
+  const auto& resultTable = result.idTableView();
+  ASSERT_EQ(resultTable.numRows(), 1);
+  EXPECT_EQ(resultTable(0, 0), expectedId.value());
+  EXPECT_EQ(resultTable(0, 1), expectedId.value());
+  EXPECT_TRUE(result.localVocab().empty());
+}
+
+// _____________________________________________________________________________
 TEST_F(BinaryExportRoundTrip, lazyImport) {
   auto* qec = ad_utility::testing::getQec();
 
@@ -560,8 +826,10 @@ TEST_F(BinaryExportRoundTrip, allDatatypes) {
           break;
         default:
           // The import uses the same index as the export, so the strings are
-          // found in the vocabularies and the IDs are the same.
-          EXPECT_EQ(imported, original) << i;
+          // found in the vocabularies and the IDs are the same (bitwise, not
+          // only semantically, which `operator==` would also accept for an
+          // `Id` of the local vocab).
+          EXPECT_EQ(imported.getBits(), original.getBits()) << i;
       }
     }
   }
@@ -708,17 +976,20 @@ TEST_F(BinaryExportRoundTrip, lazyExportWithSeveralLocalVocabs) {
 // _____________________________________________________________________________
 TEST_F(BinaryExportRoundTrip, severalBatches) {
   auto* qec = ad_utility::testing::getQec();
-  // One more distinct string than fits into a single batch, see
-  // `exportAsQLeverBinary`.
-  static constexpr size_t numRows = 10'001;
+  // Large distinct strings (of about 1 MB each), which take up more than the
+  // minimum size of the strings of a batch, see `ExportBatch`.
+  static constexpr size_t stringSize = 1 << 20;
+  static constexpr size_t numRows = minNumStringBytesPerBatch / stringSize + 2;
+  auto word = [](size_t i) {
+    return absl::StrCat("\"word", i, std::string(stringSize, 'x'), "\"");
+  };
   LocalVocab localVocab;
   IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   for (size_t i = 0; i < numRows; ++i) {
     table.push_back(
         {Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
             LocalVocabEntry::fromStringRepresentation(
-                absl::StrCat("\"word", i, "\""),
-                qec->getLocalVocabContext())))});
+                word(i), qec->getLocalVocabContext())))});
   }
   for (bool requestLaziness : {false, true}) {
     auto result = roundTrip(qec, qec, table.clone(), {"?x"}, localVocab.clone(),
@@ -727,12 +998,20 @@ TEST_F(BinaryExportRoundTrip, severalBatches) {
     ASSERT_EQ(resultTable.numRows(), numRows);
     for (size_t i = 0; i < numRows; ++i) {
       ASSERT_EQ(idToString(qec->getIndex(), resultTable(i, 0), resultVocab),
-                absl::StrCat("\"word", i, "\""));
+                word(i));
     }
   }
+  {
+    // The strings are sent in several batches.
+    auto result =
+        roundTrip(qec, qec, table.clone(), {"?x"}, localVocab.clone(), true);
+    auto [resultTable, resultVocabs] = aggregateTables(result.idTables(), 1);
+    EXPECT_GE(resultVocabs.size(), 2);
+  }
 
-  // One more row than fits into a single batch.
-  static constexpr size_t numIntRows = 100'001;
+  // More IDs than the minimum size of the IDs of a batch.
+  static constexpr size_t numIntRows =
+      minNumIdBytesPerBatch / sizeof(Id::T) + 1;
   IdTable intTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
   for (size_t i = 0; i < numIntRows; ++i) {
     intTable.push_back({Id::makeFromInt(static_cast<int64_t>(i))});

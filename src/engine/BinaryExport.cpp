@@ -13,10 +13,15 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <cstring>
+#include <utility>
+
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Result.h"
 #include "engine/StringMapping.h"
+#include "index/TripleComponentConversions.h"
 #include "util/Algorithm.h"
+#include "util/Generator.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FromCallableSerializer.h"
 #include "util/Serializer/SerializeOptional.h"
@@ -37,9 +42,8 @@ std::string_view raw(const std::integral auto& value) {
 namespace qlever::binary_export {
 
 // _____________________________________________________________________________
-AD_ALWAYS_INLINE Id
-toExportableId(Id originalId, [[maybe_unused]] const LocalVocab& localVocab,
-               StringMapping& stringMapping) {
+AD_ALWAYS_INLINE Id toExportableId(Id originalId,
+                                   StringMapping& stringMapping) {
   if (originalId.isTrivial() ||
       originalId.getDatatype() == Datatype::BlankNodeIndex ||
       originalId.getDatatype() == Datatype::EncodedVal) {
@@ -132,9 +136,111 @@ struct Header {
   }
 };
 
-// Use special undefined value that's not actually used as a real value.
+// The marker that precedes each batch of strings (see `StringMapping`) in the
+// stream of IDs. It is an undefined `Id` with additional bits set, which never
+// occurs as an actual value (all undefined values are `Id::makeUndefined()`).
+// The reader reads the first `Id` of each row and compares it to this marker
+// to decide whether a row or a batch of strings follows. This is subtle: it
+// only works because the marker is never the first `Id` of an actual row.
 static constexpr Id::T vocabMarker = Id::makeUndefined().getBits() + 0b10101010;
 static_assert(Id::fromBits(vocabMarker).getDatatype() == Datatype::Undefined);
+
+// _____________________________________________________________________________
+void ExportBatch::addRow(const IdTableView<0>& idTable, size_t row,
+                         ql::span<const ColumnIndex> columns) {
+  size_t offset = buffer_.size();
+  buffer_.resize(offset + columns.size() * sizeof(Id::T));
+  char* target = buffer_.data() + offset;
+  for (ColumnIndex column : columns) {
+    Id::T bits = toExportableId(idTable(row, column), stringMapping_).getBits();
+    std::memcpy(target, &bits, sizeof(bits));
+    target += sizeof(bits);
+  }
+  ++numRows_;
+}
+
+// _____________________________________________________________________________
+bool ExportBatch::shouldFinish() const {
+  return buffer_.size() >= sizes_.minNumIdBytes_ ||
+         stringMapping_.numBytes() >= sizes_.minNumStringBytes_;
+}
+
+// _____________________________________________________________________________
+std::string ExportBatch::finish() {
+  // The marker tells the reader that the strings follow, see `vocabMarker`.
+  absl::StrAppend(
+      &buffer_, raw(vocabMarker),
+      BinaryExportHelpers::writeVectorOfStrings(stringMapping_.takeStrings()));
+  numRows_ = 0;
+  return std::exchange(buffer_, std::string{});
+}
+
+// Return the serialized header of the binary export of `qet`, where the
+// `columns` are the exported columns.
+static std::string writeHeader(
+    const QueryExecutionTree& qet,
+    const QueryExecutionTree::ColumnIndicesAndTypes& columns) {
+  ad_utility::serialization::ByteBufferWriteSerializer serializer{};
+  serializer << Header{GeoPoint::encoding(),
+                       qet.getQec()->getIndex().encodedIriManager().patterns_,
+                       ad_utility::transform(columns, [](const auto& column) {
+                         return column.value().variable_;
+                       })};
+  return std::string{serializer.data().data(), serializer.data().size()};
+}
+
+// The special case of a result without columns, for which only the number of
+// rows is exported. `exportNumRows` and `importNumRows` are the two
+// counterparts of this format.
+static std::string exportNumRows(LimitOffsetClause limitAndOffset,
+                                 const Result& result,
+                                 const CancellationHandle& cancellationHandle) {
+  uint64_t numRows = 0;
+  for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
+           limitAndOffset, result, numRows)) {
+    for ([[maybe_unused]] uint64_t i : range) {
+      cancellationHandle->throwIfCancelled();
+    }
+  }
+  return std::string{raw(numRows)};
+}
+
+// _____________________________________________________________________________
+template <ByteIterator It, std::sentinel_for<It> End>
+static IdTable importNumRows(It& it, const End& end, size_t numColumns,
+                             const QueryExecutionContext& qec) {
+  auto numRows = BinaryExportHelpers::read<uint64_t>(it, end);
+  IdTable result{numColumns, qec.getAllocator()};
+  result.resize(numRows);
+  for (auto column : result.getColumns()) {
+    ql::ranges::fill(column, Id::makeUndefined());
+  }
+  return result;
+}
+
+// Export the rows of the `result` (only the `columns`) in batches, see
+// `ExportBatch`. Each batch is yielded at once.
+static cppcoro::generator<std::string> exportRows(
+    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
+    std::vector<ColumnIndex> columns, const Index& index,
+    CancellationHandle cancellationHandle) {
+  // NOTE: The `batch` resolves the strings of the IDs immediately, so the
+  // local vocabs of the tables of the `result` don't have to be kept alive.
+  ExportBatch batch{index};
+  uint64_t resultSize = 0;
+  for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
+           limitAndOffset, *result, resultSize)) {
+    for (uint64_t i : range) {
+      batch.addRow(pair.idTable_, i, columns);
+      if (batch.shouldFinish()) {
+        co_yield batch.finish();
+      }
+      cancellationHandle->throwIfCancelled();
+    }
+  }
+  // Always send the trailing vocab so the importer can finalize the last batch.
+  co_yield batch.finish();
+}
 
 // _____________________________________________________________________________
 ad_utility::streams::stream_generator exportAsQLeverBinary(
@@ -145,179 +251,205 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
   result->logResultSize();
   AD_LOG_DEBUG << "Starting binary export..." << std::endl;
 
-  using namespace std::string_view_literals;
   // Get all columns with defined variables.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, true);
   std::erase(columns, std::nullopt);
 
-  {
-    ad_utility::serialization::ByteBufferWriteSerializer serializer{};
-    serializer << Header{GeoPoint::encoding(),
-                         qet.getQec()->getIndex().encodedIriManager().patterns_,
-                         ad_utility::transform(columns, [](const auto& column) {
-                           return column.value().variable_;
-                         })};
-    co_yield std::string_view{serializer.data().data(),
-                              serializer.data().size()};
-  }
+  co_yield writeHeader(qet, columns);
 
-  // Iterate over the result and yield the bindings.
-  uint64_t resultSize = 0;
-
-  // For zero columns, only emit the total row count.
   if (columns.empty()) {
-    for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
-             limitAndOffset, *result, resultSize)) {
-      for ([[maybe_unused]] uint64_t i : range) {
-        cancellationHandle->throwIfCancelled();
-      }
-    }
-    co_yield raw(resultSize);
+    co_yield exportNumRows(limitAndOffset, *result, cancellationHandle);
     co_return;
   }
 
-  // Non-zero columns: export IDs with periodic vocab flushes.
-  StringMapping stringMapping;
-  // The `stringMapping` might refer to entries of the local vocabs of the
-  // tables of the result, which (for a lazy result) are destroyed when the next
-  // table is requested. They are kept alive until the next flush.
-  LocalVocab localVocabsOfBatch;
-  uint64_t numRowsInBatch = 0;
-  auto flush = [&numRowsInBatch, &stringMapping, &qet, &localVocabsOfBatch]() {
-    numRowsInBatch = 0;
-    auto strings = BinaryExportHelpers::writeVectorOfStrings(
-        stringMapping.flush(qet.getQec()->getIndex()));
-    localVocabsOfBatch = LocalVocab{};
-    return absl::StrCat(raw(vocabMarker), strings);
-  };
-  for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
-           limitAndOffset, *result, resultSize)) {
-    for (uint64_t i : range) {
-      for (const auto& column : columns) {
-        Id id = pair.idTable_(i, column->columnIndex_);
-        co_yield raw(
-            toExportableId(id, pair.localVocab_, stringMapping).getBits());
-      }
-      ++numRowsInBatch;
-      // TODO<joka921> arbitrary constants.
-      if (numRowsInBatch >= 100'000 || stringMapping.size() >= 10'000) {
-        co_yield flush();
-      }
-      cancellationHandle->throwIfCancelled();
-    }
-    if (stringMapping.size() > 0) {
-      localVocabsOfBatch.mergeWith(pair.localVocab());
-    }
+  for (const std::string& batch :
+       exportRows(limitAndOffset, std::move(result),
+                  ad_utility::transform(
+                      columns,
+                      [](const auto& column) { return column->columnIndex_; }),
+                  qet.getQec()->getIndex(), std::move(cancellationHandle))) {
+    co_yield batch;
   }
-
-  // Always send the trailing vocab so the importer can finalize the last batch.
-  co_yield flush();
 }
 
-// Convert the string representation of a literal or IRI to a local `Id`, see
-// `LocalVocab::getIdAndAddIfNotContained`.
+// Convert the string representation of a literal or IRI to a local `Id` in
+// the same way as for any other input (see `toValueId`): an IRI that can be
+// encoded with a local pattern becomes an `EncodedVal`, a word of the
+// vocabularies of the local index the corresponding `VocabIndex` or
+// `SecondaryVocabIndex`, and only the remaining words are added to `vocab`.
 static Id stringToId(std::string representation,
                      const QueryExecutionContext& qec, LocalVocab& vocab) {
-  return vocab.getIdAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation(std::move(representation),
-                                                qec.getLocalVocabContext()));
+  auto literalOrIri =
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          std::move(representation));
+  TripleComponent tripleComponent =
+      literalOrIri.isIri()
+          ? TripleComponent{std::move(literalOrIri.getIri())}
+          : TripleComponent{std::move(literalOrIri.getLiteral())};
+  return toValueId(std::move(tripleComponent), qec.getIndex().getImpl(), vocab);
 }
 
-// Replace a blank node of the exporting instance by a new local blank node.
-// The same remote blank node is always replaced by the same local one, see
-// `blankNodeMapping`.
-static Id remapBlankNode(Id id, const QueryExecutionContext& qec,
-                         LocalVocab& vocab,
-                         ad_utility::HashMap<Id::T, Id>& blankNodeMapping) {
-  auto [it, inserted] = blankNodeMapping.try_emplace(id.getBits(), Id{});
+// _____________________________________________________________________________
+IdRewriter::IdRewriter(const QueryExecutionContext& qec,
+                       std::vector<encodedIri::Pattern> remotePatterns,
+                       GeoPointEncodingEnum remoteGeoPointEncoding)
+    : qec_{&qec},
+      remotePatterns_{std::move(remotePatterns)},
+      prefixMapping_{getPrefixMapping(qec, remotePatterns_)},
+      remoteGeoPointEncoding_{remoteGeoPointEncoding} {}
+
+// _____________________________________________________________________________
+void IdRewriter::startBatch(std::vector<std::string> transmittedStrings) {
+  transmittedIds_.clear();
+  transmittedIds_.reserve(transmittedStrings.size());
+  for (auto& string : transmittedStrings) {
+    transmittedIds_.push_back(
+        stringToId(std::move(string), *qec_, localVocab_));
+  }
+  decodedIris_.clear();
+}
+
+// _____________________________________________________________________________
+void IdRewriter::rewriteRows(IdTable& table, size_t firstRow) {
+  for (auto column : table.getColumns()) {
+    for (Id& id : column.subspan(firstRow)) {
+      id = (*this)(id);
+    }
+  }
+}
+
+// _____________________________________________________________________________
+Id IdRewriter::operator()(Id id) {
+  switch (id.getDatatype()) {
+    case Datatype::EncodedVal:
+      return rewriteEncodedVal(id);
+    case Datatype::BlankNodeIndex:
+      return rewriteBlankNode(id);
+    case Datatype::LocalVocabIndex:
+      return rewriteString(id);
+    case Datatype::GeoPoint:
+      return rewriteGeoPoint(id);
+    default:
+      // All other IDs that the exporter sends are self-contained, see
+      // `toExportableId`.
+      AD_CORRECTNESS_CHECK(id.isTrivial());
+      return id;
+  }
+}
+
+// _____________________________________________________________________________
+Id IdRewriter::rewriteEncodedVal(Id id) {
+  auto [prefixIdx, payload] =
+      EncodedIriManager::splitIntoPrefixIdxAndPayload(id);
+  if (auto it = prefixMapping_.find(prefixIdx); it != prefixMapping_.end()) {
+    return EncodedIriManager::makeIdFromPrefixIdxAndPayload(it->second,
+                                                            payload);
+  }
+  // The decoded IRI might be encoded with a different local pattern.
+  auto [it, inserted] = decodedIris_.try_emplace(id.getBits(), Id{});
   if (inserted) {
-    it->second = Id::makeFromBlankNodeIndex(
-        vocab.getBlankNodeIndex(qec.getIndex().getBlankNodeManager()));
+    it->second = stringToId(
+        encodedIri::decodeToIri(remotePatterns_.at(prefixIdx), payload), *qec_,
+        localVocab_);
   }
   return it->second;
 }
 
-// Remap an `Id` of type `EncodedVal` that was encoded using the remote
-// `patterns`. If the pattern also exists locally, only the tag is changed,
-// otherwise the IRI is decoded and converted to a local `Id`.
-static Id remapEncodedVal(
-    Id id, const QueryExecutionContext& qec, LocalVocab& vocab,
-    const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
-    const std::vector<encodedIri::Pattern>& patterns) {
-  auto [prefixIdx, payload] =
-      EncodedIriManager::splitIntoPrefixIdxAndPayload(id);
-  if (prefixMapping.contains(prefixIdx)) {
-    return EncodedIriManager::makeIdFromPrefixIdxAndPayload(
-        prefixMapping.at(prefixIdx), payload);
+// _____________________________________________________________________________
+Id IdRewriter::rewriteBlankNode(Id id) {
+  auto [it, inserted] = blankNodeMapping_.try_emplace(id.getBits(), Id{});
+  if (inserted) {
+    it->second = Id::makeFromBlankNodeIndex(
+        localVocab_.getBlankNodeIndex(qec_->getIndex().getBlankNodeManager()));
   }
-  return stringToId(encodedIri::decodeToIri(patterns.at(prefixIdx), payload),
-                    qec, vocab);
+  return it->second;
 }
 
 // _____________________________________________________________________________
-void BinaryExportHelpers::rewriteVocabIds(
-    IdTable& result, const size_t dirtyIndex, const QueryExecutionContext& qec,
-    LocalVocab& vocab, const std::vector<std::string>& transmittedStrings,
-    const ad_utility::HashMap<uint8_t, uint8_t>& prefixMapping,
-    const std::vector<encodedIri::Pattern>& prefixes,
-    ad_utility::HashMap<Id::T, Id>& blankNodeMapping,
-    GeoPointEncodingEnum remoteGeoPointEncoding) {
-  for (auto col : result.getColumns()) {
-    ql::ranges::for_each(
-        col.subspan(dirtyIndex),
-        [&qec, &vocab, &transmittedStrings, &prefixMapping, &prefixes,
-         &blankNodeMapping, remoteGeoPointEncoding](Id& id) {
-          switch (id.getDatatype()) {
-            case Datatype::EncodedVal:
-              id = remapEncodedVal(id, qec, vocab, prefixMapping, prefixes);
-              break;
-            case Datatype::BlankNodeIndex:
-              id = remapBlankNode(id, qec, vocab, blankNodeMapping);
-              break;
-            case Datatype::LocalVocabIndex:
-              // Undo the shift done during encoding.
-              id = stringToId(
-                  transmittedStrings.at(
-                      reinterpret_cast<size_t>(id.getLocalVocabIndex()) >>
-                      Id::numDatatypeBits),
-                  qec, vocab);
-              break;
-            case Datatype::GeoPoint:
-              // The two instances might use different encodings of `GeoPoint`s.
-              if (remoteGeoPointEncoding != GeoPoint::encoding()) {
-                static constexpr auto mask =
-                    ad_utility::bitMaskForLowerBits(Id::numDataBits);
-                id = Id::fromBits(
-                    (id.getBits() & ~mask) |
-                    GeoPoint::convertEncoding(id.getBits() & mask,
-                                              remoteGeoPointEncoding,
-                                              GeoPoint::encoding()));
-              }
-              break;
-            default:
-              // All other IDs that the exporter sends are self-contained, see
-              // `toExportableId`.
-              AD_CORRECTNESS_CHECK(id.isTrivial());
-          }
-        });
-  }
+Id IdRewriter::rewriteString(Id id) const {
+  // Undo the shift done by `StringMapping::remapId`.
+  return transmittedIds_.at(reinterpret_cast<size_t>(id.getLocalVocabIndex()) >>
+                            Id::numDatatypeBits);
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<uint8_t, uint8_t> BinaryExportHelpers::getPrefixMapping(
+Id IdRewriter::rewriteGeoPoint(Id id) const {
+  if (remoteGeoPointEncoding_ == GeoPoint::encoding()) {
+    return id;
+  }
+  static constexpr auto mask = ad_utility::bitMaskForLowerBits(Id::numDataBits);
+  return Id::fromBits((id.getBits() & ~mask) |
+                      GeoPoint::convertEncoding(id.getBits() & mask,
+                                                remoteGeoPointEncoding_,
+                                                GeoPoint::encoding()));
+}
+
+// _____________________________________________________________________________
+LocalVocab IdRewriter::takeLocalVocab() {
+  LocalVocab nextVocab;
+  if (!blankNodeMapping_.empty()) {
+    nextVocab.mergeWith(localVocab_);
+  }
+  // The IDs of the current batch might point into the old local vocab.
+  transmittedIds_.clear();
+  decodedIris_.clear();
+  return std::exchange(localVocab_, std::move(nextVocab));
+}
+
+// _____________________________________________________________________________
+ad_utility::HashMap<uint8_t, uint8_t> IdRewriter::getPrefixMapping(
     const QueryExecutionContext& qec,
-    const std::vector<encodedIri::Pattern>& prefixes) {
+    const std::vector<encodedIri::Pattern>& patterns) {
   ad_utility::HashMap<uint8_t, uint8_t> prefixMapping;
-  const auto& localPrefixes = qec.getIndex().encodedIriManager().patterns_;
-  for (const auto& [index, prefix] : ::ranges::views::enumerate(prefixes)) {
-    auto prefixIt = ql::ranges::find(localPrefixes, prefix);
-    if (prefixIt != localPrefixes.end()) {
+  const auto& localPatterns = qec.getIndex().encodedIriManager().patterns_;
+  for (const auto& [index, pattern] : ::ranges::views::enumerate(patterns)) {
+    auto patternIt = ql::ranges::find(localPatterns, pattern);
+    if (patternIt != localPatterns.end()) {
       prefixMapping[index] = static_cast<uint8_t>(
-          ql::ranges::distance(localPrefixes.begin(), prefixIt));
+          ql::ranges::distance(localPatterns.begin(), patternIt));
     }
   }
   return prefixMapping;
+}
+
+// For each of the `expectedVariables`, the index of the column of the
+// response that contains it (`std::nullopt` if the response doesn't contain
+// it).
+static std::vector<std::optional<size_t>> getRemoteColumns(
+    const std::vector<std::string>& expectedVariables,
+    const std::vector<std::string>& remoteVariables) {
+  return ad_utility::transform(
+      expectedVariables,
+      [&remoteVariables](const auto& variable) -> std::optional<size_t> {
+        auto it = ql::ranges::find(remoteVariables, variable);
+        if (it == remoteVariables.end()) {
+          return std::nullopt;
+        }
+        return static_cast<size_t>(it - remoteVariables.begin());
+      });
+}
+
+// Read the remaining IDs of a row of the response (the `firstId` has already
+// been read) from the range `[it, end)` into the `rowBuffer` (which has one
+// entry per column of the response), and append the row to the `table`
+// (which has one column per entry of `remoteColumns`, see `getRemoteColumns`).
+template <ByteIterator It, std::sentinel_for<It> End>
+static void readRow(It& it, const End& end, Id::T firstId,
+                    const std::vector<std::optional<size_t>>& remoteColumns,
+                    std::vector<Id::T>& rowBuffer, IdTable& table) {
+  rowBuffer.at(0) = firstId;
+  for (size_t i = 1; i < rowBuffer.size(); ++i) {
+    rowBuffer[i] = BinaryExportHelpers::read<Id::T>(it, end);
+  }
+  table.emplace_back();
+  size_t rowIndex = table.size() - 1;
+  for (size_t col = 0; col < remoteColumns.size(); ++col) {
+    table(rowIndex, col) =
+        remoteColumns[col].has_value()
+            ? Id::fromBits(rowBuffer[remoteColumns[col].value()])
+            : Id::makeUndefined();
+  }
 }
 
 // Core coroutine that reads the binary response and yields one
@@ -328,100 +460,58 @@ ad_utility::HashMap<uint8_t, uint8_t> BinaryExportHelpers::getPrefixMapping(
 Result::Generator importBinaryGenerator(
     HttpOrHttpsResponse response, const QueryExecutionContext& qec,
     std::vector<std::string> expectedVariables, bool yieldOnce) {
+  // TODO<joka921> Iterating over the single bytes of a `join` view is rather
+  // inefficient. It would be faster to directly work on the spans of the
+  // `response.body_`, but then a value can span multiple spans.
   auto bytes = response.body_ | ql::views::join;
   auto it = ql::ranges::begin(bytes);
   auto end = ql::ranges::end(bytes);
 
-  BinaryExportHelpers::IteratorReader<decltype(it), decltype(end)> itReader{
-      it, end};
-  ad_utility::serialization::ReadViaCallableSerializer serializer{
-      std::ref(itReader)};
-  Header header;
-  serializer >> header;
-  // Done with the serializer for now, reextracting the iterator.
-  it = itReader.it;
-
-  auto prefixMapping =
-      BinaryExportHelpers::getPrefixMapping(qec, header.patterns_);
-  size_t numRemoteColumns = header.variableNames_.size();
+  auto header = BinaryExportHelpers::read<Header>(it, end);
   size_t numColumns = expectedVariables.size();
 
-  // For each column of the result, the corresponding column of the response.
-  std::vector<std::optional<size_t>> remoteColumns;
-  for (const auto& variable : expectedVariables) {
-    auto remoteIt = ql::ranges::find(header.variableNames_, variable);
-    remoteColumns.push_back(
-        remoteIt == header.variableNames_.end()
-            ? std::nullopt
-            : std::optional{static_cast<size_t>(
-                  remoteIt - header.variableNames_.begin())});
-  }
-
   // Special case 0 columns: yield a single pair with the correct row count.
-  if (numRemoteColumns == 0) {
-    auto numRows = BinaryExportHelpers::read<uint64_t>(it, end);
-    IdTable result{numColumns, qec.getAllocator()};
-    result.resize(numRows);
-    for (auto column : result.getColumns()) {
-      ql::ranges::fill(column, Id::makeUndefined());
-    }
-    co_yield Result::IdTableVocabPair{std::move(result), LocalVocab{}};
+  if (header.variableNames_.empty()) {
+    co_yield Result::IdTableVocabPair{importNumRows(it, end, numColumns, qec),
+                                      LocalVocab{}};
     co_return;
   }
 
-  LocalVocab vocab;
-  ad_utility::HashMap<Id::T, Id> blankNodeMapping;
-
+  auto remoteColumns =
+      getRemoteColumns(expectedVariables, header.variableNames_);
+  IdRewriter rewriter{qec, std::move(header.patterns_),
+                      header.geoPointEncoding_};
   IdTable currentBatch{numColumns, qec.getAllocator()};
-  // At which index we need to start converting values.
-  size_t dirtyIndex = 0;
-  std::vector<Id::T> row(numRemoteColumns);
+  // The rows before this index have already been rewritten.
+  size_t firstRowToRewrite = 0;
+  std::vector<Id::T> rowBuffer(header.variableNames_.size());
 
   while (it != end) {
-    row.at(0) = BinaryExportHelpers::read<Id::T>(it, end);
-    if (row.at(0) == vocabMarker) {
-      auto transmittedStrings =
-          BinaryExportHelpers::readVectorOfStrings(it, end);
-      BinaryExportHelpers::rewriteVocabIds(currentBatch, dirtyIndex, qec, vocab,
-                                           transmittedStrings, prefixMapping,
-                                           header.patterns_, blankNodeMapping,
-                                           header.geoPointEncoding_);
-      dirtyIndex = currentBatch.size();
-      if (!yieldOnce) {
-        // The blank nodes of later batches might be the same as the ones of
-        // this batch, so the next batch has to keep them alive.
-        LocalVocab nextVocab;
-        if (!blankNodeMapping.empty()) {
-          nextVocab.mergeWith(vocab);
-        }
-        co_yield Result::IdTableVocabPair{std::move(currentBatch),
-                                          std::move(vocab)};
-        currentBatch = IdTable{numColumns, qec.getAllocator()};
-        vocab = std::move(nextVocab);
-        dirtyIndex = 0;
-      }
-    } else {
-      for (size_t i = 1; i < numRemoteColumns; ++i) {
-        row[i] = BinaryExportHelpers::read<Id::T>(it, end);
-      }
-      currentBatch.emplace_back();
-      size_t rowIndex = currentBatch.size() - 1;
-      for (size_t col = 0; col < numColumns; ++col) {
-        currentBatch(rowIndex, col) =
-            remoteColumns[col].has_value()
-                ? Id::fromBits(row[remoteColumns[col].value()])
-                : Id::makeUndefined();
-      }
+    auto firstId = BinaryExportHelpers::read<Id::T>(it, end);
+    if (firstId != vocabMarker) {
+      readRow(it, end, firstId, remoteColumns, rowBuffer, currentBatch);
+      continue;
+    }
+    // The end of a batch, rewrite its rows using the strings that follow.
+    rewriter.startBatch(
+        BinaryExportHelpers::read<std::vector<std::string>>(it, end));
+    rewriter.rewriteRows(currentBatch, firstRowToRewrite);
+    firstRowToRewrite = currentBatch.size();
+    if (!yieldOnce) {
+      co_yield Result::IdTableVocabPair{std::move(currentBatch),
+                                        rewriter.takeLocalVocab()};
+      currentBatch = IdTable{numColumns, qec.getAllocator()};
+      firstRowToRewrite = 0;
     }
   }
   // The exporter always ends with a vocab, so all rows have been converted.
-  if (dirtyIndex != currentBatch.size()) {
+  if (firstRowToRewrite != currentBatch.size()) {
     throw std::runtime_error{
         "The result in QLever's binary export format ended unexpectedly"};
   }
   if (yieldOnce) {
     co_yield Result::IdTableVocabPair{std::move(currentBatch),
-                                      std::move(vocab)};
+                                      rewriter.takeLocalVocab()};
   }
 }
 

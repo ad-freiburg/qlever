@@ -17,9 +17,21 @@
 
 using namespace qlever::binary_export;
 
+namespace {
+// A test index with a text index, such that all the datatypes that point to
+// strings can be resolved.
+QueryExecutionContext* getQecWithTextIndex() {
+  ad_utility::testing::TestIndexConfig config;
+  config.turtleInput =
+      "<a> <b> \"The quick brown fox jumps over the lazy dog\" .";
+  config.createTextIndex = true;
+  return ad_utility::testing::getQec(std::move(config));
+}
+}  // namespace
+
 // _____________________________________________________________________________
 TEST(StringMapping, remapId) {
-  auto* qec = ad_utility::testing::getQec("<a> <b> <c> .");
+  auto* qec = getQecWithTextIndex();
   auto toMappedId = [](size_t count) {
     return Id::makeFromLocalVocabIndex(
         reinterpret_cast<LocalVocabIndex>(count << ValueId::numDatatypeBits));
@@ -37,39 +49,37 @@ TEST(StringMapping, remapId) {
       "\"abc\"", index.getLocalVocabContext());
   LocalVocabEntry duplicateWord = LocalVocabEntry::fromStringRepresentation(
       "<b>", index.getLocalVocabContext());
-  StringMapping mapping;
-  Id id1 = Id::makeFromVocabIndex(VocabIndex::make(1));
+  StringMapping mapping{index};
+  // The word `<b>` of the vocabulary.
+  Id id1 = Id::makeFromVocabIndex(VocabIndex::make(2));
   Id id2 = Id::makeFromLocalVocabIndex(&testWord);
-  Id id3 = Id::makeFromTextRecordIndex(TextRecordIndex::make(42));
-  Id id4 = Id::makeFromWordVocabIndex(WordVocabIndex::make(1010));
+  Id id3 = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
+  Id id4 = Id::makeFromWordVocabIndex(WordVocabIndex::make(0));
   Id id5 = Id::makeFromLocalVocabIndex(&duplicateWord);
-  // The words of a secondary vocabulary also point to strings, so they are
-  // remapped as well. Note that `remapId` only inspects the datatype, so no
-  // secondary vocabulary has to be set on the index here.
-  Id id6 = Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(7));
 
   // Mapped ids start counting from zero.
   binaryEq(mapping.remapId(id1), toMappedId(0));
   binaryEq(mapping.remapId(id2), toMappedId(1));
   binaryEq(mapping.remapId(id3), toMappedId(2));
   binaryEq(mapping.remapId(id4), toMappedId(3));
-  binaryEq(mapping.remapId(id6), toMappedId(4));
   binaryEq(mapping.remapId(id1), toMappedId(0));
+  // Equal IDs (here: the same word in the vocabulary and the local vocab) are
+  // mapped to the same index.
   binaryEq(mapping.remapId(id5), toMappedId(0));
-  binaryEq(mapping.remapId(id6), toMappedId(4));
 
   EXPECT_THAT(mapping.stringMappingForTesting(),
               ::testing::UnorderedElementsAre(
                   ::testing::Pair(id1, 0), ::testing::Pair(id2, 1),
-                  ::testing::Pair(id3, 2), ::testing::Pair(id4, 3),
-                  ::testing::Pair(id6, 4)));
+                  ::testing::Pair(id3, 2), ::testing::Pair(id4, 3)));
 
-  EXPECT_EQ(mapping.size(), 5);
+  EXPECT_EQ(mapping.size(), 4);
+  // The strings are `<b>`, `"abc"`, `""`, and `"brown"`.
+  EXPECT_EQ(mapping.numBytes(), 3 + 5 + 2 + 7);
 }
 
 // _____________________________________________________________________________
-TEST(StringMapping, flushResolvesSecondaryVocabIds) {
-  // `flush` resolves the collected `Id`s via `ql::exportIds::idToLiteralOrIri`,
+TEST(StringMapping, resolvesSecondaryVocabIds) {
+  // `remapId` resolves the new `Id`s via `ql::exportIds::idToLiteralOrIri`,
   // so an `Id` of a secondary vocabulary requires the index to actually have
   // such a vocabulary. Use a fresh index instead of the shared one of `getQec`,
   // because `setSecondaryVocab` must not leak into other tests.
@@ -78,26 +88,21 @@ TEST(StringMapping, flushResolvesSecondaryVocabIds) {
   index.getImpl().setSecondaryVocab(std::make_shared<SecondaryVocabulary>(
       std::vector<std::string>{"<d>", "<e>"}));
 
-  StringMapping mapping;
+  StringMapping mapping{index};
   Id vocabId = Id::makeFromVocabIndex(VocabIndex::make(1));
   Id secondaryVocabId =
       Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(1));
   mapping.remapId(vocabId);
   mapping.remapId(secondaryVocabId);
 
-  EXPECT_THAT(mapping.flush(index), ::testing::ElementsAre("<b>", "<e>"));
+  EXPECT_THAT(mapping.takeStrings(), ::testing::ElementsAre("<b>", "<e>"));
 }
 
 // _____________________________________________________________________________
-TEST(StringMapping, flush) {
-  ad_utility::testing::TestIndexConfig config;
-  config.turtleInput =
-      "<a> <b> \"The quick brown fox jumps over the lazy dog\" .";
-  config.createTextIndex = true;
-  auto* qec = ad_utility::testing::getQec(std::move(config));
-  StringMapping mapping;
-
+TEST(StringMapping, takeStrings) {
+  auto* qec = getQecWithTextIndex();
   const auto& index = qec->getIndex();
+  StringMapping mapping{index};
   LocalVocabEntry testWord = LocalVocabEntry::fromStringRepresentation(
       "\"abc\"", index.getLocalVocabContext());
   Id id0 = Id::makeFromVocabIndex(VocabIndex::make(1));
@@ -117,6 +122,13 @@ TEST(StringMapping, flush) {
   EXPECT_EQ(mapping.remapId(id0).getDatatype(), Datatype::LocalVocabIndex);
 
   EXPECT_THAT(
-      mapping.flush(index),
+      mapping.takeStrings(),
       ::testing::ElementsAre("<a>", "<b>", "\"abc\"", "\"\"", "\"brown\""));
+
+  // After `takeStrings`, the mapping starts from scratch.
+  EXPECT_EQ(mapping.size(), 0);
+  EXPECT_EQ(mapping.numBytes(), 0);
+  EXPECT_EQ(mapping.remapId(id1).getBits(),
+            Id::makeFromLocalVocabIndex(nullptr).getBits());
+  EXPECT_THAT(mapping.takeStrings(), ::testing::ElementsAre("<b>"));
 }

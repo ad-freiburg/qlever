@@ -204,12 +204,14 @@ Result Service::computeResultImpl(bool requestLaziness) {
   // If enabled, prefer QLever's binary format (which only other QLever
   // instances that support the same version of the format understand, see
   // `ad_utility::binaryQleverExportVersion`) over JSON.
+  const std::string& sparqlJson =
+      ad_utility::toString(ad_utility::MediaType::sparqlJson);
   const std::string accept =
       getRuntimeParameter<&RuntimeParameters::binaryServiceEnabled_>()
           ? absl::StrCat(
                 ad_utility::toString(ad_utility::MediaType::binaryQleverExport),
-                ",application/sparql-results+json;q=0.9")
-          : "application/sparql-results+json";
+                ",", sparqlJson, ";q=0.9")
+          : sparqlJson;
 
   // Send the query to the remote endpoint. Redirects are handled automatically
   // by the HTTP client up to the limit specified by the runtime parameter
@@ -234,17 +236,16 @@ Result Service::computeResultImpl(bool requestLaziness) {
 
   if (ad_utility::toMediaType(response.contentType_) ==
       ad_utility::MediaType::binaryQleverExport) {
-    AD_LOG_INFO << "The result of the SERVICE is transferred in QLever's "
-                   "binary format"
-                << std::endl;
+    AD_LOG_DEBUG << "The result of the SERVICE is transferred in QLever's "
+                    "binary format"
+                 << std::endl;
     return computeBinaryResult(requestLaziness, std::move(response));
   }
   auto contentType = ad_utility::utf8ToLower(response.contentType_);
-  if (!ql::starts_with(contentType, "application/sparql-results+json")) {
+  if (!ql::starts_with(contentType, sparqlJson)) {
     throwErrorWithContext(absl::StrCat(
-        "QLever requires the endpoint of a SERVICE to send the result as "
-        "'application/sparql-results+json' but the endpoint sent '",
-        response.contentType_, "'"));
+        "QLever requires the endpoint of a SERVICE to send the result as '",
+        sparqlJson, "' but the endpoint sent '", response.contentType_, "'"));
   }
 
   // Prepare the expected Variables as keys for the JSON-bindings. We can't wait

@@ -5,6 +5,8 @@
 
 #include "engine/StringMapping.h"
 
+#include <utility>
+
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/ExportIds.h"
 #include "index/Index.h"
@@ -12,19 +14,10 @@
 namespace qlever::binary_export {
 
 // _____________________________________________________________________________
-std::vector<std::string> StringMapping::flush(const Index& index) {
-  LocalVocab dummy;
-  std::vector<std::string> sortedStrings;
-  sortedStrings.resize(stringMapping_.size());
-  for (const auto& [oldId, newId] : stringMapping_) {
-    auto literalOrIri =
-        ql::exportIds::idToLiteralOrIri(index, oldId, dummy, true);
-    AD_CORRECTNESS_CHECK(literalOrIri.has_value());
-    sortedStrings[newId] =
-        std::move(literalOrIri.value()).toStringRepresentation();
-  }
+std::vector<std::string> StringMapping::takeStrings() {
   stringMapping_.clear();
-  return sortedStrings;
+  numBytes_ = 0;
+  return std::exchange(strings_, {});
 }
 
 // _____________________________________________________________________________
@@ -55,8 +48,18 @@ Id StringMapping::remapId(Id id) {
     return true;
   };
   static_assert(checkDatatypes());
-  size_t distinctIndex =
-      stringMapping_.try_emplace(id, stringMapping_.size()).first->second;
+  auto [it, inserted] = stringMapping_.try_emplace(id, stringMapping_.size());
+  size_t distinctIndex = it->second;
+  if (inserted) {
+    LocalVocab dummy;
+    auto literalOrIri =
+        ql::exportIds::idToLiteralOrIri(*index_, id, dummy, true);
+    AD_CORRECTNESS_CHECK(literalOrIri.has_value());
+    strings_.push_back(
+        std::move(literalOrIri.value()).toStringRepresentation());
+    numBytes_ += strings_.back().size();
+    AD_CORRECTNESS_CHECK(strings_.size() == stringMapping_.size());
+  }
   // `Id::makeFromLocalVocabIndex` assumes that the last `numDatatypeBits` bits
   // are all zero and then performs a right shift. We have to shift the
   // `dinstinctIndex` left by the same amount to counter this effect.
