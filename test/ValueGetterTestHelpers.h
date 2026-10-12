@@ -136,8 +136,8 @@ inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
     if (isIri) {
       return LiteralOrIri::iriref(std::string(content));
     } else {
-      return LiteralOrIri{Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(content), descriptor)};
+      return LiteralOrIri{
+          Literal::literalWithNormalizedContent(content, descriptor)};
     }
   };
   LiteralOrIri literalOrIri =
