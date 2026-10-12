@@ -122,10 +122,11 @@ jobs:
       - name: Install ccache
         run: sudo apt-get update && sudo apt-get install -y ccache
 
-      # Each run saves its `ccache` under its own key (see `Save ccache`), so
-      # this restores the most recent one. Releases are built without the cache.
+      # Only pull requests use `ccache`; pushes to master, the merge queue and
+      # releases are built from scratch. Each run saves its cache under its own
+      # key (see `Save ccache`), so this restores the most recent one.
       - name: Restore ccache
-        if: github.ref_type != 'tag'
+        if: github.event_name == 'pull_request'
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/ccache
@@ -148,18 +149,19 @@ jobs:
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
-      # Releases don't use `ccache`. Otherwise, remove the cache entries that
-      # this build didn't use, so that the cache doesn't grow with each run.
+      # Outside of pull requests, `ccache` is disabled (see `Restore ccache`).
+      # Otherwise, remove the cache entries that this build didn't use, so that
+      # the cache doesn't grow with each run.
       - name: Build
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then export CCACHE_DISABLE=1; fi
+          if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]]; then export CCACHE_DISABLE=1; fi
           ccache --zero-stats
           cmake --build build --parallel
           ccache --evict-older-than "$((SECONDS + 60))s"
           ccache --show-stats
 
       - name: Save ccache
-        if: ${{ !cancelled() && github.ref_type != 'tag' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         uses: actions/cache/save@v6
         with:
           path: ~/.cache/ccache
