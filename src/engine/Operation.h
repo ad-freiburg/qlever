@@ -303,6 +303,16 @@ class Operation {
   // subquery.
   virtual const VariableToColumnMap& getExternallyVisibleVariableColumns()
       const final;
+
+  // If this operation is the root of a subquery, it hides the variables that
+  // the subquery does not select. Hide the same variables in `replacement`,
+  // which was built from scratch to replace this operation (e.g. a clone or a
+  // copy with a pushed-down `BIND`). The `additionalVisibleVariable` (e.g. the
+  // target of the pushed-down `BIND`) stays visible.
+  void keepHiddenVariablesHidden(
+      Operation& replacement,
+      std::optional<Variable> additionalVisibleVariable = std::nullopt) const;
+
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
 
@@ -324,6 +334,12 @@ class Operation {
   // `Operation` and are always defined.
   bool areVariablesAlwaysDefined(
       const std::vector<const Variable*>& variables) const;
+
+  // Check whether all the given variables are externally visible in the result
+  // of this `Operation`, that is, neither hidden by a subquery nor stripped
+  // away. In contrast to `areVariablesAlwaysDefined`, the variables may be
+  // UNDEF.
+  bool areVariablesVisible(const std::vector<const Variable*>& variables) const;
 
   // See the member variable with the same name below for documentation.
   std::optional<std::shared_ptr<const Result>>&

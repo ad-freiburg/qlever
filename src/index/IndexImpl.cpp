@@ -2262,15 +2262,16 @@ std::packaged_task<void()> computeStatistics(
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
     // The statistics are only recomputed as part of a runtime index rebuild
     // (see `IndexRebuilder`), so this scan is also throttled by
-    // `rebuild-index-scan-num-threads` (several permutations are scanned in
-    // parallel, so without the throttle this short phase has a high peak
-    // CPU). A value of 0 means "fall back to `lazy-index-scan-num-threads`".
-    auto numThreadsOverride = getRuntimeParameterAsOptional<
-        &RuntimeParameters::rebuildIndexScanNumThreads_>();
+    // `rebuild-index-scan-num-blocks-in-flight` (several permutations are
+    // scanned in parallel, so without the throttle this short phase has a high
+    // peak CPU). A value of 0 means "fall back to
+    // `lazy-index-scan-num-blocks-in-flight`".
+    auto numBlocksInFlightOverride = getRuntimeParameterAsOptional<
+        &RuntimeParameters::rebuildIndexScanNumBlocksInFlight_>();
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
         additionalColumns, cancellationHandle, *locatedTriplesSharedState,
-        numThreadsOverride);
+        numBlocksInFlightOverride);
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);
