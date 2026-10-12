@@ -74,6 +74,19 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
+    // The parser accepts all vocabulary types, but a type with holes cannot be
+    // written word by word (see `Qlever::buildIndex`), and the merge requires
+    // at least one partial vocabulary.
+    if (!vocabType.isSupportedForIndexBuilding()) {
+      throw std::invalid_argument(absl::StrCat(
+          "The vocabulary type \"", vocabType.toString(),
+          "\" cannot be written by a merge, the supported types are ",
+          vocabTypes));
+    }
+    if (numPartialVocabularies == 0) {
+      throw std::invalid_argument(
+          "The number of partial vocabularies must be at least 1");
+    }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << options << '\n';
@@ -94,22 +107,26 @@ int main(int argc, char** argv) {
   auto sortPred = [&comparator](std::string_view a, std::string_view b) {
     return comparator(a, b, TripleComponentComparator::Level::TOTAL);
   };
-  PolymorphicVocabulary vocabulary;
-  vocabulary.resetToType(vocabType);
-  auto writerPtr = vocabulary.makeDiskWriterPtr(outputBasename + VOCAB_SUFFIX);
-  auto& writer = *writerPtr;
-  writer.readableName() = "merged vocabulary";
-
   AD_LOG_INFO << "Merging " << numPartialVocabularies
               << " partial vocabularies of " << basename << " into "
               << outputBasename << VOCAB_SUFFIX << " (" << vocabType << ") ..."
               << std::endl;
   ad_utility::Timer timer{ad_utility::Timer::Started};
-  auto metaData = ad_utility::vocabulary_merger::mergeVocabulary(
-      basename, numPartialVocabularies, sortPred, writer, memory);
-  writer.finish();
-  AD_LOG_INFO << "Merged " << metaData.numWordsTotal() << " words and "
-              << metaData.getNextBlankNodeIndex() << " blank nodes in "
-              << timer.msecs().count() << " ms" << std::endl;
+  try {
+    auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(
+        outputBasename + VOCAB_SUFFIX, vocabType);
+    auto& writer = *writerPtr;
+    writer.readableName() = "merged vocabulary";
+    auto metaData = ad_utility::vocabulary_merger::mergeVocabulary(
+        basename, numPartialVocabularies, sortPred, writer, memory);
+    writer.finish();
+    AD_LOG_INFO << "Merged " << metaData.numWordsTotal() << " words and "
+                << metaData.getNextBlankNodeIndex() << " blank nodes in "
+                << timer.msecs().count() << " ms" << std::endl;
+  } catch (const std::exception& e) {
+    AD_LOG_ERROR << "The vocabulary merge failed with the following exception: "
+                 << e.what() << std::endl;
+    return EXIT_FAILURE;
+  }
   return EXIT_SUCCESS;
 }
