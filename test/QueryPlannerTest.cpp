@@ -2566,6 +2566,14 @@ TEST(QueryPlanner, UnboundMinusIgnored) {
       "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?y } MINUS { ?z <is-a> ?y } }",
       h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
                h::IndexScanFromStrings("?a", "<is-a>", "?y")));
+  // The same holds for a later OPTIONAL.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?c } "
+      "OPTIONAL { ?c <is-a> ?d } }",
+      h::CartesianProductJoin(
+          h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                   h::IndexScanFromStrings("?a", "<is-a>", "?c")),
+          h::NeutralOptional(h::IndexScanFromStrings("?c", "<is-a>", "?d"))));
 }
 
 // ___________________________________________________________________________
@@ -2579,6 +2587,14 @@ TEST(QueryPlanner, SimpleMinus) {
       h::Minus(h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
                         h::IndexScanFromStrings("?a", "<is-a>", "?c")),
                h::IndexScanFromStrings("?a", "<is-a>", "?d")));
+  // A MINUS is connected to the variables of a preceding OPTIONAL.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b OPTIONAL { ?a <is-a> ?c } "
+      "MINUS { ?c <is-a> ?d } }",
+      h::Minus(h::Sort(h::OptionalJoin(
+                   h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                   h::IndexScanFromStrings("?a", "<is-a>", "?c"))),
+               h::IndexScanFromStrings("?c", "<is-a>", "?d")));
 }
 
 // ___________________________________________________________________________
@@ -3003,6 +3019,30 @@ TEST(QueryPlanner, UnconnectedComponentsInGraphClause) {
       "SELECT * WHERE { ?s1 ?p1 ?o1 . ?s2 ?p2 ?o2 }",
       h::CartesianProductJoin(h::IndexScanFromStrings("?s1", "?p1", "?o1"),
                               h::IndexScanFromStrings("?s2", "?p2", "?o2")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, UnconnectedMinusAndOptionalInGraphClause) {
+  auto scan = [](std::string s, std::string p, std::string o) {
+    return h::IndexScanFromStrings(std::move(s), std::move(p), std::move(o), {},
+                                   NamedTag{}, {Variable{"?g"}}, {3});
+  };
+  // The graph variable doesn't connect a MINUS, no matter whether the
+  // preceding pattern is a triple or a nested group.
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?x <q> ?y } } }",
+            scan("?a", "<p>", "?b"));
+  h::expect("SELECT * { GRAPH ?g { { ?a <p> ?b } MINUS { ?x <q> ?y } } }",
+            scan("?a", "<p>", "?b"));
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?a <q> ?y } } }",
+            h::Minus(h::Sort(scan("?a", "<p>", "?b")),
+                     h::Sort(scan("?a", "<q>", "?y"))));
+  // The graph variable does connect an OPTIONAL.
+  auto optionalJoin = h::OptionalJoin(h::Sort(scan("?a", "<p>", "?b")),
+                                      h::Sort(scan("?x", "<q>", "?y")));
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b OPTIONAL { ?x <q> ?y } } }",
+            optionalJoin);
+  h::expect("SELECT * { GRAPH ?g { { ?a <p> ?b } OPTIONAL { ?x <q> ?y } } }",
+            optionalJoin);
 }
 
 // _____________________________________________________________________________

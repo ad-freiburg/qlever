@@ -3015,6 +3015,8 @@ QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
   candidateTriples_.collectAllContainedVariables(variables);
   for (const auto& row : candidatePlans_) {
     AD_CORRECTNESS_CHECK(!row.empty());
+    // All plans of a row bind the same variables, up to internal ones, see the
+    // TODO in `visitGroupOptionalOrMinus`.
     for (const auto& variable :
          row.front()._qet->getVariableColumns() | ql::views::keys) {
       variables.insert(variable);
@@ -3028,7 +3030,21 @@ template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     std::vector<SubtreePlan>& candidates, const Variables& variables) {
   using enum SubtreePlan::Type;
+  auto type = candidates[0].type;
+  if (type != MINUS && type != OPTIONAL) {
+    return false;
+  }
   auto previousVariables = getVariablesOfPreviousPatterns();
+  // Inside `GRAPH ?g {...}` the patterns are evaluated per graph, so `?g` is
+  // not a shared variable for a MINUS, but an OPTIONAL has to be joined on it.
+  if (const auto& graphVariable = planner_.activeGraphVariable_) {
+    if (type == MINUS) {
+      previousVariables.erase(graphVariable.value());
+    } else if (!candidateTriples_._triples.empty() ||
+               !candidatePlans_.empty()) {
+      previousVariables.insert(graphVariable.value());
+    }
+  }
   bool areVariablesUnconnected =
       ql::ranges::none_of(variables, [&previousVariables](const Variable& var) {
         return previousVariables.contains(var);
@@ -3038,7 +3054,6 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
   }
   // A MINUS clause that doesn't share any variable with the preceding
   // patterns behaves as if it isn't there.
-  auto type = candidates[0].type;
   if (type == MINUS) {
     planner_.warnings_.push_back(
         "A MINUS clause that shares no variables with the patterns before it "
@@ -3048,21 +3063,17 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
   }
   // An OPTIONAL clause that doesn't share any variable with the preceding
   // patterns behaves as if it is joined with the neutral element.
-  if (type == OPTIONAL) {
-    auto& newPlans = candidatePlans_.emplace_back();
-    ql::ranges::for_each(
-        candidates, [this, &newPlans](const SubtreePlan& plan) {
-          auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
-          // Note: It is important that we do NOT copy the filter and
-          // textLimit IDs, as they originate from the inner scope of the
-          // OPTIONAL clause and have been already completely dealt with.
-          // This was the cause of
-          // https://github.com/ad-freiburg/qlever/issues/2194.
-          newPlans.push_back(std::move(joinedPlan));
-        });
-    return true;
-  }
-  return false;
+  auto& newPlans = candidatePlans_.emplace_back();
+  ql::ranges::for_each(candidates, [this, &newPlans](const SubtreePlan& plan) {
+    auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
+    // Note: It is important that we do NOT copy the filter and
+    // textLimit IDs, as they originate from the inner scope of the
+    // OPTIONAL clause and have been already completely dealt with.
+    // This was the cause of
+    // https://github.com/ad-freiburg/qlever/issues/2194.
+    newPlans.push_back(std::move(joinedPlan));
+  });
+  return true;
 }
 
 // _____________________________________________________________________________
