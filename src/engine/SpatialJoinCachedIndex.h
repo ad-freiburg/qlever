@@ -162,10 +162,10 @@ class SpatialJoinCachedIndex {
   // `AD_CONTRACT_CHECK`), because otherwise the shape of a row would be
   // silently dropped.
   //
-  // NOTE: This is currently required when an `IdTable` that contains
-  // `LocalVocabEntry`s is serialized into a blob, because its rows are then
-  // rewritten and sorted again, see `rewriteToSecondaryVocab` in
-  // `NamedCacheSecondaryVocabRewriter.h`.
+  // NOTE: This is currently required when an `IdTable` is serialized into a
+  // blob, because its rows are then brought into canonical order (and
+  // rewritten if it contains `LocalVocabEntry`s), see
+  // `canonicalizeForSerialization` in `NamedCacheSecondaryVocabRewriter.h`.
   SpatialJoinCachedIndex withPermutedRows(
       ql::span<const size_t> newRowOfOldRow) const;
 

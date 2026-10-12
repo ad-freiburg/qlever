@@ -22,13 +22,13 @@
 #include <mutex>
 #include <numeric>
 #include <optional>
-#include <stdexcept>
 #include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
 
 #include "../util/GTestHelpers.h"
+#include "../util/TestException.h"
 
 // The `BlockPrefetcher` only exists in C++20 mode, see its header.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -115,7 +115,7 @@ class FakeSink {
     if (hangingHandler_.has_value()) {
       auto handler = std::move(hangingHandler_).value();
       hangingHandler_.reset();
-      completeLater(std::move(handler), nullptr, std::nullopt);
+      completeLater(lock, std::move(handler), nullptr, std::nullopt);
     }
   }
 
@@ -152,7 +152,7 @@ class FakeSink {
       });
     };
     if (wasStopped_) {
-      completeLater(std::move(erased), nullptr, std::nullopt);
+      completeLater(lock, std::move(erased), nullptr, std::nullopt);
       return;
     }
     if (script_.empty()) {
@@ -162,25 +162,33 @@ class FakeSink {
     Outcome outcome = std::move(script_.front());
     script_.pop_front();
     if (auto* block = std::get_if<Block>(&outcome)) {
-      completeLater(std::move(erased), nullptr,
+      completeLater(lock, std::move(erased), nullptr,
                     DeferredBlock::fromBlock(*block));
     } else if (auto* reader = std::get_if<Reader>(&outcome)) {
-      completeLater(std::move(erased), nullptr,
+      completeLater(lock, std::move(erased), nullptr,
                     DeferredBlock::fromReader(std::move(*reader)));
     } else if (auto* exception = std::get_if<std::exception_ptr>(&outcome)) {
-      completeLater(std::move(erased), *exception, std::nullopt);
+      completeLater(lock, std::move(erased), *exception, std::nullopt);
     } else {
-      completeLater(std::move(erased), nullptr, std::nullopt);
+      completeLater(lock, std::move(erased), nullptr, std::nullopt);
     }
   }
 
   // Complete the `handler` (which posts itself to its executor) with the given
-  // arguments. The operation is no longer in flight from now on.
+  // arguments. The operation is no longer in flight from now on. The `lock`
+  // (which must hold `mutex_`) is released before the `handler` is invoked,
+  // and the caller must not touch this sink afterwards.
   //
-  // PRECONDITION: `mutex_` is held.
-  void completeLater(Handler handler, std::exception_ptr exception,
+  // NOTE: The posted handler may run on another thread right away and resume
+  // the filler of the `BlockPrefetcher`, which then releases its reference to
+  // this sink. So the test may already have destroyed the sink (together with
+  // `mutex_`) when this function returns.
+  void completeLater(std::unique_lock<std::mutex>& lock, Handler handler,
+                     std::exception_ptr exception,
                      std::optional<DeferredBlock> block) {
+    AD_CORRECTNESS_CHECK(lock.owns_lock());
     --numInFlight_;
+    lock.unlock();
     handler(std::move(exception), std::move(block));
   }
 };
@@ -209,7 +217,7 @@ class ThrowingSink {
   // it only determines the return type.
   template <typename CompletionToken>
   auto asyncGetNextBlock(CompletionToken&& completionToken) {
-    throw std::runtime_error{"sink threw"};
+    throw TestException{"sink threw"};
     return net::async_initiate<CompletionToken,
                                void(std::exception_ptr,
                                     std::optional<DeferredBlock>)>(
@@ -345,7 +353,7 @@ TEST(BlockPrefetcher, shutDownAfterLastValueOrRightAway) {
   absl::Cleanup joinPool = [&pool] { pool.join(); };
   std::vector<std::vector<FakeSink::Outcome>> scripts;
   scripts.push_back({FakeSink::EndOfMerge{}});
-  scripts.push_back({std::make_exception_ptr(std::runtime_error{"failed"})});
+  scripts.push_back({std::make_exception_ptr(TestException{"failed"})});
   scripts.push_back({Block{0}, FakeSink::EndOfMerge{}});
   for (const auto& script : scripts) {
     for (bool consumeLastValue : {true, false}) {
@@ -356,7 +364,7 @@ TEST(BlockPrefetcher, shutDownAfterLastValueOrRightAway) {
           try {
             while (prefetcher.getNextBlock().has_value()) {
             }
-          } catch (const std::runtime_error& error) {
+          } catch (const TestException& error) {
             EXPECT_STREQ(error.what(), "failed");
           }
         }
@@ -413,8 +421,7 @@ TEST(BlockPrefetcher, exceptionAfterBufferedBlocks) {
   net::thread_pool pool{2};
   absl::Cleanup joinPool = [&pool] { pool.join(); };
   auto script = blocksScript(5);
-  script.emplace_back(
-      std::make_exception_ptr(std::runtime_error{"merge failed"}));
+  script.emplace_back(std::make_exception_ptr(TestException{"merge failed"}));
   auto sink = std::make_shared<FakeSink>(pool.get_executor(), script);
   Prefetcher prefetcher{pool.get_executor(), sink, 10};
   // Let the read-ahead buffer everything before the consumer starts.
@@ -462,7 +469,7 @@ TEST(BlockPrefetcher, shutDownDropsBufferedException) {
   net::thread_pool pool{2};
   absl::Cleanup joinPool = [&pool] { pool.join(); };
   std::vector<FakeSink::Outcome> script{
-      Block{0}, std::make_exception_ptr(std::runtime_error{"merge failed"})};
+      Block{0}, std::make_exception_ptr(TestException{"merge failed"})};
   auto sink = std::make_shared<FakeSink>(pool.get_executor(), script);
   Prefetcher prefetcher{pool.get_executor(), sink, 10};
   // Let the read-ahead buffer the block and the exception before the shutdown.
@@ -557,8 +564,7 @@ TEST(BlockPrefetcher, exceptionOfARead) {
     absl::Cleanup joinPool = [&pool] { pool.join(); };
     std::vector<FakeSink::Outcome> script{
         Block{0}, FakeSink::Reader{[]() -> Block { return 1; }},
-        FakeSink::Reader{
-            []() -> Block { throw std::runtime_error{"read failed"}; }},
+        FakeSink::Reader{[]() -> Block { throw TestException{"read failed"}; }},
         Block{3}};
     if (withEnd) {
       script.emplace_back(FakeSink::EndOfMerge{});

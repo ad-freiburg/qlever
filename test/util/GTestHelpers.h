@@ -245,8 +245,8 @@ class CopyShield {
 
  public:
   CPP_variadic_template(typename... Ts)(
-      requires ql::concepts::constructible_from<
-          T, Ts&&...>) explicit CopyShield(Ts&&... args)
+      requires ql::concepts::constructible_from<T, Ts...>)
+  explicit CopyShield(Ts&&... args)
       : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
 
   CPP_template(typename Ts)(requires ql::concepts::constructible_from<T, Ts&&>)

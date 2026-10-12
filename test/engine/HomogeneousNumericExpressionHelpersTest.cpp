@@ -109,11 +109,11 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedValueGetters) {
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedOperandTypes) {
   static_assert(supportsNumericFastPathOperand<ValueId>());
-  static_assert(supportsNumericFastPathOperand<ql::span<const ValueId>>());
+  static_assert(supportsNumericFastPathOperand<ConstIdColumnRef>());
   static_assert(!supportsNumericFastPathOperand<int>());
 
   EXPECT_TRUE(supportsNumericFastPathOperand<ValueId>());
-  EXPECT_TRUE(supportsNumericFastPathOperand<ql::span<const ValueId>>());
+  EXPECT_TRUE(supportsNumericFastPathOperand<ConstIdColumnRef>());
   EXPECT_FALSE(supportsNumericFastPathOperand<int>());
 }
 
@@ -166,52 +166,49 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySpan) {
       I(1), I(2), D(3.0), Id::makeFromBool(true), Id::makeFromBool(false)};
 
   auto classification =
-      classifyNumericOperand(ql::span<const ValueId>{ints}, &context_);
+      classifyNumericOperand(ConstIdColumnRef{ints}, &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Int);
   EXPECT_EQ(classification.majorityType_, NumericType::Int);
 
-  classification =
-      classifyNumericOperand(ql::span<const ValueId>{doubles}, &context_);
+  classification = classifyNumericOperand(ConstIdColumnRef{doubles}, &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Double);
   EXPECT_EQ(classification.majorityType_, NumericType::Double);
 
   classification =
-      classifyNumericOperand(ql::span<const ValueId>{mostlyInts}, &context_);
+      classifyNumericOperand(ConstIdColumnRef{mostlyInts}, &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Int);
 
   classification =
-      classifyNumericOperand(ql::span<const ValueId>{mostlyDoubles}, &context_);
+      classifyNumericOperand(ConstIdColumnRef{mostlyDoubles}, &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Double);
 
-  classification =
-      classifyNumericOperand(ql::span<const ValueId>{tied}, &context_);
+  classification = classifyNumericOperand(ConstIdColumnRef{tied}, &context_);
+  EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
+  EXPECT_EQ(classification.majorityType_, NumericType::Other);
+
+  classification = classifyNumericOperand(ConstIdColumnRef{empty}, &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Other);
 
   classification =
-      classifyNumericOperand(ql::span<const ValueId>{empty}, &context_);
-  EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
-  EXPECT_EQ(classification.majorityType_, NumericType::Other);
-
-  classification = classifyNumericOperand(
-      ql::span<const ValueId>{withNonNumeric}, &context_);
+      classifyNumericOperand(ConstIdColumnRef{withNonNumeric}, &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Int);
 
   classification =
-      classifyNumericOperand(ql::span<const ValueId>{withUndefined}, &context_);
+      classifyNumericOperand(ConstIdColumnRef{withUndefined}, &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Int);
 
-  classification = classifyNumericOperand(
-      ql::span<const ValueId>{mostlyNonNumeric}, &context_);
+  classification =
+      classifyNumericOperand(ConstIdColumnRef{mostlyNonNumeric}, &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Other);
 
-  classification = classifyNumericOperand(
-      ql::span<const ValueId>{tiedWithNonNumeric}, &context_);
+  classification =
+      classifyNumericOperand(ConstIdColumnRef{tiedWithNonNumeric}, &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Other);
 }
@@ -221,8 +218,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifyOperands) {
   std::array<ValueId, 3> mostlyInts{I(1), I(2), D(3.0)};
   std::array<ValueId, 3> mostlyDoubles{I(1), D(2.0), D(3.0)};
 
-  auto intsSpan = ql::span<const ValueId>{mostlyInts};
-  auto doublesSpan = ql::span<const ValueId>{mostlyDoubles};
+  auto intsSpan = ConstIdColumnRef{mostlyInts};
+  auto doublesSpan = ConstIdColumnRef{mostlyDoubles};
 
   const auto classifications =
       classifyNumericOperands(&context_, intsSpan, doublesSpan, I(5));
@@ -246,7 +243,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, GetHomogeneousNumericValue) {
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, MakeHomogeneousNumericGetter) {
   std::array<ValueId, 3> ints{I(4), I(5), I(6)};
-  ql::span<const ValueId> span{ints};
+  ConstIdColumnRef span{ints};
 
   auto vectorGetter = makeHomogeneousNumericGetter<int64_t>(span);
 
@@ -266,8 +263,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   std::array<ValueId, 3> left{I(1), I(2), I(3)};
   std::array<ValueId, 3> right{I(4), I(5), I(6)};
 
-  auto leftSpan = ql::span<const ValueId>{left};
-  auto rightSpan = ql::span<const ValueId>{right};
+  auto leftSpan = ConstIdColumnRef{left};
+  auto rightSpan = ConstIdColumnRef{right};
 
   auto result = evaluateHomogeneousNumericOperation<TestAdd, int64_t, int64_t>(
       std::tie(leftSpan, rightSpan), &context_);
@@ -294,8 +291,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   std::array<ValueId, 3> left{I(1), D(2.5), I(3)};
   std::array<ValueId, 3> right{I(4), I(5), D(6.5)};
 
-  auto leftSpan = ql::span<const ValueId>{left};
-  auto rightSpan = ql::span<const ValueId>{right};
+  auto leftSpan = ConstIdColumnRef{left};
+  auto rightSpan = ConstIdColumnRef{right};
 
   auto result = evaluateSpeculativeNumericOperation<
       TestNumericAdd, TestNumericValueGetter, TestNumericValueGetter, int64_t,
@@ -315,7 +312,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        EvaluateSpeculativeNumericOperationVectorConstant) {
   std::array<ValueId, 3> left{I(1), D(2.5), I(3)};
-  auto leftSpan = ql::span<const ValueId>{left};
+  auto leftSpan = ConstIdColumnRef{left};
 
   auto result = evaluateSpeculativeNumericOperation<
       TestNumericAdd, TestNumericValueGetter, TestNumericValueGetter, int64_t,
@@ -335,7 +332,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        EvaluateSpeculativeNumericOperationConstantVector) {
   std::array<ValueId, 3> right{I(1), D(2.5), I(3)};
-  auto rightSpan = ql::span<const ValueId>{right};
+  auto rightSpan = ConstIdColumnRef{right};
 
   auto result = evaluateSpeculativeNumericOperation<
       TestNumericAdd, TestNumericValueGetter, TestNumericValueGetter, int64_t,
@@ -357,8 +354,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   std::array<ValueId, 3> left{D(1.5), D(2.5), I(3)};
   std::array<ValueId, 3> right{D(4.0), D(5.0), D(6.5)};
 
-  auto leftSpan = ql::span<const ValueId>{left};
-  auto rightSpan = ql::span<const ValueId>{right};
+  auto leftSpan = ConstIdColumnRef{left};
+  auto rightSpan = ConstIdColumnRef{right};
 
   auto result = evaluateSpeculativeNumericOperation<
       TestNumericAdd, TestNumericValueGetter, TestNumericValueGetter, double,
@@ -380,8 +377,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   std::array<ValueId, 3> left{I(1), D(2.5), D(3.5)};
   std::array<ValueId, 3> right{I(4), I(5), D(6.5)};
 
-  auto leftSpan = ql::span<const ValueId>{left};
-  auto rightSpan = ql::span<const ValueId>{right};
+  auto leftSpan = ConstIdColumnRef{left};
+  auto rightSpan = ConstIdColumnRef{right};
 
   auto result = evaluateSpeculativeNumericOperation<
       TestNumericAdd, TestNumericValueGetter, TestNumericValueGetter, double,
@@ -418,8 +415,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   std::array<ValueId, 3> first{I(1), I(2), I(3)};
   std::array<ValueId, 3> second{D(0.5), D(1.5), D(2.5)};
 
-  auto firstSpan = ql::span<const ValueId>{first};
-  auto secondSpan = ql::span<const ValueId>{second};
+  auto firstSpan = ConstIdColumnRef{first};
+  auto secondSpan = ConstIdColumnRef{second};
   auto constant = I(10);
 
   auto result = evaluateHomogeneousNumericOperation<TestAddThree, int64_t,

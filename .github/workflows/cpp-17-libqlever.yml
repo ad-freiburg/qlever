@@ -5,6 +5,9 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+    # Also run when a label is applied, so that applying the `run-ci` or
+    # `run-full-ci` label triggers the checks, see `README.md`.
+    types: [ opened, synchronize, reopened, labeled ]
   merge_group:
 
 concurrency:
@@ -22,6 +25,11 @@ jobs:
   # the `build` matrix below via an artifact. This job has to run directly on
   # the runner (and not in a `container` like `build`), because it needs Docker.
   rewrite-using-enum:
+    # Only run for PRs with the `run-ci` or `run-full-ci` label, see `README.md`.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'run-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'run-full-ci')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
