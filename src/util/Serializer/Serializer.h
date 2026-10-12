@@ -302,8 +302,12 @@ template <typename S>
 constexpr bool usesAlignedSerialization =
     detail::UsesAlignedSerializationImpl<std::decay_t<S>>::value;
 
-// Concept for serializers that support zero-copy reads by providing direct
-// access to the underlying buffer.
+// Concept for serializers that provide direct access to the underlying buffer
+// (`getSpanToBytes`), so that bytes can be read without copying them. This is
+// enough for zero-copy reads of data without alignment requirements, see
+// `zeroCopyDeserializeToStringView` in `SerializeString.h`. For the zero-copy
+// reads of trivially serializable values, which have to be aligned, see
+// `ZeroCopyReadSerializer` below.
 // Note: The concept currently only checks for the existence of the functions,
 // but leaves the return types unchecked, because the syntax in C++17 mode for
 // those checks is very very verbose.
@@ -315,9 +319,16 @@ CPP_requires(zeroCopyReadSerializerRequires,
                                        concepts::requires_<ReadSerializer<S>>));
 
 template <typename S>
+CPP_concept SpanReadSerializer =
+    ReadSerializer<S> && CPP_requires_ref(zeroCopyReadSerializerRequires, S);
+
+// Concept for serializers that support zero-copy reads of trivially
+// serializable values, which additionally requires that the serializer uses
+// aligned serialization (see `zeroCopyDeserializeToSpan` in
+// `SerializeVector.h`).
+template <typename S>
 CPP_concept ZeroCopyReadSerializer =
-    ReadSerializer<S> && usesAlignedSerialization<S> &&
-    CPP_requires_ref(zeroCopyReadSerializerRequires, S);
+    SpanReadSerializer<S> && usesAlignedSerialization<S>;
 
 // Concept that checks whether a type `T` provides a static
 // `fromZeroCopyDeserializer(S&)` factory for the zero-copy read serializer `S`.

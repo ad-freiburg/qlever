@@ -14,13 +14,17 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "backports/span.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/NoCopyNoMove.h"
+#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/SerializeString.h"
+#include "util/UninitializedAllocator.h"
 
 // The words of the partial vocabularies as the parallel block merge (see
 // `util/parallelBlockMerge/ParallelBlockMerge.h`) sees them, and the blocks
@@ -50,14 +54,31 @@ struct MergeWord {
   [[nodiscard]] const bool& isExternal() const { return isExternal_; }
   [[nodiscard]] std::string_view iriOrLiteral() const { return word_; }
   [[nodiscard]] const uint64_t& id() const { return index_; }
-};
 
-// The memory footprint of a `MergeWord` including its word, which the parallel
-// merge needs to limit its memory consumption.
-inline ad_utility::MemorySize sizeOfMergeWord(const MergeWord& word) {
-  return ad_utility::MemorySize::bytes(sizeof(MergeWord) +
-                                       word.iriOrLiteral().size());
-}
+  // The memory footprint of a `MergeWord` including its word, which the
+  // parallel merge needs to limit its memory consumption.
+  static ad_utility::MemorySize memorySize(const MergeWord& word) {
+    return ad_utility::MemorySize::bytes(sizeof(MergeWord) +
+                                         word.iriOrLiteral().size());
+  }
+
+  // Read a word of the partial vocabulary `partialFileId` from the
+  // `serializer`, in the format that `PartialVocabularyWriter` (see
+  // `index/vocabulary_merger/PartialVocabularyFile.h`) writes: the word as a
+  // string, its external flag and its local index. The word is not copied, but
+  // points into the buffer of the `serializer`, which therefore has to outlive
+  // the returned `MergeWord` (and must not move its buffer).
+  CPP_template(typename S)(
+      requires serialization::SpanReadSerializer<S>) static MergeWord
+      fromZeroCopyDeserializer(S& serializer, uint32_t partialFileId) {
+    MergeWord word;
+    word.word_ = serialization::zeroCopyDeserializeToStringView(serializer);
+    serializer >> word.isExternal_;
+    serializer >> word.index_;
+    word.partialFileId_ = partialFileId;
+    return word;
+  }
+};
 
 // A block of `MergeWord`s together with the storage that their words point
 // into: either the serialized bytes of a block of a partial vocabulary file
@@ -65,57 +86,42 @@ inline ad_utility::MemorySize sizeOfMergeWord(const MergeWord& word) {
 // or, for a block of merged words, buffers that the words are copied into. The
 // buffers never move once a word points into them, so the block can be moved,
 // but not copied. The block is a random-access range of its words.
-class MergeBlock {
+class MergeBlock : public ad_utility::NoCopy {
  public:
   using iterator = std::vector<MergeWord>::iterator;
   using const_iterator = std::vector<MergeWord>::const_iterator;
+  // A buffer that the words point into. The bytes are not zeroed when the
+  // buffer is resized, because they are overwritten anyway (by a read from a
+  // file, or by the words that are copied in).
+  using Buffer = std::vector<char, ad_utility::default_init_allocator<char>>;
 
  private:
   // The size of a buffer of a block of merged words. A word that is longer
   // gets a buffer of its own.
-  static constexpr size_t bufferSize_ = 1u << 20;
+  static constexpr ad_utility::MemorySize bufferSize_ =
+      ad_utility::MemorySize::megabytes(1);
 
   std::vector<MergeWord> words_;
-  std::vector<std::vector<char>> buffers_;
+  std::vector<Buffer> buffers_;
 
  public:
   MergeBlock() = default;
-  MergeBlock(const MergeBlock&) = delete;
-  MergeBlock& operator=(const MergeBlock&) = delete;
-  MergeBlock(MergeBlock&&) noexcept = default;
-  MergeBlock& operator=(MergeBlock&&) noexcept = default;
 
   // Construct a block over the serialized `bytes` of `numWords` words of the
   // partial vocabulary `partialFileId`, in the format that
-  // `PartialVocabularyWriter` writes: for each word its length (`uint64_t`),
-  // its bytes, its external flag (one byte) and its local index (`uint64_t`).
-  // The words are parsed in place, nothing is copied.
-  MergeBlock(std::vector<char> bytes, size_t numWords, uint32_t partialFileId) {
+  // `PartialVocabularyWriter` writes (see `MergeWord::fromZeroCopyDeserializer`
+  // above). The words are parsed in place, nothing is copied.
+  MergeBlock(Buffer bytes, size_t numWords, uint32_t partialFileId) {
     buffers_.push_back(std::move(bytes));
     const auto& buffer = buffers_.back();
     words_.reserve(numWords);
-    const char* pos = buffer.data();
-    const char* end = pos + buffer.size();
-    auto readFixed = [&pos, end](auto& target) {
-      AD_CORRECTNESS_CHECK(static_cast<size_t>(end - pos) >= sizeof(target),
-                           "Truncated block of a partial vocabulary");
-      std::memcpy(&target, pos, sizeof(target));
-      pos += sizeof(target);
-    };
+    serialization::ByteBufferReadSerializerT<false, ql::span<const char>>
+        serializer{ql::span<const char>{buffer.data(), buffer.size()}};
     for (size_t i = 0; i < numWords; ++i) {
-      MergeWord word;
-      uint64_t length = 0;
-      readFixed(length);
-      AD_CORRECTNESS_CHECK(static_cast<uint64_t>(end - pos) >= length,
-                           "Truncated block of a partial vocabulary");
-      word.word_ = std::string_view{pos, length};
-      pos += length;
-      readFixed(word.isExternal_);
-      readFixed(word.index_);
-      word.partialFileId_ = partialFileId;
-      words_.push_back(word);
+      words_.push_back(
+          MergeWord::fromZeroCopyDeserializer(serializer, partialFileId));
     }
-    AD_CORRECTNESS_CHECK(pos == end,
+    AD_CORRECTNESS_CHECK(serializer.getCurrentPosition() == buffer.size(),
                          "Trailing bytes in a block of a partial vocabulary");
   }
 
@@ -163,7 +169,8 @@ class MergeBlock {
   std::string_view store(std::string_view word) {
     if (buffers_.empty() ||
         buffers_.back().size() + word.size() > buffers_.back().capacity()) {
-      buffers_.emplace_back().reserve(std::max(bufferSize_, word.size()));
+      buffers_.emplace_back().reserve(
+          std::max(bufferSize_.getBytes(), word.size()));
     }
     auto& buffer = buffers_.back();
     size_t offset = buffer.size();
