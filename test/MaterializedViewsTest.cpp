@@ -2084,6 +2084,37 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                 "2 * ?o + 1", V{"?s2"}));
   }
 
+  // A `BIND` pushed into the right child of a `SpatialJoin` with restricted
+  // payload variables: its target becomes a payload variable, because the
+  // `SpatialJoin` would drop the column otherwise.
+  {
+    constexpr std::string_view bindIntoPayloadChild = R"(
+      PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?o ?o2 ?bind {
+        ?s view:bindView-o ?o .
+        SERVICE spatialSearch: {
+          _:config spatialSearch:algorithm spatialSearch:libspatialjoin ;
+                   spatialSearch:left ?o ;
+                   spatialSearch:right ?o2 ;
+                   spatialSearch:joinType spatialSearch:within-dist ;
+                   spatialSearch:maxDistance 100 ;
+                   spatialSearch:payload ?o2 .
+          { ?s2 view:bindView-o ?o2 }
+        }
+        BIND(2 * ?o2 + 1 AS ?bind)
+      }
+    )";
+    qpExpect(qlv(), bindIntoPayloadChild,
+             h::spatialJoin(
+                 100, -1, V{"?o"}, V{"?o2"}, std::nullopt,
+                 PayloadVariables{std::vector{V{"?o2"}, V{"?bind"}}},
+                 SpatialJoinAlgorithm::LIBSPATIALJOIN,
+                 SpatialJoinType::WITHIN_DIST, std::nullopt, viewScanNoBind,
+                 viewScan("bindView", "?s2", "?o2", "?_ql_materialized_view_o",
+                          3, AC{{3, V{"?bind"}}})));
+  }
+
   // The `2 * ?o + 1` expression.
   auto bindExpr = sparqlExpression::makeAddExpression(
       sparqlExpression::makeMultiplyExpression(
@@ -2464,6 +2495,16 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                h::Filter("true", pushedView));
     expectPush(makeExecutionTree<Filter>(qec, sharesS(), trueExpr),
                std::nullopt);
+    // Refused if their own expression refers to the `BIND`'s target: it sees
+    // the target as unbound, but after the push down it wouldn't.
+    sparqlExpression::SparqlExpressionPimpl targetExpr{
+        std::make_shared<sparqlExpression::VariableExpression>(V{"?bind"}),
+        "?bind"};
+    expectPush(makeExecutionTree<::Bind>(
+                   qec, view(), parsedQuery::Bind{targetExpr, V{"?other"}}),
+               std::nullopt);
+    expectPush(makeExecutionTree<Filter>(qec, view(), targetExpr),
+               std::nullopt);
 
     // `CartesianProductJoin`: succeeds iff a child covering `?o` accepts.
     auto sharesNothingMatcher = h::IndexScanFromStrings("?y", "<p1>", "?z");
@@ -2487,6 +2528,10 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                h::CartesianProductJoin(pushedUndefView, sharesNothingMatcher));
     expectPush(unionOf(undefView(), undefView()),
                h::Union(pushedUndefView, pushedUndefView));
+    // The same tree as both children: `?o` might be `UNDEF` in the other child
+    // as well, so this is refused (children are told apart by position).
+    auto sameUndefView = undefView();
+    expectPush(optional(sameUndefView, sameUndefView), std::nullopt);
 
     // `QueryExecutionTree::makeTreeWithBindColumn` (the entry point used by the
     // query planner) preserves the `LIMIT` and the visible variables (as
@@ -2505,6 +2550,19 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                   ::testing::UnorderedElementsAre(::testing::Key(V{"?s"}),
                                                   ::testing::Key(V{"?o"}),
                                                   ::testing::Key(V{"?bind"})));
+    }
+
+    // It also preserves the variables stripped from the original tree, so that
+    // they can still be prefiltered.
+    {
+      auto stripped =
+          QueryExecutionTree::makeTreeWithStrippedColumns(view(), {V{"?o"}});
+      ASSERT_THAT(stripped->getStrippedVariables(),
+                  ::testing::UnorderedElementsAre(V{"?s"}));
+      auto result = stripped->makeTreeWithBindColumn(bind);
+      ASSERT_TRUE(result.has_value());
+      EXPECT_THAT(result.value()->getStrippedVariables(),
+                  ::testing::UnorderedElementsAre(V{"?s"}));
     }
   }
 

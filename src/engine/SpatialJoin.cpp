@@ -661,7 +661,26 @@ std::unique_ptr<Operation> SpatialJoin::cloneWithNewChildren(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  return pushDownBindToAnyChild(bind, {childLeft_, childRight_});
+  // The left child keeps all its columns.
+  if (childLeft_ != nullptr) {
+    if (auto result = pushDownBindToChild(bind, {childLeft_, childRight_}, 0)) {
+      return result;
+    }
+  }
+  if (childRight_ == nullptr) {
+    return std::nullopt;
+  }
+  if (config_.payloadVariables_.isAll()) {
+    return pushDownBindToChild(bind, {childLeft_, childRight_}, 1);
+  }
+  // Only the payload variables of the right child are kept, so the target has
+  // to become one of them. `pushDownBindToChild` rebuilds the `SpatialJoin`
+  // from the `config_` of the object it is called on.
+  auto config = config_;
+  config.payloadVariables_.addVariable(bind._target);
+  return SpatialJoin{_executionContext, std::move(config), childLeft_,
+                     childRight_, substitutesFilterOp_}
+      .pushDownBindToChild(bind, {childLeft_, childRight_}, 1);
 }
 
 // _____________________________________________________________________________

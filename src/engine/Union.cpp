@@ -392,6 +392,13 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
+std::unique_ptr<Operation> Union::cloneWithNewChildren(
+    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<Union>(_executionContext, std::move(children.at(0)),
+                                 std::move(children.at(1)), targetOrder_);
+}
+
+// _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   AD_CONTRACT_CHECK(!containsVariableInternally(bind._target));
@@ -410,24 +417,16 @@ Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // isn't itself `UNDEF` on `UNDEF` input (e.g. `COALESCE`). `UNION` doesn't
   // change any values, so (unlike for joins) it doesn't matter whether the
   // variables might be `UNDEF` in a child.
-  std::array<std::shared_ptr<QueryExecutionTree>, 2> results;
-  // This also guarantees equality of `std::tuple_size<T>::value`, because the
-  // size is a template parameter.
-  static_assert(std::is_same_v<decltype(_subtrees), decltype(results)>);
-
-  for (const auto& [i, subtree] : ::ranges::views::enumerate(_subtrees)) {
+  std::vector<std::shared_ptr<QueryExecutionTree>> children;
+  for (const auto& subtree : _subtrees) {
     auto result = subtree->makeTreeWithBindColumn(bind);
     if (!result.has_value()) {
       return std::nullopt;
     }
-    results[i] = std::move(result.value());
+    children.push_back(std::move(result.value()));
   }
-
-  // All children have the `BIND` target column added. Make a new `UNION`
-  // object with the new children (there is no sort order to preserve here,
-  // see the `targetOrder_` check above).
-  return ad_utility::makeExecutionTree<Union>(
-      getExecutionContext(), std::move(results[0]), std::move(results[1]));
+  return _executionContext->makeShared<QueryExecutionTree>(
+      _executionContext, cloneWithNewChildren(std::move(children)));
 }
 
 // _____________________________________________________________________________

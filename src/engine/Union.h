@@ -161,6 +161,10 @@ class Union : public Operation {
       const parsedQuery::Bind& bind) const override;
 
   // ___________________________________________________________________________
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+
+  // ___________________________________________________________________________
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;

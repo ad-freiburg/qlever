@@ -187,6 +187,10 @@ QueryExecutionTree::makeTreeWithBindColumn(
         rootOperation_->getLimitOffset());
     // Same as for the prefiltered tree above, but the `BIND` target is new.
     rootOperation_->keepHiddenVariablesHidden(*newRoot, bind._target);
+    AD_CORRECTNESS_CHECK(result.value()->containsVariable(bind._target),
+                         "The `BIND` target was lost during the push down.");
+    // The new tree still strips the same variables (plus it adds the target).
+    result.value()->strippedVariables_ = strippedVariables_;
   }
   return result;
 }

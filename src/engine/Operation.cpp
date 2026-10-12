@@ -933,13 +933,15 @@ Operation::pushDownBindToChild(
     size_t childIndex) const {
   auto& child = children.at(childIndex);
   AD_CORRECTNESS_CHECK(child != nullptr);
-  auto isOther = [&child](const auto& other) {
-    return other != nullptr && other != child;
-  };
+  // Compare by position, not by identity: the same tree might be used twice.
   auto otherContains = [&](const Variable& var) {
-    return ql::ranges::any_of(children, [&](const auto& other) {
-      return isOther(other) && other->containsVariable(var);
-    });
+    for (size_t i = 0; i < children.size(); ++i) {
+      const auto& other = children[i];
+      if (i != childIndex && other != nullptr && other->containsVariable(var)) {
+        return true;
+      }
+    }
+    return false;
   };
   if (otherContains(bind._target)) {
     return std::nullopt;
