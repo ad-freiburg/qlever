@@ -5,10 +5,8 @@
 #ifndef QLEVER_RDFESCAPING_H
 #define QLEVER_RDFESCAPING_H
 
-#include <sstream>
 #include <string>
-
-#include "util/StringUtils.h"
+#include <string_view>
 
 namespace RdfEscaping {
 namespace detail {
