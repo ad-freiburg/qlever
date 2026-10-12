@@ -1,0 +1,164 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#include "util/metrics/Tracing.h"
+
+#include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
+#include <opentelemetry/sdk/trace/batch_span_processor_factory.h>
+#include <opentelemetry/sdk/trace/batch_span_processor_options.h>
+#include <opentelemetry/sdk/trace/samplers/always_on_factory.h>
+#include <opentelemetry/sdk/trace/samplers/parent_factory.h>
+#include <opentelemetry/sdk/trace/tracer_provider.h>
+#include <opentelemetry/sdk/trace/tracer_provider_factory.h>
+#include <opentelemetry/semconv/error_attributes.h>
+#include <opentelemetry/semconv/exception_attributes.h>
+#include <opentelemetry/trace/propagation/http_trace_context.h>
+#include <opentelemetry/trace/provider.h>
+#include <opentelemetry/trace/span_metadata.h>
+
+#include <boost/core/demangle.hpp>
+#include <exception>
+#include <memory>
+#include <optional>
+#include <string_view>
+#include <typeinfo>
+#include <utility>
+
+#include "util/metrics/Resource.h"
+
+namespace otel_propagation = opentelemetry::context::propagation;
+namespace trace_api = opentelemetry::trace;
+namespace trace_sdk = opentelemetry::sdk::trace;
+namespace semconv = opentelemetry::semconv;
+
+namespace ad_utility::tracing {
+
+// _____________________________________________________________________________
+TracingHandle::TracingHandle(Provider provider)
+    : provider_{std::move(provider), &shutdownProvider} {}
+
+// _____________________________________________________________________________
+void TracingHandle::shutdownProvider(Provider provider) {
+  if (provider == nullptr) {
+    return;
+  }
+  // Uninstall first, so that anything that creates a span from here on gets the
+  // no-op provider instead of one whose exporter is being torn down.
+  trace_api::Provider::SetTracerProvider(
+      std::shared_ptr<trace_api::TracerProvider>{});
+  // The batch processor buffers spans and exports them from a background
+  // thread, so without this the spans of the last few seconds would be lost.
+  provider->Shutdown();
+}
+
+// _____________________________________________________________________________
+TracingHandle initialize() {
+  // The endpoint is configured with the standard `OTEL_EXPORTER_OTLP_TRACES_*`
+  // environment variables.
+  auto exporter =
+      opentelemetry::exporter::otlp::OtlpHttpExporterFactory::Create();
+  auto provider = trace_sdk::TracerProviderFactory::Create(
+      trace_sdk::BatchSpanProcessorFactory::Create(
+          std::move(exporter), trace_sdk::BatchSpanProcessorOptions{}),
+      metrics::sharedResource(),
+      // If a span has a parent outside QLever respect the existing sampling
+      // decision, otherwise collect all.
+      trace_sdk::ParentBasedSamplerFactory::Create(
+          trace_sdk::AlwaysOnSamplerFactory::Create()));
+
+  auto sharedProvider = std::shared_ptr{std::move(provider)};
+  trace_api::Provider::SetTracerProvider(
+      std::shared_ptr<trace_api::TracerProvider>{sharedProvider});
+
+  // Propagate the trace context using the W3C Trace Context standard.
+  // NOTES:
+  // - The propagation is currently only used for incoming context.
+  // - The baggage (user-defined key/value pairs) is not propagated. We don't
+  // use or need it. To use it we'd also need a `BaggagePropagator` among other
+  // changes.
+  otel_propagation::GlobalTextMapPropagator::SetGlobalPropagator(
+      std::make_shared<trace_api::propagation::HttpTraceContext>());
+
+  return TracingHandle{std::move(sharedProvider)};
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<trace_api::Tracer> tracer() {
+  return trace_api::Provider::GetTracerProvider()->GetTracer("qlever");
+}
+
+// _____________________________________________________________________________
+SpanGuard::SpanGuard(std::string_view name,
+                     std::optional<trace_api::SpanContext> parent) {
+  trace_api::StartSpanOptions options;
+  if (parent.has_value()) {
+    options.parent = std::move(parent).value();
+  } else {
+    // Declaring a span as a root span (not the child of another span) has to be
+    // done explicitly.
+    options.parent = opentelemetry::context::Context{}.SetValue(
+        trace_api::kIsRootSpanKey, true);
+  }
+  span_ = tracer()->StartSpan(name, options);
+}
+
+// _____________________________________________________________________________
+SpanGuard::~SpanGuard() {
+  if (!statusRecorded_) {
+    // Neither success nor a specific error was recorded, so the scope holding
+    // this guard was left abnormally.
+    span_->SetStatus(trace_api::StatusCode::kError, "unfinished");
+  }
+  span_->End();
+}
+
+// _____________________________________________________________________________
+trace_api::SpanContext SpanGuard::context() const {
+  return span_->GetContext();
+}
+
+// _____________________________________________________________________________
+void SpanGuard::setOk() {
+  span_->SetStatus(trace_api::StatusCode::kOk);
+  statusRecorded_ = true;
+}
+
+// _____________________________________________________________________________
+void SpanGuard::setError(std::string_view errorType, std::string_view message) {
+  span_->SetAttribute(semconv::error::kErrorType, errorType);
+  span_->SetStatus(trace_api::StatusCode::kError, message);
+  statusRecorded_ = true;
+}
+
+// _____________________________________________________________________________
+void SpanGuard::recordException(const std::exception& exception,
+                                std::string_view errorType) {
+  span_->AddEvent("exception",
+                  {{semconv::exception::kExceptionType, errorType},
+                   {semconv::exception::kExceptionMessage, exception.what()}});
+  setError(errorType, exception.what());
+}
+
+// _____________________________________________________________________________
+void detail::recordException(SpanGuard& guard, std::exception_ptr exception) {
+  AD_CONTRACT_CHECK(exception != nullptr);
+  // Rethrow so that we can inspect the exception.
+  try {
+    std::rethrow_exception(std::move(exception));
+  } catch (const std::exception& exception) {
+    guard.recordException(exception,
+                          boost::core::demangle(typeid(exception).name()));
+  } catch (...) {
+    // `_OTHER` is the fallback value for `error.type` defined by the semantic
+    // conventions.
+    guard.setError("_OTHER", "unknown exception");
+  }
+}
+
+}  // namespace ad_utility::tracing
