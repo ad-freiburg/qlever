@@ -18,8 +18,7 @@
 using namespace qlever::binary_export;
 
 namespace {
-// A test index with a text index, such that all the datatypes that point to
-// strings can be resolved.
+// An index with a text index, to resolve all datatypes that point to strings.
 QueryExecutionContext* getQecWithTextIndex() {
   ad_utility::testing::TestIndexConfig config;
   config.turtleInput =
@@ -50,7 +49,6 @@ TEST(StringMapping, remapId) {
   LocalVocabEntry duplicateWord = LocalVocabEntry::fromStringRepresentation(
       "<b>", index.getLocalVocabContext());
   StringMapping mapping{index};
-  // The word `<b>` of the vocabulary.
   Id id1 = Id::makeFromVocabIndex(VocabIndex::make(2));
   Id id2 = Id::makeFromLocalVocabIndex(&testWord);
   Id id3 = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
@@ -63,18 +61,22 @@ TEST(StringMapping, remapId) {
   binaryEq(mapping.remapId(id3), toMappedId(2));
   binaryEq(mapping.remapId(id4), toMappedId(3));
   binaryEq(mapping.remapId(id1), toMappedId(0));
-  // Equal IDs (here: the same word in the vocabulary and the local vocab) are
-  // mapped to the same index.
-  binaryEq(mapping.remapId(id5), toMappedId(0));
+  // The same word with a different ID gets a new index.
+  binaryEq(mapping.remapId(id5), toMappedId(4));
 
-  EXPECT_THAT(mapping.stringMappingForTesting(),
-              ::testing::UnorderedElementsAre(
-                  ::testing::Pair(id1, 0), ::testing::Pair(id2, 1),
-                  ::testing::Pair(id3, 2), ::testing::Pair(id4, 3)));
+  EXPECT_THAT(
+      mapping.stringMappingForTesting(),
+      ::testing::UnorderedElementsAre(
+          ::testing::Pair(id1.getBits(), 0), ::testing::Pair(id2.getBits(), 1),
+          ::testing::Pair(id3.getBits(), 2), ::testing::Pair(id4.getBits(), 3),
+          ::testing::Pair(id5.getBits(), 4)));
 
-  EXPECT_EQ(mapping.size(), 4);
-  // The strings are `<b>`, `"abc"`, `""`, and `"brown"`.
-  EXPECT_EQ(mapping.numBytes(), 3 + 5 + 2 + 7);
+  EXPECT_EQ(mapping.size(), 5);
+  // `<b>`, `"abc"`, `""`, `"brown"`, `<b>`.
+  EXPECT_EQ(mapping.numBytes(), 3 + 5 + 2 + 7 + 3);
+  EXPECT_THAT(
+      mapping.takeStrings(),
+      ::testing::ElementsAre("<b>", "\"abc\"", "\"\"", "\"brown\"", "<b>"));
 }
 
 // _____________________________________________________________________________
@@ -125,7 +127,7 @@ TEST(StringMapping, takeStrings) {
       mapping.takeStrings(),
       ::testing::ElementsAre("<a>", "<b>", "\"abc\"", "\"\"", "\"brown\""));
 
-  // After `takeStrings`, the mapping starts from scratch.
+  // A new batch.
   EXPECT_EQ(mapping.size(), 0);
   EXPECT_EQ(mapping.numBytes(), 0);
   EXPECT_EQ(mapping.remapId(id1).getBits(),

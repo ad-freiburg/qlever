@@ -287,8 +287,7 @@ TEST(GeoPoint, latMajorEncoding) {
   }
 }
 
-// Test `GeoPoint::convertEncoding`, which converts the bit representation of a
-// point from one encoding to another.
+// _____________________________________________________________________________
 TEST(GeoPoint, convertEncoding) {
   using T = GeoPoint::T;
   using E = GeoPointEncodingEnum;
@@ -298,20 +297,18 @@ TEST(GeoPoint, convertEncoding) {
   constexpr T latMajor = GeoPoint::combineCoordinates(lat, lng, E::LatMajor);
   static_assert(zOrder != latMajor);
 
-  // Converting between the two encodings.
   static_assert(GeoPoint::convertEncoding(zOrder, E::ZOrder, E::LatMajor) ==
                 latMajor);
   static_assert(GeoPoint::convertEncoding(latMajor, E::LatMajor, E::ZOrder) ==
                 zOrder);
 
-  // Converting to the same encoding doesn't change anything.
+  // Same encoding: unchanged.
   static_assert(GeoPoint::convertEncoding(zOrder, E::ZOrder, E::ZOrder) ==
                 zOrder);
   static_assert(GeoPoint::convertEncoding(latMajor, E::LatMajor, E::LatMajor) ==
                 latMajor);
 
-  // The conversion is lossless for actual points, also for the extreme
-  // coordinates.
+  // Lossless, also for the extreme coordinates.
   for (auto [latitude, longitude] : std::vector<std::pair<double, double>>{
            {48.0, 7.8}, {-90.0, -180.0}, {90.0, 180.0}, {0.0, 0.0}}) {
     T latQuantized = GeoPoint::quantizeCoordinate(latitude, 90);

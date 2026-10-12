@@ -48,7 +48,8 @@ Id StringMapping::remapId(Id id) {
     return true;
   };
   static_assert(checkDatatypes());
-  auto [it, inserted] = stringMapping_.try_emplace(id, stringMapping_.size());
+  auto [it, inserted] =
+      stringMapping_.try_emplace(id.getBits(), stringMapping_.size());
   size_t distinctIndex = it->second;
   if (inserted) {
     LocalVocab dummy;

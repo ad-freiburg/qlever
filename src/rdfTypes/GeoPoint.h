@@ -142,8 +142,7 @@ class GeoPoint {
     encoding_.store(encoding);
   }
 
-  // Convert a bit representation with the encoding `from` to the bit
-  // representation of the same point with the encoding `to`. This is lossless.
+  // Convert the bit representation of a point from encoding `from` to `to`.
   static constexpr T convertEncoding(T bits, GeoPointEncodingEnum from,
                                      GeoPointEncodingEnum to) {
     auto [lat, lng] = splitCoordinates(bits, from);
