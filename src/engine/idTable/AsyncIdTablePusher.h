@@ -346,7 +346,7 @@ class AsyncIdTablePusher {
   // of the strand.
   void copyColumnsOnExecutor(const PushOperation& operation,
                              const Columns& targetColumns, size_t targetRow,
-                             size_t numToPush) {
+                             size_t numToPush) const {
     const size_t beginRow = operation.numPushed_;
     for (size_t col = 0; col < numColumns_; ++col) {
       auto source =
