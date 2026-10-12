@@ -7,8 +7,25 @@
 
 /// Helper macros that allow suppressing specific warnings in certain compiler
 /// versions that turn out to be false positives.
+///
+/// NOTE: Several of the warnings below (`-Wmaybe-uninitialized`,
+/// `-Warray-bounds`, `-Wstringop-overflow`) are emitted by GCC's *middle end*,
+/// long after the preprocessor has run. Two consequences follow:
+///
+/// * Such a warning is NOT suppressed by the offending code being in a system
+///   header (`-isystem`, `/usr/include`). For example, GCC 15 and GCC 16 report
+///   a false-positive `-Wuninitialized` inside `absl::InlinedVector` when
+///   compiling `S2GeometryAlgorithm.cpp`, although Abseil is included as a
+///   system header.
+/// * It IS suppressed by an explicit `#pragma GCC diagnostic` region, because
+///   GCC walks the inlining chain when it decides whether a warning is
+///   disabled. Wrapping the *definition* of the offending function (or the
+///   `#include` that provides it) in the macros below therefore covers every
+///   translation unit that instantiates it, provided that the definition is
+///   not already included before (outside of the region) in that translation
+///   unit.
 
-#if defined(__GNUC__) && (__GNUC__ >= 11 && __GNUC__ <= 15)
+#if defined(__GNUC__) && (__GNUC__ >= 11 && __GNUC__ <= 16)
 
 // Disable the `maybe-uninitialized` warning, which has many false positives.
 #define DISABLE_UNINITIALIZED_WARNINGS \

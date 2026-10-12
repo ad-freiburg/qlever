@@ -30,7 +30,8 @@ progress).
 
 ## The expensive checks (only `run-full-ci`)
 
-- `native-build-only-if-complete-ci.yml` (all other native builds, incl. TSAN)
+- `native-build-only-if-complete-ci.yml` (the other native builds, incl. TSAN)
+- `native-build-newest-compilers.yml` (GCC 15 and GCC 16)
 - `docker-publish.yml`
 - `check_index_version.yml`
 - `portable-binaries.yml`
