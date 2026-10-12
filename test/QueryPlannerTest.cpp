@@ -2575,8 +2575,6 @@ TEST(QueryPlanner, CountAvailablePredicates) {
 // by the query planner.
 TEST(QueryPlanner, UnboundMinusIgnored) {
   h::expect("SELECT * WHERE {MINUS{?x <is-a> ?y}}", h::NeutralElement());
-  h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?x <is-a> ?y}}",
-            h::IndexScanFromStrings("?a", "<is-a>", "?b"));
   h::expect("SELECT * { ?a <is-a> ?b MINUS { ?x <is-a> ?y } }",
             h::QetWithWarnings({"MINUS clause that shares no variables"},
                                h::IndexScanFromStrings("?a", "<is-a>", "?b")));
@@ -3119,7 +3117,8 @@ TEST(QueryPlanner, UnconnectedComponentsInGraphClause) {
                               h::IndexScanFromStrings("?s2", "?p2", "?o2")));
 }
 
-// _____________________________________________________________________________
+// Test that inside a `GRAPH ?g` clause the graph variable connects an OPTIONAL
+// to the preceding patterns that bind it, but not a MINUS.
 TEST(QueryPlanner, UnconnectedMinusAndOptionalInGraphClause) {
   auto scan = [](std::string s, std::string p, std::string o) {
     return h::IndexScanFromStrings(std::move(s), std::move(p), std::move(o), {},

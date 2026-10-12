@@ -687,8 +687,10 @@ class QueryPlanner {
 
     // The variables that have been used by the children of the `rootPattern_`
     // which we have dealt with so far. They must not be the target of a later
-    // BIND. Note: This includes the variables of MINUS clauses, which are not
-    // part of the result, see `getVariablesOfPreviousPatterns` for those.
+    // BIND.
+    //
+    // NOTE: This includes the variables of MINUS clauses, which are not part
+    // of the result, see `getVariablesOfPreviousPatterns` for those.
     ad_utility::HashSet<Variable> boundVariables_{};
 
     // The filters of the `rootPattern_`, wrapped for `applyFiltersIfPossible`.

@@ -3072,7 +3072,7 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
   // A MINUS clause that doesn't share any variable with the preceding
   // patterns behaves as if it isn't there.
   if (type == MINUS) {
-    planner_.warnings_.push_back(
+    planner_.warnings_.emplace_back(
         "A MINUS clause that shares no variables with the patterns before it "
         "has no effect and is ignored. Use FILTER NOT EXISTS if you want to "
         "remove all results whenever the pattern of the MINUS clause matches.");
@@ -3080,15 +3080,14 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
   }
   // An OPTIONAL clause that doesn't share any variable with the preceding
   // patterns behaves as if it is joined with the neutral element.
+  //
+  // NOTE: The filter and text limit IDs of the plans are deliberately not
+  // copied. They originate from the inner scope of the OPTIONAL clause and have
+  // already been dealt with completely, copying them was the cause of
+  // https://github.com/ad-freiburg/qlever/issues/2194.
   auto& newPlans = candidatePlans_.emplace_back();
   ql::ranges::for_each(candidates, [this, &newPlans](const SubtreePlan& plan) {
-    auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
-    // Note: It is important that we do NOT copy the filter and
-    // textLimit IDs, as they originate from the inner scope of the
-    // OPTIONAL clause and have been already completely dealt with.
-    // This was the cause of
-    // https://github.com/ad-freiburg/qlever/issues/2194.
-    newPlans.push_back(std::move(joinedPlan));
+    newPlans.push_back(makeSubtreePlan<NeutralOptional>(qec_, plan._qet));
   });
   return true;
 }
