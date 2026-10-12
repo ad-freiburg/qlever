@@ -10,7 +10,8 @@
 
 #include "index/vocabulary/GeoVocabulary.h"
 
-#include <cstring>
+#include <boost/asio/post.hpp>
+#include <boost/asio/use_future.hpp>
 #include <stdexcept>
 #include <vector>
 
@@ -23,7 +24,7 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/GlobalExecutor.h"
-#include "util/PostAndGetFuture.h"
+#include "util/MemorySize/MemorySize.h"
 
 using ad_utility::GeometryInfo;
 
@@ -118,16 +119,21 @@ GeoVocabulary<V>::WordWriter::WordWriter(
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"},
       grid_{grid} {
-  // Initialize geo info file with header
-  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
+  // Initialize the geo info file with its header. Like the records (see
+  // `flushBatch`), it is written with a positioned write, because positioned
+  // and sequential writes must not be mixed on the same file (see
+  // `File::write`).
+  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader, 0);
 }
 
-// The number of words (and their total size) after which a batch of words is
-// handed to the thread pool, see `flushBatch`. A batch holds copies of its
-// words, and so does an output block of the merge that feeds this writer, so
-// the limits are those of such a block.
+using namespace ad_utility::memory_literals;
+
+// A batch of words is handed to the thread pool (see `flushBatch`) as soon as
+// it has this many words or this many bytes. A batch holds copies of its
+// words, so the limits bound its memory, while a batch stays large enough to
+// make the cost of a task on the pool negligible.
 static constexpr size_t GEO_WRITER_BATCH_NUM_WORDS = 10'000;
-static constexpr size_t GEO_WRITER_BATCH_NUM_BYTES = 10 * 1024 * 1024;
+static constexpr size_t GEO_WRITER_BATCH_NUM_BYTES = (10_MB).getBytes();
 
 // ____________________________________________________________________________
 template <typename V>
@@ -175,6 +181,22 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
 
 // ____________________________________________________________________________
 template <typename V>
+auto GeoVocabulary<V>::computeGeoInfoRecord(
+    std::string_view word, std::atomic<size_t>& numInvalidGeometries,
+    std::atomic<size_t>& numInvalidPolygonArea) -> GeometryInfoBuffer {
+  auto info = GeometryInfo::fromWktLiteral(word);
+  if (!info.has_value()) {
+    ++numInvalidGeometries;
+    return invalidGeoInfoBuffer;
+  }
+  if (!info.value().getMetricArea().isValid()) {
+    ++numInvalidPolygonArea;
+  }
+  return absl::bit_cast<GeometryInfoBuffer>(info.value());
+}
+
+// ____________________________________________________________________________
+template <typename V>
 void GeoVocabulary<V>::WordWriter::flushBatch() {
   if (currentBatch_.empty()) {
     return;
@@ -190,8 +212,10 @@ void GeoVocabulary<V>::WordWriter::flushBatch() {
   // Compute the `GeometryInfo` of every word of the batch and write it to its
   // position in the `geoInfoFile_`, or write a zero buffer of the same size
   // (indicating an invalid geometry), so that direct access by position stays
-  // possible. NOTE: The positioned `File::write` is a `pwrite`, so the batches
-  // can write concurrently.
+  // possible.
+  //
+  // NOTE: The positioned `File::write` is a `pwrite`, so the batches can write
+  // concurrently.
   auto computeAndWrite = [this, words = std::move(currentBatch_),
                           firstPosition = firstPositionOfCurrentBatch_]() {
     // The records of the batch are contiguous in the file, so they are
@@ -199,24 +223,16 @@ void GeoVocabulary<V>::WordWriter::flushBatch() {
     std::vector<GeometryInfoBuffer> records;
     records.reserve(words.size());
     for (const auto& word : words) {
-      const void* ptr = &invalidGeoInfoBuffer;
-      auto info = GeometryInfo::fromWktLiteral(word);
-      if (info.has_value()) {
-        if (!info.value().getMetricArea().isValid()) {
-          ++numInvalidPolygonArea_;
-        }
-        ptr = &info.value();
-      } else {
-        ++numInvalidGeometries_;
-      }
-      std::memcpy(&records.emplace_back(), ptr, geoInfoOffset);
+      records.push_back(computeGeoInfoRecord(word, numInvalidGeometries_,
+                                             numInvalidPolygonArea_));
     }
     auto offset =
         static_cast<off_t>(geoInfoHeader + firstPosition * geoInfoOffset);
     geoInfoFile_.write(records.data(), records.size() * geoInfoOffset, offset);
   };
-  pendingBatches_.push_back(ad_utility::postAndGetFuture(
-      ad_utility::globalExecutor(), std::move(computeAndWrite)));
+  pendingBatches_.push_back(
+      boost::asio::post(ad_utility::globalExecutor(),
+                        boost::asio::use_future(std::move(computeAndWrite))));
   currentBatch_.clear();
   currentBatchSize_ = 0;
 }
@@ -266,7 +282,8 @@ GeoVocabulary<V>::BlockWriter::BlockWriter(
     : underlyingWriter_{vocabulary.makeBlockWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"},
       grid_{grid} {
-  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
+  // The header, with a positioned write, see `WordWriter::WordWriter`.
+  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader, 0);
 }
 
 // ____________________________________________________________________________
@@ -283,81 +300,80 @@ uint64_t GeoVocabulary<V>::BlockWriter::indexOf(uint64_t position,
 
 // ____________________________________________________________________________
 template <typename V>
-void GeoVocabulary<V>::BlockWriter::precompute(std::string_view word,
-                                               char* payload) const {
-  // The record of the word, or a zero buffer of the same size for an invalid
-  // geometry, see `WordWriter::flushBatch`.
-  const void* ptr = &invalidGeoInfoBuffer;
-  auto info = GeometryInfo::fromWktLiteral(word);
-  if (info.has_value()) {
-    if (!info.value().getMetricArea().isValid()) {
-      ++numInvalidPolygonArea_;
-    }
-    ptr = &info.value();
-  } else {
-    ++numInvalidGeometries_;
-  }
-  std::memcpy(payload, ptr, geoInfoOffset);
+void GeoVocabulary<V>::BlockWriter::precomputePayload(
+    std::string_view word, ql::span<char> payload) const {
+  AD_CONTRACT_CHECK(payload.size() == geoInfoOffset);
+  ql::ranges::copy(
+      computeGeoInfoRecord(word, numInvalidGeometries_, numInvalidPolygonArea_),
+      payload.begin());
 }
 
 // ____________________________________________________________________________
 template <typename V>
-std::unique_ptr<PreparedBlockBase> GeoVocabulary<V>::BlockWriter::prepare(
-    WordBlock block) {
+AppendBlock GeoVocabulary<V>::BlockWriter::prepare(WordBlock block) {
   AD_CONTRACT_CHECK(block.payloadSize_ == geoInfoOffset);
-  auto prepared = std::make_unique<Prepared>();
-  prepared->firstPosition_ = block.firstPosition_;
-  // The records come precomputed with the block (see `precompute`); with a
-  // grid, check that the cells are non-decreasing within the block, see
+  const uint64_t firstPosition = block.firstPosition_;
+  std::vector<GeometryInfoBuffer> records;
+  // The cells of the first and the last word (only with a grid).
+  std::optional<GeoCellGrid::CellIndex> firstCellIndex;
+  std::optional<GeoCellGrid::CellIndex> lastCellIndex;
+  // The records come precomputed with the block (see `precomputePayload`); with
+  // a grid, check that the cells are non-decreasing within the block, see
   // `WordWriter::operator()`.
-  prepared->records_.reserve(block.numWords());
+  records.reserve(block.numWords());
   for (size_t i = 0; i < block.numWords(); ++i) {
     std::string_view word = block.word(i);
-    std::memcpy(&prepared->records_.emplace_back(), block.payload(i).data(),
-                geoInfoOffset);
+    // NOTE: The size of the payload has been checked at the beginning.
+    ql::ranges::copy(block.payload(i), records.emplace_back().begin());
     if (grid_.has_value()) {
-      const auto& record = prepared->records_.back();
+      const auto& record = records.back();
       std::optional<GeometryInfo> info;
       if (record != invalidGeoInfoBuffer) {
         info = absl::bit_cast<GeometryInfo>(record);
       }
       auto cellIndex = cellIndexOfWord(grid_.value(), info, word);
-      AD_CONTRACT_CHECK(!prepared->lastCellIndex_.has_value() ||
-                            prepared->lastCellIndex_.value() <= cellIndex,
-                        "WKT literals were not passed to the GeoVocabulary in "
-                        "the order of their geo grid cells");
-      if (!prepared->firstCellIndex_.has_value()) {
-        prepared->firstCellIndex_ = cellIndex;
+      AD_CONTRACT_CHECK(
+          !lastCellIndex.has_value() || lastCellIndex.value() <= cellIndex,
+          "WKT literals were not passed to the GeoVocabulary in "
+          "the order of their geo grid cells");
+      if (!firstCellIndex.has_value()) {
+        firstCellIndex = cellIndex;
       }
-      prepared->lastCellIndex_ = cellIndex;
+      lastCellIndex = cellIndex;
     }
   }
-  prepared->underlying_ = underlyingWriter_->prepare(std::move(block));
-  return prepared;
+  return [this, firstPosition, records = std::move(records), firstCellIndex,
+          lastCellIndex,
+          appendUnderlying =
+              underlyingWriter_->prepare(std::move(block))]() mutable {
+    appendRecords(firstPosition, std::move(records), firstCellIndex,
+                  lastCellIndex, std::move(appendUnderlying));
+  };
 }
 
 // ____________________________________________________________________________
 template <typename V>
-void GeoVocabulary<V>::BlockWriter::append(
-    std::unique_ptr<PreparedBlockBase> preparedBase) {
-  auto& prepared = static_cast<Prepared&>(*preparedBase);
-  AD_CONTRACT_CHECK(prepared.firstPosition_ == numWords_);
-  const size_t numWords = prepared.records_.size();
+void GeoVocabulary<V>::BlockWriter::appendRecords(
+    uint64_t firstPosition, std::vector<GeometryInfoBuffer> records,
+    std::optional<GeoCellGrid::CellIndex> firstCellIndex,
+    std::optional<GeoCellGrid::CellIndex> lastCellIndex,
+    AppendBlock appendUnderlying) {
+  AD_CONTRACT_CHECK(firstPosition == numWords_);
+  const size_t numWords = records.size();
   if (grid_.has_value() && numWords > 0) {
     // Keep one position free, see `WordWriter::operator()`.
     AD_CONTRACT_CHECK(numWords_ + numWords < grid_->maxNumWords(),
                       "Too many WKT literals for the configured geo cell "
                       "grid, please rebuild with a smaller grid level");
-    AD_CONTRACT_CHECK(
-        !lastCellIndex_.has_value() ||
-            lastCellIndex_.value() <= prepared.firstCellIndex_.value(),
-        "WKT literals were not passed to the GeoVocabulary in "
-        "the order of their geo grid cells");
-    lastCellIndex_ = prepared.lastCellIndex_;
+    AD_CONTRACT_CHECK(!lastCellIndex_.has_value() ||
+                          lastCellIndex_.value() <= firstCellIndex.value(),
+                      "WKT literals were not passed to the GeoVocabulary in "
+                      "the order of their geo grid cells");
+    lastCellIndex_ = lastCellIndex;
   }
   auto offset = static_cast<off_t>(geoInfoHeader + numWords_ * geoInfoOffset);
   numWords_ += numWords;
-  underlyingWriter_->append(std::move(prepared.underlying_));
+  std::move(appendUnderlying)();
   // The records are written by the pool, see `WordWriter::flushBatch` for
   // the bound on the writes in flight.
   const size_t maxNumPendingWrites = 2 * ad_utility::globalExecutorNumThreads();
@@ -365,12 +381,12 @@ void GeoVocabulary<V>::BlockWriter::append(
     pendingWrites_.front().get();
     pendingWrites_.pop_front();
   }
-  pendingWrites_.push_back(ad_utility::postAndGetFuture(
+  pendingWrites_.push_back(boost::asio::post(
       ad_utility::globalExecutor(),
-      [this, records = std::move(prepared.records_), offset]() {
+      boost::asio::use_future([this, records = std::move(records), offset]() {
         geoInfoFile_.write(records.data(), records.size() * geoInfoOffset,
                            offset);
-      }));
+      })));
 }
 
 // ____________________________________________________________________________

@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "index/IndexBuilderTypes.h"
@@ -166,7 +167,7 @@ CPP_template(typename W)(requires WordComparator<W>) Segment
   AD_CONTRACT_CHECK(numSubs > 0 && numSubs < blankNodeSubVocabulary);
   segment.words_.resize(numSubs);
   // The per-word payload that the writers precompute, see
-  // `BlockWriterBase::precompute`.
+  // `BlockWriterBase::precomputePayload`.
   std::vector<size_t> payloadSizes(numSubs);
   for (uint8_t sub = 0; sub < numSubs; ++sub) {
     payloadSizes[sub] = writer.blockWriter(sub).precomputedPayloadSize();
@@ -212,7 +213,8 @@ CPP_template(typename W)(requires WordComparator<W>) Segment
       segment.metaData_.addWord(pendingWord, id);
       payload.resize(payloadSizes[sub]);
       if (!payload.empty()) {
-        writer.blockWriter(sub).precompute(pendingWord, payload.data());
+        writer.blockWriter(sub).precomputePayload(
+            pendingWord, ql::span<char>{payload.data(), payload.size()});
       }
       words.push(pendingWord, pendingIsExternal, payload);
     }

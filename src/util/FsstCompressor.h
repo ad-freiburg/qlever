@@ -53,6 +53,8 @@ class FsstDecoder {
     // NOTE: `fsst_decoder` leaves the (unused) `version` field of the struct
     // uninitialized. It is set here, so that the serialized decoders are the
     // same for the same input, no matter on which thread they were created.
+    // See https://github.com/cwida/fsst/issues/50, once that is fixed, this
+    // workaround is no longer required.
     decoder_.version = 0;
   }
 

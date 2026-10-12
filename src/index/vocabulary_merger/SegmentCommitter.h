@@ -11,6 +11,8 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_SEGMENTCOMMITTER_H
 
 #include <atomic>
+#include <boost/asio/post.hpp>
+#include <boost/asio/use_future.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -29,7 +31,6 @@
 #include "util/GlobalExecutor.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
-#include "util/PostAndGetFuture.h"
 #include "util/ProgressBar.h"
 #include "util/TaskQueue.h"
 #include "util/Timer.h"
@@ -48,7 +49,8 @@ namespace ad_utility::vocabulary_merger::detail {
 // position (so that the files are the same as if the words were written one
 // by one); a block typically spans several segments. A full block is prepared
 // on the global thread pool (see `BlockWriterBase::prepare`) and then
-// appended by a thread of its own per sub-vocabulary (`append`), in order.
+// appended by a thread of its own per sub-vocabulary (the `AppendBlock` that
+// `prepare` returns), in order.
 //
 // NOTE: All the member functions are called by a single thread, the one that
 // runs `mergeVocabulary`.
@@ -185,14 +187,6 @@ class SegmentCommitter {
   static WordBlock gather(const OpenBlock& block) {
     WordBlock result;
     result.firstPosition_ = block.firstPosition_;
-    size_t numBytes = 0;
-    for (const Piece& piece : block.pieces_) {
-      const auto& offsets = piece.segment_->words_[piece.sub_].offsets_;
-      numBytes += offsets[piece.firstWord_ + piece.numWords_] -
-                  offsets[piece.firstWord_];
-    }
-    result.data_.reserve(numBytes);
-    result.offsets_.reserve(block.numWords_ + 1);
     result.isExternal_.reserve(block.numWords_);
     if (!block.pieces_.empty()) {
       result.payloadSize_ = block.pieces_.front()
@@ -224,21 +218,20 @@ class SegmentCommitter {
     auto& blockWriter = writer_.blockWriter(sub);
     // NOTE: The future is shared, because a `std::function` (which the queue
     // stores) has to be copyable.
-    auto prepared =
-        std::make_shared<std::future<std::unique_ptr<PreparedBlockBase>>>(
-            ad_utility::postAndGetFuture(
-                ad_utility::globalExecutor(),
-                [this, &blockWriter, block = std::move(block)]() {
-                  ad_utility::Timer timer{ad_utility::Timer::Started};
-                  auto result = blockWriter.prepare(gather(block));
-                  prepareBusyMs_ += timer.msecs().count();
-                  return result;
-                }));
-    appendQueues_[sub]->push([this, &blockWriter, prepared]() {
-      runAndCatchException([this, &blockWriter, &prepared]() {
-        auto block = prepared->get();
+    auto prepare = [this, &blockWriter, block = std::move(block)]() {
+      ad_utility::Timer timer{ad_utility::Timer::Started};
+      auto result = blockWriter.prepare(gather(block));
+      prepareBusyMs_ += timer.msecs().count();
+      return result;
+    };
+    auto prepared = std::make_shared<std::future<AppendBlock>>(
+        boost::asio::post(ad_utility::globalExecutor(),
+                          boost::asio::use_future(std::move(prepare))));
+    appendQueues_[sub]->push([this, prepared]() {
+      runAndCatchException([this, &prepared]() {
+        auto appendBlock = prepared->get();
         ad_utility::Timer timer{ad_utility::Timer::Started};
-        blockWriter.append(std::move(block));
+        std::move(appendBlock)();
         appendBusyMs_ += timer.msecs().count();
       });
     });

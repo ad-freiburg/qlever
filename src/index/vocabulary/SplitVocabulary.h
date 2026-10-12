@@ -438,11 +438,12 @@ class SplitVocabulary {
 
     uint8_t numSubVocabularies() const override { return numberOfVocabs; }
     uint8_t subVocabularyOf(std::string_view word) const override {
-      return splitFunction_(word);
+      return SplitVocabulary::splitFunction_(word);
     }
     uint64_t indexOf(uint8_t sub, uint64_t position,
                      std::string_view word) const override {
-      return addMarker(blockWriters_.at(sub)->indexOf(position, word), sub);
+      return SplitVocabulary::addMarker(
+          blockWriters_.at(sub)->indexOf(position, word), sub);
     }
     BlockWriterBase& blockWriter(uint8_t sub) override {
       return *blockWriters_.at(sub);

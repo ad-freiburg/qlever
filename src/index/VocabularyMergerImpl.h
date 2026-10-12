@@ -6,6 +6,8 @@
 #define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 
 #include <atomic>
+#include <boost/asio/post.hpp>
+#include <boost/asio/use_future.hpp>
 #include <chrono>
 #include <cstdint>
 #include <deque>
@@ -28,7 +30,6 @@
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
-#include "util/PostAndGetFuture.h"
 #include "util/Serializer/CompressedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
@@ -170,17 +171,18 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
       currentBlocks.clear();
       return;
     }
-    segments.push_back(ad_utility::postAndGetFuture(
+    segments.push_back(boost::asio::post(
         ad_utility::globalExecutor(),
-        [blocks = std::move(currentBlocks), &writer, &blankNodeIriRegexes,
-         numPartialVocabularies, &comparator, &segmentBusyMs]() mutable {
+        boost::asio::use_future([blocks = std::move(currentBlocks), &writer,
+                                 &blankNodeIriRegexes, numPartialVocabularies,
+                                 &comparator, &segmentBusyMs]() mutable {
           ad_utility::Timer timer{ad_utility::Timer::Started};
           auto segment = std::make_shared<const Segment>(detail::buildSegment(
               std::move(blocks), writer, blankNodeIriRegexes,
               numPartialVocabularies, comparator));
           segmentBusyMs += timer.msecs().count();
           return segment;
-        }));
+        })));
     currentBlocks.clear();
     currentNumWords = 0;
   };

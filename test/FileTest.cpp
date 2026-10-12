@@ -8,7 +8,6 @@
 #include <filesystem>
 #include <vector>
 
-#include "backports/algorithm.h"
 #include "util/File.h"
 #include "util/GTestHelpers.h"
 #include "util/Views.h"
