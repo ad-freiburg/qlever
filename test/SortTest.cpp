@@ -550,7 +550,7 @@ TEST(Sort, makeTreeWithStrippedColumns) {
   using ::testing::Key;
   using ::testing::SizeIs;
   using ::testing::UnorderedElementsAre;
-  // A subtree with the variables `?a`, `?b`, `?c`, `?d`, sorted on `?b`.
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`
   auto qec = ad_utility::testing::getQec();
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec,

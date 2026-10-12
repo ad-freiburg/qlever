@@ -472,7 +472,7 @@ GroupByImpl::makeTreeWithStrippedColumns(
   // The subtree must provide the `requestedVariables`, the variables that
   // the `GroupBy` groups the input rows by (`_groupByVariables`). Keep in mind
   // that `requestedVariables` which are not part of `_groupByVariables` or
-  // `_aliases`, do not have any impact here, as the columns have been already
+  // `_aliases`, do not have any impact here, as the columns have already been
   // stripped in the constructor.
   columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
       &requestedVariables);
@@ -480,9 +480,8 @@ GroupByImpl::makeTreeWithStrippedColumns(
     varsRequiredFromSubtree.add(groupByVar);
   }
 
-  // Add variables to `varsRequiredFromSubtree` that are needed to build the
-  // aliases. Erase aliases whose targets are not contained in
-  // `requestedVariables`.
+  // Add the variables needed to compute requested aliases to
+  // `varsRequiredFromSubtree`. Keep only aliases whose targets are requested.
   const std::vector<Alias>* resultingAliases = &_aliases;
   std::vector<Alias> bufferAliases;
   for (const auto& alias : _aliases) {
@@ -490,11 +489,9 @@ GroupByImpl::makeTreeWithStrippedColumns(
       for (const Variable* aliasVar : alias._expression.containedVariables()) {
         varsRequiredFromSubtree.add(*aliasVar);
       }
-    } else {
-      if (resultingAliases == &_aliases) {
-        bufferAliases = _aliases;
-        resultingAliases = &bufferAliases;
-      }
+    } else if (resultingAliases == &_aliases) {
+      bufferAliases = _aliases;
+      resultingAliases = &bufferAliases;
     }
   }
   if (resultingAliases != &_aliases) {

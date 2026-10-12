@@ -3597,7 +3597,7 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
   using ::testing::Key;
   using ::testing::SizeIs;
   using ::testing::UnorderedElementsAre;
-  // A subtree with the variables `?a`, `?b`, `?c`, `?d`
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`
   auto qec = ad_utility::testing::getQec();
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec,
@@ -3620,7 +3620,7 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
           "SUM(?b)"},
       Variable{"?sumB"});
 
-  // `GroupBy` `?a` and produce alias `?sumB` from `?b`. `?a` and `?sumB`
+  // `GroupBy` `?a` and compute alias `?sumB` from `?b`. `?a` and `?sumB`
   // requested: the result has `?a` and `?sumB`.
   {
     auto tree = strip({V{"?a"}}, {alias}, {V{"?a"}, V{"?sumB"}});
@@ -3641,7 +3641,7 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
                 UnorderedElementsAre(Key(V{"?a"}), Key(V{"?sumB"})));
   }
 
-  // `GroupBy` `?a` and `?c` and produce alias `?sumB` from `?b`. `?sumB` and
+  // `GroupBy` `?a` and `?c` and compute alias `?sumB` from `?b`. `?sumB` and
   // `?c` requested: the result has `?sumB` and `?c`, a `StripColumns` on top
   // removes `?a`.
   {
@@ -3676,7 +3676,7 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
                                      Key(V{"?d"}), Key(V{"?sumB"})));
   }
 
-  // `GroupBy` `?a` and `?c` and produce alias `?sumB` from `?b`. `?a` and `?c`
+  // `GroupBy` `?a` and `?c` and compute alias `?sumB` from `?b`. `?a` and `?c`
   // requested: the result has `?a` and `?c`, the alias is erased from the
   // `GroupBy` operation, as its target is not requested.
   {
