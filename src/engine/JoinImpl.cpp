@@ -144,7 +144,8 @@ Result JoinImpl::computeResult(bool requestLaziness) {
   checkCancellation();
 
   auto leftIndexScan = IndexScan::getIfSupportsPrefilteredJoin(*left_);
-  if (leftIndexScan && IndexScan::getIfSupportsPrefilteredJoin(*right_)) {
+  auto rightIndexScan = IndexScan::getIfSupportsPrefilteredJoin(*right_);
+  if (leftIndexScan && rightIndexScan) {
     if (rightResIfCached && !leftResIfCached) {
       AD_CORRECTNESS_CHECK(rightResIfCached->isFullyMaterialized());
       return computeResultForIndexScanAndIdTable<true>(
@@ -165,7 +166,6 @@ Result JoinImpl::computeResult(bool requestLaziness) {
 
   // Note: If only one of the children is a scan, then we have made sure in the
   // constructor that it is the right child.
-  auto rightIndexScan = IndexScan::getIfSupportsPrefilteredJoin(*right_);
   if (rightIndexScan && !rightResIfCached) {
     if (leftRes->isFullyMaterialized()) {
       return computeResultForIndexScanAndIdTable<false>(
