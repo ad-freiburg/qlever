@@ -3051,16 +3051,16 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
   if (type != MINUS && type != OPTIONAL) {
     return false;
   }
+  // Inside `GRAPH ?g {...}` the patterns are evaluated per graph, so an
+  // OPTIONAL has to be joined on `?g` if the previous patterns bind it. The
+  // triples only get their `?g` column when they are planned (contains-word and
+  // materialized views are not allowed inside a `GRAPH` clause).
+  // TODO<RobinTF> For a MINUS, `?g` should only count as shared if both sides
+  // mention it explicitly.
   auto previousVariables = getVariablesOfPreviousPatterns();
-  // Inside `GRAPH ?g {...}` the patterns are evaluated per graph, so `?g` is
-  // not a shared variable for a MINUS, but an OPTIONAL has to be joined on it.
-  if (const auto& graphVariable = planner_.activeGraphVariable_) {
-    if (type == MINUS) {
-      previousVariables.erase(graphVariable.value());
-    } else if (!candidateTriples_._triples.empty() ||
-               !candidatePlans_.empty()) {
-      previousVariables.insert(graphVariable.value());
-    }
+  if (type == OPTIONAL && planner_.activeGraphVariable_.has_value() &&
+      !candidateTriples_._triples.empty()) {
+    previousVariables.insert(planner_.activeGraphVariable_.value());
   }
   bool areVariablesUnconnected =
       ql::ranges::none_of(variables, [&previousVariables](const Variable& var) {

@@ -3125,22 +3125,29 @@ TEST(QueryPlanner, UnconnectedMinusAndOptionalInGraphClause) {
     return h::IndexScanFromStrings(std::move(s), std::move(p), std::move(o), {},
                                    NamedTag{}, {Variable{"?g"}}, {3});
   };
-  // The graph variable doesn't connect a MINUS, no matter whether the
-  // preceding pattern is a triple or a nested group.
+  // A MINUS that shares no variable with the preceding triple is ignored.
   h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?x <q> ?y } } }",
-            scan("?a", "<p>", "?b"));
-  h::expect("SELECT * { GRAPH ?g { { ?a <p> ?b } MINUS { ?x <q> ?y } } }",
             scan("?a", "<p>", "?b"));
   h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?a <q> ?y } } }",
             h::Minus(h::Sort(scan("?a", "<p>", "?b")),
                      h::Sort(scan("?a", "<q>", "?y"))));
-  // The graph variable does connect an OPTIONAL.
+  // The graph variable connects an OPTIONAL, no matter whether the preceding
+  // pattern is a triple or a nested group.
   auto optionalJoin = h::OptionalJoin(h::Sort(scan("?a", "<p>", "?b")),
                                       h::Sort(scan("?x", "<q>", "?y")));
   h::expect("SELECT * { GRAPH ?g { ?a <p> ?b OPTIONAL { ?x <q> ?y } } }",
             optionalJoin);
   h::expect("SELECT * { GRAPH ?g { { ?a <p> ?b } OPTIONAL { ?x <q> ?y } } }",
             optionalJoin);
+  // Also when the graph variable is used explicitly.
+  h::expect("SELECT * { GRAPH ?g { ?g <p> ?b OPTIONAL { ?g <q> ?y } } }",
+            h::OptionalJoin(::testing::A<const QueryExecutionTree&>(),
+                            ::testing::A<const QueryExecutionTree&>()));
+  // But only if the preceding pattern binds the graph variable.
+  h::expect(
+      "SELECT * { GRAPH ?g { VALUES ?v { 1 } OPTIONAL { ?x <q> ?y } } }",
+      h::CartesianProductJoin(h::ValuesClause("VALUES (?v) { (1) }"),
+                              h::NeutralOptional(scan("?x", "<q>", "?y"))));
 }
 
 // _____________________________________________________________________________
