@@ -156,7 +156,7 @@ class Union : public Operation {
       std::shared_ptr<const Result> result2) const;
 
   // If a `BIND` is to be pushed down into a `UNION`, it must be pushed into all
-  // children of the `UNION` that cover its expression variables.
+  // children of the `UNION`.
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
 
