@@ -18,6 +18,7 @@
 #include "backports/concepts.h"
 #include "util/Exception.h"
 #include "util/TaskQueue.h"
+#include "util/TypeTraits.h"
 #include "util/jthread.h"
 
 namespace ad_utility {
@@ -54,40 +55,9 @@ auto runTasksInParallel(std::vector<std::packaged_task<R()>>&& tasks)
   }
 }
 
-namespace detail {
-// The decayed type of the first argument of the callable `T`. Works for
-// function pointers and for class types (in particular lambdas) with a single
-// `operator()` that is neither overloaded nor templated. For all other types
-// the member `type` is absent, so that this can be used in a SFINAE context.
-template <typename T, typename = void>
-struct FirstArgument {};
-
-template <typename R, typename First, typename... Rest>
-struct FirstArgument<R (*)(First, Rest...), void> {
-  using type = std::decay_t<First>;
-  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
-};
-
-template <typename C, typename R, typename First, typename... Rest>
-struct FirstArgument<R (C::*)(First, Rest...), void> {
-  using type = std::decay_t<First>;
-  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
-};
-
-template <typename C, typename R, typename First, typename... Rest>
-struct FirstArgument<R (C::*)(First, Rest...) const, void> {
-  using type = std::decay_t<First>;
-  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
-};
-
-// For a class type (in particular a lambda), look at its `operator()`.
-template <typename T>
-struct FirstArgument<T, std::void_t<decltype(&T::operator())>>
-    : FirstArgument<decltype(&T::operator()), void> {};
-
-template <typename T>
-using FirstArgumentT = typename FirstArgument<T>::type;
-}  // namespace detail
+// `detail::FirstArgument`/`FirstArgumentT` (the decayed type of the first
+// argument of a callable) live in `util/TypeTraits.h`, as they are also used
+// by `ad_utility::visitIf`.
 
 // Split the range `[0, numElements)` into consecutive chunks of `chunkSize`
 // elements (the last chunk may be smaller), fold all of them into a single

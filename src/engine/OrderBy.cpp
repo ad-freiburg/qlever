@@ -137,7 +137,7 @@ std::optional<std::vector<RowRange>> getRowRangesForSortedNumericColumn(
   // first, because their datatype bits are all zero). If there is no such row,
   // return the whole column as a single range (it is then already in the order
   // of `ORDER BY`).
-  size_t firstDefined = partitionPoint(0, column.size(), &Id::isUndefined);
+  size_t firstDefined = partitionPoint(0, column.size(), Id::isUndefinedL);
   if (firstDefined == column.size()) {
     return std::vector<RowRange>{{0, column.size(), false}};
   }

@@ -176,10 +176,10 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   AD_CORRECTNESS_CHECK(numJoinColumns == joinColumnsRight.numColumns());
   bool isCheap = ql::ranges::none_of(
       ad_utility::integerRange(numJoinColumns), [&](const auto& col) {
-        return (ql::ranges::any_of(joinColumnsRight.getColumn(col),
-                                   &Id::isUndefined)) ||
-               (ql::ranges::any_of(joinColumnsLeft.getColumn(col),
-                                   &Id::isUndefined));
+        return ql::ranges::any_of(joinColumnsRight.getColumn(col),
+                                  Id::isUndefinedL) ||
+               ql::ranges::any_of(joinColumnsLeft.getColumn(col),
+                                  Id::isUndefinedL);
       });
 
   // Nothing to do for the actual matches.
@@ -566,11 +566,9 @@ Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
 
 // _____________________________________________________________________________
 CPP_template_def(typename Range)(
-    requires ql::ranges::input_range<Range>&& ql::ranges::sized_range<Range>&&
-        ql::concepts::convertible_to<
-            ql::ranges::range_value_t<Range>,
-            bool>) void ExistsJoin::addExistsColumn(IdTable& idTable,
-                                                    Range&& range) const {
+    requires ql::ranges::input_range<Range> && ql::ranges::sized_range<Range> &&
+    ql::concepts::convertible_to<ql::ranges::range_value_t<Range>, bool>)
+void ExistsJoin::addExistsColumn(IdTable& idTable, Range&& range) const {
   idTable.addEmptyColumn();
   ad_utility::chunkedCopy(
       ql::views::transform(AD_FWD(range),
