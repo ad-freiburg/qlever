@@ -360,6 +360,8 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeEnvelopeExpression));
   expectFunctionCall(absl::StrCat(geof, "geometryType>(?x)"),
                      matchUnary(&makeGeometryTypeExpression));
+  expectFunctionCall(absl::StrCat(geof, "getSRID>(?x)"),
+                     matchUnary(&makeCrsTypeExpression));
   expectFunctionCall(absl::StrCat(geof, "numGeometries>(?x)"),
                      matchUnary(&makeNumGeometriesExpression));
 

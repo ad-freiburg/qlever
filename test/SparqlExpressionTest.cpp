@@ -1681,6 +1681,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkEnvelopeLL = testUnaryExpression<&makeEnvelopeLowerLeftExpression>;
   auto checkEnvelopeUR = testUnaryExpression<&makeEnvelopeUpperRightExpression>;
   auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
+  auto checkCrsType = testUnaryExpression<&makeCrsTypeExpression>;
 
   auto p = GeoPoint(26.8, 24.3);
   auto v = ValueId::makeFromGeoPoint(p);
@@ -1739,6 +1740,14 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                              geoLit("BLABLIBLU(1 1, 2 2)")},
       IdOrLocalVocabEntryVec{U, U, sfGeoType("Point"), sfGeoType("LineString"),
                              sfGeoType("Polygon"), U});
+  checkCrsType(
+      IdOrLocalVocabEntryVec{U, D(0.0), v,
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "3857> LINESTRING(2 2, 4 4)"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "4326> POLYGON((2 4, 4 4, 4 2, 2 2))"),
+                             geoLit("BLABLIBLU(1 1, 2 2)")},
+      IdOrLocalVocabEntryVec{U, U, 1, 3, 2, U});
 
   // Bounding coordinate expressions
   using enum ad_utility::BoundingCoordinate;
