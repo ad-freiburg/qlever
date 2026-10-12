@@ -265,10 +265,19 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
                          vector<Variable> groupByVariables,
                          std::vector<Alias> aliases,
                          std::shared_ptr<QueryExecutionTree> subtree)
+    // Braced initializers are evaluated in order: `empty()` before the move.
+    : GroupByImpl{qec, groupByVariables.empty(), std::move(groupByVariables),
+                  std::move(aliases), std::move(subtree)} {}
+
+// _____________________________________________________________________________
+GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
+                         vector<Variable> groupByVariables,
+                         std::vector<Alias> aliases,
+                         std::shared_ptr<QueryExecutionTree> subtree)
     : Operation{qec},
       _groupByVariables{std::move(groupByVariables)},
       _aliases{std::move(aliases)},
-      isImplicitGroupBy_{_groupByVariables.empty()} {
+      isImplicitGroupBy_{isImplicitGroupBy} {
   AD_CORRECTNESS_CHECK(subtree != nullptr);
   // Remove all undefined GROUP BY variables. They are constant, so they don't
   // affect the grouping, except that an empty input has no group.
@@ -1975,11 +1984,10 @@ bool GroupByImpl::isVariableBoundInSubtree(const Variable& variable) const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> GroupByImpl::cloneImpl() const {
-  auto result = std::make_unique<GroupByImpl>(
-      _executionContext, _groupByVariables, _aliases, _subtree->clone());
-  // The flag can't be derived from the reduced `_groupByVariables`.
-  result->isImplicitGroupBy_ = isImplicitGroupBy_;
-  return result;
+  // `std::make_unique` can't access the private constructor.
+  return std::unique_ptr<GroupByImpl>{
+      new GroupByImpl{_executionContext, isImplicitGroupBy_, _groupByVariables,
+                      _aliases, _subtree->clone()}};
 }
 
 // _____________________________________________________________________________

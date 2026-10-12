@@ -66,6 +66,12 @@ class GroupByImpl : public Operation {
               std::vector<Alias> aliases,
               std::shared_ptr<QueryExecutionTree> subtree);
 
+ private:
+  // Needed by `cloneImpl`, where `_groupByVariables` is already reduced.
+  GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
+              vector<Variable> groupByVariables, std::vector<Alias> aliases,
+              std::shared_ptr<QueryExecutionTree> subtree);
+
  public:
   virtual string getCacheKeyImpl() const override;
 
