@@ -179,6 +179,50 @@ TEST_F(ValueIdTest, Undefined) {
   EXPECT_FALSE(ValueId::makeFromInt(42).visit(isUndefinedType));
 }
 
+// _____________________________________________________________________________
+TEST_F(ValueIdTest, getDatatypeBitsAndGetPayloadBits) {
+  // The datatype bits and the payload bits are the two parts of the bits of an
+  // `Id`: the datatype in the highest `numDatatypeBits` bits, the payload in
+  // the lower `numDataBits` bits.
+  auto checkParts = [](ValueId id) {
+    EXPECT_EQ(id.getDatatypeBits(), static_cast<uint8_t>(id.getDatatype()));
+    EXPECT_LT(id.getPayloadBits(), uint64_t{1} << ValueId::numDataBits);
+    EXPECT_EQ(id.getBits(),
+              (uint64_t{id.getDatatypeBits()} << ValueId::numDataBits) |
+                  id.getPayloadBits());
+  };
+  for (auto id : makeRandomIds()) {
+    checkParts(id);
+  }
+
+  // Some known values.
+  auto expectParts = [&checkParts](ValueId id, Datatype datatype,
+                                   uint64_t payload) {
+    checkParts(id);
+    EXPECT_EQ(id.getDatatypeBits(), static_cast<uint8_t>(datatype));
+    EXPECT_EQ(id.getPayloadBits(), payload);
+  };
+  expectParts(ValueId::makeUndefined(), Datatype::Undefined, 0);
+  expectParts(ValueId::makeFromBool(false), Datatype::Bool, 0);
+  expectParts(ValueId::makeFromBool(true), Datatype::Bool, 1);
+  expectParts(ValueId::makeFromInt(0), Datatype::Int, 0);
+  expectParts(ValueId::makeFromInt(1), Datatype::Int, 1);
+  expectParts(makeVocabId(42), Datatype::VocabIndex, 42);
+  // The largest index fills the whole payload, but does not touch the datatype
+  // bits.
+  expectParts(ValueId::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)),
+              Datatype::VocabIndex, ValueId::maxIndex);
+  // A negative integer has all payload bits set, and its sign must not leak
+  // into the datatype bits.
+  expectParts(ValueId::makeFromInt(-1), Datatype::Int,
+              ad_utility::bitMaskForLowerBits(ValueId::numDataBits));
+
+  // Both functions can be used at compile time.
+  static_assert(ValueId::makeFromInt(5).getPayloadBits() == 5);
+  static_assert(ValueId::makeFromInt(5).getDatatypeBits() ==
+                static_cast<uint8_t>(Datatype::Int));
+}
+
 TEST_F(ValueIdTest, OrderingDifferentDatatypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end());

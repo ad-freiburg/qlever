@@ -56,9 +56,7 @@ Id oldFormatId(uint64_t datatypeBits, uint64_t valueBits) {
 
 // Return the value bits of the given `id`, that is, its bits without the
 // datatype bits.
-uint64_t valueBits(Id id) {
-  return id.getBits() & ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
-}
+uint64_t valueBits(Id id) { return id.getPayloadBits(); }
 
 // The 20 triples of the index in the previous format, in the order of the `SPO`
 // permutation, in the string representation of `tripleToString` below. Note
