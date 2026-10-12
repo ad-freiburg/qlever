@@ -344,36 +344,31 @@ std::unique_ptr<Operation> OrderBy::cloneImpl() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 OrderBy::makeTreeWithStrippedColumns(
-    const std::set<Variable>& variables) const {
-  // Add variables and the variables corresponding to the sortIndices_ to the
-  // variables that are required from the subtree.
-  VarsRequiredFromSubtree helper(variables);
+    const std::set<Variable>& requestedVariables) const {
+  // The subtree has to provide the requested variables and the variables that
+  // the `OrderBy` sorts by (those at `sortIndices_`).
+  VarsRequiredFromSubtree varsRequiredFromSubtree(requestedVariables);
   std::vector<std::pair<Variable, bool>> sortVars;
   for (const auto& sortIndex : sortIndices_) {
-    const auto& var =
+    const auto& sortVariable =
         subtree_->getVariableAndInfoByColumnIndex(sortIndex.first).first;
-    sortVars.push_back(std::pair{var, sortIndex.second});
-    helper.add(var);
+    sortVars.push_back(std::pair{sortVariable, sortIndex.second});
+    varsRequiredFromSubtree.add(sortVariable);
   }
-  // Collect all the variables that are required from the subtree.
-  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
-  // Continue with the recursion and strip columns of subtree.
+  // Strip the subtree and translate `sortIndices_` to the column indices of
+  // the stripped subtree.
   auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
-      subtree_, varsRequiredFromSubtree);
-
-  // Find out the new column indices to update sortIndices_
-  std::vector<const Variable*> keepVars;
-  std::vector<std::pair<ColumnIndex, bool>> distinctSortIndices;
+      subtree_, varsRequiredFromSubtree.get());
+  std::vector<std::pair<ColumnIndex, bool>> newSortIndices;
   for (const auto& var : sortVars) {
-    keepVars.push_back(&(var.first));
-    distinctSortIndices.push_back(
+    newSortIndices.push_back(
         std::pair{subtree->getVariableColumn(var.first), var.second});
   }
 
-  // Create query execution tree with OrderBy-Operation as root-Operation and
-  // add additional stripColumns-Operation if needed.
+  // The new `OrderBy` also exports sorting variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
   return makeTreeWithOptionalStripOperation<OrderBy>(
-      getExecutionContext(), variables, std::move(keepVars), std::move(subtree),
-      distinctSortIndices);
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      newSortIndices);
 }
