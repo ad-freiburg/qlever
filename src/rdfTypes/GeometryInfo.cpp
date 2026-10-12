@@ -25,6 +25,12 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
       numGeometries_{numGeometries.numGeometries()},
       metricLength_{metricLength},
       metricArea_{metricArea} {
+  // The binary representation must not contain implicit padding, see the
+  // `static_assert` after the class in `GeometryInfo.h`.
+  static_assert(sizeof(GeometryInfo) ==
+                sizeof(boundingBox_) + sizeof(geometryTypeAndCentroid_) +
+                    sizeof(numGeometries_) + sizeof(padding_) +
+                    sizeof(metricLength_) + sizeof(metricArea_));
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in

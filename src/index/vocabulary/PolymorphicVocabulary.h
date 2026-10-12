@@ -254,6 +254,13 @@ class PolymorphicVocabulary {
   std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
       const std::string& filename) const;
 
+  // Create the `ParallelWordWriterBase` (see `index/vocabulary/
+  // VocabularyTypes.h`) that will create a vocabulary of the currently active
+  // type at the given `filename`. Throw for a type with holes, see
+  // `makeDiskWriterPtr`.
+  std::unique_ptr<ParallelWordWriterBase> makeParallelWriterPtr(
+      const std::string& filename) const;
+
   // Generic serialization support - delegates to the active variant.
   AD_SERIALIZE_FRIEND_FUNCTION(PolymorphicVocabulary) {
     std::visit([&serializer](auto& vocab) { serializer | vocab; }, arg.vocab_);
