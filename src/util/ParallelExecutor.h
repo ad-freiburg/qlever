@@ -9,12 +9,19 @@
 
 #include <algorithm>
 #include <atomic>
+#include <boost/asio/post.hpp>
+#include <condition_variable>
+#include <exception>
 #include <future>
+#include <memory>
+#include <mutex>
 #include <range/v3/algorithm/fold_left.hpp>
 #include <thread>
 #include <type_traits>
 #include <vector>
 
+#include "backports/algorithm.h"
+#include "backports/asio.h"
 #include "backports/concepts.h"
 #include "util/Exception.h"
 #include "util/TaskQueue.h"
@@ -160,6 +167,105 @@ CPP_template(typename ChunkFunction)(
                                result.mergeWith(future.get());
                                return result;
                              });
+}
+
+namespace detail {
+// The state that the caller of `runIndexedTasksOnExecutor` (see below) shares
+// with the helpers that it posts to the executor.
+struct RunIndexedTasksState {
+  // The index of the next task that has not been claimed yet.
+  std::atomic<size_t> nextTaskIdx_ = 0;
+  // All the members below are protected by the `mutex_`.
+  std::mutex mutex_;
+  std::condition_variable helperFinished_;
+  // The number of helpers that are currently running tasks.
+  size_t numActiveHelpers_ = 0;
+  // Set by the caller as soon as it has stopped running tasks itself. A helper
+  // that starts after that returns right away.
+  bool isClosed_ = false;
+  std::exception_ptr firstException_;
+};
+
+// Claim and run tasks of the `state` until there are none left. Never throw:
+// after a task has thrown, store the exception in the `state` and stop handing
+// out the remaining tasks.
+template <typename RunTask>
+void claimAndRunIndexedTasks(RunIndexedTasksState& state, size_t numTasks,
+                             const RunTask& runTask) {
+  try {
+    while (true) {
+      size_t taskIdx = state.nextTaskIdx_.fetch_add(1);
+      if (taskIdx >= numTasks) {
+        return;
+      }
+      runTask(taskIdx);
+    }
+  } catch (...) {
+    state.nextTaskIdx_.store(numTasks);
+    std::lock_guard lock{state.mutex_};
+    if (!state.firstException_) {
+      state.firstException_ = std::current_exception();
+    }
+  }
+}
+}  // namespace detail
+
+// Run the `numTasks` tasks `runTask(0), ..., runTask(numTasks - 1)` on the
+// `executor`, which is expected to have `numThreads` threads (this only bounds
+// the number of helpers that are posted to it, see below). Return only when
+// all of the tasks are done, rethrowing the first exception that any of them
+// has thrown. After a task has thrown, the tasks that have not been started
+// yet are skipped. The tasks are started in the order of their indices. Note
+// that `runTask` is called concurrently from several threads.
+//
+// NOTE: The calling thread doesn't only wait for the executor, but also runs
+// tasks itself, and it waits only for the helpers on the executor that have
+// actually started. That way this function completes even if none of the
+// threads of the executor ever becomes available, so that (unlike the blocking
+// functions of `TaskQueueOnExecutor`) it can safely be called from a thread
+// that the threads of the executor are (indirectly) waiting for, and from the
+// threads of the executor themselves.
+template <typename RunTask>
+void runIndexedTasksOnExecutor(const ql::any_io_executor& executor,
+                               size_t numThreads, size_t numTasks,
+                               const RunTask& runTask) {
+  if (numTasks == 0) {
+    return;
+  }
+  // NOTE: The `state` is shared with the helpers, because a helper may only be
+  // started after this function has returned. Such a helper then sees that the
+  // `state` is closed and returns without touching the `runTask`.
+  auto state = std::make_shared<detail::RunIndexedTasksState>();
+  auto helper = [state, numTasks, &runTask]() {
+    {
+      std::lock_guard lock{state->mutex_};
+      if (state->isClosed_) {
+        return;
+      }
+      ++state->numActiveHelpers_;
+    }
+    detail::claimAndRunIndexedTasks(*state, numTasks, runTask);
+    {
+      std::lock_guard lock{state->mutex_};
+      --state->numActiveHelpers_;
+    }
+    state->helperFinished_.notify_all();
+  };
+  size_t numHelpers = std::min(numTasks, std::max(numThreads, size_t{1})) - 1;
+  for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, numHelpers)) {
+    boost::asio::post(executor, helper);
+  }
+  detail::claimAndRunIndexedTasks(*state, numTasks, runTask);
+
+  // All the tasks have been claimed, so wait for the helpers that are still
+  // running one of them, and keep all the other ones from starting.
+  std::unique_lock lock{state->mutex_};
+  state->isClosed_ = true;
+  state->helperFinished_.wait(
+      lock, [&state]() { return state->numActiveHelpers_ == 0; });
+  if (state->firstException_) {
+    std::rethrow_exception(state->firstException_);
+  }
 }
 }  // namespace ad_utility
 

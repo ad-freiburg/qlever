@@ -19,6 +19,7 @@
 #include <optional>
 #include <utility>
 
+#include "engine/idTable/BitwiseKeySort.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/CompressedRelationHelpersImpl.h"
 #include "index/CompressedRelationWriter.h"
@@ -43,13 +44,10 @@ struct CompressedRelationWriter::AddBlockOfSmallRelationsToSwitched {
 
     // We only need to sort by the columns of the triple + the graph
     // column, not the additional payload. The comparison is performed on the
-    // bits of the `Id`s, which is much cheaper, see `pickBitsOfColumns`.
-    auto compare = [](const auto& a, const auto& b) {
-      auto pickBits =
-          pickBitsOfColumns<c0Idx, c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID>;
-      return pickBits(a) < pickBits(b);
-    };
-    ql::ranges::sort(blockOfSmallRelations, compare);
+    // bits of the `Id`s, which is much cheaper, see `sortByBitwiseKeys`.
+    ad_utility::sortByBitwiseKeys(
+        blockOfSmallRelations,
+        std::array<size_t, 4>{c0Idx, c1Idx, c2Idx, ADDITIONAL_COLUMN_GRAPH_ID});
     AD_CORRECTNESS_CHECK(!blockOfSmallRelations.empty());
     // Note: it is important that we store these two IDs before moving the
     // `relation`, because the evaluation order of function arguments is

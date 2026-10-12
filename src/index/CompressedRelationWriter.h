@@ -43,6 +43,14 @@
 // block.
 using SmallRelationsBuffer = IdTable;
 
+// The writer that is fed directly by the chunks of a parallel merge (see
+// `index/ChunkwisePermutationWriter.h`), which needs access to the
+// thread-safe internals of the `CompressedRelationWriter` below.
+namespace chunkwisePermutationWriter {
+class ChunkwisePermutationWriter;
+class ChunkWriter;
+}  // namespace chunkwisePermutationWriter
+
 /// Manage the compression and serialization of relations during the index
 /// build.
 class CompressedRelationWriter {
@@ -72,6 +80,9 @@ class CompressedRelationWriter {
   // A buffer for small relations that will be stored in the same block.
   SmallRelationsBuffer smallRelationsBuffer_{numColumns_, allocator_};
   size_t rowsPerBlock_;
+  // The ZSTD compression level of the blocks, see the runtime parameter
+  // `permutation-compression-level`, which is read once at construction.
+  int compressionLevel_;
 
   // When we store a large relation with multiple blocks then we keep track of
   // its `col0Id`, mostly for sanity checks.
@@ -120,6 +131,7 @@ class CompressedRelationWriter {
       : outfile_{std::move(f)},
         numColumns_{numColumns},
         rowsPerBlock_{rowsPerBlock},
+        compressionLevel_{getCompressionLevel()},
         numConcurrentBlocks_{getNumConcurrentBlocks(numWriterThreads)},
         blockWriteQueue_{makeBlockWriteQueue(numConcurrentBlocks_)} {
     AD_CONTRACT_CHECK(rowsPerBlock_ > 0,
@@ -506,6 +518,11 @@ class CompressedRelationWriter {
   // values are capped at that number.
   static size_t getNumConcurrentBlocks(
       std::optional<size_t> numConcurrentBlocksOverride);
+
+  // Return the compression level of the blocks, see `compressionLevel_`.
+  static int getCompressionLevel();
+  friend class chunkwisePermutationWriter::ChunkwisePermutationWriter;
+  friend class chunkwisePermutationWriter::ChunkWriter;
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfTasksInFlight);
   FRIEND_TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices);
