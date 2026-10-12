@@ -329,10 +329,9 @@ Id evaluateSpeculativeNaryRow(
 
   if (allMatch) {
     return std::apply(
-        [&fastFunction](const auto&... values) {
+        [&fastFunction](const auto&... value) {
           // Expand the numeric types and corresponding values in lockstep.
-          return fastFunction(
-              getPrimitiveNumericValue<NumericTypes>(values)...);
+          return fastFunction(getPrimitiveNumericValue<NumericTypes>(value)...);
         },
         values);
   }

@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/NumericExpressionWrappers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "util/ChunkedForLoop.h"
 #include "util/CryptographicHashUtils.h"
 
 namespace sparqlExpression::detail {
@@ -56,26 +57,6 @@ class NaryExpressionBase : public SparqlExpression {
     return {children_.data(), children_.size()};
   }
 };
-
-// Create an indexed accessor for an N-ary operand. Vector operands are read at
-// the requested row, while constant operands always return the same converted
-// value.
-template <typename ValueGetter, typename Operand>
-auto makeIndexedNaryValueGetter(Operand&& operand, EvaluationContext* context) {
-  using OperandType = std::decay_t<Operand>;
-
-  if constexpr (isVectorResult<OperandType>) {
-    AD_CORRECTNESS_CHECK(operand.size() == context->size());
-
-    return [&operand, context](size_t i) {
-      return ValueGetter{}(operand[i], context);
-    };
-  } else {
-    return [value = ValueGetter{}(AD_FWD(operand), context)](size_t) mutable {
-      return value;
-    };
-  }
-}
 
 // Return whether all value getters and converted operands support the numeric
 // fast path. The index sequence matches each value getter with the
@@ -204,7 +185,7 @@ class NaryExpressionStronglyTyped
       // corresponding value getter from `ValueGetters`.
       auto indexedGetters = [&]<size_t... I>(std::index_sequence<I...>) {
         return std::tuple{
-            makeIndexedNaryValueGetter<std::tuple_element_t<I, ValueGetters>>(
+            makeIndexedValueGetter<std::tuple_element_t<I, ValueGetters>>(
                 std::get<I>(convertedOperands), context)...};
       }(std::index_sequence_for<Operands...>{});
 
@@ -224,13 +205,17 @@ class NaryExpressionStronglyTyped
       VectorWithMemoryLimit<ResultType> result{context->_allocator};
       result.reserve(targetSize);
 
-      // Keep the named temporary to work around a Clang 16/17 code-generation
-      // crash when `computeValue(i)` is passed directly to this function.
-      for (size_t i = 0; i < targetSize; ++i) {
-        auto value = computeValue(i);
-        result.push_back(promoteToLocalVocabEntry(
-            std::move(value), context->getLocalVocabContext()));
-      }
+      // Compute the result row by row. The named temporary `value` works
+      // around a Clang 16/17 code-generation crash when `computeValue(i)` is
+      // passed directly to `promoteToLocalVocabEntry`.
+      ad_utility::chunkedForLoop<1000>(
+          0, targetSize,
+          [&](size_t i) {
+            auto value = computeValue(i);
+            result.push_back(promoteToLocalVocabEntry(
+                std::move(value), context->getLocalVocabContext()));
+          },
+          [context]() { context->cancellationHandle_->throwIfCancelled(); });
 
       if constexpr (resultIsConstant) {
         AD_CORRECTNESS_CHECK(result.size() == 1);
@@ -258,10 +243,9 @@ ExpressionResult NaryExpressionStronglyTyped<NaryOperation>::evaluate(
       this->children_);
 
   // A function that only takes several `ExpressionResult`s,
-  // and evaluates the expression.
-  // Avoid an inline NaryOperation{} temporary here: Clang 16/17 can crash
-  // during
-  // IR generation for numeric operation wrappers (for example, RoundImpl).
+  // and evaluates the expression. The named `naryOperation` instead of an
+  // inline `NaryOperation{}` temporary works around a Clang 16/17 crash during
+  // IR generation for numeric operation wrappers (for example `RoundImpl`).
   NaryOperation naryOperation;
   auto evaluateOnChildrenResults = absl::bind_front(
       ad_utility::visitWithVariantsAndParameters, EvaluateOnChildOperands{},
@@ -406,7 +390,8 @@ struct TypeErasedNaryHelper<Func, std::tuple<VGs...>> {
   // `std::decay_t` ensures a value type, not a reference. Without this,
   // expressions that use `ql:identity` as their functor, because the
   // `ValueGetter`s do all the work would lead to dangling stack references.
-  // The strongly-typed path handles the same issue in `applyFunction`.
+  // The strongly-typed path applies the same `std::decay_t` to the result of
+  // its `computeValue` lambda.
   using Res = std::decay_t<std::invoke_result_t<Func, typename VGs::Value...>>;
   using BaseType = NaryExpressionTypeErasedImpl<Res, typename VGs::Value...>;
   static auto makeGetters() {

@@ -513,21 +513,24 @@ TEST(SparqlExpression, multiplyExpressionWithVariable) {
                           sparqlExpressionResultMatcher(expected)));
 }
 
-// _____________________________________________________________________________
+// Test that `canUseNumericFastPath` accepts exactly the combinations of
+// numeric value getters with `ValueId` vectors or constants (also outside a
+// constant-expression context, because coverage tools don't track compile-time
+// uses).
 TEST(SparqlExpression, canUseNumericFastPath) {
-  // Coverage tools don't track compile-time uses of these helpers, so also
-  // test them outside a constant-expression context.
   using sparqlExpression::detail::canUseNumericFastPath;
   using sparqlExpression::detail::NumericOrDateValueGetter;
   using sparqlExpression::detail::NumericValueGetter;
   using sparqlExpression::detail::StringValueGetter;
 
+  // Numeric value getters on `ValueId` vectors and constants.
   EXPECT_TRUE((canUseNumericFastPath<std::tuple<NumericValueGetter>,
                                      std::tuple<ValueId>>()));
   EXPECT_TRUE((canUseNumericFastPath<
                std::tuple<NumericValueGetter, NumericOrDateValueGetter>,
                std::tuple<V<ValueId>, ValueId>>()));
 
+  // A non-numeric value getter or an operand that is not a `ValueId`.
   EXPECT_FALSE((canUseNumericFastPath<std::tuple<StringValueGetter>,
                                       std::tuple<ValueId>>()));
   EXPECT_FALSE((canUseNumericFastPath<std::tuple<NumericValueGetter>,
@@ -592,9 +595,11 @@ TEST(SparqlExpression, speculativeNumericBinaryFastPath) {
   testPlus(V<Id>{{I(2), D(3.0), U}, alloc}, tied, I(1));
 }
 
-// _____________________________________________________________________________
+// Test the numeric fast paths of `NaryExpression` on a ternary addition: the
+// homogeneous path, the speculative majority-type path with its per-row
+// fallback, and the generic fallback.
 TEST(SparqlExpression, naryNumericFastPaths) {
-  // 1. Homogeneous integer operands.
+  // Homogeneous integer operands.
   {
     V<Id> left{{I(1), I(2), I(3), I(4)}, alloc};
     V<Id> middle{{I(10), I(10), I(10), I(10)}, alloc};
@@ -606,7 +611,7 @@ TEST(SparqlExpression, naryNumericFastPaths) {
                        right);
   }
 
-  // 2. Homogeneous operands with different numeric types.
+  // Homogeneous operands with different numeric types.
   {
     V<Id> left{{I(1), I(2), I(3)}, alloc};
     V<Id> middle{{I(10), I(10), I(10)}, alloc};
@@ -618,8 +623,8 @@ TEST(SparqlExpression, naryNumericFastPaths) {
                        right);
   }
 
-  // 3. Mixed operand with an integer majority.
-  // The exceptional double row has to use the speculative slow row.
+  // An operand with an integer majority: the single double row is computed by
+  // the per-row fallback of the speculative path.
   {
     V<Id> left{{I(1), I(2), D(3.0), I(4), I(5)}, alloc};
     V<Id> middle{{I(10), I(10), I(10), I(10), I(10)}, alloc};
@@ -631,7 +636,7 @@ TEST(SparqlExpression, naryNumericFastPaths) {
                        right);
   }
 
-  // 4. No majority -> generic fallback.
+  // No majority type, hence the generic fallback.
   {
     V<Id> left{{I(1), D(2.0), I(3), D(4.0)}, alloc};
     V<Id> middle{{I(10), I(10), I(10), I(10)}, alloc};
@@ -643,8 +648,8 @@ TEST(SparqlExpression, naryNumericFastPaths) {
                        right);
   }
 
-  // 5. A boolean row reaches the generic slow path, where `true` is treated
-  // numerically as 1.
+  // A boolean row is computed by the per-row fallback, which treats `true` as
+  // the number 1.
   {
     V<Id> left{{I(1), B(true), I(3)}, alloc};
     V<Id> middle{{I(10), I(10), I(10)}, alloc};
@@ -656,7 +661,8 @@ TEST(SparqlExpression, naryNumericFastPaths) {
                        right);
   }
 
-  // 6. An unsupported datatype reaches the generic slow path and yields UNDEF.
+  // A row with an unsupported datatype is computed by the per-row fallback and
+  // yields `UNDEF`.
   {
     V<Id> left{{I(1), Voc(4), I(3)}, alloc};
     V<Id> middle{{I(10), I(10), I(10)}, alloc};
@@ -667,6 +673,21 @@ TEST(SparqlExpression, naryNumericFastPaths) {
     testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
                        right);
   }
+}
+
+// Test that the generic evaluation loop of `NaryExpression` checks for
+// cancellation (`STR` on an `Id` vector takes that loop).
+TEST(SparqlExpression, naryExpressionGenericPathIsCancellable) {
+  TestContext outerContext;
+  auto& context = outerContext.context;
+  V<Id> input{{I(1), I(2), I(3)}, alloc};
+  context._endIndex = input.size();
+  auto expression = makeStrExpression(std::make_unique<SingleUseExpression>(
+      ExpressionResult{std::move(input)}));
+
+  context.cancellationHandle_->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(expression->evaluate(&context),
+               ad_utility::CancellationException);
 }
 
 // _____________________________________________________________________________________
