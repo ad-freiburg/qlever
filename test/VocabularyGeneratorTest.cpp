@@ -44,15 +44,13 @@ const std::string partialVocabBasename = "vocab-";
 // them as not external.
 template <typename Range>
 void writePartialVocabularyFile(const std::string& path, const Range& words) {
-  ad_utility::serialization::FileWriteSerializer partialVocab(path);
-  partialVocab << words.size();
+  ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{path};
   size_t localIdx = 0;
   for (const auto& word : words) {
-    partialVocab << std::string_view{word};
-    partialVocab << false;
-    partialVocab << localIdx;
+    partialVocab(std::string_view{word}, false, localIdx);
     ++localIdx;
   }
+  partialVocab.finish();
 }
 }  // namespace
 
@@ -128,19 +126,18 @@ class MergeVocabularyTest : public ::testing::Test {
          true}};
 
     // open files for partial Vocabularies
-    ad_utility::serialization::FileWriteSerializer partial0(path0_);
-    ad_utility::serialization::FileWriteSerializer partial1(path1_);
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partial0{path0_};
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partial1{path1_};
 
     auto writePartialVocabulary = [](auto& partialVocab,
                                      const auto& tripleComponents,
                                      IdMap* idMap) {
       // write first partial vocabulary
-      partialVocab << tripleComponents.size();
       size_t localIdx = 0;
       for (auto w : tripleComponents) {
         auto globalId = w.index_;
         w.index_ = localIdx;
-        partialVocab << w;
+        partialVocab(w.iriOrLiteral(), w.isExternal(), w.index_);
         if (idMap) {
           if (w.isBlankNode({})) {
             idMap->push_back(
@@ -447,25 +444,17 @@ TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
   // which is the only word of the second partial vocabulary, there marked as
   // external.
   {
-    ad_utility::serialization::FileWriteSerializer partialVocab{
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{
         filenames.wordsFiles_[0]};
-    partialVocab << numWords;
     for (size_t i = 0; i + 1 < numWords; ++i) {
-      partialVocab << absl::StrFormat("\"word%08d\"", i);
-      partialVocab << false;
-      partialVocab << i;
+      partialVocab(absl::StrFormat("\"word%08d\"", i), false, i);
     }
-    partialVocab << std::string{"\"zzz\""};
-    partialVocab << false;
-    partialVocab << numWords - 1;
+    partialVocab("\"zzz\"", false, numWords - 1);
   }
   {
-    ad_utility::serialization::FileWriteSerializer partialVocab{
+    ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{
         filenames.wordsFiles_[1]};
-    partialVocab << size_t{1};
-    partialVocab << std::string{"\"zzz\""};
-    partialVocab << true;
-    partialVocab << size_t{0};
+    partialVocab("\"zzz\"", true, 0);
   }
 
   std::vector<std::pair<std::string, bool>> vocabulary;

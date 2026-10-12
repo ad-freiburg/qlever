@@ -49,6 +49,15 @@ inline ad_utility::MemorySize& RDF_PARSER_MAX_TOTAL_BUFFER_SIZE() {
 // ________________________________________________________________
 constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
     ".partial-vocab.words.tmp.";
+// The size of the blocks into which the words of a partial vocabulary are
+// grouped on disk (see `index/vocabulary_merger/PartialVocabularyFile.h`). Each
+// chunk of the parallel vocabulary merge (see `PartialVocabularyRunsInput` in
+// that header) reads about one block per partial vocabulary beyond the ones it
+// really needs, and holds one decoded block per partial vocabulary in memory,
+// so this should be small; but a block is also the unit of a single `pread`,
+// so it should not be tiny.
+constexpr inline ad_utility::MemorySize PARTIAL_VOCAB_BLOCK_SIZE =
+    ad_utility::MemorySize::kilobytes(32);
 constexpr inline std::string_view PARTIAL_VOCAB_IDMAP_INFIX =
     ".partial-vocab.idmap.tmp.";
 

@@ -15,13 +15,13 @@
 #include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/VocabularyMerger.h"
+#include "index/vocabulary_merger/PartialVocabularyFile.h"
 #include "util/Allocator.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
 #include "util/ParallelMultiwayMerge.h"
-#include "util/Serializer/BufferedSerializer.h"
 #include "util/Serializer/CompressedSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
@@ -196,32 +196,11 @@ inline IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
 inline void writePartialVocabularyToFile(const ItemVec& els,
                                          const std::string& fileName) {
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
-
-  // We buffer the data with our own buffer before passing it to the file in
-  // large chunks. Despite `fwrite` (which is ultimately called by
-  // `FileWriteSerializer::serializeBytes`) buffering data on its own, it is
-  // faster to buffer with our own buffer, presumably because `fwrite` is
-  // thread-safe and therefore has to acquire a mutex for every call.
-  serialization::BufferedWriteSerializer serializer{
-      serialization::FileWriteSerializer{fileName}, 16_MB};
-
-  uint64_t size = els.size();
-  serializer << size;
-
-  // This is essentially a `VectorIncrementalSerializer` with a custom
-  // serialization function, which the infrastructure currently does not
-  // support.
+  PartialVocabularyWriter writer{fileName};
   for (const auto& [word, idAndExternal] : els) {
-    // When merging the vocabulary, we need the actual word, the (internal) id
-    // we have assigned to this word, and the information, whether this word
-    // belongs to the internal or external vocabulary.
-    serializer << word;
-    serializer << idAndExternal.isExternal();
-    serializer << idAndExternal.id();
+    writer(word, idAndExternal.isExternal(), idAndExternal.id());
   }
-
-  serializer.close();
-
+  writer.finish();
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";
 }
 
