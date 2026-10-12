@@ -157,8 +157,8 @@ class QueryPlanner {
     template <typename Operation>
     SubtreePlan(QueryExecutionContext* qec,
                 std::shared_ptr<Operation> operation)
-        : _qet{std::make_shared<QueryExecutionTree>(qec,
-                                                    std::move(operation))} {}
+        : _qet{qec->makeShared<QueryExecutionTree>(qec, std::move(operation))} {
+    }
 
     std::shared_ptr<QueryExecutionTree> _qet;
     std::shared_ptr<Result> _cachedResult;

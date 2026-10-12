@@ -29,6 +29,7 @@
 #include "backports/span.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "libqlever/CanonicalRowOrder.h"
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
@@ -294,6 +295,17 @@ std::vector<std::vector<Id>> columnsOfPinnedResult(const Qlever& qlever,
     columns.emplace_back(column.begin(), column.end());
   }
   return columns;
+}
+
+// Return the result (as TSV) of the query that selects the `variables` (for
+// example `"?s ?o"`) from the named cache entry `name` of `qlever`.
+std::string queryPinnedResult(const Qlever& qlever, std::string_view variables,
+                              std::string_view name) {
+  return qlever.query(
+      absl::StrCat("SELECT ", variables,
+                   " WHERE { SERVICE ql:cached-result-with-name-", name,
+                   " {}}"),
+      ad_utility::MediaType::tsv);
 }
 
 // The data and the update of the tests below for blobs with new words: the
@@ -672,9 +684,7 @@ TEST(NamedCachedQueryBlobManager, blobUsesProvidedAllocator) {
 
   // The instance still answers queries correctly from the resource-backed
   // buffer.
-  auto res = target.query(
-      "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-blobPin {}}",
-      ad_utility::MediaType::tsv);
+  auto res = queryPinnedResult(target, "?s ?o", "blobPin");
   EXPECT_EQ(res,
             "?s\t?o\n<allocatorBlobSubject>\t\"allocator blob literal\"\n");
 }
@@ -815,11 +825,8 @@ TEST(NamedCachedQueryBlobManager, tryToDeserializeLeavesInstanceUsable) {
   EXPECT_EQ(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
                 compressedBlob),
             std::nullopt);
-  EXPECT_EQ(
-      target.query(
-          "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-blobPin {}}",
-          ad_utility::MediaType::tsv),
-      "?s\t?o\n<retrySubject>\t\"retry literal\"\n");
+  EXPECT_EQ(queryPinnedResult(target, "?s ?o", "blobPin"),
+            "?s\t?o\n<retrySubject>\t\"retry literal\"\n");
 
   // After a successful load, a second blob is rejected, also by the
   // non-throwing version (a violated precondition is not a blob error).
@@ -878,9 +885,7 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
   EXPECT_THAT(res, HasSubstr("<s4>"));
 
   // The pinned result itself is also queryable directly from the blob.
-  auto cachedRes = target.query(
-      "SELECT ?s2 ?geo2 WHERE { SERVICE ql:cached-result-with-name-geoPin {} }",
-      ad_utility::MediaType::tsv);
+  auto cachedRes = queryPinnedResult(target, "?s2 ?geo2", "geoPin");
   EXPECT_THAT(cachedRes, HasSubstr("<s1>"));
 }
 
@@ -1062,10 +1067,9 @@ TEST(NamedCachedQueryBlobManager, blobWithPreexistingSecondaryVocab) {
   EXPECT_EQ(target.query(std::string{newWordsCachedQuery},
                          ad_utility::MediaType::tsv),
             newWordsExpectedResult);
-  EXPECT_EQ(target.query("SELECT ?s WHERE { SERVICE "
-                         "ql:cached-result-with-name-second {}}",
-                         ad_utility::MediaType::tsv),
-            "?s\n<z>\n<a>\n<m>\n");
+  EXPECT_EQ(queryPinnedResult(target, "?s", "second"),
+            // The result is in canonical order (see `CanonicalRowOrder.h`).
+            "?s\n<m>\n<a>\n<z>\n");
 }
 
 // _____________________________________________________________________________
@@ -1102,4 +1106,56 @@ TEST(NamedCachedQueryBlobManager, blobWithNewWordsAndSpatialIndex) {
   EXPECT_EQ(target.query(spatialJoinQuery("POINT(7.841295 47.997731)"),
                          ad_utility::MediaType::tsv),
             "?s2\n<s1>\n<s2>\n");
+}
+
+// _____________________________________________________________________________
+// Test that every entry (also one without local vocab `Id`s) is written in
+// canonical order with respect to the sort order of the plan, and that the
+// entries of the source stay unchanged.
+TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
+  auto sourceConfig =
+      buildTestIndex("<m> <p> <b> . <m> <p> <a> . <n> <p> <a> .");
+  Qlever source{EngineConfig{sourceConfig}};
+  // The result of the `VALUES` clause is not sorted, and contains a duplicate
+  // row.
+  source.queryAndPinResultWithName(
+      "ints",
+      "SELECT ?x ?y { VALUES (?x ?y) { (3 1) (1 2) (2 0) (1 1) (1 2) } }");
+  // The result of the index scan is sorted by `?s` and then by `?o`. In the
+  // blob, the columns are in the order `?o`, `?s` (see `canonicalColumnOrder`).
+  source.queryAndPinResultWithName("sorted",
+                                   "SELECT ?s ?o WHERE { ?s <p> ?o }");
+  auto intsBefore = columnsOfPinnedResult(source, "ints");
+  auto sortedEntry = source.namedResultCache().get("sorted");
+  ASSERT_THAT(sortedEntry->resultSortedOn_, ElementsAre(0, 1));
+
+  auto expectCanonical = [](const Qlever& qlever, const std::string& name,
+                            const std::vector<ColumnIndex>& sortedOn,
+                            ad_utility::source_location loc =
+                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    auto entry = qlever.namedResultCache().get(name);
+    ASSERT_NE(entry, nullptr) << name;
+    EXPECT_EQ(entry->resultSortedOn_, sortedOn) << name;
+    EXPECT_TRUE(canonicalRowOrder::isInCanonicalOrder(
+        ExplicitIdTableOperation::viewOf(entry->result_),
+        entry->resultSortedOn_))
+        << name;
+  };
+
+  // The sort order of the plan is kept, and the rows are in canonical order
+  // with respect to it.
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+  target.deserializeVocabAndNamedCacheFromCompressedBlob(blob);
+  expectCanonical(target, "ints", {});
+  expectCanonical(target, "sorted", {1, 0});
+  EXPECT_EQ(queryPinnedResult(target, "?x ?y", "ints"),
+            "?x\t?y\n1\t1\n1\t2\n1\t2\n2\t0\n3\t1\n");
+  EXPECT_EQ(queryPinnedResult(target, "?s ?o", "sorted"),
+            "?s\t?o\n<m>\t<a>\n<m>\t<b>\n<n>\t<a>\n");
+
+  // The entries of the source are unchanged.
+  EXPECT_EQ(columnsOfPinnedResult(source, "ints"), intsBefore);
+  EXPECT_EQ(source.namedResultCache().get("sorted"), sortedEntry);
 }

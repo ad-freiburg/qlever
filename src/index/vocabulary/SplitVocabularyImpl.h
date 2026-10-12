@@ -78,6 +78,23 @@ SplitVocabulary<SF, FS, S...>::WordWriter::WordWriter(
 template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
     requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
+SplitVocabulary<SF, FS, S...>::ParallelWordWriter::ParallelWordWriter(
+    const UnderlyingVocabsArray& underlyingVocabularies,
+    const std::string& filename) {
+  auto vocabFilenames = underlyingFilenames(filename);
+  for (uint8_t i = 0; i < numberOfVocabs; i++) {
+    blockWriters_[i] = std::visit(
+        [&](auto& vocab) -> std::unique_ptr<BlockWriterBase> {
+          return vocab.makeBlockWriterPtr(vocabFilenames[i]);
+        },
+        underlyingVocabularies[i]);
+  }
+}
+
+// _____________________________________________________________________________
+template <typename SF, const auto& FS, typename... S>
+QL_CONCEPT_OR_NOTHING(
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
 uint64_t SplitVocabulary<SF, FS, S...>::WordWriter::operator()(
     std::string_view word, bool isExternal) {
   // The word will be stored in the vocabulary selected by the split

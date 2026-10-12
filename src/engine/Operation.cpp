@@ -763,16 +763,26 @@ uint64_t Operation::getSizeEstimate() {
 }
 
 // _____________________________________________________________________________
+void Operation::keepHiddenVariablesHidden(
+    Operation& replacement,
+    std::optional<Variable> additionalVisibleVariable) const {
+  // Nothing is hidden if the externally visible variables were never set.
+  if (!variableToColumnMap_ || !externallyVisibleVariableToColumnMap_) {
+    return;
+  }
+  std::vector<Variable> visibleVariables;
+  ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
+                   std::back_inserter(visibleVariables));
+  if (additionalVisibleVariable.has_value()) {
+    visibleVariables.push_back(std::move(additionalVisibleVariable).value());
+  }
+  replacement.setSelectedVariablesForSubquery(visibleVariables);
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> Operation::clone() const {
   auto result = cloneImpl();
-
-  if (variableToColumnMap_ && externallyVisibleVariableToColumnMap_) {
-    // Make sure previously hidden variables remain hidden.
-    std::vector<Variable> visibleVariables;
-    ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
-                     std::back_inserter(visibleVariables));
-    result->setSelectedVariablesForSubquery(visibleVariables);
-  }
+  keepHiddenVariablesHidden(*result);
   result->limitOffset_ = limitOffset_;
 
   auto compareTypes = [this, &result]() {
@@ -795,7 +805,13 @@ std::unique_ptr<Operation> Operation::clone() const {
     return true;
   };
   AD_CORRECTNESS_CHECK(areChildrenDifferent());
-  AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
+  // Compare the actual mappings, not the lazily computed caches: the original
+  // might already have computed its mapping, while the clone has not. The
+  // externally visible mappings differ if the clone lost hidden variables.
+  AD_CORRECTNESS_CHECK(getInternallyVisibleVariableColumns() ==
+                       result->getInternallyVisibleVariableColumns());
+  AD_CORRECTNESS_CHECK(getExternallyVisibleVariableColumns() ==
+                       result->getExternallyVisibleVariableColumns());
   // For deterministic operations the cache key must be identical in the clone.
   // Non-deterministic operations (BNODE, RAND, UUID, SERVICE, LOAD) may
   // legitimately produce a different cache key on each instantiation, so we
@@ -892,6 +908,15 @@ bool Operation::areVariablesAlwaysDefined(
     const std::vector<const Variable*>& variables) const {
   return ql::ranges::all_of(
       variables, [this](const auto v) { return isVariableAlwaysDefined(*v); });
+}
+
+// _____________________________________________________________________________
+bool Operation::areVariablesVisible(
+    const std::vector<const Variable*>& variables) const {
+  const auto& visibleVariables = getExternallyVisibleVariableColumns();
+  return ql::ranges::all_of(variables, [&visibleVariables](const auto v) {
+    return visibleVariables.contains(*v);
+  });
 }
 
 // _____________________________________________________________________________
