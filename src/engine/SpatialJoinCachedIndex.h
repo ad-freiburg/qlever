@@ -68,12 +68,13 @@ class SpatialJoinCachedIndex {
   static constexpr uint64_t SHAPE_ID_MASK =
       ad_utility::bitMaskForLowerBits(SHAPE_ID_BITS);
 
-  // The number of segments has to be smaller than `MAX_NUM_SEGMENTS`, and the
-  // number of shapes in a segment must be smaller than
-  // `MAX_NUM_SHAPES_PER_SEGMENT`, s.t. each shape can be encoded and an encoded
-  // shape never collides with `NO_SHAPE`.
+  // The number of segments must be at most `MAX_NUM_SEGMENTS`, and the number
+  // of shapes in a segment must be at most `MAX_NUM_SHAPES_PER_SEGMENT`. Then a
+  // segment index and a shape id are always smaller than these maxima, s.t.
+  // each shape can be encoded and an encoded shape never collides with
+  // `NO_SHAPE`.
   static constexpr uint64_t MAX_NUM_SEGMENTS =
-      ad_utility::bitMaskForLowerBits(64 - SHAPE_ID_BITS) + 1;
+      ad_utility::bitMaskForLowerBits(64 - SHAPE_ID_BITS);
   static constexpr uint64_t MAX_NUM_SHAPES_PER_SEGMENT = SHAPE_ID_MASK;
 
   // A shape, decoded from the format of `rowToShape_`.
@@ -298,7 +299,7 @@ class SpatialJoinCachedIndex {
     serializer >> simplification;
     uint64_t numSegments;
     serializer >> numSegments;
-    AD_CORRECTNESS_CHECK(numSegments < MAX_NUM_SEGMENTS,
+    AD_CORRECTNESS_CHECK(numSegments <= MAX_NUM_SEGMENTS,
                          "The serialized geo index is corrupt");
     Segments segments;
     for (uint64_t i = 0; i < numSegments; ++i) {

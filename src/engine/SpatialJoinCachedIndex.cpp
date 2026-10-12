@@ -143,7 +143,7 @@ void SpatialJoinCachedIndex::computeShapeToRow() {
   shapeToRow_.clear();
   shapeToRow_.reserve(segments_.size());
   // Each shape has to be representable by `encodeShape`.
-  AD_CORRECTNESS_CHECK(segments_.size() < MAX_NUM_SEGMENTS,
+  AD_CORRECTNESS_CHECK(segments_.size() <= MAX_NUM_SEGMENTS,
                        "The geo index has too many segments");
   for (const auto& segment : segments_) {
     AD_CORRECTNESS_CHECK(segment != nullptr);
@@ -219,7 +219,7 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::forUpdatedTable(
     ql::span<const size_t> rowOrder) {
   AD_CONTRACT_CHECK(baseRowOfNewRow.size() == newTable.size());
   AD_CONTRACT_CHECK(rowOrder.size() == newTable.size());
-  AD_CONTRACT_CHECK(base.segments_.size() + 1 < MAX_NUM_SEGMENTS,
+  AD_CONTRACT_CHECK(base.segments_.size() + 1 <= MAX_NUM_SEGMENTS,
                     "The geo index has too many segments");
   SegmentBuilder builder;
   const size_t newSegment = base.segments_.size();
