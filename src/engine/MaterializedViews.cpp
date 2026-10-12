@@ -11,6 +11,8 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -30,6 +32,7 @@
 #include "index/CompressedRelationWriter.h"
 #include "index/DeltaTriples.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/IdTableUtils.h"
 #include "libqlever/Qlever.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/ParsedQuery.h"
@@ -38,6 +41,8 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/FilesystemHelpers.h"
+#include "util/HyperLogLog.h"
+#include "util/InputRangeUtils.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 #include "util/Views.h"
@@ -218,13 +223,7 @@ void MaterializedViewWriter::permuteIdTableAndCheckNoLocalVocabEntries(
   // Check that there are no values of type `LocalVocabIndex` in the selected
   // columns of the `IdTable` as materialized views do not support them as of
   // now.
-  bool hasLocalVocab =
-      ql::ranges::any_of(block.getColumns(), [](const auto& col) {
-        return ql::ranges::any_of(col, [](ValueId id) {
-          return id.getDatatype() == Datatype::LocalVocabIndex;
-        });
-      });
-  if (hasLocalVocab) {
+  if (IdTableUtils::containsLocalVocabIds(block)) {
     throw std::runtime_error{
         "The query to write a materialized view returned a string not "
         "contained in the index (local vocabulary entry). This could be "
@@ -365,21 +364,24 @@ IndexMetaData MaterializedViewWriter::writePermutation(
 }
 
 // _____________________________________________________________________________
-void MaterializedViewWriter::writeViewMetadata() const {
-  // Export column names to view info JSON file.
+void MaterializedViewWriter::writeViewMetadata(
+    const std::vector<size_t>& numDistinct) const {
+  // Export column names, undef status and number of distinct values to view
+  // info JSON file.
+  AD_CORRECTNESS_CHECK(numDistinct.size() == columnNames_.size());
   const auto& varToCol = qet_->getVariableColumns();
-  nlohmann::json viewInfo = {
-      {"version", MATERIALIZED_VIEWS_VERSION},
-      {"columns",
-       (columnNames_ | ql::views::transform([&varToCol](const Variable& v) {
-          return nlohmann::json{
-              {"name", v.name()},
-              {"always_defined",
-               varToCol.at(v).mightContainUndef_ ==
-                   ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined}};
-        }) |
-        ::ranges::to<std::vector<nlohmann::json>>())},
-      {"query", parsedQuery_._originalString}};
+  std::vector<nlohmann::json> columns;
+  for (size_t col = 0; col < columnNames_.size(); ++col) {
+    const Variable& v = columnNames_[col];
+    columns.push_back({{"name", v.name()},
+                       {"always_defined",
+                        varToCol.at(v).mightContainUndef_ ==
+                            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined},
+                       {"num_distinct", numDistinct[col]}});
+  }
+  nlohmann::json viewInfo = {{"version", MATERIALIZED_VIEWS_VERSION},
+                             {"columns", std::move(columns)},
+                             {"query", parsedQuery_._originalString}};
   ad_utility::makeOfstream(absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX))
       << viewInfo.dump() << std::endl;
 }
@@ -396,11 +398,43 @@ void MaterializedViewWriter::computeResultAndWritePermutation() const {
                    memoryLimit_, allocator_};
   RangeOfIdTables sortedBlocksSPO = getSortedBlocks(spoSorter, result);
 
+  // While the blocks are written, estimate the number of distinct values of
+  // each selected column except for the first one, the exact count of which is
+  // computed by the permutation writer (as the column is sorted). Counting
+  // exactly would need memory linear in the number of distinct values (hash
+  // sets) or an additional external sort per column, but views can have
+  // billions of rows. The `HyperLogLog` sketch needs a single pass and constant
+  // memory per column, at the price of a typical error of about 1% (a few
+  // percent at most), which is sufficient for the query planner.
+  std::vector<ad_utility::HyperLogLog> distinctEstimators(columnNames_.size() -
+                                                          1);
+  auto estimateDistinct =
+      [&distinctEstimators](IdTableStatic<0>& block) -> IdTableStatic<0> {
+    for (size_t col = 1; col <= distinctEstimators.size(); ++col) {
+      for (Id id : block.getColumn(col)) {
+        distinctEstimators[col - 1].add(id.getBits());
+      }
+    }
+    return std::move(block);
+  };
+
   // Write compressed relation to disk.
   AD_LOG_INFO << "Writing materialized view \"" << name_ << "\" to disk ..."
               << std::endl;
-  auto spoMetaData = writePermutation(std::move(sortedBlocksSPO));
-  writeViewMetadata();
+  auto spoMetaData =
+      writePermutation(RangeOfIdTables{ad_utility::CachingTransformInputRange(
+          std::move(sortedBlocksSPO), std::move(estimateDistinct))});
+
+  // The number of distinct values of each selected column. An estimate can't
+  // be larger than the number of rows or zero for a non-empty view.
+  const size_t numRows = spoMetaData.totalElements();
+  std::vector<size_t> numDistinct{spoMetaData.numDistinctCol0()};
+  for (const auto& estimator : distinctEstimators) {
+    numDistinct.push_back(
+        std::clamp(static_cast<size_t>(std::llround(estimator.estimate())),
+                   std::min(numRows, size_t{1}), numRows));
+  }
+  writeViewMetadata(numDistinct);
 
   AD_LOG_INFO << "Statistics for view \"" << name_
               << "\": " << spoMetaData.statistics() << std::endl;
@@ -457,13 +491,14 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
         ". Please re-write the materialized view.")};
   }
 
-  // Make variable to column map.
+  // Make variable to column map and restore the number of distinct values.
   ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns;
   for (const auto& [index, columnEntry] :
        ::ranges::views::enumerate(viewInfoJson.at("columns"))) {
     std::string columnName;
     ColumnIndexAndTypeInfo::UndefStatus undefStatus =
         ColumnIndexAndTypeInfo::PossiblyUndefined;
+    std::optional<size_t> numDistinctOfColumn;
 
     // For backward compatibility, also accept columns as strings not
     // object.
@@ -476,7 +511,12 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name)
       undefStatus = columnEntry.at("always_defined").get<bool>()
                         ? ColumnIndexAndTypeInfo::AlwaysDefined
                         : ColumnIndexAndTypeInfo::PossiblyUndefined;
+      // Views written by older versions of QLever have no distinct counts.
+      if (columnEntry.contains("num_distinct")) {
+        numDistinctOfColumn = columnEntry.at("num_distinct").get<size_t>();
+      }
     }
+    numDistinct_.push_back(numDistinctOfColumn);
 
     varToColMap_.insert({Variable{std::move(columnName)},
                          {static_cast<ColumnIndex>(index), undefStatus}});

@@ -158,7 +158,8 @@ CPP_template(typename T)(
 // If it is an ID (possibly contained in the `IdOrLocalVocabEntry` variant),
 // then the `matchId` matcher from above is used, else we test for equality.
 template <typename T>
-requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
+requires(!isVectorResult<T>)
+auto nonVectorResultMatcher(const T& expected) {
   if constexpr (std::is_same_v<T, Id>) {
     return matchId(expected);
   } else if constexpr (std::is_same_v<T, IdOrLocalVocabEntry>) {

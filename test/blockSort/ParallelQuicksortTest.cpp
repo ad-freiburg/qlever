@@ -22,7 +22,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <functional>
 #include <future>
 #include <memory>
@@ -34,6 +33,7 @@
 
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/GTestHelpers.h"
+#include "../util/TestException.h"
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "backports/span.h"
@@ -64,19 +64,6 @@ boost::asio::thread_pool& threadPool() {
   static boost::asio::thread_pool pool{numPoolThreads};
   return pool;
 }
-
-// The exception that the tests throw. Its message is a string literal, so that
-// it owns no memory besides the exception object itself. The freeing of a
-// message that is owned by the exception (e.g. by a `std::runtime_error`) would
-// be reported as a false positive by TSAN, see `misc/tsan-suppressions.txt`.
-class TestException : public std::exception {
- private:
-  const char* message_;
-
- public:
-  explicit TestException(const char* message) : message_{message} {}
-  const char* what() const noexcept override { return message_; }
-};
 
 // The message of the exception that a `FuzzCompare` throws.
 constexpr const char* comparisonFailed = "comparison failed";

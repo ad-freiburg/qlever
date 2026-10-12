@@ -67,10 +67,10 @@ constexpr bool supportsNumericFastPathOperand() {
   }
 }
 
-// Classify a span by determining whether all values have the same numeric
+// Classify a column by determining whether all values have the same numeric
 // datatype and whether an integer or double is the unique most common datatype.
 inline NumericOperandClassification classifyNumericOperand(
-    ql::span<const ValueId> values, const EvaluationContext* context) {
+    ConstIdColumnRef values, const EvaluationContext* context) {
   if (values.empty()) {
     return {};
   }
@@ -175,7 +175,7 @@ inline NumericOperandClassification classifyNumericOperand(
     return classifyNumericOperand(operand);
   } else {
     return classifyNumericOperand(
-        ql::span<const ValueId>{operand.data(), operand.size()}, context);
+        ConstIdColumnRef{operand.data(), operand.size()}, context);
   }
 }
 

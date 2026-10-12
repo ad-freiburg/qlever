@@ -211,8 +211,8 @@ auto parallelBlockMergeToSink(
       detail::ParallelMergeState<moveElements, Input, Comparator, Sink>;
   AD_CONTRACT_CHECK(static_cast<bool>(executor),
                     "The executor of a parallel block merge must not be empty");
-  auto chunkBoundaries =
-      computeChunkBoundaries(input, comparator, options.targetNumChunks());
+  auto chunkBoundaries = computeChunkBoundaries(
+      input, comparator, options.targetNumChunks(), options.firstChunkSize);
   size_t numChunks = chunkBoundaries.size();
   size_t maxNumChunksInFlight = options.numChunksInFlight(numChunks);
   // NOTE: The input, the comparator, the options, the cancellation handle, and
