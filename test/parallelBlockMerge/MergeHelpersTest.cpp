@@ -308,6 +308,72 @@ TEST(MergeHelpers, totalNumElements) {
 }
 
 // _____________________________________________________________________________
+// An input that provides `blockWeight` cuts the chunks by that weight instead
+// of by the number of elements: here every block of the first run weighs as
+// much as all the blocks of the second run together.
+namespace {
+struct WeightedInput {
+  using value_type = size_t;
+  using Element = size_t;
+  using Block = SizeVec;
+
+  SizeInput wrapped_;
+
+  size_t numRuns() const { return wrapped_.numRuns(); }
+  size_t numBlocks(size_t runIdx) const { return wrapped_.numBlocks(runIdx); }
+  size_t numElementsInBlock(size_t runIdx, size_t blockIdx) const {
+    return wrapped_.numElementsInBlock(runIdx, blockIdx);
+  }
+  size_t blockWeight(size_t runIdx, size_t blockIdx) const {
+    return runIdx == 0 ? numBlocks(1) * numElementsInBlock(runIdx, blockIdx)
+                       : numElementsInBlock(runIdx, blockIdx);
+  }
+  const Element& firstElement(size_t runIdx, size_t blockIdx) const {
+    return wrapped_.firstElement(runIdx, blockIdx);
+  }
+  const Element& lastElement(size_t runIdx, size_t blockIdx) const {
+    return wrapped_.lastElement(runIdx, blockIdx);
+  }
+  Block getBlock(size_t runIdx, size_t blockIdx) const {
+    return wrapped_.getBlock(runIdx, blockIdx);
+  }
+  Block makeEmptyBlock() const { return {}; }
+  template <typename U>
+  void appendToBlock(Block& block, U&& element) const {
+    block.push_back(AD_FWD(element));
+  }
+  ad_utility::MemorySize memorySizeOfElement(
+      [[maybe_unused]] const value_type& element) const {
+    return ad_utility::MemorySize::bytes(sizeof(value_type));
+  }
+};
+static_assert(InputConcept<WeightedInput>);
+}  // namespace
+
+TEST(MergeHelpers, blockWeight) {
+  // Run 0: `0..9` in blocks of 5, run 1: `10..29` in blocks of 5.
+  std::vector<SizeVec> runs{SizeVec{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+                            SizeVec{10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                                    20, 21, 22, 23, 24, 25, 26, 27, 28, 29}};
+  auto plain = makeVectorInput(runs, 5);
+  EXPECT_FALSE(detail::HasBlockWeight<decltype(plain)>::value);
+  EXPECT_EQ(detail::blockWeight(plain, 0, 0), 5u);
+  // By elements, the 30 elements split into 15 and 15: the split point is the
+  // last element of the block at which the first 15 are complete, `14`.
+  EXPECT_THAT(chunkSplitPoints(computeChunkBoundaries(plain, std::less<>{}, 2)),
+              ::testing::ElementsAre(14u));
+  // By weight, the two blocks of run 0 weigh 20 each, the four blocks of run 1
+  // weigh 5 each: 60 in total, so the first chunk ends with the two blocks of
+  // run 0, whose last element is `9`.
+  WeightedInput weighted{makeVectorInput(runs, 5)};
+  EXPECT_TRUE(detail::HasBlockWeight<WeightedInput>::value);
+  EXPECT_EQ(detail::blockWeight(weighted, 0, 0), 20u);
+  EXPECT_THAT(
+      chunkSplitPoints(computeChunkBoundaries(weighted, std::less<>{}, 2)),
+      ::testing::ElementsAre(9u));
+}
+
+// _____________________________________________________________________________
 TEST(MergeHelpers, chunkSplitPointsAreStrictlyIncreasing) {
   auto runs = makeRandomRuns(20, 100, 200);
   auto input = makeVectorInput(runs, 7);
