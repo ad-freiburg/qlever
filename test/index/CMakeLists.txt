@@ -17,6 +17,9 @@ if (EMSCRIPTEN)
     endif ()
     target_link_options(${target} PRIVATE
             "--embed-file=${QLEVER_TEST_DATA_DIR}@${QLEVER_TEST_DATA_DIR}")
+    # Relink when the test data changes.
+    file(GLOB_RECURSE testDataFiles CONFIGURE_DEPENDS "${QLEVER_TEST_DATA_DIR}/*")
+    set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS ${testDataFiles})
 endif ()
 # When the `server` library is not built (Emscripten, see
 # `src/engine/CMakeLists.txt`), the server-integration test is compiled out
