@@ -42,7 +42,7 @@ namespace qlever {
 
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
-               ql::any_io_executor executor)
+               qlever::Executor executor)
     : Qlever(config, skipLoading,
              qlever::makeAllocatorWithLimit<Id>(
                  config.memoryLimit_.value_or(DEFAULT_MEM_FOR_QUERIES),
@@ -54,7 +54,7 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
 
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
-               Allocator<Id> allocator, ql::any_io_executor executor)
+               Allocator<Id> allocator, qlever::Executor executor)
     : allocator_{std::move(allocator)},
       executor_{std::move(executor)},
       indexAndViews_{std::make_shared<IndexAndViews>(
@@ -497,7 +497,7 @@ void Qlever::deleteMaterializedView(std::string name) const {
 
 // ___________________________________________________________________________
 std::shared_ptr<QueryExecutionContext> Qlever::createQueryExecutionContext(
-    std::shared_ptr<IndexAndViews> indexAndViews, ql::any_io_executor executor,
+    std::shared_ptr<IndexAndViews> indexAndViews, qlever::Executor executor,
     std::function<void(std::string)> updateCallback, bool pinSubtrees,
     bool pinResult,
     QueryExecutionContext::DisableCaching disableCaching) const {

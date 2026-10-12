@@ -22,6 +22,7 @@
 #include "index/KeyOrder.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
+#include "util/Executor.h"
 #include "util/File.h"
 #include "util/HashSet.h"
 #include "util/Log.h"
@@ -119,7 +120,7 @@ class Permutation {
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesState& locatedTriplesState,
-               ql::any_io_executor executor,
+               qlever::Executor executor,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
@@ -149,7 +150,7 @@ class Permutation {
                      std::optional<std::vector<Id>> idFilter,
                      const CancellationHandle& cancellationHandle,
                      const LocatedTriplesState& locatedTriplesState,
-                     ql::any_io_executor executor) const;
+                     qlever::Executor executor) const;
 #endif
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
@@ -181,8 +182,7 @@ class Permutation {
       std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesState,
-      ql::any_io_executor executor,
+      const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
       const LimitOffsetClause& limitOffset = {}) const;
 
   // A lazy scan together with the independent `CompressedRelationReader` it
@@ -204,7 +204,7 @@ class Permutation {
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState,
-      ql::any_io_executor executor) const;
+      qlever::Executor executor) const;
 
   // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
   // with relevant `BlockMetadataRanges`.
@@ -311,8 +311,8 @@ class Permutation {
       std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesState,
-      ql::any_io_executor executor, const LimitOffsetClause& limitOffset) const;
+      const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
+      const LimitOffsetClause& limitOffset) const;
 
   // The base filename of the permutation without the suffix below
   std::string onDiskBase_;

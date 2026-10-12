@@ -22,6 +22,7 @@
 #include "index/IndexRebuilder.h"
 #include "index/IndexRebuilderTypes.h"
 #include "util/CancellationHandle.h"
+#include "util/Executor.h"
 #include "util/InputRangeUtils.h"
 #include "util/TransparentFunctors.h"
 
@@ -48,7 +49,7 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks);
 // and all vocab `Id`s are remapped according to `insertInfo` to create a new
 // index where all of these values are all vocab `Id`s in the new vocabulary.
 // The blocks are read on the `executor`, by at most
-// `rebuild-index-scan-num-blocks-in-flight` threads at the same time.
+// `rebuild-index-scan-num-threads` threads at the same time.
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation,
     const BlockMetadataRanges& blockMetadataRanges,
@@ -57,8 +58,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    ql::span<const ColumnIndex> additionalColumns,
-    ql::any_io_executor executor);
+    ql::span<const ColumnIndex> additionalColumns, qlever::Executor executor);
 
 // Get the number of columns in the given `blockMetadataRanges`. If this cannot
 // be determined, return 4 as a "safe" default, representing subject + predicate
@@ -83,7 +83,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    ql::any_io_executor executor,
+    qlever::Executor executor,
     std::function<void(size_t)> progress = ad_utility::noop);
 
 // Analyze how many columns the new permutation will have and which additional

@@ -282,8 +282,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    ql::span<const ColumnIndex> additionalColumns,
-    ql::any_io_executor executor) {
+    ql::span<const ColumnIndex> additionalColumns, qlever::Executor executor) {
   AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(insertionPositions));
   AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(blankNodeBlocks));
   Permutation::ScanSpecAndBlocks scanSpecAndBlocks{
@@ -292,7 +291,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   // A positive value throttles the rebuild's read/decompress parallelism only,
   // reducing its peak CPU without touching queries; 0 means "no limit".
   if (auto maxNumThreads = getRuntimeParameterAsOptional<
-          &RuntimeParameters::rebuildIndexScanNumBlocksInFlight_>()) {
+          &RuntimeParameters::rebuildIndexScanNumThreads_>()) {
     executor = ad_utility::makeConcurrencyLimitedExecutor(
         std::move(executor), maxNumThreads.value());
   }
@@ -402,7 +401,7 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     const InsertionPositions& insertionPositions,
     const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    ql::any_io_executor executor, std::function<void(size_t)> progress) {
+    qlever::Executor executor, std::function<void(size_t)> progress) {
   namespace net = boost::asio;
   using namespace net::experimental::awaitable_operators;
   auto makeTaskForPermutation = [&](const Permutation& permutation) {
@@ -462,7 +461,7 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
     const std::vector<LocalVocabIndex>& entries,
     const indexRebuilder::OwnedBlocks& ownedBlocks,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    ql::any_io_executor executor, const std::string& logFileName) {
+    qlever::Executor executor, const std::string& logFileName) {
   using namespace indexRebuilder;
   AD_CONTRACT_CHECK(!logFileName.empty(), "Log file name must not be empty");
 

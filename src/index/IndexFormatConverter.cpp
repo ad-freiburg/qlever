@@ -320,7 +320,7 @@ size_t batchSizeFor(size_t total) {
 // be consumed before `permutation` is destroyed.
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
     const Permutation& permutation, std::function<void(size_t)> progress,
-    ql::any_io_executor executor) {
+    qlever::Executor executor) {
   auto locatedTriplesState = makeEmptyLocatedTriplesState(permutation);
   auto scanSpecAndBlocks = permutation.getScanSpecAndBlocks(
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
@@ -375,7 +375,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
 IndexMetaData writePermutation(
     const std::string& filename, size_t numColumns, size_t rowsPerBlock,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> blocks,
-    ql::any_io_executor executor) {
+    qlever::Executor executor) {
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File{filename, "w"}, rowsPerBlock,
       std::move(executor));
@@ -502,7 +502,7 @@ IndexMetaData convertPermutation(const Permutation& oldPermutation,
                                  const std::string& newBasename,
                                  bool isInternal, size_t rowsPerBlock,
                                  const std::function<void(size_t)>& progress,
-                                 const ql::any_io_executor& executor) {
+                                 const qlever::Executor& executor) {
   std::string newFilename =
       filenameForPermutation(newBasename, oldPermutation, isInternal);
   auto newMetaData = writePermutation(
@@ -524,7 +524,7 @@ void convertPermutations(const std::string& oldBasename,
                          const Index::NumNormalAndInternal& numTriples,
                          size_t rowsPerBlock,
                          std::vector<fs::path>& handledFiles,
-                         const ql::any_io_executor& executor) {
+                         const qlever::Executor& executor) {
   // Each triple is written once per permutation, which gives the total number
   // of triples that the conversion of the permutations writes.
   auto numPermutations = numPermutationsOfIndex(oldBasename);
@@ -578,7 +578,8 @@ void convertPermutations(const std::string& oldBasename,
     // independent of each other (each has its own reader, its own writer, and
     // its own metadata), and a single conversion keeps only few tasks in
     // flight on the `executor` (`lazy-index-scan-num-blocks-in-flight`
-    // for reading and `permutation-writer-num-threads` for writing), so there
+    // for reading and `permutation-writer-num-blocks-in-flight` for writing),
+    // so there
     // are cores to spare. One of the two conversions runs on this thread, so
     // that only one additional thread is needed.
     //
@@ -636,7 +637,7 @@ void convertPatterns(const std::string& oldBasename,
 void convertMaterializedView(const std::string& oldBasename,
                              const std::string& newBasename,
                              const std::string& name, size_t rowsPerBlock,
-                             const ql::any_io_executor& executor) {
+                             const qlever::Executor& executor) {
   AD_LOG_INFO << "Converting the materialized view \"" << name << "\" ..."
               << std::endl;
   std::string oldViewBasename = materializedViewFilenameBase(oldBasename, name);
@@ -693,7 +694,7 @@ void convertMaterializedView(const std::string& oldBasename,
 void convertMaterializedViews(const std::string& oldBasename,
                               const std::string& newBasename,
                               size_t rowsPerBlock,
-                              const ql::any_io_executor& executor) {
+                              const qlever::Executor& executor) {
   // Each view has exactly one info file, so the names of the views are exactly
   // the infixes of those files (`<basename>.view.<name><suffix>`).
   auto viewFiles =
@@ -831,7 +832,7 @@ Id convertId(Id id) {
 // _____________________________________________________________________________
 void convertIndexToCurrentFormat(const std::string& oldBasename,
                                  const std::string& newBasename,
-                                 ql::any_io_executor executor) {
+                                 qlever::Executor executor) {
   AD_CONTRACT_CHECK(!oldBasename.empty() && !newBasename.empty(),
                     "The base names of the indexes must not be empty");
   // NOTE: This is a user-facing error and not a requirement violation, because
@@ -958,7 +959,7 @@ void checkUpgradedIndex(const std::string& newBasename,
 
 // _____________________________________________________________________________
 void upgradeIndexInPlace(const std::string& basename,
-                         ql::any_io_executor executor) {
+                         qlever::Executor executor) {
   // Read the configuration of the index that is to be upgraded; this also
   // checks that the index exists and is exactly in the source format.
   auto configuration = readAndCheckConfiguration(basename);

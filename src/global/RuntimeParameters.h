@@ -83,8 +83,7 @@ struct RuntimeParameters {
   // remap thread, so more concurrent block reads mostly add contention
   // (measured on Wikidata on an otherwise idle 16-core server, where the wall
   // time was the same for 1, 2, and 4). A value of 0 means "no limit".
-  SizeT rebuildIndexScanNumBlocksInFlight_{
-      1, "rebuild-index-scan-num-blocks-in-flight"};
+  SizeT rebuildIndexScanNumThreads_{1, "rebuild-index-scan-num-threads"};
   // The maximum number of threads with which each permutation is compressed
   // and written during a runtime index rebuild. Like the scan parameter
   // above, this exists so that a rebuild on a live server leaves as much CPU
@@ -93,8 +92,8 @@ struct RuntimeParameters {
   // work of the permutation phase by ~20% at nearly no cost in wall time (same
   // measurement setup as above). A value of 0 means "no limit". The number of
   // blocks that are in flight is still determined by
-  // `permutation-writer-num-threads`, which is also used when building an
-  // index from scratch and when writing materialized views.
+  // `permutation-writer-num-blocks-in-flight`, which is also used when
+  // building an index from scratch and when writing materialized views.
   SizeT rebuildPermutationWriterNumThreads_{
       1, "rebuild-permutation-writer-num-threads"};
   // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
@@ -242,18 +241,18 @@ struct RuntimeParameters {
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
 
-  // Configure how many blocks are compressed and written concurrently per
-  // permutation. The blocks are compressed and written on the global thread
-  // pool, so this is not a number of threads of its own, and it is capped at
-  // the number of threads of that pool. A value of 0 means "as many as the
-  // global thread pool has threads". A value of 1 means one block after the
-  // other. For a larger value `n`, up to `2 * n` blocks (at least 4) are in
-  // flight, all of which may be compressed at the same time if the pool has
-  // idle threads (see `CompressedRelationWriter::makeBlockWriteQueue`). Even
-  // though this influences the logic of regular index building, `qlever-index`
-  // doesn't expose a CLI flag to set this parameter, but derives it from its
-  // `--num-threads` option.
-  SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
+  // The maximal number of blocks per permutation that are queued for or
+  // currently being compressed and written (see
+  // `CompressedRelationWriter::makeBlockWriteQueue`). Each of them is held in
+  // memory until it has been written. How many of them are compressed at the
+  // same time is not determined by this parameter, but by the executor on
+  // which they are written (for the runtime index rebuild, see
+  // `rebuild-permutation-writer-num-threads`). The value must be at least `1`
+  // (enforced by a parameter constraint). Even though this influences the
+  // logic of regular index building, `qlever-index` doesn't expose a CLI flag
+  // to set this parameter, but derives it from its `--num-threads` option.
+  SizeT permutationWriterNumBlocksInFlight_{
+      4, "permutation-writer-num-blocks-in-flight"};
 
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};

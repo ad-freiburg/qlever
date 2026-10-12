@@ -175,7 +175,7 @@ CompressedRelationReader::lazyScan(
     std::vector<CompressedBlockMetadata> relevantBlockMetadata,
     ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    ql::any_io_executor executor, const LimitOffsetClause& limitOffset) const {
+    qlever::Executor executor, const LimitOffsetClause& limitOffset) const {
   AD_CONTRACT_CHECK(cancellationHandle);
 
   if (relevantBlockMetadata.empty()) {
@@ -290,7 +290,7 @@ IdTable CompressedRelationReader::scan(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    ql::any_io_executor executor, const LimitOffsetClause& limitOffset) const {
+    qlever::Executor executor, const LimitOffsetClause& limitOffset) const {
   const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
@@ -519,7 +519,7 @@ CompressedRelationReader::getDistinctCol0Ids(
     std::optional<std::vector<Id>> idFilter,
     CancellationHandle cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    ql::any_io_executor executor) const {
+    qlever::Executor executor) const {
   using namespace distinctCol0Ids;
   AD_CONTRACT_CHECK(cancellationHandle != nullptr);
   AD_CONTRACT_CHECK(scanSpecAndBlocks.scanSpec_.firstFreeColIndex() == 0,

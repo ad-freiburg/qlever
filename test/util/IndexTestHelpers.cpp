@@ -33,11 +33,18 @@ using qlever::TextScoringMetric;
 namespace ad_utility::testing {
 
 // ______________________________________________________________
-ql::any_io_executor singleThreadExecutor() {
+qlever::Executor singleThreadExecutor() {
   // Deliberately never destroyed (like the global thread pool, see
   // `util/GlobalExecutor.h`), such that it outlives the static
   // `QueryExecutionContext`s of `getQec` that refer to it.
   static absl::NoDestructor<boost::asio::thread_pool> pool{1};
+  return pool->get_executor();
+}
+
+// ______________________________________________________________
+qlever::Executor multiThreadExecutor() {
+  // Deliberately never destroyed, see `singleThreadExecutor` above.
+  static absl::NoDestructor<boost::asio::thread_pool> pool{4};
   return pool->get_executor();
 }
 

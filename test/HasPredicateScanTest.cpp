@@ -22,6 +22,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
+
 namespace {
 using ad_utility::testing::makeAllocator;
 auto Int = ad_utility::testing::IntId;
@@ -422,7 +424,7 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntitiesWithDeltaTriples) {
                                  SortPerformanceEstimator{},
                                  &namedResultCache,
                                  std::make_shared<MaterializedViewsManager>(),
-                                 ad_utility::testing::singleThreadExecutor()};
+                                 executor()};
   };
 
   // Read the `ql:has-pattern` entry of `<z>` (subject, pattern, and the

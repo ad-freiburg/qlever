@@ -94,7 +94,7 @@ IdTable Permutation::scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                           ColumnIndicesRef additionalColumns,
                           const CancellationHandle& cancellationHandle,
                           const LocatedTriplesState& locatedTriplesState,
-                          ql::any_io_executor executor,
+                          qlever::Executor executor,
                           const LimitOffsetClause& limitOffset) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
@@ -155,7 +155,7 @@ Permutation::getDistinctCol0Ids(const ScanSpecification& scanSpec,
                                 std::optional<std::vector<Id>> idFilter,
                                 const CancellationHandle& cancellationHandle,
                                 const LocatedTriplesState& locatedTriplesState,
-                                ql::any_io_executor executor) const {
+                                qlever::Executor executor) const {
   return reader().getDistinctCol0Ids(
       getScanSpecAndBlocks(scanSpec, locatedTriplesState), addGraphColumn,
       std::move(idFilter), cancellationHandle,
@@ -246,8 +246,8 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
     std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesState,
-    ql::any_io_executor executor, const LimitOffsetClause& limitOffset) const {
+    const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
+    const LimitOffsetClause& limitOffset) const {
   return lazyScanImpl(reader(), scanSpecAndBlocks, std::move(optBlocks),
                       additionalColumns, cancellationHandle,
                       locatedTriplesState, std::move(executor), limitOffset);
@@ -260,8 +260,8 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScanImpl(
     std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesState,
-    ql::any_io_executor executor, const LimitOffsetClause& limitOffset) const {
+    const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
+    const LimitOffsetClause& limitOffset) const {
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
   if (!optBlocks.has_value()) {
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
@@ -280,7 +280,7 @@ Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState,
-    ql::any_io_executor executor) const {
+    qlever::Executor executor) const {
   auto independentReader = std::make_unique<CompressedRelationReader>(
       reader().makeReaderWithReboundAllocator(
           ad_utility::makeUnlimitedAllocator<Id>()));

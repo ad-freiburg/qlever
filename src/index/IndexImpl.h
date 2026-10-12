@@ -47,6 +47,7 @@
 #include "parser/AsyncRdfParserBase.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
+#include "util/Executor.h"
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
@@ -754,7 +755,7 @@ class IndexImpl {
   // constructor).
   CompressedRelationWriter::WriterAndCallback getWriterAndCallback(
       IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
-      ql::any_io_executor executor) const;
+      qlever::Executor executor) const;
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
@@ -775,7 +776,7 @@ class IndexImpl {
   std::tuple<size_t, IndexMetaData> createPermutationImpl(
       size_t numColumns, const std::string& fileName,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      ql::any_io_executor executor);
+      qlever::Executor executor);
 
  protected:
   // _______________________________________________________________________
@@ -835,8 +836,7 @@ class IndexImpl {
   std::pair<size_t, IndexMetaData> createPermutationWithoutMetadata(
       size_t numColumns,
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-      const Permutation& permutation, bool internal,
-      ql::any_io_executor executor);
+      const Permutation& permutation, bool internal, qlever::Executor executor);
 
   // Finalize the writing of a permutation by appending the metadata to
   // the corresponding file on disk.
@@ -1100,13 +1100,13 @@ class IndexImpl {
 
   // Recompute the statistics about the index based on the passed located
   // triples shared state. The permutations are scanned on the `executor`, each
-  // scan by at most `rebuild-index-scan-num-blocks-in-flight` threads at the
+  // scan by at most `rebuild-index-scan-num-threads` threads at the
   // same time. `progress` is called (possibly from several threads) with the
   // number of newly scanned rows; this is used by the index rebuild for
   // progress reporting and defaults to a no-op.
   nlohmann::json recomputeStatistics(
       const LocatedTriplesSharedState& locatedTriplesSharedState,
-      ql::any_io_executor executor,
+      qlever::Executor executor,
       const std::function<void(size_t)>& progress = ad_utility::noop) const;
 };
 

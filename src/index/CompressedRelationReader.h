@@ -32,6 +32,7 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
+#include "util/Executor.h"
 #include "util/File.h"
 #include "util/Generator.h"
 #include "util/HashSet.h"
@@ -311,7 +312,7 @@ class CompressedRelationReader {
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-               ql::any_io_executor executor,
+               qlever::Executor executor,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
@@ -327,7 +328,7 @@ class CompressedRelationReader {
       std::vector<CompressedBlockMetadata> relevantBlockMetadata,
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      ql::any_io_executor executor,
+      qlever::Executor executor,
       const LimitOffsetClause& limitOffset = {}) const;
 
   // Retrieve all triples in the given block, ignoring updates. This is used in
@@ -397,7 +398,7 @@ class CompressedRelationReader {
       std::optional<std::vector<Id>> idFilter,
       CancellationHandle cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      ql::any_io_executor executor) const;
+      qlever::Executor executor) const;
 #endif
 
   // Return true iff the values of the first `numColumns` columns of all the

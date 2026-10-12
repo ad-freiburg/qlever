@@ -840,7 +840,7 @@ std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
 // _____________________________________________________________________________
 CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
     IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
-    ql::any_io_executor executor) const {
+    qlever::Executor executor) const {
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File(fileName, "w"), rowsPerBlock_,
       std::move(executor));
@@ -884,7 +884,7 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
 std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
     size_t numColumns, const std::string& fileName,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    ql::any_io_executor executor) {
+    qlever::Executor executor) {
   IndexMetaData metaData;
   auto writerAndCallback =
       getWriterAndCallback(metaData, numColumns, fileName, std::move(executor));
@@ -936,8 +936,7 @@ void IndexImpl::writeMetaData(IndexMetaData& metaData,
 std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
     size_t numColumns,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    const Permutation& permutation, bool internal,
-    ql::any_io_executor executor) {
+    const Permutation& permutation, bool internal, qlever::Executor executor) {
   AD_LOG_INFO << "Creating permutation " << permutation.readableName() << " ..."
               << std::endl;
   std::string fileName = getFilenameForPermutation(permutation, internal);
@@ -2256,7 +2255,7 @@ namespace {
 template <typename CustomAction>
 std::packaged_task<void()> computeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
-    const Permutation& permutation, ql::any_io_executor executor,
+    const Permutation& permutation, qlever::Executor executor,
     CustomAction customAction, const std::function<void(size_t)>& progress) {
   return std::packaged_task<void()>{[&counter, &permutation,
                                      &locatedTriplesSharedState,
@@ -2269,11 +2268,11 @@ std::packaged_task<void()> computeStatistics(
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
     // The statistics are only recomputed as part of a runtime index rebuild
     // (see `IndexRebuilder`), so this scan is also throttled by
-    // `rebuild-index-scan-num-blocks-in-flight` (several permutations are
+    // `rebuild-index-scan-num-threads` (several permutations are
     // scanned in parallel, so without the throttle this short phase has a high
     // peak CPU). A value of 0 means "no limit".
     if (auto maxNumThreads = getRuntimeParameterAsOptional<
-            &RuntimeParameters::rebuildIndexScanNumBlocksInFlight_>()) {
+            &RuntimeParameters::rebuildIndexScanNumThreads_>()) {
       executor = ad_utility::makeConcurrencyLimitedExecutor(
           std::move(executor), maxNumThreads.value());
     }
@@ -2294,7 +2293,7 @@ std::packaged_task<void()> computeStatistics(
 // _____________________________________________________________________________
 nlohmann::json IndexImpl::recomputeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState,
-    ql::any_io_executor executor,
+    qlever::Executor executor,
     const std::function<void(size_t)>& progress) const {
   size_t numTriples = 0;
   size_t numTriplesInternal = 0;

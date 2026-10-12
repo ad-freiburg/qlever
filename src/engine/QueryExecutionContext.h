@@ -24,6 +24,7 @@
 #include "util/AllocateShared.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
+#include "util/Executor.h"
 
 // The value of the `QueryResultCache` below. It consists of a `Result` together
 // with its `RuntimeInfo`.
@@ -113,7 +114,7 @@ class QueryExecutionContext
       SortPerformanceEstimator sortPerformanceEstimator,
       NamedResultCache* namedResultCache,
       std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
-      ql::any_io_executor executor,
+      qlever::Executor executor,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false,
@@ -268,7 +269,7 @@ class QueryExecutionContext
   // index scans). The server uses an executor that limits the number of
   // threads that a single query may use at the same time (see
   // `maximum-threads-per-query`).
-  const ql::any_io_executor& executor() const { return executor_; }
+  const qlever::Executor& executor() const { return executor_; }
 
  private:
   // Helper functions to avoid including `global/RuntimeParameters.h` in this
@@ -341,7 +342,7 @@ class QueryExecutionContext
   bool isAnalyzingMaterializedViewQuery_ = false;
 
   // See the documentation for the getter with the same name above.
-  ql::any_io_executor executor_;
+  qlever::Executor executor_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

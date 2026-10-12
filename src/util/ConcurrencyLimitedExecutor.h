@@ -15,6 +15,7 @@
 
 #include "backports/asio.h"
 #include "util/Exception.h"
+#include "util/Executor.h"
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <boost/asio/bind_executor.hpp>
@@ -126,8 +127,8 @@ class ConcurrencyLimitedExecutor {
 // Return an executor that runs at most `maxConcurrency` function objects on
 // `executor` at the same time. In the reduced C++17 build the `executor` is
 // returned unchanged, as the workloads there are controlled.
-inline ql::any_io_executor makeConcurrencyLimitedExecutor(
-    ql::any_io_executor executor, size_t maxConcurrency) {
+inline qlever::Executor makeConcurrencyLimitedExecutor(
+    qlever::Executor executor, size_t maxConcurrency) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   return ConcurrencyLimitedExecutor{std::move(executor), maxConcurrency};
 #else

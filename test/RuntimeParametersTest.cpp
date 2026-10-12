@@ -82,6 +82,21 @@ TEST(RuntimeParameters, maximumThreadsPerQueryIsStrictlyPositive) {
   EXPECT_EQ(params.maximumThreadsPerQuery_.get(), 1u);
 }
 
+// Test the default of `permutation-writer-num-blocks-in-flight` and that the
+// value `0` is rejected (a writer has to keep at least one block in flight).
+TEST(RuntimeParameters, permutationWriterNumBlocksInFlightIsStrictlyPositive) {
+  RuntimeParameters params;
+  EXPECT_EQ(params.permutationWriterNumBlocksInFlight_.get(), 4u);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      params.setFromAssignment("permutation-writer-num-blocks-in-flight=0"),
+      AllOf(HasSubstr("permutation-writer-num-blocks-in-flight"),
+            HasSubstr("strictly positive")),
+      std::runtime_error);
+  EXPECT_NO_THROW(
+      params.setFromAssignment("permutation-writer-num-blocks-in-flight=1"));
+  EXPECT_EQ(params.permutationWriterNumBlocksInFlight_.get(), 1u);
+}
+
 // Test that `getKeys` and `toMap` (the building blocks of
 // `--set-runtime-parameter help`) are consistent with each other.
 TEST(RuntimeParameters, getKeysAndToMapAreConsistent) {

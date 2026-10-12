@@ -21,6 +21,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "index/DeltaTriples.h"
 
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
+
 using ad_utility::testing::getQec;
 using ::testing::ElementsAreArray;
 using ::testing::UnorderedElementsAreArray;
@@ -564,7 +566,7 @@ TEST(EmptyPath, deletedTriplesAreRespected) {
                             SortPerformanceEstimator{},
                             &namedCache,
                             materializedViews,
-                            ad_utility::testing::singleThreadExecutor()};
+                            executor()};
 
   EmptyPath emptyPath{&qec, Variable{"?x"}, Graphs::All(), std::nullopt};
   std::vector<Id> expected{getId("<a>"), getId("<b>"), getId("<z>")};
@@ -793,7 +795,7 @@ TEST(EmptyPath, allEntitiesAreYieldedInChunks) {
                             SortPerformanceEstimator{},
                             &namedCache,
                             materializedViews,
-                            ad_utility::testing::singleThreadExecutor()};
+                            executor()};
 
   EmptyPath emptyPath{&qec, Variable{"?x"}, Graphs::All(), std::nullopt};
   auto result = emptyPath.computeResultOnlyForTesting(true);

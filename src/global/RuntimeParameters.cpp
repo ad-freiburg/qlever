@@ -29,7 +29,7 @@ RuntimeParameters::RuntimeParameters() {
   add(cacheMaxSizeSingleEntry_);
   add(lazyIndexScanNumBlocksInFlight_);
   add(maximumThreadsPerQuery_);
-  add(rebuildIndexScanNumBlocksInFlight_);
+  add(rebuildIndexScanNumThreads_);
   add(rebuildPermutationWriterNumThreads_);
   add(rebuildMaxConcurrentPermutationPairs_);
   add(lazyIndexScanMaxSizeMaterialization_);
@@ -65,7 +65,7 @@ RuntimeParameters::RuntimeParameters() {
   add(materializedViewPatternMatchNumAssignments_);
   add(materializedViewPatternMatchNumReplacementPlans_);
   add(serviceAllowedIriPrefixes_);
-  add(permutationWriterNumThreads_);
+  add(permutationWriterNumBlocksInFlight_);
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
   add(logLevel_);
@@ -98,6 +98,8 @@ RuntimeParameters::RuntimeParameters() {
   lazyIndexScanNumBlocksInFlight_.setParameterConstraint(
       mustBeStrictlyPositive);
   maximumThreadsPerQuery_.setParameterConstraint(mustBeStrictlyPositive);
+  permutationWriterNumBlocksInFlight_.setParameterConstraint(
+      mustBeStrictlyPositive);
 }
 
 // _____________________________________________________________________________

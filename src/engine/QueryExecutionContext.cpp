@@ -27,10 +27,9 @@ QueryExecutionContext::QueryExecutionContext(
     SortPerformanceEstimator sortPerformanceEstimator,
     NamedResultCache* namedResultCache,
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager,
-    ql::any_io_executor executor,
-    std::function<void(std::string)> updateCallback, const bool pinSubtrees,
-    const bool pinResult, const DisableCaching disableCaching,
-    bool disableMaterializedViewRewriting)
+    qlever::Executor executor, std::function<void(std::string)> updateCallback,
+    const bool pinSubtrees, const bool pinResult,
+    const DisableCaching disableCaching, bool disableMaterializedViewRewriting)
     : _pinSubtrees(pinSubtrees),
       _pinResult(pinResult),
       _index(std::move(index)),

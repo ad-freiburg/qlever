@@ -31,8 +31,8 @@
 #include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/Executor.h"
 #include "util/File.h"
-#include "util/GlobalExecutor.h"
 #include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/RecyclingPool.h"
@@ -79,14 +79,14 @@ class CompressedRelationWriter {
   Id currentCol0Id_ = Id::makeUndefined();
   size_t currentRelationPreviousSize_ = 0;
 
-  // The executor on which the blocks are compressed and written, and the number
-  // of blocks that are compressed and written concurrently, see
-  // `getNumConcurrentBlocks`. The `PermutationWriter` configures its queue for
-  // the blocks of large relations (which bypass the `blockWriteQueue_`) with
-  // the same executor and number, see
+  // The executor on which the blocks are compressed and written, and the
+  // maximal number of blocks that are queued or currently being compressed and
+  // written, see `getNumBlocksInFlight`. The `PermutationWriter` configures its
+  // queue for the blocks of large relations (which bypass the
+  // `blockWriteQueue_`) with the same executor and number, see
   // `PermutationWriter::largeRelationBlockQueue_`.
-  ql::any_io_executor executor_;
-  size_t numConcurrentBlocks_;
+  qlever::Executor executor_;
+  size_t numBlocksInFlight_;
   ad_utility::TaskQueueOnExecutor blockWriteQueue_;
   ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
 
@@ -110,25 +110,26 @@ class CompressedRelationWriter {
 
  public:
   // Create using a filename, to which the relation data will be written.
-  // The blocks are compressed and written on the `executor`, the runtime
-  // parameter `permutation-writer-num-threads` determines how many of them
-  // (see `getNumConcurrentBlocks`). To limit the number of threads that the
-  // writer uses, pass an executor that limits its concurrency (see
+  // The blocks are compressed and written on the `executor`, and the runtime
+  // parameter `permutation-writer-num-blocks-in-flight` determines how many of
+  // them are kept in flight (see `getNumBlocksInFlight`). The number of threads
+  // that the writer uses is determined by the `executor` alone; to limit it,
+  // pass an executor that limits its concurrency (see
   // `util/ConcurrencyLimitedExecutor.h`), as the runtime index rebuild does.
   //
   // The file `f` has to be empty, because this writer writes the blocks at
   // the offsets that `nextOffset_` hands out, starting at `0`. It never
   // appends at the current file position (see `compressAndWriteColumn`), so
   // it would otherwise silently overwrite the existing content.
-  explicit CompressedRelationWriter(
-      size_t numColumns, ad_utility::File f, size_t rowsPerBlock,
-      ql::any_io_executor executor = ad_utility::globalExecutor())
+  explicit CompressedRelationWriter(size_t numColumns, ad_utility::File f,
+                                    size_t rowsPerBlock,
+                                    qlever::Executor executor)
       : outfile_{std::move(f)},
         numColumns_{numColumns},
         rowsPerBlock_{rowsPerBlock},
         executor_{std::move(executor)},
-        numConcurrentBlocks_{getNumConcurrentBlocks()},
-        blockWriteQueue_{makeBlockWriteQueue(executor_, numConcurrentBlocks_)} {
+        numBlocksInFlight_{getNumBlocksInFlight()},
+        blockWriteQueue_{makeBlockWriteQueue(executor_, numBlocksInFlight_)} {
     AD_CONTRACT_CHECK(rowsPerBlock_ > 0,
                       "A block must have room for at least one row");
     // NOTE: `File::empty` moves the file position, which doesn't matter,
@@ -492,24 +493,18 @@ class CompressedRelationWriter {
   // Create the queue for the compression and writing of blocks. The blocks are
   // compressed and written on the `executor`, so this queue owns no threads of
   // its own and only bounds the number of blocks that this writer keeps in
-  // flight (queued or currently being compressed and written).
-  //
-  // The blocks are allowed to pile up to twice `numConcurrentBlocks` (but at
-  // least 4 blocks are always allowed to be in flight), such that the writer
-  // can also make progress while all the concurrent blocks are being
-  // compressed. All the blocks in flight may run at the same time if the
-  // `executor` has idle threads, except for `numConcurrentBlocks == 1`, where
-  // the blocks are compressed and written one after the other (on a strand of
-  // the `executor`). `numConcurrentBlocks` is typically computed by
-  // `getNumConcurrentBlocks` below.
+  // flight (queued or currently being compressed and written) to
+  // `numBlocksInFlight`, which also bounds the memory that these blocks
+  // occupy. How many of them run at the same time is determined by the
+  // `executor` alone. `numBlocksInFlight` is typically computed by
+  // `getNumBlocksInFlight` below.
   static ad_utility::TaskQueueOnExecutor makeBlockWriteQueue(
-      ql::any_io_executor executor, size_t numConcurrentBlocks);
+      qlever::Executor executor, size_t numBlocksInFlight);
 
-  // Return the number of blocks that are compressed and written concurrently,
-  // as determined by the runtime parameter "permutation-writer-num-threads". A
-  // value of 0 means "as many as the global thread pool has threads", and
-  // larger values are capped at that number.
-  static size_t getNumConcurrentBlocks();
+  // Return the maximal number of blocks that are queued or currently being
+  // compressed and written, as determined by the runtime parameter
+  // `permutation-writer-num-blocks-in-flight`.
+  static size_t getNumBlocksInFlight();
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfTasksInFlight);
   FRIEND_TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices);

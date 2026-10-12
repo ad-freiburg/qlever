@@ -38,6 +38,8 @@
 #include "util/CompactStringVector.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
+
 namespace {
 
 using namespace std::string_literals;
@@ -795,7 +797,7 @@ struct ContextWithSecondaryVocab {
              SortPerformanceEstimator{},
              &namedResultCache_,
              materializedViews_,
-             ad_utility::testing::singleThreadExecutor()} {}
+             executor()} {}
 
   // Delete the files of the index again. NOTE: The `Index` is still alive at
   // this point (the `QueryExecutionContext` also holds a reference to it), but

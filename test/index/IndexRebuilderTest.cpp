@@ -56,6 +56,9 @@
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
 
+// Multi-threaded, to exercise the concurrency of the tested code.
+static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
+
 using namespace qlever::indexRebuilder;
 using namespace std::string_literals;
 
@@ -455,11 +458,10 @@ TEST(IndexRebuilder, readIndexAndRemap) {
       ADDITIONAL_COLUMN_GRAPH_ID, ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
       ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN};
 
-  auto range = readIndexAndRemap(permutation, blockMetadataRanges, state,
-                                 localVocabMapping, insertionPositions,
-                                 blankNodeBlocks, minBlankNodeIndex,
-                                 cancellationHandle, additionalColumns,
-                                 ad_utility::testing::singleThreadExecutor());
+  auto range = readIndexAndRemap(
+      permutation, blockMetadataRanges, state, localVocabMapping,
+      insertionPositions, blankNodeBlocks, minBlankNodeIndex,
+      cancellationHandle, additionalColumns, executor());
 
   std::vector<IdTableStatic<0>> idTables = ::ranges::to<std::vector>(
       ql::views::transform(range, ad_utility::staticCast<IdTableStatic<0>&&>));
@@ -562,7 +564,7 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
       newIndex, index.getImpl().getPermutation(Permutation::Enum::PSO),
       index.getImpl().getPermutation(Permutation::Enum::POS), false, state,
       localVocabMapping, insertionPositions, blankNodeBlocks, 1,
-      cancellationHandle, ad_utility::testing::singleThreadExecutor());
+      cancellationHandle, executor());
 
   // Assert nothing has happened yet
   for (std::string_view suffix : suffixes) {
@@ -652,8 +654,7 @@ TEST(IndexRebuilder, materializeToIndex) {
       auto sourceDate = index.getImpl().dateOfIndexBuild();
 
       qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
-                                 blankNodes, cancellationHandle,
-                                 ad_utility::testing::singleThreadExecutor(),
+                                 blankNodes, cancellationHandle, executor(),
                                  logFile);
       EXPECT_TRUE(ql::filesystem::exists(logFile));
 
@@ -766,8 +767,7 @@ TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
 
   EXPECT_NO_THROW(qlever::materializeToIndex(
       index.getImpl(), newIndexName, state, vocab, blankNodes,
-      cancellationHandle, ad_utility::testing::singleThreadExecutor(),
-      logFile));
+      cancellationHandle, executor(), logFile));
 
   IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
   newIndex.createFromOnDiskIndex(newIndexName, false);
@@ -827,8 +827,7 @@ TEST(IndexRebuilder, materializeToIndexKeepsGeoPointEncoding) {
   absl::Cleanup removeIndexFiles{
       [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
   qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
-                             blankNodes, cancellationHandle,
-                             ad_utility::testing::singleThreadExecutor(),
+                             blankNodes, cancellationHandle, executor(),
                              newIndexName + ".log");
 
   // The rebuilt index is in the current format with the entry `lat-major`, and
@@ -864,11 +863,10 @@ TEST(IndexRebuilder, materializeToIndexNoLogFileName) {
       index.deltaTriplesManager()
           .getCurrentLocatedTriplesSharedStateWithVocab();
 
-  EXPECT_THROW(
-      qlever::materializeToIndex(
-          index.getImpl(), "nexIndex", state, vocab, blankNodes,
-          cancellationHandle, ad_utility::testing::singleThreadExecutor(), ""),
-      ad_utility::Exception);
+  EXPECT_THROW(qlever::materializeToIndex(index.getImpl(), "nexIndex", state,
+                                          vocab, blankNodes, cancellationHandle,
+                                          executor(), ""),
+               ad_utility::Exception);
 }
 
 namespace {
@@ -895,17 +893,16 @@ void cleanDirsWithPrefix(std::string_view prefix) {
 // Recomputing the statistics must give exactly the same result, no matter by
 // how many threads each of its scans is limited (0 means "no limit"). This
 // exercises both branches of the translation of the runtime parameter
-// `rebuild-index-scan-num-blocks-in-flight` to a concurrency-limited executor.
-TEST(IndexRebuilder, rebuildIndexScanNumBlocksInFlight) {
+// `rebuild-index-scan-num-threads` to a concurrency-limited executor.
+TEST(IndexRebuilder, rebuildIndexScanNumThreads) {
   auto index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
                                                   "<a> <b> <c> .");
   auto state =
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  boost::asio::thread_pool pool{4};
   auto recomputeStatistics = [&](size_t maxNumThreads) {
     auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::rebuildIndexScanNumBlocksInFlight_>(maxNumThreads);
-    return index.getImpl().recomputeStatistics(state, pool.get_executor());
+        &RuntimeParameters::rebuildIndexScanNumThreads_>(maxNumThreads);
+    return index.getImpl().recomputeStatistics(state, executor());
   };
   auto statsUnlimited = recomputeStatistics(0);
   EXPECT_EQ(recomputeStatistics(1), statsUnlimited);

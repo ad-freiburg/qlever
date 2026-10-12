@@ -25,6 +25,8 @@
 #include "index/TripleComponentConversions.h"
 #include "parser/ParsedQuery.h"
 
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
+
 using namespace ad_utility::testing;
 using namespace std::chrono_literals;
 using ad_utility::source_location;
@@ -596,7 +598,7 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
         SortPerformanceEstimator{}, &namedCache, materializedViewsManager,
-        ad_utility::testing::singleThreadExecutor());
+        executor());
     SparqlTripleSimple scanTriple{Variable{"?x"},
                                   TripleComponent::Iri::fromIriref(predicate),
                                   Variable{"?y"}};
@@ -656,7 +658,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
         SortPerformanceEstimator{}, &namedCache, materializedViewsManager,
-        ad_utility::testing::singleThreadExecutor());
+        executor());
 
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     return IndexScan{qec.get(), Permutation::Enum::PSO, scanTriple};
