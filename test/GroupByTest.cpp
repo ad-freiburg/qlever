@@ -3584,8 +3584,8 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_NE(table(0, 1), table(1, 1));
 }
 
-// A `GROUP BY` on unbound variables has one group for a non-empty input, but,
-// unlike an implicit `GROUP BY`, none for an empty input.
+// Test that a `GROUP BY` on unbound variables has one group for a non-empty
+// input, but, unlike an implicit `GROUP BY`, none for an empty input.
 TEST(GroupBy, GroupByUnboundVariable) {
   auto* qec = getQec();
   Variable x{"?x"};
@@ -3688,10 +3688,10 @@ TEST(GroupBy, GroupByUnboundVariable) {
   EXPECT_TRUE(clone->knownEmptyResult());
 }
 
-// The hash map optimization doesn't support GROUP BYs without GROUP BY columns.
-// It used to be applied to them anyway (if the input is a `Sort`), which
-// crashed for a non-empty input and returned no row for an empty input with an
-// implicit `GROUP BY`.
+// Test that the hash map optimization is not applied to a `GROUP BY` without
+// `GROUP BY` columns. It used to be applied anyway (if the input is a `Sort`),
+// which crashed for a non-empty input and returned no row for an empty input
+// with an implicit `GROUP BY`.
 TEST(GroupBy, HashMapOptimizationWithoutGroupByColumns) {
   auto* qec = getQec();
   Variable x{"?x"};

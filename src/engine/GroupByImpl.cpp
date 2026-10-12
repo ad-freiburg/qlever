@@ -196,10 +196,9 @@ class LazyGroupByRange
   std::optional<Result::IdTableVocabPair> yieldFinalValue() {
     // No need for final commit when loop was never entered.
     if (!groupSplitAcrossTables_) {
-      // If we have an implicit group by we need to produce one result row
+      // An implicit GROUP BY (where the entire input is a single group) has to
+      // produce one result row even for an empty input.
       if (parent_->isImplicitGroupBy_) {
-        // If we have an implicit GROUP BY, where the entire input is a
-        // single group, we need to produce one result row.
         IdTable resultTable = std::move(resultTable_).toDynamic();
         parent_->processEmptyImplicitGroup<OUT_WIDTH>(resultTable, aggregates_,
                                                       &currentLocalVocab_);
@@ -417,8 +416,8 @@ std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
 std::vector<ColumnIndex> GroupByImpl::computeSortColumns(
     const QueryExecutionTree* subtree) {
   vector<ColumnIndex> cols;
-  // If we have an implicit GROUP BY, where the entire input is a single group,
-  // no sorting needs to be done.
+  // Without GROUP BY columns, the entire input is a single group, so no sorting
+  // needs to be done.
   if (_groupByVariables.empty()) {
     return cols;
   }
