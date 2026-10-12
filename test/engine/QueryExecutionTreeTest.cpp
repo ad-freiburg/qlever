@@ -152,7 +152,8 @@ TEST(QueryExecutionTree, createDistinctTreeEmptyIndicesUsesLimitOne) {
             makeIdTableFromVector({{0}}));
 }
 
-// _____________________________________________________________________________
+// Test that pushing a `DISTINCT` into a `CartesianProductJoin` keeps the
+// variables hidden by a subquery hidden (regression test for #3563).
 TEST(QueryExecutionTree, createDistinctTreeKeepsHiddenVariablesHidden) {
   using Var = Variable;
   using Vars = std::vector<std::optional<Variable>>;
@@ -160,9 +161,7 @@ TEST(QueryExecutionTree, createDistinctTreeKeepsHiddenVariablesHidden) {
   auto* qec = getQec();
   Var a{"?a"};
 
-  // Regression test for #3563: The `DISTINCT` is pushed into the
-  // `CartesianProductJoin`, but the variables that were hidden by a subquery
-  // must remain hidden.
+  // A Cartesian product whose root hides `?hidden` and `?b`.
   auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 1}, {0, 2}, {1, 3}}),
       Vars{a, Var{"?hidden"}});
@@ -267,7 +266,8 @@ TEST(QueryExecutionTree, limitAndOffsetIsPropagatedWhenCreatingSortedTree) {
             limitOffset);
 }
 
-// _____________________________________________________________________________
+// Test that re-sorting a `Union` or a `Sort` keeps the variables hidden by a
+// subquery hidden (regression test for #3569).
 TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
   using Var = Variable;
   using Vars = std::vector<std::optional<Variable>>;
@@ -276,8 +276,7 @@ TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
   VariableToColumnMap expectedVariables{
       {Var{"?a"}, makeAlwaysDefinedColumn(0)}};
 
-  // Regression test for #3569: The root operation re-sorts itself, but the
-  // variables that were hidden by a subquery must remain hidden.
+  // A `Union` whose root hides `?b`, re-sorted by `?a`.
   auto makeValues = [qec](IdTable table) {
     return ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(table), Vars{Var{"?a"}, Var{"?b"}});

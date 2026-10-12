@@ -303,17 +303,18 @@ class Operation {
   // subquery.
   virtual const VariableToColumnMap& getExternallyVisibleVariableColumns()
       const final;
+
+  // If this operation is the root of a subquery, it hides the variables that
+  // the subquery does not select. Hide the same variables in `replacement`,
+  // which was built from scratch to replace this operation (e.g. a clone or a
+  // copy with a pushed-down `BIND`). The `additionalVisibleVariable` (e.g. the
+  // target of the pushed-down `BIND`) stays visible.
+  void keepHiddenVariablesHidden(
+      Operation& replacement,
+      std::optional<Variable> additionalVisibleVariable = std::nullopt) const;
+
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
-
-  // Hide the variables that are hidden in `original` (see
-  // `setSelectedVariablesForSubquery`) also in this operation, which replaces
-  // `original` (e.g. a clone, or a re-sorted version of it that was built from
-  // its children). The `additionalVisibleVariables` (e.g. the target of a
-  // `BIND` that was pushed down) remain visible.
-  void hideVariablesHiddenIn(
-      const Operation& original,
-      const std::vector<Variable>& additionalVisibleVariables = {});
 
   /// Return true if this object is an instance of `IndexScan` and has the
   /// specified number of variables. For this to work this function needs to
@@ -333,6 +334,12 @@ class Operation {
   // `Operation` and are always defined.
   bool areVariablesAlwaysDefined(
       const std::vector<const Variable*>& variables) const;
+
+  // Check whether all the given variables are externally visible in the result
+  // of this `Operation`, that is, neither hidden by a subquery nor stripped
+  // away. In contrast to `areVariablesAlwaysDefined`, the variables may be
+  // UNDEF.
+  bool areVariablesVisible(const std::vector<const Variable*>& variables) const;
 
   // See the member variable with the same name below for documentation.
   std::optional<std::shared_ptr<const Result>>&
