@@ -8,6 +8,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/OrderBy.h"
+#include "engine/StripColumns.h"
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
 #include "index/IdTableUtils.h"
@@ -17,6 +18,7 @@
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using ad_utility::source_location;
+using V = Variable;
 
 namespace {
 // Create an `OrderBy` operation that sorts the `input` by the `sortColumns`.
@@ -435,4 +437,95 @@ TEST(OrderBy, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(orderBy, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), orderBy.getDescriptor());
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
+// variables plus the variables the `OrderBy` compares on, translates
+// `sortIndices_` accordingly, and adds a `StripColumns` for the compared
+// variables that the parent did not request.
+TEST(OrderBy, makeTreeWithStrippedColumns) {
+  using ::testing::ElementsAre;
+  using ::testing::Key;
+  using ::testing::SizeIs;
+  using ::testing::UnorderedElementsAre;
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`.
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 4, 5, 4}, {1, 6, 5, 1}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+  auto strip = [&](std::vector<std::pair<ColumnIndex, bool>> sortIndices,
+                   std::set<V> requestedVariables) {
+    OrderBy orderBy{qec, values, sortIndices};
+    auto tree = orderBy.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+
+  // `OrderBy` `?b`, only `?b` requested: the result has only `?b`, the
+  // `OrderBy` now sorts on column 0.
+  {
+    auto tree = strip({{1, false}}, {V{"?b"}});
+    auto orderBy = std::dynamic_pointer_cast<OrderBy>(tree->getRootOperation());
+    ASSERT_TRUE(orderBy);
+    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?b"})));
+    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 0u);
+    EXPECT_EQ(tree->getResult(false)->idTableView(),
+              makeIdTableFromVector({{1}, {2}, {4}, {6}}));
+    EXPECT_EQ(orderBy->getSortedVariables(),
+              OrderBy::SortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Asc}}));
+  }
+
+  // `OrderBy` on `?b`, `?a`, `?b` and `?d` requested: `?c` is stripped
+  // and the columns are renumbered.
+  {
+    auto tree = strip({{1, true}}, {V{"?a"}, V{"?b"}, V{"?d"}});
+    auto orderBy = std::dynamic_pointer_cast<OrderBy>(tree->getRootOperation());
+    ASSERT_TRUE(orderBy);
+    EXPECT_EQ(tree->getVariableColumn(V{"?a"}), 0u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 1u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?d"}), 2u);
+    EXPECT_EQ(
+        tree->getResult(false)->idTableView(),
+        makeIdTableFromVector({{1, 6, 1}, {3, 4, 4}, {2, 2, 5}, {6, 1, 6}}));
+  }
+
+  // A requested variable that the subtree does not have is ignored.
+  {
+    auto tree =
+        strip({{1, true}}, {V{"?a"}, V{"?b"}, V{"?d"}, V{"?notIncluded"}});
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}), Key(V{"?d"})));
+  }
+
+  // `OrderBy` on `?b`, only `?c` requested: the `OrderBy` keeps `?b` and `?c`,
+  // a `StripColumns` on top removes `?b`.
+  {
+    auto tree = strip({{1, true}}, {V{"?c"}});
+    auto stripColumns =
+        std::dynamic_pointer_cast<StripColumns>(tree->getRootOperation());
+    ASSERT_TRUE(stripColumns);
+    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?c"})));
+    EXPECT_EQ(tree->getResult(false)->idTableView(),
+              makeIdTableFromVector({{5}, {5}, {3}, {3}}));
+    const auto* child = stripColumns->getChildren().at(0);
+    auto orderBy =
+        std::dynamic_pointer_cast<OrderBy>(child->getRootOperation());
+    ASSERT_TRUE(orderBy);
+    EXPECT_THAT(child->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?b"}), Key(V{"?c"})));
+    EXPECT_EQ(orderBy->getSortedVariables(),
+              OrderBy::SortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Desc}}));
+  }
+
+  // All variables requested: nothing is stripped and the indices stay.
+  {
+    auto tree = strip({{1, false}}, {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+    auto orderBy = std::dynamic_pointer_cast<OrderBy>(tree->getRootOperation());
+    ASSERT_TRUE(orderBy);
+    EXPECT_THAT(tree->getVariableColumns(), SizeIs(4));
+    EXPECT_EQ(orderBy->getSortedVariables(),
+              OrderBy::SortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Asc}}));
+  }
 }
