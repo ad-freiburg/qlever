@@ -162,9 +162,8 @@ class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
   TripleComponentWithIndex wordInCurrentBlock(size_t offset) const {
     const auto& bytes = currentBlock_.data();
     AD_CORRECTNESS_CHECK(offset < bytes.size());
-    serialization::ByteBufferReadSerializerT<false, ql::span<const char>>
-        reader{
-            ql::span<const char>{bytes.data() + offset, bytes.size() - offset}};
+    serialization::ByteBufferReadSerializerT reader{
+        ql::span<const char>{bytes.data() + offset, bytes.size() - offset}};
     TripleComponentWithIndex word;
     reader >> word;
     return word;
@@ -299,8 +298,7 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     Block::Buffer bytes(sizeOfFile - sizeof(offsetOfBlockIndex) -
                         offsetOfBlockIndex);
     readExactly(bytes.data(), bytes.size(), offsetOfBlockIndex);
-    serialization::ByteBufferReadSerializerT<false, Block::Buffer> reader{
-        std::move(bytes)};
+    serialization::ByteBufferReadSerializerT reader{std::move(bytes)};
     std::vector<PartialVocabularyBlockMetadata> blocks;
     reader >> blocks;
     // The first and the last words of the blocks are stored back to back in

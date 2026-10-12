@@ -115,8 +115,8 @@ class MergeBlock : public ad_utility::NoCopy {
     buffers_.push_back(std::move(bytes));
     const auto& buffer = buffers_.back();
     words_.reserve(numWords);
-    serialization::ByteBufferReadSerializerT<false, ql::span<const char>>
-        serializer{ql::span<const char>{buffer.data(), buffer.size()}};
+    serialization::ByteBufferReadSerializerT serializer{
+        ql::span<const char>{buffer.data(), buffer.size()}};
     for (size_t i = 0; i < numWords; ++i) {
       words_.push_back(
           MergeWord::fromZeroCopyDeserializer(serializer, partialFileId));
