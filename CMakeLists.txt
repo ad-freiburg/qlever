@@ -194,6 +194,12 @@ else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
 
+# Clang stores a timestamp in each precompiled header, so `ccache` would never
+# reuse the objects compiled with one. CMake doesn't remove it on its own.
+if (CMAKE_CXX_COMPILER_LAUNCHER MATCHES "ccache" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options("SHELL:-Xclang -fno-pch-timestamp")
+endif ()
+
 # Additionally fall back to `range-v3` whenever the C++ standard library is
 # libstdc++ older than version 12, independent of the compiler. Such versions
 # (e.g. the libstdc++ of GCC 8-11) do not yet provide `std::ranges::owning_view`,
@@ -311,7 +317,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 0e2a41b61694e823df1b7d77174b139253c7ac39 # branch fork-for-qlever
+        GIT_TAG 4ec7405bcc0639f93a0b9435d29859ef0770c080 # branch fork-for-qlever
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -482,13 +488,13 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 option(QLEVER_ENABLE_LTO "Enable link-time optimization" OFF)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
-# GCC 11–15 emit spurious `-Wmaybe-uninitialized` for template instantiations
+# GCC 11–16 emit spurious `-Wmaybe-uninitialized` for template instantiations
 # that cross the system-header boundary (e.g. absl containers instantiated with
 # user types, std::variant). Suppress for the affected version range so the
 # flag can be re-enabled easily once GCC fixes the false-positive behavior.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11" AND
-    CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16")
+    CMAKE_CXX_COMPILER_VERSION VERSION_LESS "17")
     # False positives from template instantiation crossing system-header boundaries.
     add_compile_options(-Wno-maybe-uninitialized)
     # Unreliable on large translation units; formatting is enforced by clang-format anyway.
@@ -800,7 +806,11 @@ else ()
     add_library(antlr4_umbrella ALIAS antlr4_static)
 endif ()
 # Disable some warnings in RE2 and GTEST
-target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
+# NOTE: `-Wno-uninitialized` is needed in addition to `-Wno-maybe-uninitialized`
+# (which it does not imply): GCC 15 and GCC 16 wrongly report the inline storage
+# of the `absl::InlinedVector` inside the priority queue of
+# `S2ClosestPointQueryBase` as definitely used uninitialized.
+target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function -Wno-nullability-completeness)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
@@ -974,9 +984,9 @@ add_subdirectory(test)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
-OPTION(_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER "Don't build some targets when compiling with Emscripten." OFF)
-
-if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+# The command-line tools are not built for Emscripten (and `qlever-server`
+# cannot be, see `src/engine/CMakeLists.txt`).
+if (NOT EMSCRIPTEN)
     add_executable(qlever-index src/index/IndexBuilderMain.cpp)
     qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
@@ -999,16 +1009,22 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     qlever_enable_lto(qlever-upgrade-index)
 endif()
 
-add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
+# Tools that are only needed natively: `LibQLeverExample` and
+# `VocabularyMergerMain` work on files on the host file system, which a
+# WebAssembly build cannot access, and `PrintIndexVersionMain` is only used by
+# the index version check in CI.
+if (NOT EMSCRIPTEN)
+    add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
+    qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
 
-add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
+    add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
+    qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
-qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
+    add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
+    qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
+endif()
 
-if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+if (NOT EMSCRIPTEN)
     install(TARGETS
         qlever-index
         qlever-server
