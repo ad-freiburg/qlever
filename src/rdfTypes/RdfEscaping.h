@@ -8,8 +8,6 @@
 #include <sstream>
 #include <string>
 
-#include "backports/StartsWithAndEndsWith.h"
-#include "util/Exception.h"
 #include "util/StringUtils.h"
 
 namespace RdfEscaping {
