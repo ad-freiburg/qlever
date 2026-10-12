@@ -13,7 +13,10 @@
 
 #include <string>
 
+#include "index/ConstantsIndexBuilding.h"
 #include "index/VocabularyMergerImpl.h"
+#include "util/GlobalExecutor.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeString.h"
 
@@ -70,4 +73,44 @@ TEST(IndexVocabularyMergerImpl, writePartialVocabularyToFile) {
   ItemVec empty;
   writePartialVocabularyToFile(empty, fileName);
   EXPECT_TRUE(readBack(fileName).empty());
+}
+
+// _____________________________________________________________________________
+TEST(IndexVocabularyMergerImpl, vocabularyMergeOptions) {
+  using ad_utility::MemorySize;
+  using ad_utility::vocabulary_merger::vocabularyMergeOptions;
+  const size_t parallelism = ad_utility::globalExecutorNumThreads();
+  const size_t inputPerChunk = VOCAB_MERGER_INPUT_PER_CHUNK.getBytes();
+
+  // The output blocks are the batches of the pipeline behind the merge.
+  auto options = vocabularyMergeOptions(3, 0, MemorySize::gigabytes(4));
+  EXPECT_EQ(options.outputBlockSize.maxNumElements(),
+            VOCAB_MERGER_WORD_BATCH_SIZE);
+  EXPECT_EQ(options.outputBlockSize.maxMemory(),
+            VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE);
+  EXPECT_EQ(options.parallelism(), parallelism);
+
+  // No input still gives one chunk per thread, `10.5` chunks worth of input
+  // gives `11` chunks, distributed over the threads.
+  EXPECT_EQ(options.targetChunksPerThread, 1u);
+  options = vocabularyMergeOptions(3, 10 * inputPerChunk + inputPerChunk / 2,
+                                   MemorySize::gigabytes(4));
+  EXPECT_EQ(options.targetChunksPerThread,
+            (11 + parallelism - 1) / parallelism);
+
+  // The chunks in flight are bounded by the memory from below (at least one)
+  // and by the threads from above.
+  options = vocabularyMergeOptions(3, 0, MemorySize::bytes(1));
+  EXPECT_EQ(options.maxNumChunksInFlight, 1u);
+  options = vocabularyMergeOptions(3, 0, MemorySize::terabytes(100));
+  EXPECT_EQ(options.maxNumChunksInFlight,
+            VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD * parallelism);
+  // In between, the memory decides: one chunk takes twice its input plus one
+  // block per partial vocabulary.
+  const size_t memoryPerChunk =
+      2 * (3 * PARTIAL_VOCAB_BLOCK_SIZE.getBytes() + inputPerChunk);
+  options = vocabularyMergeOptions(3, 0, MemorySize::bytes(3 * memoryPerChunk));
+  EXPECT_EQ(options.maxNumChunksInFlight,
+            std::min<size_t>(
+                3, VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD * parallelism));
 }
