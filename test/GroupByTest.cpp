@@ -3600,15 +3600,14 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
   // A subtree with the variables `?a`, `?b`, `?c`, `?d`
   auto qec = ad_utility::testing::getQec();
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
-    qec,
-    makeIdTableFromVector({{I(6), I(6), I(3), I(6)},
-                           {I(6), I(6), I(3), I(5)},
-                           {I(3), I(5), I(5), I(4)},
-                           {I(1), I(2), I(5), I(1)}}),
-    std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+      qec,
+      makeIdTableFromVector({{I(6), I(6), I(3), I(6)},
+                             {I(6), I(6), I(3), I(5)},
+                             {I(3), I(5), I(5), I(4)},
+                             {I(1), I(2), I(5), I(1)}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
   auto strip = [&](std::vector<Variable> groupByVariables,
-                   std::vector<Alias> aliases,
-                   std::set<V> requestedVariables) {
+                   std::vector<Alias> aliases, std::set<V> requestedVariables) {
     GroupBy groupBy(qec, groupByVariables, aliases, values);
     auto tree = groupBy.makeTreeWithStrippedColumns(requestedVariables);
     AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
@@ -3627,220 +3626,68 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     auto tree = strip({V{"?a"}}, {alias}, {V{"?a"}, V{"?sumB"}});
     auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
     ASSERT_TRUE(groupBy);
-    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?a"}), Key(V{"?sumB"})));
-    EXPECT_EQ(tree->getResult(false)->idTableView(),
-          makeIdTableFromVector(
-              {{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}}));
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?sumB"})));
+    EXPECT_EQ(
+        tree->getResult(false)->idTableView(),
+        makeIdTableFromVector({{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}}));
   }
 
   // A requested variable that the subtree does not have is ignored.
   {
-    auto tree = strip({V{"?a"}}, {alias}, {V{"?a"}, V{"?sumB"}, V{"?notValid"}});
-    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?a"}), Key(V{"?sumB"})));
+    auto tree =
+        strip({V{"?a"}}, {alias}, {V{"?a"}, V{"?sumB"}, V{"?notValid"}});
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?sumB"})));
   }
 
-  // `GroupBy` `?a` and produce alias `?sumB` from `?b`. `?sumB` and `?c`
-  // requested: the result has `?sumB` and `?c`, a `StripColumns` on top removes `?a`.
+  // `GroupBy` `?a` and `?c` and produce alias `?sumB` from `?b`. `?sumB` and
+  // `?c` requested: the result has `?sumB` and `?c`, a `StripColumns` on top
+  // removes `?a`.
   {
     auto tree = strip({V{"?a"}, V{"?c"}}, {alias}, {V{"?c"}, V{"?sumB"}});
     auto stripColumns =
         std::dynamic_pointer_cast<StripColumns>(tree->getRootOperation());
     ASSERT_TRUE(stripColumns);
-    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?sumB"}), Key(V{"?c"})));
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?sumB"}), Key(V{"?c"})));
+    EXPECT_EQ(
+        tree->getResult(false)->idTableView(),
+        makeIdTableFromVector({{I(5), I(2)}, {I(5), I(5)}, {I(3), I(12)}}));
     const auto* child = stripColumns->getChildren().at(0);
-    auto groupBy = std::dynamic_pointer_cast<GroupBy>(child->getRootOperation());
+    auto groupBy =
+        std::dynamic_pointer_cast<GroupBy>(child->getRootOperation());
     ASSERT_TRUE(groupBy);
-    EXPECT_THAT(child->getVariableColumns(),
-                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?sumB"}), Key(V{"?c"})));
-    EXPECT_EQ(tree->getResult(false)->idTableView(),
-          makeIdTableFromVector(
-              {{I(5), I(2)}, {I(5), I(5)}, {I(3), I(12)}}));
+    EXPECT_THAT(
+        child->getVariableColumns(),
+        UnorderedElementsAre(Key(V{"?a"}), Key(V{"?sumB"}), Key(V{"?c"})));
   }
 
-  // All variables requested: nothing is stripped and result has additional column `?sumB`
+  // All variables requested: nothing is stripped and result has additional
+  // column `?sumB`
   {
-    auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}, {alias}, {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?sumB"}});
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}, {alias},
+                      {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?sumB"}});
     auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
     ASSERT_TRUE(groupBy);
     EXPECT_THAT(tree->getVariableColumns(), SizeIs(5));
-    EXPECT_THAT(
-    tree->getVariableColumns(),
-    UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}), Key(V{"?c"}),
-                         Key(V{"?d"}), Key(V{"?sumB"})));
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}), Key(V{"?c"}),
+                                     Key(V{"?d"}), Key(V{"?sumB"})));
+  }
+
+  // `GroupBy` `?a` and `?c` and produce alias `?sumB` from `?b`. `?a` and `?c`
+  // requested: the result has `?a` and `?c`, the alias is erased from the
+  // `GroupBy` operation, as its target is not requested.
+  {
+    auto tree = strip({V{"?a"}, V{"?c"}}, {alias}, {V{"?a"}, V{"?c"}});
+    auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
+    ASSERT_TRUE(groupBy);
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?c"})));
+    EXPECT_EQ(
+        tree->getResult(false)->idTableView(),
+        makeIdTableFromVector({{I(1), I(5)}, {I(3), I(5)}, {I(6), I(3)}}));
+    EXPECT_EQ(groupBy->aliases(), std::vector<Alias>{});
   }
 }
-
-/*
-// _____________________________________________________________________________
-TEST(GroupBy, makeTreeWithStrippedColumns) {
-  auto* qec = getQec();
-  std::vector<std::optional<Variable>> vars = {
-      {Variable{"?a"}, Variable{"?b"}, Variable{"?c"}, Variable{"?d"}}};
-  IdTable input{makeIdTableFromVector(
-      {{6, 1, 3, 6}, {6, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
-
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(input), std::move(vars));
-
-  // Test case 1: `GroupBy` groups by ?a and produces the alias ?sumB from ?b.
-  // The parent tree requests ?a and ?sumB.
-  // Therefore, ?a and ?sumB should remain.
-  // This tests the case where fewer variables are requested than the `GroupBy`
-  // operation produces.
-  {
-    Alias detAlias(
-        SparqlExpressionPimpl{
-            std::make_unique<SumExpression>(
-                false, std::make_unique<VariableExpression>(Variable{"?b"})),
-            "SUM(?b)"},
-        Variable{"?sumB"});
-
-    GroupBy groupBy(qec, {Variable{"?a"}}, {detAlias}, subtree);
-
-    std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
-        groupBy.makeTreeWithStrippedColumns(
-            std::set<Variable>{Variable{"?a"}, Variable{"?sumB"}});
-    ASSERT_TRUE(resultTree.has_value());
-    ASSERT_TRUE((*resultTree) != nullptr);
-    const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
-
-    EXPECT_EQ(v2cMap.size(), 2);
-    EXPECT_THAT(v2cMap,
-                testing::UnorderedElementsAre(testing::Key(Variable{"?a"}),
-                                              testing::Key(Variable{"?sumB"})));
-  }
-
-  // Test case 2: `GroupBy` groups by ?a and ?b and produces the alias ?sumB
-  // from ?b.
-  // The parent tree requests ?a, ?b and ?sumB.
-  // Therefore, ?a, ?b and ?sumB should remain.
-  // This tests the case where all variables produced by the `GroupBy`
-  // operation are requested by the parent tree.
-  {
-    Alias detAlias(
-        SparqlExpressionPimpl{
-            std::make_unique<SumExpression>(
-                false, std::make_unique<VariableExpression>(Variable{"?b"})),
-            "SUM(?b)"},
-        Variable{"?sumB"});
-
-    GroupBy groupBy(qec, {Variable{"?a"}, Variable{"?b"}}, {detAlias}, subtree);
-
-    std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
-        groupBy.makeTreeWithStrippedColumns(std::set<Variable>{
-            Variable{"?a"}, Variable{"?b"}, Variable{"?sumB"}});
-    ASSERT_TRUE(resultTree.has_value());
-    ASSERT_TRUE((*resultTree) != nullptr);
-    const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
-
-    EXPECT_EQ(v2cMap.size(), 3);
-    EXPECT_THAT(v2cMap,
-                testing::UnorderedElementsAre(testing::Key(Variable{"?a"}),
-                                              testing::Key(Variable{"?b"}),
-                                              testing::Key(Variable{"?sumB"})));
-  }
-
-  // Test case 3: `GroupBy` groups by ?a and ?c and produces no aliases.
-  // The parent tree requests ?a, ?b, ?c and ?notIncluded.
-  // Therefore, ?a and ?c should remain, while ?b and ?notIncluded are ignored.
-  // This tests the case where the parent tree requests variables that are not
-  // produced by the `GroupBy` operation.
-  {
-    GroupBy groupBy(qec, {Variable{"?a"}, Variable{"?c"}}, std::vector<Alias>{},
-                    subtree);
-
-    std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
-        groupBy.makeTreeWithStrippedColumns(
-            std::set<Variable>{Variable{"?a"}, Variable{"?c"}, Variable{"?b"},
-                               Variable{"?notIncluded"}});
-    ASSERT_TRUE(resultTree.has_value());
-    ASSERT_TRUE((*resultTree) != nullptr);
-    const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
-
-    EXPECT_EQ(v2cMap.size(), 2);
-    EXPECT_THAT(v2cMap,
-                testing::UnorderedElementsAre(testing::Key(Variable{"?a"}),
-                                              testing::Key(Variable{"?c"})));
-  }
-
-  // Test case 4: `GroupBy` groups by ?c and ?d and produces no aliases.
-  // The parent tree requests ?d.
-  // Therefore, ?d should remain in the result, while ?c is only required
-  // internally by the `GroupBy` operation.
-  // This tests the case where a `StripColumns` operation has to be added
-  // because a `groupByVariable` is not requested by the parent tree.
-  {
-    GroupBy groupBy(qec, {Variable{"?c"}, Variable{"?d"}}, {}, subtree);
-
-    std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
-        groupBy.makeTreeWithStrippedColumns(std::set<Variable>{Variable{"?d"}});
-    ASSERT_TRUE(resultTree.has_value());
-    ASSERT_TRUE((*resultTree) != nullptr);
-    const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
-
-    // Only ?d should remain, as ?c is only required internally by the
-    // `GroupBy` operation and is not requested by the parent tree.
-    EXPECT_EQ(v2cMap.size(), 1);
-    EXPECT_TRUE(v2cMap.contains(Variable{"?d"}));
-
-    // Check whether a `StripColumns` operation has been added to the execution
-    // tree because ?c is required by `GroupBy` but not requested by the parent
-    // tree. Only ?d should remain in the result of the `StripColumns`
-    // operation.
-    /*auto rootOperation = (*resultTree)->getRootOperation();
-    StripColumns* stripColumnsOperation =
-        dynamic_cast<StripColumns*>(rootOperation.get());
-    ASSERT_TRUE(stripColumnsOperation != nullptr);
-    VariableToColumnMap strColMap =
-        stripColumnsOperation->computeVariableToColumnMap();
-    EXPECT_EQ(strColMap.size(), 1);
-    EXPECT_TRUE(strColMap.contains(Variable{"?d"}));
-
-    // Check whether the `GroupBy` operation still has the same
-    // `groupByVariables`.
-    qlm::vector<QueryExecutionTree*> subtree =
-        stripColumnsOperation->getChildren();
-    ASSERT_TRUE(subtree.at(0) != nullptr);
-    auto groupByOp = subtree.at(0)->getRootOperation();
-    GroupBy* groupByOperation = dynamic_cast<GroupBy*>(groupByOp.get());
-    ASSERT_TRUE(groupByOperation != nullptr);
-    std::vector<Variable> newGroupByVariables =
-        groupByOperation->groupByVariables();
-    EXPECT_EQ(newGroupByVariables.size(), 2);
-    EXPECT_EQ(newGroupByVariables.at(0), Variable{"?c"});
-    EXPECT_EQ(newGroupByVariables.at(1), Variable{"?d"});
-  }
-
-  // Test case 5: `GroupBy` groups by ?a and produces the alias ?sumB from ?b.
-  // The parent tree requests ?a.
-  // Therefore, only ?a should remain in the result.
-  // This tests the case where an alias is removed because its target is not
-  // requested by the parent tree.
-  {
-    Alias detAlias(
-        SparqlExpressionPimpl{
-            std::make_unique<SumExpression>(
-                false, std::make_unique<VariableExpression>(Variable{"?b"})),
-            "SUM(?b)"},
-        Variable{"?sumB"});
-
-    GroupBy groupBy(qec, {Variable{"?a"}}, {detAlias}, subtree);
-
-    std::optional<std::shared_ptr<QueryExecutionTree>> resultTree =
-        groupBy.makeTreeWithStrippedColumns(std::set<Variable>{Variable{"?a"}});
-    ASSERT_TRUE(resultTree.has_value());
-    ASSERT_TRUE((*resultTree) != nullptr);
-    const VariableToColumnMap& v2cMap = (*resultTree)->getVariableColumns();
-
-    EXPECT_EQ(v2cMap.size(), 1);
-    EXPECT_TRUE(v2cMap.contains(Variable{"?a"}));
-
-    // Check whether the alias has been removed because its target ?sumB is not
-    // requested by the parent tree.
-    auto rootOperation = (*resultTree)->getRootOperation();
-    GroupBy* groupByOperation = dynamic_cast<GroupBy*>(rootOperation.get());
-    ASSERT_TRUE(groupByOperation != nullptr);
-    ASSERT_EQ((groupByOperation->aliases()).size(), 0);
-  }
-}
-*/
