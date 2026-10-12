@@ -375,10 +375,27 @@ auto ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
          ql::views::join;
 }
 
-// Convert a stringvalue and optional type to JSON binding.
+// Return true iff the `id` is a word or a text record of the text index. For
+// those, `idToStringAndType` returns the plain text, which (unlike the
+// representation of a literal) is not surrounded by quotes, but might contain
+// quotes.
+static bool isTextIndexEntry(Id id) {
+  return id.getDatatype() == Datatype::TextRecordIndex ||
+         id.getDatatype() == Datatype::WordVocabIndex;
+}
+
+// Convert a stringvalue and optional type to JSON binding. If `isPlainText` is
+// true, the `entitystr` is the plain content of a literal, see
+// `isTextIndexEntry` above.
 static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
-                                             const char* xsdType) {
+                                             const char* xsdType,
+                                             bool isPlainText = false) {
   nlohmann::ordered_json b;
+  if (isPlainText) {
+    b["value"] = entitystr;
+    b["type"] = "literal";
+    return b;
+  }
   if (xsdType) {
     b["value"] = entitystr;
     b["type"] = "literal";
@@ -401,7 +418,8 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
     // that there are datatype IRIs which contain quotes.
     size_t quotePos = entitystr.rfind('"');
     if (quotePos == std::string::npos) {
-      // TEXT entries are currently not surrounded by quotes
+      // A string without quotes cannot occur here (the entries of the text
+      // index are handled above), but export it as a plain literal to be safe.
       b["value"] = entitystr;
       b["type"] = "literal";
     } else {
@@ -583,6 +601,9 @@ static std::string idToXMLBinding(std::string_view variable, Id id,
     } else {
       size_t quotePos = entitystr.rfind('"');
       if (quotePos == std::string::npos) {
+        // A string without quotes cannot occur here (the entries of the text
+        // index are handled below), but export it as a plain literal to be
+        // safe.
         absl::StrAppend(&result, "<literal>"sv, escape(entitystr),
                         "</literal>"sv);
       } else {
@@ -609,7 +630,9 @@ static std::string idToXMLBinding(std::string_view variable, Id id,
       }
     }
   };
-  if (!xsdType) {
+  if (isTextIndexEntry(id)) {
+    append("<literal>"sv, escape(stringValue), "</literal>"sv);
+  } else if (!xsdType) {
     // No xsdType, this means that `stringValue` is a plain string literal
     // or entity.
     strToBinding(stringValue);
@@ -707,13 +730,13 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
   auto getBinding = [&](const TableConstRefWithVocab& pair, const uint64_t& i) {
     auto binding = nlohmann::ordered_json::object();
     for (const auto& column : columns) {
+      Id id = pair.idTable()(i, column->columnIndex_);
       auto optionalStringAndType = ql::exportIds::idToStringAndType(
-          qet.getQec()->getIndex(), pair.idTable()(i, column->columnIndex_),
-          pair.localVocab());
+          qet.getQec()->getIndex(), id, pair.localVocab());
       if (optionalStringAndType.has_value()) [[likely]] {
         const auto& [stringValue, xsdType] = optionalStringAndType.value();
         binding[column->variable_] =
-            stringAndTypeToBinding(stringValue, xsdType);
+            stringAndTypeToBinding(stringValue, xsdType, isTextIndexEntry(id));
       }
     }
     return binding.dump();

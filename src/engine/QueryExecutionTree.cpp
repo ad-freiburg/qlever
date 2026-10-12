@@ -139,10 +139,20 @@ QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied(
 
   if (prefilterPairs.empty()) {
     return std::nullopt;
-  } else {
-    return rootOperation_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
-        prefilterPairs);
   }
+  auto result =
+      rootOperation_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+          prefilterPairs);
+  if (result.has_value()) {
+    AD_CORRECTNESS_CHECK(result.value() != nullptr);
+    // The prefiltered tree has a new root operation, on which the variables
+    // that are hidden in this tree would be visible again.
+    rootOperation_->keepHiddenVariablesHidden(
+        *result.value()->getRootOperation());
+    AD_CORRECTNESS_CHECK(result.value()->getVariableColumns() ==
+                         getVariableColumns());
+  }
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -221,6 +231,10 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 
   if (sortedQet.has_value()) {
     AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
+    // The new root operation is built from the children of `rootOperation`, so
+    // the variables hidden in the latter would become visible again.
+    rootOperation->keepHiddenVariablesHidden(
+        *sortedQet.value()->getRootOperation());
     AD_CORRECTNESS_CHECK(qet->getVariableColumns() ==
                          sortedQet.value()->getVariableColumns());
     const auto& sortedRootOperation = sortedQet.value()->getRootOperation();
@@ -277,6 +291,9 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
   auto distinctQet = rootOperation->makeDistinctTree(distinctIndices);
   if (distinctQet.has_value()) {
     AD_CORRECTNESS_CHECK(distinctQet.value() != nullptr);
+    // See the comment in `createSortedTree` above.
+    rootOperation->keepHiddenVariablesHidden(
+        *distinctQet.value()->getRootOperation());
     // Pushing the `DISTINCT` down must preserve the set of visible variables,
     // but the exact column layout may change: e.g. pushing into a
     // `CartesianProductJoin` can collapse a child to a single row, which
