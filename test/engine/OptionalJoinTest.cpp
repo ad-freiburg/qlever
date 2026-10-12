@@ -1301,9 +1301,9 @@ INSTANTIATE_TEST_SUITE_P(
                           materializeLeft ? "MaterializedLeft" : "LazyLeft");
     }));
 
-// _____________________________________________________________________________
-// Regression test for https://github.com/ad-freiburg/qlever/issues/3574:
-// Optional join with an `IndexScan` without variables on the right.
+// Test the optional join with an `IndexScan` without variables on the right,
+// which must not use the prefiltered join (regression test for
+// https://github.com/ad-freiburg/qlever/issues/3574).
 TEST(OptionalJoin, rightIsScanWithoutVariables) {
   TestIndexConfig config{"<a> <b> <c> <g1> . <a> <b> <c> <g2> ."};
   config.indexType = qlever::Filetype::NQuad;

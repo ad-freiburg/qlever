@@ -599,8 +599,9 @@ TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
   testJoinOperation(joinSwitched, expectedColumns, true, true);
 }
 
-// Regression test for https://github.com/ad-freiburg/qlever/issues/3574: Joins
-// with an `IndexScan` without variables.
+// Test joins with an `IndexScan` without variables, which must not use the
+// prefiltered join (regression test for
+// https://github.com/ad-freiburg/qlever/issues/3574).
 TEST_P(JoinTestParametrized, joinWithScanWithoutVariables) {
   auto keepJoinCol = GetParam();
   ad_utility::testing::TestIndexConfig config{
@@ -653,8 +654,13 @@ TEST_P(JoinTestParametrized, joinWithScanWithoutVariables) {
     }
   };
 
+  // Two scans without variables.
   expectResult(makeFixedScan(), makeFixedScan(), {"<g1>", "<g2>"});
+
+  // A scan without variables and a scan with a variable.
   expectResult(makeFixedScan(), scanWithVariable, {"<g1>", "<g2>"});
+
+  // A scan without variables and an operation that is not a scan.
   expectResult(makeFixedScan(), values, {"<g2>"});
 }
 
