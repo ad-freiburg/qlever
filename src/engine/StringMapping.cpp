@@ -5,6 +5,8 @@
 
 #include "engine/StringMapping.h"
 
+#include <utility>
+
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/ExportIds.h"
 #include "index/Index.h"
@@ -12,19 +14,10 @@
 namespace qlever::binary_export {
 
 // _____________________________________________________________________________
-std::vector<std::string> StringMapping::flush(const Index& index) {
-  LocalVocab dummy;
-  std::vector<std::string> sortedStrings;
-  sortedStrings.resize(stringMapping_.size());
-  for (const auto& [oldId, newId] : stringMapping_) {
-    auto literalOrIri =
-        ql::exportIds::idToLiteralOrIri(index, oldId, dummy, true);
-    AD_CORRECTNESS_CHECK(literalOrIri.has_value());
-    sortedStrings[newId] =
-        std::move(literalOrIri.value()).toStringRepresentation();
-  }
+std::vector<std::string> StringMapping::takeStrings() {
   stringMapping_.clear();
-  return sortedStrings;
+  numBytes_ = 0;
+  return std::exchange(strings_, {});
 }
 
 // _____________________________________________________________________________
@@ -34,20 +27,18 @@ Id StringMapping::remapId(Id id) {
   // datatypes that semantically point to strings (so literals/IRIs that can't
   // be directly encoded into the ID). All other IDs have to be serialized by
   // different mechanism.
-  static constexpr std::array allowedDatatypes{VocabIndex, LocalVocabIndex,
-                                               TextRecordIndex, WordVocabIndex,
-                                               SecondaryVocabIndex};
+  static constexpr std::array allowedDatatypes{
+      VocabIndex,     LocalVocabIndex,     TextRecordIndex,
+      WordVocabIndex, SecondaryVocabIndex, EncodedVal};
   AD_EXPENSIVE_CHECK(ad_utility::contains(allowedDatatypes, id.getDatatype()));
 
   // A static assertion that each datatype is either `trivial`, or `allowed`
-  // (see above), or `EncodedVal`, or `BlankNodeIndex` (the latter also requires
-  // special handling and remapping, but cannot be handled by the
-  // `StringMapping`).
+  // (see above), or `BlankNodeIndex` (which also requires special handling and
+  // remapping, but cannot be handled by the `StringMapping`).
   static constexpr auto checkDatatypes = []() {
     auto checkType = [](Datatype datatype) {
       return ad_utility::contains(allowedDatatypes, datatype) ||
-             isDatatypeTrivial(datatype) || datatype == BlankNodeIndex ||
-             datatype == EncodedVal;
+             isDatatypeTrivial(datatype) || datatype == BlankNodeIndex;
     };
     for (size_t i = 0; i <= static_cast<size_t>(MaxValue); ++i) {
       if (!checkType(static_cast<Datatype>(i))) {
@@ -57,8 +48,19 @@ Id StringMapping::remapId(Id id) {
     return true;
   };
   static_assert(checkDatatypes());
-  size_t distinctIndex =
-      stringMapping_.try_emplace(id, stringMapping_.size()).first->second;
+  auto [it, inserted] =
+      stringMapping_.try_emplace(id.getBits(), stringMapping_.size());
+  size_t distinctIndex = it->second;
+  if (inserted) {
+    LocalVocab dummy;
+    auto literalOrIri =
+        ql::exportIds::idToLiteralOrIri(*index_, id, dummy, true);
+    AD_CORRECTNESS_CHECK(literalOrIri.has_value());
+    strings_.push_back(
+        std::move(literalOrIri.value()).toStringRepresentation());
+    numBytes_ += strings_.back().size();
+    AD_CORRECTNESS_CHECK(strings_.size() == stringMapping_.size());
+  }
   // `Id::makeFromLocalVocabIndex` assumes that the last `numDatatypeBits` bits
   // are all zero and then performs a right shift. We have to shift the
   // `dinstinctIndex` left by the same amount to counter this effect.
