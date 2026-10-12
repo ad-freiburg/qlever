@@ -145,6 +145,22 @@ TEST(Views, CallbackOnEndView) {
   EXPECT_EQ(numCalls, 3);
 }
 
+// For an empty range, the callback is invoked as soon as the iteration starts
+// (and ends), not only during the destruction of the view.
+TEST(Views, CallbackOnEndViewEmptyRange) {
+  using namespace ad_utility;
+  size_t numCalls{0};
+  {
+    auto view = CallbackOnEndView{ad_utility::integerRange(0u),
+                                  [&numCalls]() { ++numCalls; }};
+    EXPECT_EQ(numCalls, 0u);
+    EXPECT_TRUE(view.begin() == view.end());
+    EXPECT_EQ(numCalls, 1u);
+  }
+  // Callback not invoked again during destruction.
+  EXPECT_EQ(numCalls, 1u);
+}
+
 // Overwriting a view invokes its callback, unless it was already invoked.
 TEST(Views, CallbackOnEndViewMoveAssignment) {
   using namespace ad_utility;

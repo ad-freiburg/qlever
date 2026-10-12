@@ -21,6 +21,7 @@
 #include <thread>
 #include <vector>
 
+#include "./util/GTestHelpers.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/jthread.h"
 
@@ -70,16 +71,6 @@ bool becomesReady(const std::future<T>& future) {
   return future.wait_for(timeout) == std::future_status::ready;
 }
 
-// Block until the `predicate` is true, but at most for the `timeout`. Return
-// the final value of the `predicate`.
-template <typename Predicate>
-bool waitUntil(const Predicate& predicate) {
-  auto deadline = std::chrono::steady_clock::now() + timeout;
-  while (!predicate() && std::chrono::steady_clock::now() < deadline) {
-    std::this_thread::sleep_for(1ms);
-  }
-  return predicate();
-}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -148,9 +139,9 @@ TEST(TaskQueueOnExecutor, inFlightBoundIsRespected) {
     latch.wait();
   });
   queue.push([&numStartedTasks]() { ++numStartedTasks; });
-  ASSERT_TRUE(waitUntil([&numStartedTasks]() {
-    return numStartedTasks.load() == 1u;
-  })) << "The first task was not started by the pool";
+  ASSERT_TRUE(waitUntil(
+      [&numStartedTasks]() { return numStartedTasks.load() == 1u; }, timeout))
+      << "The first task was not started by the pool";
 
   // The third `push` has to block, because two tasks are already in flight.
   std::atomic<bool> thirdPushHasReturned = false;
@@ -355,11 +346,13 @@ TEST(TaskQueueOnExecutor, aPushThatIsBlockedWhenFinishStartsIsRejected) {
   std::this_thread::sleep_for(shortTimeout);
   EXPECT_FALSE(pushHasReturned.load());
   ad_utility::JThread finisher{[&queue]() { queue.finish(); }};
-  // The finisher has now started finishing and waits for the first task.
-  std::this_thread::sleep_for(shortTimeout);
-  latch.release();
+  // `finish()` wakes up the blocked push, which then reports the violation
+  // right away. The slot is still taken, so the push cannot have enqueued its
+  // task, no matter when the two threads actually started. If the push were
+  // not woken up, this `join` would block forever.
   pusher.join();
-  finisher.join();
   EXPECT_TRUE(pushHasThrown.load());
+  latch.release();
+  finisher.join();
   queue.waitUntilFinished();
 }

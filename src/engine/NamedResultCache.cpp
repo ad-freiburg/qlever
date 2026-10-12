@@ -63,13 +63,11 @@ size_t NamedResultCache::numEntries() const {
 }
 
 // _____________________________________________________________________________
-std::vector<std::pair<NamedResultCache::Key,
-                      std::shared_ptr<const NamedResultCache::Value>>>
-NamedResultCache::getAllEntriesSortedByKey() const {
+NamedResultCache::Entries NamedResultCache::getAllEntriesSortedByKey() const {
   // NOTE: We need the (non-const) `wlock` here, because the `operator[]` of the
   // underlying cache is non-const, see the comment in `get` above.
   auto lock = cache_.wlock();
-  std::vector<std::pair<Key, std::shared_ptr<const Value>>> entries;
+  Entries entries;
   for (const auto& key : lock->getAllNonpinnedKeys()) {
     entries.emplace_back(key, (*lock)[key]);
     AD_CORRECTNESS_CHECK(entries.back().second != nullptr);

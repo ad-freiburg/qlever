@@ -55,8 +55,8 @@ ConstIdColumnRef graphsOf(const IdTable& matches, Id id) {
   auto matching = ql::ranges::equal_range(ids, id);
   size_t numMatches = ql::ranges::size(matching);
   if (matches.numColumns() == 1) {
-    static const Id undefined = Id::makeUndefined();
-    return {&undefined, numMatches == 0 ? 0u : 1u};
+    static const IdColumn undefinedColumn{Id::makeUndefined()};
+    return ConstIdColumnRef{undefinedColumn}.first(numMatches == 0u ? 0u : 1u);
   }
   return matches.getColumn(1).subspan(matching.begin() - ids.begin(),
                                       numMatches);
@@ -436,8 +436,7 @@ Result::Generator EmptyPath::processTable(IdTableView<0> table,
   // The distinct values of the join column that have to be looked up.
   std::vector<Id> ids;
   ids.reserve(joinColumn.size());
-  ql::ranges::copy_if(joinColumn, std::back_inserter(ids),
-                      [](Id id) { return !id.isUndefined(); });
+  ql::ranges::copy_if(joinColumn, std::back_inserter(ids), Id::isDefinedL);
   bool hasUndef = ids.size() != joinColumn.size();
   ql::ranges::sort(ids);
   // NOTE: `ql::ranges::unique` does not work because of a discrepancy in the

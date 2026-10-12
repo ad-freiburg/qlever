@@ -83,6 +83,50 @@ TEST(EngineTest, multiColumnJoinTest) {
   ASSERT_EQ(wantedRes[3], vres[3]);
 }
 
+// Test the join with UNDEF values in the join columns. An UNDEF value matches
+// every value, and the join value of a result row is the one of the side that
+// is not UNDEF. Such inputs take the generic path of `computeMultiColumnJoin`
+// (see `isCheap` there), which requires that no join column contains UNDEF.
+TEST(MultiColumnJoin, undefInJoinColumns) {
+  constexpr auto U = Id::makeUndefined();
+  auto* qec = ad_utility::testing::getQec();
+  std::vector<std::array<ColumnIndex, 2>> jcls;
+  jcls.push_back(std::array<ColumnIndex, 2>{{0, 0}});
+  jcls.push_back(std::array<ColumnIndex, 2>{{1, 1}});
+
+  auto join = [&](const IdTable& left, const IdTable& right) {
+    IdTable result(3, makeAllocator());
+    MultiColumnJoin{qec, idTableToExecutionTree(qec, left),
+                    idTableToExecutionTree(qec, right)}
+        .computeMultiColumnJoin(left.asStaticView<0>(), right.asStaticView<0>(),
+                                jcls, &result);
+    return result;
+  };
+
+  // UNDEF only in a join column of the right input.
+  {
+    auto left = makeIdTableFromVector({{1, 10}, {2, 20}});
+    auto right = makeIdTableFromVector({{U, 10, 100}, {2, 20, 200}});
+    auto expected = makeIdTableFromVector({{1, 10, 100}, {2, 20, 200}});
+    EXPECT_EQ(expected, join(left, right));
+  }
+  // UNDEF only in a join column of the left input.
+  {
+    auto left = makeIdTableFromVector({{U, 10}, {2, 20}});
+    auto right = makeIdTableFromVector({{1, 10, 100}, {2, 20, 200}});
+    auto expected = makeIdTableFromVector({{1, 10, 100}, {2, 20, 200}});
+    EXPECT_EQ(expected, join(left, right));
+  }
+  // UNDEF in a join column of both inputs.
+  {
+    auto left = makeIdTableFromVector({{U, 10}, {2, 20}});
+    auto right = makeIdTableFromVector({{1, 10, 100}, {2, U, 200}});
+    auto expected =
+        makeIdTableFromVector({{1, 10, 100}, {2, 10, 200}, {2, 20, 200}});
+    EXPECT_EQ(expected, join(left, right));
+  }
+}
+
 // _____________________________________________________________________________
 TEST(MultiColumnJoin, clone) {
   auto* qec = ad_utility::testing::getQec();
