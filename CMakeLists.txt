@@ -1009,18 +1009,20 @@ if (NOT EMSCRIPTEN)
     qlever_enable_lto(qlever-upgrade-index)
 endif()
 
-# The example reads its input from and writes its index to the host file system,
-# which a WebAssembly build cannot access.
+# Tools that are only needed natively: `LibQLeverExample` and
+# `VocabularyMergerMain` work on files on the host file system, which a
+# WebAssembly build cannot access, and `PrintIndexVersionMain` is only used by
+# the index version check in CI.
 if (NOT EMSCRIPTEN)
     add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
     qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
+
+    add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
+    qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
+
+    add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
+    qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
 endif()
-
-add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
-
-add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
-qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
 
 if (NOT EMSCRIPTEN)
     install(TARGETS
