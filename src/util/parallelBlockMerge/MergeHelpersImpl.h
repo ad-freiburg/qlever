@@ -93,12 +93,10 @@ using ElementAndWeight = std::pair<Element, size_t>;
 
 // Whether the `Input` has a member `blockWeight(runIdx, blockIdx)`, see
 // `blockWeight` below.
-template <typename Input, typename = void>
-struct HasBlockWeight : std::false_type {};
 template <typename Input>
-struct HasBlockWeight<
-    Input, std::void_t<decltype(std::declval<const Input&>().blockWeight(
-               size_t{0}, size_t{0}))>> : std::true_type {};
+CPP_requires(HasBlockWeight_,
+             requires(const Input& input, size_t runIdx,
+                      size_t blockIdx)(input.blockWeight(runIdx, blockIdx)));
 
 // The weight of a block for the computation of the chunk boundaries: the
 // chunks are cut such that they all have (approximately) the same total
@@ -109,7 +107,7 @@ struct HasBlockWeight<
 // to merge rather than having the same number of elements.
 CPP_template(typename Input)(requires InputConcept<Input>) size_t
     blockWeight(const Input& input, size_t runIdx, size_t blockIdx) {
-  if constexpr (HasBlockWeight<Input>::value) {
+  if constexpr (CPP_requires_ref(HasBlockWeight_, Input)) {
     return input.blockWeight(runIdx, blockIdx);
   } else {
     return input.numElementsInBlock(runIdx, blockIdx);

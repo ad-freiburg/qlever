@@ -181,7 +181,9 @@ class InMemoryBlockStorage {
                 // Let the producer of the sentinel complete, see
                 // `releaseChunkOnConsumption`. The ack channel has room for
                 // this one value, so this never suspends.
-                chunk.ack_->try_send(boost::system::error_code{});
+                bool ackWasSent =
+                    chunk.ack_->try_send(boost::system::error_code{});
+                AD_CORRECTNESS_CHECK(ackWasSent);
               }
               std::move(handler)(std::exception_ptr{}, GetResult::endOfChunk());
               return;
