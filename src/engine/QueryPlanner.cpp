@@ -3039,7 +3039,8 @@ QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
 // _____________________________________________________________________________
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
-    std::vector<SubtreePlan>& candidates, const Variables& variables) {
+    std::vector<SubtreePlan>& candidates, const Variables& variables,
+    bool isGraphVariableInScopeOnBothSidesOfMinus) {
   using enum SubtreePlan::Type;
   auto type = candidates[0].type;
   if (type != MINUS && type != OPTIONAL) {
@@ -3049,12 +3050,20 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
   // OPTIONAL has to be joined on `?g` if the previous patterns bind it. The
   // triples only get their `?g` column when they are planned (contains-word and
   // materialized views are not allowed inside a `GRAPH` clause).
-  // TODO<RobinTF> For a MINUS, `?g` should only count as shared if both sides
-  // mention it explicitly.
+  //
+  // For a MINUS on the other hand, `?g` only counts as a shared variable if it
+  // is in scope on both sides without the implicit graph columns of the index
+  // scans. Otherwise, the MINUS would remove all rows of every graph in which
+  // its pattern matches. If the MINUS is connected via other variables, it
+  // is still joined on `?g`, as the patterns are evaluated per graph.
   auto previousVariables = getVariablesOfPreviousPatterns();
-  if (type == OPTIONAL && planner_.activeGraphVariable_.has_value() &&
-      !candidateTriples_._triples.empty()) {
-    previousVariables.insert(planner_.activeGraphVariable_.value());
+  if (const auto& graphVariable = planner_.activeGraphVariable_;
+      graphVariable.has_value()) {
+    if (type == OPTIONAL && !candidateTriples_._triples.empty()) {
+      previousVariables.insert(graphVariable.value());
+    } else if (type == MINUS && !isGraphVariableInScopeOnBothSidesOfMinus) {
+      previousVariables.erase(graphVariable.value());
+    }
   }
   bool areVariablesUnconnected =
       ql::ranges::none_of(variables, [&previousVariables](const Variable& var) {
@@ -3088,7 +3097,8 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
-    std::vector<SubtreePlan>&& candidates) {
+    std::vector<SubtreePlan>&& candidates,
+    bool isGraphVariableInScopeOnBothSidesOfMinus) {
   // Empty group graph patterns should have been handled previously.
   AD_CORRECTNESS_CHECK(!candidates.empty());
 
@@ -3100,8 +3110,8 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // clean. This should be fixed.
   auto variables = candidates[0]._qet->getVariableColumns() | ql::views::keys;
 
-  bool specialCaseHandled =
-      handleUnconnectedMinusOrOptional(candidates, variables);
+  bool specialCaseHandled = handleUnconnectedMinusOrOptional(
+      candidates, variables, isGraphVariableInScopeOnBothSidesOfMinus);
 
   // All variables seen so far are considered bound and cannot appear as the
   // RHS of a BIND operation. This is also true for variables from OPTIONALs
@@ -3277,11 +3287,18 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   } else if constexpr (std::is_same_v<T, p::Bind>) {
     visitBind(arg);
   } else if constexpr (std::is_same_v<T, p::Minus>) {
+    const auto& graphVariable = planner_.activeGraphVariable_;
+    bool isGraphVariableInScopeOnBothSides =
+        graphVariable.has_value() &&
+        ad_utility::contains(arg.visibleVariables_, graphVariable.value()) &&
+        ad_utility::contains(arg.visibleVariablesOfPrecedingPatterns_,
+                             graphVariable.value());
     auto candidates = planner_.optimize(&arg._child);
     for (auto& c : candidates) {
       c.type = SubtreePlan::MINUS;
     }
-    visitGroupOptionalOrMinus(std::move(candidates));
+    visitGroupOptionalOrMinus(std::move(candidates),
+                              isGraphVariableInScopeOnBothSides);
   } else if constexpr (std::is_same_v<T, p::PathQuery>) {
     visitPathSearch(arg);
   } else if constexpr (std::is_same_v<T, p::Describe>) {
