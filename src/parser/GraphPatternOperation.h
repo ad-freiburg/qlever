@@ -135,10 +135,11 @@ struct Minus {
   GraphPattern _child;
   // The variables that are in scope (see section 18.2.1 of the SPARQL 1.1
   // standard) in the `_child` and in the patterns that precede the MINUS clause
-  // in the same group, respectively. They are filled by the parser. Inside a
-  // `GRAPH ?g {...}` clause, the query planner adds `?g` as an implicit column
-  // to all index scans, so these are needed to decide whether `?g` is actually
-  // shared between both sides.
+  // in the same group, respectively. They are filled by the parser.
+  //
+  // NOTE: Inside a `GRAPH ?g {...}` clause, the query planner adds `?g` as an
+  // implicit column to all index scans, so it needs these to decide whether
+  // `?g` is actually shared between both sides.
   std::vector<Variable> visibleVariables_;
   std::vector<Variable> visibleVariablesOfPrecedingPatterns_;
 };

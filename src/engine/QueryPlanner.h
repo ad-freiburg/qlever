@@ -757,8 +757,8 @@ class QueryPlanner {
     // is made via the type member of the `SubtreePlan`s. For a MINUS clause
     // inside a `GRAPH ?g {...}` clause,
     // `isGraphVariableInScopeOnBothSidesOfMinus` has to be true iff `?g` is in
-    // scope in the MINUS clause and in the patterns before it, it is ignored
-    // otherwise.
+    // scope in the MINUS clause and in the patterns before it. For all other
+    // clauses it is ignored.
     void visitGroupOptionalOrMinus(
         std::vector<SubtreePlan>&& candidates,
         bool isGraphVariableInScopeOnBothSidesOfMinus = false);

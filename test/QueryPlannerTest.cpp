@@ -3118,7 +3118,8 @@ TEST(QueryPlanner, UnconnectedComponentsInGraphClause) {
 }
 
 // Test that inside a `GRAPH ?g` clause the graph variable connects an OPTIONAL
-// to the preceding patterns that bind it, but not a MINUS.
+// to the preceding patterns that bind it, but a MINUS only if `?g` is in scope
+// on both sides.
 TEST(QueryPlanner, UnconnectedMinusAndOptionalInGraphClause) {
   auto scan = [](std::string s, std::string p, std::string o) {
     return h::IndexScanFromStrings(std::move(s), std::move(p), std::move(o), {},
