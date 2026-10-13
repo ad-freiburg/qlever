@@ -145,6 +145,9 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   if (config.parserBufferSize_.has_value()) {
     index.parserBufferSize() = config.parserBufferSize_.value();
   }
+  if (config.largeRelationSortMemory_.has_value()) {
+    index.largeRelationSortMemory() = config.largeRelationSortMemory_.value();
+  }
   if (config.indexRowsPerBlock_.has_value()) {
     index.rowsPerBlock() = config.indexRowsPerBlock_.value();
   }

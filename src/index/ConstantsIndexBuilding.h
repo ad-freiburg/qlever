@@ -126,4 +126,18 @@ constexpr inline size_t NumColumnsIndexBuilding = 4;
 // is stored in the metadata of the block.
 constexpr inline size_t MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA = 20;
 
+// The default memory for sorting the large relations of the permutation pairs
+// SPO/SOP and OSP/OPS for their second permutation (the "twin relation sorter"
+// of `CompressedRelationWriter::createPermutationPair`), configurable via
+// `--large-relation-sort-memory`. For these pairs, a "relation" (all triples
+// with the same subject or object) is rarely large, so a constant amount of
+// memory is fine, and the sorter for the next pair holds its share of the
+// memory limit at the same time. For PSO/POS, relations are large (think
+// `rdf:type`), but that pair comes last, when no other sorter is active, so
+// its twin relation sorter gets half of the memory limit of the index build
+// (the half that the sorter of a next pair would get), see
+// `IndexImpl::createPSOAndPOSImpl`.
+constexpr inline ad_utility::MemorySize DEFAULT_LARGE_RELATION_SORT_MEMORY =
+    ad_utility::MemorySize::gigabytes(4);
+
 #endif  // QLEVER_SRC_INDEX_CONSTANTSINDEXBUILDING_H

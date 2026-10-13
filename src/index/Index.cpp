@@ -170,6 +170,16 @@ const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
 }
 
 // ____________________________________________________________________________
+ad_utility::MemorySize& Index::largeRelationSortMemory() {
+  return pimpl_->largeRelationSortMemory();
+}
+
+// ____________________________________________________________________________
+const ad_utility::MemorySize& Index::largeRelationSortMemory() const {
+  return std::as_const(*pimpl_).largeRelationSortMemory();
+}
+
+// ____________________________________________________________________________
 ad_utility::MemorySize& Index::parserBufferSize() {
   return pimpl_->parserBufferSize();
 }

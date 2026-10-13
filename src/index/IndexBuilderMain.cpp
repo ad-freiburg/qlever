@@ -318,6 +318,14 @@ int main(int argc, char** argv) {
   add("stxxl-memory,m", po::value(&config.memoryLimit_),
       "The amount of memory in to use for sorting during the index build. "
       "Decrease if the index builder runs out of memory.");
+  add("large-relation-sort-memory", po::value(&config.largeRelationSortMemory_),
+      "The memory for sorting the large relations (all triples with the same "
+      "subject or object that do not fit into a single block) of the "
+      "permutation pairs SPO/SOP and OSP/OPS for their second permutation. A "
+      "relation that does not fit into this memory is sorted externally, "
+      "which is slower. Default: 4 GB. For PSO/POS, where the relations are "
+      "large (think `rdf:type`), half of `--stxxl-memory` is used instead, "
+      "which is available at that point of the index build.");
   add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");

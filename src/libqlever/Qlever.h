@@ -103,6 +103,12 @@ struct IndexBuilderConfig : CommonConfig {
   // The default chunk size is large enough for most input sets.
   std::optional<ad_utility::MemorySize> parserBufferSize_;
 
+  // The memory for sorting the large relations of the permutation pairs SPO/SOP
+  // and OSP/OPS for their second permutation, see
+  // `DEFAULT_LARGE_RELATION_SORT_MEMORY`. For PSO/POS, half of `memoryLimit_`
+  // is used instead.
+  std::optional<ad_utility::MemorySize> largeRelationSortMemory_;
+
   // The number of rows of one block of the permutations (and of the other
   // sorted lists of the index). It determines the granularity at which they
   // are read: an index scan always reads whole blocks, so smaller blocks make
