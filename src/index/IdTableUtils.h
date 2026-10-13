@@ -6,46 +6,50 @@
 #define QLEVER_SRC_INDEX_IDTABLEUTILS_H
 
 #include <algorithm>
+#include <cstdint>
+#include <limits>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
-#include "global/Constants.h"
 #include "global/RuntimeParameters.h"
+#include "util/Executor.h"
 #include "util/Log.h"
+#include "util/blockSort/BlockIndirectSort.h"
 
 class IdTableUtils {
-  // The number of threads for the parallel sort, settable via the runtime
-  // parameter `parallel-sort-num-threads` (values below `1` are treated
-  // as `1`).
-  static size_t numSortThreads() {
-    size_t numThreads =
-        getRuntimeParameter<&RuntimeParameters::parallelSortNumThreads_>();
-    return std::max<size_t>(numThreads, 1);
+  // The runtime parameter `sort-num-tasks-in-flight`, at least `1`.
+  static uint32_t numSortTasksInFlight() {
+    size_t numTasks =
+        getRuntimeParameter<&RuntimeParameters::sortNumTasksInFlight_>();
+    return static_cast<uint32_t>(
+        std::clamp<size_t>(numTasks, 1, std::numeric_limits<uint32_t>::max()));
   }
 
  public:
+  // The `sort` functions below sort in place (not stable) via
+  // `blockIndirectSort` on the `executor`. They block the calling thread, which
+  // therefore must not belong to the `executor`. The `executor` must not be a
+  // strand.
+  //
+  // TODO<RobinTF> Pass the query's cancellation handle once
+  // `blockIndirectSort` supports it.
+
+  // Sort the rows of `tab` by the column `keyColumn`.
   template <size_t WIDTH>
-  static void sort(IdTable* tab, const size_t keyColumn) {
-    AD_LOG_DEBUG << "Sorting " << tab->size() << " elements ..." << std::endl;
-    IdTableStatic<WIDTH> stab = std::move(*tab).toStatic<WIDTH>();
-    if constexpr (USE_PARALLEL_SORT) {
-      ad_utility::parallel_sort(
-          stab.begin(), stab.end(),
-          [keyColumn](const auto& a, const auto& b) {
-            return a[keyColumn] < b[keyColumn];
-          },
-          ad_utility::parallel_tag(numSortThreads()));
-    } else {
-      std::sort(stab.begin(), stab.end(),
-                [keyColumn](const auto& a, const auto& b) {
-                  return a[keyColumn] < b[keyColumn];
-                });
-    }
-    *tab = std::move(stab).toDynamic();
-    AD_LOG_TRACE << "Sort done.\n";
+  static void sort(IdTable* tab, const size_t keyColumn,
+                   const qlever::Executor& executor) {
+    sort<WIDTH>(
+        tab,
+        [keyColumn](const auto& a, const auto& b) {
+          return a[keyColumn] < b[keyColumn];
+        },
+        executor);
   }
+
+  // Sort the rows of `tab` by the comparator `comp`.
+  //
   // The effect of the third template argument is that if C does not have
   // operator() with the specified arguments that returns bool, then this
   // template does not match (so that there is no confusion with the templated
@@ -55,20 +59,18 @@ class IdTableUtils {
       typename = std::enable_if_t<std::is_same_v<
           bool, std::invoke_result_t<C, typename IdTableStatic<WIDTH>::row_type,
                                      typename IdTableStatic<WIDTH>::row_type>>>>
-  static void sort(IdTable* tab, C comp) {
+  static void sort(IdTable* tab, C comp, const qlever::Executor& executor) {
     AD_LOG_DEBUG << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = std::move(*tab).toStatic<WIDTH>();
-    if constexpr (USE_PARALLEL_SORT) {
-      ad_utility::parallel_sort(stab.begin(), stab.end(), comp,
-                                ad_utility::parallel_tag(numSortThreads()));
-    } else {
-      std::sort(stab.begin(), stab.end(), comp);
-    }
+    ad_utility::blockSort::blockIndirectSort(stab, std::move(comp),
+                                             numSortTasksInFlight(), executor);
     *tab = std::move(stab).toDynamic();
     AD_LOG_DEBUG << "Sort done.\n";
   }
 
-  static void sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols);
+  // Sort the rows of `idTable` lexicographically by the columns `sortCols`.
+  static void sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols,
+                   const qlever::Executor& executor);
 
   // Return the number of distinct rows in the `input`. The input must have all
   // duplicates adjacent to each other (e.g. by being sorted), otherwise the

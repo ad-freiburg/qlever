@@ -312,9 +312,10 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
   // is templated not only on the integer `I` (which the `callFixedSize`
   // function deals with) but also on the `comparison`.
-  ad_utility::callFixedSizeVi(width, [&idTable, &comparison](auto I) {
-    IdTableUtils::sort<I>(&idTable, comparison);
-  });
+  ad_utility::callFixedSizeVi(
+      width,
+      [&idTable, &comparison, &executor = getExecutionContext()->executor()](
+          auto I) { IdTableUtils::sort<I>(&idTable, comparison, executor); });
   // We can't check during sort, so reset status here
   cancellationHandle_->resetWatchDogState();
   checkCancellation();

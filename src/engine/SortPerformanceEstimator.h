@@ -9,6 +9,7 @@
 
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/Executor.h"
 #include "util/Timer.h"
 
 /// Estimates the time it takes to sort an IdTable with a given number of rows
@@ -23,10 +24,12 @@ class SortPerformanceEstimator {
   // explicit factory function.
 
   // Create a random IdTable with the specified number of rows and columns. Sort
-  // this table and return the time that this sorting took.
+  // this table on the `executor` (see `IdTableUtils::sort`) and return the time
+  // that this sorting took.
   static Timer::Duration measureSortingTime(
       size_t numRows, size_t numColumns,
-      const ad_utility::AllocatorWithLimit<Id>& allocator);
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      const qlever::Executor& executor);
 
   // Compute and return an Estimate for how long sorting an IdTable with the
   // specified number of rows and columns takes.
@@ -40,14 +43,17 @@ class SortPerformanceEstimator {
   // Expensive constructor, directly calls computeEstimatesExpensively
   explicit SortPerformanceEstimator(
       const ad_utility::AllocatorWithLimit<Id>& allocator,
-      size_t maxNumberOfElementsToSort);
+      size_t maxNumberOfElementsToSort, const qlever::Executor& executor);
 
   /// Set up the sort estimates. This will take some time. Only samples, that
   /// can be allocated by the allocator and that have less than
-  /// `maxNumberOfElementsToSort` elements will actually be measured.
+  /// `maxNumberOfElementsToSort` elements will actually be measured. The
+  /// samples are sorted on the `executor`, which should be the executor on
+  /// which the sorts of the queries run (or one with the same threads), so that
+  /// the estimates reflect their parallelism.
   void computeEstimatesExpensively(
       const ad_utility::AllocatorWithLimit<Id>& allocator,
-      size_t maxNumberOfElementsToSort);
+      size_t maxNumberOfElementsToSort, const qlever::Executor& executor);
 
   // Return true iff `computeEstimatesExpensively` has been called. If it
   // returns false, `estimatedSortTime` always returns zero, and sorts thus

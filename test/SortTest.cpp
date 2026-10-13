@@ -82,13 +82,13 @@ void testSort(IdTable input, const IdTable& expected,
 }  // namespace
 
 // _____________________________________________________________________________
-// The runtime parameter `parallel-sort-num-threads` bounds the number of
-// threads of the parallel sort; the result must be the same for any value
-// (`0` is treated as `1`).
-TEST(Sort, parallelSortNumThreads) {
+// The runtime parameter `sort-num-tasks-in-flight` is a hint for the number of
+// tasks of the parallel sort; the result must be the same for any value (`0`
+// is treated as `1`).
+TEST(Sort, sortNumTasksInFlight) {
   for (size_t numThreads : {0, 1, 2, 3}) {
     auto cleanup =
-        setRuntimeParameterForTest<&RuntimeParameters::parallelSortNumThreads_>(
+        setRuntimeParameterForTest<&RuntimeParameters::sortNumTasksInFlight_>(
             numThreads);
     VectorTable input, expected;
     for (int i = 1000; i > 0; --i) {
@@ -257,7 +257,8 @@ TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   const_cast<SortPerformanceEstimator&>(
       sort.getExecutionContext()->getSortPerformanceEstimator())
       .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
+          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000,
+          sort.getExecutionContext()->executor());
 
   sort.recursivelySetTimeConstraint(0ms);
 
