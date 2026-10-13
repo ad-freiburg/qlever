@@ -307,11 +307,9 @@ TEST(MergeHelpers, totalNumElements) {
   }
 }
 
-// _____________________________________________________________________________
-// An input that provides `blockWeight` cuts the chunks by that weight instead
-// of by the number of elements: here every block of the first run weighs as
-// much as all the blocks of the second run together.
 namespace {
+// A `SizeInput` with a `blockWeight` member: every block of the first run
+// weighs as much as all the blocks of the second run together.
 struct WeightedInput {
   using value_type = size_t;
   using Element = size_t;
@@ -350,6 +348,8 @@ struct WeightedInput {
 static_assert(InputConcept<WeightedInput>);
 }  // namespace
 
+// Test that an input with a `blockWeight` member cuts the chunks by that weight
+// instead of by the number of elements.
 TEST(MergeHelpers, blockWeight) {
   // Run 0: `0..9` in blocks of 5, run 1: `10..29` in blocks of 5.
   std::vector<SizeVec> runs{SizeVec{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
