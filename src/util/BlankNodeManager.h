@@ -19,6 +19,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <vector>
 
+#include "backports/keywords.h"
 #include "global/Id.h"
 #include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
@@ -128,7 +129,9 @@ class BlankNodeManager {
         : manager_(manager), uuid_(std::move(uuid)) {
       AD_CORRECTNESS_CHECK(manager_ != nullptr);
     }
-    ~Blocks() noexcept(false) {
+    // Destructors in a shared_ptr cannot be marked as noexcept(false) in QNX's
+    // libc++
+    ~Blocks() noexcept(qlever::usesReducedFeatureSet) {
       throwIfSafe_(
           [this]() { manager_->freeBlockSet(*this); },
           std::string_view{"In `freeBlockSet` called from the destructor of a "

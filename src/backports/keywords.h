@@ -8,6 +8,14 @@
 #ifndef QLEVER_SRC_BACKPORTS_KEYWORDS_H
 #define QLEVER_SRC_BACKPORTS_KEYWORDS_H
 
+namespace qlever {
+#ifdef REDUCED_FEATURE_SET_FOR_CPP_17
+static constexpr bool usesReducedFeatureSet = true;
+#else
+static constexpr bool usesReducedFeatureSet = false;
+#endif
+}  // namespace qlever
+
 // Add C++17 replacements for C++20 keywords like `consteval` and
 // `explicit(condition)`
 // 1. `QL_CONSTEVAL` is `consteval` in C++20 mode, and `constexpr` in C++17
