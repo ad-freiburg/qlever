@@ -123,7 +123,7 @@ class InMemoryBlockStorage {
           auto* channelPtr = chunk.blocks_.get();
           channelPtr->async_send(
               boost::system::error_code{}, std::move(block),
-              [chunk = std::move(chunk), handler = std::move(handler),
+              [this, chunk = std::move(chunk), handler = std::move(handler),
                waitForAck](boost::system::error_code errorCode) mutable {
                 // NOTE: This runs on `strand_`, because the channel was created
                 // with `strand_` as its executor and this handler has no
@@ -132,6 +132,14 @@ class InMemoryBlockStorage {
                 // `cancelAll`.
                 if (errorCode || !waitForAck) {
                   std::move(handler)(std::exception_ptr{}, !errorCode);
+                  return;
+                }
+                // Report the cancellation if `cancelAll` ran after the sentinel
+                // was accepted (this handler is posted, so that is possible).
+                // A wait for the acknowledgement that is registered now would
+                // never be woken up, because the sweep of `cancelAll` is over.
+                if (wasCancelled_) {
+                  std::move(handler)(std::exception_ptr{}, false);
                   return;
                 }
                 auto* ackPtr = chunk.ack_.get();
@@ -238,6 +246,9 @@ class InMemoryBlockStorage {
     AD_CORRECTNESS_CHECK(!wasCancelled_);
     auto& chunk = chunks_[chunkIndex];
     if (chunk.blocks_ == nullptr) {
+      // NOTE: The channels live on the strand as well, so that the operations
+      // on them are dispatched through the strand no matter which executor the
+      // initiating caller reports.
       chunk.blocks_ =
           std::make_shared<BlockChannel>(strand_, maxBufferedBlocksPerChunk_);
       chunk.ack_ = std::make_shared<AckChannel>(strand_, 1);
