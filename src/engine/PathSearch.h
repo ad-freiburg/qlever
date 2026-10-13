@@ -281,7 +281,7 @@ class PathSearch : public Operation {
    * @return A vector of paths.
    */
   pathSearch::PathsLimited findPaths(
-      const Id& source, const std::unordered_set<uint64_t>& targets,
+      const Id& source, const std::unordered_set<Id::T>& targets,
       const pathSearch::BinSearchWrapper& binSearch,
       std::optional<uint64_t> numPathsPerTarget,
       std::optional<uint64_t> maxDepth) const;

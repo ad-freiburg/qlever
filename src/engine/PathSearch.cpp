@@ -330,19 +330,19 @@ std::pair<ConstIdColumnRef, ConstIdColumnRef> PathSearch::handleSearchSides()
 
 // _____________________________________________________________________________
 PathsLimited PathSearch::findPaths(const Id& source,
-                                   const std::unordered_set<uint64_t>& targets,
+                                   const std::unordered_set<Id::T>& targets,
                                    const BinSearchWrapper& binSearch,
                                    std::optional<uint64_t> numPathsPerTarget,
                                    std::optional<uint64_t> maxDepth) const {
   std::vector<Edge> edgeStack;
   Path currentPath{EdgesLimited(allocator())};
   std::unordered_map<
-      uint64_t, uint64_t, std::hash<uint64_t>, std::equal_to<uint64_t>,
-      ad_utility::AllocatorWithLimit<std::pair<const uint64_t, uint64_t>>>
+      Id::T, uint64_t, std::hash<Id::T>, std::equal_to<Id::T>,
+      ad_utility::AllocatorWithLimit<std::pair<const Id::T, uint64_t>>>
       numPathsPerNode{allocator()};
   PathsLimited result{allocator()};
-  std::unordered_set<uint64_t, std::hash<uint64_t>, std::equal_to<uint64_t>,
-                     ad_utility::AllocatorWithLimit<uint64_t>>
+  std::unordered_set<Id::T, std::hash<Id::T>, std::equal_to<Id::T>,
+                     ad_utility::AllocatorWithLimit<Id::T>>
       visited{allocator()};
 
   visited.insert(source.getBits());
@@ -409,7 +409,7 @@ PathsLimited PathSearch::allPaths(ConstIdColumnRef sources,
   Path path{EdgesLimited(allocator())};
 
   if (cartesian || sources.size() != targets.size()) {
-    std::unordered_set<uint64_t> targetSet;
+    std::unordered_set<Id::T> targetSet;
     for (auto target : targets) {
       targetSet.insert(target.getBits());
     }
