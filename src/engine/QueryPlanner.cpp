@@ -3025,39 +3025,71 @@ qlever::index::GraphFilter<TripleComponent> QueryPlanner::getActiveGraphs()
 }
 
 // _____________________________________________________________________________
+ad_utility::HashSet<Variable>
+QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
+  ad_utility::HashSet<Variable> variables;
+  // The triples have not been turned into plans yet.
+  candidateTriples_.collectAllContainedVariables(variables);
+  for (const auto& row : candidatePlans_) {
+    AD_CORRECTNESS_CHECK(!row.empty());
+    // All plans of a row bind the same variables, up to internal ones, see the
+    // TODO in `visitGroupOptionalOrMinus`.
+    for (const auto& variable :
+         row.front()._qet->getVariableColumns() | ql::views::keys) {
+      variables.insert(variable);
+    }
+  }
+  return variables;
+}
+
+// _____________________________________________________________________________
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     std::vector<SubtreePlan>& candidates, const Variables& variables) {
   using enum SubtreePlan::Type;
-  bool areVariablesUnconnected = ql::ranges::all_of(
-      variables,
-      [this](const Variable& var) { return !boundVariables_.contains(var); });
+  auto type = candidates[0].type;
+  if (type != MINUS && type != OPTIONAL) {
+    return false;
+  }
+  // Inside `GRAPH ?g {...}` the patterns are evaluated per graph, so an
+  // OPTIONAL has to be joined on `?g` if the previous patterns bind it. The
+  // triples only get their `?g` column when they are planned (contains-word and
+  // materialized views are not allowed inside a `GRAPH` clause).
+  // TODO<RobinTF> For a MINUS, `?g` should only count as shared if both sides
+  // mention it explicitly.
+  auto previousVariables = getVariablesOfPreviousPatterns();
+  if (type == OPTIONAL && planner_.activeGraphVariable_.has_value() &&
+      !candidateTriples_._triples.empty()) {
+    previousVariables.insert(planner_.activeGraphVariable_.value());
+  }
+  bool areVariablesUnconnected =
+      ql::ranges::none_of(variables, [&previousVariables](const Variable& var) {
+        return previousVariables.contains(var);
+      });
   if (!areVariablesUnconnected) {
     return false;
   }
   // A MINUS clause that doesn't share any variable with the preceding
   // patterns behaves as if it isn't there.
-  auto type = candidates[0].type;
   if (type == MINUS) {
+    planner_.warnings_.emplace_back(
+        "A MINUS clause that shares no variables with the patterns before it "
+        "has no effect and is ignored. Use FILTER NOT EXISTS if you want to "
+        "remove all results whenever the pattern of the MINUS clause matches.");
     return true;
   }
   // An OPTIONAL clause that doesn't share any variable with the preceding
   // patterns behaves as if it is joined with the neutral element.
-  if (type == OPTIONAL) {
-    auto& newPlans = candidatePlans_.emplace_back();
-    ql::ranges::for_each(
-        candidates, [this, &newPlans](const SubtreePlan& plan) {
-          auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
-          // Note: It is important that we do NOT copy the filter and
-          // textLimit IDs, as they originate from the inner scope of the
-          // OPTIONAL clause and have been already completely dealt with.
-          // This was the cause of
-          // https://github.com/ad-freiburg/qlever/issues/2194.
-          newPlans.push_back(std::move(joinedPlan));
-        });
-    return true;
-  }
-  return false;
+  //
+  // NOTE: The filter and text limit IDs of the plans are deliberately not
+  // copied. They originate from the inner scope of the OPTIONAL clause and have
+  // already been dealt with completely, copying them was the cause of
+  // https://github.com/ad-freiburg/qlever/issues/2194.
+  auto& newPlans = candidatePlans_.emplace_back();
+  ql::ranges::for_each(candidates, [this, &newPlans](const SubtreePlan& plan) {
+    newPlans.push_back(makeSubtreePlan<NeutralOptional>(qec_, plan._qet));
+  });
+  return true;
 }
 
 // _____________________________________________________________________________
@@ -3068,6 +3100,10 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
 
   // Optionals that occur before any of their variables have been bound,
   // actually behave like ordinary (Group)GraphPatterns.
+  // TODO<RobinTF> The candidates can differ in their internal variables (e.g.
+  // the bounding box columns of a `SpatialJoin`), so taking the variables of
+  // the first candidate (here and in `getVariablesOfPreviousPatterns`) is not
+  // clean. This should be fixed.
   auto variables = candidates[0]._qet->getVariableColumns() | ql::views::keys;
 
   bool specialCaseHandled =

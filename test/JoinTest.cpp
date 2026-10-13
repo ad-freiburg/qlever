@@ -599,6 +599,71 @@ TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
   testJoinOperation(joinSwitched, expectedColumns, true, true);
 }
 
+// Test joins with an `IndexScan` without variables, which must not use the
+// prefiltered join (regression test for
+// https://github.com/ad-freiburg/qlever/issues/3574).
+TEST_P(JoinTestParametrized, joinWithScanWithoutVariables) {
+  auto keepJoinCol = GetParam();
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <b> <c> <g1> . <a> <b> <c> <g2> . <x> <y> <g1> . <x> <y> <g2> ."
+      " <x> <y> <g3> ."};
+  config.indexType = qlever::Filetype::NQuad;
+  auto qec = ad_utility::testing::getQec(config);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
+
+  // `GRAPH ?g { <a> <b> <c> }`
+  auto makeFixedScan = [qec]() {
+    return ad_utility::makeExecutionTree<IndexScan>(
+        qec, PSO,
+        SparqlTripleSimple{iri("<a>"),
+                           iri("<b>"),
+                           iri("<c>"),
+                           {std::pair{ADDITIONAL_COLUMN_GRAPH_ID, Var{"?g"}}}});
+  };
+  // `<x> <y> ?g`
+  auto scanWithVariable = ad_utility::makeExecutionTree<IndexScan>(
+      qec, PSO, SparqlTripleSimple{iri("<x>"), iri("<y>"), Var{"?g"}});
+  auto values =
+      makeValuesForSingleVariable(qec, "?g", {iri("<g2>"), iri("<g3>")});
+
+  auto expectResult = [&](std::shared_ptr<QueryExecutionTree> left,
+                          std::shared_ptr<QueryExecutionTree> right,
+                          const std::vector<std::string>& expectedGraphs,
+                          ad_utility::source_location location =
+                              AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(location);
+    IdTable expected{1, qec->getAllocator()};
+    for (const auto& graph : expectedGraphs) {
+      expected.push_back({getId(graph)});
+    }
+    VariableToColumnMap expectedVariables{
+        {Var{"?g"}, makeAlwaysDefinedColumn(0)}};
+    if (!keepJoinCol) {
+      removeJoinColFromVarColMap(Var{"?g"}, expectedVariables);
+    }
+    auto expectedColumns = makeExpectedColumns(expectedVariables, expected);
+    for (bool swap : {false, true}) {
+      auto join = swap ? Join{qec, right, left, 0, 0, keepJoinCol, false}
+                       : Join{qec, left, right, 0, 0, keepJoinCol, false};
+      for (bool requestLaziness : {false, true}) {
+        qec->getQueryTreeCache().clearAll();
+        testJoinOperation(join, expectedColumns, requestLaziness);
+      }
+    }
+  };
+
+  // Two scans without variables.
+  expectResult(makeFixedScan(), makeFixedScan(), {"<g1>", "<g2>"});
+
+  // A scan without variables and a scan with a variable.
+  expectResult(makeFixedScan(), scanWithVariable, {"<g1>", "<g2>"});
+
+  // A scan without variables and an operation that is not a scan.
+  expectResult(makeFixedScan(), values, {"<g2>"});
+}
+
 // This is a regression test for a related issue found during the analysis of
 // https://github.com/ad-freiburg/qlever/issues/1893 where the join of two index
 // scans would fail if one element could potentially be found in multiple blocks

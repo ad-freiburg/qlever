@@ -708,6 +708,13 @@ TEST(QueryPlanner, testSimpleOptional) {
       h::OrderBy({{Variable{"?b"}, ::OrderBy::AscOrDesc::Asc}},
                  h::OptionalJoin(scan("?a", "<rel1>", "?b"),
                                  scan("?a", "<rel2>", "?c"))));
+  // The second OPTIONAL is connected to the result of the first one.
+  h::expect(
+      "SELECT * { ?a <rel1> ?b OPTIONAL { ?a <rel2> ?c } "
+      "OPTIONAL { ?a <rel3> ?d } }",
+      h::OptionalJoin(h::OptionalJoin(scan("?a", "<rel1>", "?b"),
+                                      scan("?a", "<rel2>", "?c")),
+                      scan("?a", "<rel3>", "?d")));
 }
 
 TEST(QueryPlanner, SimpleTripleOneVariable) {
@@ -2568,8 +2575,27 @@ TEST(QueryPlanner, CountAvailablePredicates) {
 // by the query planner.
 TEST(QueryPlanner, UnboundMinusIgnored) {
   h::expect("SELECT * WHERE {MINUS{?x <is-a> ?y}}", h::NeutralElement());
-  h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?x <is-a> ?y}}",
-            h::IndexScanFromStrings("?a", "<is-a>", "?b"));
+  h::expect("SELECT * { ?a <is-a> ?b MINUS { ?x <is-a> ?y } }",
+            h::QetWithWarnings({"MINUS clause that shares no variables"},
+                               h::IndexScanFromStrings("?a", "<is-a>", "?b")));
+  // Regression tests for https://github.com/ad-freiburg/qlever/issues/3556:
+  // The variables of a MINUS are not part of its result, so they must not
+  // connect a later MINUS.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?x <is-a> ?y } MINUS { ?z <is-a> ?y } }",
+      h::IndexScanFromStrings("?a", "<is-a>", "?b"));
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?y } MINUS { ?z <is-a> ?y } }",
+      h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+               h::IndexScanFromStrings("?a", "<is-a>", "?y")));
+  // The same holds for a later OPTIONAL.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?c } "
+      "OPTIONAL { ?c <is-a> ?d } }",
+      h::CartesianProductJoin(
+          h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                   h::IndexScanFromStrings("?a", "<is-a>", "?c")),
+          h::NeutralOptional(h::IndexScanFromStrings("?c", "<is-a>", "?d"))));
 }
 
 // ___________________________________________________________________________
@@ -2577,6 +2603,20 @@ TEST(QueryPlanner, SimpleMinus) {
   h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?a <is-a> ?b}}",
             h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
                      h::IndexScanFromStrings("?a", "<is-a>", "?b")));
+  // The second MINUS is connected to the result of the first one.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?c } MINUS { ?a <is-a> ?d } }",
+      h::Minus(h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                        h::IndexScanFromStrings("?a", "<is-a>", "?c")),
+               h::IndexScanFromStrings("?a", "<is-a>", "?d")));
+  // A MINUS is connected to the variables of a preceding OPTIONAL.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b OPTIONAL { ?a <is-a> ?c } "
+      "MINUS { ?c <is-a> ?d } }",
+      h::Minus(h::Sort(h::OptionalJoin(
+                   h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                   h::IndexScanFromStrings("?a", "<is-a>", "?c"))),
+               h::IndexScanFromStrings("?c", "<is-a>", "?d")));
 }
 
 // ___________________________________________________________________________
@@ -3075,6 +3115,38 @@ TEST(QueryPlanner, UnconnectedComponentsInGraphClause) {
       "SELECT * WHERE { ?s1 ?p1 ?o1 . ?s2 ?p2 ?o2 }",
       h::CartesianProductJoin(h::IndexScanFromStrings("?s1", "?p1", "?o1"),
                               h::IndexScanFromStrings("?s2", "?p2", "?o2")));
+}
+
+// Test that inside a `GRAPH ?g` clause the graph variable connects an OPTIONAL
+// to the preceding patterns that bind it, but not a MINUS.
+TEST(QueryPlanner, UnconnectedMinusAndOptionalInGraphClause) {
+  auto scan = [](std::string s, std::string p, std::string o) {
+    return h::IndexScanFromStrings(std::move(s), std::move(p), std::move(o), {},
+                                   NamedTag{}, {Variable{"?g"}}, {3});
+  };
+  // A MINUS that shares no variable with the preceding triple is ignored.
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?x <q> ?y } } }",
+            scan("?a", "<p>", "?b"));
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?a <q> ?y } } }",
+            h::Minus(h::Sort(scan("?a", "<p>", "?b")),
+                     h::Sort(scan("?a", "<q>", "?y"))));
+  // The graph variable connects an OPTIONAL, no matter whether the preceding
+  // pattern is a triple or a nested group.
+  auto optionalJoin = h::OptionalJoin(h::Sort(scan("?a", "<p>", "?b")),
+                                      h::Sort(scan("?x", "<q>", "?y")));
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b OPTIONAL { ?x <q> ?y } } }",
+            optionalJoin);
+  h::expect("SELECT * { GRAPH ?g { { ?a <p> ?b } OPTIONAL { ?x <q> ?y } } }",
+            optionalJoin);
+  // Also when the graph variable is used explicitly.
+  h::expect("SELECT * { GRAPH ?g { ?g <p> ?b OPTIONAL { ?g <q> ?y } } }",
+            h::OptionalJoin(::testing::A<const QueryExecutionTree&>(),
+                            ::testing::A<const QueryExecutionTree&>()));
+  // But only if the preceding pattern binds the graph variable.
+  h::expect(
+      "SELECT * { GRAPH ?g { VALUES ?v { 1 } OPTIONAL { ?x <q> ?y } } }",
+      h::CartesianProductJoin(h::ValuesClause("VALUES (?v) { (1) }"),
+                              h::NeutralOptional(scan("?x", "<q>", "?y"))));
 }
 
 // _____________________________________________________________________________
