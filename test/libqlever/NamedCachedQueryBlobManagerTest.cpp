@@ -1211,9 +1211,10 @@ TEST(NamedCachedQueryBlobManager, blobWithSegmentedSpatialIndex) {
 }
 
 // _____________________________________________________________________________
-// A geo index with a simplification has a single segment, but requires the new
-// blob format, because the old one cannot store the simplification (which is
-// needed by `SpatialJoinCachedIndex::forUpdatedTable`).
+// A geo index with a simplification and a single segment is deliberately still
+// written in the old blob format, which drops the simplification (see the NOTE
+// in `NamedCachedQueryBlobManager::serialize`). With more than one segment,
+// the new format is used, which keeps the simplification.
 TEST(NamedCachedQueryBlobManager, blobWithSimplifiedSpatialIndex) {
   auto sourceConfig = buildTestIndex(std::string{freiburgSegmentsS1S2});
   Qlever source{EngineConfig{sourceConfig}};
@@ -1223,15 +1224,46 @@ TEST(NamedCachedQueryBlobManager, blobWithSimplifiedSpatialIndex) {
       "SELECT * { ?s2 <asWKT> ?geo2 }");
   ASSERT_THAT(geoIndexOf(source), hasStats(1, 2, 2, 2));
   ASSERT_THAT(geoIndexOf(source).simplificationErrorInMeters(), Optional(2.5));
-
-  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
-  expectBlobFormatVersion(blob, Manager::formatVersionWithSecondaryVocab);
-  auto loaded = loadBlob(blob);
-  EXPECT_THAT(geoIndexOf(*loaded), hasStats(1, 2, 2, 2));
-  EXPECT_THAT(geoIndexOf(*loaded).simplificationErrorInMeters(), Optional(2.5));
+  const std::string expected = "?s2\n<s1>\n<s2>\n";
   std::string spatialQuery = spatialJoinQuery("POINT(7.841295 47.997731)");
-  EXPECT_EQ(loaded->query(spatialQuery, ad_utility::MediaType::tsv),
-            "?s2\n<s1>\n<s2>\n");
+
+  // A single segment: the old format, the simplification is dropped.
+  {
+    auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+    expectBlobFormatVersion(blob, Manager::formatVersionWithoutSecondaryVocab);
+    auto loaded = loadBlob(blob);
+    EXPECT_THAT(geoIndexOf(*loaded), hasStats(1, 2, 2, 2));
+    EXPECT_EQ(geoIndexOf(*loaded).simplificationErrorInMeters(), std::nullopt);
+    EXPECT_EQ(loaded->query(spatialQuery, ad_utility::MediaType::tsv),
+              expected);
+  }
+
+  // Replace the shape of the first row by a new shape in a second segment,
+  // which requires the new format, which keeps the simplification.
+  auto value = source.namedResultCache().get("geoPin");
+  auto view = ExplicitIdTableOperation::viewOf(value->result_);
+  auto col = value->varToColMap_.at(Variable{"?geo2"}).columnIndex_;
+  auto updated = SpatialJoinCachedIndex::forUpdatedTable(
+      value->cachedGeoIndex_.value(),
+      std::vector{SpatialJoinCachedIndex::NO_ROW, size_t{1}}, view, col,
+      source.indexAndViewsSnapshot()->index_);
+  ASSERT_THAT(updated, hasStats(2, 3, 2, 2));
+  ASSERT_THAT(updated.simplificationErrorInMeters(), Optional(2.5));
+  source.namedResultCache().store(
+      "geoPin", NamedResultCache::Value{value->result_, value->varToColMap_,
+                                        value->resultSortedOn_,
+                                        value->localVocab_.clone(),
+                                        value->cacheKey_, std::move(updated)});
+  {
+    auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+    expectBlobFormatVersion(blob, Manager::formatVersionWithSecondaryVocab);
+    auto loaded = loadBlob(blob);
+    EXPECT_THAT(geoIndexOf(*loaded), hasStats(2, 3, 2, 2));
+    EXPECT_THAT(geoIndexOf(*loaded).simplificationErrorInMeters(),
+                Optional(2.5));
+    EXPECT_EQ(loaded->query(spatialQuery, ad_utility::MediaType::tsv),
+              expected);
+  }
 }
 
 // _____________________________________________________________________________

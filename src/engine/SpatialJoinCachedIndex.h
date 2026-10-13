@@ -242,8 +242,9 @@ class SpatialJoinCachedIndex {
   // written if the index has exactly one segment (checked via
   // `AD_CONTRACT_CHECK`). The `simplificationErrorInMeters_` cannot be
   // represented in that format and is silently dropped (it is only needed by
-  // `forUpdatedTable`). The blob writer therefore never uses that format for an
-  // index with a simplification (see `NamedCachedQueryBlobManager::serialize`).
+  // `forUpdatedTable`). The blob writer deliberately still uses that format for
+  // an index with a single segment and a simplification (see
+  // `NamedCachedQueryBlobManager::serialize`).
   CPP_template(typename Serializer)(
       requires ad_utility::serialization::WriteSerializer<
           Serializer>) void writeToSerializer(Serializer& serializer,
