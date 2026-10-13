@@ -1125,7 +1125,8 @@ TEST(AlignedSerializer, Concepts) {
   static_assert(!WriteSerializer<AlignedByteBufferReadSerializer>);
 }
 
-// _____________________________________________________________________________
+// Test the concepts `SpanReadSerializer` and `ZeroCopyReadSerializer` and the
+// deduction guide of `ByteBufferReadSerializerT`.
 TEST(Serializer, SpanReadSerializerConcepts) {
   using ad_utility::serialization::SpanReadSerializer;
   using ad_utility::serialization::ZeroCopyReadSerializer;
@@ -1182,7 +1183,9 @@ TEST(Serializer, SpanReadSerializerConcepts) {
                 SpanReader>);
 }
 
-// _____________________________________________________________________________
+// Test that `zeroCopyDeserializeToStringView` returns views into the buffer of
+// the reader, for the unaligned and the aligned serializers, and throws on a
+// truncated buffer.
 TEST(Serializer, ZeroCopyDeserializeToStringView) {
   using ad_utility::serialization::zeroCopyDeserializeToStringView;
   using namespace ad_utility::use_type_identity;

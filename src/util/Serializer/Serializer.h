@@ -308,7 +308,8 @@ constexpr bool usesAlignedSerialization =
 // `zeroCopyDeserializeToStringView` in `SerializeString.h`. For the zero-copy
 // reads of trivially serializable values, which have to be aligned, see
 // `ZeroCopyReadSerializer` below.
-// Note: The concept currently only checks for the existence of the functions,
+//
+// NOTE: The concept currently only checks for the existence of the functions,
 // but leaves the return types unchecked, because the syntax in C++17 mode for
 // those checks is very very verbose.
 template <typename S>
@@ -318,6 +319,7 @@ CPP_requires(zeroCopyReadSerializerRequires,
                                        s.getCurrentPosition(), s.skip(numBytes),
                                        concepts::requires_<ReadSerializer<S>>));
 
+// The concept for the requirements above.
 template <typename S>
 CPP_concept SpanReadSerializer =
     ReadSerializer<S> && CPP_requires_ref(zeroCopyReadSerializerRequires, S);

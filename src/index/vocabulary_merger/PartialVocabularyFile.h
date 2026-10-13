@@ -234,16 +234,21 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     return runs_.at(run).blocks_.at(block).numWords_;
   }
 
-  // The size of a block in the file. This is also the weight of the block for
-  // the chunk boundaries of the merge (see `blockWeight` in
-  // `util/parallelBlockMerge/MergeHelpersImpl.h`): the cost of merging a word
-  // grows with its length, so chunks of equal size in bytes cost about the
-  // same, while chunks of equal numbers of words do not (a chunk of long
-  // literals costs many times a chunk of short IRIs, and the consumer, which
-  // takes the chunks in order, then waits for it while the merge runs ahead).
+  // The size of a block in the file.
   size_t numBytesInBlock(size_t run, size_t block) const {
     return runs_.at(run).blocks_.at(block).numBytes_;
   }
+
+  // The weight of a block for the chunk boundaries of the merge, which is its
+  // size in bytes.
+  //
+  // NOTE: The merge library does not use this yet (the `blockWeight`
+  // customization point is added by #3669); it currently cuts the chunks by
+  // numbers of words. The cost of merging a word grows with its length, so
+  // chunks of equal size in bytes cost about the same, while chunks of equal
+  // numbers of words do not (a chunk of long literals costs many times a chunk
+  // of short IRIs, and the consumer, which takes the chunks in order, then
+  // waits for it while the merge runs ahead).
   size_t blockWeight(size_t run, size_t block) const {
     return numBytesInBlock(run, block);
   }
