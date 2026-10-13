@@ -288,7 +288,10 @@ void ParsedQuery::addSolutionModifiers(
     AD_CORRECTNESS_CHECK(hasAskClause());
   }
 
-  // Only set with `GROUP BY`, see above.
+  // The trailing `VALUES` clause is stored here only with `GROUP BY` (see
+  // above). The aliases that use its variables are then computed after the
+  // join, for `SELECT` queries as well as for the internal aliases of
+  // `CONSTRUCT` and `ASK` queries.
   if (postQueryValuesClause_.has_value()) {
     moveAliasesAfterPostQueryValues(internalVariableGenerator);
   }
@@ -613,10 +616,8 @@ void ParsedQuery::addHavingClause(
   }
 
   ad_utility::HashSet<Variable> variablesFromAliases;
-  if (hasSelectClause()) {
-    for (const auto& alias : selectClause().getAliases()) {
-      variablesFromAliases.insert(alias._target);
-    }
+  for (const auto& alias : getAliases()) {
+    variablesFromAliases.insert(alias._target);
   }
   for (auto& havingClause : havingClauses) {
     checkUsedVariablesAreVisible(
@@ -638,10 +639,8 @@ void ParsedQuery::addOrderByClause(
   // The variables that are used in the ORDER BY can also come from aliases in
   // the SELECT clause
   ad_utility::HashSet<Variable> variablesFromAliases;
-  if (hasSelectClause()) {
-    for (const auto& alias : selectClause().getAliases()) {
-      variablesFromAliases.insert(alias._target);
-    }
+  for (const auto& alias : getAliases()) {
+    variablesFromAliases.insert(alias._target);
   }
 
   std::string_view additionalError =
