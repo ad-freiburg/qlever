@@ -30,7 +30,7 @@ class OptionalJoin : public Operation {
   std::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
   std::vector<float> _multiplicities;
-  size_t _sizeEstimate;
+  size_t _sizeEstimate = 0;
   std::optional<size_t> _costEstimate;
   bool _multiplicitiesComputed = false;
 

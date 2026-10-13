@@ -934,7 +934,7 @@ Operation::pushDownBindToChild(
   auto& child = children.at(childIndex);
   AD_CORRECTNESS_CHECK(child != nullptr);
   // Compare by position, not by identity: the same tree might be used twice.
-  auto otherContains = [&](const Variable& var) {
+  auto otherContains = [&children, childIndex](const Variable& var) {
     for (size_t i = 0; i < children.size(); ++i) {
       const auto& other = children[i];
       if (i != childIndex && other != nullptr && other->containsVariable(var)) {
@@ -947,7 +947,8 @@ Operation::pushDownBindToChild(
     return std::nullopt;
   }
   auto canComputeExpression = ql::ranges::all_of(
-      bind._expression.containedVariables(), [&](const Variable* var) {
+      bind._expression.containedVariables(),
+      [&child, &otherContains](const Variable* var) {
         return child->getRootOperation()->isVariableAlwaysDefined(*var) ||
                (child->containsVariable(*var) && !otherContains(*var));
       });
@@ -969,11 +970,6 @@ Operation::pushDownBindToAnyChild(
     const parsedQuery::Bind& bind,
     std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   for (size_t i = 0; i < children.size(); ++i) {
-    // A child can be `nullptr` for a `SpatialJoin` that doesn't have all of its
-    // children attached yet.
-    if (children.at(i) == nullptr) {
-      continue;
-    }
     if (auto result = pushDownBindToChild(bind, children, i)) {
       return result;
     }

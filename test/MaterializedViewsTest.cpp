@@ -2115,6 +2115,44 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
                           3, AC{{3, V{"?bind"}}})));
   }
 
+  // A `BIND` that only uses variables of the left child of a `SpatialJoin` is
+  // pushed into the left child.
+  {
+    constexpr std::string_view bindIntoLeftChild = R"(
+      PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>
+      PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+      SELECT ?s ?o ?o2 ?bind {
+        ?s view:bindView-o ?o .
+        SERVICE spatialSearch: {
+          _:config spatialSearch:algorithm spatialSearch:libspatialjoin ;
+                   spatialSearch:left ?o ;
+                   spatialSearch:right ?o2 ;
+                   spatialSearch:joinType spatialSearch:within-dist ;
+                   spatialSearch:maxDistance 100 ;
+                   spatialSearch:payload ?o2 .
+          { ?s2 view:bindView-o ?o2 }
+        }
+        BIND(2 * ?o + 1 AS ?bind)
+      }
+    )";
+    qpExpect(
+        qlv(), bindIntoLeftChild,
+        h::spatialJoin(
+            100, -1, V{"?o"}, V{"?o2"}, std::nullopt,
+            PayloadVariables{std::vector{V{"?o2"}}},
+            SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::WITHIN_DIST,
+            std::nullopt, bindView(AC{{3, V{"?bind"}}}),
+            viewScan("bindView", "?s2", "?o2", "?_ql_materialized_view_o", 2)));
+  }
+
+  // `cloneWithNewChildren` throws for operations that don't implement it.
+  {
+    auto plan = qlv().parseAndPlanQuery("SELECT * { ?s <p1> ?o }");
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        plan.queryExecutionTree().getRootOperation()->cloneWithNewChildren({}),
+        ::testing::HasSubstr("`cloneWithNewChildren` is not implemented"));
+  }
+
   // The `2 * ?o + 1` expression.
   auto bindExpr = sparqlExpression::makeAddExpression(
       sparqlExpression::makeMultiplyExpression(
