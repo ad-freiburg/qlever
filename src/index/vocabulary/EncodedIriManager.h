@@ -194,8 +194,8 @@ class EncodedIriManagerImpl {
 
   // combine the integer representation of the prefix and of the payload into a
   // single `Id` with datatype `EncodedValue`.
-  static Id makeIdFromPrefixIdxAndPayload(uint64_t prefixIdx,
-                                          uint64_t payload) {
+  static Id makeIdFromPrefixIdxAndPayload(Id::PayloadType prefixIdx,
+                                          Id::PayloadType payload) {
     return Id::makeFromEncodedVal(payload | (prefixIdx << NumBitsEncoding));
   }
 
@@ -213,7 +213,8 @@ class EncodedIriManagerImpl {
   // NOTE: The payload is only a single nibble-encoded number (which
   // `decodeDecimalFrom64Bit` can decode) if the prefix is a plain prefix, so
   // callers have to check the prefix index before decoding the payload.
-  static std::pair<uint64_t, uint64_t> splitIntoPrefixIdxAndPayload(Id id) {
+  static std::pair<Id::PayloadType, Id::PayloadType>
+  splitIntoPrefixIdxAndPayload(Id id) {
     AD_CONTRACT_CHECK(
         id.getDatatype() == Datatype::EncodedVal,
         "datatype must be `EncodedVal` for `splitIntoPrefixIdxAndPayload`");

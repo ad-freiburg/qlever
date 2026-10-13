@@ -21,10 +21,10 @@ using testHelpers::sampleIds;
 
 namespace {
 // Split the `ids` into the two arrays of the split layout.
-std::pair<std::vector<uint64_t>, std::vector<uint8_t>> splitIds(
+std::pair<std::vector<Id::PayloadType>, std::vector<Id::DatatypeType>> splitIds(
     const std::vector<Id>& ids) {
-  std::vector<uint64_t> payloads;
-  std::vector<uint8_t> datatypes;
+  std::vector<Id::PayloadType> payloads;
+  std::vector<Id::DatatypeType> datatypes;
   for (const Id id : ids) {
     auto [datatype, payload] = getBitsCompat(id);
     payloads.push_back(payload);

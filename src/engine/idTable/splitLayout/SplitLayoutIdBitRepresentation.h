@@ -91,9 +91,11 @@ struct std::hash<
   size_t operator()(
       const columnBasedIdTable::splitLayout::SplitLayoutIdBitRepresentation&
           rep) const noexcept {
-    return std::hash<columnBasedIdTable::splitLayout::PayloadType>{}(
+    return std::hash<columnBasedIdTable::splitLayout::
+                         SplitLayoutIdBitRepresentation::PayloadType>{}(
         rep.payload_ ^
-        (static_cast<columnBasedIdTable::splitLayout::PayloadType>(
+        (static_cast<columnBasedIdTable::splitLayout::
+                         SplitLayoutIdBitRepresentation::PayloadType>(
              rep.datatype_)
          << 56));
   }

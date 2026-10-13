@@ -26,11 +26,12 @@ namespace columnBasedIdTable::splitLayout {
 inline SplitLayoutIdBitRepresentation getBitsCompat(const Id id) {
   const auto bits = id.getBits();
   return {static_cast<uint8_t>(bits >> Id::numDataBits),
-          bits & ((Id::T{1} << Id::numDataBits) - 1)};
+          bits & ((Id::PayloadType{1} << Id::numDataBits) - 1)};
 }
 inline Id idFromBitsCompat(const SplitLayoutIdBitRepresentation bits) {
-  return Id::fromBits((static_cast<Id::T>(bits.datatype_) << Id::numDataBits) |
-                      bits.payload_);
+  return Id::fromBits(
+      (static_cast<Id::DatatypeType>(bits.datatype_) << Id::numDataBits) |
+      bits.payload_);
 }
 
 // A proxy reference to a single `Id` stored in the experimental split layout
