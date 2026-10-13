@@ -12,11 +12,11 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
+#include "util/ColumnStrippingHelpers.h"
 
 using std::endl;
 
@@ -36,21 +36,6 @@ Filter::Filter(QueryExecutionContext* qec,
   if (getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     setPrefilterExpressionForChildren();
   }
-}
-
-// _____________________________________________________________________________
-VariableToColumnMap Filter::computeVariableToColumnMap() const {
-  // The columns of the `ExistsJoin`s are only needed to evaluate this filter.
-  // Hide them, so that parents neither join on them nor see them twice.
-  // TODO<StripColumns> Don't write these columns once `Filter` can strip
-  // columns.
-  auto variableColumns = _subtree->getVariableColumns();
-  for (const auto* expression : _expression.getExistsExpressions()) {
-    variableColumns.erase(
-        dynamic_cast<const sparqlExpression::ExistsExpression&>(*expression)
-            .variable());
-  }
-  return variableColumns;
 }
 
 // _____________________________________________________________________________
@@ -131,8 +116,8 @@ Result Filter::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 CPP_template_def(typename Table)(requires IdTableLike<Table>)
-IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
-                              Table&& idTable) const {
+    IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
+                                  Table&& idTable) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
 
@@ -179,15 +164,17 @@ CPP_template_def(int WIDTH,
       requires sparqlExpression::SingleExpressionResult<T>) {
     if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
       AD_CONTRACT_CHECK(input.size() == evaluationContext.size());
-      AD_CONTRACT_CHECK(singleResult.size() == input.size(),
-                        "The size of a `SetOfIntervals` does not match the "
-                        "size of the evaluation context.");
       // If the expression result is given as a set of intervals, we copy
       // the corresponding parts of `input` to `resultTable`.
+      //
+      // NOTE: One of the interval ends may be larger than `input.size()`
+      // (as the result of a negation).
       auto totalSize = std::accumulate(
           singleResult._intervals.begin(), singleResult._intervals.end(),
-          resultTable.size(), [](const auto& sum, const auto& interval) {
-            return sum + (interval.second - interval.first);
+          resultTable.size(), [&input](const auto& sum, const auto& interval) {
+            size_t intervalBegin = interval.first;
+            size_t intervalEnd = std::min(interval.second, input.size());
+            return sum + (intervalEnd - intervalBegin);
           });
       if (resultTable.empty() && totalSize == inputTable.size()) {
         // The binary filter contains all elements of the input, and we have
@@ -198,6 +185,7 @@ CPP_template_def(int WIDTH,
       }
       checkCancellation();
       for (auto [intervalBegin, intervalEnd] : singleResult._intervals) {
+        intervalEnd = std::min(intervalEnd, input.size());
         resultTable.insertAtEnd(inputTable, intervalBegin, intervalEnd);
         checkCancellation();
       }
@@ -269,4 +257,28 @@ bool Filter::isDeterministicImpl() const {
 std::unique_ptr<Operation> Filter::cloneImpl() const {
   return std::make_unique<Filter>(_executionContext, _subtree->clone(),
                                   _expression);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Filter::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
+  // Collect variables requested from parent-tree and variables needed for
+  // filtering
+  VarsRequiredFromSubtree helper(variables);
+  std::vector<const Variable*> variablesForFiltering =
+      _expression.containedVariables();
+  for (auto filterVar : variablesForFiltering) {
+    helper.add(*filterVar);
+  }
+  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
+
+  // Continue with the recursion and strip columns of subtree.
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      _subtree, varsRequiredFromSubtree);
+
+  // Create query execution tree with Filter-Operation as root-Operation and add
+  // additional stripColumns-Operation if needed.
+  return makeTreeWithOptionalStripOperation<Filter>(
+      getExecutionContext(), variables, std::move(variablesForFiltering),
+      std::move(subtree), _expression);
 }
