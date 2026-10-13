@@ -16,6 +16,7 @@
 #include "backports/algorithm.h"
 #include "util/GTestHelpers.h"
 #include "util/HashSet.h"
+#include "util/IndexTestHelpers.h"
 #include "util/ParallelExecutor.h"
 
 // _____________________________________________________________________________
@@ -104,6 +105,9 @@ TEST(ParallelExecutor, multipleTaskWithOnlyExceptions) {
 }
 
 namespace {
+// The executor on which `computeInParallelChunks` runs its tasks.
+constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
+
 // A result type for `computeInParallelChunks` that simply remembers all the
 // chunks it has seen.
 struct Chunks {
@@ -143,24 +147,25 @@ void expectPartitionOf(Chunks chunks, size_t numElements) {
 
 // _____________________________________________________________________________
 TEST(ComputeInParallelChunks, emptyRangeDoesNothing) {
-  Chunks chunks = ad_utility::computeInParallelChunks(0, 1, &addChunk);
+  Chunks chunks =
+      ad_utility::computeInParallelChunks(executor(), 0, 1, &addChunk);
   EXPECT_THAT(chunks.chunks_, ::testing::IsEmpty());
 }
 
 // _____________________________________________________________________________
 TEST(ComputeInParallelChunks, illegalChunkSize) {
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ad_utility::computeInParallelChunks(10, 0, &addChunk),
+      ad_utility::computeInParallelChunks(executor(), 10, 0, &addChunk),
       ::testing::HasSubstr("chunkSize > 0"));
 }
 
 // _____________________________________________________________________________
 TEST(ComputeInParallelChunks, singleChunkRunsInCallingThread) {
   // The range is not larger than the chunk size, so there is exactly one chunk
-  // which is processed directly, without spawning a thread and without merging.
+  // which is processed directly, without posting a task and without merging.
   for (size_t numElements : {size_t{1}, size_t{41}, size_t{42}}) {
-    Chunks chunks =
-        ad_utility::computeInParallelChunks(numElements, 42, &addChunk);
+    Chunks chunks = ad_utility::computeInParallelChunks(executor(), numElements,
+                                                        42, &addChunk);
     EXPECT_THAT(chunks.chunks_,
                 ::testing::ElementsAre(std::pair{size_t{0}, numElements}));
     EXPECT_EQ(chunks.threadId_, std::this_thread::get_id());
@@ -171,8 +176,8 @@ TEST(ComputeInParallelChunks, singleChunkRunsInCallingThread) {
 TEST(ComputeInParallelChunks, multipleChunksArePartitionAndAreMerged) {
   // A chunk size of one means that there is one chunk per element.
   for (size_t numElements : {size_t{2}, size_t{7}, size_t{1000}}) {
-    Chunks chunks =
-        ad_utility::computeInParallelChunks(numElements, 1, &addChunk);
+    Chunks chunks = ad_utility::computeInParallelChunks(executor(), numElements,
+                                                        1, &addChunk);
     expectPartitionOf(chunks, numElements);
     EXPECT_THAT(chunks.chunks_, ::testing::SizeIs(numElements));
   }
@@ -182,7 +187,8 @@ TEST(ComputeInParallelChunks, multipleChunksArePartitionAndAreMerged) {
 TEST(ComputeInParallelChunks, chunksHaveTheGivenSize) {
   // All chunks hold exactly 400 elements, except for the last one which holds
   // the remaining 200.
-  Chunks chunks = ad_utility::computeInParallelChunks(1000, 400, &addChunk);
+  Chunks chunks =
+      ad_utility::computeInParallelChunks(executor(), 1000, 400, &addChunk);
   EXPECT_THAT(chunks.chunks_, ::testing::UnorderedElementsAre(
                                   std::pair{size_t{0}, size_t{400}},
                                   std::pair{size_t{400}, size_t{800}},
@@ -197,7 +203,7 @@ TEST(ComputeInParallelChunks, threadBudgetIsRespected) {
   // There are 1000 chunks, but never more than one of them per thread runs at
   // the same time.
   Chunks chunks = ad_utility::computeInParallelChunks(
-      1000, 1,
+      executor(), 1000, 1,
       [&numRunning, &tooManyRunning, numThreads](Chunks& chunks, size_t begin,
                                                  size_t end) {
         if (++numRunning > numThreads) {
@@ -211,14 +217,14 @@ TEST(ComputeInParallelChunks, threadBudgetIsRespected) {
 }
 
 // _____________________________________________________________________________
-TEST(ComputeInParallelChunks, explicitNumThreadsIsRespected) {
-  // With an explicit thread limit of 2, never more than two chunks run at the
+TEST(ComputeInParallelChunks, explicitNumTasksIsRespected) {
+  // With an explicit task limit of 2, never more than two chunks run at the
   // same time (in contrast to `threadBudgetIsRespected` above, this test does
   // not depend on the hardware concurrency of the machine).
   std::atomic<size_t> numRunning = 0;
   std::atomic<bool> tooManyRunning = false;
   Chunks chunks = ad_utility::computeInParallelChunks(
-      100, 1,
+      executor(), 100, 1,
       [&numRunning, &tooManyRunning](Chunks& chunks, size_t begin, size_t end) {
         if (++numRunning > 2) {
           tooManyRunning = true;
@@ -232,14 +238,14 @@ TEST(ComputeInParallelChunks, explicitNumThreadsIsRespected) {
 }
 
 // _____________________________________________________________________________
-TEST(ComputeInParallelChunks, onePartialResultPerThreadAndNotPerChunk) {
-  // There are 1000 chunks, but only two threads, so the chunks are folded into
+TEST(ComputeInParallelChunks, onePartialResultPerTaskAndNotPerChunk) {
+  // There are 1000 chunks, but only two tasks, so the chunks are folded into
   // at most two partial results. This is what keeps the number of (sequential)
   // merges independent of the chunk size.
   std::mutex mutex;
   ad_utility::HashSet<const Chunks*> partialResults;
   Chunks chunks = ad_utility::computeInParallelChunks(
-      1000, 1,
+      executor(), 1000, 1,
       [&mutex, &partialResults](Chunks& chunks, size_t begin, size_t end) {
         {
           std::lock_guard<std::mutex> lock{mutex};
@@ -263,27 +269,26 @@ TEST(ComputeInParallelChunks, exceptionInChunkIsPropagated) {
     addChunk(chunks, begin, end);
   };
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      ad_utility::computeInParallelChunks(2, 1, computeChunk),
+      ad_utility::computeInParallelChunks(executor(), 2, 1, computeChunk),
       ::testing::StrEq("Error in the first chunk"), std::runtime_error);
 }
 
 // _____________________________________________________________________________
 TEST(ComputeInParallelChunks, chunksRunInParallel) {
-  size_t numThreads = std::thread::hardware_concurrency();
-  if (numThreads < 2) {
-    GTEST_SKIP() << "Requires at least two hardware threads";
-  }
+  // The `executor` has more threads than this.
+  size_t numTasks = 2;
   // All chunks have to run concurrently, else this test deadlocks (which is a
   // failure that a timeout will catch).
   std::atomic<size_t> numStarted = 0;
   Chunks chunks = ad_utility::computeInParallelChunks(
-      numThreads, 1,
-      [&numStarted, numThreads](Chunks& chunks, size_t begin, size_t end) {
+      executor(), numTasks, 1,
+      [&numStarted, numTasks](Chunks& chunks, size_t begin, size_t end) {
         ++numStarted;
-        while (numStarted.load() < numThreads) {
+        while (numStarted.load() < numTasks) {
         }
         addChunk(chunks, begin, end);
-      });
-  expectPartitionOf(chunks, numThreads);
-  EXPECT_EQ(chunks.chunks_.size(), numThreads);
+      },
+      numTasks);
+  expectPartitionOf(chunks, numTasks);
+  EXPECT_EQ(chunks.chunks_.size(), numTasks);
 }
