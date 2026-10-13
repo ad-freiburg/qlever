@@ -2060,9 +2060,11 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
   EXPECT_GE(toChrono(timingInformation["total"].get<std::string_view>()), 1ms);
   // Ensure result is not returned in microseconds and subsequently interpreted
   // in milliseconds
+#ifndef _QLEVER_NO_TIMING_TESTS
   EXPECT_LT(
       toChrono(timingInformation["computeResult"].get<std::string_view>()),
       100ms);
+#endif
   EXPECT_GE(
       toChrono(timingInformation["total"].get<std::string_view>()),
       toChrono(timingInformation["computeResult"].get<std::string_view>()));

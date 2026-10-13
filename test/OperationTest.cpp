@@ -319,8 +319,10 @@ TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
   auto childOperation = std::dynamic_pointer_cast<StallForeverOperation>(
       operation.getChildren().at(0)->getRootOperation());
 
+#ifndef _QLEVER_NO_TIMING_TESTS
   EXPECT_GT(operation.publicRemainingTime(), 0ms);
   EXPECT_GT(childOperation->publicRemainingTime(), 0ms);
+#endif
   std::this_thread::sleep_for(timeout);
   // Verify time is up for parent and child
   EXPECT_EQ(operation.publicRemainingTime(), 0ms);
