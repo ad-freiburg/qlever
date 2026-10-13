@@ -300,9 +300,9 @@ using IdRow = std::array<Id, NumColumnsIndexBuilding>;
 // implementation and for the text index) that it gives rise to. All Ids are
 // assigned according to `map`. Increase `numHasWordTriples` by the number of
 // `ql:has-word` triples that were added.
-template <typename IndexPtr>
-void mapTripleToIds(QL_CONCEPT_OR_NOTHING(ad_utility::Rvalue) auto&& triple,
-                    ItemMapManager& map, IndexPtr* index,
+template <typename IndexPtr, typename Triple>
+QL_CONCEPT_OR_NOTHING(requires ad_utility::Rvalue<Triple>)
+void mapTripleToIds(Triple&& triple, ItemMapManager& map, IndexPtr* index,
                     std::vector<IdRow>& result, size_t& numHasWordTriples) {
   // Process the given triple.
   ProcessedTriple lt = index->processTriple(AD_FWD(triple));

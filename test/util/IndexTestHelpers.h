@@ -17,6 +17,7 @@
 
 #include "AllocatorTestHelpers.h"
 #include "GTestHelpers.h"
+#include "backports/asio.h"
 #include "backports/three_way_comparison.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -25,6 +26,7 @@
 #include "index/Index.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
+#include "util/Executor.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
@@ -32,6 +34,37 @@
 // be used for unit tests.
 
 namespace ad_utility::testing {
+// Set the global `EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING`
+// flag to `value` and restore its previous value when the returned cleanup is
+// destroyed.
+//
+// NOTE: The flag is global, so setting it without such a cleanup would make
+// every test that runs afterwards silently depend on the value that was set
+// here.
+[[nodiscard]] inline auto setIgnoreMemoryLimit(bool value) {
+  bool previousValue =
+      ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING
+          .exchange(value);
+  return absl::Cleanup{[previousValue] {
+    ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
+        previousValue;
+  }};
+}
+
+// Return the executor of a single, lazily-initialized thread pool with a single
+// thread, which is shared across all tests. It is meant for the tests that only
+// need an executor to perform their work on, in particular for the
+// `QueryExecutionContext`s of `getQec` (see below).
+qlever::Executor singleThreadExecutor();
+
+// Return the executor of a single, lazily-initialized thread pool with several
+// threads, which is shared across all tests. It is meant for the tests of
+// components whose work runs concurrently on the executor (for example the
+// reading ahead of the `CompressedRelationReader` and the parallel writing of
+// the `CompressedRelationWriter`), such that this concurrency is actually
+// exercised, in particular under the thread sanitizer.
+qlever::Executor multiThreadExecutor();
+
 // Return a pointer to a single, lazily-initialized `EncodedIriManager`
 // instance shared across all tests.
 inline const EncodedIriManager* encodedIriManager() {

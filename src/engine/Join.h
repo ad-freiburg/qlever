@@ -59,6 +59,10 @@ class Join : public Operation {
 
  private:
   std::unique_ptr<JoinImpl> impl_;
+
+  // Delegate to the `isDeterministicImpl()` of the implementation only. The
+  // subtree is covered by `Operation::isDeterministic()` via the forwarded
+  // children, see the comment in `GroupBy.h`.
   [[nodiscard]] bool isDeterministicImpl() const override;
   VariableToColumnMap computeVariableToColumnMap() const override;
   uint64_t getSizeEstimateBeforeLimit() override;

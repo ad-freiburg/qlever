@@ -428,15 +428,15 @@ TEST(RegexExpression, prefixRegexOrderedColumn) {
   // Sorted order (by bits of the valueIds):
   // ?vocab column is  "alpha", "älpha", "Beta"
   // ?mixed column is `1, -0.1, <x>`
-  test("?vocab", "^Be", {{{2, 3}}});
+  test("?vocab", "^Be", {{{2, 3}}, 3});
   // Prefix filters are currently always case-insensitive.
-  test("?vocab", "^be", {{{2, 3}}});
+  test("?vocab", "^be", {{{2, 3}}, 3});
   // Prefix filters currently always work on the primary level, where `a` and
   // `ä` are considered equal.
-  test("?vocab", "^al", {{{0, 2}}});
-  test("?vocab", "^äl", {{{0, 2}}});
-  test("?vocab", "^c", {});
-  test("?mixed", "^x", {{{2, 3}}}, true);
+  test("?vocab", "^al", {{{0, 2}}, 3});
+  test("?vocab", "^äl", {{{0, 2}}, 3});
+  test("?vocab", "^c", {{}, 3});
+  test("?mixed", "^x", {{{2, 3}}, 3}, true);
 
   // Input with UNDEF.
   {
@@ -461,7 +461,7 @@ TEST(RegexExpression, prefixRegexOrderedColumn) {
     auto resultAsVariant = expression->evaluate(&ctx.context);
     EXPECT_THAT(resultAsVariant,
                 ::testing::VariantWith<ad_utility::SetOfIntervals>(
-                    ad_utility::SetOfIntervals{}));
+                    ad_utility::SetOfIntervals{{}, 0}));
   }
 }
 

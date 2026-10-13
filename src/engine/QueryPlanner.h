@@ -13,6 +13,8 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYPLANNER_H
 #define QLEVER_SRC_ENGINE_QUERYPLANNER_H
 
+#include <gtest/gtest_prod.h>
+
 #include <boost/optional.hpp>
 #include <vector>
 
@@ -155,8 +157,8 @@ class QueryPlanner {
     template <typename Operation>
     SubtreePlan(QueryExecutionContext* qec,
                 std::shared_ptr<Operation> operation)
-        : _qet{std::make_shared<QueryExecutionTree>(qec,
-                                                    std::move(operation))} {}
+        : _qet{qec->makeShared<QueryExecutionTree>(qec, std::move(operation))} {
+    }
 
     std::shared_ptr<QueryExecutionTree> _qet;
     std::shared_ptr<Result> _cachedResult;
@@ -689,10 +691,12 @@ class QueryPlanner {
     // with each other and with the contents of  `candidatePlans_`
     parsedQuery::BasicGraphPattern candidateTriples_{};
 
-    // The variables that have been bound by the children of the `rootPattern_`
-    // which we have dealt with so far.
-    // TODO<joka921> verify that we get no false positives with plans that
-    // create no single binding for a variable "by accident".
+    // The variables that have been used by the children of the `rootPattern_`
+    // which we have dealt with so far. They must not be the target of a later
+    // BIND.
+    //
+    // NOTE: This includes the variables of MINUS clauses, which are not part
+    // of the result, see `getVariablesOfPreviousPatterns` for those.
     ad_utility::HashSet<Variable> boundVariables_{};
 
     // The filters of the `rootPattern_`, wrapped for `applyFiltersIfPossible`.
@@ -734,6 +738,12 @@ class QueryPlanner {
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
     void visitDescribe(parsedQuery::Describe& describe);
+
+    // Return the variables of the results of the children of the
+    // `rootPattern_` which we have dealt with so far. Such a variable might be
+    // undefined in all rows of the result, which is fine, as only the absence
+    // of shared variables leads to a special case.
+    ad_utility::HashSet<Variable> getVariablesOfPreviousPatterns() const;
 
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
@@ -806,6 +816,8 @@ class QueryPlanner {
   static std::pair<ReplacementPlans, bool> findApplicableReplacementPlans(
       ReplacementPlans& allReplacementPlans, uint64_t coveredNodeIds,
       bool useGreedyPlanning);
+  FRIEND_TEST(MaterializedViewsGreedyPlanningTest,
+              findApplicableReplacementPlansGreedyOverlap);
 
   // Helper for `fillDpTab` that inserts replacement plans into a connected
   // component for greedy query planning. The `IndexScan` plans for triples

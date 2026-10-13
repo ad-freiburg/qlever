@@ -9,16 +9,6 @@
 using std::string;
 
 // _____________________________________________________________________________
-VocabularyInMemoryBinSearch::IndicesView VocabularyInMemoryBinSearch::indices()
-    const {
-  return std::visit(
-      [](const auto& indices) -> IndicesView {
-        return {indices.data(), indices.size()};
-      },
-      indices_);
-}
-
-// _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::open(const string& fileName) {
   AD_CORRECTNESS_CHECK(
       words_.size() == 0 && indices().empty(),
@@ -30,7 +20,7 @@ void VocabularyInMemoryBinSearch::open(const string& fileName) {
   {
     ad_utility::serialization::FileReadSerializer idFile(
         absl::StrCat(fileName, idsSuffix));
-    idFile >> ownedIndices();
+    idFile >> indices_;
   }
 }
 
@@ -103,7 +93,7 @@ VocabularyInMemoryBinSearch::makeDiskWriterPtr(
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::close() {
   words_.clear();
-  indices_.emplace<Indices>();
+  indices_ = {};
 }
 
 // _____________________________________________________________________________

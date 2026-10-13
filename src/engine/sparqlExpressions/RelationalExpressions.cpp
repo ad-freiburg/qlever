@@ -111,11 +111,11 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
   }();
 
   // Convert pairs of iterators to pairs of indexes.
-  ad_utility::SetOfIntervals s;
+  ad_utility::SetOfIntervals::Vec intervals;
   for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
-    s._intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
+    intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
   }
-  return s;
+  return {std::move(intervals), context->size()};
 }
 
 // The actual comparison function for the `SingleExpressionResult`'s which are
@@ -383,7 +383,8 @@ RelationalExpression<comp>::getEstimatesForFilterExpression(
 ExpressionResult InExpression::evaluate(
     sparqlExpression::EvaluationContext* context) const {
   auto lhs = children_.at(0)->evaluate(context);
-  ExpressionResult result{ad_utility::SetOfIntervals{}};
+  // `IN ()` is always false.
+  ExpressionResult result{Id::makeFromBool(false)};
   bool firstChild = true;
   for (const auto& child : children_ | ql::views::drop(1)) {
     auto rhs = child->evaluate(context);

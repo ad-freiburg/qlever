@@ -42,6 +42,9 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UnicodeSupport.h"
 
+// Multi-threaded, to exercise the concurrency of the tested code.
+static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
+
 using namespace ad_utility::testing;
 using namespace std::string_literals;
 
@@ -88,7 +91,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
                 .toScanSpecification(index),
             locatedTriplesSnapshot),
         additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
-        locatedTriplesSnapshot);
+        locatedTriplesSnapshot, executor());
     ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
@@ -113,7 +116,7 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
             locatedTriplesSnapshot),
         Permutation::ColumnIndicesRef{},
         std::make_shared<ad_utility::CancellationHandle<>>(),
-        locatedTriplesSnapshot);
+        locatedTriplesSnapshot, executor());
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
@@ -1072,7 +1075,8 @@ TEST(IndexImpl, recomputeStatistics) {
   auto& indexImpl = index.getImpl();
   // No-op, should return the same stats.
   auto result = indexImpl.recomputeStatistics(
-      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
+      executor());
   EXPECT_EQ(result, indexImpl.configurationJson_);
 
   // Now, modify the index by adding triples.
@@ -1109,7 +1113,8 @@ TEST(IndexImpl, recomputeStatistics) {
     }
 
     auto newStats = indexImpl.recomputeStatistics(
-        index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+        index.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
+        executor());
     EXPECT_NE(newStats, indexImpl.configurationJson_);
     EXPECT_EQ(newStats["num-triples"], NNAI(6, 7));
     EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
@@ -1155,7 +1160,7 @@ TEST(IndexImpl, createPermutation) {
       4,
       ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
           tables.at(0).clone(), tables.at(1).clone()}},
-      permutation, false);
+      permutation, false, executor());
   index.finalizePermutation(meta, permutation, false);
 
   EXPECT_EQ(uniquePredicates, 3);
@@ -1163,11 +1168,11 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
   // Writing the same permutation with the writer-thread throttle disabled
-  // (0 means "fall back to `permutation-writer-num-threads`") must give the
-  // same result. Together with the default of 1 used by the calls above and
-  // below, this exercises the translation of the runtime parameter to the
-  // writer-thread override on both of its branches. Use a separate base name,
-  // so that the permutation that was already finalized above stays intact.
+  // (0 means "no limit") must give the same result. Together with the default
+  // of 1 used by the calls above and below, this exercises the translation of
+  // the runtime parameter to a concurrency-limited executor on both of its
+  // branches. Use a separate base name, so that the permutation that was
+  // already finalized above stays intact.
   {
     auto cleanupParameter = setRuntimeParameterForTest<
         &RuntimeParameters::rebuildPermutationWriterNumThreads_>(0);
@@ -1177,7 +1182,7 @@ TEST(IndexImpl, createPermutation) {
             4,
             ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
                 tables.at(0).clone(), tables.at(1).clone()}},
-            permutation, false);
+            permutation, false, executor());
     index.setOnDiskBase(onDiskBase);
     EXPECT_EQ(uniquePredicatesUnthrottled, uniquePredicates);
   }
@@ -1185,7 +1190,7 @@ TEST(IndexImpl, createPermutation) {
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(
           4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,
-          true);
+          true, executor());
   index.finalizePermutation(internalMeta, permutation, true);
 
   EXPECT_EQ(uniqueInternalPredicates, 3);
@@ -1208,7 +1213,7 @@ TEST(IndexImpl, createPermutation) {
         actualPermutation.getScanSpecAndBlocks(scanSpec, *state), std::nullopt,
         std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID},
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>(),
-        *state);
+        *state, executor());
     auto begin = scan.begin();
     ASSERT_NE(begin, scan.end());
     EXPECT_EQ(*begin, makeIdTableFromVector({{1, 1, 1, 0},
@@ -1399,39 +1404,48 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
   // Apply the `minimalValidConfiguration()`, but with the
   // `index-format-version` replaced by `version` (or removed, if `version` is
   // `std::nullopt`), to a freshly created `IndexImpl`. Expect that this throws
-  // with a message that matches `messageMatcher`, and return the log output
-  // that was produced in the process.
-  auto applyVersionAndExpectThrow =
-      [](std::optional<qlever::IndexFormatVersion> version,
-         const auto& messageMatcher,
-         ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
-        auto trace = generateLocationTrace(loc);
-        auto configuration = minimalValidConfiguration();
-        if (version.has_value()) {
-          configuration["index-format-version"] = version.value();
-        } else {
-          configuration.erase("index-format-version");
-        }
-        IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
-        auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
-        AD_EXPECT_THROW_WITH_MESSAGE(
-            indexImpl.applyConfiguration(configuration), messageMatcher);
-        return logStream.str();
-      };
-  auto genericThrowMessage = ::testing::HasSubstr(
-      "Incompatible index format, see log message for details");
+  // with a message that matches `messageMatcher`, and that the non-throwing
+  // `checkIndexFormatVersion` returns exactly the same message.
+  auto applyVersionAndExpectThrow = [](std::optional<nlohmann::json> version,
+                                       const auto& messageMatcher,
+                                       ad_utility::source_location loc =
+                                           AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    auto configuration = minimalValidConfiguration();
+    if (version.has_value()) {
+      configuration["index-format-version"] = version.value();
+    } else {
+      configuration.erase("index-format-version");
+    }
+    IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+    auto error = indexImpl.checkIndexFormatVersion(configuration);
+    ASSERT_TRUE(error.has_value());
+    EXPECT_THAT(error.value(), messageMatcher);
+    AD_EXPECT_THROW_WITH_MESSAGE(indexImpl.applyConfiguration(configuration),
+                                 ::testing::Eq(error.value()));
+  };
+
+  // The current version is accepted.
+  {
+    IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+    EXPECT_EQ(indexImpl.checkIndexFormatVersion(minimalValidConfiguration()),
+              std::nullopt);
+    // The previous format with `LatMajor` geo points is accepted as well.
+    auto configuration = minimalValidConfiguration();
+    configuration["index-format-version"] =
+        qlever::indexFormatVersionWithLatMajorGeoPoints;
+    EXPECT_EQ(indexImpl.checkIndexFormatVersion(configuration), std::nullopt);
+  }
 
   // An index that was built before the index format was versioned at all.
-  EXPECT_THAT(applyVersionAndExpectThrow(std::nullopt, genericThrowMessage),
-              ::testing::HasSubstr("This index was built before versioning was "
-                                   "introduced for QLever's index format"));
+  applyVersionAndExpectThrow(
+      std::nullopt,
+      ::testing::HasSubstr("This index was built before versioning was "
+                           "introduced for QLever's index format"));
 
   // An index that is newer than the QLever binary that reads it.
-  EXPECT_THAT(
-      applyVersionAndExpectThrow(
-          qlever::IndexFormatVersion{4711,
-                                     DateYearOrDuration{Date{9999, 12, 31}}},
-          genericThrowMessage),
+  applyVersionAndExpectThrow(
+      qlever::IndexFormatVersion{4711, DateYearOrDuration{Date{9999, 12, 31}}},
       ::testing::AllOf(
           ::testing::HasSubstr("The version of QLever you are using is too old "
                                "for this index"),
@@ -1442,10 +1456,8 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
   // An index that is older than the QLever binary that reads it, but not in
   // exactly the format that the index upgrader upgrades from. Such an index
   // has to be rebuilt.
-  EXPECT_THAT(
-      applyVersionAndExpectThrow(
-          qlever::IndexFormatVersion{42, DateYearOrDuration{Date{1900, 1, 1}}},
-          genericThrowMessage),
+  applyVersionAndExpectThrow(
+      qlever::IndexFormatVersion{42, DateYearOrDuration{Date{1900, 1, 1}}},
       ::testing::AllOf(
           ::testing::HasSubstr("The index is too old for this version of "
                                "QLever"),
@@ -1453,23 +1465,35 @@ TEST(IndexImpl, applyConfigurationIndexFormatVersion) {
           ::testing::Not(::testing::HasSubstr("qlever-upgrade-index"))));
 
   // An index in exactly the format that the `qlever-upgrade-index` binary
-  // upgrades from. Then the thrown exception is one dedicated message that
-  // mentions that binary, and the generic advice is not logged at all.
-  //
-  // NOTE: This requires the target format of the upgrader to be a format that
-  // the current version of QLever loads (which `convertIndexToCurrentFormat`
-  // also checks).
+  // upgrades from. Then the message is one dedicated message that mentions that
+  // binary, and not the generic advice. Note that this requires the target
+  // format of the upgrader to be a format that the current version of QLever
+  // loads (which `convertIndexToCurrentFormat` also checks).
   ASSERT_TRUE(qlever::isLoadableIndexFormatVersion(
       qlever::indexFormatConverter::targetVersion));
-  EXPECT_THAT(
-      applyVersionAndExpectThrow(
-          qlever::indexFormatConverter::sourceVersion,
-          ::testing::AllOf(
-              ::testing::HasSubstr("but your index uses the previous format"),
-              ::testing::HasSubstr("sometimes they are unavoidable"),
-              ::testing::HasSubstr("the old index is preserved"),
-              ::testing::HasSubstr("qlever-upgrade-index "))),
-      ::testing::Not(::testing::HasSubstr("The index is too old")));
+  applyVersionAndExpectThrow(
+      qlever::indexFormatConverter::sourceVersion,
+      ::testing::AllOf(
+          ::testing::HasSubstr("but your index uses the previous format"),
+          ::testing::HasSubstr("sometimes they are unavoidable"),
+          ::testing::HasSubstr("the old index is preserved"),
+          ::testing::HasSubstr("qlever-upgrade-index "),
+          ::testing::Not(::testing::HasSubstr("The index is too old"))));
+
+  // Malformed versions are reported, but never make the check throw.
+  auto malformed = ::testing::HasSubstr(
+      "The index format version stored in the index metadata is malformed");
+  applyVersionAndExpectThrow(nlohmann::json(42), malformed);
+  applyVersionAndExpectThrow(nlohmann::json::array({1, 2}), malformed);
+  applyVersionAndExpectThrow(
+      nlohmann::json{{"pull-request-number", -3}, {"date", "2024-10-22"}},
+      malformed);
+  applyVersionAndExpectThrow(
+      nlohmann::json{{"pull-request-number", 3}, {"date", 17}}, malformed);
+  applyVersionAndExpectThrow(
+      nlohmann::json{{"pull-request-number", 3}, {"date", "noDate"}},
+      malformed);
+  applyVersionAndExpectThrow(nlohmann::json{{"date", "2024-10-22"}}, malformed);
 }
 
 // Test that the encoding of the geo points is taken from the configuration of

@@ -35,6 +35,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
+#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
@@ -133,10 +134,11 @@ void Server::configureQueryEventLog(const ql::filesystem::path& path) {
 
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>) Server::ResponseT
-    Server::reportHttpError(std::string_view message, http::status status,
-                            const RequestT& request,
-                            const MetricLabel& errorType) const {
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+Server::ResponseT Server::reportHttpError(std::string_view message,
+                                          http::status status,
+                                          const RequestT& request,
+                                          const MetricLabel& errorType) const {
   using namespace ad_utility::httpUtils;
   AD_LOG_ERROR << message << std::endl;
   metrics_->httpErrors_->Add(1, {errorType});
@@ -273,6 +275,16 @@ class QueryAlreadyInUseError : public std::runtime_error {
                            "' is already in use!"} {}
 };
 
+namespace {
+// Return an executor for a single query, which runs at most
+// `max-num-threads-per-query` tasks on the `executor` at the same time.
+qlever::Executor makeQueryExecutor(qlever::Executor executor) {
+  return ad_utility::makeConcurrencyLimitedExecutor(
+      std::move(executor),
+      getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>());
+}
+}  // namespace
+
 // _____________________________________________________________________________
 auto Server::cancelAfterDeadline(
     std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
@@ -337,7 +349,7 @@ auto Server::prepareOperation(
        resultPinning = std::move(resultPinning),
        accessTokenOk](SharedIndexAndView indexAndViews) mutable {
         auto qec = qlever().createQueryExecutionContext(
-            std::move(indexAndViews),
+            std::move(indexAndViews), makeQueryExecutor(qlever().executor()),
             [sharedMessageSender](std::string json) {
               (*sharedMessageSender)(std::move(json));
             },
@@ -406,19 +418,14 @@ Awaitable<nlohmann::json> Server::processWriteMaterializedView(
   AD_CONTRACT_CHECK(name != "", "The name for the view may not be empty");
 
   // Extract query body.
-  auto query = std::visit(
+  auto query = ad_utility::visitIf(
+      operation, [](const Query& op) -> Query { return op; },
       [](const auto& op) -> Query {
-        using T = std::decay_t<decltype(op)>;
-        if constexpr (std::is_same_v<T, Query>) {
-          return op;
-        } else {
-          static_assert(
-              ad_utility::SameAsAny<T, Update, GraphStoreOperation, None>);
-          throw std::runtime_error(
-              "Action 'write-materialized-view' requires a 'SELECT' query.");
-        }
-      },
-      operation);
+        static_assert(ad_utility::SimilarToAny<decltype(op), Update,
+                                               GraphStoreOperation, None>);
+        throw std::runtime_error(
+            "Action 'write-materialized-view' requires a 'SELECT' query.");
+      });
 
   // Extract time limit.
   auto timeLimit =
@@ -452,7 +459,8 @@ nlohmann::json Server::processLoadMaterializedView(
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Loading");
 
-  auto qec = qlever().createQueryExecutionContext(indexAndViews);
+  auto qec = qlever().createQueryExecutionContext(
+      indexAndViews, makeQueryExecutor(qlever().executor()));
   indexAndViews->materializedViewsManager_.loadView(name, qec.get());
 
   return json{{"materialized-view-loaded", name}};
@@ -495,8 +503,8 @@ nlohmann::json Server::processUnloadMaterializedView(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Server::ResponseT Server::processPing(std::optional<std::string> msg,
-                                          const RequestT& request) const {
+Server::ResponseT Server::processPing(std::optional<std::string> msg,
+                                      const RequestT& request) const {
   using namespace ad_utility::httpUtils;
   if (msg.has_value()) {
     AD_LOG_INFO << "Alive check with message \"" << msg.value() << "\""
@@ -626,8 +634,9 @@ void checkAndLogCommand(std::string_view cmd, bool accessTokenOk,
 
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
-    requires ad_utility::httpUtils::HttpRequest<RequestT>) Server::ResponseT
-    Server::processMetrics(bool accessTokenOk, const RequestT& request) const {
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+Server::ResponseT Server::processMetrics(bool accessTokenOk,
+                                         const RequestT& request) const {
   using namespace ad_utility::httpUtils;
   serverProcessHelpers::requireValidAccessToken(accessTokenOk, "metrics");
   if (!metricsReader_) {
@@ -658,11 +667,10 @@ std::optional<nlohmann::json> Server::processSetRuntimeParameters(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Server::Awaitable<Server::ProcessCommandsResult> Server::processCommands(
-        const SharedIndexAndView& indexAndViews,
-        const ParamValueMap& parameters, const SparqlOperation& operation,
-        bool accessTokenOk, const ad_utility::Timer& requestTimer,
-        RequestT& request) {
+Server::Awaitable<Server::ProcessCommandsResult> Server::processCommands(
+    const SharedIndexAndView& indexAndViews, const ParamValueMap& parameters,
+    const SparqlOperation& operation, bool accessTokenOk,
+    const ad_utility::Timer& requestTimer, RequestT& request) {
   using namespace ad_utility::httpUtils;
   using namespace responseJson;
   using namespace serverProcessHelpers;
@@ -806,8 +814,9 @@ CPP_template_def(typename RequestT, typename SendT)(
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
     // Workaround for a GCC 15/16 bug: the hidden object of a by-value
-    // structured binding is not destroyed when the coroutine frame is
-    // destroyed while suspended (gcc.gnu.org bug 124584).
+    // structured binding in a coroutine is not always destroyed at the end
+    // of its scope, for example when it is initialized by a `co_await` or
+    // lives across one (gcc.gnu.org bug 124584).
     auto preparedOp = prepareOperation(operationName, operationString,
                                        std::move(messageSender), parameters,
                                        timeLimit, accessTokenOk, clientIp);
@@ -1063,10 +1072,10 @@ Server::PlannedQuery Server::planQuery(
 // _____________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    ad_utility::websocket::OwningQueryId Server::getQueryId(
-        const RequestT& request, std::string_view query,
-        ad_utility::websocket::QueryOperation operationType,
-        std::string_view clientIp) {
+ad_utility::websocket::OwningQueryId Server::getQueryId(
+    const RequestT& request, std::string_view query,
+    ad_utility::websocket::QueryOperation operationType,
+    std::string_view clientIp) {
   using ad_utility::websocket::OwningQueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
@@ -1133,11 +1142,11 @@ CPP_template_def(typename RequestT, typename SendT)(
 // ____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    ad_utility::websocket::MessageSender Server::createMessageSender(
-        const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-        const RequestT& request, std::string_view operationString,
-        ad_utility::websocket::QueryOperation operationType,
-        std::string_view clientIp) {
+ad_utility::websocket::MessageSender Server::createMessageSender(
+    const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
+    const RequestT& request, std::string_view operationString,
+    ad_utility::websocket::QueryOperation operationType,
+    std::string_view clientIp) {
   auto queryHubLock = queryHub.lock();
   AD_CORRECTNESS_CHECK(queryHubLock);
   ad_utility::websocket::MessageSender messageSender{
@@ -1698,8 +1707,8 @@ Awaitable<qlever::IndexSwapConfig> Server::rebuildIndex(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<Server::ResponseT> Server::processRebuildIndex(
-        const ParamValueMap& parameters, const RequestT& request) {
+Awaitable<Server::ResponseT> Server::processRebuildIndex(
+    const ParamValueMap& parameters, const RequestT& request) {
   using namespace ad_utility::httpUtils;
   auto config = co_await rebuildIndexUnlessInProgress(
       ad_utility::url_parser::checkParameter(parameters, "rebuild-tmp-dir",

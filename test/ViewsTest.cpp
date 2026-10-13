@@ -12,7 +12,6 @@
 
 #include "./util/GTestHelpers.h"
 #include "util/InputRangeUtils.h"
-#include "util/Random.h"
 #include "util/ResetWhenMoved.h"
 #include "util/ValueIdentity.h"
 #include "util/Views.h"
@@ -51,50 +50,6 @@ TEST(Views, BufferedAsyncView) {
 
   testWithVector(ints);
   testWithVector(strings);
-}
-
-TEST(Views, uniqueBlockView) {
-  const uint64_t numInts = 50'000;
-  std::vector<int> ints;
-
-  ad_utility::SlowRandomIntGenerator<int> r(0, 1000);
-  for (size_t i = 0; i < numInts; ++i) {
-    ints.push_back(r());
-  }
-
-  std::vector<int> intsWithDuplicates;
-  intsWithDuplicates.reserve(3 * numInts);
-  for (size_t i = 0; i < 3; ++i) {
-    for (auto num : ints) {
-      intsWithDuplicates.push_back(num);
-    }
-  }
-
-  std::sort(intsWithDuplicates.begin(), intsWithDuplicates.end());
-
-  ad_utility::SlowRandomIntGenerator<int> vecSizeGenerator(2, 200);
-
-  size_t i = 0;
-  std::vector<std::vector<int>> inputs;
-  while (i < intsWithDuplicates.size()) {
-    auto vecSize = vecSizeGenerator();
-    size_t nextI = std::min(i + vecSize, intsWithDuplicates.size());
-    inputs.emplace_back(intsWithDuplicates.begin() + i,
-                        intsWithDuplicates.begin() + nextI);
-    i = nextI;
-  }
-
-  auto unique = ql::views::join(ad_utility::uniqueBlockView(inputs));
-  std::vector<int> result;
-  for (const auto& element : unique) {
-    result.push_back(element);
-  }
-  std::sort(ints.begin(), ints.end());
-  // Erase "accidentally" unique duplicates from the random initialization.
-  auto it = std::unique(ints.begin(), ints.end());
-  ints.erase(it, ints.end());
-  ASSERT_EQ(ints.size(), result.size());
-  ASSERT_EQ(ints, result);
 }
 
 TEST(Views, owningView) {
@@ -188,6 +143,22 @@ TEST(Views, CallbackOnEndView) {
   }
   // Callback not invoked for the destructor of the moved-from `viewA`.
   EXPECT_EQ(numCalls, 3);
+}
+
+// For an empty range, the callback is invoked as soon as the iteration starts
+// (and ends), not only during the destruction of the view.
+TEST(Views, CallbackOnEndViewEmptyRange) {
+  using namespace ad_utility;
+  size_t numCalls{0};
+  {
+    auto view = CallbackOnEndView{ad_utility::integerRange(0u),
+                                  [&numCalls]() { ++numCalls; }};
+    EXPECT_EQ(numCalls, 0u);
+    EXPECT_TRUE(view.begin() == view.end());
+    EXPECT_EQ(numCalls, 1u);
+  }
+  // Callback not invoked again during destruction.
+  EXPECT_EQ(numCalls, 1u);
 }
 
 // Overwriting a view invokes its callback, unless it was already invoked.
