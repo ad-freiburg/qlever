@@ -210,8 +210,10 @@ class ParsedQuery {
   // queries without one) to `internalAliasesWithoutSelectClause_`.
   void addInternalAlias(Alias alias);
 
-  // Remove all aliases and return them. The (non-internal) targets stay
-  // selected, see `SelectClause::deleteAliasesButKeepVariables`.
+  // Remove all aliases and return them. With a `SELECT` clause, the
+  // (non-internal) targets stay selected (see
+  // `SelectClause::deleteAliasesButKeepVariables`), otherwise
+  // `internalAliasesWithoutSelectClause_` is cleared.
   std::vector<Alias> takeAliases();
 
   // If the `variable` is neither visible in the query body nor contained in the
