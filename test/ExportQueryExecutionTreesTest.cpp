@@ -1681,6 +1681,12 @@ TEST(ExportQueryExecutionTrees, HavingAndOrderByExpressionsWithoutSelect) {
   // The pattern trick also reads the aliases.
   EXPECT_EQ(turtle("CONSTRUCT { ?p <r> ?p } { ?s ?p ?o } GROUP BY ?p"),
             "<p> <r> <p> .\n");
+  EXPECT_EQ(runQueryStreamableResult(
+                kg + " <a> <q> <c> .",
+                "CONSTRUCT { ?p <r> ?p } { ?s ?p ?o } GROUP BY ?p "
+                "ORDER BY DESC(COUNT(DISTINCT ?s))",
+                ad_utility::MediaType::turtle),
+            "<p> <r> <p> .\n<q> <r> <q> .\n");
   auto ask = [&kg](const std::string& query) {
     return nlohmann::json::parse(runQueryStreamableResult(
         kg, query, ad_utility::MediaType::sparqlJson))["boolean"];

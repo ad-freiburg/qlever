@@ -87,9 +87,10 @@ class ParsedQuery {
   // `postQueryValuesClause_` and are thus computed by the `QueryPlanner` after
   // joining it, see `moveAliasesAfterPostQueryValues`.
   std::vector<parsedQuery::Bind> postQueryValuesBinds_;
-  // The internal aliases (from `HAVING` and `ORDER BY` with `GROUP BY`) of a
-  // query without a `SELECT` clause (`CONSTRUCT` or `ASK`). For a `SELECT`
-  // query, they are stored in the `SelectClause`.
+  // The internal aliases (e.g. from `HAVING` and `ORDER BY` with `GROUP BY`,
+  // or from `moveAliasesAfterPostQueryValues`) of a query without a `SELECT`
+  // clause (`CONSTRUCT` or `ASK`). For a `SELECT` query, they are stored in the
+  // `SelectClause`.
   std::vector<Alias> internalAliasesWithoutSelectClause_;
 
   // Contains warnings about queries that are valid according to the SPARQL
