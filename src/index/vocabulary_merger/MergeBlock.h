@@ -11,6 +11,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_MERGEBLOCK_H
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_MERGEBLOCK_H
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -18,7 +19,6 @@
 #include <utility>
 #include <vector>
 
-#include "backports/algorithm.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
 #include "util/Exception.h"
@@ -111,8 +111,11 @@ class MergeBlock : public ad_utility::NoCopy {
   // The storage of the words of a block of merged words, see `push`. A
   // monotonic buffer allocates in chunks and never moves or frees what it has
   // allocated (until `release`), so the views into it stay valid. It lives on
-  // the heap, so that the block can be moved.
-  std::unique_ptr<ql::pmr::monotonic_buffer_resource> mergedWords_;
+  // the heap, so that the block can be moved. Constructing it allocates
+  // nothing, the first chunk is only allocated by the first `store`.
+  std::unique_ptr<ql::pmr::monotonic_buffer_resource> mergedWords_ =
+      std::make_unique<ql::pmr::monotonic_buffer_resource>(
+          initialBufferSize_.getBytes());
 
  public:
   MergeBlock() = default;
@@ -171,21 +174,15 @@ class MergeBlock : public ad_utility::NoCopy {
     words_.clear();
     bytesFromFile_.clear();
     bytesFromFile_.shrink_to_fit();
-    mergedWords_.reset();
+    mergedWords_->release();
   }
 
  private:
   // Copy the `word` into `mergedWords_` and return the view of the copy.
   std::string_view store(std::string_view word) {
-    if (word.empty()) {
-      return {};
-    }
-    if (!mergedWords_) {
-      mergedWords_ = std::make_unique<ql::pmr::monotonic_buffer_resource>(
-          initialBufferSize_.getBytes());
-    }
-    auto* copy = static_cast<char*>(mergedWords_->allocate(word.size(), 1));
-    ql::ranges::copy(word, copy);
+    auto* copy =
+        static_cast<char*>(mergedWords_->allocate(word.size(), alignof(char)));
+    std::copy(word.begin(), word.end(), copy);
     return {copy, word.size()};
   }
 };

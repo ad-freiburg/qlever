@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_PARTIALVOCABULARYFILE_H
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_PARTIALVOCABULARYFILE_H
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -18,6 +19,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/memory.h"
 #include "backports/span.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/IndexBuilderTypes.h"
@@ -313,15 +315,18 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
           return sum + block.first_.iriOrLiteral().size() +
                  block.last_.iriOrLiteral().size();
         });
-    run.boundaryWords_ = std::unique_ptr<char[]>{new char[numBoundaryBytes]};
-    size_t numBytesStored = 0;
-    auto makeElement = [&run, &numBytesStored,
-                        runIdx](const TripleComponentWithIndex& word) {
+    run.boundaryWords_ =
+        ql::make_unique_for_overwrite<char[]>(numBoundaryBytes);
+    auto makeElement = [&run, runIdx, numBoundaryBytes,
+                        numBytesStored = size_t{0}](
+                           const TripleComponentWithIndex& word) mutable {
+      const auto& bytes = word.iriOrLiteral();
+      AD_CORRECTNESS_CHECK(numBytesStored + bytes.size() <= numBoundaryBytes);
       char* storage = run.boundaryWords_.get() + numBytesStored;
-      ql::ranges::copy(word.iriOrLiteral(), storage);
-      numBytesStored += word.iriOrLiteral().size();
+      std::copy(bytes.begin(), bytes.end(), storage);
+      numBytesStored += bytes.size();
       Element element;
-      element.word_ = {storage, word.iriOrLiteral().size()};
+      element.word_ = {storage, bytes.size()};
       element.isExternal_ = word.isExternal();
       element.index_ = word.index_;
       element.partialFileId_ = static_cast<uint32_t>(runIdx);
@@ -334,7 +339,6 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
                              makeElement(block.first_),
                              makeElement(block.last_)});
     }
-    AD_CORRECTNESS_CHECK(numBytesStored == numBoundaryBytes);
     return run;
   }
 };
