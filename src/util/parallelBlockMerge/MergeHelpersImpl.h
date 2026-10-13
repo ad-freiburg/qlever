@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <range/v3/numeric/accumulate.hpp>
 #include <range/v3/numeric/partial_sum.hpp>
@@ -153,13 +154,19 @@ std::vector<ElementAndWeight<Element>> sortAndAccumulateWeights(
   // collation) and millions of blocks it takes a while, so it is sorted in
   // parallel. This blocks the calling thread, which therefore must not be a
   // thread of the global executor.
-  auto compareElements = [&comparator](const ElementAndWeight<Element>& a,
-                                       const ElementAndWeight<Element>& b) {
-    return comparator(a.first, b.first);
-  };
+  // NOTE: The comparator is type-erased, because it ends up in the coroutine
+  // frames of the parallel sort, and GCC rejects a frame that depends on a
+  // `Comparator` without linkage (a local class, as in several tests) with
+  // `-Werror=subobject-linkage`.
+  std::function<bool(const ElementAndWeight<Element>&,
+                     const ElementAndWeight<Element>&)>
+      compareElements = [&comparator](const ElementAndWeight<Element>& a,
+                                      const ElementAndWeight<Element>& b) {
+        return comparator(a.first, b.first);
+      };
   size_t numThreads = defaultMergeParallelism();
   ad_utility::blockSort::blockIndirectSort(
-      elementsAndWeights, compareElements,
+      elementsAndWeights, std::move(compareElements),
       static_cast<uint32_t>(std::clamp<size_t>(
           numThreads, 1, std::numeric_limits<uint32_t>::max())),
       ad_utility::makeConcurrencyLimitedExecutor(ad_utility::globalExecutor(),
