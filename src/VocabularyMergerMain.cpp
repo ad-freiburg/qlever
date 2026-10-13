@@ -110,6 +110,6 @@ int main(int argc, char** argv) {
   writer.finish();
   AD_LOG_INFO << "Merged " << metaData.numWordsTotal() << " words and "
               << metaData.getNextBlankNodeIndex() << " blank nodes in "
-              << timer.msecs() << std::endl;
+              << timer.msecs().count() << " ms" << std::endl;
   return EXIT_SUCCESS;
 }
