@@ -194,6 +194,12 @@ else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++, LLVM-Clang++ or AppleClang compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
 
+# Clang stores a timestamp in each precompiled header, so `ccache` would never
+# reuse the objects compiled with one. CMake doesn't remove it on its own.
+if (CMAKE_CXX_COMPILER_LAUNCHER MATCHES "ccache" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options("SHELL:-Xclang -fno-pch-timestamp")
+endif ()
+
 # Additionally fall back to `range-v3` whenever the C++ standard library is
 # libstdc++ older than version 12, independent of the compiler. Such versions
 # (e.g. the libstdc++ of GCC 8-11) do not yet provide `std::ranges::owning_view`,
@@ -978,9 +984,9 @@ add_subdirectory(test)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
-OPTION(_EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER "Don't build some targets when compiling with Emscripten." OFF)
-
-if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+# The command-line tools are not built for Emscripten (and `qlever-server`
+# cannot be, see `src/engine/CMakeLists.txt`).
+if (NOT EMSCRIPTEN)
     add_executable(qlever-index src/index/IndexBuilderMain.cpp)
     qlever_target_link_libraries(qlever-index qlever index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
@@ -1003,16 +1009,22 @@ if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
     qlever_enable_lto(qlever-upgrade-index)
 endif()
 
-add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
-qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
+# Tools that are only needed natively: `LibQLeverExample` and
+# `VocabularyMergerMain` work on files on the host file system, which a
+# WebAssembly build cannot access, and `PrintIndexVersionMain` is only used by
+# the index version check in CI.
+if (NOT EMSCRIPTEN)
+    add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
+    qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
 
-add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
+    add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
+    qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
-qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
+    add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
+    qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
+endif()
 
-if (NOT _EMSCRIPTEN_NO_INDEXBUILDER_AND_SERVER)
+if (NOT EMSCRIPTEN)
     install(TARGETS
         qlever-index
         qlever-server
