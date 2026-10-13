@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <range/v3/numeric/accumulate.hpp>
 #include <range/v3/numeric/partial_sum.hpp>
 #include <range/v3/range/conversion.hpp>
@@ -23,10 +25,12 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
-#include "global/Constants.h"
+#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
+#include "util/GlobalExecutor.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
+#include "util/blockSort/BlockIndirectSort.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
@@ -147,18 +151,19 @@ std::vector<ElementAndWeight<Element>> sortAndAccumulateWeights(
   // NOTE: This is the only work of the boundary computation that grows with
   // the number of blocks, and with an expensive comparator (such as a
   // collation) and millions of blocks it takes a while, so it is sorted in
-  // parallel.
-  if constexpr (USE_PARALLEL_SORT) {
-    auto compareElements = [&comparator](const ElementAndWeight<Element>& a,
-                                         const ElementAndWeight<Element>& b) {
-      return comparator(a.first, b.first);
-    };
-    ad_utility::parallel_sort(
-        elementsAndWeights.begin(), elementsAndWeights.end(), compareElements,
-        ad_utility::parallel_tag(defaultMergeParallelism()));
-  } else {
-    ql::ranges::sort(elementsAndWeights, comparator, ad_utility::first);
-  }
+  // parallel. This blocks the calling thread, which therefore must not be a
+  // thread of the global executor.
+  auto compareElements = [&comparator](const ElementAndWeight<Element>& a,
+                                       const ElementAndWeight<Element>& b) {
+    return comparator(a.first, b.first);
+  };
+  size_t numThreads = defaultMergeParallelism();
+  ad_utility::blockSort::blockIndirectSort(
+      elementsAndWeights, compareElements,
+      static_cast<uint32_t>(std::clamp<size_t>(
+          numThreads, 1, std::numeric_limits<uint32_t>::max())),
+      ad_utility::makeConcurrencyLimitedExecutor(ad_utility::globalExecutor(),
+                                                 numThreads));
   // Merging equal elements is what makes the quantiles below exact: a target
   // then always identifies a single entry, and picking that entry for two
   // different targets can be avoided by simply moving on to the next one.
