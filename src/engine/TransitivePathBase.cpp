@@ -539,6 +539,10 @@ void TransitivePathBase::computePayloadColumnOffsets(
     auto leftOrMiddle = columnIndex < lowerCol ? 2 : 1;
     return columnIndex < higherCol ? leftOrMiddle : 0;
   };
+  auto isSideCol = [&](const auto& colIndex) -> bool {
+    return (leftCol.has_value() && colIndex == leftCol.value()) ||
+           (rightCol.has_value() && colIndex == rightCol.value());
+  };
 
   // Note: The `variable` in the following structured binding is `const`, even
   // if we bind by value. We deliberately make one unnecessary copy of the
@@ -546,8 +550,7 @@ void TransitivePathBase::computePayloadColumnOffsets(
   for (auto [variable, columnIndexWithType] : op->getVariableColumns()) {
     ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
     // Do not add the actual joining columns as payload columns.
-    if ((leftCol.has_value() && columnIndex == leftCol.value()) ||
-        (rightCol.has_value() && columnIndex == rightCol.value()) ||
+    if (isSideCol(columnIndex) ||
         (graphVariable_.has_value() && variable == graphVariable_)) {
       continue;
     }
@@ -569,10 +572,9 @@ void TransitivePathBase::computePayloadColumnOffsets(
     // When we have a graph variable, we write it last, so we have to
     // account for that.
     if (graphVariable_.has_value()) {
-      auto optGraphIndex =
-          op->getVariableColumnOrNullopt(graphVariable_.value());
-      if (columnIndex >
-          optGraphIndex.value_or(std::numeric_limits<size_t>::max())) {
+      auto graphIndex = op->getVariableColumnOrNullopt(graphVariable_.value())
+                            .value_or(std::numeric_limits<size_t>::max());
+      if (!isSideCol(graphIndex) && columnIndex > graphIndex) {
         columnIndexWithType.columnIndex_ -= 1;
       }
     }

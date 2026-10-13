@@ -1608,6 +1608,28 @@ TEST_P(TransitivePathTest, sameVariableOnBothSidesOrGraphBound) {
     auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
   }
+  {
+    auto sideTable = makeIdTableFromVector({
+        {1, 1, 7},
+        {2, 2, 7},
+    });
+    auto expected = makeIdTableFromVector({{1, 1, 7, 1}});
+
+    TransitivePathSide left(std::nullopt, 0, Variable{"?x"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?g"}, 1);
+    runTestWithForcedSideTableScenarios(
+        [&](auto tableVariant, bool forceFullyMaterialized) {
+          auto T = makePathBoundOnBothSides(
+              sub.clone(), {Variable{"?x"}, Variable{"?g"}, Variable{"?g"}},
+              std::move(tableVariant), 0, 1,
+              {Variable{"?x"}, Variable{"?g"}, Variable{"?z"}}, left, right, 1,
+              std::numeric_limits<size_t>::max(), forceFullyMaterialized,
+              Variable{"?g"});
+          auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+          assertResultMatchesIdTable(resultTable, expected);
+        },
+        std::move(sideTable));
+  }
 }
 
 // _____________________________________________________________________________
