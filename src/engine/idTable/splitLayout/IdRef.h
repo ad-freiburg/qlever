@@ -48,9 +48,9 @@ template <bool IsConst>
 class BasicIdRef {
  public:
   using PayloadPointer =
-      std::conditional_t<IsConst, const PayloadType*, PayloadType*>;
+      std::conditional_t<IsConst, const Id::PayloadType*, Id::PayloadType*>;
   using DatatypePointer =
-      std::conditional_t<IsConst, const DatatypeType*, DatatypeType*>;
+      std::conditional_t<IsConst, const Id::DatatypeType*, Id::DatatypeType*>;
 
  private:
   PayloadPointer payload_;
@@ -107,10 +107,8 @@ class BasicIdRef {
   [[nodiscard]] auto compareWithoutLocalVocab(const Id& other) const {
     return toId().compareWithoutLocalVocab(other);
   }
-  [[nodiscard]] SplitLayoutIdBitRepresentation getBits() const noexcept {
-    return {*datatype_, *payload_};
-  }
-  [[nodiscard]] PayloadType getPayloadBits() const noexcept {
+  [[nodiscard]] Id::T getBits() const noexcept { return toId().getBits(); }
+  [[nodiscard]] Id::PayloadType getPayloadBits() const noexcept {
     return *payload_;
   }
   [[nodiscard]] Datatype getDatatype() const noexcept {
@@ -129,7 +127,7 @@ class BasicIdRef {
   [[nodiscard]] VocabIndex getVocabIndex() const noexcept {
     return toId().getVocabIndex();
   }
-  [[nodiscard]] PayloadType getEncodedVal() const noexcept {
+  [[nodiscard]] Id::PayloadType getEncodedVal() const noexcept {
     return toId().getEncodedVal();
   }
   [[nodiscard]] TextRecordIndex getTextRecordIndex() const noexcept {

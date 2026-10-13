@@ -37,9 +37,9 @@ template <bool IsConst>
 class BasicIdColumnView {
  public:
   using PayloadPointer =
-      std::conditional_t<IsConst, const PayloadType*, PayloadType*>;
+      std::conditional_t<IsConst, const Id::PayloadType*, Id::PayloadType*>;
   using DatatypePointer =
-      std::conditional_t<IsConst, const DatatypeType*, DatatypeType*>;
+      std::conditional_t<IsConst, const Id::DatatypeType*, Id::DatatypeType*>;
   using Reference = BasicIdRef<IsConst>;
   using value_type = Id;
   using iterator = BasicIdColumnIterator<IsConst>;
@@ -126,12 +126,12 @@ class BasicIdColumnView {
   // Direct access to the two underlying arrays (`.data()` is intentionally
   // not provided), e.g. for raw byte I/O.
   [[nodiscard]] ql::span<
-      std::conditional_t<IsConst, const PayloadType, PayloadType>>
+      std::conditional_t<IsConst, const Id::PayloadType, Id::PayloadType>>
   rawPayloads() const {
     return {payloads_, size_};
   }
   [[nodiscard]] ql::span<
-      std::conditional_t<IsConst, const DatatypeType, DatatypeType>>
+      std::conditional_t<IsConst, const Id::DatatypeType, Id::DatatypeType>>
   rawDatatypes() const {
     return {datatypes_, size_};
   }

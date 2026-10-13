@@ -20,9 +20,6 @@
 #include "backports/three_way_comparison.h"
 
 namespace columnBasedIdTable::splitLayout {
-using PayloadType = uint64_t;
-using DatatypeType = uint8_t;
-
 // The raw bit representation of an `Id` in the experimental split layout: a
 // datatype byte and a full 64-bit payload word, kept apart (unlike the legacy
 // `ValueId`, which packs both into a single 64-bit word). The comparison is
@@ -30,6 +27,9 @@ using DatatypeType = uint8_t;
 // consistent with the ordering of the legacy `ValueId`s (as long as no
 // `LocalVocabIndex` is involved).
 struct SplitLayoutIdBitRepresentation {
+  using PayloadType = uint64_t;
+  using DatatypeType = uint8_t;
+
   DatatypeType datatype_;
   PayloadType payload_;
 

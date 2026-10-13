@@ -32,9 +32,9 @@ template <typename Allocator>
 class IdColumnVector {
  public:
   using PayloadAllocator =
-      std::allocator_traits<Allocator>::template rebind_alloc<PayloadType>;
+      std::allocator_traits<Allocator>::template rebind_alloc<Id::PayloadType>;
   using DatatypeAllocator =
-      std::allocator_traits<Allocator>::template rebind_alloc<DatatypeType>;
+      std::allocator_traits<Allocator>::template rebind_alloc<Id::DatatypeType>;
 
   using value_type = Id;
   using reference = IdRef;
@@ -47,8 +47,8 @@ class IdColumnVector {
   // allocators) to preserve the passed-in allocator's exact state (e.g. a
   // shared memory limit).
   Allocator allocator_;
-  std::vector<PayloadType, PayloadAllocator> payloads_;
-  std::vector<DatatypeType, DatatypeAllocator> datatypes_;
+  std::vector<Id::PayloadType, PayloadAllocator> payloads_;
+  std::vector<Id::DatatypeType, DatatypeAllocator> datatypes_;
 
  public:
   explicit IdColumnVector(Allocator allocator = Allocator{})
@@ -161,8 +161,8 @@ class IdColumnVector {
   }
   template <typename InputIt>
   void insertImpl(ptrdiff_t offset, InputIt first, InputIt last) {
-    std::vector<PayloadType> newPayloads;
-    std::vector<DatatypeType> newDatatypes;
+    std::vector<Id::PayloadType> newPayloads;
+    std::vector<Id::DatatypeType> newDatatypes;
     for (; first != last; ++first) {
       auto [datatype, payload] = getBitsCompat(static_cast<Id>(*first));
       newPayloads.push_back(payload);
