@@ -111,8 +111,8 @@ class MergeBlock : public ad_utility::NoCopy {
   // The storage of the words of a block of merged words, see `push`. A
   // monotonic buffer allocates in chunks and never moves or frees what it has
   // allocated (until `release`), so the views into it stay valid. It lives on
-  // the heap, so that the block can be moved. Constructing it allocates
-  // nothing, the first chunk is only allocated by the first `store`.
+  // the heap, so that the block can be moved. Constructing it allocates no
+  // chunk yet, the first chunk is only allocated by the first `store`.
   std::unique_ptr<ql::pmr::monotonic_buffer_resource> mergedWords_ =
       std::make_unique<ql::pmr::monotonic_buffer_resource>(
           initialBufferSize_.getBytes());

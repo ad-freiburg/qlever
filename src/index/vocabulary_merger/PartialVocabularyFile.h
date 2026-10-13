@@ -222,10 +222,6 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     }
   }
 
-  PartialVocabularyRunsInput(PartialVocabularyRunsInput&&) noexcept = default;
-  PartialVocabularyRunsInput& operator=(PartialVocabularyRunsInput&&) noexcept =
-      default;
-
   size_t numRuns() const { return runs_.size(); }
 
   size_t numBlocks(size_t run) const { return runs_.at(run).blocks_.size(); }
