@@ -94,6 +94,11 @@ std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance) {
 }
 
 // _____________________________________________________________________________
+std::optional<std::string> wktToGeoJson(GeoPointOrWkt wkt) {
+  return utilGeomToGeoJson(parseGeoPointOrWkt(wkt).parsedWkt_);
+}
+
+// _____________________________________________________________________________
 std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
                                                 const GeoPointOrWkt& b) {
   return computeMetricDistance(a, b);

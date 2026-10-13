@@ -17,6 +17,7 @@
 #include <array>
 #include <iostream>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <range/v3/numeric/accumulate.hpp>
 #include <stdexcept>
 #include <string_view>
@@ -536,6 +537,87 @@ struct UtilGeomToWktVisitor {
 };
 
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
+
+// Helper to convert a geometry from `pb_util` to a GeoJSON geometry object (RFC
+// 7946). The input is expected to be in CRS84, as GeoJSON only supports this
+// CRS.
+struct UtilGeomToGeoJsonVisitor {
+  using Json = nlohmann::ordered_json;
+
+  // Visitor for `std::optional<ParsedWkt>` inputs.
+  std::optional<std::string> operator()(
+      const std::optional<ParsedWkt>& geom) const {
+    if (!geom.has_value()) {
+      return std::nullopt;
+    }
+    return std::visit([](const auto& g) { return toJson(g); }, geom.value())
+        .dump();
+  }
+
+  // The GeoJSON coordinates of a point, line, ring or multi-geometry.
+  static Json coords(const Point<CoordType>& p) {
+    return Json::array({p.getX(), p.getY()});
+  }
+  template <typename T>
+  static Json coords(const std::vector<T>& vec) {
+    Json result = Json::array();
+    for (const auto& element : vec) {
+      result.push_back(coords(element));
+    }
+    return result;
+  }
+  static Json coords(const Polygon<CoordType>& polygon) {
+    Json result = Json::array({ringCoords(polygon.getOuter())});
+    for (const auto& inner : polygon.getInners()) {
+      result.push_back(ringCoords(inner));
+    }
+    return result;
+  }
+  // GeoJSON requires rings to be closed explicitly.
+  static Json ringCoords(const Ring<CoordType>& ring) {
+    Json result = coords(ring);
+    if (!ring.empty() && ring.front() != ring.back()) {
+      result.push_back(coords(ring.front()));
+    }
+    return result;
+  }
+
+  static Json geometry(std::string_view type, Json coordinates) {
+    return {{"type", std::string{type}},
+            {"coordinates", std::move(coordinates)}};
+  }
+
+  // The GeoJSON geometry objects for each of the `pb_util` geometry types.
+  static Json toJson(const Point<CoordType>& g) {
+    return geometry(detail::geoStrings::point, coords(g));
+  }
+  static Json toJson(const Line<CoordType>& g) {
+    return geometry(detail::geoStrings::linestring, coords(g));
+  }
+  static Json toJson(const Polygon<CoordType>& g) {
+    return geometry(detail::geoStrings::polygon, coords(g));
+  }
+  static Json toJson(const MultiPoint<CoordType>& g) {
+    return geometry(detail::geoStrings::multipoint, coords(g));
+  }
+  static Json toJson(const MultiLine<CoordType>& g) {
+    return geometry(detail::geoStrings::multiLineString, coords(g));
+  }
+  static Json toJson(const MultiPolygon<CoordType>& g) {
+    return geometry(detail::geoStrings::multiPolygon, coords(g));
+  }
+  static Json toJson(const Collection<CoordType>& collection) {
+    Json geometries = Json::array();
+    for (const auto& g : collection) {
+      geometries.push_back(
+          visitAnyGeometry([](const auto& x) { return toJson(x); }, g));
+    }
+    return {{"type", std::string{detail::geoStrings::geometryCollection}},
+            {"geometries", std::move(geometries)}};
+  }
+};
+
+static constexpr UtilGeomToGeoJsonVisitor utilGeomToGeoJson;
 
 // Helper to extract the n-th geometry from a parsed `pb_util` geometry. Note
 // that this is 1-indexed and non-collection types return themselves at index 1.

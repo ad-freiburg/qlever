@@ -1941,6 +1941,55 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       geoLit("LINESTRING(0 0,10 0)"),
   };
   checkSimplify(expected, geometries, tolerances);
+
+  // The function `geof:asGeoJSON`.
+  auto checkAsGeoJson = testUnaryExpression<&makeAsGeoJsonExpression>;
+  auto geoJsonLit = [](std::string_view content) {
+    return IdOrLocalVocabEntry{lit(
+        content, "^^<http://www.opengis.net/ont/geosparql#geoJSONLiteral>")};
+  };
+  checkAsGeoJson(
+      IdOrLocalVocabEntryVec{
+          U,
+          IdOrLocalVocabEntry{lit("NotAGeometry")},
+          geoLit("NOTWKT(1 2)"),
+          Id::makeFromGeoPoint(GeoPoint{2.5, 1.5}),
+          geoLit("POINT(1 2)"),
+          geoLit("LINESTRING(1 2,3 4.5)"),
+          // The rings of the polygon are closed explicitly in GeoJSON. The
+          // inner ring is oriented clockwise when parsing.
+          geoLit("POLYGON((0 0,10 0,10 10,0 0),(1 1,2 1,2 2))"),
+          geoLit("MULTIPOINT((1 2),(3 4))"),
+          geoLit("MULTILINESTRING((1 2,3 4),(5 6,7 8))"),
+          geoLit("MULTIPOLYGON(((0 0,1 0,1 1,0 0)),((2 2,3 2,3 3,2 2)))"),
+          geoLit("GEOMETRYCOLLECTION(POINT(1 2),LINESTRING(1 2,3 4))"),
+      },
+      IdOrLocalVocabEntryVec{
+          U,
+          U,
+          U,
+          // `GeoPoint`s are stored with limited precision.
+          geoJsonLit(R"({"type":"Point","coordinates":)"
+                     R"([1.5000000796281086,2.499999937135712]})"),
+          geoJsonLit(R"({"type":"Point","coordinates":[1.0,2.0]})"),
+          geoJsonLit(
+              R"({"type":"LineString","coordinates":[[1.0,2.0],[3.0,4.5]]})"),
+          geoJsonLit(
+              R"({"type":"Polygon","coordinates":[[[0.0,0.0],[10.0,0.0],)"
+              R"([10.0,10.0],[0.0,0.0]],[[2.0,2.0],[2.0,1.0],[1.0,1.0],)"
+              R"([2.0,2.0]]]})"),
+          geoJsonLit(
+              R"({"type":"MultiPoint","coordinates":[[1.0,2.0],[3.0,4.0]]})"),
+          geoJsonLit(R"({"type":"MultiLineString","coordinates":)"
+                     R"([[[1.0,2.0],[3.0,4.0]],[[5.0,6.0],[7.0,8.0]]]})"),
+          geoJsonLit(R"({"type":"MultiPolygon","coordinates":)"
+                     R"([[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[0.0,0.0]]],)"
+                     R"([[[2.0,2.0],[3.0,2.0],[3.0,3.0],[2.0,2.0]]]]})"),
+          geoJsonLit(R"({"type":"GeometryCollection","geometries":)"
+                     R"([{"type":"Point","coordinates":[1.0,2.0]},)"
+                     R"({"type":"LineString","coordinates":)"
+                     R"([[1.0,2.0],[3.0,4.0]]}]})"),
+      });
 }
 
 // ________________________________________________________________________________________
