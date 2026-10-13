@@ -3586,6 +3586,36 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_NE(table(0, 1), table(1, 1));
 }
 
+// Matcher for TEST(GroupBy.makeTreeWithStrippedColumns
+MATCHER_P3(HasOperationResult, operationType, expectedVariables,
+           expectedResult, "") {
+  using OperationType = typename decltype(operationType)::type;
+  auto operation =
+      std::dynamic_pointer_cast<OperationType>(arg->getRootOperation());
+  if (!operation) {
+    *result_listener << "root operation has the wrong type";
+    return false;
+  }
+  const auto& columns = arg->getVariableColumns();
+  if (columns.size() != expectedVariables.size()) {
+    *result_listener << "expected " << expectedVariables.size()
+                     << " variables, but got " << columns.size();
+    return false;
+  }
+  for (const auto& variable : expectedVariables) {
+    if (!columns.contains(variable)) {
+      *result_listener << "an expected variable is missing";
+      return false;
+    }
+  }
+  if (arg->getResult(false)->idTableView() != expectedResult.get()) {
+    *result_listener << "the result table does not match";
+    return false;
+  }
+  return true;
+}
+
+
 // Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
 // variables plus the variables the `GroupBy` uses for grouping or for building
 // _aliases. The test checks whether `makeTreeWithStrippedColumns` adds a
@@ -3624,13 +3654,13 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
   // requested: the result has `?a` and `?sumB`.
   {
     auto tree = strip({V{"?a"}}, {alias}, {V{"?a"}, V{"?sumB"}});
-    auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
-    ASSERT_TRUE(groupBy);
-    EXPECT_THAT(tree->getVariableColumns(),
-                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?sumB"})));
-    EXPECT_EQ(
-        tree->getResult(false)->idTableView(),
-        makeIdTableFromVector({{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}}));
+    auto expectedResult = makeIdTableFromVector(
+            {{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}});
+    EXPECT_THAT(
+    tree,
+    HasOperationResult(
+        std::type_identity<GroupBy>{}, std::vector{V{"?a"}, V{"?sumB"}}, std::cref(expectedResult))
+        );
   }
 
   // A requested variable that the subtree does not have is ignored.
