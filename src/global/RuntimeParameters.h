@@ -70,7 +70,7 @@ struct RuntimeParameters {
   // of its lazy index scans). This keeps a single expensive query from
   // occupying all the threads of the pool. The value must be at least `1`
   // (enforced by a parameter constraint).
-  SizeT maximumThreadsPerQuery_{6, "maximum-threads-per-query"};
+  SizeT maxNumThreadsPerQuery_{6, "max-num-threads-per-query"};
   // The maximum number of threads with which each scan of a permutation
   // during a runtime index rebuild (see `IndexRebuilder`) reads and
   // decompresses its blocks, both for the main scan of the old permutations

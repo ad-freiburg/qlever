@@ -268,7 +268,7 @@ class QueryExecutionContext
   // work (for example, the reading and decompressing of the blocks of lazy
   // index scans). The server uses an executor that limits the number of
   // threads that a single query may use at the same time (see
-  // `maximum-threads-per-query`).
+  // `max-num-threads-per-query`).
   const qlever::Executor& executor() const { return executor_; }
 
  private:

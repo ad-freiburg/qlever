@@ -68,18 +68,18 @@ TEST(RuntimeParameters, lazyIndexScanNumBlocksInFlightIsStrictlyPositive) {
   EXPECT_EQ(params.lazyIndexScanNumBlocksInFlight_.get(), 1u);
 }
 
-// Test the default of `maximum-threads-per-query` and that the value `0` is
+// Test the default of `max-num-threads-per-query` and that the value `0` is
 // rejected (a query has to be able to run at least one task).
-TEST(RuntimeParameters, maximumThreadsPerQueryIsStrictlyPositive) {
+TEST(RuntimeParameters, maxNumThreadsPerQueryIsStrictlyPositive) {
   RuntimeParameters params;
-  EXPECT_EQ(params.maximumThreadsPerQuery_.get(), 6u);
+  EXPECT_EQ(params.maxNumThreadsPerQuery_.get(), 6u);
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      params.setFromAssignment("maximum-threads-per-query=0"),
-      AllOf(HasSubstr("maximum-threads-per-query"),
+      params.setFromAssignment("max-num-threads-per-query=0"),
+      AllOf(HasSubstr("max-num-threads-per-query"),
             HasSubstr("strictly positive")),
       std::runtime_error);
-  EXPECT_NO_THROW(params.setFromAssignment("maximum-threads-per-query=1"));
-  EXPECT_EQ(params.maximumThreadsPerQuery_.get(), 1u);
+  EXPECT_NO_THROW(params.setFromAssignment("max-num-threads-per-query=1"));
+  EXPECT_EQ(params.maxNumThreadsPerQuery_.get(), 1u);
 }
 
 // Test the default of `permutation-writer-num-blocks-in-flight` and that the

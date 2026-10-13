@@ -277,11 +277,11 @@ class QueryAlreadyInUseError : public std::runtime_error {
 
 namespace {
 // Return an executor for a single query, which runs at most
-// `maximum-threads-per-query` tasks on the `executor` at the same time.
+// `max-num-threads-per-query` tasks on the `executor` at the same time.
 qlever::Executor makeQueryExecutor(qlever::Executor executor) {
   return ad_utility::makeConcurrencyLimitedExecutor(
       std::move(executor),
-      getRuntimeParameter<&RuntimeParameters::maximumThreadsPerQuery_>());
+      getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>());
 }
 }  // namespace
 
