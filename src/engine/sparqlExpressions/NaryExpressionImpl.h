@@ -210,7 +210,7 @@ class NaryExpressionStronglyTyped
       // passed directly to `promoteToLocalVocabEntry`.
       ad_utility::chunkedForLoop<1000>(
           0, targetSize,
-          [&](size_t i) {
+          [&computeValue, &result, context](size_t i) {
             auto value = computeValue(i);
             result.push_back(promoteToLocalVocabEntry(
                 std::move(value), context->getLocalVocabContext()));
