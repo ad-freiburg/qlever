@@ -97,7 +97,7 @@ class SparqlExpressionPimpl {
   [[nodiscard]] bool isResultAlwaysDefined(
       const VariableToColumnMap& variableToColumnMap) const;
 
-  SparqlExpressionPimpl(std::shared_ptr<SparqlExpression>&& pimpl,
+  SparqlExpressionPimpl(const std::shared_ptr<SparqlExpression>& pimpl,
                         std::string descriptor);
   ~SparqlExpressionPimpl();
   SparqlExpressionPimpl(SparqlExpressionPimpl&&) noexcept;

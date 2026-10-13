@@ -13,8 +13,8 @@ namespace sparqlExpression {
 
 // __________________________________________________________________________
 SparqlExpressionPimpl::SparqlExpressionPimpl(
-    std::shared_ptr<SparqlExpression>&& pimpl, std::string descriptor)
-    : _pimpl{std::move(pimpl)} {
+    const std::shared_ptr<SparqlExpression>& pimpl, std::string descriptor)
+    : _pimpl{pimpl} {
   _pimpl->descriptor() = std::move(descriptor);
 }
 
@@ -28,10 +28,14 @@ std::vector<const Variable*> SparqlExpressionPimpl::containedVariables(
 }
 
 // ____________________________________________________________________________
-SparqlExpressionPimpl::SparqlExpressionPimpl(SparqlExpressionPimpl&&) noexcept =
-    default;
+SparqlExpressionPimpl::SparqlExpressionPimpl(
+    SparqlExpressionPimpl&& other) noexcept
+    : _pimpl{other._pimpl} {}
 SparqlExpressionPimpl& SparqlExpressionPimpl::operator=(
-    SparqlExpressionPimpl&&) noexcept = default;
+    SparqlExpressionPimpl&& other) noexcept {
+  _pimpl = other._pimpl;
+  return *this;
+}
 SparqlExpressionPimpl::SparqlExpressionPimpl(const SparqlExpressionPimpl&) =
     default;
 SparqlExpressionPimpl& SparqlExpressionPimpl::operator=(
