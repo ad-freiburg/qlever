@@ -32,9 +32,9 @@ template <typename Allocator>
 class IdColumnVector {
  public:
   using PayloadAllocator =
-      std::allocator_traits<Allocator>::template rebind_alloc<uint64_t>;
+      std::allocator_traits<Allocator>::template rebind_alloc<PayloadType>;
   using DatatypeAllocator =
-      std::allocator_traits<Allocator>::template rebind_alloc<uint8_t>;
+      std::allocator_traits<Allocator>::template rebind_alloc<DatatypeType>;
 
   using value_type = Id;
   using reference = IdRef;

@@ -48,8 +48,9 @@ template <bool IsConst>
 class BasicIdRef {
  public:
   using PayloadPointer =
-      std::conditional_t<IsConst, const uint64_t*, uint64_t*>;
-  using DatatypePointer = std::conditional_t<IsConst, const uint8_t*, uint8_t*>;
+      std::conditional_t<IsConst, const PayloadType*, PayloadType*>;
+  using DatatypePointer =
+      std::conditional_t<IsConst, const DatatypeType*, DatatypeType*>;
 
  private:
   PayloadPointer payload_;
@@ -126,7 +127,7 @@ class BasicIdRef {
   [[nodiscard]] VocabIndex getVocabIndex() const noexcept {
     return toId().getVocabIndex();
   }
-  [[nodiscard]] uint64_t getEncodedVal() const noexcept {
+  [[nodiscard]] PayloadType getEncodedVal() const noexcept {
     return toId().getEncodedVal();
   }
   [[nodiscard]] TextRecordIndex getTextRecordIndex() const noexcept {

@@ -1,9 +1,9 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-//
+// 2026 Pascal Keßler <kesslerp@cs.uni-freiburg.de>, UFR
+
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-//
+
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
@@ -20,6 +20,8 @@
 #include "backports/three_way_comparison.h"
 
 namespace columnBasedIdTable::splitLayout {
+using PayloadType = uint64_t;
+using DatatypeType = uint8_t;
 
 // The raw bit representation of an `Id` in the experimental split layout: a
 // datatype byte and a full 64-bit payload word, kept apart (unlike the legacy
@@ -28,8 +30,8 @@ namespace columnBasedIdTable::splitLayout {
 // consistent with the ordering of the legacy `ValueId`s (as long as no
 // `LocalVocabIndex` is involved).
 struct SplitLayoutIdBitRepresentation {
-  uint8_t datatype_;
-  uint64_t payload_;
+  DatatypeType datatype_;
+  PayloadType payload_;
 
   // The default three-way comparison is datatype-major because `datatype_`
   // is declared before `payload_`.
@@ -42,8 +44,8 @@ struct SplitLayoutIdBitRepresentation {
   // the single integer in the packed 64-bit representation of the legacy
   // `ValueId`.
   [[nodiscard]] constexpr SplitLayoutIdBitRepresentation incremented() const {
-    if (payload_ == std::numeric_limits<uint64_t>::max()) {
-      return {static_cast<uint8_t>(datatype_ + 1), 0};
+    if (payload_ == std::numeric_limits<PayloadType>::max()) {
+      return {static_cast<DatatypeType>(datatype_ + 1), 0};
     }
     return {datatype_, payload_ + 1};
   }
@@ -89,8 +91,11 @@ struct std::hash<
   size_t operator()(
       const columnBasedIdTable::splitLayout::SplitLayoutIdBitRepresentation&
           rep) const noexcept {
-    return std::hash<uint64_t>{}(rep.payload_ ^
-                                 (static_cast<uint64_t>(rep.datatype_) << 56));
+    return std::hash<columnBasedIdTable::splitLayout::PayloadType>{}(
+        rep.payload_ ^
+        (static_cast<columnBasedIdTable::splitLayout::PayloadType>(
+             rep.datatype_)
+         << 56));
   }
 };
 
