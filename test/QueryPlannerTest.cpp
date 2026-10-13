@@ -3357,6 +3357,38 @@ TEST(QueryPlanner, distributiveJoinInUnionIsNotAppliedIfUnionHasLimit) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, distributiveJoinInUnionKeepsHiddenVariablesHidden) {
+  // Regression test for https://github.com/ad-freiburg/qlever/issues/3688.
+  // With `strip-columns` disabled, the `UNION` (the root of the subquery) only
+  // hides `?z`, which is still visible in its children. The join that is pushed
+  // into the children must not join on this `?z`.
+  auto cleanupDistributive =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  auto cleanupStrip =
+      setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(false);
+  auto qec = ad_utility::testing::getQec("<a> <b> <c> . <a> <b> <d> .");
+  QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+  auto query = parseQuery(
+      "SELECT * { { SELECT ?x ?q { { ?x ?q ?z } UNION { } } } ?x ?q ?z }");
+  auto plans = qp.createExecutionTrees(query);
+
+  // Make sure that the plan with the join pushed into the `UNION` is among the
+  // candidates, so that this test actually tests something.
+  EXPECT_TRUE(ql::ranges::any_of(plans, [](const auto& plan) {
+    return std::dynamic_pointer_cast<Union>(plan._qet->getRootOperation()) !=
+           nullptr;
+  }));
+  for (const auto& plan : plans) {
+    qec->clearCacheUnpinnedOnly();
+    EXPECT_THAT(*plan._qet, h::hasVariables({"?x", "?q", "?z"}));
+    // The subquery yields `(<a>, <b>)` twice and the empty solution once, each
+    // of which is compatible with both triples.
+    EXPECT_EQ(plan._qet->getResult()->idTableView().size(), 6);
+  }
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
   auto* qec = ad_utility::testing::getQec(
       "<a> <P279> <b> . <c> <P279> <d> . <e> <P279> <f> . <g> <P279> <h> ."
