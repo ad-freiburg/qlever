@@ -741,15 +741,16 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
   static_assert(sizeof(GeometryType) == 1);
   static_assert(sizeof(MetricLength) == sizeof(double));
   static_assert(sizeof(NumGeometries) == 4);
+  static_assert(sizeof(SourceCrsType) == 1);
   static_assert(sizeof(MetricArea) == sizeof(double));
 
   using EncodedGeometryTypeAndCentroid = uint64_t;
-  // TODO<yarox-1> adjust appropriately.
-  /*static_assert(sizeof(GeometryInfo) ==
+  static_assert(sizeof(GeometryInfo) ==
                 4 +  // Currently we need 4 B alignment
                     sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
-                    sizeof(MetricLength) + sizeof(MetricArea));*/
+                    sizeof(SourceCrsType) + sizeof(MetricLength) +
+                    sizeof(MetricArea));
 }
 
 // _____________________________________________________________________________

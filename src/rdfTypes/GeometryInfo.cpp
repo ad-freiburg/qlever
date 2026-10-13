@@ -19,7 +19,7 @@ namespace ad_utility {
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                            Centroid centroid, NumGeometries numGeometries,
-                           uint8_t sourceCrs, MetricLength metricLength,
+                           SourceCrsType sourceCrs, MetricLength metricLength,
                            MetricArea metricArea)
     : boundingBox_{boundingBox.lowerLeft().toBitRepresentation(),
                    boundingBox.upperRight().toBitRepresentation()},
@@ -41,8 +41,8 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                        "Centroid bit representation exceeds available bits.");
   geometryTypeAndCentroid_ = typeBits | centroidBits;
 
-  AD_CORRECTNESS_CHECK(sourceCrs <= 3, "CRS Type out of range");
-  AD_CORRECTNESS_CHECK(sourceCrs > 0,
+  AD_CORRECTNESS_CHECK(sourceCrs.type() <= 3, "CRS Type out of range");
+  AD_CORRECTNESS_CHECK(sourceCrs.type() > 0,
                        "CRS Type indicates invalid/unsupported geometry");
 
   AD_CORRECTNESS_CHECK(
@@ -84,9 +84,10 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                  << std::endl;
   }
 
-  return GeometryInfo{wktType,         boundingBox.value(), centroid.value(),
-                      {numGeom},       sourceCrs,           metricLength,
-                      MetricArea{area}};
+  return GeometryInfo{
+      wktType,         boundingBox.value(),      centroid.value(),
+      {numGeom},       SourceCrsType{sourceCrs}, metricLength,
+      MetricArea{area}};
 }
 
 // ____________________________________________________________________________
@@ -125,8 +126,13 @@ std::optional<SourceCrsType> GeometryInfo::getSourceCrsType(
 
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
-  return {util::geo::WKTType::POINT, {point, point},    Centroid{point}, {1},
-          util::geo::CRSType::CRS84, MetricLength{0.0}, MetricArea{0.0}};
+  return {util::geo::WKTType::POINT,
+          {point, point},
+          Centroid{point},
+          {1},
+          SourceCrsType{util::geo::CRSType::CRS84},
+          MetricLength{0.0},
+          MetricArea{0.0}};
 }
 
 // ____________________________________________________________________________
