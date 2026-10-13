@@ -198,7 +198,7 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
   PartialVocabularyWriter writer{fileName};
   for (const auto& [word, idAndExternal] : els) {
-    writer(word, idAndExternal.isExternal(), idAndExternal.id());
+    writer(word, idAndExternal);
   }
   writer.finish();
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";

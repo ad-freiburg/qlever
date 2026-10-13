@@ -55,7 +55,7 @@ void writePartialVocabulary(const std::string& filename,
                             const std::vector<std::string>& words) {
   PartialVocabularyWriter writer{filename};
   for (size_t i = 0; i < words.size(); ++i) {
-    writer(words[i], i % 3 == 2, i);
+    writer(words[i], PartialVocabIndexWithExternalFlag{i, i % 3 == 2});
   }
   writer.finish();
 }

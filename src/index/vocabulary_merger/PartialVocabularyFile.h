@@ -11,6 +11,7 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_PARTIALVOCABULARYFILE_H
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -36,17 +37,21 @@
 // in `index/PartialVocabularyFilenames.h`), with its writer and the input
 // policy that lets the parallel block merge (see
 // `util/parallelBlockMerge/ParallelBlockMerge.h`) merge the partial
-// vocabularies. The format is:
+// vocabularies. A file consists of the following four parts, in this order:
 //
-//   uint64_t numWords
-//   the words, each as a `TripleComponentWithIndex` (word, isExternal, local
-//     index), in the order of the vocabulary, grouped into blocks of about
-//     `PARTIAL_VOCAB_BLOCK_SIZE` bytes
-//   the block index: uint64_t numBlocks, then per block its `BlockMetadata`
-//   uint64_t offsetOfBlockIndex
+// 1. The number of words, as a `uint64_t`.
+// 2. The words, in the order of the vocabulary. Each word is serialized as a
+//    `TripleComponentWithIndex`, that is, the word itself, its external flag
+//    and its local index. The words are grouped into blocks: a block ends
+//    after the word that makes it at least `PARTIAL_VOCAB_BLOCK_SIZE` bytes
+//    long. The blocks are only visible through the block index (part 3), the
+//    words themselves are stored back to back.
+// 3. The block index: the number of blocks as a `uint64_t`, then the
+//    `PartialVocabularyBlockMetadata` of every block.
+// 4. The offset of the block index (part 3) in the file, as a `uint64_t`.
 //
 // The words are stored exactly as before the block index existed, so a reader
-// that only wants the words (`numWords`, then that many words) still works. The
+// that only wants the words (part 1, then that many words) still works. The
 // block index is what the merge needs: the first and the last word of every
 // block, without reading the block, so that it can split the runs into
 // independent chunks by their words alone and then read only the blocks that a
@@ -77,8 +82,9 @@ struct PartialVocabularyBlockMetadata {
 };
 
 // Write a partial vocabulary file. The words have to be pushed in the order of
-// the vocabulary, each with its local index and its external flag, and
-// `finish()` (which the destructor calls if necessary) writes the block index.
+// the vocabulary, each with its local index and its external flag (bundled in
+// a `PartialVocabIndexWithExternalFlag`), and `finish()` (which the destructor
+// calls if necessary) writes the block index.
 class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
  private:
   serialization::FileWriteSerializer file_;
@@ -113,12 +119,13 @@ class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
   }
 
   // Add the next word.
-  void operator()(std::string_view word, bool isExternal, uint64_t localIndex) {
+  void operator()(std::string_view word,
+                  PartialVocabIndexWithExternalFlag indexAndExternalFlag) {
     AD_CONTRACT_CHECK(!finishWasCalled_);
     offsetOfLastWord_ = currentBlock_.getCurrentPosition();
     currentBlock_ << word;
-    currentBlock_ << isExternal;
-    currentBlock_ << localIndex;
+    currentBlock_ << indexAndExternalFlag.isExternal();
+    currentBlock_ << indexAndExternalFlag.id();
     ++numWordsInBlock_;
     ++numWords_;
     if (currentBlock_.getCurrentPosition() >=
@@ -197,10 +204,10 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
   struct Run {
     ad_utility::File file_;
     std::vector<BlockInfo> blocks_;
-    // The first and the last words of all blocks, back to back. This is a
-    // `std::vector` and not a `std::string`, because it must not move its
-    // bytes when the `Run` is moved (a short string would).
-    std::vector<char> boundaryWords_;
+    // The first and the last words of all blocks, back to back. This is
+    // allocated once with its final size and never resized or moved, so that
+    // the `Element`s can point into it.
+    std::unique_ptr<char[]> boundaryWords_;
   };
   std::vector<Run> runs_;
 
@@ -253,8 +260,7 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     Block::Buffer bytes(info.numBytes_);
     auto numBytesRead = runs_.at(run).file_.read(
         bytes.data(), info.numBytes_, static_cast<off_t>(info.offset_));
-    AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
-                         static_cast<uint64_t>(numBytesRead) == info.numBytes_);
+    AD_CORRECTNESS_CHECK(static_cast<uint64_t>(numBytesRead) == info.numBytes_);
     return Block{std::move(bytes), info.numWords_, static_cast<uint32_t>(run)};
   }
 
@@ -283,11 +289,10 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
                                          uint64_t offset) {
       auto numBytesRead =
           run.file_.read(target, numBytes, static_cast<off_t>(offset));
-      AD_CORRECTNESS_CHECK(
-          numBytesRead >= 0 && static_cast<uint64_t>(numBytesRead) == numBytes,
-          "Could not read the block index of the partial "
-          "vocabulary file ",
-          filename);
+      AD_CORRECTNESS_CHECK(static_cast<uint64_t>(numBytesRead) == numBytes,
+                           "Could not read the block index of the partial "
+                           "vocabulary file ",
+                           filename);
     };
     readExactly(&offsetOfBlockIndex, sizeof(offsetOfBlockIndex),
                 sizeOfFile - sizeof(offsetOfBlockIndex));
@@ -302,21 +307,21 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     std::vector<PartialVocabularyBlockMetadata> blocks;
     reader >> blocks;
     // The first and the last words of the blocks are stored back to back in
-    // `boundaryWords_`, which is allocated once and never resized afterwards,
-    // so that the `Element`s can point into it.
+    // `boundaryWords_`, see there.
     size_t numBoundaryBytes = ::ranges::accumulate(
         blocks, size_t{0}, [](size_t sum, const auto& block) {
           return sum + block.first_.iriOrLiteral().size() +
                  block.last_.iriOrLiteral().size();
         });
-    run.boundaryWords_.reserve(numBoundaryBytes);
-    auto makeElement = [&run, runIdx](const TripleComponentWithIndex& word) {
-      auto& storage = run.boundaryWords_;
-      size_t offset = storage.size();
-      storage.insert(storage.end(), word.iriOrLiteral().begin(),
-                     word.iriOrLiteral().end());
+    run.boundaryWords_ = std::unique_ptr<char[]>{new char[numBoundaryBytes]};
+    size_t numBytesStored = 0;
+    auto makeElement = [&run, &numBytesStored,
+                        runIdx](const TripleComponentWithIndex& word) {
+      char* storage = run.boundaryWords_.get() + numBytesStored;
+      ql::ranges::copy(word.iriOrLiteral(), storage);
+      numBytesStored += word.iriOrLiteral().size();
       Element element;
-      element.word_ = {storage.data() + offset, word.iriOrLiteral().size()};
+      element.word_ = {storage, word.iriOrLiteral().size()};
       element.isExternal_ = word.isExternal();
       element.index_ = word.index_;
       element.partialFileId_ = static_cast<uint32_t>(runIdx);
@@ -329,7 +334,7 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
                              makeElement(block.first_),
                              makeElement(block.last_)});
     }
-    AD_CORRECTNESS_CHECK(run.boundaryWords_.size() == numBoundaryBytes);
+    AD_CORRECTNESS_CHECK(numBytesStored == numBoundaryBytes);
     return run;
   }
 };

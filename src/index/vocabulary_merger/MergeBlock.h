@@ -11,13 +11,15 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_MERGER_MERGEBLOCK_H
 #define QLEVER_SRC_INDEX_VOCABULARY_MERGER_MERGEBLOCK_H
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
+#include "backports/memory_resource.h"
 #include "backports/span.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
@@ -56,7 +58,10 @@ struct MergeWord {
   [[nodiscard]] const uint64_t& id() const { return index_; }
 
   // The memory footprint of a `MergeWord` including its word, which the
-  // parallel merge needs to limit its memory consumption.
+  // parallel merge needs to limit its memory consumption. Every word of a
+  // `MergeBlock` owns a distinct slice of the storage of the block (no two
+  // words share their bytes), so the sum over the words of a block is the
+  // footprint of the block.
   static ad_utility::MemorySize memorySize(const MergeWord& word) {
     return ad_utility::MemorySize::bytes(sizeof(MergeWord) +
                                          word.iriOrLiteral().size());
@@ -83,26 +88,31 @@ struct MergeWord {
 // A block of `MergeWord`s together with the storage that their words point
 // into: either the serialized bytes of a block of a partial vocabulary file
 // (see `PartialVocabularyRunsInput::getBlock`, which parses the words in place)
-// or, for a block of merged words, buffers that the words are copied into. The
-// buffers never move once a word points into them, so the block can be moved,
-// but not copied. The block is a random-access range of its words.
+// or, for a block of merged words, a monotonic buffer that the words are copied
+// into. The storage never moves once a word points into it, so the block can
+// be moved, but not copied. The block is a random-access range of its words.
 class MergeBlock : public ad_utility::NoCopy {
  public:
   using iterator = std::vector<MergeWord>::iterator;
   using const_iterator = std::vector<MergeWord>::const_iterator;
-  // A buffer that the words point into. The bytes are not zeroed when the
-  // buffer is resized, because they are overwritten anyway (by a read from a
-  // file, or by the words that are copied in).
-  using Buffer = std::vector<char, ad_utility::default_init_allocator<char>>;
+  // The buffer of the bytes of a block from a file. The bytes are not zeroed
+  // when the buffer is created, because the read from the file overwrites
+  // them anyway.
+  using Buffer = ad_utility::UninitializedVector<char>;
 
  private:
-  // The size of a buffer of a block of merged words. A word that is longer
-  // gets a buffer of its own.
-  static constexpr ad_utility::MemorySize bufferSize_ =
+  // The size of the first chunk of the `mergedWords_` buffer below.
+  static constexpr ad_utility::MemorySize initialBufferSize_ =
       ad_utility::MemorySize::megabytes(1);
 
   std::vector<MergeWord> words_;
-  std::vector<Buffer> buffers_;
+  // The bytes of a block that was read from a file, see the constructor below.
+  Buffer bytesFromFile_;
+  // The storage of the words of a block of merged words, see `push`. A
+  // monotonic buffer allocates in chunks and never moves or frees what it has
+  // allocated (until `release`), so the views into it stay valid. It lives on
+  // the heap, so that the block can be moved.
+  std::unique_ptr<ql::pmr::monotonic_buffer_resource> mergedWords_;
 
  public:
   MergeBlock() = default;
@@ -111,9 +121,9 @@ class MergeBlock : public ad_utility::NoCopy {
   // partial vocabulary `partialFileId`, in the format that
   // `PartialVocabularyWriter` writes (see `MergeWord::fromZeroCopyDeserializer`
   // above). The words are parsed in place, nothing is copied.
-  MergeBlock(Buffer bytes, size_t numWords, uint32_t partialFileId) {
-    buffers_.push_back(std::move(bytes));
-    const auto& buffer = buffers_.back();
+  MergeBlock(Buffer bytes, size_t numWords, uint32_t partialFileId)
+      : bytesFromFile_{std::move(bytes)} {
+    const auto& buffer = bytesFromFile_;
     words_.reserve(numWords);
     serialization::ByteBufferReadSerializerT serializer{
         ql::span<const char>{buffer.data(), buffer.size()}};
@@ -159,23 +169,24 @@ class MergeBlock : public ad_utility::NoCopy {
   // Release the words and the storage.
   void clear() {
     words_.clear();
-    buffers_.clear();
+    bytesFromFile_.clear();
+    bytesFromFile_.shrink_to_fit();
+    mergedWords_.reset();
   }
 
  private:
-  // Copy the `word` into the buffers and return the view of the copy. A word
-  // is never split across two buffers, and a buffer is never reallocated (it
-  // is reserved once and filled up to its capacity), so the views stay valid.
+  // Copy the `word` into `mergedWords_` and return the view of the copy.
   std::string_view store(std::string_view word) {
-    if (buffers_.empty() ||
-        buffers_.back().size() + word.size() > buffers_.back().capacity()) {
-      buffers_.emplace_back().reserve(
-          std::max(bufferSize_.getBytes(), word.size()));
+    if (word.empty()) {
+      return {};
     }
-    auto& buffer = buffers_.back();
-    size_t offset = buffer.size();
-    buffer.insert(buffer.end(), word.begin(), word.end());
-    return {buffer.data() + offset, word.size()};
+    if (!mergedWords_) {
+      mergedWords_ = std::make_unique<ql::pmr::monotonic_buffer_resource>(
+          initialBufferSize_.getBytes());
+    }
+    auto* copy = static_cast<char*>(mergedWords_->allocate(word.size(), 1));
+    ql::ranges::copy(word, copy);
+    return {copy, word.size()};
   }
 };
 }  // namespace ad_utility::vocabulary_merger::detail
