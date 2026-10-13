@@ -87,6 +87,9 @@ int main(int argc, char** argv) {
       throw std::invalid_argument(
           "The number of partial vocabularies must be at least 1");
     }
+    if (optionsMap.count("num-threads") && numThreads == 0) {
+      throw std::invalid_argument("The number of threads must be at least 1");
+    }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << options << '\n';
@@ -95,7 +98,7 @@ int main(int argc, char** argv) {
   if (outputBasename.empty()) {
     outputBasename = basename + ".merged";
   }
-  if (numThreads > 0) {
+  if (optionsMap.count("num-threads")) {
     // NOTE: The merge does not use the global thread pool yet, see the
     // description of the option above.
     ad_utility::setGlobalExecutorNumThreads(numThreads);
