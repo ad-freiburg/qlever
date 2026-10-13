@@ -27,8 +27,31 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
     return std::nullopt;
   }
 
+  // The target of a `BIND` must not be visible before the `BIND`. If this
+  // operation or a child contains it anyway, it is hidden in this operation by
+  // a subquery. Then the `BIND` must not be pushed down, because the new
+  // operation would have two columns for the target (the hidden one and the
+  // pushed-down one).
+  //
+  // NOTE: Both checks are needed. This operation can add variables that no
+  // child contains (e.g. the distance variable of a `SpatialJoin`), and a
+  // child can contain variables that this operation drops (e.g. the payload
+  // variables of a `SpatialJoin`).
+  if (getInternallyVisibleVariableColumns().contains(bind._target) ||
+      ql::ranges::any_of(children, [&bind](const auto& child) {
+        return child != nullptr && child->containsVariable(bind._target);
+      })) {
+    return std::nullopt;
+  }
+
   // Get the variables used in the bind expression (not the target).
   const auto& bindExpressionVars = bind._expression.containedVariables();
+
+  // The variables of the `BIND` expression must be visible in this operation,
+  // not hidden by a subquery (the children still see the hidden variables).
+  if (!areVariablesVisible(bindExpressionVars)) {
+    return std::nullopt;
+  }
 
   // For each child that covers all expression variables, check whether the bind
   // can be pushed down into that child.
@@ -40,8 +63,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
       continue;
     }
     if (!child->getRootOperation()->areVariablesAlwaysDefined(
-            bindExpressionVars) ||
-        child->containsVariable(bind._target)) {
+            bindExpressionVars)) {
       continue;
     }
     auto result = child->getRootOperation()->makeTreeWithBindColumn(bind);
@@ -55,7 +77,12 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::
   if (!anyChildRewritten) {
     return std::nullopt;
   }
-  return makeCloneWithNewChildren(std::move(children));
+
+  // The new operation is built from scratch, so the variables hidden by this
+  // operation (if it is the root of a subquery) must be hidden again.
+  auto newTree = makeCloneWithNewChildren(std::move(children));
+  keepHiddenVariablesHidden(*newTree->getRootOperation(), bind._target);
+  return newTree;
 }
 
 #endif  // QLEVER_SRC_ENGINE_OPERATIONBINDPUSHDOWNIMPL_H_

@@ -32,6 +32,8 @@ using namespace qlever::namedCacheSecondaryVocab;
 using secondaryVocabTestHelpers::secondaryVocabIs;
 using ::testing::ElementsAre;
 using ::testing::HasSubstr;
+using ::testing::IsEmpty;
+using ::testing::Optional;
 
 namespace {
 using Value = NamedResultCache::Value;
@@ -75,13 +77,13 @@ Id localVocabIdOf(const std::vector<Id>& column, std::string_view iriref) {
 }
 
 // Add the new words of the `value` to the `secondaryVocab`, and return the
-// rewritten copy of the `value` (see `addNewWordsToSecondaryVocab` and
-// `rewriteToSecondaryVocab`).
+// canonicalized copy of the `value` (see `addNewWordsToSecondaryVocab` and
+// `canonicalizeForSerialization`).
 Value addAndRewrite(const std::shared_ptr<const Value>& value,
                     SecondaryVocabulary& secondaryVocab) {
   addNewWordsToSecondaryVocab({{"entry", value}}, secondaryVocab);
-  return rewriteToSecondaryVocab(*value, secondaryVocab,
-                                 ad_utility::testing::makeAllocator());
+  return canonicalizeForSerialization(*value, secondaryVocab,
+                                      ad_utility::testing::makeAllocator());
 }
 
 // The data of the tests below. Most of the new words that the tests use are
@@ -150,9 +152,9 @@ TEST(NamedCacheSecondaryVocabRewriter, addNewWordsAndRewriteIds) {
       HasSubstr("call `addNewWordsToSecondaryVocab` first"));
 }
 
-// Test that `rewriteToSecondaryVocab` sorts the rewritten copy again by the
-// columns that the entry is sorted on, and leaves the entry unchanged.
-TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabSortsAgain) {
+// Test that `canonicalizeForSerialization` sorts the rewritten `Id`s again in
+// canonical order (see `CanonicalRowOrder.h`), and leaves the entry unchanged.
+TEST(NamedCacheSecondaryVocabRewriter, canonicalizeForSerializationSortsAgain) {
   auto qec = ad_utility::testing::getQec(std::string{kb});
   // The `DISTINCT` sorts the result by `?x` in the internal order, in which a
   // new word is sorted at the position where it would be sorted into the main
@@ -177,23 +179,26 @@ TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabSortsAgain) {
   EXPECT_THAT(rewritten.resultSortedOn_, ElementsAre(0));
   EXPECT_FALSE(containsLocalVocabIds(rewritten));
   EXPECT_EQ(rewritten.varToColMap_, value->varToColMap_);
-  EXPECT_EQ(rewritten.cacheKey_, value->cacheKey_);
+  EXPECT_EQ(rewritten.cacheKey_,
+            canonicalCacheKey(value->cacheKey_, std::vector<ColumnIndex>{0}));
   EXPECT_FALSE(rewritten.cachedGeoIndex_.has_value());
 
   // The original entry is unchanged.
   EXPECT_EQ(column(*value, 0), originalColumn);
   EXPECT_TRUE(containsLocalVocabIds(*value));
 
-  // A result that is not sorted keeps its order of rows.
+  // A result that is not sorted is sorted canonically, that is, by all of its
+  // columns in increasing order.
   auto unsorted = pin(qec, "unsorted", "SELECT ?x { VALUES ?x { <y> <m> } }");
   ASSERT_TRUE(unsorted->resultSortedOn_.empty());
   EXPECT_THAT(column(addAndRewrite(unsorted, secondaryVocab), 0),
-              ElementsAre(secondaryId(1), getId("<m>")));
+              ElementsAre(getId("<m>"), secondaryId(1)));
 }
 
 // Test that the mapping from shapes to rows of a cached geo index is
-// permuted together with the rows of the rewritten copy.
-TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabWithGeoIndex) {
+// permuted together with the rows of the canonicalized copy.
+TEST(NamedCacheSecondaryVocabRewriter,
+     canonicalizeForSerializationWithGeoIndex) {
   auto qec = ad_utility::testing::getQec(
       "<s1> <asWKT> \"LINESTRING(1 1, 2 2)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral> . "
@@ -226,10 +231,14 @@ TEST(NamedCacheSecondaryVocabRewriter, rewriteToSecondaryVocabWithGeoIndex) {
   auto originalView = ExplicitIdTableOperation::viewOf(value->result_);
   auto rewrittenView = ExplicitIdTableOperation::viewOf(rewritten.result_);
   EXPECT_NE(rewrittenGeoIndex.getRow(0), originalGeoIndex.getRow(0));
+  // NOTE: The columns of the rewritten entry are in a different order, so
+  // they are identified via their variables.
   for (int shape = 0; shape < numShapes; ++shape) {
-    for (size_t col = 0; col < originalView.numColumns(); ++col) {
-      EXPECT_EQ(rewrittenView(rewrittenGeoIndex.getRow(shape), col),
-                rewriteId(originalView(originalGeoIndex.getRow(shape), col),
+    for (const auto& [variable, info] : value->varToColMap_) {
+      size_t oldCol = info.columnIndex_;
+      size_t newCol = rewritten.varToColMap_.at(variable).columnIndex_;
+      EXPECT_EQ(rewrittenView(rewrittenGeoIndex.getRow(shape), newCol),
+                rewriteId(originalView(originalGeoIndex.getRow(shape), oldCol),
                           secondaryVocab));
     }
   }
@@ -261,8 +270,9 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
   EXPECT_EQ(Id::fromBits(positionOfA.lowerBound_.get()), secondaryId(0));
   auto value = std::make_shared<const Value>(Value{
       std::make_shared<const IdTable>(makeIdTableFromVector({{m}, {a}, {y}})),
-      VariableToColumnMap{}, std::vector<ColumnIndex>{}, std::move(localVocab),
-      "handmade", std::nullopt});
+      VariableToColumnMap{{Variable{"?x"}, makeAlwaysDefinedColumn(0)}},
+      std::vector<ColumnIndex>{}, std::move(localVocab), "handmade",
+      std::nullopt});
 
   // The secondary vocabulary that is passed in has to be an extension of the
   // one of the index (see the precondition in
@@ -277,8 +287,179 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
   EXPECT_EQ(rewriteId(m, secondaryVocab), getId("<m>"));
   EXPECT_EQ(rewriteId(a, secondaryVocab), secondaryId(0));
   EXPECT_EQ(rewriteId(y, secondaryVocab), secondaryId(1));
-  auto rewritten = rewriteToSecondaryVocab(
+  auto rewritten = canonicalizeForSerialization(
       *value, secondaryVocab, ad_utility::testing::makeAllocator());
   EXPECT_THAT(column(rewritten, 0),
               ElementsAre(getId("<m>"), secondaryId(0), secondaryId(1)));
+}
+
+// _____________________________________________________________________________
+// Test that the columns of an entry are written in the order of the variable
+// names, that the columns without a variable are dropped, and that the sort
+// order of the entry is kept (up to the first dropped column).
+TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
+  // Column 0 is `?z`, column 1 has no variable, column 2 is `?a`, column 3 is
+  // `?m`.
+  VariableToColumnMap map{{Variable{"?z"}, makeAlwaysDefinedColumn(0)},
+                          {Variable{"?a"}, makeAlwaysDefinedColumn(2)},
+                          {Variable{"?m"}, makeAlwaysDefinedColumn(3)}};
+  EXPECT_THAT(canonicalColumnOrder(map, 4), ElementsAre(2, 3, 0));
+  EXPECT_THAT(canonicalColumnOrder({}, 2), IsEmpty());
+  EXPECT_THAT(canonicalColumnOrder(map, 5), ElementsAre(2, 3, 0));
+  EXPECT_ANY_THROW(canonicalColumnOrder(map, 3));
+  // A column that belongs to two variables is written only once.
+  VariableToColumnMap twoVariables{
+      {Variable{"?b"}, makeAlwaysDefinedColumn(1)},
+      {Variable{"?c"}, makeAlwaysDefinedColumn(1)},
+      {Variable{"?a"}, makeAlwaysDefinedColumn(0)}};
+  EXPECT_THAT(canonicalColumnOrder(twoVariables, 2), ElementsAre(0, 1));
+
+  auto makeValue = [&map](std::vector<ColumnIndex> sortedOn) {
+    return Value{std::make_shared<const IdTable>(makeIdTableFromVector(
+                     {{1, 7, 5, 3}, {2, 6, 5, 4}}, ad_utility::testing::IntId)),
+                 map,
+                 std::move(sortedOn),
+                 LocalVocab{},
+                 "handmade",
+                 std::nullopt};
+  };
+  SecondaryVocabulary secondaryVocab;
+  auto allocator = ad_utility::testing::makeAllocator();
+  // The table is sorted by its first column.
+  auto value = makeValue({0});
+  auto copy = canonicalizeForSerialization(value, secondaryVocab, allocator);
+  // The column without a variable is dropped.
+  EXPECT_EQ(ExplicitIdTableOperation::viewOf(copy.result_),
+            makeIdTableFromVector({{5, 3, 1}, {5, 4, 2}},
+                                  ad_utility::testing::IntId));
+  EXPECT_EQ(
+      copy.varToColMap_,
+      (VariableToColumnMap{{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
+                           {Variable{"?m"}, makeAlwaysDefinedColumn(1)},
+                           {Variable{"?z"}, makeAlwaysDefinedColumn(2)}}));
+  EXPECT_THAT(copy.resultSortedOn_, ElementsAre(2));
+
+  // The sort order is kept up to the first dropped column.
+  auto keptSortOrder = [&](std::vector<ColumnIndex> sortedOn) {
+    auto value = makeValue(std::move(sortedOn));
+    return canonicalizeForSerialization(value, secondaryVocab, allocator)
+        .resultSortedOn_;
+  };
+  EXPECT_THAT(keptSortOrder({}), IsEmpty());
+  EXPECT_THAT(keptSortOrder({3, 0}), ElementsAre(1, 2));
+  EXPECT_THAT(keptSortOrder({0, 1, 3}), ElementsAre(2));
+  EXPECT_THAT(keptSortOrder({1, 0}), IsEmpty());
+}
+
+// _____________________________________________________________________________
+// Test that the canonicalized copy of an entry gets a cache key that differs
+// from the one of the entry and depends on the column order of the copy, and
+// that canonicalizing the copy again keeps it.
+TEST(NamedCacheSecondaryVocabRewriter, canonicalCacheKey) {
+  using Columns = std::vector<ColumnIndex>;
+  auto key = canonicalCacheKey("SCAN SPO", Columns{1, 0});
+  EXPECT_NE(key, "SCAN SPO");
+  EXPECT_THAT(key, HasSubstr("SCAN SPO"));
+  EXPECT_THAT(key, HasSubstr("[1, 0]"));
+  EXPECT_EQ(canonicalCacheKey(key, Columns{0, 1}), key);
+  EXPECT_NE(canonicalCacheKey("SCAN POS", Columns{1, 0}), key);
+  EXPECT_NE(canonicalCacheKey("SCAN SPO", Columns{0, 1}), key);
+  EXPECT_NE(canonicalCacheKey("SCAN SPO", Columns{1}), key);
+
+  // Two entries with the same cache key, but with different variables, and
+  // thus different column orders in their copies, get different keys.
+  auto makeValue = [](VariableToColumnMap map) {
+    return Value{std::make_shared<const IdTable>(makeIdTableFromVector(
+                     {{1, 2}, {3, 4}}, ad_utility::testing::IntId)),
+                 std::move(map),
+                 {},
+                 LocalVocab{},
+                 "handmade",
+                 std::nullopt};
+  };
+  SecondaryVocabulary secondaryVocab;
+  auto allocator = ad_utility::testing::makeAllocator();
+  auto canonicalize = [&](const Value& value) {
+    return canonicalizeForSerialization(value, secondaryVocab, allocator);
+  };
+  // NOTE: The copies are views of the columns of the values (see
+  // `canonicalizeForSerialization`), so the values have to outlive them.
+  auto inOrderValue = makeValue({{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
+                                 {Variable{"?b"}, makeAlwaysDefinedColumn(1)}});
+  auto swappedValue = makeValue({{Variable{"?y"}, makeAlwaysDefinedColumn(0)},
+                                 {Variable{"?x"}, makeAlwaysDefinedColumn(1)}});
+  auto inOrder = canonicalize(inOrderValue);
+  auto swapped = canonicalize(swappedValue);
+  EXPECT_EQ(inOrder.cacheKey_, canonicalCacheKey("handmade", Columns{0, 1}));
+  EXPECT_EQ(swapped.cacheKey_, canonicalCacheKey("handmade", Columns{1, 0}));
+  EXPECT_NE(inOrder.cacheKey_, swapped.cacheKey_);
+
+  // Canonicalizing a copy again keeps its key.
+  EXPECT_EQ(canonicalize(swapped).cacheKey_, swapped.cacheKey_);
+}
+
+// Test that an entry that needs neither rewriting nor sorting is canonicalized
+// without copying its table (the copy is a view of its columns), and that every
+// other entry is copied.
+TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
+  // Column 0 is `?b`, column 1 has no variable, column 2 is `?a`.
+  auto makeValue = [](const VectorTable& table,
+                      std::vector<ColumnIndex> sortedOn) {
+    return Value{
+        std::make_shared<const IdTable>(
+            makeIdTableFromVector(table, ad_utility::testing::IntId)),
+        VariableToColumnMap{{Variable{"?b"}, makeAlwaysDefinedColumn(0)},
+                            {Variable{"?a"}, makeAlwaysDefinedColumn(2)}},
+        std::move(sortedOn),
+        LocalVocab{},
+        "handmade",
+        std::nullopt};
+  };
+  SecondaryVocabulary secondaryVocab;
+  auto allocator = ad_utility::testing::makeAllocator();
+  auto isView = [](const Value& value) {
+    return std::holds_alternative<IdTableView<0>>(value.result_);
+  };
+
+  // The rows are sorted by `?b`, and then by `?a`, so they already are in
+  // canonical order. The copy is a view of the columns `?a` and `?b` of the
+  // table of the value.
+  auto sorted = makeValue({{1, 9, 4}, {2, 8, 3}}, {0});
+  auto canonical =
+      canonicalizeWithPermutation(sorted, secondaryVocab, allocator);
+  EXPECT_TRUE(isView(canonical.value_));
+  EXPECT_FALSE(canonical.oldRowOfNewRow_.has_value());
+  auto view = ExplicitIdTableOperation::viewOf(canonical.value_.result_);
+  EXPECT_EQ(view, makeIdTableFromVector({{4, 1}, {3, 2}},
+                                        ad_utility::testing::IntId));
+  auto original = ExplicitIdTableOperation::viewOf(sorted.result_);
+  EXPECT_EQ(view.getColumn(0).data(), original.getColumn(2).data());
+  EXPECT_THAT(canonical.value_.resultSortedOn_, ElementsAre(1));
+
+  // A table that is not in canonical order is copied and sorted.
+  auto unsorted = makeValue({{2, 9, 4}, {1, 8, 3}}, {});
+  auto copy = canonicalizeWithPermutation(unsorted, secondaryVocab, allocator);
+  EXPECT_FALSE(isView(copy.value_));
+  EXPECT_THAT(copy.oldRowOfNewRow_, Optional(ElementsAre(1, 0)));
+  EXPECT_EQ(
+      ExplicitIdTableOperation::viewOf(copy.value_.result_),
+      makeIdTableFromVector({{3, 1}, {4, 2}}, ad_utility::testing::IntId));
+
+  // A table with rows but no columns (the result of a triple pattern without
+  // variables) is not copied either, and keeps its number of rows.
+  IdTable noColumns{0, allocator};
+  noColumns.resize(1);
+  Value zeroColumns{std::make_shared<const IdTable>(std::move(noColumns)),
+                    VariableToColumnMap{},
+                    {},
+                    LocalVocab{},
+                    "handmade",
+                    std::nullopt};
+  auto zero =
+      canonicalizeWithPermutation(zeroColumns, secondaryVocab, allocator);
+  EXPECT_TRUE(isView(zero.value_));
+  EXPECT_FALSE(zero.oldRowOfNewRow_.has_value());
+  auto zeroView = ExplicitIdTableOperation::viewOf(zero.value_.result_);
+  EXPECT_EQ(zeroView.numColumns(), 0u);
+  EXPECT_EQ(zeroView.numRows(), 1u);
 }
