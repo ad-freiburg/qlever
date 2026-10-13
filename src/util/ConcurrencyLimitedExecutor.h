@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -11,6 +11,7 @@
 #define QLEVER_SRC_UTIL_CONCURRENCYLIMITEDEXECUTOR_H
 
 #include <cstddef>
+#include <optional>
 #include <utility>
 
 #include "backports/asio.h"
@@ -125,8 +126,10 @@ class ConcurrencyLimitedExecutor {
 #endif
 
 // Return an executor that runs at most `maxConcurrency` function objects on
-// `executor` at the same time. In the reduced C++17 build the `executor` is
-// returned unchanged, as the workloads there are controlled.
+// `executor` at the same time.
+//
+// NOTE: In the reduced C++17 build, the `executor` is returned unchanged (only
+// its contract checks are performed), so the limit is not enforced there.
 inline qlever::Executor makeConcurrencyLimitedExecutor(
     qlever::Executor executor, size_t maxConcurrency) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -136,6 +139,19 @@ inline qlever::Executor makeConcurrencyLimitedExecutor(
   AD_CONTRACT_CHECK(maxConcurrency > 0);
   return executor;
 #endif
+}
+
+// Same as above, but a `maxConcurrency` of `std::nullopt` means "no limit", in
+// which case the `executor` is returned unchanged. This is the form in which
+// the runtime parameters that throttle the index rebuild are expressed (see
+// `getRuntimeParameterAsOptional`).
+inline qlever::Executor makeConcurrencyLimitedExecutor(
+    qlever::Executor executor, std::optional<size_t> maxConcurrency) {
+  if (!maxConcurrency.has_value()) {
+    return executor;
+  }
+  return makeConcurrencyLimitedExecutor(std::move(executor),
+                                        maxConcurrency.value());
 }
 
 }  // namespace ad_utility

@@ -74,26 +74,29 @@ struct RuntimeParameters {
   // The maximum number of threads with which each scan of a permutation
   // during a runtime index rebuild (see `IndexRebuilder`) reads and
   // decompresses its blocks, both for the main scan of the old permutations
-  // and for the statistics recomputation. (How many blocks are read ahead of
-  // the consumer is determined by `lazy-index-scan-num-blocks-in-flight`
-  // above, as for query scans.) Lowering it reduces the rebuild's CPU usage
-  // without affecting query scans. The default of 1 keeps a rebuild on a live
-  // server from starving concurrent queries of CPU, at nearly no cost in wall
-  // time: the bottleneck of each permutation pipeline is its single sequential
-  // remap thread, so more concurrent block reads mostly add contention
-  // (measured on Wikidata on an otherwise idle 16-core server, where the wall
-  // time was the same for 1, 2, and 4). A value of 0 means "no limit".
+  // and for the statistics recomputation. A value of 0 means "no limit".
+  // Lowering it reduces the rebuild's CPU usage without affecting query scans
+  // (how many blocks are read ahead of the consumer is determined by
+  // `lazy-index-scan-num-blocks-in-flight` above, as for query scans).
+  //
+  // NOTE: The default of 1 keeps a rebuild on a live server from starving
+  // concurrent queries of CPU, at nearly no cost in wall time: the bottleneck
+  // of each permutation pipeline is its single sequential remap thread, so
+  // more concurrent block reads mostly add contention (measured on Wikidata on
+  // an otherwise idle 16-core server, where the wall time was the same for 1,
+  // 2, and 4).
   SizeT rebuildIndexScanNumThreads_{1, "rebuild-index-scan-num-threads"};
   // The maximum number of threads with which each permutation is compressed
-  // and written during a runtime index rebuild. Like the scan parameter
-  // above, this exists so that a rebuild on a live server leaves as much CPU
-  // as possible to concurrent queries: the default of 1 compresses and writes
-  // the blocks of each permutation one after the other, which reduces the CPU
-  // work of the permutation phase by ~20% at nearly no cost in wall time (same
-  // measurement setup as above). A value of 0 means "no limit". The number of
-  // blocks that are in flight is still determined by
+  // and written during a runtime index rebuild. A value of 0 means "no limit".
+  // The number of blocks that are in flight is still determined by
   // `permutation-writer-num-blocks-in-flight`, which is also used when
   // building an index from scratch and when writing materialized views.
+  //
+  // NOTE: Like the scan parameter above, this exists so that a rebuild on a
+  // live server leaves as much CPU as possible to concurrent queries: the
+  // default of 1 compresses and writes the blocks of each permutation one
+  // after the other, which reduces the CPU work of the permutation phase by
+  // ~20% at nearly no cost in wall time (same measurement setup as above).
   SizeT rebuildPermutationWriterNumThreads_{
       1, "rebuild-permutation-writer-num-threads"};
   // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and

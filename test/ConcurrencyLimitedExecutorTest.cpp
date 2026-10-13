@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -59,7 +59,7 @@ struct ConcurrencyTracker {
 
 }  // namespace
 
-// _____________________________________________________________________________
+// Test that an empty executor and a limit of zero are rejected.
 TEST(ConcurrencyLimitedExecutor, invalidArguments) {
   net::thread_pool pool{2};
   EXPECT_ANY_THROW(ConcurrencyLimitedExecutor(ql::any_io_executor{}, 2));
@@ -67,7 +67,8 @@ TEST(ConcurrencyLimitedExecutor, invalidArguments) {
   EXPECT_NO_THROW(ConcurrencyLimitedExecutor(pool.get_executor(), 3));
 }
 
-// _____________________________________________________________________________
+// Test that never more than `maxConcurrency` tasks run at the same time, and
+// that the waiting tasks run as soon as a slot is free.
 TEST(ConcurrencyLimitedExecutor, limitIsRespected) {
   net::thread_pool pool{8};
   ConcurrencyLimitedExecutor ex{pool.get_executor(), 3};
@@ -92,7 +93,8 @@ TEST(ConcurrencyLimitedExecutor, limitIsRespected) {
   EXPECT_EQ(tracker.maxActive_.load(), 3u);
 }
 
-// _____________________________________________________________________________
+// Test that the limit also holds when several threads submit tasks through
+// their own copies of the executor.
 TEST(ConcurrencyLimitedExecutor, concurrentSubmitters) {
   net::thread_pool pool{6};
   ConcurrencyLimitedExecutor ex{pool.get_executor(), 2};
@@ -119,7 +121,8 @@ TEST(ConcurrencyLimitedExecutor, concurrentSubmitters) {
   EXPECT_LE(tracker.maxActive_.load(), 2u);
 }
 
-// _____________________________________________________________________________
+// Test that with a limit of one the tasks run one after the other in FIFO
+// order (which also establishes a happens-before between them).
 TEST(ConcurrencyLimitedExecutor, limitOneRunsTasksInOrder) {
   net::thread_pool pool{4};
   ConcurrencyLimitedExecutor ex{pool.get_executor(), 1};
@@ -135,7 +138,8 @@ TEST(ConcurrencyLimitedExecutor, limitOneRunsTasksInOrder) {
   EXPECT_EQ(order, expected);
 }
 
-// _____________________________________________________________________________
+// Test that a task is never run inline, not even by `dispatch` from a thread of
+// the underlying executor.
 TEST(ConcurrencyLimitedExecutor, neverRunsInline) {
   // A single thread, so that a submitted task can't run before the current one
   // completes.
@@ -151,7 +155,8 @@ TEST(ConcurrencyLimitedExecutor, neverRunsInline) {
   EXPECT_TRUE(dispatchedHasRun.load());
 }
 
-// _____________________________________________________________________________
+// Test that copies share the limit and compare equal, while independent
+// executors compare unequal.
 TEST(ConcurrencyLimitedExecutor, copiesAndComparison) {
   net::thread_pool pool{1};
   ConcurrencyLimitedExecutor ex{pool.get_executor(), 2};
@@ -161,7 +166,7 @@ TEST(ConcurrencyLimitedExecutor, copiesAndComparison) {
   EXPECT_NE(ex, other);
 }
 
-// _____________________________________________________________________________
+// Test that a task that throws releases its slot, so that the next task runs.
 TEST(ConcurrencyLimitedExecutor, throwingTaskReleasesItsSlot) {
   net::io_context ctx;
   ConcurrencyLimitedExecutor ex{ctx.get_executor(), 1};
@@ -174,7 +179,8 @@ TEST(ConcurrencyLimitedExecutor, throwingTaskReleasesItsSlot) {
   EXPECT_TRUE(secondHasRun);
 }
 
-// _____________________________________________________________________________
+// Test that queued tasks are destroyed (and not run) when the execution context
+// shuts down, without a reference cycle that keeps them alive.
 TEST(ConcurrencyLimitedExecutor, shutdownDestroysQueuedTasks) {
   std::weak_ptr<int> weakToken;
   {
@@ -191,7 +197,8 @@ TEST(ConcurrencyLimitedExecutor, shutdownDestroysQueuedTasks) {
   EXPECT_TRUE(weakToken.expired());
 }
 
-// _____________________________________________________________________________
+// Test that queries, `require`, and `prefer` are forwarded to the underlying
+// executor and that the resulting executor keeps the limit.
 TEST(ConcurrencyLimitedExecutor, propertiesAreForwarded) {
   namespace execution = net::execution;
   net::thread_pool pool{1};
@@ -212,7 +219,8 @@ TEST(ConcurrencyLimitedExecutor, propertiesAreForwarded) {
                                ConcurrencyLimitedExecutor>);
 }
 
-// _____________________________________________________________________________
+// Test `makeConcurrencyLimitedExecutor`, whose result is usable as a
+// `qlever::Executor` and keeps the limit.
 TEST(ConcurrencyLimitedExecutor, makeConcurrencyLimitedExecutor) {
   net::thread_pool pool{4};
   ql::any_io_executor ex =

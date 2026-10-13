@@ -413,8 +413,10 @@ int main(int argc, char** argv) {
     // `config.numThreads_` inside `Qlever::buildIndex`), such that the writer
     // can make progress while all the threads are compressing blocks. The
     // default is optimized for `rebuild-index`, where six permutations are
-    // written simultaneously. NOTE: `config.validate()` guarantees that
-    // `config.numThreads_` is at least 1.
+    // written simultaneously.
+    //
+    // NOTE: `config.validate()` guarantees that `config.numThreads_` is at
+    // least 1.
     setRuntimeParameter<
         &RuntimeParameters::permutationWriterNumBlocksInFlight_>(
         2 * config.numThreads_);

@@ -290,14 +290,13 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
       blockMetadataRanges};
   // A positive value throttles the rebuild's read/decompress parallelism only,
   // reducing its peak CPU without touching queries; 0 means "no limit".
-  if (auto maxNumThreads = getRuntimeParameterAsOptional<
-          &RuntimeParameters::rebuildIndexScanNumThreads_>()) {
-    executor = ad_utility::makeConcurrencyLimitedExecutor(
-        std::move(executor), maxNumThreads.value());
-  }
   auto [reader, fullScan] = permutation.lazyScanWithUnlimitedReader(
       scanSpecAndBlocks, additionalColumns, cancellationHandle,
-      *locatedTriplesSharedState, std::move(executor));
+      *locatedTriplesSharedState,
+      ad_utility::makeConcurrencyLimitedExecutor(
+          std::move(executor),
+          getRuntimeParameterAsOptional<
+              &RuntimeParameters::rebuildIndexScanNumThreads_>()));
 
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),

@@ -944,13 +944,12 @@ std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
   // `IndexRebuilder`), which by default throttles the compress/write threads
   // of its permutation writers so that a rebuild on a live server leaves most
   // of the CPU to concurrent queries. A value of 0 means "no limit".
-  if (auto maxNumThreads = getRuntimeParameterAsOptional<
-          &RuntimeParameters::rebuildPermutationWriterNumThreads_>()) {
-    executor = ad_utility::makeConcurrencyLimitedExecutor(
-        std::move(executor), maxNumThreads.value());
-  }
   auto metaData = createPermutationImpl(
-      numColumns, fileName, std::move(sortedTriples), std::move(executor));
+      numColumns, fileName, std::move(sortedTriples),
+      ad_utility::makeConcurrencyLimitedExecutor(
+          std::move(executor),
+          getRuntimeParameterAsOptional<
+              &RuntimeParameters::rebuildPermutationWriterNumThreads_>()));
 
   auto& [numDistinctCol0, meta] = metaData;
   meta.calculateStatistics(numDistinctCol0);
@@ -2271,15 +2270,13 @@ std::packaged_task<void()> computeStatistics(
     // `rebuild-index-scan-num-threads` (several permutations are
     // scanned in parallel, so without the throttle this short phase has a high
     // peak CPU). A value of 0 means "no limit".
-    if (auto maxNumThreads = getRuntimeParameterAsOptional<
-            &RuntimeParameters::rebuildIndexScanNumThreads_>()) {
-      executor = ad_utility::makeConcurrencyLimitedExecutor(
-          std::move(executor), maxNumThreads.value());
-    }
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
         additionalColumns, cancellationHandle, *locatedTriplesSharedState,
-        std::move(executor));
+        ad_utility::makeConcurrencyLimitedExecutor(
+            std::move(executor),
+            getRuntimeParameterAsOptional<
+                &RuntimeParameters::rebuildIndexScanNumThreads_>()));
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);
