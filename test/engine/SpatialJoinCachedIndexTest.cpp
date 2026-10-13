@@ -15,6 +15,7 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "./SpatialJoinCachedIndexTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
@@ -390,16 +391,7 @@ namespace segmented {
 using Index = SpatialJoinCachedIndex;
 using namedResultCacheSerializer::formatVersion;
 using namedResultCacheSerializer::legacyFormatVersion;
-
-// Return a matcher for a `SpatialJoinCachedIndex` with the given statistics.
-auto hasStats(size_t numSegments, size_t numShapes, size_t numLiveShapes,
-              size_t numRows) {
-  using ::testing::Eq;
-  return ::testing::AllOf(AD_PROPERTY(Index, numSegments, Eq(numSegments)),
-                          AD_PROPERTY(Index, numShapes, Eq(numShapes)),
-                          AD_PROPERTY(Index, numLiveShapes, Eq(numLiveShapes)),
-                          AD_PROPERTY(Index, numRows, Eq(numRows)));
-}
+using spatialJoinCachedIndexTestHelpers::hasStats;
 
 // Six linestrings far apart from each other (the `i`-th starts at the longitude
 // `10 * i`), and two rows that are no linestrings.

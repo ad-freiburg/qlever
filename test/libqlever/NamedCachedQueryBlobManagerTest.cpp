@@ -23,6 +23,7 @@
 #include <variant>
 #include <vector>
 
+#include "../engine/SpatialJoinCachedIndexTestHelpers.h"
 #include "../index/SecondaryVocabularyTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "./QleverTestHelpers.h"
@@ -43,6 +44,7 @@
 using namespace qlever;
 using namespace testing;
 using secondaryVocabTestHelpers::secondaryVocabIs;
+using spatialJoinCachedIndexTestHelpers::hasStats;
 
 namespace {
 using Manager = NamedCachedQueryBlobManager;
@@ -1175,8 +1177,7 @@ TEST(NamedCachedQueryBlobManager, blobWithSegmentedSpatialIndex) {
   ASSERT_NE(value, nullptr);
   ASSERT_TRUE(value->cachedGeoIndex_.has_value());
   const auto& base = value->cachedGeoIndex_.value();
-  ASSERT_EQ(base.numSegments(), 1);
-  ASSERT_EQ(base.numShapes(), 5);
+  ASSERT_THAT(base, hasStats(1, 5, 5, 5));
 
   // Replace the shapes of the first and last row by new shapes in a second
   // segment. Their shapes in the first segment become dead and must not be
@@ -1187,9 +1188,7 @@ TEST(NamedCachedQueryBlobManager, blobWithSegmentedSpatialIndex) {
   auto updated = SpatialJoinCachedIndex::forUpdatedTable(
       base, std::vector{NO_ROW, size_t{1}, size_t{2}, size_t{3}, NO_ROW}, view,
       col, source.indexAndViewsSnapshot()->index_);
-  ASSERT_EQ(updated.numSegments(), 2);
-  ASSERT_EQ(updated.numShapes(), 7);
-  ASSERT_EQ(updated.numLiveShapes(), 5);
+  ASSERT_THAT(updated, hasStats(2, 7, 5, 5));
   source.namedResultCache().store(
       "geoPin", NamedResultCache::Value{value->result_, value->varToColMap_,
                                         value->resultSortedOn_,
@@ -1207,8 +1206,32 @@ TEST(NamedCachedQueryBlobManager, blobWithSegmentedSpatialIndex) {
   auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
   expectBlobFormatVersion(blob, Manager::formatVersionWithSecondaryVocab);
   auto loaded = loadBlob(blob);
-  EXPECT_EQ(geoIndexOf(*loaded).numSegments(), 2);
+  EXPECT_THAT(geoIndexOf(*loaded), hasStats(2, 7, 5, 5));
   EXPECT_EQ(loaded->query(spatialQuery, ad_utility::MediaType::tsv), expected);
+}
+
+// _____________________________________________________________________________
+// A geo index with a simplification has a single segment, but requires the new
+// blob format, because the old one cannot store the simplification (which is
+// needed by `SpatialJoinCachedIndex::forUpdatedTable`).
+TEST(NamedCachedQueryBlobManager, blobWithSimplifiedSpatialIndex) {
+  auto sourceConfig = buildTestIndex(std::string{freiburgSegmentsS1S2});
+  Qlever source{EngineConfig{sourceConfig}};
+  source.queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"},
+                                               2.5},
+      "SELECT * { ?s2 <asWKT> ?geo2 }");
+  ASSERT_THAT(geoIndexOf(source), hasStats(1, 2, 2, 2));
+  ASSERT_THAT(geoIndexOf(source).simplificationErrorInMeters(), Optional(2.5));
+
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  expectBlobFormatVersion(blob, Manager::formatVersionWithSecondaryVocab);
+  auto loaded = loadBlob(blob);
+  EXPECT_THAT(geoIndexOf(*loaded), hasStats(1, 2, 2, 2));
+  EXPECT_THAT(geoIndexOf(*loaded).simplificationErrorInMeters(), Optional(2.5));
+  std::string spatialQuery = spatialJoinQuery("POINT(7.841295 47.997731)");
+  EXPECT_EQ(loaded->query(spatialQuery, ad_utility::MediaType::tsv),
+            "?s2\n<s1>\n<s2>\n");
 }
 
 // _____________________________________________________________________________
