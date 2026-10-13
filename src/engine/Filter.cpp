@@ -116,8 +116,8 @@ Result Filter::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 CPP_template_def(typename Table)(requires IdTableLike<Table>)
-    IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
-                                  Table&& idTable) const {
+IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
+                              Table&& idTable) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
 
@@ -261,24 +261,25 @@ std::unique_ptr<Operation> Filter::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-Filter::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
-  // Collect variables requested from parent-tree and variables needed for
-  // filtering
-  VarsRequiredFromSubtree helper(variables);
+Filter::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // The subtree has to provide the requested variables and all variables that
+  // the `Filter` operation filters on.
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      requestedVariables);
   std::vector<const Variable*> variablesForFiltering =
       _expression.containedVariables();
   for (auto filterVar : variablesForFiltering) {
-    helper.add(*filterVar);
+    varsRequiredFromSubtree.add(*filterVar);
   }
-  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
 
-  // Continue with the recursion and strip columns of subtree.
+  // Strip the subtree.
   auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
-      _subtree, varsRequiredFromSubtree);
+      _subtree, varsRequiredFromSubtree.get());
 
-  // Create query execution tree with Filter-Operation as root-Operation and add
-  // additional stripColumns-Operation if needed.
-  return makeTreeWithOptionalStripOperation<Filter>(
-      getExecutionContext(), variables, std::move(variablesForFiltering),
-      std::move(subtree), _expression);
+  // The new `Filter` also exports the filtered variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Filter>(
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      _expression);
 }
