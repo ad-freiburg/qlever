@@ -505,7 +505,7 @@ class QueryPlanner {
       const vector<vector<SubtreePlan>>& dpTab) const;
 
   vector<SubtreePlan> getPatternTrickRow(
-      const parsedQuery::SelectClause& selectClause,
+      const std::vector<Alias>& aliases,
       const vector<vector<SubtreePlan>>& dpTab,
       const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple);
 

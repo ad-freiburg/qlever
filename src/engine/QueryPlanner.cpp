@@ -180,8 +180,8 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
 
   // GROUP BY (Either the pattern trick or a "normal" GROUP BY)
   if (patternTrickTuple.has_value()) {
-    plans.emplace_back(getPatternTrickRow(pq.selectClause(), plans,
-                                          patternTrickTuple.value()));
+    plans.emplace_back(
+        getPatternTrickRow(pq.getAliases(), plans, patternTrickTuple.value()));
   } else if (doGroupBy) {
     plans.emplace_back(getGroupByRow(pq, plans));
   }
@@ -360,12 +360,10 @@ std::vector<SubtreePlan> QueryPlanner::getDistinctRow(
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::getPatternTrickRow(
-    const p::SelectClause& selectClause,
-    const vector<vector<SubtreePlan>>& dpTab,
+    const std::vector<Alias>& aliases, const vector<vector<SubtreePlan>>& dpTab,
     const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
   AD_CORRECTNESS_CHECK(!dpTab.empty());
   const vector<SubtreePlan>& previous = dpTab.back();
-  auto aliases = selectClause.getAliases();
 
   vector<SubtreePlan> added;
 
@@ -427,12 +425,8 @@ std::vector<SubtreePlan> QueryPlanner::getGroupByRow(
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
   added.reserve(previous.size());
+  const auto& aliases = pq.getAliases();
   for (auto& parent : previous) {
-    std::vector<Alias> aliases;
-    if (pq.hasSelectClause()) {
-      aliases = pq.selectClause().getAliases();
-    }
-
     // Inside a `GRAPH ?var {....}` clause,  a `GROUP BY` must implicitly (also)
     // group by the graph variable.
     auto groupVariables = pq._groupByVariables;
@@ -445,8 +439,8 @@ std::vector<SubtreePlan> QueryPlanner::getGroupByRow(
     }
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
-    SubtreePlan groupByPlan = makeSubtreePlan<GroupBy>(
-        _qec, groupVariables, std::move(aliases), parent._qet);
+    SubtreePlan groupByPlan =
+        makeSubtreePlan<GroupBy>(_qec, groupVariables, aliases, parent._qet);
     assignNodesFilterAndTextLimitIds(groupByPlan, parent);
     added.push_back(std::move(groupByPlan));
   }
