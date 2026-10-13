@@ -110,7 +110,9 @@ class BasicIdRef {
   [[nodiscard]] SplitLayoutIdBitRepresentation getBits() const noexcept {
     return {*datatype_, *payload_};
   }
-  [[nodiscard]] Id::T getPayloadBits() const noexcept { return *payload_; }
+  [[nodiscard]] PayloadType getPayloadBits() const noexcept {
+    return *payload_;
+  }
   [[nodiscard]] Datatype getDatatype() const noexcept {
     return static_cast<Datatype>(*datatype_);
   }

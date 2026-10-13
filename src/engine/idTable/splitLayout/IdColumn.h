@@ -126,12 +126,12 @@ class BasicIdColumnView {
   // Direct access to the two underlying arrays (`.data()` is intentionally
   // not provided), e.g. for raw byte I/O.
   [[nodiscard]] ql::span<
-      std::conditional_t<IsConst, const PayloadPointer, PayloadPointer>>
+      std::conditional_t<IsConst, const PayloadType, PayloadType>>
   rawPayloads() const {
     return {payloads_, size_};
   }
   [[nodiscard]] ql::span<
-      std::conditional_t<IsConst, const DatatypePointer, DatatypePointer>>
+      std::conditional_t<IsConst, const DatatypeType, DatatypeType>>
   rawDatatypes() const {
     return {datatypes_, size_};
   }
