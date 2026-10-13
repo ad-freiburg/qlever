@@ -321,9 +321,8 @@ class WktAsGeoJson {
     if (!geoJson.has_value()) {
       return ValueId::makeUndefined();
     }
-    auto lit = Literal::literalWithoutQuotes(geoJson.value());
-    lit.addDatatype(Iri::fromIrirefWithoutBrackets(GEO_JSON_LITERAL));
-    return {LiteralOrIri{std::move(lit)}};
+    return {LiteralOrIri{Literal::literalWithoutQuotes(
+        geoJson.value(), Iri::fromIrirefWithoutBrackets(GEO_JSON_LITERAL))}};
   }
 };
 

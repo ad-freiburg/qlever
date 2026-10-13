@@ -17,7 +17,6 @@
 #include <array>
 #include <iostream>
 #include <memory>
-#include <nlohmann/json.hpp>
 #include <range/v3/numeric/accumulate.hpp>
 #include <stdexcept>
 #include <string_view>
@@ -34,6 +33,7 @@
 #include "util/Log.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
+#include "util/json.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
