@@ -1953,7 +1953,6 @@ TEST(SparqlExpression, geoSparqlExpressions) {
           U,
           IdOrLocalVocabEntry{lit("NotAGeometry")},
           geoLit("NOTWKT(1 2)"),
-          Id::makeFromGeoPoint(GeoPoint{2.5, 1.5}),
           geoLit("POINT(1 2)"),
           geoLit("LINESTRING(1 2,3 4.5)"),
           // The rings of the polygon are closed explicitly in GeoJSON. The
@@ -1968,9 +1967,6 @@ TEST(SparqlExpression, geoSparqlExpressions) {
           U,
           U,
           U,
-          // `GeoPoint`s are stored with limited precision.
-          geoJsonLit(R"({"type":"Point","coordinates":)"
-                     R"([1.5000000796281086,2.499999937135712]})"),
           geoJsonLit(R"({"type":"Point","coordinates":[1.0,2.0]})"),
           geoJsonLit(
               R"({"type":"LineString","coordinates":[[1.0,2.0],[3.0,4.5]]})"),
@@ -1990,6 +1986,15 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                      R"({"type":"LineString","coordinates":)"
                      R"([[1.0,2.0],[3.0,4.0]]}]})"),
       });
+
+  // `GeoPoint`s are stored with limited precision, and the last digits of the
+  // decoded coordinates depend on the platform (e.g. FMA on macOS arm64).
+  auto geoPointJson = ad_utility::detail::wktToGeoJson(GeoPoint{2.5, 1.5});
+  ASSERT_TRUE(geoPointJson.has_value());
+  auto parsed = nlohmann::json::parse(geoPointJson.value());
+  EXPECT_EQ(parsed["type"], "Point");
+  EXPECT_NEAR(parsed["coordinates"][0].get<double>(), 1.5, 1e-6);
+  EXPECT_NEAR(parsed["coordinates"][1].get<double>(), 2.5, 1e-6);
 }
 
 // ________________________________________________________________________________________
