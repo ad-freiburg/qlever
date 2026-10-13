@@ -619,10 +619,12 @@ void ParsedQuery::addHavingClause(
   for (const auto& alias : getAliases()) {
     variablesFromAliases.insert(alias._target);
   }
+  // The hint about the `SELECT` clause only makes sense if there is one.
+  std::string_view additionalError =
+      hasSelectClause() ? " and also not bound inside the SELECT clause" : "";
   for (auto& havingClause : havingClauses) {
-    checkUsedVariablesAreVisible(
-        havingClause.expression_, "HAVING", variablesFromAliases,
-        " and also not bound inside the SELECT clause");
+    checkUsedVariablesAreVisible(havingClause.expression_, "HAVING",
+                                 variablesFromAliases, additionalError);
     auto newVariable = addInternalAlias(std::move(havingClause.expression_),
                                         internalVariableGenerator);
     _havingClauses.push_back(
@@ -643,8 +645,9 @@ void ParsedQuery::addOrderByClause(
     variablesFromAliases.insert(alias._target);
   }
 
+  // The hint about the `SELECT` clause only makes sense if there is one.
   std::string_view additionalError =
-      " and also not bound inside the SELECT clause";
+      hasSelectClause() ? " and also not bound inside the SELECT clause" : "";
 
   // Process orderClause
   auto processVariableOrderKey = [this, isGroupBy, &noteForImplicitGroupBy,
