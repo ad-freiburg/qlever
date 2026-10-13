@@ -10,13 +10,13 @@
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
-#include "util/ColumnStrippingHelpers.h"
 
 using std::endl;
 
@@ -266,7 +266,7 @@ Filter::makeTreeWithStrippedColumns(
   // The subtree has to provide the requested variables and all variables that
   // the `Filter` operation filters on.
   columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
-      requestedVariables);
+      &requestedVariables);
   std::vector<const Variable*> variablesForFiltering =
       _expression.containedVariables();
   for (auto filterVar : variablesForFiltering) {
