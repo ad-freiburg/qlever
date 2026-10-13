@@ -482,22 +482,18 @@ GroupByImpl::makeTreeWithStrippedColumns(
 
   // Add the variables needed to compute requested aliases to
   // `varsRequiredFromSubtree`. Keep only aliases whose targets are requested.
-  const std::vector<Alias>* resultingAliases = &_aliases;
-  std::vector<Alias> bufferAliases;
-  for (const auto& alias : _aliases) {
-    if (requestedVariables.contains(alias._target)) {
-      for (const Variable* aliasVar : alias._expression.containedVariables()) {
-        varsRequiredFromSubtree.add(*aliasVar);
-      }
-    } else if (resultingAliases == &_aliases) {
-      bufferAliases = _aliases;
-      resultingAliases = &bufferAliases;
+  auto neededAliases =
+      _aliases | ql::views::filter([&requestedVariables](const Alias& alias) {
+        return requestedVariables.contains(alias._target);
+      }) |
+      ::ranges::to_vector;
+
+  // Add the variables needed to compute the requested aliases
+  // to `varsRequiredFromSubtree`.
+  for (const auto& alias : neededAliases) {
+    for (const Variable* aliasVar : alias._expression.containedVariables()) {
+      varsRequiredFromSubtree.add(*aliasVar);
     }
-  }
-  if (resultingAliases != &_aliases) {
-    std::erase_if(bufferAliases, [&requestedVariables](const Alias& alias) {
-      return !requestedVariables.contains(alias._target);
-    });
   }
 
   // Strip the subtree
@@ -510,7 +506,7 @@ GroupByImpl::makeTreeWithStrippedColumns(
   // for them.
   return columnStrippingHelpers::makeTreeWithOptionalStripOperation<GroupBy>(
       getExecutionContext(), requestedVariables, _groupByVariables,
-      std::move(*resultingAliases), std::move(subtree));
+      std::move(neededAliases), std::move(subtree));
 }
 
 // _____________________________________________________________________________
