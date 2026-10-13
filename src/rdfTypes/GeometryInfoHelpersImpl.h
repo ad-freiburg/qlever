@@ -558,6 +558,7 @@ struct UtilGeomToGeoJsonVisitor {
   static Json coords(const Point<CoordType>& p) {
     return Json::array({p.getX(), p.getY()});
   }
+
   template <typename T>
   static Json coords(const std::vector<T>& vec) {
     Json result = Json::array();
@@ -566,6 +567,7 @@ struct UtilGeomToGeoJsonVisitor {
     }
     return result;
   }
+
   static Json coords(const Polygon<CoordType>& polygon) {
     Json result = Json::array({ringCoords(polygon.getOuter())});
     for (const auto& inner : polygon.getInners()) {
@@ -573,6 +575,7 @@ struct UtilGeomToGeoJsonVisitor {
     }
     return result;
   }
+
   // GeoJSON requires rings to be closed explicitly.
   static Json ringCoords(const Ring<CoordType>& ring) {
     Json result = coords(ring);
@@ -582,6 +585,7 @@ struct UtilGeomToGeoJsonVisitor {
     return result;
   }
 
+  // The GeoJSON geometry object of the given type with the given coordinates.
   static Json geometry(std::string_view type, Json coordinates) {
     return {{"type", std::string{type}},
             {"coordinates", std::move(coordinates)}};
@@ -591,21 +595,27 @@ struct UtilGeomToGeoJsonVisitor {
   static Json toJson(const Point<CoordType>& g) {
     return geometry(detail::geoStrings::point, coords(g));
   }
+
   static Json toJson(const Line<CoordType>& g) {
     return geometry(detail::geoStrings::linestring, coords(g));
   }
+
   static Json toJson(const Polygon<CoordType>& g) {
     return geometry(detail::geoStrings::polygon, coords(g));
   }
+
   static Json toJson(const MultiPoint<CoordType>& g) {
     return geometry(detail::geoStrings::multipoint, coords(g));
   }
+
   static Json toJson(const MultiLine<CoordType>& g) {
     return geometry(detail::geoStrings::multiLineString, coords(g));
   }
+
   static Json toJson(const MultiPolygon<CoordType>& g) {
     return geometry(detail::geoStrings::multiPolygon, coords(g));
   }
+
   static Json toJson(const Collection<CoordType>& collection) {
     Json geometries = Json::array();
     for (const auto& g : collection) {

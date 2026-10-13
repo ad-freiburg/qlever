@@ -1987,14 +1987,17 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                      R"([[1.0,2.0],[3.0,4.0]]}]})"),
       });
 
-  // `GeoPoint`s are stored with limited precision, and the last digits of the
-  // decoded coordinates depend on the platform (e.g. FMA on macOS arm64).
-  auto geoPointJson = ad_utility::detail::wktToGeoJson(GeoPoint{2.5, 1.5});
-  ASSERT_TRUE(geoPointJson.has_value());
-  auto parsed = nlohmann::json::parse(geoPointJson.value());
-  EXPECT_EQ(parsed["type"], "Point");
-  EXPECT_NEAR(parsed["coordinates"][0].get<double>(), 1.5, 1e-6);
-  EXPECT_NEAR(parsed["coordinates"][1].get<double>(), 2.5, 1e-6);
+  // The coordinates of a `GeoPoint` (stored with limited precision) are
+  // rounded to six decimals, so the decoding artifacts do not show.
+  checkAsGeoJson(
+      IdOrLocalVocabEntryVec{
+          IdOrLocalVocabEntry{Id::makeFromGeoPoint(GeoPoint{2.5, 1.5})},
+          IdOrLocalVocabEntry{Id::makeFromGeoPoint(GeoPoint{48.0012341, -7.1})},
+      },
+      IdOrLocalVocabEntryVec{
+          geoJsonLit(R"({"type":"Point","coordinates":[1.5,2.5]})"),
+          geoJsonLit(R"({"type":"Point","coordinates":[-7.1,48.001234]})"),
+      });
 }
 
 // ________________________________________________________________________________________
