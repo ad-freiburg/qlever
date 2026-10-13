@@ -925,7 +925,19 @@ TEST(RelationalExpression, SetOfIntervals) {
   expectSet(makeExpression<LT>(set, other), S{{{2, 3}}, 3});
   expectSet(makeExpression<GE>(set, other), S{{{0, 2}}, 3});
   expectSet(makeInExpression(set, T), set);
+  // An `IN` with several elements combines the results with an `OR`. The type
+  // erased expressions don't use the optimizations between set-of-interval,
+  // but always return a fully materialized vector.
+#ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
+  auto expectIds = [](auto expression, std::vector<Id> expected) {
+    EXPECT_THAT(expression.evaluate(&testContext().context),
+                ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                    ::testing::ElementsAreArray(expected)));
+  };
+  expectIds(makeInExpression(set, F, T), {T, T, T});
+#else
   expectSet(makeInExpression(set, F, T), S{{{0, 3}}, 3});
+#endif
 
   // Other comparisons are evaluated row by row.
   auto vec = [](std::vector<Id> ids) {
@@ -936,6 +948,10 @@ TEST(RelationalExpression, SetOfIntervals) {
   testWithExplicitIdResult<GT>(set, vec({T, F, F}), {F, T, F});
   testWithExplicitIdResult<NE>(vec({T, F, F}), set, {F, T, F});
   testWithExplicitIdResult<LE>(set, vec({F, F, T}), {F, F, T});
+  // A constant that is not a boolean is incompatible with the booleans.
+  auto U = Id::makeUndefined();
+  testWithExplicitIdResult<NE>(IntId(1), set, {U, U, U});
+  testWithExplicitIdResult<LT>(IntId(0), set, {U, U, U});
 
   // The `SetOfIntervals` is computed by a nested comparison on a sorted input.
   // Sorted by `?ints`, the column is `0, 1, -1`.
