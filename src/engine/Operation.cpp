@@ -969,6 +969,8 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::pushDownBindToAnyChild(
     const parsedQuery::Bind& bind,
     std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  AD_CORRECTNESS_CHECK(ql::ranges::all_of(
+      children, [](const auto& child) { return child != nullptr; }));
   for (size_t i = 0; i < children.size(); ++i) {
     if (auto result = pushDownBindToChild(bind, children, i)) {
       return result;
