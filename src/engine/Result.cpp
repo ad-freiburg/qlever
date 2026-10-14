@@ -19,6 +19,8 @@
 #include "util/Timer.h"
 
 namespace {
+// TODO<joka921>: Remove these conversions once all operations pass
+// `qlm::vector` for the sorted columns.
 qlm::vector<ColumnIndex> toQlmSortedColumns(
     const std::vector<ColumnIndex>& sortedColumns) {
   return {sortedColumns.begin(), sortedColumns.end(),

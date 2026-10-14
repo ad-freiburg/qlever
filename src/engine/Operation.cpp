@@ -484,6 +484,8 @@ void Operation::storeToNamedResultCache(const Result& result) {
   auto valueForNamedResultCache = NamedResultCache::Value{
       std::make_shared<const IdTable>(result.cloneIdTable()),
       getExternallyVisibleVariableColumns(),
+      // TODO<joka921>: Remove this conversion after `resultSortedOn()` is
+      // migrated to `qlm::vector` throughout the Operation hierarchy.
       std::vector<ColumnIndex>{result.sortedBy().begin(),
                                result.sortedBy().end()},
       result.localVocab().clone(),

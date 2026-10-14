@@ -177,6 +177,8 @@ class Result : public ad_utility::NoCopy {
   // The first overload of the constructor is for local vocabs that are shared
   // with another `Result` via the `getSharedLocalVocab...` methods below.
   // The second overload is for newly created local vocabularies.
+  // TODO<joka921>: Remove the `std::vector` and initializer-list overloads once
+  // all Operations pass `qlm::vector` from `resultSortedOn()`.
   Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
          SharedLocalVocabWrapper localVocab);
   Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,

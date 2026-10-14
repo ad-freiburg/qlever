@@ -161,6 +161,8 @@ CPP_template_def(int WIDTH,
 
   // TODO<joka921> This should be a mandatory argument to the
   // EvaluationContext constructor.
+  // TODO<joka921>: Move `sortedBy` into the evaluation context after its
+  // sorted-column member is migrated to `qlm::vector`.
   evaluationContext._columnsByWhichResultIsSorted.assign(sortedBy.begin(),
                                                          sortedBy.end());
   const auto input =

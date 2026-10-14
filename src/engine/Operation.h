@@ -594,10 +594,8 @@ class Operation {
   // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
       ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) const {
-    if (cancellationHandle_) {
-      cancellationHandle_->throwIfCancelled(
-          location, [this]() { return getDescriptor(); });
-    }
+    cancellationHandle_->throwIfCancelled(location,
+                                          [this]() { return getDescriptor(); });
   }
 
   std::chrono::milliseconds remainingTime() const;

@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "parser/ParsedQuery.h"
@@ -212,10 +213,7 @@ class QueryExecutionTree {
   // duplicates.
   static std::shared_ptr<QueryExecutionTree> createDistinctTree(
       std::shared_ptr<QueryExecutionTree> qet,
-      const qlm::vector<ColumnIndex>& distinctIndices);
-  static std::shared_ptr<QueryExecutionTree> createDistinctTree(
-      std::shared_ptr<QueryExecutionTree> qet,
-      const std::vector<ColumnIndex>& distinctIndices);
+      ql::span<const ColumnIndex> distinctIndices);
 
   // Similar to `createSortedTree` (see directly above), but create the sorted
   // trees for two different trees, the sort columns of which are specified as
