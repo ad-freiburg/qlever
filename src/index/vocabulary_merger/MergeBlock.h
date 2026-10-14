@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "backports/span.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
@@ -27,6 +28,7 @@
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/UninitializedAllocator.h"
+#include "util/UniqueCleanup.h"
 
 // The words of the partial vocabularies as the parallel block merge (see
 // `util/parallelBlockMerge/ParallelBlockMerge.h`) sees them, and the blocks
@@ -156,48 +158,66 @@ class MergeBlock : public ad_utility::NoCopy {
   using Buffer = BufferPool::Buffer;
 
  private:
-  // The capacity of a buffer of a block of merged words without pools. A word
-  // that is longer gets a buffer of its own.
-  static constexpr size_t bufferSize_ =
-      ad_utility::MemorySize::megabytes(1).getBytes();
+  using Buffers = std::vector<Buffer>;
+  // The cleanup of the `buffers_` below: give them back to the pools, or do
+  // nothing if the block has no pools (the buffers are then simply freed). It
+  // owns a copy of everything it needs (and not pointers into the block), so
+  // that it stays valid when the block is moved.
+  struct GiveBackToPools {
+    std::shared_ptr<BufferPools> pools_;
+    // Whether the first buffer holds the bytes of a block of a file (and hence
+    // goes back to the pool of those). All other buffers hold merged words.
+    bool firstBufferIsFromFile_ = false;
+
+    void operator()(Buffers&& buffers) const {
+      if (pools_ == nullptr) {
+        return;
+      }
+      for (size_t i = 0; i < buffers.size(); ++i) {
+        auto& pool = (i == 0 && firstBufferIsFromFile_) ? pools_->fileBlocks_
+                                                        : pools_->mergedWords_;
+        pool.giveBack(std::move(buffers[i]));
+      }
+    }
+  };
+  using OwnedBuffers =
+      ad_utility::unique_cleanup::UniqueCleanup<Buffers, GiveBackToPools>;
 
   std::vector<MergeWord> words_;
+  // The pools that the buffers of a block of merged words are taken from (see
+  // `store`), `nullptr` for a block without pools.
+  std::shared_ptr<BufferPools> pools_;
   // The bytes of a block that was read from a file (see the constructor
   // below), or the buffers that the words of a block of merged words are
   // copied into (see `push`). A word is never split across two buffers, and a
   // buffer is never reallocated (it is reserved once and filled up to its
-  // capacity), so the views into it stay valid.
-  std::vector<Buffer> buffers_;
-  // Whether the first of the `buffers_` holds the bytes of a block of a file
-  // (and hence goes back to the pool of those), see `clear`.
-  bool bytesAreFromFile_ = false;
-  std::shared_ptr<BufferPools> pools_;
+  // capacity), so the views into it stay valid. The `UniqueCleanup` gives the
+  // buffers back to the pools when the block is destroyed, overwritten by a
+  // move assignment, or cleared (see `clear`), and does nothing for a
+  // moved-from block, so the move operations below can be defaulted.
+  OwnedBuffers buffers_{Buffers{}, GiveBackToPools{}};
 
  public:
   MergeBlock() = default;
   explicit MergeBlock(std::shared_ptr<BufferPools> pools)
-      : pools_{std::move(pools)} {}
+      : pools_{std::move(pools)},
+        buffers_{Buffers{}, GiveBackToPools{pools_, false}} {}
   MergeBlock(MergeBlock&&) noexcept = default;
-  MergeBlock& operator=(MergeBlock&& other) noexcept {
-    clear();
-    words_ = std::move(other.words_);
-    buffers_ = std::move(other.buffers_);
-    bytesAreFromFile_ = std::exchange(other.bytesAreFromFile_, false);
-    pools_ = std::move(other.pools_);
-    return *this;
-  }
-  ~MergeBlock() { clear(); }
+  MergeBlock& operator=(MergeBlock&&) noexcept = default;
 
   // Construct a block over the serialized `bytes` of `numWords` words of the
   // partial vocabulary `partialFileId`, in the format that
   // `PartialVocabularyWriter` writes (see `MergeWord::fromZeroCopyDeserializer`
   // above). The words are parsed in place, nothing is copied. The `bytes` go
-  // back to the `pools` (if any) when the block is cleared or destroyed.
+  // back to the `pools` when the block is cleared or destroyed. The `pools`
+  // may be `nullptr` (for example in tests): the block then works just the
+  // same, only its buffers are freed instead of given back.
   MergeBlock(Buffer bytes, size_t numWords, uint32_t partialFileId,
              std::shared_ptr<BufferPools> pools = nullptr)
-      : bytesAreFromFile_{true}, pools_{std::move(pools)} {
-    buffers_.push_back(std::move(bytes));
-    const auto& buffer = buffers_.back();
+      : pools_{std::move(pools)},
+        buffers_{Buffers{}, GiveBackToPools{pools_, true}} {
+    buffers_->push_back(std::move(bytes));
+    const auto& buffer = buffers_->back();
     words_.reserve(numWords);
     serialization::ByteBufferReadSerializerT serializer{
         ql::span<const char>{buffer.data(), buffer.size()}};
@@ -240,32 +260,30 @@ class MergeBlock : public ad_utility::NoCopy {
   MergeWord& back() { return words_.back(); }
   const MergeWord& back() const { return words_.back(); }
 
-  // Release the words and the storage (the buffers go back to the pools).
+  // Release the words and the storage (the buffers go back to the pools). The
+  // block stays usable, for merged words.
   void clear() {
     words_.clear();
-    if (pools_ != nullptr) {
-      for (size_t i = 0; i < buffers_.size(); ++i) {
-        auto& pool = (i == 0 && bytesAreFromFile_) ? pools_->fileBlocks_
-                                                   : pools_->mergedWords_;
-        pool.giveBack(std::move(buffers_[i]));
-      }
-    }
-    buffers_.clear();
-    bytesAreFromFile_ = false;
+    // The move assignment runs the cleanup of the old buffers.
+    buffers_ = OwnedBuffers{Buffers{}, GiveBackToPools{pools_, false}};
   }
 
  private:
   // Copy the `word` into the buffers and return the view of the copy.
   std::string_view store(std::string_view word) {
-    if (buffers_.empty() ||
-        buffers_.back().size() + word.size() > buffers_.back().capacity()) {
+    Buffers& buffers = *buffers_;
+    if (buffers.empty() ||
+        buffers.back().size() + word.size() > buffers.back().capacity()) {
       if (pools_ != nullptr) {
-        buffers_.push_back(pools_->mergedWords_.take(word.size()));
+        buffers.push_back(pools_->mergedWords_.take(word.size()));
       } else {
-        buffers_.emplace_back().reserve(std::max(bufferSize_, word.size()));
+        // Without pools, the buffers have the same size as with them. A word
+        // that is longer gets a buffer of its own.
+        buffers.emplace_back().reserve(std::max(
+            VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE.getBytes(), word.size()));
       }
     }
-    auto& buffer = buffers_.back();
+    auto& buffer = buffers.back();
     size_t offset = buffer.size();
     buffer.insert(buffer.end(), word.begin(), word.end());
     return {buffer.data() + offset, word.size()};

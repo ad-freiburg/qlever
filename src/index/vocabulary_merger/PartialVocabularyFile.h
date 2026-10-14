@@ -189,6 +189,14 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
   using Element = detail::MergeWord;
   using Block = detail::MergeBlock;
 
+  // The totals over all blocks of all partial vocabularies, see `statistics`.
+  struct Statistics {
+    size_t numBlocks_ = 0;
+    size_t numWords_ = 0;
+    // The sizes of the blocks in the files.
+    size_t numBytes_ = 0;
+  };
+
  private:
   // The metadata of a block, with the first and the last word already in the
   // form that the merge compares. Their words point into the
@@ -209,14 +217,12 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     std::unique_ptr<char[]> boundaryWords_;
   };
   std::vector<Run> runs_;
-  // The pools of the buffers of the blocks, see `detail::BufferPools`: a block
-  // of a file is a bit larger than `PARTIAL_VOCAB_BLOCK_SIZE` (its last word
-  // crosses that size), a block of merged words holds at most
-  // `VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE`.
+  // The pools of the buffers of the blocks (see `detail::BufferPools`), with
+  // the buffer sizes from `index/ConstantsIndexBuilding.h`.
   std::shared_ptr<detail::BufferPools> pools_ =
       std::make_shared<detail::BufferPools>(
-          PARTIAL_VOCAB_BLOCK_SIZE.getBytes() * 5 / 4,
-          VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE.getBytes() / 8);
+          VOCAB_MERGER_FILE_BLOCK_BUFFER_SIZE.getBytes(),
+          VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE.getBytes());
 
  public:
   PartialVocabularyRunsInput(const std::string& basename,
@@ -238,6 +244,20 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
   // The size of a block in the file.
   size_t numBytesInBlock(size_t run, size_t block) const {
     return runs_.at(run).blocks_.at(block).numBytes_;
+  }
+
+  // Return the number of blocks, of words, and of bytes in the files over all
+  // partial vocabularies.
+  Statistics statistics() const {
+    Statistics result;
+    for (const Run& run : runs_) {
+      result.numBlocks_ += run.blocks_.size();
+      for (const BlockInfo& block : run.blocks_) {
+        result.numWords_ += block.numWords_;
+        result.numBytes_ += block.numBytes_;
+      }
+    }
+    return result;
   }
 
   // The weight of a block for the chunk boundaries of the merge (see

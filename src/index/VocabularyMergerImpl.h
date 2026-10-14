@@ -113,20 +113,12 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
   // memory, and a chunk keeps its slot until this thread has taken its output,
   // see `vocabularyMergeOptions`.
   PartialVocabularyRunsInput input{basename, numPartialVocabularies};
-  size_t numBlocks = 0;
-  size_t numInputWords = 0;
-  size_t numInputBytes = 0;
-  for (size_t run = 0; run < input.numRuns(); ++run) {
-    for (size_t block = 0; block < input.numBlocks(run); ++block) {
-      numInputWords += input.numElementsInBlock(run, block);
-      numInputBytes += input.numBytesInBlock(run, block);
-    }
-    numBlocks += input.numBlocks(run);
-  }
-  auto options = vocabularyMergeOptions(numPartialVocabularies, numInputBytes,
-                                        memoryToUse);
+  const auto inputStatistics = input.statistics();
+  auto options = vocabularyMergeOptions(numPartialVocabularies,
+                                        inputStatistics.numBytes_, memoryToUse);
   AD_LOG_INFO << "Merging " << input.numRuns() << " partial vocabularies ("
-              << numInputWords << " words in " << numBlocks << " blocks) in "
+              << inputStatistics.numWords_ << " words in "
+              << inputStatistics.numBlocks_ << " blocks) in "
               << options.targetNumChunks() << " chunks, using "
               << options.parallelism() << " threads and up to "
               << options.maxNumChunksInFlight << " chunks in flight ..."

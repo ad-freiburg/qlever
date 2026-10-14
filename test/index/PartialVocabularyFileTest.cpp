@@ -92,6 +92,25 @@ TEST(PartialVocabularyFile, blockIndexAndBlocks) {
 
   PartialVocabularyRunsInput input{partialVocabBasename, 3};
   ASSERT_EQ(input.numRuns(), 3u);
+  // The statistics are the totals over all blocks of all partial vocabularies.
+  PartialVocabularyRunsInput::Statistics expectedStatistics;
+  for (size_t p = 0; p < 3; ++p) {
+    expectedStatistics.numBlocks_ += input.numBlocks(p);
+    for (size_t b = 0; b < input.numBlocks(p); ++b) {
+      expectedStatistics.numWords_ += input.numElementsInBlock(p, b);
+      expectedStatistics.numBytes_ += input.numBytesInBlock(p, b);
+    }
+  }
+  const auto statistics = input.statistics();
+  EXPECT_EQ(statistics.numBlocks_, expectedStatistics.numBlocks_);
+  EXPECT_EQ(statistics.numWords_, expectedStatistics.numWords_);
+  EXPECT_EQ(statistics.numBytes_, expectedStatistics.numBytes_);
+  const size_t totalNumWords =
+      words[0].size() + words[1].size() + words[2].size();
+  EXPECT_EQ(statistics.numWords_, totalNumWords);
+  EXPECT_GE(statistics.numBlocks_, 5u);
+  // The serialized form of a word takes at least 17 bytes plus the word.
+  EXPECT_GT(statistics.numBytes_, totalNumWords * 17);
   for (size_t p = 0; p < 3; ++p) {
     // The first partial vocabulary has all the words and hence spans several
     // blocks, the last one about a third of them.
@@ -244,10 +263,24 @@ TEST(PartialVocabularyFile, mergeBlockAccessorsAndBlockWeight) {
   block[0].isExternal() = true;
   EXPECT_TRUE(constBlock[0].isExternal());
 
-  // A cleared block is empty.
+  // A block can be moved (the words keep pointing into its storage), the
+  // moved-from block is empty.
+  MergeBlock moved{std::move(block)};
+  EXPECT_TRUE(block.empty());
+  ASSERT_EQ(moved.size(), 3u);
+  EXPECT_EQ(moved[1].iriOrLiteral(), "\"b\"");
+  block = std::move(moved);
+  EXPECT_TRUE(moved.empty());
+  ASSERT_EQ(block.size(), 3u);
+  EXPECT_EQ(block[2].iriOrLiteral(), "\"c\"");
+
+  // A cleared block is empty, and can be filled again.
   block.clear();
   EXPECT_TRUE(block.empty());
   EXPECT_EQ(block.size(), 0u);
+  block.push("\"d\"", false, 3, 10);
+  ASSERT_EQ(block.size(), 1u);
+  EXPECT_EQ(block[0].iriOrLiteral(), "\"d\"");
 
   // A partial vocabulary with two blocks. The weight of a block is its size in
   // bytes, and a block ends after the word that makes it at least
