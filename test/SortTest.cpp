@@ -19,6 +19,7 @@
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/TieHelper.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -346,8 +347,8 @@ TEST(Sort, externalSortLazyInput) {
   EXPECT_EQ(8000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
-        std::tuple(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
-        std::tuple(table(i, 0), table(i, 1), table(i, 2));
+        ad_utility::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        ad_utility::tie(table(i, 0), table(i, 1), table(i, 2));
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }
@@ -394,8 +395,8 @@ TEST(Sort, externalSortMaterializedInput) {
   EXPECT_EQ(5000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
-        std::tuple(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
-        std::tuple(table(i, 0), table(i, 1), table(i, 2));
+        ad_utility::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        ad_utility::tie(table(i, 0), table(i, 1), table(i, 2));
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }
@@ -490,8 +491,8 @@ TEST(Sort, inMemorySortMaterializedInput) {
   EXPECT_EQ(100u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
-        std::tuple(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
-        std::tuple(table(i, 0), table(i, 1), table(i, 2));
+        ad_utility::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        ad_utility::tie(table(i, 0), table(i, 1), table(i, 2));
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }

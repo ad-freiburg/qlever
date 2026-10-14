@@ -20,6 +20,7 @@ inline constexpr bool isProxy = false;
 }  // namespace qlever
 
 namespace ad_utility {
+
 // lvalues stay references, a proxy that is returned by value is stored by value
 template <typename T>
 constexpr auto tieElement() {
@@ -40,8 +41,17 @@ using TieElement = typename decltype(tieElement<T>())::type;
 // `ad_utility::ValueSequence`.
 // TODO<pas-kes>: Test/benchmark this with proxies of the split layout in future
 template <typename Row, template <typename T, T...> typename Tp, size_t... I>
-auto tieHelper(Row& row, Tp<size_t, I...>) {
+constexpr auto tieHelper(Row& row, Tp<size_t, I...>) {
   return std::tuple<TieElement<decltype(row[I])>...>(row[I]...);
 }
+
+// Like `std::tie`, but it also accepts proxies that are returned by value (like
+// `IdRef`), which `std::tie` cannot bind. Lvalues are stored as references,
+// proxies by value, other temporaries are rejected (see `TieElement`).
+template <typename... Ts>
+constexpr auto tie(Ts&&... args) {
+  return std::tuple<TieElement<Ts>...>(std::forward<Ts>(args)...);
+}
+
 }  // namespace ad_utility
 #endif  // QLEVER_SRC_UTIL_TIEHELPER_H
