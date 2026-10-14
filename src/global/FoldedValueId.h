@@ -237,7 +237,8 @@ class ValueId {
     // Check that datatype bits are in the last bits and
     // will not be shifted over the uint64_t
     AD_EXPENSIVE_CHECK(datatype < (T{1} << numDatatypeBits));
-    return {removeDatatypeBits(payload) | (datatype << numDataBits)};
+    constexpr auto datatypeMask = ad_utility::bitMaskForLowerBits(numDataBits);
+    return {(payload & datatypeMask) | (datatype << numDataBits)};
   }
 
   // Get the datatype bits.
@@ -317,7 +318,7 @@ class ValueId {
 
   // Obtain the boolean value.
   [[nodiscard]] constexpr bool getBool() const noexcept {
-    return static_cast<bool>(removeDatatypeBits(_bits) & 1);
+    return static_cast<bool>(getPayloadBits() & 1);
   }
 
   // Obtain the boolean value as a string view. In particular, return either
@@ -368,30 +369,30 @@ class ValueId {
   // is not the index type that the respective getter below is named after, then
   // the result is unspecified.
   [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
-    return VocabIndex::make(removeDatatypeBits(_bits));
+    return VocabIndex::make(getPayloadBits());
   }
 
   [[nodiscard]] constexpr uint64_t getEncodedVal() const noexcept {
-    return removeDatatypeBits(_bits);
+    return getPayloadBits();
   }
 
   [[nodiscard]] constexpr TextRecordIndex getTextRecordIndex() const noexcept {
-    return TextRecordIndex::make(removeDatatypeBits(_bits));
+    return TextRecordIndex::make(getPayloadBits());
   }
   [[nodiscard]] LocalVocabIndex getLocalVocabIndex() const noexcept {
     return reinterpret_cast<LocalVocabIndex>(_bits << numDatatypeBits);
   }
   [[nodiscard]] constexpr WordVocabIndex getWordVocabIndex() const noexcept {
-    return WordVocabIndex::make(removeDatatypeBits(_bits));
+    return WordVocabIndex::make(getPayloadBits());
   }
 
   [[nodiscard]] constexpr BlankNodeIndex getBlankNodeIndex() const noexcept {
-    return BlankNodeIndex::make(removeDatatypeBits(_bits));
+    return BlankNodeIndex::make(getPayloadBits());
   }
 
   [[nodiscard]] constexpr SecondaryVocabIndex getSecondaryVocabIndex()
       const noexcept {
-    return SecondaryVocabIndex::make(removeDatatypeBits(_bits));
+    return SecondaryVocabIndex::make(getPayloadBits());
   }
 
   // Store or load a `Date` object.
@@ -402,7 +403,7 @@ class ValueId {
   }
 
   DateYearOrDuration getDate() const noexcept {
-    return absl::bit_cast<DateYearOrDuration>(removeDatatypeBits(_bits));
+    return absl::bit_cast<DateYearOrDuration>(getPayloadBits());
   }
 
   // TODO<joka921> implement dates
@@ -416,8 +417,7 @@ class ValueId {
   // this `ValueId` encodes. If `getDatatype() != GeoPoint` then the result
   // is unspecified.
   GeoPoint getGeoPoint() const {
-    T bits = removeDatatypeBits(_bits);
-    return GeoPoint::fromBitRepresentation(bits);
+    return GeoPoint::fromBitRepresentation(getPayloadBits());
   }
 
   // An ID is considered trivial, if its datatype is trivial (see
@@ -607,12 +607,6 @@ class ValueId {
   static constexpr ValueId addDatatypeBits(T bits, Datatype type) {
     auto mask = static_cast<T>(type) << numDataBits;
     return {bits | mask};
-  }
-
-  // Set the datatype bits of `bits` to zero.
-  static constexpr T removeDatatypeBits(T bits) noexcept {
-    auto mask = ad_utility::bitMaskForLowerBits(numDataBits);
-    return bits & mask;
   }
 
   // Helper function for the implementation of the unsigned index types.
