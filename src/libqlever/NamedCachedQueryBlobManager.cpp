@@ -242,12 +242,16 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // any, for example because the index was itself loaded from a blob, so that
   // the `Id`s of its words stay valid), extended by the new words of the
   // named cache entries (see `NamedCacheSecondaryVocabRewriter.h`). Only if it
-  // is empty and no entry has a geo index with more than one segment, the blob
-  // is written in the old format (blob version 1 and entries version 1)
-  // without a secondary vocabulary, which can also be read by older versions
-  // of QLever. Otherwise the new format is used (blob version 2, which then
-  // contains a possibly empty secondary vocabulary, and entries version 2,
-  // which is required for a geo index with more than one segment).
+  // is empty and no entry has a geo index with more than one segment or with
+  // dead shapes, the blob is written in the old format (blob version 1 and
+  // entries version 1) without a secondary vocabulary, which can also be read
+  // by older versions of QLever. Otherwise the new format is used (blob
+  // version 2, which then contains a possibly empty secondary vocabulary, and
+  // entries version 2, which is required for a geo index with more than one
+  // segment). A geo index with dead shapes (which only arise from
+  // `SpatialJoinCachedIndex::forUpdatedTable`) could be written in the old
+  // format, but older versions of QLever would fail on it, because they
+  // expect each shape of the S2 index to have a row.
   //
   // NOTE: A geo index with a single segment and a simplification is
   // deliberately still written in the old format, although that format cannot
@@ -262,12 +266,13 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
                                            : SecondaryVocabulary{};
   namedCacheSecondaryVocab::addNewWordsToSecondaryVocab(entries,
                                                         secondaryVocab);
-  bool hasSegmentedGeoIndex =
-      ql::ranges::any_of(entries, [](const auto& entry) {
-        const auto& geoIndex = entry.second->cachedGeoIndex_;
-        return geoIndex.has_value() && geoIndex.value().numSegments() > 1;
-      });
-  bool useNewFormat = secondaryVocab.numWords() > 0 || hasSegmentedGeoIndex;
+  bool needsNewGeoFormat = ql::ranges::any_of(entries, [](const auto& entry) {
+    const auto& geoIndex = entry.second->cachedGeoIndex_;
+    return geoIndex.has_value() &&
+           (geoIndex.value().numSegments() > 1 ||
+            geoIndex.value().numLiveShapes() < geoIndex.value().numShapes());
+  });
+  bool useNewFormat = secondaryVocab.numWords() > 0 || needsNewGeoFormat;
   writeBlobHeader(serializer, useNewFormat
                                   ? formatVersionWithSecondaryVocab
                                   : formatVersionWithoutSecondaryVocab);

@@ -1211,6 +1211,60 @@ TEST(NamedCachedQueryBlobManager, blobWithSegmentedSpatialIndex) {
 }
 
 // _____________________________________________________________________________
+// A geo index with a single segment but dead shapes (as created by
+// `SpatialJoinCachedIndex::forUpdatedTable` when rows are deleted) requires the
+// new blob format, because older versions of QLever would fail on a dead shape.
+TEST(NamedCachedQueryBlobManager, blobWithDeadShapesInSingleSegment) {
+  auto sourceConfig = buildTestIndex(absl::StrCat(
+      freiburgSegmentsS1S2,
+      "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 "
+      "47.9975175)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"));
+  Qlever source{EngineConfig{sourceConfig}};
+  source.queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"}},
+      "SELECT * { ?s2 <asWKT> ?geo2 }");
+  source.queryAndPinResultWithName(
+      "subset", "SELECT * { ?s2 <asWKT> ?geo2 FILTER(?s2 != <s3>) }");
+  auto base = source.namedResultCache().get("geoPin");
+  auto subset = source.namedResultCache().get("subset");
+  ASSERT_THAT(base->cachedGeoIndex_.value(), hasStats(1, 3, 3, 3));
+
+  // Map each row of the subset to the row of `base` with the same geometry.
+  auto baseView = ExplicitIdTableOperation::viewOf(base->result_);
+  auto subsetView = ExplicitIdTableOperation::viewOf(subset->result_);
+  auto baseCol = base->varToColMap_.at(Variable{"?geo2"}).columnIndex_;
+  auto subsetCol = subset->varToColMap_.at(Variable{"?geo2"}).columnIndex_;
+  std::vector<size_t> baseRowOfNewRow;
+  for (size_t row = 0; row < subsetView.size(); ++row) {
+    auto baseRow = ql::ranges::find_if(
+        ql::views::iota(size_t{0}, baseView.size()), [&](size_t candidate) {
+          return baseView(candidate, baseCol) == subsetView(row, subsetCol);
+        });
+    ASSERT_NE(*baseRow, baseView.size());
+    baseRowOfNewRow.push_back(*baseRow);
+  }
+  auto updated = SpatialJoinCachedIndex::forUpdatedTable(
+      base->cachedGeoIndex_.value(), baseRowOfNewRow, subsetView, subsetCol,
+      source.indexAndViewsSnapshot()->index_);
+  ASSERT_THAT(updated, hasStats(1, 3, 2, 2));
+  source.namedResultCache().store(
+      "geoPin", NamedResultCache::Value{subset->result_, subset->varToColMap_,
+                                        subset->resultSortedOn_,
+                                        subset->localVocab_.clone(),
+                                        subset->cacheKey_, std::move(updated)});
+  source.namedResultCache().erase("subset");
+
+  const std::string expected = "?s2\n<s1>\n<s2>\n";
+  std::string spatialQuery = spatialJoinQuery("POINT(7.841295 47.997731)");
+  EXPECT_EQ(source.query(spatialQuery, ad_utility::MediaType::tsv), expected);
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  expectBlobFormatVersion(blob, Manager::formatVersionWithSecondaryVocab);
+  auto loaded = loadBlob(blob);
+  EXPECT_THAT(geoIndexOf(*loaded), hasStats(1, 3, 2, 2));
+  EXPECT_EQ(loaded->query(spatialQuery, ad_utility::MediaType::tsv), expected);
+}
+
+// _____________________________________________________________________________
 // A geo index with a simplification and a single segment is deliberately still
 // written in the old blob format, which drops the simplification (see the NOTE
 // in `NamedCachedQueryBlobManager::serialize`). With more than one segment,

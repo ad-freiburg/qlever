@@ -11,6 +11,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "backports/span.h"
@@ -27,6 +28,7 @@
 #include "util/HashMap.h"
 #include "util/Serializer/SerializeHashMap.h"
 #include "util/Serializer/SerializeOptional.h"
+#include "util/Serializer/SerializePair.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
@@ -261,7 +263,17 @@ class SpatialJoinCachedIndex {
                         "Only a geo index with a single segment can be "
                         "written in the legacy format");
       serializer << encodeSegment(*segments_.at(0));
-      serializer << legacyShapeToRow();
+      // The map from shape ids to rows is written with the layout of a
+      // serialized `ad_utility::HashMap<size_t, size_t>` (its size, followed
+      // by its pairs), which is what `readFromSerializer` and older versions
+      // of QLever read. The pairs are written in the order of the shape ids
+      // instead of the iteration order of a hash map, which is not
+      // deterministic.
+      auto shapeToRow = legacyShapeToRow();
+      serializer << shapeToRow.size();
+      for (const auto& pair : shapeToRow) {
+        serializer << pair;
+      }
       return;
     }
     serializer << simplificationErrorInMeters_;
@@ -337,10 +349,10 @@ class SpatialJoinCachedIndex {
   // exist, or if a shape is referenced by more than one row.
   void computeShapeToRow();
 
-  // Return the map from the shape ids of the live shapes to their rows, which
-  // is part of the legacy format (see `writeToSerializer`). The index must
-  // have exactly one segment.
-  ad_utility::HashMap<size_t, size_t> legacyShapeToRow() const;
+  // Return the pairs of the shape id of each live shape and its row, sorted by
+  // the shape id, which are part of the legacy format (see
+  // `writeToSerializer`). The index must have exactly one segment.
+  std::vector<std::pair<size_t, size_t>> legacyShapeToRow() const;
 
   // Serialize the `MutableS2ShapeIndex` as well as the contained shapes.
   static std::string encodeSegment(const MutableS2ShapeIndex& segment);

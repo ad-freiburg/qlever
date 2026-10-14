@@ -254,14 +254,14 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::forUpdatedTable(
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<size_t, size_t> SpatialJoinCachedIndex::legacyShapeToRow()
-    const {
+std::vector<std::pair<size_t, size_t>>
+SpatialJoinCachedIndex::legacyShapeToRow() const {
   AD_CONTRACT_CHECK(shapeToRow_.size() == 1);
-  ad_utility::HashMap<size_t, size_t> result;
+  std::vector<std::pair<size_t, size_t>> result;
   for (const auto& [shapeId, row] :
        ::ranges::views::enumerate(shapeToRow_.at(0))) {
     if (row != NO_ROW) {
-      result[shapeId] = row;
+      result.emplace_back(shapeId, row);
     }
   }
   return result;

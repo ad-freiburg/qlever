@@ -800,6 +800,28 @@ TEST(SpatialJoinCachedIndex, writeLegacyVersion1Format) {
   }
   expectSameResults(loaded, updated);
 
+  // The map from shape ids to rows is written in the order of the shape ids
+  // (with the layout of a serialized `ad_utility::HashMap`), so the bytes are
+  // deterministic.
+  auto bytes = serializeToBytes(updated, legacyFormatVersion);
+  EXPECT_EQ(serializeToBytes(updated, legacyFormatVersion), bytes);
+  {
+    ad_utility::serialization::ByteBufferReadSerializer reader{
+        std::vector<char>(bytes.begin(), bytes.end())};
+    Variable geometryColumn{"?unused"};
+    std::string encodedSegment;
+    size_t numPairs = 0;
+    reader >> geometryColumn;
+    reader >> encodedSegment;
+    reader >> numPairs;
+    std::vector<std::pair<size_t, size_t>> pairs(numPairs);
+    for (auto& pair : pairs) {
+      reader >> pair;
+    }
+    using P = std::pair<size_t, size_t>;
+    EXPECT_THAT(pairs, ::testing::ElementsAre(P{0, 1}, P{2, 0}));
+  }
+
   // An index with more than one segment cannot be written in the legacy
   // format.
   auto twoSegments =
