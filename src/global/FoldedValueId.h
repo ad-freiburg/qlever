@@ -241,6 +241,12 @@ class ValueId {
     return {(payload & datatypeMask) | (datatype << numDataBits)};
   }
 
+  // Overload of fromBits to directly use it with Datatype
+  static constexpr ValueId fromBits(const Datatype datatype,
+                                    const T payload) noexcept {
+    return fromBits(static_cast<T>(datatype), payload);
+  }
+
   // Get the datatype bits.
   [[nodiscard]] constexpr uint8_t getDatatypeBits() const noexcept {
     return static_cast<uint8_t>(_bits >> numDataBits);
@@ -279,8 +285,7 @@ class ValueId {
   // mode, where `absl::bit_cast` is `std::bit_cast`. In C++17 mode it falls
   // back to a `memcpy`, see also the note on `minPositiveDouble` above.
   static QL_CONSTEXPR ValueId makeFromDouble(double d) {
-    auto shifted = absl::bit_cast<T>(d) >> numDatatypeBits;
-    return addDatatypeBits(shifted, Datatype::Double);
+    return fromBits(Datatype::Double, absl::bit_cast<T>(d) >> numDatatypeBits);
   }
   // Obtain the `double` that this `ValueId` encodes. If `getDatatype() !=
   // Double` then the result is unspecified.
@@ -293,7 +298,7 @@ class ValueId {
   // overflow according to the semantics of `NBitInteger<60>`.
   static constexpr ValueId makeFromInt(int64_t i) {
     auto nbit = IntegerType::toNBit(i);
-    return addDatatypeBits(nbit, Datatype::Int);
+    return fromBits(Datatype::Int, nbit);
   }
 
   // Obtain the signed integer that this `ValueId` encodes. If `getDatatype()
@@ -304,8 +309,7 @@ class ValueId {
 
   // Create a `ValueId` for a boolean value.
   static constexpr ValueId makeFromBool(bool b) noexcept {
-    auto bits = static_cast<T>(b);
-    return addDatatypeBits(bits, Datatype::Bool);
+    return fromBits(Datatype::Bool, b);
   }
 
   // Create a `ValueId` for a boolean value, represented as "0" or "1" instead
@@ -313,7 +317,7 @@ class ValueId {
   static constexpr ValueId makeBoolFromZeroOrOne(bool b) noexcept {
     auto bits = static_cast<T>(b);
     bits |= static_cast<T>(true) << 1;
-    return addDatatypeBits(bits, Datatype::Bool);
+    return fromBits(Datatype::Bool, bits);
   }
 
   // Obtain the boolean value.
@@ -399,7 +403,7 @@ class ValueId {
   // NOTE: These functions cannot be `constexpr`, because
   // `DateYearOrDuration` is not a literal type.
   static ValueId makeFromDate(DateYearOrDuration d) noexcept {
-    return addDatatypeBits(absl::bit_cast<uint64_t>(d), Datatype::Date);
+    return fromBits(Datatype::Date, absl::bit_cast<uint64_t>(d));
   }
 
   DateYearOrDuration getDate() const noexcept {
@@ -410,7 +414,7 @@ class ValueId {
 
   // Create a `ValueId` for a GeoPoint object (representing a POINT from WKT).
   static ValueId makeFromGeoPoint(GeoPoint p) {
-    return addDatatypeBits(p.toBitRepresentation(), Datatype::GeoPoint);
+    return fromBits(Datatype::GeoPoint, p.toBitRepresentation());
   }
 
   // Obtain a new `GeoPoint` object representing the pair of coordinates that
@@ -602,19 +606,12 @@ class ValueId {
   // `Double()`, `Int()` etc.
   constexpr ValueId(T bits) : _bits{bits} {}
 
-  // Set the first 4 bits of `bits` to a 4-bit representation of `type`.
-  // Requires that the first four bits of `bits` are all zero.
-  static constexpr ValueId addDatatypeBits(T bits, Datatype type) {
-    auto mask = static_cast<T>(type) << numDataBits;
-    return {bits | mask};
-  }
-
   // Helper function for the implementation of the unsigned index types.
   static constexpr ValueId makeFromIndex(T id, Datatype type) {
     if (id > maxIndex) {
       throw IndexTooLargeException(id);
     }
-    return addDatatypeBits(id, type);
+    return fromBits(type, id);
   }
 };
 
