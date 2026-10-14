@@ -215,6 +215,10 @@ class GeometryInfo {
   // `std:nullopt` if `wkt` cannot be parsed.
   static std::optional<GeometryInfo> fromWktLiteral(std::string_view wkt);
 
+  // Check if `wkt` (a WKT literal with quotes and datatype) is valid according
+  // to the strict parsing mode of `pb_util`.
+  static bool isValidWktStrict(std::string_view wkt);
+
   // Create geometry info for a GeoPoint object.
   static GeometryInfo fromGeoPoint(const GeoPoint& point);
 

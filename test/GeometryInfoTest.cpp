@@ -317,6 +317,29 @@ TEST(GeometryInfoTest, FromWktLiteral) {
 }
 
 // ____________________________________________________________________________
+TEST(GeometryInfoTest, IsValidWktStrict) {
+  for (auto lit :
+       {litPoint, litPointWGS84, litLineString, litPolygon, litMultiPoint,
+        litMultiLineString, litMultiPolygon, litCollection}) {
+    EXPECT_TRUE(GeometryInfo::isValidWktStrict(lit)) << lit;
+  }
+  EXPECT_TRUE(GeometryInfo::isValidWktStrict(
+      "\"LINESTRING "
+      "EMPTY\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
+
+  constexpr std::string_view litInvalidCoord =
+      "\"LINESTRING(2 2, 4 a)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  for (auto lit : {litInvalidType, litInvalidBrackets, litInvalidNumCoords,
+                   litInvalidCoord}) {
+    EXPECT_FALSE(GeometryInfo::isValidWktStrict(lit)) << lit;
+  }
+  // The lenient (default) mode skips the invalid coordinate.
+  EXPECT_THAT(GeometryInfo::getNumGeometries(litInvalidCoord),
+              ::testing::Optional(NumGeometries{1}));
+}
+
+// ____________________________________________________________________________
 TEST(GeometryInfoTest, FromGeoPoint) {
   GeoPoint p{1.234, 5.678};
   auto g = GeometryInfo::fromGeoPoint(p);
