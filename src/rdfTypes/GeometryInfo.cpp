@@ -47,8 +47,9 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                        "Centroid bit representation exceeds available bits.");
   geometryTypeAndCentroid_ = typeBits | centroidBits;
 
-  AD_CORRECTNESS_CHECK(sourceCrs.type() <= 3, "CRS Type out of range");
-  AD_CORRECTNESS_CHECK(sourceCrs.type() > 0,
+  AD_CORRECTNESS_CHECK(sourceCrs.type() <= util::geo::CRSType::WEB_MERCATOR,
+                       "CRS Type out of range");
+  AD_CORRECTNESS_CHECK(sourceCrs.type() != util::geo::CRSType::UNSUPPORTED,
                        "CRS Type indicates invalid/unsupported geometry");
 
   AD_CORRECTNESS_CHECK(
@@ -121,10 +122,8 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
 // ____________________________________________________________________________
 std::optional<SourceCrsType> GeometryInfo::getSourceCrsType(
     std::string_view wkt) {
-  auto crsType =
-      static_cast<uint8_t>(detail::getCRSType(detail::removeDatatype(wkt)));
-  if (crsType == 0) {
-    // Type 0 represents invalid/unsupported type
+  auto crsType = detail::getCRSType(detail::removeDatatype(wkt));
+  if (crsType == util::geo::CRSType::UNSUPPORTED) {
     return std::nullopt;
   }
   return SourceCrsType{crsType};

@@ -95,7 +95,9 @@ struct GeometryType {
 // see `libspatialjoin`'s `CRSType`.
 struct SourceCrsType {
  private:
-  uint32_t type_ = 1;  // Default CRS type: CRS84.
+  // The default (for the C++17 default constructor) is CRS84, the value of
+  // `util::geo::CRSType::CRS84` (the util is not included in this header).
+  uint32_t type_ = 1;
 
  public:
   explicit SourceCrsType(uint32_t type);
