@@ -120,8 +120,8 @@ concept VectorOrExpressionResult =
 
 // Convert a `VectorOrExpressionResult` (see above) to a type that is supported
 // by the expression module.
-CPP_template(typename T)(
-    requires VectorOrExpressionResult<T>) auto toExpressionResult(T vec) {
+CPP_template(typename T)(requires VectorOrExpressionResult<T>)
+auto toExpressionResult(T vec) {
   if constexpr (SingleExpressionResult<T>) {
     return vec;
   } else if constexpr (ranges::convertible_to<T, std::string_view>) {

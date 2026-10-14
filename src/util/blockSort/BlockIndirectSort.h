@@ -191,10 +191,10 @@ void runSort(Iterator begin, Iterator end, Compare comp, uint32_t numThreads,
 // In C++17 mode (no coroutines), this always sorts single-threaded in the
 // calling thread; `numThreads` and `exec` are then not used.
 CPP_template(typename Range, typename Compare)(
-    requires ql::ranges::random_access_range<
-        Range>) void blockIndirectSort(Range&& range, Compare comp,
-                                       [[maybe_unused]] uint32_t numThreads,
-                                       ql::any_io_executor exec) {
+    requires ql::ranges::random_access_range<Range>)
+void blockIndirectSort(Range&& range, Compare comp,
+                       [[maybe_unused]] uint32_t numThreads,
+                       ql::any_io_executor exec) {
   AD_CONTRACT_CHECK(static_cast<bool>(exec));
   auto begin = ql::ranges::begin(range);
   auto end = begin + ql::ranges::distance(range);
@@ -215,11 +215,11 @@ CPP_template(typename Range, typename Compare)(
 //
 // NOTE: `range` is only accessed once the result is awaited, so it has to stay
 // alive until then. Temporaries in `co_await blockIndirectSortAsync(...)` do.
-CPP_template(typename Range,
-             typename Compare)(requires ql::ranges::random_access_range<Range>)
-    boost::asio::awaitable<void> blockIndirectSortAsync(
-        Range&& range, Compare comp, uint32_t numThreads,
-        ql::any_io_executor exec) {
+CPP_template(typename Range, typename Compare)(
+    requires ql::ranges::random_access_range<Range>)
+boost::asio::awaitable<void> blockIndirectSortAsync(Range&& range, Compare comp,
+                                                    uint32_t numThreads,
+                                                    ql::any_io_executor exec) {
   AD_CONTRACT_CHECK(static_cast<bool>(exec));
   auto begin = ql::ranges::begin(range);
   auto end = begin + ql::ranges::distance(range);

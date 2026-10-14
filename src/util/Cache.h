@@ -57,7 +57,8 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
              class Key, class Value, typename Score, typename ScoreComparator,
              typename AccessUpdater, typename ScoreCalculator,
              typename ValueSizeGetterT)(
-    requires ValueSizeGetter<ValueSizeGetterT, Value>) class FlexibleCache {
+    requires ValueSizeGetter<ValueSizeGetterT, Value>)
+class FlexibleCache {
  public:
   // For easier interaction with the STL, which often uses key_type and
   // value_type .
@@ -415,7 +416,8 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
 CPP_template(class Key, class Value, typename Score, typename ScoreComparator,
              typename AccessUpdater, typename ScoreCalculator,
              typename ValueSizeGetterT)(
-    requires ValueSizeGetter<ValueSizeGetterT, Value>) using HeapBasedCache =
+            requires ValueSizeGetter<ValueSizeGetterT, Value>)
+using HeapBasedCache =
     ad_utility::FlexibleCache<HeapBasedPQ, Key, Value, Score, ScoreComparator,
                               AccessUpdater, ScoreCalculator, ValueSizeGetterT>;
 
@@ -424,7 +426,8 @@ CPP_template(class Key, class Value, typename Score, typename ScoreComparator,
 CPP_template(class Key, class Value, typename Score, typename ScoreComparator,
              typename AccessUpdater, typename ScoreCalculator,
              typename ValueSizeGetterT)(
-    requires ValueSizeGetter<ValueSizeGetterT, Value>) using TreeBasedCache =
+            requires ValueSizeGetter<ValueSizeGetterT, Value>)
+using TreeBasedCache =
     ad_utility::FlexibleCache<TreeBasedPQ, Key, Value, Score, ScoreComparator,
                               AccessUpdater, ScoreCalculator, ValueSizeGetterT>;
 
@@ -451,7 +454,8 @@ struct timeUpdater {
 
 /// A LRU cache using the HeapBasedCache
 CPP_template(typename Key, typename Value, typename ValueSizeGetterT)(
-    requires ValueSizeGetter<ValueSizeGetterT, Value>) class HeapBasedLRUCache
+    requires ValueSizeGetter<ValueSizeGetterT, Value>)
+class HeapBasedLRUCache
     : public HeapBasedCache<Key, Value, detail::TimePoint, std::less<>,
                             detail::timeUpdater, detail::timeAsScore,
                             ValueSizeGetterT> {
@@ -470,7 +474,8 @@ CPP_template(typename Key, typename Value, typename ValueSizeGetterT)(
 
 /// A LRU cache using the TreeBasedCache
 CPP_template(typename Key, typename Value, typename ValueSizeGetterT)(
-    requires ValueSizeGetter<ValueSizeGetterT, Value>) class TreeBasedLRUCache
+    requires ValueSizeGetter<ValueSizeGetterT, Value>)
+class TreeBasedLRUCache
     : public ad_utility::TreeBasedCache<Key, Value, detail::TimePoint,
                                         std::less<>, detail::timeUpdater,
                                         detail::timeAsScore, ValueSizeGetterT> {
@@ -489,12 +494,12 @@ CPP_template(typename Key, typename Value, typename ValueSizeGetterT)(
 /// implementations at compile time
 #ifdef _QLEVER_USE_TREE_BASED_CACHE
 CPP_template(typename Key, typename Value, typename ValueSizeGetterT)(
-    requires ValueSizeGetter<ValueSizeGetter, Value>) using LRUCache =
-    TreeBasedLRUCache<Key, Value, ValueSizeGetterT>;
+            requires ValueSizeGetter<ValueSizeGetter, Value>)
+using LRUCache = TreeBasedLRUCache<Key, Value, ValueSizeGetterT>;
 #else
 CPP_template(typename Key, typename Value, typename ValueSizeGetterT)(
-    requires ValueSizeGetter<ValueSizeGetterT, Value>) using LRUCache =
-    HeapBasedLRUCache<Key, Value, ValueSizeGetterT>;
+            requires ValueSizeGetter<ValueSizeGetterT, Value>)
+using LRUCache = HeapBasedLRUCache<Key, Value, ValueSizeGetterT>;
 #endif
 
 }  // namespace ad_utility

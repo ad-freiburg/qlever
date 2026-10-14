@@ -343,10 +343,9 @@ class FrequencyEncode : public ad_utility::NoCopyNoMove {
   // .cpp file when using this specific requires clause. To circumvent this the
   // requires clause is kept only in the .h file and the constructor calls the
   // initialize function which has no direct requires clause.
-  CPP_template(typename View)(requires(
-      !ranges::same_as<
-          FrequencyEncode,
-          ql::remove_cvref_t<View>>)) explicit FrequencyEncode(View&& view) {
+  CPP_template(typename View)(
+      requires(!ranges::same_as<FrequencyEncode, ql::remove_cvref_t<View>>))
+  explicit FrequencyEncode(View&& view) {
     initialize(std::forward<View>(view));
   }
 
@@ -393,9 +392,9 @@ class GapEncode : public ad_utility::NoCopyNoMove {
   // .cpp file when using this specific requires clause. To circumvent this the
   // requires clause is kept only in the .h file and the constructor calls the
   // initialize function which has no direct requires clause.
-  CPP_template(typename View)(requires(
-      !ranges::same_as<GapEncode, ql::remove_cvref_t<
-                                      View>>)) explicit GapEncode(View&& view) {
+  CPP_template(typename View)(
+      requires(!ranges::same_as<GapEncode, ql::remove_cvref_t<View>>))
+  explicit GapEncode(View&& view) {
     initialize(std::forward<View>(view));
   }
 

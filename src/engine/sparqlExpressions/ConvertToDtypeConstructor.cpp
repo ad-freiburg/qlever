@@ -35,8 +35,8 @@ namespace detail::to_numeric {
 // class that converts an input `int64_t`, `double` or `std::string`
 // to a numeric value `int64_t` or `double`
 CPP_template(typename T, bool AllowExponentialNotation = true)(
-    requires(concepts::same_as<int64_t, T> ||
-             concepts::same_as<double, T>)) class ToNumericImpl {
+    requires(concepts::same_as<int64_t, T> || concepts::same_as<double, T>))
+class ToNumericImpl {
  private:
   ValueId getFromString(const std::string& input) const {
     auto str = absl::StripAsciiWhitespace(input);

@@ -40,9 +40,8 @@ const auto NaN = std::numeric_limits<double>::quiet_NaN();
 // Create and return a `RelationalExpression` with the given Comparison and the
 // given operands `leftValue` and `rightValue`.
 CPP_template(Comparison comp, typename L, typename R)(
-    requires SingleExpressionResult<L> CPP_and
-        SingleExpressionResult<R>) auto makeExpression(L leftValue,
-                                                       R rightValue) {
+    requires SingleExpressionResult<L> && SingleExpressionResult<R>)
+auto makeExpression(L leftValue, R rightValue) {
   auto leftChild = std::make_unique<SingleUseExpression>(std::move(leftValue));
   auto rightChild =
       std::make_unique<SingleUseExpression>(std::move(rightValue));
@@ -51,10 +50,9 @@ CPP_template(Comparison comp, typename L, typename R)(
       {std::move(leftChild), std::move(rightChild)});
 }
 
-CPP_template(typename L,
-             typename... R)(requires SingleExpressionResult<L> CPP_and(
-    SingleExpressionResult<R>&&...)) auto makeInExpression(L leftValue,
-                                                           R... rightValues) {
+CPP_template(typename L, typename... R)(
+    requires SingleExpressionResult<L> && (SingleExpressionResult<R> && ...))
+auto makeInExpression(L leftValue, R... rightValues) {
   auto leftChild = std::make_unique<SingleUseExpression>(std::move(leftValue));
   std::vector<SparqlExpression::Ptr> rightChildren;
   (..., (rightChildren.push_back(

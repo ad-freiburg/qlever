@@ -34,8 +34,8 @@ inline constexpr default_sentinel_t default_sentinel{};
 
 // A backport of `std::move_sentinel` for C++17. It wraps an iterator or
 // sentinel type and can be compared with a compatible `ql::move_iterator`.
-CPP_template(typename Sent)(
-    requires ql::concepts::semiregular<Sent>) class move_sentinel {
+CPP_template(typename Sent)(requires ql::concepts::semiregular<Sent>)
+class move_sentinel {
  public:
   // Default constructor
   constexpr move_sentinel() noexcept(

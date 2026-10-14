@@ -120,15 +120,15 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
              typename ElFromFirstNotFoundAction = decltype(noop),
              typename CheckCancellation = decltype(noop),
              typename CoverUndefRanges = std::true_type)(
-    requires ql::ranges::random_access_range<Range1> CPP_and
-        ql::ranges::random_access_range<Range2>)
-    [[nodiscard]] auto zipperJoinWithUndef(
-        const Range1& left, const Range2& right, const LessThan& lessThan,
-        const CompatibleRowAction& compatibleRowAction,
-        const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
-        const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
-        ElFromFirstNotFoundAction elFromFirstNotFoundAction = {},
-        CheckCancellation checkCancellation = {}, CoverUndefRanges = {}) {
+    requires ql::ranges::random_access_range<Range1> &&
+    ql::ranges::random_access_range<Range2>)
+[[nodiscard]] auto zipperJoinWithUndef(
+    const Range1& left, const Range2& right, const LessThan& lessThan,
+    const CompatibleRowAction& compatibleRowAction,
+    const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
+    const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
+    ElFromFirstNotFoundAction elFromFirstNotFoundAction = {},
+    CheckCancellation checkCancellation = {}, CoverUndefRanges = {}) {
   // If this is not an OPTIONAL join or a MINUS we can apply several
   // optimizations, so we store this information.
   static constexpr bool hasNotFoundAction =
@@ -375,17 +375,13 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
 CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
              typename Action, typename ElementFromSmallerNotFoundAction = Noop,
              typename CheckCancellation = Noop)(
-    requires ql::ranges::random_access_range<RangeSmaller> CPP_and
-        ql::ranges::random_access_range<
-            RangeLarger>) void gallopingJoin(const RangeSmaller& smaller,
-                                             const RangeLarger& larger,
-                                             LessThan const& lessThan,
-                                             Action const& action,
-                                             ElementFromSmallerNotFoundAction
-                                                 elementFromSmallerNotFoundAction =
-                                                     {},
-                                             CheckCancellation
-                                                 checkCancellation = {}) {
+    requires ql::ranges::random_access_range<RangeSmaller> &&
+    ql::ranges::random_access_range<RangeLarger>)
+void gallopingJoin(
+    const RangeSmaller& smaller, const RangeLarger& larger,
+    LessThan const& lessThan, Action const& action,
+    ElementFromSmallerNotFoundAction elementFromSmallerNotFoundAction = {},
+    CheckCancellation checkCancellation = {}) {
   auto itSmall = std::begin(smaller);
   auto endSmall = std::end(smaller);
   auto itLarge = std::begin(larger);
@@ -517,21 +513,14 @@ CPP_template(typename LeftTableLike, typename RightTableLike,
              typename CompatibleActionT, typename NotFoundActionT,
              typename CancellationFuncT, typename NumColsT)(
     requires BinaryIteratorFunction<CompatibleActionT, LeftTableLike,
-                                    RightTableLike>
-        CPP_and UnaryIteratorFunction<NotFoundActionT, LeftTableLike>
-            CPP_and ql::concepts::invocable<
-                CancellationFuncT>) void specialOptionalJoin(NumColsT
-                                                                 numJoinColumnsArg,
-                                                             const LeftTableLike&
-                                                                 left,
-                                                             const RightTableLike&
-                                                                 right,
-                                                             const CompatibleActionT&
-                                                                 compatibleRowAction,
-                                                             const NotFoundActionT&
-                                                                 elFromFirstNotFoundAction,
-                                                             const CancellationFuncT&
-                                                                 checkCancellation) {
+                                    RightTableLike> &&
+    UnaryIteratorFunction<NotFoundActionT, LeftTableLike> &&
+    ql::concepts::invocable<CancellationFuncT>)
+void specialOptionalJoin(NumColsT numJoinColumnsArg, const LeftTableLike& left,
+                         const RightTableLike& right,
+                         const CompatibleActionT& compatibleRowAction,
+                         const NotFoundActionT& elFromFirstNotFoundAction,
+                         const CancellationFuncT& checkCancellation) {
   auto it1 = std::begin(left);
   auto end1 = std::end(left);
   auto it2 = std::begin(right);
@@ -895,10 +884,9 @@ static constexpr size_t FETCH_BLOCKS = 3;
 CPP_template(typename Derived, typename LeftSide, typename RightSide,
              typename LessThan, typename CompatibleRowAction,
              typename IsUndef = AlwaysFalse)(
-    requires IsJoinSide<LeftSide> CPP_and IsJoinSide<RightSide> CPP_and
-        InvocableWithExactReturnType<
-            IsUndef, bool,
-            typename LeftSide::ProjectedEl>) struct BlockZipperJoinImplCRTP {
+    requires IsJoinSide<LeftSide> && IsJoinSide<RightSide> &&
+    InvocableWithExactReturnType<IsUndef, bool, typename LeftSide::ProjectedEl>)
+struct BlockZipperJoinImplCRTP {
   // The left and right inputs of the join
   LeftSide leftSide_;
   RightSide rightSide_;
@@ -1601,10 +1589,9 @@ CPP_template(typename Derived, typename LeftSide, typename RightSide,
 // behavior for `addCartesianProduct` and `joinSubranges`.
 CPP_template(typename LeftSide, typename RightSide, typename LessThan,
              typename CompatibleRowAction, typename IsUndef = AlwaysFalse)(
-    requires IsJoinSide<LeftSide> CPP_and IsJoinSide<RightSide> CPP_and
-        InvocableWithExactReturnType<
-            IsUndef, bool,
-            typename LeftSide::ProjectedEl>) struct BlockZipperJoinImpl
+    requires IsJoinSide<LeftSide> && IsJoinSide<RightSide> &&
+    InvocableWithExactReturnType<IsUndef, bool, typename LeftSide::ProjectedEl>)
+struct BlockZipperJoinImpl
     : BlockZipperJoinImplCRTP<BlockZipperJoinImpl<LeftSide, RightSide, LessThan,
                                                   CompatibleRowAction, IsUndef>,
                               LeftSide, RightSide, LessThan,
@@ -1695,8 +1682,8 @@ BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&, IsUndef)
 // - Both inputs are sorted lexicographically
 CPP_template(typename NumJoinColumnsT, typename LeftSide, typename RightSide,
              typename CompatibleRowAction)(
-    requires IsJoinSide<LeftSide> CPP_and
-        IsJoinSide<RightSide>) struct BlockZipperJoinImplForSpecialOptionalJoin
+    requires IsJoinSide<LeftSide> && IsJoinSide<RightSide>)
+struct BlockZipperJoinImplForSpecialOptionalJoin
     : BlockZipperJoinImplCRTP<
           BlockZipperJoinImplForSpecialOptionalJoin<
               NumJoinColumnsT, LeftSide, RightSide, CompatibleRowAction>,

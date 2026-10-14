@@ -41,10 +41,11 @@ namespace ad_utility {
 // TODO<joka921> This can be optimized when we also know which columns of
 // `[begin, end)` can possibly contain UNDEF values.
 CPP_template(typename R,
-             typename It)(requires ql::concepts::random_access_iterator<It>)  //
-    auto findSmallerUndefRangesForRowsWithoutUndef(
-        const R& row, It begin, It end,
-        [[maybe_unused]] bool& resultMightBeUnsorted) {
+             typename It)(
+    requires ql::concepts::random_access_iterator<It>)  //
+auto findSmallerUndefRangesForRowsWithoutUndef(
+    const R& row, It begin, It end,
+    [[maybe_unused]] bool& resultMightBeUnsorted) {
   using Row = typename std::iterator_traits<It>::value_type;
   assert(row.size() == (*begin).size());
   assert(
@@ -87,9 +88,9 @@ CPP_template(typename R,
 // [begin, end] range not having UNDEF values in some of the columns
 CPP_template(typename It, typename RowT)(
     requires ql::concepts::random_access_iterator<It>)  //
-    auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
-        const RowT& row, const size_t numLastUndefined, It begin, It end,
-        bool& resultMightBeUnsorted) {
+auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
+    const RowT& row, const size_t numLastUndefined, It begin, It end,
+    bool& resultMightBeUnsorted) {
   using Row = typename std::iterator_traits<It>::value_type;
   const size_t numJoinColumns = row.size();
   assert(row.size() == (*begin).size());
@@ -141,8 +142,8 @@ CPP_template(typename It, typename RowT)(
 // numColumns)`.
 CPP_template(typename It, typename RowT)(
     requires ql::concepts::random_access_iterator<It>)  //
-    auto findSmallerUndefRangesArbitrary(const RowT& row, It begin, It end,
-                                         bool& resultMightBeUnsorted) {
+auto findSmallerUndefRangesArbitrary(const RowT& row, It begin, It end,
+                                     bool& resultMightBeUnsorted) {
   assert(row.size() == (*begin).size());
   assert(
       ql::ranges::is_sorted(begin, end, ql::ranges::lexicographical_compare));
@@ -188,9 +189,9 @@ CPP_template(typename It, typename RowT)(
 // should be chosen.
 struct FindSmallerUndefRanges {
   CPP_template(typename Row, typename It)(
-      requires ql::concepts::random_access_iterator<It>) auto
-  operator()(const Row& row, It begin, It end,
-             bool& resultMightBeUnsorted) const {
+      requires ql::concepts::random_access_iterator<It>)
+  auto operator()(const Row& row, It begin, It end,
+                  bool& resultMightBeUnsorted) const {
     size_t numLastUndefined = 0;
     assert(row.size() > 0);
     auto it = ql::ranges::rbegin(row);

@@ -258,13 +258,13 @@ class GeometryInfo {
 
   // Extract the requested information from this object.
   CPP_template(typename RequestedInfo = GeometryInfo)(
-      requires RequestedInfoT<RequestedInfo>) RequestedInfo
-      getRequestedInfo() const;
+      requires RequestedInfoT<RequestedInfo>)
+  RequestedInfo getRequestedInfo() const;
 
   // Parse the given WKT literal and compute only the requested information.
   CPP_template(typename RequestedInfo = GeometryInfo)(
-      requires RequestedInfoT<RequestedInfo>) static std::
-      optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
+      requires RequestedInfoT<RequestedInfo>)
+  static std::optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
 };
 
 // The binary representation of a `GeometryInfo` must not contain implicit

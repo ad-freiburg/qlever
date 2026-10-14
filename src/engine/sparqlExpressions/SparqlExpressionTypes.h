@@ -70,8 +70,8 @@ CPP_concept SingleExpressionResult =
 
 // Copy an expression result.
 CPP_template(typename ResultT)(
-    requires ad_utility::SimilarTo<ResultT, ExpressionResult>) ExpressionResult
-    copyExpressionResult(ResultT&& result) {
+    requires ad_utility::SimilarTo<ResultT, ExpressionResult>)
+ExpressionResult copyExpressionResult(ResultT&& result) {
   auto copyIfCopyable = [](const auto& x)
       -> CPP_ret(ExpressionResult)(
           requires SingleExpressionResult<std::decay_t<decltype(x)>>) {
@@ -196,9 +196,9 @@ struct EvaluationContext {
 namespace detail {
 /// Get Id of constant result of type T.
 CPP_template(typename T, typename LocalVocabT)(
-    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
-        std::is_rvalue_reference_v<T&&>) Id
-    constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
+    requires SingleExpressionResult<T> && isConstantResult<T> &&
+    std::is_rvalue_reference_v<T &&>)
+Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrLocalVocabEntry>) {
@@ -371,8 +371,9 @@ constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
 // NOTE: Aggregates must not use this function, they aggregate one value per
 // row of the `context` also for a constant input (see
 // `AggregateExpression.cpp`).
-CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
-    size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
+CPP_template(typename... Inputs)(
+    requires(SingleExpressionResult<Inputs>&&...))
+size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
   return (... && isConstantResult<Inputs>) ? 1ul : context.size();
 }
 

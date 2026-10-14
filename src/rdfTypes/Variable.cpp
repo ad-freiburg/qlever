@@ -132,7 +132,8 @@ struct IsVariableVisitor {
   using VarContext = SparqlAutomaticParser::VarContext*;
   bool visit(VarContext) { return true; }
   CPP_template(typename T)(
-      requires(!ad_utility::SimilarTo<T, VarContext>)) bool visit(T) {
+      requires(!ad_utility::SimilarTo<T, VarContext>))
+  bool visit(T) {
     return false;
   }
 };

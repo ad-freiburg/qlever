@@ -75,8 +75,8 @@ class BasicIdRef {
   // any proxy reference (e.g. `std::vector<bool>::reference`): it writes
   // through to the referenced slot, not to the proxy's own state, which is
   // also what `std::indirectly_writable` (and thus `ranges::sort`) requires.
-  CPP_template(typename = void)(requires(!IsConst)) const BasicIdRef& operator=(
-      const Id id) const {
+  CPP_template(typename = void)(requires(!IsConst))
+  const BasicIdRef& operator=(const Id id) const {
     auto [datatype, payload] = getBitsCompat(id);
     *payload_ = payload;
     *datatype_ = datatype;

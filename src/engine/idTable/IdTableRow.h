@@ -180,10 +180,9 @@ class RowReferenceImpl {
    protected:
     // The actual implementation of operator[].
     CPP_template(typename SelfType)(
-        requires CPP_NOT(std::is_const_v<std::remove_reference_t<SelfType>>)
-            CPP_and CPP_NOT(
-                isConst)) static T& operatorBracketImpl(SelfType& self,
-                                                        size_t i) {
+        requires CPP_NOT(std::is_const_v<std::remove_reference_t<SelfType>>) &&
+        CPP_NOT(isConst))
+    static T& operatorBracketImpl(SelfType& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
     template <typename Self>
@@ -244,8 +243,8 @@ class RowReferenceImpl {
    protected:
     // The implementation of swapping two `RowReference`s (passed either by
     // value or by reference).
-    CPP_template(typename AType, typename BType)(
-        requires(!isConst)) static void swapImpl(AType&& a, BType&& b) {
+    CPP_template(typename AType, typename BType)(requires(!isConst))
+    static void swapImpl(AType&& a, BType&& b) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
         std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
       }
@@ -259,8 +258,8 @@ class RowReferenceImpl {
    public:
     // Swap two `RowReference`s, but only if they are temporaries (rvalues).
     // This modifies the underlying table.
-    CPP_template(typename = void)(requires CPP_NOT(isConst)) friend void swap(
-        This&& a, This&& b) {
+    CPP_template(typename = void)(requires CPP_NOT(isConst))
+    friend void swap(This&& a, This&& b) {
       return swapImpl(a, b);
     }
 
@@ -300,8 +299,8 @@ class RowReferenceImpl {
     }
 
     // Convert from a static `RowReference` to a `std::array` (makes a copy).
-    CPP_template(typename = void)(requires(numStaticColumns != 0)) explicit
-    operator std::array<T, numStaticColumns>() const {
+    CPP_template(typename = void)(requires(numStaticColumns != 0))
+    explicit operator std::array<T, numStaticColumns>() const {
       std::array<T, numStaticColumns> result;
       ql::ranges::copy(*this, result.begin());
       return result;
@@ -407,7 +406,7 @@ class RowReference
 
   // __________________________________________________________________________
   CPP_template_2(typename R)(
-      requires ad_utility::SimilarTo<RowReference, R> CPP_and_2(!isConst))
+      requires ad_utility::SimilarTo<RowReference, R> && (!isConst))
   friend void swap(R&& a, R&& b) {
     return Base::swapImpl(AD_FWD(a), AD_FWD(b));
   }

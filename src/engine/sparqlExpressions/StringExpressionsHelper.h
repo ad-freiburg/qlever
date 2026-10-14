@@ -28,10 +28,9 @@ class StringExpressionImplImpl : public SparqlExpression {
 
  public:
   CPP_template(typename... C)(
-      requires(concepts::same_as<C, SparqlExpression::Ptr>&&...)
-          CPP_and(sizeof...(C) + 1 ==
-                  N)) explicit StringExpressionImplImpl(Ptr child,
-                                                        C... children) {
+      requires(concepts::same_as<C, SparqlExpression::Ptr>&&...) &&
+      (sizeof...(C) + 1 == N))
+  explicit StringExpressionImplImpl(Ptr child, C... children) {
     AD_CORRECTNESS_CHECK(child != nullptr);
     if (child->isStrExpression()) {
       auto childrenOfStr = std::move(*child).moveChildrenOut();

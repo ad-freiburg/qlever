@@ -42,12 +42,10 @@ using Value = NamedResultCache::Value;
 // `NamedResultCache::Value`, but may write a modified version of it (see
 // `writeValue` below).
 CPP_template(typename Serializer, typename WriteEntry)(
-    requires ad_utility::serialization::WriteSerializer<Serializer> CPP_and
-        ql::concepts::invocable<
-            const WriteEntry&, Serializer&,
-            const Value&>) void writeEntries(Serializer& serializer,
-                                             const Entries& entries,
-                                             const WriteEntry& writeEntry) {
+    requires ad_utility::serialization::WriteSerializer<Serializer> &&
+    ql::concepts::invocable<const WriteEntry&, Serializer&, const Value&>)
+void writeEntries(Serializer& serializer, const Entries& entries,
+                  const WriteEntry& writeEntry) {
   // Write the magic byte and format version first, s.t. `readFromSerializer`
   // can detect and reject incompatible or unrelated input.
   serializer << detail::magicByte;
@@ -139,13 +137,11 @@ namespace namedResultCacheSerializer {
 // its blank node blocks, see `serializeOnlyBlankNodeBlocksFromLocalVocab`),
 // because such a caller has stored them elsewhere.
 CPP_template(typename Serializer, typename Columns)(
-    requires ad_utility::serialization::WriteSerializer<
-        Serializer>) void writeValue(Serializer& serializer,
-                                     const NamedResultCache::Value& value,
-                                     const Columns& columns,
-                                     const std::vector<ColumnIndex>&
-                                         resultSortedOn,
-                                     bool writeLocalVocabWords) {
+    requires ad_utility::serialization::WriteSerializer<Serializer>)
+void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
+                const Columns& columns,
+                const std::vector<ColumnIndex>& resultSortedOn,
+                bool writeLocalVocabWords) {
   // Serialize the `LocalVocab` first (required for ID remapping).
   if (writeLocalVocabWords) {
     ad_utility::detail::serializeLocalVocab(serializer, value.localVocab_);

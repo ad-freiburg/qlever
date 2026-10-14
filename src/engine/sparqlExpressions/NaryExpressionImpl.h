@@ -70,9 +70,9 @@ class NaryExpressionStronglyTyped
   // Construct from `N` child expressions. Each of the children must have a type
   // `std::unique_ptr<SubclassOfSparqlExpression>`.
   CPP_template(typename... C)(
-      requires(concepts::convertible_to<C, SparqlExpression::Ptr>&&...)
-          CPP_and(sizeof...(C) ==
-                  N)) explicit NaryExpressionStronglyTyped(C... children)
+      requires(concepts::convertible_to<C, SparqlExpression::Ptr>&&...) &&
+      (sizeof...(C) == N))
+  explicit NaryExpressionStronglyTyped(C... children)
       : NaryExpressionStronglyTyped{Children{std::move(children)...}} {}
 
   // __________________________________________________________________________
@@ -84,9 +84,10 @@ class NaryExpressionStronglyTyped
   // although the call operator is overloaded.
   struct EvaluateOnChildOperands {
     CPP_template(typename... Operands)(
-        requires(SingleExpressionResult<Operands>&&...)) ExpressionResult
-    operator()(NaryOperation naryOperation, EvaluationContext* context,
-               Operands&&... operands) const {
+        requires(SingleExpressionResult<Operands>&&...))
+    ExpressionResult operator()(NaryOperation naryOperation,
+                                EvaluationContext* context,
+                                Operands&&... operands) const {
       // Perform a more efficient calculation if a specialized function exists
       // that matches all operands.
       if (isAnySpecializedFunctionPossible(naryOperation._specializedFunctions,
@@ -327,9 +328,9 @@ class NaryExpressionTypeErased<
 
   // Construct from `N` child expressions.
   CPP_template(typename... C)(
-      requires(concepts::convertible_to<C, SparqlExpression::Ptr>&&...)
-          CPP_and(sizeof...(C) ==
-                  N)) explicit NaryExpressionTypeErased(C... children)
+      requires(concepts::convertible_to<C, SparqlExpression::Ptr>&&...) &&
+      (sizeof...(C) == N))
+  explicit NaryExpressionTypeErased(C... children)
       : NaryExpressionTypeErased{Children{std::move(children)...}} {}
 };
 

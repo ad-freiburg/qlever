@@ -73,8 +73,8 @@ struct MergeWord {
   // string, its external flag and its local index. The word is not copied, but
   // points into the buffer of the `serializer`, which therefore has to outlive
   // the returned `MergeWord` (and must not move its buffer).
-  CPP_template(typename S)(
-      requires serialization::SpanReadSerializer<S>) static MergeWord
+  CPP_template(typename S)(requires serialization::SpanReadSerializer<S>)
+  static MergeWord
       fromZeroCopyDeserializer(S& serializer, uint32_t partialFileId) {
     MergeWord word;
     word.word_ = serialization::zeroCopyDeserializeToStringView(serializer);

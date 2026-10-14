@@ -405,8 +405,8 @@ constexpr auto getMergeFunction(bool isNegated) {
 
 //______________________________________________________________________________
 CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
-    requires isOperation<NaryOperation>) class LogicalBinaryExpressionImpl
-    : public NaryExpression<NaryOperation> {
+    requires isOperation<NaryOperation>)
+class LogicalBinaryExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 

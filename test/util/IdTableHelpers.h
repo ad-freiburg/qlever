@@ -121,8 +121,8 @@ static constexpr MatchesIdTableFromVector matchesIdTableFromVector;
 // workaround for GMock/GTest.
 struct MatchesIdTable {
   CPP_template(typename... Ts)(
-      requires(ql::concepts::constructible_from<IdTable, Ts&&...>)) auto
-  operator()(Ts&&... ts) const {
+      requires(ql::concepts::constructible_from<IdTable, Ts&&...>))
+  auto operator()(Ts&&... ts) const {
     return ::testing::Eq(CopyShield<IdTable>(IdTable{AD_FWD(ts)...}));
   }
 
