@@ -4,20 +4,29 @@
 //
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <boost/asio/post.hpp>
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
+#include <chrono>
+#include <future>
 #include <iterator>
 #include <mutex>
+#include <stdexcept>
 #include <thread>
+#include <vector>
 
 #include "backports/algorithm.h"
 #include "util/GTestHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
 #include "util/ParallelExecutor.h"
+#include "util/Views.h"
 
 // _____________________________________________________________________________
 TEST(ParallelExecutor, noTasks) { ad_utility::runTasksInParallel<void>({}); }
@@ -291,4 +300,88 @@ TEST(ComputeInParallelChunks, chunksRunInParallel) {
       numTasks);
   expectPartitionOf(chunks, numTasks);
   EXPECT_EQ(chunks.chunks_.size(), numTasks);
+}
+
+namespace {
+// A small thread pool for the tests of `runIndexedTasksOnExecutor`.
+constexpr size_t numPoolThreads = 4;
+}  // namespace
+
+// Test that `runIndexedTasksOnExecutor` runs each of its tasks exactly once,
+// for fewer tasks than threads of the pool as well as for many more.
+TEST(ParallelExecutor, runIndexedTasksOnExecutorRunsEachTaskOnce) {
+  boost::asio::thread_pool pool{numPoolThreads};
+  auto run = [&pool](size_t numTasks, const auto& runTask) {
+    ad_utility::runIndexedTasksOnExecutor(pool.get_executor(), numPoolThreads,
+                                          numTasks, runTask);
+  };
+  // Without any tasks, nothing is run.
+  run(0, [](size_t) { FAIL() << "No task must be run"; });
+
+  // Each task is run exactly once, whether there are fewer tasks than threads
+  // of the pool or many more.
+  for (size_t numTasks : {1, 2, 7, 1000}) {
+    std::vector<std::atomic<size_t>> numCalls(numTasks);
+    run(numTasks,
+        [&numCalls](size_t taskIdx) { numCalls.at(taskIdx).fetch_add(1); });
+    for (size_t i = 0; i < numTasks; ++i) {
+      EXPECT_EQ(numCalls.at(i).load(), 1u) << i;
+    }
+  }
+}
+
+// Test that an exception of a task is rethrown only after all the tasks that
+// were started are done, and that the tasks not started by then are skipped.
+TEST(ParallelExecutor, runIndexedTasksOnExecutorRethrowsAfterAllTasksAreDone) {
+  boost::asio::thread_pool pool{numPoolThreads};
+  constexpr size_t numTasks = 1000;
+  std::atomic<size_t> numStarted = 0;
+  std::atomic<size_t> numFinished = 0;
+  auto runTask = [&](size_t taskIdx) {
+    numStarted.fetch_add(1);
+    absl::Cleanup finish = [&numFinished] { numFinished.fetch_add(1); };
+    if (taskIdx == 5) {
+      throw std::runtime_error("task 5 failed");
+    }
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::runIndexedTasksOnExecutor(pool.get_executor(), numPoolThreads,
+                                            numTasks, runTask),
+      ::testing::HasSubstr("task 5 failed"));
+  // No task is still running when the exception arrives, and the tasks that
+  // were not started before the exception are skipped.
+  EXPECT_EQ(numStarted.load(), numFinished.load());
+  EXPECT_LT(numStarted.load(), numTasks);
+}
+
+// Test that `runIndexedTasksOnExecutor` completes even when it is called from
+// *all* the threads of the executor at once, such that no thread of the
+// executor is left for the tasks (the calling thread runs tasks itself).
+TEST(ParallelExecutor, runIndexedTasksOnExecutorFromAllThreadsOfThePool) {
+  boost::asio::thread_pool pool{numPoolThreads};
+  std::atomic<size_t> numArrived = 0;
+  std::atomic<size_t> numTasksRun = 0;
+  constexpr size_t numTasksPerCaller = 100;
+  std::vector<std::future<void>> futures;
+  for ([[maybe_unused]] size_t i : ad_utility::integerRange(numPoolThreads)) {
+    futures.push_back(boost::asio::post(
+        pool.get_executor(), boost::asio::use_future([&]() {
+          // Wait until every thread of the pool is occupied by one of these
+          // callers.
+          numArrived.fetch_add(1);
+          while (numArrived.load() < numPoolThreads) {
+            std::this_thread::yield();
+          }
+          ad_utility::runIndexedTasksOnExecutor(
+              pool.get_executor(), numPoolThreads, numTasksPerCaller,
+              [&numTasksRun](size_t) { numTasksRun.fetch_add(1); });
+        })));
+  }
+  for (auto& future : futures) {
+    ASSERT_EQ(future.wait_for(std::chrono::minutes(1)),
+              std::future_status::ready);
+    future.get();
+  }
+  EXPECT_EQ(numTasksRun.load(), numPoolThreads * numTasksPerCaller);
 }

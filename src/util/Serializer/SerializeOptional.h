@@ -10,11 +10,13 @@
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 
-// Serialization for `std::optional<T>`
+// Serialization for `std::optional<T>`. This also applies to trivially
+// copyable optionals like `std::optional<double>`, which are not trivially
+// serializable (their raw bytes would contain padding).
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::similarToInstantiation<T, std::optional>)
-        CPP_and CPP_NOT(std::is_trivially_copyable_v<std::decay_t<T>>)) {
+        CPP_and CPP_NOT(TriviallySerializable<T>)) {
   if constexpr (ReadSerializer<S>) {
     bool hasValue;
     serializer >> hasValue;
