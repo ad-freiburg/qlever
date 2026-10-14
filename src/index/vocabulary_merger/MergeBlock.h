@@ -86,8 +86,9 @@ struct MergeWord {
 // A pool of the buffers that the `MergeBlock`s below store their words in, so
 // that the merge reuses them instead of allocating and freeing one per block:
 // with an allocator that returns freed memory to the operating system
-// (jemalloc purges it after a short decay), the merge of billions of words
-// otherwise spends a quarter of the machine in the kernel on that. All the
+// (immediately or after a short decay, depending on the allocator and on the
+// size of the allocation), the merge of billions of words otherwise spends a
+// quarter of the machine in the kernel on that. All the
 // buffers of a pool have the same `capacity`. A request for a larger buffer
 // (a block with a very long word) is served by a larger one, which is
 // replaced by a fresh buffer of the pool's capacity when it is given back.
@@ -122,10 +123,15 @@ class BufferPool {
     return buffer;
   }
 
-  // Give a buffer back.
+  // Give a buffer back. A buffer that is larger than the capacity of the pool
+  // (see `take`) is replaced by a fresh one of that capacity, so that the
+  // memory of the pool stays bounded by its number of buffers times the
+  // capacity, and not times the longest word that was ever seen (thousands of
+  // buffers may be in the pool, and a single literal can be hundreds of
+  // kilobytes long). A smaller buffer is grown by the next `take`.
   void giveBack(Buffer buffer) {
     buffer.clear();
-    if (buffer.capacity() != capacity_) {
+    if (buffer.capacity() > capacity_) {
       buffer.shrink_to_fit();
       buffer.reserve(capacity_);
     }
@@ -135,7 +141,14 @@ class BufferPool {
 
 // The two pools of the buffers of the `MergeBlock`s below: for the bytes of
 // the blocks of the partial vocabulary files, and for the storage of the
-// blocks of merged words.
+// blocks of merged words. They are separate because their buffers differ in
+// size by more than an order of magnitude (see
+// `VOCAB_MERGER_FILE_BLOCK_BUFFER_SIZE` and
+// `VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE` in `index/ConstantsIndexBuilding.h`)
+// and the pools keep their buffers' memory touched: with a single pool of the
+// larger size, each of the many blocks of files in flight (one per partial
+// vocabulary and chunk) would hold the resident memory of a block of merged
+// words.
 struct BufferPools {
   BufferPool fileBlocks_;
   BufferPool mergedWords_;
