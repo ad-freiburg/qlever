@@ -780,9 +780,10 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
 template <>
 STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     ad_utility::MediaType::binaryQleverExport>(
-    const QueryExecutionTree& qet,
-    const parsedQuery::SelectClause& selectClause,
-    LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle,
+    [[maybe_unused]] const QueryExecutionTree& qet,
+    [[maybe_unused]] const parsedQuery::SelectClause& selectClause,
+    [[maybe_unused]] LimitOffsetClause limitAndOffset,
+    [[maybe_unused]] CancellationHandle cancellationHandle,
     [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
