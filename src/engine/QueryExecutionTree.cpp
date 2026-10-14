@@ -223,7 +223,7 @@ std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::createSortedTreeAnyPermutation(
     std::shared_ptr<QueryExecutionTree> qet,
     const std::vector<ColumnIndex>& sortColumns) {
-  // TODO<joka921>: Remove this conversion once all callers pass
+  // TODO<vrbommireddy>: Remove this conversion once all callers pass
   // `qlm::vector` directly.
   qlm::vector<ColumnIndex> converted{sortColumns.begin(), sortColumns.end(),
                                      qet->getRootOperation()->allocator()};
@@ -243,7 +243,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
     const qlm::vector<ColumnIndex>& sortColumns, bool explicitSort) {
   const auto& rootOperation = qet->getRootOperation();
-  // TODO<joka921>: Remove this conversion once Operation accepts
+  // TODO<vrbommireddy>: Remove this conversion once Operation accepts
   // allocator-aware sorted-column vectors.
   std::vector<ColumnIndex> sortColumnsStd{sortColumns.begin(),
                                           sortColumns.end()};
@@ -289,7 +289,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
     const std::vector<ColumnIndex>& sortColumns, bool explicitSort) {
-  // TODO<joka921>: Remove this conversion once all callers pass
+  // TODO<vrbommireddy>: Remove this conversion once all callers pass
   // `qlm::vector` directly.
   qlm::vector<ColumnIndex> converted{sortColumns.begin(), sortColumns.end(),
                                      qet->getRootOperation()->allocator()};
@@ -301,7 +301,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createDistinctTree(
     std::shared_ptr<QueryExecutionTree> qet,
     ql::span<const ColumnIndex> distinctIndices) {
   const auto& rootOperation = qet->getRootOperation();
-  // TODO<joka921>: Remove this conversion once Operation accepts
+  // TODO<vrbommireddy>: Remove this conversion once Operation accepts
   // allocator-aware sorted-column vectors.
   std::vector<ColumnIndex> distinctIndicesStd{distinctIndices.begin(),
                                               distinctIndices.end()};

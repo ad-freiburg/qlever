@@ -177,8 +177,14 @@ class Result : public ad_utility::NoCopy {
   // The first overload of the constructor is for local vocabs that are shared
   // with another `Result` via the `getSharedLocalVocab...` methods below.
   // The second overload is for newly created local vocabularies.
-  // TODO<joka921>: Remove the `std::vector` and initializer-list overloads once
-  // all Operations pass `qlm::vector` from `resultSortedOn()`.
+  //
+  // TODO<vrbommireddy>: ALL of the `std::vector` and `std::initializer_list`
+  // overloads below (for `IdTable`, `IdTablePtr`, `IdTableView<0>`,
+  // `IdTableVocabPair`, `Generator` and `LazyResult`) exist only because not
+  // every `Operation` passes a `qlm::vector` for `sortedBy` yet. Once
+  // `resultSortedOn()`/`sortedBy()` are migrated to `qlm::vector` everywhere,
+  // delete all of them and keep only the `qlm::vector` overload of each
+  // constructor. This should be a dedicated feature PR, not a per-file one.
   Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
          SharedLocalVocabWrapper localVocab);
   Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,

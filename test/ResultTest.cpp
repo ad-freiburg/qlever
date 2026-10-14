@@ -142,7 +142,7 @@ TEST_P(ResultSortTest, verifyAssertSortOrderIsRespectedSucceedsWhenSorted) {
 
   for (auto& generator : getAllSubSplits(idTable)) {
     const auto& sortedBy = std::get<1>(GetParam());
-    // TODO<joka921>: Remove the explicit `LazyResult` and allocator-aware
+    // TODO<vrbommireddy>: Remove the explicit `LazyResult` and allocator-aware
     // vector construction once `Result` and all operation sort orders are
     // migrated to `qlm::vector`.
     Result result{Result::LazyResult{std::move(generator)},
@@ -504,7 +504,7 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
     }
     {
       // Now test the limit offset application for shared results;
-      // TODO<joka921>: Remove this explicit `qlm::vector` once an
+      // TODO<vrbommireddy>: Remove this explicit `qlm::vector` once an
       // `initializer_list` overload is not needed to disambiguate `{}`.
       Result result2{std::make_shared<const IdTable>(idTable.clone()),
                      qlm::vector<ColumnIndex>{
