@@ -19,9 +19,9 @@
 // everywhere.
 //
 // NOTE: Boost.Geometry includes the header (since Boost 1.90) only indirectly,
-// via the parts of Boost.Graph that it uses, which include all of Boost.Range's
-// algorithms. None of that code sorts a range with `boost::sort`, so the header
-// is not needed.
+// via the parts of Boost.Graph that it uses, which include several of
+// Boost.Range's algorithms. None of that code sorts a range with `boost::sort`,
+// so the header is not needed.
 #define BOOST_RANGE_ALGORITHM_SORT_HPP_INCLUDED
 
 #include <boost/foreach.hpp>
