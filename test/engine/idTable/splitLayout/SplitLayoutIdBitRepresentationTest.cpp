@@ -10,7 +10,7 @@
 #include <gtest/gtest.h>
 
 #include "IdColumnTestHelpers.h"
-#include "engine/idTable/splitLayout/IdRef.h"
+#include "engine/idTable/splitLayout/SplitLayoutIdBitRepresentation.h"
 
 using namespace columnBasedIdTable::splitLayout;
 using testHelpers::getBitsCompat;
