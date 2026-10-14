@@ -4,11 +4,15 @@
 
 #include "rdfTypes/GeometryInfo.h"
 
+#include <absl/base/casts.h>
+
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <type_traits>
 
+#include "backports/algorithm.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
@@ -29,8 +33,9 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
   // `static_assert` after the class in `GeometryInfo.h`.
   static_assert(sizeof(GeometryInfo) ==
                 sizeof(boundingBox_) + sizeof(geometryTypeAndCentroid_) +
-                    sizeof(numGeometries_) + sizeof(padding_) +
-                    sizeof(metricLength_) + sizeof(metricArea_));
+                    sizeof(numGeometries_) + sizeof(reservedSourceCrs_) +
+                    sizeof(reservedLiteralFormat_) + sizeof(metricLength_) +
+                    sizeof(metricArea_));
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -105,6 +110,23 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
     return std::nullopt;
   }
   return GeometryType{wktType};
+}
+
+// ____________________________________________________________________________
+GeometryInfo GeometryInfo::fromSerialized(ql::span<const uint8_t> bytes,
+                                          uint64_t version) {
+  AD_CONTRACT_CHECK(isLoadableGeometryInfoVersion(version));
+  AD_CONTRACT_CHECK(bytes.size() == geometryInfoSize(version));
+  // The binary representation is append-only, see `GEOMETRY_INFO_VERSION`.
+  std::array<uint8_t, sizeof(GeometryInfo)> buffer{};
+  ql::ranges::copy(bytes, buffer.begin());
+  auto info = absl::bit_cast<GeometryInfo>(buffer);
+  // In version 5, the reserved fields were padding with arbitrary content.
+  if (version == 5) {
+    info.reservedSourceCrs_ = 0;
+    info.reservedLiteralFormat_ = 0;
+  }
+  return info;
 }
 
 // ____________________________________________________________________________
