@@ -6,6 +6,7 @@
 #include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 
+#include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
@@ -3586,9 +3587,12 @@ TEST(GroupBy, BlankNodeInGroupBy) {
   EXPECT_NE(table(0, 1), table(1, 1));
 }
 
-// Matcher for TEST(GroupBy.makeTreeWithStrippedColumns
-MATCHER_P3(HasOperationResult, operationType, expectedVariables,
-           expectedResult, "") {
+/*
+// Matcher for GroupBy.makeTreeWithStrippedColumns.
+// It checks for correct operation type, number of columns, expected Variables
+// and table content.
+MATCHER_P3(HasOperationResult, operationType, expectedVariables, expectedResult,
+           "") {
   using OperationType = typename decltype(operationType)::type;
   auto operation =
       std::dynamic_pointer_cast<OperationType>(arg->getRootOperation());
@@ -3615,6 +3619,7 @@ MATCHER_P3(HasOperationResult, operationType, expectedVariables,
   return true;
 }
 
+*/
 
 // Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
 // variables plus the variables the `GroupBy` uses for grouping or for building
@@ -3654,13 +3659,12 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
   // requested: the result has `?a` and `?sumB`.
   {
     auto tree = strip({V{"?a"}}, {alias}, {V{"?a"}, V{"?sumB"}});
-    auto expectedResult = makeIdTableFromVector(
-            {{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}});
-    EXPECT_THAT(
-    tree,
-    HasOperationResult(
-        std::type_identity<GroupBy>{}, std::vector{V{"?a"}, V{"?sumB"}}, std::cref(expectedResult))
-        );
+    auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
+    ASSERT_TRUE(groupBy);
+    auto expectedResult =
+        makeIdTableFromVector({{I(1), I(2)}, {I(3), I(5)}, {I(6), I(12)}});
+    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?a"}, V{"?sumB"}},
+                                         std::cref(expectedResult)));
   }
 
   // A requested variable that the subtree does not have is ignored.
@@ -3676,21 +3680,22 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
   // removes `?a`.
   {
     auto tree = strip({V{"?a"}, V{"?c"}}, {alias}, {V{"?c"}, V{"?sumB"}});
+    auto expectedResult =
+        makeIdTableFromVector({{I(5), I(2)}, {I(5), I(5)}, {I(3), I(12)}});
     auto stripColumns =
         std::dynamic_pointer_cast<StripColumns>(tree->getRootOperation());
     ASSERT_TRUE(stripColumns);
-    EXPECT_THAT(tree->getVariableColumns(),
-                UnorderedElementsAre(Key(V{"?sumB"}), Key(V{"?c"})));
-    EXPECT_EQ(
-        tree->getResult(false)->idTableView(),
-        makeIdTableFromVector({{I(5), I(2)}, {I(5), I(5)}, {I(3), I(12)}}));
+    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?c"}, V{"?sumB"}},
+                                         std::cref(expectedResult)));
     const auto* child = stripColumns->getChildren().at(0);
     auto groupBy =
         std::dynamic_pointer_cast<GroupBy>(child->getRootOperation());
     ASSERT_TRUE(groupBy);
-    EXPECT_THAT(
-        child->getVariableColumns(),
-        UnorderedElementsAre(Key(V{"?a"}), Key(V{"?sumB"}), Key(V{"?c"})));
+    expectedResult = makeIdTableFromVector(
+        {{I(1), I(5), I(2)}, {I(3), I(5), I(5)}, {I(6), I(3), I(12)}});
+    EXPECT_THAT(child,
+                HasOperationResult(std::vector{V{"?a"}, V{"?c"}, V{"?sumB"}},
+                                   std::cref(expectedResult)));
   }
 
   // All variables requested: nothing is stripped and result has additional
@@ -3713,11 +3718,10 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
     auto tree = strip({V{"?a"}, V{"?c"}}, {alias}, {V{"?a"}, V{"?c"}});
     auto groupBy = std::dynamic_pointer_cast<GroupBy>(tree->getRootOperation());
     ASSERT_TRUE(groupBy);
-    EXPECT_THAT(tree->getVariableColumns(),
-                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?c"})));
-    EXPECT_EQ(
-        tree->getResult(false)->idTableView(),
-        makeIdTableFromVector({{I(1), I(5)}, {I(3), I(5)}, {I(6), I(3)}}));
+    auto expectedResult =
+        makeIdTableFromVector({{I(1), I(5)}, {I(3), I(5)}, {I(6), I(3)}});
+    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?a"}, V{"?c"}},
+                                         std::cref(expectedResult)));
     EXPECT_EQ(groupBy->aliases(), std::vector<Alias>{});
   }
 }
