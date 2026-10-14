@@ -1011,15 +1011,11 @@ endif()
 
 # Tools that are only needed natively: `LibQLeverExample` and
 # `VocabularyMergerMain` work on files on the host file system, which a
-# WebAssembly build cannot access, `BinaryExportPerfMain` is a benchmark of the
-# binary export for native builds, and `PrintIndexVersionMain` is only used by
+# WebAssembly build cannot access, and `PrintIndexVersionMain` is only used by
 # the index version check in CI.
 if (NOT EMSCRIPTEN)
     add_executable(LibQLeverExample src/libqlever/LibQLeverExample.cpp)
     qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
-
-    add_executable(BinaryExportPerfMain src/libqlever/BinaryExportPerfMain.cpp)
-    qlever_target_link_libraries(BinaryExportPerfMain sparqlParser engine qlever_util index qlever absl::strings)
 
     add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
     qlever_target_link_libraries(VocabularyMergerMain index sparqlParser vocabulary Boost::program_options ${CMAKE_THREAD_LIBS_INIT})
