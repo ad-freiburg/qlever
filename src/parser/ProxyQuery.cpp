@@ -11,8 +11,10 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
+#include "util/Algorithm.h"
 
 namespace parsedQuery {
 
@@ -30,8 +32,8 @@ void ProxyQuery::addParameter(const SparqlTriple& triple) {
             "URL)");
     // Extract the IRI content without angle brackets.
     endpoint_ = std::string(asStringViewUnsafe(object.getIri().getContent()));
-  } else if (predString.starts_with("input-")) {
-    std::string paramName(predString.substr(6));  // Remove "input-" prefix
+  } else if (ql::starts_with(predString, "input-")) {
+    std::string paramName(predString.substr(6));
     throwIf(paramName.empty(),
             "The input parameter name cannot be empty (use "
             "`qlproxy:input-<name>`)");
@@ -39,18 +41,18 @@ void ProxyQuery::addParameter(const SparqlTriple& triple) {
     inputVariables_.emplace_back(std::move(paramName), std::move(var));
   } else if (predString == "output-row") {
     // Special case: the row variable for joining.
+    // The row variable is sent under its name without the leading `?`.
     Variable var = getVariable(predString, object);
-    rowVariable_ =
-        std::make_pair(var.name().substr(1), var);  // Remove "?" prefix
-  } else if (predString.starts_with("output-")) {
-    std::string paramName(predString.substr(7));  // Remove "output-" prefix
+    rowVariable_ = std::make_pair(var.name().substr(1), var);
+  } else if (ql::starts_with(predString, "output-")) {
+    std::string paramName(predString.substr(7));
     throwIf(paramName.empty(),
             "The output parameter name cannot be empty (use "
             "`qlproxy:output-<name>`)");
     Variable var = getVariable(predString, object);
     outputVariables_.emplace_back(std::move(paramName), std::move(var));
-  } else if (predString.starts_with("param-")) {
-    std::string paramName(predString.substr(6));  // Remove "param-" prefix
+  } else if (ql::starts_with(predString, "param-")) {
+    std::string paramName(predString.substr(6));
     throwIf(paramName.empty(),
             "The URL parameter name cannot be empty (use "
             "`qlproxy:param-<name>`)");
@@ -85,6 +87,16 @@ ProxyConfiguration ProxyQuery::toConfiguration() const {
 
   throwIf(!rowVariable_.has_value(),
           "The row variable is required (use `qlproxy:output-row ?var`)");
+
+  // Each output variable and the row variable become a column of their own.
+  std::vector<Variable> boundByResponse{rowVariable_.value().second};
+  for (const auto& [name, var] : outputVariables_) {
+    throwIf(ad_utility::contains(boundByResponse, var),
+            absl::StrCat("The variable ", var.name(),
+                         " is used for more than one of the parameters "
+                         "`qlproxy:output-NAME` and `qlproxy:output-row`"));
+    boundByResponse.push_back(var);
+  }
 
   return ProxyConfiguration{endpoint_.value(), inputVariables_,
                             outputVariables_, rowVariable_.value(),
