@@ -46,12 +46,12 @@ constexpr bool isSorted(const std::array<size_t, I>& array) {
 auto SortPerformanceEstimator::measureSortingTime(
     size_t numRows, size_t numColumns,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    const qlever::Executor& executor) -> Timer::Duration {
+    const SortConfig& sortConfig) -> Timer::Duration {
   auto randomTable = createRandomIdTable(numRows, numColumns, allocator);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   // Always sort on the first column for simplicity;
   ad_utility::callFixedSizeVi(numColumns, [&](auto numCols) {
-    IdTableUtils::sort<numCols>(&randomTable, 0ull, executor);
+    IdTableUtils::sort<numCols>(&randomTable, 0ULL, sortConfig);
   });
   return timer.value();
 }
@@ -59,8 +59,8 @@ auto SortPerformanceEstimator::measureSortingTime(
 // ____________________________________________________________________________
 SortPerformanceEstimator::SortPerformanceEstimator(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    size_t maxNumElementsToSort, const qlever::Executor& executor) {
-  computeEstimatesExpensively(allocator, maxNumElementsToSort, executor);
+    size_t maxNumElementsToSort, const SortConfig& sortConfig) {
+  computeEstimatesExpensively(allocator, maxNumElementsToSort, sortConfig);
 }
 
 auto SortPerformanceEstimator::estimatedSortTime(
@@ -121,7 +121,7 @@ auto SortPerformanceEstimator::estimatedSortTime(
 
 void SortPerformanceEstimator::computeEstimatesExpensively(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    size_t maxNumberOfElementsToSort, const qlever::Executor& executor) {
+    size_t maxNumberOfElementsToSort, const SortConfig& sortConfig) {
 #ifndef QLEVER_CPP_17
   static_assert(isSorted(sampleValuesCols));
   static_assert(isSorted(sampleValuesRows));
@@ -153,7 +153,8 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
         }
 #endif
         if (!estimateSortingTime) {
-          _samples[i][j] = measureSortingTime(rows, cols, allocator, executor);
+          _samples[i][j] =
+              measureSortingTime(rows, cols, allocator, sortConfig);
         }
       } catch (const ad_utility::detail::AllocationExceedsLimitException& e) {
         estimateSortingTime = true;

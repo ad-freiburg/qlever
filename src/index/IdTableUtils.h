@@ -6,32 +6,20 @@
 #define QLEVER_SRC_INDEX_IDTABLEUTILS_H
 
 #include <algorithm>
-#include <cstdint>
-#include <limits>
 #include <vector>
 
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
-#include "global/RuntimeParameters.h"
-#include "util/Executor.h"
+#include "index/SortConfig.h"
 #include "util/Log.h"
 #include "util/blockSort/BlockIndirectSort.h"
 
 class IdTableUtils {
-  // The runtime parameter `sort-num-tasks-in-flight`, at least `1`.
-  static uint32_t numSortTasksInFlight() {
-    size_t numTasks =
-        getRuntimeParameter<&RuntimeParameters::sortNumTasksInFlight_>();
-    return static_cast<uint32_t>(
-        std::clamp<size_t>(numTasks, 1, std::numeric_limits<uint32_t>::max()));
-  }
-
  public:
   // The `sort` functions below sort in place (not stable) via
-  // `blockIndirectSort` on the `executor`. They block the calling thread, which
-  // therefore must not belong to the `executor`. The `executor` must not be a
-  // strand.
+  // `blockIndirectSort`, as configured by the `sortConfig`. They block the
+  // calling thread, which therefore must not belong to its executor.
   //
   // TODO<RobinTF> Pass the query's cancellation handle once
   // `blockIndirectSort` supports it.
@@ -39,13 +27,13 @@ class IdTableUtils {
   // Sort the rows of `tab` by the column `keyColumn`.
   template <size_t WIDTH>
   static void sort(IdTable* tab, const size_t keyColumn,
-                   const qlever::Executor& executor) {
+                   const SortConfig& sortConfig) {
     sort<WIDTH>(
         tab,
         [keyColumn](const auto& a, const auto& b) {
           return a[keyColumn] < b[keyColumn];
         },
-        executor);
+        sortConfig);
   }
 
   // Sort the rows of `tab` by the comparator `comp`.
@@ -59,18 +47,19 @@ class IdTableUtils {
       typename = std::enable_if_t<std::is_same_v<
           bool, std::invoke_result_t<C, typename IdTableStatic<WIDTH>::row_type,
                                      typename IdTableStatic<WIDTH>::row_type>>>>
-  static void sort(IdTable* tab, C comp, const qlever::Executor& executor) {
+  static void sort(IdTable* tab, C comp, const SortConfig& sortConfig) {
     AD_LOG_DEBUG << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = std::move(*tab).toStatic<WIDTH>();
     ad_utility::blockSort::blockIndirectSort(stab, std::move(comp),
-                                             numSortTasksInFlight(), executor);
+                                             sortConfig.numTasksInFlight_,
+                                             sortConfig.executor_);
     *tab = std::move(stab).toDynamic();
     AD_LOG_DEBUG << "Sort done.\n";
   }
 
   // Sort the rows of `idTable` lexicographically by the columns `sortCols`.
   static void sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols,
-                   const qlever::Executor& executor);
+                   const SortConfig& sortConfig);
 
   // Return the number of distinct rows in the `input`. The input must have all
   // duplicates adjacent to each other (e.g. by being sorted), otherwise the

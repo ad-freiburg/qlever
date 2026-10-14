@@ -62,11 +62,11 @@ void compareIdTableWithExpectedContent(
 
 // ____________________________________________________________________________
 void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
-  auto executor = ad_utility::testing::singleThreadExecutor();
-  ad_utility::callFixedSizeVi(
-      table.idTable.numColumns(), [&table, &executor](auto numCols) {
-        IdTableUtils::sort<numCols>(&table.idTable, table.joinColumn, executor);
-      });
+  SortConfig sortConfig{ad_utility::testing::singleThreadExecutor()};
+  ad_utility::callFixedSizeVi(table.idTable.numColumns(), [&table, &sortConfig](
+                                                              auto numCols) {
+    IdTableUtils::sort<numCols>(&table.idTable, table.joinColumn, sortConfig);
+  });
 }
 
 // ____________________________________________________________________________

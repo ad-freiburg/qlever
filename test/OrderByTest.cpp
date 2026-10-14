@@ -214,7 +214,7 @@ ResultAndFastPath orderByOnSortedInput(
   // subtree that reports being sorted by these columns.
   auto qec = ad_utility::testing::getQec();
   IdTable table = makeIdTableFromVector(input);
-  IdTableUtils::sort(table, sortedColumns, qec->executor());
+  IdTableUtils::sort(table, sortedColumns, qec->sortConfig());
   std::vector<std::optional<Variable>> vars;
   for (size_t i = 0; i < table.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
@@ -415,7 +415,7 @@ TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
       orderBy.getExecutionContext()->getSortPerformanceEstimator())
       .computeEstimatesExpensively(
           ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000,
-          orderBy.getExecutionContext()->executor());
+          orderBy.sortConfig());
 
   orderBy.recursivelySetTimeConstraint(0ms);
 

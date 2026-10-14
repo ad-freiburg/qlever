@@ -19,9 +19,9 @@ using namespace ad_utility::memory_literals;
 TEST(SortPerformanceEstimator, TestManyEstimates) {
   // only allow the test to use 1 Gig of RAM
   auto allocator = qlever::makeAllocatorWithLimit<Id>(1_GB);
-  auto t =
-      SortPerformanceEstimator{allocator, std::numeric_limits<size_t>::max(),
-                               ad_utility::testing::multiThreadExecutor()};
+  const SortConfig sortConfig{ad_utility::testing::multiThreadExecutor(), 3};
+  auto t = SortPerformanceEstimator{
+      allocator, std::numeric_limits<size_t>::max(), sortConfig};
 
   ad_utility::SlowRandomIntGenerator<int> dice(1, 6);
 
@@ -37,9 +37,8 @@ TEST(SortPerformanceEstimator, TestManyEstimates) {
       try {
         using ad_utility::Timer;
         Timer::Duration measurement =
-            SortPerformanceEstimator::measureSortingTime(
-                i, numColumns, allocator,
-                ad_utility::testing::multiThreadExecutor());
+            SortPerformanceEstimator::measureSortingTime(i, numColumns,
+                                                         allocator, sortConfig);
         Timer::Duration estimate = t.estimatedSortTime(i, numColumns);
         // Only report the measurement in the case of a failure.
         auto message = [&i, &numColumns, &measurement, &estimate]() {

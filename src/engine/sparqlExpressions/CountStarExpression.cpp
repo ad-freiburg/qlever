@@ -61,9 +61,10 @@ ExpressionResult CountStarExpression::evaluate(
       table.numRows(), table.numColumns(), ctx->deadline_,
       "Sort for COUNT(DISTINCT *)");
   ad_utility::callFixedSizeVi(
-      table.numColumns(), [&table, &executor = ctx->_qec.executor()](auto i) {
+      table.numColumns(),
+      [&table, &sortConfig = ctx->_qec.sortConfig()](auto i) {
         IdTableUtils::sort<i>(&table, ql::ranges::lexicographical_compare,
-                              executor);
+                              sortConfig);
       });
   return Id::makeFromInt(static_cast<int64_t>(
       IdTableUtils::countDistinct(table, checkCancellation)));
