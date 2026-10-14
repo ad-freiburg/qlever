@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "util/HashMap.h"
 
 // Forward declaration
@@ -29,12 +30,19 @@ namespace qlever::binary_export {
 // `BinaryExport.h`).
 class StringMapping {
   const Index* index_;
+  // Only required for the signature of `idToLiteralOrIri`. A `LocalVocabIndex`
+  // directly points to its word, so the local vocab is never accessed. It is a
+  // member, because constructing a `LocalVocab` allocates.
+  LocalVocab dummyLocalVocab_;
   // Map the bits of an ID to its unique index wrt the current batch (the first
   // ID gets index 0, the second ID 1, and so on). Using the bits is cheaper
   // than `Id`, whose hash looks up a `LocalVocabIndex` in the vocabulary. The
   // same word with two different IDs is then sent twice, which is harmless.
   ad_utility::HashMap<Id::T, uint64_t> stringMapping_;
   // The string of the ID with index `i` is at position `i`.
+  // TODO<joka921, RobinTF> Store the strings contiguously in a single buffer
+  // (e.g. a monotonic buffer with `string_view`s or offsets) to avoid one
+  // allocation per string.
   std::vector<std::string> strings_;
   size_t numBytes_ = 0;
 
@@ -42,7 +50,8 @@ class StringMapping {
   explicit StringMapping(const Index& index) : index_{&index} {}
 
   // Return the strings of the current batch (ordered by their index) and start
-  // a new batch, which reuses the indices.
+  // a new batch. The indices of the new batch again start at 0, so an index
+  // returned by `remapId` refers to a string of its batch only.
   std::vector<std::string> takeStrings();
 
   // Remap an `Id` to another `Id` which internally uses the `LocalVocab`

@@ -64,12 +64,14 @@ TEST(StringMapping, remapId) {
   // The same word with a different ID gets a new index.
   binaryEq(mapping.remapId(id5), toMappedId(4));
 
-  EXPECT_THAT(
-      mapping.stringMappingForTesting(),
-      ::testing::UnorderedElementsAre(
-          ::testing::Pair(id1.getBits(), 0), ::testing::Pair(id2.getBits(), 1),
-          ::testing::Pair(id3.getBits(), 2), ::testing::Pair(id4.getBits(), 3),
-          ::testing::Pair(id5.getBits(), 4)));
+  // A matcher for the entry of `id` in the string mapping.
+  auto entry = [](Id id, uint64_t index) {
+    return ::testing::Pair(id.getBits(), index);
+  };
+  EXPECT_THAT(mapping.stringMappingForTesting(),
+              ::testing::UnorderedElementsAre(entry(id1, 0), entry(id2, 1),
+                                              entry(id3, 2), entry(id4, 3),
+                                              entry(id5, 4)));
 
   EXPECT_EQ(mapping.size(), 5);
   // `<b>`, `"abc"`, `""`, `"brown"`, `<b>`.

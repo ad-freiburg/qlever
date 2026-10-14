@@ -27,18 +27,20 @@ Id StringMapping::remapId(Id id) {
   // datatypes that semantically point to strings (so literals/IRIs that can't
   // be directly encoded into the ID). All other IDs have to be serialized by
   // different mechanism.
-  static constexpr std::array allowedDatatypes{
-      VocabIndex,     LocalVocabIndex,     TextRecordIndex,
-      WordVocabIndex, SecondaryVocabIndex, EncodedVal};
+  static constexpr std::array allowedDatatypes{VocabIndex, LocalVocabIndex,
+                                               TextRecordIndex, WordVocabIndex,
+                                               SecondaryVocabIndex};
   AD_EXPENSIVE_CHECK(ad_utility::contains(allowedDatatypes, id.getDatatype()));
 
   // A static assertion that each datatype is either `trivial`, or `allowed`
-  // (see above), or `BlankNodeIndex` (which also requires special handling and
-  // remapping, but cannot be handled by the `StringMapping`).
+  // (see above), or `EncodedVal`, or `BlankNodeIndex`. The latter two are not
+  // sent as strings: An `EncodedVal` is sent as is (together with the patterns
+  // of its encoding), and a `BlankNodeIndex` is remapped by the importer.
   static constexpr auto checkDatatypes = []() {
     auto checkType = [](Datatype datatype) {
       return ad_utility::contains(allowedDatatypes, datatype) ||
-             isDatatypeTrivial(datatype) || datatype == BlankNodeIndex;
+             isDatatypeTrivial(datatype) || datatype == BlankNodeIndex ||
+             datatype == EncodedVal;
     };
     for (size_t i = 0; i <= static_cast<size_t>(MaxValue); ++i) {
       if (!checkType(static_cast<Datatype>(i))) {
@@ -52,9 +54,8 @@ Id StringMapping::remapId(Id id) {
       stringMapping_.try_emplace(id.getBits(), stringMapping_.size());
   size_t distinctIndex = it->second;
   if (inserted) {
-    LocalVocab dummy;
     auto literalOrIri =
-        ql::exportIds::idToLiteralOrIri(*index_, id, dummy, true);
+        ql::exportIds::idToLiteralOrIri(*index_, id, dummyLocalVocab_, true);
     AD_CORRECTNESS_CHECK(literalOrIri.has_value());
     strings_.push_back(
         std::move(literalOrIri.value()).toStringRepresentation());
