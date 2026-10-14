@@ -90,20 +90,17 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                  << std::endl;
   }
 
-  return GeometryInfo{wktType,
-                      boundingBox.value(),
-                      centroid.value(),
-                      {numGeom},
-                      SourceCrsType{static_cast<uint32_t>(sourceCrs)},
-                      metricLength,
-                      MetricArea{area}};
+  return GeometryInfo{
+      wktType,         boundingBox.value(),      centroid.value(),
+      {numGeom},       SourceCrsType{sourceCrs}, metricLength,
+      MetricArea{area}};
 }
 
 // ____________________________________________________________________________
 GeometryType::GeometryType(uint8_t type) : type_{type} {}
 
 // ____________________________________________________________________________
-SourceCrsType::SourceCrsType(uint8_t type) : type_{type} {};
+SourceCrsType::SourceCrsType(uint32_t type) : type_{type} {};
 
 // ____________________________________________________________________________
 MetricLength::MetricLength(double length) : length_{length} {

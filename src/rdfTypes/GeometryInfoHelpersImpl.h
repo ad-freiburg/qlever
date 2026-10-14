@@ -292,7 +292,7 @@ inline constexpr auto CRS_TYPE_IRI = []() {
 }();
 
 // Lookup the IRI for a given CRS type in the array of prepared IRIs.
-inline std::optional<std::string_view> crsTypeToIri(uint8_t type) {
+inline std::optional<std::string_view> crsTypeToIri(uint32_t type) {
   if (type < 4) {
     return CRS_TYPE_IRI.at(type);
   }

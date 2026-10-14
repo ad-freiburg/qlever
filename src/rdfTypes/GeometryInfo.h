@@ -98,13 +98,13 @@ struct SourceCrsType {
   uint32_t type_ = 1;  // Default CRS type: CRS84.
 
  public:
-  explicit SourceCrsType(uint8_t type);
+  explicit SourceCrsType(uint32_t type);
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Required for `bit_cast`.
   SourceCrsType() = default;
 #endif
 
-  uint8_t type() const { return type_; };
+  uint32_t type() const { return type_; };
 
   // Returns the representing IRI.
   std::optional<std::string_view> asIri() const;
