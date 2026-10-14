@@ -31,7 +31,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
   // `static_assert` after the class in `GeometryInfo.h`.
   static_assert(sizeof(GeometryInfo) ==
                 sizeof(boundingBox_) + sizeof(geometryTypeAndCentroid_) +
-                    sizeof(numGeometries_) + sizeof(padding_) +
+                    sizeof(numGeometries_) + sizeof(sourceCrs_) +
                     sizeof(metricLength_) + sizeof(metricArea_));
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
@@ -90,10 +90,13 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
                  << std::endl;
   }
 
-  return GeometryInfo{
-      wktType,         boundingBox.value(),      centroid.value(),
-      {numGeom},       SourceCrsType{sourceCrs}, metricLength,
-      MetricArea{area}};
+  return GeometryInfo{wktType,
+                      boundingBox.value(),
+                      centroid.value(),
+                      {numGeom},
+                      SourceCrsType{static_cast<uint32_t>(sourceCrs)},
+                      metricLength,
+                      MetricArea{area}};
 }
 
 // ____________________________________________________________________________

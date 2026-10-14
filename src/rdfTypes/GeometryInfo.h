@@ -95,7 +95,7 @@ struct GeometryType {
 // see `libspatialjoin`'s `CRSType`.
 struct SourceCrsType {
  private:
-  uint8_t type_ = 1;  // Default CRS type: CRS84.
+  uint32_t type_ = 1;  // Default CRS type: CRS84.
 
  public:
   explicit SourceCrsType(uint8_t type);
@@ -201,14 +201,12 @@ class GeometryInfo {
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
   uint32_t numGeometries_;
+  // `SourceCrsType` is 4 bytes wide, although the util's `CRSType` currently
+  // only needs 1 byte (`uint8_t`). The remaining 3 bytes would otherwise be
+  // padding anyway, so widening the type costs no additional space and leaves
+  // room to add more coordinate reference systems later without changing the
+  // serialized layout.
   SourceCrsType sourceCrs_;
-  // Explicit (zeroed) padding before the 8-byte aligned `metricLength_`. The
-  // `GeoVocabulary` writes the binary representation of this class to disk,
-  // so implicit padding would make the files depend on uninitialized memory.
-  // Every alternative (e.g. a 64-bit `numGeometries_`) would be an
-  // index-breaking change, because the existing files contain garbage in these
-  // bytes; the explicit padding keeps them readable.
-  uint32_t padding_ = 0;
   MetricLength metricLength_;
   MetricArea metricArea_;
 
@@ -297,7 +295,7 @@ class GeometryInfo {
 };
 
 // The binary representation of a `GeometryInfo` must not contain implicit
-// padding, see `GeometryInfo::padding_`. For a standard-layout class, the
+// padding. For a standard-layout class, the
 // members are laid out in the order of their declaration, so there is no
 // padding iff its size is the sum of the sizes of its members. That is checked
 // in the constructor (see `GeometryInfo.cpp`), because the members are private.
