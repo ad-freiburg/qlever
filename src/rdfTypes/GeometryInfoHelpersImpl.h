@@ -287,14 +287,14 @@ constexpr inline std::string_view webMerc =
 }  // namespace detail::crsStrings
 inline constexpr auto CRS_TYPE_IRI = []() {
   using namespace detail::crsStrings;
-  return std::array<std::optional<std::string_view>, 8>{
+  return std::array<std::optional<std::string_view>, 4>{
       std::nullopt,  // Invalid CRS
       crs84, wgs84, webMerc};
 }();
 
 // Lookup the IRI for a given CRS type in the array of prepared IRIs.
 inline std::optional<std::string_view> crsTypeToIri(uint32_t type) {
-  if (type < 4) {
+  if (type < CRS_TYPE_IRI.size()) {
     return CRS_TYPE_IRI.at(type);
   }
   return std::nullopt;

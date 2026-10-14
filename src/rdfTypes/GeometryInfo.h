@@ -104,7 +104,7 @@ struct SourceCrsType {
   SourceCrsType() = default;
 #endif
 
-  uint32_t type() const { return type_; };
+  uint32_t type() const { return type_; }
 
   // Returns the representing IRI.
   std::optional<std::string_view> asIri() const;
@@ -201,11 +201,13 @@ class GeometryInfo {
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
   uint32_t numGeometries_;
-  // `SourceCrsType` is 4 bytes wide, although the util's `CRSType` currently
-  // only needs 1 byte (`uint8_t`). The remaining 3 bytes would otherwise be
-  // padding anyway, so widening the type costs no additional space and leaves
-  // room to add more coordinate reference systems later without changing the
-  // serialized layout.
+  // The CRS named by the IRI of the WKT literal (before the projection to
+  // CRS84), see `SourceCrsType`.
+  //
+  // NOTE: The member is 4 bytes wide although the util's `CRSType` is a
+  // `uint8_t`. These bytes would otherwise be padding before the 8-byte
+  // aligned `metricLength_`, so the width costs nothing and leaves room for
+  // more coordinate reference systems without changing the serialized layout.
   SourceCrsType sourceCrs_;
   MetricLength metricLength_;
   MetricArea metricArea_;
@@ -295,7 +297,8 @@ class GeometryInfo {
 };
 
 // The binary representation of a `GeometryInfo` must not contain implicit
-// padding. For a standard-layout class, the
+// padding, because the `GeoVocabulary` writes it to disk and padding bytes
+// would depend on uninitialized memory. For a standard-layout class, the
 // members are laid out in the order of their declaration, so there is no
 // padding iff its size is the sum of the sizes of its members. That is checked
 // in the constructor (see `GeometryInfo.cpp`), because the members are private.

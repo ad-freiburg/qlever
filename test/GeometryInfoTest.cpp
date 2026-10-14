@@ -257,6 +257,12 @@ TEST(GeometryInfoTest, BasicTests) {
                    MetricLength{1}, MetricArea{5}),
       ::testing::HasSubstr("CRS Type out of range"));
 
+  // Crs type value for an invalid or unsupported CRS
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, SourceCrsType{0},
+                   MetricLength{1}, MetricArea{5}),
+      ::testing::HasSubstr("CRS Type indicates invalid/unsupported geometry"));
+
   // Wrong bounding box point ordering
   AD_EXPECT_THROW_WITH_MESSAGE(
       GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, {1}, SourceCrsType{1},
