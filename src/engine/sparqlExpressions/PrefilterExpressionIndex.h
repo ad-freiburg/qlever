@@ -232,11 +232,13 @@ class LogicalExpression : public PrefilterExpression {
 
 // Values to differentiate `PrefilterExpression` for the respective `isDatatype`
 // SPARQL expressions. Supported by the following prefilter
-// `IsDatatypeExpression`: `isIri`, `isBlank`, `isLiteral`, `isNumeric` and
-// `isEncodedIri`. Note: `IRI` includes "ordinary" (VocabIndex, LocalVocabIndex)
-// IRIs, as well as ID-encoded IRIs. `ENCODED_IRI` only includes the ID-encoded
-// IRIs.
-enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC, ENCODED_IRI };
+// `IsDatatypeExpression`: `isIri`, `isBlank`, `isLiteral`, `isNumeric`,
+// `isEncodedIri` and `ql:isGeoPoint`. Note: `IRI` includes "ordinary"
+// (VocabIndex, LocalVocabIndex) IRIs, as well as ID-encoded IRIs. `ENCODED_IRI`
+// only includes the ID-encoded IRIs. `GEO_POINT` includes exactly the points
+// that are encoded in the `Id` (datatype `GeoPoint`), not the WKT literals of
+// the vocabulary.
+enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC, ENCODED_IRI, GEO_POINT };
 
 // The specialized `PrefilterExpression` class that actually applies the
 // pre-filter procedure w.r.t. the datatypes defined with `IsDatatype`.
@@ -381,6 +383,8 @@ using IsNumericExpression = prefilterExpressions::IsDatatypeExpression<
     prefilterExpressions::IsDatatype::NUMERIC>;
 using IsEncodedIriExpression = prefilterExpressions::IsDatatypeExpression<
     prefilterExpressions::IsDatatype::ENCODED_IRI>;
+using IsGeoPointExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::GEO_POINT>;
 
 //______________________________________________________________________________
 // Definition of the LogicalExpression for AND and OR.

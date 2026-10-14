@@ -17,7 +17,6 @@
 #include <vector>
 
 #include "global/Id.h"
-#include "global/ValueId.h"
 #include "index/LocalVocab.h"
 
 namespace qlever::constructExport {

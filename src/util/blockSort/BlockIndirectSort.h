@@ -18,7 +18,6 @@
 #define QLEVER_SRC_UTIL_BLOCKSORT_BLOCKINDIRECTSORT_H
 
 #include <algorithm>
-#include <bit>
 #include <boost/sort/pdqsort/pdqsort.hpp>
 #include <cstddef>
 #include <cstdint>
@@ -31,6 +30,7 @@
 #include "util/Exception.h"
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include <bit>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>

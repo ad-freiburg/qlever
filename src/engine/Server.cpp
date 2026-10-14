@@ -35,6 +35,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
+#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
@@ -274,6 +275,16 @@ class QueryAlreadyInUseError : public std::runtime_error {
                            "' is already in use!"} {}
 };
 
+namespace {
+// Return an executor for a single query, which runs at most
+// `max-num-threads-per-query` tasks on the `executor` at the same time.
+qlever::Executor makeQueryExecutor(qlever::Executor executor) {
+  return ad_utility::makeConcurrencyLimitedExecutor(
+      std::move(executor),
+      getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>());
+}
+}  // namespace
+
 // _____________________________________________________________________________
 auto Server::cancelAfterDeadline(
     std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
@@ -338,7 +349,7 @@ auto Server::prepareOperation(
        resultPinning = std::move(resultPinning),
        accessTokenOk](SharedIndexAndView indexAndViews) mutable {
         auto qec = qlever().createQueryExecutionContext(
-            std::move(indexAndViews),
+            std::move(indexAndViews), makeQueryExecutor(qlever().executor()),
             [sharedMessageSender](std::string json) {
               (*sharedMessageSender)(std::move(json));
             },
@@ -407,19 +418,14 @@ Awaitable<nlohmann::json> Server::processWriteMaterializedView(
   AD_CONTRACT_CHECK(name != "", "The name for the view may not be empty");
 
   // Extract query body.
-  auto query = std::visit(
+  auto query = ad_utility::visitIf(
+      operation, [](const Query& op) -> Query { return op; },
       [](const auto& op) -> Query {
-        using T = std::decay_t<decltype(op)>;
-        if constexpr (std::is_same_v<T, Query>) {
-          return op;
-        } else {
-          static_assert(
-              ad_utility::SameAsAny<T, Update, GraphStoreOperation, None>);
-          throw std::runtime_error(
-              "Action 'write-materialized-view' requires a 'SELECT' query.");
-        }
-      },
-      operation);
+        static_assert(ad_utility::SimilarToAny<decltype(op), Update,
+                                               GraphStoreOperation, None>);
+        throw std::runtime_error(
+            "Action 'write-materialized-view' requires a 'SELECT' query.");
+      });
 
   // Extract time limit.
   auto timeLimit =
@@ -453,7 +459,8 @@ nlohmann::json Server::processLoadMaterializedView(
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Loading");
 
-  auto qec = qlever().createQueryExecutionContext(indexAndViews);
+  auto qec = qlever().createQueryExecutionContext(
+      indexAndViews, makeQueryExecutor(qlever().executor()));
   indexAndViews->materializedViewsManager_.loadView(name, qec.get());
 
   return json{{"materialized-view-loaded", name}};
@@ -806,8 +813,9 @@ Awaitable<void> Server::processSparqlOperation(
     // Outside the `try`: `qecPtr` owns the id whose destructor writes the
     // `end` event, so the status must be set before it unwinds.
     // Workaround for a GCC 15/16 bug: the hidden object of a by-value
-    // structured binding is not destroyed when the coroutine frame is
-    // destroyed while suspended (gcc.gnu.org bug 124584).
+    // structured binding in a coroutine is not always destroyed at the end
+    // of its scope, for example when it is initialized by a `co_await` or
+    // lives across one (gcc.gnu.org bug 124584).
     auto preparedOp = prepareOperation(operationName, operationString,
                                        std::move(messageSender), parameters,
                                        timeLimit, accessTokenOk, clientIp);

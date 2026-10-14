@@ -269,6 +269,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"metricArea", &makeMetricAreaExpression},
       {"numGeometries", &makeNumGeometriesExpression},
       {"metricLength", &makeMetricLengthExpression},
+      {"asGeoJSON", &makeAsGeoJsonExpression},
   };
   using enum SpatialJoinType::Enum;
   static const BinaryFuncTable geoBinaryFuncs{
@@ -392,18 +393,16 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   // They are visited in the order in which they appear, so a definition can
   // `INCLUDE` previously defined named subqueries.
   visitVector(ctx->namedSubqueryDefinition());
-  auto query =
-      visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
-                                    ctx->describeQuery(), ctx->askQuery());
-
   // The trailing `VALUES` clause is joined before the projection, so its
   // variables are also selected by `SELECT *`. The SPARQL 1.1 spec is vague
   // here, see https://github.com/w3c/rdf-tests/issues/381 for details.
-  query.postQueryValuesClause_ = visit(ctx->valuesClause());
-  if (query.postQueryValuesClause_.has_value()) {
-    query.registerVariablesVisibleInQueryBody(
-        query.postQueryValuesClause_->_inlineValues._variables);
-  }
+  postQueryValues_ = visit(ctx->valuesClause());
+  auto query =
+      visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
+                                    ctx->describeQuery(), ctx->askQuery());
+  AD_CORRECTNESS_CHECK(!postQueryValues_.has_value(),
+                       "The trailing `VALUES` clause must be consumed by the "
+                       "visitor of the respective query type.");
 
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
@@ -544,7 +543,8 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
         toGraphPattern(query.constructClause().triples_));
   }
   query.addSolutionModifiers(visit(ctx->solutionModifier()),
-                             makeInternalVariableGenerator());
+                             makeInternalVariableGenerator(),
+                             std::exchange(postQueryValues_, std::nullopt));
 
   return query;
 }
@@ -573,25 +573,38 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   describeClause.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
 
-  // Parse the WHERE clause and construct a SELECT query from it. For `DESCRIBE
-  // *`, add each visible variable as a resource to describe.
+  // Parse the WHERE clause and construct a SELECT query from it, which computes
+  // the resources to describe. The solution modifiers and the trailing `VALUES`
+  // clause belong to this query, because they apply to the solutions of the
+  // WHERE clause and not to the triples of the description (SPARQL 1.1, sec. 15
+  // and 16.4). For example, `LIMIT 1` describes the resources of one solution.
+  //
+  // NOTE: For `DESCRIBE *`, the query is a `SELECT *` while the solution
+  // modifiers are added (so that a `GROUP BY` is rejected like for `SELECT *`),
+  // and the visible variables are selected and described afterwards, when the
+  // variables of the trailing `VALUES` clause are visible, too.
   visitWhereClause(ctx->whereClause(), parsedQuery_);
+  auto& selectClause = parsedQuery_.selectClause();
   if (describedResources.empty()) {
-    const auto& visibleVariables =
-        parsedQuery_.selectClause().getVisibleVariables();
+    selectClause.setAsterisk();
+  } else {
+    selectClause.setSelected(std::move(describedVariables));
+  }
+  parsedQuery_.addSolutionModifiers(
+      visit(ctx->solutionModifier()), makeInternalVariableGenerator(),
+      std::exchange(postQueryValues_, std::nullopt));
+  if (describedResources.empty()) {
+    auto visibleVariables = selectClause.getVisibleVariables();
     ql::ranges::copy(visibleVariables,
                      std::back_inserter(describeClause.resources_));
-    describedVariables = visibleVariables;
+    selectClause.setSelected(std::move(visibleVariables));
   }
-  auto& selectClause = parsedQuery_.selectClause();
-  selectClause.setSelected(std::move(describedVariables));
   describeClause.whereClause_ = std::move(parsedQuery_);
 
   // Set up the final `ParsedQuery` object for the DESCRIBE query. The clause is
   // a CONSTRUCT query of the form `CONSTRUCT { ?subject ?predicate ?object} {
   // ... }`, with the `parsedQuery::Describe` object from above as the root
-  // graph pattern. The solution modifiers (in particular ORDER BY) are part of
-  // the CONSTRUCT query.
+  // graph pattern.
   //
   // NOTE: The dataset clauses are stored once in `parsedQuery_.datasetClauses_`
   // (which pertains to the CONSTRUCT query that computes the result of the
@@ -599,8 +612,6 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // (which pertains to the SELECT query that computes the resources to be
   // described).
   parsedQuery_ = ParsedQuery{};
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
-                                    makeInternalVariableGenerator());
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
       std::move(describeClause));
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
@@ -633,8 +644,9 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
     solutionModifiers.limitOffset_._limit = 1;
     return solutionModifiers;
   };
-  parsedQuery_.addSolutionModifiers(getSolutionModifiers(),
-                                    makeInternalVariableGenerator());
+  parsedQuery_.addSolutionModifiers(
+      getSolutionModifiers(), makeInternalVariableGenerator(),
+      std::exchange(postQueryValues_, std::nullopt));
   return parsedQuery_;
 }
 
@@ -1168,11 +1180,7 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
           });
   if (ctx->subSelect()) {
     auto parsedQuerySoFar = std::exchange(parsedQuery_, ParsedQuery{});
-    auto [subquery, valuesOpt] = visit(ctx->subSelect());
-    pattern._graphPatterns.emplace_back(std::move(subquery));
-    if (valuesOpt.has_value()) {
-      pattern._graphPatterns.emplace_back(std::move(valuesOpt.value()));
-    }
+    pattern._graphPatterns.emplace_back(visit(ctx->subSelect()));
     parsedQuery_ = std::move(parsedQuerySoFar);
     return pattern;
   }
@@ -1503,7 +1511,7 @@ std::optional<parsedQuery::ConstructClause> Visitor::visit(
 }
 
 // ____________________________________________________________________________________
-RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
+std::string Visitor::visit(Parser::StringContext* ctx) {
   return RdfEscaping::normalizeRDFLiteral(ctx->getText());
 }
 
@@ -1629,8 +1637,9 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
   visitWhereClause(ctx->whereClause(), parsedQuery_);
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
-                                    makeInternalVariableGenerator());
+  parsedQuery_.addSolutionModifiers(
+      visit(ctx->solutionModifier()), makeInternalVariableGenerator(),
+      std::exchange(postQueryValues_, std::nullopt));
   return parsedQuery_;
 }
 
@@ -1772,18 +1781,22 @@ ParsedQuery::GraphPattern Visitor::visitSoleInclude(
 }
 
 // ____________________________________________________________________________________
-Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
+parsedQuery::Subquery Visitor::visit(Parser::SubSelectContext* ctx) {
   ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
   visitWhereClause(ctx->whereClause(), query);
+  // The trailing `VALUES` clause belongs to the subquery, it is joined before
+  // the subquery's `ORDER BY`, `DISTINCT`, projection, and `LIMIT`/`OFFSET`
+  // (SPARQL 1.1, sec. 18.2.4.3). Its variables are thus also selected by
+  // `SELECT *`.
   query.addSolutionModifiers(visit(ctx->solutionModifier()),
-                             makeInternalVariableGenerator());
-  auto values = visit(ctx->valuesClause());
+                             makeInternalVariableGenerator(),
+                             visit(ctx->valuesClause()));
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
     addVisibleVariable(variable);
   }
-  return {parsedQuery::Subquery{std::move(query)}, std::move(values)};
+  return parsedQuery::Subquery{std::move(query)};
 }
 
 // ____________________________________________________________________________________
@@ -1899,9 +1912,13 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visit(Parser::MinusGraphPatternContext* ctx) {
-  auto visibleVariables = std::move(visibleVariables_);
-  GraphPatternOperation operation{
-      parsedQuery::Minus{visit(ctx->groupGraphPattern())}};
+  // As every group starts with no visible variables, these are exactly the
+  // variables of the patterns that precede the MINUS clause in its group.
+  auto visibleVariables = std::exchange(visibleVariables_, {});
+  auto child = visit(ctx->groupGraphPattern());
+  GraphPatternOperation operation{parsedQuery::Minus{
+      std::move(child), ad_utility::removeDuplicates(visibleVariables_),
+      ad_utility::removeDuplicates(visibleVariables)}};
   // Make sure that the variables from the minus graph pattern are NOT added to
   // visible variables.
   visibleVariables_ = std::move(visibleVariables);
@@ -3171,7 +3188,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
       // TODO: The string rule also allow triple quoted strings with different
       //  escaping rules. These are currently not handled. They should be
       //  parsed into a typesafe format with a unique representation.
-      separator = visit(ctx->string()).get();
+      separator = visit(ctx->string());
       // If there was a separator, we have to strip the quotation marks
       AD_CONTRACT_CHECK(separator.size() >= 2);
       separator = separator.substr(1, separator.size() - 2);

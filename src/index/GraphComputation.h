@@ -39,7 +39,7 @@ std::optional<std::vector<Id>> computeDistinctGraphs(
   for (Id graph : idRange) {
     auto actualEnd = graphs.begin() + foundGraphs;
     if (ql::ranges::find(graphs.begin(), actualEnd, graph.getBits(),
-                         &Id::getBits) != actualEnd) {
+                         Id::getBitsL) != actualEnd) {
       continue;
     }
     if (foundGraphs == MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {

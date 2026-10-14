@@ -7,6 +7,8 @@
 
 #include "engine/ExplicitIdTableOperation.h"
 
+#include "util/TypeTraits.h"
+
 // _____________________________________________________________________________
 ExplicitIdTableOperation::ExplicitIdTableOperation(
     QueryExecutionContext* ctx, IdTableOrView table,
@@ -28,18 +30,13 @@ ExplicitIdTableOperation::ExplicitIdTableOperation(
 
 // _____________________________________________________________________________
 IdTableView<0> ExplicitIdTableOperation::viewOf(const IdTableOrView& table) {
-  return std::visit(
-      [](const auto& arg) -> IdTableView<0> {
-        using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, std::shared_ptr<const IdTable>>) {
-          AD_CONTRACT_CHECK(arg != nullptr);
-          return arg->template asStaticView<0>();
-        } else {
-          static_assert(std::is_same_v<T, IdTableView<0>>);
-          return arg;
-        }
+  return ad_utility::visitIf(
+      table,
+      [](const std::shared_ptr<const IdTable>& arg) -> IdTableView<0> {
+        AD_CONTRACT_CHECK(arg != nullptr);
+        return arg->template asStaticView<0>();
       },
-      table);
+      [](const IdTableView<0>& arg) { return arg; });
 }
 
 // _____________________________________________________________________________
