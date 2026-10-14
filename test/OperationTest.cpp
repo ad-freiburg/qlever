@@ -327,7 +327,7 @@ TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
   EXPECT_GT(childOperation->publicRemainingTime(), 0ms);
 #endif
   std::this_thread::sleep_for(timeout);
-  // Verify time is up for parent and child
+  // Verify that the time is up for the parent and the child.
   EXPECT_EQ(operation.publicRemainingTime(), 0ms);
   EXPECT_EQ(childOperation->publicRemainingTime(), 0ms);
 }
