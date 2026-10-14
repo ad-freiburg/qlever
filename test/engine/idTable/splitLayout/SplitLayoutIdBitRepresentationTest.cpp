@@ -9,9 +9,11 @@
 
 #include <gtest/gtest.h>
 
+#include "IdColumnTestHelpers.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 
 using namespace columnBasedIdTable::splitLayout;
+using testHelpers::getBitsCompat;
 
 // Test the construction from a datatype and a payload.
 TEST(SplitLayoutIdBitRepresentationTest, construction) {

@@ -26,9 +26,8 @@ std::pair<std::vector<uint64_t>, std::vector<uint8_t>> splitIds(
   std::vector<uint64_t> payloads;
   std::vector<uint8_t> datatypes;
   for (const Id id : ids) {
-    auto [datatype, payload] = getBitsCompat(id);
-    payloads.push_back(payload);
-    datatypes.push_back(datatype);
+    payloads.push_back(id.getPayloadBits());
+    datatypes.push_back(id.getDatatypeBits());
   }
   return {std::move(payloads), std::move(datatypes)};
 }
@@ -75,14 +74,14 @@ TEST(IdColumnTest, elementAccess) {
   ASSERT_EQ(view.rawPayloads().size(), ids.size());
   ASSERT_EQ(view.rawDatatypes().size(), ids.size());
   for (size_t i = 0; i < ids.size(); ++i) {
-    EXPECT_EQ(view.rawPayloads()[i], getBitsCompat(ids.at(i)).payload_);
-    EXPECT_EQ(view.rawDatatypes()[i], getBitsCompat(ids.at(i)).datatype_);
+    EXPECT_EQ(view.rawPayloads()[i], ids.at(i).getPayloadBits());
+    EXPECT_EQ(view.rawDatatypes()[i], ids.at(i).getDatatypeBits());
   }
 
   // Writing through `operator[]` or `at()` of the mutable view changes the
   // backing arrays.
   view[0] = Id::makeFromInt(-1);
-  EXPECT_EQ(payloads.at(0), getBitsCompat(Id::makeFromInt(-1)).payload_);
+  EXPECT_EQ(payloads.at(0), Id::makeFromInt(-1).getPayloadBits());
   view.at(1) = Id::makeFromInt(12);
   EXPECT_EQ(view[1], Id::makeFromInt(12));
   EXPECT_EQ(constView[1], Id::makeFromInt(12));

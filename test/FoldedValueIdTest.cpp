@@ -223,6 +223,68 @@ TEST_F(ValueIdTest, getDatatypeBitsAndGetPayloadBits) {
                 static_cast<uint8_t>(Datatype::Int));
 }
 
+// Test `fromBits(datatype, payload)`, the counterpart of `getDatatypeBits` and
+// `getPayloadBits`.
+TEST_F(ValueIdTest, fromBitsWithDatatypeAndPayload) {
+  auto datatypeBits = [](Datatype datatype) {
+    return static_cast<uint8_t>(datatype);
+  };
+  constexpr uint64_t payloadMask =
+      ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
+
+  // Putting the two parts of an `Id` together again yields the same bits, and
+  // agrees with the overload that takes all bits at once.
+  for (auto id : makeRandomIds()) {
+    auto rebuilt = ValueId::fromBits(id.getDatatypeBits(), id.getPayloadBits());
+    EXPECT_EQ(rebuilt.getBits(), id.getBits());
+    EXPECT_EQ(rebuilt.getBits(), ValueId::fromBits(id.getBits()).getBits());
+  }
+
+  // Some known values.
+  EXPECT_EQ(ValueId::fromBits(datatypeBits(Datatype::Undefined), 0),
+            ValueId::makeUndefined());
+  EXPECT_EQ(ValueId::fromBits(datatypeBits(Datatype::Bool), 0),
+            ValueId::makeFromBool(false));
+  EXPECT_EQ(ValueId::fromBits(datatypeBits(Datatype::Bool), 1),
+            ValueId::makeFromBool(true));
+  EXPECT_EQ(ValueId::fromBits(datatypeBits(Datatype::Int), 42),
+            ValueId::makeFromInt(42));
+  EXPECT_EQ(ValueId::fromBits(datatypeBits(Datatype::VocabIndex), 42),
+            makeVocabId(42));
+  // The largest index fills the whole payload.
+  EXPECT_EQ(
+      ValueId::fromBits(datatypeBits(Datatype::VocabIndex), ValueId::maxIndex),
+      ValueId::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)));
+  // A negative integer has all payload bits set.
+  EXPECT_EQ(ValueId::fromBits(datatypeBits(Datatype::Int), payloadMask),
+            ValueId::makeFromInt(-1));
+
+  // Every datatype can be combined with every payload, and the two parts do
+  // not influence each other.
+  for (uint64_t datatype = 0;
+       datatype < (uint64_t{1} << ValueId::numDatatypeBits); ++datatype) {
+    for (uint64_t payload :
+         {uint64_t{0}, uint64_t{1}, uint64_t{123456789}, payloadMask}) {
+      auto id = ValueId::fromBits(datatype, payload);
+      EXPECT_EQ(uint64_t{id.getDatatypeBits()}, datatype);
+      EXPECT_EQ(id.getPayloadBits(), payload);
+    }
+  }
+
+  // Bits of the payload argument above `numDataBits` are dropped, they must not
+  // change the datatype.
+  auto tooLarge = ValueId::fromBits(datatypeBits(Datatype::Int), ~uint64_t{0});
+  EXPECT_EQ(tooLarge.getDatatype(), Datatype::Int);
+  EXPECT_EQ(tooLarge.getPayloadBits(), payloadMask);
+
+  // The function can be used at compile time.
+  static_assert(
+      ValueId::fromBits(static_cast<uint8_t>(Datatype::Int), 5).getBits() ==
+      ValueId::makeFromInt(5).getBits());
+  static_assert(
+      ValueId::fromBits(static_cast<uint8_t>(Datatype::Int), 5).getInt() == 5);
+}
+
 TEST_F(ValueIdTest, OrderingDifferentDatatypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end());
@@ -710,6 +772,42 @@ TEST(ValueId, forwardingLambdas) {
             ids.begin() + 2);
   EXPECT_EQ(ql::ranges::find(proxies, Datatype::Double, ValueId::getDatatypeL),
             proxies.begin() + 2);
+}
+
+// Test that the lambda `Id::fromBitsL` forwards to the `fromBits` overload that
+// takes all bits at once. In contrast to `fromBits`, which is overloaded, it
+// can be passed to generic algorithms.
+TEST(ValueId, fromBitsL) {
+  std::vector<ValueId> ids{
+      ValueId::makeUndefined(),
+      ValueId::makeFromBool(true),
+      ValueId::makeFromInt(42),
+      ValueId::makeFromInt(-42),
+      ValueId::makeFromDouble(13.37),
+      ValueId::makeFromVocabIndex(VocabIndex::make(123)),
+      ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(7))};
+
+  // The lambda returns what `fromBits` returns, and is the inverse of
+  // `getBitsL`.
+  for (ValueId id : ids) {
+    EXPECT_EQ(ValueId::fromBitsL(id.getBits()).getBits(),
+              ValueId::fromBits(id.getBits()).getBits());
+    EXPECT_EQ(ValueId::fromBitsL(ValueId::getBitsL(id)), id);
+  }
+
+  // The lambda works as the transformation of a generic algorithm.
+  std::vector<ValueId::T> bits;
+  ql::ranges::transform(ids, std::back_inserter(bits), ValueId::getBitsL);
+  std::vector<ValueId> rebuilt(bits.size());
+  ql::ranges::transform(bits, rebuilt.begin(), ValueId::fromBitsL);
+  EXPECT_EQ(rebuilt, ids);
+
+  // The lambda can be used at compile time.
+  static_assert(
+      ValueId::fromBitsL(ValueId::makeFromInt(5).getBits()).getBits() ==
+      ValueId::makeFromInt(5).getBits());
+  static_assert(
+      ValueId::fromBitsL(ValueId::makeFromInt(5).getBits()).getInt() == 5);
 }
 
 }  // namespace foldedValueId

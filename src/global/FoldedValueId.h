@@ -230,6 +230,13 @@ class ValueId {
   // obtained by a call to `getBits()` on a valid `ValueId`.
   static constexpr ValueId fromBits(T bits) noexcept { return {bits}; }
 
+  // Combine datatype and payload bits (inverse of `getDatatypeBits` and
+  // `getPayloadBits`). Payload bits beyond `numDataBits` are dropped.
+  static constexpr ValueId fromBits(const T datatype,
+                                    const T payload) noexcept {
+    return {removeDatatypeBits(payload) | (datatype << numDataBits)};
+  }
+
   // Get the datatype bits.
   [[nodiscard]] constexpr uint8_t getDatatypeBits() const noexcept {
     return static_cast<uint8_t>(_bits >> numDataBits);
@@ -562,6 +569,10 @@ class ValueId {
   };
 
   static constexpr auto getBitsL = [](const auto& id) { return id.getBits(); };
+
+  static constexpr auto fromBitsL = [](const auto& idBitRep) {
+    return fromBits(idBitRep);
+  };
 
   static constexpr auto getDatatypeL = [](const auto& id) {
     return id.getDatatype();
