@@ -220,6 +220,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
                    {{2, 2}, {4, 4}},
                    {3, 3},
                    {1},
+                   SourceCrsType{util::geo::CRSType::CRS84},
                    getLengthForTesting(exampleGeoLit),
                    getAreaForTesting(exampleGeoLit)};
   EXPECT_GEOMETRYINFO(gi.value(), exp);
