@@ -1510,7 +1510,7 @@ std::optional<parsedQuery::ConstructClause> Visitor::visit(
 }
 
 // ____________________________________________________________________________________
-RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
+std::string Visitor::visit(Parser::StringContext* ctx) {
   return RdfEscaping::normalizeRDFLiteral(ctx->getText());
 }
 
@@ -1911,9 +1911,13 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visit(Parser::MinusGraphPatternContext* ctx) {
-  auto visibleVariables = std::move(visibleVariables_);
-  GraphPatternOperation operation{
-      parsedQuery::Minus{visit(ctx->groupGraphPattern())}};
+  // As every group starts with no visible variables, these are exactly the
+  // variables of the patterns that precede the MINUS clause in its group.
+  auto visibleVariables = std::exchange(visibleVariables_, {});
+  auto child = visit(ctx->groupGraphPattern());
+  GraphPatternOperation operation{parsedQuery::Minus{
+      std::move(child), ad_utility::removeDuplicates(visibleVariables_),
+      ad_utility::removeDuplicates(visibleVariables)}};
   // Make sure that the variables from the minus graph pattern are NOT added to
   // visible variables.
   visibleVariables_ = std::move(visibleVariables);
@@ -3183,7 +3187,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
       // TODO: The string rule also allow triple quoted strings with different
       //  escaping rules. These are currently not handled. They should be
       //  parsed into a typesafe format with a unique representation.
-      separator = visit(ctx->string()).get();
+      separator = visit(ctx->string());
       // If there was a separator, we have to strip the quotation marks
       AD_CONTRACT_CHECK(separator.size() >= 2);
       separator = separator.substr(1, separator.size() - 2);
