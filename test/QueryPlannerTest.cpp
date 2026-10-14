@@ -12,7 +12,9 @@
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
+#include "engine/Proxy.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Values.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "rdfTypes/Variable.h"
@@ -4407,4 +4409,65 @@ TEST(QueryPlanner, plannerAllocationsCountTowardsMemoryLimit) {
 
   // When the tree is destroyed, the memory is released again.
   EXPECT_EQ(allocator.amountMemoryLeft(), memoryLeftBefore);
+}
+
+// Test the planning of the magic `SERVICE qlproxy:`: the part of the enclosing
+// graph pattern that binds all input variables becomes the child of the
+// `Proxy`.
+TEST(QueryPlanner, ProxyService) {
+  auto scan = h::IndexScanFromStrings;
+  std::string prefix =
+      "PREFIX qlproxy: <https://qlever.cs.uni-freiburg.de/qlproxy/> ";
+  auto proxy = [](const auto&... children) {
+    return h::MatchTypeAndOrderedChildren<::Proxy>(children...);
+  };
+  h::QetMatcher values = h::RootOperation<::Values>(::testing::_);
+
+  // The sibling binds the input variable.
+  h::expect(prefix + R"(SELECT * WHERE {
+    VALUES ?w { "a" }
+    SERVICE qlproxy: { _:c qlproxy:endpoint <http://e/> ;
+      qlproxy:input-w ?w ; qlproxy:output-q ?q ; qlproxy:output-row ?r . } })",
+            proxy(values));
+
+  // The input variables come from two triples, so their join is the child.
+  h::expect(prefix + R"(SELECT * WHERE {
+    ?s <p> ?a . ?s <q> ?b .
+    SERVICE qlproxy: { _:c qlproxy:endpoint <http://e/> ;
+      qlproxy:input-a ?a ; qlproxy:input-b ?b ;
+      qlproxy:output-q ?q ; qlproxy:output-row ?r . } })",
+            proxy(h::Join(scan("?s", "<p>", "?a"), scan("?s", "<q>", "?b"))));
+
+  // The second proxy gets its input variable from the first one.
+  h::expect(prefix + R"(SELECT * WHERE {
+    VALUES ?w { "a" }
+    SERVICE qlproxy: { _:c1 qlproxy:endpoint <http://e/> ;
+      qlproxy:input-w ?w ; qlproxy:output-q ?q ; qlproxy:output-row ?r1 . }
+    SERVICE qlproxy: { _:c2 qlproxy:endpoint <http://e/> ;
+      qlproxy:input-q ?q ; qlproxy:output-z ?z ; qlproxy:output-row ?r2 . } })",
+            proxy(proxy(values)));
+
+  // Without input variables the proxy has no child, and the same holds for an
+  // input variable that the enclosing graph pattern does not bind (the `Proxy`
+  // then throws when its result is computed).
+  h::expect(prefix + R"(SELECT * WHERE {
+    ?s <p> ?o .
+    SERVICE qlproxy: { _:c qlproxy:endpoint <http://e/> ;
+      qlproxy:output-q ?q ; qlproxy:output-row ?r . } })",
+            h::CartesianProductJoin(scan("?s", "<p>", "?o"), proxy()));
+  h::expect(prefix + R"(SELECT * WHERE {
+    ?s <p> ?o .
+    SERVICE qlproxy: { _:c qlproxy:endpoint <http://e/> ;
+      qlproxy:input-x ?x ; qlproxy:output-q ?q ; qlproxy:output-row ?r . } })",
+            h::CartesianProductJoin(scan("?s", "<p>", "?o"), proxy()));
+
+  // An output variable that the enclosing graph pattern binds is an error.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(prefix + R"(SELECT * WHERE {
+    ?s <p> ?q .
+    SERVICE qlproxy: { _:c qlproxy:endpoint <http://e/> ;
+      qlproxy:input-s ?s ; qlproxy:output-q ?q ; qlproxy:output-row ?r . } })",
+                      ad_utility::testing::getQec()),
+      ::testing::HasSubstr("?q of the parameter `qlproxy:output-q` is already "
+                           "bound by the enclosing graph pattern"));
 }
