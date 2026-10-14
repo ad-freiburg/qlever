@@ -11,13 +11,13 @@
 #define QLEVER_TEST_UTIL_COLUMNSTRIPPINGTESTHELPERS_H
 
 #include <gmock/gmock.h>
+
 #include "engine/Operation.h"
 
 // Matcher to test column stripping.
 // It checks the number of columns, expected Variables
 // and table content.
-MATCHER_P2(HasOperationResult, expectedVariables, expectedResult,
-           "") {
+MATCHER_P2(HasOperationResult, expectedVariables, expectedResult, "") {
   const auto& columns = arg->getVariableColumns();
   if (columns.size() != expectedVariables.size()) {
     *result_listener << "expected " << expectedVariables.size()
