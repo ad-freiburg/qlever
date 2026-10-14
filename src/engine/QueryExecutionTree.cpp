@@ -171,6 +171,11 @@ QueryExecutionTree::makeTreeWithBindColumn(
   // hidden variable of this tree, e.g. one that was not selected by a subquery.
   // Example: `{ SELECT ?x { ?x <p> ?y } } BIND(1 AS ?y)` is a valid query, and
   // the root operation of the subquery still has a (hidden) column for `?y`.
+  //
+  // TODO<ullingerc> This case could be supported in the future: Push down the
+  // `BIND` with a fresh internal target variable, and rename it to the actual
+  // target when hiding the variables (e.g. by a cheap `(?internal AS ?y)`,
+  // which requires overriding the check that `?y` is not used before).
   if (rootOperation_->containsVariableInternally(bind._target)) {
     return std::nullopt;
   }
