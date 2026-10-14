@@ -223,9 +223,10 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
 
   for (const std::string& batch :
        exportRows(limitAndOffset, std::move(result),
-                  ad_utility::transform(
-                      columns,
-                      [](const auto& column) { return column->columnIndex_; }),
+                  ad_utility::transform(columns,
+                                        [](const auto& column) -> ColumnIndex {
+                                          return column->columnIndex_;
+                                        }),
                   qet.getQec()->getIndex(), std::move(cancellationHandle))) {
     co_yield batch;
   }
