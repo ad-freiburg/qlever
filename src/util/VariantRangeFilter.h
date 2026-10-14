@@ -18,8 +18,8 @@ namespace ad_utility {
 CPP_template(typename T, typename R)(
     requires ql::ranges::range<
         std::decay_t<R>>) auto filterRangeOfVariantsByType(R&& range) {
-  return ad_utility::allView(AD_FWD(range)) |
-         ql::views::filter(holdsAlternative<T>) | ql::views::transform(get<T>);
+  return AD_FWD(range) | ql::views::filter(holdsAlternative<T>) |
+         ql::views::transform(get<T>);
 }
 
 }  // namespace ad_utility

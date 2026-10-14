@@ -114,7 +114,7 @@ class TextMetaData {
 
   void setName(const std::string& name) { _name = name; }
 
-  float getAverageNofEntityContexts() const { return 1.0f; };
+  float getAverageNofEntityContexts() const { return 1.0f; }
 
  private:
   std::vector<uint64_t> _blockUpperBoundWordIds;

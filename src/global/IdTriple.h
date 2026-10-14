@@ -13,7 +13,7 @@
 #include "backports/algorithm.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
 
 template <size_t N = 0>
@@ -40,13 +40,12 @@ struct IdTriple {
   const auto& payload() const { return std::get<1>(data_); }
   auto& payload() { return std::get<1>(data_); }
 
-  CPP_template_2(typename = void)(requires(N == 0)) explicit IdTriple(
-      const std::array<Id, NumCols>& idsIn)
-      : data_{idsIn, {}} {};
+  CPP_template_2(typename = void)(requires(N == 0))
+  explicit IdTriple(const std::array<Id, NumCols>& idsIn) : data_{idsIn, {}} {}
 
   explicit IdTriple(const std::array<Id, NumCols>& idsIn,
                     const Payload& payload)
-      : data_{idsIn, payload} {};
+      : data_{idsIn, payload} {}
 
   friend std::ostream& operator<<(std::ostream& os, const IdTriple& triple) {
     os << "IdTriple(";
@@ -86,7 +85,7 @@ struct IdTriple {
   }
 
   CPP_template_2(typename = void)(requires(N == 0))
-      CompressedBlockMetadata::PermutedTriple toPermutedTriple() const {
+  CompressedBlockMetadata::PermutedTriple toPermutedTriple() const {
     static_assert(NumCols == 4);
     return {ids()[0], ids()[1], ids()[2], ids()[3]};
   }

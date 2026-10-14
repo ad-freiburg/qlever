@@ -6,13 +6,14 @@
 
 #include "index/Index.h"
 #include "index/IndexImpl.h"
+#include "index/TripleComponentConversions.h"
 
 namespace {
 
 // Helper function to turn a triple component into a `ValueId`.
 Id getNonOptionalId(TripleComponent tripleComponent, const IndexImpl& index,
                     LocalVocab& localVocab) {
-  return std::move(tripleComponent).toValueId(index, localVocab);
+  return toValueId(std::move(tripleComponent), index, localVocab);
 }
 
 }  // namespace

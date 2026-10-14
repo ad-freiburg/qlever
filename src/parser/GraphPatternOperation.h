@@ -88,21 +88,6 @@ struct BasicGraphPattern {
   void collectAllContainedVariables(ad_utility::HashSet<Variable>& vars) const;
 };
 
-// Helper for a special use case: Extract all variables present in the first
-// `BasicGraphPattern` contained in a vector of `GraphPatternOperation`s.
-//
-// For example: If the vector contains a `BIND`, followed by two
-// `BasicGraphPattern`s, this would return the variables from the first of the
-// two `BasicGraphPattern`s.
-//
-// It is used for skipping some graph patterns in
-// `MaterializedViewQueryAnalysis.cpp`.
-//
-// IMPORTANT: This function does not consider variables that are contained in
-// other types of `GraphPatternOperation`s.
-ad_utility::HashSet<Variable> getVariablesPresentInFirstBasicGraphPattern(
-    const std::vector<parsedQuery::GraphPatternOperation>& graphPatterns);
-
 /// A `Values` clause
 struct Values {
   SparqlValues _inlineValues;
@@ -122,8 +107,9 @@ struct GroupGraphPattern {
   enum class GraphVariableBehaviour { ALL, NAMED };
   // If not `monostate`, then this group is a `GRAPH` clause, either with a
   // fixed graph IRI, or with a variable.
-  using GraphSpec = std::variant<std::monostate, TripleComponent::Iri,
-                                 std::pair<Variable, GraphVariableBehaviour>>;
+  using GraphVar = std::pair<Variable, GraphVariableBehaviour>;
+  using GraphSpec =
+      std::variant<std::monostate, TripleComponent::Iri, GraphVar>;
   GraphSpec graphSpec_ = std::monostate{};
 
   // Constructors for all legal constellations.
@@ -141,13 +127,22 @@ struct GroupGraphPattern {
 struct Optional {
   Optional(GraphPattern child) : _child{std::move(child)} {
     _child._optional = true;
-  };
+  }
   GraphPattern _child;
 };
 
 /// A SPARQL `MINUS` construct.
 struct Minus {
   GraphPattern _child;
+  // The variables that are in scope (see section 18.2.1 of the SPARQL 1.1
+  // standard) in the `_child` and in the patterns that precede the MINUS clause
+  // in the same group, respectively. They are filled by the parser.
+  //
+  // NOTE: Inside a `GRAPH ?g {...}` clause, the query planner adds `?g` as an
+  // implicit column to all index scans, so it needs these to decide whether
+  // `?g` is actually shared between both sides.
+  std::vector<Variable> visibleVariables_;
+  std::vector<Variable> visibleVariablesOfPrecedingPatterns_;
 };
 
 /// A SPARQL `UNION` construct.
@@ -221,8 +216,7 @@ struct Bind {
   auto containedVariables() const {
     auto result = _expression.containedVariables();
     result.push_back(&_target);
-    return ad_utility::OwningView{std::move(result)} |
-           ql::views::transform(ad_utility::dereference);
+    return std::move(result) | ql::views::transform(ad_utility::dereference);
   }
 
   [[nodiscard]] std::string getDescriptor() const;

@@ -68,6 +68,14 @@ class BlankNodeExpression : public SparqlExpression {
   // Evaluate function for the case where no argument is given and each row gets
   // a new unique blank node index.
   ExpressionResult evaluateWithoutArguments(EvaluationContext* context) const {
+    // As part of a GROUP BY (and outside of an aggregate) we only return a
+    // single (constant) blank node per group. Inside an aggregate we must still
+    // produce one blank node per row, so that e.g. `COUNT(BNODE())` counts the
+    // number of rows in the group.
+    if (worksOnAggregatedData(context)) {
+      return Id::makeFromBlankNodeIndex(context->_localVocab.getBlankNodeIndex(
+          context->_qec.getIndex().getBlankNodeManager()));
+    }
     VectorWithMemoryLimit<Id> result{context->_allocator};
     const size_t numElements = context->size();
     result.reserve(numElements);
@@ -83,6 +91,20 @@ class BlankNodeExpression : public SparqlExpression {
     return result;
   }
 
+  // Create a unique blank node (encoded as an internal IRI) for the given
+  // (already escaped) `label`, using `index` to ensure its uniqueness.
+  // TODO<RobinTF> Encoding blank nodes as IRIs is very memory-inefficient given
+  // that we only need to ensure distinctness. But for now this is the easiest
+  // way to implement it without changing large parts of the code.
+  static IdOrLocalVocabEntry makeBlankNode(std::string_view label,
+                                           uint64_t index,
+                                           const EvaluationContext* context) {
+    return LocalVocabEntry::fromStringRepresentation(
+        absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:un", label, "_",
+                     index, ">"),
+        context->getLocalVocabContext());
+  }
+
   // Perform the actual evaluation of the expression. This creates a blank node
   // based on the result of `getNextLabel`.
   CPP_template(typename Printable, typename Func)(
@@ -91,30 +113,20 @@ class BlankNodeExpression : public SparqlExpression {
           CPP_and std::is_constructible_v<absl::AlphaNum, Printable>)
       ExpressionResult
       evaluateImpl(EvaluationContext* context, Func getNextLabel) const {
-    std::string_view blankNodePrefix = "un";
-
     VectorWithMemoryLimit<IdOrLocalVocabEntry> result{context->_allocator};
     const size_t numElements = context->size();
     result.reserve(numElements);
 
     ad_utility::chunkedForLoop<1000>(
         0, numElements,
-        [this, &result, context, &blankNodePrefix, &getNextLabel](size_t) {
+        [this, &result, context, &getNextLabel](size_t) {
           const auto& label = getNextLabel();
-          // TODO<RobinTF> Encoding blank nodes as IRIs is very
-          // memory-inefficient given that we only need to ensure distinctness.
-          // But for now this is the easiest way to implement it without
-          // changing large parts of the code.
           if (label.has_value()) {
-            auto uniqueIri = absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX,
-                                          "_:", blankNodePrefix, label.value(),
-                                          "_", counter_++, ">");
-            result.push_back(LocalVocabEntry::fromStringRepresentation(
-                std::move(uniqueIri), context->getLocalVocabContext()));
+            result.push_back(makeBlankNode(label.value(), counter_, context));
           } else {
             result.push_back(Id::makeUndefined());
-            ++counter_;
           }
+          ++counter_;
         },
         [context]() { context->cancellationHandle_->throwIfCancelled(); });
     return result;
@@ -138,6 +150,15 @@ class BlankNodeExpression : public SparqlExpression {
               return Id::makeUndefined();
             }
             auto escapedValue = escapeStringForBlankNode(value.value());
+            // As part of a GROUP BY (and outside of an aggregate) the argument
+            // is constant within the group, so we only produce a single
+            // (constant) blank node. The counter is still advanced for the full
+            // range for consistency with the per-row case.
+            if (worksOnAggregatedData(context)) {
+              auto result = makeBlankNode(escapedValue, counter_, context);
+              counter_ += context->size();
+              return result;
+            }
             return evaluateImpl<std::string_view>(
                 context,
                 [escapedValue = std::optional<std::string_view>{escapedValue}]()
@@ -173,6 +194,9 @@ class BlankNodeExpression : public SparqlExpression {
     return absl::StrCat("#BlankNode#", label_.value()->getCacheKey(map), "_",
                         cacheBreaker_++);
   }
+
+  // BNODE() generates a fresh blank node on every invocation.
+  bool isDeterministic() const override { return false; }
 
   // The version of `BNODE()` without arguments always returns a defined value.
   bool isResultAlwaysDefined(const VariableToColumnMap&) const override {

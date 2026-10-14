@@ -13,7 +13,7 @@
 #include "./util/IdTableHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/ConstexprUtils.h"
 #include "util/IdTestHelpers.h"
@@ -75,17 +75,18 @@ TEST(IdTableHelpersHelpersTest, calculateAllSubSets) {
   doTest({}, {{}});
 
   // Single element.
-  doTest({1uL}, {{}, {1uL}});
+  doTest({uint64_t{1}}, {{}, {uint64_t{1}}});
 
   // Three elements.
-  doTest({4uL, 2uL, 5uL}, {{},
-                           {4uL, 2uL, 5uL},
-                           {4uL},
-                           {2uL},
-                           {5uL},
-                           {4uL, 5uL},
-                           {2uL, 5uL},
-                           {4uL, 2uL}});
+  doTest({uint64_t{4}, uint64_t{2}, uint64_t{5}},
+         {{},
+          {uint64_t{4}, uint64_t{2}, uint64_t{5}},
+          {uint64_t{4}},
+          {uint64_t{2}},
+          {uint64_t{5}},
+          {uint64_t{4}, uint64_t{5}},
+          {uint64_t{2}, uint64_t{5}},
+          {uint64_t{4}, uint64_t{2}}});
 }
 
 // _____________________________________________________________________________

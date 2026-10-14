@@ -11,11 +11,10 @@
 #define QLEVER_SRC_UTIL_SPARQLJSONBINDINGUTILS_H
 
 #include "index/Index.h"
+#include "parser/BlankNodeAdder.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
-#include "util/BlankNodeManager.h"
-#include "util/HashMap.h"
 #include "util/json.h"
 
 namespace sparqlJsonBindingUtils {
@@ -24,15 +23,15 @@ namespace sparqlJsonBindingUtils {
 // `TripleComponent`. The binding must have a "type" and a "value" field.
 // Supported types are: "uri", "literal" or "typed-literal", and "bnode".
 //
-// The `blankNodeMap` is used to ensure consistent blank node `Id`s within a
-// result set (the same blank node label always maps to the same `Id`).
+// Blank nodes are resolved via the `blankNodeAdder`, which has to be the same
+// for all bindings of a single result set, because blank node labels are scoped
+// to the result set they occur in.
 //
 // NOTE: This is used in the `Service` and `Proxy` operation, which both read
 // `sparql-results+json` result sets from a remote endpoint.
 inline TripleComponent bindingToTripleComponent(
     const nlohmann::json& binding, const Index& index,
-    ad_utility::HashMap<std::string, Id>& blankNodeMap, LocalVocab* localVocab,
-    ad_utility::BlankNodeManager* blankNodeManager) {
+    BlankNodeAdder& blankNodeAdder) {
   if (!binding.contains("type") || !binding.contains("value")) {
     throw std::runtime_error(absl::StrCat(
         "Missing type or value field in binding. The binding is: '",
@@ -65,12 +64,9 @@ inline TripleComponent bindingToTripleComponent(
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
   } else if (type == "bnode") {
-    auto [it, wasNew] = blankNodeMap.try_emplace(value, Id());
-    if (wasNew) {
-      it->second = Id::makeFromBlankNodeIndex(
-          localVocab->getBlankNodeIndex(blankNodeManager));
-    }
-    tc = it->second;
+    // In the SPARQL JSON format, the label of a blank node is stored without
+    // the leading `_:`.
+    tc = blankNodeAdder.getBlankNodeIndexForLabelWithoutPrefix(value);
   } else {
     throw std::runtime_error(absl::StrCat("Type ", type,
                                           " is undefined. The binding is: '",

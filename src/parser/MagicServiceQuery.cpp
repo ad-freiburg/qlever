@@ -43,7 +43,7 @@ Variable MagicServiceQuery::getVariable(std::string_view parameter,
   }
 
   return object.getVariable();
-};
+}
 
 // ____________________________________________________________________________
 void MagicServiceQuery::setVariable(
@@ -59,7 +59,7 @@ void MagicServiceQuery::setVariable(
   }
 
   existingValue = object.getVariable();
-};
+}
 
 // ____________________________________________________________________________
 std::string_view MagicServiceQuery::extractParameterName(
@@ -80,6 +80,6 @@ std::string_view MagicServiceQuery::extractParameterName(
     paramString.remove_prefix(iri.size());
   }
   return asStringViewUnsafe(paramString);
-};
+}
 
 }  // namespace parsedQuery

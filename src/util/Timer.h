@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 
 #include "backports/keywords.h"
 #include "util/Log.h"
@@ -202,9 +203,7 @@ struct QL_NODISCARD(
   std::string message_;
   Callback callback_;
   explicit TimeBlockAndLog(std::string message, Callback callback = {})
-      : message_{std::move(message)}, callback_{std::move(callback)} {
-    t_.start();
-  }
+      : message_{std::move(message)}, callback_{std::move(callback)} {}
 
   // The semantics of copying/moving this class are unclear and copying/moving
   // is not needed for the typical usage, so those operations are deleted.
@@ -214,17 +213,47 @@ struct QL_NODISCARD(
 };
 }  // namespace detail
 
-#if LOGLEVEL >= TIMING
+// If the compile-time log level is at least `TIMING`, use the real
+// implementation. Otherwise use a stub that does nothing at all: the timing
+// information could never be logged anyway, so we don't even measure it.
+//
+// NOTE: This has to be a preprocessor `#if` (and not an `if constexpr` inside
+// `detail::TimeBlockAndLog`), because the whole point is that no timer and no
+// message are stored and that the callback is not instantiated at all.
+#if QLEVER_COMPILETIME_LOGLEVEL >= QLEVER_TIMING
 using detail::TimeBlockAndLog;
 #else
-<template typename T = int> struct TimeBlockAndLog {
-  TimeBlockAndLog(const std::string&, T t = {}) {}
+template <typename Callback = detail::DefaultLogger>
+struct QL_NODISCARD(
+    "TimeBlockAndLog objects are RAII types that always have to be bound to a "
+    "variable") TimeBlockAndLog {
+  // NOTE: The parameters are unused, but they may not be marked as
+  // `[[maybe_unused]]`, because GCC 8 (which is used by the C++17 CI job)
+  // cannot parse an attribute at the beginning of a parameter declaration of a
+  // constructor, so we discard them explicitly instead.
+  explicit TimeBlockAndLog(std::string message, Callback callback = {}) {
+    (void)message;
+    (void)callback;
+  }
+
+  // The semantics of copying/moving this class are unclear and copying/moving
+  // is not needed for the typical usage, so those operations are deleted.
+  TimeBlockAndLog(const TimeBlockAndLog&) = delete;
+  TimeBlockAndLog& operator=(const TimeBlockAndLog&) = delete;
 };
 #endif
 
 }  // namespace timer
 using timer::TimeBlockAndLog;
 using timer::Timer;
+
+// Unix-epoch milliseconds for a wall-clock instant; used to serialize
+// timestamps (e.g. in the query-event and resource-usage logs).
+inline int64_t epochMillis(std::chrono::system_clock::time_point tp) noexcept {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             tp.time_since_epoch())
+      .count();
+}
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_TIMER_H

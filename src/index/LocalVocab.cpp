@@ -5,7 +5,7 @@
 
 #include "index/LocalVocab.h"
 
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
@@ -55,6 +55,20 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(
 LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(
     LocalVocabEntry&& word) {
   return getIndexAndAddIfNotContainedImpl(std::move(word));
+}
+
+// _____________________________________________________________________________
+Id LocalVocab::getIdAndAddIfNotContained(const LocalVocabEntry& word) {
+  // `positionInVocab` returns a half-open range that is at most one wide, so
+  // `lowerBound != upperBound` means that `word` does have a representation
+  // outside of a local vocab, and the bits of `lowerBound` then are exactly the
+  // corresponding `Id`: a `VocabIndex` if `word` is in the vocabulary of the
+  // index, an `EncodedVal` if it is directly encodable (`EncodedIriManager`).
+  auto [lowerBound, upperBound] = word.positionInVocab();
+  if (lowerBound != upperBound) {
+    return Id::fromBits(lowerBound.get());
+  }
+  return Id::makeFromLocalVocabIndex(getIndexAndAddIfNotContained(word));
 }
 
 // _____________________________________________________________________________

@@ -8,6 +8,8 @@
 #include "engine/Load.h"
 
 #include "global/RuntimeParameters.h"
+#include "index/TripleComponentConversions.h"
+#include "parser/BlankNodeAdder.h"
 #include "util/http/HttpUtils.h"
 
 // _____________________________________________________________________________
@@ -15,9 +17,7 @@ Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
            SendRequestType getResultFunction)
     : Operation(qec),
       loadClause_(std::move(loadClause)),
-      getResultFunction_(std::move(getResultFunction)),
-      loadResultCachingEnabled_(
-          getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>()) {}
+      getResultFunction_(std::move(getResultFunction)) {}
 
 // _____________________________________________________________________________
 std::string Load::getCacheKeyImpl() const {
@@ -147,10 +147,19 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
     body.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
   }
   parser.setInputStream(body);
-  LocalVocab lv;
+  // The RDF parsers represent blank nodes as plain strings, which the
+  // conversions in `TripleComponentConversions.h` cannot handle. The
+  // `BlankNodeAdder` maps them to blank node `Id`s, consistently within this
+  // `LOAD` and distinct from the blank nodes of any other operation. Its
+  // `LocalVocab` also holds the blank node blocks alive, so it is the
+  // `LocalVocab` of the result.
+  BlankNodeAdder blankNodeAdder{getIndex().getBlankNodeManager(),
+                                getExecutionContext()->getAllocator()};
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
-  auto toId = [this, &lv](TripleComponent&& tc) {
-    return std::move(tc).toValueId(getIndex(), lv);
+  auto toId = [this, &blankNodeAdder](TripleComponent&& tc) {
+    auto component = blankNodeAdder.resolveParsedComponent(std::move(tc));
+    return toValueId(std::move(component), getIndex(),
+                     blankNodeAdder.localVocab_);
   };
   for (auto& triple : parser.parseAndReturnAllTriples()) {
     result.push_back(
@@ -159,7 +168,8 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
                    toId(std::move(triple.object_))});
     checkCancellation();
   }
-  return Result{std::move(result), resultSortedOn(), std::move(lv)};
+  return Result{std::move(result), resultSortedOn(),
+                std::move(blankNodeAdder.localVocab_)};
 }
 
 // _____________________________________________________________________________
@@ -184,7 +194,9 @@ void Load::throwErrorWithContext(std::string_view msg,
 }
 
 // _____________________________________________________________________________
-bool Load::canResultBeCachedImpl() const { return loadResultCachingEnabled_; }
+bool Load::isDeterministicImpl() const {
+  return getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>();
+}
 
 // _____________________________________________________________________________
 void Load::resetGetResultFunctionForTesting(SendRequestType func) {

@@ -13,6 +13,7 @@
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/TripleComponent.h"
 
 namespace ad_utility::testing {
@@ -25,7 +26,7 @@ class LazyJoinTestHelper {
 
   // Convert a TripleComponent to a ValueId.
   Id toValueId(const TripleComponent& tc) const {
-    return tc.toValueId(qec_->getIndex()).value();
+    return ::toValueId(tc, qec_->getIndex()).value();
   }
 
   // Create an id table with a single column from a vector of TripleComponents.
@@ -57,10 +58,10 @@ class LazyJoinTestHelper {
   // size.
   void setupQecWithKnowledgeGraph(
       const std::string& kg,
-      std::optional<ad_utility::MemorySize> blockSize = std::nullopt) {
+      std::optional<size_t> rowsPerBlock = std::nullopt) {
     TestIndexConfig config{kg};
-    if (blockSize.has_value()) {
-      config.blocksizePermutations = blockSize.value();
+    if (rowsPerBlock.has_value()) {
+      config.rowsPerBlock = rowsPerBlock.value();
     }
     qec_ = getQec(std::move(config));
   }

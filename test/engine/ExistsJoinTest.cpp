@@ -75,7 +75,7 @@ void testExistsFromIdTable(
       ExistsJoin{qec, makeChild(left), makeChild(right), V{"?exists"}};
   EXPECT_EQ(exists.getResultWidth(), left.numColumns() + 1);
   auto res = exists.computeResultOnlyForTesting();
-  const auto& table = res.idTable();
+  const auto& table = res.idTableView();
   ASSERT_EQ(table.numRows(), left.size());
   expected.addEmptyColumn();
   ql::ranges::transform(expectedAsBool, expected.getColumn(2).begin(),
@@ -148,7 +148,7 @@ void testExistsJoin(
       expected.insertAtEnd(idTable);
     }
 
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
   }
 }
 
@@ -240,7 +240,7 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
         Variable{"?result"}};
     auto result = existsJoin.computeResultOnlyForTesting(true);
     ASSERT_TRUE(result.isFullyMaterialized());
-    EXPECT_EQ(result.idTable(), expected);
+    EXPECT_EQ(result.idTableView(), expected);
     EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
                 ::testing::UnorderedElementsAre(entryA));
     const auto& runtimeInfo =
@@ -301,7 +301,7 @@ TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
     auto result = existsJoin.computeResultOnlyForTesting(requestLaziness);
     ASSERT_NE(result.isFullyMaterialized(), requestLaziness);
     if (result.isFullyMaterialized()) {
-      EXPECT_EQ(result.idTable(), expected);
+      EXPECT_EQ(result.idTableView(), expected);
       EXPECT_THAT(result.localVocab().getAllWordsForTesting(),
                   ::testing::UnorderedElementsAre(entryA));
     } else {
@@ -842,7 +842,9 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
       parsedQuery::BasicGraphPattern{
           {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
                         TripleComponent{Variable{"?b"}}}}});
-  // Only add ?a to see if ?b remains hidden.
+  // Only add ?a (and select it via `*`, exactly as the parser does) to see if
+  // ?b remains hidden.
+  query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});
 
   sparqlExpression::SparqlExpressionPimpl pimpl{
@@ -862,6 +864,41 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
 }
 
 // _____________________________________________________________________________
+TEST(ExistsJoin, addExistsJoinsToSubtreeSkipsAlreadyHandledExists) {
+  auto* qec = getQec();
+
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+
+  ParsedQuery query;
+  query._rootGraphPattern._graphPatterns.push_back(
+      parsedQuery::BasicGraphPattern{
+          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                        TripleComponent{Variable{"?b"}}}}});
+  // Select the visible variables via `*`, exactly as the parser does.
+  query.selectClause().setAsterisk();
+  query.selectClause().addVisibleVariable(Variable{"?a"});
+
+  // The descriptor is the original text of the expression, exactly as the
+  // parser stores it.
+  sparqlExpression::SparqlExpressionPimpl pimpl{
+      std::make_shared<sparqlExpression::ExistsExpression>(std::move(query)),
+      "EXISTS { ?a <something> ?b }"};
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto tree = ExistsJoin::addExistsJoinsToSubtree(pimpl, subtree, qec, handle);
+  EXPECT_NE(tree, subtree);
+
+  // Applying the same `EXISTS` to a subtree that already contains its variable
+  // must not add a second `ExistsJoin`. This happens for `FILTER`s that are
+  // applied multiple times, for example in the presence of `OPTIONAL` joins.
+  EXPECT_EQ(
+      ExistsJoin::addExistsJoinsToSubtree(pimpl, tree, qec, std::move(handle)),
+      tree);
+}
+
+// _____________________________________________________________________________
 TEST(ExistsJoin, cacheKeyDiffersForDifferentJoinColumns) {
   auto* qec = getQec();
 
@@ -875,6 +912,8 @@ TEST(ExistsJoin, cacheKeyDiffersForDifferentJoinColumns) {
           {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
                         TripleComponent{Variable{"?b"}}}}});
 
+  // Select the visible variables via `*`, exactly as the parser does.
+  query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});
 
   sparqlExpression::SparqlExpressionPimpl pimpl1{

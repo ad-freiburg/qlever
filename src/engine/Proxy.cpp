@@ -20,6 +20,8 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
+#include "index/TripleComponentConversions.h"
+#include "parser/BlankNodeAdder.h"
 #include "util/Exception.h"
 #include "util/LazyJsonParser.h"
 #include "util/SparqlJsonBindingUtils.h"
@@ -142,11 +144,16 @@ uint64_t Proxy::getSizeEstimateBeforeLimit() {
 size_t Proxy::getCostEstimate() { return 10 * getSizeEstimateBeforeLimit(); }
 
 // ____________________________________________________________________________
-std::vector<QueryExecutionTree*> Proxy::getChildren() {
+qlm::vector<QueryExecutionTree*> Proxy::getChildrenImpl() const {
   if (childOperation_.has_value()) {
-    return {childOperation_.value().get()};
+    return {{childOperation_.value().get()}, allocator()};
   }
-  return {};
+  return {{}, allocator()};
+}
+
+// ____________________________________________________________________________
+bool Proxy::isDeterministicImpl() const {
+  return getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>();
 }
 
 // ____________________________________________________________________________
@@ -208,7 +215,7 @@ std::string Proxy::serializeInputAsJson(const Result& childResult) const {
 
   // Build the "results.bindings" array.
   nlohmann::json bindings = nlohmann::json::array();
-  const auto& idTable = childResult.idTable();
+  const auto& idTable = childResult.idTableView();
   const auto& localVocab = childResult.localVocab();
 
   for (size_t row = 0; row < idTable.size(); ++row) {
@@ -288,7 +295,7 @@ std::string Proxy::serializeInputAsJson(const Result& childResult) const {
 // ____________________________________________________________________________
 IdTable Proxy::joinResponseWithChild(const IdTable& responseTable,
                                      ColumnIndex responseRowCol,
-                                     const IdTable& childTable,
+                                     const IdTableView<0>& childTable,
                                      const LocalVocab& childLocalVocab,
                                      LocalVocab& resultLocalVocab) const {
   // Result width: child columns + output columns + row variable.
@@ -420,7 +427,8 @@ Result Proxy::computeResult([[maybe_unused]] bool requestLaziness) {
   size_t responseWidth = responseVarNames.size();
   IdTable responseTable{responseWidth, getExecutionContext()->getAllocator()};
   LocalVocab responseLocalVocab;
-  ad_utility::HashMap<std::string, Id> blankNodeMap;
+  BlankNodeAdder blankNodeAdder{getIndex().getBlankNodeManager(),
+                                getExecutionContext()->getAllocator()};
 
   for (const nlohmann::json& partJson : body) {
     checkCancellation();
@@ -447,17 +455,19 @@ Result Proxy::computeResult([[maybe_unused]] bool requestLaziness) {
         TripleComponent tc;
         if (binding.contains(varName)) {
           tc = sparqlJsonBindingUtils::bindingToTripleComponent(
-              binding[varName], getIndex(), blankNodeMap, &responseLocalVocab,
-              getIndex().getBlankNodeManager());
+              binding[varName], getIndex(), blankNodeAdder);
         } else {
           tc = TripleComponent::UNDEF();
         }
-        Id id = std::move(tc).toValueId(getIndex(), responseLocalVocab);
+        Id id = toValueId(std::move(tc), getIndex(), responseLocalVocab);
         responseTable(rowIdx, colIdx) = id;
       }
       checkCancellation();
     }
   }
+  // The blank node `Id`s of the response are owned by the `LocalVocab` of the
+  // `blankNodeAdder`.
+  responseLocalVocab.mergeWith(blankNodeAdder.localVocab_);
 
   // If there's no child (no input variables), return output columns + row
   // variable.
@@ -483,7 +493,7 @@ Result Proxy::computeResult([[maybe_unused]] bool requestLaziness) {
   // Join the response with the child result based on the row variable.
   LocalVocab resultLocalVocab = std::move(responseLocalVocab);
   IdTable resultTable =
-      joinResponseWithChild(responseTable, 0, childResult->idTable(),
+      joinResponseWithChild(responseTable, 0, childResult->idTableView(),
                             childResult->localVocab(), resultLocalVocab);
 
   return {std::move(resultTable), resultSortedOn(),

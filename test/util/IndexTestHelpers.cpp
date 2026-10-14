@@ -4,29 +4,54 @@
 
 #include "IndexTestHelpers.h"
 
+#include <absl/base/no_destructor.h>
+#include <absl/strings/str_cat.h>
+
+#include <array>
+#include <boost/asio/thread_pool.hpp>
+#include <memory>
+#include <utility>
+
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
+#include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
+#include "global/FileSuffixConstants.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
+#include "index/TripleComponentConversions.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/FilesystemHelpers.h"
 #include "util/ProgressBar.h"
 
 using qlever::TextScoringMetric;
 namespace ad_utility::testing {
 
 // ______________________________________________________________
+qlever::Executor singleThreadExecutor() {
+  // Deliberately never destroyed (like the global thread pool, see
+  // `util/GlobalExecutor.h`), such that it outlives the static
+  // `QueryExecutionContext`s of `getQec` that refer to it.
+  static absl::NoDestructor<boost::asio::thread_pool> pool{1};
+  return pool->get_executor();
+}
+
+// ______________________________________________________________
+qlever::Executor multiThreadExecutor() {
+  // Deliberately never destroyed, see `singleThreadExecutor` above.
+  static absl::NoDestructor<boost::asio::thread_pool> pool{4};
+  return pool->get_executor();
+}
+
+// ______________________________________________________________
 Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
-  EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  // Decrease various default batch sizes such that there are multiple batches
-  // also for the very small test indices (important for test coverage).
-  BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS() = 10;
-  DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
   index.parserBufferSize() =
       parserBufferSize;  // Note that the default value remains unchanged, but
@@ -85,13 +110,13 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
                              &indexImpl](size_t patternIdx, Id id) {
     const auto& permutation =
         indexImpl.getPermutation(Permutation::Enum::PSO).internalPermutation();
-    auto scanResultHasPattern =
-        permutation.scan(permutation.getScanSpecAndBlocks(
-                             ScanSpecificationAsTripleComponent{
-                                 iriOfHasPattern, id, std::nullopt}
-                                 .toScanSpecification(indexImpl),
-                             locatedTriplesSnapshot),
-                         {}, cancellationDummy, locatedTriplesSnapshot);
+    auto scanResultHasPattern = permutation.scan(
+        permutation.getScanSpecAndBlocks(
+            ScanSpecificationAsTripleComponent{iriOfHasPattern, id,
+                                               std::nullopt}
+                .toScanSpecification(indexImpl),
+            locatedTriplesSnapshot),
+        {}, cancellationDummy, locatedTriplesSnapshot, singleThreadExecutor());
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
@@ -113,7 +138,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
                 locatedTriplesSnapshot),
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
-            cancellationDummy, locatedTriplesSnapshot);
+            cancellationDummy, locatedTriplesSnapshot, singleThreadExecutor());
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
           auto patternIdx = row[2].getInt();
@@ -153,35 +178,57 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   // NOTE: The SPO and SOP permutations currently don't have patterns stored.
   // with them.
 }
+
+// Set the global settings that make the index building of the very small test
+// indices exercise the same code paths as that of large indices, and return a
+// cleanup that restores the previous values of these settings when it is
+// destroyed.
+//
+// NOTE: The settings are global, so setting them without such a cleanup would
+// make every test that runs afterwards silently depend on them.
+[[nodiscard]] auto setGlobalIndexBuildingSettingsForTesting() {
+  bool previousIgnoreMemoryLimit =
+      EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING.exchange(true);
+  // Decrease various default batch sizes such that there are multiple batches
+  // also for the very small test indices (important for test coverage).
+  size_t previousProgressBarBatchSize =
+      std::exchange(DEFAULT_PROGRESS_BAR_BATCH_SIZE, 2);
+  return absl::Cleanup{
+      [previousIgnoreMemoryLimit, previousProgressBarBatchSize] {
+        EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING =
+            previousIgnoreMemoryLimit;
+        DEFAULT_PROGRESS_BAR_BATCH_SIZE = previousProgressBarBatchSize;
+      }};
+}
 }  // namespace
 
 // _____________________________________________________________________________
 Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // Ignore the (irrelevant) log output of the index building and loading during
-  // these tests.
-  static std::ostringstream ignoreLogStream;
-  ad_utility::setGlobalLoggingStream(&ignoreLogStream);
+  // these tests. The returned cleanup restores the previously active logging
+  // stream when it goes out of scope at the end of this function.
+  std::ostringstream ignoreLogStream;
+  auto logCleanup = setGlobalLoggingStreamForTesting(&ignoreLogStream);
+  // The returned cleanup likewise restores the previous global settings for the
+  // index building at the end of this function.
+  auto settingsCleanup = setGlobalIndexBuildingSettingsForTesting();
   // Remove previous index files. This is necessary because if we previously
   // built the same index without patterns or all 6 permutations, we wouldn't
   // overwrite the patterns or the missing permutations. This would lead to a
   // false positive when we later check that the patterns or the missing
   // permutations are not present, because they would actually be present from
   // the previous index build.
-  namespace fs = std::filesystem;
-  for (const auto& entry : fs::directory_iterator(fs::current_path())) {
-    if (!entry.is_regular_file()) continue;
-
-    std::string name = entry.path().filename().string();
-
-    if (ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
-        ql::starts_with(name, indexBasename + ".index") ||
-        ql::starts_with(name, indexBasename + ".internal.index") ||
-        ql::starts_with(name, indexBasename + CONFIGURATION_FILE) ||
-        ql::starts_with(name, indexBasename + ".update-triples") ||
-        ql::starts_with(name, indexBasename + ".allocated-graphs-state")) {
-      ad_utility::deleteFile(entry.path());
-    }
-  }
+  namespace fs = ql::filesystem;
+  static constexpr std::array<std::string_view, 6> suffixes{
+      VOCAB_SUFFIX,       ".index",          ".internal.index",
+      CONFIGURATION_FILE, ".update-triples", ".allocated-graphs-state"};
+  qlever::util::deleteFilesInDirectory(
+      fs::current_path(), [&indexBasename](const auto& path) {
+        std::string name = path.filename().string();
+        return ql::ranges::any_of(suffixes, [&](std::string_view suffix) {
+          return ql::starts_with(name, absl::StrCat(indexBasename, suffix));
+        });
+      });
   std::string inputFilename = indexBasename + ".ttl";
   if (!c.turtleInput.has_value()) {
     c.turtleInput =
@@ -205,16 +252,18 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       settingsJson["prefixes-external"] = std::vector<std::string>{""};
       settingsJson["languages-internal"] = std::vector<std::string>{""};
     }
+    for (const auto& [key, value] : c.additionalSettings) {
+      settingsJson[key] = nlohmann::json::parse(value);
+    }
     settingsFile << settingsJson.dump();
   }
   {
     Index index = makeIndexWithTestSettings(c.parserBufferSize);
-    // This is enough for 2 triples per block. This is deliberately chosen as a
-    // small value, s.t. the tiny knowledge graphs from unit tests also contain
-    // multiple blocks. Should this value or the semantics of it (how many
-    // triples it may store) ever change, then some unit tests might have to be
-    // adapted.
-    index.blocksizePermutationsPerColumn() = c.blocksizePermutations;
+    // By default 2 triples per block. This is deliberately chosen as a small
+    // value, s.t. the tiny knowledge graphs from unit tests also contain
+    // multiple blocks. Should this value ever change, then some unit tests
+    // might have to be adapted.
+    index.rowsPerBlock() = c.rowsPerBlock;
     index.setOnDiskBase(indexBasename);
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
@@ -222,15 +271,25 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.addHasWordTriples() = c.addHasWordTriples;
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
-    // randomly choose one of the vocabulary implementations
-    index.getImpl().setVocabularyTypeForIndexBuilding(
-        c.vocabularyType.has_value() ? c.vocabularyType.value()
-                                     : VocabularyType::random());
-    if (c.encodedPrefixesWithoutAngleBrackets.has_value()) {
-      index.getImpl().setPrefixesForEncodedValues(
-          std::move(c.encodedPrefixesWithoutAngleBrackets.value()));
+    if (c.parseInParallel.has_value()) {
+      spec.parseInParallel_ = c.parseInParallel.value();
+      spec.parseInParallelSetExplicitly_ = true;
     }
-    index.createFromFiles({spec});
+    // Use the explicitly configured vocabulary type, or a random one
+    // otherwise.
+    index.getImpl().setVocabularyTypeForIndexBuilding(
+        c.vocabularyType.has_value()
+            ? c.vocabularyType.value()
+            : VocabularyType::randomForIndexBuilding());
+    index.getImpl().setGeoPointEncodingForIndexBuilding(c.geoPointEncoding);
+    if (c.encodedPrefixesWithoutAngleBrackets.has_value() ||
+        !c.encodedIriPatterns.empty()) {
+      index.getImpl().setPrefixesForEncodedValues(
+          std::move(c.encodedPrefixesWithoutAngleBrackets)
+              .value_or(std::vector<std::string>{}),
+          std::move(c.encodedIriPatterns));
+    }
+    index.createFromFiles({spec}, c.numThreads);
     if (c.createTextIndex) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
       throw std::runtime_error("The text index is not available in C++17 mode");
@@ -305,7 +364,11 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   if (c.createTextIndex) {
     index.addTextFromOnDiskIndex();
   }
-  ad_utility::setGlobalLoggingStream(&std::cout);
+
+  if (c.secondaryVocabWords.has_value()) {
+    index.getImpl().setSecondaryVocab(
+        std::make_shared<SecondaryVocabulary>(c.secondaryVocabWords.value()));
+  }
 
   if (c.usePatterns && c.loadAllPermutations) {
     checkConsistencyBetweenPatternPredicateAndAdditionalColumn(index);
@@ -319,7 +382,8 @@ Index makeTestIndex(const std::string& indexBasename, std::string turtle) {
 }
 
 // ________________________________________________________________________________
-QueryExecutionContext* getQec(TestIndexConfig c) {
+QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
+                              TestIndexConfig c) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -355,34 +419,41 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
         std::make_unique<QueryExecutionContext>(
             index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
             SortPerformanceEstimator{}, namedCache_.get(),
-            materializedViewsManager_);
+            materializedViewsManager_, singleThreadExecutor());
   };
 
-  static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
+  static ad_utility::HashMap<std::pair<TestIndexConfig, std::string>, Context>
+      contextMap;
 
-  if (!contextMap.contains(c)) {
+  if (!contextMap.contains({c, indexBasenamePrefix})) {
     // We have to pass `false` to `gtestCurrentTestName` to make this work for
     // the benchmarking code (e.g. `benchmark/GroupByHashMapBenchmark.cpp`) that
     // also calls `getQec()` outside a running gtest.
     std::string testIndexBasename =
-        absl::StrCat("_staticGlobalTestIndex", gtestCurrentTestName(false), "_",
+        absl::StrCat(indexBasenamePrefix, gtestCurrentTestName(false), "_",
                      contextMap.size());
     contextMap.emplace(
-        c, Context{TypeErasedCleanup{[testIndexBasename]() {
-                     for (const std::string& indexFilename :
-                          getAllIndexFilenames(testIndexBasename)) {
-                       // Don't log when a file can't be deleted,
-                       // because the logging might already be
-                       // destroyed.
-                       ad_utility::deleteFile(indexFilename, false);
-                     }
-                   }},
-                   std::make_shared<Index>(makeTestIndex(testIndexBasename, c)),
-                   std::make_unique<QueryResultCache>(),
-                   std::make_unique<NamedResultCache>(),
-                   std::make_shared<MaterializedViewsManager>()});
+        std::pair<TestIndexConfig, std::string>{c, indexBasenamePrefix},
+        Context{TypeErasedCleanup{[testIndexBasename]() {
+                  for (const std::string& indexFilename :
+                       getAllIndexFilenames(testIndexBasename)) {
+                    // Don't log when a file can't be deleted,
+                    // because the logging might already be
+                    // destroyed.
+                    ad_utility::deleteFile(indexFilename, false);
+                  }
+                }},
+                std::make_shared<Index>(makeTestIndex(testIndexBasename, c)),
+                std::make_unique<QueryResultCache>(),
+                std::make_unique<NamedResultCache>(),
+                std::make_shared<MaterializedViewsManager>()});
   }
-  return contextMap.at(c).qec_.get();
+  return contextMap.at({c, indexBasenamePrefix}).qec_.get();
+}
+
+// ________________________________________________________________________________
+QueryExecutionContext* getQec(TestIndexConfig c) {
+  return getQec("_staticGlobalTestIndex", std::move(c));
 }
 
 // _____________________________________________________________________________
@@ -405,7 +476,7 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
         return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    auto id = literalOrIri.toValueId(index);
+    auto id = toValueId(literalOrIri, index);
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };

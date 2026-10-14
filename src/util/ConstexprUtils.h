@@ -18,6 +18,21 @@
 
 namespace ad_utility {
 
+// True iff all the elements of the given `array` are distinct. Note that this
+// needs a quadratic number of comparisons, which is fine for the small
+// compile-time arrays that this is intended for.
+template <typename T, size_t N>
+constexpr bool allDistinct(const std::array<T, N>& array) {
+  for (size_t i = 0; i < N; ++i) {
+    for (size_t j = i + 1; j < N; ++j) {
+      if (array[i] == array[j]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 // Compute `base ^ exponent` where `^` denotes exponentiation. This is consteval
 // because for all runtime calls, a better optimized algorithm from the standard
 // library should be chosen.
@@ -33,7 +48,7 @@ constexpr auto pow(T base, int exponent) {
     result *= base;
   }
   return result;
-};
+}
 
 /*
  * @brief A compile time for loop, which passes the loop index to the
@@ -81,10 +96,10 @@ CPP_concept InvocableWithCase =
 template <auto FirstCase, auto... Cases>
 struct ConstexprSwitch {
   CPP_template(typename FuncType, typename ValueType, typename... Args)(
-      requires((sizeof...(Cases) == 0) ||
-               ad_utility::SameAsAny<decltype(FirstCase), decltype(Cases)...>)
-          CPP_and ql::concepts::equality_comparable_with<decltype(FirstCase),
-                                                         decltype(FirstCase)>
+      requires ql::concepts::equality_comparable_with<ValueType,
+                                                      decltype(FirstCase)>
+          CPP_and(ql::concepts::equality_comparable_with<ValueType,
+                                                         decltype(Cases)>&&...)
               CPP_and InvocableWithCase<FuncType, FirstCase, Args...>
                   CPP_and(InvocableWithCase<FuncType, Cases,
                                             Args...>&&...)) constexpr auto
@@ -186,7 +201,7 @@ struct ValueSequenceImpl {};
 
 template <typename T, const T&... values>
 struct ValueSequenceRefImpl {};
-};  // namespace detail
+}  // namespace detail
 
 template <typename T, T... values>
 using ValueSequence = detail::ValueSequenceImpl<T, values...>;
@@ -244,7 +259,7 @@ CPP_template(typename Int, size_t NumIntegers)(
     value /= numValues;
   }
   return res;
-};
+}
 
 // Store the result of `integerToArray` in a `constexpr` variable which has
 // linkage, and can therefore be used in C++17 mode as a `const&` template
@@ -298,8 +313,8 @@ constexpr void forEachTypeInParameterPack(const F& lambda) {
 
 // Same as the function above, but the types are passed to the lambda as a first
 // argument `ql::type_identity<T>{}`.
-template <typename... Ts>
-constexpr void forEachTypeInParameterPackWithTI(const auto& lambda) {
+template <typename... Ts, typename Lambda>
+constexpr void forEachTypeInParameterPackWithTI(const Lambda& lambda) {
   (lambda(use_type_identity::ti<Ts>), ...);
 }
 
@@ -326,7 +341,8 @@ struct forEachTypeInTemplateTypeWithTIImpl;
 
 template <template <typename...> typename Template, typename... Ts>
 struct forEachTypeInTemplateTypeWithTIImpl<Template<Ts...>> {
-  constexpr void operator()(const auto& lambda) const {
+  template <typename Lambda>
+  constexpr void operator()(const Lambda& lambda) const {
     forEachTypeInParameterPackWithTI<Ts...>(lambda);
   }
 };
@@ -343,9 +359,9 @@ constexpr void forEachTypeInTemplateType(const F& lambda) {
 
 // Same as the function above, but the template type is passed in as a
 // `ql::type_identity<TemplateType>`.
-template <typename TemplateType>
+template <typename TemplateType, typename Lambda>
 constexpr void forEachTypeInTemplateTypeWithTI(
-    use_type_identity::TI<TemplateType>, const auto& lambda) {
+    use_type_identity::TI<TemplateType>, const Lambda& lambda) {
   detail::forEachTypeInTemplateTypeWithTIImpl<TemplateType>{}(lambda);
 }
 
@@ -363,6 +379,29 @@ template <typename T, T... values, typename F>
 constexpr void forEachValueInValueSequence(std::integer_sequence<T, values...>,
                                            F&& lambda) {
   (lambda.template operator()<values>(), ...);
+}
+
+namespace detail {
+template <const auto& tuple, typename Func, typename Value, std::size_t... Is,
+          typename... Args>
+constexpr decltype(auto) constexprSwitchFromTupleImpl(
+    Func&& f, const Value& v, std::index_sequence<Is...>, Args&&... args) {
+  return ConstexprSwitch<std::get<Is>(tuple)...>{}(AD_FWD(f), v,
+                                                   AD_FWD(args)...);
+}
+}  // namespace detail
+
+// Similar to `ConstexprSwitch` above, but the compile time constants are passed
+// in as a tuple or array (anything that supports `std::tuple_size` and
+// `std::get`).
+template <const auto& tuple, typename Func, typename Value, typename... Args>
+constexpr decltype(auto) constexprSwitchFromTuple(Func&& f, const Value& v,
+                                                  Args&&... args) {
+  return detail::constexprSwitchFromTupleImpl<tuple>(
+      AD_FWD(f), v,
+      std::make_index_sequence<
+          std::tuple_size_v<std::decay_t<decltype(tuple)>>>{},
+      AD_FWD(args)...);
 }
 
 }  // namespace ad_utility

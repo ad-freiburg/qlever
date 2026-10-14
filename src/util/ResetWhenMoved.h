@@ -16,7 +16,7 @@ namespace ad_utility {
 // reset when the data structure is moved. When using `ResetWhenMoved` for such
 // members, then often the defaulted move constructors and move assignment
 // operators will have the correct semantics. For example usages see
-// `MmapVector.h` and `IdTable.h`.
+// `IdTable.h`.
 template <typename T, T DefaultValue>
 struct ResetWhenMoved {
   T value_ = DefaultValue;

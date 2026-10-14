@@ -1,0 +1,25 @@
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix geo: <http://www.opengis.net/ont/geosparql#> .
+@prefix ex: <http://example.org/> .
+@prefix id: <https://example.org/id/> .
+
+ex:s1 ex:label "alpha" .
+ex:s1 ex:label "beta"@en .
+ex:s1 ex:int "42"^^xsd:int .
+ex:s1 ex:double "3.5"^^xsd:double .
+ex:s1 ex:bool "true"^^xsd:boolean .
+ex:s1 ex:date "2020-05-17"^^xsd:date .
+ex:s1 ex:dateTime "2021-07-01T12:34:56"^^xsd:dateTime .
+ex:s1 ex:geometry "POINT(2.294481 48.858370)"^^geo:wktLiteral .
+ex:s1 ex:related id:123 .
+id:123 ex:label "encoded one" .
+id:123 ex:related id:456 .
+id:456 ex:int "-17"^^xsd:int .
+ex:s2 ex:connector _:b1 .
+_:b1 ex:label "blank one" .
+_:b1 ex:related ex:s1 .
+ex:s2 ex:label "gamma delta epsilon" .
+ex:s2 ex:geometry "POINT(7.835 47.999)"^^geo:wktLiteral .
+ex:s3 ex:int "1000000"^^xsd:int .
+ex:s3 ex:double "-0.125"^^xsd:double .
+ex:s3 ex:label "zeta" .

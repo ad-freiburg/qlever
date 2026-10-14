@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "util/ConstructDeduplicationMode.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
@@ -75,7 +76,7 @@ CPP_template(typename Type, typename FromString, typename ToString)(
   /// Construction is only allowed using an initial parameter value
   Parameter() = delete;
   explicit Parameter(Type initialValue, std::string name)
-      : value_{std::move(initialValue)}, name_{std::move(name)} {};
+      : value_{std::move(initialValue)}, name_{std::move(name)} {}
 
   /// Copying is disabled, but moving is ok
   Parameter(const Parameter& rhs) = delete;
@@ -243,6 +244,11 @@ using DurationParameter = Parameter<ParseableDuration<DurationType>,
 using SpaceSeparatedStrings =
     Parameter<std::vector<std::string>, n::SpaceSeparatedStringsToVector,
               n::VectorToSpaceSeparatedStrings>;
+
+using DeduplicationModeParameter =
+    Parameter<DeduplicationMode, DeduplicationModeFromString,
+              DeduplicationModeToString>;
+
 }  // namespace detail::parameterShortNames
 }  // namespace ad_utility
 

@@ -215,6 +215,6 @@ CPP_template(typename T, typename F)(
   return InputRangeTypeErased{std::make_unique<CallbackToRangeAdapter>(
       std::move(functionWithCallback))};
 }
-};  // namespace ad_utility
+}  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_GENERATORS_H

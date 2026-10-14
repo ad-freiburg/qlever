@@ -32,7 +32,6 @@ class ExternalValues : private Values, virtual public Operation {
  public:
   // Inherit public member functions from `Values` that are not overridden.
   using Values::computeVariableToColumnMap;
-  using Values::getChildren;
   using Values::getCostEstimate;
   using Values::getMultiplicity;
   using Values::getResultWidth;
@@ -56,9 +55,6 @@ class ExternalValues : private Values, virtual public Operation {
   // in the new values match the existing variables.
   void updateValues(parsedQuery::SparqlValues newValues);
 
-  // Override to ensure external values are never cached.
-  bool canResultBeCachedImpl() const override { return false; }
-
   // Override to ensure external values are never considered empty.
   bool knownEmptyResult() override { return false; }
 
@@ -74,6 +70,11 @@ class ExternalValues : private Values, virtual public Operation {
   }
 
  private:
+  // External values are injected at runtime and may change between invocations,
+  // so this operation is non-deterministic. This also ensures its result is
+  // never stored in the cache (see `Operation::canResultBeCached()`).
+  [[nodiscard]] bool isDeterministicImpl() const override { return false; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 };
 

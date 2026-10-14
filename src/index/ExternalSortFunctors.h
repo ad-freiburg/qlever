@@ -16,16 +16,18 @@
 #include <tuple>
 #include <vector>
 
-#include "global/Id.h"
-
-#ifdef QLEVER_CHEAPER_COMPILATION
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
-#endif
 
 template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
   using T = std::array<Id, 3>;
+
+  static constexpr auto compare = [](const Id& a, const Id& b) {
+    return a.compareWithoutLocalVocab(b);
+  };
+
   // comparison function
   template <typename T1, typename T2>
   bool operator()(const T1& a, const T2& b) const {
@@ -35,7 +37,7 @@ struct SortTriple {
       AD_EXPENSIVE_CHECK(a.size() >= ADDITIONAL_COLUMN_GRAPH_ID &&
                          b.size() >= ADDITIONAL_COLUMN_GRAPH_ID);
     }
-    constexpr auto compare = &Id::compareWithoutLocalVocab;
+
     // TODO<joka921> The manual invoking is ugly, probably we could use
     // `ql::ranges::lexicographical_compare`, but we have to carefully measure
     // that this change doesn't slow down the index build.
@@ -70,7 +72,8 @@ using SortByOSP = SortTriple<2, 0, 1>;
 
 struct SortText {
   // < comparator
-  bool operator()(const auto& a, const auto& b) const {
+  template <typename A, typename B>
+  bool operator()(const A& a, const B& b) const {
     return ql::ranges::lexicographical_compare(
         a, b, [](const Id& x, const Id& y) {
           return x.compareWithoutLocalVocab(y) < 0;
@@ -103,7 +106,6 @@ struct SortByColumns {
   }
 };
 
-#ifdef QLEVER_CHEAPER_COMPILATION
 // Extern-template declarations for the `CompressedExternalIdTableSorter`
 // specialisations used during index building. Without these declarations every
 // `TU` that includes `IndexImpl.h` or `PatternCreator.h` would instantiate all
@@ -114,7 +116,7 @@ struct SortByColumns {
 // NOTE: If you add a new `CompressedExternalIdTableSorter` specialisation used
 // by index building, you must add a matching explicit instantiation in
 // `CompressedExternalIdTableSorterInstantiations.cpp`, otherwise the build will
-// fail at link time when `QLEVER_CHEAPER_COMPILATION` is set.
+// fail at link time.
 namespace ad_utility {
 
 extern template class CompressedExternalIdTableSorter<SortByPSONoGraphColumn,
@@ -132,6 +134,5 @@ extern template class CompressedExternalIdTableSorter<
 extern template class CompressedExternalIdTableSorter<SortText, 5>;
 
 }  // namespace ad_utility
-#endif  // QLEVER_CHEAPER_COMPILATION
 
 #endif  // QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H

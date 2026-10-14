@@ -19,7 +19,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <vector>
 
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -47,7 +47,7 @@ class BlankNodeManager {
   const uint64_t minIndex_;
 
   // Number of indices that make up a single block.
-  static constexpr uint blockSize_ = 1000;
+  static constexpr uint32_t blockSize_ = 1000;
 
   // Number of blocks available.
   const uint64_t totalAvailableBlocks_ =

@@ -28,7 +28,7 @@ using namespace ad_utility::detail::parallel_wkt_parser;
 
 // _____________________________________________________________________________
 TEST(SpatialJoinParser, AddValueIdToQueue) {
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
 
   // Prepare test index
   auto kg = buildLibSJTestDataset();
@@ -43,7 +43,8 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   // Prepare sweeper
   SweeperResult results;
   SweeperDistResult resultDists;
-  auto cfg = makeSweeperCfg({INTERSECTS}, results, resultDists, -1);
+  auto cfg = makeSweeperCfg(LibSpatialJoinConfig{INTERSECTS}, results,
+                            resultDists, -1);
   std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
   sj::Sweeper sweeper{cfg, ".", sweeperPath};
 

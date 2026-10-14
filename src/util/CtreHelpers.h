@@ -41,13 +41,13 @@ constexpr ctll::fixed_string<A + B - 1> operator+(
 
 /// Create a regex group by putting the argument in parentheses
 template <size_t N>
-static constexpr auto grp(const ctll::fixed_string<N>& s) {
+constexpr auto grp(const ctll::fixed_string<N>& s) {
   return ctll::fixed_string("(") + s + ctll::fixed_string(")");
 }
 
 /// Create a regex character class by putting the argument in square brackets
 template <size_t N>
-static constexpr auto cls(const ctll::fixed_string<N>& s) {
+constexpr auto cls(const ctll::fixed_string<N>& s) {
   return ctll::fixed_string("[") + s + ctll::fixed_string("]");
 }
 

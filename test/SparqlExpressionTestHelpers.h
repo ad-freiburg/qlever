@@ -45,7 +45,7 @@ struct TestContext {
   sparqlExpression::EvaluationContext context{
       *qec,
       varToColMap,
-      table,
+      table.asStaticView<0>(),
       qec->getAllocator(),
       localVocab,
       std::make_shared<ad_utility::CancellationHandle<>>(),
@@ -145,6 +145,7 @@ inline void PrintTo(const SetOfIntervals& set, std::ostream* os) {
   for (auto [first, second] : set._intervals) {
     *os << '{' << first << ", " << second << '}';
   }
+  *os << " of size " << set.size();
 }
 }  // namespace ad_utility
 

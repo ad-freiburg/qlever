@@ -65,15 +65,28 @@ void ScoreData::calculateScoreData(const std::string& docsFileName,
         << wordsNotFoundFromDocuments << std::endl;
   }
   size_t wordsNotFoundFromLiterals = 0;
-  for (VocabIndex index = VocabIndex::make(0); index.get() < vocab.size();
-       index = index.incremented()) {
-    auto text = vocab[index];
-    if (!vocab.isLiteral(index)) {
+  // NOTE: We must iterate via `scanAll()` and not via indices `0, 1, ...,
+  // vocab.size() - 1`, because a `SplitVocabulary` (e.g. for geometries) uses
+  // non-contiguous, marker-encoded indices for its `operator[]`. We also
+  // classify literals lexically (like `TextIndexBuilder` does), and not via
+  // `vocab.isLiteral()`, because the latter only covers the vocabulary's
+  // default (marker-0) sub-vocabulary and would otherwise wrongly skip
+  // literals (e.g. WKT literals) stored in a `SplitVocabulary`'s other
+  // sub-vocabularies.
+  for (const auto& [_, text] : vocab.scanAll()) {
+    if (!Index::Vocab::stringIsLiteral(text)) {
       continue;
     }
     // Reset parameters for loop
     docId = docId.incremented();
-    std::string_view textView = text;
+
+    // Strip the surrounding quotes (and, for a literal with a datatype like a
+    // WKT literal, the datatype IRI) before tokenizing, exactly like
+    // `TextIndexBuilder::wordsInTextRecords` does when building the text
+    // vocabulary from these same literals. Skipping this step would tokenize
+    // the raw vocabulary entry (e.g. including a trailing `^^<...>`) and
+    // produce different words than during vocabulary building.
+    std::string_view textView = stripQuotesAndDatatype(text);
 
     // Parse words in literal
     addDocumentOrLiteralToScoreDataInvertedIndex(textView, docId, textVocab,

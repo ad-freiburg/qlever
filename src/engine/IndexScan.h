@@ -8,7 +8,9 @@
 #include <string>
 
 #include "engine/Operation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/DeltaTriples.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashMap.h"
 
 class SparqlTriple;
@@ -123,17 +125,24 @@ class IndexScan final : public Operation {
   // join between the first column of the result with the `joinColumn`.
   // Requires that the `joinColumn` is sorted, else the behavior is undefined.
   CompressedRelationReader::IdTableGeneratorInputRange
-  lazyScanForJoinOfColumnWithScan(ql::span<const Id> joinColumn) const;
+  lazyScanForJoinOfColumnWithScan(ConstIdColumnRef joinColumn) const;
 
   // Return two generators, the first of which yields exactly the elements of
   // `input` and the second of which yields the matching blocks, skipping the
   // blocks consisting only of rows that don't match the tables yielded by
-  // `input` to speed up join algorithms when no undef values are presend. When
-  // there are undef values, the second generator represents the full index
-  // scan.
+  // `input` to speed up join algorithms when no undef values are present. When
+  // there are undef values or this scan has a LIMIT or OFFSET, the second
+  // generator represents the full index scan.
   std::pair<Result::LazyResult, Result::LazyResult> prefilterTables(
       Result::LazyResult input, ColumnIndex joinColumn,
       bool filterJoinSide = true);
+
+  // Return the root operation of `tree` if it is an `IndexScan` that supports
+  // the prefiltered joins above, else `nullptr`. Scans without variables are
+  // not supported; they read at most one block, as a triple is never split
+  // across blocks, so prefiltering wouldn't help.
+  static std::shared_ptr<IndexScan> getIfSupportsPrefilteredJoin(
+      const QueryExecutionTree& tree);
 
  private:
   // Implementation detail that allows to consume a lazy range from two other
@@ -151,6 +160,11 @@ class IndexScan final : public Operation {
   // yielded by the input wrapped by `innerState`.
   Result::LazyResult createPrefilteredIndexScanSide(
       std::shared_ptr<SharedGeneratorState> innerState);
+
+  // Like `chunkedIndexScan`, but keep the runtime info up to date while the
+  // result is consumed. `numBlocksAll` is the total number of blocks of the
+  // scan.
+  Result::LazyResult chunkedIndexScanWithRuntimeInfo(size_t numBlocksAll);
 
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
   // ALL the `Operations`.
@@ -179,6 +193,16 @@ class IndexScan final : public Operation {
   bool isIndexScanWithNumVariables(size_t target) const override {
     return numVariables() == target;
   }
+
+  // The result of an index scan contains every matching triple (or quad, if a
+  // graph column is present) exactly once, so it is already distinct as soon as
+  // `distinctIndices` covers the identifying columns (the variable columns and
+  // the graph column). This also works when columns were stripped, as long as
+  // no identifying column was stripped away. Scans of materialized views are
+  // never known to be distinct, because they are not deduplicated. See the
+  // implementation for details.
+  bool isDistinctByImpl(
+      const std::vector<ColumnIndex>& distinctIndices) const override;
 
   // Full index scans will never be able to fit in the cache on datasets the
   // size of wikidata, so we don't even need to try and waste performance.
@@ -219,11 +243,15 @@ class IndexScan final : public Operation {
   const Permutation& permutation() const;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   Result computeResult(bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return qlm::vector<QueryExecutionTree*>{allocator()};
+  }
 
   // Compute the size estimate of the index scan, taking delta triples (from
   // the `queryExecutionContext_`) into account. The `bool` is true iff the
@@ -242,9 +270,10 @@ class IndexScan final : public Operation {
   std::string getCacheKeyImpl() const override;
 
   // If `ScanSpecAndBlocks` contains prefiltered `BlockMetadataRanges`, the
-  // result of this `IndexScan` shouldn't be cached. Thus, this method returns
-  // `false` if prefilterd `BlockMetadataRanges` are contained.
-  bool canResultBeCachedImpl() const override;
+  // result of this `IndexScan` is only a subset of the result associated with
+  // its cache key (which is that of the unfiltered scan). Thus, this method
+  // returns `false` if prefiltered `BlockMetadataRanges` are contained.
+  bool resultDoesMatchCacheKey() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -276,11 +305,24 @@ class IndexScan final : public Operation {
           std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
 
+  // Return the columns of the "full" result (without any columns stripped) that
+  // hold the variables of the scan triple and the graph, in this order. These
+  // are exactly the columns by which the full result is sorted. The combination
+  // of the values in these columns is unique for each row of the full result.
+  std::vector<ColumnIndex> variableAndGraphColumns() const;
+
   // If the `varsToKeep_` member is set, meaning that this `IndexScan` only
   // returns a subset of this actual columns, return the subset of columns that
   // has to be applied to the "full" result (without any columns stripped) to
   // get the final result. Throws if `varsToKee_` is `nullopt`.
   std::vector<ColumnIndex> getSubsetForStrippedColumns() const;
+
+  // Helpers for `determineMultiplicities`: Return the multiplicities of the
+  // full result (without any columns stripped) for a scan of a regular index
+  // permutation or of a materialized view, respectively.
+  std::vector<float> computeMultiplicitiesForIndex() const;
+  std::vector<float> computeMultiplicitiesForView(
+      const MaterializedView& view) const;
 
   // Return a lambda that takes an `idTable` that has the result without any
   // columns stripped, and applies the column subset that leads to the correct
@@ -311,10 +353,10 @@ class IndexScan final : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
 
-  // Returns a `VariableToColumnMap` that maps all visible variables of this
-  // `IndexScan` not to result column indices but to column indices in the
-  // underlying `Permutation`. This differs from the regular
-  // `VariableToColumnMap` if some columns are not read.  Used for
+  // Returns a `VariableToColumnMap` that maps all variables read by this
+  // `IndexScan` (also those hidden by a subquery) not to result column indices
+  // but to column indices in the underlying `Permutation`. This differs from
+  // the regular `VariableToColumnMap` if some columns are not read. Used for
   // `makeTreeWithBindColumn`.
   //
   // Example: We select the first three columns and an additional column at

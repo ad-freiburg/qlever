@@ -62,21 +62,10 @@ Union::Union(QueryExecutionContext* qec,
       }));
 
   if (!targetOrder_.empty()) {
-    auto computeSortOrder = [this](bool left) {
-      std::vector<ColumnIndex> specificSortOrder;
-      for (ColumnIndex index : targetOrder_) {
-        ColumnIndex realIndex = _columnOrigins.at(index).at(!left);
-        if (realIndex != NO_COLUMN) {
-          specificSortOrder.push_back(realIndex);
-        }
-      }
-      return specificSortOrder;
-    };
-
     _subtrees[0] = QueryExecutionTree::createSortedTree(std::move(_subtrees[0]),
-                                                        computeSortOrder(true));
-    _subtrees[1] = QueryExecutionTree::createSortedTree(
-        std::move(_subtrees[1]), computeSortOrder(false));
+                                                        sortOrderForSubtree(0));
+    _subtrees[1] = QueryExecutionTree::createSortedTree(std::move(_subtrees[1]),
+                                                        sortOrderForSubtree(1));
 
     // Swap children to get cheaper computation
     if (_columnOrigins.at(targetOrder_.at(0)).at(1) == NO_COLUMN) {
@@ -87,6 +76,18 @@ Union::Union(QueryExecutionContext* qec,
                            [](auto& el) { std::swap(el[0], el[1]); });
     }
   }
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> Union::sortOrderForSubtree(size_t subtreeIndex) const {
+  std::vector<ColumnIndex> specificSortOrder;
+  for (ColumnIndex index : targetOrder_) {
+    ColumnIndex realIndex = _columnOrigins.at(index).at(subtreeIndex);
+    if (realIndex != NO_COLUMN) {
+      specificSortOrder.push_back(realIndex);
+    }
+  }
+  return specificSortOrder;
 }
 
 std::string Union::getCacheKeyImpl() const {
@@ -251,8 +252,8 @@ Result Union::computeResult(bool requestLaziness) {
 
   AD_LOG_DEBUG << "Union subresult computation done." << std::endl;
 
-  IdTable idTable =
-      computeUnion(subRes1->idTable(), subRes2->idTable(), _columnOrigins);
+  IdTable idTable = computeUnion(subRes1->idTableView(), subRes2->idTableView(),
+                                 _columnOrigins);
 
   AD_LOG_DEBUG << "Union result computation done" << std::endl;
   // If only one of the two operands has a non-empty local vocabulary, share
@@ -263,7 +264,7 @@ Result Union::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 IdTable Union::computeUnion(
-    const IdTable& left, const IdTable& right,
+    const IdTableView<0>& left, const IdTableView<0>& right,
     const std::vector<std::array<size_t, 2>>& columnOrigins) const {
   IdTable res{getResultWidth(), getExecutionContext()->getAllocator()};
   res.resize(left.size() + right.size());
@@ -363,7 +364,7 @@ Result::LazyResult Union::computeResultLazily(
       return InputRangeTypeErased(
           lazySingleValueRange([transform = transformFactory(permutation),
                                 result = std::move(result)]() {
-            return transform(result->idTable().clone(),
+            return transform(result->cloneIdTable(),
                              result->getCopyOfLocalVocab());
           }));
     }
@@ -390,6 +391,42 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
+void Union::onLimitOffsetChanged(const LimitOffsetClause&) {
+  // Note that we use the merged `getLimitOffset()` and not the clause that was
+  // passed in, which only holds the increment that was just added. The bound
+  // below depends on the total limit and offset, so for nested subqueries the
+  // increment alone would be too small.
+  const auto& limitOffset = getLimitOffset();
+  if (!limitOffset._limit.has_value()) {
+    return;
+  }
+  uint64_t limit = limitOffset._limit.value();
+  uint64_t offset = limitOffset._offset;
+  // We have to be careful to not cause an overflow when adding the offset and
+  // the limit.
+  if (limit > std::numeric_limits<uint64_t>::max() - offset) {
+    return;
+  }
+  // Both children only have to supply their first `limit + offset` rows: Each
+  // row of the result consumes exactly one row of one of the children, no
+  // matter whether they are concatenated or merged according to `targetOrder_`.
+  for (size_t i = 0; i < _subtrees.size(); ++i) {
+    auto& subtree = _subtrees.at(i);
+    subtree = subtree->clone();
+    subtree->applyLimitOffset(LimitOffsetClause{limit + offset});
+
+    // The pushdown may have un-sorted `subtree`, while both the merging
+    // implementation and our `resultSortedOn()` require the subtrees to be
+    // sorted, so restore that order (see the caution note on
+    // `Operation::applyLimitOffset`).
+    if (!targetOrder_.empty()) {
+      subtree = QueryExecutionTree::createSortedTree(std::move(subtree),
+                                                     sortOrderForSubtree(i));
+    }
+  }
+}
+
+// _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
     const std::vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
@@ -406,7 +443,7 @@ Result::LazyResult Union::computeResultKeepOrder(
   auto toRange = [](const auto& result) {
     return result->isFullyMaterialized()
                ? Range{std::array{
-                     Wrapper{result->idTable(), result->localVocab()}}}
+                     Wrapper{result->idTableView(), result->localVocab()}}}
                : Range{std::move(result->idTables())};
   };
   Range leftRange = toRange(result1);

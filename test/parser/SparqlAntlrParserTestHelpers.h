@@ -17,6 +17,8 @@
 #include <vector>
 
 #include "../util/GTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
+#include "../util/ParsedQueryTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
@@ -25,7 +27,6 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/Iri.h"
 #include "parser/data/OrderKey.h"
 #include "rdfTypes/Variable.h"
 #include "util/SourceLocation.h"
@@ -34,6 +35,7 @@
 // Not relevant for the actual test logic, but provides
 // human-readable output if a test fails.
 inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
+  using Iri = ad_utility::triple_component::Iri;
   std::visit(
       [&](const auto& object) {
         using T = std::decay_t<decltype(object)>;
@@ -43,7 +45,7 @@ inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
           out << "BlankNode generated: " << object.isGenerated()
               << ", label: " << object.label();
         } else if constexpr (ad_utility::isSimilar<T, Iri>) {
-          out << "Iri " << object.iri();
+          out << "Iri " << object.toSparql();
         } else if constexpr (ad_utility::isSimilar<T, Variable>) {
           out << "Variable " << object.name();
         } else {
@@ -268,8 +270,9 @@ MultiVariantWith(const Matcher<const ad_utility::Last<Ts...>&>& matcher) {
 
 // Returns a matcher that accepts a `GraphTerm` or `Iri`.
 inline auto Iri = [](const std::string& value) {
-  return MultiVariantWith<GraphTerm, ::Iri>(
-      AD_PROPERTY(::Iri, iri, testing::Eq(value)));
+  using Iri = ad_utility::triple_component::Iri;
+  return MultiVariantWith<GraphTerm, Iri>(
+      AD_PROPERTY(Iri, toStringRepresentation, testing::Eq(value)));
 };
 
 // Returns a matcher that accepts a `VarOrPath` or `PropertyPath`.
@@ -727,6 +730,20 @@ inline auto Minus =
       AD_FIELD(p::Minus, _child, subMatcher));
 };
 
+// Match a `MINUS` clause by the variables that are in scope in it and in the
+// patterns before it (in any order), ignoring its child.
+inline auto MinusWithVisibleVariables =
+    [](const std::vector<::Variable>& visibleVariables,
+       const std::vector<::Variable>& visibleVariablesOfPrecedingPatterns)
+    -> Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::Minus>(testing::AllOf(
+      AD_FIELD(p::Minus, visibleVariables_,
+               testing::UnorderedElementsAreArray(visibleVariables)),
+      AD_FIELD(p::Minus, visibleVariablesOfPrecedingPatterns_,
+               testing::UnorderedElementsAreArray(
+                   visibleVariablesOfPrecedingPatterns))));
+};
+
 inline auto Load = [](const TripleComponent::Iri& iri,
                       bool silent) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Load>(
@@ -741,27 +758,32 @@ inline auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
 
 template <auto SubMatcherLambda>
 struct MatcherWithDefaultFilters {
+  template <typename... ChildMatchers>
   Matcher<const p::GraphPatternOperation&> operator()(
-      std::vector<std::string>&& filters, const auto&... childMatchers) {
+      std::vector<std::string>&& filters,
+      const ChildMatchers&... childMatchers) {
     return SubMatcherLambda(std::move(filters), childMatchers...);
   }
 
+  template <typename... ChildMatchers>
   Matcher<const p::GraphPatternOperation&> operator()(
-      const auto&... childMatchers) {
+      const ChildMatchers&... childMatchers) {
     return SubMatcherLambda({}, childMatchers...);
   }
 };
 
 template <auto SubMatcherLambda>
 struct MatcherWithDefaultFiltersAndOptional {
+  template <typename... ChildMatchers>
   Matcher<const ParsedQuery::GraphPattern&> operator()(
       bool optional, std::vector<std::string>&& filters,
-      const auto&... childMatchers) {
+      const ChildMatchers&... childMatchers) {
     return SubMatcherLambda(optional, std::move(filters), childMatchers...);
   }
 
+  template <typename... ChildMatchers>
   Matcher<const ParsedQuery::GraphPattern&> operator()(
-      const auto&... childMatchers) {
+      const ChildMatchers&... childMatchers) {
     return SubMatcherLambda(false, {}, childMatchers...);
   }
 };
@@ -1058,8 +1080,9 @@ CPP_template(typename Expression, typename... Children)(requires(
 // (via `dynamic_cast`) to an object of the same type that a call to the
 // `makeFunction` yields. The matcher also checks that the expression's children
 // match the `childrenMatchers`.
-auto matchNaryWithChildrenMatchers(auto makeFunction,
-                                   auto&&... childrenMatchers)
+template <typename MakeFunction, typename... ChildrenMatchers>
+auto matchNaryWithChildrenMatchers(MakeFunction makeFunction,
+                                   ChildrenMatchers&&... childrenMatchers)
     -> Matcher<const SparqlExpression::Ptr&> {
   using namespace sparqlExpression;
   auto typeIdLambda = [](const auto& ptr) {
@@ -1088,9 +1111,10 @@ inline auto idExpressionMatcher = [](Id id) {
 // (via `dynamic_cast`) to an object of the same type that a call to the
 // `makeFunction` yields. The matcher also checks that the expression's children
 // are the `variables`.
-auto matchNary(auto makeFunction,
-               QL_CONCEPT_OR_NOTHING(
-                   ad_utility::SimilarTo<::Variable>) auto&&... variables)
+template <
+    typename MakeFunction,
+    QL_CONCEPT_OR_TYPENAME(ad_utility::SimilarTo<::Variable>)... Variables>
+auto matchNary(MakeFunction makeFunction, Variables&&... variables)
     -> Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
   using namespace sparqlExpression;
   return matchNaryWithChildrenMatchers(makeFunction,
@@ -1207,6 +1231,7 @@ namespace m = matchers;
 using Parser = SparqlAutomaticParser;
 using namespace std::literals;
 using Var = Variable;
+using ad_utility::testing::encodedIriManager;
 
 const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
     {std::string{QLEVER_INTERNAL_PREFIX_NAME},
@@ -1222,10 +1247,9 @@ auto parse =
       // We might parse updates here, should we move the blank node manager out
       // to make it testable/accessible?
       static ad_utility::BlankNodeManager blankNodeManager;
-      static EncodedIriManager encodedIriManager;
       ParserAndVisitor p{
-          &blankNodeManager,   &encodedIriManager, input,
-          std::move(prefixes), std::move(clauses), disableSomeChecks};
+          &blankNodeManager,   encodedIriManager(), input,
+          std::move(prefixes), std::move(clauses),  disableSomeChecks};
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }

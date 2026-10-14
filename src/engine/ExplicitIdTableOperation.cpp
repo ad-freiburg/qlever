@@ -7,13 +7,16 @@
 
 #include "engine/ExplicitIdTableOperation.h"
 
+#include "util/TypeTraits.h"
+
 // _____________________________________________________________________________
 ExplicitIdTableOperation::ExplicitIdTableOperation(
-    QueryExecutionContext* ctx, std::shared_ptr<const IdTable> table,
+    QueryExecutionContext* ctx, IdTableOrView table,
     VariableToColumnMap variables, std::vector<ColumnIndex> sortedColumns,
     LocalVocab localVocab, std::string cacheKey)
     : Operation(ctx),
       idTable_(std::move(table)),
+      view_(viewOf(idTable_)),
       variables_(std::move(variables)),
       sortedColumns_(std::move(sortedColumns)),
       localVocab_(std::move(localVocab)),
@@ -26,14 +29,37 @@ ExplicitIdTableOperation::ExplicitIdTableOperation(
 }
 
 // _____________________________________________________________________________
-Result ExplicitIdTableOperation::computeResult(
-    [[maybe_unused]] bool requestLaziness) {
-  return {idTable_, resultSortedOn(), localVocab_.clone()};
+IdTableView<0> ExplicitIdTableOperation::viewOf(const IdTableOrView& table) {
+  return ad_utility::visitIf(
+      table,
+      [](const std::shared_ptr<const IdTable>& arg) -> IdTableView<0> {
+        AD_CONTRACT_CHECK(arg != nullptr);
+        return arg->template asStaticView<0>();
+      },
+      [](const IdTableView<0>& arg) { return arg; });
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> ExplicitIdTableOperation::getChildren() {
-  return {};
+Result ExplicitIdTableOperation::computeResult(
+    [[maybe_unused]] bool requestLaziness) {
+  // Pass the `shared_ptr<const IdTable>` alternative through to `Result`
+  // as-is (instead of converting it to a view) so that `Result` keeps its own
+  // independent claim on the underlying `IdTable` via reference counting,
+  // rather than depending on this `ExplicitIdTableOperation` to stay alive.
+  // The `IdTableView<0>` alternative is passed through unchanged; its
+  // lifetime is guaranteed by whoever created the view (e.g. the `Qlever`
+  // instance that owns the deserialized blob).
+  return std::visit(
+      [this](const auto& arg) -> Result {
+        return {arg, resultSortedOn(), localVocab_.clone()};
+      },
+      idTable_);
+}
+
+// _____________________________________________________________________________
+qlm::vector<QueryExecutionTree*> ExplicitIdTableOperation::getChildrenImpl()
+    const {
+  return qlm::vector<QueryExecutionTree*>{allocator()};
 }
 
 // _____________________________________________________________________________
@@ -48,7 +74,7 @@ std::string ExplicitIdTableOperation::getDescriptor() const {
 
 // _____________________________________________________________________________
 size_t ExplicitIdTableOperation::getResultWidth() const {
-  return idTable_->numColumns();
+  return idTableView().numColumns();
 }
 
 // The result is ready immediately.
@@ -67,7 +93,9 @@ float ExplicitIdTableOperation::getMultiplicity([[maybe_unused]] size_t col) {
 }
 
 // _____________________________________________________________________________
-bool ExplicitIdTableOperation::knownEmptyResult() { return idTable_->empty(); }
+bool ExplicitIdTableOperation::knownEmptyResult() {
+  return idTableView().empty();
+}
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> ExplicitIdTableOperation::cloneImpl() const {

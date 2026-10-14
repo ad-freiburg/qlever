@@ -44,11 +44,14 @@ TEST(ExceptionHandling, terminateIfThrows) {
                                 mockedTerminate);
   EXPECT_EQ(numCallsToMockedTerminate, 2);
 
+  // `EXPECT_EXIT` has no `_IF_SUPPORTED` variant (needed for Emscripten).
+#ifdef GTEST_HAS_DEATH_TEST
   auto noThrowThenExit = []() {
     ad_utility::terminateIfThrows([]() {}, "");
     std::exit(42);
   };
   EXPECT_EXIT(noThrowThenExit(), ::testing::ExitedWithCode(42), ::testing::_);
+#endif
 
   ad_utility::terminateIfThrows([]() {}, "", mockedTerminate);
   EXPECT_EQ(numCallsToMockedTerminate, 2);
@@ -101,10 +104,7 @@ TEST(ExceptionCollector, isNoOpWhenEmpty) {
 
 // _____________________________________________________________________________
 TEST(ExceptionCollector, asCompletionHandler) {
-  std::ostringstream logStream;
-  ad_utility::setGlobalLoggingStream(&logStream);
-  absl::Cleanup cleanup{
-      []() { ad_utility::setGlobalLoggingStream(&std::cout); }};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
 
   ad_utility::ExceptionCollector collector;
   try {
@@ -182,7 +182,7 @@ TEST(ExceptionCollector, isThreadSafe) {
     // Wait for threads to complete.
   }
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(collector.rethrowIfException(),
-                                        ::testing::MatchesRegex("t[0-9]+"),
+                                        MatchesRegex("t[0-9]+"),
                                         std::runtime_error);
 }
 

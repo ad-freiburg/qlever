@@ -85,10 +85,13 @@ class Proxy : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override;
   VariableToColumnMap computeVariableToColumnMap() const override;
   bool knownEmptyResult() override { return false; }
-  std::vector<QueryExecutionTree*> getChildren() override;
 
  private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
+  // Like for `Service`, the result is only deterministic when the caching of
+  // service results is enabled.
+  [[nodiscard]] bool isDeterministicImpl() const override;
   std::string getCacheKeyImpl() const override;
   Result computeResult(bool requestLaziness) override;
 
@@ -102,7 +105,7 @@ class Proxy : public Operation {
   // Join the proxy response with the child result based on the row variable.
   IdTable joinResponseWithChild(const IdTable& responseTable,
                                 ColumnIndex responseRowCol,
-                                const IdTable& childTable,
+                                const IdTableView<0>& childTable,
                                 const LocalVocab& childLocalVocab,
                                 LocalVocab& resultLocalVocab) const;
 };

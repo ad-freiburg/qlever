@@ -35,8 +35,8 @@ struct EvaluateOnChildOperand {
       return std::move(optionalResult.value());
     }
 
-    // The number of values we aggregate.
-    auto inputSize = getResultSize(*context, operand);
+    // The number of values we aggregate (one per row, also for constants).
+    size_t inputSize = context->size();
 
     // If there are no values, return the neutral element. It is important to
     // handle this case separately, because the following code only works if
@@ -190,7 +190,7 @@ template class DeviationAggExpression<AvgOperation, StdevFinalOperation>;
 // Explicit instantiations for the other aggregate expressions.
 #define INSTANTIATE_AGG_EXP(Function, ValueGetter) \
   template class AggregateExpression<              \
-      Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>;
+      Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>
 INSTANTIATE_AGG_EXP(AddForSum, NumericValueGetter);
 INSTANTIATE_AGG_EXP(Count, IsValidValueGetter);
 INSTANTIATE_AGG_EXP(MinLambdaForAllTypes, ActualValueGetter);

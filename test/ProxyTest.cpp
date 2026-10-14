@@ -175,9 +175,9 @@ TEST_F(ProxyTest, computeResultNoChild) {
                 getResultFunctionFactory(expectedUrl, "", jsonResult)};
 
   auto result = proxyOp.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().size(), 2);
+  ASSERT_EQ(result.idTableView().size(), 2);
   // Output variables + row variable.
-  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTableView().numColumns(), 3);
 }
 
 // Test `computeResult` with URL parameters.
@@ -195,9 +195,9 @@ TEST_F(ProxyTest, computeResultWithParams) {
                 getResultFunctionFactory(expectedUrl, "", jsonResult)};
 
   auto result = proxyOp.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().size(), 1);
+  ASSERT_EQ(result.idTableView().size(), 1);
   // 1 output variable + 1 row variable.
-  ASSERT_EQ(result.idTable().numColumns(), 2);
+  ASSERT_EQ(result.idTableView().numColumns(), 2);
 }
 
 // Test error handling when HTTP request fails.

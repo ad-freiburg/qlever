@@ -84,7 +84,8 @@ ConversionTestCase<T> getConversionTestCase() {
         std::vector{-42, 42}, nlohmann::json::parse(R"--([-42, 42])--")};
   } else if constexpr (std::is_same_v<T, std::vector<size_t>>) {
     return ConversionTestCase<std::vector<size_t>>{
-        std::vector{42uL, 42uL}, nlohmann::json::parse(R"--([42, 42])--")};
+        std::vector{size_t{42}, size_t{42}},
+        nlohmann::json::parse(R"--([42, 42])--")};
   } else {
     // Must be a vector of floats.
     static_assert(std::is_same_v<T, std::vector<float>>);
@@ -258,10 +259,10 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
   testCaseWithoutDefault(
       ConversionTestCase<int>{-40, nlohmann::json::parse(R"--(-40)--")});
 
-  testCaseWithDefault(
-      ConversionTestCase<size_t>{40uL, nlohmann::json::parse(R"--(40)--")});
-  testCaseWithoutDefault(
-      ConversionTestCase<size_t>{40uL, nlohmann::json::parse(R"--(40)--")});
+  testCaseWithDefault(ConversionTestCase<size_t>{
+      size_t{40}, nlohmann::json::parse(R"--(40)--")});
+  testCaseWithoutDefault(ConversionTestCase<size_t>{
+      size_t{40}, nlohmann::json::parse(R"--(40)--")});
 
   testCaseWithDefault(
       ConversionTestCase<float>{40.5, nlohmann::json::parse(R"--(40.5)--")});
@@ -286,9 +287,9 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
       {-40, 41}, nlohmann::json::parse(R"--([-40, 41])--")});
 
   testCaseWithDefault(ConversionTestCase<std::vector<size_t>>{
-      {40uL, 41uL}, nlohmann::json::parse(R"--([40, 41])--")});
+      {size_t{40}, size_t{41}}, nlohmann::json::parse(R"--([40, 41])--")});
   testCaseWithoutDefault(ConversionTestCase<std::vector<size_t>>{
-      {40uL, 41uL}, nlohmann::json::parse(R"--([40, 41])--")});
+      {size_t{40}, size_t{41}}, nlohmann::json::parse(R"--([40, 41])--")});
 
   testCaseWithDefault(ConversionTestCase<std::vector<float>>{
       {40.7, 40.913}, nlohmann::json::parse(R"--([40.7, 40.913])--")});

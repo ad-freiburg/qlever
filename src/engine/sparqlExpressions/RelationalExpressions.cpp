@@ -10,7 +10,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
-#include "util/GeoSparqlHelpers.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
 
@@ -41,8 +41,7 @@ CPP_template(typename S)(requires SingleExpressionResult<S>) auto idGenerator(
     return ::ranges::views::repeat_n(makeId(input), targetSize);
   } else if constexpr (isVectorResult<S>) {
     AD_CONTRACT_CHECK(targetSize == input.size());
-    return ::ranges::views::transform(ad_utility::allView(AD_FWD(input)),
-                                      makeId);
+    return ::ranges::views::transform(AD_FWD(input), makeId);
   } else {
     static_assert(
         ad_utility::SimilarToAny<S, Variable, ad_utility::SetOfIntervals>);
@@ -112,11 +111,11 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
   }();
 
   // Convert pairs of iterators to pairs of indexes.
-  ad_utility::SetOfIntervals s;
+  ad_utility::SetOfIntervals::Vec intervals;
   for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
-    s._intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
+    intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
   }
-  return s;
+  return {std::move(intervals), context->size()};
 }
 
 // The actual comparison function for the `SingleExpressionResult`'s which are
@@ -309,8 +308,10 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
 
 namespace {
 // _____________________________________________________________________________
+template <typename Children>
 SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
-    uint64_t inputSizeEstimate, uint64_t reductionFactor, const auto& children,
+    uint64_t inputSizeEstimate, uint64_t reductionFactor,
+    const Children& children,
     const std::optional<Variable>& firstSortedVariable) {
   AD_CORRECTNESS_CHECK(children.size() >= 1);
   // Prevent division by zero.
@@ -382,7 +383,8 @@ RelationalExpression<comp>::getEstimatesForFilterExpression(
 ExpressionResult InExpression::evaluate(
     sparqlExpression::EvaluationContext* context) const {
   auto lhs = children_.at(0)->evaluate(context);
-  ExpressionResult result{ad_utility::SetOfIntervals{}};
+  // `IN ()` is always false.
+  ExpressionResult result{Id::makeFromBool(false)};
   bool firstChild = true;
   for (const auto& child : children_ | ql::views::drop(1)) {
     auto rhs = child->evaluate(context);

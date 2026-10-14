@@ -26,12 +26,10 @@ TEST_F(SparqlJsonBindingUtilsTest, parseUri) {
   nlohmann::json binding = {{"type", "uri"},
                             {"value", "http://example.org/foo"}};
 
-  ad_utility::HashMap<std::string, Id> blankNodeMap;
-  LocalVocab localVocab;
+  BlankNodeAdder blankNodeAdder{testQec->getIndex().getBlankNodeManager()};
 
-  TripleComponent tc = bindingToTripleComponent(
-      binding, testQec->getIndex(), blankNodeMap, &localVocab,
-      testQec->getIndex().getBlankNodeManager());
+  TripleComponent tc =
+      bindingToTripleComponent(binding, testQec->getIndex(), blankNodeAdder);
 
   ASSERT_TRUE(tc.isIri());
   EXPECT_EQ(tc.getIri().toStringRepresentation(), "<http://example.org/foo>");
@@ -41,12 +39,10 @@ TEST_F(SparqlJsonBindingUtilsTest, parseUri) {
 TEST_F(SparqlJsonBindingUtilsTest, parsePlainLiteral) {
   nlohmann::json binding = {{"type", "literal"}, {"value", "doof"}};
 
-  ad_utility::HashMap<std::string, Id> blankNodeMap;
-  LocalVocab localVocab;
+  BlankNodeAdder blankNodeAdder{testQec->getIndex().getBlankNodeManager()};
 
-  TripleComponent tc = bindingToTripleComponent(
-      binding, testQec->getIndex(), blankNodeMap, &localVocab,
-      testQec->getIndex().getBlankNodeManager());
+  TripleComponent tc =
+      bindingToTripleComponent(binding, testQec->getIndex(), blankNodeAdder);
 
   ASSERT_TRUE(tc.isLiteral());
   EXPECT_EQ(tc.getLiteral().toStringRepresentation(), "\"doof\"");
@@ -57,12 +53,10 @@ TEST_F(SparqlJsonBindingUtilsTest, parseLanguageTaggedLiteral) {
   nlohmann::json binding = {
       {"type", "literal"}, {"value", "doof"}, {"xml:lang", "en"}};
 
-  ad_utility::HashMap<std::string, Id> blankNodeMap;
-  LocalVocab localVocab;
+  BlankNodeAdder blankNodeAdder{testQec->getIndex().getBlankNodeManager()};
 
-  TripleComponent tc = bindingToTripleComponent(
-      binding, testQec->getIndex(), blankNodeMap, &localVocab,
-      testQec->getIndex().getBlankNodeManager());
+  TripleComponent tc =
+      bindingToTripleComponent(binding, testQec->getIndex(), blankNodeAdder);
 
   ASSERT_TRUE(tc.isLiteral());
   EXPECT_EQ(tc.getLiteral().toStringRepresentation(), "\"doof\"@en");
@@ -75,12 +69,10 @@ TEST_F(SparqlJsonBindingUtilsTest, parseTypedLiteralInteger) {
       {"value", "42"},
       {"datatype", "http://www.w3.org/2001/XMLSchema#int"}};
 
-  ad_utility::HashMap<std::string, Id> blankNodeMap;
-  LocalVocab localVocab;
+  BlankNodeAdder blankNodeAdder{testQec->getIndex().getBlankNodeManager()};
 
-  TripleComponent tc = bindingToTripleComponent(
-      binding, testQec->getIndex(), blankNodeMap, &localVocab,
-      testQec->getIndex().getBlankNodeManager());
+  TripleComponent tc =
+      bindingToTripleComponent(binding, testQec->getIndex(), blankNodeAdder);
 
   ASSERT_TRUE(tc.isInt());
   EXPECT_EQ(tc.getInt(), 42);
@@ -94,12 +86,10 @@ TEST_F(SparqlJsonBindingUtilsTest, parseTypedLiteralDeprecated) {
       {"value", "3.14"},
       {"datatype", "http://www.w3.org/2001/XMLSchema#double"}};
 
-  ad_utility::HashMap<std::string, Id> blankNodeMap;
-  LocalVocab localVocab;
+  BlankNodeAdder blankNodeAdder{testQec->getIndex().getBlankNodeManager()};
 
-  TripleComponent tc = bindingToTripleComponent(
-      binding, testQec->getIndex(), blankNodeMap, &localVocab,
-      testQec->getIndex().getBlankNodeManager());
+  TripleComponent tc =
+      bindingToTripleComponent(binding, testQec->getIndex(), blankNodeAdder);
 
   ASSERT_TRUE(tc.isDouble());
   EXPECT_DOUBLE_EQ(tc.getDouble(), 3.14);
@@ -111,20 +101,16 @@ TEST_F(SparqlJsonBindingUtilsTest, parseBlankNode) {
   nlohmann::json binding2 = {{"type", "bnode"}, {"value", "b1"}};
   nlohmann::json binding3 = {{"type", "bnode"}, {"value", "b0"}};  // Same as b0
 
-  ad_utility::HashMap<std::string, Id> blankNodeMap;
-  LocalVocab localVocab;
+  BlankNodeAdder blankNodeAdder{testQec->getIndex().getBlankNodeManager()};
 
-  TripleComponent tc1 = bindingToTripleComponent(
-      binding1, testQec->getIndex(), blankNodeMap, &localVocab,
-      testQec->getIndex().getBlankNodeManager());
+  TripleComponent tc1 =
+      bindingToTripleComponent(binding1, testQec->getIndex(), blankNodeAdder);
 
-  TripleComponent tc2 = bindingToTripleComponent(
-      binding2, testQec->getIndex(), blankNodeMap, &localVocab,
-      testQec->getIndex().getBlankNodeManager());
+  TripleComponent tc2 =
+      bindingToTripleComponent(binding2, testQec->getIndex(), blankNodeAdder);
 
-  TripleComponent tc3 = bindingToTripleComponent(
-      binding3, testQec->getIndex(), blankNodeMap, &localVocab,
-      testQec->getIndex().getBlankNodeManager());
+  TripleComponent tc3 =
+      bindingToTripleComponent(binding3, testQec->getIndex(), blankNodeAdder);
 
   // For blank nodes, the TripleComponent is constructed from an Id directly.
   // tc1 and tc3 should be the same (same blank node label)
@@ -141,26 +127,22 @@ TEST_F(SparqlJsonBindingUtilsTest, parseBlankNode) {
 TEST_F(SparqlJsonBindingUtilsTest, missingTypeField) {
   nlohmann::json binding = {{"value", "http://example.org/doof"}};
 
-  ad_utility::HashMap<std::string, Id> blankNodeMap;
-  LocalVocab localVocab;
+  BlankNodeAdder blankNodeAdder{testQec->getIndex().getBlankNodeManager()};
 
-  EXPECT_THROW(bindingToTripleComponent(
-                   binding, testQec->getIndex(), blankNodeMap, &localVocab,
-                   testQec->getIndex().getBlankNodeManager()),
-               std::runtime_error);
+  EXPECT_THROW(
+      bindingToTripleComponent(binding, testQec->getIndex(), blankNodeAdder),
+      std::runtime_error);
 }
 
 // Test that missing "value" field throws an error.
 TEST_F(SparqlJsonBindingUtilsTest, missingValueField) {
   nlohmann::json binding = {{"type", "uri"}};
 
-  ad_utility::HashMap<std::string, Id> blankNodeMap;
-  LocalVocab localVocab;
+  BlankNodeAdder blankNodeAdder{testQec->getIndex().getBlankNodeManager()};
 
-  EXPECT_THROW(bindingToTripleComponent(
-                   binding, testQec->getIndex(), blankNodeMap, &localVocab,
-                   testQec->getIndex().getBlankNodeManager()),
-               std::runtime_error);
+  EXPECT_THROW(
+      bindingToTripleComponent(binding, testQec->getIndex(), blankNodeAdder),
+      std::runtime_error);
 }
 
 // Test that unknown type throws an error.
@@ -168,11 +150,9 @@ TEST_F(SparqlJsonBindingUtilsTest, unknownType) {
   nlohmann::json binding = {{"type", "unknown"},
                             {"value", "http://example.org/foo"}};
 
-  ad_utility::HashMap<std::string, Id> blankNodeMap;
-  LocalVocab localVocab;
+  BlankNodeAdder blankNodeAdder{testQec->getIndex().getBlankNodeManager()};
 
-  EXPECT_THROW(bindingToTripleComponent(
-                   binding, testQec->getIndex(), blankNodeMap, &localVocab,
-                   testQec->getIndex().getBlankNodeManager()),
-               std::runtime_error);
+  EXPECT_THROW(
+      bindingToTripleComponent(binding, testQec->getIndex(), blankNodeAdder),
+      std::runtime_error);
 }

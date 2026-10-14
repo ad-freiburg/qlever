@@ -67,7 +67,7 @@ LazyJsonParser::LazyJsonParser(std::vector<std::string> arrayPath)
 std::optional<nlohmann::json> LazyJsonParser::parseChunk(
     std::string_view inStr) {
   size_t idx = input_.size();
-  absl::StrAppend(&input_, inStr);
+  input_.append(inStr);
 
   // End-index (exclusive) of the current `input_` to construct a result.
   size_t materializeEnd = 0;
@@ -102,7 +102,7 @@ void LazyJsonParser::parseLiteral(size_t& idx) {
     ++idx;
     if (std::holds_alternative<BeforeArrayPath>(state_)) {
       std::get<BeforeArrayPath>(state_).optLiteral_ =
-          BeforeArrayPath::LiteralView{.start_ = idx, .length_ = 0};
+          BeforeArrayPath::LiteralView{idx, 0};
     }
     inLiteral_ = true;
   }
@@ -180,7 +180,7 @@ size_t LazyJsonParser::parseInArrayPath(size_t& idx) {
   size_t materializeEnd = 0;
 
   auto exitArrayPath = [&]() {
-    state_ = AfterArrayPath{.remainingBraces_ = arrayPath_.size()};
+    state_ = AfterArrayPath{arrayPath_.size()};
     ++idx;
     if (arrayPath_.empty()) {
       materializeEnd = idx;

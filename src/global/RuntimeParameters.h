@@ -6,6 +6,7 @@
 #define QLEVER_RUNTIMEPARAMETERS_H
 
 #include <algorithm>
+#include <optional>
 
 #include "util/Log.h"
 #include "util/Parameters.h"
@@ -22,8 +23,12 @@ struct RuntimeParameters {
   using MemorySizeParameter =
       ad_utility::detail::parameterShortNames::MemorySizeParameter;
   using SizeT = ad_utility::detail::parameterShortNames::SizeT;
+  using String = ad_utility::detail::parameterShortNames::String;
   using SpaceSeparatedStrings =
       ad_utility::detail::parameterShortNames::SpaceSeparatedStrings;
+  using DeduplicationMode = ad_utility::DeduplicationMode;
+  using DeduplicationModeParameter =
+      ad_utility::detail::parameterShortNames::DeduplicationModeParameter;
 
   using LogLevelParameter =
       ad_utility::Parameter<LogLevel, LogLevel::FromString, LogLevel::ToString>;
@@ -51,8 +56,57 @@ struct RuntimeParameters {
                                     "cache-max-size"};
   MemorySizeParameter cacheMaxSizeSingleEntry_{
       ad_utility::MemorySize::gigabytes(5), "cache-max-size-single-entry"};
-  SizeT lazyIndexScanQueueSize_{20, "lazy-index-scan-queue-size"};
-  SizeT lazyIndexScanNumThreads_{10, "lazy-index-scan-num-threads"};
+  // The number of blocks that a lazy index scan reads and decompresses on the
+  // global thread pool ahead of its consumer. The value must be at least `1`
+  // (enforced by a parameter constraint). The default of `20` keeps the
+  // prefetch depth that the scans had with threads of their own (2 threads
+  // plus a queue of 20 blocks). Smaller values measurably slow down queries
+  // with prefiltered joins on large relations, because their consumer
+  // processes the blocks in bursts.
+  SizeT lazyIndexScanNumBlocksInFlight_{20,
+                                        "lazy-index-scan-num-blocks-in-flight"};
+  // The maximum number of tasks that a single query runs at the same time on
+  // the global thread pool (for example, reading and decompressing the blocks
+  // of its lazy index scans). This keeps a single expensive query from
+  // occupying all the threads of the pool. The value must be at least `1`
+  // (enforced by a parameter constraint).
+  SizeT maxNumThreadsPerQuery_{6, "max-num-threads-per-query"};
+  // The maximum number of threads with which each scan of a permutation
+  // during a runtime index rebuild (see `IndexRebuilder`) reads and
+  // decompresses its blocks, both for the main scan of the old permutations
+  // and for the statistics recomputation. A value of 0 means "no limit".
+  // Lowering it reduces the rebuild's CPU usage without affecting query scans
+  // (how many blocks are read ahead of the consumer is determined by
+  // `lazy-index-scan-num-blocks-in-flight` above, as for query scans).
+  //
+  // NOTE: The default of 1 keeps a rebuild on a live server from starving
+  // concurrent queries of CPU, at nearly no cost in wall time: the bottleneck
+  // of each permutation pipeline is its single sequential remap thread, so
+  // more concurrent block reads mostly add contention (measured on Wikidata on
+  // an otherwise idle 16-core server, where the wall time was the same for 1,
+  // 2, and 4).
+  SizeT rebuildIndexScanNumThreads_{1, "rebuild-index-scan-num-threads"};
+  // The maximum number of threads with which each permutation is compressed
+  // and written during a runtime index rebuild. A value of 0 means "no limit".
+  // The number of blocks that are in flight is still determined by
+  // `permutation-writer-num-blocks-in-flight`, which is also used when
+  // building an index from scratch and when writing materialized views.
+  //
+  // NOTE: Like the scan parameter above, this exists so that a rebuild on a
+  // live server leaves as much CPU as possible to concurrent queries: the
+  // default of 1 compresses and writes the blocks of each permutation one
+  // after the other, which reduces the CPU work of the permutation phase by
+  // ~20% at nearly no cost in wall time (same measurement setup as above).
+  SizeT rebuildPermutationWriterNumThreads_{
+      1, "rebuild-permutation-writer-num-threads"};
+  // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
+  // the internal PSO+POS) that a runtime index rebuild processes in
+  // parallel. Each pair costs several CPU cores, several GB/s of memory
+  // bandwidth, and L3 cache, so lowering this value is THE knob for trading
+  // rebuild duration against interference with concurrent queries and
+  // updates. A value of 0 means "no limit" (all pairs in parallel).
+  SizeT rebuildMaxConcurrentPermutationPairs_{
+      0, "rebuild-max-concurrent-permutation-pairs"};
   Duration<std::chrono::seconds> defaultQueryTimeout_{std::chrono::seconds(30),
                                                       "default-query-timeout"};
   SizeT lazyIndexScanMaxSizeMaterialization_{
@@ -116,11 +170,27 @@ struct RuntimeParameters {
   // prefilter-free baseline, or for debugging, as wrong results may be
   // related to the `PrefilterExpression`s.
   Bool enablePrefilterOnIndexScans_{true, "enable-prefilter-on-index-scans"};
-  // The maximum number of threads to be used in `SpatialJoinAlgorithms`.
+  // The maximum number of threads to be used by the spatial join algorithms.
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
+  // The maximum number of threads for the parallel counting loops of the
+  // pattern trick (see `CountAvailablePredicates`). The value `0` means the
+  // number of logical cores of the machine. The default of `3` captures most
+  // of the speedup, with quickly diminishing returns for more threads.
+  SizeT patternTrickNumThreads_{3, "pattern-trick-num-threads"};
+  // The number of threads for the parallel sort of intermediate results
+  // (`Sort` and `ORDER BY`, see `IdTableUtils`). Values below `1` are treated
+  // as `1`. Only effective when QLever was built with the CMake option
+  // `USE_PARALLEL`, which sets the macro `_PARALLEL_SORT`. The
+  // default of `3` captures most of the speedup, with quickly diminishing
+  // returns for more threads.
+  SizeT parallelSortNumThreads_{3, "parallel-sort-num-threads"};
   // The maximum size of the `prefilterBox` for
-  // `SpatialJoinAlgorithms::libspatialjoinParse()`.
+  // `LibspatialjoinAlgorithm::parse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};
+  // Writable directory for the temporary files written by `SpatialJoin` when
+  // using the `libspatialjoin` algorithm. If empty (the default), the index
+  // directory is used.
+  String spatialJoinTmpDir_{"", "spatial-join-tmp-dir"};
   // Push joins into both children of unions if this leads to a cheaper
   // cost-estimate.
   Bool enableDistributiveUnion_{true, "enable-distributive-union"};
@@ -151,6 +221,17 @@ struct RuntimeParameters {
   Bool enableMaterializedViewQueryRewrite_{
       true, "enable-materialized-view-query-rewrite"};
 
+  // When matching materialized views using pattern-based query rewriting, the
+  // maximum number of candidate assignments tried by the backtracking
+  // algorithm. `0` disables pattern-based rewriting.
+  SizeT materializedViewPatternMatchNumAssignments_{
+      100'000, "materialized-view-pattern-match-num-assignments"};
+
+  // When matching materialized views using pattern-based query rewriting, the
+  // maximum number of replacement plans collected.
+  SizeT materializedViewPatternMatchNumReplacementPlans_{
+      500, "materialized-view-pattern-match-num-replacement-plans"};
+
   // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
   // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
   // IRIs that do not start with any of the given prefixes are rejected.
@@ -163,12 +244,18 @@ struct RuntimeParameters {
   // particular the computation of cache keys) when caching is not required.
   Bool disableCaching_{false, "disable-caching"};
 
-  // Configure the amount of threads to compress and write blocks per
-  // permutation. A value of 0 indicates that the number of threads should be
-  // determined automatically based on the number of available hardware threads.
-  // Even though this influences the logic of regular index building,
-  // `qlever-index`doesn't expose a CLI flag to set this parameter.
-  SizeT permutationWriterNumThreads_{2, "permutation-writer-num-threads"};
+  // The maximal number of blocks per permutation that are queued for or
+  // currently being compressed and written (see
+  // `CompressedRelationWriter::makeBlockWriteQueue`). Each of them is held in
+  // memory until it has been written. How many of them are compressed at the
+  // same time is not determined by this parameter, but by the executor on
+  // which they are written (for the runtime index rebuild, see
+  // `rebuild-permutation-writer-num-threads`). The value must be at least `1`
+  // (enforced by a parameter constraint). Even though this influences the
+  // logic of regular index building, `qlever-index` doesn't expose a CLI flag
+  // to set this parameter, but derives it from its `--num-threads` option.
+  SizeT permutationWriterNumBlocksInFlight_{
+      4, "permutation-writer-num-blocks-in-flight"};
 
   // Only blocks of this size or larger will be considered for vacuuming.
   SizeT vacuumMinimumBlockSize_{100, "vacuum-minimum-block-size"};
@@ -177,6 +264,14 @@ struct RuntimeParameters {
   // compile-time level (CMake LOGLEVEL) still applies as an upper bound.
   LogLevelParameter logLevel_{LogLevel{ad_utility::detail::defaultLogLevel},
                               "log-level"};
+
+  // Controls deduplication of triples in CONSTRUCT query results.
+  // "false" (default): no deduplication, every triple is emitted.
+  // "global": a triple is emitted at most once across the entire result.
+  // N (positive integer): deduplicate against the N most recently seen unique
+  // triples (per template triple); bounded memory, partial deduplication.
+  DeduplicationModeParameter constructDeduplication_{
+      DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
 
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
@@ -197,6 +292,12 @@ struct RuntimeParameters {
   // Throws if the parameter does not exist or if the value is invalid.
   void setFromString(const std::string& parameterName,
                      const std::string& value);
+
+  // Set a parameter from a single string of the form `<name>=<value>` (split
+  // at the first `=`). Throws if the string contains no `=`, if the parameter
+  // does not exist, or if the value is invalid. Used for the
+  // `--set-runtime-parameter` option of `qlever-server`.
+  void setFromAssignment(const std::string& assignment);
 
   // Get all parameter names.
   std::vector<std::string> getKeys() const;
@@ -231,6 +332,16 @@ auto getRuntimeParameter() {
   // destroyed. This is achieved by directly returning a copy of the parameter
   // value (the function returns `auto`, see above).
   return std::invoke(ParameterPtr, *globalRuntimeParameters.rlock()).get();
+}
+
+// Get the current value of the numeric runtime parameter specified by the
+// `ParameterPtr`, translated to an optional override: the value 0, which for
+// such parameters means "fall back to the corresponding general parameter",
+// becomes `std::nullopt`.
+template <auto ParameterPtr>
+std::optional<size_t> getRuntimeParameterAsOptional() {
+  size_t value = getRuntimeParameter<ParameterPtr>();
+  return value == 0 ? std::nullopt : std::optional<size_t>{value};
 }
 
 #endif  // QLEVER_RUNTIMEPARAMETERS_H

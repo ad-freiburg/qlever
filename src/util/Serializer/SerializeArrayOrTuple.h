@@ -32,7 +32,7 @@ struct IsTriviallySerializable {
   template <typename U>
   constexpr void operator()() const {
     result = result && TriviallySerializable<U>;
-  };
+  }
 };
 
 template <typename T>

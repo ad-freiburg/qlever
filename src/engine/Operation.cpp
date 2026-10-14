@@ -19,6 +19,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/Algorithm.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
@@ -176,12 +177,12 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     if (vocabSize > 1) {
       runtimeInfo().addDetail("local-vocab-size", vocabSize);
     }
-    AD_CORRECTNESS_CHECK(result.idTable().numColumns() == getResultWidth());
-    updateRuntimeInformationOnSuccess(result.idTable().size(),
+    AD_CORRECTNESS_CHECK(result.idTableView().numColumns() == getResultWidth());
+    updateRuntimeInformationOnSuccess(result.idTableView().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
     AD_CORRECTNESS_CHECK(
-        result.idTable().empty() || !knownEmptyResult(), [&]() {
+        result.idTableView().empty() || !knownEmptyResult(), [&]() {
           return absl::StrCat("Operation ", getDescriptor(),
                               "returned non-empty result, but "
                               "knownEmptyResult() returned true");
@@ -216,7 +217,11 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           }
           signalQueryUpdate(RuntimeInformation::SendPriority::IfDue);
         },
-        [this](Result::GeneratorState state) {
+        [this](Result::GeneratorState state,
+               std::chrono::microseconds duration) {
+          // The call that exhausted the generator did not yield a chunk, but
+          // its time still belongs to this operation.
+          updateRuntimeStats(false, 0, getResultWidth(), duration);
           runtimeInfo().status_ = [state]() {
             using enum Result::GeneratorState;
             switch (state) {
@@ -247,8 +252,8 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     AD_CONTRACT_CHECK(!externalLimitApplied_);
     externalLimitApplied_ = !limitOffset_.isUnconstrained();
     result.applyLimitOffset(
-        limitOffset_,
-        [this](std::chrono::microseconds limitTime, const IdTable& idTable) {
+        limitOffset_, [this](std::chrono::microseconds limitTime,
+                             const IdTableView<0>& idTable) {
           updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
                              limitTime);
         });
@@ -294,8 +299,8 @@ CacheValue Operation::runComputationAndPrepareForCache(
         });
   }
   if (result.isFullyMaterialized()) {
-    auto resultNumRows = result.idTable().size();
-    auto resultNumCols = result.idTable().numColumns();
+    auto resultNumRows = result.idTableView().size();
+    auto resultNumCols = result.idTableView().numColumns();
     AD_LOG_DEBUG << "Computed result of size " << resultNumRows << " x "
                  << resultNumCols << std::endl;
   }
@@ -317,7 +322,7 @@ std::shared_ptr<const Result> Operation::getResult(
 
   if (isRoot) {
     // Reset runtime info, tests may reuse Operation objects.
-    _runtimeInfo = std::make_shared<RuntimeInformation>();
+    _runtimeInfo = makeShared<RuntimeInformation>();
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
     signalQueryUpdate(RuntimeInformation::SendPriority::Always);
@@ -360,7 +365,7 @@ std::shared_ptr<const Result> Operation::getResult(
       if (computationMode == ComputationMode::ONLY_IF_CACHED) {
         return nullptr;
       }
-      return std::make_shared<Result>(runComputation(timer, computationMode));
+      return makeShared<Result>(runComputation(timer, computationMode));
     }
 
     auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
@@ -393,7 +398,7 @@ std::shared_ptr<const Result> Operation::getResult(
 
     if (result._resultPointer->resultTable().isFullyMaterialized()) {
       AD_CORRECTNESS_CHECK(
-          result._resultPointer->resultTable().idTable().numColumns() ==
+          result._resultPointer->resultTable().idTableView().numColumns() ==
               getResultWidth(),
           result._cacheStatus == ad_utility::CacheStatus::computed
               ? "This should never happen, non-matching result widths should "
@@ -456,7 +461,7 @@ std::chrono::milliseconds Operation::remainingTime() const {
 // _____________________________________________________________________________
 void Operation::storeToNamedResultCache(const Result& result) {
   // The query result is to be pinned in the named query cache.
-  const auto& [name, geoIndexVar] =
+  const auto& [name, geoIndexVar, simplificationInMeters] =
       _executionContext->pinResultWithName().value();
   AD_CORRECTNESS_CHECK(result.isFullyMaterialized());
 
@@ -469,15 +474,15 @@ void Operation::storeToNamedResultCache(const Result& result) {
     auto colIndex = getExternallyVisibleVariableColumns()
                         .at(geoIndexVar.value())
                         .columnIndex_;
-    return SpatialJoinCachedIndex{geoIndexVar.value(), colIndex,
-                                  result.idTable(),
-                                  _executionContext->getIndex()};
+    return SpatialJoinCachedIndex{
+        geoIndexVar.value(), colIndex, result.idTableView(),
+        _executionContext->getIndex(), simplificationInMeters};
   };
 
   // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
   // it would require a major refactoring of the `Result` class.
   auto valueForNamedResultCache = NamedResultCache::Value{
-      std::make_shared<const IdTable>(result.idTable().clone()),
+      std::make_shared<const IdTable>(result.cloneIdTable()),
       getExternallyVisibleVariableColumns(),
       result.sortedBy(),
       result.localVocab().clone(),
@@ -539,7 +544,7 @@ void Operation::updateRuntimeInformationOnSuccess(
   const auto& result = resultAndCacheStatus._resultPointer->resultTable();
   AD_CONTRACT_CHECK(result.isFullyMaterialized());
   updateRuntimeInformationOnSuccess(
-      result.idTable().size(), resultAndCacheStatus._cacheStatus, duration,
+      result.idTableView().size(), resultAndCacheStatus._cacheStatus, duration,
       resultAndCacheStatus._resultPointer->runtimeInfo());
 }
 
@@ -589,6 +594,16 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
 // __________________________________________________________________
 void Operation::applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
   limitOffset_.mergeLimitAndOffset(limitOffsetClause);
+  // The new limit changes the size estimates and thereby possibly the sort
+  // order (see the caution note in the header), so a previously cached value
+  // must be discarded. Operations that merely forward the claim of a child
+  // (e.g. `Bind`) read the child's cache via
+  // `QueryExecutionTree::resultSortedOn`, so a stale value would otherwise
+  // survive the re-reading during the repair described in the header.
+  {
+    std::lock_guard l{_resultSortedColumnsMutex};
+    _resultSortedColumns.reset();
+  }
   // We can safely ignore members that are not `_offset` and `_limit` since
   // they are unused by subclasses of `Operation`.
   onLimitOffsetChanged(limitOffsetClause);
@@ -748,16 +763,26 @@ uint64_t Operation::getSizeEstimate() {
 }
 
 // _____________________________________________________________________________
+void Operation::keepHiddenVariablesHidden(
+    Operation& replacement,
+    std::optional<Variable> additionalVisibleVariable) const {
+  // Nothing is hidden if the externally visible variables were never set.
+  if (!variableToColumnMap_ || !externallyVisibleVariableToColumnMap_) {
+    return;
+  }
+  std::vector<Variable> visibleVariables;
+  ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
+                   std::back_inserter(visibleVariables));
+  if (additionalVisibleVariable.has_value()) {
+    visibleVariables.push_back(std::move(additionalVisibleVariable).value());
+  }
+  replacement.setSelectedVariablesForSubquery(visibleVariables);
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> Operation::clone() const {
   auto result = cloneImpl();
-
-  if (variableToColumnMap_ && externallyVisibleVariableToColumnMap_) {
-    // Make sure previously hidden variables remain hidden.
-    std::vector<Variable> visibleVariables;
-    ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
-                     std::back_inserter(visibleVariables));
-    result->setSelectedVariablesForSubquery(visibleVariables);
-  }
+  keepHiddenVariablesHidden(*result);
   result->limitOffset_ = limitOffset_;
 
   auto compareTypes = [this, &result]() {
@@ -780,10 +805,18 @@ std::unique_ptr<Operation> Operation::clone() const {
     return true;
   };
   AD_CORRECTNESS_CHECK(areChildrenDifferent());
-  AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
-  // If the result can be cached, then the cache key must be the same for
-  // the cloned operation.
-  AD_EXPENSIVE_CHECK(!canResultBeCached() ||
+  // Compare the actual mappings, not the lazily computed caches: the original
+  // might already have computed its mapping, while the clone has not. The
+  // externally visible mappings differ if the clone lost hidden variables.
+  AD_CORRECTNESS_CHECK(getInternallyVisibleVariableColumns() ==
+                       result->getInternallyVisibleVariableColumns());
+  AD_CORRECTNESS_CHECK(getExternallyVisibleVariableColumns() ==
+                       result->getExternallyVisibleVariableColumns());
+  // For deterministic operations the cache key must be identical in the clone.
+  // Non-deterministic operations (BNODE, RAND, UUID, SERVICE, LOAD) may
+  // legitimately produce a different cache key on each instantiation, so we
+  // do not enforce the equality there.
+  AD_EXPENSIVE_CHECK(!isDeterministic() ||
                      getCacheKey() == result->getCacheKey());
   return result;
 }
@@ -822,6 +855,29 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
 }
 
 // _____________________________________________________________________________
+bool Operation::isDistinctBy(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  const auto& limit = getLimitOffset()._limit;
+  if (limit.has_value() && limit.value() <= 1) {
+    return true;
+  }
+  return isDistinctByImpl(distinctIndices);
+}
+
+// _____________________________________________________________________________
+bool Operation::isDistinctByImpl(
+    [[maybe_unused]] const std::vector<ColumnIndex>& distinctIndices) const {
+  return false;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeDistinctTree(
+    const std::vector<ColumnIndex>& distinctIndices) const {
+  AD_CONTRACT_CHECK(!isDistinctBy(distinctIndices));
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::makeTreeWithStrippedColumns(
     [[maybe_unused]] const std::set<Variable>& variables) const {
@@ -829,13 +885,37 @@ Operation::makeTreeWithStrippedColumns(
 }
 
 // _____________________________________________________________________________
-bool Operation::coversVariables(
+bool Operation::isDeterministic() const {
+  if (!isDeterministicImpl()) {
+    return false;
+  }
+  return ql::ranges::all_of(getChildren(), [](const QueryExecutionTree* child) {
+    return child->getRootOperation()->isDeterministic();
+  });
+}
+
+// _____________________________________________________________________________
+bool Operation::isVariableAlwaysDefined(const Variable& variable) const {
+  auto columnInfo =
+      ad_utility::findOptional(getExternallyVisibleVariableColumns(), variable);
+  return columnInfo.has_value() &&
+         columnInfo->mightContainUndef_ ==
+             ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+}
+
+// _____________________________________________________________________________
+bool Operation::areVariablesAlwaysDefined(
     const std::vector<const Variable*>& variables) const {
-  const auto& varToCol = getExternallyVisibleVariableColumns();
-  return ql::ranges::all_of(variables, [&varToCol](const auto v) {
-    return varToCol.contains(*v) &&
-           varToCol.at(*v).mightContainUndef_ ==
-               ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  return ql::ranges::all_of(
+      variables, [this](const auto v) { return isVariableAlwaysDefined(*v); });
+}
+
+// _____________________________________________________________________________
+bool Operation::areVariablesVisible(
+    const std::vector<const Variable*>& variables) const {
+  const auto& visibleVariables = getExternallyVisibleVariableColumns();
+  return ql::ranges::all_of(variables, [&visibleVariables](const auto v) {
+    return visibleVariables.contains(*v);
   });
 }
 

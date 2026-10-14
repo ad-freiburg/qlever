@@ -299,7 +299,7 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
 
   template <TurtleTokenId fst, TurtleTokenId... ids>
   std::tuple<bool, size_t, std::string_view> getNextTokenMultiple() {
-    const char* beg = _data.begin();
+    const char* beg = _data.data();
     size_t dataSize = _data.size();
 
     auto innerResult = getNextTokenRecurse<0, fst, ids...>();
@@ -320,7 +320,7 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
     // TODO<joka921> : write unit tests for this Overload!!
     const auto [success, unusedIdx, content] =
         getNextTokenRecurse<idx + 1, ids...>();
-    const char* beg = _data.begin();
+    const char* beg = _data.data();
     size_t dataSize = _data.size();
     const auto [currentSuccess, res] = getNextToken<fst>();
     reset(beg, dataSize);

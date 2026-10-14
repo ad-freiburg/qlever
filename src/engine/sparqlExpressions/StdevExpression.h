@@ -16,7 +16,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 
 namespace sparqlExpression {
 
@@ -45,6 +45,10 @@ class DeviationExpression : public SparqlExpression {
   [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override {
     return absl::StrCat("[ SQ.DEVIATION ]", child_->getCacheKey(varColMap));
+  }
+
+  [[nodiscard]] bool isDeterministic() const override {
+    return child_->isDeterministic();
   }
 
  private:

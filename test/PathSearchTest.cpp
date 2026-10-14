@@ -73,7 +73,7 @@ TEST(PathSearchTest, emptyGraph) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -103,7 +103,7 @@ TEST(PathSearchTest, singlePath) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -130,7 +130,7 @@ TEST(PathSearchTest, singlePathWithProperties) {
                                  {Var{"?edgeProperty"}}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -161,7 +161,7 @@ TEST(PathSearchTest, singlePathAllSources) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -192,7 +192,7 @@ TEST(PathSearchTest, singlePathAllTargets) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -226,7 +226,7 @@ TEST(PathSearchTest, twoPathsOneTarget) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -260,7 +260,7 @@ TEST(PathSearchTest, twoPathsTwoTargets) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -292,7 +292,7 @@ TEST(PathSearchTest, cycle) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -324,7 +324,7 @@ TEST(PathSearchTest, twoCycle) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -362,7 +362,7 @@ TEST(PathSearchTest, allPaths) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -397,7 +397,7 @@ TEST(PathSearchTest, allPathsWithPropertiesSwitched) {
       {Var{"?edgeProperty2"}, Var{"?edgeProperty1"}}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -435,7 +435,7 @@ TEST(PathSearchTest, allPathsPartialAllTargets) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -464,7 +464,7 @@ TEST(PathSearchTest, allPathsPartialAllSources) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -497,7 +497,7 @@ TEST(PathSearchTest, singlePathWithIrrelevantNode) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -540,7 +540,7 @@ TEST(PathSearchTest, elongatedDiamond) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -573,7 +573,94 @@ TEST(PathSearchTest, numPathsPerTarget) {
                                  1};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+// Graph:
+// 0 -> 1 -> 2 -> 3 -> 4
+TEST(PathSearchTest, targetBeyondMaxDepth) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+  auto expected = makeIdTableFromVector({});
+  expected.setNumColumns(4);
+
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(4)};
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {},
+                                 true,
+                                 std::nullopt,
+                                 3};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTableView(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+// Graph:
+// 0 -> 1 -> 2 -> 3 -> 4
+//
+// NOTE: Zero-length paths (a source that is itself a target) are never part
+// of the result, because a path is represented by its edges. With `maxDepth`
+// 0, no paths of length >= 1 are allowed either, so the result is empty.
+TEST(PathSearchTest, maxDepthZeroYieldsNoPaths) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+  auto expected = makeIdTableFromVector({});
+  expected.setNumColumns(4);
+
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(1)};
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {},
+                                 true,
+                                 std::nullopt,
+                                 0};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTableView(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+// Graph:
+// 0 -> 1 -> 2 -> 3 -> 4
+TEST(PathSearchTest, targetWithinMaxDepth) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1), I(0), I(0)},
+      {V(1), V(2), I(0), I(1)},
+  });
+
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(2)};
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {},
+                                 true,
+                                 std::nullopt,
+                                 2};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -615,7 +702,7 @@ TEST(PathSearchTest, multiSourceMultiTargetallPaths) {
                                  {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -644,7 +731,7 @@ TEST(PathSearchTest, multiSourceMultiTargetallPathsNotCartesian) {
                                  false};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -680,7 +767,7 @@ TEST(PathSearchTest, sourceBound) {
   pathSearch.bindSourceSide(sourceTree, 0);
 
   auto resultTable = pathSearch.computeResult(false);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -716,7 +803,7 @@ TEST(PathSearchTest, targetBound) {
   pathSearch.bindTargetSide(targetTree, 0);
 
   auto resultTable = pathSearch.computeResult(false);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 
@@ -751,7 +838,7 @@ TEST(PathSearchTest, sourceAndTargetBound) {
   pathSearch.bindSourceAndTargetSide(sideTree, 0, 1);
 
   auto resultTable = pathSearch.computeResult(false);
-  ASSERT_THAT(resultTable.idTable(),
+  ASSERT_THAT(resultTable.idTableView(),
               ::testing::UnorderedElementsAreArray(expected));
 }
 

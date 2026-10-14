@@ -5,14 +5,26 @@
 #ifndef QLEVER_SRC_INDEX_IDTABLEUTILS_H
 #define QLEVER_SRC_INDEX_IDTABLEUTILS_H
 
+#include <algorithm>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/Log.h"
 
 class IdTableUtils {
+  // The number of threads for the parallel sort, settable via the runtime
+  // parameter `parallel-sort-num-threads` (values below `1` are treated
+  // as `1`).
+  static size_t numSortThreads() {
+    size_t numThreads =
+        getRuntimeParameter<&RuntimeParameters::parallelSortNumThreads_>();
+    return std::max<size_t>(numThreads, 1);
+  }
+
  public:
   template <size_t WIDTH>
   static void sort(IdTable* tab, const size_t keyColumn) {
@@ -24,7 +36,7 @@ class IdTableUtils {
           [keyColumn](const auto& a, const auto& b) {
             return a[keyColumn] < b[keyColumn];
           },
-          ad_utility::parallel_tag(NUM_SORT_THREADS));
+          ad_utility::parallel_tag(numSortThreads()));
     } else {
       std::sort(stab.begin(), stab.end(),
                 [keyColumn](const auto& a, const auto& b) {
@@ -48,7 +60,7 @@ class IdTableUtils {
     IdTableStatic<WIDTH> stab = std::move(*tab).toStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
       ad_utility::parallel_sort(stab.begin(), stab.end(), comp,
-                                ad_utility::parallel_tag(NUM_SORT_THREADS));
+                                ad_utility::parallel_tag(numSortThreads()));
     } else {
       std::sort(stab.begin(), stab.end(), comp);
     }
@@ -64,6 +76,17 @@ class IdTableUtils {
   // be used to implement a cancellation mechanism that throws on cancellation.
   static size_t countDistinct(const IdTable& input,
                               const std::function<void()>& checkCancellation);
+
+  // Return true iff the `table` (an `IdTable` or a view of one) contains at
+  // least one `Id` of type `Datatype::LocalVocabIndex`.
+  template <typename Table>
+  static bool containsLocalVocabIds(const Table& table) {
+    return ql::ranges::any_of(table.getColumns(), [](const auto& column) {
+      return ql::ranges::any_of(column, [](Id id) {
+        return id.getDatatype() == Datatype::LocalVocabIndex;
+      });
+    });
+  }
 };
 
 #endif  // QLEVER_SRC_INDEX_IDTABLEUTILS_H

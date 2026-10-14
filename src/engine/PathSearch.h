@@ -14,6 +14,8 @@
 #include "engine/Operation.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
+#include "util/VectorWithMemoryLimit.h"
 
 enum class PathSearchAlgorithm { ALL_PATHS };
 
@@ -21,7 +23,7 @@ enum class PathSearchAlgorithm { ALL_PATHS };
  * @brief Represents the source or target side of a PathSearch.
  * The side can either be a variable or a list of Ids.
  */
-using SearchSide = std::variant<Variable, std::vector<Id>>;
+using SearchSide = std::variant<Variable, IdColumn>;
 
 namespace pathSearch {
 struct Edge {
@@ -32,7 +34,7 @@ struct Edge {
   size_t edgeRow_;
 };
 
-using EdgesLimited = std::vector<Edge, ad_utility::AllocatorWithLimit<Edge>>;
+using EdgesLimited = ad_utility::VectorWithMemoryLimit<Edge>;
 
 struct Path {
   EdgesLimited edges_;
@@ -46,9 +48,14 @@ struct Path {
   void pop_back() { edges_.pop_back(); }
 
   const Id& end() { return edges_.back().end_; }
+
+  // `Path` is not copyable because its `edges_` are stored in a
+  // `VectorWithMemoryLimit`, which is not copyable (see there). Explicit copies
+  // can be made via `clone()`.
+  [[nodiscard]] Path clone() const { return Path{edges_.clone()}; }
 };
 
-using PathsLimited = std::vector<Path, ad_utility::AllocatorWithLimit<Path>>;
+using PathsLimited = ad_utility::VectorWithMemoryLimit<Path>;
 
 /**
  * @class BinSearchWrapper
@@ -58,13 +65,13 @@ using PathsLimited = std::vector<Path, ad_utility::AllocatorWithLimit<Path>>;
  *
  */
 class BinSearchWrapper {
-  const IdTable& table_;
+  const IdTableView<0>& table_;
   size_t startCol_;
   size_t endCol_;
   std::vector<size_t> edgeCols_;
 
  public:
-  BinSearchWrapper(const IdTable& table, size_t startCol, size_t endCol,
+  BinSearchWrapper(const IdTableView<0>& table, size_t startCol, size_t endCol,
                    std::vector<size_t> edgeCols);
 
   /**
@@ -80,7 +87,7 @@ class BinSearchWrapper {
    * the search starts from all possible sources (i.e. all
    * start nodes). Returns only unique start nodes.
    */
-  std::vector<Id> getSources() const;
+  IdColumn getSources() const;
 
   std::vector<Id> getEdgeProperties(const Edge& edge) const;
 
@@ -100,6 +107,9 @@ struct PathSearchConfiguration {
   std::vector<Variable> edgeProperties_;
   bool cartesian_ = true;
   std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
+  // Cap on the number of edges in any recorded path. An edge directly
+  // out of the source counts as depth 1.
+  std::optional<uint64_t> maxDepth_ = std::nullopt;
 
   bool sourceIsVariable() const {
     return std::holds_alternative<Variable>(sources_);
@@ -113,7 +123,7 @@ struct PathSearchConfiguration {
       return std::get<Variable>(side).toSparql();
     }
     std::ostringstream os;
-    for (auto id : std::get<std::vector<Id>>(side)) {
+    for (auto id : std::get<IdColumn>(side)) {
       os << id << ", ";
     }
     return std::move(os).str();
@@ -136,6 +146,10 @@ struct PathSearchConfiguration {
     os << "EdgeProperties:" << '\n';
     for (const auto& edgeProperty : edgeProperties_) {
       os << "  " << edgeProperty.toSparql() << '\n';
+    }
+
+    if (maxDepth_.has_value()) {
+      os << "MaxDepth: " << maxDepth_.value() << '\n';
     }
 
     return std::move(os).str();
@@ -170,8 +184,10 @@ class PathSearch : public Operation {
              std::shared_ptr<QueryExecutionTree> subtree,
              PathSearchConfiguration config);
 
-  std::vector<QueryExecutionTree*> getChildren() override;
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
+ public:
   const PathSearchConfiguration& getConfig() const { return config_; }
 
   ColumnIndex getStartIndex() const {
@@ -254,9 +270,11 @@ class PathSearch : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  std::pair<ql::span<const Id>, ql::span<const Id>> handleSearchSides() const;
+  std::pair<ConstIdColumnRef, ConstIdColumnRef> handleSearchSides() const;
 
   /**
    * @brief Finds paths based on the configured algorithm.
@@ -265,16 +283,18 @@ class PathSearch : public Operation {
   pathSearch::PathsLimited findPaths(
       const Id& source, const std::unordered_set<uint64_t>& targets,
       const pathSearch::BinSearchWrapper& binSearch,
-      std::optional<uint64_t> numPathsPerTarget) const;
+      std::optional<uint64_t> numPathsPerTarget,
+      std::optional<uint64_t> maxDepth) const;
 
   /**
    * @brief Finds all paths in the graph.
    * @return A vector of all paths.
    */
   pathSearch::PathsLimited allPaths(
-      ql::span<const Id> sources, ql::span<const Id> targets,
+      ConstIdColumnRef sources, ConstIdColumnRef targets,
       const pathSearch::BinSearchWrapper& binSearch, bool cartesian,
-      std::optional<uint64_t> numPathsPerTarget) const;
+      std::optional<uint64_t> numPathsPerTarget,
+      std::optional<uint64_t> maxDepth) const;
 
   /**
    * @brief Converts paths to a result table with a specified width.

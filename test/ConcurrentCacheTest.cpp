@@ -491,6 +491,88 @@ TEST(ConcurrentCache,
       ad_utility::Exception);
 }
 
+// Regression test for a race in `moveFromInProgressToCache`. A fresh
+// computation could end up inserting a key that a concurrent thread had already
+// inserted into the cache, which used to crash with "Trying to insert a cache
+// key which was already present". The deterministic interleaving is:
+//
+// 1. Thread `A` computes the key, but its result is unsuitable for caching, so
+//    it deregisters the key from `_inProgress` and signals
+//    `finish(nullptr)` without inserting anything into the cache.
+// 2. Thread `W` was waiting for `A`. Because `A` finished with a null result
+//    (rather than throwing, which would make `W` throw as well), `W` falls
+//    back to computing the result itself and inserts it into the cache via
+//    the guarded `tryInsertIfNotPresent`.
+// 3. Thread `C` starts a fresh computation of the same key in the window
+//    after `A` deregistered the key but before `W` inserted it. `C`
+//    becomes the "must compute" thread and eventually calls
+//    `moveFromInProgressToCache` with the key already present in the cache.
+//
+// Before the fix, step 3 crashed; now the insert is skipped.
+TEST(ConcurrentCache, moveFromInProgressToCacheSkipsAlreadyPresentKey) {
+  SimpleConcurrentLruCache cache{};
+  auto returnFalse = [](const auto&) { return false; };
+
+  // The three computations are gated by their own signals so that we can force
+  // the exact interleaving described above.
+  StartStopSignal signalA;
+  StartStopSignal signalW;
+  StartStopSignal signalC;
+
+  // Step 1: `A` registers the key in `_inProgress`, but its result is
+  // unsuitable for the cache.
+  auto futA = std::async(std::launch::async, [&]() {
+    return cache.computeOnce(0, waiting_function("a"s, 0, &signalA), false,
+                             returnFalse);
+  });
+  signalA.hasStartedSignal_.wait();
+
+  // Step 2: `W` starts and waits for `A`'s in-progress computation.
+  UseCounter useCounter{cache};
+  auto futW = std::async(std::launch::async, [&]() {
+    return cache.computeOnce(0, waiting_function("w"s, 0, &signalW), false,
+                             returnTrue);
+  });
+  useCounter.waitForChange();
+
+  // Let `A` finish. Because its result is unsuitable, it deregisters the key
+  // and signals `finish(nullptr)`, so `W` falls back to computing the result
+  // itself. `W`'s fallback computation then blocks on `signalW`, before it
+  // inserts.
+  signalA.mayFinishSignal_.notify();
+  signalW.hasStartedSignal_.wait();
+
+  // Step 3: `C` now starts a fresh computation. Since the key is no longer in
+  // `_inProgress` and not yet in the cache, `C` becomes the "must compute"
+  // thread. It blocks on `signalC`, before calling `moveFromInProgressToCache`.
+  auto futC = std::async(std::launch::async, [&]() {
+    return cache.computeOnce(0, waiting_function("c"s, 0, &signalC), false,
+                             returnTrue);
+  });
+  signalC.hasStartedSignal_.wait();
+
+  // Let `W` finish: it inserts the key into the cache.
+  signalW.mayFinishSignal_.notify();
+  auto resultW = futW.get();
+  EXPECT_THAT(resultW._resultPointer, Pointee("w"s));
+  EXPECT_TRUE(cache.cacheContains(0));
+
+  // Let `C` finish: `moveFromInProgressToCache` now finds the key already
+  // present. Before the fix this threw; now the insert is skipped.
+  signalC.mayFinishSignal_.notify();
+  EXPECT_NO_THROW(futC.get());
+
+  // `A`'s computation completed normally (its result was just not cached).
+  EXPECT_THAT(futA.get()._resultPointer, Pointee("a"s));
+
+  // The in-progress entry was properly removed and the cache holds `W`'s value.
+  EXPECT_TRUE(cache.getStorage().wlock()->_inProgress.empty());
+  EXPECT_EQ(cache.numNonPinnedEntries(), 1);
+  auto contained = cache.getIfContained(0);
+  ASSERT_TRUE(contained.has_value());
+  EXPECT_THAT(contained->_resultPointer, Pointee("w"s));
+}
+
 // _____________________________________________________________________________
 TEST(ConcurrentCache, testTryInsertIfNotPresentDoesWorkCorrectly) {
   auto hasValue = [](std::string value) {

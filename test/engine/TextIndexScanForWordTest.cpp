@@ -181,8 +181,8 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   ASSERT_EQ(s1.getResultWidth(), 3);
 
   auto result = s1.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().numColumns(), 3);
-  ASSERT_EQ(result.idTable().size(), 4);
+  ASSERT_EQ(result.idTableView().numColumns(), 3);
+  ASSERT_EQ(result.idTableView().size(), 4);
   s2.getExternallyVisibleVariableColumns();
 
   // Test if all columns are there and correct
@@ -300,8 +300,8 @@ TEST(TextIndexScanForWord, WordScanShortPrefix) {
 
   auto result = s1.computeResultOnlyForTesting();
   auto tr = TextResult{qec, result};
-  ASSERT_EQ(result.idTable().numColumns(), 3);
-  ASSERT_EQ(result.idTable().size(), 10);
+  ASSERT_EQ(result.idTableView().numColumns(), 3);
+  ASSERT_EQ(result.idTableView().size(), 10);
 
   // Check if word and text are correctly retrieved
   ASSERT_EQ(withFirst("astronomer"), tr.getRow(0));
@@ -324,8 +324,8 @@ TEST(TextIndexScanForWord, WordScanStarPrefix) {
 
   auto result = s1.computeResultOnlyForTesting();
   auto tr = TextResult{qec, result};
-  ASSERT_EQ(result.idTable().numColumns(), 3);
-  ASSERT_EQ(result.idTable().size(), 50);
+  ASSERT_EQ(result.idTableView().numColumns(), 3);
+  ASSERT_EQ(result.idTableView().size(), 50);
 
   // Things to look out for: Documents come before Literals. Literals are
   // Sorted wrt. the StringSortComparator. The both of them are classified as
@@ -394,8 +394,8 @@ TEST(TextIndexScanForWord, WordScanBasic) {
 
   auto result = s1.computeResultOnlyForTesting();
   auto tr1 = TextResult{qec, result, false};
-  ASSERT_EQ(result.idTable().numColumns(), 2);
-  ASSERT_EQ(result.idTable().size(), 2);
+  ASSERT_EQ(result.idTableView().numColumns(), 2);
+  ASSERT_EQ(result.idTableView().size(), 2);
 
   ASSERT_EQ("\"he failed the test\"", tr1.getTextRecord(0));
   ASSERT_EQ("\"the test on friday was really hard\"", tr1.getTextRecord(1));
@@ -406,8 +406,8 @@ TEST(TextIndexScanForWord, WordScanBasic) {
 
   result = s2.computeResultOnlyForTesting();
   auto tr2 = TextResult{qec, result, false};
-  ASSERT_EQ(result.idTable().numColumns(), 2);
-  ASSERT_EQ(result.idTable().size(), 1);
+  ASSERT_EQ(result.idTableView().numColumns(), 2);
+  ASSERT_EQ(result.idTableView().size(), 1);
 
   ASSERT_EQ("\"testing can help\"", tr2.getTextRecord(0));
 
@@ -417,8 +417,8 @@ TEST(TextIndexScanForWord, WordScanBasic) {
 
   result = s3.computeResultOnlyForTesting();
   auto tr3 = TextResult{qec, result, false};
-  ASSERT_EQ(result.idTable().numColumns(), 2);
-  ASSERT_EQ(result.idTable().size(), 1);
+  ASSERT_EQ(result.idTableView().numColumns(), 2);
+  ASSERT_EQ(result.idTableView().size(), 1);
 
   ASSERT_EQ(secondDocText, tr3.getTextRecord(0));
 }

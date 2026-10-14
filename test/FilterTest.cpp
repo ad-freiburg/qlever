@@ -8,8 +8,10 @@
 #include "engine/Filter.h"
 #include "engine/IndexScan.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -40,6 +42,29 @@ std::vector<IdTable> toVector(Result::LazyResult generator) {
 ad_utility::triple_component::Iri iri(std::string_view string) {
   return TripleComponent::Iri::fromIriref(string);
 }
+
+// An expression that always returns an empty `SetOfIntervals` of the given
+// `size`, independent of the size of the input.
+class SetOfIntervalsOfFixedSize : public sparqlExpression::SparqlExpression {
+  size_t size_;
+
+ public:
+  explicit SetOfIntervalsOfFixedSize(size_t size) : size_{size} {}
+
+  sparqlExpression::ExpressionResult evaluate(
+      sparqlExpression::EvaluationContext*) const override {
+    return ad_utility::SetOfIntervals{{}, size_};
+  }
+
+  std::string getCacheKey(const VariableToColumnMap&) const override {
+    return absl::StrCat("SetOfIntervalsOfFixedSize ", size_);
+  }
+
+  bool isDeterministic() const override { return true; }
+
+ private:
+  ql::span<Ptr> childrenImpl() override { return {}; }
+};
 
 // _____________________________________________________________________________
 void checkSetPrefilterExpressionVariablePair(
@@ -132,7 +157,7 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
   ASSERT_TRUE(result->isFullyMaterialized());
 
   EXPECT_EQ(
-      result->idTable(),
+      result->idTableView(),
       makeIdTableFromVector({{true}, {true}, {true}, {true}, {true}}, asBool));
 }
 
@@ -163,7 +188,7 @@ TEST(Filter,
   ASSERT_TRUE(result->isFullyMaterialized());
 
   EXPECT_EQ(
-      result->idTable(),
+      result->idTableView(),
       makeIdTableFromVector({{true}, {true}, {true}, {true}, {true}}, asBool));
 }
 
@@ -241,8 +266,20 @@ TEST(Filter, lazyChildMaterializedResultBinaryFilter) {
   auto result = filter.getResult(false, ComputationMode::FULLY_MATERIALIZED);
   ASSERT_TRUE(result->isFullyMaterialized());
 
-  EXPECT_EQ(result->idTable(),
+  EXPECT_EQ(result->idTableView(),
             makeIdTableFromVector({{5}, {6}, {7}, {8}, {8}}, I));
+
+  // The size of a `SetOfIntervals` must match the size of the input.
+  ValuesForTesting twoRows{
+      qec, makeIdTableFromVector({{1}, {2}}, I), {Variable{"?x"}}};
+  Filter filterWithWrongSize{
+      qec,
+      std::make_shared<QueryExecutionTree>(
+          qec, std::make_shared<ValuesForTesting>(std::move(twoRows))),
+      {std::make_unique<SetOfIntervalsOfFixedSize>(3), "wrong size"}};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      filterWithWrongSize.getResult(false, ComputationMode::FULLY_MATERIALIZED),
+      ::testing::HasSubstr("does not match the size of the evaluation"));
 }
 
 // _____________________________________________________________________________
@@ -265,4 +302,28 @@ TEST(Filter, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(filter, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), filter.getDescriptor());
+}
+
+// _____________________________________________________________________________
+TEST(Filter, isDeterministic) {
+  using namespace sparqlExpression;
+  QueryExecutionContext* qec = ad_utility::testing::getQec();
+
+  auto makeTree = [qec]() {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, IdTable{1, qec->getAllocator()},
+        std::vector<std::optional<Variable>>{Variable{"?x"}});
+  };
+
+  // Deterministic expression.
+  Filter detFilter{
+      qec,
+      makeTree(),
+      {std::make_unique<VariableExpression>(Variable{"?x"}), "?x"}};
+  EXPECT_TRUE(detFilter.isDeterministic());
+
+  // Non-deterministic expression.
+  Filter nonDetFilter{
+      qec, makeTree(), {std::make_unique<RandomExpression>(), "RAND()"}};
+  EXPECT_FALSE(nonDetFilter.isDeterministic());
 }

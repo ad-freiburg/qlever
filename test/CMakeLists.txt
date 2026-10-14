@@ -1,5 +1,31 @@
 include(GoogleTest)
 
+# The test binaries are not shipped and link without LTO (see
+# `QLEVER_ENABLE_LTO` in the top-level `CMakeLists.txt`). With GCC, also compile
+# them without LTO, so that no (unused) GIMPLE bytecode is generated for them.
+#
+# NOTE: `add_compile_options` sets a directory property that applies to all
+# targets created afterwards in this directory and its subdirectories (in
+# particular `testUtil` below, which is why this block comes first), and never
+# to the parent directory.
+if (QLEVER_ENABLE_LTO AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-fno-lto)
+endif()
+
+# Emscripten link options for all test binaries:
+# - `-sPROXY_TO_PTHREAD`: run `main` on a pthread. Emscripten starts threads
+#   and frees the stacks of finished threads on the main JavaScript thread, so a
+#   test that blocks the main thread would otherwise starve both.
+# - `-sEXIT_RUNTIME=1`: exit when `main` returns (required with the above).
+# - `-sGROWABLE_ARRAYBUFFERS=2`: avoid a check for memory growth on every memory
+#   access from JavaScript (requires Node.js >= 26).
+# - `-O1`: link without `wasm-opt -O3` (the objects are still compiled with
+#   `-O3`). This makes linking ~35x faster, and the tests even run faster.
+if (EMSCRIPTEN)
+    add_link_options(
+            -sPROXY_TO_PTHREAD -sEXIT_RUNTIME=1 -sGROWABLE_ARRAYBUFFERS=2 -O1)
+endif ()
+
 # Needed for creating the `testUil`-library.
 add_subdirectory(util EXCLUDE_FROM_ALL)
 
@@ -8,6 +34,14 @@ add_subdirectory(util EXCLUDE_FROM_ALL)
 # arguments.
 function(linkTest basename)
     qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main ${CMAKE_THREAD_LIBS_INIT} global)
+    # Reuse the precompiled headers of `testUtil`. This requires the same
+    # compiler flags and definitions as `testUtil`, so only tests that link
+    # against `testUtil` qualify (otherwise, e.g., the definitions of
+    # OpenTelemetry are missing, and GCC ignores the precompiled header, but
+    # still includes all its headers).
+    if (USE_PRECOMPILED_HEADERS AND "testUtil" IN_LIST ARGN)
+        target_precompile_headers(${basename} REUSE_FROM testUtil)
+    endif ()
 endfunction()
 
 # Add the executable ${basename} that is compiled from the source file
@@ -19,12 +53,18 @@ endfunction()
 # Usage: `linkAndDiscoverTest(basename, [additionalLibraries...]`
 # Link the executable `basename` against `gmock_main`,threading library,
 # and all `additionLibraries` which are passed as arguments.
-# Then run `gtest_discover_tests` to add the tests cases from the executable.
+# Then register the test cases from the executable with `ctest` (see
+# `QLEVER_ONE_TEST_CASE_PER_FILE` in the top-level `CMakeLists.txt` for the two
+# possible regimes).
 # Typically you should use `addAndLinkTest` (below) but this function can be used,
 # if a test binary requires multiple sources
 function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES LABELS "${basename}")
+    if (QLEVER_ONE_TEST_CASE_PER_FILE)
+        add_test(NAME ${basename} COMMAND ${basename})
+    else ()
+        gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES LABELS "${basename}")
+    endif ()
 endfunction()
 
 # Same as `linkAndDiscoverTest`, but marks the discovered tests as
@@ -35,8 +75,13 @@ endfunction()
 # issues should be fixed via per-test unique filenames instead.
 function(linkAndDiscoverTestSerial basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
-            TRUE LABELS "${basename}")
+    if (QLEVER_ONE_TEST_CASE_PER_FILE)
+        add_test(NAME ${basename} COMMAND ${basename})
+        set_tests_properties(${basename} PROPERTIES RUN_SERIAL TRUE)
+    else ()
+        gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
+                TRUE LABELS "${basename}")
+    endif ()
 endfunction()
 
 if (SINGLE_TEST_BINARY)
@@ -52,14 +97,17 @@ else ()
 
 endif ()
 
-# The implementation of `addLinkAndDiscoverTest` and `addLinkandDiscoverTestNoLibs` below.
-function(addLinkAndDiscoverTestImpl basename)
+# The shared implementation of the `addLinkAndDiscoverTest*` family below.
+# `discoverFunction` is the name of the function used to link and discover the
+# tests, i.e. either `linkAndDiscoverTest` or its serial variant
+# `linkAndDiscoverTestSerial`.
+function(addLinkAndDiscoverTestImpl discoverFunction basename)
     if (SINGLE_TEST_BINARY)
         target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
         qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
     else ()
         addTest(${basename})
-        linkAndDiscoverTest(${basename} ${ARGN})
+        cmake_language(CALL ${discoverFunction} ${basename} ${ARGN})
     endif ()
 
 endfunction()
@@ -72,13 +120,13 @@ endfunction()
 
 # This function links the test against `testUtil` (basically all of QLever).
 function(addLinkAndDiscoverTest basename)
-    addLinkAndDiscoverTestImpl(${basename} ${ARGN} testUtil)
+    addLinkAndDiscoverTestImpl(linkAndDiscoverTest ${basename} ${ARGN} testUtil)
 endfunction()
 
 # This function links only against Gtest + the explicitly specified libraries.
 # It can be used for tests of standalone utils that don't require the rest of QLever.
 function(addLinkAndDiscoverTestNoLibs basename)
-    addLinkAndDiscoverTestImpl(${basename} ${ARGN})
+    addLinkAndDiscoverTestImpl(linkAndDiscoverTest ${basename} ${ARGN})
 endfunction()
 
 
@@ -101,23 +149,11 @@ endfunction()
 # Serial variants of `addLinkAndDiscoverTest` / `addLinkAndDiscoverTestNoLibs`.
 # See `linkAndDiscoverTestSerial` for the policy on when to use them.
 function(addLinkAndDiscoverTestSerial basename)
-    if (SINGLE_TEST_BINARY)
-        target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
-        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
-    else ()
-        addTest(${basename})
-        linkAndDiscoverTestSerial(${basename} testUtil ${ARGN})
-    endif ()
+    addLinkAndDiscoverTestImpl(linkAndDiscoverTestSerial ${basename} ${ARGN} testUtil)
 endfunction()
 
 function(addLinkAndDiscoverTestSerialNoLibs basename)
-    if (SINGLE_TEST_BINARY)
-        target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
-        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
-    else ()
-        addTest(${basename})
-        linkAndDiscoverTestSerial(${basename} ${ARGN})
-    endif ()
+    addLinkAndDiscoverTestImpl(linkAndDiscoverTestSerial ${basename} ${ARGN})
 endfunction()
 
 # Only compile and link the test, but do not run it.
@@ -127,6 +163,14 @@ function(addAndLinkTest basename)
     linkTest(${basename} ${ARGN})
 endfunction()
 
+# The directory with the test data that is checked in (currently only an index
+# in the previous index format, see `data/oldIndexFormat/README.md`). Tests must
+# only read from this directory; anything they write belongs into their working
+# directory. Emscripten tests cannot access the host filesystem, so tests that
+# read from it have to embed it into their binary (see `index/CMakeLists.txt`).
+set(QLEVER_TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data")
+add_compile_definitions(QLEVER_TEST_DATA_DIR="${QLEVER_TEST_DATA_DIR}")
+
 add_subdirectory(engine)
 add_subdirectory(parser)
 add_subdirectory(index)
@@ -134,36 +178,47 @@ add_subdirectory(backports)
 add_subdirectory(rdfTypes)
 add_subdirectory(joinAlgorithms)
 add_subdirectory(libqlever)
+add_subdirectory(parallelBlockMerge)
+add_subdirectory(blockSort)
 
-OPTION(_DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS "Disable some tests that cause undefined symbol errors when building with Emscripten." OFF)
-
-if (NOT _DISABLE_EMSCRIPTEN_PROBLEMATIC_TESTS)
+# Only register tests whose libraries are built (not the case for Emscripten).
+if (TARGET benchmark)
     addLinkAndDiscoverTestSerial(BenchmarkMeasurementContainerTest benchmark testUtil)
 
     addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
-
-    addLinkAndDiscoverTest(ServerTest engine server)
-
-    addLinkAndDiscoverTest(SparqlProtocolTest engine)
-
-    addLinkAndDiscoverTest(UrlParserTest)
-
-    addLinkAndDiscoverTest(GraphStoreProtocolTest engine server)
-
-    addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
-
-    addLinkAndDiscoverTest(ExceptionHandlingTest)
 endif ()
 
-addLinkAndDiscoverTest(ValueIdComparatorsTest util)
+if (TARGET server)
+    addLinkAndDiscoverTest(ServerTest engine server)
 
-addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
+    addLinkAndDiscoverTest(HttpApiHelpersTest server)
 
-addLinkAndDiscoverTest(StringUtilsTest util)
+    addLinkAndDiscoverTest(GraphStoreProtocolTest engine server)
+endif ()
+
+addLinkAndDiscoverTest(SparqlProtocolTest engine)
+
+addLinkAndDiscoverTest(UrlParserTest)
+
+addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
+
+addLinkAndDiscoverTest(ExceptionHandlingTest)
+
+addLinkAndDiscoverTest(ValueIdComparatorsTest qlever_util)
+
+addLinkAndDiscoverTest(SparqlParserTest sparqlParser engine sparqlExpressions)
+
+addLinkAndDiscoverTest(VariableCounterTest sparqlParser engine)
+
+addLinkAndDiscoverTest(StringUtilsTest qlever_util)
+
+addLinkAndDiscoverTest(RegexSetTest qlever_util)
+
+addLinkAndDiscoverTest(BinaryDiffApplierTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(ConstexprSmallStringTest)
 
-addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
+addLinkAndDiscoverTest(CryptographicHashUtilsTest qlever_util)
 
 addLinkAndDiscoverTest(CacheTest)
 
@@ -174,15 +229,25 @@ addLinkAndDiscoverTest(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
-addLinkAndDiscoverTest(WordsAndDocsFileParserTest parser)
+addLinkAndDiscoverTest(WordsAndDocsFileParserTest sparqlParser)
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 
 addLinkAndDiscoverTest(IndexTest index)
 
+addLinkAndDiscoverTest(PermutationTest index)
+
 addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTest(IdTripleTest index)
+
+addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
+
+addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
+
+addLinkAndDiscoverTest(RebuildIndexStrategyTest qlever_util)
+
+addLinkAndDiscoverTest(KeepPreviousIndexDirsTest qlever)
 
 addLinkAndDiscoverTest(DeltaTriplesTest index)
 
@@ -210,26 +275,23 @@ addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 
 addLinkAndDiscoverTest(HasPredicateScanTest engine)
 
-addLinkAndDiscoverTest(MmapVectorTest)
-
-# BufferedVectorTest also uses conflicting filenames.
-addLinkAndDiscoverTest(BufferedVectorTest)
+addLinkAndDiscoverTest(ExternalOverflowStorageTest)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
 if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 util)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain sparqlParser qlever_util)
 else ()
     add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-    linkAndDiscoverTest(TokenTest parser re2 util)
+    linkAndDiscoverTest(TokenTest sparqlParser qlever_util)
 endif ()
 
-addLinkAndDiscoverTest(RdfParserTest parser re2)
+addLinkAndDiscoverTestNoLibs(RdfParserTest index)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
-addLinkAndDiscoverTest(IdTableTest util)
+addLinkAndDiscoverTest(IdTableTest qlever_util)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
@@ -239,37 +301,55 @@ addLinkAndDiscoverTest(PathSearchTest engine)
 
 addLinkAndDiscoverTestSerial(ProxyTest engine)
 
-addLinkAndDiscoverTest(BatchedPipelineTest)
-
 addLinkAndDiscoverTest(TupleHelpersTest)
 
 addLinkAndDiscoverTest(UriParserUriTest)
 
 addLinkAndDiscoverTest(ParsedUriTest)
 
-addLinkAndDiscoverTestNoLibs(StringSortComparatorTest)
+addLinkAndDiscoverTestNoLibs(StringSortComparatorTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(LocaleManagerTest stringUtils)
+
+addLinkAndDiscoverTestNoLibs(GenericCharTraitsTest)
 
 addLinkAndDiscoverTest(PriorityQueueTest)
 
 addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
-addLinkAndDiscoverTest(AllocatorWithLimitTest)
+addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
+
+addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
+
+addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
+
+addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
+
+addLinkAndDiscoverTestNoLibs(AlignedAllocatorTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
 
 # this test runs for quite some time and might have spurious failures!
 # Therefore it is compiled, but not run. If you want to run it,
 # change the following two lines.
-addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
-#addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
+addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator sparqlParser)
+#addLinkAndDiscoverTest(SortPerformanceEstimatorTest sortPerformanceEstimator)
 
 addLinkAndDiscoverTestNoLibs(SerializerTest)
 
-addLinkAndDiscoverTestNoLibs(ParametersTest)
+addLinkAndDiscoverTestNoLibs(ParametersTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)
 
 addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
+addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
+
 addLinkAndDiscoverTest(TaskQueueTest)
+
+addLinkAndDiscoverTest(TaskQueueOnExecutorTest)
+
+addLinkAndDiscoverTest(ConcurrencyLimitedExecutorTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
@@ -287,7 +367,9 @@ addLinkAndDiscoverTestNoLibs(StringBatcherTest)
 
 addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
-addLinkAndDiscoverTestNoLibs(CompactStringVectorTest parser)
+addLinkAndDiscoverTestNoLibs(CompactStringVectorTest sparqlParser)
+
+addLinkAndDiscoverTestNoLibs(OwnedOrViewedVectorTest)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
@@ -295,13 +377,19 @@ addLinkAndDiscoverTest(ContentEncodingHelperTest http)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
 
-addLinkAndDiscoverTest(VocabularyTest index)
+addLinkAndDiscoverTest(VocabularyTest vocabulary)
 
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
 
+addLinkAndDiscoverTestNoLibs(UniqueBlockViewTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(AsyncTransformViewTest qlever_util)
+
 addLinkAndDiscoverTestNoLibs(TakeUntilInclusiveViewTest)
+
+addLinkAndDiscoverTestNoLibs(ChunkedIotaViewTest)
 
 addLinkAndDiscoverTest(ForwardTest)
 
@@ -311,37 +399,47 @@ addLinkAndDiscoverTestNoLibs(AsyncStreamTest)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
+addLinkAndDiscoverTest(HyperLogLogTest)
+
 addLinkAndDiscoverTest(NBitIntegerTest)
 
-addLinkAndDiscoverTest(GeoPointTest)
+addLinkAndDiscoverTestNoLibs(GeoPointTest rdfTypes)
 
-addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
+addLinkAndDiscoverTest(GeoSparqlHelpersTest rdfTypes)
 
-addLinkAndDiscoverTest(HttpUtilsTest util http)
+addLinkAndDiscoverTest(GeoConvertersTest qlever_util)
 
-addLinkAndDiscoverTest(DateYearDurationTest util parser)
+addLinkAndDiscoverTest(HttpUtilsTest qlever_util http)
 
-addLinkAndDiscoverTest(DurationTest util)
+addLinkAndDiscoverTest(DateYearDurationTest qlever_util sparqlParser)
 
-addLinkAndDiscoverTest(TripleComponentTest parser)
+addLinkAndDiscoverTest(DurationTest qlever_util)
 
-addLinkAndDiscoverTest(ValueIdTest util)
+addLinkAndDiscoverTest(TripleComponentTest)
+
+addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
+
+addLinkAndDiscoverTest(DatatypeTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
 
-addLinkAndDiscoverTest(ParseExceptionTest parser engine)
+addLinkAndDiscoverTest(ParseExceptionTest sparqlParser engine)
 
 addLinkAndDiscoverTest(TransparentFunctorsTest)
 
-addLinkAndDiscoverTest(SelectClauseTest parser engine)
+addLinkAndDiscoverTest(SelectClauseTest sparqlParser engine)
 
-addLinkAndDiscoverTest(RelationalExpressionTest parser sparqlExpressions index engine)
+addLinkAndDiscoverTest(RelationalExpressionTest sparqlParser sparqlExpressions index engine)
 
-addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
+addLinkAndDiscoverTest(CheckUsePatternTrickTest sparqlParser engine)
 
-addLinkAndDiscoverTest(RegexExpressionTest parser sparqlExpressions index engine parser)
+addLinkAndDiscoverTest(RegexExpressionTest sparqlParser sparqlExpressions index engine sparqlParser)
 
 addLinkAndDiscoverTest(LocalVocabTest engine)
+
+addLinkAndDiscoverTest(LocalVocabEntryTest index)
+
+addLinkAndDiscoverTest(SecondaryVocabularyTest index engine sparqlParser)
 
 addLinkAndDiscoverTest(ValuesTest engine)
 
@@ -351,13 +449,32 @@ addLinkAndDiscoverTestSerial(SparqlJsonBindingUtilsTest engine)
 
 addLinkAndDiscoverTest(LoadTest engine)
 
-addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
+# Not for Emscripten: it tests the native HTTP client (Emscripten uses `fetch`)
+# and triggers https://github.com/llvm/llvm-project/issues/208409.
+if (NOT EMSCRIPTEN)
+    addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
+endif ()
+
+addLinkAndDiscoverTest(HttpProxyConfigTest http)
+
+# The `fetch`-based implementation of the HTTP client that replaces the
+# Boost.Beast-based one for Emscripten (see `HttpClientEmscripten.cpp`) can of
+# course only be tested in a WebAssembly build.
+if (EMSCRIPTEN)
+    addLinkAndDiscoverTest(HttpClientEmscriptenTest http)
+endif ()
 
 addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
 addLinkAndDiscoverTestNoLibs(ConstexprUtilsTest)
 
 addLinkAndDiscoverTestNoLibs(ResetWhenMovedTest)
+
+addLinkAndDiscoverTestNoLibs(NoCopyNoMoveTest)
+
+addLinkAndDiscoverTestNoLibs(CopyOnWritePtrTest)
+
+addLinkAndDiscoverTestNoLibs(CopyOnWriteChunkedVectorTest)
 
 addLinkAndDiscoverTestSerial(TimerTest)
 
@@ -383,13 +500,13 @@ addLinkAndDiscoverTest(OrderByTest engine)
 
 addLinkAndDiscoverTest(ValuesForTestingTest index)
 
-addLinkAndDiscoverTest(ExportQueryExecutionTreesTest index engine parser)
+addLinkAndDiscoverTest(ExportQueryExecutionTreesTest index engine sparqlParser)
 
-addLinkAndDiscoverTest(AggregateExpressionTest parser sparqlExpressions index engine)
+addLinkAndDiscoverTest(AggregateExpressionTest sparqlParser sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
-addLinkAndDiscoverTest(SparqlExpressionTypesTest sparqlExpressions util)
+addLinkAndDiscoverTest(SparqlExpressionTypesTest sparqlExpressions qlever_util)
 
 addLinkAndDiscoverTest(LimitOffsetClauseTest)
 
@@ -397,7 +514,7 @@ addLinkAndDiscoverTest(OperationTest engine)
 
 addLinkAndDiscoverTest(RuntimeInformationTest engine index)
 
-addLinkAndDiscoverTest(VariableToColumnMapTest parser)
+addLinkAndDiscoverTest(VariableToColumnMapTest sparqlParser)
 
 addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
@@ -417,13 +534,15 @@ addLinkAndDiscoverTest(RandomTest)
 
 addLinkAndDiscoverTest(FindUndefRangesTest engine)
 
-addLinkAndDiscoverTest(AddCombinedRowToTableTest engine util)
+addLinkAndDiscoverTest(AddCombinedRowToTableTest engine qlever_util)
 
 addLinkAndDiscoverTest(CtreHelpersTest)
 
 addLinkAndDiscoverTest(ComparisonWithNanTest)
 
 addLinkAndDiscoverTestNoLibs(ThreadSafeQueueTest)
+
+addLinkAndDiscoverTestNoLibs(RecyclingPoolTest)
 
 addLinkAndDiscoverTest(IdTableHelpersTest)
 
@@ -436,6 +555,15 @@ addLinkAndDiscoverTest(JsonUtilTest)
 addLinkAndDiscoverTest(JoinAlgorithmsTest)
 
 addLinkAndDiscoverTest(AsioHelpersTest)
+# Emscripten's clang crashes on this file at -O2/-O3, see
+# https://github.com/llvm/llvm-project/issues/226735. The precompiled header is
+# compiled with -O3 and hence cannot be used.
+if (EMSCRIPTEN)
+    set_source_files_properties(AsioHelpersTest.cpp PROPERTIES
+            COMPILE_OPTIONS "-O1" SKIP_PRECOMPILE_HEADERS ON)
+endif ()
+
+addLinkAndDiscoverTest(AsyncResourcePoolTest)
 
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
@@ -451,17 +579,17 @@ addLinkAndDiscoverTest(UpdateFetcherTest http)
 
 addLinkAndDiscoverTest(MessageSenderTest http)
 
-addLinkAndDiscoverTestNoLibs(CancellationHandleTest util)
+addLinkAndDiscoverTestNoLibs(CancellationHandleTest qlever_util)
 
-addLinkAndDiscoverTestSerial(ProgressBarTest util)
-
-addLinkAndDiscoverTest(CachingMemoryResourceTest)
+addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 
 addLinkAndDiscoverTest(ConstantsTest)
+
+addLinkAndDiscoverTest(RuntimeParametersTest global)
 
 addLinkAndDiscoverTest(JThreadTest)
 
@@ -485,7 +613,7 @@ addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
 
 addLinkAndDiscoverTest(ExecuteUpdateTest engine)
 
-addLinkAndDiscoverTest(ValueGetterTest engine)
+addLinkAndDiscoverTest(ValueGetterTest engine index)
 
 addLinkAndDiscoverTest(LruCacheTest)
 
@@ -493,9 +621,13 @@ addLinkAndDiscoverTest(LruCacheWithStatisticsTest)
 
 addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
 
+addLinkAndDiscoverTestNoLibs(RangeThatReleasesOnEndTest)
+
 addLinkAndDiscoverTest(TripleSerializerTest)
 
-addLinkAndDiscoverTest(GeometryInfoTest util)
+addLinkAndDiscoverTest(GeometryInfoTest qlever_util)
+
+addLinkAndDiscoverTest(GeoCellGridTest vocabulary)
 
 addLinkAndDiscoverTest(QueryRewriteUtilTest engine)
 
@@ -505,15 +637,26 @@ addLinkAndDiscoverTest(TimeTracerTest)
 
 addLinkAndDiscoverTestNoLibs(SourceLocationTest)
 
-addLinkAndDiscoverTest(UnitOfMeasurementTest util)
+addLinkAndDiscoverTest(UnitOfMeasurementTest qlever_util)
 
-addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
+# When the `server` library is not built (Emscripten, see
+# `src/engine/CMakeLists.txt`), the server-integration test is compiled out
+# via `#ifndef __EMSCRIPTEN__` in the test file and all other tests still run.
+if (TARGET server)
+    addLinkAndDiscoverTest(MaterializedViewsTest qlever engine server)
+else ()
+    addLinkAndDiscoverTest(MaterializedViewsTest qlever engine)
+endif ()
 
-addLinkAndDiscoverTest(MaterializedViewsStarRewriteTest qlever engine server)
+addLinkAndDiscoverTest(MaterializedViewsPatternRewriteTest qlever engine)
+
+addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
 addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
+
+addLinkAndDiscoverTestNoLibs(IoUringManagerTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(VariantRangeFilterTest)
 
@@ -524,12 +667,24 @@ addLinkAndDiscoverTest(ExternalValuesTest engine)
 
 addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 
-addLinkAndDiscoverTest(ExportIdsTest engine parser)
+addLinkAndDiscoverTest(ExportIdsTest engine sparqlParser)
 
 addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 
-addLinkAndDiscoverTest(FilesystemHelpersTest util)
+addLinkAndDiscoverTest(ConstructDeduplicatorTest engine)
+
+addLinkAndDiscoverTest(FilesystemHelpersTest qlever_util)
 
 addLinkAndDiscoverTest(LogTest)
+
+addLinkAndDiscoverTest(QueryEventLogTest qlever_util)
+
+addLinkAndDiscoverTestNoLibs(GlobalExecutorTest qlever_util)
+
+addLinkAndDiscoverTest(MetricsTest metrics)
+
+addLinkAndDiscoverTest(InstrumentedExecutorTest metrics)
+
+addLinkAndDiscoverTest(ResourceMonitorTest qlever_util)

@@ -21,6 +21,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -28,11 +29,11 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "index/Index.h"
+#include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/AllocatorTestHelpers.h"
-#include "util/Conversions.h"
-#include "util/GeoSparqlHelpers.h"
 #include "util/IdTestHelpers.h"
 
 namespace {
@@ -157,7 +158,8 @@ CPP_template(typename T)(
 // If it is an ID (possibly contained in the `IdOrLocalVocabEntry` variant),
 // then the `matchId` matcher from above is used, else we test for equality.
 template <typename T>
-requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
+requires(!isVectorResult<T>)
+auto nonVectorResultMatcher(const T& expected) {
   if constexpr (std::is_same_v<T, Id>) {
     return matchId(expected);
   } else if constexpr (std::is_same_v<T, IdOrLocalVocabEntry>) {
@@ -213,18 +215,13 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
   LocalVocab localVocab;
   IdTable table{alloc};
 
-  // Get the size of `operand`: size for a vector, 1 otherwise. For a
-  // `SetOfIntervals`, this actually returns the *minimal* size of an
-  // `EvaluationContext` that can expand the `SetOfIntervals`. This is used to
-  // implement test cases where all the inputs are `SetOfIntervals` or constant,
-  // and the result is NOT a `SetOfIntervals`.
+  // Get the size of `operand`: size for a vector or a `SetOfIntervals`, 1
+  // otherwise.
   auto getResultSize = [](const auto& operand) -> size_t {
     using T = std::decay_t<decltype(operand)>;
-    if constexpr (isVectorResult<T>) {
+    if constexpr (isVectorResult<T> ||
+                  std::is_same_v<T, ad_utility::SetOfIntervals>) {
       return operand.size();
-    } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
-      return operand._intervals.empty() ? 0ul
-                                        : operand._intervals.back().second;
     }
     return 1;
   };
@@ -232,7 +229,7 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
   const auto resultSize = [&operands..., &getResultSize]() {
     if constexpr (sizeof...(operands) == 0) {
       (void)getResultSize;
-      return 0ul;
+      return uint64_t{0};
     } else {
       return std::max({getResultSize(operands)...});
     }
@@ -299,6 +296,41 @@ struct TestNaryExpressionVec {
   }
 };
 
+struct TestTernaryAddImpl {
+  template <typename A, typename B, typename C>
+  auto operator()(A a, B b, C c) const {
+    if constexpr (ql::concepts::same_as<std::decay_t<A>, int64_t> &&
+                  ql::concepts::same_as<std::decay_t<B>, int64_t> &&
+                  ql::concepts::same_as<std::decay_t<C>, int64_t>) {
+      return a + b + c;
+    } else {
+      return static_cast<double>(a) + static_cast<double>(b) +
+             static_cast<double>(c);
+    }
+  }
+};
+
+using TestTernaryAdd =
+    sparqlExpression::detail::MakeNumericExpression<TestTernaryAddImpl>;
+
+using TestTernaryAddOperation = sparqlExpression::detail::Operation<
+    3, sparqlExpression::detail::FV<
+           TestTernaryAdd, sparqlExpression::detail::NumericValueGetter>>;
+
+class TestTernaryAddExpression
+    : public sparqlExpression::detail::NaryExpression<TestTernaryAddOperation> {
+ public:
+  using sparqlExpression::detail::NaryExpression<
+      TestTernaryAddOperation>::NaryExpression;
+};
+
+auto makeTestTernaryAddExpression = [](SparqlExpression::Ptr a,
+                                       SparqlExpression::Ptr b,
+                                       SparqlExpression::Ptr c) {
+  return std::make_unique<TestTernaryAddExpression>(std::move(a), std::move(b),
+                                                    std::move(c));
+};
+
 auto testOr = testBinaryExpressionCommutative<&makeOrExpression>;
 auto testAnd = testBinaryExpressionCommutative<&makeAndExpression>;
 auto testPlus = testBinaryExpressionCommutative<&makeAddExpression>;
@@ -356,15 +388,15 @@ TEST(SparqlExpression, logicalOperators) {
 
   using S = ad_utility::SetOfIntervals;
   {
-    auto s1 = S{{{0, 4}}};
-    auto s2 = S{{{3, 6}}};
+    auto s1 = S{{{0, 4}}, 6};
+    auto s2 = S{{{3, 6}}, 6};
     // The type erased expressions don't use the optimizations between
     // set-of-interval, but always return a fully materialized vector.
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
     V<Id> resultAsVec{{t, t, t, t, t, t}, alloc};
     testOr(resultAsVec, s1, s2);
 #else
-    S resultAsSet = S{{{0, 6}}};
+    S resultAsSet = S{{{0, 6}}, 6};
     testOr(resultAsSet, s1, s2);
 #endif
   }
@@ -381,15 +413,15 @@ TEST(SparqlExpression, logicalOperators) {
 
   using S = ad_utility::SetOfIntervals;
   {
-    auto s1 = S{{{0, 4}}};
-    auto s2 = S{{{3, 6}}};
+    auto s1 = S{{{0, 4}}, 6};
+    auto s2 = S{{{3, 6}}, 6};
     // The type erased expressions don't use the optimizations between
     // set-of-interval, but always return a fully materialized vector.
 #ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
     V<Id> resultAsVec{{f, f, f, t, f, f}, alloc};
     testAnd(resultAsVec, s1, s2);
 #else
-    S resultAsSet = S{{{3, 4}}};
+    S resultAsSet = S{{{3, 4}}, 6};
     testAnd(resultAsSet, s1, s2);
 #endif
   }
@@ -465,6 +497,199 @@ TEST(SparqlExpression, logicalOperators) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(SparqlExpression, multiplyExpressionWithVariable) {
+  TestContext testContext;
+
+  auto expression = makeMultiplyExpression(
+      std::make_unique<VariableExpression>(Variable{"?ints"}),
+      std::make_unique<IdExpression>(I(2)));
+
+  V<Id> expected{{I(2), I(0), I(-2)}, testContext.qec->getAllocator()};
+
+  auto result = expression->evaluate(&testContext.context);
+
+  ASSERT_THAT(result, ::testing::VariantWith<V<Id>>(
+                          sparqlExpressionResultMatcher(expected)));
+}
+
+// Test that `canUseNumericFastPath` accepts exactly the combinations of
+// numeric value getters with `ValueId` vectors or constants (also outside a
+// constant-expression context, because coverage tools don't track compile-time
+// uses).
+TEST(SparqlExpression, canUseNumericFastPath) {
+  using sparqlExpression::detail::canUseNumericFastPath;
+  using sparqlExpression::detail::NumericOrDateValueGetter;
+  using sparqlExpression::detail::NumericValueGetter;
+  using sparqlExpression::detail::StringValueGetter;
+
+  // Numeric value getters on `ValueId` vectors and constants.
+  EXPECT_TRUE((canUseNumericFastPath<std::tuple<NumericValueGetter>,
+                                     std::tuple<ValueId>>()));
+  EXPECT_TRUE((canUseNumericFastPath<
+               std::tuple<NumericValueGetter, NumericOrDateValueGetter>,
+               std::tuple<V<ValueId>, ValueId>>()));
+
+  // A non-numeric value getter or an operand that is not a `ValueId`.
+  EXPECT_FALSE((canUseNumericFastPath<std::tuple<StringValueGetter>,
+                                      std::tuple<ValueId>>()));
+  EXPECT_FALSE((canUseNumericFastPath<std::tuple<NumericValueGetter>,
+                                      std::tuple<IdOrLocalVocabEntry>>()));
+  EXPECT_FALSE(
+      (canUseNumericFastPath<std::tuple<NumericValueGetter, NumericValueGetter>,
+                             std::tuple<ValueId, V<IdOrLocalVocabEntry>>>()));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
+  V<Id> ints{{I(1), I(-2), I(3)}, alloc};
+  V<Id> doubles{{D(0.5), D(2.0), D(-1.5)}, alloc};
+
+  // Vector-vector: Int/Int, Int/Double, Double/Double.
+  testPlus(V<Id>{{I(2), I(-4), I(6)}, alloc}, ints, ints);
+  testPlus(V<Id>{{D(1.5), D(0.0), D(1.5)}, alloc}, ints, doubles);
+  testPlus(V<Id>{{D(1.0), D(4.0), D(-3.0)}, alloc}, doubles, doubles);
+
+  // Vector-constant and constant-vector. `testPlus` checks both operand orders.
+  testPlus(V<Id>{{I(3), I(0), I(5)}, alloc}, ints, I(2));
+  testPlus(V<Id>{{D(2.5), D(4.0), D(0.5)}, alloc}, doubles, D(2.0));
+
+  // Exercise the `MakeNumericExpression` -> `NumericIdWrapper` fast-path
+  // mapping.
+  testMultiply(V<Id>{{I(2), I(-4), I(6)}, alloc}, ints, I(2));
+  testMultiply(V<Id>{{D(0.5), D(-4.0), D(-4.5)}, alloc}, ints, doubles);
+
+  // Preserve `NanOrInfToUndef` in the homogeneous numeric fast path.
+  testDivide(V<Id>{{U, U, U}, alloc}, ints, I(0));
+
+  // Mixed numeric vectors must preserve the expected arithmetic semantics.
+  V<Id> mixed{{I(1), D(2.0), I(3)}, alloc};
+  testPlus(V<Id>{{I(2), D(3.0), I(4)}, alloc}, mixed, I(1));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlExpression, speculativeNumericBinaryFastPath) {
+  // Integers are the majority, so the speculative path is taken with `Int`
+  // as the expected datatype. The other rows must reach the generic fallback
+  // of the slow path: a `Bool` counts as `0` or `1` there, an `UNDEF`, a
+  // vocabulary entry, and (for `+`) a date all yield `UNDEF`.
+  V<Id> mostlyInts{{I(1), I(2), I(3), I(4), I(5), D(0.5), B(true), U, Voc(4),
+                    Dat(DateYearOrDuration::parseXsdDate, "2000-01-01")},
+                   alloc};
+  testPlus(V<Id>{{I(2), I(3), I(4), I(5), I(6), D(1.5), I(2), U, U, U}, alloc},
+           mostlyInts, I(1));
+  testMultiply(
+      V<Id>{{D(2.0), D(4.0), D(6.0), D(8.0), D(10.0), D(1.0), D(2.0), U, U, U},
+            alloc},
+      mostlyInts, D(2.0));
+
+  // Doubles are the majority and the constant is an integer, so the slow path
+  // sees the `Int`/`Int` and `Int`/`Double` combinations.
+  V<Id> mostlyDoubles{{D(0.5), D(1.5), D(2.5), I(3), B(false)}, alloc};
+  testPlus(V<Id>{{D(1.5), D(2.5), D(3.5), I(4), I(1)}, alloc}, mostlyDoubles,
+           I(1));
+
+  // A tie between integers and doubles has no majority type and takes the
+  // generic path; the result must be the same either way.
+  V<Id> tied{{I(1), D(2.0), U}, alloc};
+  testPlus(V<Id>{{I(2), D(3.0), U}, alloc}, tied, I(1));
+}
+
+// Test the numeric fast paths of `NaryExpression` on a ternary addition: the
+// homogeneous path, the speculative majority-type path with its per-row
+// fallback, and the generic fallback.
+TEST(SparqlExpression, naryNumericFastPaths) {
+  // Homogeneous integer operands.
+  {
+    V<Id> left{{I(1), I(2), I(3), I(4)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), I(112), I(113), I(114)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // Homogeneous operands with different numeric types.
+  {
+    V<Id> left{{I(1), I(2), I(3)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10)}, alloc};
+    V<Id> right{{D(0.5), D(1.5), D(2.5)}, alloc};
+
+    V<Id> expected{{D(11.5), D(13.5), D(15.5)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // An operand with an integer majority: the single double row is computed by
+  // the per-row fallback of the speculative path.
+  {
+    V<Id> left{{I(1), I(2), D(3.0), I(4), I(5)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), I(112), D(113.0), I(114), I(115)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // No majority type, hence the generic fallback.
+  {
+    V<Id> left{{I(1), D(2.0), I(3), D(4.0)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), D(112.0), I(113), D(114.0)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // A boolean row is computed by the per-row fallback, which treats `true` as
+  // the number 1.
+  {
+    V<Id> left{{I(1), B(true), I(3)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), I(111), I(113)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+
+  // A row with an unsupported datatype is computed by the per-row fallback and
+  // yields `UNDEF`.
+  {
+    V<Id> left{{I(1), Voc(4), I(3)}, alloc};
+    V<Id> middle{{I(10), I(10), I(10)}, alloc};
+    V<Id> right{{I(100), I(100), I(100)}, alloc};
+
+    V<Id> expected{{I(111), U, I(113)}, alloc};
+
+    testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
+                       right);
+  }
+}
+
+// Test that the generic evaluation loop of `NaryExpression` checks for
+// cancellation (`STR` on an `Id` vector takes that loop).
+TEST(SparqlExpression, naryExpressionGenericPathIsCancellable) {
+  TestContext outerContext;
+  auto& context = outerContext.context;
+  V<Id> input{{I(1), I(2), I(3)}, alloc};
+  context._endIndex = input.size();
+  auto expression = makeStrExpression(std::make_unique<SingleUseExpression>(
+      ExpressionResult{std::move(input)}));
+
+  context.cancellationHandle_->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(expression->evaluate(&context),
+               ad_utility::CancellationException);
+}
+
 // _____________________________________________________________________________________
 TEST(SparqlExpression, arithmeticOperators) {
   // Test `AddExpression`, `SubtractExpression`, `MultiplyExpression`, and
@@ -538,8 +763,14 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMinus(minus22, mixed, D(2.2));
   testPlus(minus22, mixed, D(-2.2));
 
+  using S = ad_utility::SetOfIntervals;
+  S alternating{{{0, 2}, {3, 4}}, 4};
+  V<Id> alternatingTimes2{{I(2), I(2), I(0), I(2)}, alloc};
+
   testMultiply(times2, mixed, I(2));
   testMultiply(times13, mixed, D(1.3));
+  testMultiply(I(6), I(2), I(3));
+  testMultiply(alternatingTimes2, alternating, I(2));
 
 #ifndef REDUCED_FEATURE_SET_FOR_CPP17
   // Test for `DateTime` - `DateTime`.
@@ -583,6 +814,15 @@ TEST(SparqlExpression, arithmeticOperators) {
   testMultiply(by2, mixed, D(0.5));
   testDivide(times13, mixed, D(1.0 / 1.3));
 
+  V<Id> divisors{{I(2), I(4), D(0.5)}, alloc};
+  V<Id> eightDividedBy{{D(4), D(2), D(16)}, alloc};
+
+  // constant–vector
+  testDivide(eightDividedBy, I(8), divisors);
+
+  // constant–constant
+  testDivide(D(4), I(8), I(2));
+
   // Division by zero is either `UNDEF` or `NaN/infinity`, depending on a
   // runtime parameter.
   V<Id> undef{{U, U, U, U}, alloc};
@@ -594,6 +834,7 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(undef, divByZeroInputsInt, I(0));
   testDivide(undef, divByZeroInputsDouble, D(0));
   testDivide(undef, divByZeroInputsInt, D(0));
+  testDivide(U, I(1), I(0));
 
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::divisionByZeroIsUndef_>(
@@ -602,6 +843,7 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(nanAndInf, divByZeroInputsInt, I(0));
   testDivide(nanAndInf, divByZeroInputsDouble, D(0));
   testDivide(nanAndInf, divByZeroInputsInt, D(0));
+  testDivide(D(inf), I(1), I(0));
 }
 
 // Test that the unary expression that is specified by the `makeFunction` yields
@@ -616,7 +858,8 @@ auto testUnaryExpression = [](VectorOrExpressionResult auto const& operand,
 
 TEST(SparqlExpression, dateOperators) {
   // Test `YearExpression`, `MonthExpression`, `DayExpression`,
-  //  `HoursExpression`, `MinutesExpression`, and `SecondsExpression`.
+  //  `HoursExpression`, `MinutesExpression`, `SecondsExpression` and
+  //  `ToEpochExpression`.
   // Helper function that asserts that the date operators give the expected
   // result on the given date.
   auto checkYear = testUnaryExpression<&makeYearExpression>;
@@ -625,8 +868,9 @@ TEST(SparqlExpression, dateOperators) {
   auto checkHours = testUnaryExpression<&makeHoursExpression>;
   auto checkMinutes = testUnaryExpression<&makeMinutesExpression>;
   auto checkSeconds = testUnaryExpression<&makeSecondsExpression>;
+  auto checkEpoch = testUnaryExpression<&makeToEpochExpression>;
   auto check = [&checkYear, &checkMonth, &checkDay, &checkHours, &checkMinutes,
-                &checkSeconds](
+                &checkSeconds, &checkEpoch](
                    const DateYearOrDuration& date,
                    std::optional<int> expectedYear,
                    std::optional<int> expectedMonth = std::nullopt,
@@ -634,6 +878,7 @@ TEST(SparqlExpression, dateOperators) {
                    std::optional<int> expectedHours = std::nullopt,
                    std::optional<int> expectedMinutes = std::nullopt,
                    std::optional<double> expectedSeconds = std::nullopt,
+                   std::optional<int64_t> expectedEpoch = std::nullopt,
                    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     auto optToIdInt = [](const auto& opt) {
@@ -657,27 +902,59 @@ TEST(SparqlExpression, dateOperators) {
     checkMinutes(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedMinutes)});
     checkSeconds(Ids{Id::makeFromDate(date)},
                  Ids{optToIdDouble(expectedSeconds)});
+    checkEpoch(Ids{Id::makeFromDate(date)}, Ids{optToIdInt(expectedEpoch)});
   };
 
   using D = DateYearOrDuration;
-  // Now the checks for dates with varying level of detail.
+// Now the checks for dates with varying level of detail.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // `ToEpochExpression` works with `std::chrono`.
   check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4, 22, 11, 53,
-        42.25);
-  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
-  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
-  check(D::parseXsdDate("0042-12-24"), 42, 12, 24);
-  check(D::parseXsdDate("-0099-07-01"), -99, 7, 1);
-  check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt);
-  check(D::parseXsdDate("0321-07-01"), 321, 7, 1);
-  check(D::parseXsdDate("2321-07-01"), 2321, 7, 1);
-
-  // Test behavior of the `largeYear` representation that doesn't store the
-  // actual date.
+        42.25, 9'633'222);
+  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22, std::nullopt, std::nullopt,
+        std::nullopt, 9'590'400);
+  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22, std::nullopt, std::nullopt,
+        std::nullopt, 9'590'400);
+  check(D::parseXsdDate("0042-12-24"), 42, 12, 24, std::nullopt, std::nullopt,
+        std::nullopt, -60'810'912'000);
+  check(D::parseXsdDate("-0099-07-01"), -99, 7, 1, std::nullopt, std::nullopt,
+        std::nullopt, -65'275'718'400);
+  check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt, std::nullopt,
+        std::nullopt, std::nullopt, -101'108'476'800);
+  check(D::parseXsdDate("0321-07-01"), 321, 7, 1, std::nullopt, std::nullopt,
+        std::nullopt, -52'021'785'600);
+  check(D::parseXsdDate("2321-07-01"), 2321, 7, 1, std::nullopt, std::nullopt,
+        std::nullopt, 11'092'118'400);
+#else
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4, 22, 11, 53,
+            42.25, 9'633'222),
+      ::testing::HasSubstr("does not support ql:toEpoch"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      check(D::parseXsdDate("1970-04-22"), 1970, 4, 22, std::nullopt,
+            std::nullopt, std::nullopt, 9'590'400),
+      ::testing::HasSubstr("does not support ql:toEpoch"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt,
+            std::nullopt, std::nullopt, std::nullopt, -101'108'476'800),
+      ::testing::HasSubstr("does not support ql:toEpoch"));
+#endif
+// Test behavior of the `largeYear` representation that doesn't store the
+// actual date.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   check(D::parseGYear("123456"), 123456);
   check(D::parseGYearMonth("-12345-01"), -12345, 1);
   check(D::parseGYearMonth("-12345-03"), -12345, 1);
   check(D::parseXsdDate("-12345-01-01"), -12345, 1, 1);
   check(D::parseXsdDate("-12345-03-04"), -12345, 1, 1);
+#else
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      check(D::parseGYear("123456"), 123456),
+      ::testing::HasSubstr("does not support ql:toEpoch"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      check(D::parseXsdDate("-12345-01-01"), -12345, 1, 1),
+      ::testing::HasSubstr("does not support ql:toEpoch"));
+#endif
 
   // Invalid inputs for date expressions.
   checkYear(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
@@ -686,10 +963,15 @@ TEST(SparqlExpression, dateOperators) {
   checkHours(Ids{Id::makeFromInt(42)}, Ids{Id::makeUndefined()});
   checkMinutes(Ids{Id::makeFromInt(84)}, Ids{Id::makeUndefined()});
   checkSeconds(Ids{Id::makeFromDouble(120.0123)}, Ids{Id::makeUndefined()});
+  checkEpoch(Ids{Id::makeFromInt(84)}, Ids{Id::makeUndefined()});
   auto testYear = testUnaryExpression<&makeYearExpression>;
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
   testYear(IdOrLocalVocabEntryVec{lit("noDate")}, Ids{U});
+
+  // Test epoch for invalid dates.
+  checkEpoch(Ids{Id::makeFromDate(D::parseXsdDate("1970-02-30"))},
+             Ids{Id::makeUndefined()});
 
   // test makeTimezoneStrExpression / makeTimezoneExpression
   auto positive = DayTimeDuration::Type::Positive;
@@ -839,6 +1121,16 @@ TEST(SparqlExpression, stringOperators) {
                                  lit("https://www.bimbimbam/2001/bamString"),
                                  lit("/hello"), iriref("</hello>")},
           IdOrLocalVocabEntry{iriref("<http://example.com/hi/>")}});
+
+  // `IRI()` does not unescape its argument, so the content of the resulting IRI
+  // may contain a backslash. Resolving it against a base IRI must not read that
+  // backslash as an escape sequence: `a\\u0062c` must not silently become
+  // `abc`. A backslash is not a valid URI character, so this is reported as an
+  // error instead.
+  EXPECT_ANY_THROW(checkIriOrUri(
+      IdOrLocalVocabEntryVec{U},
+      std::tuple{IdOrLocalVocabEntryVec{lit(R"(a\\u0062c)")},
+                 IdOrLocalVocabEntry{iriref("<http://example.com/hi/>")}}));
 
   // The ParsedUriGetter::operator()(ValueId, ...) overload is required by the
   // Mixin interface but logically unreachable (the base IRI is always a
@@ -1148,6 +1440,25 @@ TEST(SparqlExpression, unaryNegate) {
   // Empty strings are considered to be true.
   checkNegate(idOrLitOrStringVec({"true", "false", "", "blibb"}),
               Ids{B(false), B(false), B(true), B(false)});
+
+  // The negation of a `SetOfIntervals` lies within the range of the set, so it
+  // can also be used as the input of other expressions. This used to fail (see
+  // https://github.com/ad-freiburg/qlever/issues/3559).
+  using S = ad_utility::SetOfIntervals;
+  S set{{{0, 2}}, 4};
+  // The type erased expressions don't use the optimizations for
+  // `SetOfIntervals`, but always return a fully materialized vector.
+#ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
+  checkNegate(set, Ids{B(false), B(false), B(true), B(true)});
+#else
+  checkNegate(set, S{{{2, 4}}, 4});
+#endif
+  auto makeNegateOr = [](SparqlExpression::Ptr a, SparqlExpression::Ptr b) {
+    return makeOrExpression(makeUnaryNegateExpression(std::move(a)),
+                            std::move(b));
+  };
+  testNaryExpression(makeNegateOr, Ids{B(true), B(false), B(true), B(true)},
+                     set, Ids{B(true), B(false), B(false), B(true)});
 }
 
 // _____________________________________________________________________________________
@@ -1214,6 +1525,9 @@ TEST(SparqlExpression, customNumericFunctions) {
   auto checkPow = std::bind_front(testNaryExpression, &makePowExpression);
   checkPow(Ids{D(1), D(32), U, U}, Ids{I(5), D(2), U, D(0)},
            IdOrLocalVocabEntryVec{I(0), D(5), I(0), lit("abc")});
+  checkPow(Ids{D(4), D(9), U}, Ids{I(2), I(3), U}, I(2));
+  checkPow(Ids{D(1), D(8), U}, I(2), Ids{I(0), I(3), U});
+  checkPow(D(8), I(2), I(3));
 }
 
 // ____________________________________________________________________________
@@ -1241,6 +1555,15 @@ TEST(SparqlExpression, isSomethingFunctions) {
       testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, F});
   testUnaryExpression<makeBoundExpression>(
       testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, T, F});
+
+  // `ql:isEncodedIri` is only true for ids of datatype `EncodedVal`, not for
+  // regular vocabulary IRIs, string IRIs, literals, or unbound values.
+  auto checkIsEncodedIri = testUnaryExpression<&makeIsEncodedIriExpression>;
+  checkIsEncodedIri(Id::makeFromEncodedVal(0), T);
+  checkIsEncodedIri(iri, F);
+  checkIsEncodedIri(literal, F);
+  checkIsEncodedIri(U, F);
+  checkIsEncodedIri(IdOrLocalVocabEntry{iriref("<i>")}, F);
 
   auto expression = makeBoundExpression(
       std::make_unique<IdExpression>(ValueId::makeUndefined()));
@@ -1722,6 +2045,116 @@ TEST(SparqlExpression, geoSparqlExpressions) {
           geoLit("LINESTRING(2 8,4 6)"),
       },
       exampleMultiGeoms, Ids{I(2), I(2), I(2), I(2), I(2)});
+
+  // The internal function `ql:simplifyGeometry`.
+  auto checkSimplify =
+      std::bind_front(testNaryExpression, &makeSimplifyGeometryExpression);
+
+  const IdOrLocalVocabEntryVec geometries{
+      // 1. Undefined input geometry.
+      U,
+      // 2. Line with a vertex that is removed for this tolerance.
+      geoLit("LINESTRING(0 0,5 0.1,10 0)"),
+      // 3. Line whose middle vertex is too far from the simplified segment and
+      //    is therefore kept.
+      geoLit("LINESTRING(0 0,5 5,10 0)"),
+      // 4. Polygon with a near-collinear vertex that is removed.
+      geoLit("POLYGON((0 0,5 0.1,10 0,10 10,0 10,0 0))"),
+      // 5. Multipolygon: each member is simplified independently.
+      geoLit(
+          "MULTIPOLYGON(((0 0,5 0.1,10 0,10 10,0 10,0 0)),((20 20,25 20.1,30 "
+          "20,30 30,20 30,20 20)))"),
+      // 6. Points are returned unchanged.
+      geoLit("POINT(1 2)"),
+      // 7. Tolerance of zero is invalid -> UNDEF.
+      geoLit("POLYGON((0 0,5 0.1,10 0,10 10,0 10,0 0))"),
+      // 8. Negative tolerance is invalid -> UNDEF.
+      geoLit("LINESTRING(0 0,5 0.1,10 0)"),
+      // 9. Non-numeric (undefined) tolerance -> UNDEF.
+      geoLit("LINESTRING(0 0,5 0.1,10 0)"),
+      // 10. Non-geometry literal -> UNDEF.
+      IdOrLocalVocabEntry{lit("NotAGeometry")},
+      // 11. Invalid WKT with the correct datatype -> UNDEF.
+      geoLit("NOTWKT(1 2)"),
+      // 12. An integer tolerance is accepted just like a double.
+      geoLit("LINESTRING(0 0,5 0.1,10 0)"),
+  };
+  const Ids tolerances{D(1.0), D(1.0),  D(1.0), D(1.0), D(1.0), D(1.0),
+                       D(0.0), D(-1.0), U,      D(1.0), D(1.0), I(1)};
+  const IdOrLocalVocabEntryVec expected{
+      U,
+      geoLit("LINESTRING(0 0,10 0)"),
+      geoLit("LINESTRING(0 0,5 5,10 0)"),
+      geoLit("POLYGON((10 10,0 10,0 0,10 0,10 10))"),
+      geoLit(
+          "MULTIPOLYGON(((10 10,0 10,0 0,10 0,10 10)),((30 30,20 30,20 20,30 "
+          "20,30 30)))"),
+      geoLit("POINT(1 2)"),
+      U,
+      U,
+      U,
+      U,
+      U,
+      geoLit("LINESTRING(0 0,10 0)"),
+  };
+  checkSimplify(expected, geometries, tolerances);
+
+  // The function `geof:asGeoJSON`.
+  auto checkAsGeoJson = testUnaryExpression<&makeAsGeoJsonExpression>;
+  auto geoJsonLit = [](std::string_view content) {
+    return IdOrLocalVocabEntry{lit(
+        content, "^^<http://www.opengis.net/ont/geosparql#geoJSONLiteral>")};
+  };
+  checkAsGeoJson(
+      IdOrLocalVocabEntryVec{
+          U,
+          IdOrLocalVocabEntry{lit("NotAGeometry")},
+          geoLit("NOTWKT(1 2)"),
+          geoLit("POINT(1 2)"),
+          geoLit("LINESTRING(1 2,3 4.5)"),
+          // The rings of the polygon are closed explicitly in GeoJSON. The
+          // inner ring is oriented clockwise when parsing.
+          geoLit("POLYGON((0 0,10 0,10 10,0 0),(1 1,2 1,2 2))"),
+          geoLit("MULTIPOINT((1 2),(3 4))"),
+          geoLit("MULTILINESTRING((1 2,3 4),(5 6,7 8))"),
+          geoLit("MULTIPOLYGON(((0 0,1 0,1 1,0 0)),((2 2,3 2,3 3,2 2)))"),
+          geoLit("GEOMETRYCOLLECTION(POINT(1 2),LINESTRING(1 2,3 4))"),
+      },
+      IdOrLocalVocabEntryVec{
+          U,
+          U,
+          U,
+          geoJsonLit(R"({"type":"Point","coordinates":[1.0,2.0]})"),
+          geoJsonLit(
+              R"({"type":"LineString","coordinates":[[1.0,2.0],[3.0,4.5]]})"),
+          geoJsonLit(
+              R"({"type":"Polygon","coordinates":[[[0.0,0.0],[10.0,0.0],)"
+              R"([10.0,10.0],[0.0,0.0]],[[2.0,2.0],[2.0,1.0],[1.0,1.0],)"
+              R"([2.0,2.0]]]})"),
+          geoJsonLit(
+              R"({"type":"MultiPoint","coordinates":[[1.0,2.0],[3.0,4.0]]})"),
+          geoJsonLit(R"({"type":"MultiLineString","coordinates":)"
+                     R"([[[1.0,2.0],[3.0,4.0]],[[5.0,6.0],[7.0,8.0]]]})"),
+          geoJsonLit(R"({"type":"MultiPolygon","coordinates":)"
+                     R"([[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[0.0,0.0]]],)"
+                     R"([[[2.0,2.0],[3.0,2.0],[3.0,3.0],[2.0,2.0]]]]})"),
+          geoJsonLit(R"({"type":"GeometryCollection","geometries":)"
+                     R"([{"type":"Point","coordinates":[1.0,2.0]},)"
+                     R"({"type":"LineString","coordinates":)"
+                     R"([[1.0,2.0],[3.0,4.0]]}]})"),
+      });
+
+  // The coordinates of a `GeoPoint` (stored with limited precision) are
+  // rounded to six decimals, so the decoding artifacts do not show.
+  checkAsGeoJson(
+      IdOrLocalVocabEntryVec{
+          IdOrLocalVocabEntry{Id::makeFromGeoPoint(GeoPoint{2.5, 1.5})},
+          IdOrLocalVocabEntry{Id::makeFromGeoPoint(GeoPoint{48.0012341, -7.1})},
+      },
+      IdOrLocalVocabEntryVec{
+          geoJsonLit(R"({"type":"Point","coordinates":[1.5,2.5]})"),
+          geoJsonLit(R"({"type":"Point","coordinates":[-7.1,48.001234]})"),
+      });
 }
 
 // ________________________________________________________________________________________
@@ -1752,11 +2185,25 @@ TEST(SparqlExpression, ifAndCoalesce) {
       std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.0)}, U,
                  IdOrLocalVocabEntry{lit("eins")}, Ids{U, U, U, U, U, D(5.0)}});
 
-  // Check COALESCE with no arguments or empty arguments.
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}, Ids{}});
-  checkCoalesce(IdOrLocalVocabEntryVec{}, std::tuple{Ids{}, Ids{}, Ids{}});
+  // If all children are constant, the result of COALESCE is also constant.
+  checkCoalesce(IdOrLocalVocabEntry{lit("eins")},
+                std::tuple{U, IdOrLocalVocabEntry{lit("eins")}, I(3)});
+  checkCoalesce(IdOrLocalVocabEntry{I(3)}, std::tuple{I(3), U});
+  // If all children are unbound constants, the result is a single UNDEF.
+  checkCoalesce(U, std::tuple{U, U});
+
+  // Check COALESCE with no arguments or empty arguments. The result is a single
+  // UNDEF and not an empty vector, by the same rule as in the case directly
+  // above: nothing is bound, and for an empty input nothing ever can be. Both
+  // representations are equivalent for an ordinary expression (the number of
+  // result rows is determined by the input, not by this result), but only a
+  // constant is accepted when the `COALESCE` is evaluated as part of an
+  // implicit `GROUP BY` over an empty input, see the
+  // `CoalesceWithAggregateOnEmptyImplicitGroup` test in `GroupByTest.cpp`.
+  checkCoalesce(U, std::tuple{});
+  checkCoalesce(U, std::tuple{Ids{}});
+  checkCoalesce(U, std::tuple{Ids{}, Ids{}});
+  checkCoalesce(U, std::tuple{Ids{}, Ids{}, Ids{}});
 
   auto coalesceExpr = makeCoalesceExpressionVariadic(
       std::make_unique<IriExpression>(iri("<bim>")),
@@ -2016,6 +2463,41 @@ TEST(SparqlExpression, unboundVariableExpression) {
   EXPECT_THAT(var.getCacheKey({}), ::testing::HasSubstr("Unbound Variable"));
   EXPECT_THAT(var.evaluate(&ctx.context),
               ::testing::VariantWith<Id>(Id::makeUndefined()));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlExpression, groupedVariableIsConstantOutsideOfAggregate) {
+  Variable vocab{"?vocab"};
+  // Evaluate on a single-row "group" in which `?vocab` is constant.
+  auto setUpGroupedContext = [&vocab](TestContext& ctx) {
+    ctx.context._groupedVariables = {vocab};
+    ctx.context._isPartOfGroupBy = true;
+    ctx.context._beginIndex = 0;
+    ctx.context._endIndex = 1;
+  };
+
+  // Outside an aggregate the grouped variable is treated as a constant.
+  {
+    TestContext ctx;
+    setUpGroupedContext(ctx);
+    VariableExpression var{vocab};
+    EXPECT_THAT(var.evaluate(&ctx.context),
+                ::testing::VariantWith<Id>(ctx.Beta));
+  }
+
+  // Inside an aggregate the variable is not folded; the `VariableExpression`
+  // still evaluates to the `Variable` itself (which is expanded to the whole
+  // column by the surrounding aggregate).
+  {
+    TestContext ctx;
+    setUpGroupedContext(ctx);
+    auto aggregate = std::make_unique<SampleExpression>(
+        false, std::make_unique<VariableExpression>(vocab));
+    const auto* inner = aggregate->children()[0].get();
+    ASSERT_TRUE(inner->isInsideAggregate());
+    EXPECT_THAT(inner->evaluate(&ctx.context),
+                ::testing::VariantWith<::Variable>(vocab));
+  }
 }
 
 // ______________________________________________________________________________
@@ -2328,6 +2810,17 @@ TEST(NaryExpressionTypeErased, basicTests) {
   // change the cache key.
   exprs.push_back(makeTypeErasedOrAlwaysTrue(c2(), c1()));
   EXPECT_THAT(exprs, AllUniqueBy(getKey));
+}
+
+// _____________________________________________________________________________
+TEST(NaryExpressionTypeErased, isDeterministic) {
+  auto var = []() {
+    return std::make_unique<VariableExpression>(Variable{"?x"});
+  };
+  auto rand = []() { return std::make_unique<RandomExpression>(); };
+
+  EXPECT_TRUE(makeTypeErasedOrExpression(var(), var())->isDeterministic());
+  EXPECT_FALSE(makeTypeErasedOrExpression(var(), rand())->isDeterministic());
 }
 
 }  // anonymous namespace

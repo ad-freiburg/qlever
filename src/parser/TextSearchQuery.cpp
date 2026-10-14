@@ -69,7 +69,7 @@ std::variant<Variable, FixedEntity> VarOrFixedEntity::makeEntityVariant(
     return FixedEntity(std::move(fixedEntity), std::move(index));
   }
   return std::get<Variable>(entity);
-};
+}
 
 namespace parsedQuery {
 

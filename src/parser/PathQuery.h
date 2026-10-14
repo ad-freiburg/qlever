@@ -42,6 +42,7 @@ struct PathQuery : MagicServiceQuery {
 
   bool cartesian_ = true;
   std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
+  std::optional<uint64_t> maxDepth_ = std::nullopt;
 
   PathQuery() = default;
   PathQuery(PathQuery&& other) noexcept = default;
@@ -64,7 +65,7 @@ struct PathQuery : MagicServiceQuery {
    * the Ids of the TripleComponents. The Vocab is only used if the given vector
    * contains IRIs.
    */
-  std::variant<Variable, std::vector<Id>> toSearchSide(
+  std::variant<Variable, IdColumn> toSearchSide(
       std::vector<TripleComponent> side, const IndexImpl& index) const;
 
   /**
@@ -81,7 +82,7 @@ struct PathQuery : MagicServiceQuery {
   PathSearchConfiguration toPathSearchConfiguration(
       const IndexImpl& index) const;
 
-  constexpr std::string_view name() const override { return "path search"; };
+  QL_CONSTEXPR std::string_view name() const override { return "path search"; }
 };
 
 }  // namespace parsedQuery

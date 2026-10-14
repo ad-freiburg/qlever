@@ -21,7 +21,7 @@ struct Join {
   auto operator()(Range&& range) const {
     std::vector<ql::ranges::range_value_t<ql::ranges::range_value_t<Range>>>
         result;
-    auto view = ql::views::join(ad_utility::OwningView{AD_FWD(range)});
+    auto view = ql::views::join(AD_FWD(range));
     ql::ranges::copy(view, std::back_inserter(result));
     return result;
   }
@@ -51,10 +51,10 @@ void testRandomInts() {
   ql::ranges::sort(expected);
 
   std::vector<size_t> result;
-  ql::ranges::copy(ql::views::join(ad_utility::OwningView{
-                       ad_utility::parallelMultiwayMerge<size_t, false>(
-                           1_GB, input, std::less<>{}, blocksize)}),
-                   std::back_inserter(result));
+  ql::ranges::copy(
+      ql::views::join(ad_utility::parallelMultiwayMerge<size_t, false>(
+          1_GB, input, std::less<>{}, blocksize)),
+      std::back_inserter(result));
 
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }
@@ -110,7 +110,13 @@ TEST(ParallelMultiwayMerge, moveOfElements) {
 
 // _______________________________________________________________________________________________
 TEST(ParallelMultiwayMerge, randomInputs) {
+  // One thread per inner node of the merge tree, so 2000 inputs mean ~2000
+  // threads (~10 MB each under Emscripten), which is too expensive by default.
+#ifdef QLEVER_RUN_EXPENSIVE_TESTS
   testRandomInts<12, 2000, 20, 50>();
+#else
+  testRandomInts<12, 100, 20, 50>();
+#endif
   testRandomInts<13, 1, 40, 40>();
   testRandomInts<5, 2, 40, 50>();
   testRandomInts<1, 3, 30, 50>();

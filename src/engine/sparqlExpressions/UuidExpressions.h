@@ -52,7 +52,10 @@ class UuidExpressionImpl : public SparqlExpression {
     result.reserve(numElements);
     ad_utility::UuidGenerator uuidGen;
 
-    if (context->_isPartOfGroupBy) {
+    // As part of a GROUP BY (and outside of an aggregate) we only return one
+    // value per group. Inside an aggregate we must still produce one value per
+    // row, so that e.g. `COUNT(STRUUID())` counts the rows in the group.
+    if (worksOnAggregatedData(context)) {
       return LocalVocabEntry{FuncConv(uuidGen()),
                              context->getLocalVocabContext()};
     }
@@ -71,6 +74,9 @@ class UuidExpressionImpl : public SparqlExpression {
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     return FuncKey(randId_);
   }
+
+  // UUID() / STRUUID() generate a fresh UUID on every invocation.
+  bool isDeterministic() const override { return false; }
 
   // The result of `UUID`/`STRUUID` is always a defined value.
   bool isResultAlwaysDefined(const VariableToColumnMap&) const override {

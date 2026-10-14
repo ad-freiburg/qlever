@@ -26,7 +26,7 @@ std::tuple<bool, size_t, std::string> Tokenizer::getNextToken(
 
   // we have to remember the current position of data so we can rewind after a
   // successful match
-  const char* beg = _data.begin();
+  const char* beg = _data.data();
   size_t dataSize = _data.size();
 
   for (size_t i = 0; i < regs.size(); i++) {
