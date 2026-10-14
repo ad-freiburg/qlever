@@ -38,18 +38,30 @@
 // pipeline consumes. A follow-up PR switches the merge to the `MergeBlock`s.
 namespace ad_utility::vocabulary_merger::detail {
 
+// An occurrence of a word in a partial vocabulary: the index of the partial
+// vocabulary and the local index of the word in it.
+using Occurrence = std::pair<uint32_t, uint64_t>;
+
 // A word from a partial vocabulary, as the merge sees it. The word itself is a
 // view into the storage of the `MergeBlock` that holds the `MergeWord`, so
 // that reading and merging the words allocates nothing per word (a merge
-// handles billions of them).
+// handles billions of them). While the partial vocabularies are merged, the
+// further occurrences of the same word in other partial vocabularies are
+// collected in the block (see `MergeBlock::addOccurrenceToLastWord`), so that
+// the words that leave the merge are distinct within a block, with one entry
+// per occurrence.
 struct MergeWord {
   // The word, a view into the block's storage.
   std::string_view word_;
   // The local index of the word in its partial vocabulary.
   uint64_t index_ = 0;
+  // The range of the further occurrences (see above) in the
+  // `moreOccurrences_` of the block.
+  uint64_t firstMoreOccurrence_ = 0;
+  uint32_t numMoreOccurrences_ = 0;
   // The partial vocabulary that the word came from.
   uint32_t partialFileId_ = 0;
-  // Whether the word will be externalized.
+  // Whether the word will be externalized (in any of its occurrences).
   bool isExternal_ = false;
 
   [[nodiscard]] bool& isExternal() { return isExternal_; }
@@ -93,6 +105,7 @@ struct MergeWord {
 // be moved, but not copied. The block is a random-access range of its words.
 class MergeBlock : public ad_utility::NoCopy {
  public:
+  using Occurrence = detail::Occurrence;
   using iterator = std::vector<MergeWord>::iterator;
   using const_iterator = std::vector<MergeWord>::const_iterator;
   // The buffer of the bytes of a block from a file. The bytes are not zeroed
@@ -106,6 +119,7 @@ class MergeBlock : public ad_utility::NoCopy {
       ad_utility::MemorySize::megabytes(1);
 
   std::vector<MergeWord> words_;
+  std::vector<Occurrence> moreOccurrences_;
   // The bytes of a block that was read from a file, see the constructor below.
   Buffer bytesFromFile_;
   // The storage of the words of a block of merged words, see `push`. A
@@ -138,7 +152,9 @@ class MergeBlock : public ad_utility::NoCopy {
                          "Trailing bytes in a block of a partial vocabulary");
   }
 
-  // Append a word, copying it into the storage of this block.
+  // Append a word, copying it into the storage of this block. The occurrence
+  // `(partialFileId, localIndex)` is its first one, further ones are added
+  // with `addOccurrenceToLastWord`.
   void push(std::string_view word, bool isExternal, uint32_t partialFileId,
             uint64_t localIndex) {
     MergeWord mergeWord;
@@ -149,10 +165,34 @@ class MergeBlock : public ad_utility::NoCopy {
     words_.push_back(mergeWord);
   }
 
-  // Append a copy of the `word` of another block.
+  // Append a copy of the `word` of another block. It must not have further
+  // occurrences (those live in its own block).
   void push(const MergeWord& word) {
+    AD_CORRECTNESS_CHECK(word.numMoreOccurrences_ == 0);
     push(word.iriOrLiteral(), word.isExternal(), word.partialFileId_,
          word.id());
+  }
+
+  // Record a further occurrence of the last word of the block.
+  void addOccurrenceToLastWord(uint32_t partialFileId, uint64_t localIndex) {
+    AD_CONTRACT_CHECK(!words_.empty());
+    auto& last = words_.back();
+    if (last.numMoreOccurrences_ == 0) {
+      last.firstMoreOccurrence_ = moreOccurrences_.size();
+    }
+    // The occurrences of the last word are the last ones in the vector.
+    AD_CORRECTNESS_CHECK(last.firstMoreOccurrence_ + last.numMoreOccurrences_ ==
+                         moreOccurrences_.size());
+    moreOccurrences_.emplace_back(partialFileId, localIndex);
+    ++last.numMoreOccurrences_;
+  }
+
+  // The further occurrences of a `word` of this block, see above.
+  ql::span<const Occurrence> moreOccurrences(const MergeWord& word) const {
+    AD_CONTRACT_CHECK(word.firstMoreOccurrence_ + word.numMoreOccurrences_ <=
+                      moreOccurrences_.size());
+    return {moreOccurrences_.data() + word.firstMoreOccurrence_,
+            word.numMoreOccurrences_};
   }
 
   // The words of the block, as a range.
@@ -172,6 +212,7 @@ class MergeBlock : public ad_utility::NoCopy {
   // Release the words and the storage.
   void clear() {
     words_.clear();
+    moreOccurrences_.clear();
     bytesFromFile_.clear();
     bytesFromFile_.shrink_to_fit();
     mergedWords_->release();
