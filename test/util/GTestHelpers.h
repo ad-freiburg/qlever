@@ -295,10 +295,8 @@ auto liftOptionalMatcher(MakeMatcher makeMatcher) {
 // `MakeMatcher` to each of the expected values in the argument of `ArrayType`
 // and returns an `ElementsAreArray` matcher of these submatchers.
 CPP_template(typename T, typename ArrayType, typename MakeMatcher)(
-    requires std::is_convertible_v<
-        ArrayType,
-        std::vector<T>>) auto liftMatcherToElementsAreArray(MakeMatcher
-                                                                makeMatcher) {
+    requires std::is_convertible_v<ArrayType, std::vector<T>>)
+auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
   return
       [makeMatcher](ArrayType expectedValues) -> ::testing::Matcher<ArrayType> {
         std::vector<::testing::Matcher<T>> childMatchers;

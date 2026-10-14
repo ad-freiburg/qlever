@@ -115,7 +115,7 @@ class FsstRepeatedDecoder {
   // Allow this type to be trivially serializable,
   CPP_template_2(typename T, typename U)(
       requires ql::concepts::same_as<T, FsstRepeatedDecoder>)
-      [[maybe_unused]] friend std::true_type allowTrivialSerialization(T, U) {
+  [[maybe_unused]] friend std::true_type allowTrivialSerialization(T, U) {
     return {};
   }
 };
