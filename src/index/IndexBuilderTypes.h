@@ -14,6 +14,7 @@
 #ifndef QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 #define QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
 #include <string>
@@ -166,7 +167,7 @@ class MonotonicBuffer {
   // the buffer.
   std::string_view addString(std::string_view input) {
     auto ptr = charAllocator_->allocate(input.size());
-    ql::ranges::copy(input, ptr);
+    std::copy(input.begin(), input.end(), ptr);
     return {ptr, input.size()};
   }
 

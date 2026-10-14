@@ -130,12 +130,19 @@ class IndexScan final : public Operation {
   // Return two generators, the first of which yields exactly the elements of
   // `input` and the second of which yields the matching blocks, skipping the
   // blocks consisting only of rows that don't match the tables yielded by
-  // `input` to speed up join algorithms when no undef values are presend. When
-  // there are undef values, the second generator represents the full index
-  // scan.
+  // `input` to speed up join algorithms when no undef values are present. When
+  // there are undef values or this scan has a LIMIT or OFFSET, the second
+  // generator represents the full index scan.
   std::pair<Result::LazyResult, Result::LazyResult> prefilterTables(
       Result::LazyResult input, ColumnIndex joinColumn,
       bool filterJoinSide = true);
+
+  // Return the root operation of `tree` if it is an `IndexScan` that supports
+  // the prefiltered joins above, else `nullptr`. Scans without variables are
+  // not supported; they read at most one block, as a triple is never split
+  // across blocks, so prefiltering wouldn't help.
+  static std::shared_ptr<IndexScan> getIfSupportsPrefilteredJoin(
+      const QueryExecutionTree& tree);
 
  private:
   // Implementation detail that allows to consume a lazy range from two other
@@ -153,6 +160,11 @@ class IndexScan final : public Operation {
   // yielded by the input wrapped by `innerState`.
   Result::LazyResult createPrefilteredIndexScanSide(
       std::shared_ptr<SharedGeneratorState> innerState);
+
+  // Like `chunkedIndexScan`, but keep the runtime info up to date while the
+  // result is consumed. `numBlocksAll` is the total number of blocks of the
+  // scan.
+  Result::LazyResult chunkedIndexScanWithRuntimeInfo(size_t numBlocksAll);
 
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
   // ALL the `Operations`.
@@ -341,10 +353,10 @@ class IndexScan final : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
 
-  // Returns a `VariableToColumnMap` that maps all visible variables of this
-  // `IndexScan` not to result column indices but to column indices in the
-  // underlying `Permutation`. This differs from the regular
-  // `VariableToColumnMap` if some columns are not read.  Used for
+  // Returns a `VariableToColumnMap` that maps all variables read by this
+  // `IndexScan` (also those hidden by a subquery) not to result column indices
+  // but to column indices in the underlying `Permutation`. This differs from
+  // the regular `VariableToColumnMap` if some columns are not read. Used for
   // `makeTreeWithBindColumn`.
   //
   // Example: We select the first three columns and an additional column at

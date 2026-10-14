@@ -1,6 +1,7 @@
 # Suppressions for ThreadSanitizer (TSAN). Pass this file to a TSAN-instrumented
 # binary via `TSAN_OPTIONS=suppressions=<path-to-this-file>`. The CI does this
-# in `.github/workflows/native-build.yml`. For the format of this file see
+# in `.github/workflows/native-build-only-if-complete-ci.yml`. For the format of
+# this file see
 # https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions
 
 # False positive in Boost.Asio (up to and including Boost 1.91). The function

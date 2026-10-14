@@ -269,6 +269,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"metricArea", &makeMetricAreaExpression},
       {"numGeometries", &makeNumGeometriesExpression},
       {"metricLength", &makeMetricLengthExpression},
+      {"asGeoJSON", &makeAsGeoJsonExpression},
   };
   using enum SpatialJoinType::Enum;
   static const BinaryFuncTable geoBinaryFuncs{
@@ -572,30 +573,38 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   describeClause.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
 
-  // Parse the WHERE clause and construct a SELECT query from it. The trailing
-  // `VALUES` clause belongs to this query (which computes the resources to
-  // describe), the other solution modifiers to the CONSTRUCT query below. For
-  // `DESCRIBE *`, add each visible variable as a resource to describe.
+  // Parse the WHERE clause and construct a SELECT query from it, which computes
+  // the resources to describe. The solution modifiers and the trailing `VALUES`
+  // clause belong to this query, because they apply to the solutions of the
+  // WHERE clause and not to the triples of the description (SPARQL 1.1, sec. 15
+  // and 16.4). For example, `LIMIT 1` describes the resources of one solution.
+  //
+  // NOTE: For `DESCRIBE *`, the query is a `SELECT *` while the solution
+  // modifiers are added (so that a `GROUP BY` is rejected like for `SELECT *`),
+  // and the visible variables are selected and described afterwards, when the
+  // variables of the trailing `VALUES` clause are visible, too.
   visitWhereClause(ctx->whereClause(), parsedQuery_);
+  auto& selectClause = parsedQuery_.selectClause();
+  if (describedResources.empty()) {
+    selectClause.setAsterisk();
+  } else {
+    selectClause.setSelected(std::move(describedVariables));
+  }
   parsedQuery_.addSolutionModifiers(
-      {}, makeInternalVariableGenerator(),
+      visit(ctx->solutionModifier()), makeInternalVariableGenerator(),
       std::exchange(postQueryValues_, std::nullopt));
   if (describedResources.empty()) {
-    const auto& visibleVariables =
-        parsedQuery_.selectClause().getVisibleVariables();
+    auto visibleVariables = selectClause.getVisibleVariables();
     ql::ranges::copy(visibleVariables,
                      std::back_inserter(describeClause.resources_));
-    describedVariables = visibleVariables;
+    selectClause.setSelected(std::move(visibleVariables));
   }
-  auto& selectClause = parsedQuery_.selectClause();
-  selectClause.setSelected(std::move(describedVariables));
   describeClause.whereClause_ = std::move(parsedQuery_);
 
   // Set up the final `ParsedQuery` object for the DESCRIBE query. The clause is
   // a CONSTRUCT query of the form `CONSTRUCT { ?subject ?predicate ?object} {
   // ... }`, with the `parsedQuery::Describe` object from above as the root
-  // graph pattern. The solution modifiers (in particular ORDER BY) are part of
-  // the CONSTRUCT query.
+  // graph pattern.
   //
   // NOTE: The dataset clauses are stored once in `parsedQuery_.datasetClauses_`
   // (which pertains to the CONSTRUCT query that computes the result of the
@@ -603,9 +612,6 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // (which pertains to the SELECT query that computes the resources to be
   // described).
   parsedQuery_ = ParsedQuery{};
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
-                                    makeInternalVariableGenerator(),
-                                    std::nullopt);
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
       std::move(describeClause));
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
@@ -1505,7 +1511,7 @@ std::optional<parsedQuery::ConstructClause> Visitor::visit(
 }
 
 // ____________________________________________________________________________________
-RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
+std::string Visitor::visit(Parser::StringContext* ctx) {
   return RdfEscaping::normalizeRDFLiteral(ctx->getText());
 }
 
@@ -1906,9 +1912,13 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visit(Parser::MinusGraphPatternContext* ctx) {
-  auto visibleVariables = std::move(visibleVariables_);
-  GraphPatternOperation operation{
-      parsedQuery::Minus{visit(ctx->groupGraphPattern())}};
+  // As every group starts with no visible variables, these are exactly the
+  // variables of the patterns that precede the MINUS clause in its group.
+  auto visibleVariables = std::exchange(visibleVariables_, {});
+  auto child = visit(ctx->groupGraphPattern());
+  GraphPatternOperation operation{parsedQuery::Minus{
+      std::move(child), ad_utility::removeDuplicates(visibleVariables_),
+      ad_utility::removeDuplicates(visibleVariables)}};
   // Make sure that the variables from the minus graph pattern are NOT added to
   // visible variables.
   visibleVariables_ = std::move(visibleVariables);
@@ -3178,7 +3188,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
       // TODO: The string rule also allow triple quoted strings with different
       //  escaping rules. These are currently not handled. They should be
       //  parsed into a typesafe format with a unique representation.
-      separator = visit(ctx->string()).get();
+      separator = visit(ctx->string());
       // If there was a separator, we have to strip the quotation marks
       AD_CONTRACT_CHECK(separator.size() >= 2);
       separator = separator.substr(1, separator.size() - 2);
