@@ -2071,3 +2071,58 @@ TEST(SparqlParser, blankNodeLabelsAreScopedToASingleBasicGraphPattern) {
       "INSERT { <a> <b> ?x } WHERE { _:who <p> ?x }",
       ::testing::SizeIs(2));
 }
+
+// _____________________________________________________________________________
+TEST(ParserTest, strictInlineWktForGeoFunctions) {
+  auto parse = [](std::string_view body) {
+    EncodedIriManager encodedIriManager;
+    return SparqlParser::parseQuery(
+        &encodedIriManager,
+        absl::StrCat("PREFIX geo: <http://www.opengis.net/ont/geosparql#> "
+                     "PREFIX geof: <http://www.opengis.net/def/function/"
+                     "geosparql/> PREFIX ql: <",
+                     QLEVER_INTERNAL_PREFIX_URL,
+                     "> SELECT * { ?s geo:asWKT ?g ", body, " }"));
+  };
+  auto valid = "\"LINESTRING(1 2, 3 4)\"^^geo:wktLiteral"s;
+  auto empty = "\"LINESTRING EMPTY\"^^geo:wktLiteral"s;
+  auto invalid = "\"LINESTRING(1 2, 3 a)\"^^geo:wktLiteral"s;
+  auto invalidPoint = "\"POINT(1 a)\"^^geo:wktLiteral"s;
+  auto fails = ::testing::HasSubstr("Invalid WKT literal");
+
+  // Inline WKT literals passed to a geo function directly or via `VALUES` in
+  // the same group are parsed strictly.
+  for (const auto& wkt : {valid, empty}) {
+    EXPECT_NO_THROW(
+        parse(absl::StrCat("FILTER geof:sfIntersects(?g, ", wkt, ")")));
+    EXPECT_NO_THROW(parse(absl::StrCat("VALUES ?p { ", wkt,
+                                       " } FILTER geof:sfIntersects(?g, ?p)")));
+  }
+  for (const auto& wkt : {invalid, invalidPoint}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("FILTER geof:sfIntersects(?g, ", wkt, ")")), fails);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("BIND(geof:metricArea(", wkt, ") AS ?a)")), fails);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("BIND(ql:simplifyGeometry(", wkt, ", 1) AS ?a)")),
+        fails);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("VALUES ?p { ", wkt,
+                           " } FILTER geof:sfIntersects(?g, ?p)")),
+        fails);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("VALUES (?x ?p) { (1 ", wkt,
+                           ") } BIND(geof:distance(?g, ?p) AS ?d)")),
+        fails);
+
+    // Invalid WKT literals that are not passed to a geo function are allowed.
+    EXPECT_NO_THROW(parse(absl::StrCat("BIND(", wkt, " AS ?p)")));
+    EXPECT_NO_THROW(parse(absl::StrCat("BIND(STR(", wkt, ") AS ?p)")));
+    EXPECT_NO_THROW(parse(absl::StrCat("VALUES ?p { ", wkt, " }")));
+    EXPECT_NO_THROW(parse(absl::StrCat("VALUES ?p { ", wkt,
+                                       " } FILTER geof:sfIntersects(?g, ?q)")));
+    // The `VALUES` must be in the same group as the geo function.
+    EXPECT_NO_THROW(parse(absl::StrCat(
+        "{ VALUES ?p { ", wkt, " } } FILTER geof:sfIntersects(?g, ?p)")));
+  }
+}
