@@ -234,11 +234,12 @@ inline std::exception_ptr closeAndWaitForHelpers(
 
 // Run the `numTasks` tasks `runTask(0), ..., runTask(numTasks - 1)` on the
 // `executor`, which is expected to have `numThreads` threads (this only bounds
-// the number of helpers that are posted to it, see below). Return only when
-// all of the tasks are done, rethrowing the first exception that any of them
-// has thrown. After a task has thrown, the tasks that have not been started
-// yet are skipped. The tasks are started in the order of their indices. Note
-// that `runTask` is called concurrently from several threads.
+// the number of helpers that are posted to it, see below), and return when all
+// of them are done. The tasks are started in the order of their indices, and
+// `runTask` is called concurrently from several threads.
+//
+// If a task throws, the tasks that have not been started yet are skipped, and
+// the first exception is rethrown once all the started tasks are done.
 //
 // NOTE: The calling thread doesn't only wait for the executor, but also runs
 // tasks itself, and it waits only for the helpers on the executor that have
@@ -254,10 +255,18 @@ void runIndexedTasksOnExecutor(const qlever::Executor& executor,
   if (numTasks == 0) {
     return;
   }
-  // NOTE: The `state` is shared with the helpers, because a helper may only be
-  // started after this function has returned. Such a helper then sees that the
-  // `state` is closed and returns without touching the `runTask`.
+  // The state that this function shares with the helpers.
+  //
+  // NOTE: The helpers own it jointly with this function (via the `shared_ptr`),
+  // because a helper may only be started after this function has returned.
+  // Such a helper then sees that the `state` is closed and returns without
+  // touching the `runTask`.
   auto state = std::make_shared<detail::RunIndexedTasksState>();
+
+  // The helper that is posted to the executor: register as active (unless the
+  // `state` is already closed), run tasks until there are none left, and
+  // unregister.
+  //
   // NOTE: The helper is `noexcept` for the same reason as the functions in
   // the `detail` namespace above: if it threw after incrementing the
   // `numActiveHelpers_`, the caller would wait forever.
@@ -276,11 +285,14 @@ void runIndexedTasksOnExecutor(const qlever::Executor& executor,
     }
     state->helperFinished_.notify_all();
   };
+  // Post one helper per thread of the executor (minus the calling thread, and
+  // never more helpers than tasks), then run tasks in the calling thread.
+  //
+  // NOTE: The posting lambda is `noexcept`, because if posting one of the
+  // helpers failed (which can only happen if the executor runs out of memory),
+  // the helpers that have already been posted might still use the `runTask`
+  // after this function has returned. Such a failure is not recoverable anyway.
   size_t numHelpers = std::min(numTasks, std::max(numThreads, size_t{1})) - 1;
-  // NOTE: This lambda is `noexcept`, because if posting one of the helpers
-  // failed (which can only happen if the executor runs out of memory), the
-  // helpers that have already been posted might still use the `runTask` after
-  // this function has returned. Such a failure is not recoverable anyway.
   [&]() noexcept {
     for ([[maybe_unused]] size_t i : ad_utility::integerRange(numHelpers)) {
       boost::asio::post(executor, helper);

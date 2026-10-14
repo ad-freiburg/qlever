@@ -15,7 +15,6 @@
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
 #include <cstdint>
-#include <exception>
 #include <future>
 #include <memory>
 #include <optional>
@@ -154,13 +153,16 @@ class CompressedExternalIdTableWriter {
   // written in parallel, see `compressAndWriteBlockOfColumn`.
   void writeIdTable(const IdTable& table) {
     const BlockLayout layout = prepareWrite(table);
+    // Compress and write the (block, column) pairs of the `table` as tasks on
+    // the global thread pool, in the order of the blocks (and within a block,
+    // in the order of the columns).
+    //
     // NOTE: The unit of parallelism is a single column of a single block. The
     // columns of a table are typically few, while its blocks are many, so the
     // tasks are small enough to keep all the threads of the pool busy until the
-    // very end of the table. The tasks are started in the order of the blocks
-    // (and within a block, in the order of the columns), such that the parts
-    // that are later read together (see `readBlockSequential`) tend to end up
-    // close to each other in the file.
+    // very end of the table. Starting the tasks in the order of the blocks
+    // makes the parts that are later read together (see `readBlockSequential`)
+    // tend to end up close to each other in the file.
     ad_utility::runIndexedTasksOnExecutor(
         ad_utility::globalExecutor(), ad_utility::globalExecutorNumThreads(),
         layout.numBlocks_ * numColumns(),
@@ -219,13 +221,15 @@ class CompressedExternalIdTableWriter {
 
   // Compress the part of the `columnIdx`-th column of the `table` that belongs
   // to the block with index `blockIdx` (counted relative to the `table`), write
-  // it to the file, and store the resulting metadata.
+  // it to the file, and store the resulting metadata. This function may be
+  // called concurrently for arbitrary combinations of `blockIdx` and
+  // `columnIdx`.
   //
-  // This function may be called concurrently for arbitrary combinations of
-  // `blockIdx` and `columnIdx`: each call first reserves a range of the file of
-  // its own and then writes to it with the positioned `File::write`, which only
-  // needs a shared lock, and the metadata of each block is stored in an element
-  // of its own, which `prepareWrite` has allocated beforehand.
+  // NOTE: The concurrent calls need no synchronization among each other: each
+  // call first reserves a range of the file of its own (via the `nextOffset_`)
+  // and then writes to it with the positioned `File::write`, which only needs
+  // a shared lock, and the metadata of each block is stored in an element of
+  // its own, which `prepareWrite` has allocated beforehand.
   void compressAndWriteBlockOfColumn(const IdTable& table, size_t blockIdx,
                                      size_t columnIdx,
                                      const BlockLayout& layout) {

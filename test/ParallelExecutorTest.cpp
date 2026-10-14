@@ -302,7 +302,8 @@ namespace {
 constexpr size_t numPoolThreads = 4;
 }  // namespace
 
-// _____________________________________________________________________________
+// Test that `runIndexedTasksOnExecutor` runs each of its tasks exactly once,
+// for fewer tasks than threads of the pool as well as for many more.
 TEST(ParallelExecutor, runIndexedTasksOnExecutorRunsEachTaskOnce) {
   boost::asio::thread_pool pool{numPoolThreads};
   auto run = [&pool](size_t numTasks, const auto& runTask) {
@@ -312,6 +313,8 @@ TEST(ParallelExecutor, runIndexedTasksOnExecutorRunsEachTaskOnce) {
   // Without any tasks, nothing is run.
   run(0, [](size_t) { FAIL() << "No task must be run"; });
 
+  // Each task is run exactly once, whether there are fewer tasks than threads
+  // of the pool or many more.
   for (size_t numTasks : {1, 2, 7, 1000}) {
     std::vector<std::atomic<size_t>> numCalls(numTasks);
     run(numTasks,
@@ -322,7 +325,8 @@ TEST(ParallelExecutor, runIndexedTasksOnExecutorRunsEachTaskOnce) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that an exception of a task is rethrown only after all the tasks that
+// were started are done, and that the tasks not started by then are skipped.
 TEST(ParallelExecutor, runIndexedTasksOnExecutorRethrowsAfterAllTasksAreDone) {
   boost::asio::thread_pool pool{numPoolThreads};
   constexpr size_t numTasks = 1000;
@@ -346,10 +350,9 @@ TEST(ParallelExecutor, runIndexedTasksOnExecutorRethrowsAfterAllTasksAreDone) {
   EXPECT_LT(numStarted.load(), numTasks);
 }
 
-// _____________________________________________________________________________
-// The calling thread of `runIndexedTasksOnExecutor` also runs tasks itself, so
-// it completes even when it is called from *all* the threads of the executor
-// at once, such that no thread of the executor is left for the tasks.
+// Test that `runIndexedTasksOnExecutor` completes even when it is called from
+// *all* the threads of the executor at once, such that no thread of the
+// executor is left for the tasks (the calling thread runs tasks itself).
 TEST(ParallelExecutor, runIndexedTasksOnExecutorFromAllThreadsOfThePool) {
   boost::asio::thread_pool pool{numPoolThreads};
   std::atomic<size_t> numArrived = 0;
