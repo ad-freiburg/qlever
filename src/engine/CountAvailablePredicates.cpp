@@ -161,7 +161,7 @@ Result CountAvailablePredicates::computeResult(
     ad_utility::callFixedSizeVi(width, [&](auto width) {
       return computePatternTrick<width>(
           subresult->idTableView(), &idTable, patterns, subjectColumnIndex_,
-          patternColumn, runtimeInfo(), getExecutionContext()->executor());
+          patternColumn, runtimeInfo(), executor());
     });
     return {std::move(idTable), resultSortedOn(),
             subresult->getSharedLocalVocab()};
