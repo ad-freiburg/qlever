@@ -446,6 +446,18 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
 }
 
 // _____________________________________________________________________________
+std::optional<nlohmann::json> ExportQueryExecutionTrees::idToSparqlJsonBinding(
+    const Index& index, Id id, const LocalVocab& localVocab) {
+  auto optionalStringAndType =
+      ql::exportIds::idToStringAndType(index, id, localVocab);
+  if (!optionalStringAndType.has_value()) {
+    return std::nullopt;
+  }
+  const auto& [stringValue, xsdType] = optionalStringAndType.value();
+  return stringAndTypeToBinding(stringValue, xsdType, isTextIndexEntry(id));
+}
+
+// _____________________________________________________________________________
 InputRangeTypeErased<std::string> askQueryResultToQLeverJSON(
     std::shared_ptr<const Result> result) {
   return InputRangeTypeErased(
@@ -731,12 +743,10 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     auto binding = nlohmann::ordered_json::object();
     for (const auto& column : columns) {
       Id id = pair.idTable()(i, column->columnIndex_);
-      auto optionalStringAndType = ql::exportIds::idToStringAndType(
-          qet.getQec()->getIndex(), id, pair.localVocab());
-      if (optionalStringAndType.has_value()) [[likely]] {
-        const auto& [stringValue, xsdType] = optionalStringAndType.value();
-        binding[column->variable_] =
-            stringAndTypeToBinding(stringValue, xsdType, isTextIndexEntry(id));
+      auto optionalBinding = idToSparqlJsonBinding(qet.getQec()->getIndex(), id,
+                                                   pair.localVocab());
+      if (optionalBinding.has_value()) [[likely]] {
+        binding[column->variable_] = std::move(optionalBinding.value());
       }
     }
     return binding.dump();
