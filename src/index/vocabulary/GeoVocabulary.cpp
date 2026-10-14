@@ -184,7 +184,9 @@ template <typename V>
 auto GeoVocabulary<V>::computeGeoInfoRecord(
     std::string_view word, std::atomic<size_t>& numInvalidGeometries,
     std::atomic<size_t>& numInvalidPolygonArea) -> GeometryInfoBuffer {
-  auto info = GeometryInfo::fromWktLiteral(word);
+  // WKT literals from the input data are parsed strictly: invalid WKT is
+  // treated as an invalid geometry instead of being guessed at leniently.
+  auto info = GeometryInfo::fromWktLiteral(word, true);
   if (!info.has_value()) {
     ++numInvalidGeometries;
     return invalidGeoInfoBuffer;

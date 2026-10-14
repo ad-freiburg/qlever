@@ -337,6 +337,10 @@ TEST(GeometryInfoTest, IsValidWktStrict) {
   // The lenient (default) mode skips the invalid coordinate.
   EXPECT_THAT(GeometryInfo::getNumGeometries(litInvalidCoord),
               ::testing::Optional(NumGeometries{1}));
+  EXPECT_TRUE(GeometryInfo::fromWktLiteral(litInvalidCoord).has_value());
+  EXPECT_FALSE(GeometryInfo::fromWktLiteral(litInvalidCoord, true).has_value());
+  EXPECT_GEOMETRYINFO(GeometryInfo::fromWktLiteral(litPolygon, true),
+                      GeometryInfo::fromWktLiteral(litPolygon));
 }
 
 // ____________________________________________________________________________

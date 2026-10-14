@@ -14,6 +14,7 @@
 #include "index/ExportIds.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeoCellGrid.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
@@ -619,6 +620,13 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
       auto precomputed = getPrecomputedGeometryInfo(id, context);
       if (precomputed.has_value()) {
         return precomputed.value().getRequestedInfo<RequestedInfo>();
+      } else if (id.getDatatype() == VocabIndex &&
+                 context->_qec.getIndex().getVocab().isGeoInfoAvailable() &&
+                 ad_utility::GeoCellGrid::isGeoVocabIndex(
+                     id.getVocabIndex().get())) {
+        // All WKT literals in the `GeoVocabulary` have precomputed geometry
+        // info, unless they are invalid (according to strict parsing).
+        return std::nullopt;
       } else {
         // No precomputed geometry info available: we have to fetch and parse
         // the string.

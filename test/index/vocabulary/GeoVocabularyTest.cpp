@@ -59,6 +59,9 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
         // Out of range literal
         "\"POLYGON((1 1, 2 2, 3 450))\""
         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        // Literal that is only valid in lenient parsing mode
+        "\"LINESTRING(1 1, 2 a, 3 3)\""
+        "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
         // Valid WKT literals
         "\"GEOMETRYCOLLECTION(LINESTRING(2 2, 4 4), "
         "POLYGON((2 4, 4 4, 4 2, 2 2)))\""
@@ -85,12 +88,23 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
       for (size_t i = 0; i < testLiterals.size(); i++) {
         ASSERT_EQ(geoVocab[i], testLiterals[i]);
         ASSERT_EQ(geoVocab.getUnderlyingVocabulary()[i], testLiterals[i]);
-        EXPECT_GEOMETRYINFO(geoVocab.getGeoInfo(i),
-                            GeometryInfo::fromWktLiteral(testLiterals[i]));
+        EXPECT_GEOMETRYINFO(
+            geoVocab.getGeoInfo(i),
+            GeometryInfo::fromWktLiteral(testLiterals[i], true));
       }
     };
 
     checkGeoVocabContents(geoVocab);
+
+    // The literal that is only valid in lenient parsing mode is treated as an
+    // invalid geometry.
+    auto leniencyIdx =
+        geoVocab.lower_bound("\"LINESTRING(1 1, 2 a", ql::ranges::less{});
+    ASSERT_EQ(leniencyIdx.word(),
+              "\"LINESTRING(1 1, 2 a, 3 3)\""
+              "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+    EXPECT_FALSE(geoVocab.getGeoInfo(leniencyIdx.index()).has_value());
+    EXPECT_TRUE(GeometryInfo::fromWktLiteral(leniencyIdx.word()).has_value());
 
     // Test further methods
     ASSERT_EQ(geoVocab.size(), testLiterals.size());

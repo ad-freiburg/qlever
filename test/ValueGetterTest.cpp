@@ -258,6 +258,32 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
 }
 
 // _____________________________________________________________________________
+TEST(GeometryInfoValueGetterTest, LenientOnlyWktInGeoVocabulary) {
+  // This WKT literal is only valid in lenient parsing mode.
+  static constexpr std::string_view lit =
+      "\"LINESTRING(2 2, 3 a, 4 4)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  auto getGeoInfo = [](ad_utility::VocabularyType::Enum type) {
+    TestContextWithGivenTTl testContext{absl::StrCat("<s> <p> ", lit, " ."),
+                                        ad_utility::VocabularyType{type}};
+    VocabIndex idx;
+    AD_CORRECTNESS_CHECK(
+        testContext.qec->getIndex().getVocab().getId(lit, &idx));
+    return sparqlExpression::detail::GeometryInfoValueGetter<
+        ad_utility::GeometryInfo>{}(ValueId::makeFromVocabIndex(idx),
+                                    &testContext.context);
+  };
+  // The `GeoVocabulary` parses strictly, so the geometry is invalid, and it is
+  // not parsed again (leniently) when evaluating the value getter.
+  EXPECT_FALSE(
+      getGeoInfo(ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit)
+          .has_value());
+  // Without a `GeoVocabulary`, the literal is parsed leniently.
+  EXPECT_TRUE(getGeoInfo(ad_utility::VocabularyType::Enum::OnDiskCompressed)
+                  .has_value());
+}
+
+// _____________________________________________________________________________
 TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
   GeoInfoTester t;
   auto noGeoInfo = geoInfoMatcher(std::nullopt);
