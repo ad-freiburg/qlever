@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/Sort.h"
@@ -571,11 +572,11 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     auto tree = strip({1}, {V{"?b"}});
     auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
     ASSERT_TRUE(sort);
-    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?b"})));
     EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 0u);
     EXPECT_THAT(sort->resultSortedOn(), ElementsAre(0));
-    EXPECT_EQ(tree->getResult(false)->idTableView(),
-              makeIdTableFromVector({{1}, {2}, {5}, {6}}));
+    auto expectedResult = makeIdTableFromVector({{1}, {2}, {5}, {6}});
+    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?b"}},
+                                         std::cref(expectedResult)));
   }
 
   // `Sort` by `?b` and `?d`, `?a`, `?b` and `?d` requested: `?c` is stripped
@@ -604,16 +605,17 @@ TEST(Sort, makeTreeWithStrippedColumns) {
     auto stripColumns =
         std::dynamic_pointer_cast<StripColumns>(tree->getRootOperation());
     ASSERT_TRUE(stripColumns);
-    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?c"})));
+    auto expectedResult = makeIdTableFromVector({{3}, {5}, {5}, {3}});
+    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?c"}},
+                                         std::cref(expectedResult)));
     const auto* child = stripColumns->getChildren().at(0);
     auto sort = std::dynamic_pointer_cast<Sort>(child->getRootOperation());
     ASSERT_TRUE(sort);
-    EXPECT_THAT(child->getVariableColumns(),
-                UnorderedElementsAre(Key(V{"?b"}), Key(V{"?c"})));
+    expectedResult = makeIdTableFromVector({{1, 3}, {2, 5}, {5, 5}, {6, 3}});
+    EXPECT_THAT(child, HasOperationResult(std::vector{V{"?b"}, V{"?c"}},
+                                          std::cref(expectedResult)));
     EXPECT_THAT(sort->resultSortedOn(),
                 ElementsAre(child->getVariableColumn(V{"?b"})));
-    EXPECT_EQ(tree->getResult(false)->idTableView(),
-              makeIdTableFromVector({{3}, {5}, {5}, {3}}));
   }
 
   // All variables requested: nothing is stripped and the indices stay.
