@@ -174,9 +174,9 @@ void WordBatchBuilder::flush(const F& batchCallback) {
     return;
   }
   // The `pendingWord_` is a view into one of the `mergedWordBuffers_` of the
-  // current batch, which the fourth stage of the pipeline destroys
-  // asynchronously as soon as the batch has been handed on (see the
-  // `mergedWordsDestructionQueue_` in
+  // current batch, which the second stage of the pipeline destroys
+  // asynchronously as soon as the batch has been handed on (see
+  // `VocabularyMergePipelineImpl::push` in
   // `index/vocabulary_merger/MergePipeline.h`), so we have to create the copy
   // that the next batch owns *before* handing the current batch on.
   std::unique_ptr<std::string> carriedOverWord;

@@ -51,7 +51,7 @@ namespace ad_utility::vocabulary_merger {
 // blank nodes (see `TripleComponentWithIndex::isBlankNode`). The regexes are
 // compiled by the caller (see `IndexImpl::setBlankNodeIriRegexes`).
 //
-// The merging is organized as a pipeline of four threads, which communicate
+// The merging is organized as a pipeline of three threads, which communicate
 // via task queues, such that all of them can work concurrently:
 //
 // 1. The thread that calls `mergeVocabulary` obtains the merged words in
@@ -61,15 +61,13 @@ namespace ad_utility::vocabulary_merger {
 //    `detail::WordBatchBuilder`) and hands each batch to the second thread.
 // 2. The `wordWriterQueue_`'s thread writes the distinct words of a batch to
 //    the vocabulary (via the `wordCallback`) and thereby determines their
-//    global IDs (see `detail::VocabularyWriter`).
+//    global IDs (see `detail::VocabularyWriter`). It then destroys the merged
+//    words of the batch, which involves freeing one string per word.
 // 3. The `idMapWriterQueue_`'s thread writes the entries of the partial ID
 //    maps (which only now know their global IDs) to those maps (see
 //    `detail::IdMapBatchWriter`).
-// 4. The `mergedWordsDestructionQueue_`'s thread destroys the merged words of
-//    a batch (which involves freeing one string per word) once they have been
-//    written to the vocabulary.
 //
-// The last three of those stages are owned by the
+// The last two of those stages are owned by the
 // `detail::VocabularyMergePipeline`.
 template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,

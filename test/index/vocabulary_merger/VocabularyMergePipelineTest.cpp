@@ -108,7 +108,7 @@ void expectFailureIsPropagated(
 
 // _____________________________________________________________________________
 // Push the batches of a `WordBatchBuilder` through the pipeline (which is the
-// second to fourth stage of the merging) and check the vocabulary that it
+// second and third stage of the merging) and check the vocabulary that it
 // writes as well as the resulting partial ID maps.
 TEST(VocabularyMergePipeline, writeWordsAndIdMaps) {
   auto [filenames, cleanup] =
