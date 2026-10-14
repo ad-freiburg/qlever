@@ -13,8 +13,8 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#include <concepts>
-#include <iterator>
+#include <algorithm>
+#include <cstring>
 #include <type_traits>
 
 #include "engine/QueryExecutionTree.h"
@@ -25,6 +25,7 @@
 #include "parser/SelectClause.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/FromCallableSerializer.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
@@ -95,69 +96,115 @@ class ExportBatch {
 // Export the result of `qet` in QLever's binary format, which is used for the
 // efficient transfer of results between two QLever instances (see
 // `ad_utility::MediaType::binaryQleverExport`). The format consists of a
-// header (see `writeHeader` in the `.cpp` file), followed by the IDs of the
+// header (see `Header` in the `.cpp` file), followed by the IDs of the
 // rows (as produced by `toExportableId`), which are interrupted by batches of
 // the strings that the non-trivial IDs refer to (see `StringMapping`). The
-// format always ends with such a batch. If there are no columns, the header is
-// followed by the number of rows only.
+// format always ends with such a batch. Only the selected variables that are
+// bound in the result get a column, the header lists the others as unbound. If
+// there are no columns, the header is followed by the number of rows only.
 ad_utility::streams::stream_generator exportAsQLeverBinary(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset,
     ad_utility::SharedCancellationHandle cancellationHandle);
 
-// A type with the size of a single byte, like `char` or `std::byte`. The
-// binary format is read from iterators over such types.
-template <typename T>
-concept SingleByte = sizeof(T) == 1 && std::is_trivially_copyable_v<T>;
+// Reads the bytes of the binary format from a range of byte spans, like the
+// body of an HTTP response. The bytes are copied block-wise, and a value can
+// be split across several spans.
+template <typename Range>
+class ByteSpanReader {
+  ql::ranges::iterator_t<Range> it_;
+  ql::ranges::sentinel_t<Range> end_;
+  // The part of `*it_` that has not been read yet. NOTE: `it_` is only
+  // advanced when `*it_` has been read completely, as the span might point
+  // into a buffer that is reused for the next span (as for a generator).
+  ql::span<const std::byte> current_;
 
-// An iterator over single bytes, see above.
-template <typename It>
-concept ByteIterator =
-    std::input_iterator<It> && SingleByte<std::iter_value_t<It>>;
+  // Advance to the next non-empty span if `current_` has been read completely.
+  // Return false if the range is exhausted.
+  bool fillCurrent() {
+    while (current_.empty() && it_ != end_) {
+      ++it_;
+      if (it_ != end_) {
+        current_ = *it_;
+      }
+    }
+    return !current_.empty();
+  }
+
+ public:
+  explicit ByteSpanReader(Range& range)
+      : it_{ql::ranges::begin(range)}, end_{ql::ranges::end(range)} {
+    if (it_ != end_) {
+      current_ = *it_;
+    }
+  }
+
+  // Copy the next `numBytes` bytes to `target`. Throw if the range ends before
+  // all of them have been read.
+  void operator()(char* target, size_t numBytes) {
+    while (numBytes > 0) {
+      if (!fillCurrent()) {
+        throw std::runtime_error{"Stream ended unexpectedly."};
+      }
+      size_t numBytesFromCurrent = std::min(numBytes, current_.size());
+      std::memcpy(target, current_.data(), numBytesFromCurrent);
+      current_ = current_.subspan(numBytesFromCurrent);
+      target += numBytesFromCurrent;
+      numBytes -= numBytesFromCurrent;
+    }
+  }
+
+  // Return true if all the bytes have been read.
+  bool atEnd() { return !fillCurrent(); }
+};
 
 // Helper functions for the binary export and import. They are publicly
 // accessible, such that they can be tested individually.
 class BinaryExportHelpers {
  public:
-  // A callable (as required by `ReadViaCallableSerializer`) that reads the
-  // bytes from the range `[it, end)` and advances `it` accordingly. Throws if
-  // the range ends before all the requested bytes have been read.
-  // TODO<joka921> The bytes are read one by one, which is rather inefficient.
-  // Reading whole blocks (e.g. the spans from which the input is joined, see
-  // `importBinaryGenerator`) would be faster.
-  template <ByteIterator It, std::sentinel_for<It> End>
-  struct IteratorReader {
-    It it;
-    End end;
-
-    void operator()(char* target, size_t numBytes) {
-      for (size_t i = 0; i < numBytes; ++i) {
-        if (it == end) {
-          throw std::runtime_error{"Stream ended unexpectedly."};
-        }
-        *target = static_cast<char>(*it);
-        ++it, ++target;
-      }
-    }
-  };
-
-  // Read a value of type `T` (using QLever's serialization framework) from the
-  // range `[it, end)` and advance `it` by the number of bytes read.
-  template <typename T, ByteIterator It, std::sentinel_for<It> End>
-  static T read(It& it, const End& end) {
-    IteratorReader<It, End> reader{std::move(it), end};
-    ad_utility::serialization::ReadViaCallableSerializer serializer{
-        std::ref(reader)};
+  // Read a value of the trivially copyable type `T` from the `reader` (see
+  // `ByteSpanReader`).
+  template <typename T, typename Reader>
+  static T read(Reader& reader) {
+    static_assert(std::is_trivially_copyable_v<T>);
     T value;
-    serializer >> value;
-    it = std::move(reader.it);
+    reader(reinterpret_cast<char*>(&value), sizeof(value));
     return value;
   }
 
+  // Read a string that was serialized via QLever's serialization framework
+  // (its size, followed by its characters) from the `reader`. Throw if it is
+  // larger than `maxNumBytes`, before any memory is allocated for it.
+  template <typename Reader>
+  static std::string readString(Reader& reader, size_t maxNumBytes) {
+    auto size = read<size_t>(reader);
+    throwIfTooLarge(size, maxNumBytes);
+    std::string result(size, '\0');
+    reader(result.data(), size);
+    return result;
+  }
+
+  // Read a vector of strings as written by `writeVectorOfStrings` from the
+  // `reader`. Throw if the strings (including the `std::string` objects
+  // themselves) take up more than `maxNumBytes`.
+  template <typename Reader>
+  static std::vector<std::string> readVectorOfStrings(Reader& reader,
+                                                      size_t maxNumBytes) {
+    auto size = read<size_t>(reader);
+    throwIfTooLarge(size, maxNumBytes / sizeof(std::string));
+    size_t remainingBytes = maxNumBytes - size * sizeof(std::string);
+    std::vector<std::string> result;
+    result.reserve(size);
+    for (size_t i = 0; i < size; ++i) {
+      result.push_back(readString(reader, remainingBytes));
+      remainingBytes -= result.back().size();
+    }
+    return result;
+  }
+
   // Serialize the `strings` (via QLever's serialization framework) into a
-  // single string of bytes, which can be read by
-  // `read<std::vector<std::string>>`.
+  // single string of bytes, which can be read by `readVectorOfStrings`.
   static std::string writeVectorOfStrings(
       const std::vector<std::string>& strings) {
     // The serialization of a vector or a string consists of its size followed
@@ -176,6 +223,11 @@ class BinaryExportHelpers {
     AD_EXPENSIVE_CHECK(result.size() == totalSize);
     return result;
   }
+
+ private:
+  // Throw if `size` is larger than `maxSize`, which protects against
+  // allocating huge amounts of memory for an invalid result.
+  static void throwIfTooLarge(size_t size, size_t maxSize);
 };
 
 // Convert the IDs that the exporting instance sent (see `toExportableId`) to
@@ -194,9 +246,14 @@ class IdRewriter {
   std::vector<encodedIri::Pattern> remotePatterns_;
   ad_utility::HashMap<uint8_t, uint8_t> prefixMapping_;
   GeoPointEncodingEnum remoteGeoPointEncoding_;
-  // The same remote blank node is always replaced by the same local one.
+  // The same remote blank node is always replaced by the same local one. The
+  // local blank nodes are allocated in `blankNodeVocab_`, which is merged into
+  // the `LocalVocab` of each batch (see `takeLocalVocab`) and only contains
+  // blank nodes. That way, the batches don't keep each other's words alive.
   ad_utility::HashMap<Id::T, Id> blankNodeMapping_;
-  // The entries that are not contained in the local index.
+  LocalVocab blankNodeVocab_;
+  // The entries of the current batch that are not contained in the local
+  // index.
   LocalVocab localVocab_;
   // The local IDs of the strings of the current batch (see `startBatch`), and
   // of the encoded IRIs that were decoded in the current batch.
@@ -234,9 +291,9 @@ class IdRewriter {
   // Convert a `GeoPoint` from the remote to the local encoding.
   Id rewriteGeoPoint(Id id) const;
 
-  // Return the local vocab that contains the entries of the rewritten IDs.
-  // The local vocab is then reset, but it still contains the blank nodes (as
-  // the next batches might contain the same blank nodes again).
+  // Return the local vocab that contains the entries of the rewritten IDs
+  // (including all the blank nodes so far, as the next batches might contain
+  // the same blank nodes again). The local vocab is then reset.
   LocalVocab takeLocalVocab();
 
   // Get the mapping from the indices of the remote `patterns` to the indices
@@ -249,22 +306,27 @@ class IdRewriter {
 
 // Read the result that the exporting instance sent in the binary format (see
 // `exportAsQLeverBinary`) from the `response`. The columns of the result are
-// the `expectedVariables` (names with a leading `?`) in this order; a
-// variable that the response doesn't contain is undefined in all rows. The
+// the `expectedVariables` (names with a leading `?`) in this order, and the
+// response has to contain exactly these variables (in any order). The
 // `resultSortedOn` are the columns by which the result is sorted (as in the
 // constructor of `Result`). They are not checked, the caller has to make sure
-// that the exporting instance sends the result in this order.
+// that the exporting instance sends the result in this order. A single string,
+// as well as the strings of a single batch, may take up at most
+// `maxStringBatchSize`, which protects against allocating huge amounts of
+// memory for an invalid response.
 //
 // The strings (literals and IRIs) of the result, as well as the IRIs that are
 // encoded with a pattern that doesn't exist in the local index, are converted
 // like any other input (see `toValueId`). That is, they become encoded IRIs or
 // IDs of the vocabularies of the local index if possible, and are only stored
 // in the `LocalVocab` of the result otherwise.
-Result importBinaryHttpResponse(bool requestLaziness,
-                                HttpOrHttpsResponse response,
-                                const QueryExecutionContext& qec,
-                                std::vector<std::string> expectedVariables,
-                                std::vector<ColumnIndex> resultSortedOn);
+Result importBinaryHttpResponse(
+    bool requestLaziness, HttpOrHttpsResponse response,
+    const QueryExecutionContext& qec,
+    std::vector<std::string> expectedVariables,
+    std::vector<ColumnIndex> resultSortedOn,
+    ad_utility::MemorySize maxStringBatchSize,
+    ad_utility::SharedCancellationHandle cancellationHandle);
 }  // namespace qlever::binary_export
 
 #endif  // QLEVER_SRC_ENGINE_BINARY_EXPORT_H

@@ -49,49 +49,78 @@ TEST(BinaryExportHelpers, isTrivial) {
           .isTrivial());
 }
 
-// _____________________________________________________________________________
-TEST(BinaryExportHelpers, readValue) {
-  std::vector<uint8_t> data;
-
-  // Write a 64-bit integer
-  uint64_t value = 0x0123456789ABCDEF;
-  for (size_t i = 0; i < sizeof(value); ++i) {
-    data.push_back(static_cast<uint8_t>((value >> (i * 8)) & 0xFF));
+namespace {
+// Split the `bytes` into consecutive spans of the given `sizes`, followed by a
+// span with the remaining bytes.
+std::vector<ql::span<const std::byte>> split(std::string_view bytes,
+                                             const std::vector<size_t>& sizes) {
+  auto remaining = ql::as_bytes(ql::span{bytes});
+  std::vector<ql::span<const std::byte>> spans;
+  for (size_t size : sizes) {
+    spans.push_back(remaining.first(size));
+    remaining = remaining.subspan(size);
   }
+  spans.push_back(remaining);
+  return spans;
+}
+}  // namespace
 
-  auto it = data.begin();
-  auto end = data.end();
+// _____________________________________________________________________________
+TEST(ByteSpanReader, readAcrossSpans) {
+  uint64_t value = 0x0123456789ABCDEF;
+  std::string bytes = absl::StrCat(
+      std::string_view{reinterpret_cast<const char*>(&value), sizeof(value)},
+      "xy");
+  // The value is split across two spans, and there are empty spans.
+  auto spans = split(bytes, {0, 3, 0, 5, 0});
+  ByteSpanReader reader{spans};
+  EXPECT_FALSE(reader.atEnd());
+  EXPECT_EQ(BinaryExportHelpers::read<uint64_t>(reader), value);
+  EXPECT_EQ(BinaryExportHelpers::read<char>(reader), 'x');
+  EXPECT_FALSE(reader.atEnd());
+  EXPECT_EQ(BinaryExportHelpers::read<char>(reader), 'y');
+  EXPECT_TRUE(reader.atEnd());
+  AD_EXPECT_THROW_WITH_MESSAGE(BinaryExportHelpers::read<char>(reader),
+                               ::testing::HasSubstr("ended unexpectedly"));
 
-  uint64_t result = BinaryExportHelpers::read<uint64_t>(it, end);
-  EXPECT_EQ(result, value);
-  EXPECT_EQ(it, end);
+  // The range ends in the middle of a value.
+  auto shortSpans = split("abc", {});
+  ByteSpanReader shortReader{shortSpans};
+  AD_EXPECT_THROW_WITH_MESSAGE(BinaryExportHelpers::read<uint64_t>(shortReader),
+                               ::testing::HasSubstr("ended unexpectedly"));
+
+  std::vector<ql::span<const std::byte>> noSpans;
+  EXPECT_TRUE(ByteSpanReader{noSpans}.atEnd());
 }
 
 // _____________________________________________________________________________
-TEST(BinaryExportHelpers, readValueThrowsOnUnexpectedEnd) {
-  std::vector<uint8_t> data{1, 2, 3};  // Only 3 bytes, but we need 8
-  auto it = data.begin();
-  auto end = data.end();
+TEST(BinaryExportHelpers, readStrings) {
+  std::vector<std::string> strings{"foo", "", "barbaz"};
+  auto bytes = BinaryExportHelpers::writeVectorOfStrings(strings);
+  auto read = [&bytes](size_t maxNumBytes) {
+    auto spans = split(bytes, {5, 10});
+    ByteSpanReader reader{spans};
+    auto result = BinaryExportHelpers::readVectorOfStrings(reader, maxNumBytes);
+    EXPECT_TRUE(reader.atEnd());
+    return result;
+  };
 
-  EXPECT_THROW(BinaryExportHelpers::read<uint64_t>(it, end),
-               std::runtime_error);
-}
+  // The strings take up 9 bytes, plus the `std::string` objects.
+  size_t numBytes = 3 * sizeof(std::string) + 9;
+  EXPECT_EQ(read(numBytes), strings);
+  auto tooLarge = ::testing::HasSubstr("larger than the maximum size");
+  AD_EXPECT_THROW_WITH_MESSAGE(read(numBytes - 1), tooLarge);
+  // There are too many strings, which is detected before reading them.
+  AD_EXPECT_THROW_WITH_MESSAGE(read(2 * sizeof(std::string)), tooLarge);
 
-// _____________________________________________________________________________
-TEST(BinaryExportHelpers, readVectorOfStrings) {
-  std::vector<uint8_t> data;
-  std::vector<std::string> expected = {"foo", "bar", "baz"};
-
-  auto str = BinaryExportHelpers::writeVectorOfStrings(expected);
-  ql::ranges::copy(str, std::back_inserter(data));
-
-  auto it = data.begin();
-  auto end = data.end();
-
-  std::vector<std::string> result =
-      BinaryExportHelpers::read<std::vector<std::string>>(it, end);
-  EXPECT_EQ(result, expected);
-  EXPECT_EQ(it, end);
+  // No memory is allocated for the size of an invalid string.
+  size_t hugeSize = size_t{1} << 60;
+  std::string hugeString{reinterpret_cast<const char*>(&hugeSize),
+                         sizeof(hugeSize)};
+  auto spans = split(hugeString, {});
+  ByteSpanReader reader{spans};
+  AD_EXPECT_THROW_WITH_MESSAGE(BinaryExportHelpers::readString(reader, 1000),
+                               tooLarge);
 }
 
 namespace {
@@ -226,6 +255,21 @@ TEST(IdRewriter, rewriteEncodedVal) {
   EXPECT_EQ(rewriter.rewriteEncodedVal(remoteOther).getBits(),
             rewritten.getBits());
   EXPECT_EQ(rewriter.takeLocalVocab().size(), 1);
+
+  // A pattern that the exporting instance didn't send.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      rewriter(EncodedIriManager::makeIdFromPrefixIdxAndPayload(2, payload)),
+      ::testing::HasSubstr("unknown pattern"));
+}
+
+// _____________________________________________________________________________
+TEST(IdRewriter, unexpectedDatatype) {
+  IdRewriter rewriter{*ad_utility::testing::getQec(), {}, GeoPoint::encoding()};
+  EXPECT_EQ(rewriter(Id::makeFromInt(42)), Id::makeFromInt(42));
+  // The exporter sends the strings instead of the `VocabIndex`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      rewriter(Id::makeFromVocabIndex(VocabIndex::make(0))),
+      ::testing::HasSubstr("unexpected datatype VocabIndex"));
 }
 
 // _____________________________________________________________________________
@@ -242,10 +286,21 @@ TEST(IdRewriter, rewriteBlankNode) {
   EXPECT_NE(first, second);
   EXPECT_EQ(rewriter.rewriteBlankNode(remote(1)), first);
 
-  // The blank nodes are consistent also for the following batches.
+  // The blank nodes are consistent also for the following batches. The local
+  // vocab of each batch contains all the blank nodes, but only the words of
+  // its own batch.
+  rewriter.startBatch({"\"word\""});
+  Id word = rewriter.rewriteString(transmitted(0));
   auto vocab = rewriter.takeLocalVocab();
+  EXPECT_EQ(vocab.size(), 1);
+  EXPECT_TRUE(vocab.isBlankNodeIndexContained(first.getBlankNodeIndex()));
   rewriter.startBatch({});
   EXPECT_EQ(rewriter.rewriteBlankNode(remote(2)), second);
+  auto nextVocab = rewriter.takeLocalVocab();
+  EXPECT_EQ(nextVocab.size(), 0);
+  EXPECT_TRUE(nextVocab.isBlankNodeIndexContained(first.getBlankNodeIndex()));
+  EXPECT_TRUE(nextVocab.isBlankNodeIndexContained(second.getBlankNodeIndex()));
+  EXPECT_EQ(word.getLocalVocabIndex()->toStringRepresentation(), "\"word\"");
 }
 
 // _____________________________________________________________________________
@@ -409,14 +464,15 @@ class BinaryExportRoundTrip : public ::testing::Test {
     return QueryExecutionTree{qec, std::move(values)};
   }
 
-  // Export the columns `varNames` of the result of `qet` and collect all the
-  // bytes into a single string.
+  // Export the `varNames` of the result of `qet` and collect all the bytes
+  // into a single string.
   static std::string exportBytes(const QueryExecutionTree& qet,
-                                 const std::vector<std::string>& varNames) {
+                                 const std::vector<std::string>& varNames,
+                                 LimitOffsetClause limitAndOffset = {}) {
     parsedQuery::SelectClause selectClause;
     selectClause.setSelected(toVariables(varNames));
     auto generator = exportAsQLeverBinary(
-        qet, selectClause, {},
+        qet, selectClause, limitAndOffset,
         std::make_shared<ad_utility::CancellationHandle<>>());
     std::string result;
     for (std::string_view chunk : generator) {
@@ -426,10 +482,15 @@ class BinaryExportRoundTrip : public ::testing::Test {
   }
 
   // Import the `bytes` into `qec`, as if they were the body of an HTTP
-  // response (which arrives in randomly sized chunks).
-  static Result importBytes(std::string bytes, QueryExecutionContext* qec,
-                            std::vector<std::string> expectedVariables,
-                            bool requestLaziness = false) {
+  // response (which arrives in randomly sized chunks, each of which is only
+  // valid until the next one is requested).
+  static Result importBytes(
+      std::string bytes, QueryExecutionContext* qec,
+      std::vector<std::string> expectedVariables, bool requestLaziness = false,
+      ad_utility::MemorySize maxStringBatchSize =
+          ad_utility::MemorySize::gigabytes(1),
+      ad_utility::SharedCancellationHandle cancellationHandle =
+          std::make_shared<ad_utility::CancellationHandle<>>()) {
     auto body =
         [](std::string data) -> cppcoro::generator<ql::span<std::byte>> {
       std::mt19937 rng{std::random_device{}()};
@@ -439,6 +500,8 @@ class BinaryExportRoundTrip : public ::testing::Test {
         size_t chunkSize = std::min(distribution(rng), data.size() - start);
         std::string chunk = data.substr(start, chunkSize);
         co_yield ql::as_writable_bytes(ql::span{chunk});
+        // Make sure that the chunk is not used after it has been "received".
+        std::ranges::fill(chunk, '\0');
         start += chunkSize;
       }
     };
@@ -448,19 +511,19 @@ class BinaryExportRoundTrip : public ::testing::Test {
                                  .location_ = {},
                                  .body_ = body(std::move(bytes))};
     return importBinaryHttpResponse(requestLaziness, std::move(response), *qec,
-                                    std::move(expectedVariables), {});
+                                    std::move(expectedVariables), {},
+                                    maxStringBatchSize,
+                                    std::move(cancellationHandle));
   }
 
-  // Export the result of `qet` (which has to contain all the `varNames`) and
-  // import it into `importQec`. The imported result has the columns
-  // `expectedVariables`, which default to `varNames`.
-  static Result roundTrip(
-      const QueryExecutionTree& qet, QueryExecutionContext* importQec,
-      const std::vector<std::string>& varNames, bool requestLaziness = false,
-      std::optional<std::vector<std::string>> expectedVariables =
-          std::nullopt) {
-    return importBytes(exportBytes(qet, varNames), importQec,
-                       expectedVariables.value_or(varNames), requestLaziness);
+  // Export the `varNames` of the result of `qet` and import them into
+  // `importQec`.
+  static Result roundTrip(const QueryExecutionTree& qet,
+                          QueryExecutionContext* importQec,
+                          const std::vector<std::string>& varNames,
+                          bool requestLaziness = false) {
+    return importBytes(exportBytes(qet, varNames), importQec, varNames,
+                       requestLaziness);
   }
 
   // Full round-trip of the `table` with the columns `varNames`: export from
@@ -517,10 +580,17 @@ TEST_F(BinaryExportRoundTrip, noRowsOrNoColumns) {
 
   IdTable noColumns{0, ad_utility::makeUnlimitedAllocator<Id>()};
   noColumns.resize(5);
-  result = roundTrip(qec, qec, std::move(noColumns), {});
+  auto qet = makeQet(qec, std::move(noColumns), {});
+  result = roundTrip(qet, qec, {});
   ASSERT_TRUE(result.isFullyMaterialized());
   EXPECT_EQ(result.idTableView().numRows(), 5);
   EXPECT_EQ(result.idTableView().numColumns(), 0);
+
+  // Only the exported rows are counted.
+  result = importBytes(
+      exportBytes(qet, {}, {._limit = 3, ._offset = 1, .exportLimit_ = 2}), qec,
+      {});
+  EXPECT_EQ(result.idTableView().numRows(), 2);
 }
 
 // _____________________________________________________________________________
@@ -656,10 +726,10 @@ TEST_F(BinaryExportRoundTrip, variablesAreMatchedByName) {
   auto qet = makeQet(qec, makeIdTableFromVector({{1, 2}}, &Id::makeFromInt),
                      {"?x", "?y"});
 
-  // The columns are reordered, `?z` is not part of the result, so it is
-  // undefined.
-  auto result = roundTrip(qet, qec, {"?x", "?y"}, false,
-                          std::vector<std::string>{"?y", "?z", "?x"});
+  // The columns are reordered, `?z` is selected, but not bound in the result,
+  // so it is undefined.
+  auto bytes = exportBytes(qet, {"?x", "?y", "?z"});
+  auto result = importBytes(bytes, qec, {"?y", "?z", "?x"});
   const auto& resultTable = result.idTableView();
   ASSERT_EQ(resultTable.numRows(), 1);
   ASSERT_EQ(resultTable.numColumns(), 3);
@@ -667,11 +737,19 @@ TEST_F(BinaryExportRoundTrip, variablesAreMatchedByName) {
   EXPECT_EQ(resultTable(0, 1), Id::makeUndefined());
   EXPECT_EQ(resultTable(0, 2), Id::makeFromInt(1));
 
+  // The variables of the result have to be exactly the expected ones.
+  for (const std::vector<std::string>& wrongVariables :
+       std::vector<std::vector<std::string>>{
+           {"?x", "?y"}, {"?x", "?y", "?z", "?w"}, {"?x", "?y", "?w"}}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        importBytes(bytes, qec, wrongVariables),
+        ::testing::HasSubstr("contains the variables \"?x ?y ?z\", but"));
+  }
+
   // The same for a result without any columns.
   IdTable noColumns{0, ad_utility::makeUnlimitedAllocator<Id>()};
   noColumns.resize(2);
-  result = roundTrip(makeQet(qec, std::move(noColumns), {}), qec, {}, false,
-                     std::vector<std::string>{"?z"});
+  result = roundTrip(makeQet(qec, std::move(noColumns), {}), qec, {"?z"});
   ASSERT_EQ(result.idTableView().numRows(), 2);
   ASSERT_EQ(result.idTableView().numColumns(), 1);
   EXPECT_EQ(result.idTableView()(1, 0), Id::makeUndefined());
@@ -682,20 +760,30 @@ TEST_F(BinaryExportRoundTrip, geoPointsAreConvertedToTheLocalEncoding) {
   auto* qec = ad_utility::testing::getQec();
   GeoPoint point{47.9, 7.8};
   ASSERT_EQ(GeoPoint::encoding(), GeoPointEncodingEnum::ZOrder);
-  Id exported = Id::makeFromGeoPoint(point);
-  auto bytes = exportBytes(
-      makeQet(qec, makeIdTableFromVector({{exported}}), {"?x"}), {"?x"});
 
-  // Import with a different encoding, as if the importing QLever instance used
-  // an index with a different encoding.
-  auto [imported, expected] =
-      withGeoPointEncoding(GeoPointEncodingEnum::LatMajor, [&]() {
-        return std::pair{
-            importBytes(std::move(bytes), qec, {"?x"}).idTableView()(0, 0),
-            Id::makeFromGeoPoint(point)};
-      });
-  ASSERT_NE(expected, exported);
-  EXPECT_EQ(imported, expected);
+  // Export with the `exportEncoding` and import with the `importEncoding`, as
+  // if the two QLever instances used indices with different encodings.
+  auto test = [qec, &point](GeoPointEncodingEnum exportEncoding,
+                            GeoPointEncodingEnum importEncoding) {
+    // The cache key of `ValuesForTesting` contains the decoded points, which
+    // are the same for both encodings.
+    qec->clearCacheUnpinnedOnly();
+    Id exported = withGeoPointEncoding(
+        exportEncoding, [&point]() { return Id::makeFromGeoPoint(point); });
+    auto bytes = withGeoPointEncoding(exportEncoding, [&]() {
+      return exportBytes(
+          makeQet(qec, makeIdTableFromVector({{exported}}), {"?x"}), {"?x"});
+    });
+    auto [imported, expected] = withGeoPointEncoding(importEncoding, [&]() {
+      return std::pair{
+          importBytes(std::move(bytes), qec, {"?x"}).idTableView()(0, 0),
+          Id::makeFromGeoPoint(point)};
+    });
+    EXPECT_NE(expected, exported);
+    EXPECT_EQ(imported, expected);
+  };
+  test(GeoPointEncodingEnum::ZOrder, GeoPointEncodingEnum::LatMajor);
+  test(GeoPointEncodingEnum::LatMajor, GeoPointEncodingEnum::ZOrder);
 }
 
 // _____________________________________________________________________________
@@ -723,11 +811,22 @@ TEST_F(BinaryExportRoundTrip, invalidHeader) {
       import(wrongVersion),
       ::testing::HasSubstr("only version 1 is supported"));
 
+  auto notBinaryFormat =
+      ::testing::HasSubstr("not in QLever's binary export format");
   auto wrongMagic = bytes;
   wrongMagic[sizeof(size_t)] = 'X';
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      import(wrongMagic),
-      ::testing::HasSubstr("not in QLever's binary export format"));
+  AD_EXPECT_THROW_WITH_MESSAGE(import(wrongMagic), notBinaryFormat);
+  // A different format, the size of which is not used for an allocation.
+  AD_EXPECT_THROW_WITH_MESSAGE(import(std::string(1000, 'x')), notBinaryFormat);
+  // An empty response.
+  AD_EXPECT_THROW_WITH_MESSAGE(import(""),
+                               ::testing::HasSubstr("ended unexpectedly"));
+
+  // The encoding of the geographic points follows the version.
+  auto wrongEncoding = bytes;
+  wrongEncoding[versionOffset + sizeof(version)] = 7;
+  AD_EXPECT_THROW_WITH_MESSAGE(import(wrongEncoding),
+                               ::testing::HasSubstr("invalid encoding"));
 
   // The result ends with the last row, the marker, and the (empty) trailing
   // batch of strings. Cut it off in the middle of that batch, directly after
@@ -813,4 +912,33 @@ TEST_F(BinaryExportRoundTrip, severalBatches) {
   auto [resultTable, resultVocab, numBlocks] = materialize(result, 1);
   EXPECT_GE(numBlocks, 2);
   EXPECT_EQ(resultTable, intTable);
+}
+
+// _____________________________________________________________________________
+TEST_F(BinaryExportRoundTrip, limitsAndCancellation) {
+  auto* qec = ad_utility::testing::getQec();
+  LocalVocab localVocab;
+  std::string word = absl::StrCat("\"", std::string(100, 'x'), "\"");
+  Id id = localVocabId(localVocab, word, *qec);
+  auto bytes = exportBytes(makeQet(qec, makeIdTableFromVector({{id}}), {"?x"},
+                                   std::move(localVocab)),
+                           {"?x"});
+  using ad_utility::MemorySize;
+
+  // The batch of strings consists of the single word.
+  auto result = importBytes(bytes, qec, {"?x"}, false,
+                            MemorySize::bytes(sizeof(std::string) + 102));
+  EXPECT_EQ(
+      result.idTableView()(0, 0).getLocalVocabIndex()->toStringRepresentation(),
+      word);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      importBytes(bytes, qec, {"?x"}, false, MemorySize::bytes(100)),
+      ::testing::HasSubstr("larger than the maximum size of 100 B"));
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(importBytes(bytes, qec, {"?x"}, false, MemorySize::gigabytes(1),
+                           cancellationHandle),
+               ad_utility::CancellationException);
 }

@@ -277,7 +277,9 @@ Result Service::computeBinaryResult(bool requestLaziness,
       requestLaziness, std::move(response), *getExecutionContext(),
       ad_utility::transform(parsedServiceClause_.visibleVariables_,
                             &Variable::name),
-      resultSortedOn());
+      resultSortedOn(),
+      getRuntimeParameter<&RuntimeParameters::serviceMaxBinaryBatchSize_>(),
+      cancellationHandle_);
 }
 
 // _____________________________________________________________________________

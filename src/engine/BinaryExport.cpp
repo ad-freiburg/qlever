@@ -12,6 +12,7 @@
 #include "engine/BinaryExport.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 
 #include <cstring>
 #include <utility>
@@ -86,6 +87,16 @@ static_assert([]() {
 
 static constexpr std::string_view magicBytes = "QLEVER.EXPORT";
 
+// _____________________________________________________________________________
+void BinaryExportHelpers::throwIfTooLarge(size_t size, size_t maxSize) {
+  if (size > maxSize) {
+    throw std::runtime_error{absl::StrCat(
+        "The result in QLever's binary export format contains a string or a "
+        "batch of strings that is larger than the maximum size of ",
+        ad_utility::MemorySize::bytes(maxSize).asString())};
+  }
+}
+
 // The header of the format. Its serialization starts with the `magicBytes` and
 // the version, which are checked when reading it.
 struct Header {
@@ -97,42 +108,61 @@ struct Header {
   std::vector<encodedIri::Pattern> patterns_;
   // The names of the variables, one per column.
   std::vector<std::string> variableNames_;
+  // The names of the selected variables that are not bound in the result, and
+  // therefore have no column.
+  std::vector<std::string> unboundVariableNames_;
 
-  AD_SERIALIZE_FRIEND_FUNCTION(Header) {
-    static constexpr bool isReader =
-        ad_utility::serialization::ReadSerializer<S>;
-    std::string magic{magicBytes};
-    serializer | magic;
-    if constexpr (isReader) {
-      if (magic != magicBytes) {
-        throw std::runtime_error{
-            "The result is not in QLever's binary export format"};
-      }
+  // Return the serialized header.
+  std::string serialize() const {
+    ad_utility::serialization::ByteBufferWriteSerializer serializer;
+    nlohmann::json patterns;
+    detail::patternsToJson(patterns, patterns_,
+                           EncodedIriManager::NumBitsEncoding);
+    serializer << std::string{magicBytes};
+    serializer << ad_utility::binaryQleverExportVersion;
+    serializer << geoPointEncoding_;
+    serializer << patterns.dump();
+    serializer << variableNames_;
+    serializer << unboundVariableNames_;
+    return std::string{serializer.data().data(), serializer.data().size()};
+  }
+
+  // Read a header that was written by `serialize` from the `reader` (see
+  // `BinaryExportHelpers::readString` for the `maxNumBytes`).
+  template <typename Reader>
+  static Header read(Reader& reader, size_t maxNumBytes) {
+    using H = BinaryExportHelpers;
+    // The magic bytes are serialized as a string. Its size is checked first,
+    // such that no memory is allocated for the size of an invalid response.
+    std::string magic(magicBytes.size(), '\0');
+    if (H::read<size_t>(reader) == magic.size()) {
+      reader(magic.data(), magic.size());
     }
-    uint16_t version = ad_utility::binaryQleverExportVersion;
-    serializer | version;
-    if constexpr (isReader) {
-      if (version != ad_utility::binaryQleverExportVersion) {
-        throw std::runtime_error{absl::StrCat(
-            "The result is in version ", version,
-            " of QLever's binary export format, but only version ",
-            ad_utility::binaryQleverExportVersion, " is supported")};
-      }
+    if (magic != magicBytes) {
+      throw std::runtime_error{
+          "The result is not in QLever's binary export format"};
     }
-    serializer | arg.geoPointEncoding_;
-    std::string patterns;
-    if constexpr (isReader) {
-      serializer >> patterns;
-      arg.patterns_ = detail::patternsFromJson(
-          nlohmann::json::parse(patterns), EncodedIriManager::NumBitsEncoding,
-          EncodedIriManager::maxNumPrefixes_);
-    } else {
-      nlohmann::json json;
-      detail::patternsToJson(json, arg.patterns_,
-                             EncodedIriManager::NumBitsEncoding);
-      serializer << json.dump();
+    auto version = H::read<uint16_t>(reader);
+    if (version != ad_utility::binaryQleverExportVersion) {
+      throw std::runtime_error{
+          absl::StrCat("The result is in version ", version,
+                       " of QLever's binary export format, but only version ",
+                       ad_utility::binaryQleverExportVersion, " is supported")};
     }
-    serializer | arg.variableNames_;
+    Header header;
+    header.geoPointEncoding_ = H::read<GeoPointEncodingEnum>(reader);
+    if (header.geoPointEncoding_ != GeoPointEncodingEnum::ZOrder &&
+        header.geoPointEncoding_ != GeoPointEncodingEnum::LatMajor) {
+      throw std::runtime_error{
+          "The result in QLever's binary export format has an invalid "
+          "encoding of its geographic points"};
+    }
+    header.patterns_ = detail::patternsFromJson(
+        nlohmann::json::parse(H::readString(reader, maxNumBytes)),
+        EncodedIriManager::NumBitsEncoding, EncodedIriManager::maxNumPrefixes_);
+    header.variableNames_ = H::readVectorOfStrings(reader, maxNumBytes);
+    header.unboundVariableNames_ = H::readVectorOfStrings(reader, maxNumBytes);
+    return header;
   }
 };
 
@@ -175,20 +205,6 @@ std::string ExportBatch::finish() {
   return std::exchange(buffer_, std::string{});
 }
 
-// Return the serialized header of the binary export of `qet`, where the
-// `columns` are the exported columns.
-static std::string writeHeader(
-    const QueryExecutionTree& qet,
-    const QueryExecutionTree::ColumnIndicesAndTypes& columns) {
-  ad_utility::serialization::ByteBufferWriteSerializer serializer{};
-  serializer << Header{GeoPoint::encoding(),
-                       qet.getQec()->getIndex().encodedIriManager().patterns_,
-                       ad_utility::transform(columns, [](const auto& column) {
-                         return column.value().variable_;
-                       })};
-  return std::string{serializer.data().data(), serializer.data().size()};
-}
-
 // The special case of a result without columns, for which only the number of
 // rows is exported. `exportNumRows` and `importNumRows` are the two
 // counterparts of this format.
@@ -196,20 +212,20 @@ static std::string exportNumRows(LimitOffsetClause limitAndOffset,
                                  const Result& result,
                                  const CancellationHandle& cancellationHandle) {
   uint64_t numRows = 0;
+  uint64_t resultSize = 0;
   for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
-           limitAndOffset, result, numRows)) {
-    for ([[maybe_unused]] uint64_t i : range) {
-      cancellationHandle->throwIfCancelled();
-    }
+           limitAndOffset, result, resultSize)) {
+    numRows += range.size();
+    cancellationHandle->throwIfCancelled();
   }
   return std::string{raw(numRows)};
 }
 
 // _____________________________________________________________________________
-template <ByteIterator It, std::sentinel_for<It> End>
-static IdTable importNumRows(It& it, const End& end, size_t numColumns,
+template <typename Reader>
+static IdTable importNumRows(Reader& reader, size_t numColumns,
                              const QueryExecutionContext& qec) {
-  auto numRows = BinaryExportHelpers::read<uint64_t>(it, end);
+  auto numRows = BinaryExportHelpers::read<uint64_t>(reader);
   IdTable result{numColumns, qec.getAllocator()};
   result.resize(numRows);
   for (auto column : result.getColumns()) {
@@ -251,12 +267,21 @@ ad_utility::streams::stream_generator exportAsQLeverBinary(
   result->logResultSize();
   AD_LOG_DEBUG << "Starting binary export..." << std::endl;
 
-  // Get all columns with defined variables.
+  // Only the variables that are bound in the result get a column.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, true);
+  Header header{GeoPoint::encoding(),
+                qet.getQec()->getIndex().encodedIriManager().patterns_,
+                {},
+                {}};
+  for (const auto& [variable, column] : ::ranges::views::zip(
+           selectClause.getSelectedVariablesAsStrings(), columns)) {
+    (column.has_value() ? header.variableNames_ : header.unboundVariableNames_)
+        .push_back(variable);
+  }
   std::erase(columns, std::nullopt);
 
-  co_yield writeHeader(qet, columns);
+  co_yield header.serialize();
 
   if (columns.empty()) {
     co_yield exportNumRows(limitAndOffset, *result, cancellationHandle);
@@ -333,7 +358,12 @@ Id IdRewriter::operator()(Id id) {
     default:
       // All other IDs that the exporter sends are self-contained, see
       // `toExportableId`.
-      AD_CORRECTNESS_CHECK(id.isTrivial());
+      if (!id.isTrivial()) {
+        throw std::runtime_error{absl::StrCat(
+            "The result in QLever's binary export format contains an ID of "
+            "the unexpected datatype ",
+            toString(id.getDatatype()))};
+      }
       return id;
   }
 }
@@ -346,12 +376,17 @@ Id IdRewriter::rewriteEncodedVal(Id id) {
     return EncodedIriManager::makeIdFromPrefixIdxAndPayload(it->second,
                                                             payload);
   }
+  if (prefixIdx >= remotePatterns_.size()) {
+    throw std::runtime_error{
+        "The result in QLever's binary export format contains an encoded IRI "
+        "with an unknown pattern"};
+  }
   // The decoded IRI might be encoded with a different local pattern.
   auto [it, inserted] = decodedIris_.try_emplace(id.getBits(), Id{});
   if (inserted) {
-    it->second = stringToId(
-        encodedIri::decodeToIri(remotePatterns_.at(prefixIdx), payload), *qec_,
-        localVocab_);
+    it->second =
+        stringToId(encodedIri::decodeToIri(remotePatterns_[prefixIdx], payload),
+                   *qec_, localVocab_);
   }
   return it->second;
 }
@@ -360,8 +395,8 @@ Id IdRewriter::rewriteEncodedVal(Id id) {
 Id IdRewriter::rewriteBlankNode(Id id) {
   auto [it, inserted] = blankNodeMapping_.try_emplace(id.getBits(), Id{});
   if (inserted) {
-    it->second = Id::makeFromBlankNodeIndex(
-        localVocab_.getBlankNodeIndex(qec_->getIndex().getBlankNodeManager()));
+    it->second = Id::makeFromBlankNodeIndex(blankNodeVocab_.getBlankNodeIndex(
+        qec_->getIndex().getBlankNodeManager()));
   }
   return it->second;
 }
@@ -369,8 +404,14 @@ Id IdRewriter::rewriteBlankNode(Id id) {
 // _____________________________________________________________________________
 Id IdRewriter::rewriteString(Id id) const {
   // Undo the shift done by `StringMapping::remapId`.
-  return transmittedIds_.at(reinterpret_cast<size_t>(id.getLocalVocabIndex()) >>
-                            Id::numDatatypeBits);
+  auto index =
+      reinterpret_cast<size_t>(id.getLocalVocabIndex()) >> Id::numDatatypeBits;
+  if (index >= transmittedIds_.size()) {
+    throw std::runtime_error{
+        "The result in QLever's binary export format refers to a string that "
+        "was not transmitted"};
+  }
+  return transmittedIds_[index];
 }
 
 // _____________________________________________________________________________
@@ -387,14 +428,15 @@ Id IdRewriter::rewriteGeoPoint(Id id) const {
 
 // _____________________________________________________________________________
 LocalVocab IdRewriter::takeLocalVocab() {
-  LocalVocab nextVocab;
   if (!blankNodeMapping_.empty()) {
-    nextVocab.mergeWith(localVocab_);
+    // NOTE: `mergeWith` marks the `blankNodeVocab_` as copied, which only
+    // forbids adding words, but not blank nodes, to it.
+    localVocab_.mergeWith(blankNodeVocab_);
   }
   // The IDs of the current batch might point into the old local vocab.
   transmittedIds_.clear();
   decodedIris_.clear();
-  return std::exchange(localVocab_, std::move(nextVocab));
+  return std::exchange(localVocab_, LocalVocab{});
 }
 
 // _____________________________________________________________________________
@@ -414,11 +456,22 @@ ad_utility::HashMap<uint8_t, uint8_t> IdRewriter::getPrefixMapping(
 }
 
 // For each of the `expectedVariables`, the index of the column of the
-// response that contains it (`std::nullopt` if the response doesn't contain
-// it).
+// response that contains it (`std::nullopt` if it is unbound). Throw if the
+// response doesn't contain exactly the `expectedVariables`.
 static std::vector<std::optional<size_t>> getRemoteColumns(
-    const std::vector<std::string>& expectedVariables,
-    const std::vector<std::string>& remoteVariables) {
+    const std::vector<std::string>& expectedVariables, const Header& header) {
+  const auto& remoteVariables = header.variableNames_;
+  auto allRemoteVariables = remoteVariables;
+  ql::ranges::copy(header.unboundVariableNames_,
+                   std::back_inserter(allRemoteVariables));
+  using Set = ad_utility::HashSet<std::string>;
+  if (Set{allRemoteVariables.begin(), allRemoteVariables.end()} !=
+      Set{expectedVariables.begin(), expectedVariables.end()}) {
+    throw std::runtime_error{absl::StrCat(
+        "The result in QLever's binary export format contains the variables \"",
+        absl::StrJoin(allRemoteVariables, " "), "\", but the variables \"",
+        absl::StrJoin(expectedVariables, " "), "\" were expected")};
+  }
   return ad_utility::transform(
       expectedVariables,
       [&remoteVariables](const auto& variable) -> std::optional<size_t> {
@@ -431,17 +484,16 @@ static std::vector<std::optional<size_t>> getRemoteColumns(
 }
 
 // Read the remaining IDs of a row of the response (the `firstId` has already
-// been read) from the range `[it, end)` into the `rowBuffer` (which has one
+// been read) from the `reader` into the `rowBuffer` (which has one
 // entry per column of the response), and append the row to the `table`
 // (which has one column per entry of `remoteColumns`, see `getRemoteColumns`).
-template <ByteIterator It, std::sentinel_for<It> End>
-static void readRow(It& it, const End& end, Id::T firstId,
+template <typename Reader>
+static void readRow(Reader& reader, Id::T firstId,
                     const std::vector<std::optional<size_t>>& remoteColumns,
                     std::vector<Id::T>& rowBuffer, IdTable& table) {
   rowBuffer.at(0) = firstId;
-  for (size_t i = 1; i < rowBuffer.size(); ++i) {
-    rowBuffer[i] = BinaryExportHelpers::read<Id::T>(it, end);
-  }
+  reader(reinterpret_cast<char*>(rowBuffer.data() + 1),
+         (rowBuffer.size() - 1) * sizeof(Id::T));
   table.emplace_back();
   size_t rowIndex = table.size() - 1;
   for (size_t col = 0; col < remoteColumns.size(); ++col) {
@@ -454,31 +506,24 @@ static void readRow(It& it, const End& end, Id::T firstId,
 
 // Core coroutine that reads the binary response and yields one
 // `IdTableVocabPair` per vocab batch (or a single one if `yieldOnce` is set).
-// The columns of the result are the `expectedVariables` in this order. A
-// variable that is not part of the response is undefined in all rows, and
-// variables of the response that are not expected are ignored.
-Result::Generator importBinaryGenerator(
+// The columns of the result are the `expectedVariables` in this order, see
+// `getRemoteColumns`.
+static Result::Generator importBinaryGenerator(
     HttpOrHttpsResponse response, const QueryExecutionContext& qec,
-    std::vector<std::string> expectedVariables, bool yieldOnce) {
-  // TODO<joka921> Iterating over the single bytes of a `join` view is rather
-  // inefficient. It would be faster to directly work on the spans of the
-  // `response.body_`, but then a value can span multiple spans.
-  auto bytes = response.body_ | ql::views::join;
-  auto it = ql::ranges::begin(bytes);
-  auto end = ql::ranges::end(bytes);
-
-  auto header = BinaryExportHelpers::read<Header>(it, end);
+    std::vector<std::string> expectedVariables, bool yieldOnce,
+    size_t maxStringBatchSize, CancellationHandle cancellationHandle) {
+  ByteSpanReader reader{response.body_};
+  auto header = Header::read(reader, maxStringBatchSize);
+  auto remoteColumns = getRemoteColumns(expectedVariables, header);
   size_t numColumns = expectedVariables.size();
 
   // Special case 0 columns: yield a single pair with the correct row count.
   if (header.variableNames_.empty()) {
-    co_yield Result::IdTableVocabPair{importNumRows(it, end, numColumns, qec),
+    co_yield Result::IdTableVocabPair{importNumRows(reader, numColumns, qec),
                                       LocalVocab{}};
     co_return;
   }
 
-  auto remoteColumns =
-      getRemoteColumns(expectedVariables, header.variableNames_);
   IdRewriter rewriter{qec, std::move(header.patterns_),
                       header.geoPointEncoding_};
   IdTable currentBatch{numColumns, qec.getAllocator()};
@@ -486,15 +531,16 @@ Result::Generator importBinaryGenerator(
   size_t firstRowToRewrite = 0;
   std::vector<Id::T> rowBuffer(header.variableNames_.size());
 
-  while (it != end) {
-    auto firstId = BinaryExportHelpers::read<Id::T>(it, end);
+  while (!reader.atEnd()) {
+    cancellationHandle->throwIfCancelled();
+    auto firstId = BinaryExportHelpers::read<Id::T>(reader);
     if (firstId != vocabMarker) {
-      readRow(it, end, firstId, remoteColumns, rowBuffer, currentBatch);
+      readRow(reader, firstId, remoteColumns, rowBuffer, currentBatch);
       continue;
     }
     // The end of a batch, rewrite its rows using the strings that follow.
     rewriter.startBatch(
-        BinaryExportHelpers::read<std::vector<std::string>>(it, end));
+        BinaryExportHelpers::readVectorOfStrings(reader, maxStringBatchSize));
     rewriter.rewriteRows(currentBatch, firstRowToRewrite);
     firstRowToRewrite = currentBatch.size();
     if (!yieldOnce) {
@@ -520,9 +566,12 @@ Result importBinaryHttpResponse(bool requestLaziness,
                                 HttpOrHttpsResponse response,
                                 const QueryExecutionContext& qec,
                                 std::vector<std::string> expectedVariables,
-                                std::vector<ColumnIndex> resultSortedOn) {
+                                std::vector<ColumnIndex> resultSortedOn,
+                                ad_utility::MemorySize maxStringBatchSize,
+                                CancellationHandle cancellationHandle) {
   auto generator = importBinaryGenerator(
-      std::move(response), qec, std::move(expectedVariables), !requestLaziness);
+      std::move(response), qec, std::move(expectedVariables), !requestLaziness,
+      maxStringBatchSize.getBytes(), std::move(cancellationHandle));
 
   if (requestLaziness) {
     return Result{std::move(generator), std::move(resultSortedOn)};
