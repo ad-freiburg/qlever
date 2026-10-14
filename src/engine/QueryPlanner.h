@@ -481,14 +481,15 @@ class QueryPlanner {
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Helper that returns `true` for each of the subtree plans `a` and `b` iff
-  // the subtree plan is a `Proxy` and it is not yet fully constructed.
+  // the subtree plan is a `Proxy` without a child.
   static std::pair<bool, bool> checkProxyOperation(const SubtreePlan& a,
                                                    const SubtreePlan& b);
 
-  // If one of the inputs is a `Proxy` which needs payload variables from the
-  // other input, add that other input as a child to the proxy.
-  static std::optional<SubtreePlan> createProxyOperation(
-      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
+  // If exactly one of the inputs is a `Proxy` without a child and the other
+  // input binds all its input variables, return the `Proxy` with that other
+  // input as its child. Return `std::nullopt` otherwise.
+  static std::optional<SubtreePlan> createProxyOperation(const SubtreePlan& a,
+                                                         const SubtreePlan& b);
 #endif
 
   // Helper that generates `IndexScan` query plans on materialized views if they

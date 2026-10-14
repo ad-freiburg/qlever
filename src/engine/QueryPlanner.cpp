@@ -2339,11 +2339,15 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
-  // Similar to SpatialJoin: if one of the inputs is an incomplete
-  // Proxy, add the other as its child to provide payload variables.
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  if (auto opt = createProxyOperation(a, b, jcs)) {
-    candidates.push_back(std::move(opt.value()));
+  // If one of the inputs is a `Proxy` without a child, add the other input as
+  // its child if that binds all the input variables. As for a `SpatialJoin`
+  // without children, a regular join is never an option, so return without
+  // candidates otherwise.
+  if (checkProxyOperation(a, b) != std::pair<bool, bool>{false, false}) {
+    if (auto opt = createProxyOperation(a, b)) {
+      candidates.push_back(std::move(opt.value()));
+    }
     return candidates;
   }
 #endif
@@ -2487,26 +2491,26 @@ std::pair<bool, bool> QueryPlanner::checkProxyOperation(const SubtreePlan& a,
 
 // _____________________________________________________________________________
 auto QueryPlanner::createProxyOperation(
-    const SubtreePlan& a, const SubtreePlan& b,
-    [[maybe_unused]] const JoinColumns& jcs) -> std::optional<SubtreePlan> {
+    const SubtreePlan& a, const SubtreePlan& b) -> std::optional<SubtreePlan> {
   auto [aIs, bIs] = checkProxyOperation(a, b);
 
-  // Exactly one of the inputs must be a Proxy.
+  // Exactly one of the inputs must be a `Proxy` without a child (two such
+  // proxies cannot provide each other's input variables).
   if (aIs == bIs) {
     return std::nullopt;
   }
-
   const SubtreePlan& proxySubtreePlan = aIs ? a : b;
   const SubtreePlan& otherSubtreePlan = aIs ? b : a;
-
   std::shared_ptr<Operation> op = proxySubtreePlan._qet->getRootOperation();
   auto proxyOp = static_cast<Proxy*>(op.get());
 
-  if (proxyOp->isConstructed()) {
+  // The other input becomes the child, but only if it binds all the input
+  // variables (if it binds only some of them, the join of it with the remaining
+  // inputs is a candidate later on).
+  if (!proxyOp->bindsAllInputVariables(
+          otherSubtreePlan._qet->getVariableColumns())) {
     return std::nullopt;
   }
-
-  // The other subtree provides the payload variables for the proxy.
   auto newProxyOp = proxyOp->addChild(otherSubtreePlan._qet);
 
   SubtreePlan plan = makeSubtreePlan<Proxy>(std::move(newProxyOp));

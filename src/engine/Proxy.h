@@ -66,8 +66,12 @@ class Proxy : public Operation {
             std::nullopt,
         SendRequestType sendRequestFunction = sendHttpOrHttpsRequest);
 
-  // Add a child operation that provides the input variable bindings.
-  // Returns a new `Proxy` with the child added.
+  // Return `true` iff all input variables are among the `variableColumns`.
+  bool bindsAllInputVariables(const VariableToColumnMap& variableColumns) const;
+
+  // Return a new `Proxy` with the `child` added, which provides the input
+  // variable bindings and must bind all input variables. Throw if the child
+  // also binds an output variable or the row variable.
   std::shared_ptr<Proxy> addChild(
       std::shared_ptr<QueryExecutionTree> child) const;
 
@@ -94,6 +98,9 @@ class Proxy : public Operation {
   [[nodiscard]] bool isDeterministicImpl() const override;
   std::string getCacheKeyImpl() const override;
   Result computeResult(bool requestLaziness) override;
+
+  // The number of columns of the child, or of input variables without a child.
+  size_t getChildWidth() const;
 
   // Serialize input bindings from the child result as SPARQL Results JSON.
   // Includes row indices for joining.

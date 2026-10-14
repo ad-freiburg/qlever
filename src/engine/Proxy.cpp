@@ -16,10 +16,10 @@
 #include <boost/url.hpp>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/RuntimeParameters.h"
-#include "index/ExportIds.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/BlankNodeAdder.h"
 #include "util/Exception.h"
@@ -38,8 +38,35 @@ Proxy::Proxy(QueryExecutionContext* qec, parsedQuery::ProxyConfiguration config,
       sendRequestFunction_{std::move(sendRequestFunction)} {}
 
 // ____________________________________________________________________________
+bool Proxy::bindsAllInputVariables(
+    const VariableToColumnMap& variableColumns) const {
+  return ql::ranges::all_of(config_.inputVariables_, [&](const auto& pair) {
+    return variableColumns.contains(pair.second);
+  });
+}
+
+// ____________________________________________________________________________
 std::shared_ptr<Proxy> Proxy::addChild(
     std::shared_ptr<QueryExecutionTree> child) const {
+  AD_CONTRACT_CHECK(!childOperation_.has_value());
+  const auto& childVariables = child->getVariableColumns();
+  AD_CONTRACT_CHECK(bindsAllInputVariables(childVariables));
+
+  // The output variables and the row variable are bound by the response, so
+  // they must not be bound by the child as well.
+  auto checkNotBound = [&childVariables](const Variable& var,
+                                         std::string_view parameter) {
+    if (childVariables.contains(var)) {
+      throw std::runtime_error(absl::StrCat(
+          "The variable ", var.name(), " of the parameter `qlproxy:", parameter,
+          "` is already bound by the enclosing graph pattern"));
+    }
+  };
+  for (const auto& [name, var] : config_.outputVariables_) {
+    checkNotBound(var, absl::StrCat("output-", name));
+  }
+  checkNotBound(config_.rowVariable_.second, "output-row");
+
   return std::make_shared<Proxy>(getExecutionContext(), config_,
                                  std::move(child), sendRequestFunction_);
 }
@@ -79,55 +106,39 @@ std::string Proxy::getDescriptor() const {
 
 // ____________________________________________________________________________
 size_t Proxy::getResultWidth() const {
-  if (!childOperation_.has_value() && !config_.inputVariables_.empty()) {
-    // Before construction and we need input variables: advertise them for
-    // joining.
-    return config_.inputVariables_.size();
-  } else if (!childOperation_.has_value()) {
-    // No child and no input variables: output variables + row variable.
-    return config_.outputVariables_.size() + 1;
-  }
-  // After construction: child columns + output columns + row variable.
-  return childOperation_.value()->getResultWidth() +
-         config_.outputVariables_.size() + 1;
+  return getChildWidth() + config_.outputVariables_.size() + 1;
+}
+
+// ____________________________________________________________________________
+size_t Proxy::getChildWidth() const {
+  return childOperation_.has_value() ? childOperation_.value()->getResultWidth()
+                                     : config_.inputVariables_.size();
 }
 
 // ____________________________________________________________________________
 VariableToColumnMap Proxy::computeVariableToColumnMap() const {
   VariableToColumnMap map;
 
-  if (!childOperation_.has_value() && !config_.inputVariables_.empty()) {
-    // When not yet constructed and we need input variables, advertise them
-    // so the query planner knows what to join with.
-    for (size_t i = 0; i < config_.inputVariables_.size(); ++i) {
-      const auto& [name, var] = config_.inputVariables_[i];
-      map[var] = makePossiblyUndefinedColumn(i);
-    }
-  } else if (childOperation_.has_value()) {
-    // When constructed, return child variables + output variables + row
-    // variable.
-    const auto& childVarColMap = childOperation_.value()->getVariableColumns();
-    for (const auto& [var, colInfo] : childVarColMap) {
-      map[var] = colInfo;
-    }
-    // Output variables come after child columns.
-    size_t childWidth = childOperation_.value()->getResultWidth();
-    for (size_t i = 0; i < config_.outputVariables_.size(); ++i) {
-      const auto& [name, var] = config_.outputVariables_[i];
-      map[var] = makePossiblyUndefinedColumn(childWidth + i);
-    }
-    // Row variable comes last.
-    map[config_.rowVariable_.second] = makePossiblyUndefinedColumn(
-        childWidth + config_.outputVariables_.size());
+  // The columns of the child come first. Without a child, the input variables
+  // stand in for them, so that the query planner connects the proxy with the
+  // operations that bind them (and, via the output variables and the row
+  // variable below, with the proxies that consume its output).
+  if (childOperation_.has_value()) {
+    map = childOperation_.value()->getVariableColumns();
   } else {
-    // No input variables and no child: just output variables + row variable.
-    for (size_t i = 0; i < config_.outputVariables_.size(); ++i) {
-      const auto& [name, var] = config_.outputVariables_[i];
-      map[var] = makePossiblyUndefinedColumn(i);
+    for (size_t i = 0; i < config_.inputVariables_.size(); ++i) {
+      map[config_.inputVariables_[i].second] = makePossiblyUndefinedColumn(i);
     }
-    map[config_.rowVariable_.second] =
-        makePossiblyUndefinedColumn(config_.outputVariables_.size());
   }
+
+  // Then the output variables, then the row variable.
+  size_t childWidth = getChildWidth();
+  for (size_t i = 0; i < config_.outputVariables_.size(); ++i) {
+    map[config_.outputVariables_[i].second] =
+        makePossiblyUndefinedColumn(childWidth + i);
+  }
+  map[config_.rowVariable_.second] =
+      makePossiblyUndefinedColumn(childWidth + config_.outputVariables_.size());
   return map;
 }
 
@@ -176,8 +187,7 @@ std::string Proxy::buildUrlWithParams() const {
         url += "&";
       }
       first = false;
-      // URL-encode the value (simple encoding for common characters).
-      url += name + "=" +
+      url += boost::urls::encode(name, boost::urls::unreserved_chars) + "=" +
              boost::urls::encode(value, boost::urls::unreserved_chars);
     }
   }
@@ -188,9 +198,10 @@ std::string Proxy::buildUrlWithParams() const {
 std::string Proxy::serializeInputAsJson(const Result& childResult) const {
   nlohmann::json result;
 
-  // Build the "head" section with variable names, including the row variable.
+  // Build the "head" section with the row variable first, then the input
+  // variables.
   std::vector<std::string> varNames;
-  varNames.push_back(config_.rowVariable_.first);  // Row variable first
+  varNames.push_back(config_.rowVariable_.first);
   for (const auto& [name, var] : config_.inputVariables_) {
     varNames.push_back(name);
   }
@@ -227,62 +238,13 @@ std::string Proxy::serializeInputAsJson(const Result& childResult) const {
         {"value", std::to_string(row + 1)},
         {"datatype", "http://www.w3.org/2001/XMLSchema#integer"}};
 
+    // An undefined value has no binding, as in the export of a query result.
     for (const auto& [name, colIdx] : inputColumns) {
-      Id id = idTable(row, colIdx);
-      if (id.isUndefined()) {
-        // Skip undefined values (they won't appear in the binding).
-        continue;
+      auto valueObj = ExportQueryExecutionTrees::idToSparqlJsonBinding(
+          getIndex(), idTable(row, colIdx), localVocab);
+      if (valueObj.has_value()) {
+        binding[name] = std::move(valueObj.value());
       }
-
-      // Convert the ID to a JSON binding.
-      nlohmann::json valueObj;
-      auto optStringAndType =
-          ql::exportIds::idToStringAndType<true>(getIndex(), id, localVocab);
-
-      if (!optStringAndType.has_value()) {
-        continue;
-      }
-
-      const auto& [value, type] = optStringAndType.value();
-
-      // Determine the RDF term type for the JSON.
-      switch (id.getDatatype()) {
-        case Datatype::VocabIndex:
-        case Datatype::LocalVocabIndex: {
-          // Could be IRI or literal - check the string representation.
-          auto litOrIri = ql::exportIds::getLiteralOrIriFromVocabIndex(
-              getIndex(), id, localVocab);
-          if (litOrIri.isIri()) {
-            valueObj["type"] = "uri";
-            valueObj["value"] = value;
-          } else {
-            valueObj["type"] = "literal";
-            valueObj["value"] = value;
-            if (litOrIri.hasLanguageTag()) {
-              valueObj["xml:lang"] =
-                  std::string(asStringViewUnsafe(litOrIri.getLanguageTag()));
-            } else if (litOrIri.hasDatatype()) {
-              valueObj["datatype"] =
-                  std::string(asStringViewUnsafe(litOrIri.getDatatype()));
-            }
-          }
-          break;
-        }
-        case Datatype::BlankNodeIndex:
-          valueObj["type"] = "bnode";
-          valueObj["value"] = value;
-          break;
-        default:
-          // For encoded values (int, double, bool, date, etc.), treat as
-          // literal.
-          valueObj["type"] = "literal";
-          valueObj["value"] = value;
-          if (type != nullptr) {
-            valueObj["datatype"] = type;
-          }
-          break;
-      }
-      binding[name] = valueObj;
     }
     bindings.push_back(binding);
     checkCancellation();
@@ -335,11 +297,12 @@ IdTable Proxy::joinResponseWithChild(const IdTable& responseTable,
       result(resultRow, col) = childTable(rowIdx, col);
     }
 
-    // Copy output columns (skip the row column in response).
+    // Copy the output columns (all columns of the response except the row
+    // column).
     size_t outputCol = 0;
     for (size_t col = 0; col < responseTable.numColumns(); ++col) {
       if (col == responseRowCol) {
-        continue;  // Skip the row variable column.
+        continue;
       }
       result(resultRow, childWidth + outputCol) = responseTable(respRow, col);
       ++outputCol;
@@ -354,6 +317,19 @@ IdTable Proxy::joinResponseWithChild(const IdTable& responseTable,
 
 // ____________________________________________________________________________
 Result Proxy::computeResult([[maybe_unused]] bool requestLaziness) {
+  // The query planner adds the enclosing graph pattern as the child only if it
+  // binds all input variables (see `QueryPlanner::createProxyOperation`).
+  if (!isConstructed()) {
+    throw std::runtime_error(absl::StrCat(
+        "The input variables ",
+        absl::StrJoin(config_.inputVariables_, ", ",
+                      [](std::string* out, const auto& pair) {
+                        absl::StrAppend(out, pair.second.name());
+                      }),
+        " of the qlproxy service are not all bound by the enclosing graph "
+        "pattern"));
+  }
+
   // First, compute the child result to get input bindings.
   std::shared_ptr<const Result> childResult;
   if (childOperation_.has_value()) {
