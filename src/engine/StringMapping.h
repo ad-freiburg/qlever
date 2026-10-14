@@ -42,6 +42,7 @@ class StringMapping {
   // (e.g. a monotonic buffer with `string_view`s or offsets) to avoid one
   // allocation per string.
   std::vector<std::string> strings_;
+  // The total size of the strings in `strings_`.
   size_t numBytes_ = 0;
 
  public:

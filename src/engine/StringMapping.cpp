@@ -50,6 +50,9 @@ Id StringMapping::remapId(Id id) {
     return true;
   };
   static_assert(checkDatatypes());
+
+  // A new ID gets the next free index and is resolved to its string right
+  // away, so that `numBytes()` always accounts for all IDs of the batch.
   auto [it, inserted] =
       stringMapping_.try_emplace(id.getBits(), stringMapping_.size());
   size_t distinctIndex = it->second;
@@ -62,9 +65,10 @@ Id StringMapping::remapId(Id id) {
     numBytes_ += strings_.back().size();
     AD_CORRECTNESS_CHECK(strings_.size() == stringMapping_.size());
   }
+
   // `Id::makeFromLocalVocabIndex` assumes that the last `numDatatypeBits` bits
   // are all zero and then performs a right shift. We have to shift the
-  // `dinstinctIndex` left by the same amount to counter this effect.
+  // `distinctIndex` left by the same amount to counter this effect.
   return Id::makeFromLocalVocabIndex(reinterpret_cast<::LocalVocabIndex>(
       distinctIndex << Id::numDatatypeBits));
 }
