@@ -176,6 +176,8 @@ struct RuntimeParameters {
   // trick (see `CountAvailablePredicates`) that run at the same time. They run
   // on the query's executor, so `max-num-threads-per-query` still bounds the
   // threads. The value `0` means the number of logical cores of the machine.
+  // The default of `3` captures most of the speedup, with quickly diminishing
+  // returns for more tasks.
   SizeT patternTrickNumTasksInFlight_{3, "pattern-trick-num-tasks-in-flight"};
   // The number of threads for the parallel sort of intermediate results
   // (`Sort` and `ORDER BY`, see `IdTableUtils`). Values below `1` are treated
