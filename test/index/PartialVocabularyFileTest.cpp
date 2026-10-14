@@ -221,3 +221,71 @@ TEST(PartialVocabularyFile, mergeInParallel) {
   }
   EXPECT_EQ(merged, expected);
 }
+
+// Test the accessors of a `MergeBlock` of merged words and that `clear`
+// releases its words, and that the weight of a block of a file is its size in
+// bytes.
+TEST(PartialVocabularyFile, mergeBlockAccessorsAndBlockWeight) {
+  // A block of three merged words.
+  MergeBlock block;
+  block.push("\"a\"", false, 0, 7);
+  block.push("\"b\"", true, 1, 8);
+  block.push("\"c\"", false, 2, 9);
+  const MergeBlock& constBlock = block;
+  ASSERT_EQ(block.size(), 3u);
+  EXPECT_EQ(block[1].iriOrLiteral(), "\"b\"");
+  EXPECT_EQ(constBlock[2].id(), 9u);
+  EXPECT_EQ(block.front().partialFileId_, 0u);
+  EXPECT_EQ(constBlock.front().id(), 7u);
+  EXPECT_EQ(block.back().partialFileId_, 2u);
+  EXPECT_EQ(constBlock.back().id(), 9u);
+
+  // The external flag can be changed in place.
+  block[0].isExternal() = true;
+  EXPECT_TRUE(constBlock[0].isExternal());
+
+  // A cleared block is empty.
+  block.clear();
+  EXPECT_TRUE(block.empty());
+  EXPECT_EQ(block.size(), 0u);
+
+  // A partial vocabulary with two blocks. The weight of a block is its size in
+  // bytes, and a block ends after the word that makes it at least
+  // `PARTIAL_VOCAB_BLOCK_SIZE` bytes long, so every block but the last is at
+  // least that large.
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
+  size_t numWords = 2 * PARTIAL_VOCAB_BLOCK_SIZE.getBytes() / 16;
+  auto words = wordsOfPartialVocabulary(0, numWords);
+  writePartialVocabulary(filenames.wordsFiles_[0], words);
+  PartialVocabularyRunsInput input{partialVocabBasename, 1};
+  ASSERT_GE(input.numBlocks(0), 2u);
+  for (size_t b = 0; b < input.numBlocks(0); ++b) {
+    EXPECT_EQ(input.blockWeight(0, b), input.numBytesInBlock(0, b));
+    if (b + 1 < input.numBlocks(0)) {
+      EXPECT_GE(input.numBytesInBlock(0, b),
+                PARTIAL_VOCAB_BLOCK_SIZE.getBytes());
+    }
+  }
+  auto firstBlock = input.getBlock(0, 0);
+  EXPECT_EQ(firstBlock[0].iriOrLiteral(), words.front());
+}
+
+// Test that a second `finish` of a `PartialVocabularyWriter` does nothing and
+// that no word can be added after `finish`.
+TEST(PartialVocabularyFile, finishTwice) {
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
+  PartialVocabularyWriter writer{filenames.wordsFiles_[0]};
+  writer("\"a\"", PartialVocabIndexWithExternalFlag{0, false});
+  writer.finish();
+  writer.finish();
+  EXPECT_THROW(writer("\"b\"", PartialVocabIndexWithExternalFlag{1, false}),
+               ad_utility::Exception);
+
+  // The file holds its single word in a single block.
+  PartialVocabularyRunsInput input{partialVocabBasename, 1};
+  ASSERT_EQ(input.numBlocks(0), 1u);
+  EXPECT_EQ(input.numElementsInBlock(0, 0), 1u);
+  EXPECT_EQ(input.firstElement(0, 0).iriOrLiteral(), "\"a\"");
+}
