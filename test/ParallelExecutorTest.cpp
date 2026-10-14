@@ -205,14 +205,17 @@ TEST(ComputeInParallelChunks, chunksHaveTheGivenSize) {
 }
 
 // _____________________________________________________________________________
-TEST(ComputeInParallelChunks, threadBudgetIsRespected) {
+TEST(ComputeInParallelChunks, defaultNumTasksIsHardwareConcurrency) {
   size_t numThreads = std::max(1u, std::thread::hardware_concurrency());
+  // The pool has one thread more than the default number of tasks, so that
+  // the limit below could actually be exceeded.
+  boost::asio::thread_pool pool{numThreads + 1};
   std::atomic<size_t> numRunning = 0;
   std::atomic<bool> tooManyRunning = false;
-  // There are 1000 chunks, but never more than one of them per thread runs at
-  // the same time.
+  // There are 1000 chunks, but never more than `numThreads` of them run at the
+  // same time.
   Chunks chunks = ad_utility::computeInParallelChunks(
-      executor(), 1000, 1,
+      pool.get_executor(), 1000, 1,
       [&numRunning, &tooManyRunning, numThreads](Chunks& chunks, size_t begin,
                                                  size_t end) {
         if (++numRunning > numThreads) {
