@@ -11,7 +11,7 @@
 // pattern. Conceptually this is the same as an optional join with the neutral
 // element, but specialized and more efficient.
 //
-// Note: `NeutralOptional` does not override `makeTreeWithBindColumn`. When
+// NOTE: `NeutralOptional` does not override `makeTreeWithBindColumn`. When
 // `tree_` produces zero rows, `computeResult` fabricates a single all-`UNDEF`
 // row without evaluating any expression, so a `BIND` pushed into `tree_`
 // would silently lose its value (e.g. a constant `BIND` would become `UNDEF`)
