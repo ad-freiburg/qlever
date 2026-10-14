@@ -271,18 +271,47 @@ TEST_F(ValueIdTest, fromBitsWithDatatypeAndPayload) {
     }
   }
 
-  // Bits of the payload argument above `numDataBits` are dropped, they must not
-  // change the datatype.
-  auto tooLarge = ValueId::fromBits(datatypeBits(Datatype::Int), ~uint64_t{0});
-  EXPECT_EQ(tooLarge.getDatatype(), Datatype::Int);
-  EXPECT_EQ(tooLarge.getPayloadBits(), payloadMask);
-
   // The function can be used at compile time.
   static_assert(
       ValueId::fromBits(static_cast<uint8_t>(Datatype::Int), 5).getBits() ==
       ValueId::makeFromInt(5).getBits());
   static_assert(
       ValueId::fromBits(static_cast<uint8_t>(Datatype::Int), 5).getInt() == 5);
+}
+
+// Test the overload `fromBits(Datatype, payload)`, which takes the `Datatype`
+// directly instead of its number.
+TEST_F(ValueIdTest, fromBitsWithDatatype) {
+  constexpr uint64_t payloadMask =
+      ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
+
+  // The `Datatype` overload yields the same bits as the overload that takes the
+  // number of the datatype, for every datatype and a few payloads.
+  for (size_t i = 0; i <= static_cast<size_t>(Datatype::MaxValue); ++i) {
+    const auto datatype = static_cast<Datatype>(i);
+    for (uint64_t payload :
+         {uint64_t{0}, uint64_t{1}, uint64_t{123456789}, payloadMask}) {
+      auto id = ValueId::fromBits(datatype, payload);
+      EXPECT_EQ(id.getBits(), ValueId::fromBits(i, payload).getBits());
+      EXPECT_EQ(id.getDatatype(), datatype);
+      EXPECT_EQ(id.getPayloadBits(), payload);
+    }
+  }
+
+  // Some known values.
+  EXPECT_EQ(ValueId::fromBits(Datatype::Undefined, 0),
+            ValueId::makeUndefined());
+  EXPECT_EQ(ValueId::fromBits(Datatype::Bool, 0), ValueId::makeFromBool(false));
+  EXPECT_EQ(ValueId::fromBits(Datatype::Bool, 1), ValueId::makeFromBool(true));
+  EXPECT_EQ(ValueId::fromBits(Datatype::Int, 42), ValueId::makeFromInt(42));
+  EXPECT_EQ(ValueId::fromBits(Datatype::VocabIndex, 42), makeVocabId(42));
+  EXPECT_EQ(ValueId::fromBits(Datatype::Int, payloadMask),
+            ValueId::makeFromInt(-1));
+
+  // The overload can be used at compile time.
+  static_assert(ValueId::fromBits(Datatype::Int, 5).getBits() ==
+                ValueId::makeFromInt(5).getBits());
+  static_assert(ValueId::fromBits(Datatype::Int, 5).getInt() == 5);
 }
 
 TEST_F(ValueIdTest, OrderingDifferentDatatypes) {

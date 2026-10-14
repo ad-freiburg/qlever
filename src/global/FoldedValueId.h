@@ -231,14 +231,12 @@ class ValueId {
   static constexpr ValueId fromBits(T bits) noexcept { return {bits}; }
 
   // Combine datatype and payload bits (inverse of `getDatatypeBits` and
-  // `getPayloadBits`). Payload bits beyond `numDataBits` are dropped.
+  // `getPayloadBits`). `payload` must not have any datatype bits set.
   static constexpr ValueId fromBits(const T datatype,
                                     const T payload) noexcept {
-    // Check that datatype bits are in the last bits and
-    // will not be shifted over the uint64_t
     AD_EXPENSIVE_CHECK(datatype < (T{1} << numDatatypeBits));
-    constexpr auto datatypeMask = ad_utility::bitMaskForLowerBits(numDataBits);
-    return {(payload & datatypeMask) | (datatype << numDataBits)};
+    AD_EXPENSIVE_CHECK(payload <= maxIndex);
+    return {payload | (datatype << numDataBits)};
   }
 
   // Overload of fromBits to directly use it with Datatype
