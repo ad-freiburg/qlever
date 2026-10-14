@@ -93,8 +93,7 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
   using detail::QueueWord;
   // Return true iff `p1` is smaller than `p2` according to the order of the
   // IRI or literal.
-  auto lessThanForQueue = [&comparator](const MergeWord& p1,
-                                        const MergeWord& p2) {
+  auto lessThan = [&comparator](const MergeWord& p1, const MergeWord& p2) {
     return comparator(p1.iriOrLiteral(), p2.iriOrLiteral());
   };
   // The index of the partial vocabulary that a merged word comes from is
@@ -124,7 +123,7 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
               << options.maxNumChunksInFlight << " chunks in flight ..."
               << std::endl;
   auto mergedWords = parallelBlockMerge::parallelBlockMergeToRange<true>(
-      ad_utility::globalExecutor(), std::move(input), lessThanForQueue,
+      ad_utility::globalExecutor(), std::move(input), lessThan,
       parallelBlockMerge::makeInMemoryStorageFactory<MergeBlock>(
           VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK,
           /*releaseChunkOnConsumption=*/true),

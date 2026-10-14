@@ -83,17 +83,18 @@ struct MergeWord {
   }
 };
 
-// A pool of the buffers that the `MergeBlock`s below store their words in, so
-// that the merge reuses them instead of allocating and freeing one per block:
-// with an allocator that returns freed memory to the operating system
+// A thread-safe pool of the buffers that the `MergeBlock`s below store their
+// words in, so that the merge reuses them instead of allocating and freeing
+// one per block. All the buffers of a pool have the same `capacity`. A request
+// for a larger buffer (a block with a very long word) is served by a larger
+// one, which is replaced by a fresh buffer of the pool's capacity when it is
+// given back. How many buffers the pool keeps is up to the
+// `ad_utility::RecyclingPool`: never more than were taken at the same time.
+//
+// NOTE: With an allocator that returns freed memory to the operating system
 // (immediately or after a short decay, depending on the allocator and on the
 // size of the allocation), the merge of billions of words otherwise spends a
-// quarter of the machine in the kernel on that. All the
-// buffers of a pool have the same `capacity`. A request for a larger buffer
-// (a block with a very long word) is served by a larger one, which is
-// replaced by a fresh buffer of the pool's capacity when it is given back.
-// How many buffers the pool keeps is up to the `ad_utility::RecyclingPool`:
-// never more than were taken at the same time.
+// quarter of the machine in the kernel on allocating and freeing the buffers.
 class BufferPool {
  public:
   // The bytes are not zeroed when a buffer is created or resized, because
@@ -204,10 +205,12 @@ class MergeBlock : public ad_utility::NoCopy {
   // below), or the buffers that the words of a block of merged words are
   // copied into (see `push`). A word is never split across two buffers, and a
   // buffer is never reallocated (it is reserved once and filled up to its
-  // capacity), so the views into it stay valid. The `UniqueCleanup` gives the
-  // buffers back to the pools when the block is destroyed, overwritten by a
-  // move assignment, or cleared (see `clear`), and does nothing for a
-  // moved-from block, so the move operations below can be defaulted.
+  // capacity), so the views into it stay valid.
+  //
+  // NOTE: The `UniqueCleanup` gives the buffers back to the pools when the
+  // block is destroyed, overwritten by a move assignment, or cleared (see
+  // `clear`), and does nothing for a moved-from block, so the move operations
+  // below can be defaulted.
   OwnedBuffers buffers_{Buffers{}, GiveBackToPools{}};
 
  public:

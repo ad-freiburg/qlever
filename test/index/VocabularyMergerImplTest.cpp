@@ -75,7 +75,8 @@ TEST(IndexVocabularyMergerImpl, writePartialVocabularyToFile) {
   EXPECT_TRUE(readBack(fileName).empty());
 }
 
-// _____________________________________________________________________________
+// Test the options of the parallel merge of the partial vocabularies: the
+// output block size, the number of chunks and the number of chunks in flight.
 TEST(IndexVocabularyMergerImpl, vocabularyMergeOptions) {
   using ad_utility::MemorySize;
   using ad_utility::vocabulary_merger::vocabularyMergeOptions;
