@@ -648,10 +648,10 @@ class Operation {
       std::vector<std::shared_ptr<QueryExecutionTree>> children,
       size_t childIndex) const;
 
-  // Internal default implementation for `makeTreeWithBindColumn`: Push the
-  // `bind` into the first of the `children` that accepts it (see
+  // Opt-in helper for implementing `makeTreeWithBindColumn`: Push the `bind`
+  // into the first of the `children` that accepts it (see
   // `pushDownBindToChild`). This is the correct behavior for various operations
-  // like `Join`, which make use of this function for their
+  // like `Join`, which explicitly use this function in their
   // `makeTreeWithBindColumn` override.
   std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
       const parsedQuery::Bind& bind,
