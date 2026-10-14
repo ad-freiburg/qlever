@@ -32,12 +32,12 @@
 #include "../util/AsyncTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/ParallelBlockMergeTestHelpers.h"
-#include "./InMemoryBlockStorage.h"
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "util/CancellationHandle.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/SourceLocation.h"
+#include "util/parallelBlockMerge/InMemoryBlockStorage.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 #include "util/parallelBlockMerge/ParallelMergeRange.h"
 
