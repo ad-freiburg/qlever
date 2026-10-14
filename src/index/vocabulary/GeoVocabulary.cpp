@@ -58,6 +58,16 @@ void GeoVocabulary<V>::open(const std::string& filename) {
         ad_utility::GEOMETRY_INFO_VERSION,
         " as supported by this version of QLever. Please rebuild your index."));
   }
+  if (versionOfFile != ad_utility::GEOMETRY_INFO_VERSION) {
+    AD_LOG_WARN << "The geometry info version of "
+                << getGeoInfoFilename(filename) << " is " << versionOfFile
+                << ", which is older than the current version "
+                << ad_utility::GEOMETRY_INFO_VERSION
+                << ". Geometry information that this version does not "
+                   "precompute will be computed on the fly. Rebuild your "
+                   "index to make use of all precomputed geometry information."
+                << std::endl;
+  }
   geoInfoVersion_ = versionOfFile;
 
   endIndex_ = computeEndIndex();
