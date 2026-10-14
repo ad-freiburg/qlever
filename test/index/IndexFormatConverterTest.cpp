@@ -51,7 +51,7 @@ fs::path oldIndexDirectory() {
 // Return the `Id` of the previous index format with the given datatype bits and
 // value bits.
 Id oldFormatId(uint64_t datatypeBits, uint64_t valueBits) {
-  return Id::fromBits((datatypeBits << ValueId::numDataBits) | valueBits);
+  return Id::fromBits(datatypeBits, valueBits);
 }
 
 // Return the value bits of the given `id`, that is, its bits without the
