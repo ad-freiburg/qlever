@@ -290,9 +290,8 @@ TEST(InMemoryBlockStorage, theSentinelDropsTheChunk) {
   EXPECT_EQ(storage.numLiveChunksForTesting(), 0u);
 }
 
-// _____________________________________________________________________________
-// With `releaseChunkOnConsumption`, storing the end-of-chunk sentinel only
-// completes once the consumer has retrieved it.
+// Test that with `releaseChunkOnConsumption`, storing the end-of-chunk sentinel
+// only completes once the consumer has retrieved it.
 TEST(InMemoryBlockStorage, releaseChunkOnConsumption) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());
@@ -316,9 +315,8 @@ TEST(InMemoryBlockStorage, releaseChunkOnConsumption) {
   EXPECT_EQ(storage.numLiveChunksForTesting(), 0u);
 }
 
-// _____________________________________________________________________________
-// A producer that waits for the consumption of its sentinel is woken up by
-// `cancelAll` as well.
+// Test that a producer that waits for the consumption of its sentinel is woken
+// up by `cancelAll` as well.
 TEST(InMemoryBlockStorage, cancelAllWakesUpAProducerWaitingForConsumption) {
   net::io_context ioContext;
   auto strand = net::make_strand(ioContext.get_executor());
@@ -329,6 +327,24 @@ TEST(InMemoryBlockStorage, cancelAllWakesUpAProducerWaitingForConsumption) {
   });
   EXPECT_TRUE(stores.wasStored_.empty());
   runOnStrand(ioContext, strand, [&] { storage.cancelAll(); });
+  EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(false));
+}
+
+// Test that a producer whose sentinel the channel has already accepted when
+// `cancelAll` runs is woken up as well. The completion of the send is posted,
+// so `cancelAll` can run before the producer starts to wait for the
+// acknowledgement, and that wait must then not be started at all.
+TEST(InMemoryBlockStorage, cancelAllRightAfterTheSentinelWasStored) {
+  net::io_context ioContext;
+  auto strand = net::make_strand(ioContext.get_executor());
+  Storage storage{strand, 2, /*releaseChunkOnConsumption=*/true};
+  StoreOutcomes stores;
+  // The store and the cancellation run in the same step of the strand, so the
+  // cancellation precedes the posted completion of the send.
+  runOnStrand(ioContext, strand, [&] {
+    store(storage, 0, Storage::OptionalBlock{std::nullopt}, stores);
+    storage.cancelAll();
+  });
   EXPECT_THAT(stores.wasStored_, ::testing::ElementsAre(false));
 }
 

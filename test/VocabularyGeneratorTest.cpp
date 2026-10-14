@@ -47,7 +47,8 @@ void writePartialVocabularyFile(const std::string& path, const Range& words) {
   ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{path};
   size_t localIdx = 0;
   for (const auto& word : words) {
-    partialVocab(std::string_view{word}, false, localIdx);
+    partialVocab(std::string_view{word},
+                 PartialVocabIndexWithExternalFlag{localIdx, false});
     ++localIdx;
   }
   partialVocab.finish();
@@ -137,7 +138,8 @@ class MergeVocabularyTest : public ::testing::Test {
       for (auto w : tripleComponents) {
         auto globalId = w.index_;
         w.index_ = localIdx;
-        partialVocab(w.iriOrLiteral(), w.isExternal(), w.index_);
+        partialVocab(w.iriOrLiteral(), PartialVocabIndexWithExternalFlag{
+                                           w.index_, w.isExternal()});
         if (idMap) {
           if (w.isBlankNode({})) {
             idMap->push_back(
@@ -435,14 +437,16 @@ TEST(MergeVocabulary, externalizationAcrossBatchBoundaries) {
     ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{
         filenames.wordsFiles_[0]};
     for (size_t i = 0; i + 1 < numWords; ++i) {
-      partialVocab(absl::StrFormat("\"word%08d\"", i), false, i);
+      partialVocab(absl::StrFormat("\"word%08d\"", i),
+                   PartialVocabIndexWithExternalFlag{i, false});
     }
-    partialVocab("\"zzz\"", false, numWords - 1);
+    partialVocab("\"zzz\"",
+                 PartialVocabIndexWithExternalFlag{numWords - 1, false});
   }
   {
     ad_utility::vocabulary_merger::PartialVocabularyWriter partialVocab{
         filenames.wordsFiles_[1]};
-    partialVocab("\"zzz\"", true, 0);
+    partialVocab("\"zzz\"", PartialVocabIndexWithExternalFlag{0, true});
   }
 
   std::vector<std::pair<std::string, bool>> vocabulary;

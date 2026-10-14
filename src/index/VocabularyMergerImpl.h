@@ -68,7 +68,7 @@ inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
   options.targetChunksPerThread = std::max<size_t>(
       1, (numChunks + options.parallelism() - 1) / options.parallelism());
   // The blocks in memory are larger than their serialized form (a
-  // `QueueWord` per word next to the bytes, and the output of a chunk copies
+  // `MergeWord` per word next to the bytes, and the output of a chunk copies
   // the words), by up to a factor of two.
   constexpr size_t decodedFactor = 2;
   const uint64_t memoryPerChunk = (std::max<size_t>(numPartialVocabularies, 1) *
@@ -106,12 +106,12 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      const ad_utility::RegexSet& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(requires WordComparator<W>) {
   using detail::MergeBlock;
-  using detail::QueueWord;
+  using detail::MergeWord;
   using detail::Segment;
   // Return true iff `p1` is smaller than `p2` according to the order of the
   // IRI or literal.
-  auto lessThanForQueue = [&comparator](const QueueWord& p1,
-                                        const QueueWord& p2) {
+  auto lessThanForQueue = [&comparator](const MergeWord& p1,
+                                        const MergeWord& p2) {
     return comparator(p1.iriOrLiteral(), p2.iriOrLiteral());
   };
   AD_CORRECTNESS_CHECK(numPartialVocabularies <=
@@ -324,7 +324,7 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
   PartialVocabularyWriter writer{fileName};
   for (const auto& [word, idAndExternal] : els) {
-    writer(word, idAndExternal.isExternal(), idAndExternal.id());
+    writer(word, idAndExternal);
   }
   writer.finish();
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";

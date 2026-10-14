@@ -20,7 +20,7 @@
 #include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary_merger/Concepts.h"
 #include "index/vocabulary_merger/IdMap.h"
-#include "index/vocabulary_merger/QueueWord.h"
+#include "index/vocabulary_merger/MergeBlock.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
@@ -30,7 +30,7 @@
 // it that are understandable (and testable) on their own live in
 // `src/index/vocabulary_merger/`, and all of them are made available by this
 // header: the `VocabularyMetaData` (the return type of `mergeVocabulary`), the
-// concepts for its callbacks, the `IdMap` types, the `detail::QueueWord`, and
+// concepts for its callbacks, the `IdMap` types, the `detail::MergeWord`, and
 // the individual stages of the merging pipeline (see below).
 namespace ad_utility::vocabulary_merger {
 

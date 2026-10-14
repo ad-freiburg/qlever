@@ -25,7 +25,7 @@
 #include "index/IndexBuilderTypes.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/Concepts.h"
-#include "index/vocabulary_merger/QueueWord.h"
+#include "index/vocabulary_merger/MergeBlock.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
 #include "util/Exception.h"
 #include "util/RegexSet.h"
@@ -191,7 +191,7 @@ CPP_template(typename W)(requires WordComparator<W>) Segment
   bool pendingIsExternal = false;
   std::vector<Occurrence> pendingOccurrences;
   auto addOccurrences = [&pendingOccurrences](const MergeBlock& block,
-                                              const QueueWord& word) {
+                                              const MergeWord& word) {
     pendingOccurrences.emplace_back(word.partialFileId_, word.id());
     for (const auto& occurrence : block.moreOccurrences(word)) {
       pendingOccurrences.push_back(occurrence);

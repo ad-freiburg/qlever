@@ -307,11 +307,9 @@ TEST(MergeHelpers, totalNumElements) {
   }
 }
 
-// _____________________________________________________________________________
-// An input that provides `blockWeight` cuts the chunks by that weight instead
-// of by the number of elements: here every block of the first run weighs as
-// much as all the blocks of the second run together.
 namespace {
+// A `SizeInput` with a `blockWeight` member: every block of the first run
+// weighs as much as all the blocks of the second run together.
 struct WeightedInput {
   using value_type = size_t;
   using Element = size_t;
@@ -350,13 +348,15 @@ struct WeightedInput {
 static_assert(InputConcept<WeightedInput>);
 }  // namespace
 
+// Test that an input with a `blockWeight` member cuts the chunks by that weight
+// instead of by the number of elements.
 TEST(MergeHelpers, blockWeight) {
   // Run 0: `0..9` in blocks of 5, run 1: `10..29` in blocks of 5.
   std::vector<SizeVec> runs{SizeVec{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
                             SizeVec{10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
                                     20, 21, 22, 23, 24, 25, 26, 27, 28, 29}};
   auto plain = makeVectorInput(runs, 5);
-  EXPECT_FALSE(detail::HasBlockWeight<decltype(plain)>::value);
+  EXPECT_FALSE(CPP_requires_ref(detail::HasBlockWeight_, decltype(plain)));
   EXPECT_EQ(detail::blockWeight(plain, 0, 0), 5u);
   // By elements, the 30 elements split into 15 and 15: the split point is the
   // last element of the block at which the first 15 are complete, `14`.
@@ -366,7 +366,7 @@ TEST(MergeHelpers, blockWeight) {
   // weigh 5 each: 60 in total, so the first chunk ends with the two blocks of
   // run 0, whose last element is `9`.
   WeightedInput weighted{makeVectorInput(runs, 5)};
-  EXPECT_TRUE(detail::HasBlockWeight<WeightedInput>::value);
+  EXPECT_TRUE(CPP_requires_ref(detail::HasBlockWeight_, WeightedInput));
   EXPECT_EQ(detail::blockWeight(weighted, 0, 0), 20u);
   EXPECT_THAT(
       chunkSplitPoints(computeChunkBoundaries(weighted, std::less<>{}, 2)),

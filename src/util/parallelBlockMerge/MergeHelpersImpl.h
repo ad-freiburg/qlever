@@ -12,6 +12,9 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <limits>
 #include <range/v3/numeric/accumulate.hpp>
 #include <range/v3/numeric/partial_sum.hpp>
 #include <range/v3/range/conversion.hpp>
@@ -23,10 +26,12 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
-#include "global/Constants.h"
+#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
+#include "util/GlobalExecutor.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
+#include "util/blockSort/BlockIndirectSort.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
@@ -93,12 +98,10 @@ using ElementAndWeight = std::pair<Element, size_t>;
 
 // Whether the `Input` has a member `blockWeight(runIdx, blockIdx)`, see
 // `blockWeight` below.
-template <typename Input, typename = void>
-struct HasBlockWeight : std::false_type {};
 template <typename Input>
-struct HasBlockWeight<
-    Input, std::void_t<decltype(std::declval<const Input&>().blockWeight(
-               size_t{0}, size_t{0}))>> : std::true_type {};
+CPP_requires(HasBlockWeight_,
+             requires(const Input& input, size_t runIdx,
+                      size_t blockIdx)(input.blockWeight(runIdx, blockIdx)));
 
 // The weight of a block for the computation of the chunk boundaries: the
 // chunks are cut such that they all have (approximately) the same total
@@ -109,7 +112,7 @@ struct HasBlockWeight<
 // to merge rather than having the same number of elements.
 CPP_template(typename Input)(requires InputConcept<Input>) size_t
     blockWeight(const Input& input, size_t runIdx, size_t blockIdx) {
-  if constexpr (HasBlockWeight<Input>::value) {
+  if constexpr (CPP_requires_ref(HasBlockWeight_, Input)) {
     return input.blockWeight(runIdx, blockIdx);
   } else {
     return input.numElementsInBlock(runIdx, blockIdx);
@@ -149,18 +152,25 @@ std::vector<ElementAndWeight<Element>> sortAndAccumulateWeights(
   // NOTE: This is the only work of the boundary computation that grows with
   // the number of blocks, and with an expensive comparator (such as a
   // collation) and millions of blocks it takes a while, so it is sorted in
-  // parallel.
-  if constexpr (USE_PARALLEL_SORT) {
-    auto compareElements = [&comparator](const ElementAndWeight<Element>& a,
-                                         const ElementAndWeight<Element>& b) {
-      return comparator(a.first, b.first);
-    };
-    ad_utility::parallel_sort(
-        elementsAndWeights.begin(), elementsAndWeights.end(), compareElements,
-        ad_utility::parallel_tag(defaultMergeParallelism()));
-  } else {
-    ql::ranges::sort(elementsAndWeights, comparator, ad_utility::first);
-  }
+  // parallel. This blocks the calling thread, which therefore must not be a
+  // thread of the global executor.
+  // NOTE: The comparator is type-erased, because it ends up in the coroutine
+  // frames of the parallel sort, and GCC rejects a frame that depends on a
+  // `Comparator` without linkage (a local class, as in several tests) with
+  // `-Werror=subobject-linkage`.
+  std::function<bool(const ElementAndWeight<Element>&,
+                     const ElementAndWeight<Element>&)>
+      compareElements = [&comparator](const ElementAndWeight<Element>& a,
+                                      const ElementAndWeight<Element>& b) {
+        return comparator(a.first, b.first);
+      };
+  size_t numThreads = defaultMergeParallelism();
+  ad_utility::blockSort::blockIndirectSort(
+      elementsAndWeights, std::move(compareElements),
+      static_cast<uint32_t>(std::clamp<size_t>(
+          numThreads, 1, std::numeric_limits<uint32_t>::max())),
+      ad_utility::makeConcurrencyLimitedExecutor(ad_utility::globalExecutor(),
+                                                 numThreads));
   // Merging equal elements is what makes the quantiles below exact: a target
   // then always identifies a single entry, and picking that entry for two
   // different targets can be avoided by simply moving on to the next one.

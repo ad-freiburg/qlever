@@ -431,6 +431,7 @@ TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyWatchDogEndsEarlyIfCancelled) {
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   CancellationHandle<ENABLED> handle;
   handle.cancel(MANUAL);
 

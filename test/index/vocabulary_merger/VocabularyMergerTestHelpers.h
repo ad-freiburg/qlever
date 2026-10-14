@@ -27,7 +27,7 @@
 #include "global/VocabIndex.h"
 #include "index/PartialVocabularyFilenames.h"
 #include "index/vocabulary/VocabularyTypes.h"
-#include "index/vocabulary_merger/QueueWord.h"
+#include "index/vocabulary_merger/MergeBlock.h"
 
 // Helpers that are shared by the tests of the vocabulary merger (see
 // `index/VocabularyMerger.h` and the individual stages in
