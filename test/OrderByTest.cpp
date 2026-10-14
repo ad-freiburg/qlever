@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/OrderBy.h"
@@ -469,10 +470,10 @@ TEST(OrderBy, makeTreeWithStrippedColumns) {
     auto tree = strip({{1, false}}, {V{"?b"}});
     auto orderBy = std::dynamic_pointer_cast<OrderBy>(tree->getRootOperation());
     ASSERT_TRUE(orderBy);
-    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?b"})));
+    auto expectedResult = makeIdTableFromVector({{1}, {2}, {4}, {6}});
+    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?b"}},
+                                         std::cref(expectedResult)));
     EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 0u);
-    EXPECT_EQ(tree->getResult(false)->idTableView(),
-              makeIdTableFromVector({{1}, {2}, {4}, {6}}));
     EXPECT_EQ(orderBy->getSortedVariables(),
               OrderBy::SortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Asc}}));
   }
@@ -506,15 +507,17 @@ TEST(OrderBy, makeTreeWithStrippedColumns) {
     auto stripColumns =
         std::dynamic_pointer_cast<StripColumns>(tree->getRootOperation());
     ASSERT_TRUE(stripColumns);
-    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?c"})));
-    EXPECT_EQ(tree->getResult(false)->idTableView(),
-              makeIdTableFromVector({{5}, {5}, {3}, {3}}));
+    auto expectedResult = makeIdTableFromVector({{5}, {5}, {3}, {3}});
+    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?c"}},
+                                         std::cref(expectedResult)));
+
     const auto* child = stripColumns->getChildren().at(0);
     auto orderBy =
         std::dynamic_pointer_cast<OrderBy>(child->getRootOperation());
     ASSERT_TRUE(orderBy);
-    EXPECT_THAT(child->getVariableColumns(),
-                UnorderedElementsAre(Key(V{"?b"}), Key(V{"?c"})));
+    expectedResult = makeIdTableFromVector({{6, 5}, {4, 5}, {2, 3}, {1, 3}});
+    EXPECT_THAT(child, HasOperationResult(std::vector{V{"?b"}, V{"?c"}},
+                                          std::cref(expectedResult)));
     EXPECT_EQ(orderBy->getSortedVariables(),
               OrderBy::SortedVariables({{V{"?b"}, OrderBy::AscOrDesc::Desc}}));
   }
