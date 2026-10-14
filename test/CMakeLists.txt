@@ -398,6 +398,8 @@ addLinkAndDiscoverTest(TripleComponentTest)
 
 addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
 
+addLinkAndDiscoverTest(TieHelperTest qlever_util)
+
 addLinkAndDiscoverTest(DatatypeTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)

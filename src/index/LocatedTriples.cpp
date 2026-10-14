@@ -18,7 +18,10 @@
 #include "index/Permutation.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Log.h"
+#include "util/TieHelper.h"
 #include "util/ValueIdentity.h"
+
+using ad_utility::tieHelper;
 
 // ____________________________________________________________________________
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
@@ -106,22 +109,6 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   }
   return {0, 0};
 }
-
-namespace {
-
-// lvalues stay references, a proxy that is returned by value is stored by value
-template <typename T>
-using TieElement =
-    std::conditional_t<std::is_lvalue_reference_v<T>, T, std::decay_t<T>>;
-
-// This code works for `std::integer_sequence` as well as
-// `ad_utility::ValueSequence`.
-// TODO<pas-kes>: Test/benchmark this with proxies of the split layout in future
-template <typename Row, template <typename T, T...> typename Tp, size_t... I>
-auto tieHelper(Row& row, Tp<size_t, I...>) {
-  return std::tuple<TieElement<decltype(row[I])>...>(row[I]...);
-}
-}  // namespace
 
 // Return a `std::tie` of the relevant entries of a row, according to
 // `numIndexColumns` and `includeGraphColumn`. For example, if `numIndexColumns`

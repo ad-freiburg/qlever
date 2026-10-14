@@ -16,6 +16,7 @@
 #include "backports/concepts.h"
 #include "engine/idTable/splitLayout/SplitLayoutIdBitRepresentation.h"
 #include "global/Id.h"
+#include "util/TieHelper.h"
 
 namespace columnBasedIdTable::splitLayout {
 
@@ -231,5 +232,12 @@ using IdRef = BasicIdRef<false>;
 using ConstIdRef = BasicIdRef<true>;
 
 }  // namespace columnBasedIdTable::splitLayout
+
+// The `IdRef` and the `ConstIdRef` are cheap to copy and refer to an element of
+// a column, so they may be stored by value.
+template <bool IsConst>
+inline constexpr bool
+    qlever::isProxy<columnBasedIdTable::splitLayout::BasicIdRef<IsConst>> =
+        true;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDREF_H
