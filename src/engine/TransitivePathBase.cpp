@@ -530,19 +530,31 @@ void TransitivePathBase::computePayloadColumnOffsets(
     const std::shared_ptr<QueryExecutionTree>& op,
     const std::shared_ptr<TransitivePathBase>& plan,
     std::optional<size_t> leftCol, std::optional<size_t> rightCol) const {
+  // Shift the index of a column to its position in the output table if one side
+  // is bound.
   auto singleColBoundIndexShift = [](size_t columnIndex, size_t col) {
     return col > columnIndex ? 2 : 1;
   };
+
+  // Shift the index of a column to its position in the output table if both
+  // sides are bound.
   auto bothColsBoundIndexShift = [](size_t columnIndex, size_t colL,
                                     size_t colR) {
     auto [lowerCol, higherCol] = std::minmax(colL, colR);
     auto leftOrMiddle = columnIndex < lowerCol ? 2 : 1;
     return columnIndex < higherCol ? leftOrMiddle : 0;
   };
+
+  // Check if a column is equal to any given side column.
   auto isSideCol = [&](const auto& colIndex) -> bool {
     return (leftCol.has_value() && colIndex == leftCol.value()) ||
            (rightCol.has_value() && colIndex == rightCol.value());
   };
+
+  auto graphIndex = getActualGraphColumnIndex(op);
+  if (isSideCol(graphIndex)) {
+    graphIndex = std::nullopt;
+  }
 
   // Note: The `variable` in the following structured binding is `const`, even
   // if we bind by value. We deliberately make one unnecessary copy of the
@@ -550,8 +562,7 @@ void TransitivePathBase::computePayloadColumnOffsets(
   for (auto [variable, columnIndexWithType] : op->getVariableColumns()) {
     ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
     // Do not add the actual joining columns as payload columns.
-    if (isSideCol(columnIndex) ||
-        (graphVariable_.has_value() && variable == graphVariable_)) {
+    if (isSideCol(columnIndex) || columnIndex == graphIndex) {
       continue;
     }
 
@@ -571,12 +582,8 @@ void TransitivePathBase::computePayloadColumnOffsets(
 
     // When we have a graph variable, we write it last, so we have to
     // account for that.
-    if (graphVariable_.has_value()) {
-      auto graphIndex = op->getVariableColumnOrNullopt(graphVariable_.value())
-                            .value_or(std::numeric_limits<size_t>::max());
-      if (!isSideCol(graphIndex) && columnIndex > graphIndex) {
-        columnIndexWithType.columnIndex_ -= 1;
-      }
+    if (columnIndex > graphIndex.value_or(std::numeric_limits<size_t>::max())) {
+      columnIndexWithType.columnIndex_ -= 1;
     }
     // Ensure all payload columns are appended to the `variableColumns_`.
     AD_CORRECTNESS_CHECK(!plan->variableColumns_.contains(variable));
