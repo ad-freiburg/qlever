@@ -234,6 +234,9 @@ class ValueId {
   // `getPayloadBits`). Payload bits beyond `numDataBits` are dropped.
   static constexpr ValueId fromBits(const T datatype,
                                     const T payload) noexcept {
+    // Check that datatype bits are in the last bits and
+    // will not be shifted over the uint64_t
+    AD_EXPENSIVE_CHECK(datatype < (T{1} << numDatatypeBits));
     return {removeDatatypeBits(payload) | (datatype << numDataBits)};
   }
 
