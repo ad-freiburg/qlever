@@ -137,6 +137,13 @@ class IndexScan final : public Operation {
       Result::LazyResult input, ColumnIndex joinColumn,
       bool filterJoinSide = true);
 
+  // Return the root operation of `tree` if it is an `IndexScan` that supports
+  // the prefiltered joins above, else `nullptr`. Scans without variables are
+  // not supported; they read at most one block, as a triple is never split
+  // across blocks, so prefiltering wouldn't help.
+  static std::shared_ptr<IndexScan> getIfSupportsPrefilteredJoin(
+      const QueryExecutionTree& tree);
+
  private:
   // Implementation detail that allows to consume a lazy range from two other
   // cooperating ranges. Needs to be forward declared as it is used by

@@ -21,9 +21,9 @@
 #include <vector>
 
 #include "backports/algorithm.h"
-#include "backports/asio.h"
 #include "backports/concepts.h"
 #include "util/Exception.h"
+#include "util/Executor.h"
 #include "util/TaskQueue.h"
 #include "util/TypeTraits.h"
 #include "util/jthread.h"
@@ -226,7 +226,7 @@ void claimAndRunIndexedTasks(RunIndexedTasksState& state, size_t numTasks,
 // that the threads of the executor are (indirectly) waiting for, and from the
 // threads of the executor themselves.
 template <typename RunTask>
-void runIndexedTasksOnExecutor(const ql::any_io_executor& executor,
+void runIndexedTasksOnExecutor(const qlever::Executor& executor,
                                size_t numThreads, size_t numTasks,
                                const RunTask& runTask) {
   if (numTasks == 0) {
