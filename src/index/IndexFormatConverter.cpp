@@ -822,7 +822,7 @@ Id convertId(Id id) {
         "stored on disk (it holds a pointer into the memory of the process "
         "that created it), so the index that is converted is corrupted"};
   }
-  return Id::fromBits(static_cast<uint64_t>(datatype), id.getPayloadBits());
+  return Id::fromBits(datatype, id.getPayloadBits());
 }
 
 // _____________________________________________________________________________
