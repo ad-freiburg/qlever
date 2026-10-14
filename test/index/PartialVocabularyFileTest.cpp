@@ -131,6 +131,39 @@ TEST(PartialVocabularyFile, blockIndexAndBlocks) {
   EXPECT_EQ(first.iriOrLiteral(), words[2].front());
 }
 
+// Test that `appendToBlock` folds a word that is equal to the last word of the
+// block into that word: the occurrence is recorded, the external flag is
+// combined, and a different word starts a new entry.
+TEST(PartialVocabularyFile, appendToBlockFoldsDuplicates) {
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
+  writePartialVocabulary(filenames.wordsFiles_[0], {"\"a\""});
+  PartialVocabularyRunsInput input{partialVocabBasename, 1};
+  auto block = input.makeEmptyBlock();
+  // The words that the merge hands to `appendToBlock` live in an input block.
+  MergeBlock source;
+  auto word = [&source](std::string_view w, bool isExternal,
+                        uint64_t localIndex, uint32_t partial) {
+    source.push(w, isExternal, partial, localIndex);
+    return source.back();
+  };
+  input.appendToBlock(block, word("\"a\"", false, 3, 0));
+  input.appendToBlock(block, word("\"a\"", true, 5, 2));
+  input.appendToBlock(block, word("\"a\"", false, 1, 4));
+  input.appendToBlock(block, word("\"b\"", false, 7, 1));
+  ASSERT_EQ(block.size(), 2u);
+  EXPECT_EQ(block[0].iriOrLiteral(), "\"a\"");
+  EXPECT_TRUE(block[0].isExternal());
+  EXPECT_EQ(block[0].partialFileId_, 0u);
+  EXPECT_EQ(block[0].id(), 3u);
+  EXPECT_THAT(block.moreOccurrences(block[0]),
+              ::testing::ElementsAre(std::pair{2u, uint64_t{5}},
+                                     std::pair{4u, uint64_t{1}}));
+  EXPECT_EQ(block[1].iriOrLiteral(), "\"b\"");
+  EXPECT_FALSE(block[1].isExternal());
+  EXPECT_TRUE(block.moreOccurrences(block[1]).empty());
+}
+
 // Test that an empty partial vocabulary has no blocks, and that a file without
 // a block index is rejected.
 TEST(PartialVocabularyFile, emptyAndInvalid) {
@@ -156,8 +189,9 @@ TEST(PartialVocabularyFile, emptyAndInvalid) {
 // vocabularies through `PartialVocabularyRunsInput`, on its parallel path
 // (several chunks on a thread pool): the merged words are sorted, every
 // occurrence of every word in every partial vocabulary arrives exactly once
-// with its local index and its external flag, and the occurrences of the
-// same word are consecutive.
+// with its local index (either as a word of a block or as a further occurrence
+// of one, see `appendToBlock`), the occurrences of the same word are
+// consecutive, and a word is external if any of its occurrences is.
 TEST(PartialVocabularyFile, mergeInParallel) {
   using namespace ad_utility::parallelBlockMerge;
   auto [filenames, cleanup] =
@@ -170,14 +204,17 @@ TEST(PartialVocabularyFile, mergeInParallel) {
     writePartialVocabulary(filenames.wordsFiles_[p], words.back());
   }
 
-  // The expected occurrences, sorted by word and then by partial vocabulary.
-  using Occurrence = std::tuple<std::string, uint32_t, uint64_t, bool>;
+  // The expected occurrences, sorted by word and then by partial vocabulary,
+  // and the expected external flag per word (the OR over its occurrences).
+  using Occurrence = std::tuple<std::string, uint32_t, uint64_t>;
   std::vector<Occurrence> expected;
+  std::vector<bool> expectedIsExternal(numWords, false);
   for (size_t k = 0; k < numWords; ++k) {
     for (size_t p = 0; p < 4; ++p) {
       if (k % (p + 1) == 0) {
         size_t localIndex = k / (p + 1);
-        expected.emplace_back(words[0][k], p, localIndex, localIndex % 3 == 2);
+        expected.emplace_back(words[0][k], p, localIndex);
+        expectedIsExternal[k] = expectedIsExternal[k] || localIndex % 3 == 2;
       }
     }
   }
@@ -190,6 +227,7 @@ TEST(PartialVocabularyFile, mergeInParallel) {
   options.serialNumElementsThreshold = 0;
   boost::asio::thread_pool pool{4};
   std::vector<Occurrence> merged;
+  std::vector<std::pair<std::string, bool>> mergedIsExternal;
   {
     auto blocks = parallelBlockMergeToRange<true>(
         pool.get_executor(),
@@ -201,8 +239,20 @@ TEST(PartialVocabularyFile, mergeInParallel) {
         if (!merged.empty()) {
           EXPECT_LE(std::get<0>(merged.back()), word.iriOrLiteral());
         }
-        merged.emplace_back(word.iriOrLiteral(), word.partialFileId_, word.id(),
-                            word.isExternal());
+        merged.emplace_back(word.iriOrLiteral(), word.partialFileId_,
+                            word.id());
+        for (const auto& [partialFileId, localIndex] :
+             block.moreOccurrences(word)) {
+          merged.emplace_back(word.iriOrLiteral(), partialFileId, localIndex);
+        }
+        // The occurrences of a word are folded within a block, but the same
+        // word may also end one block and start the next.
+        if (mergedIsExternal.empty() ||
+            mergedIsExternal.back().first != word.iriOrLiteral()) {
+          mergedIsExternal.emplace_back(word.iriOrLiteral(), word.isExternal());
+        } else {
+          mergedIsExternal.back().second |= word.isExternal();
+        }
       }
     }
   }
@@ -220,6 +270,11 @@ TEST(PartialVocabularyFile, mergeInParallel) {
     first = last;
   }
   EXPECT_EQ(merged, expected);
+  ASSERT_EQ(mergedIsExternal.size(), numWords);
+  for (size_t k = 0; k < numWords; ++k) {
+    EXPECT_EQ(mergedIsExternal[k].first, words[0][k]);
+    EXPECT_EQ(mergedIsExternal[k].second, expectedIsExternal[k]) << k;
+  }
 }
 
 // Test the accessors of a `MergeBlock` of merged words and that `clear`
