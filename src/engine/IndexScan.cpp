@@ -1116,8 +1116,10 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   }
 
   // Check if all variables required for the `BIND` expression are covered by
-  // this `IndexScan`. NOTE: `scanColumns` also contains columns that are hidden
-  // (e.g. by a subquery). This is fine, because
+  // this `IndexScan`.
+  //
+  // NOTE: `scanColumns` also contains columns that are hidden (e.g. by a
+  // subquery). This is fine, because
   // `QueryExecutionTree::makeTreeWithBindColumn` already refuses a `BIND` whose
   // expression uses a hidden variable, and it also hides the hidden variables
   // again in the new tree that we construct from scratch below.
