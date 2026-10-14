@@ -676,6 +676,13 @@ SpatialJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // Only the payload variables of the right child are kept, so the target has
   // to become one of them. `pushDownBindToChild` rebuilds the `SpatialJoin`
   // from the `config_` of the object it is called on.
+  //
+  // NOTE: The temporary `SpatialJoin` is only half-valid: its payload contains
+  // the target, but its right child doesn't (yet). This is fine as long as
+  // `pushDownBindToChild` never computes the variable columns of the operation
+  // it is called on (only those of the children and of the result of
+  // `cloneWithNewChildren`). Otherwise, `computeVariableToColumnMap` would warn
+  // (or even throw) that the payload variable is missing in the right child.
   auto config = config_;
   config.payloadVariables_.addVariable(bind._target);
   return SpatialJoin{_executionContext, std::move(config), childLeft_,
