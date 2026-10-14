@@ -347,6 +347,8 @@ addLinkAndDiscoverTest(TaskQueueTest)
 
 addLinkAndDiscoverTest(TaskQueueOnExecutorTest)
 
+addLinkAndDiscoverTest(ConcurrencyLimitedExecutorTest)
+
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
 addLinkAndDiscoverTestNoLibs(TypeTraitsTest)
