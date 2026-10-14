@@ -169,6 +169,8 @@ QueryExecutionTree::makeTreeWithBindColumn(
   }
   // The target of a `BIND` can't be bound before the `BIND`, but it might be a
   // hidden variable of this tree, e.g. one that was not selected by a subquery.
+  // Example: `{ SELECT ?x { ?x <p> ?y } } BIND(1 AS ?y)` is a valid query, and
+  // the root operation of the subquery still has a (hidden) column for `?y`.
   if (rootOperation_->containsVariableInternally(bind._target)) {
     return std::nullopt;
   }
