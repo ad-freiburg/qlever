@@ -172,8 +172,7 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
       _joinColumns.size() == 2;
   if (getRuntimeParameter<&RuntimeParameters::prefilteredOptionalJoin_>() &&
       (_joinColumns.size() == 1 || isTwoColumnSpecialOptionalJoin)) {
-    if (auto indexScan =
-            std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation())) {
+    if (auto indexScan = IndexScan::getIfSupportsPrefilteredJoin(*_right)) {
       return optionalJoinWithIndexScan(_left->getResult(true),
                                        std::move(indexScan), requestLaziness);
     }

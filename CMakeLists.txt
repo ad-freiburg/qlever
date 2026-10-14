@@ -1022,7 +1022,7 @@ if (NOT EMSCRIPTEN)
     qlever_target_link_libraries(BinaryExportPerfMain sparqlParser engine qlever_util index qlever absl::strings)
 
     add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-    qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(VocabularyMergerMain index sparqlParser vocabulary Boost::program_options ${CMAKE_THREAD_LIBS_INIT})
 
     add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
     qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
