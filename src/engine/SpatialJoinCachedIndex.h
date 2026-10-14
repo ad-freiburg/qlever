@@ -263,17 +263,18 @@ class SpatialJoinCachedIndex {
                         "Only a geo index with a single segment can be "
                         "written in the legacy format");
       serializer << encodeSegment(*segments_.at(0));
-      // The map from shape ids to rows is written with the layout of a
-      // serialized `ad_utility::HashMap<size_t, size_t>` (its size, followed
-      // by its pairs), which is what `readFromSerializer` and older versions
-      // of QLever read. The pairs are written in the order of the shape ids
-      // instead of the iteration order of a hash map, which is not
+      // A serialized `std::vector<std::pair<size_t, size_t>>` has the same
+      // layout as a serialized `ad_utility::HashMap<size_t, size_t>` (its
+      // size, followed by its pairs), which is what `readFromSerializer` and
+      // older versions of QLever read. The pairs are sorted by the shape id,
+      // so unlike the iteration order of a hash map, the result is
       // deterministic.
-      auto shapeToRow = legacyShapeToRow();
-      serializer << shapeToRow.size();
-      for (const auto& pair : shapeToRow) {
-        serializer << pair;
-      }
+      //
+      // NOTE: A vector of a `TriviallySerializable` type would instead be
+      // written as (aligned) raw bytes, which would break this equivalence.
+      static_assert(!ad_utility::serialization::TriviallySerializable<
+                    std::pair<size_t, size_t>>);
+      serializer << legacyShapeToRow();
       return;
     }
     serializer << simplificationErrorInMeters_;
