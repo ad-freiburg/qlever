@@ -36,7 +36,7 @@ bool BoundingBoxAlgorithm::isContainedInBoundingBoxes(
   }
 
   return ql::ranges::any_of(boundingBox, [point](const Box& aBox) {
-    return boost::geometry::covered_by(point, aBox);
+    return BoostGeometryNamespace::coveredBy(point, aBox);
   });
 }
 

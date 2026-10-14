@@ -11,81 +11,12 @@
 #ifndef QLEVER_SRC_ENGINE_RTREEENTRYALGORITHM_H
 #define QLEVER_SRC_ENGINE_RTREEENTRYALGORITHM_H
 
-#include <boost/foreach.hpp>
-#include <boost/geometry.hpp>
-#include <boost/geometry/geometries/box.hpp>
-#include <boost/geometry/geometries/point.hpp>
 #include <variant>
 
+#include "engine/spatialJoinAlgorithms/BoostGeometryTypes.h"
 #include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/VectorWithMemoryLimit.h"
-
-// Geometry types (and helpers operating on them) used by the algorithms that
-// parse arbitrary geometries (points and areas) into `RtreeEntry`s, i.e.
-// `RtreeEntryAlgorithm` and its subclasses. Not used by the S2-based or
-// `libspatialjoin`-based algorithms, which parse geometries differently.
-namespace BoostGeometryNamespace {
-namespace bg = boost::geometry;
-namespace bgi = boost::geometry::index;
-
-using Point = bg::model::point<double, 2, bg::cs::cartesian>;
-using Box = bg::model::box<Point>;
-using Polygon = boost::geometry::model::polygon<
-    boost::geometry::model::d2::point_xy<double>>;
-using Linestring = bg::model::linestring<Point>;
-using MultiPoint = bg::model::multi_point<Point>;
-using MultiLinestring = bg::model::multi_linestring<Linestring>;
-using MultiPolygon = bg::model::multi_polygon<Polygon>;
-using AnyGeometry = boost::variant<Point, Linestring, Polygon, MultiPoint,
-                                   MultiLinestring, MultiPolygon>;
-using Segment = boost::geometry::model::segment<Point>;
-
-// this struct is used to get the bounding box of an arbitrary geometry type.
-struct BoundingBoxVisitor : public boost::static_visitor<Box> {
-  template <typename Geometry>
-  Box operator()(const Geometry& geometry) const {
-    Box box;
-    boost::geometry::envelope(geometry, box);
-    return box;
-  }
-};
-
-// this struct is used to calculate the distance between two arbitrary
-// geometries. It calculates the two closest points (in euclidean geometry),
-// transforms the two closest points, to a GeoPoint and then calculates the
-// distance of the two points on the earth. As the closest points are calculated
-// using euclidean geometry, this is only an approximation. On the sphere two
-// other points might be closer.
-struct ClosestPointVisitor : public boost::static_visitor<double> {
-  template <typename Geometry1, typename Geometry2>
-  double operator()(const Geometry1& geo1, const Geometry2& geo2) const {
-#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-    throw std::runtime_error(
-        "ClosestPointVisitor not implemented for C++17, please use a different "
-        "spatial join implementation");
-    (void)geo1;
-    (void)geo2;
-#else
-    Segment seg;
-    bg::closest_points(geo1, geo2, seg);
-    GeoPoint closestPoint1(bg::get<0, 1>(seg), bg::get<0, 0>(seg));
-    GeoPoint closestPoint2(bg::get<1, 1>(seg), bg::get<1, 0>(seg));
-    return ad_utility::detail::wktDistImpl(closestPoint1, closestPoint2);
-#endif
-  }
-};
-
-struct RtreeEntry {
-  size_t row_;
-  std::optional<size_t> geometryIndex_;
-  std::optional<GeoPoint> geoPoint_;
-  std::optional<Box> boundingBox_;
-};
-
-using Value = std::pair<Box, RtreeEntry>;
-
-}  // namespace BoostGeometryNamespace
 
 // Intermediate base for the two algorithms that support arbitrary geometries
 // (points and areas) by parsing each of them into an `RtreeEntry` and

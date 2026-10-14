@@ -1060,7 +1060,7 @@ void testBounds(double x, double y, const Box& bbox, bool shouldBeWithin) {
   double minLonBox = bbox.min_corner().get<0>();
   double maxLonBox = bbox.max_corner().get<0>();
   if (y < 90 && y > -90 && !(minLonBox < 179.9999 && maxLonBox > 179.9999)) {
-    bool within = boost::geometry::covered_by(Point(x, y), bbox);
+    bool within = BoostGeometryNamespace::coveredBy(Point(x, y), bbox);
     ASSERT_TRUE(within == shouldBeWithin);
   }
 };

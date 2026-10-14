@@ -1,6 +1,6 @@
 target_sources(engine PRIVATE
         SpatialJoinAlgorithmBase.cpp
-        RtreeEntryAlgorithm.cpp
+        RtreeEntryAlgorithm.cpp BoostGeometryAlgorithms.cpp
         BaselineAlgorithm.cpp S2GeometryAlgorithm.cpp
         S2PointPolylineAlgorithm.cpp BoundingBoxAlgorithm.cpp
         LibspatialjoinAlgorithm.cpp)
@@ -20,3 +20,12 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
             TARGET_DIRECTORY engine
             PROPERTIES COMPILE_OPTIONS "-Wno-uninitialized")
 endif ()
+
+# `BoostGeometryAlgorithms.cpp` uses parts of Boost.Geometry that (starting with
+# Boost 1.90) transitively include `<boost/range/algorithm/sort.hpp>`, which
+# cannot be combined with `<boost/sort/...>` in one translation unit (see
+# `BoostGeometryTypes.h`). The precompiled header of the `engine` target
+# contains the latter, so it must not be used for this file.
+set_source_files_properties(BoostGeometryAlgorithms.cpp
+        TARGET_DIRECTORY engine
+        PROPERTIES SKIP_PRECOMPILE_HEADERS ON)

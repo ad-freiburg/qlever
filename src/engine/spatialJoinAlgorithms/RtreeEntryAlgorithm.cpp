@@ -74,9 +74,23 @@ std::optional<size_t> RtreeEntryAlgorithm::getAnyGeometry(
 // ____________________________________________________________________________
 double RtreeEntryAlgorithm::computeDist(const size_t geometryIndex1,
                                         const size_t geometryIndex2) const {
-  return boost::apply_visitor(ClosestPointVisitor(),
-                              geometries_.at(geometryIndex1),
+  // Calculate the two closest points (in euclidean geometry), transform them to
+  // `GeoPoint`s and then calculate the distance of the two points on the earth.
+  // As the closest points are calculated using euclidean geometry, this is only
+  // an approximation. On the sphere two other points might be closer.
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  (void)geometryIndex1;
+  (void)geometryIndex2;
+  throw std::runtime_error(
+      "Computing the distance between two areas is not implemented for C++17, "
+      "please use a different spatial join implementation");
+#else
+  Segment seg = closestPoints(geometries_.at(geometryIndex1),
                               geometries_.at(geometryIndex2));
+  GeoPoint closestPoint1(bg::get<0, 1>(seg), bg::get<0, 0>(seg));
+  GeoPoint closestPoint2(bg::get<1, 1>(seg), bg::get<1, 0>(seg));
+  return ad_utility::detail::wktDistImpl(closestPoint1, closestPoint2);
+#endif
 }
 
 // ____________________________________________________________________________
