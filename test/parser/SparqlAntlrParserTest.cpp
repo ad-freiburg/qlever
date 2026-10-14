@@ -1446,7 +1446,6 @@ TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
 // Test that ASK queries are parsed as they should.
 TEST(SparqlParser, AskQuery) {
   // Some helper functions and abbreviations.
-  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto expectAskQuery =
       ExpectCompleteParse<&Parser::askQuery>{defaultPrefixMap};
   auto expectAskQueryFails = ExpectParseFails<&Parser::askQuery>{};
