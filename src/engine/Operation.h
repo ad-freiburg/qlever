@@ -575,9 +575,12 @@ class Operation {
   // `BindRewrite` test case in `MaterializedViewsTest`.
   //
   // Precondition: The `BIND`'s target is not a variable of this operation (not
-  // even a hidden one). This is checked by
+  // even a hidden one), and all variables of the `BIND` expression are visible
+  // (not hidden by a subquery). This is checked by
   // `QueryExecutionTree::makeTreeWithBindColumn`, which should be used instead
-  // of calling this function directly.
+  // of calling this function directly. It also takes care of hiding the hidden
+  // variables of this operation again in the returned tree, so implementations
+  // don't have to.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithBindColumn(const parsedQuery::Bind&) const {
     return std::nullopt;
