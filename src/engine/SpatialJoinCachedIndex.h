@@ -147,8 +147,9 @@ class SpatialJoinCachedIndex {
   // From a shape id returned by querying the segment with the given index,
   // obtain the row index in the `IdTable` from which this index was created.
   // Return `std::nullopt` if the shape is dead.
-  // Note: For efficiency reasons (this might be called in a tight loop), this
-  // function is inlined.
+  //
+  // NOTE: This function is inlined for efficiency reasons (it is called in a
+  // tight loop).
   std::optional<size_t> getRow(size_t segment, int shapeId) const {
     size_t row = shapeToRow_[segment][static_cast<size_t>(shapeId)];
     return row == NO_ROW ? std::nullopt : std::optional<size_t>{row};
@@ -176,12 +177,12 @@ class SpatialJoinCachedIndex {
   // reuses all segments of `base`. The vector `baseRowOfNewRow` contains for
   // each row of `newTable` the row of the table of `base` that it corresponds
   // to (it inherits the shape of that row), or `NO_ROW` if the row is new.
-  // The new rows that contain a linestring are indexed in one new segment
-  // (using the simplification of `base`). A row of `base` that no row of
-  // `newTable` refers to becomes a dead shape. Each row of `base` may be
-  // referred to at most once.
-  // The new rows are added to the new segment in their order in `newTable`,
-  // see the overload below.
+  // The new rows that contain a linestring are indexed in one new segment, in
+  // their order in `newTable` (see the overload below for a different order).
+  //
+  // NOTE: The new segment uses the simplification of `base`. A row of `base`
+  // that no row of `newTable` refers to becomes a dead shape. Each row of
+  // `base` may be referred to at most once.
   static SpatialJoinCachedIndex forUpdatedTable(
       const SpatialJoinCachedIndex& base,
       ql::span<const size_t> baseRowOfNewRow, const IdTableView<0>& newTable,
@@ -189,16 +190,19 @@ class SpatialJoinCachedIndex {
 
   // Same as above, but the new rows are added to the new segment in the order
   // given by `rowOrder`, which has to be a permutation of all rows of
-  // `newTable`. The result is the same as that of the following (more
-  // expensive) steps: Permute the rows of `newTable` (and the entries of
+  // `newTable`. The bytes of the new segment then only depend on the new
+  // geometries and on `rowOrder`, but not on the order of the rows in
+  // `newTable`.
+  //
+  // NOTE 1: The result is the same as that of the following (more expensive)
+  // steps: Permute the rows of `newTable` (and the entries of
   // `baseRowOfNewRow`) s.t. the row `rowOrder[i]` becomes the row `i`, call
   // the overload above on the permuted table, and permute the rows of the
-  // result back to the order of `newTable` via `withPermutedRows`. In
-  // particular, the bytes of the new segment only depend on the new geometries
-  // and on `rowOrder`, but not on the order of the rows in `newTable`. This is
-  // used when writing a blob, where `rowOrder` is the canonical row order of
-  // the result, s.t. the written index doesn't depend on the order of the rows
-  // that the query plan happened to produce.
+  // result back to the order of `newTable` via `withPermutedRows`.
+  //
+  // NOTE 2: This is used when writing a blob, where `rowOrder` is the canonical
+  // row order of the result, s.t. the written index doesn't depend on the order
+  // of the rows that the query plan happened to produce.
   static SpatialJoinCachedIndex forUpdatedTable(
       const SpatialJoinCachedIndex& base,
       ql::span<const size_t> baseRowOfNewRow, const IdTableView<0>& newTable,
@@ -242,8 +246,10 @@ class SpatialJoinCachedIndex {
   // column, the encoded `MutableS2ShapeIndex` of the single segment, and a hash
   // map from the shape ids of the live shapes to their rows. It can only be
   // written if the index has exactly one segment (checked via
-  // `AD_CONTRACT_CHECK`). The `simplificationErrorInMeters_` cannot be
-  // represented in that format and is silently dropped (it is only needed by
+  // `AD_CONTRACT_CHECK`).
+  //
+  // NOTE: The `simplificationErrorInMeters_` cannot be represented in the
+  // legacy format and is silently dropped (it is only needed by
   // `forUpdatedTable`). The blob writer deliberately still uses that format for
   // an index with a single segment and a simplification (see
   // `NamedCachedQueryBlobManager::serialize`).

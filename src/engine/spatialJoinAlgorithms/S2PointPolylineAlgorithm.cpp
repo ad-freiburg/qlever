@@ -19,6 +19,7 @@
 #include "util/GeoConverters.h"
 #include "util/HashMap.h"
 #include "util/Timer.h"
+#include "util/Views.h"
 
 using namespace geometryConverters;
 
@@ -63,10 +64,11 @@ ad_utility::HashMap<size_t, double> findRowsWithinDistance(
       it->second = std::min(it->second, dist);
     }
   };
-  for (size_t segment = 0; segment < queries.size(); ++segment) {
+  for (size_t segmentIdx : ad_utility::integerRange(queries.size())) {
     // We only receive edges that already satisfy the given criteria.
-    for (const auto& neighbor : queries[segment]->FindClosestEdges(&target)) {
-      addNeighbor(segment, neighbor);
+    for (const auto& neighbor :
+         queries[segmentIdx]->FindClosestEdges(&target)) {
+      addNeighbor(segmentIdx, neighbor);
     }
   }
   return result;

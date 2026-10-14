@@ -154,10 +154,9 @@ class NamedCachedQueryBlobManager {
   //
   // NOTE 2: If the secondary vocabulary is empty and no entry has a geo index
   // with more than one segment or with dead shapes, then the blob is written
-  // with
-  // `formatVersionWithoutSecondaryVocab`, else with
+  // with `formatVersionWithoutSecondaryVocab`, else with
   // `formatVersionWithSecondaryVocab`. A simplification of a geo index alone
-  // deliberately does not trigger the new format (see the NOTE in the
+  // deliberately does not trigger the new format (see the NOTE 2 in the
   // implementation).
   std::vector<char> serialize(const Qlever& qlever,
                               const BlobSerializationConfig& config = {}) const;

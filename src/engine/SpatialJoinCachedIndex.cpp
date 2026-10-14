@@ -247,7 +247,8 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::forUpdatedTable(
     segments.push_back(builder.finish());
   }
   // NOTE: The constructor checks that no shape is referenced twice, which
-  // covers a base row that occurs more than once in `baseRowOfNewRow`.
+  // covers a base row with a shape that occurs more than once in
+  // `baseRowOfNewRow` (a base row without a shape is harmless either way).
   return SpatialJoinCachedIndex{base.geometryColumn_,
                                 base.simplificationErrorInMeters_,
                                 std::move(segments), std::move(rowToShape)};

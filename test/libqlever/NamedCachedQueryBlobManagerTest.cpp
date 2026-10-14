@@ -1137,7 +1137,7 @@ const SpatialJoinCachedIndex& geoIndexOf(const Qlever& qlever) {
 }  // namespace
 
 // _____________________________________________________________________________
-// A `LINESTRING Z` literal: check whether it is indexed.
+// Test that a `LINESTRING Z` literal is indexed like a `LINESTRING`.
 TEST(NamedCachedQueryBlobManager, geoIndexOfLineStringZ) {
   auto sourceConfig = buildTestIndex(
       absl::StrCat(freiburgSegmentsS1S2,
@@ -1150,13 +1150,12 @@ TEST(NamedCachedQueryBlobManager, geoIndexOfLineStringZ) {
       "SELECT * { ?s2 <asWKT> ?geo2 }");
   auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
   auto loaded = loadBlob(blob);
-  // Two shapes for `<s1>` and `<s2>`, and a third one for `<s3>` iff the Z
-  // form is accepted.
+  // Two shapes for `<s1>` and `<s2>`, and a third one for `<s3>`.
   EXPECT_EQ(geoIndexOf(*loaded).numShapes(), 3);
 }
 
 // _____________________________________________________________________________
-// Run a spatial join on a cached geometry index that consists of two segments
+// Test a spatial join on a cached geometry index that consists of two segments
 // and has dead shapes (as created by
 // `SpatialJoinCachedIndex::forUpdatedTable`), both directly and after a round
 // trip through a blob, which then requires the new blob format.
@@ -1211,7 +1210,7 @@ TEST(NamedCachedQueryBlobManager, blobWithSegmentedSpatialIndex) {
 }
 
 // _____________________________________________________________________________
-// A geo index with a single segment but dead shapes (as created by
+// Test that a geo index with a single segment but dead shapes (as created by
 // `SpatialJoinCachedIndex::forUpdatedTable` when rows are deleted) requires the
 // new blob format, because older versions of QLever would fail on a dead shape.
 TEST(NamedCachedQueryBlobManager, blobWithDeadShapesInSingleSegment) {
@@ -1265,10 +1264,11 @@ TEST(NamedCachedQueryBlobManager, blobWithDeadShapesInSingleSegment) {
 }
 
 // _____________________________________________________________________________
-// A geo index with a simplification and a single segment is deliberately still
-// written in the old blob format, which drops the simplification (see the NOTE
-// in `NamedCachedQueryBlobManager::serialize`). With more than one segment,
-// the new format is used, which keeps the simplification.
+// Test that a geo index with a simplification and a single segment is
+// deliberately still written in the old blob format, which drops the
+// simplification (see the NOTE 2 in `NamedCachedQueryBlobManager::serialize`),
+// and that with more than one segment the new format is used, which keeps the
+// simplification.
 TEST(NamedCachedQueryBlobManager, blobWithSimplifiedSpatialIndex) {
   auto sourceConfig = buildTestIndex(std::string{freiburgSegmentsS1S2});
   Qlever source{EngineConfig{sourceConfig}};

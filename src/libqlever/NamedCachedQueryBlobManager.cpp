@@ -246,14 +246,16 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // dead shapes, the blob is written in the old format (blob version 1 and
   // entries version 1) without a secondary vocabulary, which can also be read
   // by older versions of QLever. Otherwise the new format is used (blob
-  // version 2, which then contains a possibly empty secondary vocabulary, and
-  // entries version 2, which is required for a geo index with more than one
-  // segment). A geo index with dead shapes (which only arise from
+  // version 2 with a possibly empty secondary vocabulary, and entries
+  // version 2).
+  //
+  // NOTE 1: A geo index with more than one segment can only be written in
+  // entries version 2. A geo index with dead shapes (which only arise from
   // `SpatialJoinCachedIndex::forUpdatedTable`) could be written in the old
   // format, but older versions of QLever would fail on it, because they
   // expect each shape of the S2 index to have a row.
   //
-  // NOTE: A geo index with a single segment and a simplification is
+  // NOTE 2: A geo index with a single segment and a simplification is
   // deliberately still written in the old format, although that format cannot
   // store the simplification (which is then lost). The simplification is only
   // needed when the blob is later updated (see

@@ -208,7 +208,9 @@ TEST_P(SpatialJoinCachedIndexTest, UseOfIndexByS2PointPolylineAlgorithm) {
 INSTANTIATE_TEST_SUITE_P(WithAndWithoutSerialization,
                          SpatialJoinCachedIndexTest, ::testing::Bool());
 
-// _____________________________________________________________________________
+// Test that the point-polyline algorithm returns the distance of the closest
+// edge of a linestring, if several of its edges are within the maximal
+// distance.
 TEST(SpatialJoinCachedIndex, S2PointPolylineAlgorithmReturnsMinimalDistance) {
   // A linestring with three edges, which are all within the maximal distance
   // from the point. The closest edge is the first one, at a distance of 0.001
@@ -521,6 +523,15 @@ Index deserializeFromBytes(const std::string& bytes, size_t numRows,
   return Index::readFromSerializer(reader, numRows, version);
 }
 
+// Encode a segment as `SpatialJoinCachedIndex::encodeSegment` (which is
+// private) does.
+std::string encodeSegment(const MutableS2ShapeIndex& segment) {
+  Encoder encoder;
+  s2shapeutil::CompactEncodeTaggedShapes(segment, &encoder);
+  segment.Encode(&encoder);
+  return std::string{encoder.base(), encoder.length()};
+}
+
 // Serialize an index in the format of version 2 that has the given `segments`
 // (taken from `index`) and the given `rowToShape` (which does not have to be
 // valid), by replicating the layout documented at `writeToSerializer`.
@@ -531,10 +542,7 @@ std::string serializeV2WithRowToShape(const Index& index,
   writer << std::optional<double>{};
   writer << static_cast<uint64_t>(index.segments().size());
   for (const auto& segment : index.segments()) {
-    Encoder encoder;
-    s2shapeutil::CompactEncodeTaggedShapes(*segment, &encoder);
-    segment->Encode(&encoder);
-    writer << std::string{encoder.base(), encoder.length()};
+    writer << encodeSegment(*segment);
   }
   writer << rowToShape;
   auto data = std::move(writer).data();
@@ -547,17 +555,17 @@ std::string serializeLegacy(
     const Index& index, const ad_utility::HashMap<size_t, size_t>& shapeToRow) {
   ad_utility::serialization::ByteBufferWriteSerializer writer;
   writer << index.getGeometryColumn();
-  Encoder encoder;
-  s2shapeutil::CompactEncodeTaggedShapes(*index.segments()[0], &encoder);
-  index.segments()[0]->Encode(&encoder);
-  writer << std::string{encoder.base(), encoder.length()};
+  writer << encodeSegment(*index.segments()[0]);
   writer << shapeToRow;
   auto data = std::move(writer).data();
   return std::string{data.begin(), data.end()};
 }
 }  // namespace segmented
 
-// _____________________________________________________________________________
+// Test `forUpdatedTable` for a new table with inserted, deleted and reordered
+// rows (with and without simplification): the segments of the base are
+// shared, the results are those of a fresh index, and invalid input is
+// rejected.
 TEST(SpatialJoinCachedIndex,
      forUpdatedTableWithInsertedDeletedAndReorderedRows) {
   using namespace segmented;
@@ -611,7 +619,8 @@ TEST(SpatialJoinCachedIndex,
   }
 }
 
-// _____________________________________________________________________________
+// Test that the shape of a deleted row stays in its segment as a dead shape,
+// which the queries skip.
 TEST(SpatialJoinCachedIndex, deadShapesAreSkipped) {
   using namespace segmented;
   TestTables t{segmentedKb()};
@@ -636,7 +645,8 @@ TEST(SpatialJoinCachedIndex, deadShapesAreSkipped) {
   EXPECT_TRUE(queryRows(empty, 10, 0.05, 50'000).empty());
 }
 
-// _____________________________________________________________________________
+// Test the statistics (`numSegments`, `numShapes`, `numLiveShapes`, `numRows`)
+// of indices without linestrings and with dead shapes.
 TEST(SpatialJoinCachedIndex, statistics) {
   using namespace segmented;
   TestTables t{segmentedKb()};
@@ -657,7 +667,8 @@ TEST(SpatialJoinCachedIndex, statistics) {
   EXPECT_THAT(ext, hasStats(1, 2, 1, 2));
 }
 
-// _____________________________________________________________________________
+// Test `withPermutedRows` on an index with two segments: the segments are
+// shared, and each row is found at its new position.
 TEST(SpatialJoinCachedIndex, withPermutedRowsAndMultipleSegments) {
   using namespace segmented;
   TestTables t{segmentedKb()};
@@ -688,7 +699,9 @@ TEST(SpatialJoinCachedIndex, withPermutedRowsAndMultipleSegments) {
   EXPECT_ANY_THROW(ext.withPermutedRows(std::vector<size_t>{0, 1, 2, 3, 5}));
 }
 
-// _____________________________________________________________________________
+// Test that the serialization in the format version 2 is deterministic, round
+// trips (including the simplification), and that a restored index can be
+// extended like the original one.
 TEST(SpatialJoinCachedIndex, serializationOfVersion2) {
   using namespace segmented;
   TestTables t{segmentedKb()};
@@ -725,7 +738,9 @@ TEST(SpatialJoinCachedIndex, serializationOfVersion2) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that an index in the legacy format (version 1) is read as an index with
+// one segment and no simplification, which can be written in the new format
+// and extended.
 TEST(SpatialJoinCachedIndex, legacyVersion1Format) {
   using namespace segmented;
   TestTables t{segmentedKb()};
@@ -735,23 +750,13 @@ TEST(SpatialJoinCachedIndex, legacyVersion1Format) {
   auto index = t.build(table);
   ASSERT_EQ(index.numSegments(), 1);
 
-  // Write the legacy format by hand.
-  ad_utility::serialization::ByteBufferWriteSerializer writer;
-  writer << index.getGeometryColumn();
-  Encoder encoder;
-  s2shapeutil::CompactEncodeTaggedShapes(*index.segments()[0], &encoder);
-  index.segments()[0]->Encode(&encoder);
-  writer << std::string{encoder.base(), encoder.length()};
+  // Write the legacy format by hand and read it.
   ad_utility::HashMap<size_t, size_t> shapeToRow;
   for (size_t shape = 0; shape < index.numShapes(); ++shape) {
     shapeToRow[shape] = index.getRow(0, shape).value();
   }
-  writer << shapeToRow;
-  auto data = std::move(writer).data();
-
-  ad_utility::serialization::ByteBufferReadSerializer reader{std::move(data)};
-  auto loaded =
-      Index::readFromSerializer(reader, index.numRows(), legacyFormatVersion);
+  auto loaded = deserializeFromBytes(serializeLegacy(index, shapeToRow),
+                                     index.numRows(), legacyFormatVersion);
   EXPECT_EQ(loaded.getGeometryColumn(), index.getGeometryColumn());
   EXPECT_EQ(loaded.simplificationErrorInMeters(), std::nullopt);
   EXPECT_THAT(loaded, hasStats(1, 3, 3, 5));
@@ -777,7 +782,9 @@ TEST(SpatialJoinCachedIndex, legacyVersion1Format) {
   EXPECT_ANY_THROW(serializeToBytes(index, 3));
 }
 
-// _____________________________________________________________________________
+// Test that `writeToSerializer` writes the legacy format (version 1)
+// deterministically and with the layout of a serialized hash map, and only for
+// an index with a single segment.
 TEST(SpatialJoinCachedIndex, writeLegacyVersion1Format) {
   using namespace segmented;
   TestTables t{segmentedKb()};
@@ -832,7 +839,8 @@ TEST(SpatialJoinCachedIndex, writeLegacyVersion1Format) {
       ::testing::HasSubstr("single segment"));
 }
 
-// _____________________________________________________________________________
+// Test the round trip of `encodeShape` and `decodeShape`, and that values that
+// are too large are rejected.
 TEST(SpatialJoinCachedIndex, encodeAndDecodeShape) {
   using namespace segmented;
   auto roundTrip = [](size_t segment, size_t shapeId,
@@ -856,7 +864,9 @@ TEST(SpatialJoinCachedIndex, encodeAndDecodeShape) {
   EXPECT_ANY_THROW(Index::encodeShape(0, Index::MAX_NUM_SHAPES_PER_SEGMENT));
 }
 
-// _____________________________________________________________________________
+// Test that `forUpdatedTable` with an explicit `rowOrder` gives the same bytes
+// for the same rows in different orders, and that an invalid order is
+// rejected.
 TEST(SpatialJoinCachedIndex,
      forUpdatedTableWithExplicitRowOrderIsDeterministic) {
   using namespace segmented;
@@ -911,7 +921,7 @@ TEST(SpatialJoinCachedIndex,
   EXPECT_ANY_THROW(updateWith({0, 1, 2, 3, 5}));
 }
 
-// _____________________________________________________________________________
+// Test that a corrupt `rowToShape` in the format version 2 is rejected.
 TEST(SpatialJoinCachedIndex, readingCorruptVersion2IndexThrows) {
   using namespace segmented;
   TestTables t{segmentedKb()};
@@ -943,7 +953,8 @@ TEST(SpatialJoinCachedIndex, readingCorruptVersion2IndexThrows) {
       msg("more than one row"));
 }
 
-// _____________________________________________________________________________
+// Test that a corrupt map from shape ids to rows in the legacy format is
+// rejected.
 TEST(SpatialJoinCachedIndex, readingCorruptLegacyIndexThrows) {
   using namespace segmented;
   TestTables t{segmentedKb()};
