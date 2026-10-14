@@ -155,10 +155,9 @@ class PropertyPath {
           CPP_and ad_utility::InvocableWithConvertibleReturnType<
               ModifiedPathFunc, T, const std::vector<PropertyPath>&, Modifier>
               CPP_and ad_utility::InvocableWithConvertibleReturnType<
-                  MinMaxPathFunc, T, const PropertyPath&, size_t, size_t>) T
-      handlePath(const IriFunc& iriFunc,
-                 const ModifiedPathFunc& modifiedPathFunc,
-                 const MinMaxPathFunc& minMaxPathFunc) const {
+                  MinMaxPathFunc, T, const PropertyPath&, size_t, size_t>)
+  T handlePath(const IriFunc& iriFunc, const ModifiedPathFunc& modifiedPathFunc,
+               const MinMaxPathFunc& minMaxPathFunc) const {
     return std::visit(
         ad_utility::OverloadCallOperator{
             iriFunc,

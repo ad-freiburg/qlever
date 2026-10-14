@@ -106,14 +106,14 @@ namespace ad_utility::parallelBlockMerge {
 //
 // If `moveElements` is `true`, then the elements are moved out of the input
 // blocks.
-CPP_template(bool moveElements, typename Input,
-             typename Comparator)(requires InputConcept<Input>) ad_utility::
-    InputRangeTypeErased<typename Input::Block> serialBlockMergeToRange(
-        Input input, Comparator comparator, MergeOptions options = {},
-        ad_utility::SharedCancellationHandle cancellationHandle =
-            std::make_shared<ad_utility::CancellationHandle<>>(),
-        std::vector<ChunkBoundary<typename Input::Element>> chunkBoundaries =
-            singleChunk<typename Input::Element>()) {
+CPP_template(bool moveElements, typename Input, typename Comparator)(
+    requires InputConcept<Input>)
+ad_utility::InputRangeTypeErased<typename Input::Block> serialBlockMergeToRange(
+    Input input, Comparator comparator, MergeOptions options = {},
+    ad_utility::SharedCancellationHandle cancellationHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>(),
+    std::vector<ChunkBoundary<typename Input::Element>> chunkBoundaries =
+        singleChunk<typename Input::Element>()) {
   using Block = typename Input::Block;
   using Merger = detail::ChunkMerger<moveElements, Input, Comparator>;
   auto state = std::make_shared<const typename Merger::State>(
@@ -272,7 +272,8 @@ auto parallelBlockMergeToSink(
 // convenience wrapper around `serialBlockMergeToRange` and in particular
 // ignores the `executor` and the `storageFactory`.
 CPP_template(bool moveElements, typename Input, typename Comparator,
-             typename StorageFactory)(requires InputConcept<Input>) ad_utility::
+             typename StorageFactory)(requires InputConcept<Input>)
+ad_utility::
     InputRangeTypeErased<typename Input::Block> parallelBlockMergeToRange(
         ql::any_io_executor executor, Input input, Comparator comparator,
         StorageFactory storageFactory, MergeOptions options = {},

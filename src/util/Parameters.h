@@ -57,8 +57,8 @@ CPP_concept ParameterToStringType =
 CPP_template(typename Type, typename FromString, typename ToString)(
     requires ql::concepts::semiregular<Type> CPP_and
         ParameterFromStringType<FromString, Type>
-            CPP_and ParameterToStringType<ToString, Type>) struct Parameter
-    : public ParameterBase {
+            CPP_and ParameterToStringType<ToString, Type>)
+struct Parameter : public ParameterBase {
  public:
   using value_type = Type;
 

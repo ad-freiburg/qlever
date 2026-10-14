@@ -131,11 +131,11 @@ std::vector<ChunkBoundary<Element>> chunkBoundariesFromSplitPoints(
 // The common part of the overloads of `computeChunkBoundaries` below: run the
 // steps from `MergeHelpersImpl.h`, where `makeTargets` turns the total weight
 // of the input into the target quantiles.
-CPP_template(typename Input, typename Comparator,
-             typename MakeTargets)(requires InputConcept<Input>)
-    std::vector<ChunkBoundary<typename Input::Element>> chunkBoundariesImpl(
-        const Input& input, const Comparator& comparator,
-        const MakeTargets& makeTargets) {
+CPP_template(typename Input, typename Comparator, typename MakeTargets)(
+    requires InputConcept<Input>)
+std::vector<ChunkBoundary<typename Input::Element>> chunkBoundariesImpl(
+    const Input& input, const Comparator& comparator,
+    const MakeTargets& makeTargets) {
   using Element = typename Input::Element;
   auto elementsAndWeights =
       sortAndAccumulateWeights(collectElementsAndWeights(input), comparator);

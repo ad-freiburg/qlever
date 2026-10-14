@@ -188,7 +188,8 @@ class ConcurrentCache {
   CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
       requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
           InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
-                                             const Value&>) ResultAndCacheStatus
+                                             const Value&>)
+  ResultAndCacheStatus
       computeOnce(const Key& key, const ComputeFuncT& computeFunction,
                   bool onlyReadFromCache,
                   const SuitabilityFuncT& suitableForCache) {
@@ -201,7 +202,8 @@ class ConcurrentCache {
   CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
       requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
           InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
-                                             const Value&>) ResultAndCacheStatus
+                                             const Value&>)
+  ResultAndCacheStatus
       computeOncePinned(const Key& key, const ComputeFuncT& computeFunction,
                         bool onlyReadFromCache,
                         const SuitabilityFuncT& suitedForCache) {
@@ -215,11 +217,11 @@ class ConcurrentCache {
   CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
       requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
           InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
-                                             const Value&>) ResultAndCacheStatus
-      computeButDontStore(
-          const Key& key, const ComputeFuncT& computeFunction,
-          bool onlyReadFromCache,
-          [[maybe_unused]] const SuitabilityFuncT& suitedForCache) {
+                                             const Value&>)
+  ResultAndCacheStatus computeButDontStore(
+      const Key& key, const ComputeFuncT& computeFunction,
+      bool onlyReadFromCache,
+      [[maybe_unused]] const SuitabilityFuncT& suitedForCache) {
     {
       auto resultPtr = _cacheAndInProgressMap.wlock()->_cache[key];
       if (resultPtr != nullptr) {
@@ -335,8 +337,8 @@ class ConcurrentCache {
     CacheAndInProgressMap() = default;
     CPP_template_2(typename Arg, typename... Args)(requires(
         !ql::concepts::same_as<ql::remove_cvref_t<Arg>, CacheAndInProgressMap>))
-        QL_EXPLICIT(sizeof...(Args) > 0)
-            CacheAndInProgressMap(Arg&& arg, Args&&... args)
+    QL_EXPLICIT(sizeof...(Args) > 0)
+    CacheAndInProgressMap(Arg&& arg, Args&&... args)
         : _cache{AD_FWD(arg), AD_FWD(args)...} {}
   };
 
@@ -387,7 +389,8 @@ class ConcurrentCache {
   CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
       requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
           InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
-                                             const Value&>) ResultAndCacheStatus
+                                             const Value&>)
+  ResultAndCacheStatus
       computeOnceImpl(bool pinned, const Key& key,
                       const ComputeFuncT& computeFunction,
                       bool onlyReadFromCache,

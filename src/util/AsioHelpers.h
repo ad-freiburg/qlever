@@ -29,9 +29,9 @@ namespace detail {
 // for why that value has to be passed at all). The function is called directly,
 // but the invocation of the handler is posted to the associated executor of the
 // `handler`, or to the `executor` if no such associated executor exists.
-CPP_template(typename Executor, typename Function,
-             typename Handler)(requires ql::concepts::invocable<
-                               Function>) struct CallFunctionAndPassToHandler {
+CPP_template(typename Executor, typename Function, typename Handler)(
+    requires ql::concepts::invocable<Function>)
+struct CallFunctionAndPassToHandler {
   Executor executor_;
   Function function_;
   Handler handler_;
@@ -76,11 +76,10 @@ CPP_template(typename Executor, typename Function,
 // Explicit deduction guides, we need objects and not references as the template
 // parameters.
 CPP_template(typename Executor, typename Function, typename Handler)(
-    requires ql::concepts::invocable<std::decay_t<Function>>)
-    CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
-        -> CallFunctionAndPassToHandler<std::decay_t<Executor>,
-                                        std::decay_t<Function>,
-                                        std::decay_t<Handler>>;
+            requires ql::concepts::invocable<std::decay_t<Function>>)
+CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
+    -> CallFunctionAndPassToHandler<
+        std::decay_t<Executor>, std::decay_t<Function>, std::decay_t<Handler>>;
 }  // namespace detail
 
 // Run the `function` on the `executor` (e.g. a strand for synchronization or
@@ -99,11 +98,9 @@ CPP_template(typename Executor, typename Function, typename Handler)(
 CPP_template(typename Executor, typename CompletionToken, typename Function)(
     requires ql::concepts::invocable<Function> CPP_and(
         std::is_default_constructible_v<std::invoke_result_t<Function>> ||
-        std::is_void_v<std::invoke_result_t<
-            Function>>)) auto runFunctionOnExecutor(Executor executor,
-                                                    Function function,
-                                                    CompletionToken&&
-                                                        completionToken) {
+        std::is_void_v<std::invoke_result_t<Function>>))
+auto runFunctionOnExecutor(Executor executor, Function function,
+                           CompletionToken&& completionToken) {
   using Value = std::invoke_result_t<Function>;
   static constexpr bool isVoid = std::is_void_v<Value>;
 

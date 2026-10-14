@@ -107,12 +107,11 @@ class WordBatchBuilder {
 };
 
 // _____________________________________________________________________________
-CPP_template_def(typename W,
-                 typename F)(requires WordComparator<W> CPP_and_def
-                                 WordBatchCallback<F>) void WordBatchBuilder::
-    addMergedWords(std::vector<QueueWord> buffer,
-                   [[maybe_unused]] const W& comparator,
-                   const F& batchCallback) {
+CPP_template_def(typename W, typename F)(
+    requires WordComparator<W> CPP_and_def WordBatchCallback<F>)
+void WordBatchBuilder::addMergedWords(std::vector<QueueWord> buffer,
+                                      [[maybe_unused]] const W& comparator,
+                                      const F& batchCallback) {
   // NOTE: The buffer is deliberately not consumed, but kept alive as part of
   // the batch, such that the merged words neither have to be moved nor
   // destroyed by the merging thread.
