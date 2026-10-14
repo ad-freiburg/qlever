@@ -20,12 +20,12 @@
 #include <type_traits>
 #include <vector>
 
-#include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "util/Exception.h"
 #include "util/Executor.h"
 #include "util/TaskQueue.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 #include "util/jthread.h"
 
 namespace ad_utility {
@@ -189,11 +189,16 @@ struct RunIndexedTasksState {
 // Claim and run tasks of the `state` until there are none left. Never throw:
 // after a task has thrown, store the exception in the `state` and stop handing
 // out the remaining tasks.
+//
+// NOTE: The function is `noexcept`, because the bookkeeping of the callers
+// (see `runIndexedTasksOnExecutor`) relies on it returning. The only thing
+// that can still throw is the locking of the `mutex_`, and such a failure is
+// not recoverable anyway.
 template <typename RunTask>
 void claimAndRunIndexedTasks(RunIndexedTasksState& state, size_t numTasks,
-                             const RunTask& runTask) {
+                             const RunTask& runTask) noexcept {
   try {
-    while (true) {
+    for (;;) {
       size_t taskIdx = state.nextTaskIdx_.fetch_add(1);
       if (taskIdx >= numTasks) {
         return;
@@ -207,6 +212,23 @@ void claimAndRunIndexedTasks(RunIndexedTasksState& state, size_t numTasks,
       state.firstException_ = std::current_exception();
     }
   }
+}
+
+// Called by the caller of `runIndexedTasksOnExecutor` after it has run out of
+// tasks to claim: close the `state`, such that helpers that start later return
+// right away, wait for the helpers that are still running a task, and return
+// the first exception that any task has thrown (or `nullptr`).
+//
+// NOTE: The function is `noexcept`, because returning early (with an
+// exception) while a helper is still running would leave that helper with a
+// dangling reference to the `runTask` of the caller.
+inline std::exception_ptr closeAndWaitForHelpers(
+    RunIndexedTasksState& state) noexcept {
+  std::unique_lock lock{state.mutex_};
+  state.isClosed_ = true;
+  state.helperFinished_.wait(
+      lock, [&state]() { return state.numActiveHelpers_ == 0; });
+  return state.firstException_;
 }
 }  // namespace detail
 
@@ -236,7 +258,10 @@ void runIndexedTasksOnExecutor(const qlever::Executor& executor,
   // started after this function has returned. Such a helper then sees that the
   // `state` is closed and returns without touching the `runTask`.
   auto state = std::make_shared<detail::RunIndexedTasksState>();
-  auto helper = [state, numTasks, &runTask]() {
+  // NOTE: The helper is `noexcept` for the same reason as the functions in
+  // the `detail` namespace above: if it threw after incrementing the
+  // `numActiveHelpers_`, the caller would wait forever.
+  auto helper = [state, numTasks, &runTask]() noexcept {
     {
       std::lock_guard lock{state->mutex_};
       if (state->isClosed_) {
@@ -252,19 +277,21 @@ void runIndexedTasksOnExecutor(const qlever::Executor& executor,
     state->helperFinished_.notify_all();
   };
   size_t numHelpers = std::min(numTasks, std::max(numThreads, size_t{1})) - 1;
-  for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, numHelpers)) {
-    boost::asio::post(executor, helper);
-  }
+  // NOTE: This lambda is `noexcept`, because if posting one of the helpers
+  // failed (which can only happen if the executor runs out of memory), the
+  // helpers that have already been posted might still use the `runTask` after
+  // this function has returned. Such a failure is not recoverable anyway.
+  [&]() noexcept {
+    for ([[maybe_unused]] size_t i : ad_utility::integerRange(numHelpers)) {
+      boost::asio::post(executor, helper);
+    }
+  }();
   detail::claimAndRunIndexedTasks(*state, numTasks, runTask);
 
   // All the tasks have been claimed, so wait for the helpers that are still
   // running one of them, and keep all the other ones from starting.
-  std::unique_lock lock{state->mutex_};
-  state->isClosed_ = true;
-  state->helperFinished_.wait(
-      lock, [&state]() { return state->numActiveHelpers_ == 0; });
-  if (state->firstException_) {
-    std::rethrow_exception(state->firstException_);
+  if (auto exception = detail::closeAndWaitForHelpers(*state)) {
+    std::rethrow_exception(exception);
   }
 }
 }  // namespace ad_utility

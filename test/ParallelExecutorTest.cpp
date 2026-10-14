@@ -25,6 +25,7 @@
 #include "util/GTestHelpers.h"
 #include "util/HashSet.h"
 #include "util/ParallelExecutor.h"
+#include "util/Views.h"
 
 // _____________________________________________________________________________
 TEST(ParallelExecutor, noTasks) { ad_utility::runTasksInParallel<void>({}); }
@@ -355,7 +356,7 @@ TEST(ParallelExecutor, runIndexedTasksOnExecutorFromAllThreadsOfThePool) {
   std::atomic<size_t> numTasksRun = 0;
   constexpr size_t numTasksPerCaller = 100;
   std::vector<std::future<void>> futures;
-  for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, numPoolThreads)) {
+  for ([[maybe_unused]] size_t i : ad_utility::integerRange(numPoolThreads)) {
     futures.push_back(boost::asio::post(
         pool.get_executor(), boost::asio::use_future([&]() {
           // Wait until every thread of the pool is occupied by one of these
