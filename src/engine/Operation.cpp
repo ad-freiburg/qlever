@@ -943,7 +943,12 @@ Operation::pushDownBindToChild(
     }
     return false;
   };
-  if (otherContains(bind._target)) {
+  // NOTE: For the chosen child, this is also checked (including its hidden
+  // variables) by `QueryExecutionTree::makeTreeWithBindColumn` below, but we
+  // check all children here for clarity.
+  if (ql::ranges::any_of(children, [&bind](const auto& c) {
+        return c != nullptr && c->containsVariable(bind._target);
+      })) {
     return std::nullopt;
   }
   auto canComputeExpression = ql::ranges::all_of(

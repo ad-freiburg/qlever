@@ -638,10 +638,10 @@ class Operation {
   // if it might be `UNDEF` there, no other child may contain it (otherwise a
   // join could fill in the other child's value for an `UNDEF`, which the
   // original `BIND` would see, but the pushed-down `BIND` wouldn't). It is also
-  // refused if another child contains the `BIND`'s target. This is only
-  // possible for children whose variables are not visible outside of this
-  // operation (e.g. the right child of `MINUS`), but after the push down it
-  // would wrongly become a join column. The other `children` may be `nullptr`
+  // refused if any child contains the `BIND`'s target. This is only possible
+  // for children whose variables are not visible outside of this operation
+  // (e.g. the right child of `MINUS`), but after the push down it would wrongly
+  // become a join column. The other `children` may be `nullptr`
   // (they are then ignored), but the chosen child must not be.
   std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToChild(
       const parsedQuery::Bind& bind,
