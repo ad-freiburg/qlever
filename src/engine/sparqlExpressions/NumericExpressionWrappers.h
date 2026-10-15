@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NUMERICEXPRESSIONWRAPPERS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NUMERICEXPRESSIONWRAPPERS_H
 
+#include <tuple>
 #include <type_traits>
 #include <variant>
 
@@ -62,6 +63,40 @@ struct MakeNumericExpression {
     return std::visit(visitor, args...);
   }
 };
+
+// Only this wrapper guarantees that every NotNumeric argument yields UNDEF.
+// Keep this opt-in independent of eligibility for primitive numeric execution:
+// date-aware arithmetic, for example, also supports numeric fast paths.
+template <typename Function>
+inline constexpr bool undefForNonNumeric = false;
+
+template <typename Function, bool NanOrInfToUndef>
+inline constexpr bool
+    undefForNonNumeric<MakeNumericExpression<Function, NanOrInfToUndef>> = true;
+
+// Check raw IDs before invoking any value getter. NumericValueGetter currently
+// accepts booleans as integers; they must still go through numeric evaluation.
+// Other getters (especially NumericOrDateValueGetter) are deliberately
+// excluded.
+template <typename Function, typename ValueGetters, typename... Values>
+bool hasNonNumericOperand(const Values&... values) {
+  return [&]<size_t... I>(std::index_sequence<I...>) {
+    auto rejects = []<typename Getter>(const auto& value) {
+      if constexpr (undefForNonNumeric<Function> &&
+                    std::is_same_v<Getter, NumericValueGetter> &&
+                    std::is_same_v<std::decay_t<decltype(value)>, ValueId>) {
+        const auto type = value.getDatatype();
+        return type != Datatype::Int && type != Datatype::Double &&
+               type != Datatype::Bool;
+      } else {
+        return false;
+      }
+    };
+    return (rejects.template operator()<std::tuple_element_t<I, ValueGetters>>(
+                values) ||
+            ...);
+  }(std::index_sequence_for<Values...>{});
+}
 
 }  // namespace sparqlExpression::detail
 

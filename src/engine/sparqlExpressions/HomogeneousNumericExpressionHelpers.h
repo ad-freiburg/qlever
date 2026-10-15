@@ -213,8 +213,8 @@ ValueId getIdAt(const Operand& operand, size_t index) {
 // The fallback path for the speculative evaluation below when a pair of
 // operands does not match the majority types. Integer and double combinations
 // are dispatched explicitly because this was measurably faster than always
-// using the generic fallback. Other datatypes use the regular value getters to
-// preserve the generic expression semantics.
+// using the generic fallback. Eligible operations reject unsupported datatypes
+// directly; booleans and other operations retain the regular value getters.
 template <typename Function, typename LeftValueGetter,
           typename RightValueGetter>
 AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
@@ -238,6 +238,12 @@ AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
 
   if (leftType == Double && rightType == Double) {
     return fastFunction(leftValue.getDouble(), rightValue.getDouble());
+  }
+
+  if (hasNonNumericOperand<Function,
+                           std::tuple<LeftValueGetter, RightValueGetter>>(
+          leftValue, rightValue)) {
+    return Id::makeUndefined();
   }
 
   return genericFunction(LeftValueGetter{}(leftValue, context),
@@ -305,7 +311,8 @@ ExpressionResult evaluateSpeculativeNumericOperation(
 // Evaluate a single row of an N-ary numeric expression using the speculative
 // majority-type fast path. If all operand datatypes match the expected numeric
 // types, evaluate using primitive numeric values. Otherwise, fall back to the
-// generic value getters for this row.
+// generic value getters for this row, unless an unsupported operand can
+// directly yield UNDEF.
 template <typename Function, typename ValueGetters, typename... NumericTypes,
           typename... Operands>
 Id evaluateSpeculativeNaryRow(
@@ -334,6 +341,14 @@ Id evaluateSpeculativeNaryRow(
           return fastFunction(getPrimitiveNumericValue<NumericTypes>(value)...);
         },
         values);
+  }
+
+  if (std::apply(
+          [](const auto&... value) {
+            return hasNonNumericOperand<Function, ValueGetters>(value...);
+          },
+          values)) {
+    return Id::makeUndefined();
   }
 
   return [&genericFunction, &values,

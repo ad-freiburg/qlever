@@ -571,8 +571,9 @@ TEST(SparqlExpression, homogeneousNumericBinaryFastPath) {
 TEST(SparqlExpression, speculativeNumericBinaryFastPath) {
   // Integers are the majority, so the speculative path is taken with `Int`
   // as the expected datatype. The other rows must reach the generic fallback
-  // of the slow path: a `Bool` counts as `0` or `1` there, an `UNDEF`, a
-  // vocabulary entry, and (for `+`) a date all yield `UNDEF`.
+  // of the slow path or the direct UNDEF shortcut: a `Bool` counts as `0` or
+  // `1` there, an `UNDEF`, a vocabulary entry, and (for `+`) a date all yield
+  // `UNDEF`.
   V<Id> mostlyInts{{I(1), I(2), I(3), I(4), I(5), D(0.5), B(true), U, Voc(4),
                     Dat(DateYearOrDuration::parseXsdDate, "2000-01-01")},
                    alloc};
@@ -673,6 +674,24 @@ TEST(SparqlExpression, naryNumericFastPaths) {
     testNaryExpression(makeTestTernaryAddExpression, expected, left, middle,
                        right);
   }
+}
+
+// Direct UNDEF in the ordinary loop (no numeric majority), and constants.
+TEST(SparqlExpression, numericNonNumericFallback) {
+  const auto date = Dat(DateYearOrDuration::parseXsdDate, "2000-01-01");
+  V<Id> input{{I(2), D(2.5), B(true), B(false), U, Voc(4), date}, alloc};
+  testMultiply(V<Id>{{I(4), D(5.0), I(2), I(0), U, U, U}, alloc}, input, I(2));
+  testNaryExpression(makeAbsExpression,
+                     V<Id>{{I(2), D(2.5), I(1), I(0), U, U, U}, alloc}, input);
+  testNaryExpression(makeTestTernaryAddExpression,
+                     V<Id>{{D(3.5), D(4.0), D(2.5), D(1.5), U, U, U}, alloc},
+                     input, I(1), D(0.5));
+  testMultiply(U, Voc(4), I(2));
+  testMultiply(V<Id>{{U, U, U, U, U, U, U}, alloc}, input, Voc(4));
+  testNaryExpression(makeAbsExpression, U, Voc(4));
+  testNaryExpression(makeTestTernaryAddExpression, U, I(1), Voc(4), D(0.5));
+  testNaryExpression(makeTestTernaryAddExpression,
+                     V<Id>{{U, U, U, U, U, U, U}, alloc}, input, Voc(4), I(1));
 }
 
 // Test that the generic evaluation loop of `NaryExpression` checks for
