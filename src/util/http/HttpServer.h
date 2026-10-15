@@ -133,7 +133,7 @@ class HttpMessageSender {
 //   the next call. `co_await bodyGetter()` returns `std::nullopt` when the
 //   body is fully consumed and throws on network errors.
 //
-// In both modes, `send` is an `HttpMessageSender` (see below); the handler is
+// In both modes, `send` is an `HttpMessageSender` (see above); the handler is
 // responsible for sending the response via `co_await send(response)`, or via
 // `co_await send(response, executor)` for a response with a `streamable_body`.
 // (Note that `BodyReadMode` only concerns the body of the request, not the
