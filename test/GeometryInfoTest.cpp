@@ -517,7 +517,8 @@ TEST(GeometryInfoTest, GeometryTypeAsIri) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, CrsTypeAsIri) {
-  ASSERT_FALSE(SourceCrsType{util::geo::CRSType::UNSUPPORTED}.asIri().value());
+  ASSERT_FALSE(
+      SourceCrsType{util::geo::CRSType::UNSUPPORTED}.asIri().has_value());
   ASSERT_EQ(SourceCrsType{util::geo::CRSType::CRS84}.asIri().value(),
             "http://www.opengis.net/def/crs/OGC/1.3/CRS84");
   ASSERT_EQ(SourceCrsType{util::geo::CRSType::WGS84}.asIri().value(),
@@ -529,12 +530,12 @@ TEST(GeometryInfoTest, CrsTypeAsIri) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, getSourceCrsTypeFromWkt) {
-  ASSERT_FALSE(getSourceCrsType(litUnsupportedCrsIri));
-  ASSERT_EQ(getSourceCrsType(litPoint),
+  ASSERT_FALSE(GeometryInfo::getSourceCrsType(litUnsupportedCrsIri));
+  ASSERT_EQ(GeometryInfo::getSourceCrsType(litPoint),
             SourceCrsType{util::geo::CRSType::CRS84});
-  ASSERT_EQ(getSourceCrsType(litPointWGS84),
+  ASSERT_EQ(GeometryInfo::getSourceCrsType(litPointWGS84),
             SourceCrsType{util::geo::CRSType::WGS84});
-  ASSERT_EQ(getSourceCrsType(litPointWebMerc),
+  ASSERT_EQ(GeometryInfo::getSourceCrsType(litPointWebMerc),
             SourceCrsType{util::geo::CRSType::WEB_MERCATOR});
 }
 
@@ -813,15 +814,16 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
   static_assert(sizeof(GeometryType) == 1);
   static_assert(sizeof(MetricLength) == sizeof(double));
   static_assert(sizeof(NumGeometries) == 4);
-  static_assert(sizeof(SourceCrsType) == 4);
+  static_assert(sizeof(SourceCrsType) == 2);
   static_assert(sizeof(MetricArea) == sizeof(double));
 
   using EncodedGeometryTypeAndCentroid = uint64_t;
   static_assert(sizeof(GeometryInfo) ==
                 sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
-                    sizeof(SourceCrsType) + sizeof(MetricLength) +
-                    sizeof(MetricArea));
+                    sizeof(SourceCrsType) +
+                    2 /*2B for `reservedLiteralFormat`*/ +
+                    sizeof(MetricLength) + sizeof(MetricArea));
 }
 
 // _____________________________________________________________________________

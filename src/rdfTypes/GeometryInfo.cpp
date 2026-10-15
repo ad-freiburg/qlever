@@ -32,6 +32,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
   static_assert(sizeof(GeometryInfo) ==
                 sizeof(boundingBox_) + sizeof(geometryTypeAndCentroid_) +
                     sizeof(numGeometries_) + sizeof(sourceCrs_) +
+                    2 + /*2B for `reservedLiteralFormat`*/
                     sizeof(metricLength_) + sizeof(metricArea_));
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
