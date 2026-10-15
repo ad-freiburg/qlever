@@ -92,9 +92,9 @@ bool hasNonNumericOperand(const Values&... values) {
       if constexpr (undefForNonNumeric<Function> &&
                     std::is_same_v<Getter, NumericValueGetter> &&
                     std::is_same_v<std::decay_t<decltype(value)>, ValueId>) {
+        using enum Datatype;
         const auto type = value.getDatatype();
-        return type != Datatype::Int && type != Datatype::Double &&
-               type != Datatype::Bool;
+        return type != Int && type != Double && type != Bool;
       } else {
         return false;
       }

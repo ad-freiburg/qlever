@@ -103,7 +103,7 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
 
     ad_utility::chunkedForLoop<1000>(
         0, context->size(),
-        [&](size_t i) {
+        [&left, &right, &result, &function, &getLeft, &getRight](size_t i) {
           if (hasNonNumericOperand<Function, ValueGetters>(
                   getValueAt(left, i), getValueAt(right, i))) {
             result.push_back(Id::makeUndefined());
