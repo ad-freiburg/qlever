@@ -317,7 +317,8 @@ TEST_F(NamedResultCacheSerializerTest, WrongMagicByteOrFormatVersionThrows) {
 TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
   using namespace namedResultCacheSerializer;
   auto writeWithVersion = [](uint16_t version) {
-    return [version](auto& serializer, const NamedResultCache::Value& v) {
+    return [version](auto& serializer, [[maybe_unused]] const std::string& key,
+                     const NamedResultCache::Value& v) {
       writeValue(serializer, v,
                  ExplicitIdTableOperation::viewOf(v.result_).getColumns(),
                  v.resultSortedOn_, /*writeLocalVocabWords=*/true, version);
