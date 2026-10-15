@@ -119,7 +119,7 @@ SpatialJoinCachedIndex::SpatialJoinCachedIndex(
 
 // ____________________________________________________________________________
 SpatialJoinCachedIndex SpatialJoinCachedIndex::fromLegacyFormat(
-    Variable geometryColumn, const std::string& encodedSegment,
+    Variable geometryColumn, std::string_view encodedSegment,
     const ad_utility::HashMap<size_t, size_t>& shapeToRow, size_t numRows) {
   constexpr size_t segmentIdx = 0;
   std::vector rowToShape(numRows, NO_SHAPE);

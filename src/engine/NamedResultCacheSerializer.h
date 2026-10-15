@@ -196,41 +196,42 @@ CPP_template(typename Serializer, typename Arg)(
   serializer >> numColumns;
 
   [[maybe_unused]] ExplicitIdTableOperation::IdTableOrView resultTable;
-  if constexpr (!onlyLayout) {
-    AD_CORRECTNESS_CHECK(arg.allocatorForSerialization_.has_value());
-  }
   if constexpr (onlyLayout) {
     arg.numRows_ = numRows;
     arg.numColumns_ = numColumns;
     arg.columnPayloads_.reserve(numColumns);
-    for (size_t i = 0; i < numColumns; ++i) {
-      auto column = serializer.template readArray<Id>();
-      AD_CONTRACT_CHECK(column.size() == numRows * sizeof(Id),
-                        "A column of a named cache entry has the wrong size");
-      arg.columnPayloads_.push_back(column);
-    }
-  } else if constexpr (ZeroCopyReadSerializer<Serializer>) {
-    // Zero-copy path: build a non-owning `IdTableView<0>` directly from
-    // spans into the serializer's buffer, without copying the column data.
-    // Since the writing side (see above) rejects any entry that contains a
+  } else {
+    AD_CORRECTNESS_CHECK(arg.allocatorForSerialization_.has_value());
+  }
+  if constexpr (ZeroCopyReadSerializer<Serializer>) {
+    // Zero-copy path: read each column as a span into the serializer's
+    // buffer, without copying the column data, and record its range (for the
+    // layout) or collect it for a non-owning `IdTableView<0>`. Since the
+    // writing side (see above) rejects any entry that contains a
     // `LocalVocabIndex` id, `mapping` can never actually apply to any id in
     // the columns, so skipping `deserializeIds`'s remapping step here is
     // safe. We still defensively re-check the invariant.
-    IdTableView<0>::ViewSpans columns;
-    columns.reserve(numColumns);
+    [[maybe_unused]] IdTableView<0>::ViewSpans columns;
     for (size_t i = 0; i < numColumns; ++i) {
       auto column = zeroCopyDeserializeToSpan<Id>(serializer);
-      AD_CORRECTNESS_CHECK(column.size() == numRows);
-      AD_CORRECTNESS_CHECK(
-          ql::ranges::find(column, Datatype::LocalVocabIndex,
-                           Id::getDatatypeL) == column.end(),
-          "Named result cache entries that contain local vocab entries "
-          "currently cannot be deserialized.");
-      columns.push_back(column);
+      AD_CONTRACT_CHECK(column.size() == numRows,
+                        "A column of a named cache entry has the wrong size");
+      if constexpr (onlyLayout) {
+        arg.columnPayloads_.push_back(serializer.rangeOf(column));
+      } else {
+        AD_CORRECTNESS_CHECK(
+            ql::ranges::find(column, Datatype::LocalVocabIndex,
+                             Id::getDatatypeL) == column.end(),
+            "Named result cache entries that contain local vocab entries "
+            "currently cannot be deserialized.");
+        columns.push_back(column);
+      }
     }
-    resultTable =
-        IdTableView<0>::fromColumns(std::move(columns), numColumns, numRows,
-                                    arg.allocatorForSerialization_.value());
+    if constexpr (!onlyLayout) {
+      resultTable =
+          IdTableView<0>::fromColumns(std::move(columns), numColumns, numRows,
+                                      arg.allocatorForSerialization_.value());
+    }
   } else {
     IdTable idTable{numColumns, arg.allocatorForSerialization_.value()};
     idTable.resize(numRows);
@@ -253,21 +254,16 @@ CPP_template(typename Serializer, typename Arg)(
   }
 
   // Deserialize `resultSortedOn` (for the layout, its range and contents).
-  std::vector<ColumnIndex> resultSortedOn;
+  auto resultSortedOn = deserializeToSpanOrVector<ColumnIndex>(serializer);
   if constexpr (onlyLayout) {
-    auto sortedOn = zeroCopyDeserializeToSpan<ColumnIndex>(serializer);
-    arg.resultSortedOn_ = serializer.rangeOf(sortedOn);
-    arg.sortedOnColumns_.assign(sortedOn.begin(), sortedOn.end());
-  } else {
-    serializer >> resultSortedOn;
+    arg.resultSortedOn_ = serializer.rangeOf(resultSortedOn);
+    arg.sortedOnColumns_.assign(resultSortedOn.begin(), resultSortedOn.end());
   }
 
   // Deserialize `cacheKey` (for the layout, only its range).
-  std::string cacheKey;
+  auto cacheKey = deserializeToSpanOrVector<char>(serializer);
   if constexpr (onlyLayout) {
-    arg.cacheKey_ = serializer.template readArray<char>();
-  } else {
-    serializer >> cacheKey;
+    arg.cacheKey_ = serializer.rangeOf(cacheKey);
   }
 
   // Deserialize `cachedGeoIndex` (for the layout, its layout).
@@ -287,10 +283,12 @@ CPP_template(typename Serializer, typename Arg)(
     }
 
     // Construct the `Value`.
-    arg = NamedResultCache::Value{
-        std::move(resultTable),    std::move(varToColMap),
-        std::move(resultSortedOn), std::move(localVocab),
-        std::move(cacheKey),       std::move(cachedGeoIndex)};
+    arg = NamedResultCache::Value{std::move(resultTable),
+                                  std::move(varToColMap),
+                                  toOwningVector(std::move(resultSortedOn)),
+                                  std::move(localVocab),
+                                  std::string{cacheKey.data(), cacheKey.size()},
+                                  std::move(cachedGeoIndex)};
   }
 }
 }  // namespace namedResultCacheSerializer

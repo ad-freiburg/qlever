@@ -275,11 +275,7 @@ class SecondaryVocabulary {
       }
       const size_t numSegments = arg.segments_.size();
       auto readIndexArray = [&serializer](IndexArray& array) {
-        if constexpr (ZeroCopyReadSerializer<S>) {
-          array = IndexArray::fromZeroCopyDeserializer(serializer);
-        } else {
-          serializer >> array;
-        }
+        array = IndexArray{deserializeToSpanOrVector<uint64_t>(serializer)};
       };
       readIndexArray(arg.segmentOffsets_);
       readIndexArray(arg.sortedIndices_);

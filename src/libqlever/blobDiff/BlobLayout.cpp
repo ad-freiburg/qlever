@@ -39,7 +39,8 @@ BlobLayout BlobLayout::parse(ql::span<const char> decompressedBlob) {
   // The metadata JSON is a `std::string`: read its length and payload, so that
   // the range of the payload is known, and parse it (the vocabulary type is
   // needed to skip the vocabulary).
-  layout.metadata_ = reader.readArray<char>();
+  layout.metadata_ = reader.rangeOf(
+      ad_utility::serialization::zeroCopyDeserializeToSpan<char>(reader));
   auto metadata =
       nlohmann::json::parse(decompressedBlob.begin() + layout.metadata_.begin_,
                             decompressedBlob.begin() + layout.metadata_.end_);

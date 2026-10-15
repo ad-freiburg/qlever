@@ -39,9 +39,9 @@ struct ByteRange {
 // any object can be read (and thereby skipped) via the regular serialization
 // (`reader >> object`), and all zero-copy reads (see `ZeroCopyReadSerializer`)
 // work on it. In addition, `position()` tells where in the buffer the reader
-// currently is, `rangeOf` converts a zero-copy span into the buffer to its
-// byte range, and `readArray` reads a serialized array and returns the byte
-// range of its payload without copying it.
+// currently is, and `rangeOf` converts a zero-copy span into the buffer (e.g.
+// the result of `deserializeToSpanOrVector`, see `SerializeVector.h`) to its
+// byte range.
 //
 // A read function can detect this serializer via the `LayoutSerializer`
 // concept below, and then record byte ranges instead of (or in addition to)
@@ -90,16 +90,6 @@ class LayoutReadSerializer
     uint64_t begin = position();
     f();
     return {begin, position()};
-  }
-
-  // Read an array of trivially serializable `T`s (that was written as a
-  // `std::vector<T>`, a `ql::span<const T>`, or, for `T == char`, a
-  // `std::string`) and return the byte range of its payload, that is, of the
-  // raw elements, which excludes the preceding size and alignment padding. The
-  // payload is aligned to `alignof(T)`.
-  template <typename T>
-  ByteRange readArray() {
-    return rangeOf(zeroCopyDeserializeToSpan<T>(*this));
   }
 
   // Read and return a single object of type `T` (which has to be default

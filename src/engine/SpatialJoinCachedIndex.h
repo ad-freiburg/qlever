@@ -342,19 +342,17 @@ class SpatialJoinCachedIndex {
         namedResultCacheSerializer::legacyFormatVersion) {
       // The encoded single segment, followed by the map from shape ids to
       // rows (see `writeToSerializer`).
-      [[maybe_unused]] std::string encodedSegment;
-      if constexpr (onlyLayout) {
-        serializer.template readArray<char>();
-      } else {
-        serializer >> encodedSegment;
-      }
+      [[maybe_unused]] auto encodedSegment =
+          deserializeToSpanOrVector<char>(serializer);
       ad_utility::HashMap<size_t, size_t> shapeToRow;
       serializer >> shapeToRow;
       if constexpr (onlyLayout) {
         return layout;
       } else {
-        return fromLegacyFormat(std::move(geometryColumn), encodedSegment,
-                                shapeToRow, numRows);
+        return fromLegacyFormat(
+            std::move(geometryColumn),
+            std::string_view{encodedSegment.data(), encodedSegment.size()},
+            shapeToRow, numRows);
       }
     }
     std::optional<double> simplification;
@@ -365,28 +363,24 @@ class SpatialJoinCachedIndex {
                          "The serialized geo index is corrupt");
     [[maybe_unused]] Segments segments;
     for (uint64_t i = 0; i < numSegments; ++i) {
+      auto encodedSegment = deserializeToSpanOrVector<char>(serializer);
       if constexpr (onlyLayout) {
-        layout.segmentPayloads_.push_back(
-            serializer.template readArray<char>());
+        layout.segmentPayloads_.push_back(serializer.rangeOf(encodedSegment));
       } else {
-        std::string encodedSegment;
-        serializer >> encodedSegment;
-        segments.push_back(decodeSegment(encodedSegment));
+        segments.push_back(decodeSegment(
+            std::string_view{encodedSegment.data(), encodedSegment.size()}));
       }
     }
+    auto rowToShape = deserializeToSpanOrVector<uint64_t>(serializer);
+    AD_CORRECTNESS_CHECK(rowToShape.size() == numRows,
+                         "The serialized geo index is corrupt");
     if constexpr (onlyLayout) {
-      layout.rowToShape_ = serializer.template readArray<uint64_t>();
-      AD_CORRECTNESS_CHECK(
-          layout.rowToShape_.size() == numRows * sizeof(uint64_t),
-          "The serialized geo index is corrupt");
+      layout.rowToShape_ = serializer.rangeOf(rowToShape);
       return layout;
     } else {
-      std::vector<uint64_t> rowToShape;
-      serializer >> rowToShape;
-      AD_CORRECTNESS_CHECK(rowToShape.size() == numRows,
-                           "The serialized geo index is corrupt");
       return SpatialJoinCachedIndex{std::move(geometryColumn), simplification,
-                                    std::move(segments), std::move(rowToShape)};
+                                    std::move(segments),
+                                    toOwningVector(std::move(rowToShape))};
     }
   }
 
@@ -416,7 +410,7 @@ class SpatialJoinCachedIndex {
   // segment and the map from shape ids to rows. Throw an exception if a row is
   // `>= numRows` or a shape id is `>= MAX_NUM_SHAPES_PER_SEGMENT`.
   static SpatialJoinCachedIndex fromLegacyFormat(
-      Variable geometryColumn, const std::string& encodedSegment,
+      Variable geometryColumn, std::string_view encodedSegment,
       const ad_utility::HashMap<size_t, size_t>& shapeToRow, size_t numRows);
 
   // Compute `shapeToRow_` from `segments_` and `rowToShape_`. Throw an
