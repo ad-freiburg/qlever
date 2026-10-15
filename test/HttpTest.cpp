@@ -71,7 +71,8 @@ auto makeEchoHandler() {
         co_await send(
             createOkResponse(absl::StrCat(verbName(req.method()), "\n",
                                           toStd(req.target()), "\n", body),
-                             req, ad_utility::MediaType::textPlain));
+                             req, ad_utility::MediaType::textPlain),
+            co_await boost::asio::this_coro::executor);
       };
 }
 
@@ -88,8 +89,9 @@ template <BodyReadMode mode>
 auto makeIgnoreBodyServer(size_t chunkSize) {
   auto handler = [](auto req, auto&& send,
                     auto...) -> boost::asio::awaitable<void> {
-    co_await send(createOkResponse("ignored body", req,
-                                   ad_utility::MediaType::textPlain));
+    co_await send(
+        createOkResponse("ignored body", req, ad_utility::MediaType::textPlain),
+        co_await boost::asio::this_coro::executor);
   };
   return TestHttpServer<decltype(handler), mode>(std::move(handler), chunkSize);
 }
@@ -102,7 +104,8 @@ boost::asio::awaitable<void> throwingEchoBody(const Req& req, Send& send,
                                               std::exception_ptr exception) {
   co_await send(createOkResponse(absl::StrCat(verbName(req.method()), "\n",
                                               toStd(req.target()), "\n", body),
-                                 req, ad_utility::MediaType::textPlain));
+                                 req, ad_utility::MediaType::textPlain),
+                co_await boost::asio::this_coro::executor);
   std::rethrow_exception(exception);
 }
 
@@ -127,7 +130,8 @@ boost::asio::awaitable<void> redirectHandlerCore(const Req& req, Send& send,
   auto redirectIt = url.params().find("location");
   if (redirectIt == url.params().end()) {
     co_return co_await send(
-        createOkResponse("Success", req, ad_utility::MediaType::textPlain));
+        createOkResponse("Success", req, ad_utility::MediaType::textPlain),
+        co_await boost::asio::this_coro::executor);
   }
   http::response<http::string_body> resp;
   unsigned redirectStatus = 200;
@@ -613,7 +617,8 @@ TYPED_TEST(HttpServerBodyTest, SlowResponseBodyDoesNotBlockServer) {
                      auto...) -> boost::asio::awaitable<void> {
     if (req.target() != "/slow") {
       co_return co_await send(
-          createOkResponse("fast", req, ad_utility::MediaType::textPlain));
+          createOkResponse("fast", req, ad_utility::MediaType::textPlain),
+          co_await boost::asio::this_coro::executor);
     }
     auto slowBody = [](std::shared_future<void> released)
         -> cppcoro::generator<std::string> {
@@ -679,6 +684,33 @@ TYPED_TEST(HttpServerBodyTest, ExceptionInResponseBody) {
   if constexpr (ad_utility::compileTimeLogLevel >=
                 ad_utility::LogLevel::Enum::ERROR) {
     EXPECT_THAT(logStream.str(), HasSubstr("body generation failed"));
+  }
+}
+
+// Sending a response with a `streamable_body` requires a (non-empty) executor
+// on which its body is computed.
+TYPED_TEST(HttpServerBodyTest, StreamableResponseRequiresExecutor) {
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  auto handler = [](auto req, auto&& send,
+                    auto...) -> boost::asio::awaitable<void> {
+    co_await send(
+        createOkResponse("never sent", req, ad_utility::MediaType::textPlain),
+        net::any_io_executor{});
+  };
+  TestHttpServer<decltype(handler), TypeParam::value> httpServer{
+      std::move(handler), this->lazyChunkSize};
+  httpServer.runInOwnThread();
+  EXPECT_ANY_THROW(HttpClient::sendRequest(
+      std::make_unique<HttpClient>("localhost",
+                                   std::to_string(httpServer.getPort())),
+      verb::get, "localhost", "/target", this->handle_));
+
+  // Shut down the server first to not have a race condition on the logging
+  // stream.
+  httpServer.shutDown();
+  if constexpr (ad_utility::compileTimeLogLevel >=
+                ad_utility::LogLevel::Enum::ERROR) {
+    EXPECT_THAT(logStream.str(), HasSubstr("bodyExecutor"));
   }
 }
 
@@ -832,10 +864,12 @@ using ad_utility::httpProxy::Proxy;
 auto makeProxyEchoServer() {
   auto handler = [](auto req, auto&& send,
                     auto...) -> boost::asio::awaitable<void> {
-    co_await send(createOkResponse(
-        absl::StrCat(toStd(req.target()), "\n", toStd(req[field::host]), "\n",
-                     toStd(req[field::proxy_authorization])),
-        req, ad_utility::MediaType::textPlain));
+    co_await send(
+        createOkResponse(
+            absl::StrCat(toStd(req.target()), "\n", toStd(req[field::host]),
+                         "\n", toStd(req[field::proxy_authorization])),
+            req, ad_utility::MediaType::textPlain),
+        co_await boost::asio::this_coro::executor);
   };
   return TestHttpServer{std::move(handler)};
 }

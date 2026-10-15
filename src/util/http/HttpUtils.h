@@ -134,8 +134,9 @@ CPP_template(typename RequestType)(
   CompressionMethod method =
       ad_utility::content_encoding::getCompressionMethodForRequest(request);
 
-  // NOTE: The `HttpServer` advances the body on a separate thread when sending
-  // the response, so (potentially expensive) generators are fine here.
+  // NOTE: The body is advanced on the executor that is passed to the
+  // `HttpMessageSender` when sending the response, so (potentially expensive)
+  // generators are fine here if that executor is not one of the IO threads.
   if (method != CompressionMethod::NONE) {
     response.body() = streams::compressStream(std::move(generator), method);
     ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
