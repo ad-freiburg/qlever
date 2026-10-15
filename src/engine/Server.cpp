@@ -299,7 +299,11 @@ auto Server::cancelAfterDeadline(
   auto timer = std::make_shared<net::steady_timer>(timerExecutor_, timeLimit);
 
   timer->async_wait([cancellationHandle = std::move(cancellationHandle)](
-                        const boost::system::error_code&) {
+                        const boost::system::error_code& error) {
+    // The timer was cancelled via the returned callback.
+    if (error == boost::asio::error::operation_aborted) {
+      return;
+    }
     if (auto pointer = cancellationHandle.lock()) {
       pointer->cancel(ad_utility::CancellationState::TIMEOUT);
     }
@@ -314,7 +318,26 @@ auto Server::setupCancellationHandle(
                              CancellationHandleAndTimeoutTimerCancel>) auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
   AD_CORRECTNESS_CHECK(cancellationHandle);
-  cancellationHandle->startWatchDog();
+  ad_utility::CancellationHandle<>::registerWatchDog(
+      cancellationHandle,
+      // All steps reuse one timer, which is safe because they never overlap
+      // (see `RunAfter`). The pending `task` keeps the timer alive, and the
+      // `shared_ptr` keeps it from moving (see `cancelAfterDeadline`).
+      [timer = std::make_shared<net::steady_timer>(timerExecutor_)](
+          std::chrono::milliseconds delay, absl::AnyInvocable<void()> task) {
+        size_t numCancelledWaits = timer->expires_after(delay);
+        AD_CORRECTNESS_CHECK(numCancelledWaits == 0,
+                             "`RunAfter` must not be called while a previous "
+                             "wait of the watchdog timer is still pending.");
+        timer->async_wait(
+            [task = std::move(task)](const boost::system::error_code&) mutable {
+              // The error is only set if the timer is cancelled or destroyed
+              // during the wait, which can't happen (see above). Even then,
+              // running the step early would be harmless, whereas throwing
+              // here would terminate the server, so we don't assert.
+              task();
+            });
+      });
   absl::Cleanup cancelCancellationHandle{
       cancelAfterDeadline(cancellationHandle, timeLimit)};
   return CancellationHandleAndTimeoutTimerCancel{
