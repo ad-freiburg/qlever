@@ -1499,14 +1499,19 @@ struct TableWithMutableAndConstProxies {
 };
 }  // namespace
 
-// Test that the reference and const_reference of the
-// RowReference are the types that the non-const/const element
-// access of the table returns, and that operator[] only gives const access,
-// also if the table has a mutable element access.
+// Test that `reference` and `const_reference` of the `RowReference` are the
+// types that the non-const and the const element access of the table return,
+// and that `operator[]` only gives const access, also if the table has a
+// mutable element access.
 TEST(IdTable, rowReferenceReferenceTypedefs) {
   using Row = IdTable::row_reference;
   static_assert(std::is_same_v<Row::reference, IdRef>);
   static_assert(std::is_same_v<Row::const_reference, ConstIdRef>);
+
+  // A const row reference only has const access, so both typedefs are const.
+  using ConstRow = IdTable::const_row_reference;
+  static_assert(std::is_same_v<ConstRow::reference, ConstIdRef>);
+  static_assert(std::is_same_v<ConstRow::const_reference, ConstIdRef>);
 
   IdTable idTable{2, makeAllocator()};
   idTable.push_back({V(1), V(2)});
@@ -1544,7 +1549,7 @@ TEST(IdTable, rowReferenceReferenceTypedefs) {
   EXPECT_EQ(restricted[1], V(7));
 }
 
-// Test that a const RowReference uses the const element access of the table,
+// Test that a const `RowReference` uses the const element access of the table,
 // also if the mutable one returns a type that cannot be converted to the result
 // of the const one.
 TEST(IdTable, rowReferenceWithMutableAndConstProxies) {

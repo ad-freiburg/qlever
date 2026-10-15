@@ -149,9 +149,15 @@ class RowReferenceImpl {
     using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
     using T = typename Table::single_value_type;
 
-    using reference = decltype(std::declval<Table&>()(size_t{}, size_t{}));
+    // The types that the element access of the underlying table returns, a
+    // true reference for the `IdTable`, a proxy by value for a storage that
+    // does not hold plain `Id`s. A const row reference only ever returns the
+    // const variant.
     using const_reference =
         decltype(std::declval<const Table&>()(size_t{}, size_t{}));
+    using reference = std::conditional_t<isConst, const_reference,
+                                         decltype(std::declval<Table&>()(
+                                             size_t{}, size_t{}))>;
 
     static constexpr int numStaticColumns = Table::numStaticColumns;
 
@@ -218,6 +224,9 @@ class RowReferenceImpl {
                                                                 colIdx);
       }
     };
+    // The value type `T` is passed explicitly, because the iterators cannot
+    // derive it from the element access when that returns a proxy instead of
+    // a true reference.
     using iterator = ad_utility::IteratorForAccessOperator<
         RowReferenceWithRestrictedAccess,
         IteratorHelper<RowReferenceWithRestrictedAccess>,
