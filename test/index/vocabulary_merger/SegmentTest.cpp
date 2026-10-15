@@ -25,10 +25,10 @@ using ::testing::ElementsAre;
 using ::testing::Pair;
 
 namespace {
-// Shorthand for a segment-local ID.
-auto S = &SegmentLocalId::make;
-constexpr uint8_t blankNodeSubVocabulary =
-    SegmentLocalId::blankNodeSubVocabulary;
+// Shorthand for the segment-local ID of a word.
+auto S = &SegmentLocalId::makeFromWordIndex;
+constexpr uint8_t blankNodeSubVocabularyIndex =
+    SegmentLocalId::blankNodeSubVocabularyIndex;
 
 // The entry of the ID map of the partial vocabulary `partial` for its word
 // with the local index `localIndex`, which is the merged word with the
@@ -41,35 +41,44 @@ SegmentIdMapEntry entry(uint32_t partial, uint32_t localIndex,
 
 // Test the packing of a sub-vocabulary and an index into a segment-local ID.
 TEST(Segment, segmentLocalId) {
-  auto id = SegmentLocalId::make(3, 12345);
-  EXPECT_EQ(id.subVocabulary(), 3u);
+  auto id = SegmentLocalId::makeFromWordIndex(3, 12345);
+  EXPECT_EQ(id.subVocabIndex(), 3u);
   EXPECT_EQ(id.index(), 12345u);
   EXPECT_FALSE(id.isBlankNode());
   EXPECT_EQ(id.bits(), (uint64_t{3} << SegmentLocalId::numIndexBits) | 12345u);
   auto blank = SegmentLocalId::makeBlankNode(7);
-  EXPECT_EQ(blank.subVocabulary(), blankNodeSubVocabulary);
+  EXPECT_EQ(blank.subVocabIndex(), blankNodeSubVocabularyIndex);
   EXPECT_EQ(blank.index(), 7u);
   EXPECT_TRUE(blank.isBlankNode());
-  EXPECT_EQ(blank, SegmentLocalId::make(blankNodeSubVocabulary, 7));
+  EXPECT_EQ(blank.bits(), (uint64_t{blankNodeSubVocabularyIndex}
+                           << SegmentLocalId::numIndexBits) |
+                              7u);
+  EXPECT_EQ(blank, SegmentLocalId::makeBlankNode(7));
   EXPECT_NE(blank, id);
-  EXPECT_EQ(SegmentLocalId{}, SegmentLocalId::make(0, 0));
-  EXPECT_ANY_THROW(SegmentLocalId::make(0, SegmentLocalId::maxIndex + 1));
+  // The index has to fit into its bits, and a word is never in the pseudo
+  // sub-vocabulary of the blank nodes.
+  EXPECT_ANY_THROW(
+      SegmentLocalId::makeFromWordIndex(0, SegmentLocalId::maxIndex + 1));
+  EXPECT_ANY_THROW(SegmentLocalId::makeBlankNode(SegmentLocalId::maxIndex + 1));
+  EXPECT_ANY_THROW(
+      SegmentLocalId::makeFromWordIndex(blankNodeSubVocabularyIndex, 0));
   std::stringstream str;
   str << id;
   EXPECT_EQ(str.str(), "SegmentLocalId(3, 12345)");
 }
 
-// Test that the bases turn segment-local IDs into global indices and IDs.
-TEST(Segment, segmentBases) {
-  SegmentBases bases;
-  bases.bases_[0] = 100;
-  bases.bases_[1] = 20;
-  bases.bases_[blankNodeSubVocabulary] = 5;
-  EXPECT_EQ(bases.globalIndexOf(S(0, 3)), 103u);
-  EXPECT_EQ(bases.globalIndexOf(S(1, 3)), 23u);
-  EXPECT_EQ(bases.globalIdOf(S(0, 3)), V(103));
-  EXPECT_EQ(bases.globalIdOf(S(1, 3)), V(23));
-  EXPECT_EQ(bases.globalIdOf(S(blankNodeSubVocabulary, 2)), BN(7));
+// Test that the ID converter turns segment-local IDs into global indices and
+// IDs.
+TEST(Segment, idConverterForSegment) {
+  IdConverterForSegment converter;
+  converter.numWordsInPreviousSegments_[0] = 100;
+  converter.numWordsInPreviousSegments_[1] = 20;
+  converter.numWordsInPreviousSegments_[blankNodeSubVocabularyIndex] = 5;
+  EXPECT_EQ(converter.globalIndexOf(S(0, 3)), 103u);
+  EXPECT_EQ(converter.globalIndexOf(S(1, 3)), 23u);
+  EXPECT_EQ(converter.globalIdOf(S(0, 3)), V(103));
+  EXPECT_EQ(converter.globalIdOf(S(1, 3)), V(23));
+  EXPECT_EQ(converter.globalIdOf(SegmentLocalId::makeBlankNode(2)), BN(7));
 }
 
 // Test `buildSegment` on two blocks of merged words with a word that spans
@@ -78,7 +87,7 @@ TEST(Segment, segmentBases) {
 // a language-tagged predicate and a special internal IRI: the distinct words
 // per sub-vocabulary, the external flags, the blank node count, the metadata
 // with segment-local IDs, the ID map entries grouped by partial vocabulary,
-// and the bases of the next segment.
+// and the ID converter of the next segment.
 TEST(Segment, buildSegment) {
   std::string wkt =
       "\"POINT(1 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -92,10 +101,8 @@ TEST(Segment, buildSegment) {
   pushWord(blocks[0], wkt, true, 2, 1);
   pushWord(blocks[0], "\"a\"", true, 0, 5);
   // The same word from another partial vocabulary is folded into the last
-  // word by `addWord`, as the merge does it.
-  MergeBlock source;
-  pushWord(source, "\"a\"", false, 2, 0);
-  blocks[0].addWord(source.back());
+  // word, as the merge does it.
+  pushWord(blocks[0], "\"a\"", false, 2, 0);
   pushWord(blocks[0], "\"b\"", false, 0, 6);
   pushWord(blocks[1], "\"b\"", true, 1, 1);
   pushWord(blocks[1], special, false, 0, 7);
@@ -137,21 +144,22 @@ TEST(Segment, buildSegment) {
   // The ID map entries, grouped by partial vocabulary (and in word order
   // within a partial vocabulary).
   auto geoId = S(1, TestSplitWriter::geoMarker);
-  auto blankId = S(blankNodeSubVocabulary, 0);
-  EXPECT_THAT(segment.idMapEntries_,
-              ElementsAre(entry(0, 5, S(0, 0)), entry(0, 6, S(0, 1)),
-                          entry(0, 7, S(0, 2)), entry(1, 1, S(0, 1)),
-                          entry(1, 2, S(0, 3)), entry(1, 3, blankId),
-                          entry(2, 1, geoId), entry(2, 0, S(0, 0))));
-  EXPECT_THAT(segment.idMapRunStarts_, ElementsAre(0, 3, 6, 8));
+  auto blankId = SegmentLocalId::makeBlankNode(0);
+  const auto& idMap = segment.idMapEntries_;
+  ASSERT_EQ(idMap.size(), 3u);
+  EXPECT_THAT(idMap[0], ElementsAre(entry(0, 5, S(0, 0)), entry(0, 6, S(0, 1)),
+                                    entry(0, 7, S(0, 2))));
+  EXPECT_THAT(idMap[1], ElementsAre(entry(1, 1, S(0, 1)), entry(1, 2, S(0, 3)),
+                                    entry(1, 3, blankId)));
+  EXPECT_THAT(idMap[2], ElementsAre(entry(2, 1, geoId), entry(2, 0, S(0, 0))));
 
-  // The bases of the next segment.
-  SegmentBases bases;
-  bases.bases_[0] = 10;
-  auto next = segment.basesOfNextSegment(bases);
-  EXPECT_EQ(next.bases_[0], 14u);
-  EXPECT_EQ(next.bases_[1], 1u);
-  EXPECT_EQ(next.bases_[blankNodeSubVocabulary], 1u);
+  // The ID converter of the next segment.
+  IdConverterForSegment converter;
+  converter.numWordsInPreviousSegments_[0] = 10;
+  auto next = segment.idConverterForNextSegment(converter);
+  EXPECT_EQ(next.numWordsInPreviousSegments_[0], 14u);
+  EXPECT_EQ(next.numWordsInPreviousSegments_[1], 1u);
+  EXPECT_EQ(next.numWordsInPreviousSegments_[blankNodeSubVocabularyIndex], 1u);
 }
 
 // Test that the IRIs that match one of the `blankNodeIriRegexes` become blank

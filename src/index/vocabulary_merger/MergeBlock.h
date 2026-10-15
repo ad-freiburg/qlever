@@ -122,7 +122,7 @@ class MergeBlock : public ad_utility::NoCopy {
   std::vector<Occurrence> moreOccurrences_;
   // The bytes of a block that was read from a file, see the constructor below.
   Buffer bytesFromFile_;
-  // The storage of the words of a block of merged words, see `push`. A
+  // The storage of the words of a block of merged words, see `addWord`. A
   // monotonic buffer allocates in chunks and never moves or frees what it has
   // allocated (until `release`), so the views into it stay valid. It lives on
   // the heap, so that the block can be moved. Constructing it allocates no
@@ -152,20 +152,6 @@ class MergeBlock : public ad_utility::NoCopy {
                          "Trailing bytes in a block of a partial vocabulary");
   }
 
-  // Append a word, copying it into the storage of this block. The occurrence
-  // `(partialFileId, localIndex)` is its first one, further ones are added by
-  // `addWord`. This is the primitive for building input blocks (in tests);
-  // the merge itself adds its words via `addWord`.
-  void push(std::string_view word, bool isExternal, uint32_t partialFileId,
-            uint64_t localIndex) {
-    MergeWord mergeWord;
-    mergeWord.word_ = store(word);
-    mergeWord.isExternal_ = isExternal;
-    mergeWord.partialFileId_ = partialFileId;
-    mergeWord.index_ = localIndex;
-    words_.push_back(mergeWord);
-  }
-
   // Add a merged `word` that the merge yields (a copy of it, the `word`
   // itself lives in an input block, so it must not have further occurrences).
   // A word that is equal to the last word of this block (the same word from
@@ -182,8 +168,12 @@ class MergeBlock : public ad_utility::NoCopy {
       addOccurrenceToLastWord(word.partialFileId_, word.id());
       return;
     }
-    push(word.iriOrLiteral(), word.isExternal(), word.partialFileId_,
-         word.id());
+    MergeWord copy;
+    copy.word_ = store(word.iriOrLiteral());
+    copy.isExternal_ = word.isExternal();
+    copy.partialFileId_ = word.partialFileId_;
+    copy.index_ = word.id();
+    words_.push_back(copy);
   }
 
   // The further occurrences of a `word` of this block, see above.

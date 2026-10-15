@@ -24,11 +24,14 @@
 #include "../../util/FileTestHelpers.h"
 #include "../../util/IdTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "global/VocabIndex.h"
 #include "index/PartialVocabularyFilenames.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/MergeBlock.h"
 #include "index/vocabulary_merger/QueueWord.h"
+#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/SerializeString.h"
 
 // Helpers that are shared by the tests of the vocabulary merger (see
 // `index/VocabularyMerger.h` and the individual stages in
@@ -55,13 +58,43 @@ inline ad_utility::vocabulary_merger::detail::QueueWord makeQueueWord(
       partialFileId};
 }
 
-// Append the occurrence of `word` with the given `localIndex` in the partial
-// vocabulary `partialFileId` to the `block` (see
-// `index/vocabulary_merger/MergeBlock.h`).
+// A word of a partial vocabulary for `makeInputBlock` below: the word, its
+// external flag and its local index in the partial vocabulary.
+struct InputWord {
+  std::string word_;
+  bool isExternal_ = false;
+  uint64_t localIndex_ = 0;
+};
+
+// Create a `MergeBlock` (see `index/vocabulary_merger/MergeBlock.h`) of the
+// `words` of the partial vocabulary `partialFileId`, as the merge reads it
+// from a partial vocabulary file: the words are serialized in the format of
+// the `PartialVocabularyWriter` and the block parses them in place.
+inline ad_utility::vocabulary_merger::detail::MergeBlock makeInputBlock(
+    uint32_t partialFileId, const std::vector<InputWord>& words) {
+  using ad_utility::vocabulary_merger::detail::MergeBlock;
+  ad_utility::serialization::ByteBufferWriteSerializer serializer;
+  for (const auto& word : words) {
+    serializer << word.word_;
+    serializer << word.isExternal_;
+    serializer << word.localIndex_;
+  }
+  const auto& bytes = serializer.data();
+  MergeBlock::Buffer buffer(bytes.size());
+  ql::ranges::copy(bytes, buffer.begin());
+  return MergeBlock{std::move(buffer), words.size(), partialFileId};
+}
+
+// Add the occurrence of `word` with the given `localIndex` in the partial
+// vocabulary `partialFileId` to the `block` of merged words, as the merge
+// does it (via `MergeBlock::addWord`, so a `word` that is equal to the last
+// word of the `block` is folded into that word).
 inline void pushWord(ad_utility::vocabulary_merger::detail::MergeBlock& block,
                      std::string_view word, bool isExternal,
                      uint32_t partialFileId, uint64_t localIndex) {
-  block.push(word, isExternal, partialFileId, localIndex);
+  auto input = makeInputBlock(partialFileId,
+                              {{std::string{word}, isExternal, localIndex}});
+  block.addWord(input.front());
 }
 
 // The number and filenames of a set of partial vocabularies, as created by

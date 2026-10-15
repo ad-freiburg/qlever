@@ -140,17 +140,17 @@ TEST(PartialVocabularyFile, appendToBlockFoldsDuplicates) {
   writePartialVocabulary(filenames.wordsFiles_[0], {"\"a\""});
   PartialVocabularyRunsInput input{partialVocabBasename, 1};
   auto block = input.makeEmptyBlock();
-  // The words that the merge hands to `appendToBlock` live in an input block.
-  MergeBlock source;
-  auto word = [&source](std::string_view w, bool isExternal,
-                        uint64_t localIndex, uint32_t partial) {
-    source.push(w, isExternal, partial, localIndex);
-    return source.back();
-  };
-  input.appendToBlock(block, word("\"a\"", false, 3, 0));
-  input.appendToBlock(block, word("\"a\"", true, 5, 2));
-  input.appendToBlock(block, word("\"a\"", false, 1, 4));
-  input.appendToBlock(block, word("\"b\"", false, 7, 1));
+  // The words that the merge hands to `appendToBlock` live in input blocks
+  // (one per partial vocabulary here).
+  std::vector<MergeBlock> sources;
+  sources.push_back(makeInputBlock(0, {{"\"a\"", false, 3}}));
+  sources.push_back(makeInputBlock(1, {{"\"b\"", false, 7}}));
+  sources.push_back(makeInputBlock(2, {{"\"a\"", true, 5}}));
+  sources.push_back(makeInputBlock(4, {{"\"a\"", false, 1}}));
+  input.appendToBlock(block, sources[0].front());
+  input.appendToBlock(block, sources[2].front());
+  input.appendToBlock(block, sources[3].front());
+  input.appendToBlock(block, sources[1].front());
   ASSERT_EQ(block.size(), 2u);
   EXPECT_EQ(block[0].iriOrLiteral(), "\"a\"");
   EXPECT_TRUE(block[0].isExternal());
@@ -283,9 +283,9 @@ TEST(PartialVocabularyFile, mergeInParallel) {
 TEST(PartialVocabularyFile, mergeBlockAccessorsAndBlockWeight) {
   // A block of three merged words.
   MergeBlock block;
-  block.push("\"a\"", false, 0, 7);
-  block.push("\"b\"", true, 1, 8);
-  block.push("\"c\"", false, 2, 9);
+  pushWord(block, "\"a\"", false, 0, 7);
+  pushWord(block, "\"b\"", true, 1, 8);
+  pushWord(block, "\"c\"", false, 2, 9);
   const MergeBlock& constBlock = block;
   ASSERT_EQ(block.size(), 3u);
   EXPECT_EQ(block[1].iriOrLiteral(), "\"b\"");

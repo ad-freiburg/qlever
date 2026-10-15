@@ -14,8 +14,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <ostream>
-#include <string>
+#include <range/v3/numeric/partial_sum.hpp>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -30,6 +31,7 @@
 #include "index/vocabulary_merger/MergeBlock.h"
 #include "index/vocabulary_merger/SegmentLocalId.h"
 #include "index/vocabulary_merger/VocabularyMetaData.h"
+#include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/RegexSet.h"
 
@@ -51,7 +53,7 @@
 // additional information in the index). The blank nodes are not written to
 // any vocabulary, but are numbered separately; for the bookkeeping in this
 // file they are treated as one more (pseudo) sub-vocabulary, see
-// `SegmentLocalId::blankNodeSubVocabulary`.
+// `SegmentLocalId::blankNodeSubVocabularyIndex`.
 namespace ad_utility::vocabulary_merger::detail {
 
 // An entry of the ID map of a partial vocabulary as a segment produces it: the
@@ -78,15 +80,21 @@ struct SegmentIdMapEntry {
 };
 static_assert(sizeof(SegmentIdMapEntry) == 16);
 
-// The number of words of every sub-vocabulary (and of blank nodes, see
-// `SegmentLocalId::blankNodeSubVocabulary`) in all the segments before a given
-// segment, which turn the segment-local IDs of that segment into global ones.
-struct SegmentBases {
-  std::array<uint64_t, SegmentLocalId::blankNodeSubVocabulary + 1> bases_{};
+// This class is associated with a single segment and converts the
+// `SegmentLocalId`s of this segment to global IDs. To do so it stores for each
+// sub-vocabulary the number of words of that sub-vocabulary in all the
+// segments before this one (and the same for the blank nodes, see
+// `SegmentLocalId::blankNodeSubVocabularyIndex`), which is what has to be added
+// to the segment-local index. The converter for the first segment is the
+// default-constructed one (all zeros), the one for each following segment is
+// obtained from the previous segment via `Segment::idConverterForNextSegment`.
+struct IdConverterForSegment {
+  std::array<uint64_t, SegmentLocalId::blankNodeSubVocabularyIndex + 1>
+      numWordsInPreviousSegments_{};
 
   // The global index (for a word) or blank node number (for a blank node).
   uint64_t globalIndexOf(SegmentLocalId id) const {
-    return id.index() + bases_[id.subVocabulary()];
+    return id.index() + numWordsInPreviousSegments_[id.subVocabIndex()];
   }
 
   // The global ID.
@@ -109,11 +117,10 @@ struct Segment {
   size_t numBlankNodes_ = 0;
   // The metadata of the segment, with segment-local IDs.
   SegmentMetaData metaData_;
-  // The ID map entries, grouped by partial vocabulary: the entries of the
-  // partial vocabulary `p` are `idMapEntries_[idMapRunStarts_[p] ..
-  // idMapRunStarts_[p + 1])`.
-  std::vector<SegmentIdMapEntry> idMapEntries_;
-  std::vector<size_t> idMapRunStarts_;
+  // The ID map entries, grouped by partial vocabulary: `idMapEntries_[p]` are
+  // the entries of the partial vocabulary `p` (in the order of the words), so
+  // there is one element per partial vocabulary, which may be empty.
+  CompactVectorOfStrings<SegmentIdMapEntry> idMapEntries_;
   // The number of merged words (including the duplicates) that the segment
   // was built from.
   size_t numMergedWords_ = 0;
@@ -122,7 +129,8 @@ struct Segment {
   // `buildSegment` removes all the duplicates, also those at the boundaries of
   // the merged blocks (see there), so each distinct word is in exactly one of
   // the `wordBlocks_` exactly once. The counts have to be exact, because
-  // `basesOfNextSegment` derives the global IDs of the next segment from them.
+  // `idConverterForNextSegment` derives the global IDs of the next segment
+  // from them.
   size_t numDistinctWords() const {
     return ::ranges::accumulate(wordBlocks_, numBlankNodes_,
                                 [](size_t sum, const WordBlock& block) {
@@ -130,14 +138,16 @@ struct Segment {
                                 });
   }
 
-  // The bases of the segment that follows this one, given the bases of this
-  // one.
-  SegmentBases basesOfNextSegment(SegmentBases bases) const {
+  // The ID converter of the segment that follows this one, given the
+  // `converter` of this one.
+  IdConverterForSegment idConverterForNextSegment(
+      IdConverterForSegment converter) const {
+    auto& counts = converter.numWordsInPreviousSegments_;
     for (size_t sub = 0; sub < wordBlocks_.size(); ++sub) {
-      bases.bases_[sub] += wordBlocks_[sub].numWords();
+      counts[sub] += wordBlocks_[sub].numWords();
     }
-    bases.bases_[SegmentLocalId::blankNodeSubVocabulary] += numBlankNodes_;
-    return bases;
+    counts[SegmentLocalId::blankNodeSubVocabularyIndex] += numBlankNodes_;
+    return converter;
   }
 };
 
@@ -175,16 +185,20 @@ class SegmentBuilder {
   const ad_utility::RegexSet& blankNodeIriRegexes_;
   size_t numPartialVocabularies_;
   uint8_t numSubVocabularies_;
-  // The size of the per-word payload that the block writer of each
-  // sub-vocabulary precomputes, see `BlockWriterBase::precomputePayload`.
-  std::vector<size_t> payloadSizes_;
-  // A buffer for that payload, reused for every word.
-  std::string payload_;
-  // The pending word, see above. It points into one of the input blocks.
-  std::string_view pendingWord_;
-  bool hasPendingWord_ = false;
-  bool pendingIsExternal_ = false;
+  // Whether the block writer of each sub-vocabulary precomputes a per-word
+  // payload, see `BlockWriterBase::precomputePayload`.
+  std::vector<bool> hasPayload_;
+  // The pending word, see above (its word points into one of the input
+  // blocks), with the OR of the external flags of all its merged words so
+  // far. Its own occurrence fields are not used, because the occurrences of a
+  // pending word come from up to two blocks: all of them (also the first) are
+  // collected in `pendingOccurrences_`.
+  std::optional<MergeWord> pendingWord_;
   std::vector<Occurrence> pendingOccurrences_;
+  // The ID map entries of the committed words, in the order of the words.
+  // They are grouped by partial vocabulary at the very end, see
+  // `groupIdMapEntriesByPartialVocabulary`.
+  std::vector<SegmentIdMapEntry> idMapEntries_;
   // The segment under construction.
   Segment segment_;
 
@@ -207,12 +221,13 @@ class SegmentBuilder {
         numSubVocabularies_{writer.numSubVocabularies()} {
     AD_CONTRACT_CHECK(numSubVocabularies_ > 0 &&
                       numSubVocabularies_ <
-                          SegmentLocalId::blankNodeSubVocabulary);
+                          SegmentLocalId::blankNodeSubVocabularyIndex);
     segment_.wordBlocks_.resize(numSubVocabularies_);
-    payloadSizes_.resize(numSubVocabularies_);
+    hasPayload_.resize(numSubVocabularies_);
     for (uint8_t sub = 0; sub < numSubVocabularies_; ++sub) {
-      payloadSizes_[sub] = writer.blockWriter(sub).precomputedPayloadSize();
-      segment_.wordBlocks_[sub].payloadSize_ = payloadSizes_[sub];
+      size_t payloadSize = writer.blockWriter(sub).precomputedPayloadSize();
+      segment_.wordBlocks_[sub].payloadSize_ = payloadSize;
+      hasPayload_[sub] = payloadSize > 0;
     }
   }
 
@@ -223,7 +238,7 @@ class SegmentBuilder {
         blocks, size_t{0},
         [](size_t sum, const MergeBlock& block) { return sum + block.size(); });
     segment_.numMergedWords_ = numMergedWords;
-    segment_.idMapEntries_.reserve(numMergedWords);
+    idMapEntries_.reserve(numMergedWords);
   }
 
   // Add the words of the next `block`. The words have to be in the order of
@@ -234,29 +249,25 @@ class SegmentBuilder {
   void addBlock(const MergeBlock& block, [[maybe_unused]] const W& comparator) {
     bool isFirstWordOfBlock = true;
     for (const auto& word : block) {
-      if (isFirstWordOfBlock && hasPendingWord_ &&
-          word.iriOrLiteral() == pendingWord_) {
+      if (isFirstWordOfBlock && pendingWord_.has_value() &&
+          word.iriOrLiteral() == pendingWord_->iriOrLiteral()) {
         // The same word ended the previous block.
-        pendingIsExternal_ = pendingIsExternal_ || word.isExternal();
-        addOccurrences(block, word);
+        pendingWord_->isExternal() |= word.isExternal();
       } else {
-        AD_EXPENSIVE_CHECK(
-            !hasPendingWord_ || comparator(pendingWord_, word.iriOrLiteral()),
-            "Total vocabulary order violated for ", pendingWord_, " and ",
-            word.iriOrLiteral());
+        // NOTE: The message arguments of the check are evaluated eagerly, so
+        // the pending word must not be dereferenced in them if there is none.
+        if (pendingWord_.has_value()) {
+          AD_EXPENSIVE_CHECK(
+              comparator(pendingWord_->iriOrLiteral(), word.iriOrLiteral()),
+              "Total vocabulary order violated for ",
+              pendingWord_->iriOrLiteral(), " and ", word.iriOrLiteral());
+        }
         commitPendingWord();
-        startPendingWord(block, word);
+        pendingWord_ = word;
       }
+      addOccurrences(block, word);
       isFirstWordOfBlock = false;
     }
-  }
-
-  // Make the `word` of the `block` the pending word.
-  void startPendingWord(const MergeBlock& block, const MergeWord& word) {
-    pendingWord_ = word.iriOrLiteral();
-    pendingIsExternal_ = word.isExternal();
-    hasPendingWord_ = true;
-    addOccurrences(block, word);
   }
 
   // Add the occurrences of the `word` of the `block` (its own and the further
@@ -273,59 +284,74 @@ class SegmentBuilder {
   // add it to its word block (or count it as a blank node), and turn its
   // occurrences into ID map entries.
   void commitPendingWord() {
-    if (!hasPendingWord_) {
+    if (!pendingWord_.has_value()) {
       return;
     }
     SegmentLocalId id =
-        isBlankNode(pendingWord_, blankNodeIriRegexes_)
+        isBlankNode(pendingWord_->iriOrLiteral(), blankNodeIriRegexes_)
             ? SegmentLocalId::makeBlankNode(segment_.numBlankNodes_++)
             : addPendingWordToWordBlock();
     for (const auto& [partialFileId, localIndex] : pendingOccurrences_) {
       AD_CORRECTNESS_CHECK(partialFileId < numPartialVocabularies_ &&
                            localIndex <= std::numeric_limits<uint32_t>::max());
-      segment_.idMapEntries_.push_back(SegmentIdMapEntry{
+      idMapEntries_.push_back(SegmentIdMapEntry{
           partialFileId, static_cast<uint32_t>(localIndex), id});
     }
     pendingOccurrences_.clear();
-    hasPendingWord_ = false;
+    pendingWord_.reset();
   }
 
   // Add the pending word (which is not a blank node) to the word block of its
   // sub-vocabulary and to the metadata, and return its segment-local ID.
   SegmentLocalId addPendingWordToWordBlock() {
-    uint8_t sub = writer_.subVocabularyOf(pendingWord_);
+    std::string_view word = pendingWord_->iriOrLiteral();
+    uint8_t sub = writer_.subVocabularyOf(word);
     AD_CORRECTNESS_CHECK(sub < numSubVocabularies_);
     auto& words = segment_.wordBlocks_[sub];
-    auto id = SegmentLocalId::make(
-        sub, writer_.indexOf(sub, words.numWords(), pendingWord_));
-    segment_.metaData_.addWord(pendingWord_, id);
-    payload_.resize(payloadSizes_[sub]);
-    if (!payload_.empty()) {
-      writer_.blockWriter(sub).precomputePayload(
-          pendingWord_, ql::span<char>{payload_.data(), payload_.size()});
+    auto id = SegmentLocalId::makeFromWordIndex(
+        sub, writer_.indexOf(sub, words.numWords(), word));
+    segment_.metaData_.addWord(word, id);
+    // The payload is computed directly into the word block.
+    auto payload = words.pushWithPayloadSlot(word, pendingWord_->isExternal());
+    if (hasPayload_[sub]) {
+      writer_.blockWriter(sub).precomputePayload(word, payload);
     }
-    words.push(pendingWord_, pendingIsExternal_, payload_);
     return id;
   }
 
-  // Group the ID map entries by partial vocabulary (a counting sort), so that
-  // the writers of the ID maps find the entries of each partial vocabulary in
-  // one contiguous run, see `Segment::idMapRunStarts_`.
+  // Move the `idMapEntries_` into the segment, grouped by partial vocabulary
+  // (see `Segment::idMapEntries_`), so that the writers of the ID maps find
+  // the entries of each partial vocabulary in one contiguous run. The entries
+  // of a partial vocabulary stay in the order of the words.
+  //
+  // This is a counting sort by the partial vocabulary index, which directly
+  // produces the layout of the `CompactVectorOfStrings` (the sorted entries
+  // and the offset of each group) in two passes over the entries. A
+  // `std::stable_sort` would be simpler to write, but the counting sort is
+  // linear in the number of entries, needs no comparisons, and works because
+  // the keys are the few small numbers `[0, numPartialVocabularies_)`.
   void groupIdMapEntriesByPartialVocabulary() {
-    std::vector<size_t>& runStarts = segment_.idMapRunStarts_;
-    runStarts.assign(numPartialVocabularies_ + 1, 0);
-    for (const auto& entry : segment_.idMapEntries_) {
-      ++runStarts[entry.partialVocabularyIndex_ + 1];
+    // First pass: `offsets[p + 1]` becomes the number of entries of the partial
+    // vocabulary `p`, then the prefix sums turn `offsets[p]` into the start of
+    // its group, with `offsets.back()` the total number of entries (one more
+    // offset than groups, as the `CompactVectorOfStrings` wants it).
+    std::vector<uint64_t> offsets(numPartialVocabularies_ + 1, 0);
+    for (const auto& entry : idMapEntries_) {
+      ++offsets[entry.partialVocabularyIndex_ + 1];
     }
-    for (size_t p = 0; p < numPartialVocabularies_; ++p) {
-      runStarts[p + 1] += runStarts[p];
-    }
-    std::vector<SegmentIdMapEntry> sorted(segment_.idMapEntries_.size());
-    std::vector<size_t> next(runStarts.begin(), runStarts.end() - 1);
-    for (const auto& entry : segment_.idMapEntries_) {
+    ::ranges::partial_sum(offsets, offsets.begin());
+    // Second pass: place each entry at the next free position of its group.
+    // The `next` positions start at the group starts and advance per entry.
+    std::vector<uint64_t> next(offsets.begin(), offsets.end() - 1);
+    std::vector<SegmentIdMapEntry> sorted(idMapEntries_.size());
+    for (const auto& entry : idMapEntries_) {
       sorted[next[entry.partialVocabularyIndex_]++] = entry;
     }
-    segment_.idMapEntries_ = std::move(sorted);
+    idMapEntries_.clear();
+    idMapEntries_.shrink_to_fit();
+    segment_.idMapEntries_ =
+        CompactVectorOfStrings<SegmentIdMapEntry>::fromDataAndOffsets(
+            std::move(sorted), std::move(offsets));
   }
 };
 

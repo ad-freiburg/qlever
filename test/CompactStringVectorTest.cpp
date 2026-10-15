@@ -92,6 +92,48 @@ TYPED_TEST(CompactVectorOfStringsFixture, Build) {
   vectorsEqual(v, input);
 }
 
+// Test that `fromDataAndOffsets` yields the same elements as `build`, and that
+// it rejects offsets that are not a valid layout for the data.
+TYPED_TEST(CompactVectorOfStringsFixture, FromDataAndOffsets) {
+  const auto& input = TestFixture::input_;
+  using CompactVector = typename TestFixture::CompactVector;
+  using Data = std::vector<typename TestFixture::Type>;
+  using Offsets = std::vector<typename CompactVector::offset_type>;
+
+  // Lay the input out as data and offsets by hand.
+  Data data;
+  Offsets offsets{0};
+  for (const auto& element : input) {
+    data.insert(data.end(), element.begin(), element.end());
+    offsets.push_back(data.size());
+  }
+  auto v = CompactVector::fromDataAndOffsets(data, offsets);
+  EXPECT_TRUE(v.ready());
+  vectorsEqual(v, input);
+  // The result owns its storage, so it can be appended to.
+  v.push_back(input[0]);
+  EXPECT_EQ(v.size(), input.size() + 1);
+  iterablesEqual(v[v.size() - 1], input[0]);
+
+  // Zero elements are the single offset `0` and no data.
+  auto empty = CompactVector::fromDataAndOffsets({}, {0});
+  EXPECT_TRUE(empty.ready());
+  EXPECT_EQ(empty.size(), 0u);
+
+  // Invalid layouts: no offsets, a first offset other than `0`, a last offset
+  // other than the size of the data, and decreasing offsets.
+  EXPECT_ANY_THROW(CompactVector::fromDataAndOffsets(data, {}));
+  auto invalid = offsets;
+  invalid.front() = 1;
+  EXPECT_ANY_THROW(CompactVector::fromDataAndOffsets(data, invalid));
+  invalid = offsets;
+  invalid.back() = data.size() - 1;
+  EXPECT_ANY_THROW(CompactVector::fromDataAndOffsets(data, invalid));
+  invalid = offsets;
+  std::swap(invalid[1], invalid[2]);
+  EXPECT_ANY_THROW(CompactVector::fromDataAndOffsets(data, invalid));
+}
+
 // Test that `push_back` appends single elements, to an empty object and to a
 // built one.
 TYPED_TEST(CompactVectorOfStringsFixture, PushBack) {
