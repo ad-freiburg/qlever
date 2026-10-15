@@ -325,7 +325,8 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     out << contents;
   }
 
-  // Read the version 5 file. The reserved fields must be zero.
+  // Read the version 5 file. The fields in the bytes `[28, 32)` must have
+  // their default values.
   AnyGeoVocab geoVocab;
   geoVocab.open(filename);
   using Bytes = std::array<uint8_t, sizeof(GeometryInfo)>;

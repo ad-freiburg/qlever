@@ -115,6 +115,9 @@ inline void checkRequestedInfoForInstance(
   EXPECT_METRICLENGTH_NEAR(gi.getMetricLength(),
                            gi.getRequestedInfo<MetricLength>());
   EXPECT_METRICAREA_NEAR(gi.getMetricArea(), gi.getRequestedInfo<MetricArea>());
+  EXPECT_EQ(gi.getSerializationType(), SerializationType::WKT);
+  EXPECT_EQ(gi.getSerializationType(),
+            gi.getRequestedInfo<SerializationType>());
 }
 
 // ____________________________________________________________________________
@@ -137,6 +140,8 @@ inline void checkRequestedInfoForWktLiteral(
                            GeometryInfo::getRequestedInfo<MetricLength>(wkt));
   EXPECT_METRICAREA_NEAR(gi.getMetricArea(),
                          GeometryInfo::getRequestedInfo<MetricArea>(wkt));
+  EXPECT_EQ(gi.getSerializationType(),
+            GeometryInfo::getRequestedInfo<SerializationType>(wkt));
 }
 
 // ____________________________________________________________________________
