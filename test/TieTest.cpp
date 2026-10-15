@@ -20,10 +20,10 @@
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 #include "util/ConstexprUtils.h"
-#include "util/TieHelper.h"
+#include "util/Tie.h"
 
 using ad_utility::TieElement;
-using ad_utility::tieHelper;
+using ad_utility::tieElementsByIndexSequence;
 using columnBasedIdTable::splitLayout::ConstIdRef;
 using columnBasedIdTable::splitLayout::IdColumnVector;
 using columnBasedIdTable::splitLayout::IdRef;
@@ -36,7 +36,7 @@ Id intId(int64_t value) { return Id::makeFromInt(value); }
 
 // Test the types of the tied elements: an lvalue reference stays a reference, a
 // proxy that is returned by value is stored by value.
-TEST(TieHelper, tieElement) {
+TEST(Tie, tieElement) {
   static_assert(std::is_same_v<TieElement<Id&>, Id&>);
   static_assert(std::is_same_v<TieElement<const Id&>, const Id&>);
   static_assert(std::is_same_v<TieElement<IdRef>, IdRef>);
@@ -52,13 +52,13 @@ TEST(TieHelper, tieElement) {
 
 // The elements of a row of an `IdTable` are lvalue references, so the tuple
 // behaves like `std::tie`.
-TEST(TieHelper, lvalueReferences) {
+TEST(Tie, lvalueReferences) {
   IdTable table{3, ad_utility::testing::makeAllocator()};
   table.push_back({intId(1), intId(2), intId(3)});
   table.push_back({intId(4), intId(5), intId(6)});
 
   IdTable::row_reference row = table[0];
-  auto tied = tieHelper(row, std::index_sequence<0, 2>{});
+  auto tied = tieElementsByIndexSequence(row, std::index_sequence<0, 2>{});
   static_assert(std::is_same_v<decltype(tied), std::tuple<Id&, Id&>>);
 
   // The tuple refers to the elements of the table ...
@@ -73,7 +73,8 @@ TEST(TieHelper, lvalueReferences) {
   // The elements of a `const` row are `const` references.
   const IdTable& constTable = table;
   IdTable::const_row_reference constRow = constTable[1];
-  auto constTied = tieHelper(constRow, std::index_sequence<1, 2>{});
+  auto constTied =
+      tieElementsByIndexSequence(constRow, std::index_sequence<1, 2>{});
   static_assert(
       std::is_same_v<decltype(constTied), std::tuple<const Id&, const Id&>>);
   EXPECT_EQ(std::get<0>(constTied), intId(5));
@@ -81,14 +82,16 @@ TEST(TieHelper, lvalueReferences) {
 
   // Tied rows are compared lexicographically.
   IdTable::row_reference secondRow = table[1];
-  EXPECT_TRUE(tieHelper(row, std::index_sequence<0, 1>{}) <
-              tieHelper(secondRow, std::index_sequence<0, 1>{}));
-  EXPECT_FALSE(tieHelper(secondRow, std::index_sequence<0, 1>{}) <
-               tieHelper(row, std::index_sequence<0, 1>{}));
+  EXPECT_TRUE(
+      tieElementsByIndexSequence(row, std::index_sequence<0, 1>{}) <
+      tieElementsByIndexSequence(secondRow, std::index_sequence<0, 1>{}));
+  EXPECT_FALSE(
+      tieElementsByIndexSequence(secondRow, std::index_sequence<0, 1>{}) <
+      tieElementsByIndexSequence(row, std::index_sequence<0, 1>{}));
 
   // An `ad_utility::ValueSequence` works as well as a `std::index_sequence`.
-  auto viaValueSequence =
-      tieHelper(row, ad_utility::ValueSequence<size_t, 2, 1>{});
+  auto viaValueSequence = tieElementsByIndexSequence(
+      row, ad_utility::ValueSequence<size_t, 2, 1>{});
   EXPECT_EQ(&std::get<0>(viaValueSequence), &table(0, 2));
   EXPECT_EQ(&std::get<1>(viaValueSequence), &table(0, 1));
 }
@@ -96,13 +99,13 @@ TEST(TieHelper, lvalueReferences) {
 // A column of the split layout returns a proxy by value from `operator[]`: the
 // proxies are stored in the tuple by value, but still refer to the elements of
 // the column.
-TEST(TieHelper, proxies) {
+TEST(Tie, proxies) {
   IdColumnVector column{testAllocator()};
   column.push_back(intId(10));
   column.push_back(Id::makeFromBool(true));
   column.push_back(intId(30));
 
-  auto tied = tieHelper(column, std::index_sequence<0, 2>{});
+  auto tied = tieElementsByIndexSequence(column, std::index_sequence<0, 2>{});
   static_assert(std::is_same_v<decltype(tied), std::tuple<IdRef, IdRef>>);
   EXPECT_EQ(static_cast<Id>(std::get<0>(tied)), intId(10));
   EXPECT_EQ(static_cast<Id>(std::get<1>(tied)), intId(30));
@@ -120,27 +123,29 @@ TEST(TieHelper, proxies) {
   other.push_back(intId(11));
   other.push_back(intId(0));
   other.push_back(intId(32));
-  auto otherTied = tieHelper(other, std::index_sequence<0, 2>{});
+  auto otherTied =
+      tieElementsByIndexSequence(other, std::index_sequence<0, 2>{});
   EXPECT_TRUE(tied < otherTied);
   EXPECT_FALSE(otherTied < tied);
 
   // The elements of a `const` column are `ConstIdRef`s.
   const auto& constColumn = column;
-  auto constTied = tieHelper(constColumn, std::index_sequence<1, 2>{});
+  auto constTied =
+      tieElementsByIndexSequence(constColumn, std::index_sequence<1, 2>{});
   static_assert(
       std::is_same_v<decltype(constTied), std::tuple<ConstIdRef, ConstIdRef>>);
   EXPECT_EQ(static_cast<Id>(std::get<0>(constTied)), Id::makeFromBool(true));
   EXPECT_EQ(static_cast<Id>(std::get<1>(constTied)), intId(31));
 
   // An `ad_utility::ValueSequence` works as well as a `std::index_sequence`.
-  auto viaValueSequence =
-      tieHelper(column, ad_utility::ValueSequence<size_t, 2, 0>{});
+  auto viaValueSequence = tieElementsByIndexSequence(
+      column, ad_utility::ValueSequence<size_t, 2, 0>{});
   EXPECT_EQ(static_cast<Id>(std::get<0>(viaValueSequence)), intId(31));
   EXPECT_EQ(static_cast<Id>(std::get<1>(viaValueSequence)), intId(11));
 }
 
 // `ad_utility::tie` with lvalues behaves exactly like `std::tie`.
-TEST(TieHelper, tieLvalueReferences) {
+TEST(Tie, tieLvalueReferences) {
   Id a = intId(1);
   Id b = intId(2);
   const Id c = intId(3);
@@ -182,7 +187,7 @@ TEST(TieHelper, tieLvalueReferences) {
 // `ad_utility::tie` also accepts proxies that are returned by value, which
 // `std::tie` cannot bind. The proxies are stored by value, but still refer to
 // the elements.
-TEST(TieHelper, tieProxies) {
+TEST(Tie, tieProxies) {
   IdColumnVector<TestAllocator> column{testAllocator()};
   column.push_back(intId(10));
   column.push_back(intId(20));
@@ -228,10 +233,10 @@ TEST(TieHelper, tieProxies) {
                ad_utility::tie(column[0], column[1]));
 }
 
-// Like `std::tie`, `ad_utility::tie` and `tieHelper` can be used in constant
-// expressions, and `ad_utility::tie` also works without or with a single
-// argument.
-TEST(TieHelper, constexprAndEdgeCases) {
+// Like `std::tie`, `ad_utility::tie` and `tieElementsByIndexSequence` can be
+// used in constant expressions, and `ad_utility::tie` also works without or
+// with a single argument.
+TEST(Tie, constexprAndEdgeCases) {
   static constexpr int x = 1;
   static constexpr int y = 2;
   constexpr auto tied = ad_utility::tie(x, y);
@@ -239,7 +244,8 @@ TEST(TieHelper, constexprAndEdgeCases) {
   static_assert(&std::get<0>(tied) == &x);
 
   static constexpr std::array<int, 3> row{1, 2, 3};
-  constexpr auto viaHelper = tieHelper(row, std::index_sequence<0, 2>{});
+  constexpr auto viaHelper =
+      tieElementsByIndexSequence(row, std::index_sequence<0, 2>{});
   static_assert(std::get<0>(viaHelper) == 1 && std::get<1>(viaHelper) == 3);
 
   Id a = intId(1);

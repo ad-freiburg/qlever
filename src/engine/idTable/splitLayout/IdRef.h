@@ -16,7 +16,7 @@
 #include "backports/concepts.h"
 #include "engine/idTable/splitLayout/SplitLayoutIdBitRepresentation.h"
 #include "global/Id.h"
-#include "util/TieHelper.h"
+#include "util/IsProxy.h"
 
 namespace columnBasedIdTable::splitLayout {
 

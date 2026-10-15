@@ -9,10 +9,10 @@
 
 // Compare the lexicographic comparison of a row of an `IdTable` with a triple
 // of `Id`s (as in `LocatedTriples.cpp`) when the entries are put into a
-// `std::tie` (references), into the tuple that `tieHelper` in
+// `std::tie` (references), into the tuple that `tie` in
 // `LocatedTriples.cpp` builds, and into a `std::array<Id, 3>` (copies).
 // `std::tie` cannot bind to the proxy objects that a column storage may return
-// instead of `Id&`. The tuple of `tieHelper` keeps references for lvalues (so
+// instead of `Id&`. The tuple of `tie` keeps references for lvalues (so
 // it is the same type as `std::tie` here) and stores proxies by value.
 // NOTE: The `std::tie` variant only compiles if the element access of the
 // `IdTable` returns references, so this benchmark only works for the legacy
@@ -82,7 +82,7 @@ AD_NO_INLINE size_t countWithTie(const Data& data) {
   return count;
 }
 
-// The element type of the tuple in `tieHelper` in `LocatedTriples.cpp`.
+// The element type of the tuple in `tie` in `LocatedTriples.cpp`.
 template <typename T>
 using TieElement =
     std::conditional_t<std::is_lvalue_reference_v<T>, T, std::decay_t<T>>;

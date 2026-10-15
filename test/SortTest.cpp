@@ -19,7 +19,7 @@
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
-#include "util/TieHelper.h"
+#include "util/Tie.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;

@@ -7,17 +7,13 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_UTIL_TIEHELPER_H
-#define QLEVER_SRC_UTIL_TIEHELPER_H
+#ifndef QLEVER_SRC_UTIL_TIE_H
+#define QLEVER_SRC_UTIL_TIE_H
+
+#include <tuple>
 
 #include "backports/type_traits.h"
-
-namespace qlever {
-// Specialize to `true` for types that are cheap to copy and act as a reference
-// to an element (like the proxies of split layout).
-template <typename T>
-inline constexpr bool isProxy = false;
-}  // namespace qlever
+#include "util/IsProxy.h"
 
 namespace ad_utility {
 
@@ -37,14 +33,6 @@ constexpr auto tieElement() {
 template <typename T>
 using TieElement = typename decltype(tieElement<T>())::type;
 
-// This code works for `std::integer_sequence` as well as
-// `ad_utility::ValueSequence`.
-// TODO<pas-kes>: Test/benchmark this with proxies of the split layout in future
-template <typename Row, template <typename T, T...> typename Tp, size_t... I>
-constexpr auto tieHelper(Row& row, Tp<size_t, I...>) {
-  return std::tuple<TieElement<decltype(row[I])>...>(row[I]...);
-}
-
 // Like `std::tie`, but it also accepts proxies that are returned by value (like
 // `IdRef`), which `std::tie` cannot bind. Lvalues are stored as references,
 // proxies by value, other temporaries are rejected (see `TieElement`).
@@ -53,5 +41,14 @@ constexpr auto tie(Ts&&... args) {
   return std::tuple<TieElement<Ts>...>(std::forward<Ts>(args)...);
 }
 
+// Like `tie(row[I]...)`, but the indices come from a compile-time
+// sequence (`std::index_sequence` or `ad_utility::ValueSequence`) instead of
+// being written out. Lvalues are tied by reference,
+// proxies that are returned by value are stored by value.
+template <typename Row, template <typename T, T...> typename Tp, size_t... I>
+constexpr auto tieElementsByIndexSequence(Row& row, Tp<size_t, I...>) {
+  return tie(row[I]...);
+}
+
 }  // namespace ad_utility
-#endif  // QLEVER_SRC_UTIL_TIEHELPER_H
+#endif  // QLEVER_SRC_UTIL_TIE_H

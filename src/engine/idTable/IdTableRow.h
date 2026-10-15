@@ -16,6 +16,7 @@
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/IsProxy.h"
 #include "util/Iterators.h"
 #include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
@@ -464,5 +465,9 @@ class RowReference
 };
 
 }  // namespace columnBasedIdTable
+
+template <typename Table, ad_utility::IsConst isConstTag>
+inline constexpr bool
+    qlever::isProxy<columnBasedIdTable::RowReference<Table, isConstTag>> = true;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H

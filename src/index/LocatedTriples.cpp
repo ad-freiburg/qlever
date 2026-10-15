@@ -18,10 +18,10 @@
 #include "index/Permutation.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Log.h"
-#include "util/TieHelper.h"
+#include "util/Tie.h"
 #include "util/ValueIdentity.h"
 
-using ad_utility::tieHelper;
+using ad_utility::tieElementsByIndexSequence;
 
 // ____________________________________________________________________________
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
@@ -118,7 +118,7 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
              typename T)(requires(numIndexColumns >= 1 &&
                                   numIndexColumns <=
                                       3)) auto tieIdTableRow(T& row) {
-  return tieHelper(
+  return tieElementsByIndexSequence(
       row, std::make_index_sequence<numIndexColumns +
                                     static_cast<size_t>(includeGraphColumn)>{});
 }
@@ -145,7 +145,7 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
                                   numIndexColumns <=
                                       3)) auto tieLocatedTripleValue(T& lt) {
   const auto& ids = lt.triple_.ids();
-  return tieHelper(
+  return tieElementsByIndexSequence(
       ids,
       ad_utility::toIntegerSequenceRef<
           tieLocatedTriplesIndices<numIndexColumns, includeGraphColumn>>());

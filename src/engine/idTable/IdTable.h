@@ -20,6 +20,7 @@
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/IsProxy.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
@@ -1021,6 +1022,17 @@ template <int COLS>
 inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
+
+// isProxy marks this Proxy references as Proxies,
+// so it can be recognized in some helper-functions as proxies
+template <>
+inline constexpr bool qlever::isProxy<IdTable::row_reference_restricted> = true;
+template <>
+inline constexpr bool qlever::isProxy<IdTable::const_row_reference_restricted> =
+    true;
+template <>
+inline constexpr bool
+    qlever::isProxy<IdTable::const_row_reference_view_restricted> = true;
 
 // Type aliases for the columns of an `IdTable`: a mutable view, a read-only
 // view, and an owning column. Currently just aliases for `ql::span<Id>`,

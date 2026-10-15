@@ -20,7 +20,7 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "index/DeltaTriples.h"
-#include "util/TieHelper.h"
+#include "util/Tie.h"
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
