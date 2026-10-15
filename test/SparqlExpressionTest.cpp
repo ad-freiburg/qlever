@@ -686,6 +686,13 @@ TEST(SparqlExpression, numericNonNumericFallback) {
   testNaryExpression(makeTestTernaryAddExpression,
                      V<Id>{{D(3.5), D(4.0), D(2.5), D(1.5), U, U, U}, alloc},
                      input, I(1), D(0.5));
+  // Raw access also supports literal constants and mixed representation types.
+  testMultiply(U, Voc(4), IdOrLocalVocabEntry{lit("not numeric")});
+  testMultiply(V<Id>{{U, U, U, U, U, U, U}, alloc}, input,
+               IdOrLocalVocabEntry{lit("not numeric")});
+  testNaryExpression(makeTestTernaryAddExpression,
+                     V<Id>{{U, U, U, U, U, U, U}, alloc}, input,
+                     IdOrLocalVocabEntry{lit("not numeric")}, I(1));
   testMultiply(U, Voc(4), I(2));
   testMultiply(V<Id>{{U, U, U, U, U, U, U}, alloc}, input, Voc(4));
   testNaryExpression(makeAbsExpression, U, Voc(4));

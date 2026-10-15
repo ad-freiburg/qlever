@@ -104,13 +104,10 @@ ExpressionResult evaluateBinaryOperationOnVectorOrConstant(
     ad_utility::chunkedForLoop<1000>(
         0, context->size(),
         [&](size_t i) {
-          if constexpr (supportsNumericFastPathOperand<Left>() &&
-                        supportsNumericFastPathOperand<Right>()) {
-            if (hasNonNumericOperand<Function, ValueGetters>(
-                    getIdAt(left, i), getIdAt(right, i))) {
-              result.push_back(Id::makeUndefined());
-              return;
-            }
+          if (hasNonNumericOperand<Function, ValueGetters>(
+                  getValueAt(left, i), getValueAt(right, i))) {
+            result.push_back(Id::makeUndefined());
+            return;
           }
           result.push_back(function(getLeft(i), getRight(i)));
         },

@@ -64,9 +64,10 @@ struct MakeNumericExpression {
   }
 };
 
-// Only this wrapper guarantees that every NotNumeric argument yields UNDEF.
-// Keep this opt-in independent of eligibility for primitive numeric execution:
-// date-aware arithmetic, for example, also supports numeric fast paths.
+// If true, `Function` always returns an undefined ID when any argument is
+// non-numeric. This property is opt-in and independent of
+// `supportsNumericFastPath`: date-aware operations also support homogeneous
+// numeric execution, but can return defined results for non-numeric dates.
 template <typename Function>
 inline constexpr bool undefForNonNumeric = false;
 
@@ -74,10 +75,12 @@ template <typename Function, bool NanOrInfToUndef>
 inline constexpr bool
     undefForNonNumeric<MakeNumericExpression<Function, NanOrInfToUndef>> = true;
 
-// Check raw IDs before invoking any value getter. NumericValueGetter currently
-// accepts booleans as integers; they must still go through numeric evaluation.
-// Other getters (especially NumericOrDateValueGetter) are deliberately
-// excluded.
+// Return true if an argument is a raw ID with an unsupported numeric datatype,
+// its getter is NumericValueGetter, and Function opts into undefForNonNumeric.
+// This allows evaluation to return UNDEF before applying the value getters.
+// NumericValueGetter accepts booleans as integers, so they are not rejected.
+// Other getters and non-ID arguments return false; in particular, date-aware
+// getters must retain their own handling of non-numeric dates.
 template <typename Function, typename ValueGetters, typename... Values>
 bool hasNonNumericOperand(const Values&... values) {
   return [&]<size_t... I>(std::index_sequence<I...>) {

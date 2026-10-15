@@ -192,13 +192,12 @@ class NaryExpressionStronglyTyped
       // Reject known unsupported numeric inputs before invoking the indexed
       // getters. Otherwise pass the converted values to the N-ary function.
       auto computeValue = [&](size_t i) {
-        if constexpr (useNumericFastPath &&
-                      undefForNonNumeric<typename NaryOperation::Function>) {
+        if constexpr (undefForNonNumeric<typename NaryOperation::Function>) {
           const bool nonNumeric = std::apply(
               [i](const auto&... values) {
                 return hasNonNumericOperand<typename NaryOperation::Function,
                                             ValueGetters>(
-                    homogeneousNumeric::getIdAt(values, i)...);
+                    getValueAt(values, i)...);
               },
               convertedOperands);
           if (nonNumeric) {
