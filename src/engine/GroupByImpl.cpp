@@ -494,15 +494,16 @@ GroupByImpl::makeTreeWithStrippedColumns(
 
   // Add the variables needed to compute requested aliases to
   // `varsRequiredFromSubtree`. Keep only aliases whose targets are requested.
-  auto neededAliases =
+  auto requestedAliases =
       _aliases | ql::views::filter([&requestedVariables](const Alias& alias) {
-        return requestedVariables.contains(alias._target);
+        return requestedVariables.find(alias._target) !=
+               requestedVariables.end();
       }) |
       ::ranges::to_vector;
 
   // Add the variables needed to compute the requested aliases
   // to `varsRequiredFromSubtree`.
-  for (const auto& alias : neededAliases) {
+  for (const auto& alias : requestedAliases) {
     for (const Variable* aliasVar : alias._expression.containedVariables()) {
       varsRequiredFromSubtree.add(*aliasVar);
     }
