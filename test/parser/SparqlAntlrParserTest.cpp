@@ -2089,9 +2089,11 @@ TEST(ParserTest, strictInlineWktForGeoFunctions) {
   auto invalid = "\"LINESTRING(1 2, 3 a)\"^^geo:wktLiteral"s;
   auto invalidPoint = "\"POINT(1 a)\"^^geo:wktLiteral"s;
   auto fails = ::testing::HasSubstr("Invalid WKT literal");
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::throwOnInvalidWkt_>(true);
 
-  // Inline WKT literals passed to a geo function directly or via `VALUES` in
-  // the same group are parsed strictly.
+  // With `throw-on-invalid-wkt`, inline WKT literals passed to a geo function
+  // directly or via `VALUES` in the same group are parsed strictly.
   for (const auto& wkt : {valid, empty}) {
     EXPECT_NO_THROW(
         parse(absl::StrCat("FILTER geof:sfIntersects(?g, ", wkt, ")")));
@@ -2125,4 +2127,13 @@ TEST(ParserTest, strictInlineWktForGeoFunctions) {
     EXPECT_NO_THROW(parse(absl::StrCat(
         "{ VALUES ?p { ", wkt, " } } FILTER geof:sfIntersects(?g, ?p)")));
   }
+
+  // Without `throw-on-invalid-wkt` (the default), invalid inline WKT literals
+  // are no error during parsing (the geo functions evaluate to UNDEF instead).
+  auto cleanupOff =
+      setRuntimeParameterForTest<&RuntimeParameters::throwOnInvalidWkt_>(false);
+  EXPECT_NO_THROW(
+      parse(absl::StrCat("FILTER geof:sfIntersects(?g, ", invalid, ")")));
+  EXPECT_NO_THROW(parse(absl::StrCat("VALUES ?p { ", invalid,
+                                     " } FILTER geof:sfIntersects(?g, ?p)")));
 }

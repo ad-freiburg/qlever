@@ -169,8 +169,9 @@ class SparqlQleverVisitor {
   ad_utility::HashSet<std::string> allBlankNodeLabels_{};
   ad_utility::HashSet<std::string> blankNodeLabelsInCurrentBasicGraphPattern_{};
 
-  // WKT literals that are given inline in the query and passed to a geo
-  // function are parsed strictly (invalid WKT is an error). This also applies
+  // If the runtime parameter `throw-on-invalid-wkt` is set, WKT literals that
+  // are given inline in the query and passed to a geo function are parsed
+  // strictly (invalid WKT is an error). This also applies
   // to `VALUES` in the same group as the geo function, so we remember the
   // variables passed to geo functions in the current group.
   ad_utility::HashSet<Variable> geoFunctionArgVariables_{};

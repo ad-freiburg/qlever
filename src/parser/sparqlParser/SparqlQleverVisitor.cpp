@@ -66,8 +66,6 @@ constexpr ctll::fixed_string iriSchemeRegex = "<[A-Za-z]*[A-Za-z0-9+-.]:";
 
 // Return true iff `lit` is a WKT literal that is invalid according to the
 // strict WKT parsing mode.
-// TODO<ullingerc> The geometry is parsed a second time (leniently) during
-// query evaluation. Use the strict parsing mode there instead.
 bool isInvalidWkt(const ad_utility::triple_component::Literal& lit) {
   return lit.hasDatatype() &&
          asStringViewUnsafe(lit.getDatatype()) == GEO_WKT_LITERAL &&
@@ -208,6 +206,11 @@ std::string Visitor::currentTimeAsXsdString() {
 // ___________________________________________________________________________
 void Visitor::checkGeoFunctionArgs(const std::vector<ExpressionPtr>& args,
                                    const antlr4::ParserRuleContext* ctx) {
+  // Without the runtime parameter, invalid WKT literals are not an error here,
+  // but only make the geo function evaluate to UNDEF.
+  if (!getRuntimeParameter<&RuntimeParameters::throwOnInvalidWkt_>()) {
+    return;
+  }
   for (const auto& arg : args) {
     if (auto var = arg->getVariableOrNullopt()) {
       geoFunctionArgVariables_.insert(std::move(var).value());
@@ -224,6 +227,10 @@ void Visitor::checkGeoFunctionArgs(const std::vector<ExpressionPtr>& args,
 // ___________________________________________________________________________
 void Visitor::checkWktInValues(const std::vector<GraphPatternOperation>& ops,
                                const antlr4::ParserRuleContext* ctx) const {
+  // Always empty if the runtime parameter `throw-on-invalid-wkt` is not set.
+  if (geoFunctionArgVariables_.empty()) {
+    return;
+  }
   for (const auto& op : ops) {
     const auto* values = std::get_if<Values>(&op);
     if (values == nullptr) {
