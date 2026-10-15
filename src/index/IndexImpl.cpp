@@ -42,7 +42,9 @@
 #endif
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/CancellationHandle.h"
+#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/FilesystemHelpers.h"
+#include "util/GlobalExecutor.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -838,10 +840,10 @@ std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
 // _____________________________________________________________________________
 CompressedRelationWriter::WriterAndCallback IndexImpl::getWriterAndCallback(
     IndexMetaData& metaData, size_t numColumns, const std::string& fileName,
-    std::optional<size_t> numWriterThreads) const {
+    qlever::Executor executor) const {
   auto writer = std::make_unique<CompressedRelationWriter>(
       numColumns, ad_utility::File(fileName, "w"), rowsPerBlock_,
-      numWriterThreads);
+      std::move(executor));
 
   auto callback =
       liftCallback([&metaData](const auto& md) { metaData.add(md); });
@@ -858,11 +860,11 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
                                      Permutation::KeyOrder permutation,
                                      Callbacks&&... perTripleCallbacks) {
   IndexMetaData metaData1;
-  auto writerAndCallback1 =
-      getWriterAndCallback(metaData1, numColumns, fileName1);
+  auto writerAndCallback1 = getWriterAndCallback(
+      metaData1, numColumns, fileName1, ad_utility::globalExecutor());
   IndexMetaData metaData2;
-  auto writerAndCallback2 =
-      getWriterAndCallback(metaData2, numColumns, fileName2);
+  auto writerAndCallback2 = getWriterAndCallback(
+      metaData2, numColumns, fileName2, ad_utility::globalExecutor());
 
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
@@ -882,10 +884,10 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
 std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
     size_t numColumns, const std::string& fileName,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    std::optional<size_t> numWriterThreads) {
+    qlever::Executor executor) {
   IndexMetaData metaData;
   auto writerAndCallback =
-      getWriterAndCallback(metaData, numColumns, fileName, numWriterThreads);
+      getWriterAndCallback(metaData, numColumns, fileName, std::move(executor));
 
   // We can always supply the tables with the correct permutation. No need to
   // re-order everything.
@@ -934,19 +936,20 @@ void IndexImpl::writeMetaData(IndexMetaData& metaData,
 std::pair<size_t, IndexMetaData> IndexImpl::createPermutationWithoutMetadata(
     size_t numColumns,
     ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
-    const Permutation& permutation, bool internal) {
+    const Permutation& permutation, bool internal, qlever::Executor executor) {
   AD_LOG_INFO << "Creating permutation " << permutation.readableName() << " ..."
               << std::endl;
   std::string fileName = getFilenameForPermutation(permutation, internal);
   // This function is only used by the runtime index rebuild (see
   // `IndexRebuilder`), which by default throttles the compress/write threads
   // of its permutation writers so that a rebuild on a live server leaves most
-  // of the CPU to concurrent queries. A value of 0 means "fall back to
-  // `permutation-writer-num-threads`".
-  auto numWriterThreads = getRuntimeParameterAsOptional<
-      &RuntimeParameters::rebuildPermutationWriterNumThreads_>();
+  // of the CPU to concurrent queries. A value of 0 means "no limit".
   auto metaData = createPermutationImpl(
-      numColumns, fileName, std::move(sortedTriples), numWriterThreads);
+      numColumns, fileName, std::move(sortedTriples),
+      ad_utility::makeConcurrencyLimitedExecutor(
+          std::move(executor),
+          getRuntimeParameterAsOptional<
+              &RuntimeParameters::rebuildPermutationWriterNumThreads_>()));
 
   auto& [numDistinctCol0, meta] = metaData;
   meta.calculateStatistics(numDistinctCol0);
@@ -1119,7 +1122,7 @@ bool IndexImpl::mayContainGeoPoints() const {
       {BlockMetadataRange{block, block + 1}}};
   auto objects = osp_->scan(
       blockOnly, {}, std::make_shared<ad_utility::CancellationHandle<>>(),
-      *locatedTriplesState);
+      *locatedTriplesState, ad_utility::globalExecutor());
   return ql::ranges::any_of(objects.getColumn(0), [](Id id) {
     return id.getDatatype() == Datatype::GeoPoint;
   });
@@ -2251,27 +2254,29 @@ namespace {
 template <typename CustomAction>
 std::packaged_task<void()> computeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState, size_t& counter,
-    const Permutation& permutation, CustomAction customAction,
-    const std::function<void(size_t)>& progress) {
+    const Permutation& permutation, qlever::Executor executor,
+    CustomAction customAction, const std::function<void(size_t)>& progress) {
   return std::packaged_task<void()>{[&counter, &permutation,
-                                     &locatedTriplesSharedState, progress,
-                                     customAction = std::move(customAction)]() {
+                                     &locatedTriplesSharedState,
+                                     executor = std::move(executor), progress,
+                                     customAction =
+                                         std::move(customAction)]() mutable {
     auto cancellationHandle =
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
     ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
     std::array<ColumnIndex, 1> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
     // The statistics are only recomputed as part of a runtime index rebuild
     // (see `IndexRebuilder`), so this scan is also throttled by
-    // `rebuild-index-scan-num-blocks-in-flight` (several permutations are
+    // `rebuild-index-scan-num-threads` (several permutations are
     // scanned in parallel, so without the throttle this short phase has a high
-    // peak CPU). A value of 0 means "fall back to
-    // `lazy-index-scan-num-blocks-in-flight`".
-    auto numBlocksInFlightOverride = getRuntimeParameterAsOptional<
-        &RuntimeParameters::rebuildIndexScanNumBlocksInFlight_>();
+    // peak CPU). A value of 0 means "no limit".
     auto [reader, tables] = permutation.lazyScanWithUnlimitedReader(
         permutation.getScanSpecAndBlocks(scanSpec, *locatedTriplesSharedState),
         additionalColumns, cancellationHandle, *locatedTriplesSharedState,
-        numBlocksInFlightOverride);
+        ad_utility::makeConcurrencyLimitedExecutor(
+            std::move(executor),
+            getRuntimeParameterAsOptional<
+                &RuntimeParameters::rebuildIndexScanNumThreads_>()));
     std::optional<Id> lastCol0 = std::nullopt;
     for (const auto& table : tables) {
       std::invoke(customAction, table);
@@ -2285,6 +2290,7 @@ std::packaged_task<void()> computeStatistics(
 // _____________________________________________________________________________
 nlohmann::json IndexImpl::recomputeStatistics(
     const LocatedTriplesSharedState& locatedTriplesSharedState,
+    qlever::Executor executor,
     const std::function<void(size_t)>& progress) const {
   size_t numTriples = 0;
   size_t numTriplesInternal = 0;
@@ -2295,11 +2301,11 @@ nlohmann::json IndexImpl::recomputeStatistics(
 
   std::vector<std::packaged_task<void()>> tasks;
 
-  auto getCounterTask = [&locatedTriplesSharedState, &progress](
+  auto getCounterTask = [&locatedTriplesSharedState, &executor, &progress](
                             size_t& counter, const Permutation& permutation,
                             auto customAction) {
     return computeStatistics(locatedTriplesSharedState, counter, permutation,
-                             customAction, progress);
+                             executor, customAction, progress);
   };
 
   tasks.push_back(getCounterTask(

@@ -206,20 +206,23 @@ TEST(AtomicFlagTest, ConcurrentClearAndTestAndSet) {
   std::atomic<bool> stop{false};
   std::atomic<int> set_count{0};
 
+  // Each thread runs at least one iteration, even if it only starts after
+  // `stop` was set. As the flag is initially clear, the first `test_and_set`
+  // then always succeeds.
   auto setter = [&]() {
-    while (!stop.load(std::memory_order_relaxed)) {
+    do {
       if (!flag.test_and_set()) {
         set_count.fetch_add(1);
       }
       std::this_thread::sleep_for(1ms);
-    }
+    } while (!stop.load(std::memory_order_relaxed));
   };
 
   auto clearer = [&]() {
-    while (!stop.load(std::memory_order_relaxed)) {
+    do {
       flag.clear();
       std::this_thread::sleep_for(1ms);
-    }
+    } while (!stop.load(std::memory_order_relaxed));
   };
 
   std::thread t1(setter);
@@ -354,9 +357,13 @@ TEST(AtomicFlagTest, StressTest) {
   ql::backports::atomic_flag flag;
   std::atomic<bool> stop{false};
   std::atomic<int> operations{0};
+  constexpr int minOperations = 1000;
 
+  // The workers also keep going until `minOperations` is exceeded, so that
+  // this is reached even if the threads only start after `stop` was set.
   auto worker = [&]() {
-    while (!stop.load(std::memory_order_relaxed)) {
+    while (!stop.load(std::memory_order_relaxed) ||
+           operations.load(std::memory_order_relaxed) <= minOperations) {
       flag.test_and_set();
       operations.fetch_add(1, std::memory_order_relaxed);
       flag.clear();
@@ -379,7 +386,7 @@ TEST(AtomicFlagTest, StressTest) {
   }
 
   // Should have performed many operations
-  EXPECT_GT(operations.load(), 1000);
+  EXPECT_GT(operations.load(), minOperations);
 }
 
 // _____________________________________________________________________________
