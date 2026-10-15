@@ -477,6 +477,29 @@ TEST(GeometryInfoTest, GeometryTypeAsIri) {
   ASSERT_FALSE(GeometryType{8}.asIri().has_value());
 }
 
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, CrsTypeAsIri) {
+  ASSERT_FALSE(SourceCrsType{util::geo::CRSType::UNSUPPORTED}.asIri().value());
+  ASSERT_EQ(SourceCrsType{util::geo::CRSType::CRS84}.asIri().value(),
+            "http://www.opengis.net/def/crs/OGC/1.3/CRS84");
+  ASSERT_EQ(SourceCrsType{util::geo::CRSType::WGS84}.asIri().value(),
+            "http://www.opengis.net/def/crs/EPSG/0/4326");
+  ASSERT_EQ(SourceCrsType{util::geo::CRSType::WEB_MERCATOR}.asIri().value(),
+            "http://www.opengis.net/def/crs/EPSG/0/3857");
+  ASSERT_FALSE(SourceCrsType{4}.asIri().has_value());
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, getSourceCrsTypeFromWkt) {
+  ASSERT_FALSE(getSourceCrsType(litUnsupportedCrsIri));
+  ASSERT_EQ(getSourceCrsType(litPoint),
+            SourceCrsType{util::geo::CRSType::CRS84});
+  ASSERT_EQ(getSourceCrsType(litPointWGS84),
+            SourceCrsType{util::geo::CRSType::WGS84});
+  ASSERT_EQ(getSourceCrsType(litPointWebMerc),
+            SourceCrsType{util::geo::CRSType::WEB_MERCATOR});
+}
+
 namespace {
 constexpr std::string_view example = "Example";
 }
