@@ -349,13 +349,11 @@ TEST(GeometryInfoTest, IsValidWktStrict) {
     EXPECT_FALSE(GeometryInfo::isValidWktStrict(lit)) << lit;
   }
 
-  // The lenient (default) mode skips the invalid coordinate.
-  EXPECT_THAT(GeometryInfo::getNumGeometries(litInvalidCoord),
-              ::testing::Optional(NumGeometries{1}));
-  EXPECT_TRUE(GeometryInfo::fromWktLiteral(litInvalidCoord).has_value());
-  EXPECT_FALSE(GeometryInfo::fromWktLiteral(litInvalidCoord, true).has_value());
-  EXPECT_GEOMETRYINFO(GeometryInfo::fromWktLiteral(litPolygon, true),
-                      GeometryInfo::fromWktLiteral(litPolygon));
+  // All geometry computations use the strict mode, so they don't skip the
+  // invalid coordinate (as the lenient mode would), but yield no result.
+  EXPECT_EQ(GeometryInfo::getNumGeometries(litInvalidCoord), std::nullopt);
+  EXPECT_EQ(GeometryInfo::fromWktLiteral(litInvalidCoord), std::nullopt);
+  EXPECT_EQ(GeometryInfo::getBoundingBox(litInvalidCoord), std::nullopt);
 }
 
 // ____________________________________________________________________________

@@ -88,9 +88,8 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
       for (size_t i = 0; i < testLiterals.size(); i++) {
         ASSERT_EQ(geoVocab[i], testLiterals[i]);
         ASSERT_EQ(geoVocab.getUnderlyingVocabulary()[i], testLiterals[i]);
-        EXPECT_GEOMETRYINFO(
-            geoVocab.getGeoInfo(i),
-            GeometryInfo::fromWktLiteral(testLiterals[i], true));
+        EXPECT_GEOMETRYINFO(geoVocab.getGeoInfo(i),
+                            GeometryInfo::fromWktLiteral(testLiterals[i]));
       }
     };
 
@@ -104,7 +103,6 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
               "\"LINESTRING(1 1, 2 a, 3 3)\""
               "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
     EXPECT_FALSE(geoVocab.getGeoInfo(leniencyIdx.index()).has_value());
-    EXPECT_TRUE(GeometryInfo::fromWktLiteral(leniencyIdx.word()).has_value());
 
     // Test further methods
     ASSERT_EQ(geoVocab.size(), testLiterals.size());

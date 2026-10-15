@@ -56,19 +56,10 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
 }
 
 // ____________________________________________________________________________
-std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt,
-                                                         bool strict) {
+std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   // Parse WKT and compute info
   using namespace detail;
-  std::optional<ParseResult> parseResult;
-  try {
-    parseResult = parseWkt(wkt, defaultCrs, strict);
-  } catch (const WKTParseException& error) {
-    AD_LOG_DEBUG << "Invalid WKT literal `" << wkt << "`: " << error.what()
-                 << std::endl;
-    return std::nullopt;
-  }
-  auto& [parsed, wktType, crsType, sourceCrs] = parseResult.value();
+  auto [parsed, wktType, crsType, sourceCrs] = parseWkt(wkt);
   if (!parsed.has_value()) {
     return std::nullopt;
   }
@@ -119,7 +110,7 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
 // ____________________________________________________________________________
 bool GeometryInfo::isValidWktStrict(std::string_view wkt) {
   try {
-    detail::parseWkt(wkt, detail::defaultCrs, true);
+    detail::parseWktOrThrow(wkt);
     return true;
   } catch (const ::util::geo::WKTParseException&) {
     return false;

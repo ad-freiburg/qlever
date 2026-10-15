@@ -212,10 +212,8 @@ class GeometryInfo {
   GeometryInfo& operator=(const GeometryInfo& other) = default;
 
   // Parse an arbitrary WKT literal and compute all attributes. Return
-  // `std:nullopt` if `wkt` cannot be parsed. If `strict` is set, invalid WKT
-  // is not parsed leniently, but also yields `std::nullopt`.
-  static std::optional<GeometryInfo> fromWktLiteral(std::string_view wkt,
-                                                    bool strict = false);
+  // `std:nullopt` if `wkt` cannot be parsed (in the strict parsing mode).
+  static std::optional<GeometryInfo> fromWktLiteral(std::string_view wkt);
 
   // Check if `wkt` (a WKT literal with quotes and datatype) is valid according
   // to the strict parsing mode of `pb_util`. This is a purely syntactic check.
