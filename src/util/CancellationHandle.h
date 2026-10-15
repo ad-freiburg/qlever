@@ -134,9 +134,15 @@ static_assert(std::atomic<CancellationState>::is_always_lock_free);
 template <detail::CancellationMode Mode = detail::CANCELLATION_MODE>
 class CancellationHandle : public NoCopy {
  public:
-  // Run `task` once after `delay`, never synchronously inside the call. Every
-  // call but the first is made from inside the previous `task`, so the calls
-  // never overlap.
+  // Wait asynchronously (in the background, without blocking the caller) for
+  // `delay`, then run `task` once. The watchdog uses this to implement an
+  // asynchronous background loop that checks the cancellation state
+  // repeatedly: every call but the first is made from inside the previous
+  // `task`, so the calls never overlap.
+  //
+  // NOTE: An implementation must return immediately and must never run `task`
+  // synchronously inside the call. Otherwise the watchdog loop turns into an
+  // infinite recursion that never returns control to the caller.
   using RunAfter = absl::AnyInvocable<void(std::chrono::milliseconds delay,
                                            absl::AnyInvocable<void()> task)>;
 
