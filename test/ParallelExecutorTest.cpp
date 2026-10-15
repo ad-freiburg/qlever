@@ -285,6 +285,24 @@ TEST(ComputeInParallelChunks, exceptionInChunkIsPropagated) {
       ::testing::StrEq("Error in the first chunk"), std::runtime_error);
 }
 
+// Test that when every chunk throws, one of the exceptions is rethrown, and
+// only after all tasks have finished (the exception of the first task is
+// caught while the second task may still be running).
+TEST(ComputeInParallelChunks, exceptionInEveryChunkIsPropagated) {
+  // Two chunks on two tasks, both of which throw.
+  std::atomic<size_t> numThrown = 0;
+  auto computeChunk = [&numThrown](Chunks&, size_t begin, size_t) {
+    ++numThrown;
+    throw std::runtime_error{absl::StrCat("Error in chunk ", begin)};
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      ad_utility::computeInParallelChunks(executor(), 2, 1, computeChunk, 2),
+      ::testing::StartsWith("Error in chunk "), std::runtime_error);
+
+  // Both tasks have run (and thrown) before the function returned.
+  EXPECT_EQ(numThrown.load(), 2u);
+}
+
 // _____________________________________________________________________________
 TEST(ComputeInParallelChunks, chunksRunInParallel) {
   // The `executor` has more threads than this.
