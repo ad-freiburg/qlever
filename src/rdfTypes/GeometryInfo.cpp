@@ -101,7 +101,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
 GeometryType::GeometryType(uint8_t type) : type_{type} {}
 
 // ____________________________________________________________________________
-SourceCrsType::SourceCrsType(uint32_t type) : type_{type} {}
+SourceCrsType::SourceCrsType(uint16_t type) : type_{type} {}
 
 // ____________________________________________________________________________
 MetricLength::MetricLength(double length) : length_{length} {

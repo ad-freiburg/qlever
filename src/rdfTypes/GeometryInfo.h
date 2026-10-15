@@ -97,16 +97,16 @@ struct SourceCrsType {
  private:
   // The default (for the C++17 default constructor) is CRS84, the value of
   // `util::geo::CRSType::CRS84` (the util is not included in this header).
-  uint32_t type_ = 1;
+  uint16_t type_ = 1;
 
  public:
-  explicit SourceCrsType(uint32_t type);
+  explicit SourceCrsType(uint16_t type);
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Required for `bit_cast`.
   SourceCrsType() = default;
 #endif
 
-  uint32_t type() const { return type_; }
+  uint16_t type() const { return type_; }
 
   // Returns the representing IRI.
   std::optional<std::string_view> asIri() const;
