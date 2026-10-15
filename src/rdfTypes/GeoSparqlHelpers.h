@@ -81,6 +81,11 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 // quotation marks nor a datatype yet.
 std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance);
 
+// Convert a geometry to a GeoJSON geometry object. The returned string has
+// neither quotation marks nor a datatype yet. The coordinates of a `GeoPoint`
+// are rounded to the six decimals of its WKT export.
+std::optional<std::string> wktToGeoJson(const GeoPointOrWkt& wkt);
+
 const auto wktLiteralIri =
     triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
 
@@ -301,6 +306,24 @@ class WktSimplify {
     auto lit = Literal::literalWithoutQuotes(resultWkt.value());
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{std::move(lit)}};
+  }
+};
+
+// Convert a geometry to a GeoJSON literal (`geof:asGeoJSON`).
+class WktAsGeoJson {
+ public:
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<GeoPointOrWkt>& geom) const {
+    using namespace triple_component;
+    if (!geom.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    auto geoJson = detail::wktToGeoJson(geom.value());
+    if (!geoJson.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return {LiteralOrIri{Literal::literalWithoutQuotes(
+        geoJson.value(), Iri::fromIrirefWithoutBrackets(GEO_JSON_LITERAL))}};
   }
 };
 

@@ -347,6 +347,8 @@ addLinkAndDiscoverTest(TaskQueueTest)
 
 addLinkAndDiscoverTest(TaskQueueOnExecutorTest)
 
+addLinkAndDiscoverTest(ConcurrencyLimitedExecutorTest)
+
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
 addLinkAndDiscoverTestNoLibs(TypeTraitsTest)
@@ -577,7 +579,6 @@ addLinkAndDiscoverTestNoLibs(CancellationHandleTest qlever_util)
 
 addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 
-addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 
