@@ -18,10 +18,10 @@
 #include <tuple>
 #include <vector>
 
-#include "../parallelBlockMerge/InMemoryBlockStorage.h"
 #include "./vocabulary_merger/VocabularyMergerTestHelpers.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary_merger/PartialVocabularyFile.h"
+#include "util/parallelBlockMerge/InMemoryBlockStorage.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
@@ -92,6 +92,25 @@ TEST(PartialVocabularyFile, blockIndexAndBlocks) {
 
   PartialVocabularyRunsInput input{partialVocabBasename, 3};
   ASSERT_EQ(input.numRuns(), 3u);
+  // The statistics are the totals over all blocks of all partial vocabularies.
+  PartialVocabularyRunsInput::Statistics expectedStatistics;
+  for (size_t p = 0; p < 3; ++p) {
+    expectedStatistics.numBlocks_ += input.numBlocks(p);
+    for (size_t b = 0; b < input.numBlocks(p); ++b) {
+      expectedStatistics.numWords_ += input.numElementsInBlock(p, b);
+      expectedStatistics.numBytes_ += input.numBytesInBlock(p, b);
+    }
+  }
+  const auto statistics = input.statistics();
+  EXPECT_EQ(statistics.numBlocks_, expectedStatistics.numBlocks_);
+  EXPECT_EQ(statistics.numWords_, expectedStatistics.numWords_);
+  EXPECT_EQ(statistics.numBytes_, expectedStatistics.numBytes_);
+  const size_t totalNumWords =
+      words[0].size() + words[1].size() + words[2].size();
+  EXPECT_EQ(statistics.numWords_, totalNumWords);
+  EXPECT_GE(statistics.numBlocks_, 5u);
+  // The serialized form of a word takes at least 17 bytes plus the word.
+  EXPECT_GT(statistics.numBytes_, totalNumWords * 17);
   for (size_t p = 0; p < 3; ++p) {
     // The first partial vocabulary has all the words and hence spans several
     // blocks, the last one about a third of them.
@@ -244,10 +263,24 @@ TEST(PartialVocabularyFile, mergeBlockAccessorsAndBlockWeight) {
   block[0].isExternal() = true;
   EXPECT_TRUE(constBlock[0].isExternal());
 
-  // A cleared block is empty.
+  // A block can be moved (the words keep pointing into its storage), the
+  // moved-from block is empty.
+  MergeBlock moved{std::move(block)};
+  EXPECT_TRUE(block.empty());
+  ASSERT_EQ(moved.size(), 3u);
+  EXPECT_EQ(moved[1].iriOrLiteral(), "\"b\"");
+  block = std::move(moved);
+  EXPECT_TRUE(moved.empty());
+  ASSERT_EQ(block.size(), 3u);
+  EXPECT_EQ(block[2].iriOrLiteral(), "\"c\"");
+
+  // A cleared block is empty, and can be filled again.
   block.clear();
   EXPECT_TRUE(block.empty());
   EXPECT_EQ(block.size(), 0u);
+  block.push("\"d\"", false, 3, 10);
+  ASSERT_EQ(block.size(), 1u);
+  EXPECT_EQ(block[0].iriOrLiteral(), "\"d\"");
 
   // A partial vocabulary with two blocks. The weight of a block is its size in
   // bytes, and a block ends after the word that makes it at least
@@ -269,6 +302,37 @@ TEST(PartialVocabularyFile, mergeBlockAccessorsAndBlockWeight) {
   }
   auto firstBlock = input.getBlock(0, 0);
   EXPECT_EQ(firstBlock[0].iriOrLiteral(), words.front());
+}
+
+// Test that a buffer of a `BufferPool` that was taken for a word longer than
+// the capacity of the pool is shrunk back to the capacity when it is given
+// back, directly and through a `MergeBlock` with pools.
+TEST(PartialVocabularyFile, bufferPoolShrinksOversizedBuffers) {
+  using ad_utility::vocabulary_merger::detail::BufferPools;
+  constexpr size_t capacity = 32;
+  auto pools = std::make_shared<BufferPools>(capacity, capacity);
+  auto& pool = pools->mergedWords_;
+
+  auto large = pool.take(3 * capacity);
+  EXPECT_GE(large.capacity(), 3 * capacity);
+  pool.giveBack(std::move(large));
+  EXPECT_EQ(pool.take().capacity(), capacity);
+
+  // A block stores a word that is longer than the capacity in a buffer of its
+  // own, and the next word in a buffer of the capacity. Both go back to the
+  // pool when the block is destroyed, the larger one shrunk.
+  {
+    MergeBlock block{pools};
+    const std::string longWord(2 * capacity, 'x');
+    block.push(longWord, false, 0, 0);
+    block.push("\"a\"", false, 0, 1);
+    ASSERT_EQ(block.size(), 2u);
+    EXPECT_EQ(block[0].iriOrLiteral(), longWord);
+    EXPECT_EQ(block[1].iriOrLiteral(), "\"a\"");
+  }
+  for (size_t i = 0; i < 2; ++i) {
+    EXPECT_EQ(pool.take().capacity(), capacity);
+  }
 }
 
 // Test that a second `finish` of a `PartialVocabularyWriter` does nothing and

@@ -172,10 +172,12 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         break;
     }
   } catch (const WKTParseException&) {
-    // Only thrown in strict mode: report invalid WKT to the caller. If this is
-    // ever thrown in non-strict mode (e.g. after a change in `pb_util`), the
-    // check gives an error message pointing to the violated invariant instead
-    // of an unrelated parse error escaping from here.
+    // Report invalid WKT to the caller.
+    //
+    // NOTE: `pb_util` throws this exception only in strict mode. Should a
+    // future version throw it in lenient mode too, the check makes that
+    // visible instead of silently treating it like any other parse error
+    // in the handler below.
     AD_CORRECTNESS_CHECK(strict);
     throw;
   } catch (const std::runtime_error& error) {

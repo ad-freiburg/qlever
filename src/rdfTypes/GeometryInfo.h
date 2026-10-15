@@ -218,7 +218,12 @@ class GeometryInfo {
                                                     bool strict = false);
 
   // Check if `wkt` (a WKT literal with quotes and datatype) is valid according
-  // to the strict parsing mode of `pb_util`.
+  // to the strict parsing mode of `pb_util`. This is a purely syntactic check.
+  //
+  // NOTE: A valid literal does not necessarily yield a geometry in
+  // `fromWktLiteral`. In particular, `EMPTY` geometries (except `POINT EMPTY`,
+  // which the strict mode rejects), an unsupported CRS IRI, and coordinates
+  // out of range are all valid.
   static bool isValidWktStrict(std::string_view wkt);
 
   // Create geometry info for a GeoPoint object.
