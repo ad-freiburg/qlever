@@ -275,18 +275,18 @@ TEST(GeometryInfoValueGetterTest, LenientOnlyWkt) {
   };
   // The literal is parsed strictly, both when building the `GeoVocabulary` and
   // when there is no precomputed geometry info, so the geometry is invalid.
-  EXPECT_FALSE(
-      getGeoInfo(ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit)
-          .has_value());
-  EXPECT_FALSE(getGeoInfo(ad_utility::VocabularyType::Enum::OnDiskCompressed)
-                   .has_value());
+  EXPECT_EQ(
+      getGeoInfo(ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
+      std::nullopt);
+  EXPECT_EQ(getGeoInfo(ad_utility::VocabularyType::Enum::OnDiskCompressed),
+            std::nullopt);
   // The same holds for a literal that is not in the vocabulary.
-  EXPECT_FALSE(
+  EXPECT_EQ(
       Getter{}(
           ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
               std::string{lit}),
-          nullptr)
-          .has_value());
+          nullptr),
+      std::nullopt);
 }
 
 // _____________________________________________________________________________
