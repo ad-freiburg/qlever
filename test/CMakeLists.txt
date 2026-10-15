@@ -651,7 +651,7 @@ addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
-addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
+addLinkAndDiscoverTest(ParallelExecutorTest)
 
 addLinkAndDiscoverTestNoLibs(IoUringManagerTest qlever_util)
 
