@@ -19,8 +19,61 @@
 #include "util/GeoConverters.h"
 #include "util/HashMap.h"
 #include "util/Timer.h"
+#include "util/Views.h"
 
 using namespace geometryConverters;
+
+namespace {
+using S2Queries = std::vector<std::unique_ptr<S2ClosestEdgeQuery>>;
+
+// Return one query object for each segment of the `geoIndex` (in the same
+// order), which finds all edges within `maxDistInMeters`. The query objects can
+// be reused for many targets.
+S2Queries makeQueriesForAllSegments(const SpatialJoinCachedIndex& geoIndex,
+                                    double maxDistInMeters) {
+  S2Queries queries;
+  queries.reserve(geoIndex.numSegments());
+  for (const auto& segment : geoIndex.segments()) {
+    auto& query = *queries.emplace_back(
+        std::make_unique<S2ClosestEdgeQuery>(segment.get()));
+    query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
+        util::units::Meters(static_cast<float>(maxDistInMeters))));
+  }
+  return queries;
+}
+
+// Return all rows of the `geoIndex` whose shape is within the maximal distance
+// of the `queries` (see `makeQueriesForAllSegments`) from the `target`,
+// together with that distance in km. If several edges of the shape of a row are
+// within the maximal distance, the smallest distance is returned. Shapes that
+// no row refers to anymore are skipped.
+ad_utility::HashMap<size_t, double> findRowsWithinDistance(
+    const SpatialJoinCachedIndex& geoIndex, const S2Queries& queries,
+    S2ClosestEdgeQuery::PointTarget& target) {
+  ad_utility::HashMap<size_t, double> result;
+  auto addNeighbor = [&geoIndex, &result](
+                         size_t segment,
+                         const S2ClosestEdgeQuery::Result& neighbor) {
+    auto row = geoIndex.getRow(segment, neighbor.shape_id());
+    if (!row.has_value()) {
+      return;
+    }
+    auto dist = S2Earth::ToKm(neighbor.distance());
+    auto [it, isNew] = result.try_emplace(row.value(), dist);
+    if (!isNew) {
+      it->second = std::min(it->second, dist);
+    }
+  };
+  for (size_t segmentIdx : ad_utility::integerRange(queries.size())) {
+    // We only receive edges that already satisfy the given criteria.
+    for (const auto& neighbor :
+         queries[segmentIdx]->FindClosestEdges(&target)) {
+      addNeighbor(segmentIdx, neighbor);
+    }
+  }
+  return result;
+}
+}  // namespace
 
 // ____________________________________________________________________________
 Result S2PointPolylineAlgorithm::run() {
@@ -30,9 +83,11 @@ Result S2PointPolylineAlgorithm::run() {
   IdTable result{numColumns, qec_->getAllocator()};
 
   AD_CORRECTNESS_CHECK(config_.rightCacheName_.has_value());
-  auto s2index = qec_->namedResultCache()
-                     .get(config_.rightCacheName_.value())
-                     ->cachedGeoIndex_;
+  // The `cacheEntry` is a `shared_ptr` that keeps the `s2index` below alive.
+  // Binding the `s2index` by reference avoids copying the geo index.
+  auto cacheEntry =
+      qec_->namedResultCache().get(config_.rightCacheName_.value());
+  const auto& s2index = cacheEntry->cachedGeoIndex_;
   AD_CORRECTNESS_CHECK(s2index.has_value());
   AD_CORRECTNESS_CHECK(!config_.getMaxResults().has_value() &&
                        maxDist_.has_value());
@@ -40,14 +95,7 @@ Result S2PointPolylineAlgorithm::run() {
   // Construct one query object per segment of the index with the given
   // constraints. The query objects are reused for all points.
   const auto& geoIndex = s2index.value();
-  std::vector<std::unique_ptr<S2ClosestEdgeQuery>> s2queries;
-  s2queries.reserve(geoIndex.segments().size());
-  for (const auto& segment : geoIndex.segments()) {
-    auto& query = *s2queries.emplace_back(
-        std::make_unique<S2ClosestEdgeQuery>(segment.get()));
-    query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
-        util::units::Meters(static_cast<float>(maxDist_.value()))));
-  }
+  auto s2queries = makeQueriesForAllSegments(geoIndex, maxDist_.value());
 
   ad_utility::Timer timerAll{ad_utility::Timer::Started};
   ad_utility::Timer timerS2{ad_utility::Timer::Stopped};
@@ -61,21 +109,9 @@ Result S2PointPolylineAlgorithm::run() {
     }
     auto s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(p.value())};
 
-    ad_utility::HashMap<size_t, double> deduplicatedSet{};
     timerS2.cont();
-    for (size_t segment = 0; segment < s2queries.size(); ++segment) {
-      auto res = s2queries[segment]->FindClosestEdges(&s2target);
-      for (const auto& neighbor : res) {
-        // In this loop we only receive points that already satisfy the given
-        // criteria. Shapes that no row refers to anymore are skipped.
-        auto indexRow = geoIndex.getRow(segment, neighbor.shape_id());
-        if (!indexRow.has_value()) {
-          continue;
-        }
-        auto dist = S2Earth::ToKm(neighbor.distance());
-        deduplicatedSet[indexRow.value()] = dist;
-      }
-    }
+    auto deduplicatedSet =
+        findRowsWithinDistance(geoIndex, s2queries, s2target);
     timerS2.stop();
     timerWrite.cont();
     for (auto [indexRow, dist] : deduplicatedSet) {

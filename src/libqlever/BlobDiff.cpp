@@ -205,10 +205,13 @@ class DiffBuilder {
         b->sortedOnColumns_ == t.sortedOnColumns_) {
       auto baseColumns = idColumnsOf(base_, *b);
       auto targetColumns = idColumnsOf(target_, t);
-      if (isInCanonicalOrder(baseColumns, b->sortedOnColumns_) &&
-          isInCanonicalOrder(targetColumns, t.sortedOnColumns_)) {
+      if (canonicalRowOrder::isInCanonicalOrder(baseColumns,
+                                                b->sortedOnColumns_) &&
+          canonicalRowOrder::isInCanonicalOrder(targetColumns,
+                                                t.sortedOnColumns_)) {
         canMerge = true;
-        rowMapping = alignRows(baseColumns, targetColumns, t.sortedOnColumns_);
+        rowMapping = canonicalRowOrder::alignRows(baseColumns, targetColumns,
+                                                  t.sortedOnColumns_);
       }
     }
     for (size_t c = 0; c < t.columnPayloads_.size(); ++c) {

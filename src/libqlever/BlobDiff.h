@@ -30,7 +30,8 @@ namespace qlever {
 // blobs have identical metadata and main vocabulary, if the secondary
 // vocabulary of `target` extends the one of `base`, and if the named cache
 // entries of both blobs only differ by inserted and deleted rows (both tables
-// being in canonical order, see `isInCanonicalOrder`). Everything
+// being in canonical order, see `canonicalRowOrder::isInCanonicalOrder`).
+// Everything
 // else is inserted literally. In any case
 // `computeBlobDiff(...).apply(base) == target` holds.
 ad_utility::BinaryDiffApplier computeBlobDiff(ql::span<const char> base,
@@ -92,7 +93,7 @@ std::string describeBlobDiff(const ad_utility::BinaryDiffApplier& diff,
 
 namespace detail {
 // The marker for a target element that has no counterpart in the base.
-constexpr size_t noBaseRow = noMatchingRow;
+constexpr size_t noBaseRow = canonicalRowOrder::noMatchingRow;
 
 // For each element of `target` return the index of the element of `base` that
 // is equal to it, or `noBaseRow`. The matched elements are increasing and each

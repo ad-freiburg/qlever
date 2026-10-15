@@ -12,6 +12,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
+#include "engine/NamedResultCacheFormatVersion.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
 #include "util/Serializer/SerializeString.h"
@@ -24,20 +25,6 @@ namespace namedResultCacheSerializer::detail {
 // serialized `NamedResultCache`. Used by `readFromSerializer` to give a clear
 // error message when the input is not a serialized `NamedResultCache`.
 constexpr uint8_t magicByte = 0xC3;
-
-// The version of the (de)serialization format implemented below. Increment
-// this whenever the format changes in a way that is incompatible with
-// previously serialized data, s.t. `readFromSerializer` can detect and reject
-// data that was written by an incompatible version of QLever.
-//
-// Version 1 is the legacy format, whose geo index consists of the geometry
-// column, one encoded S2 index, and a hash map from shape ids to rows. It is
-// still read by `readFromSerializer`, but is only written if no entry has a geo
-// index (see `writeEntries`). Version 2 is the current format, whose geo index
-// is the segmented one that is written by `SpatialJoinCachedIndex::
-// writeToSerializer`. All other parts of the two formats are identical.
-constexpr uint16_t legacyFormatVersion = 1;
-constexpr uint16_t formatVersion = 2;
 }  // namespace namedResultCacheSerializer::detail
 
 namespace namedResultCacheSerializer {
@@ -48,11 +35,13 @@ using Value = NamedResultCache::Value;
 // `serializer`, in exactly the format that `readFromSerializer` reads. Each
 // value is written via `writeEntry(serializer, key, value)`, which has to write
 // a `NamedResultCache::Value`, but may write a modified version of it (see
-// `writeValue` below). The format version `entriesVersion` of the entries is
-// written, it is `detail::formatVersion` by default. Writing the legacy
-// `detail::legacyFormatVersion` is rejected if any of the entries has a geo
-// index, because it cannot be represented in that format. Note that
-// `writeEntry` has to write the values in the same `entriesVersion`.
+// `writeValue` below); the `key` is passed so that a caller can look up
+// information about the entry (for example its counterpart in a previously
+// written blob). The entries are written in the format version
+// `entriesVersion` (one of `legacyFormatVersion` and
+// `formatVersion`). Note that `writeEntry` has to write the values in
+// the same `entriesVersion`, and that the legacy version can only represent
+// geo indices with a single segment.
 CPP_template(typename Serializer, typename WriteEntry)(
     requires ad_utility::serialization::WriteSerializer<Serializer> CPP_and
         ql::concepts::invocable<
@@ -60,18 +49,9 @@ CPP_template(typename Serializer, typename WriteEntry)(
             const Value&>) void writeEntries(Serializer& serializer,
                                              const Entries& entries,
                                              const WriteEntry& writeEntry,
-                                             uint16_t entriesVersion =
-                                                 detail::formatVersion) {
-  AD_CONTRACT_CHECK(entriesVersion == detail::formatVersion ||
-                    entriesVersion == detail::legacyFormatVersion);
-  AD_CONTRACT_CHECK(
-      entriesVersion != detail::legacyFormatVersion ||
-          ql::ranges::none_of(
-              entries,
-              [](const auto& entry) {
-                return entry.second->cachedGeoIndex_.has_value();
-              }),
-      "Entries with a geo index cannot be written in the legacy format");
+                                             uint16_t entriesVersion) {
+  AD_CONTRACT_CHECK(entriesVersion == formatVersion ||
+                    entriesVersion == legacyFormatVersion);
   // Write the magic byte and format version first, s.t. `readFromSerializer`
   // can detect and reject incompatible or unrelated input.
   serializer << detail::magicByte;
@@ -90,8 +70,8 @@ CPP_template(typename Serializer, typename WriteEntry)(
 
 namespace namedResultCacheSerializer {
 // Read a `NamedResultCache::Value` that was written in the format of the given
-// `entriesVersion` (one of `detail::legacyFormatVersion` and
-// `detail::formatVersion`) from the `serializer` into `arg`. The
+// `entriesVersion` (one of `legacyFormatVersion` and
+// `formatVersion`) from the `serializer` into `arg`. The
 // `allocatorForSerialization_` and `contextForSerialization_` of `arg` have to
 // be set. This is the read counterpart of `writeValue` below, and also what the
 // generic serialization of a `NamedResultCache::Value` below does (for the
@@ -128,7 +108,7 @@ CPP_template(typename Serializer)(
       AD_CORRECTNESS_CHECK(column.size() == numRows);
       AD_CORRECTNESS_CHECK(
           ql::ranges::find(column, Datatype::LocalVocabIndex,
-                           &Id::getDatatype) == column.end(),
+                           Id::getDatatypeL) == column.end(),
           "Named result cache entries that contain local vocab entries "
           "currently cannot be deserialized.");
       columns.push_back(column);
@@ -177,22 +157,21 @@ CPP_template(typename Serializer)(
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::WriteSerializer<
-        Serializer>) void NamedResultCache::writeToSerializer(Serializer&
-                                                                  serializer)
-    const {
+    requires ad_utility::serialization::WriteSerializer<Serializer>)
+void NamedResultCache::writeToSerializer(Serializer& serializer) const {
   namedResultCacheSerializer::writeEntries(
       serializer, getAllEntriesSortedByKey(),
       [](Serializer& s, [[maybe_unused]] const std::string& key,
-         const Value& value) { s << value; });
+         const Value& value) { s << value; },
+      namedResultCacheSerializer::formatVersion);
 }
 
 // _____________________________________________________________________________
 CPP_template_def(typename Serializer)(
-    requires ad_utility::serialization::ReadSerializer<
-        Serializer>) void NamedResultCache::
-    readFromSerializer(Serializer& serializer, Value::Allocator allocator,
-                       const LocalVocabContext& context) {
+    requires ad_utility::serialization::ReadSerializer<Serializer>)
+void NamedResultCache::readFromSerializer(Serializer& serializer,
+                                          Value::Allocator allocator,
+                                          const LocalVocabContext& context) {
   // Clear the cache first.
   clear();
 
@@ -207,15 +186,14 @@ CPP_template_def(typename Serializer)(
   }
   uint16_t readFormatVersion;
   serializer >> readFormatVersion;
-  if (readFormatVersion != namedResultCacheSerializer::detail::formatVersion &&
-      readFormatVersion !=
-          namedResultCacheSerializer::detail::legacyFormatVersion) {
+  if (readFormatVersion != namedResultCacheSerializer::formatVersion &&
+      readFormatVersion != namedResultCacheSerializer::legacyFormatVersion) {
     AD_THROW(absl::StrCat(
         "The serialized `NamedResultCache` has format version ",
         readFormatVersion,
         ", but this version of QLever only supports the format versions ",
-        namedResultCacheSerializer::detail::legacyFormatVersion, " and ",
-        namedResultCacheSerializer::detail::formatVersion,
+        namedResultCacheSerializer::legacyFormatVersion, " and ",
+        namedResultCacheSerializer::formatVersion,
         ". The named result cache was probably written by an incompatible "
         "version of QLever"));
   }
@@ -256,8 +234,8 @@ namespace namedResultCacheSerializer {
 // its blank node blocks, see `serializeOnlyBlankNodeBlocksFromLocalVocab`),
 // because such a caller has stored them elsewhere. The geo index (if any) is
 // written in the format of the given `entriesVersion`, which has to be the one
-// given to `writeEntries`, and must not be the legacy version if the `value`
-// has a geo index.
+// given to `writeEntries`. In the legacy version, the geo index must have a
+// single segment.
 CPP_template(typename Serializer, typename Columns)(
     requires ad_utility::serialization::WriteSerializer<
         Serializer>) void writeValue(Serializer& serializer,
@@ -266,8 +244,7 @@ CPP_template(typename Serializer, typename Columns)(
                                      const std::vector<ColumnIndex>&
                                          resultSortedOn,
                                      bool writeLocalVocabWords,
-                                     uint16_t entriesVersion =
-                                         detail::formatVersion) {
+                                     uint16_t entriesVersion) {
   // Serialize the `LocalVocab` first (required for ID remapping).
   if (writeLocalVocabWords) {
     ad_utility::detail::serializeLocalVocab(serializer, value.localVocab_);
@@ -286,12 +263,12 @@ CPP_template(typename Serializer, typename Columns)(
     // NOTE 1: Although the code for serialization of a local vocab above is
     // already incorporated, we currently still let local vocab entries throw
     // an exception, because there are some caveats in the serialization that
-    // don't work yet, and will only be mitigated in the future. The blob
-    // writer (see `NamedCachedQueryBlobManager::serialize`) never triggers this
-    // check: it always passes `writeLocalVocabWords=false` and `columns` in
-    // which all such `Id`s have already been replaced by canonicalization (see
-    // `canonicalizeWithPermutation`), so this check only applies to the `Id`s
-    // that are actually written.
+    // don't work yet, and will only be mitigated in the future. The check only
+    // applies to the `Id`s that are actually written (the `columns`, not
+    // `value.result_`). The blob writer (see
+    // `NamedCachedQueryBlobManager::serialize`) therefore never triggers it,
+    // because it passes `columns` in which canonicalization has already
+    // replaced all such `Id`s (see `canonicalizeForSerialization`).
     //
     // NOTE 2: Even though we disallow the local vocab, it is crucial to
     // serialize the local vocab because of possible added blank node indices,
@@ -305,7 +282,7 @@ CPP_template(typename Serializer, typename Columns)(
     // TODO<joka921> Mitigate the inconsistencies in the serializer, and then
     // allow local vocab entries here.
     AD_CORRECTNESS_CHECK(
-        ql::ranges::find(col, Datatype::LocalVocabIndex, &Id::getDatatype) ==
+        ql::ranges::find(col, Datatype::LocalVocabIndex, Id::getDatatypeL) ==
             ql::ranges::end(col),
         "Named result cache entries that contain local vocab entries "
         "currently cannot be serialized. Note that local vocab entries can "
@@ -334,9 +311,7 @@ CPP_template(typename Serializer, typename Columns)(
   bool hasGeoIndex = value.cachedGeoIndex_.has_value();
   serializer << hasGeoIndex;
   if (hasGeoIndex) {
-    AD_CONTRACT_CHECK(entriesVersion == detail::formatVersion,
-                      "A geo index can only be written in the current format");
-    value.cachedGeoIndex_.value().writeToSerializer(serializer);
+    value.cachedGeoIndex_.value().writeToSerializer(serializer, entriesVersion);
   }
 }
 }  // namespace namedResultCacheSerializer
@@ -355,10 +330,11 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     const auto& resultView = ExplicitIdTableOperation::viewOf(arg.result_);
     namedResultCacheSerializer::writeValue(
         serializer, arg, resultView.getColumns(), arg.resultSortedOn_,
-        /*writeLocalVocabWords=*/true);
+        /*writeLocalVocabWords=*/true,
+        namedResultCacheSerializer::formatVersion);
   } else {
     namedResultCacheSerializer::readValue(
-        serializer, arg, namedResultCacheSerializer::detail::formatVersion);
+        serializer, arg, namedResultCacheSerializer::formatVersion);
   }
 }
 

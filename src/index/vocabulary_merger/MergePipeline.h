@@ -92,9 +92,9 @@ class VocabularyMergePipelineImpl {
   // reference* into the asynchronous task, so both of them have to stay alive
   // (and must not be modified from the outside) until `finish()` has
   // returned.
-  CPP_template_2(typename C)(requires WordCallback<C>) void push(
-      WordBatch batch, C& wordCallback,
-      const ad_utility::RegexSet& blankNodeIriRegexes) {
+  CPP_template_2(typename C)(requires WordCallback<C>)
+  void push(WordBatch batch, C& wordCallback,
+            const ad_utility::RegexSet& blankNodeIriRegexes) {
     wordWriterQueue_.push([this, batch = std::move(batch), &wordCallback,
                            &blankNodeIriRegexes]() mutable {
       runAndCatchException([this, &batch, &wordCallback,

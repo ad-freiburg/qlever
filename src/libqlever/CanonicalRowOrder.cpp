@@ -14,8 +14,10 @@
 
 #include "backports/algorithm.h"
 #include "util/Exception.h"
+#include "util/HashSet.h"
+#include "util/Views.h"
 
-namespace qlever {
+namespace qlever::canonicalRowOrder {
 
 namespace {
 // Return the columns of a table with `numColumns` columns in the order in which
@@ -26,18 +28,17 @@ namespace {
 std::optional<std::vector<ColumnIndex>> tryComparisonColumns(
     size_t numColumns, ql::span<const ColumnIndex> resultSortedOn) {
   std::vector<ColumnIndex> result;
-  std::vector<bool> isSortedOn(numColumns, false);
+  ad_utility::HashSet<ColumnIndex> sortedOn;
   for (ColumnIndex column : resultSortedOn) {
     if (column >= numColumns) {
       return std::nullopt;
     }
-    if (!isSortedOn[column]) {
-      isSortedOn[column] = true;
+    if (sortedOn.insert(column).second) {
       result.push_back(column);
     }
   }
-  for (ColumnIndex column = 0; column < numColumns; ++column) {
-    if (!isSortedOn[column]) {
+  for (ColumnIndex column : ad_utility::integerRange(numColumns)) {
+    if (!sortedOn.contains(column)) {
       result.push_back(column);
     }
   }
@@ -53,25 +54,39 @@ std::vector<ColumnIndex> comparisonColumns(
   return std::move(result).value();
 }
 
-// Return the number of rows of a table that is given by its `columns`.
+// Return the number of rows of a table that is given by its `columns`, which
+// have to have the same number of rows each.
 size_t numRowsOf(IdColumns columns) {
-  return columns.empty() ? 0 : columns[0].size();
+  if (columns.empty()) {
+    return 0;
+  }
+  size_t numRows = columns[0].size();
+  AD_CONTRACT_CHECK(ql::ranges::all_of(columns, [numRows](const auto& column) {
+    return column.size() == numRows;
+  }));
+  return numRows;
 }
 
-// Return the columns of `table` as spans, which are valid as long as `table`.
-std::vector<ql::span<const Id>> columnsOf(const IdTableView<0>& table) {
-  std::vector<ql::span<const Id>> result;
-  for (size_t column = 0; column < table.numColumns(); ++column) {
-    result.push_back(table.getColumn(column));
-  }
-  return result;
+// Return the columns of `table`, which are valid as long as `table`. Fail via
+// `AD_CONTRACT_CHECK` if `table` has rows but no columns, because the columns
+// would then not carry the number of rows.
+std::vector<ConstIdColumnRef> columnsOf(const IdTableView<0>& table) {
+  AD_CONTRACT_CHECK(table.numColumns() > 0 || table.numRows() == 0,
+                    "The canonical row order is not supported for tables "
+                    "that have rows but no columns");
+  return ::ranges::to<std::vector<ConstIdColumnRef>>(table.getColumns());
 }
 
 // Compare the two `Id`s via `ValueId::compareThreeWay`, and break ties by
-// their raw bits. `compareThreeWay` can consider two `Id`s equal that differ
-// bitwise (for example `Int(1)` and `Double(1.0)`, or `-0.0` and `0.0`), but
-// the canonical order has to be a total order that only considers bitwise
-// identical `Id`s equal (see `CanonicalRowOrder.h`).
+// their raw bits, so that only bitwise identical `Id`s compare equal (the
+// canonical order has to be a total order, see `CanonicalRowOrder.h`).
+//
+// NOTE: `compareThreeWay` compares the raw bits of all `Id`s except those of
+// type `LocalVocabIndex`, which it compares by their words. It thus considers
+// two `Id`s equal that differ bitwise if both are of type `LocalVocabIndex` and
+// refer to different entries with the same word (or if one of them is of type
+// `LocalVocabIndex` and its word is the one at the position in the vocabulary
+// that the other one refers to).
 int compareIds(Id a, Id b) {
   auto comparison = a.compareThreeWay(b);
   if (comparison < 0) {
@@ -127,7 +142,8 @@ bool isInCanonicalOrder(IdColumns columns,
   if (!order.has_value()) {
     return false;
   }
-  for (size_t row = 1; row < numRowsOf(columns); ++row) {
+  size_t numRows = numRowsOf(columns);
+  for (size_t row = 1; row < numRows; ++row) {
     if (compareRows(columns, row - 1, columns, row, order.value()) > 0) {
       return false;
     }
@@ -147,10 +163,9 @@ IdTable permuteRows(const IdTableView<0>& table,
                     const ad_utility::AllocatorWithLimit<Id>& allocator) {
   IdTable result{table.numColumns(), allocator};
   result.resize(oldRowOfNewRow.size());
-  for (size_t column = 0; column < table.numColumns(); ++column) {
-    auto source = table.getColumn(column);
-    auto target = result.getColumn(column);
-    for (size_t row = 0; row < oldRowOfNewRow.size(); ++row) {
+  for (auto&& [source, target] :
+       ::ranges::views::zip(table.getColumns(), result.getColumns())) {
+    for (size_t row : ad_utility::integerRange(oldRowOfNewRow.size())) {
       target[row] = source[oldRowOfNewRow[row]];
     }
   }
@@ -160,7 +175,7 @@ IdTable permuteRows(const IdTableView<0>& table,
 // _____________________________________________________________________________
 std::vector<size_t> invertPermutation(ql::span<const size_t> permutation) {
   std::vector<size_t> result(permutation.size(), noMatchingRow);
-  for (size_t i = 0; i < permutation.size(); ++i) {
+  for (size_t i : ad_utility::integerRange(permutation.size())) {
     AD_CONTRACT_CHECK(permutation[i] < permutation.size() &&
                       result[permutation[i]] == noMatchingRow);
     result[permutation[i]] = i;
@@ -198,4 +213,4 @@ std::vector<size_t> alignRows(const IdTableView<0>& base,
   return alignRows(columnsOf(base), columnsOf(target), resultSortedOn);
 }
 
-}  // namespace qlever
+}  // namespace qlever::canonicalRowOrder

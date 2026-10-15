@@ -30,6 +30,10 @@ NUM_THREADS=$(nproc)
 # crashes with an internal compiler error on QLever's C++20 code).
 GCC="${CC:-gcc}"
 
+# Link-time optimization (see `QLEVER_ENABLE_LTO` in `CMakeLists.txt`). The CI
+# sets it only for the binaries published from `master`.
+QLEVER_ENABLE_LTO="${QLEVER_ENABLE_LTO:-false}"
+
 # A directory that contains ONLY static archives and is put first in the
 # linker search path. This forces `-ljemalloc`/`-lgomp`/`-lstdc++` to resolve
 # to the `.a` instead of the `.so`. This is needed because an explicit
@@ -77,6 +81,7 @@ cmake -B "$BUILD_DIR" -S "$REPO_DIR" \
     -DRUN_EXPENSIVE_TESTS=false \
     -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE \
     -DJEMALLOC_MANUALLY_INSTALLED=True \
+    -DQLEVER_ENABLE_LTO="$QLEVER_ENABLE_LTO" \
     -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc -L$STATIC_LIBS"
 
 cmake --build "$BUILD_DIR" --target qlever-index qlever-server -- -j "$NUM_THREADS"

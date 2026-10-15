@@ -17,7 +17,7 @@
 #include "index/LocalVocabEntry.h"
 #include "libqlever/CanonicalRowOrder.h"
 
-using namespace qlever;
+using namespace qlever::canonicalRowOrder;
 using testing::ElementsAre;
 using testing::IsEmpty;
 
@@ -34,31 +34,38 @@ IdTable intTable(const VectorTable& content, size_t numColumns = 2) {
 }
 
 auto view(const IdTable& table) { return table.asStaticView<0>(); }
+
+// Return a copy of `table` that is in canonical order with respect to the
+// `sortedOn` columns.
+IdTable sortedOf(const IdTable& table,
+                 ql::span<const ColumnIndex> sortedOn = {}) {
+  return permuteRows(view(table),
+                     canonicalSortingPermutation(view(table), sortedOn),
+                     ad_utility::testing::makeAllocator());
+}
 }  // namespace
 
-// _____________________________________________________________________________
+// Test the canonical order without `resultSortedOn` columns, which is the
+// lexicographic order by all columns in increasing order.
 TEST(CanonicalRowOrder, sortWithoutResultSortedOn) {
   auto table = intTable({{2, 1}, {1, 5}, {1, 2}, {2, 0}});
   EXPECT_THAT(canonicalSortingPermutation(view(table), {}),
               ElementsAre(2, 1, 3, 0));
   EXPECT_FALSE(isInCanonicalOrder(view(table), {}));
-  auto sorted =
-      permuteRows(view(table), canonicalSortingPermutation(view(table), {}),
-                  ad_utility::testing::makeAllocator());
+  auto sorted = sortedOf(table);
   EXPECT_EQ(sorted, intTable({{1, 2}, {1, 5}, {2, 0}, {2, 1}}));
   EXPECT_TRUE(isInCanonicalOrder(view(sorted), {}));
 }
 
-// _____________________________________________________________________________
+// Test the canonical order with `resultSortedOn` columns, which are compared
+// first and in the given order.
 TEST(CanonicalRowOrder, sortWithResultSortedOn) {
   // First by column 1, then by the remaining column 0.
   auto table = intTable({{2, 1}, {1, 5}, {1, 2}, {3, 1}});
   std::vector<ColumnIndex> sortedOn{1};
   EXPECT_THAT(canonicalSortingPermutation(view(table), sortedOn),
               ElementsAre(0, 3, 2, 1));
-  auto sorted = permuteRows(view(table),
-                            canonicalSortingPermutation(view(table), sortedOn),
-                            ad_utility::testing::makeAllocator());
+  auto sorted = sortedOf(table, sortedOn);
   EXPECT_EQ(sorted, intTable({{2, 1}, {3, 1}, {1, 2}, {1, 5}}));
   EXPECT_TRUE(isInCanonicalOrder(view(sorted), sortedOn));
   // This table is canonical for column 1 first, but not for the default order.
@@ -67,13 +74,12 @@ TEST(CanonicalRowOrder, sortWithResultSortedOn) {
   // Several sorted columns, in the given order.
   auto table3 = intTable({{1, 2, 3}, {1, 1, 4}, {0, 2, 3}, {5, 1, 1}});
   std::vector<ColumnIndex> sortedOn2{2, 0};
-  auto sorted3 = permuteRows(
-      view(table3), canonicalSortingPermutation(view(table3), sortedOn2),
-      ad_utility::testing::makeAllocator());
-  EXPECT_EQ(sorted3, intTable({{5, 1, 1}, {0, 2, 3}, {1, 2, 3}, {1, 1, 4}}));
+  EXPECT_EQ(sortedOf(table3, sortedOn2),
+            intTable({{5, 1, 1}, {0, 2, 3}, {1, 2, 3}, {1, 1, 4}}));
 }
 
-// _____________________________________________________________________________
+// Test that equal rows keep their relative order, that a table that already is
+// in canonical order gets the identity permutation, and the empty table.
 TEST(CanonicalRowOrder, stabilityAndIdentity) {
   // Equal rows are not reordered, so the permutation is stable.
   auto table = intTable({{1, 1}, {0, 0}, {1, 1}, {0, 0}});
@@ -89,7 +95,7 @@ TEST(CanonicalRowOrder, stabilityAndIdentity) {
   EXPECT_TRUE(isInCanonicalOrder(view(empty), {}));
 }
 
-// _____________________________________________________________________________
+// Test `invertPermutation`, also for inputs that are not a permutation.
 TEST(CanonicalRowOrder, invertPermutation) {
   EXPECT_THAT(invertPermutation(Ints{2, 0, 1}), ElementsAre(1, 2, 0));
   EXPECT_THAT(invertPermutation(Ints{}), IsEmpty());
@@ -97,7 +103,7 @@ TEST(CanonicalRowOrder, invertPermutation) {
   EXPECT_ANY_THROW(invertPermutation(Ints{0, 2}));
 }
 
-// _____________________________________________________________________________
+// Test that `permuteRows` can also select a subset of the rows.
 TEST(CanonicalRowOrder, permuteRowsSelectsRows) {
   auto table = intTable({{1, 1}, {2, 2}, {3, 3}});
   // The result may have fewer rows than the input.
@@ -106,7 +112,8 @@ TEST(CanonicalRowOrder, permuteRowsSelectsRows) {
             intTable({{3, 3}, {1, 1}}));
 }
 
-// _____________________________________________________________________________
+// Test `alignRows` with inserted, deleted and duplicate rows, identical,
+// disjoint and empty tables, and a mismatching number of columns.
 TEST(CanonicalRowOrder, alignRows) {
   constexpr size_t no = noMatchingRow;
   auto base = intTable({{1, 1}, {2, 2}, {2, 2}, {4, 4}, {6, 6}});
@@ -137,7 +144,7 @@ TEST(CanonicalRowOrder, alignRows) {
   EXPECT_ANY_THROW(alignRows(view(base), view(oneColumn)));
 }
 
-// _____________________________________________________________________________
+// Test that `alignRows` compares the `resultSortedOn` columns first.
 TEST(CanonicalRowOrder, alignRowsWithResultSortedOn) {
   // Canonical for `resultSortedOn == {1}`: sorted by column 1, then column 0.
   std::vector<ColumnIndex> sortedOn{1};
@@ -149,25 +156,10 @@ TEST(CanonicalRowOrder, alignRowsWithResultSortedOn) {
               ElementsAre(0, noMatchingRow, 2, 3));
 }
 
-namespace {
-// Create a table from the given rows of arbitrary `Id`s.
-IdTable idTable(const std::vector<std::vector<Id>>& rows) {
-  IdTable table{rows.at(0).size(), ad_utility::testing::makeAllocator()};
-  for (const auto& row : rows) {
-    table.emplace_back();
-    for (size_t column = 0; column < row.size(); ++column) {
-      table.back()[column] = row[column];
-    }
-  }
-  return table;
-}
-}  // namespace
-
-// _____________________________________________________________________________
-// Two `Id`s of type `LocalVocabIndex` that refer to different (equal) entries
-// compare equal via `compareThreeWay`, but differ bitwise (they are pointers).
-// They must neither be matched by `alignRows`, nor must the canonical order
-// depend on their input order.
+// Test that two `Id`s of type `LocalVocabIndex` that refer to different (equal)
+// entries, which compare equal via `compareThreeWay` but differ bitwise (they
+// are pointers), are neither matched by `alignRows`, nor make the canonical
+// order depend on their input order.
 TEST(CanonicalRowOrder, idsThatCompareEqualButDifferBitwise) {
   auto qec = ad_utility::testing::getQec();
   auto iri = ad_utility::triple_component::Iri::fromIriref("<a>");
@@ -183,32 +175,105 @@ TEST(CanonicalRowOrder, idsThatCompareEqualButDifferBitwise) {
 
   // The same rows in two different input orders give the same canonical
   // order.
-  auto sortedOf = [](const IdTable& table) {
-    return permuteRows(view(table),
-                       canonicalSortingPermutation(view(table), {}),
-                       ad_utility::testing::makeAllocator());
-  };
-  auto first = sortedOf(idTable({{a1, other}, {a2, other}}));
-  auto second = sortedOf(idTable({{a2, other}, {a1, other}}));
+  auto first = sortedOf(makeIdTableFromVector({{a1, other}, {a2, other}}));
+  auto second = sortedOf(makeIdTableFromVector({{a2, other}, {a1, other}}));
   EXPECT_EQ(first, second);
   EXPECT_EQ(first.at(0, 0), bitsLess);
   EXPECT_EQ(first.at(1, 0), bitsGreater);
 
   // The tie-break is part of the canonical order.
   EXPECT_TRUE(isInCanonicalOrder(
-      view(idTable({{bitsLess, other}, {bitsGreater, other}})), {}));
+      view(makeIdTableFromVector({{bitsLess, other}, {bitsGreater, other}})),
+      {}));
   EXPECT_FALSE(isInCanonicalOrder(
-      view(idTable({{bitsGreater, other}, {bitsLess, other}})), {}));
+      view(makeIdTableFromVector({{bitsGreater, other}, {bitsLess, other}})),
+      {}));
 
   // Only bitwise identical rows are matched.
-  auto both = idTable({{bitsLess, other}, {bitsGreater, other}});
+  auto both = makeIdTableFromVector({{bitsLess, other}, {bitsGreater, other}});
   EXPECT_THAT(alignRows(view(both), view(both)), ElementsAre(0, 1));
-  auto onlyLess = idTable({{bitsLess, other}});
-  auto onlyGreater = idTable({{bitsGreater, other}});
+  auto onlyLess = makeIdTableFromVector({{bitsLess, other}});
+  auto onlyGreater = makeIdTableFromVector({{bitsGreater, other}});
   EXPECT_THAT(alignRows(view(onlyLess), view(onlyGreater)),
               ElementsAre(noMatchingRow));
   EXPECT_THAT(alignRows(view(onlyGreater), view(onlyLess)),
               ElementsAre(noMatchingRow));
   EXPECT_THAT(alignRows(view(both), view(onlyGreater)), ElementsAre(1));
   EXPECT_THAT(alignRows(view(both), view(onlyLess)), ElementsAre(0));
+}
+
+// Test that a `resultSortedOn` column that does not exist makes
+// `isInCanonicalOrder` return false, and the other functions fail.
+TEST(CanonicalRowOrder, invalidResultSortedOn) {
+  auto table = intTable({{1, 2}, {3, 4}});
+  std::vector<ColumnIndex> invalid{0, 2};
+  EXPECT_FALSE(isInCanonicalOrder(view(table), invalid));
+  EXPECT_ANY_THROW(canonicalSortingPermutation(view(table), invalid));
+  EXPECT_ANY_THROW(alignRows(view(table), view(table), invalid));
+}
+
+// Test that duplicates in `resultSortedOn` do not change the canonical order.
+TEST(CanonicalRowOrder, duplicateResultSortedOn) {
+  std::vector<ColumnIndex> sortedOn{1};
+  std::vector<ColumnIndex> duplicates{1, 1};
+  auto table = intTable({{2, 3}, {1, 5}, {3, 3}, {0, 4}});
+  EXPECT_THAT(canonicalSortingPermutation(view(table), duplicates),
+              ElementsAre(0, 2, 3, 1));
+  EXPECT_THAT(canonicalSortingPermutation(view(table), duplicates),
+              ::testing::ElementsAreArray(
+                  canonicalSortingPermutation(view(table), sortedOn)));
+
+  auto sorted = sortedOf(table, sortedOn);
+  EXPECT_TRUE(isInCanonicalOrder(view(sorted), duplicates));
+  EXPECT_FALSE(isInCanonicalOrder(view(table), duplicates));
+  EXPECT_THAT(alignRows(view(sorted), view(sorted), duplicates),
+              ElementsAre(0, 1, 2, 3));
+}
+
+// Test the overloads for tables that are given by their columns, in particular
+// a table without columns and columns with different numbers of rows.
+TEST(CanonicalRowOrder, columnsOverloads) {
+  // A table without columns is trivially in canonical order.
+  IdColumns noColumns{};
+  EXPECT_TRUE(isInCanonicalOrder(noColumns, {}));
+  EXPECT_THAT(alignRows(noColumns, noColumns), IsEmpty());
+
+  // Columns with the same number of rows.
+  auto I = ad_utility::testing::IntId;
+  std::vector<Id> first{I(1), I(2), I(3)};
+  std::vector<Id> second{I(4), I(5), I(6)};
+  std::vector<ConstIdColumnRef> columns{first, second};
+  EXPECT_TRUE(isInCanonicalOrder(columns, {}));
+  EXPECT_THAT(alignRows(columns, columns), ElementsAre(0, 1, 2));
+
+  // Columns with different numbers of rows are rejected.
+  std::vector<Id> shorter{I(4), I(5)};
+  std::vector<ConstIdColumnRef> inconsistent{first, shorter};
+  EXPECT_ANY_THROW(isInCanonicalOrder(inconsistent, {}));
+  EXPECT_ANY_THROW(alignRows(inconsistent, inconsistent));
+  EXPECT_ANY_THROW(alignRows(columns, inconsistent));
+}
+
+// Test that the functions for an `IdTable` reject a table that has rows but no
+// columns, because its rows cannot be represented by its (empty) columns.
+TEST(CanonicalRowOrder, tableWithRowsButNoColumns) {
+  IdTable noColumnsNoRows{0, ad_utility::testing::makeAllocator()};
+  EXPECT_TRUE(isInCanonicalOrder(view(noColumnsNoRows), {}));
+  EXPECT_THAT(canonicalSortingPermutation(view(noColumnsNoRows), {}),
+              IsEmpty());
+  EXPECT_THAT(alignRows(view(noColumnsNoRows), view(noColumnsNoRows)),
+              IsEmpty());
+
+  IdTable noColumns{0, ad_utility::testing::makeAllocator()};
+  noColumns.resize(3);
+  ASSERT_EQ(noColumns.numRows(), 3);
+  auto matcher = ::testing::HasSubstr("rows but no columns");
+  AD_EXPECT_THROW_WITH_MESSAGE(isInCanonicalOrder(view(noColumns), {}),
+                               matcher);
+  AD_EXPECT_THROW_WITH_MESSAGE(canonicalSortingPermutation(view(noColumns), {}),
+                               matcher);
+  AD_EXPECT_THROW_WITH_MESSAGE(alignRows(view(noColumns), view(noColumns)),
+                               matcher);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      alignRows(view(noColumnsNoRows), view(noColumns)), matcher);
 }

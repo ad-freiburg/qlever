@@ -9,7 +9,12 @@
 
 #include <algorithm>
 #include <atomic>
+#include <boost/asio/post.hpp>
+#include <condition_variable>
+#include <exception>
 #include <future>
+#include <memory>
+#include <mutex>
 #include <range/v3/algorithm/fold_left.hpp>
 #include <thread>
 #include <type_traits>
@@ -17,7 +22,10 @@
 
 #include "backports/concepts.h"
 #include "util/Exception.h"
+#include "util/Executor.h"
 #include "util/TaskQueue.h"
+#include "util/TypeTraits.h"
+#include "util/Views.h"
 #include "util/jthread.h"
 
 namespace ad_utility {
@@ -54,40 +62,9 @@ auto runTasksInParallel(std::vector<std::packaged_task<R()>>&& tasks)
   }
 }
 
-namespace detail {
-// The decayed type of the first argument of the callable `T`. Works for
-// function pointers and for class types (in particular lambdas) with a single
-// `operator()` that is neither overloaded nor templated. For all other types
-// the member `type` is absent, so that this can be used in a SFINAE context.
-template <typename T, typename = void>
-struct FirstArgument {};
-
-template <typename R, typename First, typename... Rest>
-struct FirstArgument<R (*)(First, Rest...), void> {
-  using type = std::decay_t<First>;
-  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
-};
-
-template <typename C, typename R, typename First, typename... Rest>
-struct FirstArgument<R (C::*)(First, Rest...), void> {
-  using type = std::decay_t<First>;
-  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
-};
-
-template <typename C, typename R, typename First, typename... Rest>
-struct FirstArgument<R (C::*)(First, Rest...) const, void> {
-  using type = std::decay_t<First>;
-  static constexpr bool isLvalueReference = std::is_lvalue_reference_v<First>;
-};
-
-// For a class type (in particular a lambda), look at its `operator()`.
-template <typename T>
-struct FirstArgument<T, std::void_t<decltype(&T::operator())>>
-    : FirstArgument<decltype(&T::operator()), void> {};
-
-template <typename T>
-using FirstArgumentT = typename FirstArgument<T>::type;
-}  // namespace detail
+// `detail::FirstArgument`/`FirstArgumentT` (the decayed type of the first
+// argument of a callable) live in `util/TypeTraits.h`, as they are also used
+// by `ad_utility::visitIf`.
 
 // Split the range `[0, numElements)` into consecutive chunks of `chunkSize`
 // elements (the last chunk may be smaller), fold all of them into a single
@@ -190,6 +167,144 @@ CPP_template(typename ChunkFunction)(
                                result.mergeWith(future.get());
                                return result;
                              });
+}
+
+namespace detail {
+// The state that the caller of `runIndexedTasksOnExecutor` (see below) shares
+// with the helpers that it posts to the executor.
+struct RunIndexedTasksState {
+  // The index of the next task that has not been claimed yet.
+  std::atomic<size_t> nextTaskIdx_ = 0;
+  // All the members below are protected by the `mutex_`.
+  std::mutex mutex_;
+  std::condition_variable helperFinished_;
+  // The number of helpers that are currently running tasks.
+  size_t numActiveHelpers_ = 0;
+  // Set by the caller as soon as it has stopped running tasks itself. A helper
+  // that starts after that returns right away.
+  bool isClosed_ = false;
+  std::exception_ptr firstException_;
+};
+
+// Claim and run tasks of the `state` until there are none left. Never throw:
+// after a task has thrown, store the exception in the `state` and stop handing
+// out the remaining tasks.
+//
+// NOTE: The function is `noexcept`, because the bookkeeping of the callers
+// (see `runIndexedTasksOnExecutor`) relies on it returning. The only thing
+// that can still throw is the locking of the `mutex_`, and such a failure is
+// not recoverable anyway.
+template <typename RunTask>
+void claimAndRunIndexedTasks(RunIndexedTasksState& state, size_t numTasks,
+                             const RunTask& runTask) noexcept {
+  try {
+    for (;;) {
+      size_t taskIdx = state.nextTaskIdx_.fetch_add(1);
+      if (taskIdx >= numTasks) {
+        return;
+      }
+      runTask(taskIdx);
+    }
+  } catch (...) {
+    state.nextTaskIdx_.store(numTasks);
+    std::lock_guard lock{state.mutex_};
+    if (!state.firstException_) {
+      state.firstException_ = std::current_exception();
+    }
+  }
+}
+
+// Called by the caller of `runIndexedTasksOnExecutor` after it has run out of
+// tasks to claim: close the `state`, such that helpers that start later return
+// right away, wait for the helpers that are still running a task, and return
+// the first exception that any task has thrown (or `nullptr`).
+//
+// NOTE: The function is `noexcept`, because returning early (with an
+// exception) while a helper is still running would leave that helper with a
+// dangling reference to the `runTask` of the caller.
+inline std::exception_ptr closeAndWaitForHelpers(
+    RunIndexedTasksState& state) noexcept {
+  std::unique_lock lock{state.mutex_};
+  state.isClosed_ = true;
+  state.helperFinished_.wait(
+      lock, [&state]() { return state.numActiveHelpers_ == 0; });
+  return state.firstException_;
+}
+}  // namespace detail
+
+// Run the `numTasks` tasks `runTask(0), ..., runTask(numTasks - 1)` on the
+// `executor`, which is expected to have `numThreads` threads (this only bounds
+// the number of helpers that are posted to it, see below), and return when all
+// of them are done. The tasks are started in the order of their indices, and
+// `runTask` is called concurrently from several threads.
+//
+// If a task throws, the tasks that have not been started yet are skipped, and
+// the first exception is rethrown once all the started tasks are done.
+//
+// NOTE: The calling thread doesn't only wait for the executor, but also runs
+// tasks itself, and it waits only for the helpers on the executor that have
+// actually started. That way this function completes even if none of the
+// threads of the executor ever becomes available, so that (unlike the blocking
+// functions of `TaskQueueOnExecutor`) it can safely be called from a thread
+// that the threads of the executor are (indirectly) waiting for, and from the
+// threads of the executor themselves.
+template <typename RunTask>
+void runIndexedTasksOnExecutor(const qlever::Executor& executor,
+                               size_t numThreads, size_t numTasks,
+                               const RunTask& runTask) {
+  if (numTasks == 0) {
+    return;
+  }
+  // The state that this function shares with the helpers.
+  //
+  // NOTE: The helpers own it jointly with this function (via the `shared_ptr`),
+  // because a helper may only be started after this function has returned.
+  // Such a helper then sees that the `state` is closed and returns without
+  // touching the `runTask`.
+  auto state = std::make_shared<detail::RunIndexedTasksState>();
+
+  // The helper that is posted to the executor: register as active (unless the
+  // `state` is already closed), run tasks until there are none left, and
+  // unregister.
+  //
+  // NOTE: The helper is `noexcept` for the same reason as the functions in
+  // the `detail` namespace above: if it threw after incrementing the
+  // `numActiveHelpers_`, the caller would wait forever.
+  auto helper = [state, numTasks, &runTask]() noexcept {
+    {
+      std::lock_guard lock{state->mutex_};
+      if (state->isClosed_) {
+        return;
+      }
+      ++state->numActiveHelpers_;
+    }
+    detail::claimAndRunIndexedTasks(*state, numTasks, runTask);
+    {
+      std::lock_guard lock{state->mutex_};
+      --state->numActiveHelpers_;
+    }
+    state->helperFinished_.notify_all();
+  };
+  // Post one helper per thread of the executor (minus the calling thread, and
+  // never more helpers than tasks), then run tasks in the calling thread.
+  //
+  // NOTE: The posting lambda is `noexcept`, because if posting one of the
+  // helpers failed (which can only happen if the executor runs out of memory),
+  // the helpers that have already been posted might still use the `runTask`
+  // after this function has returned. Such a failure is not recoverable anyway.
+  size_t numHelpers = std::min(numTasks, std::max(numThreads, size_t{1})) - 1;
+  [&]() noexcept {
+    for ([[maybe_unused]] size_t i : ad_utility::integerRange(numHelpers)) {
+      boost::asio::post(executor, helper);
+    }
+  }();
+  detail::claimAndRunIndexedTasks(*state, numTasks, runTask);
+
+  // All the tasks have been claimed, so wait for the helpers that are still
+  // running one of them, and keep all the other ones from starting.
+  if (auto exception = detail::closeAndWaitForHelpers(*state)) {
+    std::rethrow_exception(exception);
+  }
 }
 }  // namespace ad_utility
 

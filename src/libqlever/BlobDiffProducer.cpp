@@ -16,6 +16,7 @@
 #include <absl/time/time.h>
 
 #include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -179,6 +180,68 @@ nlohmann::json readState(const StatePaths& paths,
   return state;
 }
 
+// Return the length of the prologue of the `query`, that is, of its leading
+// `PREFIX` and `BASE` declarations (each of which ends with an IRI in angle
+// brackets). The prologue has to be repeated in front of a query that contains
+// the `query` as a subquery (see `withCanonicalSortOrder`).
+size_t prologueLength(std::string_view query) {
+  size_t pos = 0;
+  auto startsWithKeyword = [&query, &pos](std::string_view keyword) {
+    return query.size() - pos >= keyword.size() &&
+           ql::ranges::equal(
+               query.substr(pos, keyword.size()), keyword, [](char a, char b) {
+                 return std::tolower(static_cast<unsigned char>(a)) == b;
+               });
+  };
+  while (true) {
+    while (pos < query.size() &&
+           std::isspace(static_cast<unsigned char>(query[pos]))) {
+      ++pos;
+    }
+    if (!startsWithKeyword("prefix") && !startsWithKeyword("base")) {
+      return pos;
+    }
+    auto end = query.find('>', pos);
+    if (end == std::string_view::npos) {
+      return pos;
+    }
+    pos = end + 1;
+  }
+}
+
+// Return the `query`, wrapped in a query that sorts its result by all of its
+// variables in the lexicographic order of their names (via QLever's
+// `INTERNAL SORT BY` modifier, which is part of the query and is therefore
+// kept when the result is written to a blob, see
+// `canonicalizeForSerialization` in `NamedCacheSecondaryVocabRewriter.h`).
+// The sort order that the plan of the `query` itself produces may differ
+// between two runs (even for the same data), which would make the blobs, and
+// hence the diffs, depend on the plan. The variables are obtained by parsing
+// the `query` with `qlever`.
+std::string withCanonicalSortOrder(const Qlever& qlever,
+                                   const std::string& query) {
+  auto parsed = qlever.parseQuery(query);
+  const auto& parsedQuery = parsed.parsedQuery();
+  if (!parsedQuery.hasSelectClause()) {
+    throw std::runtime_error{absl::StrCat(
+        "Only SELECT queries can be pinned, but the following query is not "
+        "one: ",
+        query)};
+  }
+  auto variables = parsedQuery.selectClause().getSelectedVariablesAsStrings();
+  ql::ranges::sort(variables);
+  variables.erase(std::unique(variables.begin(), variables.end()),
+                  variables.end());
+  if (variables.empty()) {
+    return query;
+  }
+  std::string_view queryView{query};
+  auto prologue = queryView.substr(0, prologueLength(queryView));
+  auto body = queryView.substr(prologue.size());
+  return absl::StrCat(prologue, " SELECT * WHERE { { ", body,
+                      " } } INTERNAL SORT BY ", absl::StrJoin(variables, " "));
+}
+
 // Return the options of `Qlever::queryAndPinResultWithName` for `query`.
 PinOptions pinOptionsOf(const BlobDiffConfig::NamedQuery& query) {
   PinOptions options;
@@ -190,12 +253,14 @@ PinOptions pinOptionsOf(const BlobDiffConfig::NamedQuery& query) {
   return options;
 }
 
-// Drop all pinned results of `qlever` and pin the queries of `config`.
+// Drop all pinned results of `qlever` and pin the queries of `config`, each
+// with the canonical sort order (see `withCanonicalSortOrder`).
 void pinAllQueries(Qlever& qlever, const BlobDiffConfig& config) {
   qlever.clearNamedResultCache();
   qlever.clearQueryResultCache();
   for (const auto& query : config.namedQueries_) {
-    qlever.queryAndPinResultWithName(pinOptionsOf(query), query.query_);
+    qlever.queryAndPinResultWithName(
+        pinOptionsOf(query), withCanonicalSortOrder(qlever, query.query_));
   }
 }
 
@@ -265,12 +330,15 @@ std::vector<IdTriple<0>> toIdTriples(std::vector<TurtleTriple>& triples,
   return result;
 }
 
-// Serialize the pinned results of `qlever` without a base.
+// Serialize the pinned results of `qlever` without a base. The blob is written
+// in the new format, so that it keeps the simplification of the geo indices,
+// which the next week needs to extend them (see
+// `BlobSerializationConfig::alwaysUseNewFormat_`).
 std::vector<char> serializeWithoutBase(const Qlever& qlever,
                                        const BlobDiffConfig& config) {
   BlobSerializationConfig serializationConfig;
   serializationConfig.excludedEntryRegexes_ = config.excludedEntryRegexes_;
-  serializationConfig.sortOnAllColumns_ = true;
+  serializationConfig.alwaysUseNewFormat_ = true;
   return qlever.serializeVocabAndNamedCacheToCompressedBlob(
       serializationConfig);
 }
@@ -337,7 +405,6 @@ BlobDiffProducer::WeeklyResult stepImpl(const BlobDiffConfig& config,
 
   BlobSerializationConfig serializationConfig;
   serializationConfig.excludedEntryRegexes_ = config.excludedEntryRegexes_;
-  serializationConfig.sortOnAllColumns_ = true;
   size_t maxSegments = forceCompaction ? 0 : config.maxGeoSegments_;
   double maxDeadRatio = forceCompaction ? 0.0 : config.maxDeadShapeRatio_;
   serializationConfig.incremental_ = BlobSerializationConfig::IncrementalBase{

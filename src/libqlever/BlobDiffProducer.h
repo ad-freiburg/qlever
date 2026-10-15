@@ -127,11 +127,12 @@ struct BlobDiffConfig {
 //
 // NOTE: The query plan of a pinned query (and thereby the order of the columns
 // and the sort order of its result) may differ between two runs, even for the
-// same data. The producer therefore writes every entry with its columns ordered
-// by variable name and its rows sorted by all columns (see
-// `BlobSerializationConfig::sortOnAllColumns_`), which makes the blobs, and
-// hence the diffs, independent of the plan. The sort order that the plan
-// produced is not preserved in the blob.
+// same data. The columns of every entry are written to a blob in the order of
+// their variable names, and the producer pins every query with an explicit
+// sort order on all of its variables (via QLever's `INTERNAL SORT BY`
+// modifier, see `pinAllQueries` in the implementation), which makes the blobs,
+// and hence the diffs, independent of the plan. The sort order of the query
+// itself (if any) is not preserved in the blob.
 class BlobDiffProducer {
  public:
   // The result of one weekly step.

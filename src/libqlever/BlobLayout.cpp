@@ -22,6 +22,7 @@
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/SerializeOptional.h"
 #include "util/Serializer/SerializePair.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/json.h"
@@ -134,10 +135,7 @@ GeoIndexLayout parseGeoIndex(Parser& parser, uint16_t entriesVersion,
       parser.readScalar<std::pair<size_t, size_t>>();
     }
   } else {
-    auto hasSimplification = parser.readScalar<uint8_t>();
-    if (hasSimplification != 0) {
-      parser.readScalar<double>();
-    }
+    parser.readScalar<std::optional<double>>();
     auto numSegments = parser.readScalar<uint64_t>();
     for (uint64_t i = 0; i < numSegments; ++i) {
       geo.segmentPayloads_.push_back(parser.readArray<char>());

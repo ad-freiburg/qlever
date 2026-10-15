@@ -172,8 +172,7 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
       _joinColumns.size() == 2;
   if (getRuntimeParameter<&RuntimeParameters::prefilteredOptionalJoin_>() &&
       (_joinColumns.size() == 1 || isTwoColumnSpecialOptionalJoin)) {
-    if (auto indexScan =
-            std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation())) {
+    if (auto indexScan = IndexScan::getIfSupportsPrefilteredJoin(*_right)) {
       return optionalJoinWithIndexScan(_left->getResult(true),
                                        std::move(indexScan), requestLaziness);
     }
@@ -354,7 +353,7 @@ auto OptionalJoin::computeImplementationFromIdTables(
     -> Implementation {
   auto implementation = Implementation::NoUndef;
   auto anyIsUndefined = [](auto column) {
-    return ql::ranges::any_of(column, &Id::isUndefined);
+    return ql::ranges::any_of(column, Id::isUndefinedL);
   };
   for (size_t i = 0; i < joinColumns.size(); ++i) {
     auto [leftCol, rightCol] = joinColumns.at(i);

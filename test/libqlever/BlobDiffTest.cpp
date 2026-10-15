@@ -45,7 +45,7 @@ struct TestTable {
       spans_.emplace_back(column.data(), column.size());
     }
   }
-  qlever::IdColumns columns() const { return spans_; }
+  qlever::canonicalRowOrder::IdColumns columns() const { return spans_; }
 };
 
 // Return `alignRows` for the two tables, sorted on the columns `sortedOn`.
@@ -54,9 +54,12 @@ std::vector<size_t> merge(const std::vector<std::vector<int64_t>>& base,
                           std::vector<uint64_t> sortedOn = {}) {
   TestTable b{base};
   TestTable t{target};
-  EXPECT_TRUE(qlever::isInCanonicalOrder(b.columns(), sortedOn));
-  EXPECT_TRUE(qlever::isInCanonicalOrder(t.columns(), sortedOn));
-  return qlever::alignRows(b.columns(), t.columns(), sortedOn);
+  EXPECT_TRUE(
+      qlever::canonicalRowOrder::isInCanonicalOrder(b.columns(), sortedOn));
+  EXPECT_TRUE(
+      qlever::canonicalRowOrder::isInCanonicalOrder(t.columns(), sortedOn));
+  return qlever::canonicalRowOrder::alignRows(b.columns(), t.columns(),
+                                              sortedOn);
 }
 
 // Some triples with distinct subjects and objects.
@@ -147,8 +150,8 @@ bool allTablesCanonical(const ParsedBlob& blob) {
           reinterpret_cast<const Id*>(blob.bytes_.data() + range.begin_),
           entry.numRows_);
     }
-    result =
-        result && qlever::isInCanonicalOrder(columns, entry.sortedOnColumns_);
+    result = result && qlever::canonicalRowOrder::isInCanonicalOrder(
+                           columns, entry.sortedOnColumns_);
   }
   return result;
 }
@@ -217,24 +220,24 @@ TEST(BlobDiffRowMerge, customSortOrder) {
 // _____________________________________________________________________________
 TEST(BlobDiffRowMerge, isCanonicallySorted) {
   TestTable sorted{{{1, 1, 2}, {1, 2, 0}}};
-  EXPECT_TRUE(
-      qlever::isInCanonicalOrder(sorted.columns(), ql::span<const uint64_t>{}));
+  EXPECT_TRUE(qlever::canonicalRowOrder::isInCanonicalOrder(
+      sorted.columns(), ql::span<const uint64_t>{}));
   // Sorted by the first column, but not by the second column on ties.
   TestTable unsortedOnTie{{{1, 1, 2}, {2, 1, 0}}};
-  EXPECT_FALSE(qlever::isInCanonicalOrder(unsortedOnTie.columns(),
-                                          ql::span<const uint64_t>{}));
+  EXPECT_FALSE(qlever::canonicalRowOrder::isInCanonicalOrder(
+      unsortedOnTie.columns(), ql::span<const uint64_t>{}));
   // The same table is not sorted by the second column first.
-  EXPECT_FALSE(
-      qlever::isInCanonicalOrder(sorted.columns(), std::vector<uint64_t>{1}));
+  EXPECT_FALSE(qlever::canonicalRowOrder::isInCanonicalOrder(
+      sorted.columns(), std::vector<uint64_t>{1}));
   // Invalid sort columns.
-  EXPECT_FALSE(
-      qlever::isInCanonicalOrder(sorted.columns(), std::vector<uint64_t>{2}));
+  EXPECT_FALSE(qlever::canonicalRowOrder::isInCanonicalOrder(
+      sorted.columns(), std::vector<uint64_t>{2}));
   // Tables without rows or columns.
   TestTable empty{{{}, {}}};
-  EXPECT_TRUE(
-      qlever::isInCanonicalOrder(empty.columns(), ql::span<const uint64_t>{}));
-  EXPECT_TRUE(qlever::isInCanonicalOrder(qlever::IdColumns{},
-                                         ql::span<const uint64_t>{}));
+  EXPECT_TRUE(qlever::canonicalRowOrder::isInCanonicalOrder(
+      empty.columns(), ql::span<const uint64_t>{}));
+  EXPECT_TRUE(qlever::canonicalRowOrder::isInCanonicalOrder(
+      qlever::canonicalRowOrder::IdColumns{}, ql::span<const uint64_t>{}));
 }
 
 // _____________________________________________________________________________

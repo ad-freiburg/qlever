@@ -956,6 +956,28 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern("{ MINUS { ?a <foo> <bar> } }",
                      m::GraphPattern(m::MinusGraphPattern(m::Triples(
                          {{Var{"?a"}, iri("<foo>"), iri("<bar>")}}))));
+  // A MINUS clause stores the variables that are in scope in it and in the
+  // patterns before it in the same group. The variables of a nested MINUS, and
+  // the non-target variables of a BIND, are not in scope, but the variable of a
+  // GRAPH clause is.
+  expectGraphPattern(
+      "{ ?a <p> ?b . { ?c <p> ?d } MINUS { ?a <q> ?e MINUS { ?f <r> ?g } } "
+      "BIND(?i AS ?j) MINUS { GRAPH ?k { ?l <s> ?m } } }",
+      m::GraphPattern(
+          ::testing::_, ::testing::_,
+          m::MinusWithVisibleVariables(
+              {Var{"?a"}, Var{"?e"}},
+              {Var{"?a"}, Var{"?b"}, Var{"?c"}, Var{"?d"}}),
+          ::testing::_,
+          m::MinusWithVisibleVariables(
+              {Var{"?k"}, Var{"?l"}, Var{"?m"}},
+              {Var{"?a"}, Var{"?b"}, Var{"?c"}, Var{"?d"}, Var{"?j"}})));
+  // The variables before a MINUS clause in an enclosing group are not in scope.
+  expectGraphPattern(
+      "{ ?a <p> ?b { MINUS { ?a <q> ?c } } }",
+      m::GraphPattern(::testing::_,
+                      m::GroupGraphPattern(m::MinusWithVisibleVariables(
+                          {Var{"?a"}, Var{"?c"}}, {}))));
   expectGraphPattern(
       "{ FILTER (?a = 10) . ?x ?y ?z }",
       m::GraphPattern(false, {"(?a = 10)"}, DummyTriplesMatcher));
@@ -1494,6 +1516,42 @@ TEST(SparqlParser, Query) {
     Resources yv{Var{"?y"}, Var{"?v"}};
     expectQuery("DESCRIBE * { ?y <is-a> ?v }",
                 m::DescribeQuery(m::Describe(yv, {}, selectQueryMatcher2)));
+
+    // A trailing `VALUES` clause belongs to the WHERE clause of the DESCRIBE,
+    // and for `DESCRIBE *` its variables are also described.
+    expectQuery(
+        "DESCRIBE * { ?y <is-a> ?v } VALUES ?w { <a> }",
+        m::DescribeQuery(m::Describe(
+            Resources{Var{"?y"}, Var{"?v"}, Var{"?w"}}, {},
+            m::SelectQuery(
+                m::Select({Var{"?y"}, Var{"?v"}, Var{"?w"}}),
+                m::GraphPattern(m::GroupGraphPattern(m::Triples(
+                                    {{Var{"?y"}, iri("<is-a>"), Var{"?v"}}})),
+                                m::InlineData({Var{"?w"}}, {{iri("<a>")}}))))));
+
+    // The solution modifiers belong to the WHERE clause of the DESCRIBE, not to
+    // the CONSTRUCT query that computes the description.
+    expectQuery(
+        "DESCRIBE <x> ?y <z> { ?y <is-a> ?v } ORDER BY ?v LIMIT 2 OFFSET 1",
+        ::testing::AllOf(
+            m::DescribeQuery(m::Describe(
+                xyz, {},
+                ::testing::AllOf(selectQueryMatcher1,
+                                 m::pq::OrderKeys({{Var{"?v"}, false}}),
+                                 m::pq::LimitOffset({2, 1})))),
+            m::pq::OrderKeys({}), m::pq::LimitOffset({})));
+
+    // With a `GROUP BY`, the described variables must be grouped, like the
+    // selected variables of a `SELECT` query, and `DESCRIBE *` is an error.
+    expectQuery("DESCRIBE ?y { ?y <is-a> ?v } GROUP BY ?y",
+                m::DescribeQuery(m::Describe(
+                    Resources{Var{"?y"}}, {},
+                    ::testing::AllOf(selectQueryMatcher1,
+                                     m::pq::GroupKeys({Var{"?y"}})))));
+    expectQueryFails("DESCRIBE ?v { ?y <is-a> ?v } GROUP BY ?y",
+                     contains("?v is selected but not aggregated"));
+    expectQueryFails("DESCRIBE * { ?y <is-a> ?v } GROUP BY ?y",
+                     contains("GROUP BY is not allowed"));
 
     // DESCRIBE with FROM and FROM NAMED clauses.
     //

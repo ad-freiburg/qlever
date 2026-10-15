@@ -24,6 +24,7 @@
 #include <variant>
 #include <vector>
 
+#include "../engine/SpatialJoinCachedIndexTestHelpers.h"
 #include "../index/SecondaryVocabularyTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "./QleverTestHelpers.h"
@@ -44,6 +45,7 @@
 using namespace qlever;
 using namespace testing;
 using secondaryVocabTestHelpers::secondaryVocabIs;
+using spatialJoinCachedIndexTestHelpers::hasStats;
 
 namespace {
 using Manager = NamedCachedQueryBlobManager;
@@ -297,6 +299,17 @@ std::vector<std::vector<Id>> columnsOfPinnedResult(const Qlever& qlever,
     columns.emplace_back(column.begin(), column.end());
   }
   return columns;
+}
+
+// Return the result (as TSV) of the query that selects the `variables` (for
+// example `"?s ?o"`) from the named cache entry `name` of `qlever`.
+std::string queryPinnedResult(const Qlever& qlever, std::string_view variables,
+                              std::string_view name) {
+  return qlever.query(
+      absl::StrCat("SELECT ", variables,
+                   " WHERE { SERVICE ql:cached-result-with-name-", name,
+                   " {}}"),
+      ad_utility::MediaType::tsv);
 }
 
 // The data and the update of the tests below for blobs with new words: the
@@ -675,9 +688,7 @@ TEST(NamedCachedQueryBlobManager, blobUsesProvidedAllocator) {
 
   // The instance still answers queries correctly from the resource-backed
   // buffer.
-  auto res = target.query(
-      "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-blobPin {}}",
-      ad_utility::MediaType::tsv);
+  auto res = queryPinnedResult(target, "?s ?o", "blobPin");
   EXPECT_EQ(res,
             "?s\t?o\n<allocatorBlobSubject>\t\"allocator blob literal\"\n");
 }
@@ -818,11 +829,8 @@ TEST(NamedCachedQueryBlobManager, tryToDeserializeLeavesInstanceUsable) {
   EXPECT_EQ(target.tryToDeserializeVocabAndNamedCacheFromCompressedBlob(
                 compressedBlob),
             std::nullopt);
-  EXPECT_EQ(
-      target.query(
-          "SELECT ?s ?o WHERE { SERVICE ql:cached-result-with-name-blobPin {}}",
-          ad_utility::MediaType::tsv),
-      "?s\t?o\n<retrySubject>\t\"retry literal\"\n");
+  EXPECT_EQ(queryPinnedResult(target, "?s ?o", "blobPin"),
+            "?s\t?o\n<retrySubject>\t\"retry literal\"\n");
 
   // After a successful load, a second blob is rejected, also by the
   // non-throwing version (a violated precondition is not a blob error).
@@ -859,9 +867,10 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
     EXPECT_FALSE(blob.empty());
     return blob;
   }();
-  // A geo index requires the new blob format (also without new words).
+  // A geo index with a single segment and no new words can be written in the
+  // old blob format.
   expectBlobFormatVersion(compressedBlob,
-                          Manager::formatVersionWithSecondaryVocab);
+                          Manager::formatVersionWithoutSecondaryVocab);
 
   // A spatial join with the cached geometry index (from the blob).
   std::string spatialQuery = spatialJoinQuery("POINT(7.841295 47.997731)");
@@ -884,9 +893,7 @@ TEST(NamedCachedQueryBlobManager, blobWithSpatialIndex) {
   EXPECT_THAT(res, HasSubstr("<s4>"));
 
   // The pinned result itself is also queryable directly from the blob.
-  auto cachedRes = target.query(
-      "SELECT ?s2 ?geo2 WHERE { SERVICE ql:cached-result-with-name-geoPin {} }",
-      ad_utility::MediaType::tsv);
+  auto cachedRes = queryPinnedResult(target, "?s2 ?geo2", "geoPin");
   EXPECT_THAT(cachedRes, HasSubstr("<s1>"));
 }
 
@@ -1068,9 +1075,7 @@ TEST(NamedCachedQueryBlobManager, blobWithPreexistingSecondaryVocab) {
   EXPECT_EQ(target.query(std::string{newWordsCachedQuery},
                          ad_utility::MediaType::tsv),
             newWordsExpectedResult);
-  EXPECT_EQ(target.query("SELECT ?s WHERE { SERVICE "
-                         "ql:cached-result-with-name-second {}}",
-                         ad_utility::MediaType::tsv),
+  EXPECT_EQ(queryPinnedResult(target, "?s", "second"),
             // The result is in canonical order (see `CanonicalRowOrder.h`).
             "?s\n<m>\n<a>\n<z>\n");
 }
@@ -1224,7 +1229,10 @@ const SpatialJoinCachedIndex& geoIndexOf(const Qlever& qlever) {
 }
 
 // Expect that both `Qlever`s answer all queries of the weekly tests equally.
-void expectSameAnswers(Qlever& a, Qlever& b) {
+void expectSameAnswers(
+    Qlever& a, Qlever& b,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
   for (std::string_view point :
        {"POINT(13.4357 52.5103)", "POINT(7.841295 47.997731)",
         "POINT(9.905 53.505)"}) {
@@ -1241,13 +1249,16 @@ void expectSameAnswers(Qlever& a, Qlever& b) {
 }
 
 // Expect that the table of each entry of `qlever` is in canonical order.
-void expectAllEntriesCanonical(const Qlever& qlever) {
+void expectAllEntriesCanonical(
+    const Qlever& qlever,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
   for (const auto& name : weeklyEntryNames) {
     auto entry = qlever.namedResultCache().get(name);
     ASSERT_NE(entry, nullptr) << name;
-    EXPECT_TRUE(
-        isInCanonicalOrder(ExplicitIdTableOperation::viewOf(entry->result_),
-                           entry->resultSortedOn_))
+    EXPECT_TRUE(canonicalRowOrder::isInCanonicalOrder(
+        ExplicitIdTableOperation::viewOf(entry->result_),
+        entry->resultSortedOn_))
         << name;
   }
 }
@@ -1281,21 +1292,20 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithoutChangesIsIdentical) {
 }
 
 // _____________________________________________________________________________
-// A `LINESTRING Z` literal: check whether it is indexed.
+// Test that a `LINESTRING Z` literal is indexed like a `LINESTRING`.
 TEST(NamedCachedQueryBlobManager, geoIndexOfLineStringZ) {
   auto sourceConfig = buildTestIndex(
       absl::StrCat(freiburgSegmentsS1S2,
                    "<s3> <asWKT> \"LINESTRING Z(7.8 48.0 268.7, 7.81 "
                    "48.01 268.9)\"",
                    wktSuffix, " .\n"));
-  auto source = makeWeeklySource(sourceConfig);
-  source->queryAndPinResultWithName(
+  Qlever source{EngineConfig{sourceConfig}};
+  source.queryAndPinResultWithName(
       QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"}},
       "SELECT * { ?s2 <asWKT> ?geo2 }");
-  auto blob = source->serializeVocabAndNamedCacheToCompressedBlob();
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
   auto loaded = loadBlob(blob);
-  // Two shapes for `<s1>` and `<s2>`, and a third one for `<s3>` iff the Z
-  // form is accepted.
+  // Two shapes for `<s1>` and `<s2>`, and a third one for `<s3>`.
   EXPECT_EQ(geoIndexOf(*loaded).numShapes(), 3);
 }
 
@@ -1536,12 +1546,12 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobWithNonCanonicalBase) {
     // is then not in canonical order).
     std::vector<size_t> oldRowOfNewRow(view.numRows());
     std::iota(oldRowOfNewRow.rbegin(), oldRowOfNewRow.rend(), size_t{0});
-    auto table = permuteRows(view, oldRowOfNewRow,
-                             ad_utility::makeUnlimitedAllocator<Id>());
-    ASSERT_FALSE(
-        isInCanonicalOrder(table.asStaticView<0>(), entry->resultSortedOn_));
+    auto table = canonicalRowOrder::permuteRows(
+        view, oldRowOfNewRow, ad_utility::makeUnlimitedAllocator<Id>());
+    ASSERT_FALSE(canonicalRowOrder::isInCanonicalOrder(table.asStaticView<0>(),
+                                                       entry->resultSortedOn_));
     auto geoIndex = entry->cachedGeoIndex_->withPermutedRows(
-        invertPermutation(oldRowOfNewRow));
+        canonicalRowOrder::invertPermutation(oldRowOfNewRow));
     base.namedResultCache().store(
         "geoPin",
         NamedResultCache::Value{
@@ -1568,4 +1578,222 @@ TEST(NamedCachedQueryBlobManager, incrementalBlobRejectsSecondaryVocab) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       loaded->serializeVocabAndNamedCacheToCompressedBlob(nullBase),
       ::testing::HasSubstr("must not be null"));
+}
+
+// _____________________________________________________________________________
+// Test a spatial join on a cached geometry index that consists of two segments
+// and has dead shapes (as created by
+// `SpatialJoinCachedIndex::forUpdatedTable`), both directly and after a round
+// trip through a blob, which then requires the new blob format.
+TEST(NamedCachedQueryBlobManager, blobWithSegmentedSpatialIndex) {
+  IndexBuilderConfig sourceConfig = buildTestIndex(absl::StrCat(
+      freiburgSegmentsS1S2,
+      "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 "
+      "47.9975175)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s4> <asWKT> \"LINESTRING(7.8422376 47.9990144,7.8411016 "
+      "47.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"
+      "<s5> <asWKT> \"LINESTRING(8.8422376 48.9990144,8.8411016 "
+      "48.9975307)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"));
+  Qlever source{EngineConfig{sourceConfig}};
+  source.queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"}},
+      "SELECT * { ?s2 <asWKT> ?geo2 }");
+  auto value = source.namedResultCache().get("geoPin");
+  ASSERT_NE(value, nullptr);
+  ASSERT_TRUE(value->cachedGeoIndex_.has_value());
+  const auto& base = value->cachedGeoIndex_.value();
+  ASSERT_THAT(base, hasStats(1, 5, 5, 5));
+
+  // Replace the shapes of the first and last row by new shapes in a second
+  // segment. Their shapes in the first segment become dead and must not be
+  // found by the spatial join.
+  constexpr size_t NO_ROW = SpatialJoinCachedIndex::NO_ROW;
+  auto view = ExplicitIdTableOperation::viewOf(value->result_);
+  auto col = value->varToColMap_.at(Variable{"?geo2"}).columnIndex_;
+  auto updated = SpatialJoinCachedIndex::forUpdatedTable(
+      base, std::vector{NO_ROW, size_t{1}, size_t{2}, size_t{3}, NO_ROW}, view,
+      col, source.indexAndViewsSnapshot()->index_);
+  ASSERT_THAT(updated, hasStats(2, 7, 5, 5));
+  source.namedResultCache().store(
+      "geoPin", NamedResultCache::Value{value->result_, value->varToColMap_,
+                                        value->resultSortedOn_,
+                                        value->localVocab_.clone(),
+                                        value->cacheKey_, std::move(updated)});
+
+  // Each of the four segments near the point is found exactly once, the far
+  // away fifth one is not found.
+  const std::string expected = "?s2\n<s1>\n<s2>\n<s3>\n<s4>\n";
+  std::string spatialQuery = spatialJoinQuery("POINT(7.841295 47.997731)");
+  EXPECT_EQ(source.query(spatialQuery, ad_utility::MediaType::tsv), expected);
+
+  // A geo index with more than one segment requires the new blob format, and
+  // gives the same result after loading the blob.
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  expectBlobFormatVersion(blob, Manager::formatVersionWithSecondaryVocab);
+  auto loaded = loadBlob(blob);
+  EXPECT_THAT(geoIndexOf(*loaded), hasStats(2, 7, 5, 5));
+  EXPECT_EQ(loaded->query(spatialQuery, ad_utility::MediaType::tsv), expected);
+}
+
+// _____________________________________________________________________________
+// Test that a geo index with a single segment but dead shapes (as created by
+// `SpatialJoinCachedIndex::forUpdatedTable` when rows are deleted) requires the
+// new blob format, because older versions of QLever would fail on a dead shape.
+TEST(NamedCachedQueryBlobManager, blobWithDeadShapesInSingleSegment) {
+  auto sourceConfig = buildTestIndex(absl::StrCat(
+      freiburgSegmentsS1S2,
+      "<s3> <asWKT> \"LINESTRING(7.8427369 47.9995806,7.8411672 "
+      "47.9975175)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n"));
+  Qlever source{EngineConfig{sourceConfig}};
+  source.queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"}},
+      "SELECT * { ?s2 <asWKT> ?geo2 }");
+  source.queryAndPinResultWithName(
+      "subset", "SELECT * { ?s2 <asWKT> ?geo2 FILTER(?s2 != <s3>) }");
+  auto base = source.namedResultCache().get("geoPin");
+  auto subset = source.namedResultCache().get("subset");
+  ASSERT_THAT(base->cachedGeoIndex_.value(), hasStats(1, 3, 3, 3));
+
+  // Map each row of the subset to the row of `base` with the same geometry.
+  auto baseView = ExplicitIdTableOperation::viewOf(base->result_);
+  auto subsetView = ExplicitIdTableOperation::viewOf(subset->result_);
+  auto baseCol = base->varToColMap_.at(Variable{"?geo2"}).columnIndex_;
+  auto subsetCol = subset->varToColMap_.at(Variable{"?geo2"}).columnIndex_;
+  std::vector<size_t> baseRowOfNewRow;
+  for (size_t row = 0; row < subsetView.size(); ++row) {
+    auto baseRow = ql::ranges::find_if(
+        ql::views::iota(size_t{0}, baseView.size()), [&](size_t candidate) {
+          return baseView(candidate, baseCol) == subsetView(row, subsetCol);
+        });
+    ASSERT_NE(*baseRow, baseView.size());
+    baseRowOfNewRow.push_back(*baseRow);
+  }
+  auto updated = SpatialJoinCachedIndex::forUpdatedTable(
+      base->cachedGeoIndex_.value(), baseRowOfNewRow, subsetView, subsetCol,
+      source.indexAndViewsSnapshot()->index_);
+  ASSERT_THAT(updated, hasStats(1, 3, 2, 2));
+  source.namedResultCache().store(
+      "geoPin", NamedResultCache::Value{subset->result_, subset->varToColMap_,
+                                        subset->resultSortedOn_,
+                                        subset->localVocab_.clone(),
+                                        subset->cacheKey_, std::move(updated)});
+  source.namedResultCache().erase("subset");
+
+  const std::string expected = "?s2\n<s1>\n<s2>\n";
+  std::string spatialQuery = spatialJoinQuery("POINT(7.841295 47.997731)");
+  EXPECT_EQ(source.query(spatialQuery, ad_utility::MediaType::tsv), expected);
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  expectBlobFormatVersion(blob, Manager::formatVersionWithSecondaryVocab);
+  auto loaded = loadBlob(blob);
+  EXPECT_THAT(geoIndexOf(*loaded), hasStats(1, 3, 2, 2));
+  EXPECT_EQ(loaded->query(spatialQuery, ad_utility::MediaType::tsv), expected);
+}
+
+// _____________________________________________________________________________
+// Test that a geo index with a simplification and a single segment is
+// deliberately still written in the old blob format, which drops the
+// simplification (see the NOTE 2 in `NamedCachedQueryBlobManager::serialize`),
+// and that with more than one segment the new format is used, which keeps the
+// simplification.
+TEST(NamedCachedQueryBlobManager, blobWithSimplifiedSpatialIndex) {
+  auto sourceConfig = buildTestIndex(std::string{freiburgSegmentsS1S2});
+  Qlever source{EngineConfig{sourceConfig}};
+  source.queryAndPinResultWithName(
+      QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"},
+                                               2.5},
+      "SELECT * { ?s2 <asWKT> ?geo2 }");
+  ASSERT_THAT(geoIndexOf(source), hasStats(1, 2, 2, 2));
+  ASSERT_THAT(geoIndexOf(source).simplificationErrorInMeters(), Optional(2.5));
+  const std::string expected = "?s2\n<s1>\n<s2>\n";
+  std::string spatialQuery = spatialJoinQuery("POINT(7.841295 47.997731)");
+
+  // A single segment: the old format, the simplification is dropped.
+  {
+    auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+    expectBlobFormatVersion(blob, Manager::formatVersionWithoutSecondaryVocab);
+    auto loaded = loadBlob(blob);
+    EXPECT_THAT(geoIndexOf(*loaded), hasStats(1, 2, 2, 2));
+    EXPECT_EQ(geoIndexOf(*loaded).simplificationErrorInMeters(), std::nullopt);
+    EXPECT_EQ(loaded->query(spatialQuery, ad_utility::MediaType::tsv),
+              expected);
+  }
+
+  // Replace the shape of the first row by a new shape in a second segment,
+  // which requires the new format, which keeps the simplification.
+  auto value = source.namedResultCache().get("geoPin");
+  auto view = ExplicitIdTableOperation::viewOf(value->result_);
+  auto col = value->varToColMap_.at(Variable{"?geo2"}).columnIndex_;
+  auto updated = SpatialJoinCachedIndex::forUpdatedTable(
+      value->cachedGeoIndex_.value(),
+      std::vector{SpatialJoinCachedIndex::NO_ROW, size_t{1}}, view, col,
+      source.indexAndViewsSnapshot()->index_);
+  ASSERT_THAT(updated, hasStats(2, 3, 2, 2));
+  ASSERT_THAT(updated.simplificationErrorInMeters(), Optional(2.5));
+  source.namedResultCache().store(
+      "geoPin", NamedResultCache::Value{value->result_, value->varToColMap_,
+                                        value->resultSortedOn_,
+                                        value->localVocab_.clone(),
+                                        value->cacheKey_, std::move(updated)});
+  {
+    auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+    expectBlobFormatVersion(blob, Manager::formatVersionWithSecondaryVocab);
+    auto loaded = loadBlob(blob);
+    EXPECT_THAT(geoIndexOf(*loaded), hasStats(2, 3, 2, 2));
+    EXPECT_THAT(geoIndexOf(*loaded).simplificationErrorInMeters(),
+                Optional(2.5));
+    EXPECT_EQ(loaded->query(spatialQuery, ad_utility::MediaType::tsv),
+              expected);
+  }
+}
+
+// _____________________________________________________________________________
+// Test that every entry (also one without local vocab `Id`s) is written in
+// canonical order with respect to the sort order of the plan, and that the
+// entries of the source stay unchanged.
+TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
+  auto sourceConfig =
+      buildTestIndex("<m> <p> <b> . <m> <p> <a> . <n> <p> <a> .");
+  Qlever source{EngineConfig{sourceConfig}};
+  // The result of the `VALUES` clause is not sorted, and contains a duplicate
+  // row.
+  source.queryAndPinResultWithName(
+      "ints",
+      "SELECT ?x ?y { VALUES (?x ?y) { (3 1) (1 2) (2 0) (1 1) (1 2) } }");
+  // The result of the index scan is sorted by `?s` and then by `?o`. In the
+  // blob, the columns are in the order `?o`, `?s` (see `canonicalColumnOrder`).
+  source.queryAndPinResultWithName("sorted",
+                                   "SELECT ?s ?o WHERE { ?s <p> ?o }");
+  auto intsBefore = columnsOfPinnedResult(source, "ints");
+  auto sortedEntry = source.namedResultCache().get("sorted");
+  ASSERT_THAT(sortedEntry->resultSortedOn_, ElementsAre(0, 1));
+
+  auto expectCanonical = [](const Qlever& qlever, const std::string& name,
+                            const std::vector<ColumnIndex>& sortedOn,
+                            ad_utility::source_location loc =
+                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    auto entry = qlever.namedResultCache().get(name);
+    ASSERT_NE(entry, nullptr) << name;
+    EXPECT_EQ(entry->resultSortedOn_, sortedOn) << name;
+    EXPECT_TRUE(canonicalRowOrder::isInCanonicalOrder(
+        ExplicitIdTableOperation::viewOf(entry->result_),
+        entry->resultSortedOn_))
+        << name;
+  };
+
+  // The sort order of the plan is kept, and the rows are in canonical order
+  // with respect to it.
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  Qlever target{EngineConfig{}, /*skipLoading=*/true};
+  target.deserializeVocabAndNamedCacheFromCompressedBlob(blob);
+  expectCanonical(target, "ints", {});
+  expectCanonical(target, "sorted", {1, 0});
+  EXPECT_EQ(queryPinnedResult(target, "?x ?y", "ints"),
+            "?x\t?y\n1\t1\n1\t2\n1\t2\n2\t0\n3\t1\n");
+  EXPECT_EQ(queryPinnedResult(target, "?s ?o", "sorted"),
+            "?s\t?o\n<m>\t<a>\n<m>\t<b>\n<n>\t<a>\n");
+
+  // The entries of the source are unchanged.
+  EXPECT_EQ(columnsOfPinnedResult(source, "ints"), intsBefore);
+  EXPECT_EQ(source.namedResultCache().get("sorted"), sortedEntry);
 }

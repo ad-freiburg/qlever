@@ -153,11 +153,30 @@ TEST(BlobLayout, blobWithGeoIndexVersion2) {
   source.queryAndPinResultWithName(
       QueryExecutionContext::PinResultWithName{"geoPin", Variable{"?geo2"}},
       "SELECT * { ?s2 <asWKT> ?geo2 }");
-  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  // A geo index with a single segment and no new words is written in the old
+  // format by default (entries version 1 with the legacy geo index, whose
+  // segment is not recorded in the layout).
+  {
+    auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+    ParsedBlob parsed{blob};
+    const auto& layout = parsed.layout_;
+    EXPECT_EQ(layout.blobVersion_, 1u);
+    EXPECT_EQ(layout.entriesVersion_, 1u);
+    ASSERT_EQ(layout.entryLayouts_.size(), 1u);
+    const auto& entry = layout.entryLayouts_[0];
+    ASSERT_TRUE(entry.hasGeoIndex_);
+    EXPECT_GT(entry.geo_.whole_.size(), 0u);
+    EXPECT_TRUE(entry.geo_.segmentPayloads_.empty());
+    expectConsistent(layout);
+  }
+
+  // With `alwaysUseNewFormat_`, the blob is written with entries version 2,
+  // which stores the segmented geo index (here a single segment).
+  BlobSerializationConfig config2;
+  config2.alwaysUseNewFormat_ = true;
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob(config2);
   ParsedBlob parsed{blob};
   const auto& layout = parsed.layout_;
-  // A blob with a geo index is always written with entries version 2, which
-  // stores the segmented geo index (here a single segment).
   EXPECT_EQ(layout.blobVersion_, 2u);
   EXPECT_EQ(layout.entriesVersion_, 2u);
   ASSERT_EQ(layout.entryLayouts_.size(), 1u);

@@ -129,13 +129,14 @@ void writeMetadataAndFilteredVocabulary(
   }
 }
 
-// Return the extension of the geo index of the base entry with the same `key`
-// as the entry `original` (whose canonicalized copy is `canonicalized`), or
-// `std::nullopt` if the extension is not possible or if it has to be compacted
-// (see `BlobSerializationConfig::IncrementalBase`), in which case the geo
-// index of `canonicalized` is to be used, which is the geo index of the entry
-// `original` itself (as built when the entry was pinned, or as loaded from a
-// blob; it may have several segments in the latter case) with its rows
+// Return the geo index for the canonicalized copy `canonicalized` of the entry
+// `original` that reuses the segments of the geo index of the base entry with
+// the same `key` (see `SpatialJoinCachedIndex::forUpdatedTable`), or
+// `std::nullopt` if that is not possible or if the result would have to be
+// compacted (see `BlobSerializationConfig::IncrementalBase`), in which case
+// the geo index of `canonicalized` is to be used, which is the geo index of the
+// entry `original` itself (as built when the entry was pinned, or as loaded
+// from a blob; it may have several segments in the latter case) with its rows
 // permuted to canonical order. The result is in canonical row order. The
 // `index` is used to resolve the `Id`s of the table of `original`.
 //
@@ -180,27 +181,45 @@ std::optional<SpatialJoinCachedIndex> tryToExtendGeoIndex(
       baseGeoIndex.numRows() != baseView.numRows()) {
     return skip("the structure of the base entry differs");
   }
-  if (!isInCanonicalOrder(baseView, baseValue.resultSortedOn_)) {
+  if (!canonicalRowOrder::isInCanonicalOrder(baseView,
+                                             baseValue.resultSortedOn_)) {
     return skip("the table of the base entry is not in canonical order");
   }
 
-  // Translate the matching from the canonical rows of the new table to the
-  // original rows of the table of `original`.
-  auto baseRowOfNewRow =
-      alignRows(baseView, newView, canonicalValue.resultSortedOn_);
-  const auto& oldRowOfNewRow = canonicalized.oldRowOfNewRow_;
-  std::vector<size_t> baseRowOfOriginalRow(baseRowOfNewRow.size(),
-                                           SpatialJoinCachedIndex::NO_ROW);
-  for (size_t newRow = 0; newRow < baseRowOfNewRow.size(); ++newRow) {
-    baseRowOfOriginalRow[oldRowOfNewRow[newRow]] = baseRowOfNewRow[newRow];
-  }
+  // Match the canonical rows of the new table to the rows of the base. The
+  // unmatched rows are marked by `noMatchingRow`, which is what
+  // `forUpdatedTable` expects as `NO_ROW`.
+  static_assert(canonicalRowOrder::noMatchingRow ==
+                SpatialJoinCachedIndex::NO_ROW);
+  auto baseRowOfNewRow = canonicalRowOrder::alignRows(
+      baseView, newView, canonicalValue.resultSortedOn_);
   ColumnIndex column =
       original.varToColMap_.at(newGeoIndex.getGeometryColumn()).columnIndex_;
-  auto extended = SpatialJoinCachedIndex::extend(
-                      baseGeoIndex, baseRowOfOriginalRow,
-                      ExplicitIdTableOperation::viewOf(original.result_),
-                      column, index, oldRowOfNewRow)
-                      .withPermutedRows(invertPermutation(oldRowOfNewRow));
+  auto originalView = ExplicitIdTableOperation::viewOf(original.result_);
+  const auto& oldRowOfNewRow = canonicalized.oldRowOfNewRow_;
+  auto extended = [&]() {
+    if (!oldRowOfNewRow.has_value()) {
+      // The rows of `original` already are in canonical order.
+      return SpatialJoinCachedIndex::forUpdatedTable(
+          baseGeoIndex, baseRowOfNewRow, originalView, column, index);
+    }
+    // Translate the matching from the canonical rows of the new table to the
+    // original rows of the table of `original`, build the index for the
+    // original rows (visiting them in canonical order), and permute its rows
+    // to canonical order.
+    const auto& oldRowOfNewRowValue = oldRowOfNewRow.value();
+    std::vector<size_t> baseRowOfOriginalRow(baseRowOfNewRow.size(),
+                                             SpatialJoinCachedIndex::NO_ROW);
+    for (size_t newRow = 0; newRow < baseRowOfNewRow.size(); ++newRow) {
+      baseRowOfOriginalRow[oldRowOfNewRowValue[newRow]] =
+          baseRowOfNewRow[newRow];
+    }
+    return SpatialJoinCachedIndex::forUpdatedTable(
+               baseGeoIndex, baseRowOfOriginalRow, originalView, column, index,
+               oldRowOfNewRowValue)
+        .withPermutedRows(
+            canonicalRowOrder::invertPermutation(oldRowOfNewRowValue));
+  }();
 
   // Decide whether to keep the extension or to compact.
   size_t numDeadShapes = extended.numShapes() - extended.numLiveShapes();
@@ -357,12 +376,32 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   // of the base, see above; if any, for example because the index was itself
   // loaded from a blob, so that the `Id`s of its words stay valid), extended by
   // the new words of the named cache entries (see
-  // `NamedCacheSecondaryVocabRewriter.h`). Only if it is empty and no entry has
-  // a geo index, the blob is written in the old format (blob version 1 and
-  // entries version 1) without a secondary vocabulary, which can also be read
-  // by older versions of QLever. Otherwise the new format is used (blob version
-  // 2, which then contains a possibly empty secondary vocabulary, and entries
-  // version 2, which is required for the segmented geo index).
+  // `NamedCacheSecondaryVocabRewriter.h`). Only if it is empty, no entry has a
+  // geo index with more than one segment or with dead shapes, and the config
+  // does not request the new format, the blob is written in the old format
+  // (blob version 1 and entries version 1) without a secondary vocabulary,
+  // which can also be read by older versions of QLever. Otherwise the new
+  // format is used (blob version 2 with a possibly empty secondary vocabulary,
+  // and entries version 2).
+  //
+  // NOTE 1: A geo index with more than one segment can only be written in
+  // entries version 2. A geo index with dead shapes (which only arise from
+  // `SpatialJoinCachedIndex::forUpdatedTable`) could be written in the old
+  // format, but older versions of QLever would fail on it, because they
+  // expect each shape of the S2 index to have a row.
+  //
+  // NOTE 2: A geo index with a single segment and a simplification is
+  // deliberately still written in the old format, although that format cannot
+  // store the simplification (which is then lost). The simplification is only
+  // needed when the blob is later updated (see
+  // `SpatialJoinCachedIndex::forUpdatedTable`), and switching such blobs to the
+  // new format would break users that already write and read them in the old
+  // format.
+  //
+  // NOTE 3: An incremental blob always uses the new format, because the geo
+  // index of an entry is only created from the one of the base (which may then
+  // have several segments or dead shapes) while the entries are written, and
+  // because its simplification has to be kept for the next incremental blob.
   auto entries = qlever.namedResultCache_.getAllEntriesSortedByKey();
   SecondaryVocabulary secondaryVocab =
       vocabSourceIndexImpl.secondaryVocab() != nullptr
@@ -370,10 +409,14 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
           : SecondaryVocabulary{};
   namedCacheSecondaryVocab::addNewWordsToSecondaryVocab(entries,
                                                         secondaryVocab);
-  bool hasGeoIndex = ql::ranges::any_of(entries, [](const auto& entry) {
-    return entry.second->cachedGeoIndex_.has_value();
+  bool needsNewGeoFormat = ql::ranges::any_of(entries, [](const auto& entry) {
+    const auto& geoIndex = entry.second->cachedGeoIndex_;
+    return geoIndex.has_value() &&
+           (geoIndex.value().numSegments() > 1 ||
+            geoIndex.value().numLiveShapes() < geoIndex.value().numShapes());
   });
-  bool useNewFormat = secondaryVocab.numWords() > 0 || hasGeoIndex;
+  bool useNewFormat = secondaryVocab.numWords() > 0 || needsNewGeoFormat ||
+                      config.alwaysUseNewFormat_ || incremental.has_value();
   writeBlobHeader(serializer, useNewFormat
                                   ? formatVersionWithSecondaryVocab
                                   : formatVersionWithoutSecondaryVocab);
@@ -396,23 +439,27 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
     serializer << secondaryVocab;
   }
   const uint16_t entriesVersion =
-      useNewFormat ? namedResultCacheSerializer::detail::formatVersion
-                   : namedResultCacheSerializer::detail::legacyFormatVersion;
+      useNewFormat ? namedResultCacheSerializer::formatVersion
+                   : namedResultCacheSerializer::legacyFormatVersion;
 
   // Write the named cache entries. Each entry is written as a canonicalized
   // copy (the entry in the named cache itself stays unchanged): its `Id`s of
-  // type `LocalVocabIndex` are rewritten and its rows are in canonical order
-  // (see `canonicalizeWithPermutation`). The words of the local vocab of such a
-  // copy are not written, because they are no longer referenced. The entries
-  // are written in the order of `entries`.
+  // type `LocalVocabIndex` are rewritten, its columns without a variable are
+  // dropped, and its rows and columns are in canonical order (see
+  // `canonicalizeWithPermutation`). The words of the local vocab of such a
+  // copy are not written, because they are no longer referenced. For an entry
+  // that needs neither rewriting nor sorting, the copy is only a view of the
+  // columns of the entry, so no table is copied. For an incremental blob, the
+  // geo index of the copy is created from the one of the base if possible (see
+  // `tryToExtendGeoIndex`). All entries are written in the `entriesVersion`
+  // (see above).
   namedResultCacheSerializer::writeEntries(
       serializer, entries,
       [&](auto& entrySerializer, const std::string& key,
           const NamedResultCache::Value& value) {
         auto canonicalized =
             namedCacheSecondaryVocab::canonicalizeWithPermutation(
-                value, secondaryVocab, qlever.allocator_,
-                config.sortOnAllColumns_);
+                value, secondaryVocab, qlever.allocator_);
         if (incremental.has_value() && value.cachedGeoIndex_.has_value()) {
           auto extended =
               tryToExtendGeoIndex(key, value, canonicalized, baseEntries,

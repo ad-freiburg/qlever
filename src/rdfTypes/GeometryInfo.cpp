@@ -25,6 +25,12 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
       numGeometries_{numGeometries.numGeometries()},
       metricLength_{metricLength},
       metricArea_{metricArea} {
+  // The binary representation must not contain implicit padding, see the
+  // `static_assert` after the class in `GeometryInfo.h`.
+  static_assert(sizeof(GeometryInfo) ==
+                sizeof(boundingBox_) + sizeof(geometryTypeAndCentroid_) +
+                    sizeof(numGeometries_) + sizeof(padding_) +
+                    sizeof(metricLength_) + sizeof(metricArea_));
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -99,6 +105,16 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
     return std::nullopt;
   }
   return GeometryType{wktType};
+}
+
+// ____________________________________________________________________________
+bool GeometryInfo::isValidWktStrict(std::string_view wkt) {
+  try {
+    detail::parseWkt(wkt, detail::defaultCrs, true);
+    return true;
+  } catch (const ::util::geo::WKTParseException&) {
+    return false;
+  }
 }
 
 // ____________________________________________________________________________
@@ -248,8 +264,9 @@ std::optional<NumGeometries> GeometryInfo::getNumGeometries(
 }
 
 // ____________________________________________________________________________
-CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
-    RequestedInfo GeometryInfo::getRequestedInfo() const {
+CPP_template_def(typename RequestedInfo)(
+    requires RequestedInfoT<RequestedInfo>)
+RequestedInfo GeometryInfo::getRequestedInfo() const {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return *this;
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {
@@ -279,9 +296,10 @@ template MetricLength GeometryInfo::getRequestedInfo<MetricLength>() const;
 template MetricArea GeometryInfo::getRequestedInfo<MetricArea>() const;
 
 // ____________________________________________________________________________
-CPP_template_def(typename RequestedInfo)(requires RequestedInfoT<RequestedInfo>)
-    std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
-        std::string_view wkt) {
+CPP_template_def(typename RequestedInfo)(
+    requires RequestedInfoT<RequestedInfo>)
+std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
+    std::string_view wkt) {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return GeometryInfo::fromWktLiteral(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {
