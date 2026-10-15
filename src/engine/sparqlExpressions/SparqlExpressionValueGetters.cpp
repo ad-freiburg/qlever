@@ -283,10 +283,7 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     case Datatype::Double:
     case Datatype::Date:
     case Datatype::GeoPoint:
-      if constexpr (prefix == isLiteralPrefix) {
-        return Id::makeFromBool(true);
-      }
-      [[fallthrough]];
+      return Id::makeFromBool(prefix == isLiteralPrefix);
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
     case Datatype::BlankNodeIndex:
