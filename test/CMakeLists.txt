@@ -579,7 +579,6 @@ addLinkAndDiscoverTestNoLibs(CancellationHandleTest qlever_util)
 
 addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 
-addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 
@@ -650,7 +649,7 @@ addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
-addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
+addLinkAndDiscoverTest(ParallelExecutorTest)
 
 addLinkAndDiscoverTestNoLibs(IoUringManagerTest qlever_util)
 
