@@ -187,8 +187,8 @@ PlanVec QueryPlanner::createExecutionTrees(ParsedQuery& pq, bool isSubquery) {
 
   // GROUP BY (Either the pattern trick or a "normal" GROUP BY)
   if (patternTrickTuple.has_value()) {
-    plans.emplace_back(getPatternTrickRow(pq.selectClause(), plans,
-                                          patternTrickTuple.value()));
+    plans.emplace_back(
+        getPatternTrickRow(pq.getAliases(), plans, patternTrickTuple.value()));
   } else if (doGroupBy) {
     plans.emplace_back(getGroupByRow(pq, plans));
   }
@@ -367,11 +367,10 @@ PlanVec QueryPlanner::getDistinctRow(const p::SelectClause& selectClause,
 
 // _____________________________________________________________________________
 PlanVec QueryPlanner::getPatternTrickRow(
-    const p::SelectClause& selectClause, const PlanMatrix& dpTab,
+    const std::vector<Alias>& aliases, const PlanMatrix& dpTab,
     const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
   AD_CORRECTNESS_CHECK(!dpTab.empty());
   const PlanVec& previous = dpTab.back();
-  auto aliases = selectClause.getAliases();
 
   PlanVec added{previous.get_allocator()};
 
@@ -432,12 +431,8 @@ PlanVec QueryPlanner::getGroupByRow(const ParsedQuery& pq,
   const PlanVec& previous = dpTab[dpTab.size() - 1];
   PlanVec added{previous.get_allocator()};
   added.reserve(previous.size());
+  const auto& aliases = pq.getAliases();
   for (auto& parent : previous) {
-    std::vector<Alias> aliases;
-    if (pq.hasSelectClause()) {
-      aliases = pq.selectClause().getAliases();
-    }
-
     // Inside a `GRAPH ?var {....}` clause,  a `GROUP BY` must implicitly (also)
     // group by the graph variable.
     auto groupVariables = pq._groupByVariables;
@@ -450,8 +445,8 @@ PlanVec QueryPlanner::getGroupByRow(const ParsedQuery& pq,
     }
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
-    SubtreePlan groupByPlan = makeSubtreePlan<GroupBy>(
-        _qec, groupVariables, std::move(aliases), parent._qet);
+    SubtreePlan groupByPlan =
+        makeSubtreePlan<GroupBy>(_qec, groupVariables, aliases, parent._qet);
     assignNodesFilterAndTextLimitIds(groupByPlan, parent);
     added.push_back(std::move(groupByPlan));
   }
@@ -3056,54 +3051,99 @@ qlever::index::GraphFilter<TripleComponent> QueryPlanner::getActiveGraphs()
 }
 
 // _____________________________________________________________________________
+ad_utility::HashSet<Variable>
+QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
+  ad_utility::HashSet<Variable> variables;
+  // The triples have not been turned into plans yet.
+  candidateTriples_.collectAllContainedVariables(variables);
+  for (const auto& row : candidatePlans_) {
+    AD_CORRECTNESS_CHECK(!row.empty());
+    // All plans of a row bind the same variables, up to internal ones, see the
+    // TODO in `visitGroupOptionalOrMinus`.
+    for (const auto& variable :
+         row.front()._qet->getVariableColumns() | ql::views::keys) {
+      variables.insert(variable);
+    }
+  }
+  return variables;
+}
+
+// _____________________________________________________________________________
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
-    vector<SubtreePlan>& candidates, const Variables& variables) {
+    vector<SubtreePlan>& candidates, const Variables& variables,
+    bool isGraphVariableInScopeOnBothSidesOfMinus) {
   using enum SubtreePlan::Type;
-  bool areVariablesUnconnected = ql::ranges::all_of(
-      variables,
-      [this](const Variable& var) { return !boundVariables_.contains(var); });
+  auto type = candidates[0].type;
+  if (type != MINUS && type != OPTIONAL) {
+    return false;
+  }
+  // Inside `GRAPH ?g {...}` the patterns are evaluated per graph, so an
+  // OPTIONAL has to be joined on `?g` if the previous patterns bind it. The
+  // triples only get their `?g` column when they are planned (contains-word and
+  // materialized views are not allowed inside a `GRAPH` clause).
+  //
+  // For a MINUS on the other hand, `?g` only counts as a shared variable if it
+  // is in scope on both sides without the implicit graph columns of the index
+  // scans. Otherwise, the MINUS would remove all rows of every graph in which
+  // its pattern matches. If the MINUS is connected via other variables, it
+  // is still joined on `?g`, as the patterns are evaluated per graph.
+  auto previousVariables = getVariablesOfPreviousPatterns();
+  if (const auto& graphVariable = planner_.activeGraphVariable_;
+      graphVariable.has_value()) {
+    if (type == OPTIONAL && !candidateTriples_._triples.empty()) {
+      previousVariables.insert(graphVariable.value());
+    } else if (type == MINUS && !isGraphVariableInScopeOnBothSidesOfMinus) {
+      previousVariables.erase(graphVariable.value());
+    }
+  }
+  bool areVariablesUnconnected =
+      ql::ranges::none_of(variables, [&previousVariables](const Variable& var) {
+        return previousVariables.contains(var);
+      });
   if (!areVariablesUnconnected) {
     return false;
   }
   // A MINUS clause that doesn't share any variable with the preceding
   // patterns behaves as if it isn't there.
-  auto type = candidates[0].type;
   if (type == MINUS) {
+    planner_.warnings_.emplace_back(
+        "A MINUS clause that shares no variables with the patterns before it "
+        "has no effect and is ignored. Use FILTER NOT EXISTS if you want to "
+        "remove all results whenever the pattern of the MINUS clause matches.");
     return true;
   }
   // An OPTIONAL clause that doesn't share any variable with the preceding
   // patterns behaves as if it is joined with the neutral element.
-  if (type == OPTIONAL) {
-    auto& newPlans =
-        candidatePlans_.emplace_back(allocatorForType<PlanVec>(qec_));
-    ql::ranges::for_each(
-        candidates, [this, &newPlans](const SubtreePlan& plan) {
-          auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
-          // Note: It is important that we do NOT copy the filter and
-          // textLimit IDs, as they originate from the inner scope of the
-          // OPTIONAL clause and have been already completely dealt with.
-          // This was the cause of
-          // https://github.com/ad-freiburg/qlever/issues/2194.
-          newPlans.push_back(std::move(joinedPlan));
-        });
-    return true;
-  }
-  return false;
+  //
+  // NOTE: The filter and text limit IDs of the plans are deliberately not
+  // copied. They originate from the inner scope of the OPTIONAL clause and have
+  // already been dealt with completely, copying them was the cause of
+  // https://github.com/ad-freiburg/qlever/issues/2194.
+  auto& newPlans = candidatePlans_.emplace_back(allocatorForType<PlanVec>(qec_));
+  ql::ranges::for_each(candidates, [this, &newPlans](const SubtreePlan& plan) {
+    newPlans.push_back(makeSubtreePlan<NeutralOptional>(qec_, plan._qet));
+  });
+  return true;
 }
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
-    vector<SubtreePlan>&& candidates) {
+    vector<SubtreePlan>&& candidates,
+    bool isGraphVariableInScopeOnBothSidesOfMinus) {
   // Empty group graph patterns should have been handled previously.
   AD_CORRECTNESS_CHECK(!candidates.empty());
 
   // Optionals that occur before any of their variables have been bound,
   // actually behave like ordinary (Group)GraphPatterns.
+  // TODO<RobinTF> The candidates can differ in their internal variables (e.g.
+  // the bounding box columns of a `SpatialJoin`), so taking the variables of
+  // the first candidate (here and in `getVariablesOfPreviousPatterns`) is not
+  // clean. This should be fixed.
   auto variables = candidates[0]._qet->getVariableColumns() | ql::views::keys;
 
-  bool specialCaseHandled =
-      handleUnconnectedMinusOrOptional(candidates, variables);
+  bool specialCaseHandled = handleUnconnectedMinusOrOptional(
+      candidates, variables, isGraphVariableInScopeOnBothSidesOfMinus);
 
   // All variables seen so far are considered bound and cannot appear as the
   // RHS of a BIND operation. This is also true for variables from OPTIONALs
@@ -3283,11 +3323,18 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   } else if constexpr (std::is_same_v<T, p::Bind>) {
     visitBind(arg);
   } else if constexpr (std::is_same_v<T, p::Minus>) {
+    const auto& graphVariable = planner_.activeGraphVariable_;
+    bool isGraphVariableInScopeOnBothSides =
+        graphVariable.has_value() &&
+        ad_utility::contains(arg.visibleVariables_, graphVariable.value()) &&
+        ad_utility::contains(arg.visibleVariablesOfPrecedingPatterns_,
+                             graphVariable.value());
     auto candidates = planner_.optimize(&arg._child);
     for (auto& c : candidates) {
       c.type = SubtreePlan::MINUS;
     }
-    visitGroupOptionalOrMinus(std::move(candidates));
+    visitGroupOptionalOrMinus(std::move(candidates),
+                              isGraphVariableInScopeOnBothSides);
   } else if constexpr (std::is_same_v<T, p::PathQuery>) {
     visitPathSearch(arg);
   } else if constexpr (std::is_same_v<T, p::Describe>) {

@@ -33,6 +33,7 @@
 #include "util/Log.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
+#include "util/json.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -90,9 +91,10 @@ inline std::string addDatatype(const std::string_view wkt) {
 // Tries to extract the geometry type and parse the geometry given by a WKT
 // literal with quotes and datatype using `pb_util`. The coordinates are
 // projected to `projCrs` while parsing (from the CRS named by the IRI at the
-// start of the literal, or CRS84 if there is no such IRI).
+// start of the literal, or CRS84 if there is no such IRI). If `strict` is set,
+// invalid WKT throws a `WKTParseException` instead of being parsed leniently.
 inline ParseResult parseWkt(const std::string_view& wkt,
-                            CRSType projCrs = defaultCrs) {
+                            CRSType projCrs = defaultCrs, bool strict = false) {
   auto wktLiteral = removeDatatype(wkt);
   auto c = wktLiteral.c_str();
   std::optional<ParsedWkt> parsed = std::nullopt;
@@ -107,10 +109,11 @@ inline ParseResult parseWkt(const std::string_view& wkt,
   try {
     switch (type) {
       case POINT:
-        parsed = pointFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+        parsed = pointFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
         break;
       case LINESTRING: {
-        auto line = lineFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+        auto line =
+            lineFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
         if (line.empty()) {
           throw std::runtime_error("Cannot parse line from WKT");
         }
@@ -118,7 +121,8 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         break;
       }
       case POLYGON: {
-        auto polygon = polygonFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+        auto polygon =
+            polygonFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
         if (polygon.getOuter().empty()) {
           throw std::runtime_error("Cannot parse polygon from WKT");
         }
@@ -127,7 +131,7 @@ inline ParseResult parseWkt(const std::string_view& wkt,
       }
       case MULTIPOINT: {
         auto multipoint =
-            multiPointFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+            multiPointFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
         if (multipoint.empty()) {
           throw std::runtime_error("Cannot parse multipoint from WKT");
         }
@@ -136,7 +140,7 @@ inline ParseResult parseWkt(const std::string_view& wkt,
       }
       case MULTILINESTRING: {
         auto multiline =
-            multiLineFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+            multiLineFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
         if (multiline.empty()) {
           throw std::runtime_error("Cannot parse multiline from WKT");
         }
@@ -144,8 +148,8 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         break;
       }
       case MULTIPOLYGON: {
-        auto multipolygon =
-            multiPolygonFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+        auto multipolygon = multiPolygonFromWKTProj<CoordType>(c, &c, projFunc,
+                                                               crsType, strict);
         if (multipolygon.empty()) {
           throw std::runtime_error("Cannot parse multipolygon from WKT");
         }
@@ -154,7 +158,7 @@ inline ParseResult parseWkt(const std::string_view& wkt,
       }
       case COLLECTION: {
         auto collection =
-            collectionFromWKTProj<CoordType>(c, &c, projFunc, crsType);
+            collectionFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
         if (collection.empty()) {
           throw std::runtime_error("Cannot parse collection from WKT");
         }
@@ -162,8 +166,20 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         break;
       }
       default:
+        if (strict) {
+          throw WKTParseException("Unsupported WKT geometry type");
+        }
         break;
     }
+  } catch (const WKTParseException&) {
+    // Report invalid WKT to the caller.
+    //
+    // NOTE: `pb_util` throws this exception only in strict mode. Should a
+    // future version throw it in lenient mode too, the check makes that
+    // visible instead of silently treating it like any other parse error
+    // in the handler below.
+    AD_CORRECTNESS_CHECK(strict);
+    throw;
   } catch (const std::runtime_error& error) {
     AD_LOG_DEBUG << "Error parsing WKT `" << wkt << "`: " << error.what()
                  << std::endl;
@@ -536,6 +552,97 @@ struct UtilGeomToWktVisitor {
 };
 
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
+
+// Helper to convert a geometry from `pb_util` to a GeoJSON geometry object (RFC
+// 7946). The input is expected to be in CRS84, as GeoJSON only supports this
+// CRS.
+struct UtilGeomToGeoJsonVisitor {
+  using Json = nlohmann::ordered_json;
+
+  // Visitor for `std::optional<ParsedWkt>` inputs.
+  std::optional<std::string> operator()(
+      const std::optional<ParsedWkt>& geom) const {
+    if (!geom.has_value()) {
+      return std::nullopt;
+    }
+    return std::visit([](const auto& g) { return toJson(g); }, geom.value())
+        .dump();
+  }
+
+  // The GeoJSON coordinates of a point, line, ring or multi-geometry.
+  static Json coords(const Point<CoordType>& p) {
+    return Json::array({p.getX(), p.getY()});
+  }
+
+  template <typename T>
+  static Json coords(const std::vector<T>& vec) {
+    Json result = Json::array();
+    for (const auto& element : vec) {
+      result.push_back(coords(element));
+    }
+    return result;
+  }
+
+  static Json coords(const Polygon<CoordType>& polygon) {
+    Json result = Json::array({ringCoords(polygon.getOuter())});
+    for (const auto& inner : polygon.getInners()) {
+      result.push_back(ringCoords(inner));
+    }
+    return result;
+  }
+
+  // GeoJSON requires rings to be closed explicitly.
+  static Json ringCoords(const Ring<CoordType>& ring) {
+    Json result = coords(ring);
+    if (!ring.empty() && ring.front() != ring.back()) {
+      result.push_back(coords(ring.front()));
+    }
+    return result;
+  }
+
+  // The GeoJSON geometry object of the given type with the given coordinates.
+  static Json geometry(std::string_view type, Json coordinates) {
+    return {{"type", std::string{type}},
+            {"coordinates", std::move(coordinates)}};
+  }
+
+  // The GeoJSON geometry objects for each of the `pb_util` geometry types.
+  static Json toJson(const Point<CoordType>& g) {
+    return geometry(detail::geoStrings::point, coords(g));
+  }
+
+  static Json toJson(const Line<CoordType>& g) {
+    return geometry(detail::geoStrings::linestring, coords(g));
+  }
+
+  static Json toJson(const Polygon<CoordType>& g) {
+    return geometry(detail::geoStrings::polygon, coords(g));
+  }
+
+  static Json toJson(const MultiPoint<CoordType>& g) {
+    return geometry(detail::geoStrings::multipoint, coords(g));
+  }
+
+  static Json toJson(const MultiLine<CoordType>& g) {
+    return geometry(detail::geoStrings::multiLineString, coords(g));
+  }
+
+  static Json toJson(const MultiPolygon<CoordType>& g) {
+    return geometry(detail::geoStrings::multiPolygon, coords(g));
+  }
+
+  static Json toJson(const Collection<CoordType>& collection) {
+    Json geometries = Json::array();
+    for (const auto& g : collection) {
+      geometries.push_back(
+          visitAnyGeometry([](const auto& x) { return toJson(x); }, g));
+    }
+    return {{"type", std::string{detail::geoStrings::geometryCollection}},
+            {"geometries", std::move(geometries)}};
+  }
+};
+
+static constexpr UtilGeomToGeoJsonVisitor utilGeomToGeoJson;
 
 // Helper to extract the n-th geometry from a parsed `pb_util` geometry. Note
 // that this is 1-indexed and non-collection types return themselves at index 1.
