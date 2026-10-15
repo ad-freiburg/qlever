@@ -238,7 +238,8 @@ class CompressedExternalIdTableWriter {
     size_t lower = blockIdx * layout.blockSize_;
     size_t upper = std::min(lower + layout.blockSize_, column.size());
     AD_CORRECTNESS_CHECK(lower < upper);
-    auto uncompressedSize = (upper - lower) * sizeof(Id);
+    static_assert(sizeof(column[0]) == BYTES_PER_ID_COLUMN_ENTRY);
+    auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
     auto compressed =
         ZstdWrapper::compress(column.data() + lower, uncompressedSize);
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
