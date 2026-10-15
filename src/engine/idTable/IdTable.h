@@ -1023,16 +1023,25 @@ inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
 
-// isProxy marks this Proxy references as Proxies,
-// so it can be recognized in some helper-functions as proxies
+// The above `row_reference` types are proxies (value types that behave like
+// references), so we specialize `qlever::isProxy` for them.
 template <>
-inline constexpr bool qlever::isProxy<IdTable::row_reference_restricted> = true;
+inline constexpr bool qlever::isProxy<IdTable::row_reference::Base> = true;
 template <>
-inline constexpr bool qlever::isProxy<IdTable::const_row_reference_restricted> =
+inline constexpr bool qlever::isProxy<IdTable::const_row_reference::Base> =
     true;
 template <>
 inline constexpr bool
-    qlever::isProxy<IdTable::const_row_reference_view_restricted> = true;
+    qlever::isProxy<IdTableView<0>::const_row_reference::Base> = true;
+
+// Check that the un/restricted RowReferences are specialized via isProxy
+static_assert(qlever::isProxy<IdTable::row_reference>);
+static_assert(qlever::isProxy<IdTable::const_row_reference>);
+static_assert(qlever::isProxy<IdTableView<0>::const_row_reference>);
+
+static_assert(qlever::isProxy<IdTable::row_reference::Base>);
+static_assert(qlever::isProxy<IdTable::const_row_reference::Base>);
+static_assert(qlever::isProxy<IdTableView<0>::const_row_reference::Base>);
 
 // Type aliases for the columns of an `IdTable`: a mutable view, a read-only
 // view, and an owning column. Currently just aliases for `ql::span<Id>`,

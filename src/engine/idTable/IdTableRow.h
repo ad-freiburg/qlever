@@ -466,6 +466,8 @@ class RowReference
 
 }  // namespace columnBasedIdTable
 
+// The above `RowReference` is a proxy-type (value types that behave like
+// references), so we specialize `qlever::isProxy` for them.
 template <typename Table, ad_utility::IsConst isConstTag>
 inline constexpr bool
     qlever::isProxy<columnBasedIdTable::RowReference<Table, isConstTag>> = true;
