@@ -11,8 +11,10 @@
 #define QLEVER_SRC_UTIL_ISPROXY_H
 
 namespace qlever {
-// Specialize to `true` for types that are cheap to copy and act as a reference
-// to an element (like the proxies of split layout).
+// Specialize `isProxy` for types that are objects, but behave like references
+// (e.g. the Id references from the split layouts, or the  row references of
+// column-major `IdTable`s. The `isProxy` variable is for example used by
+// `ad_utility::tie` (see `util/Tie.h`)
 template <typename T>
 inline constexpr bool isProxy = false;
 }  // namespace qlever
