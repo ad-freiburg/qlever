@@ -23,6 +23,8 @@
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/OwnedOrViewedVector.h"
+#include "util/Serializer/LayoutReader.h"
+#include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 
@@ -93,6 +95,28 @@ class SecondaryVocabulary {
   static constexpr std::array<char, 8> serializationMagicBytes{
       'Q', 'L', 'S', 'E', 'C', 'V', 'O', 'C'};
   static constexpr uint16_t serializationFormatVersion = 1;
+
+  // The byte ranges that the parts of a serialized `SecondaryVocabulary`
+  // occupy in the buffer that it was written to (see `parseLayout`). All
+  // ranges are offsets into that buffer.
+  struct Layout {
+    using ByteRange = ad_utility::serialization::ByteRange;
+    // Whether a vocabulary is present at all. This is `false` only for a
+    // default-constructed layout, which stands for "no secondary vocabulary"
+    // (for example in a container format in which the vocabulary is optional),
+    // and `true` for every layout returned by `parseLayout`.
+    bool present_ = false;
+    // The complete serialized vocabulary, including the magic bytes and the
+    // format version.
+    ByteRange whole_;
+    // The complete serialization of each segment (its words and its offsets,
+    // see `CompactVectorOfStrings`), in the order of the segments.
+    std::vector<ByteRange> segments_;
+    // The payload bytes of the `segmentOffsets_` and the `sortedIndices_`
+    // (the raw `uint64_t`s, without the preceding sizes).
+    ByteRange segmentOffsets_;
+    ByteRange sortedIndices_;
+  };
 
  private:
   // An array of global indices (see `segmentOffsets_` and `sortedIndices_`
@@ -178,13 +202,25 @@ class SecondaryVocabulary {
   // move-only, and because the copy is expensive.
   SecondaryVocabulary clone() const;
 
+  // Determine the layout (see `Layout`) of a vocabulary that was written via
+  // the serialization below with the aligned serialization (see
+  // `AlignedByteBufferWriteSerializer`), starting at the current position of
+  // the `reader`, which is advanced past the vocabulary. This parses exactly
+  // the format that the serialization below writes (and has to be kept in sync
+  // with it), but only records where the parts are, instead of constructing a
+  // vocabulary. Throw if the input does not start with the
+  // `serializationMagicBytes` and the `serializationFormatVersion`, or is
+  // truncated.
+  static Layout parseLayout(ad_utility::serialization::LayoutReader& reader);
+
   // Serialize the vocabulary as the `serializationMagicBytes` and the
   // `serializationFormatVersion`, followed by its number of segments, the
   // segments (in the order in which they were appended, so that all words keep
   // their global indices), the `segmentOffsets_`, and the `sortedIndices_`.
   // The format version is stored explicitly, so that the format can be
   // changed in the future without breaking the reading of previously
-  // serialized vocabularies.
+  // serialized vocabularies. The layout of the written bytes is parsed by
+  // `parseLayout` above, which has to be adapted whenever this format changes.
   //
   // Reading is designed to be as cheap as possible: If the `serializer`
   // supports zero-copy deserialization (see `ZeroCopyReadSerializer`), then

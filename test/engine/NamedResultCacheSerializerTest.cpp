@@ -8,6 +8,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <cstring>
+
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -18,6 +20,7 @@
 #include "engine/NamedResultCacheSerializer.h"
 #include "index/LocalVocabEntry.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/LayoutReader.h"
 
 using namespace ad_utility::serialization;
 using ::testing::ElementsAre;
@@ -542,6 +545,140 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
           writer, value, tooFewRows, shortenedSortOrder, false,
           namedResultCacheSerializer::formatVersion),
       ::testing::HasSubstr("resultView.numRows()"));
+}
+
+// _____________________________________________________________________________
+// Test that `parseEntriesHeader` and `parseEntryLayout` record exactly the
+// bytes that `writeEntries` and `writeValue` write.
+TEST_F(NamedResultCacheSerializerTest, ParseLayout) {
+  using namespace namedResultCacheSerializer;
+  using ad_utility::serialization::ByteRange;
+  using ad_utility::serialization::LayoutReader;
+  NamedResultCache cache;
+  cache.store("b", makeSimpleValue("key-b"));
+  cache.store("a", makeSimpleValue("key-a"));
+  AlignedByteBufferWriteSerializer writer;
+  cache.writeToSerializer(writer);
+  auto buffer = std::move(writer).data();
+
+  // The header: the magic byte, the version, and the number of entries (none
+  // of which is aligned).
+  LayoutReader reader{ql::span<const char>{buffer.data(), buffer.size()}};
+  auto header = parseEntriesHeader(reader);
+  EXPECT_EQ(header.whole_, (ByteRange{0, 1 + 2 + 8}));
+  EXPECT_EQ(reader.position(), 11u);
+  EXPECT_EQ(header.version_, formatVersion);
+  EXPECT_EQ(header.numEntries_, 2u);
+
+  // The entries (sorted by key), which follow each other directly.
+  auto expected = makeSimpleValue("unused");
+  const auto& table = ExplicitIdTableOperation::viewOf(expected.result_);
+  uint64_t cursor = header.whole_.end_;
+  for (std::string key : {"a", "b"}) {
+    auto entry = parseEntryLayout(reader, header.version_);
+    EXPECT_EQ(entry.key_, key);
+    EXPECT_EQ(entry.whole_.begin_, cursor);
+    EXPECT_EQ(entry.whole_.end_, reader.position());
+    cursor = entry.whole_.end_;
+    EXPECT_EQ(entry.numRows_, 2u);
+    EXPECT_EQ(entry.numColumns_, 2u);
+    ASSERT_EQ(entry.columnPayloads_.size(), 2u);
+    for (size_t c = 0; c < 2; ++c) {
+      const auto& column = entry.columnPayloads_[c];
+      EXPECT_EQ(column.size(), 2 * sizeof(Id));
+      EXPECT_EQ(column.begin_ % alignof(Id), 0u);
+      std::vector<Id> ids(2);
+      std::memcpy(ids.data(), buffer.data() + column.begin_, column.size());
+      EXPECT_THAT(ids, ElementsAre(table(0, c), table(1, c)));
+    }
+    EXPECT_LE(entry.columnPayloads_[1].end_, entry.varToColMap_.begin_);
+    EXPECT_LT(entry.varToColMap_.begin_, entry.varToColMap_.end_);
+    EXPECT_LE(entry.varToColMap_.end_, entry.resultSortedOn_.begin_);
+    EXPECT_EQ(entry.resultSortedOn_.size(), sizeof(uint64_t));
+    EXPECT_THAT(entry.sortedOnColumns_, ElementsAre(0));
+    EXPECT_LE(entry.resultSortedOn_.end_, entry.cacheKey_.begin_);
+    EXPECT_EQ(std::string_view(buffer.data() + entry.cacheKey_.begin_,
+                               entry.cacheKey_.size()),
+              absl::StrCat("key-", key));
+    EXPECT_LE(entry.cacheKey_.end_, entry.whole_.end_);
+    EXPECT_FALSE(entry.hasGeoIndex_);
+  }
+  EXPECT_TRUE(reader.atEnd());
+
+  // A wrong magic byte and an unsupported version are rejected by
+  // `parseEntriesHeader`, and a truncated entry by `parseEntryLayout`.
+  auto parseHeaderFrom = [](AlignedByteBufferWriteSerializer& w) {
+    auto b = std::move(w).data();
+    LayoutReader r{ql::span<const char>{b.data(), b.size()}};
+    return parseEntriesHeader(r);
+  };
+  AlignedByteBufferWriteSerializer wrongMagic;
+  wrongMagic << uint8_t{0};
+  wrongMagic << formatVersion;
+  wrongMagic << size_t{0};
+  AD_EXPECT_THROW_WITH_MESSAGE(parseHeaderFrom(wrongMagic),
+                               ::testing::HasSubstr("magic byte"));
+  AlignedByteBufferWriteSerializer wrongVersion;
+  wrongVersion << namedResultCacheSerializer::detail::magicByte;
+  wrongVersion << uint16_t{7};
+  wrongVersion << size_t{0};
+  AD_EXPECT_THROW_WITH_MESSAGE(parseHeaderFrom(wrongVersion),
+                               ::testing::HasSubstr("format version 7"));
+  LayoutReader truncated{
+      ql::span<const char>{buffer.data(), buffer.size() - 8}};
+  parseEntriesHeader(truncated);
+  parseEntryLayout(truncated, formatVersion);
+  EXPECT_ANY_THROW(parseEntryLayout(truncated, formatVersion));
+}
+
+// _____________________________________________________________________________
+// Test `parseEntryLayout` for an entry with a geo index, in both entries
+// versions.
+TEST_F(NamedResultCacheSerializerTest, ParseLayoutWithGeoIndex) {
+  using namespace namedResultCacheSerializer;
+  using ad_utility::serialization::LayoutReader;
+  auto qec = ad_utility::testing::getQec(
+      "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .");
+  qec->pinResultWithName() = {"geo", Variable{"?o"}};
+  auto plan =
+      queryPlannerTestHelpers::parseAndPlan("SELECT * { ?s <p> ?o }", qec);
+  [[maybe_unused]] auto result = plan->getResult();
+  auto entries = qec->namedResultCache().getAllEntriesSortedByKey();
+  ASSERT_EQ(entries.size(), 1);
+  ASSERT_TRUE(entries.at(0).second->cachedGeoIndex_.has_value());
+
+  for (uint16_t version : {legacyFormatVersion, formatVersion}) {
+    AlignedByteBufferWriteSerializer writer;
+    writeEntries(
+        writer, entries,
+        [version](auto& s, const NamedResultCache::Value& v) {
+          writeValue(s, v,
+                     ExplicitIdTableOperation::viewOf(v.result_).getColumns(),
+                     v.resultSortedOn_, /*writeLocalVocabWords=*/true, version);
+        },
+        version);
+    auto buffer = std::move(writer).data();
+    LayoutReader reader{ql::span<const char>{buffer.data(), buffer.size()}};
+    auto header = parseEntriesHeader(reader);
+    EXPECT_EQ(header.version_, version);
+    ASSERT_EQ(header.numEntries_, 1u);
+    auto entry = parseEntryLayout(reader, version);
+    EXPECT_TRUE(reader.atEnd());
+    EXPECT_EQ(entry.key_, "geo");
+    EXPECT_EQ(entry.numRows_, 1u);
+    ASSERT_TRUE(entry.hasGeoIndex_);
+    EXPECT_LE(entry.cacheKey_.end_, entry.geo_.whole_.begin_);
+    EXPECT_GT(entry.geo_.whole_.size(), 0u);
+    EXPECT_EQ(entry.geo_.whole_.end_, entry.whole_.end_);
+    if (version == formatVersion) {
+      ASSERT_EQ(entry.geo_.segmentPayloads_.size(), 1u);
+      EXPECT_GT(entry.geo_.segmentPayloads_[0].size(), 0u);
+      EXPECT_EQ(entry.geo_.rowToShape_.size(), sizeof(uint64_t));
+    } else {
+      EXPECT_TRUE(entry.geo_.segmentPayloads_.empty());
+    }
+  }
 }
 
 }  // namespace

@@ -335,6 +335,8 @@ addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator sparqlParse
 
 addLinkAndDiscoverTestNoLibs(SerializerTest)
 
+addLinkAndDiscoverTestNoLibs(LayoutReaderTest)
+
 addLinkAndDiscoverTestNoLibs(ParametersTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)

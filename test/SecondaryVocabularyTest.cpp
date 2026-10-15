@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cstring>
 #include <optional>
 #include <string>
 #include <vector>
@@ -37,6 +38,7 @@
 #include "parser/TripleComponent.h"
 #include "util/CompactStringVector.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/LayoutReader.h"
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -432,6 +434,108 @@ TEST(SecondaryVocabulary, serialization) {
   SecondaryVocabulary wrongVersion;
   AD_EXPECT_THROW_WITH_MESSAGE(wrongVersionReader >> wrongVersion,
                                HasSubstr("unsupported format version 2"));
+}
+
+// _____________________________________________________________________________
+TEST(SecondaryVocabulary, parseLayout) {
+  using namespace ad_utility::serialization;
+  SecondaryVocabulary vocab{secondaryVocabWords};
+  vocab.appendSegment(makeSegment({"<a>", "<f>"}));
+
+  // Write something before and after the vocabulary, so that the parsing has
+  // to start at a non-zero position and has to stop at the right place.
+  AlignedByteBufferWriteSerializer writer;
+  writer << uint8_t{42};
+  writer << vocab;
+  writer << uint64_t{17};
+  auto buffer = std::move(writer).data();
+  LayoutReader reader{ql::span<const char>{buffer.data(), buffer.size()}};
+  EXPECT_EQ(reader.readScalar<uint8_t>(), 42);
+  auto layout = SecondaryVocabulary::parseLayout(reader);
+  EXPECT_EQ(reader.readScalar<uint64_t>(), 17u);
+  EXPECT_TRUE(reader.atEnd());
+
+  // The whole vocabulary starts (with the magic bytes) directly after the
+  // first byte and ends directly before the trailing `uint64_t`.
+  EXPECT_TRUE(layout.present_);
+  EXPECT_EQ(layout.whole_.begin_, 1u);
+  EXPECT_EQ(layout.whole_.end_, buffer.size() - sizeof(uint64_t));
+  EXPECT_EQ(std::string_view(buffer.data() + layout.whole_.begin_, 8),
+            "QLSECVOC");
+
+  // The two segments and the two index arrays follow each other in that order
+  // within the whole range.
+  ASSERT_EQ(layout.segments_.size(), 2u);
+  EXPECT_LT(layout.whole_.begin_, layout.segments_[0].begin_);
+  EXPECT_LT(layout.segments_[0].begin_, layout.segments_[0].end_);
+  EXPECT_LE(layout.segments_[0].end_, layout.segments_[1].begin_);
+  EXPECT_LT(layout.segments_[1].begin_, layout.segments_[1].end_);
+  EXPECT_LE(layout.segments_[1].end_, layout.segmentOffsets_.begin_);
+  EXPECT_LE(layout.segmentOffsets_.end_, layout.sortedIndices_.begin_);
+  EXPECT_EQ(layout.sortedIndices_.end_, layout.whole_.end_);
+
+  // The payloads of the index arrays are the raw `uint64_t`s: the segment
+  // offsets `[0, 3]`, and the global indices of the words in their bytewise
+  // order (`"a"`, `<a>`, `<b>`, `<d>`, `<f>`).
+  auto readU64s = [&buffer](ByteRange range) {
+    std::vector<uint64_t> result(range.size() / sizeof(uint64_t));
+    std::memcpy(result.data(), buffer.data() + range.begin_, range.size());
+    return result;
+  };
+  EXPECT_EQ(layout.segmentOffsets_.begin_ % alignof(uint64_t), 0u);
+  EXPECT_EQ(layout.sortedIndices_.begin_ % alignof(uint64_t), 0u);
+  EXPECT_THAT(readU64s(layout.segmentOffsets_), ElementsAre(0, 3));
+  EXPECT_THAT(readU64s(layout.sortedIndices_), ElementsAre(0, 3, 1, 2, 4));
+
+  // The first segment contains the characters of its words (the first array
+  // of the segment, whose payload starts after the size).
+  EXPECT_NE(std::string_view(buffer.data() + layout.segments_[0].begin_,
+                             layout.segments_[0].size())
+                .find("\"a\"<b><d>"),
+            std::string_view::npos);
+
+  // An empty vocabulary has no segments and empty index arrays.
+  AlignedByteBufferWriteSerializer emptyWriter;
+  emptyWriter << SecondaryVocabulary{};
+  auto emptyBuffer = std::move(emptyWriter).data();
+  LayoutReader emptyReader{
+      ql::span<const char>{emptyBuffer.data(), emptyBuffer.size()}};
+  auto emptyLayout = SecondaryVocabulary::parseLayout(emptyReader);
+  EXPECT_TRUE(emptyReader.atEnd());
+  EXPECT_TRUE(emptyLayout.present_);
+  EXPECT_EQ(emptyLayout.whole_, (ByteRange{0, emptyBuffer.size()}));
+  EXPECT_TRUE(emptyLayout.segments_.empty());
+  EXPECT_EQ(emptyLayout.segmentOffsets_.size(), 0u);
+  EXPECT_EQ(emptyLayout.sortedIndices_.size(), 0u);
+
+  // A default-constructed layout stands for an absent vocabulary.
+  EXPECT_FALSE(SecondaryVocabulary::Layout{}.present_);
+
+  // Wrong magic bytes, an unsupported format version, and a truncated input
+  // are rejected.
+  auto parseFromAlignedWriter = [](AlignedByteBufferWriteSerializer& w) {
+    auto b = std::move(w).data();
+    LayoutReader r{ql::span<const char>{b.data(), b.size()}};
+    return SecondaryVocabulary::parseLayout(r);
+  };
+  AlignedByteBufferWriteSerializer wrongMagicWriter;
+  wrongMagicWriter << std::array<char, 8>{'N', 'O', 'T', 'Q',
+                                          'L', 'E', 'V', 'R'};
+  wrongMagicWriter << SecondaryVocabulary::serializationFormatVersion;
+  wrongMagicWriter << uint64_t{0};
+  AD_EXPECT_THROW_WITH_MESSAGE(parseFromAlignedWriter(wrongMagicWriter),
+                               HasSubstr("expected magic bytes"));
+  AlignedByteBufferWriteSerializer wrongVersionWriter;
+  wrongVersionWriter << SecondaryVocabulary::serializationMagicBytes;
+  wrongVersionWriter << static_cast<uint16_t>(
+      SecondaryVocabulary::serializationFormatVersion + 1);
+  wrongVersionWriter << uint64_t{0};
+  AD_EXPECT_THROW_WITH_MESSAGE(parseFromAlignedWriter(wrongVersionWriter),
+                               HasSubstr("unsupported format version 2"));
+  LayoutReader truncatedReader{
+      ql::span<const char>{buffer.data(), buffer.size() / 2}};
+  truncatedReader.readScalar<uint8_t>();
+  EXPECT_ANY_THROW(SecondaryVocabulary::parseLayout(truncatedReader));
 }
 
 // _____________________________________________________________________________

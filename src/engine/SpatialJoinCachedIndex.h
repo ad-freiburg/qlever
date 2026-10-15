@@ -26,6 +26,7 @@
 // and `writeToSerializer`, which have to be defined in this header because
 // they are generic in the serializer.
 #include "util/HashMap.h"
+#include "util/Serializer/LayoutReader.h"
 #include "util/Serializer/SerializeHashMap.h"
 #include "util/Serializer/SerializeOptional.h"
 #include "util/Serializer/SerializePair.h"
@@ -83,6 +84,21 @@ class SpatialJoinCachedIndex {
   struct DecodedShape {
     size_t segment_;
     size_t shapeId_;
+  };
+
+  // The byte ranges that the parts of a serialized `SpatialJoinCachedIndex`
+  // occupy in the buffer that it was written to (see `parseLayout`). All
+  // ranges are offsets into that buffer.
+  struct Layout {
+    using ByteRange = ad_utility::serialization::ByteRange;
+    // The complete serialized index, including all its internal framing.
+    ByteRange whole_;
+    // Only for the entries format version 2 (see `writeToSerializer`): the
+    // payload bytes (the encoded `MutableS2ShapeIndex`, without the preceding
+    // size) of each segment, and the payload bytes of `rowToShape_` (the raw
+    // `uint64_t`s). For the legacy format (version 1), these are empty.
+    std::vector<ByteRange> segmentPayloads_;
+    ByteRange rowToShape_;
   };
 
  private:
@@ -253,6 +269,10 @@ class SpatialJoinCachedIndex {
   // `forUpdatedTable`). The blob writer deliberately still uses that format for
   // an index with a single segment and a simplification (see
   // `NamedCachedQueryBlobManager::serialize`).
+  //
+  // The layout of the written bytes (in both versions) is parsed by
+  // `parseLayout` below, which has to be adapted whenever either format
+  // changes.
   CPP_template(typename Serializer)(
       requires ad_utility::serialization::WriteSerializer<
           Serializer>) void writeToSerializer(Serializer& serializer,
@@ -335,6 +355,20 @@ class SpatialJoinCachedIndex {
     return SpatialJoinCachedIndex{std::move(geometryColumn), simplification,
                                   std::move(segments), std::move(rowToShape)};
   }
+
+  // Determine the layout (see `Layout`) of an index that was written by
+  // `writeToSerializer` in the given `entriesFormatVersion` with the aligned
+  // serialization (see `AlignedByteBufferWriteSerializer`), starting at the
+  // current position of the `reader`, which is advanced past the index. This
+  // parses exactly the format that `writeToSerializer` writes and that
+  // `readFromSerializer` reads (and has to be kept in sync with them), but only
+  // records where the parts are, instead of constructing an index. `numRows`
+  // is the number of rows of the `IdTable` that the index refers to, which is
+  // checked against the serialized `rowToShape_` (version 2 only). Throw if
+  // the `entriesFormatVersion` is unknown, or if the input is corrupt or
+  // truncated.
+  static Layout parseLayout(ad_utility::serialization::LayoutReader& reader,
+                            size_t numRows, uint16_t entriesFormatVersion);
 
  private:
   // Construct from the given parts, and compute `shapeToRow_` from

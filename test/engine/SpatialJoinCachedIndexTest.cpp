@@ -12,6 +12,8 @@
 #include <s2/s2shapeutil_coding.h>
 #include <s2/util/units/length-units.h>
 
+#include <cstring>
+
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -26,6 +28,7 @@
 #include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/LayoutReader.h"
 
 namespace {
 
@@ -837,6 +840,103 @@ TEST(SpatialJoinCachedIndex, writeLegacyVersion1Format) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       serializeToBytes(twoSegments, legacyFormatVersion),
       ::testing::HasSubstr("single segment"));
+}
+
+// Test that `parseLayout` records exactly the bytes that `writeToSerializer`
+// writes, in both format versions.
+TEST(SpatialJoinCachedIndex, parseLayout) {
+  using namespace segmented;
+  using ad_utility::serialization::AlignedByteBufferWriteSerializer;
+  using ad_utility::serialization::ByteRange;
+  using ad_utility::serialization::LayoutReader;
+  TestTables t{segmentedKb()};
+  const auto& L = t.lines_;
+  const auto& M = t.others_;
+  auto base = t.build(t.select({L[0], L[1], M[0]}), 10.0);
+  auto ext =
+      t.forUpdatedTable(base, {1, Index::NO_ROW, Index::NO_ROW, Index::NO_ROW},
+                        t.select({L[1], L[2], M[1], L[3]}));
+  ASSERT_EQ(ext.numSegments(), 2);
+
+  // Write the `index` with the aligned serialization, preceded by a byte, so
+  // that the offsets are not zero-based.
+  auto write = [](const Index& index, uint16_t version) {
+    AlignedByteBufferWriteSerializer writer;
+    writer << uint8_t{7};
+    index.writeToSerializer(writer, version);
+    return std::move(writer).data();
+  };
+  auto makeReader = [](const auto& buffer) {
+    LayoutReader reader{ql::span<const char>{buffer.data(), buffer.size()}};
+    reader.template readScalar<uint8_t>();
+    return reader;
+  };
+
+  for (const Index* index : {&base, &ext}) {
+    auto buffer = write(*index, formatVersion);
+    auto reader = makeReader(buffer);
+    auto layout = Index::parseLayout(reader, index->numRows(), formatVersion);
+    EXPECT_TRUE(reader.atEnd());
+    EXPECT_EQ(layout.whole_, (ByteRange{1, buffer.size()}));
+
+    // The payload of each segment is exactly its encoding.
+    ASSERT_EQ(layout.segmentPayloads_.size(), index->numSegments());
+    uint64_t cursor = layout.whole_.begin_;
+    for (size_t i = 0; i < index->numSegments(); ++i) {
+      const auto& payload = layout.segmentPayloads_[i];
+      EXPECT_LT(cursor, payload.begin_);
+      cursor = payload.end_;
+      EXPECT_EQ(
+          std::string_view(buffer.data() + payload.begin_, payload.size()),
+          encodeSegment(*index->segments()[i]));
+    }
+
+    // The payload of `rowToShape_` is the aligned array of the encoded shapes
+    // of the rows, which agree with `getRow`.
+    EXPECT_LT(cursor, layout.rowToShape_.begin_);
+    EXPECT_EQ(layout.rowToShape_.begin_ % alignof(uint64_t), 0u);
+    EXPECT_EQ(layout.rowToShape_.size(), index->numRows() * sizeof(uint64_t));
+    EXPECT_EQ(layout.rowToShape_.end_, layout.whole_.end_);
+    std::vector<uint64_t> rowToShape(index->numRows());
+    std::memcpy(rowToShape.data(), buffer.data() + layout.rowToShape_.begin_,
+                layout.rowToShape_.size());
+    size_t numRowsWithShape = 0;
+    for (size_t row = 0; row < index->numRows(); ++row) {
+      if (rowToShape[row] == Index::NO_SHAPE) {
+        continue;
+      }
+      ++numRowsWithShape;
+      auto [segment, shapeId] = Index::decodeShape(rowToShape[row]);
+      EXPECT_EQ(index->getRow(segment, static_cast<int>(shapeId)), row);
+    }
+    EXPECT_EQ(numRowsWithShape, index->numLiveShapes());
+
+    // The wrong number of rows and an unknown version are detected.
+    auto reader2 = makeReader(buffer);
+    EXPECT_ANY_THROW(
+        Index::parseLayout(reader2, index->numRows() + 1, formatVersion));
+    auto reader3 = makeReader(buffer);
+    EXPECT_ANY_THROW(Index::parseLayout(reader3, index->numRows(), 3));
+  }
+
+  // In the legacy format, only the whole range is recorded.
+  {
+    auto buffer = write(base, legacyFormatVersion);
+    auto reader = makeReader(buffer);
+    auto layout =
+        Index::parseLayout(reader, base.numRows(), legacyFormatVersion);
+    EXPECT_TRUE(reader.atEnd());
+    EXPECT_EQ(layout.whole_, (ByteRange{1, buffer.size()}));
+    EXPECT_TRUE(layout.segmentPayloads_.empty());
+    EXPECT_EQ(layout.rowToShape_.size(), 0u);
+
+    // A truncated input is detected.
+    LayoutReader truncated{
+        ql::span<const char>{buffer.data(), buffer.size() - 1}};
+    truncated.readScalar<uint8_t>();
+    EXPECT_ANY_THROW(
+        Index::parseLayout(truncated, base.numRows(), legacyFormatVersion));
+  }
 }
 
 // Test the round trip of `encodeShape` and `decodeShape`, and that values that

@@ -15,6 +15,7 @@
 #include "engine/NamedResultCacheFormatVersion.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
+#include "util/Serializer/LayoutReader.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
@@ -39,7 +40,9 @@ using Value = NamedResultCache::Value;
 // `entriesVersion` (one of `legacyFormatVersion` and
 // `formatVersion`). Note that `writeEntry` has to write the values in
 // the same `entriesVersion`, and that the legacy version can only represent
-// geo indices with a single segment.
+// geo indices with a single segment. The header that is written first (the
+// magic byte, the version, and the number of entries) is parsed by
+// `parseEntriesHeader` below, which has to be adapted whenever it changes.
 CPP_template(typename Serializer, typename WriteEntry)(
     requires ad_utility::serialization::WriteSerializer<Serializer> CPP_and
         ql::concepts::invocable<
@@ -64,6 +67,28 @@ CPP_template(typename Serializer, typename WriteEntry)(
     writeEntry(serializer, *value);
   }
 }
+
+// The header that `writeEntries` writes before the entries (see
+// `parseEntriesHeader`).
+struct EntriesHeader {
+  // The byte range of the header (the magic byte, the version, and the number
+  // of entries) in the buffer that it was written to.
+  ad_utility::serialization::ByteRange whole_;
+  // The entries format version (one of `legacyFormatVersion` and
+  // `formatVersion`), in which all the entries that follow are written.
+  uint16_t version_ = 0;
+  size_t numEntries_ = 0;
+};
+
+// Parse the header that `writeEntries` writes before the entries, starting at
+// the current position of the `reader`, which is advanced past the header
+// (the entries themselves then follow, see `parseEntryLayout`). This mirrors
+// the checks of `NamedResultCache::readFromSerializer`: throw if the magic
+// byte does not match, or if the version is none of `legacyFormatVersion` and
+// `formatVersion`. The input has to be written with the aligned serialization
+// (see `AlignedByteBufferWriteSerializer`).
+EntriesHeader parseEntriesHeader(
+    ad_utility::serialization::LayoutReader& reader);
 }  // namespace namedResultCacheSerializer
 
 namespace namedResultCacheSerializer {
@@ -232,7 +257,9 @@ namespace namedResultCacheSerializer {
 // because such a caller has stored them elsewhere. The geo index (if any) is
 // written in the format of the given `entriesVersion`, which has to be the one
 // given to `writeEntries`. In the legacy version, the geo index must have a
-// single segment.
+// single segment. The layout of the written bytes is parsed by
+// `parseEntryLayout` below, which has to be adapted whenever this format
+// changes.
 CPP_template(typename Serializer, typename Columns)(
     requires ad_utility::serialization::WriteSerializer<
         Serializer>) void writeValue(Serializer& serializer,
@@ -311,6 +338,46 @@ CPP_template(typename Serializer, typename Columns)(
     value.cachedGeoIndex_.value().writeToSerializer(serializer, entriesVersion);
   }
 }
+
+// The byte ranges that the parts of one serialized entry of a
+// `NamedResultCache` (its key followed by its value, as written by
+// `writeEntries` and `writeValue`) occupy in the buffer that it was written to
+// (see `parseEntryLayout`). All ranges are offsets into that buffer.
+struct EntryLayout {
+  using ByteRange = ad_utility::serialization::ByteRange;
+  // The complete entry, starting with its key.
+  ByteRange whole_;
+  std::string key_;
+  size_t numRows_ = 0;
+  size_t numColumns_ = 0;
+  // For each column the payload bytes of its `Id`s (`numRows_ * sizeof(Id)`
+  // bytes, aligned to `alignof(Id)`), without the preceding size.
+  std::vector<ByteRange> columnPayloads_;
+  // The complete serialized `VariableToColumnMap`.
+  ByteRange varToColMap_;
+  // The payload bytes of the `resultSortedOn_` array, and its contents.
+  ByteRange resultSortedOn_;
+  std::vector<uint64_t> sortedOnColumns_;
+  // The payload bytes (the characters) of the cache key.
+  ByteRange cacheKey_;
+  // Whether the entry has a geo index, and its layout if so.
+  bool hasGeoIndex_ = false;
+  SpatialJoinCachedIndex::Layout geo_;
+};
+
+// Determine the layout (see `EntryLayout`) of one entry (its key followed by
+// its value) that was written by `writeEntries` and `writeValue` in the given
+// `entriesVersion` with the aligned serialization (see
+// `AlignedByteBufferWriteSerializer`), starting at the current position of the
+// `reader`, which is advanced past the entry. This parses exactly the format
+// that `writeValue` writes and `readValue` reads (and has to be kept in sync
+// with them), but only records where the parts are, instead of constructing a
+// `NamedResultCache::Value`. In particular, nothing is checked that `readValue`
+// does not also check, and the `Id`s of the columns are not inspected. Throw
+// if the input is corrupt (for example, a column with the wrong number of
+// rows) or truncated.
+EntryLayout parseEntryLayout(ad_utility::serialization::LayoutReader& reader,
+                             uint16_t entriesVersion);
 }  // namespace namedResultCacheSerializer
 
 namespace ad_utility::serialization {

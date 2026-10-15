@@ -138,6 +138,47 @@ SpatialJoinCachedIndex SpatialJoinCachedIndex::fromLegacyFormat(
                                 std::move(segments), std::move(rowToShape)};
 }
 
+// _____________________________________________________________________________
+SpatialJoinCachedIndex::Layout SpatialJoinCachedIndex::parseLayout(
+    ad_utility::serialization::LayoutReader& reader, size_t numRows,
+    uint16_t entriesFormatVersion) {
+  AD_CONTRACT_CHECK(
+      entriesFormatVersion == namedResultCacheSerializer::legacyFormatVersion ||
+      entriesFormatVersion == namedResultCacheSerializer::formatVersion);
+  Layout layout;
+  layout.whole_.begin_ = reader.position();
+  // The geometry column (a `Variable`).
+  {
+    Variable geometryColumn{"?dummyCol"};
+    reader.reader() >> geometryColumn;
+  }
+  if (entriesFormatVersion == namedResultCacheSerializer::legacyFormatVersion) {
+    // The encoded single segment, followed by the map from shape ids to rows,
+    // which is written as its size followed by its pairs (see the NOTE in
+    // `writeToSerializer`).
+    reader.readArray<char>();
+    auto numPairs = reader.readScalar<size_t>();
+    for (size_t i = 0; i < numPairs; ++i) {
+      reader.readScalar<std::pair<size_t, size_t>>();
+    }
+    layout.whole_.end_ = reader.position();
+    return layout;
+  }
+  reader.readScalar<std::optional<double>>();
+  auto numSegments = reader.readScalar<uint64_t>();
+  AD_CORRECTNESS_CHECK(numSegments <= MAX_NUM_SEGMENTS,
+                       "The serialized geo index is corrupt");
+  layout.segmentPayloads_.reserve(numSegments);
+  for (uint64_t i = 0; i < numSegments; ++i) {
+    layout.segmentPayloads_.push_back(reader.readArray<char>());
+  }
+  layout.rowToShape_ = reader.readArray<uint64_t>();
+  AD_CORRECTNESS_CHECK(layout.rowToShape_.size() == numRows * sizeof(uint64_t),
+                       "The serialized geo index is corrupt");
+  layout.whole_.end_ = reader.position();
+  return layout;
+}
+
 // ____________________________________________________________________________
 void SpatialJoinCachedIndex::computeShapeToRow() {
   shapeToRow_.clear();

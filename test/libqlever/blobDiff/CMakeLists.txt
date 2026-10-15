@@ -1,0 +1,1 @@
+addLinkAndDiscoverTestNoLibs(BlobLayoutTest qlever testUtil)
