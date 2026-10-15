@@ -108,8 +108,6 @@ class BufferPool {
  public:
   explicit BufferPool(size_t capacity) : capacity_{capacity} {}
 
-  size_t capacity() const { return capacity_; }
-
   // Get an empty buffer with a capacity of at least `minCapacity` (the
   // capacity of the pool, unless more is needed).
   Buffer take(size_t minCapacity = 0) {

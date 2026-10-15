@@ -304,6 +304,37 @@ TEST(PartialVocabularyFile, mergeBlockAccessorsAndBlockWeight) {
   EXPECT_EQ(firstBlock[0].iriOrLiteral(), words.front());
 }
 
+// Test that a buffer of a `BufferPool` that was taken for a word longer than
+// the capacity of the pool is shrunk back to the capacity when it is given
+// back, directly and through a `MergeBlock` with pools.
+TEST(PartialVocabularyFile, bufferPoolShrinksOversizedBuffers) {
+  using ad_utility::vocabulary_merger::detail::BufferPools;
+  constexpr size_t capacity = 32;
+  auto pools = std::make_shared<BufferPools>(capacity, capacity);
+  auto& pool = pools->mergedWords_;
+
+  auto large = pool.take(3 * capacity);
+  EXPECT_GE(large.capacity(), 3 * capacity);
+  pool.giveBack(std::move(large));
+  EXPECT_EQ(pool.take().capacity(), capacity);
+
+  // A block stores a word that is longer than the capacity in a buffer of its
+  // own, and the next word in a buffer of the capacity. Both go back to the
+  // pool when the block is destroyed, the larger one shrunk.
+  {
+    MergeBlock block{pools};
+    const std::string longWord(2 * capacity, 'x');
+    block.push(longWord, false, 0, 0);
+    block.push("\"a\"", false, 0, 1);
+    ASSERT_EQ(block.size(), 2u);
+    EXPECT_EQ(block[0].iriOrLiteral(), longWord);
+    EXPECT_EQ(block[1].iriOrLiteral(), "\"a\"");
+  }
+  for (size_t i = 0; i < 2; ++i) {
+    EXPECT_EQ(pool.take().capacity(), capacity);
+  }
+}
+
 // Test that a second `finish` of a `PartialVocabularyWriter` does nothing and
 // that no word can be added after `finish`.
 TEST(PartialVocabularyFile, finishTwice) {
