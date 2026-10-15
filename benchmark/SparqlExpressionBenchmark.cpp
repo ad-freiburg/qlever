@@ -63,6 +63,27 @@ struct BenchmarkAdd {
   }
 };
 
+// Ternary addition used to benchmark the N-ary expression infrastructure
+// without unrelated expression overhead.
+struct BenchmarkTernaryAddImpl {
+  template <typename A, typename B, typename C>
+  auto operator()(A a, B b, C c) const {
+    if constexpr (ql::concepts::same_as<std::decay_t<A>, int64_t> &&
+                  ql::concepts::same_as<std::decay_t<B>, int64_t> &&
+                  ql::concepts::same_as<std::decay_t<C>, int64_t>) {
+      return a + b + c;
+    } else {
+      return static_cast<double>(a) + static_cast<double>(b) +
+             static_cast<double>(c);
+    }
+  }
+};
+
+using BenchmarkTernaryAdd = MakeNumericExpression<BenchmarkTernaryAddImpl>;
+
+NARY_EXPRESSION(BenchmarkTernaryAddExpression, 3,
+                FV<BenchmarkTernaryAdd, NumericValueGetter>);
+
 }  // namespace sparqlExpression::detail
 
 namespace ad_benchmark {
@@ -74,6 +95,7 @@ using sparqlExpression::IdExpression;
 using sparqlExpression::SparqlExpression;
 using sparqlExpression::VariableExpression;
 using sparqlExpression::VectorWithMemoryLimit;
+using sparqlExpression::detail::NumericValueGetter;
 
 // Owns all data referenced by the evaluation context.
 struct NumericExpressionBenchmarkContext {
@@ -135,6 +157,24 @@ SparqlExpression::Ptr makeNewVectorConstantExpression() {
   return sparqlExpression::makeMultiplyExpression(
       std::make_unique<VariableExpression>(Variable{"?left"}),
       std::make_unique<IdExpression>(Id::makeFromInt(2)));
+}
+
+// ternary addition expression for benchmarking the N-ary expression
+// infrastructure
+SparqlExpression::Ptr makeBenchmarkTernaryAddExpression() {
+  return std::make_unique<
+      sparqlExpression::detail::BenchmarkTernaryAddExpression>(
+      std::make_unique<VariableExpression>(Variable{"?left"}),
+      std::make_unique<VariableExpression>(Variable{"?right"}),
+      std::make_unique<VariableExpression>(Variable{"?left"}));
+}
+
+SparqlExpression::Ptr makeBenchmarkMixedTernaryAddExpression() {
+  return std::make_unique<
+      sparqlExpression::detail::BenchmarkTernaryAddExpression>(
+      std::make_unique<VariableExpression>(Variable{"?left"}),
+      std::make_unique<VariableExpression>(Variable{"?right"}),
+      std::make_unique<IdExpression>(Id::makeFromDouble(2.0)));
 }
 
 // Evaluate once and verify that the expected result type and size are produced.
@@ -295,6 +335,29 @@ VectorWithMemoryLimit<Id> makeDoubleVector(ql::span<const ValueId> input,
   return result;
 }
 
+void evaluateMixedTernaryAddRepeatedly(ql::span<const ValueId> left,
+                                       ql::span<const ValueId> middle,
+                                       ql::span<const ValueId> right,
+                                       EvaluationContext& context,
+                                       size_t repetitions) {
+  sparqlExpression::detail::BenchmarkTernaryAdd function;
+  NumericValueGetter getter;
+
+  for (size_t repetition = 0; repetition < repetitions; ++repetition) {
+    VectorWithMemoryLimit<Id> result{context._allocator};
+    result.reserve(context.size());
+
+    ad_utility::chunkedForLoop<1000>(
+        0, context.size(),
+        [&](size_t i) {
+          result.push_back(function(getter(left[i], &context),
+                                    getter(middle[i], &context),
+                                    getter(right[i], &context)));
+        },
+        [&context]() { context.cancellationHandle_->throwIfCancelled(); });
+  }
+}
+
 }  // namespace
 
 class SparqlExpressionBenchmark : public BenchmarkInterface {
@@ -308,11 +371,33 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     constexpr size_t repetitions = 50;
 
     NumericExpressionBenchmarkContext benchmarkContext{numRows};
+    NumericExpressionBenchmarkContext mixedTernaryContext{numRows};
+
+    NumericExpressionBenchmarkContext genericFallbackContext{numRows};
+
+    for (size_t i = 1; i < numRows; i += 2) {
+      genericFallbackContext.table(i, 0) = Id::makeFromDouble(
+          static_cast<double>(genericFallbackContext.table(i, 0).getInt()));
+    }
+
+    genericFallbackContext.context._inputTable =
+        genericFallbackContext.table.asStaticView<0>();
 
     auto leftIds = sparqlExpression::detail::getIdsFromVariable(
         Variable{"?left"}, &benchmarkContext.context);
     auto rightIds = sparqlExpression::detail::getIdsFromVariable(
         Variable{"?right"}, &benchmarkContext.context);
+
+    mixedTernaryContext.table(numRows / 2, 0) =
+        Id::makeFromDouble(static_cast<double>(
+            mixedTernaryContext.table(numRows / 2, 0).getInt()));
+
+    mixedTernaryContext.context._inputTable =
+        mixedTernaryContext.table.asStaticView<0>();
+
+    auto mixedTernaryStorage =
+        makeVectorWithDoubleAt(leftIds, numRows / 2, &benchmarkContext.context);
+
     auto doubleLeftStorage =
         makeDoubleVector(leftIds, &benchmarkContext.context);
     auto doubleRightStorage =
@@ -322,6 +407,10 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
                                        doubleLeftStorage.size()};
     ql::span<const ValueId> doubleRight{doubleRightStorage.data(),
                                         doubleRightStorage.size()};
+
+    ql::span<const ValueId> mixedTernary{mixedTernaryStorage.data(),
+                                         mixedTernaryStorage.size()};
+
     const ValueId constantTwo = Id::makeFromInt(2);
     const ValueId constantTwoDouble = Id::makeFromDouble(2.0);
     // The mixed cases: the left operand follows the datatype pattern, the right
@@ -375,11 +464,23 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     auto legacyVectorConstant = makeLegacyVectorConstantExpression();
     auto newVectorConstant = makeNewVectorConstantExpression();
 
+    auto ternaryAdd = makeBenchmarkTernaryAddExpression();
+    auto mixedTernaryAdd = makeBenchmarkMixedTernaryAddExpression();
+    auto mixedFallbackTernaryAdd = makeBenchmarkTernaryAddExpression();
+    auto genericFallbackTernaryAdd = makeBenchmarkTernaryAddExpression();
+
     // Warm up the multiplication implementations and validate their results.
     validateResult(*legacyVectorVector, benchmarkContext.context, numRows);
     validateResult(*newVectorVector, benchmarkContext.context, numRows);
     validateResult(*legacyVectorConstant, benchmarkContext.context, numRows);
     validateResult(*newVectorConstant, benchmarkContext.context, numRows);
+
+    // Warm up the ternary addition implementations and validate their results.
+    validateResult(*ternaryAdd, benchmarkContext.context, numRows);
+    validateResult(*mixedTernaryAdd, benchmarkContext.context, numRows);
+    validateResult(*mixedFallbackTernaryAdd, benchmarkContext.context, numRows);
+    validateResult(*genericFallbackTernaryAdd, genericFallbackContext.context,
+                   numRows);
 
     // Warm up the homogeneous numeric benchmark paths.
     auto warmUpHomogeneousCase = [&](const auto& left, const auto& right,
@@ -548,6 +649,41 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
                                NumericType::Int);
           });
     }
+
+    results.addMeasurement(
+        "NaryExpression ternary add: integer vector-vector-vector, 100k rows "
+        "x 50",
+        [&]() {
+          evaluateRepeatedly(*ternaryAdd, benchmarkContext.context,
+                             repetitions);
+        });
+
+    results.addMeasurement(
+        "NaryExpression ternary add: int-int-double, 100k rows x 50", [&]() {
+          evaluateRepeatedly(*mixedTernaryAdd, benchmarkContext.context,
+                             repetitions);
+        });
+
+    results.addMeasurement(
+        "Generic fallback ternary add: one mixed vector, 100k rows x 50",
+        [&]() {
+          evaluateMixedTernaryAddRepeatedly(mixedTernary, rightIds, leftIds,
+                                            benchmarkContext.context,
+                                            repetitions);
+        });
+
+    results.addMeasurement(
+        "NaryExpression ternary add: majority-mixed vector, 100k rows x 50",
+        [&]() {
+          evaluateRepeatedly(*mixedFallbackTernaryAdd,
+                             mixedTernaryContext.context, repetitions);
+        });
+
+    results.addMeasurement(
+        "NaryExpression ternary add: 50-50 mixed input, 100k rows x 50", [&]() {
+          evaluateRepeatedly(*genericFallbackTernaryAdd,
+                             genericFallbackContext.context, repetitions);
+        });
 
     return results;
   }

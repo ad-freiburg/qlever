@@ -19,14 +19,16 @@
 #include <utility>
 #include <vector>
 
-#include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
+#include "util/RecyclingPool.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/UninitializedAllocator.h"
+#include "util/UniqueCleanup.h"
 
 // The words of the partial vocabularies as the parallel block merge (see
 // `util/parallelBlockMerge/ParallelBlockMerge.h`) sees them, and the blocks
@@ -40,12 +42,9 @@
 //   holds the list of all the occurrences (from all the partial vocabularies)
 //   that the merge folded into it, see `MergedBlock::addWord`.
 //
-// This is not part of the public interface of `index/VocabularyMerger.h`.
-//
-// NOTE: The `QueueWord` (see `index/vocabulary_merger/QueueWord.h`) is the
-// owning counterpart of the `MergeWord` below; the current merging pipeline
-// still consumes `QueueWord`s. A follow-up PR switches the merge to the blocks
-// of this file.
+// The buffers of both kinds of blocks come from and go back to the
+// `BufferPools` below. This is not part of the public interface of
+// `index/VocabularyMerger.h`.
 namespace ad_utility::vocabulary_merger::detail {
 
 // An occurrence of a word in a partial vocabulary: the index of the partial
@@ -127,6 +126,79 @@ struct MergedWord {
   [[nodiscard]] std::string_view iriOrLiteral() const { return word_; }
 };
 
+// A thread-safe pool of the buffers that the blocks below store their bytes
+// or words in, so that the merge reuses them instead of allocating and freeing
+// one per block. All the buffers of a pool have the same `capacity`. A request
+// for a larger buffer (a block with a very long word) is served by a larger
+// one, which is replaced by a fresh buffer of the pool's capacity when it is
+// given back. How many buffers the pool keeps is up to the
+// `ad_utility::RecyclingPool`: never more than were taken at the same time.
+//
+// NOTE: With an allocator that returns freed memory to the operating system
+// (immediately or after a short decay, depending on the allocator and on the
+// size of the allocation), the merge of billions of words otherwise spends a
+// quarter of the machine in the kernel on allocating and freeing the buffers.
+class BufferPool {
+ public:
+  // The bytes are not zeroed when a buffer is created or resized, because
+  // they are overwritten anyway (by the read from the file or by the words).
+  using Buffer = ad_utility::UninitializedVector<char>;
+
+ private:
+  size_t capacity_;
+  ad_utility::RecyclingPool<Buffer> pool_;
+
+ public:
+  explicit BufferPool(size_t capacity) : capacity_{capacity} {}
+
+  // Get an empty buffer with a capacity of at least `minCapacity` (the
+  // capacity of the pool, unless more is needed).
+  Buffer take(size_t minCapacity = 0) {
+    const size_t capacity = std::max(capacity_, minCapacity);
+    Buffer buffer = pool_.take([capacity]() {
+      Buffer fresh;
+      fresh.reserve(capacity);
+      return fresh;
+    });
+    buffer.clear();
+    buffer.reserve(capacity);
+    return buffer;
+  }
+
+  // Give a buffer back. A buffer that is larger than the capacity of the pool
+  // (see `take`) is replaced by a fresh one of that capacity, so that the
+  // memory of the pool stays bounded by its number of buffers times the
+  // capacity, and not times the longest word that was ever seen (thousands of
+  // buffers may be in the pool, and a single literal can be hundreds of
+  // kilobytes long). A smaller buffer is grown by the next `take`.
+  void giveBack(Buffer buffer) {
+    buffer.clear();
+    if (buffer.capacity() > capacity_) {
+      buffer.shrink_to_fit();
+      buffer.reserve(capacity_);
+    }
+    pool_.giveBack(std::move(buffer));
+  }
+};
+
+// The two pools of the buffers of the blocks below: for the bytes of the
+// `InputBlock`s of the partial vocabulary files, and for the storage of the
+// words of the `MergedBlock`s. They are separate because their buffers differ
+// in size by more than an order of magnitude (see
+// `VOCAB_MERGER_FILE_BLOCK_BUFFER_SIZE` and
+// `VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE` in `index/ConstantsIndexBuilding.h`)
+// and the pools keep their buffers' memory touched: with a single pool of the
+// larger size, each of the many blocks of files in flight (one per partial
+// vocabulary and chunk) would hold the resident memory of a block of merged
+// words.
+struct BufferPools {
+  BufferPool fileBlocks_;
+  BufferPool mergedWords_;
+
+  BufferPools(size_t fileBlockCapacity, size_t mergedWordsCapacity)
+      : fileBlocks_{fileBlockCapacity}, mergedWords_{mergedWordsCapacity} {}
+};
+
 // The part that the two kinds of blocks below share: a block is a
 // random-access range of its words.
 template <typename Word>
@@ -157,66 +229,111 @@ class BlockOfWords {
 // bytes of the block (see `PartialVocabularyRunsInput::getBlock`) and the
 // `MergeWord`s that were parsed in place and point into these bytes. The bytes
 // never move once a word points into them, so the block can be moved, but not
-// copied.
+// copied. The bytes go back to the pool of the file blocks (if the block has
+// pools) when the block is destroyed.
 class InputBlock : public BlockOfWords<MergeWord>, public ad_utility::NoCopy {
  public:
-  // The buffer of the bytes of a block from a file. The bytes are not zeroed
-  // when the buffer is created, because the read from the file overwrites
-  // them anyway.
-  using Buffer = ad_utility::UninitializedVector<char>;
+  using Buffer = BufferPool::Buffer;
 
  private:
-  Buffer bytes_;
+  // The cleanup of the `bytes_` below: give them back to the pool, or do
+  // nothing if the block has no pools (the bytes are then simply freed). It
+  // owns the pools (and not a pointer into the block), so that it stays valid
+  // when the block is moved.
+  struct GiveBackToPool {
+    std::shared_ptr<BufferPools> pools_;
+    void operator()(Buffer&& bytes) const {
+      if (pools_ != nullptr) {
+        pools_->fileBlocks_.giveBack(std::move(bytes));
+      }
+    }
+  };
+  // NOTE: The `UniqueCleanup` gives the bytes back when the block is
+  // destroyed or overwritten by a move assignment, and does nothing for a
+  // moved-from block, so the move operations can be defaulted.
+  ad_utility::unique_cleanup::UniqueCleanup<Buffer, GiveBackToPool> bytes_;
 
  public:
   // Construct a block over the serialized `bytes` of `numWords` words of the
   // partial vocabulary `partialFileId`, in the format that
   // `PartialVocabularyWriter` writes (see `MergeWord::fromZeroCopyDeserializer`
-  // above). The words are parsed in place, nothing is copied.
-  InputBlock(Buffer bytes, size_t numWords, uint32_t partialFileId)
-      : bytes_{std::move(bytes)} {
+  // above). The words are parsed in place, nothing is copied. The `bytes` go
+  // back to the `pools` when the block is destroyed. The `pools` may be
+  // `nullptr` (for example in tests): the block then works just the same, only
+  // its bytes are freed instead of given back.
+  InputBlock(Buffer bytes, size_t numWords, uint32_t partialFileId,
+             std::shared_ptr<BufferPools> pools = nullptr)
+      : bytes_{std::move(bytes), GiveBackToPool{std::move(pools)}} {
     words_.reserve(numWords);
     serialization::ByteBufferReadSerializerT serializer{
-        ql::span<const char>{bytes_.data(), bytes_.size()}};
+        ql::span<const char>{bytes_->data(), bytes_->size()}};
     for (size_t i = 0; i < numWords; ++i) {
       words_.push_back(
           MergeWord::fromZeroCopyDeserializer(serializer, partialFileId));
     }
-    AD_CORRECTNESS_CHECK(serializer.getCurrentPosition() == bytes_.size(),
+    AD_CORRECTNESS_CHECK(serializer.getCurrentPosition() == bytes_->size(),
                          "Trailing bytes in a block of a partial vocabulary");
   }
+  InputBlock(InputBlock&&) noexcept = default;
+  InputBlock& operator=(InputBlock&&) noexcept = default;
 };
 
 // A block of merged words, as the merge yields it: the `MergedWord`s, the
-// storage that their words were copied into, and their occurrences. The
-// storage never moves once a word points into it, so the block can be moved,
-// but not copied.
+// buffers that their words were copied into, and their occurrences. The
+// buffers never move once a word points into them, so the block can be moved,
+// but not copied. The buffers come from and go back to the pool of the merged
+// words if the block has pools.
 class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
  public:
   using Occurrence = detail::Occurrence;
+  using Buffer = BufferPool::Buffer;
 
  private:
-  // The size of the first chunk of the `storage_` below.
-  static constexpr ad_utility::MemorySize initialStorageSize_ =
-      ad_utility::MemorySize::megabytes(1);
+  using Buffers = std::vector<Buffer>;
+  // The cleanup of the `buffers_` below: give them back to the pool, or do
+  // nothing if the block has no pools (the buffers are then simply freed). It
+  // owns the pools (and not a pointer into the block), so that it stays valid
+  // when the block is moved.
+  struct GiveBackToPool {
+    std::shared_ptr<BufferPools> pools_;
+    void operator()(Buffers&& buffers) const {
+      if (pools_ == nullptr) {
+        return;
+      }
+      for (auto& buffer : buffers) {
+        pools_->mergedWords_.giveBack(std::move(buffer));
+      }
+    }
+  };
+  using OwnedBuffers =
+      ad_utility::unique_cleanup::UniqueCleanup<Buffers, GiveBackToPool>;
 
   // The occurrences of all the words, see `MergedWord::occurrencesOffset_`.
   std::vector<Occurrence> occurrences_;
-  // The storage of the words, see `store`. A monotonic buffer allocates in
-  // chunks and never moves or frees what it has allocated (until `release`),
-  // so the views into it stay valid. It lives on the heap, so that the block
-  // can be moved. Constructing it allocates no chunk yet, the first chunk is
-  // only allocated by the first `store`.
-  std::unique_ptr<ql::pmr::monotonic_buffer_resource> storage_ =
-      std::make_unique<ql::pmr::monotonic_buffer_resource>(
-          initialStorageSize_.getBytes());
+  // The pools that the `buffers_` are taken from (see `store`), `nullptr` for
+  // a block without pools.
+  std::shared_ptr<BufferPools> pools_;
+  // The buffers that the words are copied into, see `store`. A word is never
+  // split across two buffers, and a buffer is never reallocated (it is
+  // reserved once and filled up to its capacity), so the views into it stay
+  // valid.
+  //
+  // NOTE: The `UniqueCleanup` gives the buffers back to the pool when the
+  // block is destroyed, overwritten by a move assignment, or cleared (see
+  // `clear`), and does nothing for a moved-from block, so the move operations
+  // below can be defaulted.
+  OwnedBuffers buffers_{Buffers{}, GiveBackToPool{}};
 
  public:
   MergedBlock() = default;
+  explicit MergedBlock(std::shared_ptr<BufferPools> pools)
+      : pools_{std::move(pools)}, buffers_{Buffers{}, GiveBackToPool{pools_}} {}
+  MergedBlock(MergedBlock&&) noexcept = default;
+  MergedBlock& operator=(MergedBlock&&) noexcept = default;
 
   // The memory that appending the `word` to a block occupies at most (see
   // `addWord`), which the parallel merge needs to limit the memory of its
-  // output blocks. Every word of a block owns a distinct slice of the storage
+  // output blocks. Every word of a block owns a distinct slice of the buffers
   // of the block (no two words share their bytes) and a distinct range of the
   // occurrences, so the sum over the words that were appended to a block is a
   // bound for the footprint of the block.
@@ -234,7 +351,7 @@ class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
   // same word from another partial vocabulary; the merge yields equal words
   // consecutively) is not appended, but its occurrence is added to that last
   // word, whose external flag becomes the OR of the two. Otherwise, the `word`
-  // is copied into the storage of this block and becomes a new `MergedWord`
+  // is copied into the buffers of this block and becomes a new `MergedWord`
   // with this single occurrence. This removes most of the duplicates on the
   // threads of the merge, so that the consumer of the merged blocks only sees
   // the duplicates at the block boundaries.
@@ -263,20 +380,37 @@ class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
             word.numOccurrences_};
   }
 
-  // Release the words, their occurrences and the storage.
+  // The number of occurrences of all the words of this block.
+  size_t numOccurrences() const { return occurrences_.size(); }
+
+  // Release the words, their occurrences and the buffers (which go back to
+  // the pool). The block stays usable.
   void clear() {
     words_.clear();
     occurrences_.clear();
-    storage_->release();
+    // The move assignment runs the cleanup of the old buffers.
+    buffers_ = OwnedBuffers{Buffers{}, GiveBackToPool{pools_}};
   }
 
  private:
-  // Copy the `word` into the `storage_` and return the view of the copy.
+  // Copy the `word` into the buffers and return the view of the copy.
   std::string_view store(std::string_view word) {
-    auto* copy =
-        static_cast<char*>(storage_->allocate(word.size(), alignof(char)));
-    std::copy(word.begin(), word.end(), copy);
-    return {copy, word.size()};
+    Buffers& buffers = *buffers_;
+    if (buffers.empty() ||
+        buffers.back().size() + word.size() > buffers.back().capacity()) {
+      if (pools_ != nullptr) {
+        buffers.push_back(pools_->mergedWords_.take(word.size()));
+      } else {
+        // Without pools, the buffers have the same size as with them. A word
+        // that is longer gets a buffer of its own.
+        buffers.emplace_back().reserve(std::max(
+            VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE.getBytes(), word.size()));
+      }
+    }
+    auto& buffer = buffers.back();
+    size_t offset = buffer.size();
+    buffer.insert(buffer.end(), word.begin(), word.end());
+    return {buffer.data() + offset, word.size()};
   }
 };
 }  // namespace ad_utility::vocabulary_merger::detail
