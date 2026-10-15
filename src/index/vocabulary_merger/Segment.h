@@ -17,7 +17,6 @@
 #include <limits>
 #include <optional>
 #include <ostream>
-#include <range/v3/numeric/partial_sum.hpp>
 #include <string_view>
 #include <utility>
 #include <vector>

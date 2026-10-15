@@ -177,11 +177,9 @@ class MergeBlock : public ad_utility::NoCopy {
       addOccurrenceToLastWord(word.partialFileId_, word.id());
       return;
     }
-    MergeWord copy;
+    // Only the word itself has to point into the storage of this block.
+    MergeWord copy = word;
     copy.word_ = store(word.iriOrLiteral());
-    copy.isExternal_ = word.isExternal();
-    copy.partialFileId_ = word.partialFileId_;
-    copy.index_ = word.id();
     words_.push_back(copy);
   }
 
