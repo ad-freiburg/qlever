@@ -40,7 +40,7 @@ namespace detail {
 
 // Helper enum that selects which features to compile inside the
 // `CancellationHandle` class.
-enum class CancellationMode { ENABLED, DISABLED };
+enum class CancellationMode { ENABLED, NO_WATCH_DOG, DISABLED };
 
 // Turn the `QUERY_CANCELLATION_MODE` macro into a constexpr variable.
 constexpr CancellationMode CANCELLATION_MODE = []() {
@@ -142,19 +142,21 @@ class CancellationHandle : public NoCopy {
 
  private:
   using steady_clock = std::chrono::steady_clock;
-  static constexpr bool CancellationEnabled =
+  static constexpr bool WatchDogEnabled =
       Mode == detail::CancellationMode::ENABLED;
+  static constexpr bool CancellationEnabled =
+      Mode != detail::CancellationMode::DISABLED;
 
   [[no_unique_address]] std::conditional_t<
       CancellationEnabled, std::atomic<CancellationState>, detail::Empty>
       cancellationState_{CancellationState::NOT_CANCELLED};
 
   template <typename T>
-  using EnabledOnly = std::conditional_t<CancellationEnabled, T, detail::Empty>;
+  using WatchDogOnly = std::conditional_t<WatchDogEnabled, T, detail::Empty>;
   // True iff `registerWatchDog` has been called for this handle.
-  [[no_unique_address]] EnabledOnly<std::atomic<bool>> watchDogRegistered_{
+  [[no_unique_address]] WatchDogOnly<std::atomic<bool>> watchDogRegistered_{
       false};
-  [[no_unique_address]] EnabledOnly<std::atomic<steady_clock::time_point>>
+  [[no_unique_address]] WatchDogOnly<std::atomic<steady_clock::time_point>>
       startTimeoutWindow_{steady_clock::now()};
   static_assert(std::atomic<steady_clock::time_point>::is_always_lock_free);
 
@@ -164,7 +166,7 @@ class CancellationHandle : public NoCopy {
   // NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
   // or `WAITING_FOR_CHECK`, otherwise it will violate the correctness check.
   CPP_template(typename StateFunc)(
-      requires CancellationEnabled CPP_and
+      requires WatchDogEnabled CPP_and
           ad_utility::InvocableWithConvertibleReturnType<
               StateFunc,
               std::string_view>) void pleaseWatchDog(CancellationState state,
@@ -211,7 +213,7 @@ class CancellationHandle : public NoCopy {
   // `WAITING_FOR_CHECK` or from there to `CHECK_WINDOW_MISSED`. Return false
   // iff this handle has been cancelled.
   CPP_member auto advanceWatchDogState()
-      -> CPP_ret(bool)(requires CancellationEnabled);
+      -> CPP_ret(bool)(requires WatchDogEnabled);
 
   // Run a step of the watch dog of `handle` and schedule the next one via
   // `runAfter`, unless the handle is gone or has been cancelled.
@@ -243,9 +245,11 @@ class CancellationHandle : public NoCopy {
       if (state == CancellationState::NOT_CANCELLED) [[likely]] {
         return;
       }
-      if (!detail::isCancelled(state)) {
-        pleaseWatchDog(state, location, stageInvocable);
-        return;
+      if constexpr (WatchDogEnabled) {
+        if (!detail::isCancelled(state)) {
+          pleaseWatchDog(state, location, stageInvocable);
+          return;
+        }
       }
       throw CancellationException{state};
     }
@@ -261,8 +265,10 @@ class CancellationHandle : public NoCopy {
     if constexpr (CancellationEnabled) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       bool isCancelled = detail::isCancelled(state);
-      if (!isCancelled && state != CancellationState::NOT_CANCELLED) {
-        pleaseWatchDog(state, location, detail::printNothing);
+      if constexpr (WatchDogEnabled) {
+        if (!isCancelled && state != CancellationState::NOT_CANCELLED) {
+          pleaseWatchDog(state, location, detail::printNothing);
+        }
       }
       return isCancelled;
     } else {
@@ -275,7 +281,7 @@ class CancellationHandle : public NoCopy {
   // immediately, the following ones every `DESIRED_CANCELLATION_CHECK_INTERVAL`
   // via `runAfter`. The watch dog only holds a `weak_ptr` to the handle and
   // stops once the handle is destroyed or cancelled. Must only be called once
-  // per handle. No-op if cancellation is disabled.
+  // per handle. No-op if the watch dog is disabled.
   static void registerWatchDog(std::weak_ptr<CancellationHandle> handle,
                                RunAfter runAfter);
 
@@ -288,6 +294,8 @@ class CancellationHandle : public NoCopy {
   FRIEND_TEST(CancellationHandle, verifyWatchDogDoesChangeState);
   FRIEND_TEST(CancellationHandle,
               verifyResetWatchDogStateDoesProperlyResetState);
+  FRIEND_TEST(CancellationHandle,
+              verifyResetWatchDogStateIsNoOpWithoutWatchDog);
   FRIEND_TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog);
   FRIEND_TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState);
   FRIEND_TEST(CancellationHandle,

@@ -32,9 +32,14 @@ const int expectedLocationLine = __LINE__ - 1;
 const auto expectedLocation =
     absl::StrCat("CancellationHandleTest.cpp:", expectedLocationLine);
 
+template <typename CancellationHandle>
 struct CancellationHandleFixture : public ::testing::Test {
-  CancellationHandle<ENABLED> handle_;
+  CancellationHandle handle_;
 };
+using WithAndWithoutWatchDog =
+    ::testing::Types<CancellationHandle<ENABLED>,
+                     CancellationHandle<NO_WATCH_DOG>>;
+TYPED_TEST_SUITE(CancellationHandleFixture, WithAndWithoutWatchDog);
 
 // Record the tasks scheduled by the watch dog instead of running them, such
 // that the tests can run its steps one by one via `runNext`.
@@ -119,7 +124,7 @@ TEST(CancellationException, verifySetOperationModifiedTheMessageAsExpected) {
 
 // _____________________________________________________________________________
 
-TEST_F(CancellationHandleFixture, verifyNotCancelledByDefault) {
+TYPED_TEST(CancellationHandleFixture, verifyNotCancelledByDefault) {
   auto& handle = this->handle_;
 
   EXPECT_FALSE(handle.isCancelled());
@@ -129,14 +134,14 @@ TEST_F(CancellationHandleFixture, verifyNotCancelledByDefault) {
 
 // _____________________________________________________________________________
 
-TEST_F(CancellationHandleFixture, verifyCancelWithWrongReasonThrows) {
+TYPED_TEST(CancellationHandleFixture, verifyCancelWithWrongReasonThrows) {
   auto& handle = this->handle_;
   EXPECT_THROW(handle.cancel(NOT_CANCELLED), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
 
-TEST_F(CancellationHandleFixture, verifyTimeoutCancellationWorks) {
+TYPED_TEST(CancellationHandleFixture, verifyTimeoutCancellationWorks) {
   auto& handle = this->handle_;
 
   handle.cancel(TIMEOUT);
@@ -149,7 +154,7 @@ TEST_F(CancellationHandleFixture, verifyTimeoutCancellationWorks) {
 
 // _____________________________________________________________________________
 
-TEST_F(CancellationHandleFixture, verifyManualCancellationWorks) {
+TYPED_TEST(CancellationHandleFixture, verifyManualCancellationWorks) {
   auto& handle = this->handle_;
 
   handle.cancel(MANUAL);
@@ -162,7 +167,8 @@ TEST_F(CancellationHandleFixture, verifyManualCancellationWorks) {
 
 // _____________________________________________________________________________
 
-TEST_F(CancellationHandleFixture, verifyCancellationWorksWithMultipleThreads) {
+TYPED_TEST(CancellationHandleFixture,
+           verifyCancellationWorksWithMultipleThreads) {
   auto& handle = this->handle_;
 
   ad_utility::JThread thread{[&]() {
@@ -284,6 +290,32 @@ TEST(CancellationHandle, verifyResetWatchDogStateDoesProperlyResetState) {
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
   handle.resetWatchDogState();
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
+
+  handle.cancellationState_ = MANUAL;
+  handle.resetWatchDogState();
+  EXPECT_EQ(handle.cancellationState_, MANUAL);
+
+  handle.cancellationState_ = TIMEOUT;
+  handle.resetWatchDogState();
+  EXPECT_EQ(handle.cancellationState_, TIMEOUT);
+}
+
+// _____________________________________________________________________________
+
+TEST(CancellationHandle, verifyResetWatchDogStateIsNoOpWithoutWatchDog) {
+  CancellationHandle<NO_WATCH_DOG> handle;
+
+  handle.cancellationState_ = NOT_CANCELLED;
+  handle.resetWatchDogState();
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
+
+  handle.cancellationState_ = WAITING_FOR_CHECK;
+  handle.resetWatchDogState();
+  EXPECT_EQ(handle.cancellationState_, WAITING_FOR_CHECK);
+
+  handle.cancellationState_ = CHECK_WINDOW_MISSED;
+  handle.resetWatchDogState();
+  EXPECT_EQ(handle.cancellationState_, CHECK_WINDOW_MISSED);
 
   handle.cancellationState_ = MANUAL;
   handle.resetWatchDogState();
@@ -483,14 +515,28 @@ TEST(CancellationHandle, expectDisabledHandleDoesNotRegisterWatchDog) {
   EXPECT_TRUE(fake.tasks_.empty());
 }
 
+// _____________________________________________________________________________
+
+TEST(CancellationHandle, expectNoWatchDogHandleDoesNotRegisterWatchDog) {
+  auto handle = std::make_shared<CancellationHandle<NO_WATCH_DOG>>();
+  FakeRunAfter fake;
+  CancellationHandle<NO_WATCH_DOG>::registerWatchDog(handle, fake.runAfter());
+  EXPECT_TRUE(fake.tasks_.empty());
+  // Registering twice is fine, because nothing is registered.
+  CancellationHandle<NO_WATCH_DOG>::registerWatchDog(handle, fake.runAfter());
+  EXPECT_TRUE(fake.tasks_.empty());
+}
+
 template <typename T>
 QL_CONSTEVAL bool isMemberFunction([[maybe_unused]] T funcPtr) {
   return std::is_member_function_pointer_v<T>;
 }
 
-// Make sure member functions still exist when cancellation is disabled to make
-// the code simpler. In this case the functions should
+// Make sure member functions still exist when no watch dog functionality
+// is available to make the code simpler. In this case the functions should
 // be no-op.
+static_assert(
+    isMemberFunction(&CancellationHandle<NO_WATCH_DOG>::resetWatchDogState));
 static_assert(
     isMemberFunction(&CancellationHandle<DISABLED>::resetWatchDogState));
 static_assert(isMemberFunction(&CancellationHandle<DISABLED>::cancel));

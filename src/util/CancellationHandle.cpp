@@ -24,7 +24,7 @@ void CancellationHandle<Mode>::cancel(
 // _____________________________________________________________________________
 template <CancellationMode Mode>
 CPP_member_def auto CancellationHandle<Mode>::advanceWatchDogState()
-    -> CPP_ret(bool)(requires CancellationEnabled) {
+    -> CPP_ret(bool)(requires WatchDogEnabled) {
   using enum CancellationState;
   auto state = cancellationState_.load(std::memory_order_relaxed);
   if (state == NOT_CANCELLED) {
@@ -48,7 +48,7 @@ template <CancellationMode Mode>
 void CancellationHandle<Mode>::runWatchDogStep(
     [[maybe_unused]] std::weak_ptr<CancellationHandle> handle,
     [[maybe_unused]] std::shared_ptr<RunAfter> runAfter) {
-  if constexpr (CancellationEnabled) {
+  if constexpr (WatchDogEnabled) {
     {
       // Don't keep the handle alive until the next step.
       auto lockedHandle = handle.lock();
@@ -68,7 +68,7 @@ template <CancellationMode Mode>
 void CancellationHandle<Mode>::registerWatchDog(
     [[maybe_unused]] std::weak_ptr<CancellationHandle> handle,
     [[maybe_unused]] RunAfter runAfter) {
-  if constexpr (CancellationEnabled) {
+  if constexpr (WatchDogEnabled) {
     {
       auto lockedHandle = handle.lock();
       AD_CONTRACT_CHECK(lockedHandle);
@@ -98,12 +98,13 @@ CPP_member_def auto CancellationHandle<Mode>::setStatePreservingCancel(
 // _____________________________________________________________________________
 template <CancellationMode Mode>
 void CancellationHandle<Mode>::resetWatchDogState() {
-  if constexpr (CancellationEnabled) {
+  if constexpr (WatchDogEnabled) {
     setStatePreservingCancel(CancellationState::NOT_CANCELLED);
   }
 }
 
 // Make sure to compile correctly.
 template class CancellationHandle<CancellationMode::ENABLED>;
+template class CancellationHandle<CancellationMode::NO_WATCH_DOG>;
 template class CancellationHandle<CancellationMode::DISABLED>;
 }  // namespace ad_utility
