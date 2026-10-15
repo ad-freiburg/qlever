@@ -38,8 +38,8 @@ namespace {
 
 // The base configuration of all the tests below. The numbers are chosen such
 // that the memory arithmetic can be verified by hand: a row has
-// `2 * sizeof(Id) = 16` bytes, and the input blocks of a single chunk occupy
-// `numRuns_ * numColumns_ * inputBlockSizePerColumn_ = 200` bytes.
+// `2 * BYTES_PER_ID_COLUMN_ENTRY = 16` bytes, and the input blocks of a single
+// chunk occupy `numRuns_ * numColumns_ * inputBlockSizePerColumn_ = 200` bytes.
 MergePhaseConfig baseConfig() {
   MergePhaseConfig config;
   config.numRuns_ = 1;
