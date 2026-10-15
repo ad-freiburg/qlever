@@ -269,6 +269,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"metricArea", &makeMetricAreaExpression},
       {"numGeometries", &makeNumGeometriesExpression},
       {"metricLength", &makeMetricLengthExpression},
+      {"asGeoJSON", &makeAsGeoJsonExpression},
   };
   using enum SpatialJoinType::Enum;
   static const BinaryFuncTable geoBinaryFuncs{
