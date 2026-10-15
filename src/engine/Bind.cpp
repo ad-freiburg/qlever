@@ -13,8 +13,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "util/ChunkedForLoop.h"
-#include "util/ColumnStrippingHelpers.h"
 #include "util/Exception.h"
 #include "util/views/ChunkedIotaView.h"
 
@@ -257,7 +257,7 @@ Bind::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
   // The subtree has to provide the requested variables and the variables that
   // are required by `Bind` to build its target.
-  columnStrippingHelper::VarsRequiredFromSubtree varsRequiredFromSubtree(
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
       &requestedVariables);
   bool bindTargetRequested = true;
   if (requestedVariables.find(_bind._target) != requestedVariables.end()) {
@@ -279,6 +279,6 @@ Bind::makeTreeWithStrippedColumns(
 
   // The new `Bind` also exports evaluated variables that the parent did
   // not request, the helper adds a `StripColumns` operation for them.
-  return columnStrippingHelper::makeTreeWithOptionalStripOperation<Bind>(
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Bind>(
       getExecutionContext(), requestedVariables, std::move(subtree), _bind);
 }
