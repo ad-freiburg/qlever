@@ -102,7 +102,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     ASSERT_EQ(leniencyIdx.word(),
               "\"LINESTRING(1 1, 2 a, 3 3)\""
               "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-    EXPECT_FALSE(geoVocab.getGeoInfo(leniencyIdx.index()).has_value());
+    EXPECT_EQ(geoVocab.getGeoInfo(leniencyIdx.index()), std::nullopt);
 
     // Test further methods
     ASSERT_EQ(geoVocab.size(), testLiterals.size());
