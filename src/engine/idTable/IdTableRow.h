@@ -148,6 +148,11 @@ class RowReferenceImpl {
     static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
     using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
     using T = typename Table::single_value_type;
+
+    using reference = decltype(std::declval<Table&>()(size_t{}, size_t{}));
+    using const_reference =
+        decltype(std::declval<const Table&>()(size_t{}, size_t{}));
+
     static constexpr int numStaticColumns = Table::numStaticColumns;
 
     // Grant the `IdTable` class access to the internal details.
@@ -181,26 +186,26 @@ class RowReferenceImpl {
     // The actual implementation of operator[].
     CPP_template(typename SelfType)(
         requires CPP_NOT(std::is_const_v<std::remove_reference_t<SelfType>>)
-            CPP_and CPP_NOT(isConst)) static decltype(auto)
+            CPP_and CPP_NOT(isConst)) static reference
         operatorBracketImpl(SelfType& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
     template <typename Self>
-    static decltype(auto) operatorBracketImpl(const Self& self, size_t i) {
-      return (*self.table_)(self.row_, i);
+    static const_reference operatorBracketImpl(const Self& self, size_t i) {
+      return std::as_const(*self.table_)(self.row_, i);
     }
 
    public:
     // Access to the `i`-th columns of this row. Only allowed for const values
     // and for rvalues.
     CPP_template_2(typename = void)(requires(!isConst))
-    decltype(auto) operator[](size_t i) && {
+    reference operator[](size_t i) && {
       return operatorBracketImpl(*this, i);
     }
-    decltype(auto) operator[](size_t i) const& {
+    const_reference operator[](size_t i) const& {
       return operatorBracketImpl(*this, i);
     }
-    decltype(auto) operator[](size_t i) const&& {
+    const_reference operator[](size_t i) const&& {
       return operatorBracketImpl(*this, i);
     }
 
@@ -389,10 +394,10 @@ class RowReference
 
   // Access to the `i`-th column of this row.
   CPP_template_2(typename = void)(requires(!isConst))
-  decltype(auto) operator[](size_t i) {
+  Base::reference operator[](size_t i) {
     return Base::operatorBracketImpl(base(), i);
   }
-  decltype(auto) operator[](size_t i) const {
+  Base::const_reference operator[](size_t i) const {
     return Base::operatorBracketImpl(base(), i);
   }
 

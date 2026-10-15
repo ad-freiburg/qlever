@@ -1474,6 +1474,95 @@ TEST(IdTable, rowReferenceConversionAndComparisonWithProxies) {
   EXPECT_TRUE(constRow != row);
 }
 
+namespace {
+// Like in the split layout, the mutable and the const element access return
+// different proxy types, and there is no conversion from the mutable to the
+// const one.
+struct MutableProxy {
+  Id* id_;
+};
+struct ConstProxy {
+  const Id* id_;
+};
+struct TableWithMutableAndConstProxies {
+  using single_value_type = Id;
+  static constexpr int numStaticColumns = 2;
+  std::array<Id, 2> row_{V(3), V(4)};
+
+  size_t numColumns() const { return 2; }
+  MutableProxy operator()(size_t, size_t column) {
+    return MutableProxy{&row_[column]};
+  }
+  ConstProxy operator()(size_t, size_t column) const {
+    return ConstProxy{&row_[column]};
+  }
+};
+}  // namespace
+
+// Test that the reference and const_reference of the
+// RowReference are the types that the non-const/const element
+// access of the table returns, and that operator[] only gives const access,
+// also if the table has a mutable element access.
+TEST(IdTable, rowReferenceReferenceTypedefs) {
+  using Row = IdTable::row_reference;
+  static_assert(std::is_same_v<Row::reference, Id&>);
+  static_assert(std::is_same_v<Row::const_reference, const Id&>);
+
+  IdTable idTable{2, makeAllocator()};
+  idTable.push_back({V(1), V(2)});
+  Row row = idTable[0];
+  const Row& constRow = row;
+  static_assert(std::is_same_v<decltype(row[0]), Id&>);
+  static_assert(std::is_same_v<decltype(constRow[0]), const Id&>);
+  EXPECT_EQ(constRow[1], V(2));
+
+  // A view has no mutable element access, so both typedefs are const.
+  using ViewRow = IdTableView<0>::const_row_reference;
+  static_assert(std::is_same_v<ViewRow::reference, const Id&>);
+  static_assert(std::is_same_v<ViewRow::const_reference, const Id&>);
+
+  // A table that only has a const element access, which returns proxies by
+  // value (see above), has the proxy for both typedefs.
+  using ProxyRow = columnBasedIdTable::RowReference<TableReturningProxies,
+                                                    ad_utility::IsConst::False>;
+  static_assert(std::is_same_v<ProxyRow::reference, Proxy>);
+  static_assert(std::is_same_v<ProxyRow::const_reference, Proxy>);
+
+  // The base class of the `RowReference` only allows mutable access for
+  // rvalues, all other values (also a const rvalue) get const access.
+  using Restricted = Row::Base;
+  static_assert(std::is_same_v<decltype(std::declval<Restricted&&>()[0]), Id&>);
+  static_assert(
+      std::is_same_v<decltype(std::declval<Restricted&>()[0]), const Id&>);
+  static_assert(std::is_same_v<decltype(std::declval<const Restricted&>()[0]),
+                               const Id&>);
+  static_assert(std::is_same_v<decltype(std::declval<const Restricted&&>()[0]),
+                               const Id&>);
+  Restricted restricted{&idTable, 0};
+  std::move(restricted)[1] = V(7);
+  EXPECT_EQ(restricted[1], V(7));
+}
+
+// Test that a const RowReference uses the const element access of the table,
+// also if the mutable one returns a type that cannot be converted to the result
+// of the const one.
+TEST(IdTable, rowReferenceWithMutableAndConstProxies) {
+  using Row = columnBasedIdTable::RowReference<TableWithMutableAndConstProxies,
+                                               ad_utility::IsConst::False>;
+  static_assert(std::is_same_v<Row::reference, MutableProxy>);
+  static_assert(std::is_same_v<Row::const_reference, ConstProxy>);
+
+  TableWithMutableAndConstProxies table;
+  Row row{&table, 0};
+  const Row& constRow = row;
+  static_assert(std::is_same_v<decltype(row[0]), MutableProxy>);
+  static_assert(std::is_same_v<decltype(constRow[0]), ConstProxy>);
+
+  *row[0].id_ = V(5);
+  EXPECT_EQ(*constRow[0].id_, V(5));
+  EXPECT_EQ(*constRow[1].id_, V(4));
+}
+
 // Check that we can completely instantiate `IdTable`s with a different value
 // type and a different underlying storage.
 
