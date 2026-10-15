@@ -8,6 +8,7 @@
 
 #include <boost/url/url_view.hpp>
 #include <charconv>
+#include <future>
 #include <thread>
 
 #include "HttpTestHelpers.h"
@@ -15,6 +16,7 @@
 #include "util/GTestHelpers.h"
 #include "util/Random.h"
 #include "util/RuntimeParametersTestHelpers.h"
+#include "util/Timer.h"
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
@@ -596,6 +598,89 @@ TYPED_TEST(HttpServerBodyTest, Redirects) {
 }
 
 namespace {
+
+// A body that is computed on an executor passed to `send` must not block the
+// threads of the server: while the body of one response is still being
+// computed, the server (which runs with a single thread in this test) must
+// still be able to answer other requests.
+TYPED_TEST(HttpServerBodyTest, SlowResponseBodyDoesNotBlockServer) {
+  std::promise<void> releaseSlowBody;
+  std::shared_future<void> slowBodyReleased =
+      releaseSlowBody.get_future().share();
+  net::thread_pool bodyThreadPool{1};
+  auto handler = [slowBodyReleased, &bodyThreadPool](
+                     auto req, auto&& send,
+                     auto...) -> boost::asio::awaitable<void> {
+    if (req.target() != "/slow") {
+      co_return co_await send(
+          createOkResponse("fast", req, ad_utility::MediaType::textPlain));
+    }
+    auto slowBody = [](std::shared_future<void> released)
+        -> cppcoro::generator<std::string> {
+      co_yield "slow-start";
+      // Don't block forever if the test fails.
+      released.wait_for(std::chrono::seconds(10));
+      co_yield "slow-end";
+    };
+    co_await send(createOkResponse(slowBody(slowBodyReleased), req,
+                                   ad_utility::MediaType::textPlain),
+                  bodyThreadPool.get_executor());
+  };
+  TestHttpServer<decltype(handler), TypeParam::value> httpServer{
+      std::move(handler), this->lazyChunkSize};
+  httpServer.runInOwnThread();
+  auto port = std::to_string(httpServer.getPort());
+
+  auto slowResponse =
+      HttpClient::sendRequest(std::make_unique<HttpClient>("localhost", port),
+                              verb::get, "localhost", "/slow", this->handle_);
+  EXPECT_EQ(slowResponse.status_, boost::beast::http::status::ok);
+
+  // The body of the slow response is still being computed.
+  ad_utility::Timer timer{ad_utility::Timer::Started};
+  auto fastResponse =
+      HttpClient::sendRequest(std::make_unique<HttpClient>("localhost", port),
+                              verb::get, "localhost", "/fast", this->handle_);
+  EXPECT_EQ(toString(std::move(fastResponse.body_)), "fast");
+  EXPECT_LT(timer.msecs(), std::chrono::seconds(5));
+
+  releaseSlowBody.set_value();
+  EXPECT_EQ(toString(std::move(slowResponse.body_)), "slow-startslow-end");
+}
+
+// An exception while computing the body of a response is logged, and the
+// connection is closed, so that the client receives an incomplete response.
+TYPED_TEST(HttpServerBodyTest, ExceptionInResponseBody) {
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  net::thread_pool bodyThreadPool{1};
+  auto handler = [&bodyThreadPool](auto req, auto&& send,
+                                   auto...) -> boost::asio::awaitable<void> {
+    auto throwingBody = []() -> cppcoro::generator<std::string> {
+      co_yield "partial";
+      throw std::runtime_error{"body generation failed"};
+    };
+    co_await send(
+        createOkResponse(throwingBody(), req, ad_utility::MediaType::textPlain),
+        bodyThreadPool.get_executor());
+  };
+  TestHttpServer<decltype(handler), TypeParam::value> httpServer{
+      std::move(handler), this->lazyChunkSize};
+  httpServer.runInOwnThread();
+  auto response = HttpClient::sendRequest(
+      std::make_unique<HttpClient>("localhost",
+                                   std::to_string(httpServer.getPort())),
+      verb::get, "localhost", "/target", this->handle_);
+  EXPECT_EQ(response.status_, boost::beast::http::status::ok);
+  EXPECT_ANY_THROW(toString(std::move(response.body_)));
+
+  // Shut down the server first to not have a race condition on the logging
+  // stream.
+  httpServer.shutDown();
+  if constexpr (ad_utility::compileTimeLogLevel >=
+                ad_utility::LogLevel::Enum::ERROR) {
+    EXPECT_THAT(logStream.str(), HasSubstr("body generation failed"));
+  }
+}
 
 // Minimal stubs to instantiate `HttpServer` solely for accessing its public
 // static helpers `readIntoBuffer` and `materializeBody`. No actual server is

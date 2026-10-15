@@ -172,7 +172,9 @@ class Server {
   // turn requires a type with linkage.
   class MockSend {
    public:
-    Awaitable<void> operator()(auto response) {
+    Awaitable<void> operator()(
+        auto response,
+        [[maybe_unused]] boost::asio::any_io_executor bodyExecutor = {}) {
       response_ = std::move(response);
       co_return;
     }
@@ -519,7 +521,7 @@ class Server {
       Awaitable<void> sendStreamableResponse(
           const RequestT& request, SendT& send, ad_utility::MediaType mediaType,
           const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
-          SharedCancellationHandle cancellationHandle) const;
+          SharedCancellationHandle cancellationHandle);
 
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 

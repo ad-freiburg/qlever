@@ -153,12 +153,13 @@ CPP_template_def(typename RequestT, typename SendT)(
   using namespace ad_utility::httpUtils;
 
   auto sendWithAccessControlHeaders =
-      [&send](auto response) -> boost::asio::awaitable<void> {
+      [&send](auto response,
+              auto... bodyExecutor) -> boost::asio::awaitable<void> {
     response.set(http::field::access_control_allow_origin, "*");
     response.set(http::field::access_control_allow_headers, "*");
     response.set(http::field::access_control_allow_methods,
                  "GET, POST, OPTIONS");
-    co_return co_await send(std::move(response));
+    co_return co_await send(std::move(response), std::move(bodyExecutor)...);
   };
 
   if (request.method() == http::verb::options) {
@@ -1095,10 +1096,21 @@ CPP_template_def(typename RequestT, typename SendT)(
     Awaitable<void> Server::sendStreamableResponse(
         const RequestT& request, SendT& send, MediaType mediaType,
         const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
-        SharedCancellationHandle cancellationHandle) const {
-  auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(), mediaType,
-      requestTimer, std::move(cancellationHandle));
+        SharedCancellationHandle cancellationHandle) {
+  // `computeResult` already computes the first block of the result (see
+  // `convertStreamGeneratorForChunkedTransfer`), which might take arbitrarily
+  // long, so it must not run on the threads of the `HttpServer`. For the same
+  // reason as in `processQuery`, the coroutine is stored in an explicit
+  // variable instead of directly `co_await`-ing it.
+  auto coroutine = computeInNewThread(
+      queryThreadPool_,
+      [&plannedQuery, mediaType, &requestTimer, &cancellationHandle]() {
+        return ExportQueryExecutionTrees::computeResult(
+            plannedQuery.parsedQuery(), plannedQuery.queryExecutionTree(),
+            mediaType, requestTimer, cancellationHandle);
+      },
+      cancellationHandle);
+  auto responseGenerator = co_await std::move(coroutine);
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
@@ -1108,7 +1120,9 @@ CPP_template_def(typename RequestT, typename SendT)(
             std::move(response));
   }
   try {
-    co_await send(std::move(response));
+    // The result of the query is computed lazily while the response is being
+    // sent, so compute it on the same thread pool as the query planning.
+    co_await send(std::move(response), queryThreadPool_.get_executor());
   } catch (const boost::system::system_error& e) {
     // "Broken Pipe" errors are thrown and reported by `streamable_body`,
     // so we can safely ignore these kind of exceptions. In practice this

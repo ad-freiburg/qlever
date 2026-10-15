@@ -14,6 +14,7 @@
 #include <thread>
 
 #include "backports/span.h"
+#include "util/AsioHelpers.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/http/HttpUtils.h"
@@ -54,7 +55,11 @@ enum class BodyReadMode { Eager, Lazy };
 //
 // In both modes `send` is a callable that takes a `http::message` and returns
 // `net::awaitable<void>`; the handler is responsible for sending the response
-// via `co_await send(response)`.
+// via `co_await send(response)`. For a response with a `streamable_body`, the
+// body (a generator) is advanced on the thread of the server that sends the
+// response, so it must be cheap to compute. Otherwise, an executor (typically
+// of a thread pool) has to be passed as a second argument
+// `co_await send(response, executor)`, on which the body is then computed.
 //
 // A very basic `HttpHandler`, which simply serves files from a directory, can
 // be obtained via `ad_utility::httpUtils::makeFileServer()`.
@@ -132,9 +137,7 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
                       ad_utility::MemorySize lazyBodyChunkSize =
                           ad_utility::MemorySize::megabytes(1))
       : httpHandler_{std::move(handler)},
-        // We need at least two threads to avoid blocking.
-        // TODO<joka921> why is that?
-        numServerThreads_{std::max(2, numServerThreads)},
+        numServerThreads_{std::max(1, numServerThreads)},
         ioContext_{numServerThreads_},
         instrumentedExec_{ioContext_.get_executor(), ioContextMetrics_},
         executor_{instrumentedExec_},
@@ -450,6 +453,49 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     co_return SessionControl::Continue;
   }
 
+  // Write the `message` to the `stream`. For a response with a
+  // `streamable_body`, the serialization of the body (which advances the
+  // generator) runs on the `bodyExecutor` if one is given, so that a body which
+  // is expensive to compute (e.g. the result of a query) doesn't block the
+  // threads of the `ioContext_`. Only the writing to the `stream` happens on
+  // the `ioContext_`.
+  template <typename Message>
+  net::awaitable<void> writeMessage(beast::tcp_stream& stream, Message& message,
+                                    net::any_io_executor bodyExecutor) {
+    if constexpr (!std::is_same_v<
+                      Message,
+                      http::response<ad_utility::httpUtils::httpStreams::
+                                         streamable_body>>) {
+      co_await http::async_write(stream, message, net::use_awaitable);
+    } else {
+      http::response_serializer<
+          ad_utility::httpUtils::httpStreams::streamable_body>
+          serializer{message};
+      std::vector<net::const_buffer> buffers;
+      // Get the next buffers to write from the `serializer`.
+      auto serializeNext = [&serializer, &buffers]() {
+        beast::error_code ec;
+        serializer.next(ec, [&buffers](beast::error_code&, const auto& next) {
+          buffers.assign(net::buffer_sequence_begin(next),
+                         net::buffer_sequence_end(next));
+        });
+        if (ec) {
+          throw beast::system_error{ec};
+        }
+      };
+      while (!serializer.is_done()) {
+        if (bodyExecutor) {
+          co_await ad_utility::runFunctionOnExecutor(
+              bodyExecutor, serializeNext, net::use_awaitable);
+        } else {
+          serializeNext();
+        }
+        serializer.consume(
+            co_await net::async_write(stream, buffers, net::use_awaitable));
+      }
+    }
+  }
+
   // The loop which accepts TCP connections and delegates their handling
   // to the session() coroutine below.
   boost::asio::awaitable<void> listener() {
@@ -517,10 +563,11 @@ CPP_template(BodyReadMode bodyReadMode, typename HttpHandler,
     // This lambda sends an http message to the `stream` and sets
     // `streamNeedsClosing` if the closing of the session is requested by the
     // session.
-    auto sendMessage = [&stream, &streamNeedsClosing](
-                           auto message) -> boost::asio::awaitable<void> {
+    auto sendMessage = [this, &stream, &streamNeedsClosing](
+                           auto message, net::any_io_executor bodyExecutor = {})
+        -> boost::asio::awaitable<void> {
       // Write the response
-      co_await http::async_write(stream, message, boost::asio::use_awaitable);
+      co_await writeMessage(stream, message, std::move(bodyExecutor));
 
       // Inform the session if the message requires the closing of the
       // connection.
