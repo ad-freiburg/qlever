@@ -14,9 +14,9 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/ChunkedForLoop.h"
-#include "util/views/ChunkedIotaView.h"
 #include "util/ColumnStrippingHelpers.h"
 #include "util/Exception.h"
+#include "util/views/ChunkedIotaView.h"
 
 // _____________________________________________________________________________
 Bind::Bind(QueryExecutionContext* qec,
@@ -253,38 +253,32 @@ std::unique_ptr<Operation> Bind::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-Bind::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
-  // Collect variables required from subtree.
-  VarsRequiredFromSubtree helper(variables);
-
-  // Check whether bind-target is requested from parent tree. If not, the bind
-  // operation is not needed in the execution-tree and can be erased.
-  bool bindTargetNeeded = true;
-  if (variables.find(_bind._target) != variables.end()) {
+Bind::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // The subtree has to provide the requested variables and the variables that
+  // are required by `Bind` to build its target.
+  columnStrippingHelper::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  bool bindTargetRequested = true;
+  if (requestedVariables.find(_bind._target) != requestedVariables.end()) {
     for (const Variable* bindVar : _bind._expression.containedVariables()) {
-      helper.add(*bindVar);
+      varsRequiredFromSubtree.add(*bindVar);
     }
   } else {
-    bindTargetNeeded = false;
+    bindTargetRequested = false;
   }
 
-  // Collect all variables required from the subtree
-  const std::set<Variable>& varsRequiredFromSubtree = helper.get();
-
-  // Continue with the recursion and strip columns of subtree.
+  // Strip the subtree and only keep `Bind` operation in the
+  // `QueryExecutionTree` if its target is requested by the parent.
   std::shared_ptr<QueryExecutionTree> subtree =
-      QueryExecutionTree::makeTreeWithStrippedColumns(_subtree,
-                                                      varsRequiredFromSubtree);
-
-  // "Delete" bind operation from the queryExecutionTree, if its target is not
-  // needed.
-  if (bindTargetNeeded == false) {
+      QueryExecutionTree::makeTreeWithStrippedColumns(
+          _subtree, varsRequiredFromSubtree.get());
+  if (!bindTargetRequested) {
     return subtree;
   }
 
-  // Create query execution tree with Bind-Operation as root-Operation and add
-  // additional stripColumns-Operation if needed.
-  return makeTreeWithOptionalStripOperation<Bind>(
-      getExecutionContext(), variables, _bind._expression.containedVariables(),
-      std::move(subtree), _bind);
+  // The new `Bind` also exports evaluated variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelper::makeTreeWithOptionalStripOperation<Bind>(
+      getExecutionContext(), requestedVariables, std::move(subtree), _bind);
 }

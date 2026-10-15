@@ -49,7 +49,7 @@ class Bind : public Operation {
   bool knownEmptyResult() override;
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
-      const std::set<Variable>& variables) const override;
+      const std::set<Variable>& requestedVariables) const override;
 
  protected:
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
