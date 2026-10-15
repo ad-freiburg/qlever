@@ -110,7 +110,7 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
 // ____________________________________________________________________________
 bool GeometryInfo::isValidWktStrict(std::string_view wkt) {
   try {
-    detail::parseWkt(wkt, detail::defaultCrs, true);
+    detail::parseWktOrThrow(wkt);
     return true;
   } catch (const ::util::geo::WKTParseException&) {
     return false;

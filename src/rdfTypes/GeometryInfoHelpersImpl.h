@@ -91,10 +91,11 @@ inline std::string addDatatype(const std::string_view wkt) {
 // Tries to extract the geometry type and parse the geometry given by a WKT
 // literal with quotes and datatype using `pb_util`. The coordinates are
 // projected to `projCrs` while parsing (from the CRS named by the IRI at the
-// start of the literal, or CRS84 if there is no such IRI). If `strict` is set,
-// invalid WKT throws a `WKTParseException` instead of being parsed leniently.
-inline ParseResult parseWkt(const std::string_view& wkt,
-                            CRSType projCrs = defaultCrs, bool strict = false) {
+// start of the literal, or CRS84 if there is no such IRI). The WKT is parsed
+// in the strict mode of `pb_util`: invalid WKT throws a `WKTParseException`.
+inline ParseResult parseWktOrThrow(const std::string_view& wkt,
+                                   CRSType projCrs = defaultCrs) {
+  constexpr bool strict = true;
   auto wktLiteral = removeDatatype(wkt);
   auto c = wktLiteral.c_str();
   std::optional<ParsedWkt> parsed = std::nullopt;
@@ -166,19 +167,11 @@ inline ParseResult parseWkt(const std::string_view& wkt,
         break;
       }
       default:
-        if (strict) {
-          throw WKTParseException("Unsupported WKT geometry type");
-        }
-        break;
+        throw WKTParseException("Unsupported WKT geometry type");
     }
   } catch (const WKTParseException&) {
-    // Report invalid WKT to the caller.
-    //
-    // NOTE: `pb_util` throws this exception only in strict mode. Should a
-    // future version throw it in lenient mode too, the check makes that
-    // visible instead of silently treating it like any other parse error
-    // in the handler below.
-    AD_CORRECTNESS_CHECK(strict);
+    // Report invalid WKT to the caller (`WKTParseException` is derived from
+    // `std::runtime_error`, so it must not reach the handler below).
     throw;
   } catch (const std::runtime_error& error) {
     AD_LOG_DEBUG << "Error parsing WKT `" << wkt << "`: " << error.what()
@@ -193,6 +186,21 @@ inline ParseResult parseWkt(const std::string_view& wkt,
     crsType = CRSType::UNSUPPORTED;
   }
   return ParseResult{std::move(parsed), type, projCrs, crsType};
+}
+
+// Like `parseWktOrThrow`, but invalid WKT yields a `ParseResult` without a
+// geometry instead of throwing. In SPARQL, this corresponds to an expression
+// error, see GeoSPARQL 1.1, Section 10.9.1.
+inline ParseResult parseWkt(const std::string_view& wkt,
+                            CRSType projCrs = defaultCrs) {
+  try {
+    return parseWktOrThrow(wkt, projCrs);
+  } catch (const WKTParseException& error) {
+    AD_LOG_DEBUG << "Invalid WKT literal `" << wkt << "`: " << error.what()
+                 << std::endl;
+    return ParseResult{std::nullopt, WKTType::NONE, CRSType::UNSUPPORTED,
+                       CRSType::UNSUPPORTED};
+  }
 }
 
 // Convert a point from `pb_util` to a `GeoPoint`
