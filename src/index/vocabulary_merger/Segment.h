@@ -59,8 +59,13 @@ namespace ad_utility::vocabulary_merger::detail {
 // index of the partial vocabulary, the index of the word in that partial
 // vocabulary, and the segment-local ID of the merged word.
 //
-// NOTE: The index in the partial vocabulary is stored in 32 bits (a partial
-// vocabulary has some million words), so that the entry is 16 bytes.
+// NOTE: The index in the partial vocabulary is stored in 32 bits, so that the
+// entry is 16 bytes. This is safe, because a partial vocabulary holds the
+// words of a single batch of the parser (`NUM_TRIPLES_PER_PARTIAL_VOCAB`
+// triples by default, see `index/ConstantsIndexBuilding.h`; at most three
+// words per triple), which has to fit into memory and is thus far below four
+// billion words. The limit is also checked when an entry is created, see
+// `SegmentBuilder::commitPendingWord`.
 struct SegmentIdMapEntry {
   uint32_t partialVocabularyIndex_;
   uint32_t localIndex_;
@@ -149,7 +154,7 @@ struct Segment {
 };
 
 // Build the segment of the consecutive `blocks` of merged words (see
-// `MergeBlock::addWord` for how the merge folds the occurrences of a word
+// `MergedBlock::addWord` for how the merge folds the occurrences of a word
 // within a block): eliminate the remaining duplicates (the same word at
 // the boundary of two blocks), combine their external flags, detect the blank
 // nodes (see `isBlankNode`), assign every distinct word to its sub-vocabulary
@@ -163,7 +168,7 @@ struct Segment {
 // below, and the C++17 emulation of a `requires` clause (a default template
 // argument) is not allowed in a friend declaration.
 template <typename W>
-Segment buildSegment(std::vector<MergeBlock> blocks,
+Segment buildSegment(std::vector<MergedBlock> blocks,
                      const ParallelWordWriterBase& writer,
                      const ad_utility::RegexSet& blankNodeIriRegexes,
                      size_t numPartialVocabularies, const W& comparator);
@@ -176,7 +181,7 @@ Segment buildSegment(std::vector<MergeBlock> blocks,
 // the next).
 class SegmentBuilder {
  private:
-  using Occurrence = MergeBlock::Occurrence;
+  using Occurrence = MergedBlock::Occurrence;
 
   const ParallelWordWriterBase& writer_;
   const ad_utility::RegexSet& blankNodeIriRegexes_;
@@ -185,12 +190,11 @@ class SegmentBuilder {
   // Whether the block writer of each sub-vocabulary precomputes a per-word
   // payload, see `BlockWriterBase::precomputePayload`.
   std::vector<bool> hasPayload_;
-  // The pending word, see above (its word points into one of the input
-  // blocks), with the OR of the external flags of all its merged words so
-  // far. Its own occurrence fields are not used, because the occurrences of a
-  // pending word come from up to two blocks: all of them (also the first) are
-  // collected in `pendingOccurrences_`.
-  std::optional<MergeWord> pendingWord_;
+  // The pending word, see above (its word points into one of the blocks),
+  // with the OR of the external flags of all its merged words so far. Its
+  // occurrence range is not used, because the occurrences of a pending word
+  // come from up to two blocks: they are collected in `pendingOccurrences_`.
+  std::optional<MergedWord> pendingWord_;
   std::vector<Occurrence> pendingOccurrences_;
   // The ID map entries of the committed words, in the order of the words.
   // They are grouped by partial vocabulary at the very end, see
@@ -201,7 +205,7 @@ class SegmentBuilder {
 
   // The only way to build a segment is the free function `buildSegment`.
   template <typename W>
-  friend Segment buildSegment(std::vector<MergeBlock> blocks,
+  friend Segment buildSegment(std::vector<MergedBlock> blocks,
                               const ParallelWordWriterBase& writer,
                               const ad_utility::RegexSet& blankNodeIriRegexes,
                               size_t numPartialVocabularies,
@@ -230,9 +234,9 @@ class SegmentBuilder {
 
   // Reserve the space for the ID map entries of the `blocks` (every merged
   // word has at least one occurrence) and remember their total number.
-  void reserveForBlocks(const std::vector<MergeBlock>& blocks) {
+  void reserveForBlocks(const std::vector<MergedBlock>& blocks) {
     size_t numMergedWords = ::ranges::accumulate(
-        blocks, size_t{0}, std::plus<>{}, &MergeBlock::size);
+        blocks, size_t{0}, std::plus<>{}, &MergedBlock::size);
     segment_.numMergedWords_ = numMergedWords;
     idMapEntries_.reserve(numMergedWords);
   }
@@ -242,7 +246,8 @@ class SegmentBuilder {
   // previous blocks. The `block` has to stay alive until the next call to
   // `commitPendingWord`, because the pending word may point into it.
   CPP_template_2(typename W)(requires WordComparator<W>)
-  void addBlock(const MergeBlock& block, [[maybe_unused]] const W& comparator) {
+  void addBlock(const MergedBlock& block,
+                [[maybe_unused]] const W& comparator) {
     bool isFirstWordOfBlock = true;
     for (const auto& word : block) {
       if (isFirstWordOfBlock && pendingWord_.has_value() &&
@@ -262,13 +267,12 @@ class SegmentBuilder {
     }
   }
 
-  // Add the occurrences of the `word` of the `block` (its own and the further
-  // ones that the merge folded into it, see `MergeBlock::addWord`) to those
-  // of the pending word.
-  void addOccurrences(const MergeBlock& block, const MergeWord& word) {
-    block.forEachOccurrence(word, [this](const Occurrence& occurrence) {
-      pendingOccurrences_.push_back(occurrence);
-    });
+  // Add the occurrences of the `word` of the `block` to those of the pending
+  // word.
+  void addOccurrences(const MergedBlock& block, const MergedWord& word) {
+    auto occurrences = block.occurrences(word);
+    pendingOccurrences_.insert(pendingOccurrences_.end(), occurrences.begin(),
+                               occurrences.end());
   }
 
   // Finish the pending word (if there is one): assign its segment-local ID,
@@ -338,8 +342,6 @@ class SegmentBuilder {
     for (const auto& entry : idMapEntries_) {
       sorted[next[entry.partialVocabularyIndex_]++] = entry;
     }
-    idMapEntries_.clear();
-    idMapEntries_.shrink_to_fit();
     segment_.idMapEntries_ =
         CompactVectorOfStrings<SegmentIdMapEntry>::fromDataAndOffsets(
             std::move(sorted), std::move(offsets));
@@ -348,10 +350,11 @@ class SegmentBuilder {
 
 // _____________________________________________________________________________
 template <typename W>
-Segment buildSegment(std::vector<MergeBlock> blocks,
+Segment buildSegment(std::vector<MergedBlock> blocks,
                      const ParallelWordWriterBase& writer,
                      const ad_utility::RegexSet& blankNodeIriRegexes,
                      size_t numPartialVocabularies, const W& comparator) {
+  // See the NOTE at the declaration for why this is not a `requires` clause.
   static_assert(WordComparator<W>);
   SegmentBuilder builder{writer, blankNodeIriRegexes, numPartialVocabularies};
   builder.reserveForBlocks(blocks);

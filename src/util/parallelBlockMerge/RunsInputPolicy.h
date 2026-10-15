@@ -34,35 +34,6 @@ namespace ad_utility::parallelBlockMerge {
 // GCC 15.3.0, GCC 16 and Clang compile both spellings; the traits are
 // equivalent here, because the entries of a `CPP_requires` only check that the
 // expression is valid.
-template <typename T>
-CPP_requires(
-    InputConcept_,
-    requires(const T& t, size_t runIdx, size_t blockIdx, typename T::Block& out,
-             ql::ranges::range_reference_t<typename T::Block> el)(
-        // The number of presorted runs.
-        std::is_convertible_v<decltype(t.numRuns()), size_t>,
-        // The number of blocks of a single run.
-        std::is_convertible_v<decltype(t.numBlocks(runIdx)), size_t>,
-        // The number of elements in a single block, available without I/O.
-        std::is_convertible_v<decltype(t.numElementsInBlock(runIdx, blockIdx)),
-                              size_t>,
-        // The first and the last element of a single block, available without
-        // I/O.
-        std::is_convertible_v<decltype(t.firstElement(runIdx, blockIdx)),
-                              typename T::Element>,
-        std::is_convertible_v<decltype(t.lastElement(runIdx, blockIdx)),
-                              typename T::Element>,
-        // Get the block identified by the `runIdx` and the `blockIdx`. This is
-        // the only operation that performs I/O, and it has to be thread-safe.
-        std::is_convertible_v<decltype(t.getBlock(runIdx, blockIdx)),
-                              typename T::Block>,
-        // Create an empty block, and append a single element to a block.
-        std::is_same_v<decltype(t.makeEmptyBlock()), typename T::Block>,
-        std::is_same_v<decltype(t.appendToBlock(out, el)), void>,
-        // The memory that a single element occupies.
-        std::is_convertible_v<decltype(t.memorySizeOfElement(el)),
-                              MemorySize>));
-
 namespace detail {
 // Extract `T::Block` if it exists, and `void` otherwise. This is needed so that
 // the `InputConcept` below is a hard `false` (instead of a compilation error)
@@ -84,7 +55,56 @@ struct BlockTypeOrVoid<T, std::void_t<typename T::Block>> {
 // ___________________________________________________________________________
 template <typename T>
 using BlockTypeOrVoidT = typename BlockTypeOrVoid<T>::type;
+
+// The type of the output blocks of an input `T`: `T::OutputBlock` if the input
+// declares it, else its `T::Block` (see `InputConcept` below), with the same
+// `void` fallback as `BlockTypeOrVoid`.
+template <typename T, typename = void>
+struct OutputBlockType {
+  using type = BlockTypeOrVoidT<T>;
+};
+
+// ___________________________________________________________________________
+template <typename T>
+struct OutputBlockType<T, std::void_t<typename T::OutputBlock>> {
+  using type = typename T::OutputBlock;
+};
+
+// ___________________________________________________________________________
+template <typename T>
+using OutputBlockT = typename OutputBlockType<T>::type;
 }  // namespace detail
+
+template <typename T>
+CPP_requires(
+    InputConcept_,
+    requires(const T& t, size_t runIdx, size_t blockIdx,
+             detail::OutputBlockT<T>& out,
+             ql::ranges::range_reference_t<typename T::Block> el)(
+        // The number of presorted runs.
+        std::is_convertible_v<decltype(t.numRuns()), size_t>,
+        // The number of blocks of a single run.
+        std::is_convertible_v<decltype(t.numBlocks(runIdx)), size_t>,
+        // The number of elements in a single block, available without I/O.
+        std::is_convertible_v<decltype(t.numElementsInBlock(runIdx, blockIdx)),
+                              size_t>,
+        // The first and the last element of a single block, available without
+        // I/O.
+        std::is_convertible_v<decltype(t.firstElement(runIdx, blockIdx)),
+                              typename T::Element>,
+        std::is_convertible_v<decltype(t.lastElement(runIdx, blockIdx)),
+                              typename T::Element>,
+        // Get the block identified by the `runIdx` and the `blockIdx`. This is
+        // the only operation that performs I/O, and it has to be thread-safe.
+        std::is_convertible_v<decltype(t.getBlock(runIdx, blockIdx)),
+                              typename T::Block>,
+        // Create an empty output block, and append a single element to an
+        // output block.
+        std::is_same_v<decltype(t.makeEmptyBlock()), detail::OutputBlockT<T>>,
+        std::is_same_v<decltype(t.appendToBlock(out, el)), void>,
+        // The memory that a single element occupies.
+        std::is_convertible_v<decltype(t.memorySizeOfElement(el)),
+                              MemorySize>));
 
 // The input policy of the merge. It abstracts a set of presorted runs
 // (`numRuns()` many), each of which is split into blocks (`numBlocks(runIdx)`
@@ -117,10 +137,14 @@ using BlockTypeOrVoidT = typename BlockTypeOrVoid<T>::type;
 // somewhat expensive, as it might perform I/O, decompression, etc.
 //
 // The remaining member functions describe how the *output* blocks are built:
-// `makeEmptyBlock()` creates a fresh (empty) block, `appendToBlock(block, el)`
-// appends a single element to it, and `memorySizeOfElement(el)` reports how
-// much memory that element occupies, so that the memory limit of an output
-// block can be honored.
+// `makeEmptyBlock()` creates a fresh (empty) output block,
+// `appendToBlock(block, el)` appends a single element to it, and
+// `memorySizeOfElement(el)` reports how much memory that element occupies in an
+// output block, so that the memory limit of an output block can be honored. The
+// output blocks are of the type `T::Block` by default; an input whose output
+// blocks are of a different type than its input blocks (for example because the
+// merge combines equal elements, see `appendToBlock`) declares that type as
+// `T::OutputBlock`, which is then also the type that the merge yields.
 //
 // All member functions must be `const` and thread-safe. This is what makes the
 // chunks of a merge independent of each other not only in principle, but also

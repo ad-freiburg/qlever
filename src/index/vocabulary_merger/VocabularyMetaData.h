@@ -49,9 +49,8 @@ struct SegmentMetaData {
     SegmentLocalId last_;
     bool wasSeen_ = false;
     void add(SegmentLocalId id) {
-      if (!wasSeen_) {
+      if (!std::exchange(wasSeen_, true)) {
         first_ = id;
-        wasSeen_ = true;
       }
       last_ = id;
     }

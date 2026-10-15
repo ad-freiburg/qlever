@@ -66,13 +66,13 @@ struct InputWord {
   uint64_t localIndex_ = 0;
 };
 
-// Create a `MergeBlock` (see `index/vocabulary_merger/MergeBlock.h`) of the
+// Create an `InputBlock` (see `index/vocabulary_merger/MergeBlock.h`) of the
 // `words` of the partial vocabulary `partialFileId`, as the merge reads it
 // from a partial vocabulary file: the words are serialized in the format of
 // the `PartialVocabularyWriter` and the block parses them in place.
-inline ad_utility::vocabulary_merger::detail::MergeBlock makeInputBlock(
+inline ad_utility::vocabulary_merger::detail::InputBlock makeInputBlock(
     uint32_t partialFileId, const std::vector<InputWord>& words) {
-  using ad_utility::vocabulary_merger::detail::MergeBlock;
+  using ad_utility::vocabulary_merger::detail::InputBlock;
   ad_utility::serialization::ByteBufferWriteSerializer serializer;
   for (const auto& word : words) {
     serializer << word.word_;
@@ -80,16 +80,16 @@ inline ad_utility::vocabulary_merger::detail::MergeBlock makeInputBlock(
     serializer << word.localIndex_;
   }
   const auto& bytes = serializer.data();
-  MergeBlock::Buffer buffer(bytes.size());
+  InputBlock::Buffer buffer(bytes.size());
   ql::ranges::copy(bytes, buffer.begin());
-  return MergeBlock{std::move(buffer), words.size(), partialFileId};
+  return InputBlock{std::move(buffer), words.size(), partialFileId};
 }
 
 // Add the occurrence of `word` with the given `localIndex` in the partial
 // vocabulary `partialFileId` to the `block` of merged words, as the merge
-// does it (via `MergeBlock::addWord`, so a `word` that is equal to the last
+// does it (via `MergedBlock::addWord`, so a `word` that is equal to the last
 // word of the `block` is folded into that word).
-inline void pushWord(ad_utility::vocabulary_merger::detail::MergeBlock& block,
+inline void pushWord(ad_utility::vocabulary_merger::detail::MergedBlock& block,
                      std::string_view word, bool isExternal,
                      uint32_t partialFileId, uint64_t localIndex) {
   auto input = makeInputBlock(partialFileId,
@@ -110,9 +110,9 @@ struct WordOccurrence {
 // Create the blocks of merged words that the merge yields for the given
 // `occurrences` (one inner vector per block, in the order of the merge), see
 // `pushWord`.
-inline std::vector<ad_utility::vocabulary_merger::detail::MergeBlock>
+inline std::vector<ad_utility::vocabulary_merger::detail::MergedBlock>
 makeMergedBlocks(const std::vector<std::vector<WordOccurrence>>& occurrences) {
-  std::vector<ad_utility::vocabulary_merger::detail::MergeBlock> blocks(
+  std::vector<ad_utility::vocabulary_merger::detail::MergedBlock> blocks(
       occurrences.size());
   for (size_t i = 0; i < blocks.size(); ++i) {
     for (const auto& occurrence : occurrences[i]) {

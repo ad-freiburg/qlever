@@ -27,7 +27,9 @@
 
 using namespace ad_utility::vocabulary_merger;
 using namespace vocabularyMergerTestHelpers;
-using ad_utility::vocabulary_merger::detail::MergeBlock;
+using ad_utility::vocabulary_merger::detail::InputBlock;
+using ad_utility::vocabulary_merger::detail::MergedBlock;
+using ad_utility::vocabulary_merger::detail::MergedWord;
 using ad_utility::vocabulary_merger::detail::MergeWord;
 
 namespace {
@@ -60,9 +62,9 @@ void writePartialVocabulary(const std::string& filename,
   writer.finish();
 }
 
-// The words of a block as (word, isExternal, local index) tuples.
+// The words of an input block as (word, isExternal, local index) tuples.
 std::vector<std::tuple<std::string, bool, uint64_t>> tuplesOfBlock(
-    const MergeBlock& block) {
+    const InputBlock& block) {
   std::vector<std::tuple<std::string, bool, uint64_t>> result;
   for (const auto& word : block) {
     result.emplace_back(word.iriOrLiteral(), word.isExternal(), word.id());
@@ -106,6 +108,7 @@ TEST(PartialVocabularyFile, blockIndexAndBlocks) {
       EXPECT_EQ(input.lastElement(p, b).iriOrLiteral(),
                 block.back().iriOrLiteral());
       EXPECT_EQ(input.firstElement(p, b).partialFileId_, p);
+      EXPECT_EQ(block[0].iriOrLiteral(), block.front().iriOrLiteral());
       for (const auto& word : block) {
         EXPECT_EQ(word.partialFileId_, p);
       }
@@ -143,7 +146,7 @@ TEST(PartialVocabularyFile, appendToBlockFoldsDuplicates) {
   auto block = input.makeEmptyBlock();
   // The words that the merge hands to `appendToBlock` live in input blocks
   // (one per partial vocabulary here).
-  std::vector<MergeBlock> sources;
+  std::vector<InputBlock> sources;
   sources.push_back(makeInputBlock(0, {{"\"a\"", false, 3}}));
   sources.push_back(makeInputBlock(1, {{"\"b\"", false, 7}}));
   sources.push_back(makeInputBlock(2, {{"\"a\"", true, 5}}));
@@ -152,17 +155,25 @@ TEST(PartialVocabularyFile, appendToBlockFoldsDuplicates) {
   for (size_t i : {0, 2, 3, 1}) {
     input.appendToBlock(block, sources[i].front());
   }
-  // The first occurrence of `"a"` is the one of the merged word, the external
-  // flag is the OR over all three, the two other occurrences are folded.
-  EXPECT_THAT(tuplesOfBlock(block),
-              ::testing::ElementsAre(std::tuple{"\"a\"", true, 3u},
-                                     std::tuple{"\"b\"", false, 7u}));
-  EXPECT_EQ(block[0].partialFileId_, 0u);
-  EXPECT_THAT(block.moreOccurrences(block[0]),
-              ::testing::ElementsAre(std::pair{2u, uint64_t{5}},
+  // The three occurrences of `"a"` are folded into one merged word, whose
+  // external flag is the OR over all of them.
+  ASSERT_EQ(block.size(), 2u);
+  EXPECT_EQ(block[0].iriOrLiteral(), "\"a\"");
+  EXPECT_TRUE(block[0].isExternal());
+  EXPECT_THAT(block.occurrences(block[0]),
+              ::testing::ElementsAre(std::pair{0u, uint64_t{3}},
+                                     std::pair{2u, uint64_t{5}},
                                      std::pair{4u, uint64_t{1}}));
-  EXPECT_EQ(block[1].partialFileId_, 1u);
-  EXPECT_TRUE(block.moreOccurrences(block[1]).empty());
+  EXPECT_EQ(block[1].iriOrLiteral(), "\"b\"");
+  EXPECT_FALSE(block[1].isExternal());
+  EXPECT_THAT(block.occurrences(block[1]),
+              ::testing::ElementsAre(std::pair{1u, uint64_t{7}}));
+  // The memory of an appended word covers the merged word, its text and one
+  // occurrence.
+  EXPECT_EQ(input.memorySizeOfElement(sources[0].front()),
+            ad_utility::MemorySize::bytes(
+                sizeof(MergedWord) + 3 +
+                sizeof(ad_utility::vocabulary_merger::detail::Occurrence)));
 }
 
 // Test that an empty partial vocabulary has no blocks, and that a file without
@@ -233,17 +244,17 @@ TEST(PartialVocabularyFile, mergeInParallel) {
     auto blocks = parallelBlockMergeToRange<true>(
         pool.get_executor(),
         PartialVocabularyRunsInput{partialVocabBasename, 4}, comparator,
-        makeInMemoryStorageFactory<MergeBlock>(4), options);
-    for (const MergeBlock& block : blocks) {
-      for (const MergeWord& word : block) {
+        makeInMemoryStorageFactory<MergedBlock>(4), options);
+    for (const MergedBlock& block : blocks) {
+      for (const MergedWord& word : block) {
         // The words arrive in sorted order.
         if (!merged.empty()) {
           EXPECT_LE(std::get<0>(merged.back()), word.iriOrLiteral());
         }
-        block.forEachOccurrence(word, [&](const auto& occurrence) {
-          const auto& [partialFileId, localIndex] = occurrence;
+        for (const auto& [partialFileId, localIndex] :
+             block.occurrences(word)) {
           merged.emplace_back(word.iriOrLiteral(), partialFileId, localIndex);
-        });
+        }
         // The occurrences of a word are folded within a block, but the same
         // word may also end one block and start the next.
         if (mergedIsExternal.empty() ||
@@ -276,23 +287,24 @@ TEST(PartialVocabularyFile, mergeInParallel) {
   }
 }
 
-// Test the accessors of a `MergeBlock` of merged words and that `clear`
-// releases its words, and that the weight of a block of a file is its size in
-// bytes.
-TEST(PartialVocabularyFile, mergeBlockAccessorsAndBlockWeight) {
+// Test the accessors of a `MergedBlock` and that `clear` releases its words,
+// and that the weight of a block of a file is its size in bytes.
+TEST(PartialVocabularyFile, mergedBlockAccessorsAndBlockWeight) {
   // A block of three merged words.
-  MergeBlock block;
+  MergedBlock block;
   pushWord(block, "\"a\"", false, 0, 7);
   pushWord(block, "\"b\"", true, 1, 8);
   pushWord(block, "\"c\"", false, 2, 9);
-  const MergeBlock& constBlock = block;
+  const MergedBlock& constBlock = block;
   ASSERT_EQ(block.size(), 3u);
   EXPECT_EQ(block[1].iriOrLiteral(), "\"b\"");
-  EXPECT_EQ(constBlock[2].id(), 9u);
-  EXPECT_EQ(block.front().partialFileId_, 0u);
-  EXPECT_EQ(constBlock.front().id(), 7u);
-  EXPECT_EQ(block.back().partialFileId_, 2u);
-  EXPECT_EQ(constBlock.back().id(), 9u);
+  EXPECT_EQ(constBlock[2].iriOrLiteral(), "\"c\"");
+  EXPECT_EQ(block.front().iriOrLiteral(), "\"a\"");
+  EXPECT_EQ(constBlock.back().iriOrLiteral(), "\"c\"");
+  EXPECT_THAT(constBlock.occurrences(constBlock.front()),
+              ::testing::ElementsAre(std::pair{0u, uint64_t{7}}));
+  EXPECT_THAT(block.occurrences(block.back()),
+              ::testing::ElementsAre(std::pair{2u, uint64_t{9}}));
 
   // The external flag can be changed in place.
   block[0].isExternal() = true;

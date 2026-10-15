@@ -190,7 +190,11 @@ class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
 class PartialVocabularyRunsInput : public ad_utility::NoCopy {
  public:
   using Element = detail::MergeWord;
-  using Block = detail::MergeBlock;
+  using Block = detail::InputBlock;
+  // The merge folds the equal words of the partial vocabularies into one
+  // `MergedWord` with all their occurrences, so its output blocks are of a
+  // different type than its input blocks, see `MergeBlock.h`.
+  using OutputBlock = detail::MergedBlock;
 
  private:
   // The metadata of a block, with the first and the last word already in the
@@ -257,7 +261,7 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     return runs_.at(run).blocks_.at(block).last_;
   }
 
-  // Read a block. The words are parsed in place, see `MergeBlock`.
+  // Read a block. The words are parsed in place, see `InputBlock`.
   Block getBlock(size_t run, size_t block) const {
     const auto& info = runs_.at(run).blocks_.at(block);
     Block::Buffer bytes(info.numBytes_);
@@ -267,17 +271,19 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
     return Block{std::move(bytes), info.numWords_, static_cast<uint32_t>(run)};
   }
 
-  Block makeEmptyBlock() const { return Block{}; }
+  OutputBlock makeEmptyBlock() const { return OutputBlock{}; }
 
   // Append a merged `word` to an output `block` of the merge. A word that is
   // equal to the last word of the block is folded into that word, see
-  // `MergeBlock::addWord`.
-  void appendToBlock(Block& block, const Element& word) const {
+  // `MergedBlock::addWord`.
+  void appendToBlock(OutputBlock& block, const Element& word) const {
     block.addWord(word);
   }
 
+  // The memory that the `word` occupies in an output block, see
+  // `MergedBlock::memorySizeOfAppended`.
   MemorySize memorySizeOfElement(const Element& word) const {
-    return Element::memorySize(word);
+    return OutputBlock::memorySizeOfAppended(word);
   }
 
  private:
