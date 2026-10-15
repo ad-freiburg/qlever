@@ -172,11 +172,13 @@ struct RuntimeParameters {
   Bool enablePrefilterOnIndexScans_{true, "enable-prefilter-on-index-scans"};
   // The maximum number of threads to be used by the spatial join algorithms.
   SizeT spatialJoinMaxNumThreads_{8, "spatial-join-max-num-threads"};
-  // The maximum number of threads for the parallel counting loops of the
-  // pattern trick (see `CountAvailablePredicates`). The value `0` means the
-  // number of logical cores of the machine. The default of `3` captures most
-  // of the speedup, with quickly diminishing returns for more threads.
-  SizeT patternTrickNumThreads_{3, "pattern-trick-num-threads"};
+  // The maximum number of tasks of the parallel counting loops of the pattern
+  // trick (see `CountAvailablePredicates`) that run at the same time. They run
+  // on the query's executor, so `max-num-threads-per-query` still bounds the
+  // threads. The value `0` means the number of logical cores of the machine.
+  // The default of `3` captures most of the speedup, with quickly diminishing
+  // returns for more tasks.
+  SizeT patternTrickNumTasksInFlight_{3, "pattern-trick-num-tasks-in-flight"};
   // A hint for how many tasks of the in-memory sort of intermediate results
   // (see `IdTableUtils::sort`) run at the same time. They run on the query's
   // executor, so `max-num-threads-per-query` still bounds the threads. Must be
