@@ -789,8 +789,10 @@ JoinImpl::makeTreeWithStrippedColumns(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 JoinImpl::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   return pushDownBindToAnyChild(
-      bind, {left_, right_},
-      [this](std::vector<std::shared_ptr<QueryExecutionTree>> newChildren) {
+      bind,
+      qlm::vector<qlm::shared_ptr<QueryExecutionTree>>{{left_, right_},
+                                                       allocator()},
+      [this](qlm::vector<qlm::shared_ptr<QueryExecutionTree>> newChildren) {
         auto& left = newChildren.at(0);
         auto& right = newChildren.at(1);
         auto leftCol = left->getVariableColumn(joinVar_);
