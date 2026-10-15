@@ -12,12 +12,10 @@
 // element, but specialized and more efficient.
 //
 // NOTE: `NeutralOptional` does not override `makeTreeWithBindColumn`. When
-// `tree_` produces zero rows, `computeResult` fabricates a single all-`UNDEF`
-// row without evaluating any expression, so a `BIND` pushed into `tree_`
-// would silently lose its value (e.g. a constant `BIND` would become `UNDEF`)
-// instead of being evaluated on that fallback row like an un-pushed `BIND`
-// would be. There is no cheap way to tell whether `tree_` is guaranteed to be
-// non-empty, so the push down is disallowed entirely.
+// `tree_` is empty, `computeResult` fabricates a single all-`UNDEF` row, on
+// which a `BIND` pushed into `tree_` would never be evaluated (e.g. a constant
+// `BIND` would become `UNDEF`). Whether `tree_` is non-empty is not known at
+// planning time, so the push down is refused.
 class NeutralOptional : public Operation {
   std::shared_ptr<QueryExecutionTree> tree_;
 

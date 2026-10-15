@@ -192,13 +192,13 @@ QueryExecutionTree::makeTreeWithBindColumn(
     // `makeTreeWithStrippedColumns` below.
     newRoot->setLimitOffsetDirectlyWithoutTriggeringHooks(
         rootOperation_->getLimitOffset());
-    // The new root operation is built from scratch, so the variables hidden in
-    // this tree must be hidden again, except for the `BIND` target, which is
-    // new (see `Operation::keepHiddenVariablesHidden`). Example: For the query
-    // `{ SELECT ?s ?o { ?s <p> ?o . ?s <q> ?x } } BIND(STR(?o) AS ?b)`, the
-    // `BIND` is pushed down into the subquery. The new tree hides `?x` again,
-    // but not `?b`, so de facto `?b` is added to the `SELECT` clause of the
-    // subquery.
+    // The new root operation is built from scratch, so hide the variables that
+    // are hidden in this tree again, but keep the new `BIND` target visible.
+    //
+    // NOTE: Consider `{ SELECT ?s ?o { ?s <p> ?o . ?s <q> ?x } }` followed by
+    // `BIND(STR(?o) AS ?b)`. The `BIND` is pushed into the subquery, which
+    // then hides `?x` again, but not `?b`. De facto, `?b` is added to the
+    // `SELECT` clause of the subquery.
     rootOperation_->keepHiddenVariablesHidden(*newRoot, bind._target);
     AD_CORRECTNESS_CHECK(result.value()->containsVariable(bind._target),
                          "The `BIND` target was lost during the push down.");
