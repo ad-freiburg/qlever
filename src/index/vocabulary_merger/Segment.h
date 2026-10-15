@@ -13,6 +13,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <ostream>
@@ -22,7 +23,6 @@
 #include <vector>
 
 #include "backports/algorithm.h"
-#include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "index/IndexBuilderTypes.h"
@@ -103,7 +103,7 @@ struct IdConverterForSegment {
       return Id::makeFromBlankNodeIndex(
           BlankNodeIndex::make(globalIndexOf(id)));
     }
-    return Id::makeFromVocabIndex(VocabIndex::make(globalIndexOf(id)));
+    return vocabIdFromIndex(globalIndexOf(id));
   }
 };
 
@@ -132,10 +132,8 @@ struct Segment {
   // `idConverterForNextSegment` derives the global IDs of the next segment
   // from them.
   size_t numDistinctWords() const {
-    return ::ranges::accumulate(wordBlocks_, numBlankNodes_,
-                                [](size_t sum, const WordBlock& block) {
-                                  return sum + block.numWords();
-                                });
+    return ::ranges::accumulate(wordBlocks_, numBlankNodes_, std::plus<>{},
+                                &WordBlock::numWords);
   }
 
   // The ID converter of the segment that follows this one, given the
@@ -152,8 +150,8 @@ struct Segment {
 };
 
 // Build the segment of the consecutive `blocks` of merged words (see
-// `PartialVocabularyRunsInput` for how the merge folds the occurrences of a
-// word within a block): eliminate the remaining duplicates (the same word at
+// `MergeBlock::addWord` for how the merge folds the occurrences of a word
+// within a block): eliminate the remaining duplicates (the same word at
 // the boundary of two blocks), combine their external flags, detect the blank
 // nodes (see `isBlankNode`), assign every distinct word to its sub-vocabulary
 // and its segment-local ID, and collect the ID map entries of all the
@@ -235,8 +233,7 @@ class SegmentBuilder {
   // word has at least one occurrence) and remember their total number.
   void reserveForBlocks(const std::vector<MergeBlock>& blocks) {
     size_t numMergedWords = ::ranges::accumulate(
-        blocks, size_t{0},
-        [](size_t sum, const MergeBlock& block) { return sum + block.size(); });
+        blocks, size_t{0}, std::plus<>{}, &MergeBlock::size);
     segment_.numMergedWords_ = numMergedWords;
     idMapEntries_.reserve(numMergedWords);
   }
@@ -254,13 +251,9 @@ class SegmentBuilder {
         // The same word ended the previous block.
         pendingWord_->isExternal() |= word.isExternal();
       } else {
-        // NOTE: The message arguments of the check are evaluated eagerly, so
-        // the pending word must not be dereferenced in them if there is none.
         if (pendingWord_.has_value()) {
-          AD_EXPENSIVE_CHECK(
-              comparator(pendingWord_->iriOrLiteral(), word.iriOrLiteral()),
-              "Total vocabulary order violated for ",
-              pendingWord_->iriOrLiteral(), " and ", word.iriOrLiteral());
+          checkVocabularyOrder(comparator, pendingWord_->iriOrLiteral(),
+                               word.iriOrLiteral());
         }
         commitPendingWord();
         pendingWord_ = word;
@@ -274,10 +267,9 @@ class SegmentBuilder {
   // ones that the merge folded into it, see `MergeBlock::addWord`) to those
   // of the pending word.
   void addOccurrences(const MergeBlock& block, const MergeWord& word) {
-    pendingOccurrences_.emplace_back(word.partialFileId_, word.id());
-    for (const auto& occurrence : block.moreOccurrences(word)) {
+    block.forEachOccurrence(word, [this](const Occurrence& occurrence) {
       pendingOccurrences_.push_back(occurrence);
-    }
+    });
   }
 
   // Finish the pending word (if there is one): assign its segment-local ID,

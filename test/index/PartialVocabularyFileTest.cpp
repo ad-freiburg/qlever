@@ -134,6 +134,7 @@ TEST(PartialVocabularyFile, blockIndexAndBlocks) {
 // Test that `appendToBlock` folds a word that is equal to the last word of the
 // block into that word: the occurrence is recorded, the external flag is
 // combined, and a different word starts a new entry.
+// _____________________________________________________________________________
 TEST(PartialVocabularyFile, appendToBlockFoldsDuplicates) {
   auto [filenames, cleanup] =
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
@@ -147,20 +148,20 @@ TEST(PartialVocabularyFile, appendToBlockFoldsDuplicates) {
   sources.push_back(makeInputBlock(1, {{"\"b\"", false, 7}}));
   sources.push_back(makeInputBlock(2, {{"\"a\"", true, 5}}));
   sources.push_back(makeInputBlock(4, {{"\"a\"", false, 1}}));
-  input.appendToBlock(block, sources[0].front());
-  input.appendToBlock(block, sources[2].front());
-  input.appendToBlock(block, sources[3].front());
-  input.appendToBlock(block, sources[1].front());
-  ASSERT_EQ(block.size(), 2u);
-  EXPECT_EQ(block[0].iriOrLiteral(), "\"a\"");
-  EXPECT_TRUE(block[0].isExternal());
+  // The order in which the merge yields the words (all the `"a"`s first).
+  for (size_t i : {0, 2, 3, 1}) {
+    input.appendToBlock(block, sources[i].front());
+  }
+  // The first occurrence of `"a"` is the one of the merged word, the external
+  // flag is the OR over all three, the two other occurrences are folded.
+  EXPECT_THAT(tuplesOfBlock(block),
+              ::testing::ElementsAre(std::tuple{"\"a\"", true, 3u},
+                                     std::tuple{"\"b\"", false, 7u}));
   EXPECT_EQ(block[0].partialFileId_, 0u);
-  EXPECT_EQ(block[0].id(), 3u);
   EXPECT_THAT(block.moreOccurrences(block[0]),
               ::testing::ElementsAre(std::pair{2u, uint64_t{5}},
                                      std::pair{4u, uint64_t{1}}));
-  EXPECT_EQ(block[1].iriOrLiteral(), "\"b\"");
-  EXPECT_FALSE(block[1].isExternal());
+  EXPECT_EQ(block[1].partialFileId_, 1u);
   EXPECT_TRUE(block.moreOccurrences(block[1]).empty());
 }
 
@@ -239,12 +240,10 @@ TEST(PartialVocabularyFile, mergeInParallel) {
         if (!merged.empty()) {
           EXPECT_LE(std::get<0>(merged.back()), word.iriOrLiteral());
         }
-        merged.emplace_back(word.iriOrLiteral(), word.partialFileId_,
-                            word.id());
-        for (const auto& [partialFileId, localIndex] :
-             block.moreOccurrences(word)) {
+        block.forEachOccurrence(word, [&](const auto& occurrence) {
+          const auto& [partialFileId, localIndex] = occurrence;
           merged.emplace_back(word.iriOrLiteral(), partialFileId, localIndex);
-        }
+        });
         // The occurrences of a word are folded within a block, but the same
         // word may also end one block and start the next.
         if (mergedIsExternal.empty() ||

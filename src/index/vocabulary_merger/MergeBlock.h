@@ -26,6 +26,7 @@
 #include "util/NoCopyNoMove.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeString.h"
+#include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
 
 // The words of the partial vocabularies as the parallel block merge (see
@@ -34,8 +35,9 @@
 // is not part of the public interface of `index/VocabularyMerger.h`.
 //
 // NOTE: The `QueueWord` (see `index/vocabulary_merger/QueueWord.h`) is the
-// owning counterpart of the `MergeWord` below, which the current merging
-// pipeline consumes. A follow-up PR switches the merge to the `MergeBlock`s.
+// owning counterpart of the `MergeWord` below; the current merging pipeline
+// still consumes `QueueWord`s. A follow-up PR switches the merge to the
+// `MergeBlock`s.
 namespace ad_utility::vocabulary_merger::detail {
 
 // An occurrence of a word in a partial vocabulary: the index of the partial
@@ -69,14 +71,21 @@ struct MergeWord {
   [[nodiscard]] std::string_view iriOrLiteral() const { return word_; }
   [[nodiscard]] const uint64_t& id() const { return index_; }
 
-  // The memory footprint of a `MergeWord` including its word, which the
-  // parallel merge needs to limit its memory consumption. Every word of a
+  // The memory footprint of a `MergeWord` including its word and the further
+  // occurrences that were folded into it (see `MergeBlock::addWord`), which
+  // the parallel merge needs to limit its memory consumption. Every word of a
   // `MergeBlock` owns a distinct slice of the storage of the block (no two
-  // words share their bytes), so the sum over the words of a block is the
-  // footprint of the block.
+  // words share their bytes) and a distinct range of its further occurrences,
+  // so the sum over the words of a block is the footprint of the block.
+  //
+  // NOTE: The merge charges this size for every element that it appends to a
+  // block (see `PartialVocabularyRunsInput::memorySizeOfElement`), also for
+  // an element that `addWord` then folds into the last word, although that
+  // only costs an `Occurrence`. This overestimate is on the safe side.
   static ad_utility::MemorySize memorySize(const MergeWord& word) {
-    return ad_utility::MemorySize::bytes(sizeof(MergeWord) +
-                                         word.iriOrLiteral().size());
+    return ad_utility::MemorySize::bytes(
+        sizeof(MergeWord) + word.iriOrLiteral().size() +
+        word.numMoreOccurrences_ * sizeof(Occurrence));
   }
 
   // Read a word of the partial vocabulary `partialFileId` from the
@@ -182,6 +191,19 @@ class MergeBlock : public ad_utility::NoCopy {
                       moreOccurrences_.size());
     return {moreOccurrences_.data() + word.firstMoreOccurrence_,
             word.numMoreOccurrences_};
+  }
+
+  // Call `f` with every occurrence (an `Occurrence`) of a `word` of this
+  // block: its own one first, then the further ones (see above).
+  CPP_template(typename F)(
+      requires ad_utility::InvocableWithConvertibleReturnType<
+          F, void,
+          const Occurrence&>) void forEachOccurrence(const MergeWord& word,
+                                                     const F& f) const {
+    f(Occurrence{word.partialFileId_, word.id()});
+    for (const auto& occurrence : moreOccurrences(word)) {
+      f(occurrence);
+    }
   }
 
   // The words of the block, as a range.

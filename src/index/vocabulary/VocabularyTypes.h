@@ -454,7 +454,7 @@ struct WordBlock {
   // Append a word whose payload (`payloadSize_` bytes) is not computed yet,
   // and return the bytes of its payload inside this block, for the caller to
   // compute it into (see `BlockWriterBase::precomputePayload`). The returned
-  // span is only valid until the next `push`.
+  // span is only valid until the next `push` or `pushWithPayloadSlot`.
   ql::span<char> pushWithPayloadSlot(std::string_view word, bool isExternal) {
     words_.push_back(word);
     isExternal_.push_back(isExternal);

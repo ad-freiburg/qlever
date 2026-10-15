@@ -15,6 +15,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "util/Exception.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility::vocabulary_merger {
@@ -30,6 +31,19 @@ CPP_concept WordCallback =
 template <typename T>
 CPP_concept WordComparator =
     ::ranges::predicate<T, std::string_view, std::string_view>;
+
+// Check that the word `previous` comes before the word `next` in the order of
+// the `comparator`, and throw otherwise. This is the check that the stages of
+// the merger run on consecutive distinct words; it is only performed if the
+// expensive checks are enabled (see `AD_EXPENSIVE_CHECK`).
+CPP_template(typename W)(requires WordComparator<W>) void checkVocabularyOrder(
+    [[maybe_unused]] const W& comparator,
+    [[maybe_unused]] std::string_view previous,
+    [[maybe_unused]] std::string_view next) {
+  AD_EXPENSIVE_CHECK(comparator(previous, next),
+                     "Total vocabulary order violated for ", previous, " and ",
+                     next);
+}
 }  // namespace ad_utility::vocabulary_merger
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_MERGER_CONCEPTS_H

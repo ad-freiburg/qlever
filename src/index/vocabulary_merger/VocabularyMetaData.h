@@ -30,6 +30,11 @@
 // testable on its own.
 namespace ad_utility::vocabulary_merger {
 
+// The ID of the word with the given global `index` in the merged vocabulary.
+inline Id vocabIdFromIndex(uint64_t index) {
+  return Id::makeFromVocabIndex(VocabIndex::make(index));
+}
+
 // The metadata of a segment of the merged vocabulary (see
 // `index/vocabulary_merger/Segment.h`), with segment-local IDs: the range of
 // the words with each of the two special prefixes (see `VocabularyMetaData`
@@ -77,10 +82,11 @@ struct SegmentMetaData {
 // The result of a call to `mergeVocabulary` (see `index/VocabularyMerger.h`).
 struct VocabularyMetaData {
   // This struct is used to incrementally construct the range of IDs that
-  // correspond to a given prefix. To use it, all the words from the
-  // vocabulary must be passed to the member function `addIfWordMatches` in
-  // sorted order. After that, the range `[begin(), end())` is the range of
-  // all the words that start with the prefix.
+  // correspond to a given prefix. To use it, either pass all the words from
+  // the vocabulary to the member function `addIfWordMatches` in sorted order,
+  // or pass the index ranges of the matching words of consecutive segments to
+  // `extend` (see `addSegment`). After that, the range `[begin(), end())` is
+  // the range of all the words that start with the prefix.
   struct IdRangeForPrefix {
     explicit IdRangeForPrefix(std::string prefix)
         : prefix_{std::move(prefix)} {}
@@ -93,11 +99,7 @@ struct VocabularyMetaData {
       if (!ql::starts_with(word, prefix_)) {
         return false;
       }
-      if (!beginWasSeen_) {
-        begin_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
-        beginWasSeen_ = true;
-      }
-      end_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex + 1));
+      extend(wordIndex, wordIndex);
       return true;
     }
 
@@ -105,10 +107,10 @@ struct VocabularyMetaData {
     // `last`, which have to come after all the words added so far.
     void extend(uint64_t first, uint64_t last) {
       if (!beginWasSeen_) {
-        begin_ = Id::makeFromVocabIndex(VocabIndex::make(first));
+        begin_ = vocabIdFromIndex(first);
         beginWasSeen_ = true;
       }
-      end_ = Id::makeFromVocabIndex(VocabIndex::make(last + 1));
+      end_ = vocabIdFromIndex(last + 1);
     }
 
     Id begin() const { return begin_; }
@@ -136,8 +138,7 @@ struct VocabularyMetaData {
     }
     if (internalEntities_.addIfWordMatches(word, wordIndex)) {
       if (globalSpecialIds_->contains(word)) {
-        specialIdMapping_[std::string{word}] =
-            Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
+        specialIdMapping_[std::string{word}] = vocabIdFromIndex(wordIndex);
       }
     }
   }
@@ -165,20 +166,20 @@ struct VocabularyMetaData {
     extend(langTaggedPredicates_, segment.langTaggedPredicates_);
     extend(internalEntities_, segment.internalEntities_);
     for (const auto& [word, id] : segment.specialIds_) {
-      specialIdMapping_[word] =
-          Id::makeFromVocabIndex(VocabIndex::make(toGlobalIndex(id)));
+      specialIdMapping_[word] = vocabIdFromIndex(toGlobalIndex(id));
     }
   }
 
   // The mapping from the `qlever::specialIds` to their actual IDs.
-  // This is created on the fly by the calls to `addWord`.
+  // This is created on the fly by the calls to `addWord` or `addSegment`.
   const auto& specialIdMapping() const { return specialIdMapping_; }
   // The prefix range for the `@en@<predicate` style predicates.
   const auto& langTaggedPredicates() const { return langTaggedPredicates_; }
   // The prefix range for the internal IRIs in the `ql:` namespace.
   const auto& internalEntities() const { return internalEntities_; }
-  // The number of words for which `addWord()` has been called. Needs to return
-  // a reference to be used in combination with a `ProgressBar`.
+  // The number of words that were added via `addWord()` or `addSegment()`.
+  // Needs to return a reference to be used in combination with a
+  // `ProgressBar`.
   const size_t& numWordsTotal() const { return numWordsTotal_; }
 
   // Return true iff the `id` belongs to one of the two ranges that contain

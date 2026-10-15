@@ -23,13 +23,13 @@
 
 #include "../../util/FileTestHelpers.h"
 #include "../../util/IdTestHelpers.h"
-#include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "global/VocabIndex.h"
 #include "index/PartialVocabularyFilenames.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "index/vocabulary_merger/MergeBlock.h"
 #include "index/vocabulary_merger/QueueWord.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeString.h"
 
@@ -95,6 +95,32 @@ inline void pushWord(ad_utility::vocabulary_merger::detail::MergeBlock& block,
   auto input = makeInputBlock(partialFileId,
                               {{std::string{word}, isExternal, localIndex}});
   block.addWord(input.front());
+}
+
+// An occurrence of a word in a partial vocabulary for `makeMergedBlocks`
+// below: the word, its external flag, the index of the partial vocabulary and
+// the local index of the word in it.
+struct WordOccurrence {
+  std::string word_;
+  bool isExternal_ = false;
+  uint32_t partialFileId_ = 0;
+  uint64_t localIndex_ = 0;
+};
+
+// Create the blocks of merged words that the merge yields for the given
+// `occurrences` (one inner vector per block, in the order of the merge), see
+// `pushWord`.
+inline std::vector<ad_utility::vocabulary_merger::detail::MergeBlock>
+makeMergedBlocks(const std::vector<std::vector<WordOccurrence>>& occurrences) {
+  std::vector<ad_utility::vocabulary_merger::detail::MergeBlock> blocks(
+      occurrences.size());
+  for (size_t i = 0; i < blocks.size(); ++i) {
+    for (const auto& occurrence : occurrences[i]) {
+      pushWord(blocks[i], occurrence.word_, occurrence.isExternal_,
+               occurrence.partialFileId_, occurrence.localIndex_);
+    }
+  }
+  return blocks;
 }
 
 // The number and filenames of a set of partial vocabularies, as created by
@@ -181,6 +207,8 @@ SingleVocabularyParallelWriter makeParallelWriter(Callback callback) {
 // and `geoWords_`, together with their `isExternal` flags.
 class TestSplitWriter : public ParallelWordWriterBase {
  public:
+  // The marker bit that the indices of the geo words carry.
+  static constexpr uint64_t geoMarker = uint64_t{1} << 59;
   std::vector<std::pair<std::string, bool>> words_;
   std::vector<std::pair<std::string, bool>> geoWords_;
 
@@ -191,18 +219,12 @@ class TestSplitWriter : public ParallelWordWriterBase {
   Writer geoWriter_{makeCollectingWordCallback(geoWords_)};
 
  public:
-  static constexpr uint64_t geoMarker = uint64_t{1} << 59;
-  static bool isGeoWord(std::string_view word) {
-    return ql::starts_with(word, "\"") &&
-           ql::ends_with(
-               word, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  }
   uint8_t numSubVocabularies() const override { return 2; }
   uint8_t subVocabularyOf(std::string_view word) const override {
-    return isGeoWord(word) ? 1 : 0;
+    return ad_utility::isWktLiteral(word) ? 1 : 0;
   }
   uint64_t indexOf(uint8_t sub, uint64_t position,
-                   std::string_view) const override {
+                   [[maybe_unused]] std::string_view word) const override {
     return sub == 1 ? (position | geoMarker) : position;
   }
   BlockWriterBase& blockWriter(uint8_t sub) override {
