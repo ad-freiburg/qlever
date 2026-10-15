@@ -68,15 +68,15 @@ std::string Sort::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void Sort::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) {
+void Sort::onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
+                                bool childrenAreExclusivelyOwned) {
   // For an explicit `INTERNAL SORT BY` we deliberately keep the complete sorted
   // result and let the `LIMIT`/`OFFSET` be applied externally (see
   // `handlesLimitOffset()`), so we must not push it down to the subtree.
   if (explicitSort_) {
     return;
   }
-  subtree_ = subtree_->clone();
-  subtree_->applyLimitOffset(limitOffset);
+  applyLimitOffsetToChild(subtree_, limitOffset, childrenAreExclusivelyOwned);
 }
 
 // _____________________________________________________________________________

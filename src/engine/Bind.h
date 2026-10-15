@@ -37,7 +37,8 @@ class Bind : public Operation {
  public:
   size_t getCostEstimate() override;
   LimitOffsetHandling handlesLimitOffset() const override;
-  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset) override;
+  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
+                            bool childrenAreExclusivelyOwned) override;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override;
