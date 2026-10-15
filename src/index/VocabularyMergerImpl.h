@@ -61,7 +61,7 @@ inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
   options.targetChunksPerThread = std::max<size_t>(
       1, (numChunks + options.parallelism() - 1) / options.parallelism());
   // The blocks in memory are larger than their serialized form (a
-  // `MergeWord` per word next to the bytes, and the output of a chunk copies
+  // `InputWord` per word next to the bytes, and the output of a chunk copies
   // the words), by up to a factor of two.
   constexpr size_t decodedFactor = 2;
   const uint64_t memoryPerChunk = (std::max<size_t>(numPartialVocabularies, 1) *
@@ -88,17 +88,17 @@ auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      const ad_utility::RegexSet& blankNodeIriRegexes)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>) {
+  using detail::InputWord;
   using detail::MergedBlock;
   using detail::MergedWord;
-  using detail::MergeWord;
   using detail::QueueWord;
   // Return true iff `p1` is smaller than `p2` according to the order of the
   // IRI or literal.
-  auto lessThan = [&comparator](const MergeWord& p1, const MergeWord& p2) {
+  auto lessThan = [&comparator](const InputWord& p1, const InputWord& p2) {
     return comparator(p1.iriOrLiteral(), p2.iriOrLiteral());
   };
   // The index of the partial vocabulary that a merged word comes from is
-  // stored in 32 bits (see `detail::MergeWord` and
+  // stored in 32 bits (see `detail::InputWord` and
   // `detail::LocalIdxToBatchMapping`). NOTE: This check is done here (and not
   // per merged word, which would be on the hot path of the merging), because
   // `partialFileId_` is always one of the indices below.

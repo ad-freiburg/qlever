@@ -1,6 +1,7 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -186,7 +187,7 @@ class PartialVocabularyWriter : public ad_utility::NoCopyNoMove {
 // never written to).
 class PartialVocabularyRunsInput : public ad_utility::NoCopy {
  public:
-  using Element = detail::MergeWord;
+  using Element = detail::InputWord;
   using Block = detail::InputBlock;
   // The merge folds the equal words of the partial vocabularies into one
   // `MergedWord` with all their occurrences, so its output blocks are of a

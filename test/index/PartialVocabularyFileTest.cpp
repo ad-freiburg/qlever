@@ -1,6 +1,7 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -28,9 +29,9 @@
 using namespace ad_utility::vocabulary_merger;
 using namespace vocabularyMergerTestHelpers;
 using ad_utility::vocabulary_merger::detail::InputBlock;
+using ad_utility::vocabulary_merger::detail::InputWord;
 using ad_utility::vocabulary_merger::detail::MergedBlock;
 using ad_utility::vocabulary_merger::detail::MergedWord;
-using ad_utility::vocabulary_merger::detail::MergeWord;
 
 namespace {
 // The basename of the partial vocabulary files of the tests below.
@@ -250,7 +251,7 @@ TEST(PartialVocabularyFile, mergeInParallel) {
     }
   }
 
-  auto comparator = [](const MergeWord& a, const MergeWord& b) {
+  auto comparator = [](const InputWord& a, const InputWord& b) {
     return a.iriOrLiteral() < b.iriOrLiteral();
   };
   MergeOptions options;

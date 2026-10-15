@@ -1,6 +1,7 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -10,7 +11,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <initializer_list>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -38,7 +38,7 @@ constexpr uint8_t blankNodeSubVocabularyIndex =
 // The ID converter with the given `numWordsInPreviousSegments_` per
 // sub-vocabulary index (all others are zero).
 IdConverterForSegment makeConverter(
-    std::initializer_list<std::pair<uint8_t, uint64_t>> counts) {
+    const std::vector<std::pair<uint8_t, uint64_t>>& counts) {
   IdConverterForSegment converter;
   for (const auto& [sub, count] : counts) {
     converter.numWordsInPreviousSegments_[sub] = count;
@@ -143,7 +143,7 @@ TEST(Segment, buildSegment) {
   EXPECT_THAT(main.isExternal_, ElementsAre(true, true, false, false));
   EXPECT_THAT(segment.wordBlocks_[1].words(), ElementsAre(wkt));
   EXPECT_EQ(segment.numBlankNodes_, 1u);
-  EXPECT_EQ(segment.numMergedWords_, 7u);
+  EXPECT_EQ(segment.numOccurrences_, 8u);
   EXPECT_EQ(segment.numDistinctWords(), 6u);
 
   // The metadata with segment-local IDs: the geo literal has the marker of
@@ -181,8 +181,8 @@ TEST(Segment, blankNodeRegexesAndOrder) {
   auto blocks = makeMergedBlocks(
       {{{"<http://ex/bn_1>", false, 0, 0}, {"<http://ex/x>", false, 0, 1}}});
   ad_utility::RegexSet regexes{{"<http://ex/bn_.*>"}, "for the test"};
-  auto writer = makeParallelWriter(
-      makeCountingWordCallback(*std::make_unique<size_t>(0).release()));
+  size_t numWords = 0;
+  auto writer = makeParallelWriter(makeCountingWordCallback(numWords));
   Segment segment =
       buildSegment(std::move(blocks), writer, regexes, 1, lessThan);
   EXPECT_EQ(segment.numBlankNodes_, 1u);

@@ -1,6 +1,7 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
@@ -63,8 +64,10 @@ class SegmentLocalId {
       bitMaskForLowerBits(numSubVocabIndexBits);
 
  private:
-  // Deliberately not initialized, so that creating many IDs (for example by
-  // resizing a vector of them) is cheap.
+  // NOTE: Like a plain integer, a default-initialized ID (`SegmentLocalId
+  // id;`) has an indeterminate value, while a value-initialized one
+  // (`SegmentLocalId{}`, or the elements of a resized vector) is zero, because
+  // the default constructor is defaulted. An initializer would gain nothing.
   uint64_t bits_;
 
  public:

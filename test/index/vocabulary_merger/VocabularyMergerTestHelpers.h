@@ -60,7 +60,7 @@ inline ad_utility::vocabulary_merger::detail::QueueWord makeQueueWord(
 
 // A word of a partial vocabulary for `makeInputBlock` below: the word, its
 // external flag and its local index in the partial vocabulary.
-struct InputWord {
+struct InputWordSpec {
   std::string word_;
   bool isExternal_ = false;
   uint64_t localIndex_ = 0;
@@ -71,7 +71,7 @@ struct InputWord {
 // from a partial vocabulary file: the words are serialized in the format of
 // the `PartialVocabularyWriter` and the block parses them in place.
 inline ad_utility::vocabulary_merger::detail::InputBlock makeInputBlock(
-    uint32_t partialFileId, const std::vector<InputWord>& words) {
+    uint32_t partialFileId, const std::vector<InputWordSpec>& words) {
   using ad_utility::vocabulary_merger::detail::InputBlock;
   ad_utility::serialization::ByteBufferWriteSerializer serializer;
   for (const auto& word : words) {
