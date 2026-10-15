@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_LIBQLEVER_BLOBDIFF_H
-#define QLEVER_SRC_LIBQLEVER_BLOBDIFF_H
+#ifndef QLEVER_SRC_LIBQLEVER_BLOBDIFF_BLOBDIFF_H
+#define QLEVER_SRC_LIBQLEVER_BLOBDIFF_BLOBDIFF_H
 
 #include <cstdint>
 #include <limits>
@@ -18,8 +18,8 @@
 
 #include "backports/span.h"
 #include "global/Id.h"
-#include "libqlever/BlobLayout.h"
 #include "libqlever/CanonicalRowOrder.h"
+#include "libqlever/blobDiff/BlobLayout.h"
 #include "util/BinaryDiffApplier.h"
 
 namespace qlever {
@@ -107,4 +107,4 @@ std::vector<size_t> greedyMatch(ql::span<const uint64_t> base,
 
 }  // namespace qlever
 
-#endif  // QLEVER_SRC_LIBQLEVER_BLOBDIFF_H
+#endif  // QLEVER_SRC_LIBQLEVER_BLOBDIFF_BLOBDIFF_H

@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "libqlever/BlobDiffProducer.h"
+#include "libqlever/blobDiff/BlobDiffProducer.h"
 #include "util/File.h"
 
 namespace po = boost::program_options;

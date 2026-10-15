@@ -20,15 +20,15 @@
 #include <string>
 #include <vector>
 
-#include "../util/GTestHelpers.h"
+#include "../../util/GTestHelpers.h"
 #include "./BlobTestHelpers.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
-#include "libqlever/BlobDiff.h"
-#include "libqlever/BlobDiffProducer.h"
-#include "libqlever/BlobLayout.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
+#include "libqlever/blobDiff/BlobDiff.h"
+#include "libqlever/blobDiff/BlobDiffProducer.h"
+#include "libqlever/blobDiff/BlobLayout.h"
 #include "util/File.h"
 
 using namespace qlever;

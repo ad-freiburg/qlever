@@ -7,7 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "libqlever/BlobLayout.h"
+#include "libqlever/blobDiff/BlobLayout.h"
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>

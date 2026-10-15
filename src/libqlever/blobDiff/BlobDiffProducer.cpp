@@ -7,7 +7,7 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#include "libqlever/BlobDiffProducer.h"
+#include "libqlever/blobDiff/BlobDiffProducer.h"
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
@@ -26,10 +26,10 @@
 #include "global/IdTriple.h"
 #include "index/DeltaTriples.h"
 #include "index/TripleComponentConversions.h"
-#include "libqlever/BlobDiff.h"
-#include "libqlever/BlobLayout.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
+#include "libqlever/blobDiff/BlobDiff.h"
+#include "libqlever/blobDiff/BlobLayout.h"
 #include "parser/BlankNodeAdder.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"

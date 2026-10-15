@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_LIBQLEVER_BLOBDIFFPRODUCER_H
-#define QLEVER_SRC_LIBQLEVER_BLOBDIFFPRODUCER_H
+#ifndef QLEVER_SRC_LIBQLEVER_BLOBDIFF_BLOBDIFFPRODUCER_H
+#define QLEVER_SRC_LIBQLEVER_BLOBDIFF_BLOBDIFFPRODUCER_H
 
 #include <cstddef>
 #include <optional>
@@ -183,4 +183,4 @@ class BlobDiffProducer {
 
 }  // namespace qlever
 
-#endif  // QLEVER_SRC_LIBQLEVER_BLOBDIFFPRODUCER_H
+#endif  // QLEVER_SRC_LIBQLEVER_BLOBDIFF_BLOBDIFFPRODUCER_H

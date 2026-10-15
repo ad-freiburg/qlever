@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_TEST_LIBQLEVER_BLOBTESTHELPERS_H
-#define QLEVER_TEST_LIBQLEVER_BLOBTESTHELPERS_H
+#ifndef QLEVER_TEST_LIBQLEVER_BLOBDIFF_BLOBTESTHELPERS_H
+#define QLEVER_TEST_LIBQLEVER_BLOBDIFF_BLOBTESTHELPERS_H
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
@@ -22,14 +22,14 @@
 #include <variant>
 #include <vector>
 
-#include "../util/GTestHelpers.h"
-#include "./QleverTestHelpers.h"
+#include "../../util/GTestHelpers.h"
+#include "../QleverTestHelpers.h"
 #include "backports/span.h"
 #include "global/Id.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
-#include "libqlever/BlobLayout.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
+#include "libqlever/blobDiff/BlobLayout.h"
 #include "util/File.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
@@ -165,4 +165,4 @@ inline std::vector<char> makeHandmadeBlob(
 
 }  // namespace blobTestHelpers
 
-#endif  // QLEVER_TEST_LIBQLEVER_BLOBTESTHELPERS_H
+#endif  // QLEVER_TEST_LIBQLEVER_BLOBDIFF_BLOBTESTHELPERS_H

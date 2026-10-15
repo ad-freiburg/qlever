@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "./BlobTestHelpers.h"
-#include "libqlever/BlobLayout.h"
+#include "libqlever/blobDiff/BlobLayout.h"
 
 using namespace qlever;
 using namespace testing;

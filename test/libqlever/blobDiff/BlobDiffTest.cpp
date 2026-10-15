@@ -17,8 +17,8 @@
 
 #include "./BlobTestHelpers.h"
 #include "backports/algorithm.h"
-#include "libqlever/BlobDiff.h"
-#include "libqlever/BlobLayout.h"
+#include "libqlever/blobDiff/BlobDiff.h"
+#include "libqlever/blobDiff/BlobLayout.h"
 #include "util/BinaryDiffApplier.h"
 
 using namespace qlever;
