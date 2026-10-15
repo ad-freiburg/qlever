@@ -100,6 +100,7 @@ RuntimeParameters::RuntimeParameters() {
   maxNumThreadsPerQuery_.setParameterConstraint(mustBeStrictlyPositive);
   permutationWriterNumBlocksInFlight_.setParameterConstraint(
       mustBeStrictlyPositive);
+  sortNumTasksInFlight_.setParameterConstraint(mustBeStrictlyPositive);
 }
 
 // _____________________________________________________________________________

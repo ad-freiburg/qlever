@@ -278,8 +278,7 @@ class QueryExecutionContext
   const SortConfig& sortConfig() const { return sortConfig_; }
 
   // Return a `SortConfig` for sorting on the `executor`, the number of tasks
-  // of which is the runtime parameter `sort-num-tasks-in-flight` (at least
-  // `1`).
+  // of which is the runtime parameter `sort-num-tasks-in-flight`.
   static SortConfig makeSortConfig(qlever::Executor executor);
 
  private:

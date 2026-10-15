@@ -14,9 +14,10 @@ using namespace std::chrono_literals;
 SortConfig QueryExecutionContext::makeSortConfig(qlever::Executor executor) {
   size_t numTasks =
       getRuntimeParameter<&RuntimeParameters::sortNumTasksInFlight_>();
+  AD_CORRECTNESS_CHECK(numTasks > 0);
   return {std::move(executor),
-          static_cast<uint32_t>(std::clamp<size_t>(
-              numTasks, 1, std::numeric_limits<uint32_t>::max()))};
+          static_cast<uint32_t>(std::min<size_t>(
+              numTasks, std::numeric_limits<uint32_t>::max()))};
 }
 
 // _____________________________________________________________________________

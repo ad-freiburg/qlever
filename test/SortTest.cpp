@@ -108,7 +108,7 @@ TEST(Sort, sortNumTasksInFlight) {
 
 // _____________________________________________________________________________
 // The number of tasks of the `SortConfig` of a query is the runtime parameter
-// `sort-num-tasks-in-flight` (at least `1`). It is not capped by
+// `sort-num-tasks-in-flight`. It is not capped by
 // `max-num-threads-per-query`, which limits the threads of the query's executor
 // instead.
 TEST(Sort, makeSortConfig) {
@@ -126,7 +126,7 @@ TEST(Sort, makeSortConfig) {
   };
   EXPECT_EQ(numTasks(3, 6), 3);
   EXPECT_EQ(numTasks(10, 4), 10);
-  EXPECT_EQ(numTasks(0, 6), 1);
+  EXPECT_EQ(numTasks(1, 6), 1);
 }
 
 TEST(Sort, ComputeSortSingleIntColumn) {

@@ -179,8 +179,8 @@ struct RuntimeParameters {
   SizeT patternTrickNumThreads_{3, "pattern-trick-num-threads"};
   // A hint for how many tasks of the in-memory sort of intermediate results
   // (see `IdTableUtils::sort`) run at the same time. They run on the query's
-  // executor, so `max-num-threads-per-query` still bounds the threads. Values
-  // below `1` are treated as `1`.
+  // executor, so `max-num-threads-per-query` still bounds the threads. Must be
+  // strictly positive; `1` means that the sort runs sequentially.
   SizeT sortNumTasksInFlight_{3, "sort-num-tasks-in-flight"};
   // The maximum size of the `prefilterBox` for
   // `LibspatialjoinAlgorithm::parse()`.
