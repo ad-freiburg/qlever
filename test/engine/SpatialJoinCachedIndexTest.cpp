@@ -28,7 +28,7 @@
 #include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
 #include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/LayoutReader.h"
+#include "util/Serializer/LayoutReadSerializer.h"
 
 namespace {
 
@@ -842,13 +842,14 @@ TEST(SpatialJoinCachedIndex, writeLegacyVersion1Format) {
       ::testing::HasSubstr("single segment"));
 }
 
+// _____________________________________________________________________________
 // Test that `parseLayout` records exactly the bytes that `writeToSerializer`
 // writes, in both format versions.
 TEST(SpatialJoinCachedIndex, parseLayout) {
   using namespace segmented;
   using ad_utility::serialization::AlignedByteBufferWriteSerializer;
   using ad_utility::serialization::ByteRange;
-  using ad_utility::serialization::LayoutReader;
+  using ad_utility::serialization::LayoutReadSerializer;
   TestTables t{segmentedKb()};
   const auto& L = t.lines_;
   const auto& M = t.others_;
@@ -867,7 +868,8 @@ TEST(SpatialJoinCachedIndex, parseLayout) {
     return std::move(writer).data();
   };
   auto makeReader = [](const auto& buffer) {
-    LayoutReader reader{ql::span<const char>{buffer.data(), buffer.size()}};
+    LayoutReadSerializer reader{
+        ql::span<const char>{buffer.data(), buffer.size()}};
     reader.template readScalar<uint8_t>();
     return reader;
   };
@@ -931,7 +933,7 @@ TEST(SpatialJoinCachedIndex, parseLayout) {
     EXPECT_EQ(layout.rowToShape_.size(), 0u);
 
     // A truncated input is detected.
-    LayoutReader truncated{
+    LayoutReadSerializer truncated{
         ql::span<const char>{buffer.data(), buffer.size() - 1}};
     truncated.readScalar<uint8_t>();
     EXPECT_ANY_THROW(

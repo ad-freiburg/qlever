@@ -21,12 +21,12 @@
 #include "rdfTypes/Variable.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
+#include "util/Serializer/LayoutReadSerializer.h"
 // NOTE: The following two includes are only needed to read and write the hash
 // map of the legacy format (version 1) in the templates `readFromSerializer`
 // and `writeToSerializer`, which have to be defined in this header because
 // they are generic in the serializer.
 #include "util/HashMap.h"
-#include "util/Serializer/LayoutReader.h"
 #include "util/Serializer/SerializeHashMap.h"
 #include "util/Serializer/SerializeOptional.h"
 #include "util/Serializer/SerializePair.h"
@@ -270,9 +270,8 @@ class SpatialJoinCachedIndex {
   // an index with a single segment and a simplification (see
   // `NamedCachedQueryBlobManager::serialize`).
   //
-  // The layout of the written bytes (in both versions) is parsed by
-  // `parseLayout` below, which has to be adapted whenever either format
-  // changes.
+  // The read counterpart is `readFromSerializer` below, which also determines
+  // the layout of the written bytes (see `parseLayout`).
   CPP_template(typename Serializer)(
       requires ad_utility::serialization::WriteSerializer<
           Serializer>) void writeToSerializer(Serializer& serializer,
@@ -316,25 +315,47 @@ class SpatialJoinCachedIndex {
   // `writeToSerializer`. An index in the legacy format (version 1) is read as
   // an index with one segment and no simplification. `numRows` is the number of
   // rows of the `IdTable` that the index refers to.
+  //
+  // If the `serializer` only determines the layout (see `LayoutSerializer`),
+  // then no index is constructed (in particular, the segments are not
+  // decoded), but the `Layout` of the index is returned instead, with
+  // everything but its `whole_` set (see `parseLayout`, which sets it). The
+  // layout path performs the checks of the framing and of the sizes (e.g. of
+  // `rowToShape_`), but not those that need the decoded contents (see
+  // `computeShapeToRow` and `fromLegacyFormat`).
   CPP_template(typename Serializer)(
       requires ad_utility::serialization::ReadSerializer<
-          Serializer>) static SpatialJoinCachedIndex
-      readFromSerializer(Serializer& serializer, size_t numRows,
-                         uint16_t entriesFormatVersion) {
+          Serializer>) static auto readFromSerializer(Serializer& serializer,
+                                                      size_t numRows,
+                                                      uint16_t
+                                                          entriesFormatVersion) {
+    using namespace ad_utility::serialization;
+    constexpr bool onlyLayout = LayoutSerializer<Serializer>;
     AD_CONTRACT_CHECK(entriesFormatVersion ==
                           namedResultCacheSerializer::legacyFormatVersion ||
                       entriesFormatVersion ==
                           namedResultCacheSerializer::formatVersion);
+    [[maybe_unused]] Layout layout;
     Variable geometryColumn{"?dummyCol"};
     serializer >> geometryColumn;
     if (entriesFormatVersion ==
         namedResultCacheSerializer::legacyFormatVersion) {
-      std::string encodedSegment;
-      serializer >> encodedSegment;
+      // The encoded single segment, followed by the map from shape ids to
+      // rows (see `writeToSerializer`).
+      [[maybe_unused]] std::string encodedSegment;
+      if constexpr (onlyLayout) {
+        serializer.template readArray<char>();
+      } else {
+        serializer >> encodedSegment;
+      }
       ad_utility::HashMap<size_t, size_t> shapeToRow;
       serializer >> shapeToRow;
-      return fromLegacyFormat(std::move(geometryColumn), encodedSegment,
-                              shapeToRow, numRows);
+      if constexpr (onlyLayout) {
+        return layout;
+      } else {
+        return fromLegacyFormat(std::move(geometryColumn), encodedSegment,
+                                shapeToRow, numRows);
+      }
     }
     std::optional<double> simplification;
     serializer >> simplification;
@@ -342,33 +363,46 @@ class SpatialJoinCachedIndex {
     serializer >> numSegments;
     AD_CORRECTNESS_CHECK(numSegments <= MAX_NUM_SEGMENTS,
                          "The serialized geo index is corrupt");
-    Segments segments;
+    [[maybe_unused]] Segments segments;
     for (uint64_t i = 0; i < numSegments; ++i) {
-      std::string encodedSegment;
-      serializer >> encodedSegment;
-      segments.push_back(decodeSegment(encodedSegment));
+      if constexpr (onlyLayout) {
+        layout.segmentPayloads_.push_back(
+            serializer.template readArray<char>());
+      } else {
+        std::string encodedSegment;
+        serializer >> encodedSegment;
+        segments.push_back(decodeSegment(encodedSegment));
+      }
     }
-    std::vector<uint64_t> rowToShape;
-    serializer >> rowToShape;
-    AD_CORRECTNESS_CHECK(rowToShape.size() == numRows,
-                         "The serialized geo index is corrupt");
-    return SpatialJoinCachedIndex{std::move(geometryColumn), simplification,
-                                  std::move(segments), std::move(rowToShape)};
+    if constexpr (onlyLayout) {
+      layout.rowToShape_ = serializer.template readArray<uint64_t>();
+      AD_CORRECTNESS_CHECK(
+          layout.rowToShape_.size() == numRows * sizeof(uint64_t),
+          "The serialized geo index is corrupt");
+      return layout;
+    } else {
+      std::vector<uint64_t> rowToShape;
+      serializer >> rowToShape;
+      AD_CORRECTNESS_CHECK(rowToShape.size() == numRows,
+                           "The serialized geo index is corrupt");
+      return SpatialJoinCachedIndex{std::move(geometryColumn), simplification,
+                                    std::move(segments), std::move(rowToShape)};
+    }
   }
 
   // Determine the layout (see `Layout`) of an index that was written by
   // `writeToSerializer` in the given `entriesFormatVersion` with the aligned
   // serialization (see `AlignedByteBufferWriteSerializer`), starting at the
   // current position of the `reader`, which is advanced past the index. This
-  // parses exactly the format that `writeToSerializer` writes and that
-  // `readFromSerializer` reads (and has to be kept in sync with them), but only
-  // records where the parts are, instead of constructing an index. `numRows`
-  // is the number of rows of the `IdTable` that the index refers to, which is
-  // checked against the serialized `rowToShape_` (version 2 only). Throw if
-  // the `entriesFormatVersion` is unknown, or if the input is corrupt or
+  // is `readFromSerializer` with a layout serializer (so the format is only
+  // spelled out there), plus the `whole_` range. `numRows` is the number of
+  // rows of the `IdTable` that the index refers to, which is checked against
+  // the serialized `rowToShape_` (version 2 only). Throw if the
+  // `entriesFormatVersion` is unknown, or if the input is corrupt or
   // truncated.
-  static Layout parseLayout(ad_utility::serialization::LayoutReader& reader,
-                            size_t numRows, uint16_t entriesFormatVersion);
+  static Layout parseLayout(
+      ad_utility::serialization::LayoutReadSerializer& reader, size_t numRows,
+      uint16_t entriesFormatVersion);
 
  private:
   // Construct from the given parts, and compute `shapeToRow_` from

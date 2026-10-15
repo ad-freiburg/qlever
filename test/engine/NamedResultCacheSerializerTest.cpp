@@ -20,7 +20,7 @@
 #include "engine/NamedResultCacheSerializer.h"
 #include "index/LocalVocabEntry.h"
 #include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/LayoutReader.h"
+#include "util/Serializer/LayoutReadSerializer.h"
 
 using namespace ad_utility::serialization;
 using ::testing::ElementsAre;
@@ -553,7 +553,7 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
 TEST_F(NamedResultCacheSerializerTest, ParseLayout) {
   using namespace namedResultCacheSerializer;
   using ad_utility::serialization::ByteRange;
-  using ad_utility::serialization::LayoutReader;
+  using ad_utility::serialization::LayoutReadSerializer;
   NamedResultCache cache;
   cache.store("b", makeSimpleValue("key-b"));
   cache.store("a", makeSimpleValue("key-a"));
@@ -563,7 +563,8 @@ TEST_F(NamedResultCacheSerializerTest, ParseLayout) {
 
   // The header: the magic byte, the version, and the number of entries (none
   // of which is aligned).
-  LayoutReader reader{ql::span<const char>{buffer.data(), buffer.size()}};
+  LayoutReadSerializer reader{
+      ql::span<const char>{buffer.data(), buffer.size()}};
   auto header = parseEntriesHeader(reader);
   EXPECT_EQ(header.whole_, (ByteRange{0, 1 + 2 + 8}));
   EXPECT_EQ(reader.position(), 11u);
@@ -609,7 +610,7 @@ TEST_F(NamedResultCacheSerializerTest, ParseLayout) {
   // `parseEntriesHeader`, and a truncated entry by `parseEntryLayout`.
   auto parseHeaderFrom = [](AlignedByteBufferWriteSerializer& w) {
     auto b = std::move(w).data();
-    LayoutReader r{ql::span<const char>{b.data(), b.size()}};
+    LayoutReadSerializer r{ql::span<const char>{b.data(), b.size()}};
     return parseEntriesHeader(r);
   };
   AlignedByteBufferWriteSerializer wrongMagic;
@@ -624,7 +625,7 @@ TEST_F(NamedResultCacheSerializerTest, ParseLayout) {
   wrongVersion << size_t{0};
   AD_EXPECT_THROW_WITH_MESSAGE(parseHeaderFrom(wrongVersion),
                                ::testing::HasSubstr("format version 7"));
-  LayoutReader truncated{
+  LayoutReadSerializer truncated{
       ql::span<const char>{buffer.data(), buffer.size() - 8}};
   parseEntriesHeader(truncated);
   parseEntryLayout(truncated, formatVersion);
@@ -636,7 +637,7 @@ TEST_F(NamedResultCacheSerializerTest, ParseLayout) {
 // versions.
 TEST_F(NamedResultCacheSerializerTest, ParseLayoutWithGeoIndex) {
   using namespace namedResultCacheSerializer;
-  using ad_utility::serialization::LayoutReader;
+  using ad_utility::serialization::LayoutReadSerializer;
   auto qec = ad_utility::testing::getQec(
       "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .");
@@ -659,7 +660,8 @@ TEST_F(NamedResultCacheSerializerTest, ParseLayoutWithGeoIndex) {
         },
         version);
     auto buffer = std::move(writer).data();
-    LayoutReader reader{ql::span<const char>{buffer.data(), buffer.size()}};
+    LayoutReadSerializer reader{
+        ql::span<const char>{buffer.data(), buffer.size()}};
     auto header = parseEntriesHeader(reader);
     EXPECT_EQ(header.version_, version);
     ASSERT_EQ(header.numEntries_, 1u);

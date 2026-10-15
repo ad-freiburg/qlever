@@ -17,13 +17,13 @@
 
 #include "backports/span.h"
 #include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/LayoutReader.h"
+#include "util/Serializer/LayoutReadSerializer.h"
 #include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeVector.h"
 
 using ad_utility::serialization::AlignedByteBufferWriteSerializer;
 using ad_utility::serialization::ByteRange;
-using ad_utility::serialization::LayoutReader;
+using ad_utility::serialization::LayoutReadSerializer;
 using ::testing::ElementsAre;
 
 namespace {
@@ -50,9 +50,10 @@ TEST(ByteRange, basics) {
 }
 
 // _____________________________________________________________________________
-TEST(LayoutReader, readScalarArrayAndPosition) {
+TEST(LayoutReadSerializer, readScalarArrayAndPosition) {
   auto buffer = writeTestBuffer();
-  LayoutReader reader{ql::span<const char>{buffer.data(), buffer.size()}};
+  LayoutReadSerializer reader{
+      ql::span<const char>{buffer.data(), buffer.size()}};
   EXPECT_EQ(reader.size(), buffer.size());
   EXPECT_EQ(reader.position(), 0u);
   EXPECT_FALSE(reader.atEnd());
@@ -65,9 +66,8 @@ TEST(LayoutReader, readScalarArrayAndPosition) {
 
   // The vector: its size (8 bytes, not aligned), then the payload, which is
   // aligned to 8 bytes.
-  auto [range, contents] = reader.readArrayWithContents<uint64_t>();
+  auto range = reader.readArray<uint64_t>();
   EXPECT_EQ(range, (ByteRange{16, 40}));
-  EXPECT_THAT(contents, ElementsAre(7, 8, 9));
   EXPECT_EQ(reader.position(), 40u);
   uint64_t second;
   std::memcpy(&second, buffer.data() + range.begin_ + 8, sizeof(second));
@@ -81,19 +81,50 @@ TEST(LayoutReader, readScalarArrayAndPosition) {
       "hello");
   EXPECT_EQ(reader.position(), 53u);
 
-  EXPECT_EQ(reader.readScalar<double>(), 1.5);
+  // Scalars can also be read via the regular serialization.
+  double d = 0;
+  reader >> d;
+  EXPECT_EQ(d, 1.5);
   EXPECT_EQ(reader.position(), 61u);
   EXPECT_TRUE(reader.atEnd());
   EXPECT_EQ(reader.position(), reader.size());
-
-  // The underlying serializer can be used directly.
-  EXPECT_EQ(reader.reader().getCurrentPosition(), 61u);
 }
 
 // _____________________________________________________________________________
-TEST(LayoutReader, readPastTheEndThrows) {
+TEST(LayoutReadSerializer, isAZeroCopyReadSerializerAndRangeOf) {
+  using namespace ad_utility::serialization;
+  static_assert(ReadSerializer<LayoutReadSerializer>);
+  static_assert(ZeroCopyReadSerializer<LayoutReadSerializer>);
+  static_assert(LayoutSerializer<LayoutReadSerializer>);
+  static_assert(LayoutSerializer<LayoutReadSerializer&>);
+  static_assert(!LayoutSerializer<AlignedByteBufferReadSerializer>);
+  static_assert(!LayoutSerializer<AlignedByteBufferWriteSerializer>);
+  static_assert(!LayoutSerializer<int>);
+
   auto buffer = writeTestBuffer();
-  LayoutReader reader{ql::span<const char>{buffer.data(), buffer.size()}};
+  LayoutReadSerializer reader{
+      ql::span<const char>{buffer.data(), buffer.size()}};
+  reader.readScalar<uint8_t>();
+  reader.readScalar<uint16_t>();
+
+  // Zero-copy reads work, and `rangeOf` converts their result to the byte
+  // range (the same that `readArray` returns).
+  auto span = zeroCopyDeserializeToSpan<uint64_t>(reader);
+  EXPECT_THAT(span, ElementsAre(7, 8, 9));
+  EXPECT_EQ(reader.rangeOf(span), (ByteRange{16, 40}));
+  auto string = zeroCopyDeserializeToStringView(reader);
+  EXPECT_EQ(string, "hello");
+  EXPECT_EQ(reader.rangeOf(ql::span<const char>{string.data(), string.size()}),
+            (ByteRange{48, 53}));
+  EXPECT_EQ(reader.rangeOf(span.subspan(1, 1)), (ByteRange{24, 32}));
+  EXPECT_EQ(reader.rangeOf(span.subspan(3)), (ByteRange{40, 40}));
+}
+
+// _____________________________________________________________________________
+TEST(LayoutReadSerializer, readPastTheEndThrows) {
+  auto buffer = writeTestBuffer();
+  LayoutReadSerializer reader{
+      ql::span<const char>{buffer.data(), buffer.size()}};
   reader.readScalar<uint8_t>();
   reader.readScalar<uint16_t>();
   reader.readArray<uint64_t>();
@@ -105,28 +136,28 @@ TEST(LayoutReader, readPastTheEndThrows) {
 
   // A truncated buffer: the size of the vector is read, but its payload is
   // missing.
-  LayoutReader truncated{ql::span<const char>{buffer.data(), 20}};
+  LayoutReadSerializer truncated{ql::span<const char>{buffer.data(), 20}};
   truncated.readScalar<uint8_t>();
   truncated.readScalar<uint16_t>();
   EXPECT_ANY_THROW(truncated.readArray<uint64_t>());
 
   // An empty buffer.
-  LayoutReader empty{ql::span<const char>{}};
+  LayoutReadSerializer empty{ql::span<const char>{}};
   EXPECT_TRUE(empty.atEnd());
   EXPECT_ANY_THROW(empty.readScalar<uint8_t>());
 }
 
 // _____________________________________________________________________________
-TEST(LayoutReader, emptyArray) {
+TEST(LayoutReadSerializer, emptyArray) {
   AlignedByteBufferWriteSerializer writer;
   writer << std::vector<uint64_t>{};
   writer << std::string{};
   auto buffer = std::move(writer).data();
-  LayoutReader reader{ql::span<const char>{buffer.data(), buffer.size()}};
-  auto [range, contents] = reader.readArrayWithContents<uint64_t>();
+  LayoutReadSerializer reader{
+      ql::span<const char>{buffer.data(), buffer.size()}};
+  auto range = reader.readArray<uint64_t>();
   EXPECT_EQ(range.size(), 0u);
   EXPECT_EQ(range.begin_, 8u);
-  EXPECT_TRUE(contents.empty());
   EXPECT_EQ(reader.readArray<char>().size(), 0u);
   EXPECT_TRUE(reader.atEnd());
 }

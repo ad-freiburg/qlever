@@ -24,11 +24,11 @@ namespace qlever {
 BlobLayout BlobLayout::parse(ql::span<const char> decompressedBlob) {
   BlobLayout layout;
   layout.totalSize_ = decompressedBlob.size();
-  ad_utility::serialization::LayoutReader reader{decompressedBlob};
+  ad_utility::serialization::LayoutReadSerializer reader{decompressedBlob};
 
   // The header (see `NamedCachedQueryBlobManager::writeBlobHeader`).
-  auto version = NamedCachedQueryBlobManager::tryToSkipAndVerifyBlobHeader(
-      reader.reader());
+  auto version =
+      NamedCachedQueryBlobManager::tryToSkipAndVerifyBlobHeader(reader);
   if (auto* error =
           std::get_if<NamedCachedQueryBlobManager::BlobError>(&version)) {
     AD_THROW(error->message_);
@@ -45,9 +45,8 @@ BlobLayout BlobLayout::parse(ql::span<const char> decompressedBlob) {
                             decompressedBlob.begin() + layout.metadata_.end_);
 
   // The main vocabulary, which is opaque to the layout.
-  layout.vocabulary_.begin_ = reader.position();
-  NamedCachedQueryBlobManager::skipVocabulary(reader.reader(), metadata);
-  layout.vocabulary_.end_ = reader.position();
+  layout.vocabulary_ = reader.recordRange(
+      [&] { NamedCachedQueryBlobManager::skipVocabulary(reader, metadata); });
 
   // The secondary vocabulary (only in the newer blob format).
   if (layout.blobVersion_ ==

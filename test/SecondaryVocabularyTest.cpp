@@ -38,7 +38,7 @@
 #include "parser/TripleComponent.h"
 #include "util/CompactStringVector.h"
 #include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/LayoutReader.h"
+#include "util/Serializer/LayoutReadSerializer.h"
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -449,7 +449,8 @@ TEST(SecondaryVocabulary, parseLayout) {
   writer << vocab;
   writer << uint64_t{17};
   auto buffer = std::move(writer).data();
-  LayoutReader reader{ql::span<const char>{buffer.data(), buffer.size()}};
+  LayoutReadSerializer reader{
+      ql::span<const char>{buffer.data(), buffer.size()}};
   EXPECT_EQ(reader.readScalar<uint8_t>(), 42);
   auto layout = SecondaryVocabulary::parseLayout(reader);
   EXPECT_EQ(reader.readScalar<uint64_t>(), 17u);
@@ -498,7 +499,7 @@ TEST(SecondaryVocabulary, parseLayout) {
   AlignedByteBufferWriteSerializer emptyWriter;
   emptyWriter << SecondaryVocabulary{};
   auto emptyBuffer = std::move(emptyWriter).data();
-  LayoutReader emptyReader{
+  LayoutReadSerializer emptyReader{
       ql::span<const char>{emptyBuffer.data(), emptyBuffer.size()}};
   auto emptyLayout = SecondaryVocabulary::parseLayout(emptyReader);
   EXPECT_TRUE(emptyReader.atEnd());
@@ -515,7 +516,7 @@ TEST(SecondaryVocabulary, parseLayout) {
   // are rejected.
   auto parseFromAlignedWriter = [](AlignedByteBufferWriteSerializer& w) {
     auto b = std::move(w).data();
-    LayoutReader r{ql::span<const char>{b.data(), b.size()}};
+    LayoutReadSerializer r{ql::span<const char>{b.data(), b.size()}};
     return SecondaryVocabulary::parseLayout(r);
   };
   AlignedByteBufferWriteSerializer wrongMagicWriter;
@@ -532,7 +533,7 @@ TEST(SecondaryVocabulary, parseLayout) {
   wrongVersionWriter << uint64_t{0};
   AD_EXPECT_THROW_WITH_MESSAGE(parseFromAlignedWriter(wrongVersionWriter),
                                HasSubstr("unsupported format version 2"));
-  LayoutReader truncatedReader{
+  LayoutReadSerializer truncatedReader{
       ql::span<const char>{buffer.data(), buffer.size() / 2}};
   truncatedReader.readScalar<uint8_t>();
   EXPECT_ANY_THROW(SecondaryVocabulary::parseLayout(truncatedReader));

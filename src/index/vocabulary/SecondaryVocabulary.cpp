@@ -10,7 +10,6 @@
 #include "index/vocabulary/SecondaryVocabulary.h"
 
 #include <functional>
-#include <type_traits>
 #include <utility>
 
 #include "backports/algorithm.h"
@@ -114,34 +113,21 @@ SecondaryVocabulary SecondaryVocabulary::clone() const {
 
 // _____________________________________________________________________________
 SecondaryVocabulary::Layout SecondaryVocabulary::parseLayout(
-    ad_utility::serialization::LayoutReader& reader) {
+    ad_utility::serialization::LayoutReadSerializer& reader) {
   Layout layout;
   layout.present_ = true;
-  layout.whole_.begin_ = reader.position();
-  auto magicBytes =
-      reader.readScalar<std::decay_t<decltype(serializationMagicBytes)>>();
-  AD_CONTRACT_CHECK(magicBytes == serializationMagicBytes,
-                    "The serialized secondary vocabulary does not start "
-                    "with the expected magic bytes");
-  auto formatVersion = reader.readScalar<uint16_t>();
-  AD_CONTRACT_CHECK(formatVersion == serializationFormatVersion,
-                    "The serialized secondary vocabulary has the "
-                    "unsupported format version ",
-                    formatVersion, ", expected ", serializationFormatVersion);
-  // The segments are written as a `std::vector` (the number of segments,
-  // followed by the segments), and each segment (a `CompactVectorOfStrings`)
-  // consists of the array of its characters and the array of its offsets.
-  auto numSegments = reader.readScalar<size_t>();
-  layout.segments_.reserve(numSegments);
-  for (size_t i = 0; i < numSegments; ++i) {
-    uint64_t begin = reader.position();
-    reader.readArray<char>();
-    reader.readArray<uint64_t>();
-    layout.segments_.push_back({begin, reader.position()});
+  // Read the vocabulary zero-copy (see the serialization), so that its
+  // segments and index arrays are views into the buffer of the `reader`, from
+  // which their byte ranges are then taken.
+  SecondaryVocabulary vocab;
+  layout.whole_ = reader.recordRange([&] { reader >> vocab; });
+  layout.segments_.reserve(vocab.segments_.size());
+  for (const auto& segment : vocab.segments_) {
+    layout.segments_.push_back({reader.rangeOf(segment.dataSpan()).begin_,
+                                reader.rangeOf(segment.offsetsSpan()).end_});
   }
-  layout.segmentOffsets_ = reader.readArray<uint64_t>();
-  layout.sortedIndices_ = reader.readArray<uint64_t>();
-  layout.whole_.end_ = reader.position();
+  layout.segmentOffsets_ = reader.rangeOf(vocab.segmentOffsets_.view());
+  layout.sortedIndices_ = reader.rangeOf(vocab.sortedIndices_.view());
   return layout;
 }
 

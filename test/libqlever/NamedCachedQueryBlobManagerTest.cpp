@@ -573,7 +573,7 @@ TEST(NamedCachedQueryBlobManager, skipVocabulary) {
   auto bytes = decompressOrFail(blob);
 
   // Skip the header and read the metadata JSON, as `tryToDeserialize` does.
-  auto skipHeaderAndReadMetadata = [&bytes](BlobReader& reader) {
+  auto skipHeaderAndReadMetadata = [](BlobReader& reader) {
     EXPECT_THAT(Manager::tryToSkipAndVerifyBlobHeader(reader),
                 isFormatVersion(Manager::formatVersionWithoutSecondaryVocab));
     std::string metadataJson;

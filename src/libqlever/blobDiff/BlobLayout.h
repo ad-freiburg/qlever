@@ -18,7 +18,7 @@
 #include "engine/NamedResultCacheSerializer.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
-#include "util/Serializer/LayoutReader.h"
+#include "util/Serializer/LayoutReadSerializer.h"
 
 namespace qlever {
 
@@ -55,8 +55,9 @@ struct BlobLayout {
 
   // Parse the layout of the decompressed blob. The blob has to be aligned to
   // `alignof(std::max_align_t)` (as the result of
-  // `NamedCachedQueryBlobManager::tryToDecompressBlob` is). The parsing mirrors
-  // the writer exactly and throws if the blob is malformed (or has trailing
+  // `NamedCachedQueryBlobManager::tryToDecompressBlob` is). Read each section
+  // via the reader of the component that writes it (see the `parseLayout`
+  // functions above), and throw if the blob is malformed (or has trailing
   // bytes).
   static BlobLayout parse(ql::span<const char> decompressedBlob);
 
