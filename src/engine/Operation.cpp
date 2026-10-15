@@ -933,6 +933,7 @@ Operation::pushDownBindToChild(
     size_t childIndex) const {
   auto& child = children.at(childIndex);
   AD_CORRECTNESS_CHECK(child != nullptr);
+
   // Return true iff any of the `children` (except the one at `excludedIndex`,
   // if given) contains `var`. Compare by position, not by identity: the same
   // tree might be used twice.
@@ -946,12 +947,18 @@ Operation::pushDownBindToChild(
     }
     return false;
   };
+
+  // Refuse if any child contains the target.
+  //
   // NOTE: For the chosen child, this is also checked (including its hidden
   // variables) by `QueryExecutionTree::makeTreeWithBindColumn` below, but we
   // check all children here for clarity.
   if (childrenContain(bind._target, std::nullopt)) {
     return std::nullopt;
   }
+
+  // Refuse if the chosen child might see different values for the expression
+  // variables than this operation does (see the header).
   auto canComputeExpression = ql::ranges::all_of(
       bind._expression.containedVariables(),
       [&child, &childrenContain, childIndex](const Variable* var) {
@@ -962,6 +969,9 @@ Operation::pushDownBindToChild(
   if (!canComputeExpression) {
     return std::nullopt;
   }
+
+  // Push the `BIND` into the chosen child and rebuild this operation with the
+  // new child.
   auto newChild = child->makeTreeWithBindColumn(bind);
   if (!newChild.has_value()) {
     return std::nullopt;

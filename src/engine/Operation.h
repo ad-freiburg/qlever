@@ -639,16 +639,19 @@ class Operation {
   // Try to push `bind` into `children.at(childIndex)`, leave the other
   // `children` (which must be the children of this operation, in the order of
   // `getChildren()`) unchanged, and return `cloneWithNewChildren` of the
-  // result. This is refused if it would change the values the `BIND` expression
-  // sees: each variable of the expression must be contained in the child, and
-  // if it might be `UNDEF` there, no other child may contain it (otherwise a
-  // join could fill in the other child's value for an `UNDEF`, which the
-  // original `BIND` would see, but the pushed-down `BIND` wouldn't). It is also
-  // refused if any child contains the `BIND`'s target. This is only possible
-  // for children whose variables are not visible outside of this operation
-  // (e.g. the right child of `MINUS`), but after the push down it would wrongly
-  // become a join column. The other `children` may be `nullptr`
-  // (they are then ignored), but the chosen child must not be.
+  // result. The push down is refused if it would change the values the `BIND`
+  // expression sees, or if any child contains the `BIND`'s target. The other
+  // `children` may be `nullptr` (they are then ignored), but the chosen child
+  // must not be.
+  //
+  // NOTE 1: Each variable of the expression must be contained in the chosen
+  // child, and if it might be `UNDEF` there, no other child may contain it.
+  // Otherwise a join could fill in the other child's value for an `UNDEF`,
+  // which the original `BIND` would see, but the pushed-down `BIND` wouldn't.
+  //
+  // NOTE 2: A child can only contain the target if its variables are not
+  // visible outside of this operation (e.g. the right child of `MINUS`). After
+  // the push down, the target would then wrongly become a join column.
   std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToChild(
       const parsedQuery::Bind& bind,
       std::vector<std::shared_ptr<QueryExecutionTree>> children,

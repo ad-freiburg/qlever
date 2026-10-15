@@ -408,15 +408,17 @@ Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     return std::nullopt;
   }
 
-  // For a `UNION`, the `BIND` must be pushed into every child. A child that
-  // doesn't cover the expression variables can't compute the `BIND` at all
-  // (`QueryExecutionTree::makeTreeWithBindColumn` refuses then), and leaving it
-  // unchanged would rely on `UNION`'s generic `UNDEF`-filling for the missing
-  // target column -- which just fills in `UNDEF` instead of evaluating the
-  // `BIND` expression, silently changing the result for any expression that
-  // isn't itself `UNDEF` on `UNDEF` input (e.g. `COALESCE`). `UNION` doesn't
-  // change any values, so (unlike for joins) it doesn't matter whether the
-  // variables might be `UNDEF` in a child.
+  // Push the `BIND` into every child, refuse if any child refuses.
+  //
+  // NOTE 1: A child that doesn't cover the expression variables can't compute
+  // the `BIND` at all (`QueryExecutionTree::makeTreeWithBindColumn` refuses
+  // then). Leaving it unchanged would fill the missing target column with
+  // `UNDEF` instead of evaluating the `BIND` expression, which silently changes
+  // the result for any expression that isn't itself `UNDEF` on `UNDEF` input
+  // (e.g. `COALESCE`).
+  //
+  // NOTE 2: `UNION` doesn't change any values, so (unlike for joins) it doesn't
+  // matter whether the variables might be `UNDEF` in a child.
   std::vector<std::shared_ptr<QueryExecutionTree>> children;
   for (const auto& subtree : _subtrees) {
     auto result = subtree->makeTreeWithBindColumn(bind);

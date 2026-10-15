@@ -795,7 +795,7 @@ std::unique_ptr<Operation> JoinImpl::cloneWithNewChildren(
   auto& right = children.at(1);
   auto leftCol = left->getVariableColumn(joinVar_);
   auto rightCol = right->getVariableColumn(joinVar_);
-  // Note: This deliberately creates a `Join`, as `JoinImpl` is only used as
+  // NOTE: This deliberately creates a `Join`, as `JoinImpl` is only used as
   // the implementation of `Join`.
   return std::make_unique<Join>(_executionContext, std::move(left),
                                 std::move(right), leftCol, rightCol,

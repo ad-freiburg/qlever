@@ -282,9 +282,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 Filter::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // The filter expression sees the target as unbound, but after the push down
   // it wouldn't.
-  if (ad_utility::contains_if(
-          _expression.containedVariables(),
-          [&bind](const Variable* var) { return *var == bind._target; })) {
+  if (_expression.isVariableContained(bind._target)) {
     return std::nullopt;
   }
   return pushDownBindToAnyChild(bind, {_subtree});
