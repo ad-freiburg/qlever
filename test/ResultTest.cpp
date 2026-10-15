@@ -514,6 +514,25 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
       EXPECT_EQ(callCounter, 2);
       EXPECT_EQ(result2.idTableView(), comparisonTable);
     }
+    {
+      // Also cover the `std::vector<ColumnIndex>` overload of the
+      // `IdTablePtr` constructor.
+      std::vector<ColumnIndex> sortedByVec{};
+      Result result3{std::make_shared<const IdTable>(idTable.clone()),
+                     sortedByVec, LocalVocab{}};
+      result3.applyLimitOffset(limitOffset, callback);
+      EXPECT_EQ(callCounter, 3);
+      EXPECT_EQ(result3.idTableView(), comparisonTable);
+    }
+    {
+      // Also cover the `std::initializer_list<ColumnIndex>` overload of the
+      // `IdTablePtr` constructor.
+      Result result4{
+          std::make_shared<const IdTable>(idTable.clone()), {}, LocalVocab{}};
+      result4.applyLimitOffset(limitOffset, callback);
+      EXPECT_EQ(callCounter, 4);
+      EXPECT_EQ(result4.idTableView(), comparisonTable);
+    }
   }
 
   for (auto& generator : getAllSubSplits(idTable)) {
