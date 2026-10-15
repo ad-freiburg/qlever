@@ -394,10 +394,10 @@ class RowReference
 
   // Access to the `i`-th column of this row.
   CPP_template_2(typename = void)(requires(!isConst))
-  Base::reference operator[](size_t i) {
+  typename Base::reference operator[](size_t i) {
     return Base::operatorBracketImpl(base(), i);
   }
-  Base::const_reference operator[](size_t i) const {
+  typename Base::const_reference operator[](size_t i) const {
     return Base::operatorBracketImpl(base(), i);
   }
 
