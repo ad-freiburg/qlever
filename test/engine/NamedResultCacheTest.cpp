@@ -62,6 +62,7 @@ TEST(NamedResultCache, basicWorkflow) {
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
+    EXPECT_TRUE(cache.contains("query-1"));
   }
   // overwrite with a different value
   {
@@ -90,6 +91,7 @@ TEST(NamedResultCache, basicWorkflow) {
   {
     cache.store("query-2", getCacheValue(table2));
     EXPECT_EQ(cache.numEntries(), 2);
+    ASSERT_TRUE(cache.contains("query-2"));
     auto res = cache.get("query-2");
     ASSERT_NE(res, nullptr);
 
@@ -105,6 +107,7 @@ TEST(NamedResultCache, basicWorkflow) {
   {
     cache.erase("query-2");
     EXPECT_EQ(cache.numEntries(), 1);
+    EXPECT_FALSE(cache.contains("query-2"));
     AD_EXPECT_THROW_WITH_MESSAGE(
         cache.getOperation("query-2", qec),
         ::testing::HasSubstr("is not contained in the named result cache"));
