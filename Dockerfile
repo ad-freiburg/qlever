@@ -36,6 +36,7 @@ COPY GitVersion.cmake /qlever/
 # `-march=native`.
 ARG RUN_TESTS=true
 WORKDIR /qlever/build/
+ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
 RUN --mount=type=cache,target=/qlever/build \
   cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_DENSE_TENSOR_INDEX=true -DQLEVER_USE_TENSOR_BLAS=true -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE -GNinja ..
 RUN --mount=type=cache,target=/qlever/build \
