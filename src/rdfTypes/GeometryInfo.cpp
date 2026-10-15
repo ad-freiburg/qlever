@@ -127,6 +127,15 @@ std::optional<SourceCrsType> GeometryInfo::getSourceCrsType(
     return std::nullopt;
   }
   return SourceCrsType{crsType};
+  
+// ____________________________________________________________________________
+bool GeometryInfo::isValidWktStrict(std::string_view wkt) {
+  try {
+    detail::parseWkt(wkt, detail::defaultCrs, true);
+    return true;
+  } catch (const ::util::geo::WKTParseException&) {
+    return false;
+  }
 }
 
 // ____________________________________________________________________________
