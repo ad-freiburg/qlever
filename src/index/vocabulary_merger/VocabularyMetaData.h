@@ -20,6 +20,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/SpecialIds.h"
+#include "index/vocabulary_merger/SegmentLocalId.h"
 #include "util/HashMap.h"
 
 // NOTE: This class is the return type of `mergeVocabulary` and hence part of
@@ -36,12 +37,13 @@ namespace ad_utility::vocabulary_merger {
 // `VocabularyMetaData` of the whole vocabulary by `addSegment`, which turns
 // the segment-local IDs into global ones.
 struct SegmentMetaData {
+  using SegmentLocalId = detail::SegmentLocalId;
   // The segment-local IDs of the first and the last word with a prefix.
   struct LocalIdRange {
-    uint64_t first_ = 0;
-    uint64_t last_ = 0;
+    SegmentLocalId first_;
+    SegmentLocalId last_;
     bool wasSeen_ = false;
-    void add(uint64_t id) {
+    void add(SegmentLocalId id) {
       if (!wasSeen_) {
         first_ = id;
         wasSeen_ = true;
@@ -51,12 +53,12 @@ struct SegmentMetaData {
   };
   LocalIdRange langTaggedPredicates_;
   LocalIdRange internalEntities_;
-  std::vector<std::pair<std::string, uint64_t>> specialIds_;
+  std::vector<std::pair<std::string, SegmentLocalId>> specialIds_;
   size_t numWords_ = 0;
 
   // Add the next distinct `word` (not a blank node) with its segment-local
   // `id`. The words have to be added in sorted order.
-  void addWord(std::string_view word, uint64_t id) {
+  void addWord(std::string_view word, SegmentLocalId id) {
     ++numWords_;
     if (ql::starts_with(word, LANGUAGE_TAGGED_PREDICATE_PREFIX)) {
       langTaggedPredicates_.add(id);

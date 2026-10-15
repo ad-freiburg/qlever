@@ -10,6 +10,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -25,7 +26,9 @@ using ::testing::Pair;
 
 namespace {
 // Shorthand for a segment-local ID.
-auto S = &makeSegmentLocalId;
+auto S = &SegmentLocalId::make;
+constexpr uint8_t blankNodeSubVocabulary =
+    SegmentLocalId::blankNodeSubVocabulary;
 
 // The entry of the ID map of the partial vocabulary `partial` for its word
 // with the local index `localIndex`, which is the merged word with the
@@ -38,13 +41,22 @@ SegmentIdMapEntry entry(uint32_t partial, uint32_t localIndex,
 
 // Test the packing of a sub-vocabulary and an index into a segment-local ID.
 TEST(Segment, segmentLocalId) {
-  auto id = makeSegmentLocalId(3, 12345);
-  EXPECT_EQ(subVocabularyOf(id), 3u);
-  EXPECT_EQ(localIndexOf(id), 12345u);
-  auto blank = makeSegmentLocalId(blankNodeSubVocabulary, 7);
-  EXPECT_EQ(subVocabularyOf(blank), blankNodeSubVocabulary);
-  EXPECT_EQ(localIndexOf(blank), 7u);
-  EXPECT_ANY_THROW(makeSegmentLocalId(0, localIndexMask + 1));
+  auto id = SegmentLocalId::make(3, 12345);
+  EXPECT_EQ(id.subVocabulary(), 3u);
+  EXPECT_EQ(id.index(), 12345u);
+  EXPECT_FALSE(id.isBlankNode());
+  EXPECT_EQ(id.bits(), (uint64_t{3} << SegmentLocalId::numIndexBits) | 12345u);
+  auto blank = SegmentLocalId::makeBlankNode(7);
+  EXPECT_EQ(blank.subVocabulary(), blankNodeSubVocabulary);
+  EXPECT_EQ(blank.index(), 7u);
+  EXPECT_TRUE(blank.isBlankNode());
+  EXPECT_EQ(blank, SegmentLocalId::make(blankNodeSubVocabulary, 7));
+  EXPECT_NE(blank, id);
+  EXPECT_EQ(SegmentLocalId{}, SegmentLocalId::make(0, 0));
+  EXPECT_ANY_THROW(SegmentLocalId::make(0, SegmentLocalId::maxIndex + 1));
+  std::stringstream str;
+  str << id;
+  EXPECT_EQ(str.str(), "SegmentLocalId(3, 12345)");
 }
 
 // Test that the bases turn segment-local IDs into global indices and IDs.
@@ -79,7 +91,11 @@ TEST(Segment, buildSegment) {
   std::vector<MergeBlock> blocks(2);
   pushWord(blocks[0], wkt, true, 2, 1);
   pushWord(blocks[0], "\"a\"", true, 0, 5);
-  blocks[0].addOccurrenceToLastWord(2, 0);
+  // The same word from another partial vocabulary is folded into the last
+  // word by `addWord`, as the merge does it.
+  MergeBlock source;
+  pushWord(source, "\"a\"", false, 2, 0);
+  blocks[0].addWord(source.back());
   pushWord(blocks[0], "\"b\"", false, 0, 6);
   pushWord(blocks[1], "\"b\"", true, 1, 1);
   pushWord(blocks[1], special, false, 0, 7);
@@ -92,15 +108,15 @@ TEST(Segment, buildSegment) {
 
   // The words of the two sub-vocabularies. `"b"` is external because one of
   // its occurrences was.
-  ASSERT_EQ(segment.words_.size(), 2u);
-  const auto& main = segment.words_[0];
+  ASSERT_EQ(segment.wordBlocks_.size(), 2u);
+  const auto& main = segment.wordBlocks_[0];
   ASSERT_EQ(main.numWords(), 4u);
   EXPECT_EQ(main.word(0), "\"a\"");
   EXPECT_EQ(main.word(1), "\"b\"");
   EXPECT_EQ(main.word(2), special);
   EXPECT_EQ(main.word(3), "@en@<p>");
   EXPECT_THAT(main.isExternal_, ElementsAre(true, true, false, false));
-  const auto& geo = segment.words_[1];
+  const auto& geo = segment.wordBlocks_[1];
   ASSERT_EQ(geo.numWords(), 1u);
   EXPECT_EQ(geo.word(0), wkt);
   EXPECT_EQ(segment.numBlankNodes_, 1u);
@@ -151,8 +167,8 @@ TEST(Segment, blankNodeRegexesAndOrder) {
   Segment segment =
       buildSegment(std::move(blocks), writer, regexes, 1, lessThan);
   EXPECT_EQ(segment.numBlankNodes_, 1u);
-  EXPECT_EQ(segment.words_[0].numWords(), 1u);
-  EXPECT_EQ(segment.words_[0].word(0), "<http://ex/x>");
+  EXPECT_EQ(segment.wordBlocks_[0].numWords(), 1u);
+  EXPECT_EQ(segment.wordBlocks_[0].word(0), "<http://ex/x>");
 
   if constexpr (ad_utility::areExpensiveChecksEnabled) {
     std::vector<MergeBlock> unordered(1);

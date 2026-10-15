@@ -269,23 +269,11 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
 
   Block makeEmptyBlock() const { return Block{}; }
 
-  // Append a merged `word` to an output `block` of the merge (a copy of the
-  // word, the `word` itself lives in an input block). A word that is equal to
-  // the last word of the block (the same word from another partial
-  // vocabulary; the merge yields equal words consecutively) is not appended,
-  // but recorded as a further occurrence of that last word, see
-  // `MergeBlock::addOccurrenceToLastWord`. This removes most of the
-  // duplicates on the threads of the merge, so that the single thread behind
-  // the merge only sees the duplicates at the block boundaries.
+  // Append a merged `word` to an output `block` of the merge. A word that is
+  // equal to the last word of the block is folded into that word, see
+  // `MergeBlock::addWord`.
   void appendToBlock(Block& block, const Element& word) const {
-    if (!block.empty() && block.back().iriOrLiteral() == word.iriOrLiteral()) {
-      AD_CORRECTNESS_CHECK(word.numMoreOccurrences_ == 0);
-      block.back().isExternal() =
-          block.back().isExternal() || word.isExternal();
-      block.addOccurrenceToLastWord(word.partialFileId_, word.id());
-      return;
-    }
-    block.push(word);
+    block.addWord(word);
   }
 
   MemorySize memorySizeOfElement(const Element& word) const {

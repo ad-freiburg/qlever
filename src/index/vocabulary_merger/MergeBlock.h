@@ -47,7 +47,7 @@ using Occurrence = std::pair<uint32_t, uint64_t>;
 // that reading and merging the words allocates nothing per word (a merge
 // handles billions of them). While the partial vocabularies are merged, the
 // further occurrences of the same word in other partial vocabularies are
-// collected in the block (see `MergeBlock::addOccurrenceToLastWord`), so that
+// collected in the block (see `MergeBlock::addWord`), so that
 // the words that leave the merge are distinct within a block, with one entry
 // per occurrence.
 struct MergeWord {
@@ -153,8 +153,9 @@ class MergeBlock : public ad_utility::NoCopy {
   }
 
   // Append a word, copying it into the storage of this block. The occurrence
-  // `(partialFileId, localIndex)` is its first one, further ones are added
-  // with `addOccurrenceToLastWord`.
+  // `(partialFileId, localIndex)` is its first one, further ones are added by
+  // `addWord`. This is the primitive for building input blocks (in tests);
+  // the merge itself adds its words via `addWord`.
   void push(std::string_view word, bool isExternal, uint32_t partialFileId,
             uint64_t localIndex) {
     MergeWord mergeWord;
@@ -165,26 +166,24 @@ class MergeBlock : public ad_utility::NoCopy {
     words_.push_back(mergeWord);
   }
 
-  // Append a copy of the `word` of another block. It must not have further
-  // occurrences (those live in its own block).
-  void push(const MergeWord& word) {
+  // Add a merged `word` that the merge yields (a copy of it, the `word`
+  // itself lives in an input block, so it must not have further occurrences).
+  // A word that is equal to the last word of this block (the same word from
+  // another partial vocabulary; the merge yields equal words consecutively) is
+  // not appended, but recorded as a further occurrence of that last word, and
+  // the external flag of the last word becomes the OR of the two. This removes
+  // most of the duplicates on the threads of the merge, so that the consumer
+  // of the merged blocks only sees the duplicates at the block boundaries.
+  void addWord(const MergeWord& word) {
     AD_CORRECTNESS_CHECK(word.numMoreOccurrences_ == 0);
+    if (!words_.empty() &&
+        words_.back().iriOrLiteral() == word.iriOrLiteral()) {
+      words_.back().isExternal_ = words_.back().isExternal_ || word.isExternal_;
+      addOccurrenceToLastWord(word.partialFileId_, word.id());
+      return;
+    }
     push(word.iriOrLiteral(), word.isExternal(), word.partialFileId_,
          word.id());
-  }
-
-  // Record a further occurrence of the last word of the block.
-  void addOccurrenceToLastWord(uint32_t partialFileId, uint64_t localIndex) {
-    AD_CONTRACT_CHECK(!words_.empty());
-    auto& last = words_.back();
-    if (last.numMoreOccurrences_ == 0) {
-      last.firstMoreOccurrence_ = moreOccurrences_.size();
-    }
-    // The occurrences of the last word are the last ones in the vector.
-    AD_CORRECTNESS_CHECK(last.firstMoreOccurrence_ + last.numMoreOccurrences_ ==
-                         moreOccurrences_.size());
-    moreOccurrences_.emplace_back(partialFileId, localIndex);
-    ++last.numMoreOccurrences_;
   }
 
   // The further occurrences of a `word` of this block, see above.
@@ -219,6 +218,20 @@ class MergeBlock : public ad_utility::NoCopy {
   }
 
  private:
+  // Record a further occurrence of the last word of the block, see `addWord`.
+  void addOccurrenceToLastWord(uint32_t partialFileId, uint64_t localIndex) {
+    AD_CONTRACT_CHECK(!words_.empty());
+    auto& last = words_.back();
+    if (last.numMoreOccurrences_ == 0) {
+      last.firstMoreOccurrence_ = moreOccurrences_.size();
+    }
+    // The occurrences of the last word are the last ones in the vector.
+    AD_CORRECTNESS_CHECK(last.firstMoreOccurrence_ + last.numMoreOccurrences_ ==
+                         moreOccurrences_.size());
+    moreOccurrences_.emplace_back(partialFileId, localIndex);
+    ++last.numMoreOccurrences_;
+  }
+
   // Copy the `word` into `mergedWords_` and return the view of the copy.
   std::string_view store(std::string_view word) {
     auto* copy =
