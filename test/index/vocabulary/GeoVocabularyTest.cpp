@@ -244,7 +244,8 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   ASSERT_FALSE(nonGeoVocab.getGeoInfo(VocabIndex::make(0)).has_value());
 }
 
-// _____________________________________________________________________________
+// Test that a geoinfo file whose version is outside the loadable range cannot
+// be opened.
 TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
   const VocabularyType geoSplitVocabType{
       VocabularyType::Enum::OnDiskCompressedGeoSplit};
@@ -278,7 +279,8 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that a geoinfo file of version 5, whose padding bytes may hold arbitrary
+// content, is read with the reserved fields zeroed.
 TEST(GeoVocabularyTest, ReadVersion5) {
   // Write a `GeoVocabulary` of the current version.
   const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");

@@ -122,10 +122,9 @@ GeometryInfo GeometryInfo::fromSerialized(ql::span<const uint8_t> bytes,
   ql::ranges::copy(bytes, buffer.begin());
   auto info = absl::bit_cast<GeometryInfo>(buffer);
   // In version 5, the reserved fields were padding with arbitrary content.
+  // Zero means "not computed", like in every record of version 6 (see the
+  // rules at `GEOMETRY_INFO_VERSION`).
   if (version == 5) {
-    // TODO<ullingerc>: Once the reserved fields are taken into use, set them
-    // to the default values (not 0): CRS84 for the source CRS and WKT for the
-    // literal format.
     info.reservedSourceCrs_ = 0;
     info.reservedLiteralFormat_ = 0;
   }

@@ -716,7 +716,8 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
                     sizeof(MetricLength) + sizeof(MetricArea));
 }
 
-// _____________________________________________________________________________
+// Test that `fromSerialized` rejects a version outside the loadable range and a
+// record of the wrong size.
 TEST(GeometryInfoTest, FromSerializedInvalidInput) {
   std::array<uint8_t, sizeof(GeometryInfo)> bytes{};
   AD_EXPECT_THROW_WITH_MESSAGE(
