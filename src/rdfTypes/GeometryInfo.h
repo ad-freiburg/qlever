@@ -182,6 +182,13 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //   `GEOMETRY_INFO_VERSION` and append the new `sizeof(GeometryInfo)` to
 //   `GEOMETRY_INFO_SIZE_PER_VERSION`. When reading a record of an older
 //   version, the bytes of the new field are zero (see `fromSerialized`).
+// - A new field must not introduce implicit padding bytes (neither before it
+//   nor at the end of the class due to its alignment), because they would be
+//   written to disk with arbitrary content, such that they could never be
+//   taken into use later (like the padding in version 5). If necessary, add
+//   explicit reserved fields initialized to zero instead. Add the new field
+//   to the `static_assert` in the constructor of `GeometryInfo`, which checks
+//   this.
 // - A reserved field can be taken into use without bumping the version, because
 //   it is zero in all records written before.
 // - Consequently, a zero value of a field that was added (or taken into use)
