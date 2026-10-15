@@ -133,6 +133,16 @@ GeometryInfo GeometryInfo::fromSerialized(ql::span<const uint8_t> bytes,
 }
 
 // ____________________________________________________________________________
+bool GeometryInfo::isValidWktStrict(std::string_view wkt) {
+  try {
+    detail::parseWkt(wkt, detail::defaultCrs, true);
+    return true;
+  } catch (const ::util::geo::WKTParseException&) {
+    return false;
+  }
+}
+
+// ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
   return {
       util::geo::WKTType::POINT, {point, point},  Centroid{point}, {1},
