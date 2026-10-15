@@ -165,7 +165,7 @@ template <typename T1, typename T2, typename F>
 static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
                                           F resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto projectionForComparator = [](const auto& rowOrId) -> decltype(auto) {
+  auto projectionForComparator = [](const auto& rowOrId) -> ConstIdRef {
     using T = std::decay_t<decltype(rowOrId)>;
     if constexpr (ad_utility::SimilarTo<T, Id>) {
       return rowOrId;
@@ -219,9 +219,8 @@ static auto fixBlockAfterPatternJoin(T block) {
   block.value().setColumnSubset(permutation);
   ql::ranges::for_each(
       block.value().getColumn(ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN),
-      [](auto&& id) {
-        std::forward<decltype(id)>(id) =
-            id.isUndefined() ? Id::makeFromInt(Pattern::NoPattern) : id;
+      [](IdRef id) {
+        id = id.isUndefined() ? Id::makeFromInt(Pattern::NoPattern) : id;
       });
   return std::move(block.value()).template toStatic<0>();
 }
@@ -654,7 +653,7 @@ using BufferView = IdTableView<NumColumnsIndexBuilding>;
 void transformTriples(Buffer& triples,
                       const ad_utility::HashMap<VocabIndex, Id>& idMap) {
   for (IdColumnRef column : triples.getColumns()) {
-    for (auto&& id : column) {
+    for (IdRef id : column) {
       if (id.getDatatype() != Datatype::VocabIndex) {
         // Check that all the internal, special IDs which we have introduced
         // for performance reasons are eliminated.

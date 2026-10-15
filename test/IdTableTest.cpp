@@ -1399,14 +1399,14 @@ struct TableReturningProxies {
 
 // Test that `operator[]` of the `RowReference` (which uses
 // `operatorBracketImpl`) returns exactly what the element access of the table
-// returns: an `Id&` for the `IdTable`, and the proxy for a table that returns
+// returns: an `IdRef` for the `IdTable`, and the proxy for a table that returns
 // proxies by value.
 TEST(IdTable, rowReferenceOperatorBracket) {
   // The `IdTable` returns references.
   IdTable idTable{2, makeAllocator()};
   idTable.push_back({V(1), V(2)});
   IdTable::row_reference row = idTable[0];
-  static_assert(std::is_same_v<decltype(row[0]), Id&>);
+  static_assert(std::is_same_v<decltype(row[0]), IdRef>);
   row[1] = V(20);
   EXPECT_EQ(idTable(0, 1), V(20));
 
@@ -1505,21 +1505,21 @@ struct TableWithMutableAndConstProxies {
 // also if the table has a mutable element access.
 TEST(IdTable, rowReferenceReferenceTypedefs) {
   using Row = IdTable::row_reference;
-  static_assert(std::is_same_v<Row::reference, Id&>);
-  static_assert(std::is_same_v<Row::const_reference, const Id&>);
+  static_assert(std::is_same_v<Row::reference, IdRef>);
+  static_assert(std::is_same_v<Row::const_reference, ConstIdRef>);
 
   IdTable idTable{2, makeAllocator()};
   idTable.push_back({V(1), V(2)});
   Row row = idTable[0];
   const Row& constRow = row;
-  static_assert(std::is_same_v<decltype(row[0]), Id&>);
-  static_assert(std::is_same_v<decltype(constRow[0]), const Id&>);
+  static_assert(std::is_same_v<decltype(row[0]), IdRef>);
+  static_assert(std::is_same_v<decltype(constRow[0]), ConstIdRef>);
   EXPECT_EQ(constRow[1], V(2));
 
   // A view has no mutable element access, so both typedefs are const.
   using ViewRow = IdTableView<0>::const_row_reference;
-  static_assert(std::is_same_v<ViewRow::reference, const Id&>);
-  static_assert(std::is_same_v<ViewRow::const_reference, const Id&>);
+  static_assert(std::is_same_v<ViewRow::reference, ConstIdRef>);
+  static_assert(std::is_same_v<ViewRow::const_reference, ConstIdRef>);
 
   // A table that only has a const element access, which returns proxies by
   // value (see above), has the proxy for both typedefs.
@@ -1531,13 +1531,14 @@ TEST(IdTable, rowReferenceReferenceTypedefs) {
   // The base class of the `RowReference` only allows mutable access for
   // rvalues, all other values (also a const rvalue) get const access.
   using Restricted = Row::Base;
-  static_assert(std::is_same_v<decltype(std::declval<Restricted&&>()[0]), Id&>);
   static_assert(
-      std::is_same_v<decltype(std::declval<Restricted&>()[0]), const Id&>);
+      std::is_same_v<decltype(std::declval<Restricted&&>()[0]), IdRef>);
+  static_assert(
+      std::is_same_v<decltype(std::declval<Restricted&>()[0]), ConstIdRef>);
   static_assert(std::is_same_v<decltype(std::declval<const Restricted&>()[0]),
-                               const Id&>);
+                               ConstIdRef>);
   static_assert(std::is_same_v<decltype(std::declval<const Restricted&&>()[0]),
-                               const Id&>);
+                               ConstIdRef>);
   Restricted restricted{&idTable, 0};
   std::move(restricted)[1] = V(7);
   EXPECT_EQ(restricted[1], V(7));

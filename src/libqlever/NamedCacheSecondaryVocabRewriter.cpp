@@ -233,8 +233,8 @@ CanonicalizedValue canonicalizeWithPermutation(
   table.insertAtEnd(columnSubset);
   if (containsLocalVocabIds(value)) {
     for (auto column : table.getColumns()) {
-      ql::ranges::for_each(column, [&secondaryVocab](auto&& id) {
-        std::forward<decltype(id)>(id) = rewriteId(id, secondaryVocab);
+      ql::ranges::for_each(column, [&secondaryVocab](IdRef id) {
+        id = rewriteId(id, secondaryVocab);
       });
     }
   }

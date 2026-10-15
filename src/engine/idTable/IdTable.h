@@ -1030,5 +1030,7 @@ inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
 using IdColumnRef = ql::span<Id>;
 using ConstIdColumnRef = ql::span<const Id>;
 using IdColumn = std::vector<Id>;
+using IdRef = Id&;
+using ConstIdRef = const Id&;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H
