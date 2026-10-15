@@ -77,6 +77,9 @@ constexpr std::string_view litInvalidBrackets =
 constexpr std::string_view litInvalidNumCoords =
     "\"LINESTRING(1)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidCoord =
+    "\"LINESTRING(2 2, 4 a)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view litCoordOutOfRange =
     "\"LINESTRING(2 -500, 4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -86,6 +89,12 @@ constexpr std::string_view litUnsupportedCrsIri =
 constexpr std::string_view litInvalidCrsIri =
     "\"<http://www.opengis.net/def/crs/EPSG/0/3485 LINESTRING(2 2,4 "
     "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+constexpr std::string_view litLineStringEmpty =
+    "\"LINESTRING EMPTY\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litPointEmpty =
+    "\"POINT EMPTY\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 constexpr std::string_view litShortRealWorldLine =
     "\"LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946000)\""
@@ -316,24 +325,30 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   EXPECT_GEOMETRYINFO(g8, std::nullopt);
 }
 
-// ____________________________________________________________________________
+// Test that `isValidWktStrict` accepts well-formed literals and rejects
+// malformed ones.
 TEST(GeometryInfoTest, IsValidWktStrict) {
+  // All supported geometry types.
   for (auto lit :
        {litPoint, litPointWGS84, litLineString, litPolygon, litMultiPoint,
         litMultiLineString, litMultiPolygon, litCollection}) {
     EXPECT_TRUE(GeometryInfo::isValidWktStrict(lit)) << lit;
   }
-  EXPECT_TRUE(GeometryInfo::isValidWktStrict(
-      "\"LINESTRING "
-      "EMPTY\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
 
-  constexpr std::string_view litInvalidCoord =
-      "\"LINESTRING(2 2, 4 a)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  // Syntactically valid literals without a geometry: `EMPTY`, an unsupported
+  // CRS, coordinates out of range.
+  for (auto lit :
+       {litLineStringEmpty, litUnsupportedCrsIri, litCoordOutOfRange}) {
+    EXPECT_TRUE(GeometryInfo::isValidWktStrict(lit)) << lit;
+    EXPECT_EQ(GeometryInfo::fromWktLiteral(lit), std::nullopt) << lit;
+  }
+
+  // Malformed literals. `POINT EMPTY` is rejected by the strict mode.
   for (auto lit : {litInvalidType, litInvalidBrackets, litInvalidNumCoords,
-                   litInvalidCoord}) {
+                   litInvalidCoord, litInvalidCrsIri, litPointEmpty}) {
     EXPECT_FALSE(GeometryInfo::isValidWktStrict(lit)) << lit;
   }
+
   // The lenient (default) mode skips the invalid coordinate.
   EXPECT_THAT(GeometryInfo::getNumGeometries(litInvalidCoord),
               ::testing::Optional(NumGeometries{1}));

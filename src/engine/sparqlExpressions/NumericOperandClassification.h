@@ -17,7 +17,7 @@
 #include <type_traits>
 
 #include "backports/concepts.h"
-#include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/ChunkedForLoop.h"
 
