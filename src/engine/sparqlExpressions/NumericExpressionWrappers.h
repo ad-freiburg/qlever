@@ -64,10 +64,12 @@ struct MakeNumericExpression {
   }
 };
 
-// If true, `Function` always returns an undefined ID when any argument is
-// non-numeric. This property is opt-in and independent of
-// `supportsNumericFastPath`: date-aware operations also support homogeneous
-// numeric execution, but can return defined results for non-numeric dates.
+// If `undefForNonNumeric<Function>` is true, `Function` must always return an
+// undefined ID when any argument is non-numeric. Expressions use this property
+// to return UNDEF for such inputs without evaluating the function.
+// This property is opt-in and independent of `supportsNumericFastPath`:
+// date-aware operations also support homogeneous numeric execution, but can
+// return defined results for non-numeric dates.
 template <typename Function>
 inline constexpr bool undefForNonNumeric = false;
 
@@ -75,8 +77,10 @@ template <typename Function, bool NanOrInfToUndef>
 inline constexpr bool
     undefForNonNumeric<MakeNumericExpression<Function, NanOrInfToUndef>> = true;
 
-// Return true if an argument is a raw ID with an unsupported numeric datatype,
-// its getter is NumericValueGetter, and Function opts into undefForNonNumeric.
+// Return true if any of `values` is a raw ID with a non-numeric datatype, its
+// corresponding getter in `ValueGetters` is `NumericValueGetter`, and
+// `undefForNonNumeric<Function>` is true. `ValueGetters` is a tuple with one
+// getter type per value, in the same order as `values`.
 // This allows evaluation to return UNDEF before applying the value getters.
 // NumericValueGetter accepts booleans as integers, so they are not rejected.
 // Other getters and non-ID arguments return false; in particular, date-aware
