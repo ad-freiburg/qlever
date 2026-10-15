@@ -1,4 +1,3 @@
-addLinkAndDiscoverTestNoLibs(BlobLayoutTest qlever testUtil)
 addLinkAndDiscoverTestNoLibs(BlobDiffTest qlever testUtil)
 addLinkAndDiscoverTestNoLibs(BlobDiffProducerTest qlever testUtil)
 target_compile_definitions(BlobDiffProducerTest PRIVATE

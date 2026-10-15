@@ -17,6 +17,7 @@
 
 #include "backports/span.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "libqlever/blobDiff/BlobDiff.h"
 #include "util/json.h"
 
 namespace qlever {
@@ -33,7 +34,7 @@ namespace qlever {
 //     "prefixesForIdEncodedIris": [],
 //     "settingsFile": ""
 //   },
-//   "blob": { "excludedEntryRegexes": [] },
+//   "blob": { "excludedEntryRegexes": [], "diffCompressionLevel": 19 },
 //   "geoCompaction": { "maxSegments": 8, "maxDeadShapeRatio": 0.3 },
 //   "namedQueries": [
 //     { "name": "streets", "query": "SELECT ...",
@@ -67,6 +68,9 @@ struct BlobDiffConfig {
   // The vocabulary entries that are left out of the blob, see
   // `BlobSerializationConfig::excludedEntryRegexes_`.
   std::vector<std::string> excludedEntryRegexes_;
+  // The ZSTD compression level of the diff files (1 to 22), see
+  // `computeBlobDiff`.
+  int diffCompressionLevel_ = defaultBlobDiffCompressionLevel;
 
   // The compaction thresholds for the geo indices, see
   // `BlobSerializationConfig::IncrementalBase`.
@@ -174,9 +178,9 @@ class BlobDiffProducer {
   static std::vector<char> apply(ql::span<const char> baseBlob,
                                  ql::span<const char> diffFile);
 
-  // Return a description of the layout (sizes of all sections) of `blob`, and,
-  // if a `diffFile` is given, of how its instructions make up `blob` (which has
-  // to be the target of the diff).
+  // Return a description of `blob` (its sizes and checksum), and, if a
+  // `diffFile` is given, of the diff and whether it yields or applies to the
+  // `blob`.
   static std::string inspect(ql::span<const char> blob,
                              std::optional<ql::span<const char>> diffFile);
 };

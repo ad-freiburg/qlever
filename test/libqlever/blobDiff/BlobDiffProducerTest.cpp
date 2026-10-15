@@ -21,19 +21,16 @@
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
-#include "./BlobTestHelpers.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
 #include "libqlever/blobDiff/BlobDiff.h"
 #include "libqlever/blobDiff/BlobDiffProducer.h"
-#include "libqlever/blobDiff/BlobLayout.h"
 #include "util/File.h"
 
 using namespace qlever;
 using namespace testing;
-using namespace blobTestHelpers;
 
 namespace {
 namespace fs = ql::filesystem;
@@ -265,26 +262,24 @@ Weeks runWeeks(const BlobDiffConfig& config, const std::string& stateDir,
   return weeks;
 }
 
-// The statistics of how the diff `diffFile` makes up the compressed blob
-// `blob`, and the layout of `blob`.
-struct DiffStatistics {
-  BlobDiffStatistics statistics_;
-  BlobLayout layout_;
-  size_t decompressedSize_;
-
-  DiffStatistics(ql::span<const char> blob, ql::span<const char> diffFile)
-      : layout_{BlobLayout::parse(ParsedBlob{blob}.span())},
-        decompressedSize_{layout_.totalSize_} {
-    auto diff = readBlobDiffFromFile(diffFile);
-    statistics_ = computeBlobDiffStatistics(diff, layout_);
+// Decompress the compressed `blob` (fail the test on error).
+std::vector<char> decompress(ql::span<const char> blob) {
+  auto result = NamedCachedQueryBlobManager::tryToDecompressBlob(blob, {});
+  if (const auto* error =
+          std::get_if<NamedCachedQueryBlobManager::BlobError>(&result)) {
+    ADD_FAILURE() << error->message_;
+    return {};
   }
+  const auto& bytes = std::get<0>(result);
+  return {bytes.begin(), bytes.end()};
+}
 
-  // The fraction of the bytes of the decompressed blob that are inserted.
-  double insertedFraction() const {
-    return static_cast<double>(statistics_.instructions_.numInsertedBytes_) /
-           static_cast<double>(decompressedSize_);
-  }
-};
+// The ratio of the size of the diff file to the size of the compressed blob of
+// the `week`.
+double diffRatio(const Weeks& weeks, size_t week) {
+  return static_cast<double>(weeks.diffs_[week].size()) /
+         static_cast<double>(weeks.blobs_[week].size());
+}
 
 // The number of segments of the geo index of the pinned result `name`.
 size_t numGeoSegments(const Qlever& qlever, std::string_view name) {
@@ -305,13 +300,20 @@ TEST(BlobDiffProducer, weeklyStepsAreSelfConsistentAndEquivalentToFreshBuilds) {
   };
   auto weeks = runWeeks(config, stateDir, 3);
 
-  // The `inspect` function describes the layout and the diff.
+  // The `inspect` function describes the blob and the diff.
   auto description = BlobDiffProducer::inspect(
       weeks.blobs_[3], ql::span<const char>{weeks.diffs_[3]});
-  EXPECT_THAT(description, HasSubstr("Layout of the blob"));
-  EXPECT_THAT(description, HasSubstr("as a diff to this blob"));
+  EXPECT_THAT(description, HasSubstr("Blob: "));
+  EXPECT_THAT(description, HasSubstr("SHA-256"));
+  EXPECT_THAT(description, HasSubstr("The diff yields this blob."));
+  EXPECT_THAT(BlobDiffProducer::inspect(weeks.blobs_[2],
+                                        ql::span<const char>{weeks.diffs_[3]}),
+              HasSubstr("The diff applies to this blob."));
+  EXPECT_THAT(BlobDiffProducer::inspect(weeks.blobs_[0],
+                                        ql::span<const char>{weeks.diffs_[3]}),
+              HasSubstr("The diff is unrelated to this blob."));
   EXPECT_THAT(BlobDiffProducer::inspect(weeks.blobs_[3], std::nullopt),
-              Not(HasSubstr("as a diff to this blob")));
+              Not(HasSubstr("The diff")));
 
   // The diff of a week only applies to the blob of the week before.
   EXPECT_ANY_THROW(BlobDiffProducer::apply(weeks.blobs_[0], weeks.diffs_[3]));
@@ -336,69 +338,40 @@ TEST(BlobDiffProducer, weeklyStepsAreSelfConsistentAndEquivalentToFreshBuilds) {
 TEST(BlobDiffProducer, diffsAreSmallAndIdsAreStable) {
   auto config = snapshotConfigWithoutCompaction();
   std::string stateDir = freshDirectory();
-  absl::Cleanup cleanup = [&] { fs::remove_all(stateDir); };
+  std::string referenceDir = freshDirectory("_reference");
+  absl::Cleanup cleanup = [&] {
+    fs::remove_all(stateDir);
+    fs::remove_all(referenceDir);
+  };
   auto weeks = runWeeks(config, stateDir, 3);
 
-  std::vector<double> fractions;
   for (size_t week = 1; week <= 3; ++week) {
-    DiffStatistics stats{weeks.blobs_[week], weeks.diffs_[week]};
-    std::cout << "Week " << week << ": decompressed blob "
-              << stats.decompressedSize_ << " bytes, inserted fraction "
-              << stats.insertedFraction() << ", diff file "
-              << weeks.diffs_[week].size() << " of "
-              << weeks.blobs_[week].size() << " compressed bytes ("
-              << static_cast<double>(weeks.diffs_[week].size()) /
-                     static_cast<double>(weeks.blobs_[week].size())
-              << ")" << std::endl;
-    fractions.push_back(stats.insertedFraction());
-
-    // The metadata and the main vocabulary are never changed.
-    for (std::string_view name : {"metadata", "main vocabulary"}) {
-      const auto& section = stats.statistics_.section(name);
-      EXPECT_GT(section.size_, 0u) << name;
-      EXPECT_EQ(section.insertedBytes_, 0u) << name << " in week " << week;
-      EXPECT_EQ(section.copiedBytes_, section.size_)
-          << name << " in week " << week;
-    }
-
-    // The segments of the secondary vocabulary of the previous week are copied
-    // (the new words are a new segment).
-    ParsedBlob previous{weeks.blobs_[week - 1]};
-    uint64_t sizeOfPreviousSegments = 0;
-    for (const auto& segment : previous.layout_.secondaryVocab_.segments_) {
-      sizeOfPreviousSegments += segment.size();
-    }
-    EXPECT_GE(stats.statistics_.section("secondary vocabulary").copiedBytes_,
-              sizeOfPreviousSegments)
-        << "week " << week;
+    std::cout << "Week " << week << ": diff file " << weeks.diffs_[week].size()
+              << " of " << weeks.blobs_[week].size() << " compressed bytes ("
+              << diffRatio(weeks, week) << ")" << std::endl;
   }
-  // The observed fractions (week 1 to 3) are about 0.23, 0.47, and 0.07: the
+  // The observed ratios (week 1 to 3) are about 0.13, 0.28, and 0.04: the
   // blob is small, so the cache keys and the maps of the entries (which change
-  // every week) are a noticeable part of the inserted bytes, and week 2
-  // replaces about half of the data. The bounds have about twice the observed
-  // values.
-  EXPECT_LT(fractions[0], 0.5);
-  EXPECT_LT(fractions[1], 0.8);
-  EXPECT_LT(fractions[2], 0.15);
-  for (size_t week : {2u, 3u}) {
-    EXPECT_LT(weeks.diffs_[week].size(), weeks.blobs_[week].size() * 3 / 4)
-        << "week " << week;
-  }
+  // every week) are a noticeable part of the diff, and week 2 replaces about
+  // half of the data. The bounds have about twice the observed values.
+  EXPECT_LT(diffRatio(weeks, 1), 0.3);
+  EXPECT_LT(diffRatio(weeks, 2), 0.6);
+  EXPECT_LT(diffRatio(weeks, 3), 0.08);
 
-  // The tables of all pinned results are copied, except for the changed rows:
-  // the diff of the week 3 inserts less than a tenth of the bytes of the
-  // columns.
-  DiffStatistics last{weeks.blobs_[3], weeks.diffs_[3]};
-  uint64_t columnBytes = 0;
-  uint64_t insertedColumnBytes = 0;
-  for (const auto& section : last.statistics_.sections_) {
-    if (section.name_.find(": columns") != std::string::npos) {
-      columnBytes += section.size_;
-      insertedColumnBytes += section.insertedBytes_;
-    }
-  }
-  EXPECT_GT(columnBytes, 0u);
-  EXPECT_LT(insertedColumnBytes * 10, columnBytes);
+  // The diffs are only small because the blobs are written incrementally,
+  // which keeps the `Id`s of all words and the segments of the secondary
+  // vocabulary and of the geo indices stable: the diff between the blob of
+  // week 2 and a freshly built blob of week 3 (same data, but the words of
+  // all weeks are in the main vocabulary) is many times larger (observed:
+  // about six times).
+  auto reference =
+      BlobDiffProducer::init(config, snapshotFile(3), referenceDir);
+  auto freshDiff =
+      computeBlobDiff(decompress(weeks.blobs_[2]), decompress(reference));
+  std::cout << "Diff to a fresh build of week 3: " << freshDiff.size()
+            << " bytes, incremental: " << weeks.diffs_[3].size() << " bytes"
+            << std::endl;
+  EXPECT_GT(freshDiff.size(), 3 * weeks.diffs_[3].size());
 }
 
 // _____________________________________________________________________________
@@ -414,22 +387,9 @@ TEST(BlobDiffProducer, stepWithoutChangesGivesTinyDiff) {
   std::cout << "Diff file for no changes: " << unchanged.diffFile_.size()
             << " bytes for a blob of " << unchanged.blob_.size() << " bytes"
             << std::endl;
-  // Observed: about 0.03.
-  EXPECT_LT(unchanged.diffFile_.size() * 10, unchanged.blob_.size());
-  // The tables are unchanged, and so are the geo indices except for the few
-  // bytes of framing between their parts (which are inserted if the cache key
-  // of the entry, which depends on the query plan, differs).
-  DiffStatistics stats{unchanged.blob_, unchanged.diffFile_};
-  for (const auto& section : stats.statistics_.sections_) {
-    if (section.name_.find(": columns") != std::string::npos) {
-      EXPECT_EQ(section.insertedBytes_, 0u) << section.name_;
-    }
-    if (section.name_.find(": geo index") != std::string::npos) {
-      EXPECT_LE(section.insertedBytes_, 64u) << section.name_;
-    }
-  }
-  EXPECT_EQ(stats.statistics_.section("secondary vocabulary").insertedBytes_,
-            0u);
+  // Observed: about 120 bytes, mostly the header of the diff file.
+  EXPECT_LT(unchanged.diffFile_.size(), 1000u);
+  EXPECT_EQ(decompress(unchanged.blob_), decompress(weeks.blobs_[1]));
 }
 
 // _____________________________________________________________________________
@@ -645,10 +605,12 @@ TEST(BlobDiffProducer, stateDirectoryBookkeeping) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       BlobDiffProducer::step(otherConfig, snapshotFile(3), stateDir),
       HasSubstr("config differs"));
-  // The compaction thresholds and the number of threads do not matter.
+  // The compaction thresholds, the number of threads, and the compression
+  // level of the diffs do not matter.
   auto sameConfig = snapshotConfig();
   sameConfig.maxGeoSegments_ = 3;
   sameConfig.numThreads_ = 1;
+  sameConfig.diffCompressionLevel_ = 3;
   EXPECT_EQ(sameConfig.fingerprint(), config.fingerprint());
   AD_EXPECT_THROW_WITH_MESSAGE(
       BlobDiffProducer::step(config, snapshotFile(3), stateDir + "_missing"),
@@ -663,6 +625,7 @@ TEST(BlobDiffProducer, configParsing) {
   EXPECT_EQ(config.numThreads_, 4u);
   EXPECT_EQ(config.maxGeoSegments_, 8u);
   EXPECT_DOUBLE_EQ(config.maxDeadShapeRatio_, 0.3);
+  EXPECT_EQ(config.diffCompressionLevel_, defaultBlobDiffCompressionLevel);
   ASSERT_EQ(config.namedQueries_.size(), 5u);
   EXPECT_EQ(config.namedQueries_[2].name_, "streetGeometries");
   EXPECT_EQ(config.namedQueries_[2].geoIndexVar_, "?wkt");
@@ -722,6 +685,16 @@ TEST(BlobDiffProducer, configParsing) {
       parse(R"({"geoCompaction": {"maxDeadShapeRatio": 2},
                 "namedQueries": []})"),
       HasSubstr("maxDeadShapeRatio"));
+  EXPECT_EQ(
+      parse(R"({"blob": {"diffCompressionLevel": 5}, "namedQueries": []})")
+          .diffCompressionLevel_,
+      5);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(R"({"blob": {"diffCompressionLevel": 0}, "namedQueries": []})"),
+      HasSubstr("diffCompressionLevel"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(R"({"blob": {"diffCompressionLevel": 23}, "namedQueries": []})"),
+      HasSubstr("diffCompressionLevel"));
 
   // A file that is not JSON.
   std::string filename = absl::StrCat(gtestCurrentTestName(), ".json");

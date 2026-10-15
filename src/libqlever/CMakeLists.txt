@@ -1,6 +1,6 @@
 add_library(qlever Qlever.cpp NamedCachedQueryBlobManager.cpp
         CanonicalRowOrder.cpp NamedCacheSecondaryVocabRewriter.cpp
-        blobDiff/BlobLayout.cpp blobDiff/BlobDiff.cpp
+        blobDiff/BlobDiff.cpp
         blobDiff/BlobDiffProducer.cpp)
 qlever_target_link_libraries(qlever sparqlParser engine qlever_util index)
 

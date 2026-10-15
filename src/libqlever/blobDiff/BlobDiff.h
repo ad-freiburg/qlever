@@ -10,100 +10,89 @@
 #ifndef QLEVER_SRC_LIBQLEVER_BLOBDIFF_BLOBDIFF_H
 #define QLEVER_SRC_LIBQLEVER_BLOBDIFF_BLOBDIFF_H
 
+#include <array>
 #include <cstdint>
-#include <limits>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "backports/span.h"
-#include "global/Id.h"
-#include "libqlever/CanonicalRowOrder.h"
-#include "libqlever/blobDiff/BlobLayout.h"
-#include "util/BinaryDiffApplier.h"
 
 namespace qlever {
 
-// Compute a diff that turns the decompressed blob `base` into the decompressed
-// blob `target`, where `baseLayout` and `targetLayout` are the layouts of the
-// respective blobs (see `BlobLayout::parse`). The diff is small if the two
-// blobs have identical metadata and main vocabulary, if the secondary
-// vocabulary of `target` extends the one of `base`, and if the named cache
-// entries of both blobs only differ by inserted and deleted rows (both tables
-// being in canonical order, see `canonicalRowOrder::isInCanonicalOrder`).
-// Everything
-// else is inserted literally. In any case
-// `computeBlobDiff(...).apply(base) == target` holds.
-ad_utility::BinaryDiffApplier computeBlobDiff(ql::span<const char> base,
-                                              const BlobLayout& baseLayout,
-                                              ql::span<const char> target,
-                                              const BlobLayout& targetLayout);
+// A blob diff file turns a (compressed) blob `base` into a (compressed) blob
+// `target`. It is a generic binary delta: the decompressed `target` is
+// compressed with ZSTD using the decompressed `base` as a reference (the
+// "prefix dictionary" of ZSTD, the same mechanism as `zstd --patch-from`), so
+// every piece of the `target` that also occurs somewhere in the `base` costs
+// only a few bytes. The diff is small if the `target` was written
+// incrementally against the `base` (see `BlobSerializationConfig::
+// IncrementalBase`), because then the `Id`s of all words and the segments of
+// the secondary vocabulary and of the geo indices are stable, and the tables
+// of the named results only differ by the inserted and deleted rows. The diff
+// knows nothing about the layout of a blob, which makes it robust against
+// changes of the blob format.
+//
+// FILE FORMAT (all integers little endian):
+//   8 bytes   the magic bytes `QLVRBDIF`
+//   uint16_t  the format version (currently 2; version 1 was the previous,
+//             layout-based diff, which is no longer supported)
+//   uint64_t  the size of the decompressed base
+//   32 bytes  the SHA-256 checksum of the decompressed base
+//   uint64_t  the size of the decompressed target
+//   32 bytes  the SHA-256 checksum of the decompressed target
+//   uint64_t  the size of the payload
+//   payload   a ZSTD frame of the decompressed target, compressed with the
+//             decompressed base as reference
+// The checksums identify the base (a diff applies to exactly one base) and
+// verify the result of `applyBlobDiff` (a wrong base would otherwise yield
+// garbage, because ZSTD does not verify its reference).
 
-// Serialize `diff` into the content of a diff file: a ZSTD frame that contains
-// the magic bytes "QLVRBDIF", a `uint16_t` format version (currently 1), and
-// the serialized `diff`, all written with an aligned serializer.
-std::vector<char> serializeBlobDiffToFile(
-    const ad_utility::BinaryDiffApplier& diff);
-
-// Inverse of `serializeBlobDiffToFile`. Throw if `compressedDiff` is not a
-// valid diff file.
-ad_utility::BinaryDiffApplier readBlobDiffFromFile(
-    ql::span<const char> compressedDiff);
-
-// Apply the diff file `compressedDiff` to the compressed blob
-// `compressedBaseBlob` and return the compressed target blob. Throw if the base
-// cannot be decompressed, or if the diff does not belong to it.
-std::vector<char> applyBlobDiff(ql::span<const char> compressedBaseBlob,
-                                ql::span<const char> compressedDiff);
-
-// Statistics of a diff, in total and per section of the target blob.
-struct BlobDiffStatistics {
-  // The statistics of the instructions of the diff.
-  ad_utility::BinaryDiffApplier::Statistics instructions_;
-
-  // The bytes of one kind of section of the target blob.
-  struct Section {
-    std::string name_;
-    uint64_t size_ = 0;
-    uint64_t insertedBytes_ = 0;
-    uint64_t copiedBytes_ = 0;
-    // The bytes that are produced by an `Align` instruction.
-    uint64_t paddedBytes_ = 0;
-  };
-  std::vector<Section> sections_;
-
-  // Return the section with the given name (which has to exist).
-  const Section& section(std::string_view name) const;
-
-  // Return a human-readable table.
-  std::string toString() const;
+// The fields of the header of a diff file (see the file format above).
+struct BlobDiffHeader {
+  using Checksum = std::array<char, 32>;
+  uint64_t baseSize_ = 0;
+  Checksum baseChecksum_{};
+  uint64_t targetSize_ = 0;
+  Checksum targetChecksum_{};
+  uint64_t payloadSize_ = 0;
 };
 
-// Replay the instructions of `diff` against the `targetLayout` and attribute
-// every byte of the target to one section (metadata, main vocabulary,
-// secondary vocabulary, and per entry its columns, its geo index, and the rest
-// of the entry; the rest of the blob is the section "framing"). The `diff`
-// must have been computed for a target with that layout.
-BlobDiffStatistics computeBlobDiffStatistics(
-    const ad_utility::BinaryDiffApplier& diff, const BlobLayout& targetLayout);
+// The ZSTD compression level that is used for the payload of a diff if none
+// is given. The high levels give noticeably smaller diffs (about 25 percent
+// smaller than the default level 3 on the data that was measured), and the
+// diff of a blob of a few hundred megabytes still takes only seconds.
+constexpr int defaultBlobDiffCompressionLevel = 19;
 
-// Shorthand for `computeBlobDiffStatistics(...).toString()`.
-std::string describeBlobDiff(const ad_utility::BinaryDiffApplier& diff,
-                             const BlobLayout& targetLayout);
+// Compute the SHA-256 checksum of `bytes`.
+BlobDiffHeader::Checksum blobChecksum(ql::span<const char> bytes);
 
-namespace detail {
-// The marker for a target element that has no counterpart in the base.
-constexpr size_t noBaseRow = canonicalRowOrder::noMatchingRow;
+// Compute the diff file that turns the decompressed blob `base` into the
+// decompressed blob `target`.
+std::vector<char> computeBlobDiff(
+    ql::span<const char> base, ql::span<const char> target,
+    int compressionLevel = defaultBlobDiffCompressionLevel);
 
-// For each element of `target` return the index of the element of `base` that
-// is equal to it, or `noBaseRow`. The matched elements are increasing and each
-// element of `base` is used at most once; the matching is greedy and therefore
-// optimal if the elements of `base` that occur in `target` are in the same
-// order and the elements that are new are pairwise distinct from all elements
-// of `base`.
-std::vector<size_t> greedyMatch(ql::span<const uint64_t> base,
-                                ql::span<const uint64_t> target);
-}  // namespace detail
+// Parse the header of `diffFile`. Throw if `diffFile` is not a diff file, has
+// an unsupported version, or is truncated.
+BlobDiffHeader readBlobDiffHeader(ql::span<const char> diffFile);
+
+// Apply `diffFile` to the decompressed blob `base` and return the decompressed
+// target blob. Throw if the diff does not belong to the `base` (size or
+// checksum differ), or if the result does not have the checksum that is stored
+// in the diff.
+std::vector<char> applyBlobDiffToDecompressed(ql::span<const char> base,
+                                              ql::span<const char> diffFile);
+
+// Apply `diffFile` to the compressed blob `compressedBase` and return the
+// compressed target blob (a standard blob that can be loaded by
+// `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob`). Throw if the base
+// cannot be decompressed, or if the diff does not belong to it (see above).
+std::vector<char> applyBlobDiff(ql::span<const char> compressedBase,
+                                ql::span<const char> diffFile);
+
+// Return a human-readable description of `diffFile` (the sizes of base, target
+// and payload). Throw if the header cannot be parsed.
+std::string describeBlobDiff(ql::span<const char> diffFile);
 
 }  // namespace qlever
 

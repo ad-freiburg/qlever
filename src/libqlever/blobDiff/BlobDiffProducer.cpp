@@ -29,7 +29,6 @@
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
 #include "libqlever/blobDiff/BlobDiff.h"
-#include "libqlever/blobDiff/BlobLayout.h"
 #include "parser/BlankNodeAdder.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
@@ -412,26 +411,23 @@ BlobDiffProducer::WeeklyResult stepImpl(const BlobDiffConfig& config,
   result.blob_ =
       qlever.serializeVocabAndNamedCacheToCompressedBlob(serializationConfig);
 
-  // Compute the diff and verify it.
+  // Compute the diff and verify it. NOTE: `applyBlobDiff` verifies the
+  // checksum of the decompressed result, so the comparison of the compressed
+  // bytes only checks that the recompression is deterministic (it is, because
+  // the same ZSTD version compresses the same bytes with the same parameters
+  // in this process).
   auto baseBytes = decompressOrThrow(previousBlob);
   auto targetBytes = decompressOrThrow(result.blob_);
-  ql::span<const char> baseSpan{baseBytes.data(), baseBytes.size()};
-  ql::span<const char> targetSpan{targetBytes.data(), targetBytes.size()};
-  auto baseLayout = BlobLayout::parse(baseSpan);
-  auto targetLayout = BlobLayout::parse(targetSpan);
-  auto diff = computeBlobDiff(baseSpan, baseLayout, targetSpan, targetLayout);
-  if (!sameBytes(diff.apply(baseSpan), targetBytes)) {
-    throw std::runtime_error{
-        "Self-check failed: applying the computed diff to the decompressed "
-        "previous blob does not yield the decompressed new blob."};
-  }
-  result.diffFile_ = serializeBlobDiffToFile(diff);
+  result.diffFile_ = computeBlobDiff(
+      ql::span<const char>{baseBytes.data(), baseBytes.size()},
+      ql::span<const char>{targetBytes.data(), targetBytes.size()},
+      config.diffCompressionLevel_);
   if (!sameBytes(applyBlobDiff(previousBlob, result.diffFile_), result.blob_)) {
     throw std::runtime_error{
         "Self-check failed: applying the diff file to the previous compressed "
         "blob does not yield the new compressed blob byte for byte."};
   }
-  result.statistics_ = describeBlobDiff(diff, targetLayout);
+  result.statistics_ = describeBlobDiff(result.diffFile_);
 
   // Rotate the state.
   writeFileAtomically(paths.currentBlob_, result.blob_);
@@ -486,9 +482,14 @@ BlobDiffConfig BlobDiffConfig::fromJson(const nlohmann::json& json) {
   }
   if (json.contains("blob")) {
     const auto& blob = json.at("blob");
-    checkKeys(blob, "blob", {"excludedEntryRegexes"});
+    checkKeys(blob, "blob", {"excludedEntryRegexes", "diffCompressionLevel"});
     config.excludedEntryRegexes_ = getOr<std::vector<std::string>>(
         blob, "excludedEntryRegexes", "blob", {});
+    config.diffCompressionLevel_ = getOr<int>(
+        blob, "diffCompressionLevel", "blob", config.diffCompressionLevel_);
+    if (config.diffCompressionLevel_ < 1 || config.diffCompressionLevel_ > 22) {
+      configError("`blob.diffCompressionLevel` has to be in [1, 22].");
+    }
   }
   if (json.contains("geoCompaction")) {
     const auto& geo = json.at("geoCompaction");
@@ -583,6 +584,7 @@ nlohmann::json BlobDiffConfig::toJson() const {
   index["prefixesForIdEncodedIris"] = prefixesForIdEncodedIris_;
   index["settingsFile"] = settingsFile_;
   json["blob"]["excludedEntryRegexes"] = excludedEntryRegexes_;
+  json["blob"]["diffCompressionLevel"] = diffCompressionLevel_;
   json["geoCompaction"]["maxSegments"] = maxGeoSegments_;
   json["geoCompaction"]["maxDeadShapeRatio"] = maxDeadShapeRatio_;
   auto& queries = json["namedQueries"] = nlohmann::json::array();
@@ -605,8 +607,10 @@ nlohmann::json BlobDiffConfig::toJson() const {
 std::string BlobDiffConfig::fingerprint() const {
   auto json = toJson();
   json.erase("geoCompaction");
-  // The number of threads does not influence the content of the index.
+  // The number of threads does not influence the content of the index, and
+  // the compression level of the diffs does not influence the blobs.
   json["index"].erase("numThreads");
+  json["blob"].erase("diffCompressionLevel");
   auto digest = ad_utility::HashSha256{}(json.dump());
   return absl::StrJoin(digest, "", ad_utility::hexFormatter);
 }
@@ -691,14 +695,20 @@ std::vector<char> BlobDiffProducer::apply(ql::span<const char> baseBlob,
 std::string BlobDiffProducer::inspect(
     ql::span<const char> blob, std::optional<ql::span<const char>> diffFile) {
   auto bytes = decompressOrThrow(blob);
-  auto layout = BlobLayout::parse(ql::span<const char>{bytes});
-  std::string result = absl::StrCat("Layout of the blob (", blob.size(),
-                                    " bytes compressed):\n", layout.describe());
+  ql::span<const char> span{bytes.data(), bytes.size()};
+  auto checksum = blobChecksum(span);
+  std::string result =
+      absl::StrCat("Blob: ", blob.size(), " bytes compressed, ", bytes.size(),
+                   " bytes decompressed, SHA-256 of the decompressed blob ",
+                   absl::StrJoin(checksum, "", ad_utility::hexFormatter));
   if (diffFile.has_value()) {
-    auto diff = readBlobDiffFromFile(diffFile.value());
-    absl::StrAppend(&result, "\nThe diff file (", diffFile->size(),
-                    " bytes) as a diff to this blob:\n",
-                    describeBlobDiff(diff, layout));
+    auto header = readBlobDiffHeader(diffFile.value());
+    std::string_view relation =
+        header.targetChecksum_ == checksum ? "yields this blob"
+        : header.baseChecksum_ == checksum ? "applies to this blob"
+                                           : "is unrelated to this blob";
+    absl::StrAppend(&result, "\n", describeBlobDiff(diffFile.value()),
+                    "\nThe diff ", relation, ".");
   }
   return result;
 }
