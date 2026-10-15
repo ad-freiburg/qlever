@@ -86,7 +86,7 @@ class Operation {
 
   // Holds a precomputed Result of this operation if it is the sibling of a
   // Service operation.
-  std::optional<std::shared_ptr<const Result>>
+  qlm::optional<qlm::shared_ptr<const Result>>
       precomputedResultBecauseSiblingOfService_;
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
@@ -199,6 +199,17 @@ class Operation {
    */
   const std::vector<ColumnIndex>& getResultSortedOn() const;
 
+  // Same as `getResultSortedOn()`, but converted to `qlm::vector` at this
+  // boundary. This lets callers that need an allocator-aware type (e.g.
+  // `QueryPlanner`) consume it without requiring every operation's
+  // `resultSortedOn()` override to change at once.
+  // TODO<vrbommireddy>: Remove once `resultSortedOn()` returns `qlm::vector`
+  // directly.
+  qlm::vector<ColumnIndex> getResultSortedOnQlm() const {
+    const auto& sorted = getResultSortedOn();
+    return {sorted.begin(), sorted.end(), allocator()};
+  }
+
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
   virtual const LocatedTriplesState& locatedTriplesState() const {
@@ -209,7 +220,7 @@ class Operation {
   // `prefilters` as possible. If none of them applies, return `std::nullopt`,
   // signaling that the `QueryExecutionTree` will not be changed. This is the
   // default implementation.
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  virtual qlm::optional<qlm::shared_ptr<QueryExecutionTree>>
   getUpdatedQueryExecutionTreeWithPrefilterApplied(
       [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilters)
       const {
@@ -528,7 +539,7 @@ class Operation {
   // most operations can't efficiently produce a sorted result. Subclasses may
   // override this function if they are able to provide more efficient
   // implementations.
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+  virtual qlm::optional<qlm::shared_ptr<QueryExecutionTree>> makeSortedTree(
       const std::vector<ColumnIndex>& sortColumns) const;
 
   // Return true iff the result of this operation is guaranteed to contain no
@@ -555,7 +566,7 @@ class Operation {
   // provide more optimal ways to ensure distinct values. This function must
   // only be called on operations that are not already distinct wrt
   // `distinctIndices`.
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeDistinctTree(
+  virtual qlm::optional<qlm::shared_ptr<QueryExecutionTree>> makeDistinctTree(
       const std::vector<ColumnIndex>& distinctIndices) const;
 
   // Try to create a version of this operation that only contains the given
@@ -564,7 +575,7 @@ class Operation {
   // TODO<joka921/RobinTF> Would it make the code simpler or be beneficial in
   // any other way, if the default implementation would add a `StripColumns`
   // operation? The the result wouldn't have to be `optional`.
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  virtual qlm::optional<qlm::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(const std::set<Variable>& variables) const;
 
   // Try to create a version of this operation with an additional column from a
@@ -573,7 +584,7 @@ class Operation {
   // override this method. Pushing a `BIND` down to a materialized view might
   // produce a cheaper query plan for example. This function is tested in the
   // `BindRewrite` test case in `MaterializedViewsTest`.
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  virtual qlm::optional<qlm::shared_ptr<QueryExecutionTree>>
   makeTreeWithBindColumn(const parsedQuery::Bind&) const {
     return std::nullopt;
   }
@@ -617,11 +628,11 @@ class Operation {
   // be instantiated in the code for operations that use it.
   CPP_template(typename MakeCloneWithNewChildren)(
       requires ad_utility::InvocableWithExactReturnType<
-          MakeCloneWithNewChildren, std::shared_ptr<QueryExecutionTree>,
-          std::vector<std::shared_ptr<QueryExecutionTree>>>)
-      std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
+          MakeCloneWithNewChildren, qlm::shared_ptr<QueryExecutionTree>,
+          qlm::vector<qlm::shared_ptr<QueryExecutionTree>>>)
+      qlm::optional<qlm::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
           const parsedQuery::Bind& bind,
-          std::vector<std::shared_ptr<QueryExecutionTree>> children,
+          qlm::vector<qlm::shared_ptr<QueryExecutionTree>> children,
           MakeCloneWithNewChildren makeCloneWithNewChildren) const;
 
  private:
