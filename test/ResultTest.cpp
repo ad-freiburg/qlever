@@ -457,9 +457,9 @@ TEST(
     cacheDuringConsumptionAbortsValueWhenRunningIntoMemoryLimitOnInitialClone) {
   bool flag = false;
   Result result{[](bool& innerFlag) -> Result::Generator {
-                  IdTable idTable{
-                      1, ad_utility::makeAllocatorWithLimit<Id>(
-                             ad_utility::MemorySize::bytes(1) * sizeof(Id))};
+                  IdTable idTable{1, ad_utility::makeAllocatorWithLimit<Id>(
+                                         ad_utility::MemorySize::bytes(1) *
+                                         BYTES_PER_ID_COLUMN_ENTRY)};
                   idTable.push_back({Id::makeFromBool(true)});
                   co_yield {std::move(idTable), LocalVocab{}};
                   innerFlag = true;

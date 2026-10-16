@@ -86,7 +86,7 @@ Result Sort::computeResult(bool requestLaziness) {
   size_t maxNumRowsToBeSortedInMemory =
       getRuntimeParameter<&RuntimeParameters::sortInMemoryThreshold_>()
           .getBytes() /
-      (numColumns * sizeof(Id));
+      (numColumns * BYTES_PER_ID_COLUMN_ENTRY);
 
   // Always request lazy input to avoid premature materialization.
   std::shared_ptr<const Result> input = subtree_->getResult(true);

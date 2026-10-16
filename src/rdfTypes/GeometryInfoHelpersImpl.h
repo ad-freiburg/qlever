@@ -171,7 +171,8 @@ inline ParseResult parseWktOrThrow(const std::string_view& wkt,
     }
   } catch (const WKTParseException&) {
     // Report invalid WKT to the caller (`WKTParseException` is derived from
-    // `std::runtime_error`, so it must not reach the handler below).
+    // `std::runtime_error`, so without this handler it would be swallowed by
+    // the one below).
     throw;
   } catch (const std::runtime_error& error) {
     AD_LOG_DEBUG << "Error parsing WKT `" << wkt << "`: " << error.what()
