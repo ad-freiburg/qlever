@@ -160,11 +160,10 @@ TEST(IdColumnIteratorTest, rangeBasedForAndSort) {
 
   // Sorting the mutable view sorts the referenced values like sorting the
   // ids themselves.
-  const auto byBits = [](const Id id) { return getBitsCompat(id); };
   const auto mutableView = vec.asView();
-  ql::ranges::sort(mutableView, {}, byBits);
+  ql::ranges::sort(mutableView, {}, Id::getBitsL);
   std::vector<Id> sortedIds = ids;
-  ql::ranges::sort(sortedIds, {}, byBits);
+  ql::ranges::sort(sortedIds, {}, Id::getBitsL);
   std::vector afterSort(mutableView.begin(), mutableView.end());
   EXPECT_THAT(afterSort, ::testing::ElementsAreArray(sortedIds));
 }

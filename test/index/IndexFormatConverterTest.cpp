@@ -54,14 +54,12 @@ fs::path oldIndexDirectory() {
 // Return the `Id` of the previous index format with the given datatype bits and
 // value bits.
 Id oldFormatId(uint64_t datatypeBits, uint64_t valueBits) {
-  return Id::fromBits((datatypeBits << ValueId::numDataBits) | valueBits);
+  return Id::fromBits(datatypeBits, valueBits);
 }
 
 // Return the value bits of the given `id`, that is, its bits without the
 // datatype bits.
-uint64_t valueBits(Id id) {
-  return id.getBits() & ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
-}
+uint64_t valueBits(Id id) { return id.getPayloadBits(); }
 
 // The 20 triples of the index in the previous format, in the order of the `SPO`
 // permutation, in the string representation of `tripleToString` below. Note
