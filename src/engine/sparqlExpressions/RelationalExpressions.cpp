@@ -75,9 +75,12 @@ CPP_template(typename S1, typename S2)(
 // valueId` for each `ValueId` that the Variable `variable` is bound to. This
 // only works, if the input (as stored in the `context`) is sorted by the
 // Variable `variable`. If `valueIdUpper` is nullopt, we only have a single
-// `valueId`, otherwise we have a range, [`valueId`, `valueIdUpper`).
+// `valueId`, otherwise we have a range, [`valueId`, `valueIdUpper`). Return
+// `std::nullopt` if the result of the comparison is UNDEF for at least one row
+// (e.g. because the row is UNDEF or its datatype is incompatible with
+// `valueId`), because a `SetOfIntervals` can only represent `true` and `false`.
 template <Comparison Comp>
-ad_utility::SetOfIntervals evaluateWithBinarySearch(
+std::optional<ad_utility::SetOfIntervals> evaluateWithBinarySearch(
     const Variable& variable, ValueId valueId,
     std::optional<ValueId> valueIdUpper, const EvaluationContext* context) {
   // Set up iterators into the `IdTable` that only access the column where the
@@ -101,21 +104,38 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
       Iterator{&context->_inputTable, context->_endIndex, getIdFromColumn};
 
   // Perform the actual evaluation.
-  const auto resultRanges = [&]() {
+  auto getRanges = [&begin, &end, &valueId,
+                    &valueIdUpper](Comparison comparison) {
     if (valueIdUpper) {
       return valueIdComparators::getRangesForEqualIds(
-          begin, end, valueId, valueIdUpper.value(), Comp);
+          begin, end, valueId, valueIdUpper.value(), comparison);
     } else {
-      return valueIdComparators::getRangesForId(begin, end, valueId, Comp);
+      return valueIdComparators::getRangesForId(begin, end, valueId,
+                                                comparison);
     }
-  }();
+  };
+
+  // The ranges only contain rows with a datatype that is compatible with
+  // `valueId`. Every such row is either equal or not equal to `valueId`, so if
+  // the ranges for `EQ` and `NE` together don't cover all rows, then the result
+  // is UNDEF for some rows.
+  auto numRows = [](const auto& ranges) {
+    return ::ranges::accumulate(
+        ranges, size_t{0}, std::plus<>{},
+        [](const auto& range) -> size_t { return range.second - range.first; });
+  };
+  if (numRows(getRanges(Comparison::EQ)) + numRows(getRanges(Comparison::NE)) !=
+      context->size()) {
+    return std::nullopt;
+  }
+  const auto resultRanges = getRanges(Comp);
 
   // Convert pairs of iterators to pairs of indexes.
   ad_utility::SetOfIntervals::Vec intervals;
   for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
     intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
   }
-  return {std::move(intervals), context->size()};
+  return ad_utility::SetOfIntervals{std::move(intervals), context->size()};
 }
 
 // The actual comparison function for the `SingleExpressionResult`'s which are
@@ -144,12 +164,17 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
           !cols.empty() && cols[0] == columnIndex) {
         constexpr static bool value2IsString =
             !ad_utility::isSimilar<decltype(valueId), Id>;
-        if constexpr (value2IsString) {
-          return evaluateWithBinarySearch<Comp>(value1, valueId.first,
-                                                valueId.second, context);
-        } else {
-          return evaluateWithBinarySearch<Comp>(value1, valueId, std::nullopt,
-                                                context);
+        auto result = [&value1, &valueId, context]() {
+          if constexpr (value2IsString) {
+            return evaluateWithBinarySearch<Comp>(value1, valueId.first,
+                                                  valueId.second, context);
+          } else {
+            return evaluateWithBinarySearch<Comp>(value1, valueId, std::nullopt,
+                                                  context);
+          }
+        }();
+        if (result.has_value()) {
+          return std::move(result.value());
         }
       }
       context->cancellationHandle_->throwIfCancelled();
