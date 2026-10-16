@@ -103,6 +103,54 @@ CPP_template(typename T, typename S)(
   return ql::span<const T>{reinterpret_cast<const T*>(bytes.data()), size};
 }
 
+// Whether `deserializeToSpanOrVector<T>` below returns a zero-copy span for
+// the read serializer `S`. This is the case for a `ZeroCopyReadSerializer`,
+// and, if `T` has no alignment requirement (`alignof(T) == 1`, e.g. `char`),
+// for every `SpanReadSerializer`, because then no aligned serialization is
+// needed.
+template <typename T, typename S>
+constexpr bool deserializesToSpan =
+    ZeroCopyReadSerializer<S> || (SpanReadSerializer<S> && alignof(T) == 1);
+
+// Read an array of trivially serializable `T`s (that was written as a
+// `std::vector<T>`, a `ql::span<const T>`, or, for `T == char`, a
+// `std::string`) from the `serializer`. If the serializer supports zero-copy
+// reads of `T` (see `deserializesToSpan` above), return a `ql::span<const T>`
+// that points into its buffer (which then has to outlive the span) without
+// copying the elements; otherwise read them into a `std::vector<T>` and
+// return that. Code that is generic in the serializer can thus read an array
+// once and only dispatch on the type of the result where it matters (see
+// `toOwningVector` below). Throw if the serializer is exhausted before the
+// array is complete.
+CPP_template(typename T, typename S)(
+    requires ReadSerializer<S> CPP_and TriviallySerializable<
+        T>) auto deserializeToSpanOrVector(S& serializer) {
+  if constexpr (ZeroCopyReadSerializer<S>) {
+    return zeroCopyDeserializeToSpan<T>(serializer);
+  } else if constexpr (deserializesToSpan<T, S>) {
+    std::size_t size;
+    serializer >> size;
+    auto bytes = serializer.getSpanToBytes(size * sizeof(T));
+    AD_CORRECTNESS_CHECK(bytes.size() == size * sizeof(T));
+    return ql::span<const T>{reinterpret_cast<const T*>(bytes.data()), size};
+  } else {
+    std::vector<T> result;
+    serializer >> result;
+    return result;
+  }
+}
+
+// Convert the result of `deserializeToSpanOrVector` into a `std::vector<T>`
+// that owns its elements: move a vector, copy the elements of a span.
+template <typename T>
+std::vector<T> toOwningVector(std::vector<T>&& vector) {
+  return std::move(vector);
+}
+template <typename T>
+std::vector<T> toOwningVector(ql::span<const T> span) {
+  return std::vector<T>(span.begin(), span.end());
+}
+
 /// Incrementally serialize a std::vector to disk without materializing it.
 /// Call `push` for each of the elements that will become part of the vector.
 CPP_template(typename T, typename Serializer)(

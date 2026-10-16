@@ -1273,6 +1273,129 @@ TEST(Serializer, ZeroCopyDeserializeToStringView) {
   }
 }
 
+// Test `deserializeToSpanOrVector` (and `deserializesToSpan` and
+// `toOwningVector`): a zero-copy span for the serializers that support it, an
+// owning vector otherwise.
+TEST(Serializer, DeserializeToSpanOrVector) {
+  using ad_utility::serialization::deserializesToSpan;
+  using ad_utility::serialization::deserializeToSpanOrVector;
+  using ad_utility::serialization::toOwningVector;
+  using ad_utility::serialization::ZeroCopyReadSerializer;
+  using SpanReader = ad_utility::serialization::ByteBufferReadSerializerT<
+      false, ql::span<const char>>;
+  using ::testing::ElementsAre;
+
+  // Which serializers yield spans for which element types.
+  static_assert(deserializesToSpan<char, AlignedByteBufferReadSerializer>);
+  static_assert(deserializesToSpan<uint64_t, AlignedByteBufferReadSerializer>);
+  static_assert(deserializesToSpan<char, ByteBufferReadSerializer>);
+  static_assert(deserializesToSpan<char, SpanReader>);
+  static_assert(!deserializesToSpan<uint64_t, ByteBufferReadSerializer>);
+  static_assert(!deserializesToSpan<uint64_t, SpanReader>);
+  static_assert(!deserializesToSpan<char, FileReadSerializer>);
+  static_assert(!deserializesToSpan<uint64_t, FileReadSerializer>);
+
+  // Write a vector of `uint64_t`s, a string, an empty vector, and a scalar
+  // with the given writer, read them back with the reader that `makeReader`
+  // creates from the written data, and check the values. `Reader` is the type
+  // of that reader, `expectSpan<T>` whether the result for `T` has to be a
+  // span (that points into the buffer of the reader) or a vector.
+  std::vector<uint64_t> numbers{7, 8, 9};
+  std::string string = "a string that is longer than the short string buffer";
+  int32_t scalar = -3;
+  auto test = [&](auto writerTi, auto makeReader) {
+    using Writer = typename decltype(writerTi)::type;
+    Writer writer;
+    writer << numbers;
+    writer << string;
+    writer << std::vector<uint64_t>{};
+    writer << scalar;
+    auto data = std::move(writer).data();
+    auto reader = makeReader(data);
+    using Reader = decltype(reader);
+
+    auto check = [&reader](auto ti, const auto& read) {
+      using T = typename decltype(ti)::type;
+      using Read = std::decay_t<decltype(read)>;
+      if constexpr (deserializesToSpan<T, Reader>) {
+        static_assert(std::is_same_v<Read, ql::span<const T>>);
+        const char* begin = reader.data().data();
+        const char* end = begin + reader.data().size();
+        auto bytes = reinterpret_cast<const char*>(read.data());
+        EXPECT_TRUE(read.empty() ||
+                    (bytes >= begin && bytes + read.size_bytes() <= end));
+      } else {
+        static_assert(std::is_same_v<Read, std::vector<T>>);
+      }
+    };
+    using namespace ad_utility::use_type_identity;
+    auto numbersRead = deserializeToSpanOrVector<uint64_t>(reader);
+    check(ti<uint64_t>, numbersRead);
+    EXPECT_THAT(numbersRead, ElementsAre(7, 8, 9));
+    auto stringRead = deserializeToSpanOrVector<char>(reader);
+    check(ti<char>, stringRead);
+    EXPECT_EQ(std::string_view(stringRead.data(), stringRead.size()), string);
+    auto emptyRead = deserializeToSpanOrVector<uint64_t>(reader);
+    check(ti<uint64_t>, emptyRead);
+    EXPECT_TRUE(emptyRead.empty());
+    int32_t scalarRead = 0;
+    reader >> scalarRead;
+    EXPECT_EQ(scalarRead, scalar);
+
+    // `toOwningVector` always yields a vector with the same elements.
+    std::vector<uint64_t> owned = toOwningVector(std::move(numbersRead));
+    EXPECT_EQ(owned, numbers);
+    EXPECT_TRUE(toOwningVector(std::move(emptyRead)).empty());
+
+    // Reading past the end throws.
+    EXPECT_ANY_THROW(deserializeToSpanOrVector<uint64_t>(reader));
+  };
+  using namespace ad_utility::use_type_identity;
+  // The aligned reader yields spans for everything, the unaligned readers only
+  // for `char`.
+  test(ti<AlignedByteBufferWriteSerializer>,
+       [](const auto& data) { return AlignedByteBufferReadSerializer{data}; });
+  test(ti<ByteBufferWriteSerializer>,
+       [](const auto& data) { return ByteBufferReadSerializer{data}; });
+  test(ti<ByteBufferWriteSerializer>,
+       [](const auto& data) { return SpanReader{ql::span<const char>{data}}; });
+
+  // A serializer that reads from a file yields vectors for everything.
+  {
+    std::string filename = gtestCurrentTestName();
+    absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+    {
+      FileWriteSerializer writer{filename};
+      writer << numbers;
+      writer << string;
+    }
+    FileReadSerializer reader{filename};
+    auto numbersRead = deserializeToSpanOrVector<uint64_t>(reader);
+    static_assert(std::is_same_v<decltype(numbersRead), std::vector<uint64_t>>);
+    EXPECT_EQ(numbersRead, numbers);
+    auto stringRead = deserializeToSpanOrVector<char>(reader);
+    static_assert(std::is_same_v<decltype(stringRead), std::vector<char>>);
+    EXPECT_EQ(std::string(stringRead.begin(), stringRead.end()), string);
+    EXPECT_ANY_THROW(deserializeToSpanOrVector<char>(reader));
+  }
+
+  // A truncated buffer throws, for the span and for the vector case.
+  {
+    ByteBufferWriteSerializer writer;
+    writer << numbers;
+    writer << string;
+    auto data = std::move(writer).data();
+    auto truncatedNumbers = data;
+    truncatedNumbers.resize(sizeof(size_t) + 2 * sizeof(uint64_t));
+    ByteBufferReadSerializer reader1{std::move(truncatedNumbers)};
+    EXPECT_ANY_THROW(deserializeToSpanOrVector<uint64_t>(reader1));
+    data.resize(data.size() - 3);
+    ByteBufferReadSerializer reader2{std::move(data)};
+    deserializeToSpanOrVector<uint64_t>(reader2);
+    EXPECT_ANY_THROW(deserializeToSpanOrVector<char>(reader2));
+  }
+}
+
 // Test that alignment padding is correctly inserted. We write a single char
 // followed by a vector<int64_t>. The vector serialization writes a size_t (8
 // bytes) then aligns to alignof(int64_t) == 8. After writing 1 byte (char) + 8

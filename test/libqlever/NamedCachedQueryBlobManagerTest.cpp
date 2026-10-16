@@ -29,6 +29,7 @@
 #include "./QleverTestHelpers.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "engine/NamedResultCacheSerializer.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "libqlever/CanonicalRowOrder.h"
@@ -557,6 +558,55 @@ TEST(NamedCachedQueryBlobManager, verifyBlobHeaderAtNonZeroPosition) {
   // buffer is exhausted.
   EXPECT_EQ(reader.getCurrentPosition() - positionBeforeHeader, 10u);
   EXPECT_EQ(reader.getCurrentPosition(), data.size());
+}
+
+// _____________________________________________________________________________
+// Test that `skipVocabulary` advances a reader exactly past the main
+// vocabulary of a blob, so that the named cache entries (which directly follow
+// it in a blob without a secondary vocabulary) can be read afterwards, and
+// that a vocabulary type that cannot be read from a blob is rejected.
+TEST(NamedCachedQueryBlobManager, skipVocabulary) {
+  auto config = buildTestIndex("<s> <p> <o> . <s> <p> <o2> .");
+  Qlever source{EngineConfig{config}};
+  source.queryAndPinResultWithName("x", "SELECT ?s WHERE { ?s <p> ?o }");
+  auto blob = source.serializeVocabAndNamedCacheToCompressedBlob();
+  auto bytes = decompressOrFail(blob);
+
+  // Skip the header and read the metadata JSON, as `tryToDeserialize` does.
+  auto skipHeaderAndReadMetadata = [](BlobReader& reader) {
+    EXPECT_THAT(Manager::tryToSkipAndVerifyBlobHeader(reader),
+                isFormatVersion(Manager::formatVersionWithoutSecondaryVocab));
+    std::string metadataJson;
+    reader >> metadataJson;
+    return nlohmann::json::parse(metadataJson);
+  };
+  BlobReader reader{ql::span<const char>{bytes.data(), bytes.size()}};
+  auto metadata = skipHeaderAndReadMetadata(reader);
+  size_t vocabularyBegin = reader.getCurrentPosition();
+  Manager::skipVocabulary(reader, metadata);
+  EXPECT_GT(reader.getCurrentPosition(), vocabularyBegin);
+
+  // The named cache entries follow directly, starting with their magic byte
+  // and their format version.
+  uint8_t magicByte = 0;
+  reader >> magicByte;
+  EXPECT_EQ(magicByte, namedResultCacheSerializer::detail::magicByte);
+  uint16_t entriesVersion = 0;
+  reader >> entriesVersion;
+  EXPECT_EQ(entriesVersion, namedResultCacheSerializer::legacyFormatVersion);
+
+  // A vocabulary type whose format cannot be read from a blob is rejected.
+  BlobReader reader2{ql::span<const char>{bytes.data(), bytes.size()}};
+  auto onDiskMetadata = skipHeaderAndReadMetadata(reader2);
+  onDiskMetadata["vocabulary-type"] =
+      VocabularyType{VocabularyType::Enum::OnDiskCompressed};
+  AD_EXPECT_THROW_WITH_MESSAGE(Manager::skipVocabulary(reader2, onDiskMetadata),
+                               HasSubstr("only supported for the in-memory"));
+
+  // A truncated vocabulary is detected.
+  BlobReader reader3{ql::span<const char>{bytes.data(), vocabularyBegin + 8}};
+  auto metadata3 = skipHeaderAndReadMetadata(reader3);
+  EXPECT_ANY_THROW(Manager::skipVocabulary(reader3, metadata3));
 }
 
 // _____________________________________________________________________________

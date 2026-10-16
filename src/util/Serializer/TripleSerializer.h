@@ -111,30 +111,65 @@ CPP_template(typename Serializer)(
   serializer << uint64_t{0};
 }
 
+// Read a local vocabulary in the format of `serializeLocalVocab` above from
+// the `serializer` and hand its parts to the given callbacks instead of
+// constructing a `LocalVocab`: call `onHeader(blocks, numWords)` once with the
+// owned blank node blocks and the number of words, and then `onWord(id,
+// word)` for each word (its `Id` in the serialized vocab, as `Id::T`, and its
+// string representation), in the order in which they were written. This is
+// the single place that knows the read format, and is the basis for
+// `deserializeLocalVocab` and `skipLocalVocab` below.
+CPP_template(typename Serializer, typename OnHeader, typename OnWord)(
+    requires serialization::ReadSerializer<
+        Serializer>) void readSerializedLocalVocab(Serializer& serializer,
+                                                   const OnHeader& onHeader,
+                                                   const OnWord& onWord) {
+  auto blocks = readValue<
+      std::vector<BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>(
+      serializer);
+  auto numWords = readValue<uint64_t>(serializer);
+  onHeader(std::move(blocks), numWords);
+  for (uint64_t i = 0; i < numWords; ++i) {
+    auto id = readValue<Id::T>(serializer);
+    auto s = readValue<std::string>(serializer);
+    onWord(id, std::move(s));
+  }
+}
+
 // Deserialize the local vocabulary from the input stream.
 CPP_template(typename Serializer)(
     requires serialization::ReadSerializer<Serializer>) std::
     tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
         Serializer& serializer, const LocalVocabContext& context) {
   LocalVocab vocab;
-  vocab.reserveBlankNodeBlocksFromExplicitIndices(
-      readValue<std::vector<
-          BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>(
-          serializer),
-      context.getBlankNodeManager());
-  auto size = readValue<uint64_t>(serializer);
-  // Note:: It might happen that the `size` is zero because the local vocab was
-  // empty.
+  // Note:: It might happen that the number of words is zero because the local
+  // vocab was empty.
   absl::flat_hash_map<Id::T, Id> mapping{};
-  mapping.reserve(size);
-  for (uint64_t i = 0; i < size; ++i) {
-    auto id = readValue<Id::T>(serializer);
-    auto s = readValue<std::string>(serializer);
-    auto localVocabIndex = vocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(std::move(s), context));
-    mapping.emplace(id, Id::makeFromLocalVocabIndex(localVocabIndex));
-  }
+  readSerializedLocalVocab(
+      serializer,
+      [&vocab, &mapping, &context](auto blocks, uint64_t numWords) {
+        vocab.reserveBlankNodeBlocksFromExplicitIndices(
+            std::move(blocks), context.getBlankNodeManager());
+        mapping.reserve(numWords);
+      },
+      [&vocab, &mapping, &context](Id::T id, std::string s) {
+        auto localVocabIndex = vocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry::fromStringRepresentation(std::move(s), context));
+        mapping.emplace(id, Id::makeFromLocalVocabIndex(localVocabIndex));
+      });
   return {std::move(vocab), std::move(mapping)};
+}
+
+// Skip a local vocabulary in the format of `serializeLocalVocab` above,
+// advancing the `serializer` past it, without constructing anything (in
+// particular, no `LocalVocabContext` is needed).
+CPP_template(typename Serializer)(
+    requires serialization::ReadSerializer<
+        Serializer>) void skipLocalVocab(Serializer& serializer) {
+  readSerializedLocalVocab(
+      serializer,
+      []([[maybe_unused]] auto&& blocks, [[maybe_unused]] uint64_t numWords) {},
+      []([[maybe_unused]] Id::T id, [[maybe_unused]] std::string word) {});
 }
 
 // Serialize a range of Ids to the output stream. If an Id is of type

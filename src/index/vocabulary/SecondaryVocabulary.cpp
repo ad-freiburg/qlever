@@ -112,6 +112,26 @@ SecondaryVocabulary SecondaryVocabulary::clone() const {
 }
 
 // _____________________________________________________________________________
+SecondaryVocabulary::Layout SecondaryVocabulary::parseLayout(
+    ad_utility::serialization::LayoutReadSerializer& reader) {
+  Layout layout;
+  layout.present_ = true;
+  // Read the vocabulary zero-copy (see the serialization), so that its
+  // segments and index arrays are views into the buffer of the `reader`, from
+  // which their byte ranges are then taken.
+  SecondaryVocabulary vocab;
+  layout.whole_ = reader.recordRange([&] { reader >> vocab; });
+  layout.segments_.reserve(vocab.segments_.size());
+  for (const auto& segment : vocab.segments_) {
+    layout.segments_.push_back({reader.rangeOf(segment.dataSpan()).begin_,
+                                reader.rangeOf(segment.offsetsSpan()).end_});
+  }
+  layout.segmentOffsets_ = reader.rangeOf(vocab.segmentOffsets_.view());
+  layout.sortedIndices_ = reader.rangeOf(vocab.sortedIndices_.view());
+  return layout;
+}
+
+// _____________________________________________________________________________
 std::vector<size_t> SecondaryVocabulary::insertPositionsInSortedIndices(
     const CompactVectorOfStrings<char>& segment) const {
   std::vector<size_t> insertPositions;
