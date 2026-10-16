@@ -301,7 +301,7 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
                   mappedId = Id::makeUndefined(),
-                  vocabHint = size_t{0}](Id& id) mutable {
+                  vocabHint = size_t{0}](IdRef id) mutable {
     if (lastId.getBits() == id.getBits()) {
       id = mappedId;
       return;

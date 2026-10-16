@@ -328,7 +328,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 6540731c0dd7a0e4335474a5e2df28fbbb07ab8b
+        GIT_TAG 5d1c09eef18bd122cadd9144870fd6bee53d4057
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -664,16 +664,6 @@ FetchContent_Declare(
         EXCLUDE_FROM_ALL
 )
 
-
-if (USE_PARALLEL)
-    include(FindOpenMP)
-    if (OPENMP_FOUND)
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-        add_compile_definitions(_PARALLEL_SORT)
-    endif ()
-endif ()
 
 OPTION(_NO_TIMING_TESTS "Disable timing tests on platforms where `sleep` is unreliable" OFF)
 if (_NO_TIMING_TESTS)
