@@ -97,11 +97,13 @@ Result::Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
   assertSortOrderIsRespected(this->idTableView(), sortedBy_);
 }
 
+// _____________________________________________________________________________
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
     : Result{std::move(idTable), toQlmSortedColumns(sortedBy),
              std::move(localVocab)} {}
 
+// _____________________________________________________________________________
 Result::Result(IdTable idTable, std::initializer_list<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
     : Result{std::move(idTable), toQlmSortedColumns(sortedBy),
@@ -122,11 +124,13 @@ Result::Result(IdTablePtr idTablePtr, qlm::vector<ColumnIndex> sortedBy,
   assertSortOrderIsRespected(this->idTableView(), sortedBy_);
 }
 
+// _____________________________________________________________________________
 Result::Result(IdTablePtr idTablePtr, std::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : Result{std::move(idTablePtr), toQlmSortedColumns(sortedBy),
              std::move(localVocab)} {}
 
+// _____________________________________________________________________________
 Result::Result(IdTablePtr idTablePtr,
                std::initializer_list<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
@@ -139,11 +143,13 @@ Result::Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
     : Result{std::move(idTable), std::move(sortedBy),
              SharedLocalVocabWrapper{std::move(localVocab)}} {}
 
+// _____________________________________________________________________________
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : Result{std::move(idTable), toQlmSortedColumns(sortedBy),
              std::move(localVocab)} {}
 
+// _____________________________________________________________________________
 Result::Result(IdTable idTable, std::initializer_list<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : Result{std::move(idTable), toQlmSortedColumns(sortedBy),
@@ -159,11 +165,13 @@ Result::Result(IdTableView<0> view, qlm::vector<ColumnIndex> sortedBy,
   assertSortOrderIsRespected(idTableView(), sortedBy_);
 }
 
+// _____________________________________________________________________________
 Result::Result(IdTableView<0> view, std::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : Result{std::move(view), toQlmSortedColumns(sortedBy),
              std::move(localVocab)} {}
 
+// _____________________________________________________________________________
 Result::Result(IdTableView<0> view, std::initializer_list<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : Result{std::move(view), toQlmSortedColumns(sortedBy),
@@ -174,10 +182,12 @@ Result::Result(IdTableVocabPair pair, qlm::vector<ColumnIndex> sortedBy)
     : Result{std::move(pair.idTable_), std::move(sortedBy),
              std::move(pair.localVocab_)} {}
 
+// _____________________________________________________________________________
 Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
     : Result{std::move(pair.idTable_), toQlmSortedColumns(sortedBy),
              std::move(pair.localVocab_)} {}
 
+// _____________________________________________________________________________
 Result::Result(IdTableVocabPair pair,
                std::initializer_list<ColumnIndex> sortedBy)
     : Result{std::move(pair.idTable_), toQlmSortedColumns(sortedBy),
@@ -188,9 +198,11 @@ Result::Result(IdTableVocabPair pair,
 Result::Result(Generator idTables, qlm::vector<ColumnIndex> sortedBy)
     : Result{LazyResult{std::move(idTables)}, std::move(sortedBy)} {}
 
+// _____________________________________________________________________________
 Result::Result(Generator idTables, std::initializer_list<ColumnIndex> sortedBy)
     : Result{LazyResult{std::move(idTables)}, toQlmSortedColumns(sortedBy)} {}
 
+// _____________________________________________________________________________
 Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
     : Result{LazyResult{std::move(idTables)}, toQlmSortedColumns(sortedBy)} {}
 #endif
@@ -214,9 +226,11 @@ Result::Result(LazyResult idTables, qlm::vector<ColumnIndex> sortedBy)
           })}},
       sortedBy_{std::move(sortedBy)} {}
 
+// _____________________________________________________________________________
 Result::Result(LazyResult idTables, std::initializer_list<ColumnIndex> sortedBy)
     : Result{std::move(idTables), toQlmSortedColumns(sortedBy)} {}
 
+// _____________________________________________________________________________
 Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
     : Result{std::move(idTables), toQlmSortedColumns(sortedBy)} {}
 

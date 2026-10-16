@@ -141,14 +141,7 @@ TEST_P(ResultSortTest, verifyAssertSortOrderIsRespectedSucceedsWhenSorted) {
   auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
 
   for (auto& generator : getAllSubSplits(idTable)) {
-    const auto& sortedBy = std::get<1>(GetParam());
-    // TODO<vrbommireddy>: Remove the explicit `LazyResult` and allocator-aware
-    // vector construction once `Result` and all operation sort orders are
-    // migrated to `qlm::vector`.
-    Result result{Result::LazyResult{std::move(generator)},
-                  qlm::vector<ColumnIndex>{
-                      sortedBy.begin(), sortedBy.end(),
-                      qlever::makeUnlimitedAllocator<ColumnIndex>()}};
+    Result result{std::move(generator), std::get<1>(GetParam())};
     if (std::get<0>(GetParam())) {
       EXPECT_NO_THROW(consumeGenerator(result.idTables()));
     } else {
@@ -187,7 +180,7 @@ TEST(Result,
       (Result{idTable.clone(), {3}, LocalVocab{}}), matcher, Exception);
 
   for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{Result::LazyResult{std::move(generator)}, {3}};
+    Result result{std::move(generator), {3}};
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(consumeGenerator(result.idTables()),
                                           matcher, Exception);
   }
@@ -196,7 +189,7 @@ TEST(Result,
       (Result{idTable.clone(), {2, 1337}, LocalVocab{}}), matcher, Exception);
 
   for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{Result::LazyResult{std::move(generator)}, {2, 1337}};
+    Result result{std::move(generator), {2, 1337}};
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(consumeGenerator(result.idTables()),
                                           matcher, Exception);
   }
@@ -401,7 +394,7 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
 
   // Test positive case
   for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{Result::LazyResult{std::move(generator)}, {0}};
+    Result result{std::move(generator), {0}};
     result.cacheDuringConsumption(
         [predictedSize = 0](const std::optional<IdTableVocabPair>& aggregator,
                             const IdTableVocabPair& newTable) mutable {
@@ -423,8 +416,7 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
   // Test negative case
   for (auto& generator : getAllSubSplits(idTable)) {
     uint32_t callCounter = 0;
-    Result result{Result::LazyResult{std::move(generator)},
-                  std::initializer_list<ColumnIndex>{}};
+    Result result{std::move(generator), {}};
     result.cacheDuringConsumption(
         [&](const std::optional<IdTableVocabPair>& aggregator,
             const IdTableVocabPair&) {
@@ -504,42 +496,18 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
     }
     {
       // Now test the limit offset application for shared results;
-      // TODO<vrbommireddy>: Remove this explicit `qlm::vector` once an
-      // `initializer_list` overload is not needed to disambiguate `{}`.
-      Result result2{std::make_shared<const IdTable>(idTable.clone()),
-                     qlm::vector<ColumnIndex>{
-                         qlever::makeUnlimitedAllocator<ColumnIndex>()},
-                     LocalVocab{}};
+      Result result2{
+          std::make_shared<const IdTable>(idTable.clone()), {}, LocalVocab{}};
       result2.applyLimitOffset(limitOffset, callback);
       EXPECT_EQ(callCounter, 2);
       EXPECT_EQ(result2.idTableView(), comparisonTable);
-    }
-    {
-      // Also cover the `std::vector<ColumnIndex>` overload of the
-      // `IdTablePtr` constructor.
-      std::vector<ColumnIndex> sortedByVec{};
-      Result result3{std::make_shared<const IdTable>(idTable.clone()),
-                     sortedByVec, LocalVocab{}};
-      result3.applyLimitOffset(limitOffset, callback);
-      EXPECT_EQ(callCounter, 3);
-      EXPECT_EQ(result3.idTableView(), comparisonTable);
-    }
-    {
-      // Also cover the `std::initializer_list<ColumnIndex>` overload of the
-      // `IdTablePtr` constructor.
-      Result result4{
-          std::make_shared<const IdTable>(idTable.clone()), {}, LocalVocab{}};
-      result4.applyLimitOffset(limitOffset, callback);
-      EXPECT_EQ(callCounter, 4);
-      EXPECT_EQ(result4.idTableView(), comparisonTable);
     }
   }
 
   for (auto& generator : getAllSubSplits(idTable)) {
     std::vector<size_t> colSizes{};
     uint32_t totalRows = 0;
-    Result result{Result::LazyResult{std::move(generator)},
-                  std::initializer_list<ColumnIndex>{}};
+    Result result{std::move(generator), {}};
     result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
                                              const IdTableView<0>& innerTable) {
       // NOTE: duration can't be tested here, processors are too fast
@@ -589,8 +557,7 @@ TEST(Result, verifyApplyLimitOffsetHandlesZeroLimitCorrectly) {
 
   for (auto& generator : getAllSubSplits(idTable)) {
     uint32_t callCounter = 0;
-    Result result{Result::LazyResult{std::move(generator)},
-                  std::initializer_list<ColumnIndex>{}};
+    Result result{std::move(generator), {}};
     result.applyLimitOffset(
         limitOffset, [&](std::chrono::microseconds, const IdTableView<0>&) {
           ++callCounter;
@@ -619,8 +586,7 @@ TEST(Result, verifyApplyLimitOffsetHandlesNonZeroOffsetWithoutLimitCorrectly) {
 
   for (auto& generator : getAllSubSplits(idTable)) {
     uint32_t callCounter = 0;
-    Result result{Result::LazyResult{std::move(generator)},
-                  std::initializer_list<ColumnIndex>{}};
+    Result result{std::move(generator), {}};
     result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
                                              const IdTableView<0>& innerTable) {
       for (const auto& row : innerTable) {
@@ -654,8 +620,7 @@ TEST(Result, verifyApplyLimitOffsetIsNoOpWhenLimitClauseIsRedundant) {
   }
 
   for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{Result::LazyResult{std::move(generator)},
-                  std::initializer_list<ColumnIndex>{}};
+    Result result{std::move(generator), {}};
     result.applyLimitOffset(
         limitOffset, [&](std::chrono::microseconds, const IdTableView<0>&) {
           ++callCounter;
@@ -686,8 +651,7 @@ TEST_P(ResultLimitTest,
   }
 
   for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{Result::LazyResult{std::move(generator)},
-                  std::initializer_list<ColumnIndex>{}};
+    Result result{std::move(generator), {}};
     result.assertThatLimitWasRespected(std::get<1>(GetParam()));
 
     if (std::get<0>(GetParam())) {
@@ -738,8 +702,7 @@ TEST_P(ResultDefinednessTest,
     }
   }
   for (auto& generator : getAllSubSplits(*std::get<1>(GetParam()))) {
-    Result result{Result::LazyResult{std::move(generator)},
-                  std::initializer_list<ColumnIndex>{}};
+    Result result{std::move(generator), {}};
     result.checkDefinedness(map);
     if (std::get<0>(GetParam())) {
       EXPECT_NO_THROW(consumeGenerator(result.idTables()));
@@ -760,10 +723,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 // _____________________________________________________________________________
 TEST(Result, assertionOnNullptrConstruction) {
-  EXPECT_ANY_THROW(Result(
-      Result::IdTablePtr(nullptr),
-      qlm::vector<ColumnIndex>{qlever::makeUnlimitedAllocator<ColumnIndex>()},
-      LocalVocab{}));
+  EXPECT_ANY_THROW(Result(Result::IdTablePtr(nullptr), {}, LocalVocab{}));
 }
 
 // _____________________________________________________________________________
@@ -837,9 +797,9 @@ TEST(Result, viewBackedSortOrderIsRespected) {
                                         ad_utility::Exception);
 }
 
-// _____________________________________________________________________________
-// Tests for the `std::vector` and `std::initializer_list` overloads of the
-// `Result` constructors, which convert to `qlm::vector<ColumnIndex>`.
+// Test the `std::vector` and `std::initializer_list` overloads of the `Result`
+// constructors for materialized results (they convert to a
+// `qlm::vector<ColumnIndex>`).
 TEST(Result, sortedByOverloadsForMaterializedResults) {
   using CI = std::vector<ColumnIndex>;
   auto makeTable = [] {
@@ -860,6 +820,10 @@ TEST(Result, sortedByOverloadsForMaterializedResults) {
   auto table = makeTable();
   expect(Result{table.asStaticView<0>(), CI{0}, LocalVocab{}}, {0});
   expect(Result{table.asStaticView<0>(), {0}, LocalVocab{}}, {0});
+  // `IdTablePtr` with `LocalVocab&&`.
+  auto ptr = std::make_shared<const IdTable>(makeTable());
+  expect(Result{ptr, CI{0}, LocalVocab{}}, {0});
+  expect(Result{ptr, {0}, LocalVocab{}}, {0});
   // `IdTableVocabPair`.
   expect(Result{IdTableVocabPair{makeTable(), LocalVocab{}}, CI{0}}, {0});
   expect(Result{IdTableVocabPair{makeTable(), LocalVocab{}}, {0}}, {0});
@@ -875,7 +839,8 @@ Result::Generator makeSingleChunkGenerator() {
 }  // namespace
 #endif
 
-// _____________________________________________________________________________
+// Test the `std::initializer_list` overloads of the `Result` constructors for
+// lazy results.
 TEST(Result, sortedByInitializerListOverloadsForLazyResults) {
   auto makeLazy = [] {
     std::vector<IdTableVocabPair> pairs;

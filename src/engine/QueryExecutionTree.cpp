@@ -208,7 +208,7 @@ void QueryExecutionTree::readFromMaterializedView() {
 std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::createSortedTreeAnyPermutation(
     std::shared_ptr<QueryExecutionTree> qet,
-    const qlm::vector<ColumnIndex>& sortColumns) {
+    ql::span<const ColumnIndex> sortColumns) {
   const auto& sortedOn = qet->resultSortedOn();
   ql::span relevantSortedCols{sortedOn.begin(),
                               std::min(sortedOn.size(), sortColumns.size())};
@@ -219,29 +219,20 @@ QueryExecutionTree::createSortedTreeAnyPermutation(
   return isSorted ? qet : createSortedTree(std::move(qet), sortColumns);
 }
 
-std::shared_ptr<QueryExecutionTree>
-QueryExecutionTree::createSortedTreeAnyPermutation(
-    std::shared_ptr<QueryExecutionTree> qet,
-    const std::vector<ColumnIndex>& sortColumns) {
-  // TODO<vrbommireddy>: Remove this conversion once all callers pass
-  // `qlm::vector` directly.
-  qlm::vector<ColumnIndex> converted{sortColumns.begin(), sortColumns.end(),
-                                     qet->getRootOperation()->allocator()};
-  return createSortedTreeAnyPermutation(std::move(qet), converted);
-}
-
+// _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree>
 QueryExecutionTree::createSortedTreeAnyPermutation(
     std::shared_ptr<QueryExecutionTree> qet,
     std::initializer_list<ColumnIndex> sortColumns) {
-  return createSortedTreeAnyPermutation(std::move(qet),
-                                        std::vector<ColumnIndex>{sortColumns});
+  return createSortedTreeAnyPermutation(
+      std::move(qet),
+      ql::span<const ColumnIndex>(sortColumns.begin(), sortColumns.size()));
 }
 
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
-    const qlm::vector<ColumnIndex>& sortColumns, bool explicitSort) {
+    ql::span<const ColumnIndex> sortColumns, bool explicitSort) {
   const auto& rootOperation = qet->getRootOperation();
   // TODO<vrbommireddy>: Remove this conversion once Operation accepts
   // allocator-aware sorted-column vectors.
@@ -286,14 +277,14 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
       std::move(sortColumnsStd), explicitSort);
 }
 
+// _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
-    const std::vector<ColumnIndex>& sortColumns, bool explicitSort) {
-  // TODO<vrbommireddy>: Remove this conversion once all callers pass
-  // `qlm::vector` directly.
-  qlm::vector<ColumnIndex> converted{sortColumns.begin(), sortColumns.end(),
-                                     qet->getRootOperation()->allocator()};
-  return createSortedTree(std::move(qet), converted, explicitSort);
+    std::initializer_list<ColumnIndex> sortColumns, bool explicitSort) {
+  return createSortedTree(
+      std::move(qet),
+      ql::span<const ColumnIndex>(sortColumns.begin(), sortColumns.size()),
+      explicitSort);
 }
 
 // ________________________________________________________________________________________________________________
@@ -449,13 +440,6 @@ QueryExecutionTree::createSortedTrees(
 
   return {createSortedTree(std::move(qetA), sortColumnsA),
           createSortedTree(std::move(qetB), sortColumnsB)};
-}
-
-std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
-    std::shared_ptr<QueryExecutionTree> qet,
-    std::initializer_list<ColumnIndex> sortColumns, bool explicitSort) {
-  return createSortedTree(std::move(qet), std::vector<ColumnIndex>{sortColumns},
-                          explicitSort);
 }
 
 // ____________________________________________________________________________

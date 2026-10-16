@@ -18,7 +18,6 @@
 #include "parser/ParsedQuery.h"
 #include "parser/data/Types.h"
 #include "util/AllocateShared.h"
-#include "util/ContainersWithAllocator.h"
 #include "util/HashSet.h"
 
 // Strongly typed enum for controlling whether stripped variables are explicitly
@@ -168,13 +167,11 @@ class QueryExecutionTree {
   // Create a `QueryExecutionTree` that produces exactly the same result as
   // `qet`, but sorted according to the `sortColumns`. If `qet` is already
   // sorted accordingly, or sorted by another permutation of the same columns,
-  // it is simply returned.
+  // it is simply returned. The second overload is for braced lists like
+  // `{0, 1}`, which do not convert to a `ql::span`.
   static std::shared_ptr<QueryExecutionTree> createSortedTreeAnyPermutation(
       std::shared_ptr<QueryExecutionTree> qet,
-      const qlm::vector<ColumnIndex>& sortColumns);
-  static std::shared_ptr<QueryExecutionTree> createSortedTreeAnyPermutation(
-      std::shared_ptr<QueryExecutionTree> qet,
-      const std::vector<ColumnIndex>& sortColumns);
+      ql::span<const ColumnIndex> sortColumns);
   static std::shared_ptr<QueryExecutionTree> createSortedTreeAnyPermutation(
       std::shared_ptr<QueryExecutionTree> qet,
       std::initializer_list<ColumnIndex> sortColumns);
@@ -185,13 +182,11 @@ class QueryExecutionTree {
   // a `Sort` operation has to be created, that `Sort` will not propagate a
   // `LIMIT`/`OFFSET` to its subtree. This is used for explicit `INTERNAL SORT
   // BY` clauses, where the complete sorted result is requested and the
-  // limit-pushdown optimization is undesired.
+  // limit-pushdown optimization is undesired. The second overload is for braced
+  // lists (see above).
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
-      const qlm::vector<ColumnIndex>& sortColumns, bool explicitSort = false);
-  static std::shared_ptr<QueryExecutionTree> createSortedTree(
-      std::shared_ptr<QueryExecutionTree> qet,
-      const std::vector<ColumnIndex>& sortColumns, bool explicitSort = false);
+      ql::span<const ColumnIndex> sortColumns, bool explicitSort = false);
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
       std::initializer_list<ColumnIndex> sortColumns,
