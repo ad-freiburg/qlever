@@ -179,8 +179,8 @@ inline size_t numBufferedOutputBlocksPerChunk(const MergePhaseConfig& config,
   const MemorySize inputMemory = config.numRuns_ * config.numColumns_ *
                                  config.inputBlockSizePerColumn_ *
                                  numChunksInFlight;
-  const MemorySize blockMemory =
-      MemorySize::bytes(outputBlockSize * config.numColumns_ * sizeof(Id));
+  const MemorySize blockMemory = MemorySize::bytes(
+      outputBlockSize * config.numColumns_ * BYTES_PER_ID_COLUMN_ENTRY);
   // A block size of zero is rejected by `OutputBlockSize` anyway, and a table
   // without columns has nothing to sort.
   AD_CORRECTNESS_CHECK(blockMemory.getBytes() > 0);
@@ -271,8 +271,8 @@ inline MergePhaseParameters computeMergePhaseParameters(
     const MemorySize perBlock =
         std::min((config.memoryLimit_ - inputMemory) / numOutputBlocks,
                  config.maxOutputBlockSize_);
-    return std::optional<size_t>{perBlock.getBytes() /
-                                 (sizeof(Id) * config.numColumns_)};
+    return std::optional<size_t>{
+        perBlock.getBytes() / (BYTES_PER_ID_COLUMN_ENTRY * config.numColumns_)};
   };
 
   if (config.outputBlockSizeOverride_.has_value()) {

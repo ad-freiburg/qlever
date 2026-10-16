@@ -1043,13 +1043,17 @@ static_assert(qlever::isProxy<IdTable::row_reference::Base>);
 static_assert(qlever::isProxy<IdTable::const_row_reference::Base>);
 static_assert(qlever::isProxy<IdTableView<0>::const_row_reference::Base>);
 
-// Type aliases for the columns of an `IdTable`: a mutable view, a read-only
-// view, and an owning column. Currently just aliases for `ql::span<Id>`,
-// `ql::span<const Id>` and `std::vector<Id>`; a later commit switches them to
-// storage-efficient split-column types, once `IdTable` stores the payload and
-// datatype of each `Id` in separate arrays.
+// Type aliases for the columns of an `IdTable` (a mutable view, a read-only
+// view, and an owning column) and for the references to a single element (a
+// mutable and a const one). Currently just aliases for `ql::span<Id>`,
+// `ql::span<const Id>`, `std::vector<Id>`, `Id&` and `const Id&`; a later
+// commit switches them to storage-efficient split-column types and proxies,
+// once `IdTable` stores the payload and datatype of each `Id` in separate
+// arrays.
 using IdColumnRef = ql::span<Id>;
 using ConstIdColumnRef = ql::span<const Id>;
 using IdColumn = std::vector<Id>;
+using IdRef = Id&;
+using ConstIdRef = const Id&;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H
