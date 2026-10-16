@@ -257,6 +257,19 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
   t.checkFromSecondaryVocab(secondaryIri, noGeoInfo);
 }
 
+// Build an index that contains the WKT literal `lit`, with the given vocabulary
+// type, and apply the `GeometryInfoValueGetter` for `RequestedInfo` to its id.
+template <typename RequestedInfo>
+std::optional<RequestedInfo> getGeoInfoFromIndex(
+    std::string_view lit, ad_utility::VocabularyType::Enum type) {
+  TestContextWithGivenTTl testContext{absl::StrCat("<s> <p> ", lit, " ."),
+                                      ad_utility::VocabularyType{type}};
+  VocabIndex idx;
+  AD_CORRECTNESS_CHECK(testContext.qec->getIndex().getVocab().getId(lit, &idx));
+  return sparqlExpression::detail::GeometryInfoValueGetter<RequestedInfo>{}(
+      ValueId::makeFromVocabIndex(idx), &testContext.context);
+}
+
 // Test that a WKT literal that only the lenient parsing mode accepts has no
 // geometry info, with and without a `GeoVocabulary` and as a plain literal.
 TEST(GeometryInfoValueGetterTest, LenientOnlyWkt) {
@@ -266,20 +279,14 @@ TEST(GeometryInfoValueGetterTest, LenientOnlyWkt) {
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   using Getter = sparqlExpression::detail::GeometryInfoValueGetter<
       ad_utility::GeometryInfo>;
-  auto getGeoInfo = [](ad_utility::VocabularyType::Enum type) {
-    TestContextWithGivenTTl testContext{absl::StrCat("<s> <p> ", lit, " ."),
-                                        ad_utility::VocabularyType{type}};
-    VocabIndex idx;
-    AD_CORRECTNESS_CHECK(
-        testContext.qec->getIndex().getVocab().getId(lit, &idx));
-    return Getter{}(ValueId::makeFromVocabIndex(idx), &testContext.context);
-  };
   // The literal is parsed strictly, both when building the `GeoVocabulary` and
   // when there is no precomputed geometry info, so the geometry is invalid.
   EXPECT_EQ(
-      getGeoInfo(ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
+      getGeoInfoFromIndex<ad_utility::GeometryInfo>(
+          lit, ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
       std::nullopt);
-  EXPECT_EQ(getGeoInfo(ad_utility::VocabularyType::Enum::OnDiskCompressed),
+  EXPECT_EQ(getGeoInfoFromIndex<ad_utility::GeometryInfo>(
+                lit, ad_utility::VocabularyType::Enum::OnDiskCompressed),
             std::nullopt);
   // The same holds for a literal that is not in the vocabulary.
   EXPECT_EQ(
@@ -290,28 +297,22 @@ TEST(GeometryInfoValueGetterTest, LenientOnlyWkt) {
       std::nullopt);
 }
 
-// _____________________________________________________________________________
+// Test that a valid WKT literal without precomputed geometry info gets its
+// geometry type from the string, with and without a `GeoVocabulary`.
 TEST(GeometryInfoValueGetterTest, ValidWktWithoutGeometryInfo) {
-  // This WKT literal is valid, but has no `GeometryInfo` (no bounding box or
-  // centroid). Its geometry type must not depend on the vocabulary type.
+  // An empty geometry, which has no bounding box or centroid and hence no
+  // `GeometryInfo` in the `GeoVocabulary`.
   static constexpr std::string_view lit =
       "\"LINESTRING EMPTY\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
-  auto getType = [](ad_utility::VocabularyType::Enum type) {
-    TestContextWithGivenTTl testContext{absl::StrCat("<s> <p> ", lit, " ."),
-                                        ad_utility::VocabularyType{type}};
-    VocabIndex idx;
-    AD_CORRECTNESS_CHECK(
-        testContext.qec->getIndex().getVocab().getId(lit, &idx));
-    return sparqlExpression::detail::GeometryInfoValueGetter<
-        ad_utility::GeometryType>{}(ValueId::makeFromVocabIndex(idx),
-                                    &testContext.context);
-  };
-  auto expected = ad_utility::GeometryInfo::getWktType(lit);
-  EXPECT_TRUE(expected.has_value());
-  EXPECT_EQ(getType(ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
-            expected);
-  EXPECT_EQ(getType(ad_utility::VocabularyType::Enum::OnDiskCompressed),
+  // The type is a `LineString` with both vocabulary types.
+  auto expected = ad_utility::GeometryType{2};
+  EXPECT_EQ(
+      getGeoInfoFromIndex<ad_utility::GeometryType>(
+          lit, ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
+      expected);
+  EXPECT_EQ(getGeoInfoFromIndex<ad_utility::GeometryType>(
+                lit, ad_utility::VocabularyType::Enum::OnDiskCompressed),
             expected);
 }
 

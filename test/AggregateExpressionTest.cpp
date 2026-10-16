@@ -307,7 +307,7 @@ TEST(AggregateExpression, CountStar) {
   t.table.push_back(t.table[0]);
 
   auto setToUndef = [](IdTable::row_reference row) {
-    for (Id& id : row) {
+    for (IdRef id : row) {
       id = Id::makeUndefined();
     }
   };

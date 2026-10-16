@@ -186,13 +186,11 @@ struct RuntimeParameters {
   // The default of `3` captures most of the speedup, with quickly diminishing
   // returns for more tasks.
   SizeT patternTrickNumTasksInFlight_{3, "pattern-trick-num-tasks-in-flight"};
-  // The number of threads for the parallel sort of intermediate results
-  // (`Sort` and `ORDER BY`, see `IdTableUtils`). Values below `1` are treated
-  // as `1`. Only effective when QLever was built with the CMake option
-  // `USE_PARALLEL`, which sets the macro `_PARALLEL_SORT`. The
-  // default of `3` captures most of the speedup, with quickly diminishing
-  // returns for more threads.
-  SizeT parallelSortNumThreads_{3, "parallel-sort-num-threads"};
+  // A hint for how many tasks of the in-memory sort of intermediate results
+  // (see `IdTableUtils::sort`) run at the same time. They run on the query's
+  // executor, so `max-num-threads-per-query` still bounds the threads. Must be
+  // strictly positive; `1` means that the sort runs sequentially.
+  SizeT sortNumTasksInFlight_{3, "sort-num-tasks-in-flight"};
   // The maximum size of the `prefilterBox` for
   // `LibspatialjoinAlgorithm::parse()`.
   SizeT spatialJoinPrefilterMaxSize_{2'500, "spatial-join-prefilter-max-size"};

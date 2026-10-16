@@ -504,7 +504,7 @@ void GroupByImpl::processGroup(
   sparqlExpression::ExpressionResult expressionResult =
       aggregate._expression.getPimpl()->evaluate(&evaluationContext);
 
-  auto& resultEntry = result->operator()(resultRow, resultColumn);
+  IdRef resultEntry = result->operator()(resultRow, resultColumn);
 
   // Copy the result to the evaluation context in case one of the following
   // aliases has to reuse it.
