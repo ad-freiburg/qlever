@@ -192,9 +192,30 @@ constexpr void adCorrectnessCheckImpl(
   AD_CHECK_IMPL(condition, message, location, additionalMessages...);
 }
 }  // namespace ad_utility::detail
-#define AD_CORRECTNESS_CHECK(condition, ...)                 \
-  ad_utility::detail::adCorrectnessCheckImpl(                \
-      static_cast<bool>(condition), AD_STRINGIFY(condition), \
+
+// Evaluate the condition of an `AD_CORRECTNESS_CHECK`. By default, this is a
+// plain conversion to `bool`. In the coverage build
+// (`QLEVER_COVERAGE_FRIENDLY_CHECKS` is set via the CMake option
+// `COVERAGE_FRIENDLY_CHECKS`), the condition is instead evaluated inside a
+// lambda that is excluded from the coverage instrumentation. Otherwise,
+// short-circuit operators (`&&`, `||`) inside the condition would produce
+// branch regions at each call site, which can never be taken because the
+// condition of a correctness check never fails (see above).
+// NOTE: Only the coverage build sets this define, so this pattern only has to
+// work with the compiler of that build (Clang, C++20).
+#ifdef QLEVER_COVERAGE_FRIENDLY_CHECKS
+#define AD_CORRECTNESS_CHECK_CONDITION(condition)         \
+  [&]() __attribute__((no_profile_instrument_function)) { \
+    return static_cast<bool>(condition);                  \
+  }                                                       \
+  ()
+#else
+#define AD_CORRECTNESS_CHECK_CONDITION(condition) static_cast<bool>(condition)
+#endif
+
+#define AD_CORRECTNESS_CHECK(condition, ...)                              \
+  ad_utility::detail::adCorrectnessCheckImpl(                             \
+      AD_CORRECTNESS_CHECK_CONDITION(condition), AD_STRINGIFY(condition), \
       AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
 
 // This check is similar to `AD_CORRECTNESS_CHECK` (see above), but the check is
