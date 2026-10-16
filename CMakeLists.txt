@@ -899,6 +899,16 @@ if (BRANCHLESS_LOGGING)
     add_compile_definitions(QLEVER_BRANCHLESS_LOGGING)
 endif ()
 
+# The conditions of the `AD_CORRECTNESS_CHECK` macro (see `src/util/Exception.h`)
+# are invariants that never fail, so branches inside these conditions (e.g.
+# from `&&` or `||`) can never be fully covered by unit tests. With this option,
+# the condition is evaluated inside a lambda that is excluded from the coverage
+# instrumentation. It is used for the coverage build and requires Clang.
+option(COVERAGE_FRIENDLY_CHECKS "Evaluate the conditions of `AD_CORRECTNESS_CHECK` in a way that is friendlier to coverage measurements" OFF)
+if (COVERAGE_FRIENDLY_CHECKS)
+    add_compile_definitions(QLEVER_COVERAGE_FRIENDLY_CHECKS)
+endif ()
+
 ##################################################
 # Warnings about incorrect combination of CMake variables
 

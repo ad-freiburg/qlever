@@ -110,6 +110,38 @@ TEST(Exception, AD_CORRECTNESS_CHECK) {
   AD_EXPECT_THROW_WITH_MESSAGE(failCheck(), makeMatcher("v.empty()"));
 }
 
+// Conditions with short-circuit operators that refer to captured variables and
+// to `this`. In the coverage build (`QLEVER_COVERAGE_FRIENDLY_CHECKS`) the
+// condition is evaluated inside a lambda, see `util/Exception.h`, so this test
+// pins down that such conditions still work in all contexts.
+namespace {
+struct StructWithCheck {
+  int a_ = 1;
+  void check() const { AD_CORRECTNESS_CHECK(a_ == 1 || a_ == 2); }
+  // Also inside a `constexpr` member function, where the condition uses `this`.
+  constexpr int checkWithThis(int x) const {
+    AD_CORRECTNESS_CHECK(x > 0 && a_ > 0, "x was ", x);
+    return x + a_;
+  }
+};
+static_assert(StructWithCheck{}.checkWithThis(1) == 2);
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(Exception, correctnessCheckWithShortCircuitCondition) {
+  std::vector<int> v{1, 2};
+  ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(!v.empty() && v.size() == 2));
+  ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(v.empty() || v.front() == 1));
+  // Structured bindings can only be captured by lambdas since C++20.
+  auto [x, y] = std::pair{1, 2};
+  ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(x == 1 && y == 2));
+  ASSERT_NO_THROW(StructWithCheck{}.check());
+  auto failCheck = [&v] { AD_CORRECTNESS_CHECK(v.empty() || v.size() > 5); };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      failCheck(), makeMatcher("Assertion `v.empty() || v.size() > 5` failed"));
+}
+
+// _____________________________________________________________________________
 TEST(Exception, correctnessCheckWithMessage) {
   ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(3 < 5, "some message"));
   ASSERT_NO_THROW(
