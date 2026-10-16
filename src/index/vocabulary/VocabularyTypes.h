@@ -451,6 +451,18 @@ struct WordBlock {
     payload_.append(payload);
   }
 
+  // Append a word whose payload (`payloadSize_` bytes) is not computed yet,
+  // and return the bytes of its payload inside this block, for the caller to
+  // compute it into (see `BlockWriterBase::precomputePayload`). The returned
+  // span is only valid until the next `push` or `pushWithPayloadSlot`.
+  ql::span<char> pushWithPayloadSlot(std::string_view word, bool isExternal) {
+    words_.push_back(word);
+    isExternal_.push_back(isExternal);
+    size_t offset = payload_.size();
+    payload_.resize(offset + payloadSize_);
+    return {payload_.data() + offset, payloadSize_};
+  }
+
   // The payload of the `i`-th word.
   std::string_view payload(size_t i) const {
     return std::string_view{payload_}.substr(i * payloadSize_, payloadSize_);
