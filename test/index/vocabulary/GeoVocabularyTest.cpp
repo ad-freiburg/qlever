@@ -2,8 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <absl/base/casts.h>
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
+
+#include <algorithm>
+#include <cstring>
+#include <fstream>
 
 #include "../../GeometryInfoTestHelpers.h"
 #include "VocabularyTestHelpers.h"
@@ -239,7 +244,8 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   ASSERT_FALSE(nonGeoVocab.getGeoInfo(VocabIndex::make(0)).has_value());
 }
 
-// _____________________________________________________________________________
+// Test that a geoinfo file whose version is outside the loadable range cannot
+// be opened.
 TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
   const VocabularyType geoSplitVocabType{
       VocabularyType::Enum::OnDiskCompressedGeoSplit};
@@ -253,21 +259,87 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
   (*wordCallback)("\"test\"@en", true);
   wordCallback->finish();
 
-  // Overwrite the geoinfo file with an invalid header
+  // Overwrite the geoinfo file with an invalid header, too old or too new.
   const std::string geometryFilename = absl::StrCat(filename, ".geometry");
-  ad_utility::File geoInfoFile{
-      AnyGeoVocab::getGeoInfoFilename(geometryFilename), "w"};
-  uint64_t fakeHeader = 0;
-  geoInfoFile.write(&fakeHeader, 8);
-  geoInfoFile.close();
+  for (uint64_t fakeHeader :
+       {uint64_t{0}, MIN_LOADABLE_GEOMETRY_INFO_VERSION - 1,
+        GEOMETRY_INFO_VERSION + 1}) {
+    ad_utility::File geoInfoFile{
+        AnyGeoVocab::getGeoInfoFilename(geometryFilename), "w"};
+    geoInfoFile.write(&fakeHeader, 8);
+    geoInfoFile.close();
 
-  // Opening the vocabulary should throw an exception
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      vocabulary.readFromFile(filename),
-      ::testing::HasSubstr(
-          absl::StrCat("The geometry info version of ",
-                       AnyGeoVocab::getGeoInfoFilename(geometryFilename),
-                       " is 0, which is incompatible")));
+    // Opening the vocabulary should throw an exception
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        vocabulary.readFromFile(filename),
+        ::testing::HasSubstr(
+            absl::StrCat("The geometry info version of ",
+                         AnyGeoVocab::getGeoInfoFilename(geometryFilename),
+                         " is ", fakeHeader, ", which is incompatible")));
+  }
+}
+
+// Test that a geoinfo file of version 5, whose padding bytes may hold arbitrary
+// content, is read with the reserved fields zeroed.
+TEST(GeoVocabularyTest, ReadVersion5) {
+  // Write a `GeoVocabulary` of the current version.
+  const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  auto cleanup = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename);
+  std::vector<std::string> literals{
+      "\"LINESTRING(1 1, 2 2, 3 3)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"Invalid\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+  };
+  ql::ranges::sort(literals);
+  {
+    AnyGeoVocab writerVocab;
+    auto ww = writerVocab.makeDiskWriterPtr(filename);
+    for (const auto& lit : literals) {
+      (*ww)(lit, true);
+    }
+    ww->finish();
+  }
+
+  // Turn the geoinfo file into one of version 5: the version 6 has the same
+  // record size, but in version 5, the bytes `[28, 32)` of a valid record could
+  // contain arbitrary content.
+  const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
+  std::string contents;
+  {
+    std::ifstream in{geoInfoFilename, std::ios::binary};
+    contents.assign(std::istreambuf_iterator<char>{in}, {});
+  }
+  constexpr size_t recordSize = 48;
+  static_assert(geometryInfoSize(5) == recordSize);
+  ASSERT_EQ(contents.size(), sizeof(uint64_t) + literals.size() * recordSize);
+  const uint64_t version5 = 5;
+  std::memcpy(contents.data(), &version5, sizeof(version5));
+  for (size_t i = 0; i < literals.size(); ++i) {
+    auto record = contents.begin() + sizeof(uint64_t) + i * recordSize;
+    if (std::any_of(record, record + recordSize,
+                    [](char c) { return c != 0; })) {
+      std::fill(record + 28, record + 32, '\xab');
+    }
+  }
+  {
+    std::ofstream out{geoInfoFilename, std::ios::binary | std::ios::trunc};
+    out << contents;
+  }
+
+  // Read the version 5 file. The reserved fields must be zero.
+  AnyGeoVocab geoVocab;
+  geoVocab.open(filename);
+  using Bytes = std::array<uint8_t, sizeof(GeometryInfo)>;
+  for (size_t i = 0; i < literals.size(); ++i) {
+    auto expected = GeometryInfo::fromWktLiteral(literals[i]);
+    auto actual = geoVocab.getGeoInfo(i);
+    ASSERT_EQ(actual.has_value(), expected.has_value());
+    if (expected.has_value()) {
+      EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()),
+                absl::bit_cast<Bytes>(expected.value()));
+    }
+  }
 }
 
 // _____________________________________________________________________________

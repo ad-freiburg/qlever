@@ -716,6 +716,23 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
                     sizeof(MetricLength) + sizeof(MetricArea));
 }
 
+// Test that `fromSerialized` rejects a version outside the loadable range and a
+// record of the wrong size.
+TEST(GeometryInfoTest, FromSerializedInvalidInput) {
+  std::array<uint8_t, sizeof(GeometryInfo)> bytes{};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo::fromSerialized(bytes,
+                                   MIN_LOADABLE_GEOMETRY_INFO_VERSION - 1),
+      ::testing::HasSubstr("isLoadableGeometryInfoVersion"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo::fromSerialized(bytes, GEOMETRY_INFO_VERSION + 1),
+      ::testing::HasSubstr("isLoadableGeometryInfoVersion"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo::fromSerialized(ql::span<const uint8_t>{bytes}.first(1),
+                                   GEOMETRY_INFO_VERSION),
+      ::testing::HasSubstr("geometryInfoSize"));
+}
+
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
   using namespace ad_utility::detail;
