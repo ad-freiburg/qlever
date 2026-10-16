@@ -150,7 +150,7 @@ class ExportQueryExecutionTrees {
   static auto constructQueryResultToStringTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
-      LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
+      LimitOffsetClause limitAndOffset, const Result& result,
       uint64_t& resultSize, CancellationHandle cancellationHandle);
 
   // Helper function that generates the result of a CONSTRUCT query as a
@@ -196,6 +196,8 @@ class ExportQueryExecutionTrees {
       uint64_t& resutSizeTotal, uint64_t resultSizeMultiplicator = 1);
 
  private:
+  FRIEND_TEST(ExportQueryExecutionTrees,
+              constructQueryResultToQLeverJSONKeepsResultAlive);
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator);
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator);
   FRIEND_TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable);
