@@ -52,6 +52,9 @@ NARY_EXPRESSION(
     SimplifyGeometryExpression, 2,
     FV<ad_utility::WktSimplify, GeoPointOrWktValueGetter, NumericValueGetter>);
 
+NARY_EXPRESSION(AsGeoJsonExpression, 1,
+                FV<ad_utility::WktAsGeoJson, GeoPointOrWktValueGetter>);
+
 template <SpatialJoinType::Enum Relation>
 NARY_EXPRESSION(
     GeoRelationExpression, 2,
@@ -118,6 +121,11 @@ SparqlExpression::Ptr makeSimplifyGeometryExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2) {
   return std::make_unique<SimplifyGeometryExpression>(std::move(child1),
                                                       std::move(child2));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeAsGeoJsonExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<AsGeoJsonExpression>(std::move(child));
 }
 
 // _____________________________________________________________________________

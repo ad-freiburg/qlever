@@ -17,6 +17,7 @@
 #include <ctre-unicode.hpp>
 #include <utility>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "util/Log.h"
