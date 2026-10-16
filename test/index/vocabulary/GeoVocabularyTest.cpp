@@ -292,7 +292,7 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
 }
 
 // Test that a geoinfo file of version 5, whose padding bytes may hold arbitrary
-// content, is read with the reserved fields zeroed.
+// content, is read with the fields in these bytes at their default values.
 TEST(GeoVocabularyTest, ReadVersion5) {
   // Write a `GeoVocabulary` of the current version.
   const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
@@ -339,7 +339,8 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     out << contents;
   }
 
-  // Read the version 5 file. The reserved fields must be zero.
+  // Read the version 5 file. The fields in the bytes `[28, 32)` must have
+  // their default values.
   AnyGeoVocab geoVocab;
   geoVocab.open(filename);
   using Bytes = std::array<uint8_t, sizeof(GeometryInfo)>;
