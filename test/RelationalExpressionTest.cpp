@@ -932,6 +932,38 @@ TEST(RelationalExpression, NegatedComparisonWithSortedVariableAndUndef) {
                   ::testing::ElementsAre(U, U, U)));
 }
 
+// Encoded IRIs are ordered by their encoding, which differs from their semantic
+// order (see issue #2448), so only `EQ` and `NE` may be evaluated using binary
+// search.
+TEST(RelationalExpression, EncodedValsWithSortedVariable) {
+  auto E = [](uint64_t i) { return Id::makeFromEncodedVal(i); };
+  TestContext ctx;
+  ctx.table.clear();
+  ctx.table.setNumColumns(1);
+  for (auto i : {1, 2, 3}) {
+    ctx.table.push_back({E(i)});
+  }
+  ctx.context._inputTable = ctx.table.asStaticView<0>();
+  ctx.context._beginIndex = 0;
+  ctx.context._endIndex = ctx.table.size();
+  Variable var{"?encoded"};
+  ctx.varToColMap.clear();
+  ctx.varToColMap[var] = makeAlwaysDefinedColumn(0);
+  ctx.context._columnsByWhichResultIsSorted = {0};
+
+  using ad_utility::SetOfIntervals;
+  EXPECT_THAT(makeExpression<EQ>(var, E(2)).evaluate(&ctx.context),
+              ::testing::VariantWith<SetOfIntervals>(
+                  ::testing::Eq(SetOfIntervals{{{1, 2}}, 3})));
+  EXPECT_THAT(makeExpression<NE>(var, E(2)).evaluate(&ctx.context),
+              ::testing::VariantWith<SetOfIntervals>(
+                  ::testing::Eq(SetOfIntervals{{{0, 1}, {2, 3}}, 3})));
+  auto B = ad_utility::testing::BoolId;
+  EXPECT_THAT(makeExpression<LT>(var, E(2)).evaluate(&ctx.context),
+              ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                  ::testing::ElementsAre(B(true), B(false), B(false))));
+}
+
 TEST(RelationalExpression, InExpressionSimpleMemberVariables) {
   auto makeInt = [](int i) {
     return std::make_unique<sparqlExpression::IdExpression>(
