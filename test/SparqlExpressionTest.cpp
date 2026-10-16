@@ -1897,6 +1897,10 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                              geoLit("BLABLIBLU(1 1, 2 2)")},
       IdOrLocalVocabEntryVec{U, U, sfGeoType("Point"), sfGeoType("LineString"),
                              sfGeoType("Polygon"), U});
+
+  auto crsType = [](std::string_view type) {
+    return lit(type, "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+  };
   checkCrsType(
       IdOrLocalVocabEntryVec{U, D(0.0), v,
                              geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
@@ -1904,7 +1908,11 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                              geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
                                     "4326> POLYGON((2 4, 4 4, 4 2, 2 2))"),
                              geoLit("BLABLIBLU(1 1, 2 2)")},
-      IdOrLocalVocabEntryVec{U, U, 1, 3, 2, U});
+      IdOrLocalVocabEntryVec{
+          U, U, crsType("http://www.opengis.net/def/crs/OGC/1.3/CRS84"),
+          crsType("http://www.opengis.net/def/crs/EPSG/0/3857"),
+          crsType("http://www.opengis.net/def/crs/EPSG/0/4326"),
+          crsType("http://www.opengis.net/def/crs/OGC/1.3/CRS84")});
 
   // Bounding coordinate expressions
   using enum ad_utility::BoundingCoordinate;
