@@ -72,6 +72,14 @@ std::vector<std::tuple<std::string, bool, uint64_t>> tuplesOfBlock(
   }
   return result;
 }
+
+// The occurrences of a `word` of a merged `block` as a vector (gtest cannot
+// print the `ql::span` in C++17 mode, where it is a `::ranges::span`).
+std::vector<MergedBlock::Occurrence> occurrencesOf(const MergedBlock& block,
+                                                   const MergedWord& word) {
+  auto occurrences = block.occurrences(word);
+  return {occurrences.begin(), occurrences.end()};
+}
 }  // namespace
 
 // The runs input over partial vocabulary files fulfills the input policy of
@@ -157,7 +165,6 @@ TEST(PartialVocabularyFile, blockIndexAndBlocks) {
 // Test that `appendToBlock` folds a word that is equal to the last word of the
 // block into that word: the occurrence is recorded, the external flag is
 // combined, and a different word starts a new entry.
-// _____________________________________________________________________________
 TEST(PartialVocabularyFile, appendToBlockFoldsDuplicates) {
   auto [filenames, cleanup] =
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
@@ -180,13 +187,13 @@ TEST(PartialVocabularyFile, appendToBlockFoldsDuplicates) {
   ASSERT_EQ(block.size(), 2u);
   EXPECT_EQ(block[0].iriOrLiteral(), "\"a\"");
   EXPECT_TRUE(block[0].isExternal());
-  EXPECT_THAT(block.occurrences(block[0]),
+  EXPECT_THAT(occurrencesOf(block, block[0]),
               ::testing::ElementsAre(std::pair{0u, uint64_t{3}},
                                      std::pair{2u, uint64_t{5}},
                                      std::pair{4u, uint64_t{1}}));
   EXPECT_EQ(block[1].iriOrLiteral(), "\"b\"");
   EXPECT_FALSE(block[1].isExternal());
-  EXPECT_THAT(block.occurrences(block[1]),
+  EXPECT_THAT(occurrencesOf(block, block[1]),
               ::testing::ElementsAre(std::pair{1u, uint64_t{7}}));
   // The memory of an appended word covers the merged word, its text and one
   // occurrence.
@@ -321,9 +328,9 @@ TEST(PartialVocabularyFile, mergedBlockAccessorsAndBlockWeight) {
   EXPECT_EQ(constBlock[2].iriOrLiteral(), "\"c\"");
   EXPECT_EQ(block.front().iriOrLiteral(), "\"a\"");
   EXPECT_EQ(constBlock.back().iriOrLiteral(), "\"c\"");
-  EXPECT_THAT(constBlock.occurrences(constBlock.front()),
+  EXPECT_THAT(occurrencesOf(constBlock, constBlock.front()),
               ::testing::ElementsAre(std::pair{0u, uint64_t{7}}));
-  EXPECT_THAT(block.occurrences(block.back()),
+  EXPECT_THAT(occurrencesOf(block, block.back()),
               ::testing::ElementsAre(std::pair{2u, uint64_t{9}}));
 
   // The external flag can be changed in place.

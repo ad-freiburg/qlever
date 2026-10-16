@@ -90,11 +90,12 @@ class CompactVectorOfStrings {
   // Create a `CompactVectorOfStrings` directly from its storage layout: the
   // concatenated `data` of all the elements and the `offsets` of the elements
   // in `data` (one more than the number of elements, the last offset is the
-  // size of `data`; see `offsetsSpan()`). This is for callers that produce the
-  // elements in this layout anyway (for example with a counting sort), and
-  // thus can avoid building the elements twice. Throw if the `offsets` are not
-  // a valid layout for the `data`: they have to start at `0`, be
-  // non-decreasing and end at `data.size()`.
+  // size of `data`; see `offsetsSpan()`). Throw if the `offsets` are not a
+  // valid layout for the `data` (start at `0`, non-decreasing, end at
+  // `data.size()`).
+  //
+  // NOTE: This is for callers that produce the elements in this layout anyway
+  // (for example with a counting sort), which thus avoid building them twice.
   static CompactVectorOfStrings fromDataAndOffsets(
       std::vector<data_type> data, std::vector<offset_type> offsets) {
     AD_CONTRACT_CHECK(!offsets.empty() && offsets.front() == 0 &&

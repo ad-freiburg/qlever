@@ -64,13 +64,16 @@ SegmentIdMapEntry entry(uint32_t partial, uint32_t localIndex,
 }  // namespace
 
 // Test the packing of a sub-vocabulary and an index into a segment-local ID.
-// _____________________________________________________________________________
 TEST(Segment, segmentLocalId) {
+  // The ID of a word: the sub-vocabulary index in the upper bits, the index in
+  // the lower bits.
   auto id = S(3, 12345);
   EXPECT_EQ(id.subVocabIndex(), 3u);
   EXPECT_EQ(id.index(), 12345u);
   EXPECT_FALSE(id.isBlankNode());
   EXPECT_EQ(id.bits(), (uint64_t{3} << SegmentLocalId::numIndexBits) | 12345u);
+
+  // The ID of a blank node: the pseudo sub-vocabulary with all upper bits set.
   auto blank = B(7);
   EXPECT_EQ(blank.subVocabIndex(), blankNodeSubVocabularyIndex);
   EXPECT_EQ(blank.index(), 7u);
@@ -80,11 +83,14 @@ TEST(Segment, segmentLocalId) {
                               7u);
   EXPECT_EQ(blank, B(7));
   EXPECT_NE(blank, id);
+
   // The index has to fit into its bits, and a word is never in the pseudo
   // sub-vocabulary of the blank nodes.
   EXPECT_ANY_THROW(S(0, SegmentLocalId::maxIndex + 1));
   EXPECT_ANY_THROW(B(SegmentLocalId::maxIndex + 1));
   EXPECT_ANY_THROW(S(blankNodeSubVocabularyIndex, 0));
+
+  // The printer for failed tests.
   std::stringstream str;
   str << id;
   EXPECT_EQ(str.str(), "SegmentLocalId(3, 12345)");
@@ -92,7 +98,6 @@ TEST(Segment, segmentLocalId) {
 
 // Test that the ID converter turns segment-local IDs into global indices and
 // IDs.
-// _____________________________________________________________________________
 TEST(Segment, idConverterForSegment) {
   auto converter =
       makeConverter({{0, 100}, {1, 20}, {blankNodeSubVocabularyIndex, 5}});
@@ -110,7 +115,6 @@ TEST(Segment, idConverterForSegment) {
 // per sub-vocabulary, the external flags, the blank node count, the metadata
 // with segment-local IDs, the ID map entries grouped by partial vocabulary,
 // and the ID converter of the next segment.
-// _____________________________________________________________________________
 TEST(Segment, buildSegment) {
   std::string wkt =
       "\"POINT(1 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -175,7 +179,6 @@ TEST(Segment, buildSegment) {
 // Test that the IRIs that match one of the `blankNodeIriRegexes` become blank
 // nodes, and that a violated order is detected (if the expensive checks are
 // enabled).
-// _____________________________________________________________________________
 TEST(Segment, blankNodeRegexesAndOrder) {
   auto blocks = makeMergedBlocks(
       {{{"<http://ex/bn_1>", false, 0, 0}, {"<http://ex/x>", false, 0, 1}}});

@@ -94,7 +94,6 @@ TYPED_TEST(CompactVectorOfStringsFixture, Build) {
 
 // Test that `fromDataAndOffsets` yields the same elements as `build`, and that
 // it rejects offsets that are not a valid layout for the data.
-// _____________________________________________________________________________
 TYPED_TEST(CompactVectorOfStringsFixture, FromDataAndOffsets) {
   const auto& input = TestFixture::input_;
   using CompactVector = typename TestFixture::CompactVector;

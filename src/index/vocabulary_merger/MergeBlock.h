@@ -20,7 +20,6 @@
 #include <vector>
 
 #include "backports/span.h"
-#include "index/ConstantsIndexBuilding.h"
 #include "util/Exception.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
@@ -355,14 +354,16 @@ class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
   }
 
   // Add a `word` that the merge yields (the `word` itself lives in an
-  // `InputBlock`). A `word` that is equal to the last word of this block (the
-  // same word from another partial vocabulary; the merge yields equal words
-  // consecutively) is not appended, but its occurrence is added to that last
-  // word, whose external flag becomes the OR of the two. Otherwise, the `word`
-  // is copied into the buffers of this block and becomes a new `MergedWord`
-  // with this single occurrence. This removes most of the duplicates on the
-  // threads of the merge, so that the consumer of the merged blocks only sees
-  // the duplicates at the block boundaries.
+  // `InputBlock`). A `word` that is equal to the last word of this block is
+  // not appended, but added as a further occurrence of that word, whose
+  // external flag becomes the OR of the two. Otherwise, the `word` is copied
+  // into the buffers of this block and becomes a new `MergedWord` with this
+  // single occurrence.
+  //
+  // NOTE: An equal word is the same word from another partial vocabulary, and
+  // the merge yields equal words consecutively. The folding thus removes most
+  // of the duplicates on the threads of the merge, and the consumer of the
+  // merged blocks only sees the duplicates at the block boundaries.
   void addWord(const InputWord& word) {
     if (!empty() && back().iriOrLiteral() == word.iriOrLiteral()) {
       MergedWord& last = back();
