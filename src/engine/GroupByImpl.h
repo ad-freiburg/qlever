@@ -255,6 +255,12 @@ class GroupByImpl : public Operation {
   // (implicit) group.
   std::optional<IdTable> computeCountStar() const;
 
+  // Helper for `computeCountStar`: If the subtree is a `Filter` (possibly below
+  // a `StripColumns`), return the number of rows of the `Filter`'s subtree for
+  // which the filter expression is true, without materializing the result of
+  // the `Filter`. The `Filter` is then shown as optimized out.
+  std::optional<size_t> computeCountStarOfFilter() const;
+
   // Stores information required for substitution of an expression in an
   // expression tree.
   struct ParentAndChildIndex {

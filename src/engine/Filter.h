@@ -47,6 +47,10 @@ class Filter : public Operation {
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; }
 
+  const sparqlExpression::SparqlExpressionPimpl& getExpression() const {
+    return _expression;
+  }
+
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {{_subtree.get()}, allocator()};

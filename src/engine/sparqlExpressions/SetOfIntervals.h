@@ -37,6 +37,15 @@ struct SetOfIntervals {
   // Return the `size` of the range [0, size) this set refers to.
   size_t size() const { return size_; }
 
+  // Return the number of elements that are contained in the set.
+  size_t numElements() const {
+    size_t result = 0;
+    for (const auto& [begin, end] : _intervals) {
+      result += end - begin;
+    }
+    return result;
+  }
+
   // _________________________________________________________________________
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(SetOfIntervals, _intervals, size_)
 

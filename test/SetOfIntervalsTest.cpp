@@ -216,3 +216,10 @@ TEST(SetOfIntervals, toIdVector) {
 
   ASSERT_EQ(result, expected);
 }
+
+// _____________________________________________________________________________
+TEST(SetOfIntervals, numElements) {
+  EXPECT_EQ(SetOfIntervals({}, 10).numElements(), 0);
+  EXPECT_EQ(SetOfIntervals({{0, 10}}, 10).numElements(), 10);
+  EXPECT_EQ(SetOfIntervals({{1, 3}, {5, 6}}, 10).numElements(), 3);
+}

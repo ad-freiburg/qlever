@@ -10,6 +10,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
@@ -18,6 +19,7 @@
 #include "engine/NamedResultCache.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -28,6 +30,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
@@ -3729,4 +3732,199 @@ TEST(GroupBy, HashMapOptimizationWithoutGroupByColumns) {
   EXPECT_EQ(compute(emptyInput(), {unbound}).numRows(), 0);
   EXPECT_EQ(compute(nonEmptyInput(), {unbound}),
             makeIdTableFromVector({{I(3)}}));
+}
+
+namespace {
+// Helpers for the tests of `COUNT(*)` over a `FILTER`.
+
+// A subtree with the single column `?x` that consists of the `idTables`, sorted
+// on `?x` or not, and lazy or fully materialized.
+std::shared_ptr<QueryExecutionTree> makeCountStarInput(
+    QueryExecutionContext* qec, std::vector<IdTable> idTables, bool sorted,
+    bool lazy) {
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(idTables),
+      std::vector<std::optional<Variable>>{Variable{"?x"}}, false,
+      sorted ? std::vector<ColumnIndex>{0} : std::vector<ColumnIndex>{});
+  dynamic_cast<ValuesForTesting&>(*values->getRootOperation())
+      .forceFullyMaterialized() = !lazy;
+  return values;
+}
+
+// The input for most of the tests: the values 1, 2, 3, 3, 4, 4, 5, 6, 7 for
+// `?x`, split into three `IdTable`s.
+std::shared_ptr<QueryExecutionTree> makeDefaultCountStarInput(
+    QueryExecutionContext* qec, bool sorted, bool lazy) {
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIdTableFromVector({{1}, {2}, {3}, {3}, {4}}, I));
+  idTables.push_back(makeIdTableFromVector({{4}, {5}}, I));
+  idTables.push_back(makeIdTableFromVector({{6}, {7}}, I));
+  return makeCountStarInput(qec, std::move(idTables), sorted, lazy);
+}
+
+// The expression `?x < value`.
+SparqlExpression::Ptr makeXLessThan(Id value) {
+  return std::make_unique<LessThanExpression>(
+      std::array<SparqlExpression::Ptr, 2>{
+          std::make_unique<VariableExpression>(Variable{"?x"}),
+          std::make_unique<IdExpression>(value)});
+}
+
+// The expression `?x`, which is evaluated to its effective boolean value.
+SparqlExpression::Ptr makeX() {
+  return std::make_unique<VariableExpression>(Variable{"?x"});
+}
+
+// A `Filter` with the `expression` on top of the `subtree`.
+std::shared_ptr<QueryExecutionTree> makeFilterTree(
+    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
+    SparqlExpression::Ptr expression) {
+  return ad_utility::makeExecutionTree<Filter>(
+      qec, std::move(subtree),
+      SparqlExpressionPimpl{std::move(expression), "filter expression"});
+}
+
+// The aliases `(COUNT(*) AS ?count0) ... (COUNT(*) AS ?countN)`, where
+// `N + 1 == numCounts`.
+std::vector<Alias> makeCountStarAliases(size_t numCounts = 1) {
+  std::vector<Alias> aliases;
+  for (size_t i = 0; i < numCounts; ++i) {
+    aliases.push_back(
+        Alias{SparqlExpressionPimpl{makeCountStarExpression(false), "COUNT(*)"},
+              Variable{absl::StrCat("?count", i)}});
+  }
+  return aliases;
+}
+
+// Compute the implicit `GROUP BY` with `makeCountStarAliases(numCounts)` on
+// the `subtree`.
+IdTable computeCountStar(QueryExecutionContext* qec,
+                         std::shared_ptr<QueryExecutionTree> subtree,
+                         size_t numCounts = 1) {
+  qec->getQueryTreeCache().clearAll();
+  GroupByImpl groupBy{
+      qec, {}, makeCountStarAliases(numCounts), std::move(subtree)};
+  return groupBy.computeResultOnlyForTesting().idTableView().clone();
+}
+
+// Return true iff the root operation of the `tree` was optimized out.
+bool isOptimizedOut(const QueryExecutionTree& tree) {
+  return tree.getRootOperation()->runtimeInfo().status_ ==
+         RuntimeInformation::Status::optimizedOut;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(GroupBy, CountStarOfFilter) {
+  auto* qec = getQec();
+  // Check that `COUNT(*)` over a `FILTER` with the `expression` yields the
+  // number of rows of the result of the same `Filter`, for all variants of the
+  // input, with and without column stripping. The `Filter` is optimized out.
+  auto expectSameAsFilter = [qec](auto makeExpression, size_t expectedCount,
+                                  ad_utility::source_location l =
+                                      AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    for (bool sorted : {false, true}) {
+      for (bool lazy : {false, true}) {
+        qec->getQueryTreeCache().clearAll();
+        auto filter =
+            makeFilterTree(qec, makeDefaultCountStarInput(qec, sorted, lazy),
+                           makeExpression());
+        EXPECT_EQ(filter->getResult()->idTableView().numRows(), expectedCount);
+
+        for (bool stripColumns : {false, true}) {
+          // The stripping happens in the constructor of `GroupByImpl`, so the
+          // parameter has to be set before creating it.
+          auto cleanup =
+              setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(
+                  stripColumns);
+          filter =
+              makeFilterTree(qec, makeDefaultCountStarInput(qec, sorted, lazy),
+                             makeExpression());
+          qec->getQueryTreeCache().clearAll();
+          GroupByImpl groupBy{qec, {}, makeCountStarAliases(), filter};
+          EXPECT_EQ(groupBy.computeResultOnlyForTesting().idTableView(),
+                    makeIdTableFromVector(
+                        {{I(static_cast<int64_t>(expectedCount))}}));
+          EXPECT_TRUE(isOptimizedOut(*filter));
+          // With column stripping, the `Filter` is below a `StripColumns`.
+          const auto& child = *groupBy.getChildren().at(0);
+          EXPECT_EQ(std::dynamic_pointer_cast<StripColumns>(
+                        child.getRootOperation()) != nullptr,
+                    stripColumns);
+          EXPECT_TRUE(isOptimizedOut(child));
+        }
+      }
+    }
+  };
+
+  // For the sorted input, `?x < value` is evaluated via binary search.
+  expectSameAsFilter([]() { return makeXLessThan(I(4)); }, 4);
+  expectSameAsFilter([]() { return makeXLessThan(I(0)); }, 0);
+  expectSameAsFilter([]() { return makeXLessThan(I(100)); }, 9);
+  expectSameAsFilter(
+      []() { return makeUnaryNegateExpression(makeXLessThan(I(4))); }, 5);
+  expectSameAsFilter(makeX, 9);
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, CountStarOfFilterEffectiveBooleanValue) {
+  auto* qec = getQec();
+  // Zero, `false`, and UNDEF are false, a comparison with UNDEF is an error and
+  // therefore false as well.
+  auto makeInput = [qec]() {
+    std::vector<IdTable> idTables;
+    idTables.push_back(makeIdTableFromVector({{I(0)},
+                                              {I(3)},
+                                              {Id::makeUndefined()},
+                                              {Id::makeFromBool(false)},
+                                              {Id::makeFromBool(true)}}));
+    return makeCountStarInput(qec, std::move(idTables), false, false);
+  };
+  auto filter = makeFilterTree(qec, makeInput(), makeX());
+  EXPECT_EQ(computeCountStar(qec, filter), makeIdTableFromVector({{I(2)}}));
+  EXPECT_TRUE(isOptimizedOut(*filter));
+
+  filter = makeFilterTree(qec, makeInput(), makeXLessThan(I(4)));
+  EXPECT_EQ(computeCountStar(qec, filter), makeIdTableFromVector({{I(2)}}));
+  EXPECT_TRUE(isOptimizedOut(*filter));
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, CountStarOfFilterNotApplicable) {
+  auto* qec = getQec();
+  auto makeFilter = [qec]() {
+    return makeFilterTree(qec, makeDefaultCountStarInput(qec, false, true),
+                          makeXLessThan(I(4)));
+  };
+
+  // A LIMIT of the `Filter` has to be applied, so it can't be optimized out.
+  auto filter = makeFilter();
+  filter->applyLimitOffset({2});
+  EXPECT_EQ(computeCountStar(qec, filter), makeIdTableFromVector({{I(2)}}));
+  EXPECT_FALSE(isOptimizedOut(*filter));
+
+  // The same for a LIMIT of a `StripColumns` on top of the `Filter`.
+  filter = makeFilter();
+  auto stripColumns = ad_utility::makeExecutionTree<StripColumns>(
+      qec, filter, std::set<Variable>{});
+  stripColumns->applyLimitOffset({3});
+  EXPECT_EQ(computeCountStar(qec, stripColumns),
+            makeIdTableFromVector({{I(3)}}));
+  EXPECT_FALSE(isOptimizedOut(*filter));
+  EXPECT_FALSE(isOptimizedOut(*stripColumns));
+
+  // Only a single `COUNT(*)` is optimized.
+  filter = makeFilter();
+  EXPECT_EQ(computeCountStar(qec, filter, 2),
+            makeIdTableFromVector({{I(4), I(4)}}));
+  EXPECT_FALSE(isOptimizedOut(*filter));
+
+  // A `StripColumns` on top of something else than a `Filter`.
+  auto values = makeDefaultCountStarInput(qec, false, true);
+  stripColumns = ad_utility::makeExecutionTree<StripColumns>(
+      qec, values, std::set<Variable>{});
+  EXPECT_EQ(computeCountStar(qec, stripColumns),
+            makeIdTableFromVector({{I(9)}}));
+  EXPECT_FALSE(isOptimizedOut(*stripColumns));
 }

@@ -12,6 +12,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/EffectiveBooleanValueHelpers.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -184,11 +185,7 @@ CPP_template_def(int WIDTH,
                         "size of the evaluation context.");
       // If the expression result is given as a set of intervals, we copy
       // the corresponding parts of `input` to `resultTable`.
-      auto totalSize = std::accumulate(
-          singleResult._intervals.begin(), singleResult._intervals.end(),
-          resultTable.size(), [](const auto& sum, const auto& interval) {
-            return sum + (interval.second - interval.first);
-          });
+      auto totalSize = resultTable.size() + singleResult.numElements();
       if (resultTable.empty() && totalSize == inputTable.size()) {
         // The binary filter contains all elements of the input, and we have
         // no previous results, so we can simply copy or move the complete
@@ -203,32 +200,19 @@ CPP_template_def(int WIDTH,
       }
       AD_CORRECTNESS_CHECK(resultTable.size() == totalSize);
     } else {
-      // In the general case, we generate all expression results and apply
-      // the `EffectiveBooleanValueGetter` to each.
-      //
-      // NOTE: According to the standard, this means that values like zero,
-      // UNDEF, and empty strings are converted to `false` and hence the
-      // corresponding rows from `input` are filtered out.
+      // In the general case, keep the rows for which the effective boolean
+      // value of the expression result is true.
       //
       // TODO<joka921> Check whether it is feasible to precompute the
       // number of `true` values and use that to reserve the right
       // amount of space for `resultTable`, like we do it for the set of
       // intervals above. This depends on how expensive the evaluation with
       // the `EffectiveBooleanValueGetter` is.
-      auto resultGenerator = sparqlExpression::detail::makeGenerator(
-          AD_FWD(singleResult), input.size(), &evaluationContext);
-      size_t i = 0;
-
-      using ValueGetter = sparqlExpression::detail::EffectiveBooleanValueGetter;
-      ValueGetter valueGetter{};
-      for (auto&& resultValue : resultGenerator) {
-        if (valueGetter(resultValue, &evaluationContext) ==
-            ValueGetter::Result::True) {
-          resultTable.push_back(input[i]);
-        }
-        checkCancellation();
-        ++i;
-      }
+      sparqlExpression::detail::forEachTrueRow(
+          AD_FWD(singleResult), input.size(), evaluationContext,
+          [&resultTable, &input](size_t row) {
+            resultTable.push_back(input[row]);
+          });
     }
   };
   std::visit(computeResult, std::move(expressionResult));

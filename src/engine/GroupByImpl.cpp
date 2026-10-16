@@ -12,6 +12,7 @@
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
+#include "engine/Filter.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
@@ -19,6 +20,7 @@
 #include "engine/StripColumns.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/EffectiveBooleanValueHelpers.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -2007,9 +2009,13 @@ std::optional<IdTable> GroupByImpl::computeCountStar() const {
     return std::nullopt;
   }
 
-  auto childRes = _subtree->getResult(true);
   // Compute the result as a single `size_t`.
-  auto res = [&input = *childRes]() -> size_t {
+  auto res = [this]() -> size_t {
+    if (auto count = computeCountStarOfFilter()) {
+      return count.value();
+    }
+    auto childRes = _subtree->getResult(true);
+    const Result& input = *childRes;
     if (input.isFullyMaterialized()) {
       return input.idTableView().size();
     } else {
@@ -2026,4 +2032,73 @@ std::optional<IdTable> GroupByImpl::computeCountStar() const {
   IdTable result{1, getExecutionContext()->getAllocator()};
   result.push_back(std::array{Id::makeFromInt(res)});
   return result;
+}
+
+// _____________________________________________________________________________
+std::optional<size_t> GroupByImpl::computeCountStarOfFilter() const {
+  // With column stripping, the `Filter` is below a `StripColumns`.
+  std::shared_ptr<Operation> root = _subtree->getRootOperation();
+  auto stripColumns = std::dynamic_pointer_cast<StripColumns>(root);
+  if (stripColumns) {
+    root = stripColumns->getChildren().at(0)->getRootOperation();
+  }
+  auto filter = std::dynamic_pointer_cast<Filter>(root);
+  // A LIMIT or OFFSET would change the number of rows.
+  auto hasLimitOrOffset = [](const Operation& operation) {
+    return !operation.getLimitOffset().isUnconstrained();
+  };
+  if (!filter || hasLimitOrOffset(*filter) ||
+      (stripColumns && hasLimitOrOffset(*stripColumns))) {
+    return std::nullopt;
+  }
+
+  // Count the rows of the `Filter`'s subtree for which the expression is true.
+  const QueryExecutionTree& filterSubtree = *filter->getSubtree();
+  std::shared_ptr<const Result> subresult = filterSubtree.getResult(true);
+  auto countRows = [this, &filter, &filterSubtree,
+                    &subresult](const IdTableView<0>& idTable) -> size_t {
+    LocalVocab localVocab;
+    sparqlExpression::EvaluationContext evaluationContext{
+        *getExecutionContext(),
+        filterSubtree.getVariableColumns(),
+        idTable,
+        getExecutionContext()->getAllocator(),
+        localVocab,
+        cancellationHandle_,
+        deadline_};
+    evaluationContext._columnsByWhichResultIsSorted = subresult->sortedBy();
+    auto countTrue = CPP_template_lambda(
+        &idTable, &evaluationContext)(typename T)(T && singleResult)(
+        requires sparqlExpression::SingleExpressionResult<T>) {
+      if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
+        AD_CONTRACT_CHECK(singleResult.size() == idTable.size());
+        return singleResult.numElements();
+      } else {
+        size_t numTrue = 0;
+        sparqlExpression::detail::forEachTrueRow(
+            AD_FWD(singleResult), idTable.size(), evaluationContext,
+            [&numTrue](size_t) { ++numTrue; });
+        return numTrue;
+      }
+    };
+    return std::visit(countTrue, filter->getExpression().getPimpl()->evaluate(
+                                     &evaluationContext));
+  };
+
+  size_t count = 0;
+  if (subresult->isFullyMaterialized()) {
+    count = countRows(subresult->idTableView());
+  } else {
+    for (const Result::IdTableVocabPair& pair : subresult->idTables()) {
+      count += countRows(pair.idTable_.asStaticView<0>());
+    }
+  }
+
+  filter->updateRuntimeInformationWhenOptimizedOut(
+      {filterSubtree.getRootOperation()->getRuntimeInfoPointer()});
+  if (stripColumns) {
+    stripColumns->updateRuntimeInformationWhenOptimizedOut(
+        {filter->getRuntimeInfoPointer()});
+  }
+  return count;
 }
