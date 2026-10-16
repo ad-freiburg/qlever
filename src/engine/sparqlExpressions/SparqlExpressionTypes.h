@@ -118,7 +118,7 @@ struct EvaluationContext {
 
   /// The input is sorted on these columns. This information can be used to
   /// perform efficient relational operations like `equal` or `less than`
-  qlm::vector<ColumnIndex> _columnsByWhichResultIsSorted;
+  qlm::vector<ColumnIndex> columnsByWhichResultIsSorted_;
 
   /// Let the expression evaluation also respect the memory limit.
   ad_utility::AllocatorWithLimit<Id> _allocator;
