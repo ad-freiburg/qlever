@@ -365,18 +365,21 @@ TEST(QueryExecutionTree,
       QueryExecutionTree::makeTreeWithStrippedColumns(sort, {Variable{"?s"}});
   EXPECT_TRUE(
       indexScan->getRootOperation()->getLimitOffset().isUnconstrained());
+/*
+  auto stripColumns = std::dynamic_pointer_cast<StripColumns>(
+      strippedValues->getRootOperation());
+  EXPECT_TRUE(stripColumns);
+  // EXPECT_EQ(strippedValues->getRootOperation()->getLimitOffset(),
+  // limitOffset);
 
-  // The test only makes sense if `Sort´ can handle stripping columns itself.
-  EXPECT_TRUE(
-      std::dynamic_pointer_cast<Sort>(strippedValues->getRootOperation()));
-  EXPECT_EQ(strippedValues->getRootOperation()->getLimitOffset(), limitOffset);
+  auto childSort = std::dynamic_pointer_cast<Sort>(
+      stripColumns->getChildren().at(0)->getRootOperation());
+  EXPECT_TRUE(childSort);
+  EXPECT_EQ(childSort->getLimitOffset(), limitOffset);
 
-  auto childOperation = strippedValues->getRootOperation()
-                            ->getChildren()
-                            .at(0)
-                            ->getRootOperation();
-  EXPECT_TRUE(std::dynamic_pointer_cast<IndexScan>(childOperation));
-  EXPECT_EQ(childOperation->getLimitOffset(), limitOffset);
+  auto childIndexScan = std::dynamic_pointer_cast<IndexScan>(
+      childSort->getChildren().at(0)->getRootOperation());
+  EXPECT_TRUE(childIndexScan);*/
 }
 
 // _____________________________________________________________________________

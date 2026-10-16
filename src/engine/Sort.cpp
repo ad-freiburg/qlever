@@ -12,7 +12,9 @@
 #include "engine/Sort.h"
 
 #include "engine/CallFixedSize.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/StripColumns.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExternalSortFunctors.h"
@@ -284,31 +286,32 @@ std::unique_ptr<Operation> Sort::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
-  std::set<Variable> newVariables;
-  std::vector<Variable> sortVars;
-  const auto* vars = &variables;
-  for (const auto& jcl : sortColumnIndices_) {
-    const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
-    sortVars.push_back(var);
-    if (!ad_utility::contains(variables, var)) {
-      if (vars == &variables) {
-        newVariables = variables;
-      }
-      newVariables.insert(var);
-      vars = &newVariables;
-    }
+Sort::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // The subtree must provide the `requestedVariables` and the variables that
+  // `Sort` sorts by (those at `sortColumnIndices_`).
+  std::vector<const Variable*> sortVars;
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  for (const auto& sortIndex : sortColumnIndices_) {
+    const auto& var =
+        subtree_->getVariableAndInfoByColumnIndex(sortIndex).first;
+    sortVars.push_back(&var);
+    varsRequiredFromSubtree.add(var);
   }
 
-  // TODO<joka921> Code duplication including a former copy-paste bug.
-  auto subtree =
-      QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, *vars);
+  // Strip the subtree and translate `sortColumnIndices_` to the column indices
+  // of the stripped subtree.
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      subtree_, varsRequiredFromSubtree.get());
   std::vector<ColumnIndex> sortColumnIndices;
   for (const auto& var : sortVars) {
-    sortColumnIndices.push_back(subtree->getVariableColumn(var));
+    sortColumnIndices.push_back(subtree->getVariableColumn(*var));
   }
 
-  return ad_utility::makeExecutionTree<Sort>(getExecutionContext(),
-                                             std::move(subtree),
-                                             sortColumnIndices, explicitSort_);
+  // The new `Sort` also exports the variables it sorts by that the parent did
+  // not request. The helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Sort>(
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      std::move(sortColumnIndices), explicitSort_);
 }

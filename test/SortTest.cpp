@@ -11,9 +11,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
@@ -23,6 +25,7 @@
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 using ad_utility::source_location;
+using V = Variable;
 
 namespace {
 
@@ -537,4 +540,90 @@ TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
                   ->getLimitOffset()
                   .isUnconstrained());
   EXPECT_TRUE(subtree->getRootOperation()->getLimitOffset().isUnconstrained());
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
+// variables plus the variables the `SORT` operation sorts the input rows by,
+// translates `sortColumnIndices_` accordingly, and adds a `StripColumns`
+// operation to remove variables that the parent did not request.
+TEST(Sort, makeTreeWithStrippedColumns) {
+  using ::testing::ElementsAre;
+  using ::testing::Key;
+  using ::testing::SizeIs;
+  using ::testing::UnorderedElementsAre;
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{6, 1, 3, 6}, {2, 6, 3, 5}, {3, 5, 5, 4}, {1, 2, 5, 1}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+  auto strip = [&](std::vector<ColumnIndex> sortColumnIndices,
+                   std::set<V> requestedVariables) {
+    Sort sort{qec, values, sortColumnIndices};
+    auto tree = sort.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+
+  // `Sort` on `?b`, only `?b` requested: the result has only `?b`, the
+  // `Sort` now sorts by column 0.
+  {
+    auto tree = strip({1}, {V{"?b"}});
+    auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
+    ASSERT_TRUE(sort);
+    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 0u);
+    EXPECT_THAT(sort->resultSortedOn(), ElementsAre(0));
+    auto expectedResult = makeIdTableFromVector({{1}, {2}, {5}, {6}});
+    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?b"}},
+                                         std::cref(expectedResult)));
+  }
+
+  // `Sort` by `?b` and `?d`, `?a`, `?b` and `?d` requested: `?c` is stripped
+  // and the columns are renumbered.
+  {
+    auto tree = strip({1, 3}, {V{"?a"}, V{"?b"}, V{"?d"}});
+    auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
+    ASSERT_TRUE(sort);
+    EXPECT_EQ(tree->getVariableColumn(V{"?a"}), 0u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 1u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?d"}), 2u);
+    EXPECT_THAT(sort->resultSortedOn(), ElementsAre(1, 2));
+  }
+
+  // A requested variable that the subtree does not have is ignored.
+  {
+    auto tree = strip({1}, {V{"?a"}, V{"?b"}, V{"?d"}, V{"?notIncluded"}});
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}), Key(V{"?d"})));
+  }
+
+  // `Sort` on `?b`, only `?c` requested: the `Sort` keeps `?b` and `?c`,
+  // a `StripColumns` on top removes `?b`.
+  {
+    auto tree = strip({1}, {V{"?c"}});
+    auto stripColumns =
+        std::dynamic_pointer_cast<StripColumns>(tree->getRootOperation());
+    ASSERT_TRUE(stripColumns);
+    auto expectedResult = makeIdTableFromVector({{3}, {5}, {5}, {3}});
+    EXPECT_THAT(tree, HasOperationResult(std::vector{V{"?c"}},
+                                         std::cref(expectedResult)));
+    const auto* child = stripColumns->getChildren().at(0);
+    auto sort = std::dynamic_pointer_cast<Sort>(child->getRootOperation());
+    ASSERT_TRUE(sort);
+    expectedResult = makeIdTableFromVector({{1, 3}, {2, 5}, {5, 5}, {6, 3}});
+    EXPECT_THAT(child, HasOperationResult(std::vector{V{"?b"}, V{"?c"}},
+                                          std::cref(expectedResult)));
+    EXPECT_THAT(sort->resultSortedOn(),
+                ElementsAre(child->getVariableColumn(V{"?b"})));
+  }
+
+  // All variables requested: nothing is stripped and the indices stay.
+  {
+    auto tree = strip({0}, {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+    auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
+    ASSERT_TRUE(sort);
+    EXPECT_THAT(tree->getVariableColumns(), SizeIs(4));
+    EXPECT_THAT(sort->resultSortedOn(), ElementsAre(0));
+  }
 }
