@@ -195,11 +195,14 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 
   // Create the overlap.
   ad_utility::HashMap<ValueId, ValueId> smallerTableElementToNewElement{};
+  // A column yields a restricted reference that can only be assigned to as an
+  // rvalue, hence `auto&&` and `AD_FWD`. The explicit return type avoids
+  // instantiating the body for the `Id&` that `ranges::for_each` requires.
   ql::ranges::for_each(
       smallerTableJoinColumnRef,
       [&randomDouble, &probabilityToCreateOverlap,
        &smallerTableElementToNewElement, &randomBiggerTableElement,
-       &newOverlapMatches, &biggerTableJoinColumnSet](IdRef id) {
+       &newOverlapMatches, &biggerTableJoinColumnSet](auto&& id) -> void {
         /*
         If a value has no hash map value, with which it will be overwritten, we
         either assign it its own value, or an element from the bigger table.
@@ -217,7 +220,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
               getMaxValue<decltype(newOverlapMatches)>() - numOccurrences) {
             return;
           }
-          id = newValue;
+          AD_FWD(id) = newValue;
           newOverlapMatches += numOccurrences;
         } else if (randomDouble() <= probabilityToCreateOverlap) {
           /*
@@ -330,11 +333,15 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
       });
 
   // Overwrite the designated values in the smaller table.
+  // A column yields a restricted reference that can only be assigned to as an
+  // rvalue, hence `auto&&` and `AD_FWD`. The explicit return type avoids
+  // instantiating the body for the `Id&` that `ranges::for_each` requires.
   ql::ranges::for_each(
-      smallerTableJoinColumnRef, [&smallerTableElementToNewElement](IdRef id) {
+      smallerTableJoinColumnRef,
+      [&smallerTableElementToNewElement](auto&& id) -> void {
         if (auto newValueIterator = smallerTableElementToNewElement.find(id);
             newValueIterator != smallerTableElementToNewElement.end()) {
-          id = newValueIterator->second;
+          AD_FWD(id) = newValueIterator->second;
         }
       });
 

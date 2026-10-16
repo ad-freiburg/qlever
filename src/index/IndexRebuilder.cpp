@@ -44,6 +44,7 @@
 #include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
+#include "util/Forward.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
@@ -298,23 +299,26 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
           getRuntimeParameterAsOptional<
               &RuntimeParameters::rebuildIndexScanNumThreads_>()));
 
+  // A column yields a restricted reference that can only be assigned to as an
+  // rvalue, hence `auto&&` and `AD_FWD`. The explicit return type avoids
+  // instantiating the body for the `Id&` that `ranges::for_each` requires.
   auto remapId = [&insertionPositions, &localVocabMapping, &blankNodeBlocks,
                   minBlankNodeIndex, lastId = Id::makeUndefined(),
                   mappedId = Id::makeUndefined(),
-                  vocabHint = size_t{0}](IdRef id) mutable {
+                  vocabHint = size_t{0}](auto&& id) mutable -> void {
     if (lastId.getBits() == id.getBits()) {
-      id = mappedId;
+      AD_FWD(id) = mappedId;
       return;
     }
     lastId = id;
     using enum Datatype;
     auto datatype = id.getDatatype();
     if (datatype == VocabIndex) [[likely]] {
-      id = remapVocabId(id, insertionPositions, vocabHint);
+      AD_FWD(id) = remapVocabId(id, insertionPositions, vocabHint);
     } else if (datatype == LocalVocabIndex) {
-      id = localVocabMapping.at(id.getBits());
+      AD_FWD(id) = localVocabMapping.at(id.getBits());
     } else if (datatype == BlankNodeIndex) {
-      id = remapBlankNodeId(id, blankNodeBlocks, minBlankNodeIndex);
+      AD_FWD(id) = remapBlankNodeId(id, blankNodeBlocks, minBlankNodeIndex);
     }
     mappedId = id;
   };

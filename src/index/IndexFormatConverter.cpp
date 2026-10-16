@@ -51,6 +51,7 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
+#include "util/Forward.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
 #include "util/ProgressBar.h"
@@ -345,8 +346,13 @@ ad_utility::InputRangeTypeErased<IdTableStatic<0>> scanAndConvertIds(
            locatedTriplesState = std::move(locatedTriplesState),
            progress = std::move(progress)](IdTable& idTable) {
             for (auto column : idTable.getColumns()) {
-              ql::ranges::for_each(column,
-                                   [](IdRef id) { id = convertId(id); });
+              // A column yields a restricted reference that can only be
+              // assigned to as an rvalue, hence `auto&&` and `AD_FWD`. The
+              // explicit return type avoids instantiating the body for the
+              // `Id&` that `ranges::for_each` requires.
+              ql::ranges::for_each(column, [](auto&& id) -> void {
+                AD_FWD(id) = convertId(id);
+              });
             }
             progress(idTable.numRows());
             return IdTableStatic<0>{std::move(idTable)};
