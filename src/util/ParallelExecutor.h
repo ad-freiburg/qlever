@@ -232,11 +232,11 @@ void claimAndRunIndexedTasks(RunIndexedTasksState& state, size_t numTasks,
 // right away, wait for the helpers that are still running a task, and return
 // the first exception that any task has thrown (or `nullptr`).
 //
-// NOTE: The function is `noexcept`, because returning early (with an
+// NOTE 1: The function is `noexcept`, because returning early (with an
 // exception) while a helper is still running would leave that helper with a
 // dangling reference to the `runTask` of the caller.
 //
-// NOTE: The exception is moved out of the `state` (instead of copied), such
+// NOTE 2: The exception is moved out of the `state` (instead of copied), such
 // that the caller holds the only reference to it. Otherwise, a helper that is
 // the last owner of the `state` might destroy the exception after the caller
 // has read it. That would be correct (the reference count of the exception is

@@ -21,7 +21,7 @@ struct SortConfig {
   // The executor on which the tasks of the sort run. It must not be a strand.
   qlever::Executor executor_;
   // A hint for how many tasks of the sort run at the same time. Values below
-  // `2` mean that the sort runs sequentially on the calling thread.
+  // `2` mean that the sort runs in a single task (still on the `executor_`).
   uint32_t numTasksInFlight_ = 1;
 };
 

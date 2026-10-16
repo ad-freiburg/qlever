@@ -82,13 +82,12 @@ void testSort(IdTable input, const IdTable& expected,
 }
 }  // namespace
 
-// _____________________________________________________________________________
-// The `numTasksInFlight_` of the `SortConfig` is a hint for the number of tasks
-// of the parallel sort; the result must be the same for any value. The input is
-// large enough to be split into several tasks, and `8` tasks also exercise the
-// sorting in blocks (see `blockIndirectSort`).
+// Test that the result of `IdTableUtils::sort` is the same for any number of
+// tasks of the `SortConfig`. With two columns, `blockIndirectSort` uses at most
+// one task per 131,072 rows, so the 1M rows allow all `8` tasks, which also
+// exercises the sorting in blocks (6 or more tasks, see `blockIndirectSort`).
 TEST(Sort, sortNumTasksInFlight) {
-  constexpr int64_t numRows = 300'000;
+  constexpr int64_t numRows = 1'000'000;
   IdTable shuffled{2, ad_utility::testing::makeAllocator()};
   IdTable expected{2, ad_utility::testing::makeAllocator()};
   for (int64_t i = 0; i < numRows; ++i) {
@@ -106,11 +105,10 @@ TEST(Sort, sortNumTasksInFlight) {
   }
 }
 
-// _____________________________________________________________________________
-// The number of tasks of the `SortConfig` of a query is the runtime parameter
-// `sort-num-tasks-in-flight`. It is not capped by
-// `max-num-threads-per-query`, which limits the threads of the query's executor
-// instead.
+// Test that the number of tasks of the `SortConfig` of a query is the runtime
+// parameter `sort-num-tasks-in-flight`, not capped by
+// `max-num-threads-per-query` (which limits the threads of the query's executor
+// instead).
 TEST(Sort, makeSortConfig) {
   auto numTasks = [](size_t sortNumTasks, size_t maxNumThreadsPerQuery) {
     auto cleanup1 =
