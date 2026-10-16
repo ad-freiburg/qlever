@@ -22,6 +22,7 @@
 #include "util/ConstexprUtils.h"
 #include "util/Tie.h"
 
+using ad_utility::tieElement;
 using ad_utility::TieElement;
 using ad_utility::tieElementsByIndexSequence;
 using columnBasedIdTable::splitLayout::ConstIdRef;
@@ -29,10 +30,8 @@ using columnBasedIdTable::splitLayout::IdColumnVector;
 using columnBasedIdTable::splitLayout::IdRef;
 using columnBasedIdTable::splitLayout::testHelpers::testAllocator;
 using columnBasedIdTable::splitLayout::testHelpers::TestAllocator;
-
 namespace {
 Id intId(int64_t value) { return Id::makeFromInt(value); }
-}  // namespace
 
 // Test the types of the tied elements: an lvalue reference stays a reference, a
 // proxy that is returned by value is stored by value.
@@ -252,4 +251,44 @@ TEST(Tie, constexprAndEdgeCases) {
   static_assert(std::is_same_v<decltype(ad_utility::tie()), std::tuple<>>);
   static_assert(std::is_same_v<decltype(ad_utility::tie(a)), std::tuple<Id&>>);
   EXPECT_EQ(&std::get<0>(ad_utility::tie(a)), &a);
+}
+
+// Call `tieElement<T>()` and check that it yields a `type_identity` of
+// `Expected`. `tieElement` is only needed at compile time, and a call that the
+// compiler can evaluate (like `auto x = tieElement<T>();`) is never executed at
+// runtime, so it would not show up in coverage reports. Calling it through a
+// volatile function pointer makes the compiler really emit and run the call.
+template <typename T, typename Expected>
+void expectTieElement() {
+  auto (*volatile function)() = &tieElement<T>;
+  auto identity = function();
+  static_assert(
+      std::is_same_v<decltype(identity), ql::type_identity<Expected>>);
+  (void)identity;
+}
+}  // namespace
+
+// `tieElement<T>()` returns a `type_identity` of the type that is stored in the
+// tuple. An lvalue reference stays a reference (also for a proxy), ...
+TEST(Tie, tieElementOfLvalues) {
+  expectTieElement<Id&, Id&>();
+  expectTieElement<const Id&, const Id&>();
+
+  expectTieElement<IdRef&, IdRef&>();
+  expectTieElement<const IdRef&, const IdRef&>();
+
+  expectTieElement<ConstIdRef&, ConstIdRef&>();
+  expectTieElement<const ConstIdRef&, const ConstIdRef&>();
+}
+
+// ... while a proxy that is returned by value is stored by value, without
+// `const` or reference qualifiers.
+TEST(Tie, tieElementOfProxiesReturnedByValue) {
+  expectTieElement<IdRef, IdRef>();
+  expectTieElement<IdRef&&, IdRef>();
+  expectTieElement<const IdRef, IdRef>();
+
+  expectTieElement<ConstIdRef, ConstIdRef>();
+  expectTieElement<ConstIdRef&&, ConstIdRef>();
+  expectTieElement<const ConstIdRef, ConstIdRef>();
 }
