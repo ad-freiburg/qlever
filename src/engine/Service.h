@@ -92,13 +92,6 @@ class Service : public Operation {
   }
 
  public:
-  // Convert the given binding to TripleComponent. Blank nodes are resolved via
-  // the `blankNodeAdder`, which has to be the same for all bindings of a single
-  // SERVICE result, because blank node labels are scoped to the result set they
-  // occur in.
-  TripleComponent bindingToTripleComponent(
-      const nlohmann::json& binding, BlankNodeAdder& blankNodeAdder) const;
-
   // Create a value for the VALUES-clause used in `getSiblingValuesClause` from
   // id. If the id is of type blank node `std::nullopt` is returned.
   static std::optional<std::string> idToValueForValuesClause(

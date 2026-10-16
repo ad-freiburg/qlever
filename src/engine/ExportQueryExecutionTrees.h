@@ -20,6 +20,7 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"
+#include "util/json.h"
 #include "util/stream_generator.h"
 
 // Class for computing the result of an already parsed and planned query and
@@ -87,6 +88,13 @@ class ExportQueryExecutionTrees {
   convertStreamGeneratorForChunkedTransfer(
       STREAMABLE_GENERATOR_TYPE streamGenerator);
 #endif
+
+  // Convert the `id` to a binding of the `application/sparql-results+json`
+  // format, that is, an object with the fields `type` and `value` and, for a
+  // literal, optionally `datatype` or `xml:lang`. Return `std::nullopt` if the
+  // `id` is undefined.
+  static std::optional<nlohmann::json> idToSparqlJsonBinding(
+      const Index& index, Id id, const LocalVocab& localVocab);
 
  private:
   // Make sure that the offset is not applied again when exporting the

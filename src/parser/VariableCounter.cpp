@@ -119,6 +119,15 @@ void VariableCounter::operator()(const PathQuery& op) {
 }
 
 // _____________________________________________________________________________
+void VariableCounter::operator()(const ProxyQuery& op) {
+  (*this)(op.inputVariables_ | ql::views::values);
+  (*this)(op.outputVariables_ | ql::views::values);
+  if (op.rowVariable_.has_value()) {
+    (*this)(op.rowVariable_->second);
+  }
+}
+
+// _____________________________________________________________________________
 void VariableCounter::operator()(const SpatialQuery& op) {
   (*this)(op.distanceVariable_);
   if (!op.payloadVariables_.isAll()) {

@@ -499,6 +499,9 @@ bool ParsedQuery::GraphPattern::isDeterministic() const {
     } else if constexpr (std::is_same_v<T, Service>) {
       // Mirror `Service::isDeterministicImpl()`.
       return getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>();
+    } else if constexpr (std::is_same_v<T, ProxyQuery>) {
+      // Mirror `Proxy::isDeterministicImpl()`.
+      return getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>();
     } else if constexpr (std::is_same_v<T, ExternalValuesQuery>) {
       return false;
     } else if constexpr (ad_utility::SimilarToAny<T, BasicGraphPattern,

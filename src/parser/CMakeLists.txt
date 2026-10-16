@@ -36,6 +36,7 @@ add_library(sparqlParser
         MagicServiceQuery.cpp
         NamedCachedResult.cpp
         PathQuery.cpp
+        ProxyQuery.cpp
         SpatialQuery.cpp
         data/SparqlFilter.cpp
         SelectClause.cpp

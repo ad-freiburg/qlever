@@ -77,6 +77,7 @@ struct VariableCounter {
   void operator()(const Values& op);
   void operator()(const Service& op);
   void operator()(const PathQuery& op);
+  void operator()(const ProxyQuery& op);
   void operator()(const SpatialQuery& op);
   void operator()(const TextSearchQuery& op);
   void operator()(const TextSearchConfig& op);

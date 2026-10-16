@@ -28,6 +28,7 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
+#include "util/SparqlJsonBindingUtils.h"
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
@@ -639,19 +640,13 @@ TEST_F(ServiceTest, getCacheKeyWithCaching) {
 
 // Test that bindingToTripleComponent behaves as expected.
 TEST_F(ServiceTest, bindingToTripleComponent) {
-  parsedQuery::Service parsedServiceClause{
-      {Variable{"?x"}, Variable{"?y"}},
-      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
-      "PREFIX doof: <http://doof.org>",
-      "{ }",
-      false};
-  Service service{testQec, parsedServiceClause};
   BlankNodeAdder blankNodeAdder{testQec->getIndex().getBlankNodeManager(),
                                 testQec->getAllocator()};
 
-  auto bTTC = [&service, &blankNodeAdder](
+  auto bTTC = [this, &blankNodeAdder](
                   const nlohmann::json& binding) -> TripleComponent {
-    return service.bindingToTripleComponent(binding, blankNodeAdder);
+    return sparqlJsonBindingUtils::bindingToTripleComponent(
+        binding, testQec->getIndex(), blankNodeAdder);
   };
 
   // Missing type or value.
@@ -668,8 +663,8 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       bTTC({{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
       TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
 
-  // See the comment in `src/engine/Service.cpp` regarding the support of the
-  // deprecated `typed-literal` type.
+  // See the comment in `src/util/SparqlJsonBindingUtils.h` regarding the
+  // support of the deprecated `typed-literal` type.
   EXPECT_EQ(
       bTTC({{"type", "typed-literal"},
             {"value", "Hallo Welt"},

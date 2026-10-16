@@ -64,7 +64,7 @@ struct BlankNodeAdder {
 
   // Same as above, but for a `label` without the leading `_:`. This is how
   // blank nodes are represented in SPARQL JSON results (see the `bnode` type in
-  // `Service::bindingToTripleComponent`).
+  // `sparqlJsonBindingUtils::bindingToTripleComponent`).
   Id getBlankNodeIndexForLabelWithoutPrefix(std::string_view label);
 
   // Resolve a `TripleComponent` that was produced by one of the RDF parsers

@@ -19,10 +19,9 @@
 #include "index/ExportIds.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/BlankNodeAdder.h"
-#include "parser/RdfParser.h"
-#include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+#include "util/SparqlJsonBindingUtils.h"
 #include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
 
@@ -263,10 +262,11 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
     for (const auto& binding : bindings) {
       idTable.emplace_back();
       for (size_t colIdx = 0; colIdx < vars.size(); ++colIdx) {
-        TripleComponent tc = binding.contains(vars[colIdx])
-                                 ? bindingToTripleComponent(
-                                       binding[vars[colIdx]], blankNodeAdder)
-                                 : TripleComponent::UNDEF();
+        TripleComponent tc =
+            binding.contains(vars[colIdx])
+                ? sparqlJsonBindingUtils::bindingToTripleComponent(
+                      binding[vars[colIdx]], getIndex(), blankNodeAdder)
+                : TripleComponent::UNDEF();
 
         idTable(rowIdx, colIdx) =
             toValueId(std::move(tc), getIndex(), *localVocab);
@@ -445,52 +445,6 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
   }
 
   return "VALUES " + vars + values + "} ";
-}
-
-// ____________________________________________________________________________
-TripleComponent Service::bindingToTripleComponent(
-    const nlohmann::json& binding, BlankNodeAdder& blankNodeAdder) const {
-  if (!binding.contains("type") || !binding.contains("value")) {
-    throw std::runtime_error(absl::StrCat(
-        "Missing type or value field in binding. The binding is: '",
-        binding.dump(), "'"));
-  }
-
-  const auto type = binding["type"].get<std::string_view>();
-  const auto value = binding["value"].get<std::string_view>();
-
-  TripleComponent tc;
-  // NOTE: The type `typed-literal` is not part of the official SPARQL 1.1
-  // standard, but was mentioned in a pre SPARQL 1.1 WG note and used by
-  // Virtuoso until the summer of 2025. It is therefore still produced by
-  // some SPARQL endpoints, and we therefore support parsing it.
-  if (type == "literal" || type == "typed-literal") {
-    if (binding.contains("datatype")) {
-      tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
-          value,
-          TripleComponent::Iri::fromIrirefWithoutBrackets(
-              binding["datatype"].get<std::string_view>()),
-          getIndex().encodedIriManager());
-    } else if (binding.contains("xml:lang")) {
-      tc = TripleComponent::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(value),
-          binding["xml:lang"].get<std::string>());
-    } else {
-      tc = TripleComponent::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(value));
-    }
-  } else if (type == "uri") {
-    tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
-  } else if (type == "bnode") {
-    // In the SPARQL JSON format, the label of a blank node is stored without
-    // the leading `_:`.
-    tc = blankNodeAdder.getBlankNodeIndexForLabelWithoutPrefix(value);
-  } else {
-    throw std::runtime_error(absl::StrCat("Type ", type,
-                                          " is undefined. The binding is: '",
-                                          binding.dump(), "'"));
-  }
-  return tc;
 }
 
 // ____________________________________________________________________________
