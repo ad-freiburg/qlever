@@ -25,9 +25,8 @@
 using ad_utility::tieElement;
 using ad_utility::TieElement;
 using ad_utility::tieElementsByIndexSequence;
-using columnBasedIdTable::splitLayout::ConstIdRef;
+namespace splitLayout = columnBasedIdTable::splitLayout;
 using columnBasedIdTable::splitLayout::IdColumnVector;
-using columnBasedIdTable::splitLayout::IdRef;
 using columnBasedIdTable::splitLayout::testHelpers::testAllocator;
 using columnBasedIdTable::splitLayout::testHelpers::TestAllocator;
 namespace {
@@ -38,13 +37,16 @@ Id intId(int64_t value) { return Id::makeFromInt(value); }
 TEST(Tie, tieElement) {
   static_assert(std::is_same_v<TieElement<Id&>, Id&>);
   static_assert(std::is_same_v<TieElement<const Id&>, const Id&>);
-  static_assert(std::is_same_v<TieElement<IdRef>, IdRef>);
-  static_assert(std::is_same_v<TieElement<const ConstIdRef>, ConstIdRef>);
-  static_assert(std::is_same_v<TieElement<ConstIdRef&&>, ConstIdRef>);
+  static_assert(
+      std::is_same_v<TieElement<splitLayout::IdRef>, splitLayout::IdRef>);
+  static_assert(std::is_same_v<TieElement<const splitLayout::ConstIdRef>,
+                               splitLayout::ConstIdRef>);
+  static_assert(std::is_same_v<TieElement<splitLayout::ConstIdRef&&>,
+                               splitLayout::ConstIdRef>);
 
   // The proxies of the split layout are marked as such, other types are not.
-  static_assert(qlever::isProxy<IdRef>);
-  static_assert(qlever::isProxy<ConstIdRef>);
+  static_assert(qlever::isProxy<splitLayout::IdRef>);
+  static_assert(qlever::isProxy<splitLayout::ConstIdRef>);
   static_assert(!qlever::isProxy<Id>);
   static_assert(!qlever::isProxy<int>);
 }
@@ -105,7 +107,9 @@ TEST(Tie, proxies) {
   column.push_back(intId(30));
 
   auto tied = tieElementsByIndexSequence(column, std::index_sequence<0, 2>{});
-  static_assert(std::is_same_v<decltype(tied), std::tuple<IdRef, IdRef>>);
+  static_assert(
+      std::is_same_v<decltype(tied),
+                     std::tuple<splitLayout::IdRef, splitLayout::IdRef>>);
   EXPECT_EQ(static_cast<Id>(std::get<0>(tied)), intId(10));
   EXPECT_EQ(static_cast<Id>(std::get<1>(tied)), intId(30));
 
@@ -132,7 +136,8 @@ TEST(Tie, proxies) {
   auto constTied =
       tieElementsByIndexSequence(constColumn, std::index_sequence<1, 2>{});
   static_assert(
-      std::is_same_v<decltype(constTied), std::tuple<ConstIdRef, ConstIdRef>>);
+      std::is_same_v<decltype(constTied), std::tuple<splitLayout::ConstIdRef,
+                                                     splitLayout::ConstIdRef>>);
   EXPECT_EQ(static_cast<Id>(std::get<0>(constTied)), Id::makeFromBool(true));
   EXPECT_EQ(static_cast<Id>(std::get<1>(constTied)), intId(31));
 
@@ -193,7 +198,9 @@ TEST(Tie, tieProxies) {
   column.push_back(intId(30));
 
   auto tied = ad_utility::tie(column[0], column[2]);
-  static_assert(std::is_same_v<decltype(tied), std::tuple<IdRef, IdRef>>);
+  static_assert(
+      std::is_same_v<decltype(tied),
+                     std::tuple<splitLayout::IdRef, splitLayout::IdRef>>);
   EXPECT_EQ(static_cast<Id>(std::get<0>(tied)), intId(10));
   EXPECT_EQ(static_cast<Id>(std::get<1>(tied)), intId(30));
 
@@ -208,7 +215,8 @@ TEST(Tie, tieProxies) {
   // Proxies and lvalues can be mixed.
   Id a = intId(5);
   auto mixed = ad_utility::tie(a, column[1]);
-  static_assert(std::is_same_v<decltype(mixed), std::tuple<Id&, IdRef>>);
+  static_assert(
+      std::is_same_v<decltype(mixed), std::tuple<Id&, splitLayout::IdRef>>);
   std::get<0>(mixed) = intId(6);
   std::get<1>(mixed) = intId(7);
   EXPECT_EQ(a, intId(6));
@@ -218,7 +226,8 @@ TEST(Tie, tieProxies) {
   const auto& constColumn = column;
   auto constTied = ad_utility::tie(constColumn[0], constColumn[1]);
   static_assert(
-      std::is_same_v<decltype(constTied), std::tuple<ConstIdRef, ConstIdRef>>);
+      std::is_same_v<decltype(constTied), std::tuple<splitLayout::ConstIdRef,
+                                                     splitLayout::ConstIdRef>>);
   EXPECT_EQ(static_cast<Id>(std::get<0>(constTied)), intId(11));
   EXPECT_EQ(static_cast<Id>(std::get<1>(constTied)), intId(7));
 
@@ -274,21 +283,22 @@ TEST(Tie, tieElementOfLvalues) {
   expectTieElement<Id&, Id&>();
   expectTieElement<const Id&, const Id&>();
 
-  expectTieElement<IdRef&, IdRef&>();
-  expectTieElement<const IdRef&, const IdRef&>();
+  expectTieElement<splitLayout::IdRef&, splitLayout::IdRef&>();
+  expectTieElement<const splitLayout::IdRef&, const splitLayout::IdRef&>();
 
-  expectTieElement<ConstIdRef&, ConstIdRef&>();
-  expectTieElement<const ConstIdRef&, const ConstIdRef&>();
+  expectTieElement<splitLayout::ConstIdRef&, splitLayout::ConstIdRef&>();
+  expectTieElement<const splitLayout::ConstIdRef&,
+                   const splitLayout::ConstIdRef&>();
 }
 
 // ... while a proxy that is returned by value is stored by value, without
 // `const` or reference qualifiers.
 TEST(Tie, tieElementOfProxiesReturnedByValue) {
-  expectTieElement<IdRef, IdRef>();
-  expectTieElement<IdRef&&, IdRef>();
-  expectTieElement<const IdRef, IdRef>();
+  expectTieElement<splitLayout::IdRef, splitLayout::IdRef>();
+  expectTieElement<splitLayout::IdRef&&, splitLayout::IdRef>();
+  expectTieElement<const splitLayout::IdRef, splitLayout::IdRef>();
 
-  expectTieElement<ConstIdRef, ConstIdRef>();
-  expectTieElement<ConstIdRef&&, ConstIdRef>();
-  expectTieElement<const ConstIdRef, ConstIdRef>();
+  expectTieElement<splitLayout::ConstIdRef, splitLayout::ConstIdRef>();
+  expectTieElement<splitLayout::ConstIdRef&&, splitLayout::ConstIdRef>();
+  expectTieElement<const splitLayout::ConstIdRef, splitLayout::ConstIdRef>();
 }
