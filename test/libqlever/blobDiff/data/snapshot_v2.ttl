@@ -1,0 +1,2152 @@
+PREFIX ex:  <http://example.org/streets#>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+ex:street_1001 a ex:Street ;
+    ex:id "1001"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "610.74"^^xsd:double ;
+    ex:width "694"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1124 ;
+    ex:hasSpeedLimit ex:speedLimit_1001_0, ex:speedLimit_1001_1, ex:speedLimit_1001_2 ;
+    geo:hasGeometry ex:street_1001_geometry .
+ex:street_1001_geometry geo:asWKT "LINESTRING(10.053762 50.124668, 10.055226 50.125543, 10.056271 50.122909, 10.057432 50.123771, 10.056675 50.126615)"^^geo:wktLiteral .
+ex:speedLimit_1001_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "26.04"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1001_1 a ex:SpeedLimit ; ex:start "26.04"^^xsd:double ; ex:end "309.24"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1001_2 a ex:SpeedLimit ; ex:start "309.24"^^xsd:double ; ex:end "553.58"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1005 a ex:Street ;
+    ex:id "1005"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "689.52"^^xsd:double ;
+    ex:width "284"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1011, ex:street_1131 ;
+    ex:hasSpeedLimit ex:speedLimit_1005_0, ex:speedLimit_1005_1 ;
+    geo:hasGeometry ex:street_1005_geometry .
+ex:street_1005_geometry geo:asWKT "LINESTRING(10.060081 50.102886, 10.061519 50.100022, 10.063317 50.099050, 10.062760 50.098414)"^^geo:wktLiteral .
+ex:speedLimit_1005_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "216.26"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1005_1 a ex:SpeedLimit ; ex:start "216.26"^^xsd:double ; ex:end "506.96"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1007 a ex:Street ;
+    ex:id "1007"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "702.22"^^xsd:double ;
+    ex:width "805"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1011 ;
+    ex:hasSpeedLimit ex:speedLimit_1007_0, ex:speedLimit_1007_1, ex:speedLimit_1007_2 ;
+    geo:hasGeometry ex:street_1007_geometry .
+ex:street_1007_geometry geo:asWKT "LINESTRING(10.034762 50.047126, 10.033460 50.047628, 10.031609 50.045166, 10.031156 50.043390, 10.032627 50.040423)"^^geo:wktLiteral .
+ex:speedLimit_1007_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "278.12"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1007_1 a ex:SpeedLimit ; ex:start "278.12"^^xsd:double ; ex:end "364.09"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1007_2 a ex:SpeedLimit ; ex:start "364.09"^^xsd:double ; ex:end "515.61"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1008 a ex:Street ;
+    ex:id "1008"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "42.52"^^xsd:double ;
+    ex:width "732"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1025, ex:street_1126 ;
+    ex:hasSpeedLimit ex:speedLimit_1008_0, ex:speedLimit_1008_1 ;
+    geo:hasGeometry ex:street_1008_geometry .
+ex:street_1008_geometry geo:asWKT "LINESTRING(10.127177 50.194198, 10.124254 50.196181, 10.123755 50.198361, 10.125663 50.200482, 10.123199 50.202709)"^^geo:wktLiteral .
+ex:speedLimit_1008_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "271.27"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1008_1 a ex:SpeedLimit ; ex:start "271.27"^^xsd:double ; ex:end "305.92"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1010 a ex:Street ;
+    ex:id "1010"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "344.45"^^xsd:double ;
+    ex:width "412"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1093, ex:street_1105 ;
+    ex:hasSpeedLimit ex:speedLimit_1010_0, ex:speedLimit_1010_1 ;
+    geo:hasGeometry ex:street_1010_geometry .
+ex:street_1010_geometry geo:asWKT "LINESTRING(10.010892 50.123053, 10.010228 50.123529, 10.010656 50.123444, 10.009134 50.120644)"^^geo:wktLiteral .
+ex:speedLimit_1010_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "148.3"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1010_1 a ex:SpeedLimit ; ex:start "148.3"^^xsd:double ; ex:end "171.31"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1011 a ex:Street ;
+    ex:id "1011"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "101.03"^^xsd:double ;
+    ex:width "671"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1011_0, ex:speedLimit_1011_1, ex:speedLimit_1011_2 ;
+    geo:hasGeometry ex:street_1011_geometry .
+ex:street_1011_geometry geo:asWKT "LINESTRING(10.020063 50.098738, 10.017748 50.101045, 10.018824 50.100464, 10.017705 50.102897)"^^geo:wktLiteral .
+ex:speedLimit_1011_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "168.36"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1011_1 a ex:SpeedLimit ; ex:start "168.36"^^xsd:double ; ex:end "448.68"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1011_2 a ex:SpeedLimit ; ex:start "448.68"^^xsd:double ; ex:end "668.57"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1012 a ex:Street ;
+    ex:id "1012"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "306.06"^^xsd:double ;
+    ex:width "801"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:hasSpeedLimit ex:speedLimit_1012_0, ex:speedLimit_1012_1 ;
+    geo:hasGeometry ex:street_1012_geometry .
+ex:street_1012_geometry geo:asWKT "LINESTRING(10.125929 50.124016, 10.123900 50.124746, 10.124650 50.127694, 10.124307 50.128074)"^^geo:wktLiteral .
+ex:speedLimit_1012_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "80.89"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1012_1 a ex:SpeedLimit ; ex:start "80.89"^^xsd:double ; ex:end "333.0"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1013 a ex:Street ;
+    ex:id "1013"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "131.44"^^xsd:double ;
+    ex:width "1105"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1115 ;
+    ex:hasSpeedLimit ex:speedLimit_1013_0, ex:speedLimit_1013_1, ex:speedLimit_1013_2 ;
+    geo:hasGeometry ex:street_1013_geometry .
+ex:street_1013_geometry geo:asWKT "LINESTRING(10.023065 50.014601, 10.025448 50.012270, 10.027666 50.009861, 10.029656 50.009577, 10.027417 50.008238)"^^geo:wktLiteral .
+ex:speedLimit_1013_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "102.62"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1013_1 a ex:SpeedLimit ; ex:start "102.62"^^xsd:double ; ex:end "289.97"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1013_2 a ex:SpeedLimit ; ex:start "289.97"^^xsd:double ; ex:end "339.03"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1016 a ex:Street ;
+    ex:id "1016"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "570.48"^^xsd:double ;
+    ex:width "725"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1016_0, ex:speedLimit_1016_1 ;
+    geo:hasGeometry ex:street_1016_geometry .
+ex:street_1016_geometry geo:asWKT "LINESTRING(10.012684 50.083572, 10.013615 50.085826, 10.014856 50.087613, 10.012590 50.086227, 10.011637 50.083402, 10.013043 50.081178)"^^geo:wktLiteral .
+ex:speedLimit_1016_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "145.04"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1016_1 a ex:SpeedLimit ; ex:start "145.04"^^xsd:double ; ex:end "296.93"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1018 a ex:Street ;
+    ex:id "1018"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "893.02"^^xsd:double ;
+    ex:width "310"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1081, ex:street_1109 ;
+    ex:hasSpeedLimit ex:speedLimit_1018_0 ;
+    geo:hasGeometry ex:street_1018_geometry .
+ex:street_1018_geometry geo:asWKT "LINESTRING(10.127364 50.126855, 10.124967 50.128944, 10.125270 50.131391, 10.124968 50.131383)"^^geo:wktLiteral .
+ex:speedLimit_1018_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "162.64"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1022 a ex:Street ;
+    ex:id "1022"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "842.2"^^xsd:double ;
+    ex:width "929"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1022_0, ex:speedLimit_1022_1, ex:speedLimit_1022_2 ;
+    geo:hasGeometry ex:street_1022_geometry .
+ex:street_1022_geometry geo:asWKT "LINESTRING(10.106687 50.082715, 10.108612 50.083043, 10.109786 50.082990, 10.109333 50.083099, 10.106971 50.085579)"^^geo:wktLiteral .
+ex:speedLimit_1022_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "181.96"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1022_1 a ex:SpeedLimit ; ex:start "181.96"^^xsd:double ; ex:end "361.62"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1022_2 a ex:SpeedLimit ; ex:start "361.62"^^xsd:double ; ex:end "656.61"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1025 a ex:Street ;
+    ex:id "1025"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "430.4"^^xsd:double ;
+    ex:width "1151"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1061, ex:street_1093 ;
+    ex:hasSpeedLimit ex:speedLimit_1025_0, ex:speedLimit_1025_1 ;
+    geo:hasGeometry ex:street_1025_geometry .
+ex:street_1025_geometry geo:asWKT "LINESTRING(10.101072 50.100921, 10.098674 50.102058, 10.100350 50.103438, 10.099999 50.103858, 10.101315 50.102473)"^^geo:wktLiteral .
+ex:speedLimit_1025_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "266.75"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1025_1 a ex:SpeedLimit ; ex:start "266.75"^^xsd:double ; ex:end "435.03"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1028 a ex:Street ;
+    ex:id "1028"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "542.0"^^xsd:double ;
+    ex:width "1049"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1005 ;
+    ex:hasSpeedLimit ex:speedLimit_1028_0, ex:speedLimit_1028_1, ex:speedLimit_1028_2 ;
+    geo:hasGeometry ex:street_1028_geometry .
+ex:street_1028_geometry geo:asWKT "LINESTRING(10.131512 50.168876, 10.131388 50.171105, 10.133262 50.168409, 10.133174 50.170775)"^^geo:wktLiteral .
+ex:speedLimit_1028_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "117.59"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1028_1 a ex:SpeedLimit ; ex:start "117.59"^^xsd:double ; ex:end "132.01"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1028_2 a ex:SpeedLimit ; ex:start "132.01"^^xsd:double ; ex:end "145.82"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1029 a ex:Street ;
+    ex:id "1029"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "685.08"^^xsd:double ;
+    ex:width "1067"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1108, ex:street_1114 ;
+    ex:hasSpeedLimit ex:speedLimit_1029_0, ex:speedLimit_1029_1 ;
+    geo:hasGeometry ex:street_1029_geometry .
+ex:street_1029_geometry geo:asWKT "LINESTRING(10.019670 50.040236, 10.021220 50.039682, 10.019494 50.042582, 10.019770 50.040375, 10.018650 50.041129, 10.018434 50.043061, 10.015469 50.042056)"^^geo:wktLiteral .
+ex:speedLimit_1029_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "66.39"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1029_1 a ex:SpeedLimit ; ex:start "66.39"^^xsd:double ; ex:end "293.83"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1031 a ex:Street ;
+    ex:id "1031"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "605.26"^^xsd:double ;
+    ex:width "700"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:hasSpeedLimit ex:speedLimit_1031_0, ex:speedLimit_1031_1, ex:speedLimit_1031_2 ;
+    geo:hasGeometry ex:street_1031_geometry .
+ex:street_1031_geometry geo:asWKT "LINESTRING(10.174313 50.112377, 10.174172 50.110160, 10.171796 50.108090, 10.172046 50.105636, 10.169597 50.107556, 10.168039 50.106115, 10.168205 50.104170)"^^geo:wktLiteral .
+ex:speedLimit_1031_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "15.72"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1031_1 a ex:SpeedLimit ; ex:start "15.72"^^xsd:double ; ex:end "269.18"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1031_2 a ex:SpeedLimit ; ex:start "269.18"^^xsd:double ; ex:end "477.29"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1034 a ex:Street ;
+    ex:id "1034"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "654.49"^^xsd:double ;
+    ex:width "349"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1034_0, ex:speedLimit_1034_1, ex:speedLimit_1034_2 ;
+    geo:hasGeometry ex:street_1034_geometry .
+ex:street_1034_geometry geo:asWKT "LINESTRING(10.031665 50.174196, 10.033115 50.171390, 10.032229 50.174073, 10.031552 50.173185, 10.029090 50.170698, 10.028884 50.168664)"^^geo:wktLiteral .
+ex:speedLimit_1034_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "299.15"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1034_1 a ex:SpeedLimit ; ex:start "299.15"^^xsd:double ; ex:end "310.73"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1034_2 a ex:SpeedLimit ; ex:start "310.73"^^xsd:double ; ex:end "548.87"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1036 a ex:Street ;
+    ex:id "1036"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "145.71"^^xsd:double ;
+    ex:width "933"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:hasSpeedLimit ex:speedLimit_1036_0, ex:speedLimit_1036_1 ;
+    geo:hasGeometry ex:street_1036_geometry .
+ex:street_1036_geometry geo:asWKT "LINESTRING(10.053927 50.052999, 10.056124 50.055043, 10.055114 50.056659)"^^geo:wktLiteral .
+ex:speedLimit_1036_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "205.17"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1036_1 a ex:SpeedLimit ; ex:start "205.17"^^xsd:double ; ex:end "218.62"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1038 a ex:Street ;
+    ex:id "1038"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "618.05"^^xsd:double ;
+    ex:width "331"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1038_0 ;
+    geo:hasGeometry ex:street_1038_geometry .
+ex:street_1038_geometry geo:asWKT "LINESTRING(10.138587 50.018044, 10.137294 50.018143, 10.137792 50.015344)"^^geo:wktLiteral .
+ex:speedLimit_1038_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "211.2"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1042 a ex:Street ;
+    ex:id "1042"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "545.82"^^xsd:double ;
+    ex:width "335"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:hasSpeedLimit ex:speedLimit_1042_0, ex:speedLimit_1042_1 ;
+    geo:hasGeometry ex:street_1042_geometry .
+ex:street_1042_geometry geo:asWKT "LINESTRING(10.093225 50.089632, 10.095577 50.090001, 10.096894 50.091482, 10.099422 50.090747, 10.098327 50.088623, 10.100367 50.089548, 10.100960 50.091806)"^^geo:wktLiteral .
+ex:speedLimit_1042_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "71.79"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1042_1 a ex:SpeedLimit ; ex:start "71.79"^^xsd:double ; ex:end "172.24"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1044 a ex:Street ;
+    ex:id "1044"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "622.84"^^xsd:double ;
+    ex:width "307"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1044_0, ex:speedLimit_1044_1, ex:speedLimit_1044_2 ;
+    geo:hasGeometry ex:street_1044_geometry .
+ex:street_1044_geometry geo:asWKT "LINESTRING(10.000439 50.093397, 9.999886 50.093354, 10.000417 50.091751)"^^geo:wktLiteral .
+ex:speedLimit_1044_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "278.67"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1044_1 a ex:SpeedLimit ; ex:start "278.67"^^xsd:double ; ex:end "434.77"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1044_2 a ex:SpeedLimit ; ex:start "434.77"^^xsd:double ; ex:end "575.8"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1045 a ex:Street ;
+    ex:id "1045"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "456.22"^^xsd:double ;
+    ex:width "479"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1079 ;
+    ex:hasSpeedLimit ex:speedLimit_1045_0 ;
+    geo:hasGeometry ex:street_1045_geometry .
+ex:street_1045_geometry geo:asWKT "LINESTRING(10.017792 50.010799, 10.019206 50.012947, 10.019276 50.011353, 10.018538 50.010106)"^^geo:wktLiteral .
+ex:speedLimit_1045_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "127.03"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1050 a ex:Street ;
+    ex:id "1050"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "315.03"^^xsd:double ;
+    ex:width "1023"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1029 ;
+    ex:hasSpeedLimit ex:speedLimit_1050_0 ;
+    geo:hasGeometry ex:street_1050_geometry .
+ex:street_1050_geometry geo:asWKT "LINESTRING(10.035663 50.033674, 10.037642 50.033679, 10.038112 50.033285, 10.040335 50.033688, 10.041090 50.034742)"^^geo:wktLiteral .
+ex:speedLimit_1050_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "186.68"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1051 a ex:Street ;
+    ex:id "1051"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "768.34"^^xsd:double ;
+    ex:width "941"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1031, ex:street_1146 ;
+    ex:hasSpeedLimit ex:speedLimit_1051_0, ex:speedLimit_1051_1, ex:speedLimit_1051_2 ;
+    geo:hasGeometry ex:street_1051_geometry .
+ex:street_1051_geometry geo:asWKT "LINESTRING(10.178758 50.096598, 10.177384 50.097780, 10.176140 50.098559, 10.176279 50.095652, 10.178126 50.094363, 10.175551 50.093793, 10.175223 50.096312)"^^geo:wktLiteral .
+ex:speedLimit_1051_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "121.31"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1051_1 a ex:SpeedLimit ; ex:start "121.31"^^xsd:double ; ex:end "253.32"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1051_2 a ex:SpeedLimit ; ex:start "253.32"^^xsd:double ; ex:end "505.0"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1054 a ex:Street ;
+    ex:id "1054"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "123.13"^^xsd:double ;
+    ex:width "512"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1096 ;
+    ex:hasSpeedLimit ex:speedLimit_1054_0, ex:speedLimit_1054_1, ex:speedLimit_1054_2 ;
+    geo:hasGeometry ex:street_1054_geometry .
+ex:street_1054_geometry geo:asWKT "LINESTRING(10.071251 50.196116, 10.069468 50.193199, 10.069958 50.194494, 10.072402 50.196257, 10.072378 50.198357)"^^geo:wktLiteral .
+ex:speedLimit_1054_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "297.85"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1054_1 a ex:SpeedLimit ; ex:start "297.85"^^xsd:double ; ex:end "467.52"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1054_2 a ex:SpeedLimit ; ex:start "467.52"^^xsd:double ; ex:end "673.16"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1055 a ex:Street ;
+    ex:id "1055"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "375.24"^^xsd:double ;
+    ex:width "679"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1073, ex:street_1099, ex:street_1146 ;
+    ex:hasSpeedLimit ex:speedLimit_1055_0, ex:speedLimit_1055_1, ex:speedLimit_1055_2 ;
+    geo:hasGeometry ex:street_1055_geometry .
+ex:street_1055_geometry geo:asWKT "LINESTRING(10.180027 50.068642, 10.181023 50.071186, 10.181175 50.070823, 10.181790 50.073166, 10.179692 50.070817, 10.180630 50.072341)"^^geo:wktLiteral .
+ex:speedLimit_1055_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "206.89"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1055_1 a ex:SpeedLimit ; ex:start "206.89"^^xsd:double ; ex:end "400.7"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1055_2 a ex:SpeedLimit ; ex:start "400.7"^^xsd:double ; ex:end "624.59"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1058 a ex:Street ;
+    ex:id "1058"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "796.28"^^xsd:double ;
+    ex:width "599"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1013 ;
+    ex:hasSpeedLimit ex:speedLimit_1058_0 ;
+    geo:hasGeometry ex:street_1058_geometry .
+ex:street_1058_geometry geo:asWKT "LINESTRING(10.003136 50.013368, 10.001744 50.015877, 10.002468 50.016680, 10.001814 50.015116, 10.002739 50.012537)"^^geo:wktLiteral .
+ex:speedLimit_1058_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "86.1"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1061 a ex:Street ;
+    ex:id "1061"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "698.36"^^xsd:double ;
+    ex:width "349"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1061_0, ex:speedLimit_1061_1, ex:speedLimit_1061_2 ;
+    geo:hasGeometry ex:street_1061_geometry .
+ex:street_1061_geometry geo:asWKT "LINESTRING(10.071859 50.127348, 10.072252 50.129226, 10.074636 50.130871, 10.073346 50.129082, 10.071625 50.130569)"^^geo:wktLiteral .
+ex:speedLimit_1061_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "36.0"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1061_1 a ex:SpeedLimit ; ex:start "36.0"^^xsd:double ; ex:end "277.34"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1061_2 a ex:SpeedLimit ; ex:start "277.34"^^xsd:double ; ex:end "504.89"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1072 a ex:Street ;
+    ex:id "1072"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "664.55"^^xsd:double ;
+    ex:width "965"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1113 ;
+    ex:hasSpeedLimit ex:speedLimit_1072_0, ex:speedLimit_1072_1, ex:speedLimit_1072_2 ;
+    geo:hasGeometry ex:street_1072_geometry .
+ex:street_1072_geometry geo:asWKT "LINESTRING(10.060239 50.065068, 10.062537 50.065295, 10.064481 50.066836, 10.066902 50.067608, 10.067473 50.066561, 10.070300 50.066579, 10.071516 50.066881)"^^geo:wktLiteral .
+ex:speedLimit_1072_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "284.15"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1072_1 a ex:SpeedLimit ; ex:start "284.15"^^xsd:double ; ex:end "294.87"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1072_2 a ex:SpeedLimit ; ex:start "294.87"^^xsd:double ; ex:end "393.91"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1073 a ex:Street ;
+    ex:id "1073"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "488.21"^^xsd:double ;
+    ex:width "787"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1073_0, ex:speedLimit_1073_1 ;
+    geo:hasGeometry ex:street_1073_geometry .
+ex:street_1073_geometry geo:asWKT "LINESTRING(10.018533 50.171540, 10.017717 50.170321, 10.017587 50.167347, 10.020266 50.164742)"^^geo:wktLiteral .
+ex:speedLimit_1073_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "206.89"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1073_1 a ex:SpeedLimit ; ex:start "206.89"^^xsd:double ; ex:end "272.27"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1075 a ex:Street ;
+    ex:id "1075"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "37.71"^^xsd:double ;
+    ex:width "916"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1075_0, ex:speedLimit_1075_1 ;
+    geo:hasGeometry ex:street_1075_geometry .
+ex:street_1075_geometry geo:asWKT "LINESTRING(10.093084 50.016856, 10.094768 50.019264, 10.094124 50.021889, 10.092068 50.024430, 10.094791 50.027078, 10.095294 50.029174, 10.094072 50.031881)"^^geo:wktLiteral .
+ex:speedLimit_1075_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "164.98"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1075_1 a ex:SpeedLimit ; ex:start "164.98"^^xsd:double ; ex:end "265.29"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1076 a ex:Street ;
+    ex:id "1076"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "424.16"^^xsd:double ;
+    ex:width "428"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1076_0, ex:speedLimit_1076_1, ex:speedLimit_1076_2 ;
+    geo:hasGeometry ex:street_1076_geometry .
+ex:street_1076_geometry geo:asWKT "LINESTRING(10.126737 50.018873, 10.129356 50.021541, 10.129659 50.022552, 10.130361 50.025052, 10.131847 50.026333, 10.131308 50.026715)"^^geo:wktLiteral .
+ex:speedLimit_1076_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "101.55"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1076_1 a ex:SpeedLimit ; ex:start "101.55"^^xsd:double ; ex:end "156.25"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1076_2 a ex:SpeedLimit ; ex:start "156.25"^^xsd:double ; ex:end "384.24"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1079 a ex:Street ;
+    ex:id "1079"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "139.42"^^xsd:double ;
+    ex:width "882"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1079_0, ex:speedLimit_1079_1, ex:speedLimit_1079_2 ;
+    geo:hasGeometry ex:street_1079_geometry .
+ex:street_1079_geometry geo:asWKT "LINESTRING(10.141303 50.094191, 10.139856 50.094282, 10.140794 50.093788, 10.141162 50.091006, 10.143731 50.088983)"^^geo:wktLiteral .
+ex:speedLimit_1079_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "161.84"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1079_1 a ex:SpeedLimit ; ex:start "161.84"^^xsd:double ; ex:end "188.57"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1079_2 a ex:SpeedLimit ; ex:start "188.57"^^xsd:double ; ex:end "379.75"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1081 a ex:Street ;
+    ex:id "1081"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "507.67"^^xsd:double ;
+    ex:width "1174"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1005 ;
+    ex:hasSpeedLimit ex:speedLimit_1081_0 ;
+    geo:hasGeometry ex:street_1081_geometry .
+ex:street_1081_geometry geo:asWKT "LINESTRING(10.064905 50.026514, 10.063088 50.027390, 10.062842 50.029608)"^^geo:wktLiteral .
+ex:speedLimit_1081_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "24.35"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1083 a ex:Street ;
+    ex:id "1083"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "817.0"^^xsd:double ;
+    ex:width "374"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1083_0, ex:speedLimit_1083_1, ex:speedLimit_1083_2 ;
+    geo:hasGeometry ex:street_1083_geometry .
+ex:street_1083_geometry geo:asWKT "LINESTRING(10.149635 50.199523, 10.151877 50.199423, 10.150310 50.197468, 10.150619 50.199733)"^^geo:wktLiteral .
+ex:speedLimit_1083_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "69.41"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1083_1 a ex:SpeedLimit ; ex:start "69.41"^^xsd:double ; ex:end "134.92"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1083_2 a ex:SpeedLimit ; ex:start "134.92"^^xsd:double ; ex:end "366.22"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1084 a ex:Street ;
+    ex:id "1084"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "892.12"^^xsd:double ;
+    ex:width "1197"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1029 ;
+    ex:hasSpeedLimit ex:speedLimit_1084_0 ;
+    geo:hasGeometry ex:street_1084_geometry .
+ex:street_1084_geometry geo:asWKT "LINESTRING(10.114733 50.101066, 10.112211 50.102122, 10.114153 50.103921, 10.116181 50.105126, 10.117441 50.106266, 10.119078 50.105981)"^^geo:wktLiteral .
+ex:speedLimit_1084_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "204.86"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1085 a ex:Street ;
+    ex:id "1085"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "51.35"^^xsd:double ;
+    ex:width "685"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1105 ;
+    ex:hasSpeedLimit ex:speedLimit_1085_0, ex:speedLimit_1085_1 ;
+    geo:hasGeometry ex:street_1085_geometry .
+ex:street_1085_geometry geo:asWKT "LINESTRING(10.113382 50.060271, 10.114021 50.057762, 10.112208 50.059761, 10.109735 50.059569, 10.108481 50.058875, 10.105823 50.056139)"^^geo:wktLiteral .
+ex:speedLimit_1085_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "84.12"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1085_1 a ex:SpeedLimit ; ex:start "84.12"^^xsd:double ; ex:end "271.95"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1086 a ex:Street ;
+    ex:id "1086"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "433.98"^^xsd:double ;
+    ex:width "577"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1086_0, ex:speedLimit_1086_1, ex:speedLimit_1086_2 ;
+    geo:hasGeometry ex:street_1086_geometry .
+ex:street_1086_geometry geo:asWKT "LINESTRING(10.187306 50.049428, 10.190175 50.047608, 10.192020 50.045759, 10.193734 50.046019, 10.194287 50.047953, 10.197010 50.045355, 10.198845 50.048147)"^^geo:wktLiteral .
+ex:speedLimit_1086_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "23.66"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1086_1 a ex:SpeedLimit ; ex:start "23.66"^^xsd:double ; ex:end "210.96"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1086_2 a ex:SpeedLimit ; ex:start "210.96"^^xsd:double ; ex:end "282.13"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1088 a ex:Street ;
+    ex:id "1088"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "670.68"^^xsd:double ;
+    ex:width "586"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1088_0, ex:speedLimit_1088_1, ex:speedLimit_1088_2 ;
+    geo:hasGeometry ex:street_1088_geometry .
+ex:street_1088_geometry geo:asWKT "LINESTRING(10.141088 50.115340, 10.143327 50.113989, 10.144470 50.115163, 10.142039 50.115689, 10.142149 50.116558)"^^geo:wktLiteral .
+ex:speedLimit_1088_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "96.07"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1088_1 a ex:SpeedLimit ; ex:start "96.07"^^xsd:double ; ex:end "108.43"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1088_2 a ex:SpeedLimit ; ex:start "108.43"^^xsd:double ; ex:end "265.16"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1091 a ex:Street ;
+    ex:id "1091"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "668.68"^^xsd:double ;
+    ex:width "454"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1083, ex:street_1131 ;
+    ex:hasSpeedLimit ex:speedLimit_1091_0 ;
+    geo:hasGeometry ex:street_1091_geometry .
+ex:street_1091_geometry geo:asWKT "LINESTRING(10.086423 50.070133, 10.088472 50.070429, 10.086913 50.070814, 10.085941 50.071184, 10.084786 50.071368, 10.082208 50.070099, 10.084269 50.068719)"^^geo:wktLiteral .
+ex:speedLimit_1091_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "117.81"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1093 a ex:Street ;
+    ex:id "1093"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "666.63"^^xsd:double ;
+    ex:width "1041"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1114 ;
+    ex:hasSpeedLimit ex:speedLimit_1093_0, ex:speedLimit_1093_1 ;
+    geo:hasGeometry ex:street_1093_geometry .
+ex:street_1093_geometry geo:asWKT "LINESTRING(10.013667 50.069301, 10.010697 50.066776, 10.009441 50.067620, 10.006927 50.067655, 10.005318 50.065459, 10.007508 50.065190, 10.010083 50.066946)"^^geo:wktLiteral .
+ex:speedLimit_1093_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "191.12"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1093_1 a ex:SpeedLimit ; ex:start "191.12"^^xsd:double ; ex:end "243.96"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1094 a ex:Street ;
+    ex:id "1094"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "505.65"^^xsd:double ;
+    ex:width "573"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1036 ;
+    ex:hasSpeedLimit ex:speedLimit_1094_0 ;
+    geo:hasGeometry ex:street_1094_geometry .
+ex:street_1094_geometry geo:asWKT "LINESTRING(10.167629 50.008131, 10.168852 50.005768, 10.170894 50.004797, 10.168014 50.007534, 10.169499 50.007706, 10.170603 50.010101, 10.172734 50.011447)"^^geo:wktLiteral .
+ex:speedLimit_1094_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "61.78"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1095 a ex:Street ;
+    ex:id "1095"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "808.66"^^xsd:double ;
+    ex:width "1035"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1088 ;
+    ex:hasSpeedLimit ex:speedLimit_1095_0, ex:speedLimit_1095_1, ex:speedLimit_1095_2 ;
+    geo:hasGeometry ex:street_1095_geometry .
+ex:street_1095_geometry geo:asWKT "LINESTRING(10.056778 50.040700, 10.056389 50.038257, 10.055736 50.037177, 10.055745 50.039169, 10.055434 50.039190, 10.052894 50.038670, 10.050284 50.037301)"^^geo:wktLiteral .
+ex:speedLimit_1095_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "203.75"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1095_1 a ex:SpeedLimit ; ex:start "203.75"^^xsd:double ; ex:end "255.13"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1095_2 a ex:SpeedLimit ; ex:start "255.13"^^xsd:double ; ex:end "436.89"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1096 a ex:Street ;
+    ex:id "1096"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "356.11"^^xsd:double ;
+    ex:width "1083"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:hasSpeedLimit ex:speedLimit_1096_0 ;
+    geo:hasGeometry ex:street_1096_geometry .
+ex:street_1096_geometry geo:asWKT "LINESTRING(10.125275 50.091540, 10.125068 50.093029, 10.126677 50.094214, 10.125525 50.095271, 10.127080 50.094159, 10.129056 50.091782)"^^geo:wktLiteral .
+ex:speedLimit_1096_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "131.73"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1099 a ex:Street ;
+    ex:id "1099"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "375.29"^^xsd:double ;
+    ex:width "834"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1116 ;
+    ex:hasSpeedLimit ex:speedLimit_1099_0, ex:speedLimit_1099_1 ;
+    geo:hasGeometry ex:street_1099_geometry .
+ex:street_1099_geometry geo:asWKT "LINESTRING(10.057154 50.119705, 10.059215 50.117922, 10.058702 50.119590)"^^geo:wktLiteral .
+ex:speedLimit_1099_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "52.36"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1099_1 a ex:SpeedLimit ; ex:start "52.36"^^xsd:double ; ex:end "263.74"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1100 a ex:Street ;
+    ex:id "1100"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "396.22"^^xsd:double ;
+    ex:width "1075"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:hasSpeedLimit ex:speedLimit_1100_0 ;
+    geo:hasGeometry ex:street_1100_geometry .
+ex:street_1100_geometry geo:asWKT "LINESTRING(10.141003 50.193579, 10.138183 50.192973, 10.135918 50.192353, 10.133648 50.192420, 10.131264 50.194770, 10.131053 50.197125, 10.130838 50.198891)"^^geo:wktLiteral .
+ex:speedLimit_1100_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "68.73"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1104 a ex:Street ;
+    ex:id "1104"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "31.1"^^xsd:double ;
+    ex:width "428"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:hasSpeedLimit ex:speedLimit_1104_0, ex:speedLimit_1104_1, ex:speedLimit_1104_2 ;
+    geo:hasGeometry ex:street_1104_geometry .
+ex:street_1104_geometry geo:asWKT "LINESTRING(10.010398 50.187227, 10.008716 50.185297, 10.009334 50.185560, 10.011567 50.183141)"^^geo:wktLiteral .
+ex:speedLimit_1104_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "180.51"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1104_1 a ex:SpeedLimit ; ex:start "180.51"^^xsd:double ; ex:end "205.76"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1104_2 a ex:SpeedLimit ; ex:start "205.76"^^xsd:double ; ex:end "483.37"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1105 a ex:Street ;
+    ex:id "1105"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "465.95"^^xsd:double ;
+    ex:width "764"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1105_0, ex:speedLimit_1105_1 ;
+    geo:hasGeometry ex:street_1105_geometry .
+ex:street_1105_geometry geo:asWKT "LINESTRING(10.125395 50.125583, 10.124498 50.125069, 10.122866 50.126044, 10.125181 50.126461)"^^geo:wktLiteral .
+ex:speedLimit_1105_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "218.23"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1105_1 a ex:SpeedLimit ; ex:start "218.23"^^xsd:double ; ex:end "271.47"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1108 a ex:Street ;
+    ex:id "1108"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "334.69"^^xsd:double ;
+    ex:width "596"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1011 ;
+    ex:hasSpeedLimit ex:speedLimit_1108_0, ex:speedLimit_1108_1, ex:speedLimit_1108_2 ;
+    geo:hasGeometry ex:street_1108_geometry .
+ex:street_1108_geometry geo:asWKT "LINESTRING(10.013050 50.043783, 10.015415 50.044039, 10.016591 50.042925, 10.016304 50.044040, 10.015285 50.041227, 10.016756 50.043893, 10.019010 50.044856)"^^geo:wktLiteral .
+ex:speedLimit_1108_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "179.03"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1108_1 a ex:SpeedLimit ; ex:start "179.03"^^xsd:double ; ex:end "367.7"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1108_2 a ex:SpeedLimit ; ex:start "367.7"^^xsd:double ; ex:end "602.2"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1109 a ex:Street ;
+    ex:id "1109"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "818.0"^^xsd:double ;
+    ex:width "590"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1109_0, ex:speedLimit_1109_1, ex:speedLimit_1109_2 ;
+    geo:hasGeometry ex:street_1109_geometry .
+ex:street_1109_geometry geo:asWKT "LINESTRING(10.187295 50.114922, 10.185096 50.112801, 10.185273 50.114548, 10.186167 50.114265, 10.185190 50.116558, 10.187516 50.114899)"^^geo:wktLiteral .
+ex:speedLimit_1109_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "294.81"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1109_1 a ex:SpeedLimit ; ex:start "294.81"^^xsd:double ; ex:end "518.53"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1109_2 a ex:SpeedLimit ; ex:start "518.53"^^xsd:double ; ex:end "808.51"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1110 a ex:Street ;
+    ex:id "1110"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "575.87"^^xsd:double ;
+    ex:width "831"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1084 ;
+    ex:hasSpeedLimit ex:speedLimit_1110_0 ;
+    geo:hasGeometry ex:street_1110_geometry .
+ex:street_1110_geometry geo:asWKT "LINESTRING(10.081032 50.086786, 10.081273 50.085258, 10.080433 50.085621, 10.079789 50.088242, 10.081975 50.086701)"^^geo:wktLiteral .
+ex:speedLimit_1110_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "130.04"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1113 a ex:Street ;
+    ex:id "1113"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "72.38"^^xsd:double ;
+    ex:width "831"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1010, ex:street_1055 ;
+    ex:hasSpeedLimit ex:speedLimit_1113_0, ex:speedLimit_1113_1, ex:speedLimit_1113_2 ;
+    geo:hasGeometry ex:street_1113_geometry .
+ex:street_1113_geometry geo:asWKT "LINESTRING(10.191320 50.034157, 10.193297 50.034683, 10.196110 50.032308, 10.197474 50.030447, 10.196604 50.030400, 10.195989 50.029327, 10.194291 50.030133)"^^geo:wktLiteral .
+ex:speedLimit_1113_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "235.98"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1113_1 a ex:SpeedLimit ; ex:start "235.98"^^xsd:double ; ex:end "502.86"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1113_2 a ex:SpeedLimit ; ex:start "502.86"^^xsd:double ; ex:end "585.36"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1114 a ex:Street ;
+    ex:id "1114"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "851.55"^^xsd:double ;
+    ex:width "708"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1108 ;
+    ex:hasSpeedLimit ex:speedLimit_1114_0, ex:speedLimit_1114_1, ex:speedLimit_1114_2 ;
+    geo:hasGeometry ex:street_1114_geometry .
+ex:street_1114_geometry geo:asWKT "LINESTRING(10.026606 50.056445, 10.023908 50.055333, 10.025055 50.056623, 10.023175 50.055843, 10.020229 50.055901, 10.019561 50.054654, 10.020646 50.056845)"^^geo:wktLiteral .
+ex:speedLimit_1114_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "126.33"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1114_1 a ex:SpeedLimit ; ex:start "126.33"^^xsd:double ; ex:end "378.88"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1114_2 a ex:SpeedLimit ; ex:start "378.88"^^xsd:double ; ex:end "517.07"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1115 a ex:Street ;
+    ex:id "1115"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "740.23"^^xsd:double ;
+    ex:width "1136"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1005 ;
+    ex:hasSpeedLimit ex:speedLimit_1115_0, ex:speedLimit_1115_1 ;
+    geo:hasGeometry ex:street_1115_geometry .
+ex:street_1115_geometry geo:asWKT "LINESTRING(10.000992 50.040080, 10.003797 50.038154, 10.002397 50.035239, 10.002329 50.033873)"^^geo:wktLiteral .
+ex:speedLimit_1115_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "85.13"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1115_1 a ex:SpeedLimit ; ex:start "85.13"^^xsd:double ; ex:end "339.05"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1116 a ex:Street ;
+    ex:id "1116"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "503.07"^^xsd:double ;
+    ex:width "632"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1029 ;
+    ex:hasSpeedLimit ex:speedLimit_1116_0, ex:speedLimit_1116_1, ex:speedLimit_1116_2 ;
+    geo:hasGeometry ex:street_1116_geometry .
+ex:street_1116_geometry geo:asWKT "LINESTRING(10.045941 50.117326, 10.047211 50.115168, 10.044550 50.115441, 10.043517 50.113367, 10.040627 50.111857, 10.040876 50.109636, 10.038222 50.110050)"^^geo:wktLiteral .
+ex:speedLimit_1116_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "207.67"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1116_1 a ex:SpeedLimit ; ex:start "207.67"^^xsd:double ; ex:end "235.94"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1116_2 a ex:SpeedLimit ; ex:start "235.94"^^xsd:double ; ex:end "352.02"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1118 a ex:Street ;
+    ex:id "1118"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "377.72"^^xsd:double ;
+    ex:width "556"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1110 ;
+    ex:hasSpeedLimit ex:speedLimit_1118_0, ex:speedLimit_1118_1, ex:speedLimit_1118_2 ;
+    geo:hasGeometry ex:street_1118_geometry .
+ex:street_1118_geometry geo:asWKT "LINESTRING(10.134419 50.021453, 10.131566 50.019895, 10.130513 50.022741)"^^geo:wktLiteral .
+ex:speedLimit_1118_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "182.52"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1118_1 a ex:SpeedLimit ; ex:start "182.52"^^xsd:double ; ex:end "218.52"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1118_2 a ex:SpeedLimit ; ex:start "218.52"^^xsd:double ; ex:end "505.01"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1124 a ex:Street ;
+    ex:id "1124"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "89.06"^^xsd:double ;
+    ex:width "1073"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1171 ;
+    ex:hasSpeedLimit ex:speedLimit_1124_0 ;
+    geo:hasGeometry ex:street_1124_geometry .
+ex:street_1124_geometry geo:asWKT "LINESTRING(10.168063 50.063353, 10.170409 50.060577, 10.171388 50.063003, 10.168401 50.063778, 10.171234 50.062399)"^^geo:wktLiteral .
+ex:speedLimit_1124_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "272.63"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1126 a ex:Street ;
+    ex:id "1126"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "156.4"^^xsd:double ;
+    ex:width "492"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1131 ;
+    ex:hasSpeedLimit ex:speedLimit_1126_0, ex:speedLimit_1126_1, ex:speedLimit_1126_2 ;
+    geo:hasGeometry ex:street_1126_geometry .
+ex:street_1126_geometry geo:asWKT "LINESTRING(10.033297 50.045338, 10.035210 50.042544, 10.033620 50.041354, 10.033161 50.042259, 10.036098 50.041221, 10.033577 50.043582)"^^geo:wktLiteral .
+ex:speedLimit_1126_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "101.16"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1126_1 a ex:SpeedLimit ; ex:start "101.16"^^xsd:double ; ex:end "351.46"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1126_2 a ex:SpeedLimit ; ex:start "351.46"^^xsd:double ; ex:end "582.47"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1128 a ex:Street ;
+    ex:id "1128"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "661.23"^^xsd:double ;
+    ex:width "917"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1128_0, ex:speedLimit_1128_1, ex:speedLimit_1128_2 ;
+    geo:hasGeometry ex:street_1128_geometry .
+ex:street_1128_geometry geo:asWKT "LINESTRING(10.013600 50.196920, 10.014703 50.195063, 10.016561 50.195655, 10.016599 50.197756, 10.018674 50.196826)"^^geo:wktLiteral .
+ex:speedLimit_1128_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "168.94"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1128_1 a ex:SpeedLimit ; ex:start "168.94"^^xsd:double ; ex:end "211.82"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1128_2 a ex:SpeedLimit ; ex:start "211.82"^^xsd:double ; ex:end "412.3"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1130 a ex:Street ;
+    ex:id "1130"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "172.79"^^xsd:double ;
+    ex:width "904"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1096, ex:street_1109 ;
+    ex:hasSpeedLimit ex:speedLimit_1130_0 ;
+    geo:hasGeometry ex:street_1130_geometry .
+ex:street_1130_geometry geo:asWKT "LINESTRING(10.193125 50.119690, 10.193196 50.117540, 10.194618 50.114555, 10.194802 50.114679, 10.194020 50.111932)"^^geo:wktLiteral .
+ex:speedLimit_1130_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "17.49"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1131 a ex:Street ;
+    ex:id "1131"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "817.33"^^xsd:double ;
+    ex:width "1187"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1187 ;
+    ex:hasSpeedLimit ex:speedLimit_1131_0, ex:speedLimit_1131_1, ex:speedLimit_1131_2 ;
+    geo:hasGeometry ex:street_1131_geometry .
+ex:street_1131_geometry geo:asWKT "LINESTRING(10.127897 50.129839, 10.126542 50.129649, 10.125299 50.132595, 10.124178 50.134341, 10.124624 50.136825)"^^geo:wktLiteral .
+ex:speedLimit_1131_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "149.95"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1131_1 a ex:SpeedLimit ; ex:start "149.95"^^xsd:double ; ex:end "206.91"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1131_2 a ex:SpeedLimit ; ex:start "206.91"^^xsd:double ; ex:end "470.94"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1140 a ex:Street ;
+    ex:id "1140"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "181.27"^^xsd:double ;
+    ex:width "670"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1073 ;
+    ex:hasSpeedLimit ex:speedLimit_1140_0, ex:speedLimit_1140_1, ex:speedLimit_1140_2 ;
+    geo:hasGeometry ex:street_1140_geometry .
+ex:street_1140_geometry geo:asWKT "LINESTRING(10.056435 50.019713, 10.054498 50.018074, 10.055642 50.017572, 10.055832 50.016868, 10.053194 50.018436, 10.050734 50.020308)"^^geo:wktLiteral .
+ex:speedLimit_1140_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "197.48"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1140_1 a ex:SpeedLimit ; ex:start "197.48"^^xsd:double ; ex:end "239.63"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1140_2 a ex:SpeedLimit ; ex:start "239.63"^^xsd:double ; ex:end "420.03"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1142 a ex:Street ;
+    ex:id "1142"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "837.33"^^xsd:double ;
+    ex:width "1185"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1005, ex:street_1034 ;
+    ex:hasSpeedLimit ex:speedLimit_1142_0, ex:speedLimit_1142_1 ;
+    geo:hasGeometry ex:street_1142_geometry .
+ex:street_1142_geometry geo:asWKT "LINESTRING(10.113806 50.101557, 10.111206 50.100606, 10.112425 50.097657, 10.114826 50.097023, 10.112140 50.094482, 10.111672 50.092647)"^^geo:wktLiteral .
+ex:speedLimit_1142_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "33.62"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1142_1 a ex:SpeedLimit ; ex:start "33.62"^^xsd:double ; ex:end "186.67"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1144 a ex:Street ;
+    ex:id "1144"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "834.24"^^xsd:double ;
+    ex:width "373"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:hasSpeedLimit ex:speedLimit_1144_0, ex:speedLimit_1144_1 ;
+    geo:hasGeometry ex:street_1144_geometry .
+ex:street_1144_geometry geo:asWKT "LINESTRING(10.081139 50.044402, 10.082495 50.044266, 10.080283 50.044625, 10.078884 50.044423, 10.076388 50.046821, 10.073865 50.046550)"^^geo:wktLiteral .
+ex:speedLimit_1144_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "244.07"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1144_1 a ex:SpeedLimit ; ex:start "244.07"^^xsd:double ; ex:end "274.91"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1146 a ex:Street ;
+    ex:id "1146"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "848.05"^^xsd:double ;
+    ex:width "942"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1054 ;
+    ex:hasSpeedLimit ex:speedLimit_1146_0 ;
+    geo:hasGeometry ex:street_1146_geometry .
+ex:street_1146_geometry geo:asWKT "LINESTRING(10.199434 50.000321, 10.197210 49.998452, 10.199601 50.000203, 10.197611 49.999233, 10.196804 49.996703, 10.194542 49.996609)"^^geo:wktLiteral .
+ex:speedLimit_1146_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "45.53"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1148 a ex:Street ;
+    ex:id "1148"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "212.57"^^xsd:double ;
+    ex:width "999"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1012, ex:street_1206 ;
+    ex:hasSpeedLimit ex:speedLimit_1148_0, ex:speedLimit_1148_1, ex:speedLimit_1148_2 ;
+    geo:hasGeometry ex:street_1148_geometry .
+ex:street_1148_geometry geo:asWKT "LINESTRING(10.064775 50.151836, 10.064204 50.149562, 10.061590 50.147080, 10.062068 50.149709, 10.062874 50.147443, 10.065630 50.145197, 10.064098 50.144348)"^^geo:wktLiteral .
+ex:speedLimit_1148_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "215.49"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1148_1 a ex:SpeedLimit ; ex:start "215.49"^^xsd:double ; ex:end "396.84"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1148_2 a ex:SpeedLimit ; ex:start "396.84"^^xsd:double ; ex:end "436.47"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1150 a ex:Street ;
+    ex:id "1150"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "82.12"^^xsd:double ;
+    ex:width "1041"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1116 ;
+    ex:hasSpeedLimit ex:speedLimit_1150_0 ;
+    geo:hasGeometry ex:street_1150_geometry .
+ex:street_1150_geometry geo:asWKT "LINESTRING(10.179664 50.150950, 10.177177 50.153666, 10.179118 50.152621, 10.179421 50.153175, 10.177798 50.151854, 10.177074 50.153433)"^^geo:wktLiteral .
+ex:speedLimit_1150_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "270.53"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1152 a ex:Street ;
+    ex:id "1152"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "679.56"^^xsd:double ;
+    ex:width "1015"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1001, ex:street_1038 ;
+    ex:hasSpeedLimit ex:speedLimit_1152_0, ex:speedLimit_1152_1 ;
+    geo:hasGeometry ex:street_1152_geometry .
+ex:street_1152_geometry geo:asWKT "LINESTRING(10.144670 50.134637, 10.145978 50.132276, 10.146882 50.133043, 10.146034 50.130699)"^^geo:wktLiteral .
+ex:speedLimit_1152_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "78.24"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1152_1 a ex:SpeedLimit ; ex:start "78.24"^^xsd:double ; ex:end "111.62"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1153 a ex:Street ;
+    ex:id "1153"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "238.41"^^xsd:double ;
+    ex:width "1053"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1153_0 ;
+    geo:hasGeometry ex:street_1153_geometry .
+ex:street_1153_geometry geo:asWKT "LINESTRING(10.128111 50.053932, 10.130574 50.055805, 10.131448 50.053259, 10.128864 50.053640, 10.131568 50.056480, 10.129291 50.057422)"^^geo:wktLiteral .
+ex:speedLimit_1153_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "110.83"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1154 a ex:Street ;
+    ex:id "1154"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "240.17"^^xsd:double ;
+    ex:width "636"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1054 ;
+    ex:hasSpeedLimit ex:speedLimit_1154_0 ;
+    geo:hasGeometry ex:street_1154_geometry .
+ex:street_1154_geometry geo:asWKT "LINESTRING(10.109424 50.007772, 10.109105 50.009832, 10.108701 50.008400, 10.110965 50.008690, 10.108303 50.009211, 10.107032 50.007069)"^^geo:wktLiteral .
+ex:speedLimit_1154_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "185.35"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1156 a ex:Street ;
+    ex:id "1156"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "177.8"^^xsd:double ;
+    ex:width "308"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1156_0, ex:speedLimit_1156_1 ;
+    geo:hasGeometry ex:street_1156_geometry .
+ex:street_1156_geometry geo:asWKT "LINESTRING(10.056403 50.196585, 10.054276 50.197810, 10.052326 50.199654, 10.050171 50.201173, 10.050407 50.203262)"^^geo:wktLiteral .
+ex:speedLimit_1156_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "145.67"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1156_1 a ex:SpeedLimit ; ex:start "145.67"^^xsd:double ; ex:end "428.46"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1157 a ex:Street ;
+    ex:id "1157"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "95.44"^^xsd:double ;
+    ex:width "1175"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1115 ;
+    ex:hasSpeedLimit ex:speedLimit_1157_0 ;
+    geo:hasGeometry ex:street_1157_geometry .
+ex:street_1157_geometry geo:asWKT "LINESTRING(10.140446 50.198895, 10.141324 50.200154, 10.138964 50.197313, 10.141722 50.198572, 10.143889 50.197641, 10.143654 50.198100)"^^geo:wktLiteral .
+ex:speedLimit_1157_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "46.31"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1158 a ex:Street ;
+    ex:id "1158"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "250.28"^^xsd:double ;
+    ex:width "741"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1095, ex:street_1126 ;
+    ex:hasSpeedLimit ex:speedLimit_1158_0 ;
+    geo:hasGeometry ex:street_1158_geometry .
+ex:street_1158_geometry geo:asWKT "LINESTRING(10.100441 50.098591, 10.100470 50.100041, 10.102076 50.100608, 10.103930 50.102221)"^^geo:wktLiteral .
+ex:speedLimit_1158_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "284.97"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1160 a ex:Street ;
+    ex:id "1160"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "776.13"^^xsd:double ;
+    ex:width "1136"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1050, ex:street_1072, ex:street_1144 ;
+    ex:hasSpeedLimit ex:speedLimit_1160_0 ;
+    geo:hasGeometry ex:street_1160_geometry .
+ex:street_1160_geometry geo:asWKT "LINESTRING(10.161672 50.191358, 10.160924 50.193004, 10.161968 50.190638, 10.162560 50.190381, 10.164666 50.191434, 10.163437 50.192710)"^^geo:wktLiteral .
+ex:speedLimit_1160_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "210.63"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1162 a ex:Street ;
+    ex:id "1162"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "197.33"^^xsd:double ;
+    ex:width "997"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1148 ;
+    ex:hasSpeedLimit ex:speedLimit_1162_0, ex:speedLimit_1162_1 ;
+    geo:hasGeometry ex:street_1162_geometry .
+ex:street_1162_geometry geo:asWKT "LINESTRING(10.157827 50.056744, 10.156773 50.058813, 10.156122 50.056632)"^^geo:wktLiteral .
+ex:speedLimit_1162_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "128.01"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1162_1 a ex:SpeedLimit ; ex:start "128.01"^^xsd:double ; ex:end "354.94"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1165 a ex:Street ;
+    ex:id "1165"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "304.84"^^xsd:double ;
+    ex:width "447"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1016, ex:street_1093 ;
+    ex:hasSpeedLimit ex:speedLimit_1165_0, ex:speedLimit_1165_1, ex:speedLimit_1165_2 ;
+    geo:hasGeometry ex:street_1165_geometry .
+ex:street_1165_geometry geo:asWKT "LINESTRING(10.091858 50.125146, 10.091139 50.124500, 10.090433 50.125489, 10.089670 50.126136, 10.090465 50.128747, 10.093294 50.129110, 10.092926 50.132060)"^^geo:wktLiteral .
+ex:speedLimit_1165_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "268.75"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1165_1 a ex:SpeedLimit ; ex:start "268.75"^^xsd:double ; ex:end "364.49"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1165_2 a ex:SpeedLimit ; ex:start "364.49"^^xsd:double ; ex:end "542.16"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1166 a ex:Street ;
+    ex:id "1166"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "473.0"^^xsd:double ;
+    ex:width "1094"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1008, ex:street_1110 ;
+    ex:hasSpeedLimit ex:speedLimit_1166_0, ex:speedLimit_1166_1, ex:speedLimit_1166_2 ;
+    geo:hasGeometry ex:street_1166_geometry .
+ex:street_1166_geometry geo:asWKT "LINESTRING(10.012971 50.087558, 10.013967 50.086020, 10.016698 50.083193)"^^geo:wktLiteral .
+ex:speedLimit_1166_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "55.2"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1166_1 a ex:SpeedLimit ; ex:start "55.2"^^xsd:double ; ex:end "277.58"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1166_2 a ex:SpeedLimit ; ex:start "277.58"^^xsd:double ; ex:end "462.95"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1168 a ex:Street ;
+    ex:id "1168"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "772.56"^^xsd:double ;
+    ex:width "766"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:hasSpeedLimit ex:speedLimit_1168_0, ex:speedLimit_1168_1, ex:speedLimit_1168_2 ;
+    geo:hasGeometry ex:street_1168_geometry .
+ex:street_1168_geometry geo:asWKT "LINESTRING(10.097117 50.144914, 10.095332 50.143869, 10.095200 50.145410, 10.097047 50.142411, 10.096877 50.141595)"^^geo:wktLiteral .
+ex:speedLimit_1168_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "151.86"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1168_1 a ex:SpeedLimit ; ex:start "151.86"^^xsd:double ; ex:end "426.37"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1168_2 a ex:SpeedLimit ; ex:start "426.37"^^xsd:double ; ex:end "441.64"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1170 a ex:Street ;
+    ex:id "1170"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "174.09"^^xsd:double ;
+    ex:width "466"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1096, ex:street_1173, ex:street_1206 ;
+    ex:hasSpeedLimit ex:speedLimit_1170_0 ;
+    geo:hasGeometry ex:street_1170_geometry .
+ex:street_1170_geometry geo:asWKT "LINESTRING(10.151624 50.052642, 10.150621 50.054130, 10.147797 50.054116)"^^geo:wktLiteral .
+ex:speedLimit_1170_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "72.8"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1171 a ex:Street ;
+    ex:id "1171"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "825.34"^^xsd:double ;
+    ex:width "762"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1028, ex:street_1038 ;
+    ex:hasSpeedLimit ex:speedLimit_1171_0, ex:speedLimit_1171_1 ;
+    geo:hasGeometry ex:street_1171_geometry .
+ex:street_1171_geometry geo:asWKT "LINESTRING(10.054943 50.003285, 10.052328 50.004288, 10.053750 50.004384)"^^geo:wktLiteral .
+ex:speedLimit_1171_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "95.52"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1171_1 a ex:SpeedLimit ; ex:start "95.52"^^xsd:double ; ex:end "152.55"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1172 a ex:Street ;
+    ex:id "1172"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "541.76"^^xsd:double ;
+    ex:width "408"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1118, ex:street_1202 ;
+    ex:hasSpeedLimit ex:speedLimit_1172_0 ;
+    geo:hasGeometry ex:street_1172_geometry .
+ex:street_1172_geometry geo:asWKT "LINESTRING(10.108254 50.028254, 10.107244 50.030140, 10.108086 50.028815, 10.108331 50.031254)"^^geo:wktLiteral .
+ex:speedLimit_1172_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "250.14"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1173 a ex:Street ;
+    ex:id "1173"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "697.34"^^xsd:double ;
+    ex:width "692"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1160 ;
+    ex:hasSpeedLimit ex:speedLimit_1173_0, ex:speedLimit_1173_1, ex:speedLimit_1173_2 ;
+    geo:hasGeometry ex:street_1173_geometry .
+ex:street_1173_geometry geo:asWKT "LINESTRING(10.104082 50.053962, 10.103751 50.051536, 10.102890 50.051884, 10.102282 50.054452, 10.100043 50.056297)"^^geo:wktLiteral .
+ex:speedLimit_1173_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "45.29"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1173_1 a ex:SpeedLimit ; ex:start "45.29"^^xsd:double ; ex:end "117.32"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1173_2 a ex:SpeedLimit ; ex:start "117.32"^^xsd:double ; ex:end "222.03"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1174 a ex:Street ;
+    ex:id "1174"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "423.86"^^xsd:double ;
+    ex:width "308"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1058 ;
+    ex:hasSpeedLimit ex:speedLimit_1174_0, ex:speedLimit_1174_1 ;
+    geo:hasGeometry ex:street_1174_geometry .
+ex:street_1174_geometry geo:asWKT "LINESTRING(10.133861 50.182931, 10.132052 50.180690, 10.132111 50.177720, 10.134652 50.178197, 10.134514 50.180768, 10.136532 50.181694, 10.135690 50.180891)"^^geo:wktLiteral .
+ex:speedLimit_1174_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "185.9"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1174_1 a ex:SpeedLimit ; ex:start "185.9"^^xsd:double ; ex:end "267.58"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1175 a ex:Street ;
+    ex:id "1175"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "670.27"^^xsd:double ;
+    ex:width "1186"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1042, ex:street_1198, ex:street_1235 ;
+    ex:hasSpeedLimit ex:speedLimit_1175_0 ;
+    geo:hasGeometry ex:street_1175_geometry .
+ex:street_1175_geometry geo:asWKT "LINESTRING(10.007747 50.103861, 10.008271 50.106359, 10.006244 50.104451)"^^geo:wktLiteral .
+ex:speedLimit_1175_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "142.64"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1176 a ex:Street ;
+    ex:id "1176"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "683.52"^^xsd:double ;
+    ex:width "947"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1180 ;
+    ex:hasSpeedLimit ex:speedLimit_1176_0, ex:speedLimit_1176_1, ex:speedLimit_1176_2 ;
+    geo:hasGeometry ex:street_1176_geometry .
+ex:street_1176_geometry geo:asWKT "LINESTRING(10.185017 50.093417, 10.186045 50.093132, 10.186450 50.091024, 10.187584 50.091380)"^^geo:wktLiteral .
+ex:speedLimit_1176_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "109.87"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1176_1 a ex:SpeedLimit ; ex:start "109.87"^^xsd:double ; ex:end "164.66"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1176_2 a ex:SpeedLimit ; ex:start "164.66"^^xsd:double ; ex:end "313.1"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1177 a ex:Street ;
+    ex:id "1177"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "55.87"^^xsd:double ;
+    ex:width "685"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1128 ;
+    ex:hasSpeedLimit ex:speedLimit_1177_0, ex:speedLimit_1177_1, ex:speedLimit_1177_2 ;
+    geo:hasGeometry ex:street_1177_geometry .
+ex:street_1177_geometry geo:asWKT "LINESTRING(10.044407 50.061108, 10.042663 50.062289, 10.043232 50.063323, 10.043290 50.062782, 10.044899 50.061473, 10.046948 50.060050)"^^geo:wktLiteral .
+ex:speedLimit_1177_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "221.41"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1177_1 a ex:SpeedLimit ; ex:start "221.41"^^xsd:double ; ex:end "259.69"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1177_2 a ex:SpeedLimit ; ex:start "259.69"^^xsd:double ; ex:end "307.8"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1178 a ex:Street ;
+    ex:id "1178"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "846.83"^^xsd:double ;
+    ex:width "328"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1215 ;
+    ex:hasSpeedLimit ex:speedLimit_1178_0, ex:speedLimit_1178_1 ;
+    geo:hasGeometry ex:street_1178_geometry .
+ex:street_1178_geometry geo:asWKT "LINESTRING(10.051254 50.062878, 10.048923 50.059950, 10.050236 50.058050, 10.051232 50.057689, 10.048477 50.055107, 10.048000 50.055861, 10.045164 50.053140)"^^geo:wktLiteral .
+ex:speedLimit_1178_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "190.51"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1178_1 a ex:SpeedLimit ; ex:start "190.51"^^xsd:double ; ex:end "251.68"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1179 a ex:Street ;
+    ex:id "1179"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "184.55"^^xsd:double ;
+    ex:width "1097"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1075, ex:street_1144, ex:street_1187 ;
+    ex:hasSpeedLimit ex:speedLimit_1179_0 ;
+    geo:hasGeometry ex:street_1179_geometry .
+ex:street_1179_geometry geo:asWKT "LINESTRING(10.175849 50.074867, 10.173045 50.075081, 10.172765 50.077078, 10.174572 50.075805, 10.176442 50.074862, 10.177771 50.077831, 10.177434 50.078454)"^^geo:wktLiteral .
+ex:speedLimit_1179_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "272.95"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1180 a ex:Street ;
+    ex:id "1180"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "767.71"^^xsd:double ;
+    ex:width "1159"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1075 ;
+    ex:hasSpeedLimit ex:speedLimit_1180_0, ex:speedLimit_1180_1, ex:speedLimit_1180_2 ;
+    geo:hasGeometry ex:street_1180_geometry .
+ex:street_1180_geometry geo:asWKT "LINESTRING(10.185794 50.141777, 10.183438 50.143236, 10.186113 50.142106, 10.185736 50.142456)"^^geo:wktLiteral .
+ex:speedLimit_1180_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "174.97"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1180_1 a ex:SpeedLimit ; ex:start "174.97"^^xsd:double ; ex:end "438.84"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1180_2 a ex:SpeedLimit ; ex:start "438.84"^^xsd:double ; ex:end "486.49"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1181 a ex:Street ;
+    ex:id "1181"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "167.32"^^xsd:double ;
+    ex:width "416"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1156, ex:street_1218 ;
+    ex:hasSpeedLimit ex:speedLimit_1181_0, ex:speedLimit_1181_1, ex:speedLimit_1181_2 ;
+    geo:hasGeometry ex:street_1181_geometry .
+ex:street_1181_geometry geo:asWKT "LINESTRING(10.085346 50.135485, 10.087563 50.133099, 10.088392 50.134685, 10.087120 50.134524, 10.086962 50.136640)"^^geo:wktLiteral .
+ex:speedLimit_1181_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "243.62"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1181_1 a ex:SpeedLimit ; ex:start "243.62"^^xsd:double ; ex:end "264.94"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1181_2 a ex:SpeedLimit ; ex:start "264.94"^^xsd:double ; ex:end "393.7"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1182 a ex:Street ;
+    ex:id "1182"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "181.42"^^xsd:double ;
+    ex:width "886"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1199 ;
+    ex:hasSpeedLimit ex:speedLimit_1182_0, ex:speedLimit_1182_1, ex:speedLimit_1182_2 ;
+    geo:hasGeometry ex:street_1182_geometry .
+ex:street_1182_geometry geo:asWKT "LINESTRING(10.014733 50.078805, 10.014382 50.081574, 10.014677 50.080063)"^^geo:wktLiteral .
+ex:speedLimit_1182_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "281.2"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1182_1 a ex:SpeedLimit ; ex:start "281.2"^^xsd:double ; ex:end "313.54"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1182_2 a ex:SpeedLimit ; ex:start "313.54"^^xsd:double ; ex:end "364.29"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1183 a ex:Street ;
+    ex:id "1183"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "564.8"^^xsd:double ;
+    ex:width "509"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1195, ex:street_1206 ;
+    ex:hasSpeedLimit ex:speedLimit_1183_0, ex:speedLimit_1183_1, ex:speedLimit_1183_2 ;
+    geo:hasGeometry ex:street_1183_geometry .
+ex:street_1183_geometry geo:asWKT "LINESTRING(10.101335 50.190814, 10.101408 50.193325, 10.102870 50.193160, 10.104097 50.192184, 10.104408 50.189588, 10.105722 50.189423)"^^geo:wktLiteral .
+ex:speedLimit_1183_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "185.69"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1183_1 a ex:SpeedLimit ; ex:start "185.69"^^xsd:double ; ex:end "256.99"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1183_2 a ex:SpeedLimit ; ex:start "256.99"^^xsd:double ; ex:end "508.27"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1184 a ex:Street ;
+    ex:id "1184"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "125.53"^^xsd:double ;
+    ex:width "284"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1165, ex:street_1191 ;
+    ex:hasSpeedLimit ex:speedLimit_1184_0 ;
+    geo:hasGeometry ex:street_1184_geometry .
+ex:street_1184_geometry geo:asWKT "LINESTRING(10.027839 50.133133, 10.029652 50.133035, 10.030171 50.131042, 10.030120 50.130159, 10.030296 50.129793, 10.033260 50.130229, 10.030442 50.130829)"^^geo:wktLiteral .
+ex:speedLimit_1184_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "41.92"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1185 a ex:Street ;
+    ex:id "1185"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "234.27"^^xsd:double ;
+    ex:width "769"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1055, ex:street_1168, ex:street_1216 ;
+    ex:hasSpeedLimit ex:speedLimit_1185_0, ex:speedLimit_1185_1 ;
+    geo:hasGeometry ex:street_1185_geometry .
+ex:street_1185_geometry geo:asWKT "LINESTRING(10.165074 50.052276, 10.167364 50.051671, 10.169785 50.053244, 10.169543 50.051378)"^^geo:wktLiteral .
+ex:speedLimit_1185_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "44.35"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1185_1 a ex:SpeedLimit ; ex:start "44.35"^^xsd:double ; ex:end "77.88"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1186 a ex:Street ;
+    ex:id "1186"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "797.97"^^xsd:double ;
+    ex:width "1035"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1108, ex:street_1219 ;
+    ex:hasSpeedLimit ex:speedLimit_1186_0 ;
+    geo:hasGeometry ex:street_1186_geometry .
+ex:street_1186_geometry geo:asWKT "LINESTRING(10.152646 50.085816, 10.154509 50.087801, 10.157264 50.089646, 10.158268 50.088908, 10.157475 50.091224)"^^geo:wktLiteral .
+ex:speedLimit_1186_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "75.51"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1187 a ex:Street ;
+    ex:id "1187"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "853.9"^^xsd:double ;
+    ex:width "529"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1038 ;
+    ex:hasSpeedLimit ex:speedLimit_1187_0, ex:speedLimit_1187_1, ex:speedLimit_1187_2 ;
+    geo:hasGeometry ex:street_1187_geometry .
+ex:street_1187_geometry geo:asWKT "LINESTRING(10.000063 50.051267, 9.999309 50.051033, 10.000903 50.050231, 10.000950 50.053221, 10.002204 50.051719)"^^geo:wktLiteral .
+ex:speedLimit_1187_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "47.3"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1187_1 a ex:SpeedLimit ; ex:start "47.3"^^xsd:double ; ex:end "178.56"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1187_2 a ex:SpeedLimit ; ex:start "178.56"^^xsd:double ; ex:end "251.75"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1188 a ex:Street ;
+    ex:id "1188"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "134.23"^^xsd:double ;
+    ex:width "437"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1241 ;
+    ex:hasSpeedLimit ex:speedLimit_1188_0, ex:speedLimit_1188_1 ;
+    geo:hasGeometry ex:street_1188_geometry .
+ex:street_1188_geometry geo:asWKT "LINESTRING(10.109961 50.013903, 10.111360 50.012948, 10.110362 50.014456)"^^geo:wktLiteral .
+ex:speedLimit_1188_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "283.67"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1188_1 a ex:SpeedLimit ; ex:start "283.67"^^xsd:double ; ex:end "507.06"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1189 a ex:Street ;
+    ex:id "1189"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "122.77"^^xsd:double ;
+    ex:width "1171"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1191 ;
+    ex:hasSpeedLimit ex:speedLimit_1189_0, ex:speedLimit_1189_1, ex:speedLimit_1189_2 ;
+    geo:hasGeometry ex:street_1189_geometry .
+ex:street_1189_geometry geo:asWKT "LINESTRING(10.175465 50.177523, 10.177481 50.179109, 10.180380 50.178127, 10.181258 50.176225, 10.179853 50.179056, 10.181128 50.177307)"^^geo:wktLiteral .
+ex:speedLimit_1189_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "134.36"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1189_1 a ex:SpeedLimit ; ex:start "134.36"^^xsd:double ; ex:end "180.52"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1189_2 a ex:SpeedLimit ; ex:start "180.52"^^xsd:double ; ex:end "263.65"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1190 a ex:Street ;
+    ex:id "1190"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "566.82"^^xsd:double ;
+    ex:width "719"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1182, ex:street_1211, ex:street_1234 ;
+    ex:hasSpeedLimit ex:speedLimit_1190_0 ;
+    geo:hasGeometry ex:street_1190_geometry .
+ex:street_1190_geometry geo:asWKT "LINESTRING(10.195249 50.044770, 10.192256 50.047298, 10.189628 50.048109, 10.190734 50.049687)"^^geo:wktLiteral .
+ex:speedLimit_1190_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "193.11"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1191 a ex:Street ;
+    ex:id "1191"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "807.21"^^xsd:double ;
+    ex:width "407"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1012 ;
+    ex:hasSpeedLimit ex:speedLimit_1191_0, ex:speedLimit_1191_1 ;
+    geo:hasGeometry ex:street_1191_geometry .
+ex:street_1191_geometry geo:asWKT "LINESTRING(10.194370 50.152180, 10.195689 50.154623, 10.192781 50.152757)"^^geo:wktLiteral .
+ex:speedLimit_1191_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "57.55"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1191_1 a ex:SpeedLimit ; ex:start "57.55"^^xsd:double ; ex:end "79.59"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1192 a ex:Street ;
+    ex:id "1192"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "824.75"^^xsd:double ;
+    ex:width "914"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1029, ex:street_1144 ;
+    ex:hasSpeedLimit ex:speedLimit_1192_0, ex:speedLimit_1192_1 ;
+    geo:hasGeometry ex:street_1192_geometry .
+ex:street_1192_geometry geo:asWKT "LINESTRING(10.147787 50.075107, 10.145088 50.074211, 10.145480 50.072749, 10.146713 50.071964, 10.148988 50.072979, 10.147254 50.071083)"^^geo:wktLiteral .
+ex:speedLimit_1192_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "223.77"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1192_1 a ex:SpeedLimit ; ex:start "223.77"^^xsd:double ; ex:end "427.31"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1193 a ex:Street ;
+    ex:id "1193"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "187.89"^^xsd:double ;
+    ex:width "1050"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1205 ;
+    ex:hasSpeedLimit ex:speedLimit_1193_0, ex:speedLimit_1193_1 ;
+    geo:hasGeometry ex:street_1193_geometry .
+ex:street_1193_geometry geo:asWKT "LINESTRING(10.104233 50.002243, 10.104989 50.002966, 10.107242 50.001947, 10.106217 49.999964)"^^geo:wktLiteral .
+ex:speedLimit_1193_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "197.41"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1193_1 a ex:SpeedLimit ; ex:start "197.41"^^xsd:double ; ex:end "438.51"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1194 a ex:Street ;
+    ex:id "1194"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "792.87"^^xsd:double ;
+    ex:width "652"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1237 ;
+    ex:hasSpeedLimit ex:speedLimit_1194_0 ;
+    geo:hasGeometry ex:street_1194_geometry .
+ex:street_1194_geometry geo:asWKT "LINESTRING(10.057035 50.034156, 10.055457 50.032796, 10.055689 50.030318, 10.058085 50.032347)"^^geo:wktLiteral .
+ex:speedLimit_1194_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "159.43"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1195 a ex:Street ;
+    ex:id "1195"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "137.39"^^xsd:double ;
+    ex:width "493"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1095, ex:street_1191, ex:street_1228 ;
+    ex:hasSpeedLimit ex:speedLimit_1195_0, ex:speedLimit_1195_1 ;
+    geo:hasGeometry ex:street_1195_geometry .
+ex:street_1195_geometry geo:asWKT "LINESTRING(10.006006 50.091289, 10.008951 50.089885, 10.009253 50.092159, 10.010522 50.089874, 10.009037 50.092762)"^^geo:wktLiteral .
+ex:speedLimit_1195_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "44.46"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1195_1 a ex:SpeedLimit ; ex:start "44.46"^^xsd:double ; ex:end "224.95"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1196 a ex:Street ;
+    ex:id "1196"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "47.26"^^xsd:double ;
+    ex:width "971"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1081, ex:street_1243 ;
+    ex:hasSpeedLimit ex:speedLimit_1196_0, ex:speedLimit_1196_1, ex:speedLimit_1196_2 ;
+    geo:hasGeometry ex:street_1196_geometry .
+ex:street_1196_geometry geo:asWKT "LINESTRING(10.016810 50.059134, 10.019384 50.059995, 10.016486 50.057957, 10.016967 50.060935)"^^geo:wktLiteral .
+ex:speedLimit_1196_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "243.93"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1196_1 a ex:SpeedLimit ; ex:start "243.93"^^xsd:double ; ex:end "266.64"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1196_2 a ex:SpeedLimit ; ex:start "266.64"^^xsd:double ; ex:end "343.83"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1197 a ex:Street ;
+    ex:id "1197"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "54.24"^^xsd:double ;
+    ex:width "695"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1036, ex:street_1202, ex:street_1242 ;
+    ex:hasSpeedLimit ex:speedLimit_1197_0, ex:speedLimit_1197_1 ;
+    geo:hasGeometry ex:street_1197_geometry .
+ex:street_1197_geometry geo:asWKT "LINESTRING(10.158073 50.157707, 10.158059 50.155330, 10.156599 50.153950, 10.157069 50.154533, 10.156253 50.155946, 10.154360 50.154746, 10.151957 50.156736)"^^geo:wktLiteral .
+ex:speedLimit_1197_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "265.26"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1197_1 a ex:SpeedLimit ; ex:start "265.26"^^xsd:double ; ex:end "293.74"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1198 a ex:Street ;
+    ex:id "1198"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "717.61"^^xsd:double ;
+    ex:width "662"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1222 ;
+    ex:hasSpeedLimit ex:speedLimit_1198_0, ex:speedLimit_1198_1, ex:speedLimit_1198_2 ;
+    geo:hasGeometry ex:street_1198_geometry .
+ex:street_1198_geometry geo:asWKT "LINESTRING(10.097819 50.112730, 10.095567 50.114619, 10.095592 50.113121, 10.093617 50.112411, 10.092637 50.111123)"^^geo:wktLiteral .
+ex:speedLimit_1198_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "227.3"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1198_1 a ex:SpeedLimit ; ex:start "227.3"^^xsd:double ; ex:end "476.41"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1198_2 a ex:SpeedLimit ; ex:start "476.41"^^xsd:double ; ex:end "511.58"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1199 a ex:Street ;
+    ex:id "1199"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "80.35"^^xsd:double ;
+    ex:width "790"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1079, ex:street_1232 ;
+    ex:hasSpeedLimit ex:speedLimit_1199_0, ex:speedLimit_1199_1, ex:speedLimit_1199_2 ;
+    geo:hasGeometry ex:street_1199_geometry .
+ex:street_1199_geometry geo:asWKT "LINESTRING(10.055957 50.166586, 10.058875 50.164634, 10.056227 50.161922, 10.053625 50.162842, 10.052667 50.162844, 10.049739 50.163445, 10.050137 50.165523)"^^geo:wktLiteral .
+ex:speedLimit_1199_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "222.08"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1199_1 a ex:SpeedLimit ; ex:start "222.08"^^xsd:double ; ex:end "302.77"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1199_2 a ex:SpeedLimit ; ex:start "302.77"^^xsd:double ; ex:end "577.44"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1200 a ex:Street ;
+    ex:id "1200"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "531.14"^^xsd:double ;
+    ex:width "642"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1150 ;
+    ex:hasSpeedLimit ex:speedLimit_1200_0, ex:speedLimit_1200_1, ex:speedLimit_1200_2 ;
+    geo:hasGeometry ex:street_1200_geometry .
+ex:street_1200_geometry geo:asWKT "LINESTRING(10.120168 50.173247, 10.119350 50.170272, 10.118740 50.167483, 10.115767 50.165973, 10.115222 50.166797, 10.113904 50.167297, 10.112238 50.165029)"^^geo:wktLiteral .
+ex:speedLimit_1200_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "30.49"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1200_1 a ex:SpeedLimit ; ex:start "30.49"^^xsd:double ; ex:end "282.31"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1200_2 a ex:SpeedLimit ; ex:start "282.31"^^xsd:double ; ex:end "538.33"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1201 a ex:Street ;
+    ex:id "1201"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "179.62"^^xsd:double ;
+    ex:width "402"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1233 ;
+    ex:hasSpeedLimit ex:speedLimit_1201_0, ex:speedLimit_1201_1, ex:speedLimit_1201_2 ;
+    geo:hasGeometry ex:street_1201_geometry .
+ex:street_1201_geometry geo:asWKT "LINESTRING(10.126959 50.180403, 10.129725 50.178013, 10.129493 50.178135, 10.128870 50.176876, 10.131433 50.177040)"^^geo:wktLiteral .
+ex:speedLimit_1201_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "46.49"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1201_1 a ex:SpeedLimit ; ex:start "46.49"^^xsd:double ; ex:end "246.23"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1201_2 a ex:SpeedLimit ; ex:start "246.23"^^xsd:double ; ex:end "431.0"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1202 a ex:Street ;
+    ex:id "1202"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "22.12"^^xsd:double ;
+    ex:width "271"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1196, ex:street_1227 ;
+    ex:hasSpeedLimit ex:speedLimit_1202_0, ex:speedLimit_1202_1 ;
+    geo:hasGeometry ex:street_1202_geometry .
+ex:street_1202_geometry geo:asWKT "LINESTRING(10.145406 50.100734, 10.144796 50.103342, 10.142200 50.100702)"^^geo:wktLiteral .
+ex:speedLimit_1202_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "282.27"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1202_1 a ex:SpeedLimit ; ex:start "282.27"^^xsd:double ; ex:end "326.72"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1203 a ex:Street ;
+    ex:id "1203"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "49.96"^^xsd:double ;
+    ex:width "341"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1028, ex:street_1190, ex:street_1227 ;
+    ex:hasSpeedLimit ex:speedLimit_1203_0, ex:speedLimit_1203_1 ;
+    geo:hasGeometry ex:street_1203_geometry .
+ex:street_1203_geometry geo:asWKT "LINESTRING(10.073773 50.009576, 10.072301 50.007150, 10.070074 50.007628, 10.067687 50.009160, 10.065408 50.007752)"^^geo:wktLiteral .
+ex:speedLimit_1203_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "168.18"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1203_1 a ex:SpeedLimit ; ex:start "168.18"^^xsd:double ; ex:end "457.16"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1204 a ex:Street ;
+    ex:id "1204"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "187.34"^^xsd:double ;
+    ex:width "1180"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1076, ex:street_1205 ;
+    ex:hasSpeedLimit ex:speedLimit_1204_0, ex:speedLimit_1204_1 ;
+    geo:hasGeometry ex:street_1204_geometry .
+ex:street_1204_geometry geo:asWKT "LINESTRING(10.040219 50.035152, 10.038292 50.035033, 10.037535 50.037597, 10.035342 50.035531, 10.032358 50.035177, 10.031886 50.035751)"^^geo:wktLiteral .
+ex:speedLimit_1204_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "197.89"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1204_1 a ex:SpeedLimit ; ex:start "197.89"^^xsd:double ; ex:end "463.27"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1205 a ex:Street ;
+    ex:id "1205"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "846.35"^^xsd:double ;
+    ex:width "445"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1228, ex:street_1244 ;
+    ex:hasSpeedLimit ex:speedLimit_1205_0, ex:speedLimit_1205_1, ex:speedLimit_1205_2 ;
+    geo:hasGeometry ex:street_1205_geometry .
+ex:street_1205_geometry geo:asWKT "LINESTRING(10.005053 50.155202, 10.004428 50.157422, 10.002778 50.156187, 10.001974 50.156084, 10.001463 50.153602)"^^geo:wktLiteral .
+ex:speedLimit_1205_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "93.14"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1205_1 a ex:SpeedLimit ; ex:start "93.14"^^xsd:double ; ex:end "273.52"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1205_2 a ex:SpeedLimit ; ex:start "273.52"^^xsd:double ; ex:end "327.11"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1206 a ex:Street ;
+    ex:id "1206"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "471.25"^^xsd:double ;
+    ex:width "579"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1195 ;
+    ex:hasSpeedLimit ex:speedLimit_1206_0, ex:speedLimit_1206_1, ex:speedLimit_1206_2 ;
+    geo:hasGeometry ex:street_1206_geometry .
+ex:street_1206_geometry geo:asWKT "LINESTRING(10.110675 50.112074, 10.111268 50.109509, 10.110138 50.107835, 10.111322 50.109600)"^^geo:wktLiteral .
+ex:speedLimit_1206_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "265.32"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1206_1 a ex:SpeedLimit ; ex:start "265.32"^^xsd:double ; ex:end "340.95"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1206_2 a ex:SpeedLimit ; ex:start "340.95"^^xsd:double ; ex:end "494.7"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1207 a ex:Street ;
+    ex:id "1207"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "698.66"^^xsd:double ;
+    ex:width "1156"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1118, ex:street_1175, ex:street_1185 ;
+    ex:hasSpeedLimit ex:speedLimit_1207_0, ex:speedLimit_1207_1 ;
+    geo:hasGeometry ex:street_1207_geometry .
+ex:street_1207_geometry geo:asWKT "LINESTRING(10.167278 50.130383, 10.165932 50.133159, 10.164288 50.135490)"^^geo:wktLiteral .
+ex:speedLimit_1207_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "222.16"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1207_1 a ex:SpeedLimit ; ex:start "222.16"^^xsd:double ; ex:end "271.5"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1208 a ex:Street ;
+    ex:id "1208"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "404.03"^^xsd:double ;
+    ex:width "996"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1228 ;
+    ex:hasSpeedLimit ex:speedLimit_1208_0, ex:speedLimit_1208_1, ex:speedLimit_1208_2 ;
+    geo:hasGeometry ex:street_1208_geometry .
+ex:street_1208_geometry geo:asWKT "LINESTRING(10.021005 50.084931, 10.019915 50.085194, 10.018360 50.083154)"^^geo:wktLiteral .
+ex:speedLimit_1208_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "226.39"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1208_1 a ex:SpeedLimit ; ex:start "226.39"^^xsd:double ; ex:end "380.97"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1208_2 a ex:SpeedLimit ; ex:start "380.97"^^xsd:double ; ex:end "481.55"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1209 a ex:Street ;
+    ex:id "1209"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "238.12"^^xsd:double ;
+    ex:width "307"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1001, ex:street_1190 ;
+    ex:hasSpeedLimit ex:speedLimit_1209_0, ex:speedLimit_1209_1 ;
+    geo:hasGeometry ex:street_1209_geometry .
+ex:street_1209_geometry geo:asWKT "LINESTRING(10.096127 50.010134, 10.096359 50.008803, 10.096618 50.010460)"^^geo:wktLiteral .
+ex:speedLimit_1209_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "115.58"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1209_1 a ex:SpeedLimit ; ex:start "115.58"^^xsd:double ; ex:end "296.67"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1210 a ex:Street ;
+    ex:id "1210"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "140.97"^^xsd:double ;
+    ex:width "318"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1231 ;
+    ex:hasSpeedLimit ex:speedLimit_1210_0, ex:speedLimit_1210_1 ;
+    geo:hasGeometry ex:street_1210_geometry .
+ex:street_1210_geometry geo:asWKT "LINESTRING(10.186888 50.112099, 10.188487 50.111184, 10.189675 50.108247, 10.188602 50.107554, 10.189526 50.108165)"^^geo:wktLiteral .
+ex:speedLimit_1210_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "210.54"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1210_1 a ex:SpeedLimit ; ex:start "210.54"^^xsd:double ; ex:end "432.04"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1211 a ex:Street ;
+    ex:id "1211"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "766.1"^^xsd:double ;
+    ex:width "1046"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1210, ex:street_1214, ex:street_1226 ;
+    ex:hasSpeedLimit ex:speedLimit_1211_0 ;
+    geo:hasGeometry ex:street_1211_geometry .
+ex:street_1211_geometry geo:asWKT "LINESTRING(10.153093 50.096697, 10.154123 50.096189, 10.153242 50.098333, 10.154078 50.099452, 10.153260 50.099905)"^^geo:wktLiteral .
+ex:speedLimit_1211_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "74.61"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1212 a ex:Street ;
+    ex:id "1212"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "428.99"^^xsd:double ;
+    ex:width "631"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1160, ex:street_1162, ex:street_1210 ;
+    ex:hasSpeedLimit ex:speedLimit_1212_0, ex:speedLimit_1212_1, ex:speedLimit_1212_2 ;
+    geo:hasGeometry ex:street_1212_geometry .
+ex:street_1212_geometry geo:asWKT "LINESTRING(10.061791 50.046981, 10.060638 50.049646, 10.060959 50.049682, 10.060895 50.052462, 10.063031 50.050562)"^^geo:wktLiteral .
+ex:speedLimit_1212_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "299.72"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1212_1 a ex:SpeedLimit ; ex:start "299.72"^^xsd:double ; ex:end "417.75"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1212_2 a ex:SpeedLimit ; ex:start "417.75"^^xsd:double ; ex:end "660.31"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1213 a ex:Street ;
+    ex:id "1213"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "672.56"^^xsd:double ;
+    ex:width "689"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1005, ex:street_1031, ex:street_1036 ;
+    ex:hasSpeedLimit ex:speedLimit_1213_0, ex:speedLimit_1213_1, ex:speedLimit_1213_2 ;
+    geo:hasGeometry ex:street_1213_geometry .
+ex:street_1213_geometry geo:asWKT "LINESTRING(10.008418 50.124581, 10.007216 50.123008, 10.005279 50.125127, 10.004951 50.124014, 10.003144 50.121452, 10.000258 50.121610, 10.000456 50.120067)"^^geo:wktLiteral .
+ex:speedLimit_1213_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "282.71"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1213_1 a ex:SpeedLimit ; ex:start "282.71"^^xsd:double ; ex:end "319.46"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1213_2 a ex:SpeedLimit ; ex:start "319.46"^^xsd:double ; ex:end "456.08"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1214 a ex:Street ;
+    ex:id "1214"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "202.08"^^xsd:double ;
+    ex:width "860"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1076 ;
+    ex:hasSpeedLimit ex:speedLimit_1214_0, ex:speedLimit_1214_1 ;
+    geo:hasGeometry ex:street_1214_geometry .
+ex:street_1214_geometry geo:asWKT "LINESTRING(10.052636 50.174482, 10.052692 50.173823, 10.051931 50.174221, 10.050705 50.172461, 10.049673 50.174184, 10.048488 50.171861)"^^geo:wktLiteral .
+ex:speedLimit_1214_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "270.34"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1214_1 a ex:SpeedLimit ; ex:start "270.34"^^xsd:double ; ex:end "345.38"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1215 a ex:Street ;
+    ex:id "1215"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "330.25"^^xsd:double ;
+    ex:width "786"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1205 ;
+    ex:hasSpeedLimit ex:speedLimit_1215_0, ex:speedLimit_1215_1 ;
+    geo:hasGeometry ex:street_1215_geometry .
+ex:street_1215_geometry geo:asWKT "LINESTRING(10.057889 50.136207, 10.057482 50.137663, 10.056663 50.135963, 10.053770 50.135355)"^^geo:wktLiteral .
+ex:speedLimit_1215_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "285.99"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1215_1 a ex:SpeedLimit ; ex:start "285.99"^^xsd:double ; ex:end "429.72"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1216 a ex:Street ;
+    ex:id "1216"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "373.55"^^xsd:double ;
+    ex:width "790"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1031, ex:street_1142 ;
+    ex:hasSpeedLimit ex:speedLimit_1216_0, ex:speedLimit_1216_1, ex:speedLimit_1216_2 ;
+    geo:hasGeometry ex:street_1216_geometry .
+ex:street_1216_geometry geo:asWKT "LINESTRING(10.195012 50.129602, 10.198004 50.128852, 10.197132 50.128969, 10.199446 50.131136, 10.197955 50.132651, 10.198398 50.133028, 10.197848 50.132527)"^^geo:wktLiteral .
+ex:speedLimit_1216_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "74.86"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1216_1 a ex:SpeedLimit ; ex:start "74.86"^^xsd:double ; ex:end "296.54"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1216_2 a ex:SpeedLimit ; ex:start "296.54"^^xsd:double ; ex:end "527.68"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1217 a ex:Street ;
+    ex:id "1217"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "96.25"^^xsd:double ;
+    ex:width "337"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1116, ex:street_1157 ;
+    ex:hasSpeedLimit ex:speedLimit_1217_0 ;
+    geo:hasGeometry ex:street_1217_geometry .
+ex:street_1217_geometry geo:asWKT "LINESTRING(10.146418 50.106447, 10.149278 50.108826, 10.148861 50.109301, 10.148658 50.112282)"^^geo:wktLiteral .
+ex:speedLimit_1217_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "189.98"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1218 a ex:Street ;
+    ex:id "1218"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "384.62"^^xsd:double ;
+    ex:width "1145"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1140 ;
+    ex:hasSpeedLimit ex:speedLimit_1218_0 ;
+    geo:hasGeometry ex:street_1218_geometry .
+ex:street_1218_geometry geo:asWKT "LINESTRING(10.162364 50.109311, 10.161335 50.111629, 10.161406 50.109764, 10.159723 50.111906)"^^geo:wktLiteral .
+ex:speedLimit_1218_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "185.07"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1219 a ex:Street ;
+    ex:id "1219"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "196.7"^^xsd:double ;
+    ex:width "856"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1008, ex:street_1055, ex:street_1150 ;
+    ex:hasSpeedLimit ex:speedLimit_1219_0, ex:speedLimit_1219_1 ;
+    geo:hasGeometry ex:street_1219_geometry .
+ex:street_1219_geometry geo:asWKT "LINESTRING(10.132635 50.067632, 10.132139 50.066877, 10.129724 50.067777, 10.127185 50.067089, 10.127320 50.064259)"^^geo:wktLiteral .
+ex:speedLimit_1219_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "69.9"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1219_1 a ex:SpeedLimit ; ex:start "69.9"^^xsd:double ; ex:end "286.57"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1220 a ex:Street ;
+    ex:id "1220"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "250.17"^^xsd:double ;
+    ex:width "1191"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1230 ;
+    ex:hasSpeedLimit ex:speedLimit_1220_0 ;
+    geo:hasGeometry ex:street_1220_geometry .
+ex:street_1220_geometry geo:asWKT "LINESTRING(10.161870 50.125150, 10.164179 50.123415, 10.166154 50.125619, 10.165826 50.126068)"^^geo:wktLiteral .
+ex:speedLimit_1220_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "226.44"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1221 a ex:Street ;
+    ex:id "1221"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "214.09"^^xsd:double ;
+    ex:width "622"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1075, ex:street_1153 ;
+    ex:hasSpeedLimit ex:speedLimit_1221_0, ex:speedLimit_1221_1 ;
+    geo:hasGeometry ex:street_1221_geometry .
+ex:street_1221_geometry geo:asWKT "LINESTRING(10.152479 50.072915, 10.153978 50.071711, 10.152075 50.070952, 10.151230 50.073499)"^^geo:wktLiteral .
+ex:speedLimit_1221_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "74.4"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1221_1 a ex:SpeedLimit ; ex:start "74.4"^^xsd:double ; ex:end "343.23"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1222 a ex:Street ;
+    ex:id "1222"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "268.01"^^xsd:double ;
+    ex:width "997"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1010, ex:street_1225 ;
+    ex:hasSpeedLimit ex:speedLimit_1222_0, ex:speedLimit_1222_1 ;
+    geo:hasGeometry ex:street_1222_geometry .
+ex:street_1222_geometry geo:asWKT "LINESTRING(10.118674 50.068255, 10.118962 50.065646, 10.119760 50.062770, 10.118624 50.060086, 10.119434 50.057136)"^^geo:wktLiteral .
+ex:speedLimit_1222_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "254.23"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1222_1 a ex:SpeedLimit ; ex:start "254.23"^^xsd:double ; ex:end "300.02"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1223 a ex:Street ;
+    ex:id "1223"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "739.77"^^xsd:double ;
+    ex:width "564"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1010, ex:street_1091 ;
+    ex:hasSpeedLimit ex:speedLimit_1223_0 ;
+    geo:hasGeometry ex:street_1223_geometry .
+ex:street_1223_geometry geo:asWKT "LINESTRING(10.014692 50.139275, 10.013499 50.140375, 10.016350 50.138954)"^^geo:wktLiteral .
+ex:speedLimit_1223_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "285.71"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1224 a ex:Street ;
+    ex:id "1224"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "158.85"^^xsd:double ;
+    ex:width "693"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1025, ex:street_1144 ;
+    ex:hasSpeedLimit ex:speedLimit_1224_0 ;
+    geo:hasGeometry ex:street_1224_geometry .
+ex:street_1224_geometry geo:asWKT "LINESTRING(10.152653 50.077921, 10.152563 50.077636, 10.154444 50.075450, 10.154068 50.073446, 10.152741 50.073306)"^^geo:wktLiteral .
+ex:speedLimit_1224_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "125.24"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1225 a ex:Street ;
+    ex:id "1225"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "470.48"^^xsd:double ;
+    ex:width "606"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1146, ex:street_1175 ;
+    ex:hasSpeedLimit ex:speedLimit_1225_0 ;
+    geo:hasGeometry ex:street_1225_geometry .
+ex:street_1225_geometry geo:asWKT "LINESTRING(10.109919 50.088103, 10.109897 50.089346, 10.111739 50.090913, 10.113142 50.090610, 10.114745 50.092330, 10.115046 50.090967, 10.117328 50.092676)"^^geo:wktLiteral .
+ex:speedLimit_1225_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "167.4"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1226 a ex:Street ;
+    ex:id "1226"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "392.38"^^xsd:double ;
+    ex:width "509"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1153 ;
+    ex:hasSpeedLimit ex:speedLimit_1226_0, ex:speedLimit_1226_1, ex:speedLimit_1226_2 ;
+    geo:hasGeometry ex:street_1226_geometry .
+ex:street_1226_geometry geo:asWKT "LINESTRING(10.171059 50.042158, 10.170370 50.041134, 10.171368 50.041505, 10.173916 50.043974, 10.171867 50.041460, 10.171082 50.044440)"^^geo:wktLiteral .
+ex:speedLimit_1226_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "293.65"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1226_1 a ex:SpeedLimit ; ex:start "293.65"^^xsd:double ; ex:end "504.1"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1226_2 a ex:SpeedLimit ; ex:start "504.1"^^xsd:double ; ex:end "772.93"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1227 a ex:Street ;
+    ex:id "1227"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "678.01"^^xsd:double ;
+    ex:width "1104"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1224 ;
+    ex:hasSpeedLimit ex:speedLimit_1227_0, ex:speedLimit_1227_1, ex:speedLimit_1227_2 ;
+    geo:hasGeometry ex:street_1227_geometry .
+ex:street_1227_geometry geo:asWKT "LINESTRING(10.096460 50.120604, 10.098625 50.118146, 10.099947 50.115226, 10.097498 50.117206, 10.095299 50.117740, 10.097183 50.116590)"^^geo:wktLiteral .
+ex:speedLimit_1227_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "239.2"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1227_1 a ex:SpeedLimit ; ex:start "239.2"^^xsd:double ; ex:end "462.03"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1227_2 a ex:SpeedLimit ; ex:start "462.03"^^xsd:double ; ex:end "726.14"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1228 a ex:Street ;
+    ex:id "1228"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "506.86"^^xsd:double ;
+    ex:width "1031"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1013, ex:street_1173, ex:street_1194 ;
+    ex:hasSpeedLimit ex:speedLimit_1228_0, ex:speedLimit_1228_1, ex:speedLimit_1228_2 ;
+    geo:hasGeometry ex:street_1228_geometry .
+ex:street_1228_geometry geo:asWKT "LINESTRING(10.175346 50.167678, 10.175019 50.169426, 10.177071 50.168036, 10.175715 50.165858)"^^geo:wktLiteral .
+ex:speedLimit_1228_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "133.14"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1228_1 a ex:SpeedLimit ; ex:start "133.14"^^xsd:double ; ex:end "208.15"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1228_2 a ex:SpeedLimit ; ex:start "208.15"^^xsd:double ; ex:end "355.92"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1229 a ex:Street ;
+    ex:id "1229"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "209.76"^^xsd:double ;
+    ex:width "432"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1153, ex:street_1168 ;
+    ex:hasSpeedLimit ex:speedLimit_1229_0, ex:speedLimit_1229_1, ex:speedLimit_1229_2 ;
+    geo:hasGeometry ex:street_1229_geometry .
+ex:street_1229_geometry geo:asWKT "LINESTRING(10.193015 50.121487, 10.192690 50.119218, 10.191248 50.118533)"^^geo:wktLiteral .
+ex:speedLimit_1229_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "146.22"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1229_1 a ex:SpeedLimit ; ex:start "146.22"^^xsd:double ; ex:end "350.31"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1229_2 a ex:SpeedLimit ; ex:start "350.31"^^xsd:double ; ex:end "368.62"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1230 a ex:Street ;
+    ex:id "1230"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "476.5"^^xsd:double ;
+    ex:width "715"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1055, ex:street_1156, ex:street_1175 ;
+    ex:hasSpeedLimit ex:speedLimit_1230_0 ;
+    geo:hasGeometry ex:street_1230_geometry .
+ex:street_1230_geometry geo:asWKT "LINESTRING(10.087623 50.148398, 10.089095 50.146757, 10.089939 50.146498, 10.091136 50.146499, 10.092046 50.147321, 10.090111 50.148794)"^^geo:wktLiteral .
+ex:speedLimit_1230_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "232.28"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+
+ex:street_1231 a ex:Street ;
+    ex:id "1231"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "807.34"^^xsd:double ;
+    ex:width "322"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1201, ex:street_1224 ;
+    ex:hasSpeedLimit ex:speedLimit_1231_0, ex:speedLimit_1231_1, ex:speedLimit_1231_2 ;
+    geo:hasGeometry ex:street_1231_geometry .
+ex:street_1231_geometry geo:asWKT "LINESTRING(10.030017 50.127991, 10.027830 50.126172, 10.026185 50.123730)"^^geo:wktLiteral .
+ex:speedLimit_1231_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "51.38"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1231_1 a ex:SpeedLimit ; ex:start "51.38"^^xsd:double ; ex:end "273.59"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1231_2 a ex:SpeedLimit ; ex:start "273.59"^^xsd:double ; ex:end "338.91"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1232 a ex:Street ;
+    ex:id "1232"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "284.68"^^xsd:double ;
+    ex:width "503"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1235 ;
+    ex:hasSpeedLimit ex:speedLimit_1232_0 ;
+    geo:hasGeometry ex:street_1232_geometry .
+ex:street_1232_geometry geo:asWKT "LINESTRING(10.063526 50.024934, 10.065470 50.024708, 10.064184 50.024890)"^^geo:wktLiteral .
+ex:speedLimit_1232_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "142.45"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1233 a ex:Street ;
+    ex:id "1233"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "731.5"^^xsd:double ;
+    ex:width "538"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1158, ex:street_1176, ex:street_1214 ;
+    ex:hasSpeedLimit ex:speedLimit_1233_0 ;
+    geo:hasGeometry ex:street_1233_geometry .
+ex:street_1233_geometry geo:asWKT "LINESTRING(10.153878 50.020960, 10.156186 50.020303, 10.155355 50.022092, 10.157165 50.024206, 10.155841 50.021322, 10.155249 50.023254, 10.157926 50.024276)"^^geo:wktLiteral .
+ex:speedLimit_1233_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "290.78"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1234 a ex:Street ;
+    ex:id "1234"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "228.82"^^xsd:double ;
+    ex:width "627"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1081, ex:street_1091, ex:street_1113 ;
+    ex:hasSpeedLimit ex:speedLimit_1234_0, ex:speedLimit_1234_1 ;
+    geo:hasGeometry ex:street_1234_geometry .
+ex:street_1234_geometry geo:asWKT "LINESTRING(10.114391 50.105297, 10.116254 50.105670, 10.118597 50.106392, 10.115920 50.105977, 10.116766 50.107049, 10.119097 50.105457, 10.117173 50.107397)"^^geo:wktLiteral .
+ex:speedLimit_1234_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "29.36"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1234_1 a ex:SpeedLimit ; ex:start "29.36"^^xsd:double ; ex:end "113.27"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1235 a ex:Street ;
+    ex:id "1235"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "178.5"^^xsd:double ;
+    ex:width "900"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1115, ex:street_1126, ex:street_1194 ;
+    ex:hasSpeedLimit ex:speedLimit_1235_0, ex:speedLimit_1235_1 ;
+    geo:hasGeometry ex:street_1235_geometry .
+ex:street_1235_geometry geo:asWKT "LINESTRING(10.173135 50.182136, 10.171993 50.183466, 10.172612 50.184429, 10.170844 50.183076, 10.173035 50.182732, 10.171454 50.182273)"^^geo:wktLiteral .
+ex:speedLimit_1235_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "272.03"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1235_1 a ex:SpeedLimit ; ex:start "272.03"^^xsd:double ; ex:end "397.98"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+
+ex:street_1236 a ex:Street ;
+    ex:id "1236"^^xsd:unsignedLong ;
+    ex:category ex:Residential ;
+    ex:length "182.99"^^xsd:double ;
+    ex:width "1018"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1114, ex:street_1128, ex:street_1148 ;
+    ex:hasSpeedLimit ex:speedLimit_1236_0, ex:speedLimit_1236_1, ex:speedLimit_1236_2 ;
+    geo:hasGeometry ex:street_1236_geometry .
+ex:street_1236_geometry geo:asWKT "LINESTRING(10.060140 50.172478, 10.060538 50.171266, 10.058002 50.172173, 10.060022 50.170202)"^^geo:wktLiteral .
+ex:speedLimit_1236_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "186.66"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1236_1 a ex:SpeedLimit ; ex:start "186.66"^^xsd:double ; ex:end "345.05"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "50"^^xsd:unsignedInt .
+ex:speedLimit_1236_2 a ex:SpeedLimit ; ex:start "345.05"^^xsd:double ; ex:end "442.99"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1237 a ex:Street ;
+    ex:id "1237"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "391.37"^^xsd:double ;
+    ex:width "675"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1232, ex:street_1234 ;
+    ex:hasSpeedLimit ex:speedLimit_1237_0, ex:speedLimit_1237_1 ;
+    geo:hasGeometry ex:street_1237_geometry .
+ex:street_1237_geometry geo:asWKT "LINESTRING(10.081092 50.180174, 10.078847 50.179942, 10.081072 50.178911)"^^geo:wktLiteral .
+ex:speedLimit_1237_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "244.06"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1237_1 a ex:SpeedLimit ; ex:start "244.06"^^xsd:double ; ex:end "359.71"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1238 a ex:Street ;
+    ex:id "1238"^^xsd:unsignedLong ;
+    ex:category ex:Arterial ;
+    ex:length "176.08"^^xsd:double ;
+    ex:width "605"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1131, ex:street_1216, ex:street_1227 ;
+    ex:hasSpeedLimit ex:speedLimit_1238_0, ex:speedLimit_1238_1 ;
+    geo:hasGeometry ex:street_1238_geometry .
+ex:street_1238_geometry geo:asWKT "LINESTRING(10.106689 50.036257, 10.105949 50.037706, 10.107399 50.036700, 10.104990 50.039090, 10.105715 50.037339, 10.103832 50.039215, 10.106159 50.040483)"^^geo:wktLiteral .
+ex:speedLimit_1238_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "237.53"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+ex:speedLimit_1238_1 a ex:SpeedLimit ; ex:start "237.53"^^xsd:double ; ex:end "318.91"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:street_1239 a ex:Street ;
+    ex:id "1239"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "804.56"^^xsd:double ;
+    ex:width "319"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1158, ex:street_1206, ex:street_1222 ;
+    ex:hasSpeedLimit ex:speedLimit_1239_0, ex:speedLimit_1239_1 ;
+    geo:hasGeometry ex:street_1239_geometry .
+ex:street_1239_geometry geo:asWKT "LINESTRING(10.154792 50.176379, 10.151957 50.174032, 10.151477 50.174648, 10.151214 50.176408, 10.150588 50.174396, 10.149004 50.176972, 10.149973 50.178903)"^^geo:wktLiteral .
+ex:speedLimit_1239_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "105.35"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1239_1 a ex:SpeedLimit ; ex:start "105.35"^^xsd:double ; ex:end "202.77"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1240 a ex:Street ;
+    ex:id "1240"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "687.22"^^xsd:double ;
+    ex:width "421"^^xsd:unsignedInt ;
+    ex:oneWay true ;
+    ex:nextStreet ex:street_1202 ;
+    ex:hasSpeedLimit ex:speedLimit_1240_0, ex:speedLimit_1240_1, ex:speedLimit_1240_2 ;
+    geo:hasGeometry ex:street_1240_geometry .
+ex:street_1240_geometry geo:asWKT "LINESTRING(10.060262 50.040448, 10.060302 50.038666, 10.058713 50.035968, 10.056061 50.035774, 10.057720 50.034394)"^^geo:wktLiteral .
+ex:speedLimit_1240_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "102.72"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1240_1 a ex:SpeedLimit ; ex:start "102.72"^^xsd:double ; ex:end "234.25"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+ex:speedLimit_1240_2 a ex:SpeedLimit ; ex:start "234.25"^^xsd:double ; ex:end "281.3"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1241 a ex:Street ;
+    ex:id "1241"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "514.69"^^xsd:double ;
+    ex:width "850"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1158, ex:street_1242 ;
+    ex:hasSpeedLimit ex:speedLimit_1241_0 ;
+    geo:hasGeometry ex:street_1241_geometry .
+ex:street_1241_geometry geo:asWKT "LINESTRING(10.038037 50.151950, 10.040102 50.152408, 10.041276 50.152163, 10.043082 50.149542, 10.042820 50.149111, 10.042080 50.149682, 10.039640 50.147646)"^^geo:wktLiteral .
+ex:speedLimit_1241_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "20.22"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1242 a ex:Street ;
+    ex:id "1242"^^xsd:unsignedLong ;
+    ex:category ex:Highway ;
+    ex:length "888.74"^^xsd:double ;
+    ex:width "870"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1085 ;
+    ex:hasSpeedLimit ex:speedLimit_1242_0, ex:speedLimit_1242_1 ;
+    geo:hasGeometry ex:street_1242_geometry .
+ex:street_1242_geometry geo:asWKT "LINESTRING(10.020367 50.060013, 10.022464 50.059612, 10.023562 50.059009, 10.023154 50.058120, 10.023191 50.057560, 10.023000 50.057706, 10.023570 50.056251)"^^geo:wktLiteral .
+ex:speedLimit_1242_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "167.46"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+ex:speedLimit_1242_1 a ex:SpeedLimit ; ex:start "167.46"^^xsd:double ; ex:end "302.71"^^xsd:double ; ex:minSpeed "30"^^xsd:unsignedInt ; ex:maxSpeed "70"^^xsd:unsignedInt .
+
+ex:street_1243 a ex:Street ;
+    ex:id "1243"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "683.24"^^xsd:double ;
+    ex:width "1106"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1085 ;
+    ex:hasSpeedLimit ex:speedLimit_1243_0, ex:speedLimit_1243_1 ;
+    geo:hasGeometry ex:street_1243_geometry .
+ex:street_1243_geometry geo:asWKT "LINESTRING(10.163122 50.059774, 10.162074 50.059664, 10.163133 50.057186, 10.163532 50.059539, 10.161795 50.058179, 10.162776 50.057700, 10.160070 50.055077)"^^geo:wktLiteral .
+ex:speedLimit_1243_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "279.93"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "30"^^xsd:unsignedInt .
+ex:speedLimit_1243_1 a ex:SpeedLimit ; ex:start "279.93"^^xsd:double ; ex:end "389.38"^^xsd:double ; ex:minSpeed "50"^^xsd:unsignedInt ; ex:maxSpeed "100"^^xsd:unsignedInt .
+
+ex:street_1244 a ex:Street ;
+    ex:id "1244"^^xsd:unsignedLong ;
+    ex:category ex:Service ;
+    ex:length "772.57"^^xsd:double ;
+    ex:width "313"^^xsd:unsignedInt ;
+    ex:oneWay false ;
+    ex:nextStreet ex:street_1011, ex:street_1075 ;
+    ex:hasSpeedLimit ex:speedLimit_1244_0 ;
+    geo:hasGeometry ex:street_1244_geometry .
+ex:street_1244_geometry geo:asWKT "LINESTRING(10.106107 50.164861, 10.106120 50.164610, 10.108985 50.167490, 10.108408 50.165820, 10.109796 50.166044, 10.111846 50.166595, 10.113058 50.167036)"^^geo:wktLiteral .
+ex:speedLimit_1244_0 a ex:SpeedLimit ; ex:start "0.0"^^xsd:double ; ex:end "274.32"^^xsd:double ; ex:minSpeed "0"^^xsd:unsignedInt ; ex:maxSpeed "130"^^xsd:unsignedInt .
+
+ex:district_100 a ex:District ;
+    ex:category ex:Industrial ;
+    ex:population "58474"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_100_geometry .
+ex:district_100_geometry geo:asWKT "LINESTRING(10.068454 50.097915, 10.062337 50.103525, 10.055272 50.101724, 10.054904 50.093839, 10.062446 50.091970, 10.068454 50.097915)"^^geo:wktLiteral .
+
+ex:district_101 a ex:District ;
+    ex:category ex:Suburban ;
+    ex:population "22591"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_101_geometry .
+ex:district_101_geometry geo:asWKT "LINESTRING(10.037988 50.193200, 10.037058 50.199418, 10.031092 50.201385, 10.024451 50.202202, 10.022293 50.195877, 10.019779 50.189608, 10.025642 50.186260, 10.031055 50.185226, 10.036510 50.187443, 10.037988 50.193200)"^^geo:wktLiteral .
+
+ex:district_102 a ex:District ;
+    ex:category ex:Urban ;
+    ex:population "55318"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_102_geometry .
+ex:district_102_geometry geo:asWKT "LINESTRING(10.130720 50.047914, 10.121775 50.060758, 10.109589 50.053735, 10.110800 50.042972, 10.121140 50.037025, 10.130720 50.047914)"^^geo:wktLiteral .
+
+ex:district_103 a ex:District ;
+    ex:category ex:Industrial ;
+    ex:population "68186"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_103_geometry .
+ex:district_103_geometry geo:asWKT "LINESTRING(10.073533 50.008271, 10.071223 50.011325, 10.067997 50.011739, 10.065904 50.009660, 10.064487 50.006200, 10.067741 50.003682, 10.072025 50.004212, 10.073533 50.008271)"^^geo:wktLiteral .
+
+ex:district_104 a ex:District ;
+    ex:category ex:Park ;
+    ex:population "58994"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_104_geometry .
+ex:district_104_geometry geo:asWKT "LINESTRING(10.073518 50.141576, 10.064485 50.147842, 10.058219 50.150663, 10.048414 50.151381, 10.046649 50.141576, 10.050478 50.133835, 10.058219 50.132363, 10.064779 50.135016, 10.073518 50.141576)"^^geo:wktLiteral .
+
+ex:district_109 a ex:District ;
+    ex:category ex:Suburban ;
+    ex:population "14417"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_109_geometry .
+ex:district_109_geometry geo:asWKT "LINESTRING(10.178391 50.010166, 10.176807 50.017350, 10.169622 50.023091, 10.163390 50.016398, 10.157376 50.010166, 10.161338 50.001882, 10.169622 50.000840, 10.176848 50.002940, 10.178391 50.010166)"^^geo:wktLiteral .
+
+ex:district_110 a ex:District ;
+    ex:category ex:Industrial ;
+    ex:population "18730"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_110_geometry .
+ex:district_110_geometry geo:asWKT "LINESTRING(10.059225 50.090385, 10.051178 50.096143, 10.043543 50.094573, 10.044596 50.086962, 10.051582 50.083385, 10.059225 50.090385)"^^geo:wktLiteral .
+
+ex:district_111 a ex:District ;
+    ex:category ex:Suburban ;
+    ex:population "13279"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_111_geometry .
+ex:district_111_geometry geo:asWKT "LINESTRING(10.128064 50.060781, 10.122191 50.065533, 10.118611 50.072600, 10.110777 50.070740, 10.106581 50.064401, 10.106460 50.057117, 10.111268 50.051671, 10.117777 50.053692, 10.122691 50.055608, 10.128064 50.060781)"^^geo:wktLiteral .
+
+ex:district_114 a ex:District ;
+    ex:category ex:Suburban ;
+    ex:population "85164"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_114_geometry .
+ex:district_114_geometry geo:asWKT "LINESTRING(10.160768 50.119915, 10.154336 50.126114, 10.147091 50.129999, 10.138397 50.125211, 10.138075 50.114465, 10.146869 50.108860, 10.154655 50.113317, 10.160768 50.119915)"^^geo:wktLiteral .
+
+ex:district_117 a ex:District ;
+    ex:category ex:Industrial ;
+    ex:population "43616"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_117_geometry .
+ex:district_117_geometry geo:asWKT "LINESTRING(10.046879 50.185209, 10.042248 50.190225, 10.035211 50.192381, 10.034156 50.185209, 10.036632 50.180499, 10.042750 50.179324, 10.046879 50.185209)"^^geo:wktLiteral .
+
+ex:district_123 a ex:District ;
+    ex:category ex:Urban ;
+    ex:population "59978"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_123_geometry .
+ex:district_123_geometry geo:asWKT "LINESTRING(10.152333 50.040518, 10.148084 50.050104, 10.137898 50.048574, 10.135716 50.040518, 10.138210 50.033001, 10.147131 50.032582, 10.152333 50.040518)"^^geo:wktLiteral .
+
+ex:district_125 a ex:District ;
+    ex:category ex:Urban ;
+    ex:population "55044"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_125_geometry .
+ex:district_125_geometry geo:asWKT "LINESTRING(10.124360 50.045771, 10.120258 50.050494, 10.112869 50.050025, 10.113307 50.041836, 10.120713 50.039649, 10.124360 50.045771)"^^geo:wktLiteral .
+
+ex:district_126 a ex:District ;
+    ex:category ex:Industrial ;
+    ex:population "44687"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_126_geometry .
+ex:district_126_geometry geo:asWKT "LINESTRING(10.196696 50.126225, 10.188223 50.134496, 10.176673 50.132665, 10.175942 50.119255, 10.188502 50.117096, 10.196696 50.126225)"^^geo:wktLiteral .
+
+ex:district_128 a ex:District ;
+    ex:category ex:Park ;
+    ex:population "14410"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_128_geometry .
+ex:district_128_geometry geo:asWKT "LINESTRING(10.091999 50.082552, 10.088117 50.093582, 10.077458 50.090716, 10.066962 50.088504, 10.071222 50.078652, 10.076807 50.071536, 10.085132 50.075265, 10.091999 50.082552)"^^geo:wktLiteral .
+
+ex:district_132 a ex:District ;
+    ex:category ex:Industrial ;
+    ex:population "52727"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_132_geometry .
+ex:district_132_geometry geo:asWKT "LINESTRING(10.059580 50.128969, 10.056388 50.133394, 10.051593 50.134516, 10.048271 50.131179, 10.047031 50.126162, 10.051690 50.123844, 10.056578 50.124305, 10.059580 50.128969)"^^geo:wktLiteral .
+
+ex:district_134 a ex:District ;
+    ex:category ex:Urban ;
+    ex:population "3997"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_134_geometry .
+ex:district_134_geometry geo:asWKT "LINESTRING(10.050764 50.153684, 10.048322 50.157124, 10.043251 50.159028, 10.041864 50.153684, 10.043792 50.149277, 10.049411 50.148360, 10.050764 50.153684)"^^geo:wktLiteral .
+
+ex:district_135 a ex:District ;
+    ex:category ex:Suburban ;
+    ex:population "89710"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_135_geometry .
+ex:district_135_geometry geo:asWKT "LINESTRING(10.153658 50.099806, 10.149941 50.108375, 10.139755 50.108880, 10.137603 50.099806, 10.139853 50.090901, 10.149459 50.092073, 10.153658 50.099806)"^^geo:wktLiteral .
+
+ex:district_136 a ex:District ;
+    ex:category ex:Park ;
+    ex:population "28048"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_136_geometry .
+ex:district_136_geometry geo:asWKT "LINESTRING(10.093378 50.188400, 10.090663 50.192389, 10.086270 50.193708, 10.082930 50.190592, 10.083170 50.186323, 10.086284 50.183155, 10.090712 50.184348, 10.093378 50.188400)"^^geo:wktLiteral .
+
+ex:district_137 a ex:District ;
+    ex:category ex:Urban ;
+    ex:population "29839"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_137_geometry .
+ex:district_137_geometry geo:asWKT "LINESTRING(10.143766 50.124685, 10.143520 50.131331, 10.136873 50.133052, 10.132141 50.129417, 10.130054 50.124685, 10.132553 50.120364, 10.136873 50.118822, 10.141107 50.120451, 10.143766 50.124685)"^^geo:wktLiteral .
+
+ex:district_138 a ex:District ;
+    ex:category ex:Park ;
+    ex:population "62309"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_138_geometry .
+ex:district_138_geometry geo:asWKT "LINESTRING(10.180466 50.070112, 10.179574 50.072688, 10.177529 50.075924, 10.174519 50.073550, 10.172365 50.071618, 10.172203 50.068547, 10.173972 50.065726, 10.177242 50.065923, 10.179896 50.067266, 10.180466 50.070112)"^^geo:wktLiteral .
+
+ex:district_139 a ex:District ;
+    ex:category ex:Industrial ;
+    ex:population "12202"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_139_geometry .
+ex:district_139_geometry geo:asWKT "LINESTRING(10.013202 50.109784, 10.010172 50.113994, 10.005426 50.113795, 10.004502 50.109784, 10.005758 50.106349, 10.010303 50.105347, 10.013202 50.109784)"^^geo:wktLiteral .
+
+ex:district_140 a ex:District ;
+    ex:category ex:Suburban ;
+    ex:population "50396"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_140_geometry .
+ex:district_140_geometry geo:asWKT "LINESTRING(10.038930 50.032481, 10.033624 50.036430, 10.030383 50.040788, 10.025008 50.039253, 10.018674 50.036210, 10.022430 50.030119, 10.025307 50.026226, 10.029974 50.026494, 10.033617 50.028538, 10.038930 50.032481)"^^geo:wktLiteral .
+
+ex:district_141 a ex:District ;
+    ex:category ex:Suburban ;
+    ex:population "75941"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_141_geometry .
+ex:district_141_geometry geo:asWKT "LINESTRING(10.166191 50.021802, 10.163077 50.023942, 10.161145 50.025311, 10.158483 50.025342, 10.157262 50.022990, 10.156362 50.020287, 10.157576 50.016692, 10.161560 50.015941, 10.163793 50.019061, 10.166191 50.021802)"^^geo:wktLiteral .
+
+ex:district_142 a ex:District ;
+    ex:category ex:Park ;
+    ex:population "83077"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_142_geometry .
+ex:district_142_geometry geo:asWKT "LINESTRING(10.135057 50.012390, 10.130345 50.019487, 10.122365 50.019114, 10.117987 50.012390, 10.121181 50.003614, 10.131253 50.003720, 10.135057 50.012390)"^^geo:wktLiteral .
+
+ex:district_143 a ex:District ;
+    ex:category ex:Suburban ;
+    ex:population "14907"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_143_geometry .
+ex:district_143_geometry geo:asWKT "LINESTRING(10.085364 50.063500, 10.083562 50.068462, 10.077404 50.066803, 10.078909 50.061290, 10.083749 50.057963, 10.085364 50.063500)"^^geo:wktLiteral .
+
+ex:district_144 a ex:District ;
+    ex:category ex:Urban ;
+    ex:population "51886"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_144_geometry .
+ex:district_144_geometry geo:asWKT "LINESTRING(10.050626 50.009269, 10.051509 50.016247, 10.044531 50.017721, 10.038431 50.015369, 10.035793 50.009269, 10.039984 50.004723, 10.044531 50.000016, 10.050462 50.003338, 10.050626 50.009269)"^^geo:wktLiteral .
+
+ex:district_145 a ex:District ;
+    ex:category ex:Suburban ;
+    ex:population "30824"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_145_geometry .
+ex:district_145_geometry geo:asWKT "LINESTRING(10.033759 50.036524, 10.032177 50.041942, 10.025991 50.044696, 10.022338 50.039182, 10.022381 50.033887, 10.026620 50.031106, 10.032909 50.030189, 10.033759 50.036524)"^^geo:wktLiteral .
+
+ex:district_146 a ex:District ;
+    ex:category ex:Suburban ;
+    ex:population "84588"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_146_geometry .
+ex:district_146_geometry geo:asWKT "LINESTRING(10.167676 50.024236, 10.165198 50.029231, 10.160202 50.030946, 10.155735 50.028703, 10.154674 50.024236, 10.154729 50.018763, 10.160202 50.016561, 10.163706 50.020732, 10.167676 50.024236)"^^geo:wktLiteral .
+
+ex:district_147 a ex:District ;
+    ex:category ex:Suburban ;
+    ex:population "60642"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_147_geometry .
+ex:district_147_geometry geo:asWKT "LINESTRING(10.100800 50.058481, 10.094276 50.068138, 10.082102 50.069909, 10.077573 50.058481, 10.084196 50.050679, 10.095483 50.046734, 10.100800 50.058481)"^^geo:wktLiteral .
+
+ex:district_148 a ex:District ;
+    ex:category ex:Urban ;
+    ex:population "2703"^^xsd:unsignedInt ;
+    geo:hasGeometry ex:district_148_geometry .
+ex:district_148_geometry geo:asWKT "LINESTRING(10.042478 50.180724, 10.041028 50.183061, 10.038909 50.184505, 10.035443 50.185571, 10.032691 50.182744, 10.032853 50.178762, 10.036344 50.177435, 10.039130 50.175687, 10.041470 50.178015, 10.042478 50.180724)"^^geo:wktLiteral .
