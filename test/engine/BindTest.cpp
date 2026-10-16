@@ -2,6 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "../util/IdTableHelpers.h"
@@ -9,11 +10,13 @@
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
+#include "engine/QueryPlanner.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "parser/SparqlParser.h"
 
 using namespace sparqlExpression;
 using Vars = std::vector<std::optional<Variable>>;
@@ -281,4 +284,38 @@ TEST(Bind, cloneSucceedsForNondeterministicBind) {
   auto clone = bind.clone();
   ASSERT_TRUE(clone);
   EXPECT_FALSE(clone->isDeterministic());
+}
+
+// IRIs that are computed by an expression and that match a pattern of the
+// `EncodedIriManager` must get the same `Id` as the same IRIs from the index,
+// so that a join on them finds all matches. In the index, the non-encodable
+// `<http://example.org/5a>` (a `VocabIndex`) is sorted before the encoded
+// `<http://example.org/5>` (an `EncodedVal`), while the computed IRIs used to
+// be sorted by their string value, so in the opposite order.
+TEST(Bind, joinOfComputedEncodableIris) {
+  std::string kg =
+      "<http://example.org/5> <p> \"five\" . "
+      "<http://example.org/5a> <p> \"fiveA\" .";
+  ad_utility::testing::TestIndexConfig config{kg};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  std::string query =
+      "SELECT ?l WHERE { VALUES ?n { \"5\" \"5a\" } "
+      "BIND(IRI(CONCAT(\"http://example.org/\", ?n)) AS ?s) ?s <p> ?l }";
+  auto parsedQuery =
+      SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(), query, {});
+  QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+  auto qet = qp.createExecutionTree(parsedQuery);
+  auto result = qet->getResult();
+  const auto& table = result->idTableView();
+  auto col = qet->getVariableColumn(Variable{"?l"});
+  std::vector<Id> literals;
+  for (size_t i = 0; i < table.numRows(); ++i) {
+    literals.push_back(table(i, col));
+  }
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  EXPECT_THAT(literals, ::testing::UnorderedElementsAre(getId("\"five\""),
+                                                        getId("\"fiveA\"")));
 }

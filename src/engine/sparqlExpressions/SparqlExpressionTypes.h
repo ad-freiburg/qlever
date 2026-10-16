@@ -207,8 +207,7 @@ CPP_template(typename T, typename LocalVocabT)(
         [&localVocab](auto&& el) mutable {
           using R = decltype(el);
           if constexpr (ad_utility::isSimilar<R, LocalVocabEntry>) {
-            return Id::makeFromLocalVocabIndex(
-                localVocab.getIndexAndAddIfNotContained(AD_FWD(el)));
+            return localVocab.getEncodedIdOrAddIfNotContained(AD_FWD(el));
           } else {
             static_assert(ad_utility::isSimilar<R, Id>);
             return el;
