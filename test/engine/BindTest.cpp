@@ -319,3 +319,55 @@ TEST(Bind, joinOfComputedEncodableIris) {
   EXPECT_THAT(literals, ::testing::UnorderedElementsAre(getId("\"five\""),
                                                         getId("\"fiveA\"")));
 }
+
+// Test that the `Id`s of a computed encodable IRI, a computed IRI that is not
+// in the vocabulary, and an IRI from the vocabulary are ordered by a strict
+// weak ordering, which sorting them requires. Before the computed encodable IRI
+// was encoded, the three formed a cycle.
+TEST(Bind, computedEncodableIrisAreStrictlyWeaklyOrdered) {
+  ad_utility::testing::TestIndexConfig config{"<http://z> <p> <o> ."};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  const auto& context = qec->getLocalVocabContext();
+
+  // The input `?s` holds the two strings from which `IRI(?s)` computes the
+  // IRIs.
+  LocalVocab localVocab;
+  auto literal = [&](std::string_view s) {
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::literalWithoutQuotes(s, context)));
+  };
+  auto input = makeIdTableFromVector(
+      {{literal("http://example.org/1")}, {literal("http://y")}});
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(input), Vars{Variable{"?s"}}, false,
+      std::vector<ColumnIndex>{}, std::move(localVocab));
+  Bind bind{qec,
+            std::move(valuesTree),
+            {SparqlExpressionPimpl{
+                 makeIriOrUriExpression(
+                     std::make_unique<VariableExpression>(Variable{"?s"}),
+                     std::make_unique<IriExpression>(TripleComponent::Iri{})),
+                 "IRI(?s) AS ?x"},
+             Variable{"?x"}}};
+  auto result = bind.getResult();
+  auto col = bind.getExternallyVisibleVariableColumns()
+                 .at(Variable{"?x"})
+                 .columnIndex_;
+  const auto& table = result->idTableView();
+  ASSERT_EQ(table.numRows(), 2);
+
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  std::vector<Id> ids{table(0, col), table(1, col), getId("<http://z>")};
+  for (Id a : ids) {
+    EXPECT_FALSE(a < a) << a;
+    for (Id b : ids) {
+      for (Id c : ids) {
+        if (a < b && b < c) {
+          EXPECT_TRUE(a < c) << a << ' ' << b << ' ' << c;
+        }
+      }
+    }
+  }
+}
