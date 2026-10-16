@@ -21,6 +21,10 @@ using Id = foldedValueId::ValueId;
 using ValueId = Id;
 using Score = float;
 
+// To ensure places where we can't include Id.h because of a cycle include
+// we need the be sure that this types are the same.
+static_assert(std::is_same_v<IdBitRepresentation, Id::T>);
+
 // `Id`s are copied around a lot, in particular in bulk (see the `IdTable`
 // class, in particular `IdTable::insertAtEnd`). Only for trivially copyable
 // types do the compilers turn such a bulk copy into a single `std::memmove`

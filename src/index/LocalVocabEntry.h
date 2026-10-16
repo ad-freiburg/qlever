@@ -14,6 +14,7 @@
 #include "backports/three_way_comparison.h"
 #include "global/TypedIndex.h"
 #include "global/VocabIndex.h"
+#include "index/IdBitRepresentation.h"
 #include "parser/LiteralOrIri.h"
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
@@ -68,7 +69,7 @@ class alignas(16) LocalVocabEntry
   // Note: The values here actually are `Id`s, but we cannot store the `Id` type
   // directly because of cyclic dependencies.
   static constexpr ad_utility::IndexTag proxyTag = "LveIdProxy";
-  using IdProxy = ad_utility::TypedIndex<uint64_t, proxyTag>;
+  using IdProxy = ad_utility::TypedIndex<IdBitRepresentation, proxyTag>;
 
   FRIEND_TEST(TripleComponent, toValueId);
 
@@ -87,6 +88,10 @@ class alignas(16) LocalVocabEntry
   // downside is, that in parallel code multiple threads might look up the
   // position concurrently, which wastes a bit of resources. However, we don't
   // consider this case to be likely.
+  // TODO<pas-kes> For the split layout `IdProxy` has 16 bytes, so these atomics
+  // are not lock-free everywhere (`libatomic` on Linux). Check the alternatives
+  // (once-pattern with plain fields, or separate atomics for datatype and
+  // payload).
   mutable ad_utility::CopyableAtomic<IdProxy> lowerBoundInVocab_;
   mutable ad_utility::CopyableAtomic<IdProxy> upperBoundInVocab_;
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;

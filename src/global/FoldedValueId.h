@@ -33,6 +33,9 @@ namespace foldedValueId {
 class ValueId {
  public:
   using T = uint64_t;
+  using PayloadType = uint64_t;
+  using DatatypeType = uint64_t;
+
   static constexpr T numDatatypeBits = 4;
   static constexpr T numDataBits = 64 - numDatatypeBits;
 

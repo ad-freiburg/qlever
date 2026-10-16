@@ -44,7 +44,7 @@ std::vector<encodedIri::Pattern> makePatterns(
 // Find the first of the `patterns` that `repr` matches (see
 // `encodedIri::encodePayload`). Return the index of that pattern together with
 // the encoded payload, or `std::nullopt` if there is no such pattern.
-std::optional<std::pair<size_t, uint64_t>> matchPatterns(
+std::optional<std::pair<size_t, Id::PayloadType>> matchPatterns(
     const std::vector<encodedIri::Pattern>& patterns, std::string_view repr);
 
 // Conversion of the `patterns` to and from JSON. As long as only plain prefixes
@@ -194,8 +194,8 @@ class EncodedIriManagerImpl {
 
   // combine the integer representation of the prefix and of the payload into a
   // single `Id` with datatype `EncodedValue`.
-  static Id makeIdFromPrefixIdxAndPayload(uint64_t prefixIdx,
-                                          uint64_t payload) {
+  static Id makeIdFromPrefixIdxAndPayload(Id::PayloadType prefixIdx,
+                                          Id::PayloadType payload) {
     return Id::makeFromEncodedVal(payload | (prefixIdx << NumBitsEncoding));
   }
 
@@ -213,7 +213,8 @@ class EncodedIriManagerImpl {
   // NOTE: The payload is only a single nibble-encoded number (which
   // `decodeDecimalFrom64Bit` can decode) if the prefix is a plain prefix, so
   // callers have to check the prefix index before decoding the payload.
-  static std::pair<uint64_t, uint64_t> splitIntoPrefixIdxAndPayload(Id id) {
+  static std::pair<Id::PayloadType, Id::PayloadType>
+  splitIntoPrefixIdxAndPayload(Id id) {
     AD_CONTRACT_CHECK(
         id.getDatatype() == Datatype::EncodedVal,
         "datatype must be `EncodedVal` for `splitIntoPrefixIdxAndPayload`");
@@ -229,7 +230,7 @@ class EncodedIriManagerImpl {
   // `makeIdFromPrefixIdxAndPayload` and returned from
   // `splitIntoPrefixIdxAndPayload`. If several patterns share the same prefix,
   // then the index of the first of them is returned.
-  std::optional<uint64_t> getIndexOfPrefix(
+  std::optional<Id::PayloadType> getIndexOfPrefix(
       std::string_view prefixWithoutAngleBrackets) const {
     auto prefix = absl::StrCat("<", prefixWithoutAngleBrackets);
     auto it =

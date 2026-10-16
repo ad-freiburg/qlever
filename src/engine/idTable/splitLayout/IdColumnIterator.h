@@ -32,8 +32,9 @@ template <bool IsConst>
 class BasicIdColumnIterator {
  public:
   using PayloadPointer =
-      std::conditional_t<IsConst, const uint64_t*, uint64_t*>;
-  using DatatypePointer = std::conditional_t<IsConst, const uint8_t*, uint8_t*>;
+      std::conditional_t<IsConst, const Id::PayloadType*, Id::PayloadType*>;
+  using DatatypePointer =
+      std::conditional_t<IsConst, const Id::DatatypeType*, Id::DatatypeType*>;
 
   using iterator_category = std::random_access_iterator_tag;
   using difference_type = int64_t;

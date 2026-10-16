@@ -114,7 +114,7 @@ std::vector<encodedIri::Pattern> detail::makePatterns(
 }
 
 // ____________________________________________________________________________
-std::optional<std::pair<size_t, uint64_t>> detail::matchPatterns(
+std::optional<std::pair<size_t, Id::PayloadType>> detail::matchPatterns(
     const std::vector<encodedIri::Pattern>& patterns, std::string_view repr) {
   for (const auto& [tag, pattern] : ::ranges::views::enumerate(patterns)) {
     if (!ql::starts_with(repr, pattern.prefix_)) {

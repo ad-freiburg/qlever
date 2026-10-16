@@ -26,11 +26,12 @@ namespace columnBasedIdTable::splitLayout {
 inline SplitLayoutIdBitRepresentation getBitsCompat(const Id id) {
   const auto bits = id.getBits();
   return {static_cast<uint8_t>(bits >> Id::numDataBits),
-          bits & ((Id::T{1} << Id::numDataBits) - 1)};
+          bits & ((Id::PayloadType{1} << Id::numDataBits) - 1)};
 }
 inline Id idFromBitsCompat(const SplitLayoutIdBitRepresentation bits) {
-  return Id::fromBits((static_cast<Id::T>(bits.datatype_) << Id::numDataBits) |
-                      bits.payload_);
+  return Id::fromBits(
+      (static_cast<Id::DatatypeType>(bits.datatype_) << Id::numDataBits) |
+      bits.payload_);
 }
 
 // A proxy reference to a single `Id` stored in the experimental split layout
@@ -48,8 +49,9 @@ template <bool IsConst>
 class BasicIdRef {
  public:
   using PayloadPointer =
-      std::conditional_t<IsConst, const uint64_t*, uint64_t*>;
-  using DatatypePointer = std::conditional_t<IsConst, const uint8_t*, uint8_t*>;
+      std::conditional_t<IsConst, const Id::PayloadType*, Id::PayloadType*>;
+  using DatatypePointer =
+      std::conditional_t<IsConst, const Id::DatatypeType*, Id::DatatypeType*>;
 
  private:
   PayloadPointer payload_;
@@ -106,10 +108,10 @@ class BasicIdRef {
   [[nodiscard]] auto compareWithoutLocalVocab(const Id& other) const {
     return toId().compareWithoutLocalVocab(other);
   }
-  [[nodiscard]] SplitLayoutIdBitRepresentation getBits() const noexcept {
-    return {*datatype_, *payload_};
+  [[nodiscard]] Id::T getBits() const noexcept { return toId().getBits(); }
+  [[nodiscard]] Id::PayloadType getPayloadBits() const noexcept {
+    return *payload_;
   }
-  [[nodiscard]] Id::T getPayloadBits() const noexcept { return *payload_; }
   [[nodiscard]] Datatype getDatatype() const noexcept {
     return static_cast<Datatype>(*datatype_);
   }
@@ -126,7 +128,7 @@ class BasicIdRef {
   [[nodiscard]] VocabIndex getVocabIndex() const noexcept {
     return toId().getVocabIndex();
   }
-  [[nodiscard]] uint64_t getEncodedVal() const noexcept {
+  [[nodiscard]] Id::PayloadType getEncodedVal() const noexcept {
     return toId().getEncodedVal();
   }
   [[nodiscard]] TextRecordIndex getTextRecordIndex() const noexcept {
