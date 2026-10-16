@@ -2,7 +2,7 @@
 # Build portable Linux binaries of `qlever-index` and `qlever-server`, whose
 # only dynamic dependency is glibc (libc, libm, ld-linux, vdso). All other
 # libraries — Boost, ICU (including its Unicode data), OpenSSL, zstd, zlib,
-# bzip2, jemalloc, libgomp, libstdc++, libgcc — are linked statically. Such
+# bzip2, jemalloc, libstdc++, libgcc — are linked statically. Such
 # binaries run on any Linux distribution and architecture-matching machine
 # whose glibc is at least as new as the one of the build machine (glibc is
 # backward compatible), which is why the CI builds them on the oldest
@@ -35,7 +35,7 @@ GCC="${CC:-gcc}"
 QLEVER_ENABLE_LTO="${QLEVER_ENABLE_LTO:-false}"
 
 # A directory that contains ONLY static archives and is put first in the
-# linker search path. This forces `-ljemalloc`/`-lgomp`/`-lstdc++` to resolve
+# linker search path. This forces `-ljemalloc`/`-lstdc++` to resolve
 # to the `.a` instead of the `.so`. This is needed because an explicit
 # `-lstdc++` (injected by conan's package configs) bypasses
 # `-static-libstdc++`, and because QLever's CMake links jemalloc by name.
@@ -53,7 +53,6 @@ link_static_lib() {
     ln -sf "$source" "$STATIC_LIBS/$name"
 }
 link_static_lib "$MULTIARCH_LIBDIR/libjemalloc.a" libjemalloc.a
-link_static_lib "$($GCC -print-file-name=libgomp.a)" libgomp.a
 link_static_lib "$($GCC -print-file-name=libstdc++.a)" libstdc++.a
 
 # Build the third-party libraries as static libraries via conan (using the
@@ -77,7 +76,6 @@ cmake -B "$BUILD_DIR" -S "$REPO_DIR" \
     -DLOGLEVEL=INFO \
     -DCMAKE_TOOLCHAIN_FILE="$BUILD_DIR/conan_toolchain.cmake" \
     -DCMAKE_POLICY_DEFAULT_CMP0091=NEW \
-    -DUSE_PARALLEL=true \
     -DRUN_EXPENSIVE_TESTS=false \
     -DCOMPILER_SUPPORTS_MARCH_NATIVE=FALSE \
     -DJEMALLOC_MANUALLY_INSTALLED=True \
