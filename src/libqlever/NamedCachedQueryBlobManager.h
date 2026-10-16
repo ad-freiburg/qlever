@@ -196,8 +196,8 @@ class NamedCachedQueryBlobManager {
   // `config.alwaysUseNewFormat_` nor `config.incremental_` is set, then the
   // blob is written with `formatVersionWithoutSecondaryVocab`, else with
   // `formatVersionWithSecondaryVocab`. A simplification of a geo index alone
-  // deliberately does not trigger the new format (see the NOTE 2 in the
-  // implementation).
+  // deliberately does not trigger the new format (see the NOTE 2 of
+  // `needsNewFormat` in the implementation).
   //
   // NOTE 3: If `config.incremental_` is set, then the secondary vocabulary of
   // the blob starts from a copy of the one of the base (its words keep their

@@ -99,6 +99,10 @@ class NamedResultCache {
   // result exists, throw an exception.
   std::shared_ptr<const Value> get(const Key& name) const;
 
+  // Get a pointer to the cached result with the given `name`, or `nullptr` if
+  // no such result exists.
+  std::shared_ptr<const Value> getIfContained(const Key& name) const;
+
   // Get a pointer to the cached result with the given `name`, and convert
   // it into an `ExplicitIdTableOperation` that can be used as part of a
   // `QueryExecutionTree`.
