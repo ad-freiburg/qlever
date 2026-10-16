@@ -224,8 +224,8 @@ set(BUILD_TESTING  OFF CACHE BOOL "Disable testing for FAISS")
 # RapidJSON (for fast JSON parsing in the tensor loading code)
 # Use own fork as the upstream has cmake issues
 ################################
-set(RAPIDJSON_BUILD_TESTS OFF)
-set(RAPIDJSON_BUILD_EXAMPLES OFF)
+set(RAPIDJSON_BUILD_TESTS OFF CACHE BOOL "Disable tests for RapidJSON" FORCE)
+set(RAPIDJSON_BUILD_EXAMPLES OFF CACHE BOOL "Disable examples for RapidJSON" FORCE)
 MESSAGE(STATUS "Using RapidJSON for very fast JSON parsing in the tensor loading code.")
 FetchContent_Declare(
         rapidjson
