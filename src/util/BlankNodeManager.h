@@ -129,8 +129,10 @@ class BlankNodeManager {
         : manager_(manager), uuid_(std::move(uuid)) {
       AD_CORRECTNESS_CHECK(manager_ != nullptr);
     }
-    // Destructors in a shared_ptr cannot be marked as noexcept(false) in QNX's
-    // libc++
+    // The destructor may throw (via `throwIfSafe_`), except in the reduced
+    // feature set for C++17, where it is `noexcept` because the libc++ of QNX
+    // rejects a type with a `noexcept(false)` destructor in a `shared_ptr`.
+    // There, an exception from `freeBlockSet` terminates the program.
     ~Blocks() noexcept(qlever::usesReducedFeatureSet) {
       throwIfSafe_(
           [this]() { manager_->freeBlockSet(*this); },
