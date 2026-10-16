@@ -103,6 +103,28 @@ TEST(CanonicalRowOrder, invertPermutation) {
   EXPECT_ANY_THROW(invertPermutation(Ints{0, 2}));
 }
 
+// Test `toOldRowOrder`, also with values that are `noMatchingRow`, and for
+// inputs of different sizes or with an out-of-range row.
+TEST(CanonicalRowOrder, toOldRowOrder) {
+  constexpr size_t no = noMatchingRow;
+  // The new row `i` is the old row `oldRowOfNewRow[i]`.
+  EXPECT_THAT(toOldRowOrder(Ints{10, no, 30}, Ints{2, 0, 1}),
+              ElementsAre(no, 30, 10));
+  EXPECT_THAT(toOldRowOrder(Ints{4, 5}, Ints{0, 1}), ElementsAre(4, 5));
+  EXPECT_THAT(toOldRowOrder(Ints{}, Ints{}), IsEmpty());
+  // The result is the inverse operation of reading `valueOfOldRow` in the new
+  // order.
+  Ints oldRowOfNewRow{3, 1, 0, 2};
+  Ints valueOfOldRow{7, 8, 9, 6};
+  Ints valueOfNewRow;
+  for (size_t oldRow : oldRowOfNewRow) {
+    valueOfNewRow.push_back(valueOfOldRow[oldRow]);
+  }
+  EXPECT_EQ(toOldRowOrder(valueOfNewRow, oldRowOfNewRow), valueOfOldRow);
+  EXPECT_ANY_THROW(toOldRowOrder(Ints{1, 2}, Ints{0}));
+  EXPECT_ANY_THROW(toOldRowOrder(Ints{1, 2}, Ints{0, 2}));
+}
+
 // Test that `permuteRows` can also select a subset of the rows.
 TEST(CanonicalRowOrder, permuteRowsSelectsRows) {
   auto table = intTable({{1, 1}, {2, 2}, {3, 3}});
