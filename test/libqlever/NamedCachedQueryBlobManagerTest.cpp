@@ -1035,14 +1035,15 @@ TEST(NamedCachedQueryBlobManager, blobWithNewWords) {
                          ad_utility::MediaType::tsv),
             newWordsExpectedResult);
 
-  // A join with the pinned result relies on it being sorted.
+  // A join with the pinned result relies on it being sorted. NOTE: `ORDER BY`
+  // puts IRIs before literals.
   auto joinResult = target.query(
       "SELECT ?s ?o ?x WHERE { SERVICE ql:cached-result-with-name-pin {} "
       "VALUES (?s ?x) { (<a> 1) (<m> 2) } } ORDER BY ?x ?o",
       ad_utility::MediaType::tsv);
   EXPECT_EQ(joinResult,
-            "?s\t?o\t?x\n<a>\t\"new literal\"\t1\n<m>\t\"old "
-            "literal\"\t2\n<m>\t<y>\t2\n");
+            "?s\t?o\t?x\n<a>\t\"new literal\"\t1\n<m>\t<y>\t2\n<m>\t\"old "
+            "literal\"\t2\n");
 }
 
 // _____________________________________________________________________________

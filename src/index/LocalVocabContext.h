@@ -112,6 +112,12 @@ class LocalVocabContext {
   // hand, so that the blank node manager would otherwise have to be threaded
   // through the same call chains a second time.
   virtual ad_utility::BlankNodeManager* getBlankNodeManager() const = 0;
+
+  // Return the position of the first word in the vocabulary of the main index
+  // that is not a literal (all literals come first). `OrderByComparator` uses
+  // this to tell the literals from the IRIs. NOTE: `LocalVocabEntry` doesn't
+  // need this, but `ORDER BY` and `MIN`/`MAX` have this interface at hand.
+  virtual VocabIndex getBeginOfIrisInVocabulary() const = 0;
 };
 
 #endif  // QLEVER_SRC_INDEX_LOCALVOCABCONTEXT_H

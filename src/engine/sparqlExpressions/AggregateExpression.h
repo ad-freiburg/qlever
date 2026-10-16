@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_AGGREGATEEXPRESSION_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_AGGREGATEEXPRESSION_H
 
+#include "engine/OrderByComparator.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -189,36 +190,30 @@ class AvgExpression : public AvgExpressionBase {
   ValueId resultForEmptyGroup() const override { return Id::makeFromInt(0); }
 };
 
-// Compare two arbitrary values (each of which can be an ID, a literal, or an
-// IRI). This always returns a `bool`, see `ValueIdComparators.h` for details.
-template <valueIdComparators::Comparison Comp>
-inline const auto compareIdsOrStrings =
-    [](const auto& a, const auto& b,
-       const EvaluationContext* ctx) -> IdOrLocalVocabEntry {
-  // TODO<joka921> moveTheStrings.
-  return toBoolNotUndef(
-             sparqlExpression::compareIdsOrStrings<
-                 Comp, valueIdComparators::ComparisonForIncompatibleTypes::
-                           CompareByType>(a, b, ctx))
-             ? IdOrLocalVocabEntry{a}
-             : IdOrLocalVocabEntry{b};
-};
-
-// Aggregate expression for MIN and MAX.
+// Aggregate expression for MIN and MAX, which the standard defines via the
+// order of `ORDER BY` (`ASC` resp. `DESC`), see `OrderByComparator`.
 template <valueIdComparators::Comparison comparison>
 struct MinMaxLambdaForAllTypes {
+  static_assert(comparison == valueIdComparators::Comparison::LT ||
+                comparison == valueIdComparators::Comparison::GT);
+
+  // Return true iff `a` comes first in the order of this aggregate, that is, it
+  // is less (`MIN`) resp. greater (`MAX`) than `b`. The name is neutral,
+  // because the same function serves both directions.
   template <typename T>
-  auto operator()(const T& a, const T& b, const EvaluationContext* ctx) const
+  static bool comesFirst(const T& a, const T& b, const EvaluationContext* ctx) {
+    int result = OrderByComparator{ctx->getLocalVocabContext()}.compare(
+        makeValueId(a, ctx), makeValueId(b, ctx));
+    return comparison == valueIdComparators::Comparison::LT ? result < 0
+                                                            : result > 0;
+  }
+
+  // Return `a` if it comes first, and else `b`. Taking them by value moves the
+  // result (which may hold a string) instead of copying it.
+  template <typename T>
+  auto operator()(T a, T b, const EvaluationContext* ctx) const
       -> CPP_ret(T)(requires SingleExpressionResult<T>) {
-    auto actualImpl = [ctx](const auto& x, const auto& y) {
-      return compareIdsOrStrings<comparison>(x, y, ctx);
-    };
-    if constexpr (ad_utility::isSimilar<T, Id>) {
-      return std::get<Id>(actualImpl(a, b));
-    } else {
-      // TODO<joka921> We should definitely move strings here.
-      return std::visit(actualImpl, a, b);
-    }
+    return comesFirst(a, b, ctx) ? std::move(a) : std::move(b);
   }
 };
 using MinLambdaForAllTypes =
