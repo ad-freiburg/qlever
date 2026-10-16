@@ -241,6 +241,8 @@ addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTest(IdTripleTest index)
 
+addLinkAndDiscoverTest(TextMetaDataTest index)
+
 addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 
 addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
@@ -649,7 +651,7 @@ addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
-addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
+addLinkAndDiscoverTest(ParallelExecutorTest)
 
 addLinkAndDiscoverTestNoLibs(IoUringManagerTest qlever_util)
 

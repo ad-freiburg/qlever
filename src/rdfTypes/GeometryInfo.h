@@ -5,12 +5,14 @@
 #ifndef QLEVER_SRC_UTIL_GEOMETRYINFO_H
 #define QLEVER_SRC_UTIL_GEOMETRYINFO_H
 
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <string>
 #include <string_view>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "concepts/concepts.hpp"
 #include "global/Constants.h"
@@ -186,15 +188,65 @@ CPP_concept RequestedInfoT =
 // Where the actual geometries are required, this type can be used.
 using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 
-// The version of the `GeometryInfo`: to ensure correctness when reading disk
-// serialized objects of this class.
+// The version of the binary representation of `GeometryInfo`, which the
+// `GeoVocabulary` writes to disk. The history of the versions that can still be
+// read:
+//
+// 5: The bytes `[28, 32)` are padding with arbitrary content (they were only
+//    zeroed explicitly in later builds of this version).
+// 6: The bytes `[28, 32)` are the two 16-bit fields `sourceCrs_` (initially
+//    reserved and zero) and `reservedLiteralFormat_`, see below.
+//
+// From version 6 on, the binary representation is append-only, so that adding
+// a field does not invalidate existing indices:
+//
+// - Never change the order, size, encoding or meaning of an existing field.
+// - A new field is appended at the end of the class. Bump the
+//   `GEOMETRY_INFO_VERSION` and append the new `sizeof(GeometryInfo)` to
+//   `GEOMETRY_INFO_SIZE_PER_VERSION`. When reading a record of an older
+//   version, the bytes of the new field are zero (see `fromSerialized`).
+// - A new field must not introduce implicit padding bytes (neither before it
+//   nor at the end of the class due to its alignment), because they would be
+//   written to disk with arbitrary content, such that they could never be
+//   taken into use later (like the padding in version 5). If necessary, add
+//   explicit reserved fields initialized to zero instead. Add the new field
+//   to the `static_assert` in the constructor of `GeometryInfo`, which checks
+//   this.
+// - A reserved field can be taken into use without bumping the version, because
+//   it is zero in all records written before.
+// - Consequently, a zero value of a field that was added (or taken into use)
+//   after version 5 must mean "not computed", and every reader of such a field
+//   must handle this case, typically by computing the value from the literal.
+// - Only a change that violates these rules is index-breaking: bump the
+//   `GEOMETRY_INFO_VERSION`, raise `MIN_LOADABLE_GEOMETRY_INFO_VERSION` to it,
+//   and remove the handling of the dropped versions from `fromSerialized` and
+//   `GEOMETRY_INFO_SIZE_PER_VERSION`.
 constexpr uint64_t GEOMETRY_INFO_VERSION = 6;
+constexpr uint64_t MIN_LOADABLE_GEOMETRY_INFO_VERSION = 5;
+
+// The size of the binary representation of `GeometryInfo` for each loadable
+// version, starting at `MIN_LOADABLE_GEOMETRY_INFO_VERSION`.
+inline constexpr std::array<size_t, GEOMETRY_INFO_VERSION -
+                                        MIN_LOADABLE_GEOMETRY_INFO_VERSION + 1>
+    GEOMETRY_INFO_SIZE_PER_VERSION{48, 48};
+
+// Return true iff a `GeometryInfo` of the given `version` can be read.
+constexpr bool isLoadableGeometryInfoVersion(uint64_t version) {
+  return version >= MIN_LOADABLE_GEOMETRY_INFO_VERSION &&
+         version <= GEOMETRY_INFO_VERSION;
+}
+
+// The size of the binary representation of `GeometryInfo` for the given
+// loadable `version`.
+constexpr size_t geometryInfoSize(uint64_t version) {
+  return GEOMETRY_INFO_SIZE_PER_VERSION.at(version -
+                                           MIN_LOADABLE_GEOMETRY_INFO_VERSION);
+}
 
 // A geometry info object holds precomputed details on WKT literals.
-// IMPORTANT: Every modification of the attributes of this class will be an
-// index-breaking change regarding the `GeoVocabulary`. Please update the
-// `GEOMETRY_INFO_VERSION` constant above accordingly, which will invalidate all
-// indices using such a vocabulary.
+// IMPORTANT: The binary representation of this class is written to disk by the
+// `GeoVocabulary`. Every modification of its attributes must follow the rules
+// at `GEOMETRY_INFO_VERSION` above.
 class GeometryInfo {
  private:
   // `GeometryInfo` must ensure that its attributes' binary representation
@@ -203,14 +255,15 @@ class GeometryInfo {
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
   uint32_t numGeometries_;
-  // The CRS named by the IRI of the WKT literal (before the projection to
-  // CRS84), see `SourceCrsType`.
-  //
-  // NOTE: The member is 4 bytes wide although the util's `CRSType` is a
-  // `uint8_t`. These bytes would otherwise be padding before the 8-byte
-  // aligned `metricLength_`, so the width costs nothing and leaves room for
-  // more coordinate reference systems without changing the serialized layout.
+  // The CRS named by the IRI of the literal (before the projection to CRS84),
+  // see `SourceCrsType`. This was the reserved field `reservedSourceCrs_` in
+  // the first builds of version 6, so it is zero ("not computed") in their
+  // records and in those of version 5 (see `fromSerialized`).
   SourceCrsType sourceCrs_;
+  // Reserved for the format of the literal (WKT, and in the future e.g.
+  // GeoJSON or KML), which is always zero for now. See the rules at
+  // `GEOMETRY_INFO_VERSION` for taking it into use.
+  uint16_t reservedLiteralFormat_ = 0;
   MetricLength metricLength_;
   MetricArea metricArea_;
 
@@ -240,6 +293,12 @@ class GeometryInfo {
   // `std:nullopt` if `wkt` cannot be parsed.
   static std::optional<GeometryInfo> fromWktLiteral(std::string_view wkt);
 
+  // Read a `GeometryInfo` from `bytes`, its binary representation of the given
+  // loadable `version` (of size `geometryInfoSize(version)`). The fields that
+  // the `version` did not have yet are zero.
+  static GeometryInfo fromSerialized(ql::span<const uint8_t> bytes,
+                                     uint64_t version);
+
   // Check if `wkt` (a WKT literal with quotes and datatype) is valid according
   // to the strict parsing mode of `pb_util`. This is a purely syntactic check.
   //
@@ -258,7 +317,9 @@ class GeometryInfo {
   // Parse an arbitrary WKT literal and return only the geometry type.
   static std::optional<GeometryType> getWktType(std::string_view wkt);
 
-  // Get the source CRS Type.
+  // Get the source CRS Type. Its `type()` is zero (`UNSUPPORTED`) iff it was
+  // not computed, because this object was read from an index that predates it
+  // (see `fromSerialized`). Then it has to be computed from the literal.
   SourceCrsType getSourceCrsType() const;
 
   // Parse an arbitrary WKT literal and return only the contained CRS type.
@@ -318,6 +379,10 @@ static_assert(std::is_standard_layout_v<GeometryInfo>);
 // For the disk serialization we require that a `GeometryInfo` is trivially
 // copyable.
 static_assert(std::is_trivially_copyable_v<GeometryInfo>);
+
+// A new field must also be added to `GEOMETRY_INFO_SIZE_PER_VERSION`, see the
+// rules at `GEOMETRY_INFO_VERSION`.
+static_assert(GEOMETRY_INFO_SIZE_PER_VERSION.back() == sizeof(GeometryInfo));
 
 // Return true iff `word` is a WKT literal (with quotes and datatype suffix).
 // This is the criterion by which the `SplitGeoVocabulary` routes words into
