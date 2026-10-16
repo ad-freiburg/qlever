@@ -28,6 +28,18 @@ WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
 }
 
 // _____________________________________________________________________________
+WKTParser::~WKTParser() {
+  _cancelled = true;
+  // An empty batch is the end event of the job queue (see `done()`).
+  _jobs.add({});
+  for (auto& thread : _thrds) {
+    if (thread.joinable()) {
+      thread.join();
+    }
+  }
+}
+
+// _____________________________________________________________________________
 size_t WKTParser::getPrefilterCounter() {
   return ::ranges::accumulate(_numSkipped, 0);
 }

@@ -116,6 +116,35 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   sweeper.flush();
 }
 
+// Test that a parser can be destroyed without `done()` while its worker
+// threads still have work, as happens when a query is cancelled during the
+// parsing. The threads must stop before the members of the parser that they
+// use are destroyed (otherwise they write to freed memory, which only a
+// sanitizer build detects reliably).
+TEST(SpatialJoinParser, DestroyWithoutDone) {
+  using enum SpatialJoinType::Enum;
+  auto kg = buildLibSJTestDataset();
+  auto qec = buildQec(kg, true);
+  const auto& index = qec->getIndex();
+  auto [vMap, nMap] = resolveValIdTable(qec, 6);
+  auto idxUni = getValId(nMap, "uni");
+
+  SweeperResult results;
+  SweeperDistResult resultDists;
+  auto cfg = makeSweeperCfg(LibSpatialJoinConfig{INTERSECTS}, results,
+                            resultDists, -1);
+  std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
+  sj::Sweeper sweeper{cfg, ".", sweeperPath};
+
+  for (size_t numBatches : {0, 1, 5}) {
+    WKTParser parser{&sweeper, 4, true, std::nullopt, index};
+    for (size_t i = 0; i < numBatches * WKT_PARSER_BATCH_SIZE; ++i) {
+      parser.addValueIdToQueue(idxUni, i, false, std::nullopt);
+    }
+    // The parser goes out of scope here without `done()`.
+  }
+}
+
 // _____________________________________________________________________________
 TEST(SpatialJoinParser, SpatialJoinTaskOperatorEq) {
   // Test equality operator of `SpatialJoinParseJob` helper struct
