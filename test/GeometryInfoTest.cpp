@@ -77,6 +77,9 @@ constexpr std::string_view litInvalidBrackets =
 constexpr std::string_view litInvalidNumCoords =
     "\"LINESTRING(1)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidCoord =
+    "\"LINESTRING(2 2, 4 a)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view litCoordOutOfRange =
     "\"LINESTRING(2 -500, 4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
@@ -86,6 +89,12 @@ constexpr std::string_view litUnsupportedCrsIri =
 constexpr std::string_view litInvalidCrsIri =
     "\"<http://www.opengis.net/def/crs/EPSG/0/3485 LINESTRING(2 2,4 "
     "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+constexpr std::string_view litLineStringEmpty =
+    "\"LINESTRING EMPTY\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litPointEmpty =
+    "\"POINT EMPTY\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 constexpr std::string_view litShortRealWorldLine =
     "\"LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946000)\""
@@ -314,6 +323,37 @@ TEST(GeometryInfoTest, FromWktLiteral) {
 
   auto g8 = GeometryInfo::fromWktLiteral(litInvalidType);
   EXPECT_GEOMETRYINFO(g8, std::nullopt);
+}
+
+// Test that `isValidWktStrict` accepts well-formed literals and rejects
+// malformed ones.
+TEST(GeometryInfoTest, IsValidWktStrict) {
+  // All supported geometry types.
+  for (auto lit :
+       {litPoint, litPointWGS84, litLineString, litPolygon, litMultiPoint,
+        litMultiLineString, litMultiPolygon, litCollection}) {
+    EXPECT_TRUE(GeometryInfo::isValidWktStrict(lit)) << lit;
+  }
+
+  // Syntactically valid literals without a geometry: `EMPTY`, an unsupported
+  // CRS, coordinates out of range.
+  for (auto lit :
+       {litLineStringEmpty, litUnsupportedCrsIri, litCoordOutOfRange}) {
+    EXPECT_TRUE(GeometryInfo::isValidWktStrict(lit)) << lit;
+    EXPECT_EQ(GeometryInfo::fromWktLiteral(lit), std::nullopt) << lit;
+  }
+
+  // Malformed literals. `POINT EMPTY` is rejected by the strict mode.
+  for (auto lit : {litInvalidType, litInvalidBrackets, litInvalidNumCoords,
+                   litInvalidCoord, litInvalidCrsIri, litPointEmpty}) {
+    EXPECT_FALSE(GeometryInfo::isValidWktStrict(lit)) << lit;
+  }
+
+  // All geometry computations use the strict mode, so they don't skip the
+  // invalid coordinate (as the lenient mode would), but yield no result.
+  EXPECT_EQ(GeometryInfo::getNumGeometries(litInvalidCoord), std::nullopt);
+  EXPECT_EQ(GeometryInfo::fromWktLiteral(litInvalidCoord), std::nullopt);
+  EXPECT_EQ(GeometryInfo::getBoundingBox(litInvalidCoord), std::nullopt);
 }
 
 // ____________________________________________________________________________
@@ -669,13 +709,32 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
   static_assert(sizeof(MetricLength) == sizeof(double));
   static_assert(sizeof(NumGeometries) == 4);
   static_assert(sizeof(MetricArea) == sizeof(double));
+  static_assert(sizeof(SerializationType) == 2);
 
   using EncodedGeometryTypeAndCentroid = uint64_t;
+  using ReservedSourceCrs = uint16_t;
   static_assert(sizeof(GeometryInfo) ==
-                4 +  // Currently we need 4 B alignment
+                sizeof(ReservedSourceCrs) + sizeof(SerializationType) +
                     sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
                     sizeof(MetricLength) + sizeof(MetricArea));
+}
+
+// Test that `fromSerialized` rejects a version outside the loadable range and a
+// record of the wrong size.
+TEST(GeometryInfoTest, FromSerializedInvalidInput) {
+  std::array<uint8_t, sizeof(GeometryInfo)> bytes{};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo::fromSerialized(bytes,
+                                   MIN_LOADABLE_GEOMETRY_INFO_VERSION - 1),
+      ::testing::HasSubstr("isLoadableGeometryInfoVersion"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo::fromSerialized(bytes, GEOMETRY_INFO_VERSION + 1),
+      ::testing::HasSubstr("isLoadableGeometryInfoVersion"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo::fromSerialized(ql::span<const uint8_t>{bytes}.first(1),
+                                   GEOMETRY_INFO_VERSION),
+      ::testing::HasSubstr("geometryInfoSize"));
 }
 
 // _____________________________________________________________________________

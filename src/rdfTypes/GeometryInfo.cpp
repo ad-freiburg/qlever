@@ -4,11 +4,15 @@
 
 #include "rdfTypes/GeometryInfo.h"
 
+#include <absl/base/casts.h>
+
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <type_traits>
 
+#include "backports/algorithm.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
@@ -29,8 +33,9 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
   // `static_assert` after the class in `GeometryInfo.h`.
   static_assert(sizeof(GeometryInfo) ==
                 sizeof(boundingBox_) + sizeof(geometryTypeAndCentroid_) +
-                    sizeof(numGeometries_) + sizeof(padding_) +
-                    sizeof(metricLength_) + sizeof(metricArea_));
+                    sizeof(numGeometries_) + sizeof(reservedSourceCrs_) +
+                    sizeof(serializationType_) + sizeof(metricLength_) +
+                    sizeof(metricArea_));
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -105,6 +110,36 @@ std::optional<GeometryType> GeometryInfo::getWktType(std::string_view wkt) {
     return std::nullopt;
   }
   return GeometryType{wktType};
+}
+
+// ____________________________________________________________________________
+GeometryInfo GeometryInfo::fromSerialized(ql::span<const uint8_t> bytes,
+                                          uint64_t version) {
+  AD_CONTRACT_CHECK(isLoadableGeometryInfoVersion(version));
+  AD_CONTRACT_CHECK(bytes.size() == geometryInfoSize(version));
+  // The binary representation is append-only, see `GEOMETRY_INFO_VERSION`.
+  std::array<uint8_t, sizeof(GeometryInfo)> buffer{};
+  ql::ranges::copy(bytes, buffer.begin());
+  auto info = absl::bit_cast<GeometryInfo>(buffer);
+  // In version 5, the bytes of these fields were padding with arbitrary
+  // content. Zero means "not computed" (and `WKT` for the serialization type),
+  // like in every record of version 6 (see the rules at
+  // `GEOMETRY_INFO_VERSION`).
+  if (version == 5) {
+    info.reservedSourceCrs_ = 0;
+    info.serializationType_ = SerializationType::WKT;
+  }
+  return info;
+}
+
+// ____________________________________________________________________________
+bool GeometryInfo::isValidWktStrict(std::string_view wkt) {
+  try {
+    detail::parseWktOrThrow(wkt);
+    return true;
+  } catch (const ::util::geo::WKTParseException&) {
+    return false;
+  }
 }
 
 // ____________________________________________________________________________
@@ -254,6 +289,19 @@ std::optional<NumGeometries> GeometryInfo::getNumGeometries(
 }
 
 // ____________________________________________________________________________
+SerializationType GeometryInfo::getSerializationType() const {
+  return serializationType_;
+}
+
+// ____________________________________________________________________________
+std::optional<SerializationType> GeometryInfo::getSerializationType(
+    [[maybe_unused]] std::string_view wkt) {
+  // TODO<ullingerc>: Only WKT literals exist for now, detect the format once
+  // GeoJSON or KML are supported.
+  return SerializationType::WKT;
+}
+
+// ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(
     requires RequestedInfoT<RequestedInfo>)
 RequestedInfo GeometryInfo::getRequestedInfo() const {
@@ -271,6 +319,8 @@ RequestedInfo GeometryInfo::getRequestedInfo() const {
     return getMetricLength();
   } else if constexpr (std::is_same_v<RequestedInfo, MetricArea>) {
     return getMetricArea();
+  } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
+    return getSerializationType();
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -284,6 +334,8 @@ template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
 template NumGeometries GeometryInfo::getRequestedInfo<NumGeometries>() const;
 template MetricLength GeometryInfo::getRequestedInfo<MetricLength>() const;
 template MetricArea GeometryInfo::getRequestedInfo<MetricArea>() const;
+template SerializationType GeometryInfo::getRequestedInfo<SerializationType>()
+    const;
 
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(
@@ -304,6 +356,8 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
     return GeometryInfo::getMetricLength(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, MetricArea>) {
     return GeometryInfo::getMetricArea(wkt);
+  } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
+    return GeometryInfo::getSerializationType(wkt);
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -324,5 +378,7 @@ template std::optional<MetricLength>
 GeometryInfo::getRequestedInfo<MetricLength>(std::string_view wkt);
 template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>(
     std::string_view wkt);
+template std::optional<SerializationType>
+GeometryInfo::getRequestedInfo<SerializationType>(std::string_view wkt);
 
 }  // namespace ad_utility
