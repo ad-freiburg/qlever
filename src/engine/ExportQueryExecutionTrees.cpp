@@ -21,6 +21,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "engine/BinaryExport.h"
 #include "engine/ConstructTripleGenerator.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
@@ -785,9 +786,14 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     [[maybe_unused]] CancellationHandle cancellationHandle,
     [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  throw std::runtime_error(
-      "The binary export of QLever results is not yet implemented, please have "
-      "a little patience");
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  return qlever::binary_export::exportAsQLeverBinary(
+      qet, selectClause, limitAndOffset, std::move(cancellationHandle));
+#else
+  throw std::runtime_error{
+      "The special binary export is currently not supported in the reduced "
+      "feature mode for C++17"};
+#endif
 }
 
 // _____________________________________________________________________________
