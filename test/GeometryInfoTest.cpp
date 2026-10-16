@@ -252,7 +252,7 @@ TEST(GeometryInfoTest, BasicTests) {
   ASSERT_EQ(g.getNumGeometries().numGeometries(), 2);
   ASSERT_NEAR(g.getMetricLength().length(), 900, 0.0001);
   ASSERT_NEAR(g.getMetricArea().area(), 5, 0.0001);
-  ASSERT_EQ(g.getSourceCrsType().type(), util::geo::CRSType::WGS84);
+  ASSERT_EQ(g.getSourceCrsType().value().type(), util::geo::CRSType::WGS84);
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(

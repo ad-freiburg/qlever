@@ -338,7 +338,8 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     auto actual = geoVocab.getGeoInfo(i);
     ASSERT_EQ(actual.has_value(), expected.has_value());
     if (expected.has_value()) {
-      EXPECT_EQ(actual.value().getSourceCrsType().type(), 0);
+      EXPECT_EQ(actual.value().getSourceCrsType(), std::nullopt);
+      EXPECT_EQ(actual.value().getRequestedInfo<SourceCrsType>(), std::nullopt);
       auto expectedBytes = absl::bit_cast<Bytes>(expected.value());
       std::fill(expectedBytes.begin() + 28, expectedBytes.begin() + 32, 0);
       EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()), expectedBytes);

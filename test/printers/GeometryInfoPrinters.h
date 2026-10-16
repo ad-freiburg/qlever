@@ -72,7 +72,7 @@ inline void PrintTo(const GeometryInfo& gi, std::ostream* os) {
   s << ",";
   PrintTo(gi.getNumGeometries(), os);
   s << ",";
-  PrintTo(gi.getSourceCrsType(), os);
+  s << ::testing::PrintToString(gi.getSourceCrsType());
   s << ",";
   PrintTo(gi.getMetricLength(), os);
   s << ",";

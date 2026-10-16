@@ -618,13 +618,17 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
     case SecondaryVocabIndex: {
       auto precomputed = getPrecomputedGeometryInfo(id, context);
       if (precomputed.has_value()) {
-        return precomputed.value().getRequestedInfo<RequestedInfo>();
-      } else {
-        // No precomputed geometry info available: we have to fetch and parse
-        // the string.
-        auto lit = getLiteralOrIri(id, context);
-        return GeometryInfoValueGetter{}(lit, context);
+        // Empty if the index predates this info, see
+        // `GeometryInfo::getSourceCrsType`.
+        auto info = precomputed.value().getRequestedInfo<RequestedInfo>();
+        if (info.has_value()) {
+          return info;
+        }
       }
+      // No precomputed geometry info available: we have to fetch and parse
+      // the string.
+      auto lit = getLiteralOrIri(id, context);
+      return GeometryInfoValueGetter{}(lit, context);
     }
     case GeoPoint:
       return ad_utility::GeometryInfo::fromGeoPoint(id.getGeoPoint())
@@ -664,6 +668,7 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
 namespace sparqlExpression::detail {
 template struct GeometryInfoValueGetter<ad_utility::GeometryInfo>;
 template struct GeometryInfoValueGetter<ad_utility::GeometryType>;
+template struct GeometryInfoValueGetter<ad_utility::SourceCrsType>;
 template struct GeometryInfoValueGetter<ad_utility::Centroid>;
 template struct GeometryInfoValueGetter<ad_utility::BoundingBox>;
 template struct GeometryInfoValueGetter<ad_utility::NumGeometries>;

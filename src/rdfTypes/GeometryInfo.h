@@ -317,10 +317,11 @@ class GeometryInfo {
   // Parse an arbitrary WKT literal and return only the geometry type.
   static std::optional<GeometryType> getWktType(std::string_view wkt);
 
-  // Get the source CRS Type. Its `type()` is zero (`UNSUPPORTED`) iff it was
-  // not computed, because this object was read from an index that predates it
-  // (see `fromSerialized`). Then it has to be computed from the literal.
-  SourceCrsType getSourceCrsType() const;
+  // Get the source CRS type. Empty iff this object was read from an index that
+  // predates `sourceCrs_` (stored as zero, see `fromSerialized`): then compute
+  // it from the literal. Zero is unambiguous, because a literal with an
+  // unsupported CRS has no `GeometryInfo` at all.
+  std::optional<SourceCrsType> getSourceCrsType() const;
 
   // Parse an arbitrary WKT literal and return only the contained CRS type.
   static std::optional<SourceCrsType> getSourceCrsType(std::string_view wkt);
@@ -357,10 +358,11 @@ class GeometryInfo {
   static std::optional<MetricLength> getMetricLength(
       const std::string_view& wkt);
 
-  // Extract the requested information from this object.
+  // Extract the requested information from this object. Empty iff it is not
+  // stored in this object (see `getSourceCrsType`).
   CPP_template(typename RequestedInfo = GeometryInfo)(
-      requires RequestedInfoT<RequestedInfo>) RequestedInfo
-      getRequestedInfo() const;
+      requires RequestedInfoT<RequestedInfo>)
+      std::optional<RequestedInfo> getRequestedInfo() const;
 
   // Parse the given WKT literal and compute only the requested information.
   CPP_template(typename RequestedInfo = GeometryInfo)(

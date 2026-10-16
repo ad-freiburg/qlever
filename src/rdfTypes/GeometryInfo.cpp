@@ -182,7 +182,12 @@ GeometryType GeometryInfo::getWktType() const {
 }
 
 // ____________________________________________________________________________
-SourceCrsType GeometryInfo::getSourceCrsType() const { return sourceCrs_; }
+std::optional<SourceCrsType> GeometryInfo::getSourceCrsType() const {
+  if (sourceCrs_.type() == 0) {
+    return std::nullopt;
+  }
+  return sourceCrs_;
+}
 
 // ____________________________________________________________________________
 std::optional<std::string_view> GeometryType::asIri() const {
@@ -323,7 +328,7 @@ std::optional<NumGeometries> GeometryInfo::getNumGeometries(
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(
     requires RequestedInfoT<RequestedInfo>)
-RequestedInfo GeometryInfo::getRequestedInfo() const {
+std::optional<RequestedInfo> GeometryInfo::getRequestedInfo() const {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return *this;
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {
@@ -346,14 +351,22 @@ RequestedInfo GeometryInfo::getRequestedInfo() const {
 }
 
 // Explicit instantiations
-template GeometryInfo GeometryInfo::getRequestedInfo<GeometryInfo>() const;
-template Centroid GeometryInfo::getRequestedInfo<Centroid>() const;
-template BoundingBox GeometryInfo::getRequestedInfo<BoundingBox>() const;
-template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
-template SourceCrsType GeometryInfo::getRequestedInfo<SourceCrsType>() const;
-template NumGeometries GeometryInfo::getRequestedInfo<NumGeometries>() const;
-template MetricLength GeometryInfo::getRequestedInfo<MetricLength>() const;
-template MetricArea GeometryInfo::getRequestedInfo<MetricArea>() const;
+template std::optional<GeometryInfo>
+GeometryInfo::getRequestedInfo<GeometryInfo>() const;
+template std::optional<Centroid> GeometryInfo::getRequestedInfo<Centroid>()
+    const;
+template std::optional<BoundingBox>
+GeometryInfo::getRequestedInfo<BoundingBox>() const;
+template std::optional<GeometryType>
+GeometryInfo::getRequestedInfo<GeometryType>() const;
+template std::optional<SourceCrsType>
+GeometryInfo::getRequestedInfo<SourceCrsType>() const;
+template std::optional<NumGeometries>
+GeometryInfo::getRequestedInfo<NumGeometries>() const;
+template std::optional<MetricLength>
+GeometryInfo::getRequestedInfo<MetricLength>() const;
+template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>()
+    const;
 
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(
