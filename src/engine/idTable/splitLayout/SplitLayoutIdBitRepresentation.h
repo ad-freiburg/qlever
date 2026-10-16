@@ -1,9 +1,9 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
 // 2026 Pascal Keßler <kesslerp@cs.uni-freiburg.de>, UFR
-
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
-
+//
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
@@ -20,6 +20,7 @@
 #include "backports/three_way_comparison.h"
 
 namespace columnBasedIdTable::splitLayout {
+
 // The raw bit representation of an `Id` in the experimental split layout: a
 // datatype byte and a full 64-bit payload word, kept apart (unlike the legacy
 // `ValueId`, which packs both into a single 64-bit word). The comparison is
