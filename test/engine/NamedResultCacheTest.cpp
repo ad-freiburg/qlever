@@ -14,6 +14,7 @@ namespace {
 TEST(NamedResultCache, basicWorkflow) {
   NamedResultCache cache;
   EXPECT_EQ(cache.numEntries(), 0);
+  EXPECT_FALSE(cache.contains("query-1"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       cache.get("query-1"),
       ::testing::HasSubstr("is not contained in the named result cache"));
@@ -91,7 +92,7 @@ TEST(NamedResultCache, basicWorkflow) {
   {
     cache.store("query-2", getCacheValue(table2));
     EXPECT_EQ(cache.numEntries(), 2);
-    ASSERT_TRUE(cache.contains("query-2"));
+    EXPECT_TRUE(cache.contains("query-2"));
     auto res = cache.get("query-2");
     ASSERT_NE(res, nullptr);
 
