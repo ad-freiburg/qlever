@@ -39,6 +39,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
+
 using namespace ad_utility::testing;
 using ::testing::Eq;
 using ::testing::Optional;
@@ -2023,7 +2025,8 @@ struct QecWrapper {
         makeAllocator(ad_utility::MemorySize::megabytes(100)),
         SortPerformanceEstimator{},
         &namedCache_,
-        materializedViewsManager_};
+        materializedViewsManager_,
+        executor()};
   }
 };
 

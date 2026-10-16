@@ -241,6 +241,8 @@ addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTest(IdTripleTest index)
 
+addLinkAndDiscoverTest(TextMetaDataTest index)
+
 addLinkAndDiscoverTestNoLibs(ZipMergeUniqueViewTest)
 
 addLinkAndDiscoverTestNoLibs(SortedSequenceTest)
@@ -330,7 +332,7 @@ addLinkAndDiscoverTest(MinusTest engine)
 # this test runs for quite some time and might have spurious failures!
 # Therefore it is compiled, but not run. If you want to run it,
 # change the following two lines.
-addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator sparqlParser)
+addAndLinkTest(SortPerformanceEstimatorTest sortPerformanceEstimator sparqlParser testUtil)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest sortPerformanceEstimator)
 
 addLinkAndDiscoverTestNoLibs(SerializerTest)
@@ -346,6 +348,8 @@ addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
 addLinkAndDiscoverTest(TaskQueueTest)
 
 addLinkAndDiscoverTest(TaskQueueOnExecutorTest)
+
+addLinkAndDiscoverTest(ConcurrencyLimitedExecutorTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
@@ -577,7 +581,6 @@ addLinkAndDiscoverTestNoLibs(CancellationHandleTest qlever_util)
 
 addLinkAndDiscoverTestSerial(ProgressBarTest qlever_util)
 
-addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 
@@ -648,7 +651,7 @@ addLinkAndDiscoverTest(MaterializedViewsCacheKeyRewriteTest qlever engine)
 
 addLinkAndDiscoverTestNoLibs(ConstexprMapTest)
 
-addLinkAndDiscoverTestNoLibs(ParallelExecutorTest)
+addLinkAndDiscoverTest(ParallelExecutorTest)
 
 addLinkAndDiscoverTestNoLibs(IoUringManagerTest qlever_util)
 

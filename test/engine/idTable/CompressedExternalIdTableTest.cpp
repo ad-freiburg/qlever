@@ -513,7 +513,7 @@ namespace {
 // The number of rows per block that results from the given uncompressed block
 // size. The blocks are formed per column, hence the size of a single `Id`.
 size_t rowsPerBlockFor(ad_utility::MemorySize blockSize) {
-  return blockSize.getBytes() / sizeof(Id);
+  return blockSize.getBytes() / BYTES_PER_ID_COLUMN_ENTRY;
 }
 
 // Write all the `tables` to the `writer` and then flush it, such that the
@@ -647,6 +647,31 @@ TEST(CompressedExternalIdTable, concurrentBlockReads) {
 
   // After all readers are gone, the writer can be written to again.
   EXPECT_NO_THROW(writer.writeIdTable(tables.at(0)));
+}
+
+// Test that `writeIdTable` with a tiny block size and several columns (so that
+// it compresses and writes thousands of (block, column) pairs in parallel)
+// stores exactly the blocks of a sequential write, also after a `clear()`,
+// which starts writing at the beginning of the file again.
+TEST(CompressedExternalIdTable, writerWithManyBlocksAndColumns) {
+  constexpr size_t numColumns = 5;
+  std::vector<CopyableIdTable<0>> tables;
+  for (size_t numRows : {1001, 2, 1, 777}) {
+    tables.emplace_back(createRandomlyFilledIdTable(numRows, numColumns));
+  }
+  auto blockSize = 16_B;
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  ad_utility::CompressedExternalIdTableWriter writer{
+      filename, numColumns, ad_utility::testing::makeAllocator(), blockSize};
+  for (size_t i = 0; i < 2; ++i) {
+    writeAndFlush(writer, tables);
+    checkBlockMetadata(writer, tables, rowsPerBlockFor(blockSize));
+    checkBlockContents(writer, tables, rowsPerBlockFor(blockSize));
+    writer.clear();
+  }
 }
 
 // _____________________________________________________________________________

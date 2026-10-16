@@ -41,6 +41,10 @@ inline Id idFromBitsCompat(const SplitLayoutIdBitRepresentation bits) {
 // supports assigning a new `Id` to the referenced slot. A thin,
 // cheap-to-copy pair of pointers, not polymorphic, like `Id` itself.
 //
+// TODO<pas-kes>: Restrict the write access of this proxy like
+// `RowReferenceWithRestrictedAccess` does for rows (writable only for
+// rvalues). This will be done in the split layout PR.
+//
 // TODO<pas-kes>: Most of the read API below first converts to an `Id` via
 // `toId()`. Assess in the future whether this is necessary, or whether the
 // generated code should be avoided.
