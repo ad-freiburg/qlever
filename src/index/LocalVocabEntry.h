@@ -9,12 +9,12 @@
 
 #include <atomic>
 
-#include "IdBitRepresentation.h"
 #include "backports/algorithm.h"
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "global/TypedIndex.h"
 #include "global/VocabIndex.h"
+#include "index/IdBitRepresentation.h"
 #include "parser/LiteralOrIri.h"
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
