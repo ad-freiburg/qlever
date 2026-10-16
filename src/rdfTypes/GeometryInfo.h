@@ -264,7 +264,7 @@ class GeometryInfo {
   GeometryInfo& operator=(const GeometryInfo& other) = default;
 
   // Parse an arbitrary WKT literal and compute all attributes. Return
-  // `std:nullopt` if `wkt` cannot be parsed.
+  // `std::nullopt` if `wkt` cannot be parsed (in the strict parsing mode).
   static std::optional<GeometryInfo> fromWktLiteral(std::string_view wkt);
 
   // Read a `GeometryInfo` from `bytes`, its binary representation of the given

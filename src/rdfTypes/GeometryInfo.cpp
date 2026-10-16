@@ -134,7 +134,7 @@ GeometryInfo GeometryInfo::fromSerialized(ql::span<const uint8_t> bytes,
 // ____________________________________________________________________________
 bool GeometryInfo::isValidWktStrict(std::string_view wkt) {
   try {
-    detail::parseWkt(wkt, detail::defaultCrs, true);
+    detail::parseWktOrThrow(wkt);
     return true;
   } catch (const ::util::geo::WKTParseException&) {
     return false;
