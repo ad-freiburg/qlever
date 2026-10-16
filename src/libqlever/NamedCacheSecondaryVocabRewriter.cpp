@@ -233,7 +233,7 @@ CanonicalizedValue canonicalizeWithPermutation(
   table.insertAtEnd(columnSubset);
   if (containsLocalVocabIds(value)) {
     for (auto column : table.getColumns()) {
-      ql::ranges::for_each(column, [&secondaryVocab](Id& id) {
+      ql::ranges::for_each(column, [&secondaryVocab](IdRef id) {
         id = rewriteId(id, secondaryVocab);
       });
     }

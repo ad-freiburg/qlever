@@ -51,7 +51,7 @@ RuntimeParameters::RuntimeParameters() {
   add(enablePrefilterOnIndexScans_);
   add(spatialJoinMaxNumThreads_);
   add(patternTrickNumTasksInFlight_);
-  add(parallelSortNumThreads_);
+  add(sortNumTasksInFlight_);
   add(spatialJoinPrefilterMaxSize_);
   add(spatialJoinTmpDir_);
   add(enableDistributiveUnion_);
@@ -100,6 +100,7 @@ RuntimeParameters::RuntimeParameters() {
   maxNumThreadsPerQuery_.setParameterConstraint(mustBeStrictlyPositive);
   permutationWriterNumBlocksInFlight_.setParameterConstraint(
       mustBeStrictlyPositive);
+  sortNumTasksInFlight_.setParameterConstraint(mustBeStrictlyPositive);
 }
 
 // _____________________________________________________________________________
