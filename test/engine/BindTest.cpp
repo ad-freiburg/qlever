@@ -10,13 +10,13 @@
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
-#include "engine/QueryPlanner.h"
+#include "engine/IndexScan.h"
+#include "engine/Join.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
-#include "parser/SparqlParser.h"
 
 using namespace sparqlExpression;
 using Vars = std::vector<std::optional<Variable>>;
@@ -46,6 +46,41 @@ Bind makeBindForExpression(QueryExecutionContext* qec,
           {SparqlExpressionPimpl{std::move(expression),
                                  std::move(descriptor) + " AS ?b"},
            Variable{"?b"}}};
+}
+
+// Return a `Bind` of `IRI(?s) AS ?x` on an input whose column `?s` holds the
+// `strings` as literals.
+std::shared_ptr<QueryExecutionTree> makeIriBind(
+    QueryExecutionContext* qec, const std::vector<std::string>& strings) {
+  LocalVocab localVocab;
+  VectorTable rows;
+  for (const auto& s : strings) {
+    rows.push_back(
+        {Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry::literalWithoutQuotes(
+                s, qec->getLocalVocabContext())))});
+  }
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector(rows), Vars{Variable{"?s"}}, false,
+      std::vector<ColumnIndex>{}, std::move(localVocab));
+  return ad_utility::makeExecutionTree<Bind>(
+      qec, std::move(valuesTree),
+      parsedQuery::Bind{
+          SparqlExpressionPimpl{
+              makeIriOrUriExpression(
+                  std::make_unique<VariableExpression>(Variable{"?s"}),
+                  std::make_unique<IriExpression>(TripleComponent::Iri{})),
+              "IRI(?s) AS ?x"},
+          Variable{"?x"}});
+}
+
+// Return the `Id`s of the `variable` in the result of the `qet`.
+std::vector<Id> getIdsOfVariable(QueryExecutionTree& qet,
+                                 const Variable& variable) {
+  auto result = qet.getResult();
+  auto col = qet.getVariableColumn(variable);
+  const auto& table = result->idTableView();
+  return {table.getColumn(col).begin(), table.getColumn(col).end()};
 }
 
 void expectBindYieldsIdTable(
@@ -293,31 +328,28 @@ TEST(Bind, cloneSucceedsForNondeterministicBind) {
 // `<http://example.org/5>` (an `EncodedVal`), while the computed IRIs used to
 // be sorted by their string value, so in the opposite order.
 TEST(Bind, joinOfComputedEncodableIris) {
-  std::string kg =
+  ad_utility::testing::TestIndexConfig config{
       "<http://example.org/5> <p> \"five\" . "
-      "<http://example.org/5a> <p> \"fiveA\" .";
-  ad_utility::testing::TestIndexConfig config{kg};
+      "<http://example.org/5a> <p> \"fiveA\" ."};
   config.encodedPrefixesWithoutAngleBrackets =
       std::vector<std::string>{"http://example.org/"};
   auto* qec = ad_utility::testing::getQec(std::move(config));
 
-  std::string query =
-      "SELECT ?l WHERE { VALUES ?n { \"5\" \"5a\" } "
-      "BIND(IRI(CONCAT(\"http://example.org/\", ?n)) AS ?s) ?s <p> ?l }";
-  auto parsedQuery =
-      SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(), query, {});
-  QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
-  auto qet = qp.createExecutionTree(parsedQuery);
-  auto result = qet->getResult();
-  const auto& table = result->idTableView();
-  auto col = qet->getVariableColumn(Variable{"?l"});
-  std::vector<Id> literals;
-  for (size_t i = 0; i < table.numRows(); ++i) {
-    literals.push_back(table(i, col));
-  }
+  auto bind =
+      makeIriBind(qec, {"http://example.org/5", "http://example.org/5a"});
+  auto scan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?x"},
+                         TripleComponent::Iri::fromIriref("<p>"),
+                         Variable{"?l"}});
+  auto join = ad_utility::makeExecutionTree<Join>(
+      qec, bind, scan, bind->getVariableColumn(Variable{"?x"}),
+      scan->getVariableColumn(Variable{"?x"}));
+
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  EXPECT_THAT(literals, ::testing::UnorderedElementsAre(getId("\"five\""),
-                                                        getId("\"fiveA\"")));
+  EXPECT_THAT(
+      getIdsOfVariable(*join, Variable{"?l"}),
+      ::testing::UnorderedElementsAre(getId("\"five\""), getId("\"fiveA\"")));
 }
 
 // Test that the `Id`s of a computed encodable IRI, a computed IRI that is not
@@ -329,37 +361,11 @@ TEST(Bind, computedEncodableIrisAreStrictlyWeaklyOrdered) {
   config.encodedPrefixesWithoutAngleBrackets =
       std::vector<std::string>{"http://example.org/"};
   auto* qec = ad_utility::testing::getQec(std::move(config));
-  const auto& context = qec->getLocalVocabContext();
 
-  // The input `?s` holds the two strings from which `IRI(?s)` computes the
-  // IRIs.
-  LocalVocab localVocab;
-  auto literal = [&](std::string_view s) {
-    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::literalWithoutQuotes(s, context)));
-  };
-  auto input = makeIdTableFromVector(
-      {{literal("http://example.org/1")}, {literal("http://y")}});
-  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(input), Vars{Variable{"?s"}}, false,
-      std::vector<ColumnIndex>{}, std::move(localVocab));
-  Bind bind{qec,
-            std::move(valuesTree),
-            {SparqlExpressionPimpl{
-                 makeIriOrUriExpression(
-                     std::make_unique<VariableExpression>(Variable{"?s"}),
-                     std::make_unique<IriExpression>(TripleComponent::Iri{})),
-                 "IRI(?s) AS ?x"},
-             Variable{"?x"}}};
-  auto result = bind.getResult();
-  auto col = bind.getExternallyVisibleVariableColumns()
-                 .at(Variable{"?x"})
-                 .columnIndex_;
-  const auto& table = result->idTableView();
-  ASSERT_EQ(table.numRows(), 2);
-
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  std::vector<Id> ids{table(0, col), table(1, col), getId("<http://z>")};
+  auto bind = makeIriBind(qec, {"http://example.org/1", "http://y"});
+  auto ids = getIdsOfVariable(*bind, Variable{"?x"});
+  ASSERT_EQ(ids.size(), 2);
+  ids.push_back(ad_utility::testing::makeGetId(qec->getIndex())("<http://z>"));
   for (Id a : ids) {
     EXPECT_FALSE(a < a) << a;
     for (Id b : ids) {
