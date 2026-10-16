@@ -140,41 +140,42 @@ void logGeoIndexNotExtended(std::string_view key, std::string_view reason) {
 }
 
 // Return true iff the entry `baseValue` of the base (with the geo index
-// `baseGeoIndex`) has the same structure as the canonicalized entry
-// `canonicalValue` (with the geo index `newGeoIndex`): the same number of
-// columns, the same geometry column and simplification of the geo index, and
-// the same variable-to-column map and sort order. Only then can the geo index
-// of the base be extended to the one of the canonicalized entry.
+// `baseGeoIndex`) has the same structure as the canonicalized copy
+// `canonicalUpdated` of the updated entry (whose geo index is
+// `updatedGeoIndex`): the same number of columns, the same geometry column and
+// simplification of the geo index, and the same variable-to-column map and
+// sort order. Only then can the geo index of the base be extended to the one
+// of the updated entry.
 bool baseHasSameStructure(const NamedResultCache::Value& baseValue,
                           const SpatialJoinCachedIndex& baseGeoIndex,
-                          const NamedResultCache::Value& canonicalValue,
-                          const SpatialJoinCachedIndex& newGeoIndex) {
+                          const NamedResultCache::Value& canonicalUpdated,
+                          const SpatialJoinCachedIndex& updatedGeoIndex) {
   return ExplicitIdTableOperation::viewOf(baseValue.result_).numColumns() ==
-             ExplicitIdTableOperation::viewOf(canonicalValue.result_)
+             ExplicitIdTableOperation::viewOf(canonicalUpdated.result_)
                  .numColumns() &&
-         baseGeoIndex.getGeometryColumn() == newGeoIndex.getGeometryColumn() &&
+         baseGeoIndex.getGeometryColumn() ==
+             updatedGeoIndex.getGeometryColumn() &&
          baseGeoIndex.simplificationErrorInMeters() ==
-             newGeoIndex.simplificationErrorInMeters() &&
-         baseValue.varToColMap_ == canonicalValue.varToColMap_ &&
-         baseValue.resultSortedOn_ == canonicalValue.resultSortedOn_;
+             updatedGeoIndex.simplificationErrorInMeters() &&
+         baseValue.varToColMap_ == canonicalUpdated.varToColMap_ &&
+         baseValue.resultSortedOn_ == canonicalUpdated.resultSortedOn_;
 }
 
 // Return the entry with the `key` from the named result cache of the `base`
-// if its geo index can be extended to the one of the canonicalized entry
-// `canonicalValue` (with the geo index `newGeoIndex`), else `nullptr`. That is
-// the case iff the base contains an entry with the `key` that has a geo index
-// and the same structure (see `baseHasSameStructure`), and whose table is in
-// canonical order (which `canonicalRowOrder::alignRows` requires). If the base
-// contains an entry with the `key`, but it is not eligible, then the reason is
-// logged.
+// if its geo index can be extended to the one of the updated entry with the
+// same `key` (with the canonicalized copy `canonicalUpdated` and the geo index
+// `updatedGeoIndex`), else `nullptr`. That is the case iff the base contains
+// an entry with the `key` that has a geo index and the same structure (see
+// `baseHasSameStructure`), and whose table is in canonical order (which
+// `canonicalRowOrder::alignRows` requires). If the base entry is not eligible
+// (or does not exist), then the reason is logged.
 std::shared_ptr<const NamedResultCache::Value> findEligibleBaseEntry(
     const std::string& key, const Qlever& base,
-    const NamedResultCache::Value& canonicalValue,
-    const SpatialJoinCachedIndex& newGeoIndex) {
-  // An entry without a counterpart in the base is silently written with its
-  // own geo index.
+    const NamedResultCache::Value& canonicalUpdated,
+    const SpatialJoinCachedIndex& updatedGeoIndex) {
   auto baseValue = base.namedResultCache().getIfContained(key);
   if (baseValue == nullptr) {
+    logGeoIndexNotExtended(key, "the base has no entry with this name");
     return nullptr;
   }
   if (!baseValue->cachedGeoIndex_.has_value()) {
@@ -187,8 +188,8 @@ std::shared_ptr<const NamedResultCache::Value> findEligibleBaseEntry(
   // either built from the table, or the number of its rows is checked against
   // the table when it is read from a blob.
   AD_CORRECTNESS_CHECK(baseGeoIndex.numRows() == baseView.numRows());
-  if (!baseHasSameStructure(*baseValue, baseGeoIndex, canonicalValue,
-                            newGeoIndex)) {
+  if (!baseHasSameStructure(*baseValue, baseGeoIndex, canonicalUpdated,
+                            updatedGeoIndex)) {
     logGeoIndexNotExtended(key, "the structure of the base entry differs");
     return nullptr;
   }
@@ -201,49 +202,57 @@ std::shared_ptr<const NamedResultCache::Value> findEligibleBaseEntry(
   return baseValue;
 }
 
-// Return the geo index for the table of the entry `original`, in the canonical
-// row order of the canonicalized copy of `original`, that is created from the
-// `baseGeoIndex` via `SpatialJoinCachedIndex::forUpdatedTable` (reusing its
-// segments). The element `i` of `baseRowOfNewRow` is the row of the base that
-// matches the canonical row `i` (or `SpatialJoinCachedIndex::NO_ROW`), and
-// `oldRowOfNewRow` is the permutation from the canonical rows to the rows of
-// `original` (`std::nullopt` if the rows of `original` already are in
-// canonical order, see `namedCacheSecondaryVocab::CanonicalizedValue`). The
-// `index` is used to resolve the `Id`s of the table of `original`.
+// Extend the geo index of an entry of the base to the geo index of the
+// corresponding updated entry.
 //
-// NOTE: The new geometries have to be read from the table of `original`,
+// Given are:
+// - The `baseGeoIndex`, the geo index of the base entry.
+// - The `updated` entry, as it is stored in the named cache of the instance
+//   that is serialized. The `index` is used to resolve the `Id`s of its table.
+// - The `updatedRowOfCanonicalRow`: element `i` is the row of the table of
+//   `updated` that becomes the row `i` of its canonicalized copy (see
+//   `namedCacheSecondaryVocab::CanonicalizedValue::oldRowOfNewRow_`), or
+//   `std::nullopt` if the rows of `updated` already are in canonical order.
+// - The `baseRowOfCanonicalRow`: element `i` is the row of the base entry that
+//   is equal to the row `i` of the canonicalized copy of `updated`, or
+//   `SpatialJoinCachedIndex::NO_ROW` if there is no such row (see
+//   `canonicalRowOrder::alignRows`).
+//
+// Return the geo index for the canonicalized copy of `updated`, in its
+// canonical row order. It reuses all segments of the `baseGeoIndex` (the
+// shapes of the base rows without a matching row become dead), and adds the
+// geometries of the rows without a matching base row as one new segment (see
+// `SpatialJoinCachedIndex::forUpdatedTable`).
+//
+// NOTE: The new geometries have to be read from the table of `updated`,
 // because the table of the canonicalized copy may contain `Id`s that only the
 // secondary vocabulary of the blob can resolve. They are added to the new
 // segment in canonical row order, so that the bytes of the segment do not
-// depend on the order of the rows of `original`.
+// depend on the order of the rows of `updated`.
 SpatialJoinCachedIndex extendGeoIndexFromBase(
     const SpatialJoinCachedIndex& baseGeoIndex,
-    const std::vector<size_t>& baseRowOfNewRow,
-    const NamedResultCache::Value& original,
-    const std::optional<std::vector<size_t>>& oldRowOfNewRow,
+    const std::vector<size_t>& baseRowOfCanonicalRow,
+    const NamedResultCache::Value& updated,
+    const std::optional<std::vector<size_t>>& updatedRowOfCanonicalRow,
     const Index& index) {
   ColumnIndex column =
-      original.varToColMap_.at(baseGeoIndex.getGeometryColumn()).columnIndex_;
-  auto originalView = ExplicitIdTableOperation::viewOf(original.result_);
-  if (!oldRowOfNewRow.has_value()) {
-    // The rows of `original` already are in canonical order.
+      updated.varToColMap_.at(baseGeoIndex.getGeometryColumn()).columnIndex_;
+  auto updatedView = ExplicitIdTableOperation::viewOf(updated.result_);
+  if (!updatedRowOfCanonicalRow.has_value()) {
+    // The rows of `updated` already are in canonical order.
     return SpatialJoinCachedIndex::forUpdatedTable(
-        baseGeoIndex, baseRowOfNewRow, originalView, column, index);
+        baseGeoIndex, baseRowOfCanonicalRow, updatedView, column, index);
   }
-  // Translate the matching from the canonical rows to the rows of `original`,
-  // build the index for the rows of `original` (visiting them in canonical
+  // Translate the matching from the canonical rows to the rows of `updated`,
+  // build the index for the rows of `updated` (visiting them in canonical
   // order), and permute its rows to canonical order.
-  const auto& oldRowOfNewRowValue = oldRowOfNewRow.value();
-  std::vector<size_t> baseRowOfOriginalRow(baseRowOfNewRow.size(),
-                                           SpatialJoinCachedIndex::NO_ROW);
-  for (size_t newRow = 0; newRow < baseRowOfNewRow.size(); ++newRow) {
-    baseRowOfOriginalRow[oldRowOfNewRowValue[newRow]] = baseRowOfNewRow[newRow];
-  }
+  const auto& permutation = updatedRowOfCanonicalRow.value();
+  auto baseRowOfUpdatedRow =
+      canonicalRowOrder::toOldRowOrder(baseRowOfCanonicalRow, permutation);
   return SpatialJoinCachedIndex::forUpdatedTable(
-             baseGeoIndex, baseRowOfOriginalRow, originalView, column, index,
-             oldRowOfNewRowValue)
-      .withPermutedRows(
-          canonicalRowOrder::invertPermutation(oldRowOfNewRowValue));
+             baseGeoIndex, baseRowOfUpdatedRow, updatedView, column, index,
+             permutation)
+      .withPermutedRows(canonicalRowOrder::invertPermutation(permutation));
 }
 
 // Return true iff the `extended` geo index of the named result `key` exceeds
@@ -271,46 +280,69 @@ bool exceedsCompactionThresholds(
   return exceeds;
 }
 
-// Return the geo index for the canonicalized copy `canonicalized` of the entry
-// `original` that reuses the segments of the geo index of the entry with the
-// same `key` in the base of the `incremental` config (see
+// Return the geo index for the canonicalized copy `canonicalized` of the
+// `updated` entry that reuses the segments of the geo index of the entry with
+// the same `key` in the base of the `incremental` config (see
 // `findEligibleBaseEntry` and `extendGeoIndexFromBase`), or `std::nullopt` if
 // that is not possible or if the result would have to be compacted (see
 // `exceedsCompactionThresholds`), in which case the geo index of
-// `canonicalized` is to be used, which is the geo index of the entry
-// `original` itself (as built when the entry was pinned, or as loaded from a
-// blob; it may have several segments in the latter case) with its rows
-// permuted to canonical order. The result is in canonical row order. The
-// `index` is used to resolve the `Id`s of the table of `original`.
+// `canonicalized` is to be used, which is the geo index of the `updated` entry
+// itself (as built when the entry was pinned, or as loaded from a blob; it may
+// have several segments in the latter case) with its rows permuted to
+// canonical order. The result is in canonical row order. The `index` is used
+// to resolve the `Id`s of the table of `updated`.
 std::optional<SpatialJoinCachedIndex> tryToExtendGeoIndex(
-    const std::string& key, const NamedResultCache::Value& original,
+    const std::string& key, const NamedResultCache::Value& updated,
     const namedCacheSecondaryVocab::CanonicalizedValue& canonicalized,
     const BlobSerializationConfig::IncrementalBase& incremental,
     const Index& index) {
-  const auto& canonicalValue = canonicalized.value_;
-  const auto& newGeoIndex = original.cachedGeoIndex_.value();
+  const auto& canonicalUpdated = canonicalized.value_;
+  const auto& updatedGeoIndex = updated.cachedGeoIndex_.value();
   auto baseValue = findEligibleBaseEntry(key, *incremental.base_,
-                                         canonicalValue, newGeoIndex);
+                                         canonicalUpdated, updatedGeoIndex);
   if (baseValue == nullptr) {
     return std::nullopt;
   }
 
-  // Match the canonical rows of the new table to the rows of the base. The
+  // Match the canonical rows of the updated table to the rows of the base. The
   // unmatched rows are marked by `noMatchingRow`, which is what
   // `forUpdatedTable` expects as `NO_ROW`.
   static_assert(canonicalRowOrder::noMatchingRow ==
                 SpatialJoinCachedIndex::NO_ROW);
-  auto baseRowOfNewRow = canonicalRowOrder::alignRows(
+  auto baseRowOfCanonicalRow = canonicalRowOrder::alignRows(
       ExplicitIdTableOperation::viewOf(baseValue->result_),
-      ExplicitIdTableOperation::viewOf(canonicalValue.result_),
-      canonicalValue.resultSortedOn_);
+      ExplicitIdTableOperation::viewOf(canonicalUpdated.result_),
+      canonicalUpdated.resultSortedOn_);
   auto extended = extendGeoIndexFromBase(baseValue->cachedGeoIndex_.value(),
-                                         baseRowOfNewRow, original,
+                                         baseRowOfCanonicalRow, updated,
                                          canonicalized.oldRowOfNewRow_, index);
   if (exceedsCompactionThresholds(key, extended, incremental)) {
     return std::nullopt;
   }
   return extended;
+}
+
+// Return the snapshot of the index whose secondary vocabulary is the starting
+// point of the one of a blob that is written from an instance with the
+// snapshot `indexAndViews` and the `incremental` config: the snapshot of the
+// base for an incremental blob, else `indexAndViews` itself. Throw if the base
+// of an incremental blob is null, or if the `indexAndViews` of an incremental
+// blob have a secondary vocabulary.
+std::shared_ptr<Qlever::IndexAndViews> vocabSourceForBlob(
+    std::shared_ptr<Qlever::IndexAndViews> indexAndViews,
+    const std::optional<BlobSerializationConfig::IncrementalBase>&
+        incremental) {
+  if (!incremental.has_value()) {
+    return indexAndViews;
+  }
+  AD_CONTRACT_CHECK(incremental->base_ != nullptr,
+                    "The base of an incremental blob must not be null");
+  AD_CONTRACT_CHECK(
+      indexAndViews->index_.getImpl().secondaryVocab() == nullptr,
+      "An incremental blob can only be written from an instance without a "
+      "secondary vocabulary, because the secondary vocabulary of the blob "
+      "starts from the one of its base");
+  return incremental->base_->indexAndViewsSnapshot();
 }
 
 // Return the secondary vocabulary of a blob with the named cache `entries`: a
@@ -509,21 +541,10 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   auto indexAndViews = qlever.indexAndViewsSnapshot();
   const auto& indexImpl = indexAndViews->index_.getImpl();
   const auto& incremental = config.incremental_;
-  std::shared_ptr<Qlever::IndexAndViews> baseIndexAndViews;
-  if (incremental.has_value()) {
-    AD_CONTRACT_CHECK(incremental->base_ != nullptr,
-                      "The base of an incremental blob must not be null");
-    baseIndexAndViews = incremental->base_->indexAndViewsSnapshot();
-    AD_CONTRACT_CHECK(
-        indexImpl.secondaryVocab() == nullptr,
-        "An incremental blob can only be written from an instance without a "
-        "secondary vocabulary, because the secondary vocabulary of the blob "
-        "starts from the one of its base");
-  }
   // The index whose secondary vocabulary is the starting point of the one of
-  // the blob.
-  const auto& vocabSourceIndexImpl =
-      incremental.has_value() ? baseIndexAndViews->index_.getImpl() : indexImpl;
+  // the blob (see `vocabSourceForBlob`).
+  auto vocabSource = vocabSourceForBlob(indexAndViews, incremental);
+  const auto& vocabSourceIndexImpl = vocabSource->index_.getImpl();
 
   // Determine the secondary vocabulary and the format of the blob (see
   // `secondaryVocabForBlob` and `needsNewFormat`).
