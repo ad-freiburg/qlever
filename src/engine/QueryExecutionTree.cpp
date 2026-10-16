@@ -156,6 +156,59 @@ QueryExecutionTree::getUpdatedQueryExecutionTreeWithPrefilterApplied(
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+QueryExecutionTree::makeTreeWithBindColumn(
+    const parsedQuery::Bind& bind) const {
+  // The root operation also sees the variables that are hidden in this tree,
+  // so a `BIND` that uses a variable that is not visible must not be pushed
+  // down, because it would read the values of the hidden variable instead of
+  // an unbound one.
+  if (!rootOperation_->areVariablesVisible(
+          bind._expression.containedVariables())) {
+    return std::nullopt;
+  }
+  // The target of a `BIND` can't be bound before the `BIND`, but it might be a
+  // hidden variable of this tree, e.g. one that was not selected by a subquery.
+  // Example: `{ SELECT ?x { ?x <p> ?y } } BIND(1 AS ?y)` is a valid query, and
+  // the root operation of the subquery still has a (hidden) column for `?y`.
+  //
+  // TODO<ullingerc> This case could be supported in the future: Push down the
+  // `BIND` with a fresh internal target variable, and rename it to the actual
+  // target when hiding the variables (e.g. by a cheap `(?internal AS ?y)`,
+  // which requires overriding the check that `?y` is not used before).
+  if (rootOperation_->containsVariableInternally(bind._target)) {
+    return std::nullopt;
+  }
+  auto result = rootOperation_->makeTreeWithBindColumn(bind);
+  if (result.has_value()) {
+    AD_CORRECTNESS_CHECK(result.value() != nullptr);
+    const auto& newRoot = result.value()->getRootOperation();
+    AD_CORRECTNESS_CHECK(
+        newRoot->getLimitOffset().isUnconstrained(),
+        "`LIMIT` and `OFFSET` are applied by "
+        "`QueryExecutionTree::makeTreeWithBindColumn`, not by the individual "
+        "implementations.");
+    // We cannot use `applyLimitOffset` here, for the same reason as in
+    // `makeTreeWithStrippedColumns` below.
+    newRoot->setLimitOffsetDirectlyWithoutTriggeringHooks(
+        rootOperation_->getLimitOffset());
+    // The new root operation is built from scratch, so hide the variables that
+    // are hidden in this tree again, but keep the new `BIND` target visible.
+    //
+    // NOTE: Consider `{ SELECT ?s ?o { ?s <p> ?o . ?s <q> ?x } }` followed by
+    // `BIND(STR(?o) AS ?b)`. The `BIND` is pushed into the subquery, which
+    // then hides `?x` again, but not `?b`. De facto, `?b` is added to the
+    // `SELECT` clause of the subquery.
+    rootOperation_->keepHiddenVariablesHidden(*newRoot, bind._target);
+    AD_CORRECTNESS_CHECK(result.value()->containsVariable(bind._target),
+                         "The `BIND` target was lost during the push down.");
+    // The new tree still strips the same variables (plus it adds the target).
+    result.value()->strippedVariables_ = strippedVariables_;
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
 bool QueryExecutionTree::knownEmptyResult() {
   if (cachedResult_) {
     AD_CORRECTNESS_CHECK(cachedResult_->isFullyMaterialized());

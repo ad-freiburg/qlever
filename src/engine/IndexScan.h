@@ -209,7 +209,8 @@ class IndexScan final : public Operation {
   bool unlikelyToFitInCache(
       ad_utility::MemorySize maxCacheableSize) const override {
     return ad_utility::MemorySize::bytes(sizeEstimate_ * getResultWidth() *
-                                         sizeof(Id)) > maxCacheableSize;
+                                         BYTES_PER_ID_COLUMN_ENTRY) >
+           maxCacheableSize;
   }
 
   // An index scan applies LIMIT and OFFSET directly while scanning.
