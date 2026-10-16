@@ -79,6 +79,7 @@ SparqlExpression::Ptr makeEnvelopeLowerLeftExpression(
 SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
     SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeCrsTypeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
                                            SparqlExpression::Ptr child2);
