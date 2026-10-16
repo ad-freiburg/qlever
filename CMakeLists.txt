@@ -328,7 +328,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 6540731c0dd7a0e4335474a5e2df28fbbb07ab8b
+        GIT_TAG 5d1c09eef18bd122cadd9144870fd6bee53d4057
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -1018,7 +1018,7 @@ if (NOT EMSCRIPTEN)
     qlever_target_link_libraries(LibQLeverExample sparqlParser engine qlever_util index qlever)
 
     add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-    qlever_target_link_libraries(VocabularyMergerMain index sparqlParser ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(VocabularyMergerMain index sparqlParser vocabulary Boost::program_options ${CMAKE_THREAD_LIBS_INIT})
 
     add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
     qlever_target_link_libraries(PrintIndexVersionMain qlever_util)
