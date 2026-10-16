@@ -466,6 +466,12 @@ class Operation {
     return getExecutionContext()->getAllocator();
   }
 
+  // The executor on which this `Operation` runs its parallel work, see
+  // `QueryExecutionContext::executor`.
+  const qlever::Executor& executor() const {
+    return getExecutionContext()->executor();
+  }
+
   // define a `makeShared` member function that has the same interface as
   // `std::make_shared`, but allocates via the `allocator()` (see
   // `util/AllocateShared.h`).
