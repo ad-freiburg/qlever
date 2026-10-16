@@ -16,6 +16,7 @@
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/IsProxy.h"
 #include "util/Iterators.h"
 #include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
@@ -260,7 +261,7 @@ class RowReferenceImpl {
     CPP_template(typename AType, typename BType)(
         requires(!isConst)) static void swapImpl(AType&& a, BType&& b) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
-        std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
+        ql::ranges::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
       }
     }
 
@@ -477,5 +478,11 @@ class RowReference
 };
 
 }  // namespace columnBasedIdTable
+
+// The above `RowReference` is a proxy-type (value types that behave like
+// references), so we specialize `qlever::isProxy` for them.
+template <typename Table, ad_utility::IsConst isConstTag>
+inline constexpr bool
+    qlever::isProxy<columnBasedIdTable::RowReference<Table, isConstTag>> = true;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H

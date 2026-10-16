@@ -20,6 +20,7 @@
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/IsProxy.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
@@ -1021,6 +1022,26 @@ template <int COLS>
 inline bool operator==(const IdTableView<COLS>& view, const IdTable& table) {
   return table == view;
 }
+
+// The above `row_reference` types are proxies (value types that behave like
+// references), so we specialize `qlever::isProxy` for them.
+template <>
+inline constexpr bool qlever::isProxy<IdTable::row_reference::Base> = true;
+template <>
+inline constexpr bool qlever::isProxy<IdTable::const_row_reference::Base> =
+    true;
+template <>
+inline constexpr bool
+    qlever::isProxy<IdTableView<0>::const_row_reference::Base> = true;
+
+// Check that the un/restricted RowReferences are specialized via isProxy
+static_assert(qlever::isProxy<IdTable::row_reference>);
+static_assert(qlever::isProxy<IdTable::const_row_reference>);
+static_assert(qlever::isProxy<IdTableView<0>::const_row_reference>);
+
+static_assert(qlever::isProxy<IdTable::row_reference::Base>);
+static_assert(qlever::isProxy<IdTable::const_row_reference::Base>);
+static_assert(qlever::isProxy<IdTableView<0>::const_row_reference::Base>);
 
 // Type aliases for the columns of an `IdTable` (a mutable view, a read-only
 // view, and an owning column) and for the references to a single element (a
