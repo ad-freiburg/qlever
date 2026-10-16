@@ -483,10 +483,11 @@ void Operation::storeToNamedResultCache(const Result& result) {
   auto valueForNamedResultCache = NamedResultCache::Value{
       std::make_shared<const IdTable>(result.cloneIdTable()),
       getExternallyVisibleVariableColumns(),
-      result.sortedBy(),
-      result.localVocab().clone(),
-      getCacheKey(),
-      geoIndex()};
+      // TODO<vrbommireddy>: Remove this conversion after `resultSortedOn()` is
+      // migrated to `qlm::vector` throughout the Operation hierarchy.
+      std::vector<ColumnIndex>{result.sortedBy().begin(),
+                               result.sortedBy().end()},
+      result.localVocab().clone(), getCacheKey(), geoIndex()};
   _executionContext->namedResultCache().store(
       name, std::move(valueForNamedResultCache));
 

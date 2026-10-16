@@ -131,7 +131,7 @@ Result Filter::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 CPP_template_def(typename Table)(requires IdTableLike<Table>)
-IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
+IdTable Filter::filterIdTable(qlm::vector<ColumnIndex> sortedBy,
                               Table&& idTable) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
@@ -148,7 +148,7 @@ IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
 CPP_template_def(int WIDTH,
                  typename Table)(requires IdTableLike<Table>) void Filter::
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
-                      std::vector<ColumnIndex> sortedBy) const {
+                      qlm::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =
