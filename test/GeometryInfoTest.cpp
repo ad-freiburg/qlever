@@ -529,7 +529,7 @@ TEST(GeometryInfoTest, CrsTypeAsIri) {
 }
 
 // ____________________________________________________________________________
-TEST(GeometryInfoTest, getSourceCrsTypeFromWkt) {
+TEST(GeometryInfoTest, GetSourceCrsTypeFromWkt) {
   EXPECT_EQ(GeometryInfo::getSourceCrsType(litUnsupportedCrsIri), std::nullopt);
   EXPECT_EQ(GeometryInfo::getSourceCrsType(litPoint),
             SourceCrsType{util::geo::CRSType::CRS84});
@@ -822,7 +822,7 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
                 sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
                     sizeof(SourceCrsType) +
-                    2 /*2B for `reservedLiteralFormat`*/ +
+                    sizeof(uint16_t) +  // `reservedLiteralFormat_`
                     sizeof(MetricLength) + sizeof(MetricArea));
 }
 
