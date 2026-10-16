@@ -331,6 +331,33 @@ TEST(GeometryInfoValueGetterTest, ValidWktWithoutGeometryInfo) {
             expected);
 }
 
+// Test that a valid WKT literal with precomputed geometry info gets its source
+// CRS and its geometry type from the `GeoVocabulary`, with the same values as
+// computed from the string without a `GeoVocabulary`.
+TEST(GeometryInfoValueGetterTest, ValidWktWithGeometryInfo) {
+  // A line with an explicit WGS84 CRS, which the `GeoVocabulary` stores.
+  static constexpr std::string_view lit =
+      "\"<http://www.opengis.net/def/crs/EPSG/0/4326> LINESTRING(2 3, 4 5)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  // The source CRS is WGS84 (type 2) with both vocabulary types.
+  EXPECT_EQ(
+      getGeoInfoFromIndex<SourceCrsType>(
+          lit, ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
+      SourceCrsType{2});
+  EXPECT_EQ(getGeoInfoFromIndex<SourceCrsType>(
+                lit, ad_utility::VocabularyType::Enum::OnDiskCompressed),
+            SourceCrsType{2});
+  // The geometry type is a `LineString` with both vocabulary types.
+  auto expected = ad_utility::GeometryType{2};
+  EXPECT_EQ(
+      getGeoInfoFromIndex<ad_utility::GeometryType>(
+          lit, ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
+      expected);
+  EXPECT_EQ(getGeoInfoFromIndex<ad_utility::GeometryType>(
+                lit, ad_utility::VocabularyType::Enum::OnDiskCompressed),
+            expected);
+}
+
 // _____________________________________________________________________________
 TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
   GeoInfoTester t;
