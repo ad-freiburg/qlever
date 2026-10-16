@@ -251,8 +251,8 @@ class alignas(16) LocalVocabEntry
     return static_cast<const Base&>(*this) != rhs;
   }
 
-  // Expose `context_` for testing.
-  const LocalVocabContext& getContextForTesting() const { return *context_; }
+  // Return the context of the index that this entry belongs to.
+  const LocalVocabContext& getContext() const { return *context_; }
 
  private:
   // The expensive case of looking up the position in vocab.

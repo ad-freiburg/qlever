@@ -6,6 +6,7 @@
 #include "index/LocalVocab.h"
 
 #include "global/Id.h"
+#include "index/LocalVocabContext.h"
 #include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
@@ -69,6 +70,28 @@ Id LocalVocab::getIdAndAddIfNotContained(const LocalVocabEntry& word) {
     return Id::fromBits(lowerBound.get());
   }
   return Id::makeFromLocalVocabIndex(getIndexAndAddIfNotContained(word));
+}
+
+// _____________________________________________________________________________
+template <typename WordT>
+Id LocalVocab::getEncodedIdOrAddIfNotContainedImpl(WordT&& word) {
+  if (word.isIri()) {
+    if (auto id = word.getContext().encodeAsId(word.toStringRepresentation())) {
+      return id.value();
+    }
+  }
+  return Id::makeFromLocalVocabIndex(
+      getIndexAndAddIfNotContainedImpl(AD_FWD(word)));
+}
+
+// _____________________________________________________________________________
+Id LocalVocab::getEncodedIdOrAddIfNotContained(const LocalVocabEntry& word) {
+  return getEncodedIdOrAddIfNotContainedImpl(word);
+}
+
+// _____________________________________________________________________________
+Id LocalVocab::getEncodedIdOrAddIfNotContained(LocalVocabEntry&& word) {
+  return getEncodedIdOrAddIfNotContainedImpl(std::move(word));
 }
 
 // _____________________________________________________________________________
