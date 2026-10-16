@@ -44,7 +44,7 @@ std::vector<encodedIri::Pattern> makePatterns(
 // Find the first of the `patterns` that `repr` matches (see
 // `encodedIri::encodePayload`). Return the index of that pattern together with
 // the encoded payload, or `std::nullopt` if there is no such pattern.
-std::optional<std::pair<size_t, uint64_t>> matchPatterns(
+std::optional<std::pair<size_t, Id::PayloadType>> matchPatterns(
     const std::vector<encodedIri::Pattern>& patterns, std::string_view repr);
 
 // Conversion of the `patterns` to and from JSON. As long as only plain prefixes
@@ -230,7 +230,7 @@ class EncodedIriManagerImpl {
   // `makeIdFromPrefixIdxAndPayload` and returned from
   // `splitIntoPrefixIdxAndPayload`. If several patterns share the same prefix,
   // then the index of the first of them is returned.
-  std::optional<uint64_t> getIndexOfPrefix(
+  std::optional<Id::PayloadType> getIndexOfPrefix(
       std::string_view prefixWithoutAngleBrackets) const {
     auto prefix = absl::StrCat("<", prefixWithoutAngleBrackets);
     auto it =
