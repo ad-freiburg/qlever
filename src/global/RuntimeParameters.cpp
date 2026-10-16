@@ -28,7 +28,8 @@ RuntimeParameters::RuntimeParameters() {
   add(cacheMaxSize_);
   add(cacheMaxSizeSingleEntry_);
   add(lazyIndexScanNumBlocksInFlight_);
-  add(rebuildIndexScanNumBlocksInFlight_);
+  add(maxNumThreadsPerQuery_);
+  add(rebuildIndexScanNumThreads_);
   add(rebuildPermutationWriterNumThreads_);
   add(rebuildMaxConcurrentPermutationPairs_);
   add(lazyIndexScanMaxSizeMaterialization_);
@@ -49,8 +50,8 @@ RuntimeParameters::RuntimeParameters() {
   add(divisionByZeroIsUndef_);
   add(enablePrefilterOnIndexScans_);
   add(spatialJoinMaxNumThreads_);
-  add(patternTrickNumThreads_);
-  add(parallelSortNumThreads_);
+  add(patternTrickNumTasksInFlight_);
+  add(sortNumTasksInFlight_);
   add(spatialJoinPrefilterMaxSize_);
   add(spatialJoinTmpDir_);
   add(enableDistributiveUnion_);
@@ -64,7 +65,7 @@ RuntimeParameters::RuntimeParameters() {
   add(materializedViewPatternMatchNumAssignments_);
   add(materializedViewPatternMatchNumReplacementPlans_);
   add(serviceAllowedIriPrefixes_);
-  add(permutationWriterNumThreads_);
+  add(permutationWriterNumBlocksInFlight_);
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
   add(logLevel_);
@@ -96,6 +97,10 @@ RuntimeParameters::RuntimeParameters() {
   defaultQueryTimeout_.setParameterConstraint(mustBeStrictlyPositive);
   lazyIndexScanNumBlocksInFlight_.setParameterConstraint(
       mustBeStrictlyPositive);
+  maxNumThreadsPerQuery_.setParameterConstraint(mustBeStrictlyPositive);
+  permutationWriterNumBlocksInFlight_.setParameterConstraint(
+      mustBeStrictlyPositive);
+  sortNumTasksInFlight_.setParameterConstraint(mustBeStrictlyPositive);
 }
 
 // _____________________________________________________________________________

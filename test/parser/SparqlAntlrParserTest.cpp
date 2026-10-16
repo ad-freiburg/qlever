@@ -956,6 +956,28 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern("{ MINUS { ?a <foo> <bar> } }",
                      m::GraphPattern(m::MinusGraphPattern(m::Triples(
                          {{Var{"?a"}, iri("<foo>"), iri("<bar>")}}))));
+  // A MINUS clause stores the variables that are in scope in it and in the
+  // patterns before it in the same group. The variables of a nested MINUS, and
+  // the non-target variables of a BIND, are not in scope, but the variable of a
+  // GRAPH clause is.
+  expectGraphPattern(
+      "{ ?a <p> ?b . { ?c <p> ?d } MINUS { ?a <q> ?e MINUS { ?f <r> ?g } } "
+      "BIND(?i AS ?j) MINUS { GRAPH ?k { ?l <s> ?m } } }",
+      m::GraphPattern(
+          ::testing::_, ::testing::_,
+          m::MinusWithVisibleVariables(
+              {Var{"?a"}, Var{"?e"}},
+              {Var{"?a"}, Var{"?b"}, Var{"?c"}, Var{"?d"}}),
+          ::testing::_,
+          m::MinusWithVisibleVariables(
+              {Var{"?k"}, Var{"?l"}, Var{"?m"}},
+              {Var{"?a"}, Var{"?b"}, Var{"?c"}, Var{"?d"}, Var{"?j"}})));
+  // The variables before a MINUS clause in an enclosing group are not in scope.
+  expectGraphPattern(
+      "{ ?a <p> ?b { MINUS { ?a <q> ?c } } }",
+      m::GraphPattern(::testing::_,
+                      m::GroupGraphPattern(m::MinusWithVisibleVariables(
+                          {Var{"?a"}, Var{"?c"}}, {}))));
   expectGraphPattern(
       "{ FILTER (?a = 10) . ?x ?y ?z }",
       m::GraphPattern(false, {"(?a = 10)"}, DummyTriplesMatcher));
