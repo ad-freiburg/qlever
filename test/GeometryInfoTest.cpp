@@ -517,25 +517,25 @@ TEST(GeometryInfoTest, GeometryTypeAsIri) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, CrsTypeAsIri) {
-  ASSERT_FALSE(
-      SourceCrsType{util::geo::CRSType::UNSUPPORTED}.asIri().has_value());
-  ASSERT_EQ(SourceCrsType{util::geo::CRSType::CRS84}.asIri().value(),
+  EXPECT_EQ(SourceCrsType{util::geo::CRSType::UNSUPPORTED}.asIri(),
+            std::nullopt);
+  EXPECT_EQ(SourceCrsType{util::geo::CRSType::CRS84}.asIri(),
             "http://www.opengis.net/def/crs/OGC/1.3/CRS84");
-  ASSERT_EQ(SourceCrsType{util::geo::CRSType::WGS84}.asIri().value(),
+  EXPECT_EQ(SourceCrsType{util::geo::CRSType::WGS84}.asIri(),
             "http://www.opengis.net/def/crs/EPSG/0/4326");
-  ASSERT_EQ(SourceCrsType{util::geo::CRSType::WEB_MERCATOR}.asIri().value(),
+  EXPECT_EQ(SourceCrsType{util::geo::CRSType::WEB_MERCATOR}.asIri(),
             "http://www.opengis.net/def/crs/EPSG/0/3857");
-  ASSERT_FALSE(SourceCrsType{4}.asIri().has_value());
+  EXPECT_EQ(SourceCrsType{4}.asIri(), std::nullopt);
 }
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, getSourceCrsTypeFromWkt) {
-  ASSERT_FALSE(GeometryInfo::getSourceCrsType(litUnsupportedCrsIri));
-  ASSERT_EQ(GeometryInfo::getSourceCrsType(litPoint),
+  EXPECT_EQ(GeometryInfo::getSourceCrsType(litUnsupportedCrsIri), std::nullopt);
+  EXPECT_EQ(GeometryInfo::getSourceCrsType(litPoint),
             SourceCrsType{util::geo::CRSType::CRS84});
-  ASSERT_EQ(GeometryInfo::getSourceCrsType(litPointWGS84),
+  EXPECT_EQ(GeometryInfo::getSourceCrsType(litPointWGS84),
             SourceCrsType{util::geo::CRSType::WGS84});
-  ASSERT_EQ(GeometryInfo::getSourceCrsType(litPointWebMerc),
+  EXPECT_EQ(GeometryInfo::getSourceCrsType(litPointWebMerc),
             SourceCrsType{util::geo::CRSType::WEB_MERCATOR});
 }
 
