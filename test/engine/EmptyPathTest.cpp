@@ -563,7 +563,6 @@ TEST(EmptyPath, deletedTriplesAreRespected) {
                             &cache,
                             ad_utility::testing::makeAllocator(
                                 ad_utility::MemorySize::megabytes(100)),
-                            SortPerformanceEstimator{},
                             &namedCache,
                             materializedViews,
                             executor()};
@@ -792,7 +791,6 @@ TEST(EmptyPath, allEntitiesAreYieldedInChunks) {
                             &cache,
                             ad_utility::testing::makeAllocator(
                                 ad_utility::MemorySize::megabytes(100)),
-                            SortPerformanceEstimator{},
                             &namedCache,
                             materializedViews,
                             executor()};

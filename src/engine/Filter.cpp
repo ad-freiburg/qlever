@@ -157,7 +157,7 @@ CPP_template_def(int WIDTH,
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputTable.template asStaticView<0>(),
       getExecutionContext()->getAllocator(), dummyLocalVocab,
-      cancellationHandle_, deadline_);
+      cancellationHandle_);
 
   // TODO<joka921> This should be a mandatory argument to the
   // EvaluationContext constructor.

@@ -143,15 +143,8 @@ Result Sort::computeResultInMemory(IdTable idTable,
                                    LocalVocab localVocab) const {
   runtimeInfo().addDetail("is-external", "false");
 
-  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
-      idTable.numRows(), idTable.numColumns(), deadline_, "Sort operation");
-
-  IdTableUtils::sort(idTable, sortColumnIndices_, sortConfig());
-
-  // Don't report missed timeout check because the in-memory sort is currently
-  // not cancellable.
-  cancellationHandle_->resetWatchDogState();
-  checkCancellation();
+  IdTableUtils::sort(idTable, sortColumnIndices_, sortConfig(),
+                     cancellationHandle_);
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
@@ -183,7 +176,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   auto sorter = std::make_unique<Sorter>(
       tempFilename, numColumns, memoryLimit, allocator(),
       ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-      SortByColumns{sortColumnIndices_});
+      SortByColumns{sortColumnIndices_}, cancellationHandle_);
 
   // Push the already collected blocks and the remaining blocks from the
   // iterator. For lazy input, the iterator yields `IdTableVocabPair` (move the
@@ -224,7 +217,6 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
       checkCancellation();
       result.insertAtEnd(block);
     }
-    cancellationHandle_->resetWatchDogState();
     checkCancellation();
     return {std::move(result), resultSortedOn(), std::move(mergedLocalVocab)};
   }

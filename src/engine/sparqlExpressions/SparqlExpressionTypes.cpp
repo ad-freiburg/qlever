@@ -20,15 +20,14 @@ EvaluationContext::EvaluationContext(
     const QueryExecutionContext& qec,
     const VariableToColumnMap& variableToColumnMap, IdTableView<0> inputTable,
     const ad_utility::AllocatorWithLimit<Id>& allocator, LocalVocab& localVocab,
-    ad_utility::SharedCancellationHandle cancellationHandle, TimePoint deadline)
+    ad_utility::SharedCancellationHandle cancellationHandle)
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},
       _inputTable{std::move(inputTable)},
       _columnsByWhichResultIsSorted{allocator},
       _allocator{allocator},
       _localVocab{localVocab},
-      cancellationHandle_{std::move(cancellationHandle)},
-      deadline_{deadline} {
+      cancellationHandle_{std::move(cancellationHandle)} {
   AD_CONTRACT_CHECK(cancellationHandle_);
 }
 

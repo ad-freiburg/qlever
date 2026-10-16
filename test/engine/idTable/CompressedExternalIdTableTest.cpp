@@ -12,6 +12,7 @@
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <tuple>
 
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
@@ -270,6 +271,40 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       (idTableFromRowGenerator<0>(generator(), NUM_COLS)),
       ::testing::ContainsRegex("Insufficient memory"));
+}
+
+// The sorter can be cancelled via its cancellation handle, both while the rows
+// are pushed (the sorts of the blocks) and in the merge phase.
+TEST(CompressedExternalIdTable, sorterIsCancellable) {
+  auto test = [](bool cancelBeforePushing) {
+    std::string filename = "idTableCompressedSorter.cancellation.dat";
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+        filename,
+        NUM_COLS,
+        1_kB,
+        ad_utility::testing::makeAllocator(),
+        ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+        {},
+        handle};
+    CopyableIdTable<0> randomTable =
+        createRandomlyFilledIdTable(1000, NUM_COLS);
+    auto pushAndSort = [&]() {
+      for (const auto& row : randomTable) {
+        sorter.push(row);
+      }
+      if (!cancelBeforePushing) {
+        handle->cancel(ad_utility::CancellationState::MANUAL);
+      }
+      std::ignore = idTableFromRowGenerator<0>(sorter.sortedView(), NUM_COLS);
+    };
+    if (cancelBeforePushing) {
+      handle->cancel(ad_utility::CancellationState::MANUAL);
+    }
+    EXPECT_THROW(pushAndSort(), ad_utility::CancellationException);
+  };
+  test(true);
+  test(false);
 }
 
 // Test corner case: pushing exactly blockSize rows leaves currentBlock_ empty.

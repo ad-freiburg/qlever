@@ -2023,7 +2023,6 @@ struct QecWrapper {
         index_,
         &cache_,
         makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{},
         &namedCache_,
         materializedViewsManager_,
         executor()};

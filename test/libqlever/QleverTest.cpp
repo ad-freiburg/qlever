@@ -666,10 +666,9 @@ TEST(LibQlever, parseAndPlanQueryIsParseThenPlan) {
   // `requestTimer` reaches the query planner through `planQuery` and ends up in
   // the runtime information, just as it does via `parseAndPlanQuery`.
   ad_utility::Timer requestTimer{ad_utility::Timer::Started};
-  auto plan =
-      engine.planQuery(engine.parseQuery(query),
-                       std::make_shared<ad_utility::CancellationHandle<>>(),
-                       std::nullopt, requestTimer);
+  auto plan = engine.planQuery(
+      engine.parseQuery(query),
+      std::make_shared<ad_utility::CancellationHandle<>>(), requestTimer);
   EXPECT_GT(plan.queryExecutionTree()
                 .getRootOperation()
                 ->getQueryPlanningInfo()
@@ -724,19 +723,6 @@ TEST(LibQlever, bindParsedQueryReusesAParsedQuery) {
   EXPECT_EQ(&planOnSecond.queryExecutionContext(),
             &boundToSecond.queryExecutionContext());
   EXPECT_EQ(second.query(planOnSecond, ad_utility::MediaType::tsv), expected);
-}
-
-// _____________________________________________________________________________
-// Test `EngineConfig::computeSortPerformanceEstimators_`: the (potentially
-// expensive) estimates are computed by default, but not if the config disables
-// them.
-TEST(LibQlever, computeSortPerformanceEstimators) {
-  EngineConfig ec = buildTestIndex("<s> <p> <o> .");
-  ASSERT_TRUE(ec.computeSortPerformanceEstimators_);
-  EXPECT_TRUE(Qlever{ec}.sortPerformanceEstimator().estimatesWereCalculated());
-
-  ec.computeSortPerformanceEstimators_ = false;
-  EXPECT_FALSE(Qlever{ec}.sortPerformanceEstimator().estimatesWereCalculated());
 }
 
 // _____________________________________________________________________________

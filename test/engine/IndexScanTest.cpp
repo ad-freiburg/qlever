@@ -597,8 +597,7 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   auto sizeEstimate = [&](const std::string& predicate) {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{}, &namedCache, materializedViewsManager,
-        executor());
+        &namedCache, materializedViewsManager, executor());
     SparqlTripleSimple scanTriple{Variable{"?x"},
                                   TripleComponent::Iri::fromIriref(predicate),
                                   Variable{"?y"}};
@@ -657,8 +656,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
   auto makeScan = [&]() {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{}, &namedCache, materializedViewsManager,
-        executor());
+        &namedCache, materializedViewsManager, executor());
 
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     return IndexScan{qec.get(), Permutation::Enum::PSO, scanTriple};

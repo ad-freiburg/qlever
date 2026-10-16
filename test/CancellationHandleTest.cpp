@@ -275,58 +275,6 @@ TEST(CancellationHandle, verifyWatchDogCanOnlyBeRegisteredOnce) {
 
 // _____________________________________________________________________________
 
-TEST(CancellationHandle, verifyResetWatchDogStateDoesProperlyResetState) {
-  CancellationHandle<ENABLED> handle;
-
-  handle.cancellationState_ = NOT_CANCELLED;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-
-  handle.cancellationState_ = WAITING_FOR_CHECK;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-
-  handle.cancellationState_ = CHECK_WINDOW_MISSED;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-
-  handle.cancellationState_ = MANUAL;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, MANUAL);
-
-  handle.cancellationState_ = TIMEOUT;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, TIMEOUT);
-}
-
-// _____________________________________________________________________________
-
-TEST(CancellationHandle, verifyResetWatchDogStateIsNoOpWithoutWatchDog) {
-  CancellationHandle<NO_WATCH_DOG> handle;
-
-  handle.cancellationState_ = NOT_CANCELLED;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-
-  handle.cancellationState_ = WAITING_FOR_CHECK;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, WAITING_FOR_CHECK);
-
-  handle.cancellationState_ = CHECK_WINDOW_MISSED;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, CHECK_WINDOW_MISSED);
-
-  handle.cancellationState_ = MANUAL;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, MANUAL);
-
-  handle.cancellationState_ = TIMEOUT;
-  handle.resetWatchDogState();
-  EXPECT_EQ(handle.cancellationState_, TIMEOUT);
-}
-
-// _____________________________________________________________________________
-
 TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog) {
   CancellationHandle<ENABLED> handle;
 
@@ -532,10 +480,6 @@ QL_CONSTEVAL bool isMemberFunction([[maybe_unused]] T funcPtr) {
 // Make sure member functions still exist when no watch dog functionality
 // is available to make the code simpler. In this case the functions should
 // be no-op.
-static_assert(
-    isMemberFunction(&CancellationHandle<NO_WATCH_DOG>::resetWatchDogState));
-static_assert(
-    isMemberFunction(&CancellationHandle<DISABLED>::resetWatchDogState));
 static_assert(isMemberFunction(&CancellationHandle<DISABLED>::cancel));
 static_assert(isMemberFunction(&CancellationHandle<DISABLED>::isCancelled));
 // Ideally we'd add a static assertion for throwIfCancelled here too, but

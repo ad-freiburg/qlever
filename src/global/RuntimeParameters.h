@@ -16,7 +16,6 @@
 // complete QLever instance.
 struct RuntimeParameters {
   using Bool = ad_utility::detail::parameterShortNames::Bool;
-  using Double = ad_utility::detail::parameterShortNames::Double;
   template <typename DurationTp>
   using Duration =
       ad_utility::detail::parameterShortNames::DurationParameter<DurationTp>;
@@ -45,11 +44,6 @@ struct RuntimeParameters {
   // between otherwise equal queries.
   Bool stripColumns_{false, "strip-columns"};
 
-  // If the time estimate for a sort operation is larger by more than this
-  // factor than the remaining time, then the sort is canceled with a
-  // timeout exception.
-  Double sortEstimateCancellationFactor_{3.0,
-                                         "sort-estimate-cancellation-factor"};
   SizeT cacheMaxNumEntries_{1000, "cache-max-num-entries"};
 
   MemorySizeParameter cacheMaxSize_{ad_utility::MemorySize::gigabytes(30),

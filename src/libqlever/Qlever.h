@@ -266,15 +266,6 @@ struct EngineConfig : CommonConfig {
   // separately).
   bool doNotLoadPermutations_ = false;
 
-  // QLever doesn't use a cancelable sorting algorithm, but before starting a
-  // sort estimates whether the sort will time out. To do so, on index load it
-  // sorts some `IdTable`s to measure the time that sorting takes on the
-  // concrete machine. This step can take some time and can be disabled by
-  // setting this flag to `false`. In that case, sort operations are always
-  // started and run to completion (unless the query times out or is canceled
-  // before the sort operation starts).
-  bool computeSortPerformanceEstimators_ = true;
-
   // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
   // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
   // IRIs that do not start with any of the given prefixes are rejected.
@@ -345,12 +336,10 @@ class Qlever {
   // The executor on which the queries and index rebuilds of this instance run
   // their parallel work, see `executor()`.
   qlever::Executor executor_;
-  SortPerformanceEstimator sortPerformanceEstimator_;
   mutable NamedResultCache namedResultCache_;
   ad_utility::Synchronized<std::shared_ptr<IndexAndViews>> indexAndViews_;
   bool enablePatternTrick_;
   QueryExecutionContext::DisableCaching disableCaching_;
-  using TimeLimit = std::chrono::milliseconds;
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
   // Handles the (de)serialization of the vocabulary and the `NamedResultCache`
@@ -378,8 +367,7 @@ class Qlever {
   //
   // NOTE: Neither this constructor nor the computation of a query must be
   // called from a thread of the `executor`, because they block while waiting
-  // for work on the `executor` (e.g. the sorts of `IdTableUtils::sort`, which
-  // also run when the sort performance estimates are computed here).
+  // for work on the `executor` (e.g. the sorts of `IdTableUtils::sort`).
   explicit Qlever(const EngineConfig& config, bool skipLoading = false,
                   qlever::Executor executor = ad_utility::globalExecutor());
 
@@ -403,18 +391,8 @@ class Qlever {
   // query planning is stored in the query's runtime information as
   // `timeQueryPlanning`. This information can be accessed via the
   // query execution tree's root operation.
-  //
-  // TODO<joka921,damekt> The `timeLimit` is currently only used for
-  // non-cancelable operations (in particular sorting). The time limit applies
-  // from the time this function is called until the execution of the query
-  // has finished. This might be very unintuitive when the `PlannedQuery` is
-  // stored for later execution. This is not an issue for now (only the
-  // `Server` actually imposes time limits and then executes the queries right
-  // away), but should be addressed in the future once the timeout management
-  // also is moved into the `QLever` class.
   PlannedQuery planQuery(ParsedQuery&& parsedQuery, QueryExecutionContext& qec,
                          SharedCancellationHandle handle,
-                         std::optional<TimeLimit> timeLimit,
                          boost::optional<const ad_utility::Timer&>
                              requestTimer = boost::none) const;
 
@@ -423,13 +401,11 @@ class Qlever {
   // `QueryExecutionContext` that `parsedQuery` carries, so the two can not get
   // out of sync. Implemented in terms of the `planQuery` overload above.
   //
-  // For the semantics of `handle`, `timeLimit`, and `requestTimer`, see
-  // `planQuery` above.
+  // For the semantics of `handle` and `requestTimer`, see `planQuery` above.
   PlannedQuery planQuery(
       ParsedQueryAndContext parsedQuery,
       SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
-      std::optional<TimeLimit> timeLimit = std::nullopt,
       boost::optional<const ad_utility::Timer&> requestTimer =
           boost::none) const;
 
@@ -486,20 +462,10 @@ class Qlever {
   //
   // 3. It enables an inspection or even modification of the query plan before
   // executing it (this requires some expertise).
-  //
-  // TODO<joka921,damekt> The `timeLimit` is currently only used for
-  // non-cancelable operations (in particular sorting). The time limit applies
-  // from the time this function is called until the execution of the query
-  // has finished. This might be very unintuitive when the `PlannedQuery` is
-  // stored for later execution. This is not an issue for now (only the
-  // `Server` actually imposes time limits and then executes the queries right
-  // away), but should be addressed in the future once the timeout management
-  // also is moved into the `QLever` class.
   PlannedQuery parseAndPlanQuery(
       std::string query, const std::vector<DatasetClause>& datasetClauses = {},
       SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
-      std::optional<TimeLimit> timeLimit = std::nullopt,
       boost::optional<const ad_utility::Timer&> requestTimer = boost::none,
       std::function<void(std::string)> updateCallback = ad_utility::noop,
       bool pinSubtrees = false, bool pinResult = false) const;
@@ -585,16 +551,15 @@ class Qlever {
   // Write a new materialized view with `name` to disk and store the result of
   // `query`.
   //
-  // `requestTimer`, `timeLimit`, and `handle` are forwarded to `planQuery`
-  // (see there for their exact semantics). If omitted, the query is planned
-  // and executed without a timer, without a time limit, and with a fresh,
-  // never-triggered cancellation handle, i.e. it always runs to completion.
+  // `requestTimer` and `handle` are forwarded to `planQuery` (see there for
+  // their exact semantics). If omitted, the query is planned and executed
+  // without a timer and with a fresh, never-triggered cancellation handle, i.e.
+  // it always runs to completion.
   void writeMaterializedView(
       std::string name, std::string query,
       const std::vector<DatasetClause>& datasetClauses = {},
       SharedCancellationHandle handle =
           std::make_shared<ad_utility::CancellationHandle<>>(),
-      std::optional<TimeLimit> timeLimit = std::nullopt,
       boost::optional<const ad_utility::Timer&> requestTimer =
           boost::none) const;
 
@@ -835,13 +800,6 @@ class Qlever {
 
   Allocator<Id>& allocator() { return allocator_; }
   const Allocator<Id>& allocator() const { return allocator_; }
-
-  SortPerformanceEstimator& sortPerformanceEstimator() {
-    return sortPerformanceEstimator_;
-  }
-  const SortPerformanceEstimator& sortPerformanceEstimator() const {
-    return sortPerformanceEstimator_;
-  }
 
   NamedResultCache& namedResultCache() { return namedResultCache_; }
   const NamedResultCache& namedResultCache() const { return namedResultCache_; }

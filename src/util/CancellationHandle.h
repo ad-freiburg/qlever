@@ -293,17 +293,7 @@ class CancellationHandle : public NoCopy {
   static void registerWatchDog(std::weak_ptr<CancellationHandle> handle,
                                RunAfter runAfter);
 
-  // If this `CancellationHandle` is not cancelled, reset the internal
-  // `cancellationState_` to `CancellationState::NOT_CANCELED`.
-  // Useful to ignore expected gaps in the execution flow, but typically
-  // indicates that there's code that cannot be interrupted, so use with care!
-  void resetWatchDogState();
-
   FRIEND_TEST(CancellationHandle, verifyWatchDogDoesChangeState);
-  FRIEND_TEST(CancellationHandle,
-              verifyResetWatchDogStateDoesProperlyResetState);
-  FRIEND_TEST(CancellationHandle,
-              verifyResetWatchDogStateIsNoOpWithoutWatchDog);
   FRIEND_TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog);
   FRIEND_TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState);
   FRIEND_TEST(CancellationHandle,
