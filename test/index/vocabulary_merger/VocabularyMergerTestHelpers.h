@@ -58,6 +58,17 @@ inline ad_utility::vocabulary_merger::detail::QueueWord makeQueueWord(
       partialFileId};
 }
 
+// The buffer pools (see `index/vocabulary_merger/MergeBlock.h`) of the blocks
+// that the helpers below create. Their buffers are small, so that a block of a
+// few words already spans several of them.
+inline std::shared_ptr<ad_utility::vocabulary_merger::detail::BufferPools>
+testBufferPools() {
+  static auto pools =
+      std::make_shared<ad_utility::vocabulary_merger::detail::BufferPools>(256,
+                                                                           64);
+  return pools;
+}
+
 // A word of a partial vocabulary for `makeInputBlock` below: the word, its
 // external flag and its local index in the partial vocabulary.
 struct InputWordSpec {
@@ -82,7 +93,8 @@ inline ad_utility::vocabulary_merger::detail::InputBlock makeInputBlock(
   const auto& bytes = serializer.data();
   InputBlock::Buffer buffer(bytes.size());
   ql::ranges::copy(bytes, buffer.begin());
-  return InputBlock{std::move(buffer), words.size(), partialFileId};
+  return InputBlock{std::move(buffer), words.size(), partialFileId,
+                    testBufferPools()};
 }
 
 // Add the occurrence of `word` with the given `localIndex` in the partial
@@ -112,9 +124,10 @@ struct WordOccurrence {
 // `pushWord`.
 inline std::vector<ad_utility::vocabulary_merger::detail::MergedBlock>
 makeMergedBlocks(const std::vector<std::vector<WordOccurrence>>& occurrences) {
-  std::vector<ad_utility::vocabulary_merger::detail::MergedBlock> blocks(
-      occurrences.size());
-  for (size_t i = 0; i < blocks.size(); ++i) {
+  std::vector<ad_utility::vocabulary_merger::detail::MergedBlock> blocks;
+  blocks.reserve(occurrences.size());
+  for (size_t i = 0; i < occurrences.size(); ++i) {
+    blocks.emplace_back(testBufferPools());
     for (const auto& occurrence : occurrences[i]) {
       pushWord(blocks[i], occurrence.word_, occurrence.isExternal_,
                occurrence.partialFileId_, occurrence.localIndex_);

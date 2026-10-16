@@ -311,7 +311,7 @@ TEST(PartialVocabularyFile, mergeInParallel) {
 // and that the weight of a block of a file is its size in bytes.
 TEST(PartialVocabularyFile, mergedBlockAccessorsAndBlockWeight) {
   // A block of three merged words.
-  MergedBlock block;
+  MergedBlock block{testBufferPools()};
   pushWord(block, "\"a\"", false, 0, 7);
   pushWord(block, "\"b\"", true, 1, 8);
   pushWord(block, "\"c\"", false, 2, 9);

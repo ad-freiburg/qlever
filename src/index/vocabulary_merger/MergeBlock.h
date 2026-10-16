@@ -43,8 +43,8 @@
 //   that the merge folded into it, see `MergedBlock::addWord`.
 //
 // The buffers of both kinds of blocks come from and go back to the
-// `BufferPools` below. This is not part of the public interface of
-// `index/VocabularyMerger.h`.
+// `BufferPools` below, which every block has. This is not part of the public
+// interface of `index/VocabularyMerger.h`.
 namespace ad_utility::vocabulary_merger::detail {
 
 // An occurrence of a word in a partial vocabulary: the index of the partial
@@ -205,6 +205,13 @@ struct BufferPools {
       : fileBlocks_{fileBlockCapacity}, mergedWords_{mergedWordsCapacity} {}
 };
 
+// Return the `pools`, which must not be `nullptr` (every block has pools).
+inline std::shared_ptr<BufferPools> checkedBufferPools(
+    std::shared_ptr<BufferPools> pools) {
+  AD_CONTRACT_CHECK(pools != nullptr);
+  return pools;
+}
+
 // The part that the two kinds of blocks below share: a block is a
 // random-access range of its words.
 template <typename Word>
@@ -240,28 +247,25 @@ class BlockOfWords {
 // bytes of the block (see `PartialVocabularyRunsInput::getBlock`) and the
 // `InputWord`s that were parsed in place and point into these bytes. The bytes
 // never move once a word points into them, so the block can be moved, but not
-// copied. The bytes go back to the pool of the file blocks (if the block has
-// pools) when the block is destroyed.
+// copied. The bytes go back to the pool of the file blocks when the block is
+// destroyed.
 class InputBlock : public BlockOfWords<InputWord>, public ad_utility::NoCopy {
  public:
   using Buffer = BufferPool::Buffer;
 
  private:
-  // The cleanup of the `bytes_` below: give them back to the pool, or do
-  // nothing if the block has no pools (the bytes are then simply freed). It
-  // owns the pools (and not a pointer into the block), so that it stays valid
-  // when the block is moved.
+  // The cleanup of the `bytes_` below: give them back to the pool. It owns
+  // the pools (and not a pointer into the block), so that it stays valid when
+  // the block is moved.
   struct GiveBackToPool {
     std::shared_ptr<BufferPools> pools_;
     void operator()(Buffer&& bytes) const {
-      if (pools_ != nullptr) {
-        pools_->fileBlocks_.giveBack(std::move(bytes));
-      }
+      pools_->fileBlocks_.giveBack(std::move(bytes));
     }
   };
   // NOTE: The `UniqueCleanup` gives the bytes back when the block is
   // destroyed or overwritten by a move assignment, and does nothing for a
-  // moved-from block, so the move operations can be defaulted.
+  // moved-from block, so the implicit move operations are correct.
   ad_utility::unique_cleanup::UniqueCleanup<Buffer, GiveBackToPool> bytes_;
 
  public:
@@ -269,12 +273,12 @@ class InputBlock : public BlockOfWords<InputWord>, public ad_utility::NoCopy {
   // partial vocabulary `partialFileId`, in the format that
   // `PartialVocabularyWriter` writes (see `InputWord::fromZeroCopyDeserializer`
   // above). The words are parsed in place, nothing is copied. The `bytes` go
-  // back to the `pools` when the block is destroyed. The `pools` may be
-  // `nullptr` (for example in tests): the block then works just the same, only
-  // its bytes are freed instead of given back.
+  // back to the `pools` (which must not be `nullptr`) when the block is
+  // destroyed.
   InputBlock(Buffer bytes, size_t numWords, uint32_t partialFileId,
-             std::shared_ptr<BufferPools> pools = nullptr)
-      : bytes_{std::move(bytes), GiveBackToPool{std::move(pools)}} {
+             std::shared_ptr<BufferPools> pools)
+      : bytes_{std::move(bytes),
+               GiveBackToPool{checkedBufferPools(std::move(pools))}} {
     words().reserve(numWords);
     serialization::ByteBufferReadSerializerT serializer{
         ql::span<const char>{bytes_->data(), bytes_->size()}};
@@ -285,15 +289,13 @@ class InputBlock : public BlockOfWords<InputWord>, public ad_utility::NoCopy {
     AD_CORRECTNESS_CHECK(serializer.getCurrentPosition() == bytes_->size(),
                          "Trailing bytes in a block of a partial vocabulary");
   }
-  InputBlock(InputBlock&&) noexcept = default;
-  InputBlock& operator=(InputBlock&&) noexcept = default;
 };
 
 // A block of merged words, as the merge yields it: the `MergedWord`s, the
 // buffers that their words were copied into, and their occurrences. The
 // buffers never move once a word points into them, so the block can be moved,
 // but not copied. The buffers come from and go back to the pool of the merged
-// words if the block has pools.
+// words.
 class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
  public:
   using Occurrence = detail::Occurrence;
@@ -301,16 +303,12 @@ class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
 
  private:
   using Buffers = std::vector<Buffer>;
-  // The cleanup of the `buffers_` below: give them back to the pool, or do
-  // nothing if the block has no pools (the buffers are then simply freed). It
-  // owns the pools (and not a pointer into the block), so that it stays valid
-  // when the block is moved.
+  // The cleanup of the `buffers_` below: give them back to the pool. It owns
+  // the pools (and not a pointer into the block), so that it stays valid when
+  // the block is moved.
   struct GiveBackToPool {
     std::shared_ptr<BufferPools> pools_;
     void operator()(Buffers&& buffers) const {
-      if (pools_ == nullptr) {
-        return;
-      }
       for (auto& buffer : buffers) {
         pools_->mergedWords_.giveBack(std::move(buffer));
       }
@@ -321,8 +319,7 @@ class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
 
   // The occurrences of all the words, see `MergedWord::occurrencesOffset_`.
   std::vector<Occurrence> occurrences_;
-  // The pools that the `buffers_` are taken from (see `store`), `nullptr` for
-  // a block without pools.
+  // The pools that the `buffers_` are taken from, see `store`.
   std::shared_ptr<BufferPools> pools_;
   // The buffers that the words are copied into, see `store`. A word is never
   // split across two buffers, and a buffer is never reallocated (it is
@@ -331,16 +328,16 @@ class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
   //
   // NOTE: The `UniqueCleanup` gives the buffers back to the pool when the
   // block is destroyed, overwritten by a move assignment, or cleared (see
-  // `clear`), and does nothing for a moved-from block, so the move operations
-  // below can be defaulted.
-  OwnedBuffers buffers_{Buffers{}, GiveBackToPool{}};
+  // `clear`), and does nothing for a moved-from block, so the implicit move
+  // operations are correct.
+  OwnedBuffers buffers_;
 
  public:
-  MergedBlock() = default;
+  // Construct an empty block whose buffers come from the `pools` (which must
+  // not be `nullptr`).
   explicit MergedBlock(std::shared_ptr<BufferPools> pools)
-      : pools_{std::move(pools)}, buffers_{Buffers{}, GiveBackToPool{pools_}} {}
-  MergedBlock(MergedBlock&&) noexcept = default;
-  MergedBlock& operator=(MergedBlock&&) noexcept = default;
+      : pools_{checkedBufferPools(std::move(pools))},
+        buffers_{Buffers{}, GiveBackToPool{pools_}} {}
 
   // The memory that appending the `word` to a block occupies at most (see
   // `addWord`), which the parallel merge needs to limit the memory of its
@@ -408,14 +405,7 @@ class MergedBlock : public BlockOfWords<MergedWord>, public ad_utility::NoCopy {
     Buffers& buffers = *buffers_;
     if (buffers.empty() ||
         buffers.back().size() + word.size() > buffers.back().capacity()) {
-      if (pools_ != nullptr) {
-        buffers.push_back(pools_->mergedWords_.take(word.size()));
-      } else {
-        // Without pools, the buffers have the same size as with them. A word
-        // that is longer gets a buffer of its own.
-        buffers.emplace_back().reserve(std::max(
-            VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE.getBytes(), word.size()));
-      }
+      buffers.push_back(pools_->mergedWords_.take(word.size()));
     }
     auto& buffer = buffers.back();
     size_t offset = buffer.size();

@@ -136,9 +136,6 @@ struct Segment {
   // the entries of the partial vocabulary `p` (in the order of the words), so
   // there is one element per partial vocabulary, which may be empty.
   CompactVectorOfStrings<SegmentIdMapEntry> idMapEntries_;
-  // The number of occurrences of the words of the segment in the partial
-  // vocabularies, which is the number of the ID map entries.
-  size_t numOccurrences_ = 0;
 
   // The number of distinct words including the blank nodes. This is exact:
   // `buildSegment` removes all the duplicates, also those at the boundaries of
@@ -244,12 +241,10 @@ class SegmentBuilder {
   }
 
   // Reserve the space for the ID map entries of the `blocks` (one per
-  // occurrence of a word) and remember their total number.
+  // occurrence of a word).
   void reserveForBlocks(const std::vector<MergedBlock>& blocks) {
-    size_t numOccurrences = ::ranges::accumulate(
-        blocks, size_t{0}, std::plus<>{}, &MergedBlock::numOccurrences);
-    segment_.numOccurrences_ = numOccurrences;
-    idMapEntries_.reserve(numOccurrences);
+    idMapEntries_.reserve(::ranges::accumulate(blocks, size_t{0}, std::plus<>{},
+                                               &MergedBlock::numOccurrences));
   }
 
   // Add the words of the next `block`. The words have to be in the order of

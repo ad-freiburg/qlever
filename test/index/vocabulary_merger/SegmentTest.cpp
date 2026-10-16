@@ -143,7 +143,6 @@ TEST(Segment, buildSegment) {
   EXPECT_THAT(main.isExternal_, ElementsAre(true, true, false, false));
   EXPECT_THAT(segment.wordBlocks_[1].words(), ElementsAre(wkt));
   EXPECT_EQ(segment.numBlankNodes_, 1u);
-  EXPECT_EQ(segment.numOccurrences_, 8u);
   EXPECT_EQ(segment.numDistinctWords(), 6u);
 
   // The metadata with segment-local IDs: the geo literal has the marker of
