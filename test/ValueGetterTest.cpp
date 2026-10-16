@@ -291,6 +291,31 @@ TEST(GeometryInfoValueGetterTest, LenientOnlyWkt) {
 }
 
 // _____________________________________________________________________________
+TEST(GeometryInfoValueGetterTest, ValidWktWithoutGeometryInfo) {
+  // This WKT literal is valid, but has no `GeometryInfo` (no bounding box or
+  // centroid). Its geometry type must not depend on the vocabulary type.
+  static constexpr std::string_view lit =
+      "\"LINESTRING EMPTY\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  auto getType = [](ad_utility::VocabularyType::Enum type) {
+    TestContextWithGivenTTl testContext{absl::StrCat("<s> <p> ", lit, " ."),
+                                        ad_utility::VocabularyType{type}};
+    VocabIndex idx;
+    AD_CORRECTNESS_CHECK(
+        testContext.qec->getIndex().getVocab().getId(lit, &idx));
+    return sparqlExpression::detail::GeometryInfoValueGetter<
+        ad_utility::GeometryType>{}(ValueId::makeFromVocabIndex(idx),
+                                    &testContext.context);
+  };
+  auto expected = ad_utility::GeometryInfo::getWktType(lit);
+  EXPECT_TRUE(expected.has_value());
+  EXPECT_EQ(getType(ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
+            expected);
+  EXPECT_EQ(getType(ad_utility::VocabularyType::Enum::OnDiskCompressed),
+            expected);
+}
+
+// _____________________________________________________________________________
 TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
   GeoInfoTester t;
   auto noGeoInfo = geoInfoMatcher(std::nullopt);

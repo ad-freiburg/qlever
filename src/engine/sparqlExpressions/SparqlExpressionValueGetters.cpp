@@ -619,12 +619,6 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
       auto precomputed = getPrecomputedGeometryInfo(id, context);
       if (precomputed.has_value()) {
         return precomputed.value().getRequestedInfo<RequestedInfo>();
-      } else if (id.getDatatype() == VocabIndex &&
-                 context->_qec.getIndex().getVocab().isGeoInfoAvailable()) {
-        // With a `GeoVocabulary`, every WKT literal from the index has
-        // precomputed geometry info, unless it is invalid (according to strict
-        // parsing). All other vocabulary entries are not WKT literals.
-        return std::nullopt;
       } else {
         // No precomputed geometry info available: we have to fetch and parse
         // the string.
