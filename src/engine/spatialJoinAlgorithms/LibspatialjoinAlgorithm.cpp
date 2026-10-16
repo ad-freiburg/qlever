@@ -322,6 +322,13 @@ Result LibspatialjoinAlgorithm::run() {
         "num-parser-threads-smaller-side", threadsSmall);
     auto numValidGeomsSmall = sweeper.numElements();
 
+    // Return right away if the smaller side has no valid geometry (for example,
+    // a constant WKT literal that cannot be parsed). The result is then empty,
+    // and the larger side does not have to be parsed at all.
+    if (numValidGeomsSmall == 0) {
+      return false;
+    }
+
     // Filtering by bounding box *after* parsing is only necessary if
     // precomputed bounding boxes for filtering *before* parsing are not
     // available.
