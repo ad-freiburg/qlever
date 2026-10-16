@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <utility>
+
 #include "util/stream_generator.h"
 
 using namespace ad_utility::streams;
@@ -89,4 +91,56 @@ TEST(StreamableGenerator, GeneratorDefaultInitialisesWithNoOp) {
   stream_generator generator;
   auto iterator = generator.begin();
   ASSERT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(StreamableGenerator, ChunkCapacityAppliesFromTheNextChunk) {
+  auto generator = []() -> basic_stream_generator<TEST_BUFFER_SIZE> {
+    co_yield std::string(6, 'A');
+    co_yield std::string(TEST_BUFFER_SIZE, 'B');
+    co_yield "C";
+  }();
+
+  // Set before `begin`, the capacity determines the size of the first chunk.
+  generator.setChunkCapacity(4);
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, "AAAA");
+
+  // Set while iterating, the capacity applies to the next chunk, which starts
+  // with the overflow of the previous one.
+  generator.setChunkCapacity(8);
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, "AABBBBBB");
+
+  generator.setChunkCapacity(TEST_BUFFER_SIZE);
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, "BBBBC");
+  ++iterator;
+  ASSERT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(StreamableGenerator, ChunkCapacityOnMovedFromGeneratorThrows) {
+  // A default-constructed generator owns the no-op coroutine, so only a
+  // moved-from generator has a null handle: changing the chunk capacity on it
+  // must fail its contract check instead of dereferencing null.
+  stream_generator generator;
+  stream_generator moved = std::move(generator);
+  EXPECT_ANY_THROW(generator.setChunkCapacity(4));
+}
+
+// _____________________________________________________________________________
+TEST(StreamableGenerator, ChunkCapacityMustFitTheBuffer) {
+  auto generator = []() -> basic_stream_generator<TEST_BUFFER_SIZE> {
+    co_yield "A";
+  }();
+  EXPECT_ANY_THROW(generator.setChunkCapacity(0));
+  EXPECT_ANY_THROW(generator.setChunkCapacity(TEST_BUFFER_SIZE + 1));
+  generator.setChunkCapacity(TEST_BUFFER_SIZE);
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, "A");
 }
