@@ -167,6 +167,12 @@ struct MetricArea {
   bool isValid() const { return !std::isnan(area_); }
 };
 
+// The serialization format of a geometry literal. For now, only WKT literals
+// are supported (in the future possibly e.g. GeoJSON or KML). The value zero
+// is `WKT`, because all records written before this field was taken into use
+// are WKT literals, see the rules at `GEOMETRY_INFO_VERSION`.
+enum class SerializationType : uint16_t { WKT };
+
 // Class for internal exception handling of errors from `s2geometry`.
 class InvalidPolygonError : public std::runtime_error {
  public:
@@ -183,7 +189,8 @@ class GeometryInfo;
 template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
-              SourceCrsType, NumGeometries, MetricLength, MetricArea>;
+              SourceCrsType, NumGeometries, MetricLength, MetricArea,
+              SerializationType>;
 
 // Where the actual geometries are required, this type can be used.
 using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
@@ -195,7 +202,7 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 // 5: The bytes `[28, 32)` are padding with arbitrary content (they were only
 //    zeroed explicitly in later builds of this version).
 // 6: The bytes `[28, 32)` are the two 16-bit fields `sourceCrs_` (initially
-//    reserved and zero) and `reservedLiteralFormat_`, see below.
+//    reserved and zero) and `serializationType_`, see below.
 //
 // From version 6 on, the binary representation is append-only, so that adding
 // a field does not invalidate existing indices:
@@ -217,6 +224,8 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 // - Consequently, a zero value of a field that was added (or taken into use)
 //   after version 5 must mean "not computed", and every reader of such a field
 //   must handle this case, typically by computing the value from the literal.
+//   Alternatively, zero may be a value that is correct for all records written
+//   before (like `SerializationType::WKT`).
 // - Only a change that violates these rules is index-breaking: bump the
 //   `GEOMETRY_INFO_VERSION`, raise `MIN_LOADABLE_GEOMETRY_INFO_VERSION` to it,
 //   and remove the handling of the dropped versions from `fromSerialized` and
@@ -260,10 +269,8 @@ class GeometryInfo {
   // the first builds of version 6, so it is zero ("not computed") in their
   // records and in those of version 5 (see `fromSerialized`).
   SourceCrsType sourceCrs_;
-  // Reserved for the format of the literal (WKT, and in the future e.g.
-  // GeoJSON or KML), which is always zero for now. See the rules at
-  // `GEOMETRY_INFO_VERSION` for taking it into use.
-  uint16_t reservedLiteralFormat_ = 0;
+  // The serialization format of the literal, see `SerializationType`.
+  SerializationType serializationType_ = SerializationType::WKT;
   MetricLength metricLength_;
   MetricArea metricArea_;
 
@@ -290,7 +297,7 @@ class GeometryInfo {
   GeometryInfo& operator=(const GeometryInfo& other) = default;
 
   // Parse an arbitrary WKT literal and compute all attributes. Return
-  // `std:nullopt` if `wkt` cannot be parsed.
+  // `std::nullopt` if `wkt` cannot be parsed (in the strict parsing mode).
   static std::optional<GeometryInfo> fromWktLiteral(std::string_view wkt);
 
   // Read a `GeometryInfo` from `bytes`, its binary representation of the given
@@ -357,6 +364,14 @@ class GeometryInfo {
   // Parse an arbitrary WKT literal and compute only the length in meters.
   static std::optional<MetricLength> getMetricLength(
       const std::string_view& wkt);
+
+  // Get the serialization format of the literal.
+  SerializationType getSerializationType() const;
+
+  // Return the serialization format of an arbitrary WKT literal, which is
+  // always `WKT`.
+  static std::optional<SerializationType> getSerializationType(
+      std::string_view wkt);
 
   // Extract the requested information from this object. Empty iff it is not
   // stored in this object (see `getSourceCrsType`).

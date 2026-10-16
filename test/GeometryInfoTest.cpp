@@ -422,9 +422,11 @@ TEST(GeometryInfoTest, IsValidWktStrict) {
     EXPECT_FALSE(GeometryInfo::isValidWktStrict(lit)) << lit;
   }
 
-  // The lenient (default) mode skips the invalid coordinate.
-  EXPECT_THAT(GeometryInfo::getNumGeometries(litInvalidCoord),
-              ::testing::Optional(NumGeometries{1}));
+  // All geometry computations use the strict mode, so they don't skip the
+  // invalid coordinate (as the lenient mode would), but yield no result.
+  EXPECT_EQ(GeometryInfo::getNumGeometries(litInvalidCoord), std::nullopt);
+  EXPECT_EQ(GeometryInfo::fromWktLiteral(litInvalidCoord), std::nullopt);
+  EXPECT_EQ(GeometryInfo::getBoundingBox(litInvalidCoord), std::nullopt);
 }
 
 // ____________________________________________________________________________
@@ -816,13 +818,13 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
   static_assert(sizeof(NumGeometries) == 4);
   static_assert(sizeof(SourceCrsType) == 2);
   static_assert(sizeof(MetricArea) == sizeof(double));
+  static_assert(sizeof(SerializationType) == 2);
 
   using EncodedGeometryTypeAndCentroid = uint64_t;
   static_assert(sizeof(GeometryInfo) ==
                 sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
-                    sizeof(SourceCrsType) +
-                    sizeof(uint16_t) +  // `reservedLiteralFormat_`
+                    sizeof(SourceCrsType) + sizeof(SerializationType) +
                     sizeof(MetricLength) + sizeof(MetricArea));
 }
 
