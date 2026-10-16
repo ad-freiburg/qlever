@@ -217,10 +217,14 @@ static auto fixBlockAfterPatternJoin(T block) {
   static QL_CONSTEXPR auto permutation =
       makePermutationFirstThirdSwitched<NumColumnsIndexBuilding + 2>();
   block.value().setColumnSubset(permutation);
+  // A column yields a restricted reference that can only be assigned to as an
+  // rvalue, hence `auto&&` and `AD_FWD`. The explicit return type avoids
+  // instantiating the body for the `Id&` that `ranges::for_each` requires.
   ql::ranges::for_each(
       block.value().getColumn(ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN),
-      [](IdRef id) {
-        id = id.isUndefined() ? Id::makeFromInt(Pattern::NoPattern) : id;
+      [](auto&& id) -> void {
+        AD_FWD(id) =
+            id.isUndefined() ? Id::makeFromInt(Pattern::NoPattern) : id;
       });
   return std::move(block.value()).template toStatic<0>();
 }

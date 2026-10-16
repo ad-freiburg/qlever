@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 
+#include <type_traits>
 #include <vector>
 
 #include "IdColumnTestHelpers.h"
@@ -136,4 +137,38 @@ TEST(IdColumnVectorTest, insertRollsBackOnDatatypesAllocationFailure) {
       vec.insert(vec.asView().begin(), toInsert.begin(), toInsert.end()),
       ad_utility::detail::AllocationExceedsLimitException);
   EXPECT_TRUE(vec.empty());
+}
+
+// Test that `operator[]` and `at` return the restricted reference, like the
+// column views: Writing is possible via an rvalue or via an explicitly
+// requested `IdRef`, but not via a variable that was created by `auto`.
+TEST(IdColumnVectorTest, restrictedElementAccess) {
+  auto ids = sampleIds();
+  IdColumnVector vec{ids.begin(), ids.end(), testAllocator()};
+  const auto& constVec = vec;
+  static_assert(std::is_same_v<decltype(vec[0]), IdRef::Base>);
+  static_assert(std::is_same_v<decltype(vec.at(0)), IdRef::Base>);
+  static_assert(std::is_same_v<decltype(constVec[0]), ConstIdRef::Base>);
+  static_assert(std::is_same_v<decltype(constVec.at(0)), ConstIdRef::Base>);
+  static_assert(std::is_assignable_v<decltype(vec[0]), Id>);
+  static_assert(!std::is_assignable_v<decltype(vec[0])&, Id>);
+  static_assert(!std::is_assignable_v<decltype(vec.at(0))&, Id>);
+
+  // Assigning to the temporary writes to the vector.
+  const Id first = Id::makeFromInt(42);
+  vec[1] = first;
+  EXPECT_EQ(vec[1], first);
+  vec.at(2) = first;
+  EXPECT_EQ(constVec[2], first);
+
+  // A variable has to request the writable reference explicitly.
+  IdRef ref = vec[3];
+  const Id second = Id::makeFromInt(43);
+  ref = second;
+  EXPECT_EQ(vec[3], second);
+
+  // `auto` copies the (read-only) reference, which still reads the vector.
+  auto autoRef = vec[3];
+  vec[3] = first;
+  EXPECT_EQ(autoRef, first);
 }

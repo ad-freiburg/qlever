@@ -26,6 +26,7 @@
 #include "libqlever/CanonicalRowOrder.h"
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
 #include "util/HashSet.h"
 
 namespace qlever::namedCacheSecondaryVocab {
@@ -233,8 +234,11 @@ CanonicalizedValue canonicalizeWithPermutation(
   table.insertAtEnd(columnSubset);
   if (containsLocalVocabIds(value)) {
     for (auto column : table.getColumns()) {
-      ql::ranges::for_each(column, [&secondaryVocab](IdRef id) {
-        id = rewriteId(id, secondaryVocab);
+      // A column yields a restricted reference that can only be assigned to as
+      // an rvalue, hence `auto&&` and `AD_FWD`. The explicit return type avoids
+      // instantiating the body for the `Id&` that `ranges::for_each` requires.
+      ql::ranges::for_each(column, [&secondaryVocab](auto&& id) -> void {
+        AD_FWD(id) = rewriteId(id, secondaryVocab);
       });
     }
   }

@@ -39,6 +39,7 @@ class BasicIdColumnIterator {
   using difference_type = int64_t;
   using value_type = Id;
   using reference = BasicIdRef<IsConst>;
+  using reference_restricted = typename BasicIdRef<IsConst>::Base;
   using pointer = void;
 
  private:
@@ -62,8 +63,8 @@ class BasicIdColumnIterator {
           const BasicIdColumnIterator<false>& other)  // NOSONAR, intended
       : payload_{other.payload_}, datatype_{other.datatype_} {}
 
-  reference operator*() const { return {payload_, datatype_}; }
-  reference operator[](difference_type n) const {
+  reference_restricted operator*() const { return {payload_, datatype_}; }
+  reference_restricted operator[](difference_type n) const {
     return {payload_ + n, datatype_ + n};
   }
 

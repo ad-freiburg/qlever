@@ -25,7 +25,16 @@ using testHelpers::testAllocator;
 
 // Test the iterator traits, dereferencing, and the subscript operator.
 TEST(IdColumnIteratorTest, traitsAndDereference) {
-  static_assert(std::is_same_v<decltype(*IdColumnIterator{}), IdRef>);
+  // Dereferencing yields the restricted reference (what `auto` deduces).
+  static_assert(std::is_same_v<decltype(*IdColumnIterator{}), IdRef::Base>);
+  static_assert(!std::is_same_v<decltype(*IdColumnIterator{}), IdRef>);
+  static_assert(std::is_same_v<decltype(IdColumnIterator{}[0]), IdRef::Base>);
+
+  // Unlike the full `IdRef`, it can only be assigned to as an rvalue: `*it =
+  // id` writes, but `auto ref = *it; ref = id;` does not compile.
+  static_assert(std::is_assignable_v<decltype(*IdColumnIterator{}), Id>);
+  static_assert(!std::is_assignable_v<decltype(*IdColumnIterator{})&, Id>);
+  static_assert(std::is_assignable_v<IdRef&, Id>);
   static_assert(std::is_same_v<IdColumnIterator::value_type, Id>);
   static_assert(std::is_same_v<IdColumnIterator::iterator_category,
                                std::random_access_iterator_tag>);

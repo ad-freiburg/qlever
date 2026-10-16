@@ -39,6 +39,8 @@ class IdColumnVector {
   using value_type = Id;
   using reference = IdRef;
   using const_reference = ConstIdRef;
+  using reference_restricted = IdRef::Base;
+  using const_reference_restricted = ConstIdRef::Base;
   using iterator = IdColumnIterator;
   using const_iterator = ConstIdColumnIterator;
 
@@ -109,17 +111,17 @@ class IdColumnVector {
     datatypes_.emplace_back();
   }
 
-  [[nodiscard]] reference operator[](size_t i) {
+  [[nodiscard]] reference_restricted operator[](size_t i) {
     return {&payloads_[i], &datatypes_[i]};
   }
-  [[nodiscard]] const_reference operator[](size_t i) const {
+  [[nodiscard]] const_reference_restricted operator[](size_t i) const {
     return {&payloads_[i], &datatypes_[i]};
   }
-  [[nodiscard]] reference at(size_t i) {
+  [[nodiscard]] reference_restricted at(size_t i) {
     AD_CONTRACT_CHECK(i < size());
     return (*this)[i];
   }
-  [[nodiscard]] const_reference at(size_t i) const {
+  [[nodiscard]] const_reference_restricted at(size_t i) const {
     AD_CONTRACT_CHECK(i < size());
     return (*this)[i];
   }
