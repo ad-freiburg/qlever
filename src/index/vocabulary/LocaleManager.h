@@ -12,9 +12,13 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_LOCALEMANAGER_H
 
 #ifndef QLEVER_NO_UNICODE
+#include <unicode/bytestream.h>
+#include <unicode/coleitr.h>
 #include <unicode/coll.h>
 #include <unicode/locid.h>
 #include <unicode/normalizer2.h>
+#include <unicode/stringpiece.h>
+#include <unicode/tblcoll.h>
 #include <unicode/unistr.h>
 #include <unicode/unorm2.h>
 #include <unicode/utypes.h>
@@ -23,18 +27,16 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
-#include <vector>
+#include <utility>
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
-#include "backports/three_way_comparison.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
-#include "util/GenericCharTraits.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 
@@ -53,46 +55,6 @@ class LocaleManagerBase {
     // account and then the result of `strcmp`; that way two strings that have a
     // different byte representation never compare equal.
     TOTAL = 5
-  };
-
-  // A strong typedef for a string that contains unicode collation weights for
-  // another string. The actual storage can be a `std::string` or a
-  // `std::string_view`.
-  // TODO<GCC12> As soon as we have constexpr std::string, this class can
-  //  become constexpr.
-  // A `uint8_t` behaves like a `char`, so we use `GenericCharTraits` (see there
-  // for why we cannot rely on `std::char_traits` directly).
-  using U8CharTraits = ad_utility::GenericCharTraits<uint8_t>;
-  using U8String = std::basic_string<uint8_t, U8CharTraits>;
-
-  class SortKey {
-   private:
-    U8String sortKey_;
-
-   public:
-    SortKey() = default;
-    explicit SortKey(U8String sortKey) : sortKey_(std::move(sortKey)) {}
-    [[nodiscard]] constexpr const U8String& get() const noexcept {
-      return sortKey_;
-    }
-    constexpr U8String& get() noexcept { return sortKey_; }
-
-    // Comparison of sort key is done lexicographically on the byte values
-    // of member `sortKey_`
-    [[nodiscard]] int compare(const SortKey& rhs) const noexcept {
-      return sortKey_.compare(rhs.sortKey_);
-    }
-
-    QL_DEFINE_DEFAULTED_THREEWAY_OPERATOR_LOCAL(SortKey, sortKey_)
-
-    // Is this sort key a prefix of another sort key. Note: This does not imply
-    // any guarantees on the relation of the underlying strings.
-    bool starts_with(const SortKey& rhs) const noexcept {
-      return ql::starts_with(get(), rhs.get());
-    }
-
-    // Return the number of bytes in the `SortKey`.
-    std::string::size_type size() const noexcept { return get().size(); }
   };
 };
 
@@ -181,100 +143,6 @@ class LocaleManagerICU : public LocaleManagerBase {
     return res;
   }
 
-  // Compare two WeightStrings. These have to be extracted by a call to
-  // getSortKey using the same level specification and on the same LocaleManager
-  // otherwise the behavior is undefined. The `level` parameter is ignored but
-  // required to have a symmetric interface. Return <0 iff a<b, >0 iff a>b, 0
-  // iff a==b.
-  static int compare(const SortKey& a, const SortKey& b,
-                     [[maybe_unused]] const Level = Level::PRIMARY) {
-    return a.compare(b);
-  }
-
-  // Transform a UTF-8 string into a `SortKey`.
-  //
-  // We need this wrapper because ICU internally only works on utf16 and does
-  // not create c++ strings in large parts of the API. `s` is a UTF-8 encoded
-  // string, `level` the Collation Level for which we want to create the
-  // SortKey. Return a `SortKey` s.t. compare(s, t, level) ==
-  // compare(getSortKey(s, level), getSortKey(t, level)).
-  SortKey getSortKey(std::string_view s, const Level level) const {
-    auto utf16 = icu::UnicodeString::fromUTF8(toStringPiece(s));
-    const auto& col = *collators_[static_cast<uint8_t>(level)];
-    std::vector<uint8_t> sortKeyBuffer;
-    // The actual computation of the sort key is very expensive, so we first
-    // allocate a buffer that is typically large enough to store the sort key.
-    static constexpr size_t maxBufferSize = std::numeric_limits<int32_t>::max();
-    sortKeyBuffer.resize(std::min(50 * s.size(), maxBufferSize));
-    static_assert(sizeof(uint8_t) == sizeof(std::string::value_type));
-    static constexpr auto intMax = std::numeric_limits<int32_t>::max();
-    auto sz = col.getSortKey(utf16, sortKeyBuffer.data(),
-                             static_cast<int32_t>(sortKeyBuffer.size()));
-    AD_CONTRACT_CHECK(sz >= 0);
-    // If the buffer was large enough, we only have to copy the sort key to the
-    // destination. Otherwise, we now know the exact size of the sort key and
-    // can retrigger the computation.
-    if (static_cast<size_t>(sz) > sortKeyBuffer.size()) {
-      sortKeyBuffer.clear();
-      sortKeyBuffer.resize(sz);
-      AD_CORRECTNESS_CHECK(sortKeyBuffer.size() <= static_cast<size_t>(intMax));
-      auto actualSz =
-          col.getSortKey(utf16, (sortKeyBuffer.data()),
-                         static_cast<int32_t>(sortKeyBuffer.size()));
-      AD_CONTRACT_CHECK(actualSz ==
-                        static_cast<decltype(sz)>(sortKeyBuffer.size()));
-    }
-    // since this is a c-api we still have a trailing '\0'. Trimming this is
-    // necessary for the prefix range to work correct.
-    AD_CORRECTNESS_CHECK(sz > 0);
-    --sz;
-    SortKey result;
-    U8String& resultView = result.get();
-    resultView.insert(resultView.end(), sortKeyBuffer.data(),
-                      sortKeyBuffer.data() + sz);
-    return result;
-  }
-
-  // Compute a `SortKey` for `Level::PRIMARY` that corresponds to a prefix of
-  // `s`.
-  //
-  // `prefixLength` is the number of relevant characters (see below). Return a
-  // `SortKey` that is a prefix of the `SortKey` for `s` w.r.t `Level::PRIMARY`
-  // and that also is a `SortKey` for a prefix "p" of `s`. "p" is the minimal
-  // prefix of `s` which consists of at least `prefixLength` codepoints and
-  // whose SortKey fulfills the first condition. Codepoints, which do not
-  // contribute to the `SortKey` because they are irrelevant for the `PRIMARY`
-  // level do not count towards `prefixLength`. The first element of the return
-  // value is the actual number of (contributing) codepoints in "p". If `s`
-  // contains less than `prefixLength` contributing codepoints, then
-  // {totalNumberOfContributingCodepoints, completeSortKey} is returned.
-  [[nodiscard]] std::pair<size_t, SortKey> getPrefixSortKey(
-      std::string_view s, size_t prefixLength) const {
-    size_t numContributingCodepoints = 0;
-    SortKey sortKey;
-    size_t prefixLengthSoFar = 1;
-    SortKey completeSortKey = getSortKey(s, Level::PRIMARY);
-    while (numContributingCodepoints < prefixLength ||
-           !completeSortKey.starts_with(sortKey)) {
-      auto [numCodepoints, prefix] =
-          ad_utility::getUTF8Prefix(s, prefixLengthSoFar);
-      auto nextLongerSortKey = getSortKey(prefix, Level::PRIMARY);
-      if (nextLongerSortKey != sortKey) {
-        // The `SortKey` changed by adding a codepoint, so that codepoint was
-        // contributing.
-        numContributingCodepoints++;
-        sortKey = std::move(nextLongerSortKey);
-      }
-      if (numCodepoints < prefixLengthSoFar) {
-        // We have checked the complete string without finding a sufficiently
-        // long contributing prefix.
-        break;
-      }
-      prefixLengthSoFar++;
-    }
-    return {numContributingCodepoints, std::move(sortKey)};
-  }
-
   // Convert a UTF-8 String to lowercase according to the held locale. `s` is a
   // UTF-8 encoded string; return the lowercase version of s, also encoded as
   // UTF-8.
@@ -294,6 +162,43 @@ class LocaleManagerICU : public LocaleManagerBase {
     normalizer_->normalizeUTF8(0, toStringPiece(input), sink, nullptr, err);
     raise(err);
     return res;
+  }
+
+  // Return true iff `text` starts with `prefix` on the `PRIMARY` level, i.e.
+  // iff the primary weights of the collation elements of `prefix` are a prefix
+  // of those of `text`. Elements that are ignored on the `PRIMARY` level don't
+  // matter. This also works for characters that expand to several elements,
+  // e.g. "groß" (g, r, o, s, s) starts with "gros".
+  [[nodiscard]] bool startsWithOnPrimaryLevel(std::string_view text,
+                                              std::string_view prefix) const {
+    PrimaryWeightIterator textIt{*this, text};
+    PrimaryWeightIterator prefixIt{*this, prefix};
+    while (auto prefixWeight = prefixIt.next()) {
+      if (textIt.next() != prefixWeight) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Return true iff the first `numElements` collation elements of `a` and `b`
+  // that are relevant on the `PRIMARY` level have the same primary weights. If
+  // one of the strings has fewer elements, both have to have the same elements.
+  [[nodiscard]] bool haveEqualPrimaryPrefix(std::string_view a,
+                                            std::string_view b,
+                                            size_t numElements) const {
+    PrimaryWeightIterator itA{*this, a};
+    PrimaryWeightIterator itB{*this, b};
+    for (size_t i = 0; i < numElements; ++i) {
+      auto weightA = itA.next();
+      if (weightA != itB.next()) {
+        return false;
+      }
+      if (!weightA.has_value()) {
+        break;
+      }
+    }
+    return true;
   }
 
  private:
@@ -368,6 +273,71 @@ class LocaleManagerICU : public LocaleManagerBase {
   static icu::StringPiece toStringPiece(std::string_view s) {
     return icu::StringPiece(s.data(), static_cast<int32_t>(s.size()));
   }
+
+  // Yield the primary weights of the collation elements of a UTF-8 string that
+  // are relevant on the `PRIMARY` level: elements with a zero primary weight
+  // are skipped, and so are variable elements (punctuation, spaces, symbols)
+  // if punctuation is ignored.
+  class PrimaryWeightIterator {
+    std::unique_ptr<icu::CollationElementIterator> iter_;
+    // With `UCOL_SHIFTED`, all primary weights up to and including this value
+    // are ignored on the `PRIMARY` level.
+    std::optional<uint32_t> variableTop_;
+    // An element that was read ahead, but not yet processed.
+    std::optional<int32_t> lookahead_;
+
+    // Return the next element or `NULLORDER` at the end.
+    int32_t nextElement() {
+      if (lookahead_.has_value()) {
+        return std::exchange(lookahead_, std::nullopt).value();
+      }
+      UErrorCode err = U_ZERO_ERROR;
+      int32_t elem = iter_->next(err);
+      raise(err);
+      return elem;
+    }
+
+   public:
+    PrimaryWeightIterator(const LocaleManagerICU& locManager,
+                          std::string_view text) {
+      auto& collator = dynamic_cast<const icu::RuleBasedCollator&>(
+          *locManager.collators_[static_cast<uint8_t>(Level::PRIMARY)]);
+      iter_.reset(collator.createCollationElementIterator(
+          icu::UnicodeString::fromUTF8(toStringPiece(text))));
+      if (locManager.ignorePunctuationStatus_ == UCOL_SHIFTED) {
+        UErrorCode err = U_ZERO_ERROR;
+        variableTop_ = collator.getVariableTop(err);
+        raise(err);
+      }
+    }
+
+    // Return the next relevant primary weight or `std::nullopt` at the end.
+    std::optional<uint32_t> next() {
+      using CEI = icu::CollationElementIterator;
+      while (true) {
+        int32_t elem = nextElement();
+        if (elem == CEI::NULLORDER) {
+          return std::nullopt;
+        }
+        // The `CollationElementIterator` splits 32-bit primary weights into a
+        // first element holding the upper 16 bits and a continuation element
+        // holding the lower 16 bits. Continuations have the bits `0xC0` set in
+        // their lowest byte, which never happens for a first element.
+        uint32_t weight = static_cast<uint32_t>(CEI::primaryOrder(elem)) << 16;
+        int32_t following = nextElement();
+        if (following != CEI::NULLORDER && (following & 0xC0) == 0xC0) {
+          weight |= static_cast<uint32_t>(CEI::primaryOrder(following));
+        } else {
+          lookahead_ = following;
+        }
+        if (weight == 0 ||
+            (variableTop_.has_value() && weight <= *variableTop_)) {
+          continue;
+        }
+        return weight;
+      }
+    }
+  };
 };
 
 #endif  // QLEVER_NO_UNICODE
@@ -388,24 +358,16 @@ class LocaleManagerNoICU : public LocaleManagerBase {
     return std::clamp(a.compare(b), -1, 1);
   }
 
-  static int compare(const SortKey& a, const SortKey& b,
-                     [[maybe_unused]] const Level = Level::PRIMARY) {
-    return a.compare(b);
+  // Every byte is its own collation element.
+  [[nodiscard]] bool startsWithOnPrimaryLevel(std::string_view text,
+                                              std::string_view prefix) const {
+    return ql::starts_with(text, prefix);
   }
 
-  [[nodiscard]] SortKey getSortKey(std::string_view s,
-                                   const Level /*level*/) const {
-    return SortKey{::ranges::to<U8String>(s | ql::views::transform([](char c) {
-                                            return static_cast<uint8_t>(c);
-                                          }))};
-  }
-
-  [[nodiscard]] std::pair<size_t, SortKey> getPrefixSortKey(
-      std::string_view s, size_t prefixLength) const {
-    // Every byte is its own sort weight (see `getSortKey`), so the prefix sort
-    // key is just the first `min(prefixLength, s.size())` bytes.
-    size_t numBytes = std::min(prefixLength, s.size());
-    return {numBytes, getSortKey(s.substr(0, numBytes), Level::PRIMARY)};
+  [[nodiscard]] bool haveEqualPrimaryPrefix(std::string_view a,
+                                            std::string_view b,
+                                            size_t numElements) const {
+    return a.substr(0, numElements) == b.substr(0, numElements);
   }
 
   // Lowercase `s`. As a preparatory step this still reuses the ICU-based
