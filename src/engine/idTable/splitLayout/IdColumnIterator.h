@@ -39,7 +39,7 @@ class BasicIdColumnIterator {
   using difference_type = int64_t;
   using value_type = Id;
   using reference = BasicIdRef<IsConst>;
-  using reference_restricted = IdRef::Base;
+  using reference_restricted = typename BasicIdRef<IsConst>::Base;
   using pointer = void;
 
  private:
