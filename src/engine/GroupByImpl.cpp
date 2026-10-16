@@ -519,7 +519,7 @@ GroupByImpl::makeTreeWithStrippedColumns(
   // for them.
   return columnStrippingHelpers::makeTreeWithOptionalStripOperation<GroupBy>(
       getExecutionContext(), requestedVariables, _groupByVariables,
-      std::move(neededAliases), std::move(subtree));
+      std::move(requestedAliases), std::move(subtree));
 }
 
 // _____________________________________________________________________________
