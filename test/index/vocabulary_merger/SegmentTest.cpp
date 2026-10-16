@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -45,6 +46,27 @@ IdConverterForSegment makeConverter(
   }
   return converter;
 }
+
+// A block writer (see `BlockWriterBase` in
+// `index/vocabulary/VocabularyTypes.h`) that precomputes a payload of one byte
+// per word, the length of the word, and otherwise does nothing.
+class PayloadBlockWriter : public BlockWriterBase {
+ public:
+  size_t blockSize() const override {
+    return DEFAULT_WORDS_PER_VOCABULARY_BLOCK;
+  }
+  size_t precomputedPayloadSize() const override { return 1; }
+  void precomputePayload(std::string_view word,
+                         ql::span<char> payload) const override {
+    payload[0] = static_cast<char>(word.size());
+  }
+  AppendBlock prepare([[maybe_unused]] WordBlock block) override {
+    return []() {};
+  }
+
+ private:
+  void finishImpl() override {}
+};
 
 // Matcher for a `LocalIdRange` that has seen the words from `first` to
 // `last`.
@@ -90,10 +112,13 @@ TEST(Segment, segmentLocalId) {
   EXPECT_ANY_THROW(B(SegmentLocalId::maxIndex + 1));
   EXPECT_ANY_THROW(S(blankNodeSubVocabularyIndex, 0));
 
-  // The printer for failed tests.
+  // The printers for failed tests, of an ID and of an ID map entry.
   std::stringstream str;
   str << id;
   EXPECT_EQ(str.str(), "SegmentLocalId(3, 12345)");
+  str.str("");
+  str << entry(2, 7, S(1, 3));
+  EXPECT_EQ(str.str(), "{2, 7, SegmentLocalId(1, 3)}");
 }
 
 // Test that the ID converter turns segment-local IDs into global indices and
@@ -108,32 +133,36 @@ TEST(Segment, idConverterForSegment) {
   EXPECT_EQ(converter.globalIdOf(B(2)), BN(7));
 }
 
-// Test `buildSegment` on two blocks of merged words with a word that spans
-// the block boundary (with different external flags), a blank node, a WKT
-// literal (which goes to the second sub-vocabulary of the `TestSplitWriter`),
-// a language-tagged predicate and a special internal IRI: the distinct words
-// per sub-vocabulary, the external flags, the blank node count, the metadata
-// with segment-local IDs, the ID map entries grouped by partial vocabulary,
-// and the ID converter of the next segment.
+// Test `buildSegment` on three blocks of merged words with a word that spans
+// the first block boundary (with different external flags) and a different
+// word at the second, a blank node, a WKT literal (which goes to the second
+// sub-vocabulary of the `TestSplitWriter`), two language-tagged predicates,
+// a special internal IRI and an internal IRI that is not special: the
+// distinct words per sub-vocabulary, the external flags, the blank node count,
+// the metadata with segment-local IDs, the ID map entries grouped by partial
+// vocabulary, and the ID converter of the next segment.
 TEST(Segment, buildSegment) {
   std::string wkt =
       "\"POINT(1 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   std::string special{HAS_PATTERN_PREDICATE};
+  std::string internal =
+      std::string{QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET} + "zzz>";
   // The words in the order in which the merge yields them (the `std::less`
-  // order): the WKT literal, `"a"`, `"b"`, `<http://qlever...>`, `@en@<p>`,
-  // `_:bn`. The word `"b"` occurs in the partial vocabularies 0 (block 0,
-  // not external) and 1 (block 1, external), the literal `"a"` in 0 and 2
-  // (folded within the block).
+  // order): the WKT literal, `"a"`, `"b"`, the two `<http://qlever...>` IRIs,
+  // `@en@<p>`, `@en@<q>`, `_:bn`. The word `"b"` occurs in the partial
+  // vocabularies 0 (block 0, not external) and 1 (block 1, external), the
+  // literal `"a"` in 0 and 2 (folded within the block).
   // NOTE: The second `"a"` is folded into the first one by `makeMergedBlocks`,
   // as the merge does it.
-  auto blocks = makeMergedBlocks({{{wkt, true, 2, 1},
-                                   {"\"a\"", true, 0, 5},
-                                   {"\"a\"", false, 2, 0},
-                                   {"\"b\"", false, 0, 6}},
-                                  {{"\"b\"", true, 1, 1},
-                                   {special, false, 0, 7},
-                                   {"@en@<p>", false, 1, 2},
-                                   {"_:bn", false, 1, 3}}});
+  auto blocks = makeMergedBlocks(
+      {{{wkt, true, 2, 1},
+        {"\"a\"", true, 0, 5},
+        {"\"a\"", false, 2, 0},
+        {"\"b\"", false, 0, 6}},
+       {{"\"b\"", true, 1, 1}, {special, false, 0, 7}, {internal, false, 2, 2}},
+       {{"@en@<p>", false, 1, 2},
+        {"@en@<q>", false, 0, 8},
+        {"_:bn", false, 1, 3}}});
 
   TestSplitWriter writer;
   Segment segment = buildSegment(std::move(blocks), writer,
@@ -143,18 +172,21 @@ TEST(Segment, buildSegment) {
   // its occurrences was.
   ASSERT_EQ(segment.wordBlocks_.size(), 2u);
   const auto& main = segment.wordBlocks_[0];
-  EXPECT_THAT(main.words(), ElementsAre("\"a\"", "\"b\"", special, "@en@<p>"));
-  EXPECT_THAT(main.isExternal_, ElementsAre(true, true, false, false));
+  EXPECT_THAT(main.words(), ElementsAre("\"a\"", "\"b\"", special, internal,
+                                        "@en@<p>", "@en@<q>"));
+  EXPECT_THAT(main.isExternal_,
+              ElementsAre(true, true, false, false, false, false));
   EXPECT_THAT(segment.wordBlocks_[1].words(), ElementsAre(wkt));
   EXPECT_EQ(segment.numBlankNodes_, 1u);
-  EXPECT_EQ(segment.numDistinctWords(), 6u);
+  EXPECT_EQ(segment.numDistinctWords(), 8u);
 
   // The metadata with segment-local IDs: the geo literal has the marker of
-  // the `TestSplitWriter`, the blank node is not part of the metadata.
+  // the `TestSplitWriter`, the blank node is not part of the metadata, and
+  // only the special internal IRI is a special ID.
   const auto& meta = segment.metaData_;
-  EXPECT_EQ(meta.numWords_, 5u);
-  EXPECT_THAT(meta.langTaggedPredicates_, localIdRange(S(0, 3), S(0, 3)));
-  EXPECT_THAT(meta.internalEntities_, localIdRange(S(0, 2), S(0, 2)));
+  EXPECT_EQ(meta.numWords_, 7u);
+  EXPECT_THAT(meta.langTaggedPredicates_, localIdRange(S(0, 4), S(0, 5)));
+  EXPECT_THAT(meta.internalEntities_, localIdRange(S(0, 2), S(0, 3)));
   EXPECT_THAT(meta.specialIds_, ElementsAre(Pair(special, S(0, 2))));
 
   // The ID map entries, grouped by partial vocabulary (and in word order
@@ -163,16 +195,18 @@ TEST(Segment, buildSegment) {
   auto blankId = B(0);
   const auto& idMap = segment.idMapEntries_;
   ASSERT_EQ(idMap.size(), 3u);
-  EXPECT_THAT(idMap[0], ElementsAre(entry(0, 5, S(0, 0)), entry(0, 6, S(0, 1)),
-                                    entry(0, 7, S(0, 2))));
-  EXPECT_THAT(idMap[1], ElementsAre(entry(1, 1, S(0, 1)), entry(1, 2, S(0, 3)),
+  EXPECT_THAT(idMap[0],
+              ElementsAre(entry(0, 5, S(0, 0)), entry(0, 6, S(0, 1)),
+                          entry(0, 7, S(0, 2)), entry(0, 8, S(0, 5))));
+  EXPECT_THAT(idMap[1], ElementsAre(entry(1, 1, S(0, 1)), entry(1, 2, S(0, 4)),
                                     entry(1, 3, blankId)));
-  EXPECT_THAT(idMap[2], ElementsAre(entry(2, 1, geoId), entry(2, 0, S(0, 0))));
+  EXPECT_THAT(idMap[2], ElementsAre(entry(2, 1, geoId), entry(2, 0, S(0, 0)),
+                                    entry(2, 2, S(0, 3))));
 
   // The ID converter of the next segment.
   auto next = segment.idConverterForNextSegment(makeConverter({{0, 10}}));
   EXPECT_EQ(next.numWordsInPreviousSegments_,
-            makeConverter({{0, 14}, {1, 1}, {blankNodeSubVocabularyIndex, 1}})
+            makeConverter({{0, 16}, {1, 1}, {blankNodeSubVocabularyIndex, 1}})
                 .numWordsInPreviousSegments_);
 }
 
@@ -197,4 +231,20 @@ TEST(Segment, blankNodeRegexesAndOrder) {
         buildSegment(std::move(unordered), writer, regexes, 1, lessThan),
         ::testing::HasSubstr("vocabulary order violated"));
   }
+}
+
+// Test that `buildSegment` computes the payload of every word into its word
+// block if the block writer of the sub-vocabulary has one (see
+// `BlockWriterBase::precomputePayload`).
+TEST(Segment, buildSegmentPrecomputesPayload) {
+  auto blocks =
+      makeMergedBlocks({{{"\"a\"", false, 0, 0}, {"<abc>", false, 0, 1}}});
+  SingleVocabularyParallelWriter writer{std::make_unique<PayloadBlockWriter>()};
+  Segment segment = buildSegment(std::move(blocks), writer,
+                                 ad_utility::RegexSet{}, 1, lessThan);
+  const auto& block = segment.wordBlocks_.at(0);
+  EXPECT_THAT(block.words(), ElementsAre("\"a\"", "<abc>"));
+  EXPECT_EQ(block.payloadSize_, 1u);
+  EXPECT_EQ(block.payload(0), std::string_view("\x03", 1));
+  EXPECT_EQ(block.payload(1), std::string_view("\x05", 1));
 }

@@ -409,6 +409,24 @@ TEST(PartialVocabularyFile, bufferPoolShrinksOversizedBuffers) {
   }
 }
 
+// Test the preconditions of the blocks: every block needs buffer pools, and a
+// block only knows the occurrences of its own words.
+TEST(PartialVocabularyFile, blockContractChecks) {
+  EXPECT_ANY_THROW(MergedBlock{nullptr});
+  EXPECT_ANY_THROW((InputBlock{InputBlock::Buffer{}, 0, 0, nullptr}));
+
+  MergedBlock one{testBufferPools()};
+  pushWord(one, "\"a\"", false, 0, 0);
+  MergedBlock three{testBufferPools()};
+  pushWord(three, "\"a\"", false, 0, 0);
+  pushWord(three, "\"b\"", false, 1, 1);
+  pushWord(three, "\"c\"", false, 2, 2);
+  EXPECT_THAT(occurrencesOf(one, one[0]),
+              ::testing::ElementsAre(std::pair{0u, uint64_t{0}}));
+  // The third word of `three` has no occurrences in `one`.
+  EXPECT_ANY_THROW(one.occurrences(three[2]));
+}
+
 // Test that a second `finish` of a `PartialVocabularyWriter` does nothing and
 // that no word can be added after `finish`.
 TEST(PartialVocabularyFile, finishTwice) {
