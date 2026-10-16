@@ -13,6 +13,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_PREFILTEREXPRESSIONINDEX_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_PREFILTEREXPRESSIONINDEX_H
 
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -23,6 +24,7 @@
 #include "index/vocabulary/Vocabulary.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
+#include "util/Exception.h"
 #include "util/Iterators.h"
 
 // NOTE: The prefiltering needs the vocabulary of the index (and not only the
@@ -239,6 +241,49 @@ class LogicalExpression : public PrefilterExpression {
 // that are encoded in the `Id` (datatype `GeoPoint`), not the WKT literals of
 // the vocabulary.
 enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC, ENCODED_IRI, GEO_POINT };
+
+namespace detail {
+inline constexpr std::array<Datatype, 1> blankDatatypes{
+    Datatype::BlankNodeIndex};
+inline constexpr std::array<Datatype, 2> numericDatatypes{Datatype::Int,
+                                                          Datatype::Double};
+inline constexpr std::array<Datatype, 1> encodedIriDatatypes{
+    Datatype::EncodedVal};
+inline constexpr std::array<Datatype, 1> geoPointDatatypes{Datatype::GeoPoint};
+inline constexpr std::array<Datatype, 5> inlinedLiteralDatatypes{
+    Datatype::Bool, Datatype::Int, Datatype::Double, Datatype::Date,
+    Datatype::GeoPoint};
+}  // namespace detail
+
+// The (sorted) datatypes of the `Id`s for which `isDatatype` holds. For `IRI`
+// and `LITERAL`, these are only the `Id`s that directly encode their value,
+// the words of the vocabularies have to be handled separately.
+constexpr ql::span<const Datatype> getDatatypes(IsDatatype isDatatype) {
+  switch (isDatatype) {
+    case IsDatatype::BLANK:
+      return detail::blankDatatypes;
+    case IsDatatype::NUMERIC:
+      return detail::numericDatatypes;
+    case IsDatatype::IRI:
+    case IsDatatype::ENCODED_IRI:
+      return detail::encodedIriDatatypes;
+    case IsDatatype::GEO_POINT:
+      return detail::geoPointDatatypes;
+    case IsDatatype::LITERAL:
+      return detail::inlinedLiteralDatatypes;
+  }
+  AD_FAIL();
+}
+
+// True iff `isDatatype` holds for exactly the `Id`s of `getDatatypes`, and
+// each of these datatypes forms one contiguous range in a sorted column. Not
+// the case for `IRI` and `LITERAL` (see above), and for `ENCODED_IRI`, because
+// local vocab entries of encoded IRIs may lie within the `EncodedVal` range
+// (see `Id::compareThreeWay`).
+constexpr bool isExactlyDatatypes(IsDatatype isDatatype) {
+  return isDatatype == IsDatatype::BLANK || isDatatype == IsDatatype::NUMERIC ||
+         isDatatype == IsDatatype::GEO_POINT;
+}
 
 // The specialized `PrefilterExpression` class that actually applies the
 // pre-filter procedure w.r.t. the datatypes defined with `IsDatatype`.

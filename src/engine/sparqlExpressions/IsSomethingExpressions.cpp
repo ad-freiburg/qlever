@@ -11,9 +11,54 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "global/ValueIdComparators.h"
+#include "util/Algorithm.h"
 
 namespace sparqlExpression {
 namespace detail {
+
+// If `child` is a variable by which the input of the `context` is sorted,
+// return the set of rows where it is bound to an `Id` of one of the
+// `datatypes` (or of none of them if `complement` is set). The `Id`s of each
+// datatype are adjacent in the sorted input, so this only needs a few binary
+// searches. Otherwise, return `std::nullopt`. This is also the case if the
+// input contains UNDEF but `datatypes` doesn't, because then the result for
+// UNDEF is UNDEF, which a `SetOfIntervals` can't represent.
+static std::optional<ad_utility::SetOfIntervals>
+evaluateDatatypesWithBinarySearch(const SparqlExpression& child,
+                                  EvaluationContext* context,
+                                  ql::span<const Datatype> datatypes,
+                                  bool complement) {
+  auto variable = child.getVariableOrNullopt();
+  if (!variable.has_value() || !context->isResultSortedBy(variable.value()) ||
+      context->_groupedVariables.contains(variable.value())) {
+    return std::nullopt;
+  }
+  auto column =
+      context->_inputTable
+          .getColumn(
+              context->getColumnIndexForVariable(variable.value()).value())
+          .subspan(context->_beginIndex, context->size());
+  // UNDEF sorts first.
+  if (!column.empty() && column.front().isUndefined() &&
+      !ad_utility::contains(datatypes, Datatype::Undefined)) {
+    return std::nullopt;
+  }
+  ad_utility::SetOfIntervals::Vec intervals;
+  for (Datatype datatype : datatypes) {
+    auto [begin, end] = valueIdComparators::getRangeForDatatype(
+        column.begin(), column.end(), datatype);
+    if (begin != end) {
+      intervals.emplace_back(begin - column.begin(), end - column.begin());
+    }
+  }
+  auto result = ad_utility::SetOfIntervals::CheckSortedAndDisjointAndSimplify(
+      {std::move(intervals), context->size()});
+  if (complement) {
+    return ad_utility::SetOfIntervals::Complement{}(std::move(result));
+  }
+  return result;
+}
 
 // Quick recap of how defining n-ary functions works in QLever.
 //
@@ -36,6 +81,23 @@ CPP_class_template(typename NaryOperation,
     : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
+
+  // Use the binary search if `Datatype` holds for exactly the `Id`s of its
+  // datatypes, see `prefilterExpressions::isExactlyDatatypes`. The value
+  // getters must be consistent with this.
+  ExpressionResult evaluate(EvaluationContext* context) const override {
+    using namespace prefilterExpressions;
+    if constexpr (isExactlyDatatypes(Datatype)) {
+      AD_CORRECTNESS_CHECK(this->children().size() == 1);
+      auto result = evaluateDatatypesWithBinarySearch(
+          *this->children()[0], context, getDatatypes(Datatype), false);
+      if (result.has_value()) {
+        return std::move(result.value());
+      }
+    }
+    return NaryExpression<NaryOperation>::evaluate(context);
+  }
+
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       [[maybe_unused]] const LocalVocabContext& context,
       [[maybe_unused]] bool isNegated) const override {
@@ -89,9 +151,22 @@ struct BoolToId {
   Id operator()(bool b) const { return Id::makeFromBool(b); }
 };
 
-class BoundExpression : public NARY<1, FV<BoolToId, IsValidValueGetter>> {
+using BoundExpressionBase = NARY<1, FV<BoolToId, IsValidValueGetter>>;
+
+class BoundExpression : public BoundExpressionBase {
  public:
-  using NARY<1, FV<BoolToId, IsValidValueGetter>>::NARY;
+  using BoundExpressionBase::BoundExpressionBase;
+
+  // On sorted inputs, `BOUND` is the complement of the (leading) UNDEF rows.
+  ExpressionResult evaluate(EvaluationContext* context) const override {
+    static constexpr std::array undefined{Datatype::Undefined};
+    auto result = evaluateDatatypesWithBinarySearch(*this->children()[0],
+                                                    context, undefined, true);
+    if (result.has_value()) {
+      return std::move(result.value());
+    }
+    return BoundExpressionBase::evaluate(context);
+  }
 
   // The result of `BOUND` is always a valid bool.
   bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
