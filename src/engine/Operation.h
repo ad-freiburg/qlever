@@ -472,6 +472,12 @@ class Operation {
     return getExecutionContext()->executor();
   }
 
+  // How the in-memory sorts of this `Operation` run in parallel, see
+  // `QueryExecutionContext::sortConfig`.
+  const SortConfig& sortConfig() const {
+    return getExecutionContext()->sortConfig();
+  }
+
   // define a `makeShared` member function that has the same interface as
   // `std::make_shared`, but allocates via the `allocator()` (see
   // `util/AllocateShared.h`).
