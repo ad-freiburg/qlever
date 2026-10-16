@@ -64,10 +64,10 @@ VocabIndex LocalVocabContextImpl::getBeginOfIrisInVocabulary() const {
     size_t upper = vocabulary_->size();
     while (lower < upper) {
       size_t middle = lower + (upper - lower) / 2;
-      // Compare as `unsigned char`, like the `std::strncmp` in the comparator.
+      // `std::char_traits<char>` compares as `unsigned char`, like the
+      // `std::strncmp` in the comparator.
       const auto& word = (*vocabulary_)[VocabIndex::make(middle)];
-      if (word.empty() || static_cast<unsigned char>(word.front()) <
-                              static_cast<unsigned char>('<')) {
+      if (word < "<") {
         lower = middle + 1;
       } else {
         upper = middle;

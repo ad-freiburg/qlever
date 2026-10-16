@@ -20,6 +20,7 @@
 #include "index/LocalVocabContext.h"
 #include "index/LocalVocabEntry.h"
 #include "util/ComparisonOfIntAndDouble.h"
+#include "util/Exception.h"
 
 // The order of `ORDER BY` (https://www.w3.org/TR/sparql11-query/#modOrderBy),
 // which the standard also uses for `MIN` and `MAX`. First by the kind of RDF
@@ -78,11 +79,11 @@ class OrderByComparator {
       case Datatype::GeoPoint:
       case Datatype::TextRecordIndex:
       case Datatype::WordVocabIndex:
-        break;
+        return TermKind::Literal;
     }
     // NOTE: Listing all datatypes above (instead of a `default`) lets the
     // compiler warn about new ones.
-    return TermKind::Literal;
+    AD_FAIL();
   }
 
   // Return a negative number if `a` comes before `b`, a positive number if `b`

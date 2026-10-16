@@ -82,6 +82,10 @@ TEST(OrderByComparator, getTermKind) {
   EXPECT_EQ(kind(TextRecordId(4)), TermKind::Literal);
   EXPECT_EQ(kind(Id::makeFromWordVocabIndex(WordVocabIndex::make(4))),
             TermKind::Literal);
+
+  // An `Id` with an invalid datatype.
+  static_assert(static_cast<int>(Datatype::MaxValue) < 15);
+  EXPECT_ANY_THROW(kind(Id::fromBits(Id::T{15} << Id::numDataBits)));
 }
 
 // Test the order on groups of `Id`s: the `Id`s of one group are equivalent, and
