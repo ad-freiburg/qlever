@@ -158,6 +158,18 @@ class AllocatorWithLimit {
     return tracker_.amountMemoryLeft();
   }
 
+  /// Return the memory limit that this allocator and all of its copies share.
+  [[nodiscard]] MemorySize memoryLimit() const {
+    return tracker_.memoryLimit();
+  }
+
+  /// Change the shared memory limit to `newLimit`. Increasing always succeeds.
+  /// Decreasing requires the difference to be currently unallocated, otherwise
+  /// an exception is thrown and nothing is changed.
+  void setMemoryLimit(MemorySize newLimit) {
+    tracker_.setMemoryLimit(newLimit);
+  }
+
   template <typename V>
   bool operator==(const AllocatorWithLimit<V>& v) const {
     return tracker_ == v.tracker_;

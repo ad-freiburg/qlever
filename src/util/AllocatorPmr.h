@@ -204,6 +204,29 @@ class PmrAllocator {
     return MemorySize::max();
   }
 
+  // The memory limit. If the underlying resource is a `LimitedMemoryResource`
+  // its limit is reported, otherwise "unlimited".
+  [[nodiscard]] MemorySize memoryLimit() const {
+    if (auto* limited = dynamic_cast<LimitedMemoryResource*>(resource_)) {
+      return limited->tracker_.memoryLimit();
+    }
+    return MemorySize::max();
+  }
+
+  // Change the memory limit to `newLimit`, with the same semantics as
+  // `AllocatorWithLimit::setMemoryLimit`. Throws if the underlying resource is
+  // not a `LimitedMemoryResource`, because such a resource enforces no limit
+  // that could be changed.
+  void setMemoryLimit(MemorySize newLimit) {
+    auto* limited = dynamic_cast<LimitedMemoryResource*>(resource_);
+    if (limited == nullptr) {
+      throw std::runtime_error{
+          "The memory limit cannot be changed, because this allocator does not "
+          "enforce one"};
+    }
+    limited->tracker_.setMemoryLimit(newLimit);
+  }
+
   ql::pmr::memory_resource* resource() const { return resource_; }
 
   // Two allocators are equal iff they refer to the same resource.
