@@ -1,0 +1,22 @@
+# `sameTerm` with constants, with terms that are computed by other functions,
+# and with unbound variables (which are an error, so the result is unbound).
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+PREFIX : <http://example.org/>
+SELECT ?r01 ?r02 ?r03 ?r04 ?r05 ?r06 ?r07 ?r08 ?r09 ?r10 ?r11 ?r12 ?r13 ?r14
+WHERE {
+  BIND (sameTerm(1, 1) AS ?r01)
+  BIND (sameTerm(1, 1.0) AS ?r02)
+  BIND (sameTerm(1, "1") AS ?r03)
+  BIND (sameTerm("NaN"^^xsd:double, "NaN"^^xsd:double) AS ?r04)
+  BIND (sameTerm(STRDT("1", xsd:integer), 1) AS ?r05)
+  BIND (sameTerm(STRDT("01", xsd:integer), 1) AS ?r06)
+  BIND (sameTerm("abc", "abc"^^xsd:string) AS ?r07)
+  BIND (sameTerm("abc", "abc"@en) AS ?r08)
+  BIND (sameTerm(STR(:abc), "http://example.org/abc") AS ?r09)
+  BIND (sameTerm(:abc, "http://example.org/abc") AS ?r10)
+  BIND (sameTerm(IRI("http://example.org/enc/1"), <http://example.org/enc/1>)
+        AS ?r11)
+  BIND (sameTerm(STRLANG("abc", "en"), "abc"@en) AS ?r12)
+  BIND (sameTerm(?unbound, 1) AS ?r13)
+  BIND (sameTerm(?unbound, ?unbound) AS ?r14)
+}

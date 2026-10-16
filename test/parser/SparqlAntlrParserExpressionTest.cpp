@@ -197,8 +197,19 @@ TEST(SparqlParser, builtInCall) {
                      },
                      Eq(std::reference_wrapper(typeid(reference))))));
   expectBuiltInCall("bnode(?x)", matchUnary(&makeBlankNodeExpression));
-  // Not implemented yet
-  expectFails("sameTerm(?a, ?b)");
+
+  expectFails("sameTerm()");
+  expectFails("sameTerm(?a)");
+  expectFails("sameTerm(?a, ?b, ?c)");
+  expectBuiltInCall("sameTerm(?a, ?b)",
+                    matchNary(&makeSameTermExpression, Var{"?a"}, Var{"?b"}));
+  expectBuiltInCall("SAMETERM(?a, ?b)",
+                    matchNary(&makeSameTermExpression, Var{"?a"}, Var{"?b"}));
+  expectBuiltInCall(
+      "sameTerm(?x, <http://example.org/a>)",
+      matchNaryWithChildrenMatchers(
+          &makeSameTermExpression, variableExpressionMatcher(Var{"?x"}),
+          matchLiteralExpression(iri("<http://example.org/a>"))));
 }
 
 TEST(SparqlParser, unaryExpression) {

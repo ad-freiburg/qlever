@@ -1,0 +1,7 @@
+# `sameTerm(?x, ?x)` is true for every RDF term, so every subject is returned.
+PREFIX : <http://example.org/>
+SELECT ?a WHERE {
+  ?a :p ?x .
+  FILTER sameTerm(?x, ?x)
+}
+ORDER BY ?a
