@@ -50,3 +50,31 @@ ad_utility::BlankNodeManager* LocalVocabContextImpl::getBlankNodeManager()
   AD_CONTRACT_CHECK(*blankNodeManager_);
   return blankNodeManager_->get();
 }
+
+// _____________________________________________________________________________
+VocabIndex LocalVocabContextImpl::getBeginOfIrisInVocabulary() const {
+  uint64_t beginOfIris = beginOfIris_.load();
+  if (beginOfIris == beginOfIrisNotComputed_) {
+    // `TripleComponentComparator` first compares the first characters bytewise,
+    // so all literals (`"...`) come before all IRIs (`<...>`). A binary search
+    // on that character finds the boundary independently of the collation.
+    // Computing this concurrently is harmless, all threads store the same
+    // value.
+    size_t lower = 0;
+    size_t upper = vocabulary_->size();
+    while (lower < upper) {
+      size_t middle = lower + (upper - lower) / 2;
+      // `std::char_traits<char>` compares as `unsigned char`, like the
+      // `std::strncmp` in the comparator.
+      const auto& word = (*vocabulary_)[VocabIndex::make(middle)];
+      if (word < "<") {
+        lower = middle + 1;
+      } else {
+        upper = middle;
+      }
+    }
+    beginOfIris = lower;
+    beginOfIris_.store(beginOfIris);
+  }
+  return VocabIndex::make(beginOfIris);
+}
