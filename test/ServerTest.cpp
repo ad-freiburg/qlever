@@ -71,6 +71,12 @@ TEST(ServerTest, chooseBestFittingMediaType) {
   EXPECT_EQ(choose({tsv, csv}, askQuery), sparqlJson);
   EXPECT_EQ(choose({turtle, json}, selectQuery), sparqlJson);
   EXPECT_EQ(choose({octetStream, sparqlJson}, constructQuery), turtle);
+
+  // QLever's binary format is only supported for SELECT queries.
+  EXPECT_EQ(choose({binaryQleverExport, sparqlJson}, selectQuery),
+            binaryQleverExport);
+  EXPECT_EQ(choose({binaryQleverExport, sparqlJson}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({binaryQleverExport}, constructQuery), turtle);
 }
 
 // _____________________________________________________________________________
