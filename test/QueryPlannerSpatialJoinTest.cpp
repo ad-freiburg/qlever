@@ -2020,7 +2020,9 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
   testMaxDistance("<max-distance-in-metersjklö:1000>dfgh", 1000, true);
 }
 
-// _____________________________________________________________________________
+// Test that an inline WKT literal that is invalid in the strict parsing mode
+// matches nothing in a spatial join and makes the other geo functions evaluate
+// to UNDEF.
 TEST(QueryPlanner, InvalidInlineWktIsUndef) {
   auto qec = ad_utility::testing::getQec(
       "<a> <p> \"POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))\""

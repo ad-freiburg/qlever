@@ -2072,8 +2072,9 @@ TEST(SparqlParser, blankNodeLabelsAreScopedToASingleBasicGraphPattern) {
       ::testing::SizeIs(2));
 }
 
-// _____________________________________________________________________________
-TEST(ParserTest, strictInlineWktForGeoFunctions) {
+// Test that with the runtime parameter `throw-on-invalid-wkt`, an invalid WKT
+// literal given inline to a geo function is a parse error.
+TEST(SparqlParser, strictInlineWktForGeoFunctions) {
   auto parse = [](std::string_view body) {
     EncodedIriManager encodedIriManager;
     return SparqlParser::parseQuery(
@@ -2109,6 +2110,9 @@ TEST(ParserTest, strictInlineWktForGeoFunctions) {
         parse(absl::StrCat("BIND(ql:simplifyGeometry(", wkt, ", 1) AS ?a)")),
         fails);
     AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("BIND(ql:envelopeLowerLeft(", wkt, ") AS ?a)")),
+        fails);
+    AD_EXPECT_THROW_WITH_MESSAGE(
         parse(absl::StrCat("VALUES ?p { ", wkt,
                            " } FILTER geof:sfIntersects(?g, ?p)")),
         fails);
@@ -2127,6 +2131,16 @@ TEST(ParserTest, strictInlineWktForGeoFunctions) {
     EXPECT_NO_THROW(parse(absl::StrCat(
         "{ VALUES ?p { ", wkt, " } } FILTER geof:sfIntersects(?g, ?p)")));
   }
+
+  // Arguments that are not WKT literals (a plain string, a literal of another
+  // datatype, a nested expression, `UNDEF` or an IRI in a `VALUES` clause) are
+  // not checked.
+  EXPECT_NO_THROW(parse("FILTER geof:sfIntersects(?g, \"not wkt\")"));
+  EXPECT_NO_THROW(parse(
+      "FILTER geof:sfIntersects(?g, \"not wkt\"^^<http://example.org/dt>)"));
+  EXPECT_NO_THROW(parse("BIND(geof:metricLength(geof:envelope(?g)) AS ?a)"));
+  EXPECT_NO_THROW(
+      parse("VALUES ?p { UNDEF <x> } FILTER geof:sfIntersects(?g, ?p)"));
 
   // Without `throw-on-invalid-wkt` (the default), invalid inline WKT literals
   // are no error during parsing (the geo functions evaluate to UNDEF instead).
