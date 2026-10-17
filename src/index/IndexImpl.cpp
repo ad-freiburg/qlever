@@ -1621,12 +1621,12 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
   if (triple.object_.isLiteral()) {
     const auto& lit = triple.object_.getLiteral();
     if (lit.hasLanguageTag()) {
-      result.langtag_ = std::string(asStringViewUnsafe(lit.getLanguageTag()));
+      result.langtag_ = std::string(lit.getLanguageTag());
     }
     // Extract words from the literal content for ql:has-word triples and
     // count their term frequencies.
     if (addHasWordTriples_) {
-      std::string_view content = asStringViewUnsafe(lit.getContent());
+      std::string_view content = lit.getContent();
       for (auto&& word :
            tokenizeAndNormalizeText(content, vocab_.getLocaleManager())) {
         ++result.wordFrequencies_[std::move(word)];
