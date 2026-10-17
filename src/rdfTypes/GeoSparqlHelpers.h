@@ -248,6 +248,29 @@ class WktGeometryType {
   }
 };
 
+// Get the CRS type of WKT literal using `GeometryInfo`.
+class WktCrsType {
+ public:
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<SourceCrsType>& crsType) const {
+    if (!crsType.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    auto typeIri = crsType.value().asIri();
+    if (!typeIri.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    // The CRS type should be returned as an xsd:anyURI literal according
+    // to the GeoSPARQL standard.
+    using namespace triple_component;
+    auto lit = Literal::literalWithoutQuotes(typeIri.value());
+    lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
+    return {LiteralOrIri{std::move(lit)}};
+  }
+};
+
 // Get the WKT for the n-th element (1-indexed) of the given WKT.
 class WktGeometryN {
  public:
