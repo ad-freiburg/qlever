@@ -91,7 +91,7 @@ void WKTParser::processQueue(size_t t) {
         // information except the string.
         const auto& literalOrIri = *job.valueId.getLocalVocabIndex();
         if (literalOrIri.isLiteral()) {
-          job.wkt = asStringViewUnsafe(literalOrIri.getLiteral().getContent());
+          job.wkt = literalOrIri.getLiteral().getContent();
           parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
                     false);
           parseCounter++;

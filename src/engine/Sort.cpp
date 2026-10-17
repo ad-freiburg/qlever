@@ -146,7 +146,7 @@ Result Sort::computeResultInMemory(IdTable idTable,
   getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
       idTable.numRows(), idTable.numColumns(), deadline_, "Sort operation");
 
-  IdTableUtils::sort(idTable, sortColumnIndices_);
+  IdTableUtils::sort(idTable, sortColumnIndices_, sortConfig());
 
   // Don't report missed timeout check because the in-memory sort is currently
   // not cancellable.

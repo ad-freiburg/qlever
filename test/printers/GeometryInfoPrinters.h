@@ -61,6 +61,12 @@ inline void PrintTo(const SourceCrsType& crs, std::ostream* os) {
 }
 
 // _____________________________________________________________________________
+inline void PrintTo(const SerializationType& st, std::ostream* os) {
+  auto& s = *os;
+  s << "SerializationType(" << static_cast<uint16_t>(st) << ")";
+}
+
+// _____________________________________________________________________________
 inline void PrintTo(const GeometryInfo& gi, std::ostream* os) {
   auto& s = *os;
   s << "GeometryInfo(";
@@ -77,6 +83,8 @@ inline void PrintTo(const GeometryInfo& gi, std::ostream* os) {
   PrintTo(gi.getMetricLength(), os);
   s << ",";
   PrintTo(gi.getMetricArea(), os);
+  s << ",";
+  PrintTo(gi.getSerializationType(), os);
   s << ")";
 }
 
