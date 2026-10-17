@@ -24,7 +24,7 @@ EvaluationContext::EvaluationContext(
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},
       _inputTable{std::move(inputTable)},
-      _columnsByWhichResultIsSorted{allocator},
+      columnsByWhichResultIsSorted_{allocator},
       _allocator{allocator},
       _localVocab{localVocab},
       cancellationHandle_{std::move(cancellationHandle)},
@@ -34,7 +34,7 @@ EvaluationContext::EvaluationContext(
 
 // _____________________________________________________________________________
 bool EvaluationContext::isResultSortedBy(const Variable& variable) {
-  if (_columnsByWhichResultIsSorted.empty()) {
+  if (columnsByWhichResultIsSorted_.empty()) {
     return false;
   }
   if (!_variableToColumnMap.contains(variable)) {
@@ -42,7 +42,7 @@ bool EvaluationContext::isResultSortedBy(const Variable& variable) {
   }
 
   return getColumnIndexForVariable(variable) ==
-         _columnsByWhichResultIsSorted[0];
+         columnsByWhichResultIsSorted_[0];
 }
 
 // _____________________________________________________________________________

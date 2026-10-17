@@ -161,7 +161,10 @@ CPP_template_def(int WIDTH,
 
   // TODO<joka921> This should be a mandatory argument to the
   // EvaluationContext constructor.
-  evaluationContext._columnsByWhichResultIsSorted = std::move(sortedBy);
+  // TODO<vrbommireddy>: Move `sortedBy` into the evaluation context after its
+  // sorted-column member is migrated to `qlm::vector`.
+  evaluationContext.columnsByWhichResultIsSorted_.assign(sortedBy.begin(),
+                                                         sortedBy.end());
   const auto input =
       evaluationContext._inputTable.asStaticView<static_cast<size_t>(WIDTH)>();
   sparqlExpression::ExpressionResult expressionResult =

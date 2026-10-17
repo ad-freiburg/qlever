@@ -8,12 +8,20 @@
 #ifndef QLEVER_SRC_UTIL_CONTAINERSWITHALLOCATOR_H
 #define QLEVER_SRC_UTIL_CONTAINERSWITHALLOCATOR_H
 
+#include <array>
+#include <cstddef>
 #include <deque>
+#include <exception>
 #include <list>
 #include <map>
+#include <memory>
+#include <optional>
 #include <set>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include "util/Allocator.h"
@@ -40,6 +48,32 @@ namespace qlm {
 template <typename T>
 using Allocator = qlever::Allocator<T>;
 
+template <typename T, size_t Size>
+using array = std::array<T, Size>;
+
+template <typename First, typename Second>
+using pair = std::pair<First, Second>;
+
+template <typename T>
+using optional = std::optional<T>;
+
+template <typename... Types>
+using variant = std::variant<Types...>;
+
+template <typename T>
+using shared_ptr = std::shared_ptr<T>;
+
+template <typename T>
+using unique_ptr = std::unique_ptr<T>;
+
+template <typename T>
+using weak_ptr = std::weak_ptr<T>;
+
+template <typename T, typename... Args>
+shared_ptr<T> makeShared(const Allocator<T>& allocator, Args&&... args) {
+  return std::allocate_shared<T>(allocator, std::forward<Args>(args)...);
+}
+
 template <typename T>
 using vector = std::vector<T, Allocator<T>>;
 
@@ -51,6 +85,11 @@ using list = std::list<T, Allocator<T>>;
 
 template <typename T, typename Compare = std::less<T>>
 using set = std::set<T, Compare, Allocator<T>>;
+
+template <typename CharT, typename Traits = std::char_traits<CharT>>
+using basic_string = std::basic_string<CharT, Traits, Allocator<CharT>>;
+
+using string = basic_string<char>;
 
 template <typename Key, typename T, typename Compare = std::less<Key>>
 using map = std::map<Key, T, Compare, Allocator<std::pair<const Key, T>>>;

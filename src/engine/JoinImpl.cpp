@@ -23,6 +23,7 @@
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/JoinHelpers.h"
+#include "engine/OperationBindPushDownImpl.h"
 #include "engine/Service.h"
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -785,7 +786,19 @@ JoinImpl::makeTreeWithStrippedColumns(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 JoinImpl::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  return pushDownBindToAnyChild(bind, {left_, right_});
+  return pushDownBindToAnyChild(
+      bind,
+      qlm::vector<qlm::shared_ptr<QueryExecutionTree>>{{left_, right_},
+                                                       allocator()},
+      [this](qlm::vector<qlm::shared_ptr<QueryExecutionTree>> newChildren) {
+        auto& left = newChildren.at(0);
+        auto& right = newChildren.at(1);
+        auto leftCol = left->getVariableColumn(joinVar_);
+        auto rightCol = right->getVariableColumn(joinVar_);
+        return ad_utility::makeExecutionTree<Join>(
+            getExecutionContext(), std::move(left), std::move(right), leftCol,
+            rightCol, keepJoinColumn_);
+      });
 }
 
 // _____________________________________________________________________________

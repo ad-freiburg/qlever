@@ -135,12 +135,12 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
         "2 {s: <X>, p: ?p, o: <Y>} : (0)",
         tg.asString());
     {
-      std::vector<size_t> keep;
+      qlm::vector<size_t> keep{qlever::makeUnlimitedAllocator<size_t>()};
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("", tgnew.asString());
     }
     {
-      std::vector<size_t> keep;
+      qlm::vector<size_t> keep{qlever::makeUnlimitedAllocator<size_t>()};
       keep.push_back(0);
       keep.push_back(1);
       keep.push_back(2);
@@ -155,14 +155,14 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
       ASSERT_EQ(1u, tgnew._nodeMap.find(2)->second->_variables.size());
     }
     {
-      std::vector<size_t> keep;
+      qlm::vector<size_t> keep{qlever::makeUnlimitedAllocator<size_t>()};
       keep.push_back(0);
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()", tgnew.asString());
       ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
     }
     {
-      std::vector<size_t> keep;
+      qlm::vector<size_t> keep{qlever::makeUnlimitedAllocator<size_t>()};
       keep.push_back(0);
       keep.push_back(1);
       QueryPlanner::TripleGraph tgnew(tg, keep);
