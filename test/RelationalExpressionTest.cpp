@@ -893,6 +893,81 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
       {{{2, 3}}, 3});
 }
 
+// Comparisons with a `SetOfIntervals` (the result of, for example, a
+// comparison that was evaluated using binary search on a sorted input).
+TEST(RelationalExpression, SetOfIntervals) {
+  auto T = Id::makeFromBool(true);
+  auto F = Id::makeFromBool(false);
+  using S = ad_utility::SetOfIntervals;
+  // The `TestContext` has three rows. `set` is `true, true, false`, `other` is
+  // `false, true, true`.
+  S set{{{0, 2}}, 3};
+  S other{{{1, 3}}, 3};
+
+  // Comparisons with a boolean constant or another `SetOfIntervals` are
+  // computed on the intervals and again yield a `SetOfIntervals`.
+  auto expectSet = [](auto expression, S expected,
+                      source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(l);
+    EXPECT_THAT(expression.evaluate(&testContext().context),
+                ::testing::VariantWith<S>(::testing::Eq(expected)));
+  };
+  expectSet(makeExpression<EQ>(set, T), set);
+  expectSet(makeExpression<EQ>(T, set), set);
+  expectSet(makeExpression<EQ>(set, F), S{{{2, 3}}, 3});
+  expectSet(makeExpression<NE>(set, F), set);
+  expectSet(makeExpression<LT>(set, T), S{{{2, 3}}, 3});
+  expectSet(makeExpression<GT>(T, set), S{{{2, 3}}, 3});
+  expectSet(makeExpression<GE>(set, F), S{{{0, 3}}, 3});
+  expectSet(makeExpression<LT>(set, F), S{{}, 3});
+  expectSet(makeExpression<EQ>(set, other), S{{{1, 2}}, 3});
+  expectSet(makeExpression<NE>(set, other), S{{{0, 1}, {2, 3}}, 3});
+  expectSet(makeExpression<LT>(set, other), S{{{2, 3}}, 3});
+  expectSet(makeExpression<GE>(set, other), S{{{0, 2}}, 3});
+  expectSet(makeInExpression(set, T), set);
+  // An `IN` with several elements combines the results with an `OR`. The type
+  // erased expressions don't use the optimizations between set-of-interval,
+  // but always return a fully materialized vector.
+#ifdef _QLEVER_TYPE_ERASED_EXPRESSIONS
+  auto expectIds = [](auto expression, std::vector<Id> expected) {
+    EXPECT_THAT(expression.evaluate(&testContext().context),
+                ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                    ::testing::ElementsAreArray(expected)));
+  };
+  expectIds(makeInExpression(set, F, T), {T, T, T});
+#else
+  expectSet(makeInExpression(set, F, T), S{{{0, 3}}, 3});
+#endif
+
+  // Other comparisons are evaluated row by row.
+  auto vec = [](std::vector<Id> ids) {
+    VectorWithMemoryLimit<Id> result{makeAllocator()};
+    ql::ranges::copy(ids, std::back_inserter(result));
+    return result;
+  };
+  testWithExplicitIdResult<GT>(set, vec({T, F, F}), {F, T, F});
+  testWithExplicitIdResult<NE>(vec({T, F, F}), set, {F, T, F});
+  testWithExplicitIdResult<LE>(set, vec({F, F, T}), {F, F, T});
+  // A constant that is not a boolean is incompatible with the booleans.
+  auto U = Id::makeUndefined();
+  testWithExplicitIdResult<NE>(IntId(1), set, {U, U, U});
+  testWithExplicitIdResult<LT>(IntId(0), set, {U, U, U});
+
+  // The `SetOfIntervals` is computed by a nested comparison on a sorted input.
+  // Sorted by `?ints`, the column is `0, 1, -1`.
+  TestContext ctx = TestContext::sortedBy(Variable{"?ints"});
+  auto inner = std::make_unique<relational::RelationalExpression<GE>>(
+      std::array<SparqlExpression::Ptr, 2>{
+          std::make_unique<VariableExpression>(Variable{"?ints"}),
+          std::make_unique<IdExpression>(IntId(0))});
+  EXPECT_THAT(inner->evaluate(&ctx.context),
+              ::testing::VariantWith<S>(::testing::Eq(set)));
+  auto outer = relational::RelationalExpression<EQ>(
+      {std::move(inner), std::make_unique<IdExpression>(T)});
+  EXPECT_THAT(outer.evaluate(&ctx.context),
+              ::testing::VariantWith<S>(::testing::Eq(set)));
+}
+
 TEST(RelationalExpression, InExpressionSimpleMemberVariables) {
   auto makeInt = [](int i) {
     return std::make_unique<sparqlExpression::IdExpression>(
