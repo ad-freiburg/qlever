@@ -117,4 +117,21 @@ std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
 
 }  // namespace detail
 
+// _____________________________________________________________________________
+ValueId WktCentroid::operator()(const std::optional<GeometryInfo>& geom) const {
+  if (!geom.has_value()) {
+    return ValueId::makeUndefined();
+  }
+  std::optional<SourceCrsType> sourceCrs = geom.value().getSourceCrsType();
+  if (!sourceCrs.has_value()) {
+    // TODO<yarox-1> Check if this breaks somethings (old index might have
+    // problem as stored with unsupported Crs -> maybe just assume CRS84)
+    return ValueId::makeUndefined();
+  }
+  Centroid centroid = geom.value().getCentroid();
+  return ValueId::makeFromGeoPoint(ad_utility::detail::projectGeoPointToCrs(
+      centroid.centroid(),
+      static_cast<::util::geo::CRSType>(sourceCrs.value().type())));
+}
+
 }  // namespace ad_utility

@@ -248,6 +248,12 @@ inline Point<CoordType> geoPointToUtilPoint(const GeoPoint& point,
                       defaultCrs, projCrs);
 }
 
+// Project the coordinates of a `GeoPoint` to another coordinate reference
+// system using an util point as an intermediate step.
+inline GeoPoint projectGeoPointToCrs(const GeoPoint& point, CRSType projCrs) {
+  return utilPointToGeoPoint(geoPointToUtilPoint(point, projCrs));
+}
+
 // Serialize a bounding box given by a pair of `GeoPoint`s to a WKT literal
 // (without quotes or datatype).
 inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,

@@ -21,9 +21,9 @@
 namespace sparqlExpression {
 namespace detail {
 
-NARY_EXPRESSION(
-    CentroidExpression, 1,
-    FV<ad_utility::WktCentroid, GeometryInfoValueGetter<ad_utility::Centroid>>);
+NARY_EXPRESSION(CentroidExpression, 1,
+                FV<ad_utility::WktCentroid,
+                   GeometryInfoValueGetter<ad_utility::GeometryInfo>>);
 
 NARY_EXPRESSION(
     AreaExpression, 2,

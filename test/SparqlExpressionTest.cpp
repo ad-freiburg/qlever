@@ -1868,11 +1868,25 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkDist(U, v, IdOrLocalVocabEntry{lit("NotAPoint")});
   checkDist(U, IdOrLocalVocabEntry{lit("NotAPoint")}, v);
 
-  auto polygonCentroid = GP({3, 3});
+  auto pWGS84 = GP({26.8, 24.3});
+  checkCentroid(
+      IdOrLocalVocabEntry{lit(
+          "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(24.3 26.8)\"",
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      pWGS84);
+
+  auto polygonCentroid = GP({20, 50});
   checkCentroid(IdOrLocalVocabEntry{lit(
-                    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
+                    "\"POLYGON((40 10, 40 30, 60 30, 60 10))\"",
                     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
                 polygonCentroid);
+
+  auto polygonCentroidWGS84 = GP({50, 20});
+  checkCentroid(IdOrLocalVocabEntry{lit(
+                    "\"<http://www.opengis.net/def/crs/EPSG/0/4326> "
+                    "POLYGON((10 40, 30 40, 30 60, 10 60))\"",
+                    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+                polygonCentroidWGS84);
 
   checkEnvelope(
       IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
