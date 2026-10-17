@@ -28,10 +28,7 @@ using valueIdComparators::Comparison;
 // input types.
 
 // For the various `SingleExpressionResult`s the `idGenerator` function returns
-// a generator that yields `targetSize` many `ValueId`s. One exception is the
-// case where `S` is `string` or `vector<string>`. In this case the generator
-// yields `pair<ValueId, ValueId>` (see `makeValueId` and `getRangeFromVocab`
-// above for details).
+// a generator that yields `targetSize` many `ValueId`s.
 CPP_template(typename S)(requires SingleExpressionResult<S>) auto idGenerator(
     S&& input, size_t targetSize, const EvaluationContext* context) {
   [[maybe_unused]] auto makeId = [context](const auto& el) {
@@ -74,12 +71,24 @@ CPP_template(typename S1, typename S2)(
 // Efficiently (using binary search) computes the result of `aVal Comparator
 // valueId` for each `ValueId` that the Variable `variable` is bound to. This
 // only works, if the input (as stored in the `context`) is sorted by the
-// Variable `variable`. If `valueIdUpper` is nullopt, we only have a single
-// `valueId`, otherwise we have a range, [`valueId`, `valueIdUpper`).
+// Variable `variable`. Return
+// `std::nullopt` if the result of the comparison is UNDEF for at least one row
+// (e.g. because the row is UNDEF or its datatype is incompatible with
+// `valueId`), because a `SetOfIntervals` can only represent `true` and `false`,
+// or if the binary search can't evaluate the comparison correctly (see below).
 template <Comparison Comp>
-ad_utility::SetOfIntervals evaluateWithBinarySearch(
+std::optional<ad_utility::SetOfIntervals> evaluateWithBinarySearch(
     const Variable& variable, ValueId valueId,
-    std::optional<ValueId> valueIdUpper, const EvaluationContext* context) {
+    const EvaluationContext* context) {
+  // The binary search orders encoded IRIs by their encoding, which differs from
+  // the semantic (string) order of the IRIs, see issue #2448. Only `EQ` and
+  // `NE` are therefore safe to evaluate via binary search.
+  if constexpr (Comp != Comparison::EQ && Comp != Comparison::NE) {
+    if (valueId.getDatatype() == Datatype::EncodedVal) {
+      return std::nullopt;
+    }
+  }
+
   // Set up iterators into the `IdTable` that only access the column where the
   // `variable` is stored.
   auto columnIndex = context->getColumnIndexForVariable(variable);
@@ -101,21 +110,31 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
       Iterator{&context->_inputTable, context->_endIndex, getIdFromColumn};
 
   // Perform the actual evaluation.
-  const auto resultRanges = [&]() {
-    if (valueIdUpper) {
-      return valueIdComparators::getRangesForEqualIds(
-          begin, end, valueId, valueIdUpper.value(), Comp);
-    } else {
-      return valueIdComparators::getRangesForId(begin, end, valueId, Comp);
-    }
-  }();
+  auto getRanges = [&begin, &end, &valueId](Comparison comparison) {
+    return valueIdComparators::getRangesForId(begin, end, valueId, comparison);
+  };
+
+  // The ranges only contain rows with a datatype that is compatible with
+  // `valueId`. Every such row is either equal or not equal to `valueId`, so if
+  // the ranges for `EQ` and `NE` together don't cover all rows, then the result
+  // is UNDEF for some rows.
+  auto numRows = [](const auto& ranges) {
+    return ::ranges::accumulate(
+        ranges, size_t{0}, std::plus<>{},
+        [](const auto& range) -> size_t { return range.second - range.first; });
+  };
+  if (numRows(getRanges(Comparison::EQ)) + numRows(getRanges(Comparison::NE)) !=
+      context->size()) {
+    return std::nullopt;
+  }
+  const auto resultRanges = getRanges(Comp);
 
   // Convert pairs of iterators to pairs of indexes.
   ad_utility::SetOfIntervals::Vec intervals;
   for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
     intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
   }
-  return {std::move(intervals), context->size()};
+  return ad_utility::SetOfIntervals{std::move(intervals), context->size()};
 }
 
 // The actual comparison function for the `SingleExpressionResult`'s which are
@@ -142,14 +161,9 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
       // TODO<C++23> Use `ql::ranges::starts_with`.
       if (const auto& cols = context->_columnsByWhichResultIsSorted;
           !cols.empty() && cols[0] == columnIndex) {
-        constexpr static bool value2IsString =
-            !ad_utility::isSimilar<decltype(valueId), Id>;
-        if constexpr (value2IsString) {
-          return evaluateWithBinarySearch<Comp>(value1, valueId.first,
-                                                valueId.second, context);
-        } else {
-          return evaluateWithBinarySearch<Comp>(value1, valueId, std::nullopt,
-                                                context);
+        auto result = evaluateWithBinarySearch<Comp>(value1, valueId, context);
+        if (result.has_value()) {
+          return std::move(result.value());
         }
       }
       context->cancellationHandle_->throwIfCancelled();
