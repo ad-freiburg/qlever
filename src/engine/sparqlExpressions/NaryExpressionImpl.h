@@ -189,9 +189,21 @@ class NaryExpressionStronglyTyped
                 std::get<I>(convertedOperands), context)...};
       }(std::index_sequence_for<Operands...>{});
 
-      // Evaluate one result row by invoking every indexed getter at `i` and
-      // passing the resulting values to the N-ary function.
+      // Reject known unsupported numeric inputs before invoking the indexed
+      // getters. Otherwise pass the converted values to the N-ary function.
       auto computeValue = [&](size_t i) {
+        if constexpr (undefForNonNumeric<typename NaryOperation::Function>) {
+          const bool nonNumeric = std::apply(
+              [i](const auto&... values) {
+                return hasNonNumericOperand<typename NaryOperation::Function,
+                                            ValueGetters>(
+                    getValueAt(values, i)...);
+              },
+              convertedOperands);
+          if (nonNumeric) {
+            return Id::makeUndefined();
+          }
+        }
         return std::apply(
             [&](auto&... getters) {
               return naryOperation._function(getters(i)...);

@@ -98,6 +98,31 @@ class HomogeneousNumericExpressionHelpersTest : public ::testing::Test {
   }
 };
 
+// The shortcut is opt-in for both the operation and each value getter.
+TEST_F(HomogeneousNumericExpressionHelpersTest, NonNumericFallbackEligibility) {
+  using Function = MakeNumericExpression<std::multiplies<>>;
+  using Getters = std::tuple<NumericValueGetter>;
+  static_assert(undefForNonNumeric<Function>);
+  static_assert(!undefForNonNumeric<TestNumericAdd>);
+  for (auto value :
+       {I(1), D(2.5), Id::makeFromBool(true), Id::makeFromBool(false)}) {
+    EXPECT_FALSE((hasNonNumericOperand<Function, Getters>(value)));
+  }
+  for (auto value :
+       {Id::makeUndefined(), Id::makeFromVocabIndex(VocabIndex::make(4)),
+        Id::makeFromGeoPoint(GeoPoint{1.0, 2.0})}) {
+    EXPECT_TRUE((hasNonNumericOperand<Function, Getters>(value)));
+    EXPECT_FALSE((hasNonNumericOperand<TestNumericAdd, Getters>(value)));
+    EXPECT_FALSE(
+        (hasNonNumericOperand<Function, std::tuple<NumericOrDateValueGetter>>(
+            value)));
+  }
+  EXPECT_TRUE(
+      (hasNonNumericOperand<Function,
+                            std::tuple<NumericValueGetter, NumericValueGetter>>(
+          I(1), Id::makeUndefined())));
+}
+
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedValueGetters) {
   struct UnsupportedValueGetter {};
