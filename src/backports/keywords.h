@@ -36,4 +36,15 @@
 #define QL_MAYBE_UNUSED [[maybe_unused]]
 #endif
 
+namespace qlever {
+// `true` iff QLever is built with the reduced feature set for C++17 (CMake
+// option `REDUCED_FEATURE_SET_FOR_CPP17`). Used for workarounds that are only
+// needed for the old toolchains targeted by that configuration.
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+inline constexpr bool usesReducedFeatureSet = true;
+#else
+inline constexpr bool usesReducedFeatureSet = false;
+#endif
+}  // namespace qlever
+
 #endif  // QLEVER_SRC_BACKPORTS_KEYWORDS_H

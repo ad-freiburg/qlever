@@ -1554,7 +1554,7 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
             "was built with an older version of QLever and should be rebuilt")};
       }
     } else {
-      target = static_cast<Target>(*it);
+      target = it->get<Target>();
     }
   };
 

@@ -159,7 +159,7 @@ nlohmann::json DeltaTriples::vacuum(
         [isInternal, this, &removeFromAllPermutations,
          deletions = std::move(deletions),
          insertions = std::move(insertions)]() {
-          auto& state = getState<isInternal>();
+          auto& state = getState<isInternal.value>();
           removeFromAllPermutations(deletions, state.triplesDeleted_,
                                     isInternal);
           removeFromAllPermutations(insertions, state.triplesInserted_,
