@@ -101,7 +101,7 @@ void WKTParser::processQueue(size_t t) {
         if (literalOrIri.isLiteral() &&
             GeometryInfo::isValidWktStrict(
                 literalOrIri.toStringRepresentation())) {
-          job.wkt = asStringViewUnsafe(literalOrIri.getLiteral().getContent());
+          job.wkt = literalOrIri.getLiteral().getContent();
           parseLine(job.wkt.data(), job.wkt.size(), job.line, t, w, job.side,
                     false);
           parseCounter++;

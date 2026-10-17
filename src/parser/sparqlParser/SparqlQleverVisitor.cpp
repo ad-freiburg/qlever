@@ -67,8 +67,7 @@ constexpr ctll::fixed_string iriSchemeRegex = "<[A-Za-z]*[A-Za-z0-9+-.]:";
 // Return true iff `lit` is a WKT literal that is invalid according to the
 // strict WKT parsing mode.
 bool isInvalidWkt(const ad_utility::triple_component::Literal& lit) {
-  return lit.hasDatatype() &&
-         asStringViewUnsafe(lit.getDatatype()) == GEO_WKT_LITERAL &&
+  return lit.hasDatatype() && lit.getDatatype() == GEO_WKT_LITERAL &&
          !ad_utility::GeometryInfo::isValidWktStrict(
              lit.toStringRepresentation());
 }
@@ -254,7 +253,7 @@ void Visitor::checkWktInValues(const std::vector<GraphPatternOperation>& ops,
 ExpressionPtr Visitor::processIriFunctionCall(
     const TripleComponent::Iri& iri, std::vector<ExpressionPtr> argList,
     const antlr4::ParserRuleContext* ctx) {
-  std::string_view functionName = asStringViewUnsafe(iri.getContent());
+  std::string_view functionName = iri.getContent();
   std::string_view prefixName;
   // Helper lambda that checks if `functionName` starts with the given prefix.
   // If yes, remove the prefix from `functionName` and set
@@ -1440,11 +1439,11 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
                              EXTERNAL_VALUES_IRI_PREFIX)) {
     return visitMagicServiceQuery<parsedQuery::ExternalValuesQuery>(ctx,
                                                                     serviceIri);
-  } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
+  } else if (ql::starts_with(serviceIri.getContent(),
                              CACHED_RESULT_WITH_NAME_PREFIX)) {
     return visitMagicServiceQuery<parsedQuery::NamedCachedResult>(ctx,
                                                                   serviceIri);
-  } else if (ql::starts_with(asStringViewUnsafe(serviceIri.getContent()),
+  } else if (ql::starts_with(serviceIri.getContent(),
                              MATERIALIZED_VIEW_IRI_WITHOUT_BRACKETS)) {
     return visitMagicServiceQuery<parsedQuery::MaterializedViewQuery>(
         ctx, serviceIri);
@@ -1691,7 +1690,7 @@ void Visitor::visit(Parser::BaseDeclContext* ctx) {
   }
   auto iri =
       TripleComponent::Iri::fromStringRepresentation(visit(ctx->iriref()));
-  baseIri_ = qlever::util::ParsedUri{asStringViewUnsafe(iri.getContent())};
+  baseIri_ = qlever::util::ParsedUri{iri.getContent()};
 }
 
 // ____________________________________________________________________________________
