@@ -186,7 +186,13 @@ class DistinctIdCounter {
     if (column.empty()) {
       return;
     }
-    DistinctIdCountOfBlock countOfBlock = countDistinctIds(column);
+    addCountOfBlock(countDistinctIds(column));
+  }
+
+  // Like `addBlock`, but for a block whose `DistinctIdCountOfBlock` has
+  // already been computed (e.g. concurrently, see
+  // `CompressedRelationWriter::addCompleteLargeRelation`).
+  void addCountOfBlock(const DistinctIdCountOfBlock& countOfBlock) {
     count_ += countOfBlock.count_;
     if (lastBitsOfPreviousBlock_ ==
         bitsOfIdWithoutLocalVocab(countOfBlock.first_)) {

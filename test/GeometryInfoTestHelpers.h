@@ -93,7 +93,11 @@ inline auto geoInfoMatcher = liftOptionalMatcher<GeometryInfo>(
           Property(&GeometryInfo::getMetricLength,
                    metricLengthNear(expected.getMetricLength())),
           Property(&GeometryInfo::getMetricArea,
-                   metricAreaNear(expected.getMetricArea())));
+                   metricAreaNear(expected.getMetricArea())),
+          Property(&GeometryInfo::getSourceCrsType,
+                   Eq(expected.getSourceCrsType())),
+          Property(&GeometryInfo::getSerializationType,
+                   Eq(expected.getSerializationType())));
     });
 #define EXPECT_GEOMETRYINFO(a, b) EXPECT_THAT(a, geoInfoMatcher(b))
 
@@ -115,6 +119,10 @@ inline void checkRequestedInfoForInstance(
   EXPECT_METRICLENGTH_NEAR(gi.getMetricLength(),
                            gi.getRequestedInfo<MetricLength>());
   EXPECT_METRICAREA_NEAR(gi.getMetricArea(), gi.getRequestedInfo<MetricArea>());
+  EXPECT_EQ(gi.getSourceCrsType(), gi.getRequestedInfo<SourceCrsType>());
+  EXPECT_EQ(gi.getSerializationType(), SerializationType::WKT);
+  EXPECT_EQ(gi.getSerializationType(),
+            gi.getRequestedInfo<SerializationType>());
 }
 
 // ____________________________________________________________________________
@@ -137,6 +145,10 @@ inline void checkRequestedInfoForWktLiteral(
                            GeometryInfo::getRequestedInfo<MetricLength>(wkt));
   EXPECT_METRICAREA_NEAR(gi.getMetricArea(),
                          GeometryInfo::getRequestedInfo<MetricArea>(wkt));
+  EXPECT_EQ(gi.getSourceCrsType(),
+            GeometryInfo::getRequestedInfo<SourceCrsType>(wkt));
+  EXPECT_EQ(gi.getSerializationType(),
+            GeometryInfo::getRequestedInfo<SerializationType>(wkt));
 }
 
 // ____________________________________________________________________________

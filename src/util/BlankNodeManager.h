@@ -19,7 +19,8 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <vector>
 
-#include "global/ValueId.h"
+#include "backports/keywords.h"
+#include "global/Id.h"
 #include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -128,7 +129,11 @@ class BlankNodeManager {
         : manager_(manager), uuid_(std::move(uuid)) {
       AD_CORRECTNESS_CHECK(manager_ != nullptr);
     }
-    ~Blocks() noexcept(false) {
+    // The destructor may throw (via `throwIfSafe_`), except in the reduced
+    // feature set for C++17, where it is `noexcept` because the libc++ of QNX
+    // rejects a type with a `noexcept(false)` destructor in a `shared_ptr`.
+    // There, an exception from `freeBlockSet` terminates the program.
+    ~Blocks() noexcept(qlever::usesReducedFeatureSet) {
       throwIfSafe_(
           [this]() { manager_->freeBlockSet(*this); },
           std::string_view{"In `freeBlockSet` called from the destructor of a "
