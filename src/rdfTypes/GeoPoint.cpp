@@ -9,7 +9,6 @@
 #include <type_traits>
 
 #include "global/Constants.h"
-#include "parser/NormalizedString.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Literal.h"
 #include "util/Exception.h"
@@ -55,8 +54,7 @@ double GeoPoint::dequantizeCoordinate(T quantized, double maxValue) {
 GeoPoint::T GeoPoint::toBitRepresentation() const {
   T lat = quantizeCoordinate(getLat(), COORDINATE_LAT_MAX);
   T lng = quantizeCoordinate(getLng(), COORDINATE_LNG_MAX);
-  // Use shift to obtain 30 bit lat followed by 30 bit lng in lower bits
-  auto bits = (lat << numDataBitsCoordinate) | lng;
+  auto bits = combineCoordinates(lat, lng, encoding());
   // Ensure the highest 4 bits are 0
   AD_CORRECTNESS_CHECK((bits & coordinateMaskFreeBits) == 0);
   return bits;
@@ -66,10 +64,8 @@ GeoPoint::T GeoPoint::toBitRepresentation() const {
 std::optional<GeoPoint> GeoPoint::parseFromLiteral(
     const ad_utility::triple_component::Literal& value, bool checkDatatype) {
   if (!checkDatatype ||
-      (value.hasDatatype() &&
-       value.getDatatype() == asNormalizedStringViewUnsafe(GEO_WKT_LITERAL))) {
-    auto [lng, lat] = ad_utility::detail::parseWktPoint(
-        asStringViewUnsafe(value.getContent()));
+      (value.hasDatatype() && value.getDatatype() == GEO_WKT_LITERAL)) {
+    auto [lng, lat] = ad_utility::detail::parseWktPoint(value.getContent());
     if (!std::isnan(lng) && !std::isnan(lat)) {
       return GeoPoint{lat, lng};
     }
@@ -79,10 +75,9 @@ std::optional<GeoPoint> GeoPoint::parseFromLiteral(
 
 // _____________________________________________________________________________
 GeoPoint GeoPoint::fromBitRepresentation(T bits) {
-  return {
-      dequantizeCoordinate((bits & coordinateMaskLat) >> numDataBitsCoordinate,
-                           COORDINATE_LAT_MAX),
-      dequantizeCoordinate(bits & coordinateMaskLng, COORDINATE_LNG_MAX)};
+  auto [lat, lng] = splitCoordinates(bits, encoding());
+  return {dequantizeCoordinate(lat, COORDINATE_LAT_MAX),
+          dequantizeCoordinate(lng, COORDINATE_LNG_MAX)};
 }
 
 // _____________________________________________________________________________

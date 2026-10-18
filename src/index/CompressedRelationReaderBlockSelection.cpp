@@ -91,7 +91,7 @@ Id CompressedRelationReader::getRelevantIdFromTriple(
 
 // _____________________________________________________________________________
 auto CompressedRelationReader::getBlocksForJoin(
-    ql::span<const Id> joinColumn,
+    ConstIdColumnRef joinColumn,
     const ScanSpecAndBlocksAndBounds& metadataAndBlocks)
     -> GetBlocksForJoinResult {
   if (joinColumn.empty() || metadataAndBlocks.getBlockMetadataView().empty()) {
