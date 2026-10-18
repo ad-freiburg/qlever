@@ -72,6 +72,9 @@ class BasicIdRefImpl {
                                    DatatypePointer datatype)
         : payload_{payload}, datatype_{datatype} {}
 
+    // TODO<pas-kes> With `SplitLayoutId`: implicit constructor from
+    // `SplitLayoutId&` (points to its members, rvalues deleted).
+
     // Explicitly defaulted, because the copy-assignment operator below is
     // user-provided (for good reason, see there), which would otherwise make
     // the implicit generation of these two deprecated-but-not-removed.
