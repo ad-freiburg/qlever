@@ -3381,9 +3381,10 @@ TEST(QueryPlanner, distributiveJoinInUnionIsNotAppliedIfUnionHasLimit) {
                            h::IndexScanFromStrings("?s", "<is-a>", "?o")))));
 }
 
-// _____________________________________________________________________________
+// Test that a join that is pushed into the children of a `UNION` at the root
+// of a subquery does not join on the variables that the subquery hides.
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3688.
 TEST(QueryPlanner, distributiveJoinInUnionKeepsHiddenVariablesHidden) {
-  // Regression test for https://github.com/ad-freiburg/qlever/issues/3688.
   // With `strip-columns` disabled, the `UNION` (the root of the subquery) only
   // hides `?z`, which is still visible in its children. The join that is pushed
   // into the children must not join on this `?z`.
