@@ -714,6 +714,36 @@ TYPED_TEST(HttpServerBodyTest, StreamableResponseRequiresExecutor) {
   }
 }
 
+// Test that the session is closed after a response that announces this via
+// `Connection: close`.
+TYPED_TEST(HttpServerBodyTest, ConnectionCloseEndsSession) {
+  auto httpServer = makeEchoServer<TypeParam::value>(this->lazyChunkSize);
+  httpServer.runInOwnThread();
+
+  // A request with `Connection: close` on a raw socket, so that the closing of
+  // the connection can be observed below.
+  net::io_context ioContext;
+  tcp::socket socket{ioContext};
+  socket.connect(
+      tcp::endpoint{net::ip::address_v4::loopback(), httpServer.getPort()});
+  http::request<http::empty_body> request{verb::get, "/target", 11};
+  request.set(field::host, "localhost");
+  request.keep_alive(false);
+  http::write(socket, request);
+
+  // The response is complete and announces the closing of the connection.
+  beast::flat_buffer buffer;
+  http::response<http::string_body> response;
+  http::read(socket, buffer, response);
+  EXPECT_EQ(response.body(), "GET\n/target\n");
+  EXPECT_TRUE(response.need_eof());
+
+  // The server has closed the connection.
+  beast::error_code ec;
+  socket.read_some(buffer.prepare(1), ec);
+  EXPECT_EQ(ec, net::error::eof);
+}
+
 // Minimal stubs to instantiate `HttpServer` solely for accessing its public
 // static helpers `readIntoBuffer` and `materializeBody`. No actual server is
 // constructed.
